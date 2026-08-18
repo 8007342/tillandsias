@@ -42,13 +42,33 @@ pub const WIRE_VERSION: u16 = 2;
 pub mod guest_transport;
 pub mod transport;
 
-/// Maximum permitted single-message length on the wire. Length prefixes
-/// greater than this trigger an `Error::PayloadTooLarge` response and the
-/// connection is closed.
+/// Maximum permitted single-message length on the wire, and the ONLY frame
+/// size ceiling the control wire has. Build the framing with
+/// [`transport::control_frame_codec`], which pins this value.
 ///
-/// Note: `ControlMessage::McpFrame` payloads may reach 4 MiB for large tool
-/// responses (e.g., PNG screenshots). The per-variant cap is enforced by the
-/// framing layer; see design.md Q-OPEN (size-cap reconciliation).
+/// A length prefix greater than this closes the connection with a local
+/// `io::ErrorKind::InvalidData`; **no reply is sent**.
+///
+/// CORRECTED 2026-08-18 (order 795-5itp). The previous text claimed an
+/// oversize prefix triggers "an `Error::PayloadTooLarge` response", and that
+/// a per-variant cap "is enforced by the framing layer". Both were false, and
+/// each was checked before being removed:
+///
+///  * [`ErrorCode::PayloadTooLarge`] is constructed nowhere outside this
+///    crate's own tests. No framing site has ever sent it — they return an
+///    `io::Error` and drop the connection, so a peer learns only that the
+///    wire closed.
+///  * No framing site has any per-variant logic whatsoever. Every one applies
+///    this single flat bound.
+///
+/// The referenced "design.md Q-OPEN (size-cap reconciliation)" was likewise
+/// stale, not open: it concerned `ControlMessage::McpFrame`, which order 505
+/// retired. That variant is refused by the dispatch matrix, is constructed
+/// nowhere in the tree, and the enforcement its cap pointed at lived in
+/// `src-tauri/`, a directory that no longer exists. [`MAX_MCP_FRAME_BYTES`]
+/// survives only as the per-LINE cap on the unrelated NDJSON MCP socket
+/// (order 779-dqsv) — it is **not** a second framing ceiling, and nothing on
+/// this wire is measured against it.
 pub const MAX_MESSAGE_BYTES: usize = 65_536;
 
 /// Maximum permitted `PtyData` frame payload size (for `PtyData` variant only).

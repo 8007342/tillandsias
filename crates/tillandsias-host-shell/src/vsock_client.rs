@@ -15,10 +15,18 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
+// Only the test-side fake guest peers still frame by hand (order 795-5itp
+// migrated the production path onto the shared codec). Keeping their framing
+// hand-rolled is deliberate: it is what proves codec↔hand-rolled interop on
+// the real client, so these peers must NOT be migrated with it.
+#[cfg(test)]
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+use futures_util::{SinkExt, StreamExt};
+use tokio_util::codec::{Framed, LengthDelimitedCodec};
+
 use tillandsias_control_wire::transport::{
-    self, AsyncReadWrite, CONTROL_WIRE_VSOCK_PORT, Transport,
+    self, AsyncReadWrite, CONTROL_WIRE_VSOCK_PORT, Transport, control_frame_codec,
 };
 use tillandsias_control_wire::{
     ControlEnvelope, ControlMessage, MAX_MESSAGE_BYTES, WIRE_VERSION, decode, encode,
@@ -102,7 +110,13 @@ pub const BACKOFF_SCHEDULE: &[Duration] = &[
 /// `seq` counter. The Linux dev loop uses `Transport::Unix`; production
 /// Windows + macOS use `Transport::Vsock`.
 pub struct Client {
-    stream: Box<dyn AsyncReadWrite + Unpin + Send>,
+    /// The control wire, framed by the shared codec rather than by hand
+    /// (order 795-5itp). `Framed` OWNS the stream and its read buffer, which
+    /// is safe here precisely because this field is private with no accessor,
+    /// no `into_inner`, and no split: nothing can take the stream back and
+    /// resume reading it by hand, which is the way a partial migration
+    /// strands buffered bytes and desynchronises the wire.
+    framed: Framed<Box<dyn AsyncReadWrite + Unpin + Send>, LengthDelimitedCodec>,
     next_seq: AtomicU64,
     transport: Transport,
 }
@@ -113,7 +127,7 @@ impl Client {
     pub async fn connect(transport: Transport) -> io::Result<Self> {
         let stream = transport::connect(&transport).await?;
         Ok(Self {
-            stream,
+            framed: Framed::new(stream, control_frame_codec()),
             next_seq: AtomicU64::new(1),
             transport,
         })
@@ -141,7 +155,7 @@ impl Client {
         transport: Transport,
     ) -> Self {
         Self {
-            stream,
+            framed: Framed::new(stream, control_frame_codec()),
             next_seq: AtomicU64::new(1),
             transport,
         }
@@ -226,31 +240,44 @@ impl Client {
 
     async fn send(&mut self, envelope: &ControlEnvelope) -> io::Result<()> {
         let bytes = encode(envelope).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        // Kept AHEAD of the sink deliberately. The codec would also refuse an
+        // oversize frame, but with its own message ("frame size too big"); this
+        // pre-check preserves the exact `control frame too large` string that
+        // callers and tests have always seen. Removing it does not change what
+        // is accepted — only what the failure is called.
         if bytes.len() > MAX_MESSAGE_BYTES {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "control frame too large",
             ));
         }
-        self.stream
-            .write_all(&(bytes.len() as u32).to_be_bytes())
-            .await?;
-        self.stream.write_all(&bytes).await?;
-        self.stream.flush().await
+        self.framed.send(bytes.into()).await?;
+        self.framed.flush().await
     }
 
     async fn recv(&mut self) -> io::Result<ControlEnvelope> {
-        let mut len_buf = [0u8; 4];
-        self.stream.read_exact(&mut len_buf).await?;
-        let len = u32::from_be_bytes(len_buf) as usize;
-        if len > MAX_MESSAGE_BYTES {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "inbound control frame too large",
-            ));
-        }
-        let mut body = vec![0u8; len];
-        self.stream.read_exact(&mut body).await?;
+        let body = match self.framed.next().await {
+            Some(Ok(body)) => body,
+            // The codec's own bound rejection, remapped to the string this
+            // call site has always returned. `InvalidData` is what the codec
+            // raises for an oversize length prefix.
+            Some(Err(err)) if err.kind() == io::ErrorKind::InvalidData => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "inbound control frame too large",
+                ));
+            }
+            Some(Err(err)) => return Err(err),
+            // `Framed` reports a clean EOF as `None`; the hand-rolled
+            // `read_exact` reported it as `UnexpectedEof`. Preserved, because
+            // the reconnect loop distinguishes EOF from a transport error.
+            None => {
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "control wire closed",
+                ));
+            }
+        };
         decode(&body).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
     }
 }
@@ -342,6 +369,128 @@ mod push_stream_tests {
         let mut framed = (bytes.len() as u32).to_be_bytes().to_vec();
         framed.extend_from_slice(&bytes);
         framed
+    }
+
+    // ---- order 795-5itp, exit criterion 3 (NEGATIVE CONTROL) -------------
+    //
+    // The bound survives the move onto `LengthDelimitedCodec`, and — the half
+    // that is easy to lose in a codec swap — it still fails with the SAME
+    // error surface callers saw when this path framed by hand. The codec's own
+    // wording is "frame size too big"; both strings below are the pre-migration
+    // ones, preserved deliberately.
+
+    /// Outbound: an envelope over the limit is refused BEFORE anything is
+    /// written, with the pre-migration string.
+    #[tokio::test]
+    async fn oversize_outbound_envelope_is_refused_with_the_original_error() {
+        let (host_side, mut guest_side) = tokio::io::duplex(4096);
+        let mut client = Client::from_stream(
+            Box::new(host_side),
+            Transport::Vsock {
+                cid: 0,
+                port: CONTROL_WIRE_VSOCK_PORT,
+            },
+        );
+
+        let huge = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 1,
+            body: ControlMessage::PtyData {
+                session_id: 1,
+                direction: tillandsias_control_wire::PtyDirection::ToGuest,
+                bytes: vec![0xEEu8; MAX_MESSAGE_BYTES + 1],
+            },
+        };
+        let err = client
+            .send_envelope(&huge)
+            .await
+            .expect_err("an envelope over MAX_MESSAGE_BYTES must be refused");
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+        assert_eq!(err.to_string(), "control frame too large");
+
+        // And nothing reached the peer: the refusal is local, before the wire.
+        drop(client);
+        let mut sink = Vec::new();
+        guest_side.read_to_end(&mut sink).await.expect("drain peer");
+        assert!(
+            sink.is_empty(),
+            "an oversize frame must not put bytes on the wire, got {} byte(s)",
+            sink.len()
+        );
+    }
+
+    /// Inbound: a hostile length prefix is refused with the pre-migration
+    /// string, and the body it declares is never read.
+    #[tokio::test]
+    async fn oversize_inbound_length_prefix_is_refused_with_the_original_error() {
+        let (host_side, mut guest_side) = tokio::io::duplex(4096);
+        let mut client = Client::from_stream(
+            Box::new(host_side),
+            Transport::Vsock {
+                cid: 0,
+                port: CONTROL_WIRE_VSOCK_PORT,
+            },
+        );
+
+        // Hand-rolled hostile peer: declares one byte over the maximum, then
+        // sends only a few bytes. A reader without a bound would sit here
+        // holding a 64 KiB+ allocation waiting for a body that never comes.
+        let mut hostile = ((MAX_MESSAGE_BYTES + 1) as u32).to_be_bytes().to_vec();
+        hostile.extend_from_slice(b"short");
+        guest_side.write_all(&hostile).await.unwrap();
+
+        let err = client
+            .next_envelope()
+            .await
+            .expect_err("a length prefix over MAX_MESSAGE_BYTES must be refused");
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+        assert_eq!(err.to_string(), "inbound control frame too large");
+    }
+
+    /// A frame exactly AT the limit is still accepted — the bound is inclusive,
+    /// and this is the half that catches an off-by-one tightening.
+    #[tokio::test]
+    async fn inbound_frame_exactly_at_the_limit_is_accepted() {
+        let (host_side, mut guest_side) = tokio::io::duplex(MAX_MESSAGE_BYTES * 4);
+        let mut client = Client::from_stream(
+            Box::new(host_side),
+            Transport::Vsock {
+                cid: 0,
+                port: CONTROL_WIRE_VSOCK_PORT,
+            },
+        );
+
+        // Grow a PtyData envelope until its ENCODED length is exactly the
+        // maximum, so this pins the boundary rather than approaching it.
+        let mut payload = vec![0xAAu8; MAX_MESSAGE_BYTES - 64];
+        let env = loop {
+            let candidate = ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: 5,
+                body: ControlMessage::PtyData {
+                    session_id: 1,
+                    direction: tillandsias_control_wire::PtyDirection::ToHost,
+                    bytes: payload.clone(),
+                },
+            };
+            match encode(&candidate).expect("encode").len() {
+                n if n == MAX_MESSAGE_BYTES => break candidate,
+                n if n < MAX_MESSAGE_BYTES => payload.push(0xAA),
+                _ => panic!("overshot MAX_MESSAGE_BYTES while sizing the fixture"),
+            }
+        };
+        let framed = encode_frame(&env);
+        assert_eq!(framed.len(), 4 + MAX_MESSAGE_BYTES);
+
+        tokio::spawn(async move {
+            guest_side.write_all(&framed).await.unwrap();
+        });
+
+        let got = client
+            .next_envelope()
+            .await
+            .expect("a frame exactly at MAX_MESSAGE_BYTES must be accepted");
+        assert_eq!(got.seq, 5);
     }
 
     /// `next_envelope` reads unsolicited frames (the `Subscribe` →

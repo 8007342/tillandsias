@@ -14,18 +14,13 @@ use std::time::Duration;
 use bytes::{Bytes, BytesMut};
 use futures_util::{SinkExt, StreamExt};
 use tempfile::TempDir;
-use tillandsias_control_wire::{
-    ControlEnvelope, ControlMessage, MAX_MESSAGE_BYTES, WIRE_VERSION, decode, encode,
-};
+use tillandsias_control_wire::transport::control_frame_codec;
+use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION, decode, encode};
 use tokio::net::{UnixListener, UnixStream};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
 fn codec() -> LengthDelimitedCodec {
-    LengthDelimitedCodec::builder()
-        .length_field_length(4)
-        .max_frame_length(MAX_MESSAGE_BYTES)
-        .big_endian()
-        .new_codec()
+    control_frame_codec()
 }
 
 async fn write_envelope(

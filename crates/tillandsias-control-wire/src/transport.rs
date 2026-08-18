@@ -49,6 +49,41 @@ pub enum Transport {
 pub trait AsyncReadWrite: AsyncRead + AsyncWrite {}
 impl<T: AsyncRead + AsyncWrite + ?Sized> AsyncReadWrite for T {}
 
+/// The ONE construction site for the control wire's length-delimited framing.
+///
+/// Every framing site in the tree encodes exactly `u32-BE body length ‖ raw
+/// postcard body` — no magic, no version byte, no type tag, no checksum, no
+/// trailer. The length counts the body ONLY and excludes its own 4 bytes;
+/// `wire_version` travels INSIDE the postcard envelope (see [`crate::encode`]),
+/// not in the frame header. This constructor reproduces those bytes exactly,
+/// so a `Framed` peer and a hand-rolled peer interoperate — which is not a
+/// claim, it already ships: `tillandsias-router-sidecar` has talked to the
+/// hand-rolled reader in `tillandsias-headless`'s tray over a live Unix socket
+/// since it was written, and `codec_framing_is_byte_identical_to_hand_rolled`
+/// below pins it.
+///
+/// **All four parameters are pinned deliberately, and `max_frame_length` is
+/// the one that must never be defaulted.** `LengthDelimitedCodec::new()`
+/// defaults to 8 MiB — 128x looser than [`MAX_MESSAGE_BYTES`] — and the bound
+/// exists precisely to cap the `vec![0u8; len]` a hand-rolled reader performs
+/// on an attacker-chosen `u32`. Constructing the codec anywhere else is how
+/// that bound gets silently widened, so construct it here or not at all.
+///
+/// Unlike the hand-rolled sites, this bound is symmetric: the codec enforces
+/// `max_frame_length` on ENCODE as well as decode, so an oversize outbound
+/// frame fails locally instead of being put on the wire for the peer to
+/// reject.
+///
+/// @trace order:795-5itp, spec:vsock-transport, spec:host-shell-architecture
+pub fn control_frame_codec() -> tokio_util::codec::LengthDelimitedCodec {
+    tokio_util::codec::LengthDelimitedCodec::builder()
+        .length_field_length(4)
+        .big_endian()
+        .length_adjustment(0)
+        .max_frame_length(crate::MAX_MESSAGE_BYTES)
+        .new_codec()
+}
+
 /// A bound listener that yields connections framed for the control wire.
 pub enum Listener {
     /// Unix-socket listener (Unix-family only).
@@ -171,11 +206,15 @@ async fn bind_vsock(_cid: u32, _port: u32) -> io::Result<Listener> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    // The framing helpers below only feed the unix roundtrip test; on
-    // Windows they (and their imports) would be dead code — a lint class
+    // These five are used by the codec tests too, which run on EVERY target
+    // (they frame over `tokio::io::duplex`, not a Unix socket), so they are no
+    // longer unix-gated.
+    use crate::{ControlEnvelope, ControlMessage, MAX_MESSAGE_BYTES, WIRE_VERSION, encode};
+    // The hand-rolled framing helpers below only feed the unix roundtrip test;
+    // on Windows they (and these imports) would be dead code — a lint class
     // Linux clippy never compiles (mirror of the windows-cfg case, 2abfcb30).
     #[cfg(unix)]
-    use crate::{ControlEnvelope, ControlMessage, MAX_MESSAGE_BYTES, WIRE_VERSION, decode, encode};
+    use crate::decode;
     #[cfg(unix)]
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -300,5 +339,145 @@ mod tests {
             Err(err) => err,
         };
         assert_eq!(connect_err.kind(), io::ErrorKind::Unsupported);
+    }
+
+    // ---- control_frame_codec (order 795-5itp) --------------------------
+    //
+    // These are deliberately NOT `#[cfg(unix)]`: they run on `tokio::io::duplex`
+    // rather than a Unix socket, so they guard the framing on every target
+    // including Windows — where `hvsocket.rs` speaks this same format and has
+    // no other test that compiles off a live WSL host.
+
+    /// The codec's bytes are the hand-rolled bytes, exactly.
+    ///
+    /// This is the proof that underwrites migrating any site: if these two
+    /// vectors are equal, a `Framed` peer and a hand-rolled peer cannot
+    /// desynchronise, and sites may be converted one at a time.
+    #[tokio::test]
+    async fn codec_framing_is_byte_identical_to_hand_rolled() {
+        use futures_util::SinkExt;
+        use tokio_util::codec::FramedWrite;
+
+        let env = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 7,
+            body: ControlMessage::Hello {
+                from: "codec-golden-test".to_string(),
+                capabilities: vec!["v1".to_string()],
+                build_version: None,
+            },
+        };
+        let body = encode(&env).expect("encode");
+
+        // Hand-rolled, the shape every framing site in the tree writes today.
+        let mut hand_rolled = Vec::new();
+        hand_rolled.extend_from_slice(&(body.len() as u32).to_be_bytes());
+        hand_rolled.extend_from_slice(&body);
+
+        // Through the shared codec.
+        let mut via_codec = Vec::new();
+        let mut sink = FramedWrite::new(&mut via_codec, control_frame_codec());
+        sink.send(tokio_util::bytes::Bytes::from(body.clone()))
+            .await
+            .expect("codec send");
+        drop(sink);
+
+        assert_eq!(
+            hand_rolled, via_codec,
+            "codec framing diverged from the hand-rolled wire format"
+        );
+        // Pin the format itself, not just the agreement: 4-byte BE prefix
+        // counting the body only, body immediately after.
+        assert_eq!(&via_codec[..4], &(body.len() as u32).to_be_bytes());
+        assert_eq!(&via_codec[4..], &body[..]);
+    }
+
+    /// The bound is exactly `MAX_MESSAGE_BYTES`, inclusive, on BOTH directions.
+    ///
+    /// Before 795-5itp NOTHING in the tree asserted either half of this, across
+    /// eleven read sites that all cap at this value — so a codec constructed
+    /// without `max_frame_length` (tokio-util defaults to 8 MiB) would have
+    /// widened every one of them 128x and shipped green.
+    #[tokio::test]
+    async fn codec_bound_is_max_message_bytes_inclusive_both_directions() {
+        use futures_util::SinkExt;
+        use futures_util::StreamExt;
+        use tokio_util::codec::{FramedRead, FramedWrite};
+
+        // --- ENCODE: at the limit is accepted, one over is refused ---
+        let at_limit = vec![0xABu8; MAX_MESSAGE_BYTES];
+        let mut buf = Vec::new();
+        let mut sink = FramedWrite::new(&mut buf, control_frame_codec());
+        sink.send(tokio_util::bytes::Bytes::from(at_limit.clone()))
+            .await
+            .expect("a frame exactly at MAX_MESSAGE_BYTES must be accepted");
+        drop(sink);
+        assert_eq!(buf.len(), 4 + MAX_MESSAGE_BYTES);
+
+        let over = vec![0xABu8; MAX_MESSAGE_BYTES + 1];
+        let mut buf2 = Vec::new();
+        let mut sink2 = FramedWrite::new(&mut buf2, control_frame_codec());
+        let err = sink2
+            .send(tokio_util::bytes::Bytes::from(over))
+            .await
+            .expect_err("a frame one byte over MAX_MESSAGE_BYTES must be refused on encode");
+        assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
+        assert!(
+            buf2.is_empty(),
+            "an oversize frame must not put ANY bytes on the wire, got {}",
+            buf2.len()
+        );
+
+        // --- DECODE: at the limit is accepted ---
+        let mut framed = FramedRead::new(&buf[..], control_frame_codec());
+        let got = framed
+            .next()
+            .await
+            .expect("a frame at the limit must decode")
+            .expect("decode at limit");
+        assert_eq!(got.len(), MAX_MESSAGE_BYTES);
+
+        // --- DECODE: a declared length one over is refused, and the body is
+        // never allocated. Hand-build the prefix, since the encoder above
+        // (correctly) refuses to produce this.
+        let mut hostile = Vec::new();
+        hostile.extend_from_slice(&((MAX_MESSAGE_BYTES + 1) as u32).to_be_bytes());
+        hostile.extend_from_slice(&[0u8; 16]); // a short, truncated body
+        let mut framed = FramedRead::new(&hostile[..], control_frame_codec());
+        let err = framed
+            .next()
+            .await
+            .expect("an oversize length prefix must yield an item")
+            .expect_err("a declared length over MAX_MESSAGE_BYTES must be refused on decode");
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    }
+
+    /// A `u32::MAX` length prefix — the allocation the bound exists to stop.
+    ///
+    /// The hand-rolled readers do `vec![0u8; len]` immediately after decoding
+    /// the prefix; without a bound that is a 4 GiB allocation on a peer's say-so.
+    ///
+    /// SENSITIVITY, stated so nobody over-trusts this one: it guards against
+    /// NO bound, not against a WRONG one. Measured — with `max_frame_length`
+    /// deleted entirely (tokio-util's 8 MiB default) this test still passes,
+    /// because 4 GiB exceeds 8 MiB too. The test that pins the exact value is
+    /// `codec_bound_is_max_message_bytes_inclusive_both_directions`, which goes
+    /// red both when the bound is removed and when it is off by one byte.
+    #[tokio::test]
+    async fn codec_refuses_u32_max_length_prefix_without_allocating() {
+        use futures_util::StreamExt;
+        use tokio_util::codec::FramedRead;
+
+        let mut hostile = Vec::new();
+        hostile.extend_from_slice(&u32::MAX.to_be_bytes());
+        hostile.extend_from_slice(b"only a few bytes actually follow");
+
+        let mut framed = FramedRead::new(&hostile[..], control_frame_codec());
+        let err = framed
+            .next()
+            .await
+            .expect("a u32::MAX prefix must yield an item")
+            .expect_err("a u32::MAX length prefix must be refused");
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
     }
 }
