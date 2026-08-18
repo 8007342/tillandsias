@@ -175,7 +175,30 @@ check_log() {
 
     marker="$(grep -E '^MO-FULL: ' "$log" 2>/dev/null | tail -1 || true)"
     if [ -z "$marker" ]; then
-        echo "MO-FULL: FAIL missing MO-FULL terminal marker (provider likely exited between tool calls)"
+        # A MISSING MARKER HAS AT LEAST TWO CAUSES AND THIS NAMED ONLY ONE.
+        #
+        # Measured on macuahuitl 2026-08-18, order 817-8czp. The e2e's forge
+        # lane failed here and this line said "provider likely exited between
+        # tool calls". The provider did not exit. The in-forge cycle ran
+        # correctly, hit the Credential Channel Guard, got
+        # `blocked:upstream-auth-stale` (the mirror's write-authorization
+        # verdict was 21504s old against a 900s ceiling), and REFUSED to do
+        # committable work — exactly as the exit contract requires. A blocked
+        # cycle that cannot push MUST NOT emit a marker; its absence is the
+        # designed loud failure. So the one state where the missing marker is
+        # CORRECT was reported as the one state where the agent died, and the
+        # reader is sent looking for a crash instead of at the credential.
+        #
+        # Same shape as 797-5kqe and the stale-healthy corpse of 798-tk7b: the
+        # status is not merely absent, it asserts the opposite. The lane still
+        # FAILS — it did not complete — but it now fails with the cause the log
+        # actually carries.
+        _mo_refusal="$(grep -oE 'blocked:[a-z0-9][a-z0-9-]*' "$log" 2>/dev/null | tail -1 || true)"
+        if [ -n "$_mo_refusal" ]; then
+            echo "MO-FULL: FAIL no marker because the cycle REFUSED and stopped: ${_mo_refusal} — a blocked cycle that cannot push emits no marker BY DESIGN, so the fault is whatever produced ${_mo_refusal}, not the agent"
+            return 1
+        fi
+        echo "MO-FULL: FAIL missing MO-FULL terminal marker and NO refusal verdict in the log — cause unproven; the provider may have exited between tool calls"
         return 1
     fi
 
@@ -377,6 +400,24 @@ fixture() {
     printf '%s\n' "some agent work line" "local commit made: 4a1410a2" > "$work/log-no-marker"
     run_case "no-marker" "$work/log-no-marker" 1 "missing MO-FULL terminal marker" "printf '${sha_a}'"
 
+    # 1b. ORDER 817-8czp. The SAME missing marker, but the log carries an
+    # explicit refusal. This must NOT be reported as a provider crash: a
+    # blocked cycle that cannot push emits no marker by design. Still exit 1 —
+    # the lane did not complete — but with the cause the log actually carries.
+    # The pair is the control: 1 and 1b differ ONLY in the refusal line, so a
+    # regression that collapses them turns exactly one of the two red.
+    printf '%s\n' \
+        "Cycle preflight: ok." \
+        "Credential channel guard: blocked:upstream-auth-stale. This blocks the cycle." \
+        "BLOCKED — no committable work performed." > "$work/log-refused"
+    run_case "no-marker-but-refused" "$work/log-refused" 1 "REFUSED and stopped: blocked:upstream-auth-stale" "printf '${sha_a}'"
+
+    # 1c. The refusal branch must not fire on prose that merely contains the
+    # word: only a `blocked:<verdict>` token counts. Without this, any log
+    # mentioning "blocked" would stop naming a real provider death.
+    printf '%s\n' "the lane was blocked for a while then the provider vanished" > "$work/log-prose-blocked"
+    run_case "no-marker-prose-only" "$work/log-prose-blocked" 1 "NO refusal verdict in the log" "printf '${sha_a}'"
+
     # 2. malformed marker (short sha).
     printf '%s\n' "MO-FULL: COMPLETE deadbeef $branch deadbeef" > "$work/log-malformed"
     run_case "malformed-marker" "$work/log-malformed" 1 "malformed" "printf '${sha_a}'"
@@ -494,10 +535,10 @@ fixture() {
     if [ "$self_cases" -eq 0 ]; then
         # Say what was NOT run. A fixture that silently covers less on some
         # checkouts reports the same "green" as one that covered everything.
-        echo "PASS: mo-full-attest fixture 7/7 check scenarios green (no-marker, malformed, unpushed-commit, branch-mismatch, remote-head-mismatch, clean-pass, fabricated-sha); self/record boundary scenarios SKIPPED — not attestable from branch '${live_branch:-none}'"
+        echo "PASS: mo-full-attest fixture 9/9 check scenarios green (no-marker, no-marker-but-refused, no-marker-prose-only, malformed, unpushed-commit, branch-mismatch, remote-head-mismatch, clean-pass, fabricated-sha); self/record boundary scenarios SKIPPED — not attestable from branch '${live_branch:-none}'"
         return 0
     fi
-    echo "PASS: mo-full-attest fixture 12/12 scenarios green (no-marker, malformed, unpushed-commit, branch-mismatch, remote-head-mismatch, clean-pass, fabricated-sha, self-no-boundary, self-stale-boundary, self-verified-boundary, record-verified-boundary, record-no-boundary)"
+    echo "PASS: mo-full-attest fixture 14/14 scenarios green (no-marker, no-marker-but-refused, no-marker-prose-only, malformed, unpushed-commit, branch-mismatch, remote-head-mismatch, clean-pass, fabricated-sha, self-no-boundary, self-stale-boundary, self-verified-boundary, record-verified-boundary, record-no-boundary)"
     return 0
 }
 

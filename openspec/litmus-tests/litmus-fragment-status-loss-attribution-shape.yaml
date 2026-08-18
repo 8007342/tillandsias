@@ -79,7 +79,16 @@ critical_path:
   # NOT skip. Without this, a script that skipped unconditionally would pass the
   # stale-binary step while disabling the gate entirely.
   - step: "a current plan binary does NOT skip"
-    command: "out=$(scripts/check-fragment-status-loss.sh 2>&1); echo \"$out\" | grep -q 'predates fragment-terminal-events' && { echo \"FAIL: current binary skipped the gate: $out\"; exit 1; }; case \"$out\" in ok:no-fragment-status-loss:*|violation:fragment-status-loss:*) echo 'ok: current binary enforces';; *) echo \"FAIL: unexpected verdict: $out\"; exit 1;; esac"
+    # The two channels are read SEPARATELY, from one run. This step used to
+    # capture `2>&1` and then prefix-match the merged text against the verdict
+    # glob, which silently required the guard's stderr to be EMPTY — true only
+    # until the advisory channels landed (797-qm4t unknown packet_ids,
+    # 812-d45t misplaced definitions). Three real advisories then made the
+    # merged output start with "  advisory: ..." and the step read a working
+    # gate as an unexpected verdict. The guard's contract is one verdict line on
+    # stdout with detail on stderr; this now honours it, and still needs stderr
+    # because the stale-binary skip note is written there.
+    command: "_e=$(mktemp); out=$(scripts/check-fragment-status-loss.sh 2>\"$_e\"); err=$(cat \"$_e\"); rm -f \"$_e\"; printf '%s' \"$err\" | grep -q 'predates fragment-terminal-events' && { echo \"FAIL: current binary skipped the gate: $err\"; exit 1; }; case \"$out\" in ok:no-fragment-status-loss:*|violation:fragment-status-loss:*) echo 'ok: current binary enforces';; *) echo \"FAIL: unexpected verdict: $out\"; exit 1;; esac"
     timeout_ms: 30000
     expected_behavior: "ok: current binary enforces"
 

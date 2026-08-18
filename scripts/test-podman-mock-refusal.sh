@@ -195,7 +195,13 @@ fi
 # `image inspect <img>` with no --format: the mock has no bare-form payload, so
 # it used to answer with an empty stdout and success — the shape most likely to
 # be read as "this image has no data" rather than "nothing ran".
-run_mock image_inspect_bare image inspect localhost/tillandsias-git:latest
+# The tag is a fixture string, not a real reference — nothing is pulled. It is
+# pinned anyway because check-container-bases.sh greps scripts/ for
+# `tillandsias-*:latest` and cannot tell an argument to a mock from an image
+# this repo would actually run. `./build.sh --check` does not run that policy
+# but `--ci-full` does, which is how this reached linux-next green and then
+# failed the e2e's build gate (found 2026-08-18).
+run_mock image_inspect_bare image inspect localhost/tillandsias-git:0.0.0-fixture
 if [ "$rc" -eq "$REFUSAL_EXIT" ] && [ ! -s "$out_file" ] \
    && grep -q 'REFUSED: unrecognized image inspect form' "$err_file"; then
     pass "bare-image-inspect-refused"
