@@ -1,0 +1,53 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by windows (yolanda), 2026-08-18T09:32Z.
+#
+# 823-u5zf had exactly one clause that resisted the argv translation. It is
+# resolved. The order stays OPEN: what remains is mechanical, and this fragment
+# says precisely what.
+
+events:
+  - packet_id: windows-lane-sends-a-verbatim-argv-and-drops-its-escaping-workarounds
+    event:
+      type: note
+      ts: "2026-08-18T09:32:10Z"
+      agent_id: windows-yolanda-opus5-20260818t0919z
+      host: windows
+      summary: >
+        THE BLOCKING DESIGN QUESTION IS ANSWERED; the order is not done.
+        Auditing what the tray's composed preamble actually does, every clause
+        is `export NAME=value` — which an argv launch carries in its env map —
+        EXCEPT ONE: `install -d -m 0700 "$XDG_RUNTIME_DIR"`. That is a side
+        effect, not an assignment, and it has no argv equivalent. It was the
+        reason a shell had to stay in the chain.
+        IT IS NOT `mkdir -p`. THE MODE IS THE POINT. Consumers deriving a path
+        under XDG_RUNTIME_DIR call create_dir_all, which creates missing parents
+        at 0777-minus-umask — commonly 0755. That directory holds control
+        sockets, so a world-traversable parent is a real weakening. `install -m
+        0700` was load-bearing and no consumer's create_dir_all replaces it. The
+        tempting reading — "the consumers already mkdir, so the preamble clause
+        is redundant" — is wrong, and wrong in the quiet direction.
+        RESOLUTION: put the guarantee where the dependency is.
+        tillandsias-headless is the process that needs the directory, so it now
+        asserts it at startup before any subsystem derives a path under it
+        (crates/tillandsias-headless/src/main.rs, ensure_xdg_runtime_dir).
+        Deliberately NON-FATAL: unset variable, or a create that fails, warns
+        and continues — every consumer already falls back when the runtime dir
+        is absent, and refusing to start a lane over a directory mode would be a
+        worse failure than the one being prevented.
+        Three tests, run in the tillandsias-build WSL2 distro because this crate
+        is unix-only and does not compile natively on Windows: a missing dir is
+        created at 0700; a PRE-EXISTING 0755 dir is tightened rather than
+        accepted; an unset variable is a no-op. The middle one is the test that
+        earns its keep — it is exactly the case a plain create_dir_all passes
+        silently.
+        STILL OPEN, and now unblocked mechanical work rather than an open
+        question: the tray still composes
+        `/bin/bash -lc "export … && exec tillandsias-headless --cloud '<nwo>'
+        --<agent>"` in crates/tillandsias-host-shell/src/pty/mod.rs;
+        argv_survives_wt_reparse (7 sites) and wt_safe_title (4 sites) in
+        notify_icon.rs are still live; lanes do not yet route through wt.exe.
+        The paste/clickable-link field failure this loop opened with traces to
+        those workarounds, so finishing 823-u5zf is what actually closes it.
+      evidence_refs:
+        - "69a45e095 ./build.sh --check rc=0 (target/smoke-e2e/gate-823-u5zf.log)"
+        - "69a45e095 cargo test -p tillandsias-headless --bin tillandsias xdg_runtime_dir: 3 passed 0 failed"
