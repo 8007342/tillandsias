@@ -74,6 +74,23 @@ if [ -z "$CHUNKS" ]; then
 fi
 N=40
 REPS=3
+# WHERE this benchmark is running, carried into the recorded measurement
+# (orders 808-43mw, 810-jeg7). An INPUT, not a derivation: the script cannot
+# reliably tell "in the guest" from "on the host talking to a mirrored port"
+# by inspection, and a wrong locus is worse than an absent one -- absent reads
+# as unknown, wrong reads as comparable.
+#
+# Unset stays unset, deliberately. `MeasurementRecord.locus` is Option, so an
+# unlabelled run records honestly as unlabelled rather than defaulting to a
+# guess that a consumer would then rank against a labelled row.
+#
+# This host measured the same suite at two loci and the hop cost 5-10% on the
+# embed arm -- enough to have inverted a cross-host conclusion once already.
+LOCUS="${TILLANDSIAS_BENCH_LOCUS:-}"
+# The suite label was ALREADY in this script's stdout JSON and was dropped on
+# the way into --record-measurement, because MeasurementRecord had nowhere to
+# put it (808-43mw). One constant now feeds both, so they cannot drift.
+WORKLOAD_SUITE="802-2536-v1"
 EMBED_MODEL="nomic-embed-text"
 GEN_MODEL="qwen2.5:0.5b"
 GEN_PROMPT="Summarize the purpose of a container enclave in two sentences."
@@ -225,10 +242,18 @@ if [ "${RECORD:-0}" = "1" ]; then
             _bench_reason='"requested gpu but the runner reported no VRAM-resident model"'
             ;;
     esac
+    # An unset locus is sent as JSON null rather than omitted, so the payload
+    # shape is the same either way and a reader never has to distinguish
+    # "absent key" from "null value" to reach the same conclusion: unknown.
+    _bench_locus=null
+    [ -n "$LOCUS" ] && _bench_locus="$(jq -n --arg l "$LOCUS" '$l')"
+    # Older binaries ignore unknown fields (serde default), so sending these to
+    # a release that predates schema_version 2 is a no-op rather than a break.
     jq -nc --arg d "$LANE" --arg e "ollama" \
         --argjson p "${_bench_prefill:-0}" --argjson dec "${_bench_decode:-0}" \
         --argjson deg "$_bench_degraded" --argjson reason "$_bench_reason" \
-        '{device:$d, engine:$e, prefill_tps:$p, decode_tps:$dec, joules_per_token:null, degraded:$deg, degraded_reason:$reason}' \
+        --arg suite "$WORKLOAD_SUITE" --argjson locus "$_bench_locus" \
+        '{device:$d, engine:$e, prefill_tps:$p, decode_tps:$dec, joules_per_token:null, degraded:$deg, degraded_reason:$reason, workload_suite:$suite, locus:$locus}' \
         | "$_bench_tillandsias" --record-measurement - >&2 || \
         echo "note:bench-accel-lane:record-failed (numbers still on stdout)" >&2
 fi
@@ -246,8 +271,11 @@ jq -nc \
     --argjson embed_failed_per_rep "[$embed_failed]" \
     --argjson gen_tokens_per_s "[$gen_tps]" \
     --argjson gen_prefill_tps "[$gen_ptps]" \
+    --arg suite "$WORKLOAD_SUITE" \
+    --argjson locus_out "$( [ -n "$LOCUS" ] && jq -n --arg l "$LOCUS" '$l' || echo null )" \
     '{
-       workload_suite: "802-2536-v1",
+       workload_suite: $suite,
+       locus: $locus_out,
        lane_requested: $lane,
        lane_observed: $observed,
        endpoint: $endpoint,
