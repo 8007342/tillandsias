@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: measurement-locus-is-worth-5-to-10-percent-and-reversed-a-cross-host-conclusion
+    field: status
+    value: completed
+    ts: "2026-08-18T11:26:39Z"
+    host: windows
+
+events:
+  - packet_id: measurement-locus-is-worth-5-to-10-percent-and-reversed-a-cross-host-conclusion
+    event:
+      type: completed
+      ts: "2026-08-18T11:26:39Z"
+      host: windows
+      summary: >
+        status 'completed' with evidence_refs: cargo test -p tillandsias-plan 203+17 passed 0 failed; capability-matrix refuses unlocated measurements with a printed reason
