@@ -1,0 +1,72 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-18T00:43:28Z.
+status:
+  - packet_id: uninstall-deletes-the-model-cache-then-reports-it-preserved
+    field: status
+    value: completed
+    ts: "2026-08-18T00:43:28Z"
+    host: linux_mutable
+
+events:
+  - packet_id: uninstall-deletes-the-model-cache-then-reports-it-preserved
+    event:
+      type: completed
+      ts: "2026-08-18T00:43:28Z"
+      agent_id: linux-macuahuitl-opus5-20260818T003900Z
+      host: linux_mutable
+      summary: >
+        status 'completed' with evidence. The Linux half of the uninstall-misreports
+        defect; the macOS twin (804-bpke) had already been fixed by that host, and its
+        guard is what showed the shape of this one. On root, uninstall.sh runs
+        `userdel -r "$SERVICE_USER"` and `rm -rf "$SERVICE_HOME"` OUTSIDE the --wipe
+        guard, and under the packaged service account the headless resolves its model
+        cache from its process HOME (main.rs:4013) — so the weights at
+        /var/lib/tillandsias/.cache/tillandsias/models go with it. The script then printed
+        "Cache preserved. Use --wipe to remove everything." THREE CHANGES, all reporting,
+        none touching the deletion: the pre-removal listing now sizes the service
+        account's model cache and names it in the line for $SERVICE_HOME rather than
+        calling it "home/state"; a SERVICE_HOME_REMOVED flag is set immediately beside the
+        deletion it describes; and the closing line, when that flag is set, states which
+        cache survived (the invoking user's) and which did not. The deletion is unchanged
+        — removing a service account's home on uninstall is defensible, and claiming
+        afterwards that the cache was preserved is not.
+      evidence_refs:
+        - "scripts/uninstall.sh: sized listing, SERVICE_HOME_REMOVED flag, corrected closing branch"
+        - "scripts/test-uninstall-preserves-vm.sh: 6/6 -> 7/7, new linux-non-root scenario"
+        - "mutation: force the new elif always-true -> the new scenario FAILS; restore -> 7/7"
+  - packet_id: uninstall-deletes-the-model-cache-then-reports-it-preserved
+    event:
+      type: note
+      ts: "2026-08-18T00:43:28Z"
+      agent_id: linux-macuahuitl-opus5-20260818T003900Z
+      host: linux_mutable
+      summary: |
+        WHAT IS TESTED AND WHAT IS NOT, stated rather than implied.
+
+        TESTED: that the new branch did not hijack the COMMON path. A non-root
+        Linux run removes no service home, so the original "Cache preserved"
+        line must survive verbatim — asserted, and mutation-checked by forcing
+        the new `elif` always-true, which reddens it.
+
+        NOT TESTED: the root branch itself, which is the branch the packet is
+        about. Exercising it requires a script that runs `userdel -r` and
+        `rm -rf $SERVICE_HOME` to believe it is root, and a fixture that can be
+        WRONG about that is a fixture that can delete a real account on a
+        developer's machine. I judged that hazard worse than the coverage gap,
+        given the change is one branch on a boolean set three lines from the
+        deletion it reports. Someone with a disposable VM should close it; the
+        honest state today is one branch verified and one reasoned.
+
+        SCOPE NOTE CARRIED FROM THE FILING: I found no installer that actually
+        provisions the service account — grep over scripts/install*.sh for
+        sysusers / /var/lib/tillandsias / SERVICE_USER returns nothing — so the
+        supervised shape may be packaging-only and not yet reachable from the
+        shipped installer. The uninstaller tears it down unconditionally on root
+        either way, so the message was wrong wherever that account exists.
+
+        WHY THE PAIR MATTERS MORE THAN EITHER HALF: macOS lost 11.83 GiB and
+        Linux loses the model cache, both reported as preservation, and both
+        from ONE sentence written for a meaning that stopped being true. The
+        general form — a closing summary that describes intent rather than what
+        the code just did — is worth watching for wherever an uninstall,
+        cleanup or reset path prints reassurance.

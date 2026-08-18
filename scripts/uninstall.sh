@@ -67,7 +67,22 @@ if [[ "$IS_ROOT" == true ]]; then
     [ -f "$SYSTEMD_USER_UNIT_DIR/tillandsias.service" ] && echo "    - $SYSTEMD_USER_UNIT_DIR/tillandsias.service (systemd user service)"
     [ -f "$SYSUSERS_DIR/tillandsias.conf" ] && echo "    - $SYSUSERS_DIR/tillandsias.conf (service account sysusers entry)"
     [ -f "$TMPFILES_DIR/tillandsias.conf" ] && echo "    - $TMPFILES_DIR/tillandsias.conf (service account tmpfiles entry)"
-    [ -d "$SERVICE_HOME" ] && echo "    - $SERVICE_HOME/ (service account home/state)"
+    # 804-wfcu: name the EXPENSIVE thing, not just the directory. Under the
+    # packaged service account the headless resolves its model cache from its
+    # process HOME (main.rs:4013), so the weights live at
+    # $SERVICE_HOME/.cache/tillandsias/models and go with the home below. The
+    # macOS half of this defect (804-bpke) measured 11.83 GiB reported as
+    # "preserved"; the Linux half is the same sentence over a different
+    # directory. Size it so the operator sees what they are about to lose.
+    if [ -d "$SERVICE_HOME" ]; then
+        _svc_models="$SERVICE_HOME/.cache/tillandsias/models"
+        if [ -d "$_svc_models" ]; then
+            _svc_models_size="$(du -sh "$_svc_models" 2>/dev/null | cut -f1)"
+            echo "    - $SERVICE_HOME/ (service account home/state, INCLUDING the model cache: ${_svc_models_size:-unknown})"
+        else
+            echo "    - $SERVICE_HOME/ (service account home/state)"
+        fi
+    fi
     [ -f "/usr/local/bin/tillandsias" ] && echo "    - /usr/local/bin/tillandsias (system binary)"
 fi
 if [[ "$WIPE" == true ]]; then
@@ -154,8 +169,15 @@ update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
 rm -rf "$HOME/Applications/Tillandsias.app"
 rm -f "$HOME/Library/LaunchAgents/com.tillandsias.tray.plist"
 
+SERVICE_HOME_REMOVED=false
 if [[ "$IS_ROOT" == true ]]; then
     rm -f "/usr/local/bin/tillandsias" "/usr/local/bin/tillandsias-uninstall"
+    # 804-wfcu. `userdel -r` removes the account's HOME, and `rm -rf` finishes
+    # the job, so both of these take $SERVICE_HOME/.cache/tillandsias/models
+    # with them — the packaged service account's weights. That is defensible on
+    # an uninstall; claiming afterwards that the cache was preserved is not.
+    # Record what happened so the closing message can tell the truth.
+    [ -d "$SERVICE_HOME" ] && SERVICE_HOME_REMOVED=true
     userdel -r "$SERVICE_USER" 2>/dev/null || true
     groupdel "$SERVICE_GROUP" 2>/dev/null || true
     rm -rf "$SERVICE_HOME"
@@ -201,6 +223,14 @@ echo "  Your project files were NOT touched."
 if [[ "$WIPE" != true ]]; then
     if [[ "$IS_MACOS" == true ]]; then
         echo "  VM image, settings and cache preserved. Use --wipe to remove everything."
+    elif [[ "$SERVICE_HOME_REMOVED" == true ]]; then
+        # 804-wfcu: the invoking user's cache IS preserved, but the service
+        # account's home just went — models included. Saying "Cache preserved"
+        # here is the same false reassurance 804-bpke removed on macOS: true of
+        # the 8 KB nobody cares about, false of the gigabytes they do.
+        echo "  Your cache ($CACHE_DIR) is preserved. The service account home"
+        echo "  $SERVICE_HOME was REMOVED, including any model cache it held."
+        echo "  Use --wipe to remove your cache too."
     else
         echo "  Cache preserved. Use --wipe to remove everything."
     fi

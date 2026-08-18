@@ -1,0 +1,108 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-18T00:34:41Z.
+#
+# Found while verifying 801-a2by's numbers. The verification succeeded; getting
+# to it took four attempts because the endpoint kept dying underneath.
+packets:
+  - packet_id: dev-inference-container-exits-2-mid-workload-with-no-error
+    order: 811-28eh
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    title: "the dev inference container exits(2) mid-request under sustained embedding load, while serving 200s, with nothing in its own logs — and podman labels the corpse (healthy)"
+    deliverable: "either the cause is identified and fixed, or the container is supervised so a death is a loud typed verdict with the last-output pointer preserved; today the only symptom a caller sees is `blocked:spec-index:embed-endpoint-refused`, which names the wrong subject"
+    pickup_role: linux
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [inference, gpu, stability, fail-loud, experts]
+    estimated_hours: 5
+    context: |
+      OBSERVED, macuahuitl 2026-08-17/18, at least three deaths in one evening.
+
+      THE STATE AT DEATH, read from podman rather than inferred:
+        tillandsias-dev-inference  Exited (2) 55 seconds ago (healthy)
+        OOMKilled=false  exit=2  RestartCount=0
+        host memory: 53 GiB available of 62
+        GPU: 946 MiB / 24564 MiB used, 7% utilisation
+      So: not OOM, not VRAM exhaustion, not GPU saturation.
+
+      THE LAST WORDS ARE THE STRANGE PART. The final log lines are successful
+      work, not an error:
+        [GIN] ... | 200 | 248.288414ms | POST "/v1/embeddings"
+        [GIN] ... | 200 | 252.196369ms | POST "/v1/embeddings"
+      Eight consecutive 200s at ~250ms each, then nothing. No panic, no fatal,
+      no signal message, no CUDA error. The process is simply gone with exit 2.
+
+      WHAT IT BREAKS: index rebuilds. scripts/spec-index-ensure.sh reports
+      `blocked:spec-index:embed-endpoint-refused` and exits — correct behaviour
+      for the script, but the verdict names the endpoint's REFUSAL when the
+      endpoint has in fact DIED. It took four attempts to build the index
+      tonight; the successful one is `ok:spec-index:built:18345`.
+
+      NOT REPRODUCIBLE ON DEMAND, said plainly because I tried. After
+      restarting the container I ran the full 18345-chunk build as sustained
+      load specifically to trigger it and the build completed cleanly. Two
+      hypotheses I formed and then FALSIFIED, recorded so nobody re-walks them:
+        * "a 64-item batch of 6000-char chunks is too large" — one hand-made
+          batch did return HTTP 400 with an internal
+          `Post "http://127.0.0.1:PORT/detokenize": connection reset by peer`,
+          but a follow-up sweep at 8/16/32/64 items x 6000 chars returned 200
+          at every size. The 400 was a symptom of a dying runner, not a size
+          threshold.
+        * "jq truncation at MAX_CHARS splits a multi-byte character" — jq's
+          `.[0:$max]` is character-safe on JSON strings, so the payload is
+          valid UTF-8. Ruled out by reading the code, not by testing.
+
+      THE SECONDARY DEFECT, and it is cheap: the caller discards the evidence.
+      scripts/spec-index-ensure.sh:383 runs
+        curl -fsS ... > "$work/resp.json" 2>/dev/null
+      so the HTTP status and the response body are both thrown away, and the
+      operator gets `embed-endpoint-refused` with no code, no body, no clue.
+      I only learned there was a 400 with a detokenize reset by rebuilding the
+      request by hand. Capturing `%{http_code}` and the first line of the body
+      into the verdict would have turned an hour into a minute. Same class as
+      797-5kqe (a preflight asserting a cause it never measured).
+
+      RELATED, ALREADY FILED: podman reporting `(healthy)` beside an Exited
+      container is 798-tk7b, seen here for the fourth time. And 767-nkkq's
+      harness supervisor plus 767-es4w's proxy supervisor are the same shape of
+      answer — a service that dies should produce a typed verdict and an
+      evidence pointer, not silence. This is the third service on this host to
+      need it, which is an argument for the shared mechanism 798-tk7b asks for
+      rather than a third bespoke supervisor.
+events:
+  - packet_id: expert-index-lifecycle-belongs-to-the-mirror-not-the-forge
+    event:
+      type: note
+      ts: "2026-08-18T00:34:41Z"
+      agent_id: linux-macuahuitl-opus5-20260817T233700Z
+      host: linux_mutable
+      summary: |
+        INDEPENDENT VERIFICATION OF THIS PACKET'S NUMBERS, by the coordinator,
+        on the merged tree rather than in the fork's worktree.
+
+          warm hit, three consecutive runs : 0.14s, 0.14s, 0.14s
+            verdict ok:spec-index:fresh:18345
+          after `rm -rf /dev/shm/tillandsias-experts/spec-index` : 0.14s,
+            verdict ok:spec-index:fresh:18345
+
+        That second line is the packet. The old location was tmpfs; deleting it
+        used to mean a full rebuild, and now it means nothing at all, because
+        the index lives in the podman volume
+        tillandsias-spec-index-tillandsias. The durable tier is real and the
+        ephemeral tier can be destroyed without touching it.
+
+        `--where` also earns its place immediately: run in this session it
+        prints serving=/mnt/c/Users/bullo/... — surfacing the stale
+        FORGE_SPEC_INDEX_DIR of 789-nc2s in one command, where previously it
+        took reading a refusal message and grepping the environment. Run with
+        the variable unset it resolves to the volume correctly. Worth a small
+        follow-up: with the override set it still reports `entries=3` while
+        omitting the `root=` line, so it counts entries the overridden path
+        does not have. Reporting a count for a location that does not exist is
+        the shape this milestone keeps removing; it is a nit here only because
+        the line above it already names the real problem.
+
+        HELD AT `implemented` CORRECTLY: no forge image is baked, so the
+        read-only mount into a forge is unexercised. The bare-metal half is
+        verified above.
