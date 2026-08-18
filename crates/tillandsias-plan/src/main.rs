@@ -2546,6 +2546,22 @@ fn main() {
                     "host:{host_id}\tlocus:{locus}\tkind:{kind}\tid_source:{source}\tderived_tier:{tier}\tts:{}\twriter:{}\tfrom:{}",
                     entry.ts, entry.host, entry.source
                 );
+                // Machine RAM, when the contributing context knows it. This is
+                // deliberately NOT a field on the Rust `HostInfo` (adding one
+                // would give a second home to a value DeviceRecord already
+                // owns), so without printing it here the number is carried in
+                // the ledger and visible to nobody — the write-only field this
+                // milestone keeps collecting. Printing it is the cheap half of
+                // that fix; typing it waits for a consumer that needs
+                // machine-capacity RAM as distinct from context-available RAM.
+                //
+                // Two loci legitimately disagree: this machine's guest reports
+                // its 7.3 GB VM slice and Windows reports 15.2 GB installed.
+                // Neither is wrong, which is why the figure is printed per-row
+                // rather than once per host.
+                if let Some(ram) = entry.document["host"]["system_ram_gb"].as_f64() {
+                    println!("  machine_ram_gb: {ram:.2}");
+                }
                 let triples = tillandsias_plan::fragments::schedulable_triples(&entry.document);
                 if triples.is_empty() {
                     println!("  schedulable: none");
@@ -2585,8 +2601,23 @@ fn main() {
                 if let Some(devices) = entry.document["devices"].as_sequence() {
                     for d in devices {
                         if d["usable"].as_bool() == Some(false) {
+                            // `os_status` is printed BESIDE the reason, not
+                            // folded into it, because they are two independent
+                            // facts and 806-2r4s is precisely about not
+                            // collapsing them. Windows calls this NPU healthy
+                            // AND we cannot reach it; a reader who sees only
+                            // the reason cannot tell "the OS says it is
+                            // broken" from "the OS says it is fine and our
+                            // lanes cannot get to it" — which are different
+                            // engineering problems. Omitted when the
+                            // contributing context did not report one, rather
+                            // than guessed.
+                            let os_status = d["os_status"]
+                                .as_str()
+                                .map(|s| format!(" os_status:{s}"))
+                                .unwrap_or_default();
                             println!(
-                                "  present-unusable: {}/{} ({})",
+                                "  present-unusable: {}/{} ({}){os_status}",
                                 d["device_class"].as_str().unwrap_or("?"),
                                 d["name"].as_str().unwrap_or("?"),
                                 d["unusable_reason"].as_str().unwrap_or("unstated")
