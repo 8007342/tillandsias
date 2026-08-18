@@ -105,7 +105,6 @@ if ! podman run \
     --name "$PROXY_CONTAINER" \
     --hostname proxy \
     --network "$ENCLAVE_NET" \
-    --ip "10.0.42.2" \
     --cap-drop=ALL \
     --security-opt=no-new-privileges \
     --security-opt=label=disable \
@@ -156,12 +155,10 @@ log_step "Starting git mirror container..."
 
         if ! podman run \
             --detach \
-            --rm \
             --name "$GIT_CONTAINER" \
             --hostname "git-$PROJECT_NAME" \
             --network-alias git-service \
             --network "$ENCLAVE_NET" \
-            --ip "10.0.42.3" \
         --cap-drop=ALL \
         --security-opt=no-new-privileges \
         --security-opt=label=disable \
@@ -170,9 +167,10 @@ log_step "Starting git mirror container..."
             --read-only \
             --env "PROJECT=$PROJECT_NAME" \
             --env "GIT_TRACE=1" \
+            --volume "tillandsias-mirror-$PROJECT_NAME:/srv/git" \
             --mount "type=bind,source=$CERTS_DIR/intermediate.crt,target=/etc/tillandsias/ca.crt,readonly=true" \
             "$GIT_IMAGE" \
-        /usr/bin/git daemon --verbose --listen=0.0.0.0 --base-path=/var/lib/git 2>&1 | tee /tmp/git-start.log; then
+        /usr/bin/git daemon --verbose --listen=0.0.0.0 --base-path=/srv/git 2>&1 | tee /tmp/git-start.log; then
         log_error "Failed to start git mirror container"
         exit 1
     fi
@@ -195,6 +193,7 @@ fi
 log_step "Starting inference container (non-blocking)..."
 
     INFERENCE_CONTAINER="tillandsias-inference"
+    INFERENCE_IMAGE=$(podman images --format "{{.Repository}}:{{.Tag}}" | grep "tillandsias-inference" | grep -v "sha256-" | head -1)
     mkdir -p "$HOME/.cache/tillandsias/models"
     podman rm -f "$INFERENCE_CONTAINER" 2>/dev/null || true
     inference_env_args=()
@@ -208,7 +207,6 @@ log_step "Starting inference container (non-blocking)..."
         --hostname inference \
         --network-alias inference \
         --network "$ENCLAVE_NET" \
-        --ip "10.0.42.4" \
         --cap-drop=ALL \
         --security-opt=no-new-privileges \
         --security-opt=label=disable \
@@ -219,7 +217,7 @@ log_step "Starting inference container (non-blocking)..."
         "${inference_env_args[@]}" \
         -v "$HOME/.cache/tillandsias/models:/home/ollama/.ollama/models:rw" \
         --mount "type=bind,source=$CERTS_DIR/intermediate.crt,target=/etc/tillandsias/ca.crt,readonly=true" \
-        "tillandsias-inference:v${VERSION}" \
+        "$INFERENCE_IMAGE" \
         /usr/bin/ollama serve >/tmp/inference-start.log 2>&1; then
         log_error "Failed to start inference container"
         exit 1
