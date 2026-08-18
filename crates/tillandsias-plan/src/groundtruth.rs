@@ -714,6 +714,27 @@ mod tests {
         repo_root().join("openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml")
     }
 
+    /// EVERY committed corpus, one entry per registered engine's query set.
+    ///
+    /// Order 551 registered the `spec.answer` engine and added its cases in a
+    /// SEPARATE file, `spec-rung1.yaml`, but the representation test still read
+    /// only `committed_set()` — so the engine was registered, never graded, and
+    /// the test that exists to catch exactly that went red instead of the
+    /// corpus being found. It was doing its job; it simply had no way to see
+    /// the second file.
+    ///
+    /// Listed explicitly rather than globbed: the other two files in that
+    /// directory (fragment-provenance, plan-next) are scoped query sets, not
+    /// per-engine corpora, and sweeping the directory would silently change
+    /// what "represented" means the next time someone adds one.
+    fn committed_sets() -> Vec<PathBuf> {
+        let root = repo_root().join("openspec/litmus-tests/groundtruth");
+        vec![
+            root.join("expert-groundtruth-rung1.yaml"),
+            root.join("spec-rung1.yaml"),
+        ]
+    }
+
     fn harness() -> Harness {
         Harness::new(
             repo_root(),
@@ -849,7 +870,7 @@ expect:
     /// being graded without anything going red.
     #[test]
     fn both_corpora_are_represented_in_the_committed_set() {
-        let sets = load_all(&[committed_set()]).expect("loads");
+        let sets = load_all(&committed_sets()).expect("loads");
         let engines: BTreeSet<&str> = sets
             .iter()
             .flat_map(|s| s.cases.iter())
