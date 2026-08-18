@@ -1,0 +1,72 @@
+# ORDER 551 — ground truth for the FAT SPEC EXPERT (spec.answer).
+#
+# @trace order:551
+# @trace spec:fat-spec-corpus-index
+#
+# Written to the format expert-groundtruth-rung1.yaml anticipated for exactly
+# this: register the engine in groundtruth.rs (ENGINES + Harness::run), drop a
+# set NEXT TO that file, and grade with the same code path — so the accuracy bar
+# cannot be quietly lowered for a new expert.
+#
+# WHY EACH CASE CARRIES A query_vec
+#
+#   This crate is network-free (spec.rs:2) and `spec-retrieve` is specified as
+#   "network-free cosine top-k over CALLER-SUPPLIED embeddings". So the grader
+#   supplies the query embedding exactly as every other caller of that path
+#   does, and grading stays deterministic while still exercising the REAL
+#   retrieval and envelope code. Having the grader make an HTTP call would
+#   trade determinism for nothing; grading a lexical stand-in would be worse,
+#   because a green grade would then certify a path production never runs.
+#
+#   The vectors pin this set to an embedding model (768-dim nomic-embed-text).
+#   That is a managed fact, not a new one — check-dev-embed-model-agreement.sh
+#   exists so the producer and the query path cannot name different models. A
+#   model change re-embeds the set; it does not rewrite it.
+#
+# PRECONDITION: spec.answer needs a built index. Point
+# TILLANDSIAS_SPEC_INDEX_DIR at one (scripts/spec-index-ensure.sh builds it).
+# A missing index is reported as an error naming that variable, never as a
+# silent pass — an ungradeable case must not read as a graded one.
+version: 1
+name: spec-rung1
+description: >
+  Cross-cutting questions the deterministic plan and methodology experts
+  refuse, whose answers live in whole-spec prose and in code.
+cases:
+  - id: spec-forge-isolation-and-egress
+    engine: spec.answer
+    query: "how does the forge stay isolated from the host and control outbound network access?"
+    query_vec: openspec/litmus-tests/groundtruth/query-vectors/forge-isolation.json
+    why: >
+      The question 803-su4n's scorecard used as its worked example of a JOIN
+      across specs: no single spec answers it, and the deterministic experts
+      correctly refuse. It is the case that justifies the fat expert existing
+      at all, so if retrieval stops finding the two governing requirements the
+      expert has lost the thing it was built for.
+    expect:
+      confidence: retrieved
+      min_citations: 3
+      citations_include:
+        # The REQUIREMENT, re-read from disk at grading time. Asserting the
+        # governing sentence rather than the file means a citation that points
+        # at the right file and the wrong lines goes red — the failure mode
+        # that otherwise looks entirely healthy.
+        - path: openspec/specs/forge-offline/spec.md
+          kind: spec
+          span_contains:
+            - "SHALL be attached to the `tillandsias-enclave` internal network only"
+            - "All HTTP/HTTPS traffic SHALL go through the proxy"
+        # The SCENARIO that makes the requirement checkable, in a different
+        # spec — which is what makes this a join rather than a lookup.
+        - path: openspec/specs/enclave-network/spec.md
+          kind: spec
+          span_contains:
+            - "MUST NOT have access to the default bridge network"
+      citations_exclude:
+        # A "return everything" regression satisfies citations_include for
+        # free. These are the corpora a top-6 must NOT reach for this question:
+        # the plan ledger is not in this corpus at all, and a localization spec
+        # is present, adjacent in neither meaning nor vocabulary, and would
+        # indicate the ranking had collapsed.
+        - path: plan/index.yaml
+        - path: openspec/specs/i18n-localization/spec.md

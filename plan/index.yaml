@@ -28174,6 +28174,18 @@ plan_index:
         - "a wrong expected span turns a case red (falsifiability spot-check)"
 
       events:
+        - type: progress
+          ts: "2026-08-18T05:31:34Z"
+          agent_id: "linux-yoga-claude-20260818t053134z"
+          host: linux-immutable
+          summary: |
+            SPEC.ANSWER ENGINE REGISTERED AND GREEN, with the falsifiability check the third criterion asks for. The set reuses expert-groundtruth-rung1.yaml's format verbatim, which that file's own header anticipated: register in ENGINES + Harness::run, drop a set beside it, grade through the same code path so the accuracy bar cannot be lowered for a new expert. HERMETIC BY THE CONTRACT, NOT BY COMPROMISE. The grader lives in a network-free crate while a spec answer needs an embedding. spec-retrieve is already specified as network-free cosine top-k over CALLER-SUPPLIED embeddings, so each case carries a committed query_vec and the grader supplies it exactly as every other caller does -- exercising the REAL retrieval and envelope path (top_k -> retrieval_only_answer -> build_envelope) rather than a lexical stand-in. Grading a stand-in would have been worse than not grading: a green result would certify a path production never runs. Cost stated in the file: the set is pinned to a 768-dim nomic-embed-text vector, which check-dev-embed-model-agreement.sh already keeps honest; a model change re-embeds the set rather than rewriting it. A MISTAKE WORTH RECORDING, because the corpus caught it in one run. My first shape re-derived the chunks from the repo with chunk_corpus(root) and took only the vectors from the index. That is wrong precisely BECAUSE 803-su4n added crates/ to the corpus: editing any Rust file changes the chunk count and shifts the pairing. Adding this very engine took the tree from 19483 chunks to 19485 while the index held 19483 vectors, and the arity guard refused rather than grading a shifted pairing -- a shift cites real files at wrong lines and reads exactly like a healthy answer. Both sides now come from the index, written by one run over one tree, so the failure is removed rather than detected; the arity check stays for a killed or half-copied builder. Note span_contains still re-reads every cited span FROM DISK at grading time, so a stale index makes a case FAIL, never pass -- the correct direction. RESULTS: PASS spec-forge-isolation-and-egress, 1/1, 486ms. Falsifiability: mutating one expected sentence to 'All HTTP traffic SHALL bypass the proxy entirely' turns it red with a diagnostic naming what WAS cited and the closest miss (rc 1). NOT DELIVERED, and I am not claiming it: the second exit criterion also wants the SYNTHESIZED envelope graded. Only the retrieval-only envelope is, because synthesis needs a model call and would make the grade non-deterministic; the citation set is what is graded either way, which is what the criterion says matters, but the synthesized path is untested here. Also NOT wired into the default grade set or build --check: the engine needs a built index (TILLANDSIAS_SPEC_INDEX_DIR), and a host without one would get a harness ERROR rather than a skip -- making it default would turn a missing host artifact into a red build fleet-wide. The gate's own committed-set test names one file rather than globbing, so this set cannot affect it.
+        - type: claim
+          ts: "2026-08-18T05:25:21Z"
+          agent_id: "linux-yoga-claude-20260818t052521z"
+          host: linux-immutable
+          summary: |
+            linux-immutable takes 551: spec.answer engine with caller-supplied query vectors, per spec-retrieve's contract
         - type: note
           ts: "2026-08-18T04:31:44Z"
           agent_id: "linux-yoga-claude-20260818t043144z"
