@@ -26,6 +26,7 @@ tracing = { workspace = true }
 # probes the in-VM headless's vsock listener after the VM reaches state ==
 # Running. No cycle: control-wire does NOT depend on vm-layer.
 # @trace spec:vsock-transport
+tillandsias-core = { workspace = true }
 tillandsias-control-wire = { workspace = true }
 # Host free-space probe for the pre-import headroom gate (order 419,
 # tar_to_wsl_import). Same version tillandsias-core pins.
