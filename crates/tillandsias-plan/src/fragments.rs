@@ -1509,6 +1509,129 @@ pub fn fold_capabilities(
     (matrix, skipped)
 }
 
+/// Why two measurements may not be ranked against each other (order 810-jeg7).
+#[derive(Debug, Clone, PartialEq)]
+pub enum Comparability {
+    /// Same workload, same locus: a ranking is meaningful.
+    Comparable,
+    /// One or both carry no locus, so nothing is known about where they ran.
+    RefusedUnlocated,
+    /// Both located, but at different loci.
+    RefusedDifferentLoci(String, String),
+    /// Different workloads, which is not a slower machine but a different question.
+    RefusedDifferentWorkloads(String, String),
+}
+
+impl Comparability {
+    pub fn is_comparable(&self) -> bool {
+        matches!(self, Comparability::Comparable)
+    }
+
+    /// A one-line reason, for a reader that has to explain the refusal.
+    pub fn reason(&self) -> String {
+        match self {
+            Comparability::Comparable => "comparable".to_string(),
+            Comparability::RefusedUnlocated => {
+                "refused: a measurement without a locus cannot be placed".to_string()
+            }
+            Comparability::RefusedDifferentLoci(a, b) => {
+                format!("refused: different loci ({a} vs {b})")
+            }
+            Comparability::RefusedDifferentWorkloads(a, b) => {
+                format!("refused: different workloads ({a} vs {b})")
+            }
+        }
+    }
+}
+
+/// May these two measurements be ranked against each other? (order 810-jeg7)
+///
+/// # Why this refuses instead of warning
+///
+/// This host measured the SAME suite on the SAME machine at two loci and the
+/// hop cost 5-10% on the embed arm — the same order as the cross-host
+/// differences the fleet matrix exists to detect. It did not merely add noise:
+/// it INVERTED a reported conclusion. Yolanda had been reported
+/// "indistinguishable" from yoga on the prefill-shaped arm; measured at a
+/// common locus it is FASTER. The original reading survived because two errors
+/// cancelled, which is the worst kind of wrong because nothing about it looks
+/// wrong.
+///
+/// A warning attached to a number that is still ranked gets read as a caveat on
+/// a result. A refusal has no such failure mode: there is no ranking to
+/// misread. So the matrix declines rather than annotates.
+///
+/// # An absent locus is refused, not defaulted
+///
+/// `MeasurementRecord.locus` is `Option` at the SCHEMA layer so that writers
+/// predating the field keep recording (see 808-43mw). That compatibility must
+/// not leak upward into the comparison: defaulting an unlabelled record to
+/// "probably the usual locus" would manufacture exactly the false comparability
+/// this exists to prevent. Schema permits absence; the matrix requires
+/// presence. PROBE-9 states that split.
+///
+/// # Workload mismatch refuses too
+///
+/// 810-jeg7 names the locus, but `workload_suite` landed in the same bump for
+/// the same reason and a reader that refuses on locus while silently ranking
+/// across workloads keeps the hole open on the other axis. Two suites are not a
+/// faster and a slower machine; they are different questions.
+pub fn measurements_comparable(a: &Value, b: &Value) -> Comparability {
+    let field = |v: &Value, k: &str| {
+        v.get(k)
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+    };
+
+    let (Some(la), Some(lb)) = (field(a, "locus"), field(b, "locus")) else {
+        return Comparability::RefusedUnlocated;
+    };
+    if la != lb {
+        return Comparability::RefusedDifferentLoci(la, lb);
+    }
+    // Two records that both omit the suite are treated as the same unknown
+    // workload rather than refused: the locus check has already established
+    // they were observed the same way, and 810-jeg7's claim is about locus.
+    // Refusing here would reject every pre-808-43mw pair for a reason that
+    // packet does not make.
+    match (field(a, "workload_suite"), field(b, "workload_suite")) {
+        (Some(wa), Some(wb)) if wa != wb => Comparability::RefusedDifferentWorkloads(wa, wb),
+        (Some(wa), None) => Comparability::RefusedDifferentWorkloads(wa, "unstated".to_string()),
+        (None, Some(wb)) => Comparability::RefusedDifferentWorkloads("unstated".to_string(), wb),
+        _ => Comparability::Comparable,
+    }
+}
+
+/// Split a document's measurements into those the matrix will accept and those
+/// it refuses, with a reason for each refusal (order 810-jeg7).
+///
+/// Returned as a partition rather than filtered in place: a measurement dropped
+/// without a reason is indistinguishable from a measurement never taken, which
+/// is the same silent-loss failure the capability channel's skipped-row list
+/// exists to prevent one level up.
+pub fn partition_measurements(document: &Value) -> (Vec<Value>, Vec<(Value, String)>) {
+    let mut accepted = Vec::new();
+    let mut refused = Vec::new();
+    let Some(ms) = document.get("measurements").and_then(Value::as_sequence) else {
+        return (accepted, refused);
+    };
+    for m in ms {
+        match m
+            .get("locus")
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+        {
+            Some(_) => accepted.push(m.clone()),
+            None => refused.push((
+                m.clone(),
+                "no locus: the matrix cannot place this measurement".to_string(),
+            )),
+        }
+    }
+    (accepted, refused)
+}
+
 /// The schedulable unit of the matrix: `(device_class, lane, engine)`
 /// (order 808-7yrd).
 ///
@@ -3150,5 +3273,148 @@ mod capability_matrix_tests {
             schedulable_triples(&doc).is_empty(),
             "no engine claims npu, so there is nothing to schedule on it"
         );
+    }
+}
+
+#[cfg(test)]
+mod measurement_comparability_tests {
+    use super::*;
+
+    fn m(locus: Option<&str>, suite: Option<&str>, decode: f64) -> Value {
+        let mut s = String::new();
+        s.push_str("device: cpu\nengine: ollama\n");
+        s.push_str(&format!("decode_tps: {decode}\n"));
+        if let Some(l) = locus {
+            s.push_str(&format!("locus: {l}\n"));
+        }
+        if let Some(w) = suite {
+            s.push_str(&format!("workload_suite: {w}\n"));
+        }
+        serde_yaml::from_str(&s).expect("fixture parses")
+    }
+
+    /// THE MEASUREMENT THIS RULE COMES FROM. Same suite, same machine, two
+    /// loci, 5-10% apart on the embed arm — and that gap once inverted a
+    /// cross-host conclusion. These must not be ranked.
+    #[test]
+    fn two_loci_are_refused_even_for_the_same_suite_and_machine() {
+        let in_guest = m(Some("in-guest"), Some("802-2536-v1"), 91.6);
+        let mirrored = m(Some("host-side-via-mirror"), Some("802-2536-v1"), 87.2);
+        let v = measurements_comparable(&in_guest, &mirrored);
+        assert!(!v.is_comparable());
+        assert_eq!(
+            v,
+            Comparability::RefusedDifferentLoci(
+                "in-guest".to_string(),
+                "host-side-via-mirror".to_string()
+            )
+        );
+        assert!(v.reason().contains("different loci"));
+    }
+
+    /// Same locus, same suite: this is the case a ranking is FOR.
+    #[test]
+    fn one_locus_and_one_suite_is_comparable() {
+        let a = m(Some("in-guest"), Some("802-2536-v1"), 91.6);
+        let b = m(Some("in-guest"), Some("802-2536-v1"), 109.1);
+        assert!(measurements_comparable(&a, &b).is_comparable());
+    }
+
+    /// An absent locus is REFUSED, never defaulted. The schema keeps the field
+    /// optional so pre-808-43mw writers keep recording; that compatibility must
+    /// not leak upward into a comparison, because defaulting would manufacture
+    /// exactly the false comparability this exists to prevent.
+    #[test]
+    fn an_unlocated_measurement_is_refused_not_defaulted() {
+        let located = m(Some("in-guest"), Some("802-2536-v1"), 91.6);
+        let bare = m(None, Some("802-2536-v1"), 87.2);
+        assert_eq!(
+            measurements_comparable(&located, &bare),
+            Comparability::RefusedUnlocated
+        );
+        assert_eq!(
+            measurements_comparable(&bare, &located),
+            Comparability::RefusedUnlocated,
+            "the refusal is symmetric"
+        );
+        assert_eq!(
+            measurements_comparable(&bare, &bare),
+            Comparability::RefusedUnlocated,
+            "two unlocated records are not comparable merely by both being unlocated"
+        );
+    }
+
+    /// An empty-string locus is absence, not a locus named "".
+    #[test]
+    fn an_empty_locus_counts_as_absent() {
+        let a = m(Some("in-guest"), Some("802-2536-v1"), 91.6);
+        let empty: Value = serde_yaml::from_str(
+            "device: cpu\nengine: ollama\ndecode_tps: 87.2\nlocus: \"\"\nworkload_suite: 802-2536-v1\n",
+        )
+        .expect("fixture parses");
+        assert_eq!(
+            measurements_comparable(&a, &empty),
+            Comparability::RefusedUnlocated
+        );
+    }
+
+    /// Different workloads are a different question, not a faster machine.
+    /// 810-jeg7 names the locus, but workload_suite landed in the same bump for
+    /// the same reason, and refusing on one axis while silently ranking on the
+    /// other keeps the hole open.
+    #[test]
+    fn different_workloads_are_refused_at_a_common_locus() {
+        let a = m(Some("in-guest"), Some("802-2536-v1"), 91.6);
+        let b = m(Some("in-guest"), Some("some-other-suite"), 300.0);
+        let v = measurements_comparable(&a, &b);
+        assert!(!v.is_comparable());
+        assert!(v.reason().contains("different workloads"));
+    }
+
+    /// A stated suite against an unstated one is refused: "unstated" is not a
+    /// wildcard that matches whatever it is compared against.
+    #[test]
+    fn a_stated_suite_against_an_unstated_one_is_refused() {
+        let stated = m(Some("in-guest"), Some("802-2536-v1"), 91.6);
+        let unstated = m(Some("in-guest"), None, 87.2);
+        assert!(!measurements_comparable(&stated, &unstated).is_comparable());
+    }
+
+    /// Two records that BOTH omit the suite stay comparable: the locus check
+    /// already established they were observed the same way, and refusing here
+    /// would reject every pre-808-43mw pair for a reason 810-jeg7 does not make.
+    #[test]
+    fn two_records_both_omitting_the_suite_remain_comparable() {
+        let a = m(Some("in-guest"), None, 91.6);
+        let b = m(Some("in-guest"), None, 87.2);
+        assert!(measurements_comparable(&a, &b).is_comparable());
+    }
+
+    /// Refused measurements are PARTITIONED with a reason, never dropped: a
+    /// measurement discarded silently is indistinguishable from one never
+    /// taken.
+    #[test]
+    fn unlocated_measurements_are_partitioned_with_a_reason() {
+        let doc: Value = serde_yaml::from_str(
+            "measurements:\n  - device: cpu\n    engine: ollama\n    locus: in-guest\n  - device: gpu\n    engine: ollama\n",
+        )
+        .expect("fixture parses");
+        let (accepted, refused) = partition_measurements(&doc);
+        assert_eq!(accepted.len(), 1);
+        assert_eq!(refused.len(), 1);
+        assert!(
+            refused[0].1.contains("locus"),
+            "the reason must name the missing field, got: {}",
+            refused[0].1
+        );
+    }
+
+    /// A document with no measurements partitions to two empty lists rather
+    /// than erroring — an unmeasured host is a normal state.
+    #[test]
+    fn a_document_without_measurements_partitions_empty() {
+        let doc: Value = serde_yaml::from_str("devices: []\n").expect("fixture parses");
+        let (accepted, refused) = partition_measurements(&doc);
+        assert!(accepted.is_empty() && refused.is_empty());
     }
 }

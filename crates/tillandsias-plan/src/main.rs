@@ -2553,6 +2553,31 @@ fn main() {
                 for (class, lane, engine) in triples {
                     println!("  schedulable: {class}/{lane}/{engine}");
                 }
+                // Measurements the matrix will not place (order 810-jeg7). An
+                // unlocated number is refused rather than shown as a plain
+                // figure, because the locus difference has been measured at
+                // 5-10% on the embed arm — enough to have inverted a cross-host
+                // conclusion once. Reported rather than dropped: a measurement
+                // discarded in silence is indistinguishable from one never
+                // taken.
+                let (placed, unplaced) =
+                    tillandsias_plan::fragments::partition_measurements(&entry.document);
+                for meas in &placed {
+                    println!(
+                        "  measured: {}/{} suite:{} decode_tps:{}",
+                        meas["device"].as_str().unwrap_or("?"),
+                        meas["engine"].as_str().unwrap_or("?"),
+                        meas["workload_suite"].as_str().unwrap_or("unstated"),
+                        meas["decode_tps"].as_f64().unwrap_or(f64::NAN)
+                    );
+                }
+                for (meas, why) in &unplaced {
+                    println!(
+                        "  measurement-refused: {}/{} ({why})",
+                        meas["device"].as_str().unwrap_or("?"),
+                        meas["engine"].as_str().unwrap_or("?")
+                    );
+                }
                 // Present-unusable devices are reported BESIDE the schedulable
                 // set, because "present but unreachable" and "absent" are
                 // different engineering problems (806-2r4s) and a matrix that
