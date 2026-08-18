@@ -274,6 +274,48 @@ configuration.
 - **THEN** deterministic questions still answer with citations
 - **AND** questions needing synthesis return `unsupported:` rather than an uncited guess
 
+### Requirement: Every citation names the frame it was read in, and the reader's position is derived rather than assumed
+
+@trace order:801-g9nn
+
+A citation's line range is meaningful only relative to a version of the file,
+so every citation MUST carry the commit its span was extracted from. A
+retrieved answer served from a shared index MUST carry the index's build
+commit, never the reading process's HEAD.
+
+The relationship between a reader's checkout and an answer's commit MUST be
+DERIVED from the commit graph and reported from the closed vocabulary
+`same | behind | ahead | diverged | unfetched | unknown`. It MUST NOT be
+expressed as a version number: git is a partial order, two concurrent branches
+are genuinely unordered, and `diverged` is a verdict no monotonic counter can
+carry. `unknown` MUST NOT be treated as agreement, and the relation MUST be
+omitted rather than defaulted when no reader has identified itself.
+
+A citation the reader cannot resolve MUST be distinguished from a fabricated
+one by re-reading its span at the commit it names. A span that holds there is
+reported as STALE with the frame that explains it; a span that holds at no
+commit — including one the reader has never fetched, where the question cannot
+be asked — remains a hard violation. Naming a commit MUST NOT excuse a
+citation that no commit substantiates.
+
+#### Scenario: A citation from the reader's future
+- **WHEN** an expert answers from a commit the asking agent has never fetched, as a mirror-backed index shared by concurrent harnesses routinely allows
+- **THEN** `verify-answer` reports the relation as `behind` or `unfetched` and the citation as stale rather than unresolvable
+- **AND** the finding names the commit at which the span verifies, so the reader's action is to fetch rather than to distrust the answer
+
+#### Scenario: A span that moved under the reader
+- **WHEN** a cited file still exists and the cited range is in bounds, but the lines now say something else
+- **THEN** the drifted path is named and the reader is told those line numbers are not valid in its checkout
+- **AND** the answer is not reported as fabricated, because it was true in the frame it was computed in
+
+#### Scenario: A fabricated citation carrying a commit
+- **WHEN** a citation's span holds neither in the reader's checkout nor at the commit it names
+- **THEN** it is refused as a violation with no reduction in severity for naming a frame
+
+#### Scenario: Uncommitted edits count as drift
+- **WHEN** the reader's HEAD equals the answer's commit but a cited file has uncommitted changes
+- **THEN** the relation is `same` and the file is still reported as drifted, because the reader will open the working tree and not the commit
+
 ## Litmus Tests
 
 ### Test: tillandsias-inventory command completeness

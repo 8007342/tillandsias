@@ -33,6 +33,10 @@ pub mod answer;
 /// `methodology/distributed-work.yaml` → `crdt_principles.append_only_history`,
 /// which required exactly this and which the monolithic index file never was.
 pub mod fragments;
+/// ORDER 801-g9nn — the commit-DAG plumbing behind a citation's `commit` and
+/// the envelope's `caller_relation`. Derives `same | behind | ahead | diverged`
+/// honestly and refuses to synthesise a total order git cannot give.
+pub mod gitref;
 /// ORDER 394d — the committed ground-truth query set and its grader.
 pub mod groundtruth;
 /// ORDER 582-nqw5 — the same fragment overlay applied to `plan/loop_status.md`.
