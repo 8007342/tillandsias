@@ -474,6 +474,66 @@ case "$out" in
     *) echo "ok: declared-class violation does not print the event remedy" ;;
 esac
 
+# ── 797-qm4t: a NON-TERMINAL event on an unknown packet_id is REPORTED ──────
+# The status and terminal-event channels only see a fragment that CLAIMS a
+# closure. A `note` or `progress` aimed at a packet_id nobody filed is dropped
+# in total silence — that is how a full set of GPU measurements for order 406
+# was written against an invented id, landed nowhere, and drew four green
+# signals. It is an ADVISORY, not a violation: this channel sees every note in
+# an append-only corpus no one may rewrite, and 699-dycj forbids turning one
+# host's typo into every host's red build.
+S="$TDIR/anyevent-unknown"; sandbox "$S"
+cat >"$S/plan/index.d/a.yaml" <<'F'
+packets:
+  - packet_id: alpha-packet
+    order: 900
+    status: ready
+    title: "a real packet, so the fold knows something"
+events:
+  - packet_id: ghost-packet
+    event:
+      type: note
+      ts: "2026-08-17T23:30:00Z"
+      host: fixture
+      summary: "a note addressed to a packet nobody ever filed"
+F
+out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+assert "non-terminal event on an unknown packet_id is named" 0 \
+    "ghost-packet: an events block addresses it but NO SUCH PACKET is in the fold" "$rc" "$out"
+case "$out" in
+    violation:*)
+        echo "FAIL: an unknown-pid NOTE must not fail the gate (699-dycj); out=$out" >&2
+        fail=1
+        ;;
+    *) echo "ok: unknown-pid note reports without failing the gate" ;;
+esac
+
+# NEGATIVE CONTROL: the same shape against a packet that DOES exist must stay
+# silent, or the advisory becomes noise on every well-formed fragment.
+S="$TDIR/anyevent-known"; sandbox "$S"
+cat >"$S/plan/index.d/a.yaml" <<'F'
+packets:
+  - packet_id: alpha-packet
+    order: 900
+    status: ready
+    title: "a real packet"
+events:
+  - packet_id: alpha-packet
+    event:
+      type: note
+      ts: "2026-08-17T23:30:00Z"
+      host: fixture
+      summary: "an ordinary note on a real packet"
+F
+out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+case "$out" in
+    *"an events block addresses it"*)
+        echo "FAIL: advisory fired on a KNOWN packet_id; out=$out" >&2
+        fail=1
+        ;;
+    *) echo "ok: no advisory for a note on a packet the fold knows" ;;
+esac
+
 if [ "$fail" -eq 0 ]; then
     echo "ok: all fragment-status-loss scenarios passed"
     exit 0

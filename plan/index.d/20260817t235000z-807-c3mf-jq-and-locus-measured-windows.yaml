@@ -1,0 +1,104 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by windows (yolanda), 2026-08-17T23:50Z.
+#
+# 807-c3mf's fix landed, and running the bench the RIGHT way immediately
+# corrected a cross-host conclusion this host had already reported. The locus
+# difference 808-43mw proposes to record in the schema is now MEASURED rather
+# than assumed — and it was not negligible.
+
+packets:
+  - packet_id: measurement-locus-is-worth-5-to-10-percent-and-reversed-a-cross-host-conclusion
+    order: 810-jeg7
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: research
+    title: "the wslrelay hop costs 5-10% on the embed arm, which is the same order as the differences the fleet matrix exists to detect — a row without a declared locus is not merely under-annotated, it can invert a comparison"
+    deliverable: "locus is REQUIRED on any measurement contributed to the fleet matrix, and rows at differing loci are refused a direct comparison rather than silently ranked"
+    pickup_role: any
+    release_target: forge-local-experts-milestone
+    capability_tags: [accel, fleet, schema, measurement]
+    context: |
+      MEASURED 2026-08-17, one host, one corpus, one sample (40 chunks,
+      p50_chars=298, 3 reps, suite 802-2536-v1), idle machine, changing ONLY
+      where the benchmark ran:
+
+        arm      locus                     embed ms/chunk   decode tps
+        yolanda  host-side-via-mirror      60, 61, 64       80.4, 87.2, 94.1
+        yolanda  in-guest                  58, 55, 57       83.9, 91.6, 87.5
+        yoga     in-guest (linux)          61, 60, 62       98.2, 109.1, 121.2
+
+      THE HOP COSTS 5-10% ON EMBED. When this host's row was first contributed
+      it carried the caveat "the extra hop is believed negligible and the embed
+      arm is evidence for that". That was optimistic and is now corrected: it is
+      small, but it is the same order of magnitude as the cross-host differences
+      the matrix is built to detect.
+
+      IT ALSO INVERTED A REPORTED CONCLUSION. The 2026-08-17 row was read as
+      "the prefill-shaped arm is INDISTINGUISHABLE across the two hosts —
+      whatever separates these machines, it is not embedding throughput".
+      Measured in-guest, yolanda is 55-58 against yoga's 60-62: this host is
+      FASTER on that arm, not equal to it. The original reading was an artifact
+      of the mirror hop inflating this host's numbers into coincidental
+      agreement. A conclusion that survives because two errors cancel is the
+      worst kind, because nothing about it looks wrong.
+
+      WHY THIS RAISES 808-43mw's `locus` FROM ANNOTATION TO REQUIREMENT. The
+      field was proposed so a reader could tell comparable rows apart. This
+      measurement shows the stakes are higher: an undeclared locus does not
+      merely leave a reader uninformed, it can produce a confident, wrong
+      cross-host ranking. So `locus` should be REQUIRED on contributed
+      measurements, and a consumer comparing rows at different loci should
+      refuse the comparison rather than rank them.
+
+      NOT CLAIMED: that 5-10% is a constant. It was measured on one host, one
+      corpus, one transport (wslrelay NAT loopback), on an idle machine. Another
+      host, a busier machine or mirrored-mode networking could differ. The point
+      is not the coefficient; it is that the coefficient is NOT ZERO.
+
+      The decode arm moved too (80-94 -> 84-92) but the reps overlap, so this
+      packet claims nothing about decode. The prefill rep1 cold outlier survived
+      both loci (480 host-side, 570 in-guest against 3800-4300 in reps 2-3),
+      which is evidence it is a real cold-start property of the lane rather than
+      a measurement artifact.
+    verifiable_closure: "a measurement contributed without a locus is refused, and two rows at differing loci cannot be directly ranked by the matrix reader"
+    evidence:
+      - "plan/issues/accel-bench-yolanda-cpu-2026-08-17.json (locus host-side-via-mirror)"
+      - "plan/issues/accel-bench-yolanda-cpu-in-guest-2026-08-17.json (locus in-guest, same suite/sample)"
+      - "plan/issues/accel-bench-yoga-cpu-2026-08-17.json (linux, in-guest)"
+
+events:
+  - packet_id: runtime-guest-lacks-jq-so-the-shared-accel-bench-cannot-run-in-it
+    event:
+      type: note
+      ts: "2026-08-17T23:50:00Z"
+      agent_id: windows-yolanda-opus5-20260817t2319z
+      host: windows
+      summary: >
+        FIXED in the Windows tray's guest provisioning, and verified end to end.
+        crates/tillandsias-windows-tray/src/wsl_lifecycle.rs ensure_base_packages
+        now installs jq. Chose adding it to the image over dropping jq from
+        bench-accel-lane.sh because that script belongs to another host while
+        this image is ours, and because the precedent for a test/diagnostic
+        dependency in this exact list is `socat`, already there "for Phase 5
+        vsock-in-vsock loopback tests"; jq is smaller than the
+        selinux-policy-devel sitting beside it. If the fleet later prefers a
+        dependency-free bench, remove it.
+        WHILE THERE, REMOVED A DRIFT CLASS RATHER THAN DOCUMENTING IT. The
+        package set was TWO hand-maintained spellings on adjacent lines — an
+        `rpm -q` guard and a `dnf install`. A package added to only the guard
+        never installs; one added to only the install reinstalls on EVERY
+        provision, because the guard never reports it satisfied. Neither failure
+        is loud. Both arms are now generated from a single GUEST_BASE_PACKAGES
+        array, so the drift is structurally impossible instead of policed.
+        Two tests, run natively (this crate, unlike tillandsias-headless, does
+        compile for Windows): every package appears in both generated arms, and
+        jq specifically is present. Honest note — the drift test is a STRUCTURAL
+        pin, not red-before-green: given the generator it cannot currently fail,
+        and its value is catching a future hand-edit that reintroduces two lists.
+        VERIFIED LIVE: installed jq in the running guest (exactly what the code
+        does on next provision) and re-ran the bench IN-GUEST — exit 0, clean
+        stderr, valid JSON, recorded at
+        plan/issues/accel-bench-yolanda-cpu-in-guest-2026-08-17.json. This host
+        can now contribute a locus=in-guest row, directly comparable with
+        linux's. See 810-jeg7 for what that immediately revealed.
