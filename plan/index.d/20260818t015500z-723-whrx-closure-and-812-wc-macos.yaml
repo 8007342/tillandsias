@@ -1,0 +1,164 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macos (osx-next), 2026-08-18T01:55:00Z.
+#
+# build.sh gets a macOS host branch, and a litmus step that could never pass on
+# a BSD userland is fixed — found because binding a new test ran the suite.
+status:
+  - packet_id: build-sh-install-and-init-broken-on-macos
+    field: status
+    value: completed
+    ts: "2026-08-18T01:55:00Z"
+    host: macos
+
+events:
+  - packet_id: build-sh-install-and-init-broken-on-macos
+    event:
+      type: completed
+      ts: "2026-08-18T01:55:00Z"
+      agent_id: macos-opus5-metal-20260818T012400Z
+      host: macos
+      summary: >
+        BOTH CRITERIA MET AND MEASURED. Confirmed the premise first: `grep -niE
+        'darwin|uname|OSTYPE'` over build.sh matched NOTHING — the file had no
+        host branch at all.
+        CRITERION 1 — --install refuses on Darwin naming the macOS path.
+        MEASURED: `./build.sh --install` now exits 2 and prints a refusal naming
+        scripts/build-macos-tray.sh; `./build.sh --ci-full --install` takes the
+        same path and also exits 2.
+        PLACEMENT IS THE PROPERTY, and it is why the refusal sits immediately
+        after flag parsing rather than beside the install block. THREE things
+        downstream mutate state before install work begins: the FLAG_INSTALL
+        pre-gate's _bump_build_version + _check_trace_coverage,
+        _prepare_ci_full_install_inputs on the --ci-full --install path, and the
+        main install block. Refusing at ANY of those still dirties VERSION —
+        and build.sh then tells the operator not to commit the dirt it just
+        made. MEASURED after both refusals: `git diff --stat -- VERSION
+        Cargo.toml Cargo.lock` is EMPTY. NEGATIVE CONTROL RUN, not assumed:
+        `./build.sh --check` still exits 0 (38s, gate stamp recorded), so the
+        paths that DO work on macOS are untouched.
+        CRITERION 2 — --init builds the binary it then executes, BEFORE the
+        podman gate and the version bump. VERIFIED BEHAVIOURALLY by parking
+        target/debug/tillandsias and running --init: the output order is
+        `target/debug/tillandsias is absent — building it first (723-whrx)` ->
+        `Compiling tillandsias-headless` -> `Finished dev profile in 2.66s` ->
+        only THEN the VERSION bump. The rebuild was incremental and cost 2.66s,
+        so the "a full debug build is too expensive to verify" worry carried in
+        from the plan was wrong and is recorded as such. The VERSION bump that
+        follows is --init's own long-documented behaviour, not something this
+        change introduced; the test's dirt was reverted.
+        PINNED: scripts/test-build-sh-darwin-install-refusal.sh (13 assertions)
+        + litmus:build-sh-darwin-install-refusal bound under spec:dev-build
+        (4 steps, all OK). The behavioural arm runs ONLY on Darwin — invoking
+        `./build.sh --install` on Linux would start a real install — so off
+        Darwin it falls back to source ordering, and the fixture says so rather
+        than implying full coverage.
+        FALSIFIED AGAINST TWO SHAPES: removing the Darwin guard fails three
+        assertions; moving the --init build after require_podman fails
+        init-builds-before-the-podman-gate. WORTH RECORDING — falsifying shape
+        A is mildly DESTRUCTIVE: with the guard disabled the fixture's real
+        `--install` ran and bumped VERSION, and that dirt persisted into the
+        next runs until reverted. A falsification that disables a guard performs
+        the act the guard prevents; budget for the cleanup.
+        THE FIXTURE'S OWN FIRST DRAFT WAS WRONG, and the failure is instructive:
+        its ordering assertions matched its OWN explanatory comment inside the
+        --init block (which names require_podman and _bump_build_version while
+        describing the bug), so it reported the ordering broken while the
+        behavioural arm passed. Comments are now stripped before the ordering
+        search. A source-shape assertion that cannot tell code from prose about
+        code is worse than none — it fails on correct code and would pass on a
+        block whose only mention of the gate is a comment.
+      evidence_refs:
+        - "build.sh — Darwin --install refusal after flag parsing, before every install-path mutation"
+        - "build.sh — --init builds target/debug/tillandsias before require_podman and _bump_build_version"
+        - "measured: --install exit 2, --ci-full --install exit 2, VERSION/Cargo.* clean, --check exit 0"
+        - "measured: --init build-then-bump ordering, incremental rebuild 2.66s"
+        - "scripts/test-build-sh-darwin-install-refusal.sh 13/13; litmus:build-sh-darwin-install-refusal 4/4"
+        - "falsified: guard removed -> 3 assertions fail; --init build moved after podman -> ordering assertion fails"
+
+  - packet_id: bsd-wc-padding-made-a-litmus-step-unpassable-on-macos
+    event:
+      type: completed
+      ts: "2026-08-18T01:55:00Z"
+      agent_id: macos-opus5-metal-20260818T012400Z
+      host: macos
+      summary: >
+        Fixed in the filing cycle. The step compared a BSD `wc -l` count against
+        the string "1", and BSD wc PADS with leading spaces — measured here as
+        [       1] vs [1], so the comparison was false on every macOS host while
+        `scripts/check-no-tracked-binaries.sh` itself passed cleanly
+        (ok:no-tracked-binaries:38 binary-classified 38 allowlisted, exit 0).
+        Confirmed PRE-EXISTING rather than caused by this cycle by re-running the
+        guard against a stashed clean tree: same pass, so the failing step was
+        already unpassable here. GNU coreutils prints "1" unpadded, which is why
+        it was invisible from Linux. After `| tr -d '[:space:]'` the whole
+        dev-build litmus suite is PASS on this host (exit 0), where it had been
+        FAIL:1. Found by BINDING A NEW TEST — running the suite to check my own
+        litmus surfaced someone else's broken step.
+      evidence_refs:
+        - "openspec/litmus-tests/litmus-no-tracked-binaries-shape.yaml — tr -d '[:space:]' on the wc count"
+        - "measured: BSD wc -l yields [       1]; string compare against \"1\" is false"
+        - "guard passes standalone on a stashed clean tree: ok:no-tracked-binaries:38 ... exit 0"
+        - "before: dev-build suite PASS 8 / FAIL 1; after: Status PASS, exit 0"
+
+packets:
+  - packet_id: bsd-wc-padding-made-a-litmus-step-unpassable-on-macos
+    order: 812-64j7
+    status: completed
+    desired_release: v0.5
+    priority: p2
+    kind: fix
+    title: "litmus:no-tracked-binaries-shape compared a padded BSD `wc -l` against \"1\", so the step could never go green on macOS while the guard it wraps passed cleanly"
+    deliverable: "tr -d '[:space:]' on the wc count in litmus-no-tracked-binaries-shape.yaml; dev-build suite green on macOS"
+    pickup_role: macos
+    release_target: convergence-velocity-milestone
+    capability_tags: [portability, macos, bsd, litmus, gates]
+    estimated_hours: 1
+    context: |
+      FOUND BY BINDING A NEW TEST — running the dev-build suite to check my own
+      litmus surfaced someone else's failure. Fixed in the same cycle.
+
+      The step read:
+
+        [ "$(echo "$out" | wc -l)" = 1 ]
+
+      BSD `wc -l` PADS its count with leading spaces. Measured here:
+
+        compare result: [       1] vs [1]   -> DOES NOT MATCH
+
+      GNU coreutils prints "1" unpadded, which is why this was invisible from
+      Linux. So on every macOS host the step failed with EMPTY output while
+      `scripts/check-no-tracked-binaries.sh` itself passed cleanly
+      (`ok:no-tracked-binaries:38 binary-classified 38 allowlisted`, exit 0) —
+      confirmed on a stashed clean tree, so it was pre-existing and not caused
+      by the changes in this cycle. After `| tr -d '[:space:]'` the dev-build
+      suite is PASS end to end on this host.
+
+      THIRD OF ITS CLASS IN ONE SESSION, on the host that is the declared
+      bash-3.2/BSD floor:
+        * 803-bqte — GNU-only `\b` in three observability readers, which made
+          every macOS stamp write-only;
+        * 805-pr3p — bash 3.2 rejecting "${arr[@]}" on an EMPTY array under
+          `set -u`, which killed the pre-push fast lane exactly when no checker
+          was missing;
+        * this one — BSD `wc -l` padding.
+      All three are correct on the authoring platform, fail SILENTLY or
+      INVERTED on the floor, and pass `./build.sh --check` on both. The pattern
+      is not "someone was careless"; it is that nothing in the loop executes
+      these surfaces on a BSD userland until a macOS cycle happens to touch
+      them.
+
+      SCOPE NOT SWEPT, deliberately: `wc -l` appears in 31 litmus files. Most
+      uses are counts fed to arithmetic (`-gt`, `-eq`), where padding is
+      harmless because the shell strips it; only STRING comparison breaks. I did
+      not audit all 31 this cycle because distinguishing the harmful use from the
+      harmless one needs care and a blind `tr` sweep would be churn. Recording
+      the class rather than silently half-fixing it.
+
+      PROPOSED CONSTRAINT, filed not built (bar-raise discipline — this needs
+      operator review before it can block a push): the `bash-dialect-clean` gate
+      already runs on every `./build.sh --check` and stayed GREEN through all
+      three defects above, so it does not cover this class. Extending it to flag
+      the three now-measured shapes — GNU-only sed/grep atoms (`\b`, `\u`, `\U`,
+      `\L`), bare `"${arr[@]}"` under `set -u` without a length guard, and
+      STRING comparison against an unstripped `wc` count — would have caught all
+      three at authoring time on Linux.

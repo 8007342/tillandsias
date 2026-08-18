@@ -166,6 +166,45 @@ if [ "${CYCLE_PREFLIGHT_SKIP_BUILD:-0}" != "1" ]; then
     esac
 fi
 
+# Enclave service health (order 798-tk7b). The blind spot this closes is
+# EXACTLY this position in the cycle: tillandsias-nix sat Exited(143) for three
+# days and tillandsias-vault Exited(137) for five hours while cycle after cycle
+# started on this host, several of them using podman heavily, and nothing on
+# the path a cycle actually walks ever said so. This is that path.
+#
+# A REPORT, never a gate, and folded colon-free like +expert-* so the pinned
+# line arity is preserved. A host whose stack is simply not running has every
+# service down; blocking there would strand every cycle on a freshly booted
+# laptop, and a check that stops honest work is a check someone switches off.
+# The per-service detail — exit code, derived signal, age, and whether podman
+# is still advertising a stale `healthy` — goes to stderr where the operator
+# reading the preflight sees it.
+#
+# ONE reading, not two. Calling the script once for its verdict and again for
+# its detail would let a service die between the two calls and print a detail
+# block that disagrees with the summary beside it.
+services_report="skipped"
+if [ -x "$ROOT/scripts/check-enclave-service-health.sh" ]; then
+    _svc_err="$(mktemp "${TMPDIR:-/tmp}/cycle-preflight-services.XXXXXX")"
+    services_line="$(bash "$ROOT/scripts/check-enclave-service-health.sh" 2>"$_svc_err" | tail -1)"
+    case "$services_line" in
+        ok:enclave-service-health:*) services_report="ok" ;;
+        degraded:enclave-service-health:*)
+            _down="$(printf '%s' "$services_line" | sed -n 's/.*:down=\([0-9][0-9]*\).*/\1/p')"
+            _absent="$(printf '%s' "$services_line" | sed -n 's/.*:absent=\([0-9][0-9]*\).*/\1/p')"
+            services_report="down${_down:-unknown}"
+            [ "${_absent:-0}" != "0" ] && services_report="${services_report}-absent${_absent}"
+            cat "$_svc_err" >&2
+            ;;
+        blocked:enclave-service-health:*)
+            services_report="$(printf '%s' "${services_line#blocked:enclave-service-health:}" | cut -c1-30)"
+            ;;
+        *) services_report="no-verdict" ;;
+    esac
+    rm -f "$_svc_err"
+fi
+plan_verdict="${plan_verdict}+services-${services_report}"
+
 # Host-state security migration (order 791-swxt). Runs SILENTLY and never
 # touches this script's verdict line, so the pinned arity is unaffected.
 #
