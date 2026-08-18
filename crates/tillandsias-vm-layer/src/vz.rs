@@ -579,7 +579,24 @@ if [[ -x "$STAGED" ]]; then
   install -D -m 0755 "$STAGED" "$DEST"
   exit 0
 fi
-if [[ -x "$DEST" ]]; then exit 0; fi
+# 701-iu9b TRAP 1. Say WHY the staged binary was not used, and distinguish the
+# two causes — they call for opposite responses and used to be indistinguishable
+# because this path printed nothing at all.
+#
+# `findmnt` rather than `mountpoint`: findmnt is verified present in this guest
+# (used to read the share during the 2026-08-18 instrumented boot), and under
+# `set -euo pipefail` a MISSING mountpoint binary would make `! mountpoint -q`
+# succeed and report "not mounted" for a share that is fine.
+if ! findmnt -n /home/forge/src >/dev/null 2>&1; then
+  echo "[tillandsias-fetch] staged_binary=unreachable reason=share-not-mounted path=$STAGED" >&2
+  echo "[tillandsias-fetch]   /home/forge/src is not mounted yet, so the host-staged binary is invisible to this unit." >&2
+else
+  echo "[tillandsias-fetch] staged_binary=absent path=$STAGED" >&2
+fi
+if [[ -x "$DEST" ]]; then
+  echo "[tillandsias-fetch] keeping the EXISTING $DEST — it may be OLDER than what the host staged (701-iu9b)." >&2
+  exit 0
+fi
 ARCH="$(uname -m)"
 URL="https://github.com/8007342/tillandsias/releases/latest/download/tillandsias-headless-${ARCH}-unknown-linux-musl"
 TMP="$(mktemp)"
@@ -623,6 +640,7 @@ cat > /etc/systemd/system/tillandsias-headless-fetch.service << 'EOF'
 Description=Ensure tillandsias-headless is present
 After=network-online.target
 Wants=network-online.target
+After=home-forge-src.mount
 Before=tillandsias-headless.service
 [Service]
 Type=oneshot
@@ -2289,15 +2307,88 @@ mod tests {
             .and_then(|tail| tail.split("# Write tillandsias-headless.service").next())
             .expect("fetch unit window");
 
+        // 701-iu9b widened this from a LITERAL match on
+        // `if [[ -x "$DEST" ]]; then exit 0; fi` to the property that line was
+        // standing in for. The one-line form had to grow a diagnostic (below),
+        // and pinning its exact spelling made a correct change look like a
+        // regression — the failure mode `litmus:litmus-expression-pinning-
+        // enforcement-shape` exists to discourage. The INTENT is idempotence:
+        // an existing binary must still short-circuit to exit 0.
         assert!(
-            source.contains("if [[ -x \"$DEST\" ]]; then exit 0; fi"),
-            "fetch script must be safe to run when the binary already exists"
+            source.contains("if [[ -x \"$DEST\" ]]; then")
+                && source.contains("[tillandsias-fetch] keeping the EXISTING $DEST"),
+            "fetch script must still be safe to run when the binary already exists, \
+             and must now SAY it kept the existing one"
         );
         assert!(fetch_unit.contains("Type=oneshot"));
         assert!(fetch_unit.contains("RemainAfterExit=yes"));
+
+        // 701-iu9b TRAP 1. The fetch unit must be ordered AFTER the virtiofs
+        // share, or it races the mount that carries the very binary it installs.
+        // Measured on this host 2026-08-18 from systemd's own resolved view:
+        // RequiresMountsFor= was EMPTY and After= omitted the mount. The race
+        // did not fire that boot — mount active at monotonic 3.005s, fetch
+        // started at 4.461s — but the margin was only 1.456s, small enough that
+        // a slower virtiofs mount closes it, and the failure is SILENT: the
+        // script kept the old binary and exited 0.
+        assert!(
+            fetch_unit.contains("After=home-forge-src.mount"),
+            "the fetch unit must be ordered after the share that carries the staged binary"
+        );
+        // ...but NOT via RequiresMountsFor, which implies Requires=. The fstab
+        // entry is deliberately `nofail` because a VZ config may legitimately
+        // omit the share; `tillandsias-headless.service` has
+        // Requires=tillandsias-headless-fetch.service, so a hard requirement
+        // here would turn a benign no-share boot into a DEAD GUEST. That
+        // regression would surface only on a boot, which is exactly the
+        // instrument this fix cannot afford to spend.
+        assert!(
+            !fetch_unit.contains("RequiresMountsFor="),
+            "use plain After=, not RequiresMountsFor= — the latter implies Requires= and would \
+             make a legitimate no-share boot fail the guest entirely"
+        );
         assert!(
             !fetch_unit.contains("ConditionPathExists=!/usr/local/bin/tillandsias-headless"),
             "systemd must run the idempotent oneshot instead of skipping it"
+        );
+    }
+
+    /// 701-iu9b TRAP 1, the diagnostic half. Ordering makes the race unlikely;
+    /// this makes it VISIBLE when it happens anyway — ordering cannot help a
+    /// boot where the share is genuinely absent, and that boot must not look
+    /// identical to a healthy one.
+    ///
+    /// The two causes need opposite responses and used to be indistinguishable,
+    /// because the fall-through printed nothing at all: an unmounted share means
+    /// the staged binary exists and is invisible (retry / check the share); a
+    /// genuinely absent staged file means nothing was ever staged (run the .app
+    /// bundle — 701-kgvk).
+    #[test]
+    fn vz_cloud_init_fetch_script_names_why_it_skipped_the_staged_binary() {
+        let source = include_str!("vz.rs");
+        let script = source
+            .split("# Write fetch-headless.sh")
+            .nth(1)
+            .and_then(|tail| tail.split("# Write headless-preflight.sh").next())
+            .expect("fetch script window");
+
+        assert!(
+            script.contains("staged_binary=unreachable reason=share-not-mounted"),
+            "an unmounted share must be named as the reason, not silently skipped"
+        );
+        assert!(
+            script.contains("staged_binary=absent"),
+            "a genuinely absent staged binary must be distinguishable from an unreachable one"
+        );
+        assert!(
+            script.contains("findmnt"),
+            "probe the mount with findmnt, which is verified present in this guest — under \
+             `set -euo pipefail` a MISSING `mountpoint` binary would make `! mountpoint -q` \
+             succeed and report a healthy share as unmounted"
+        );
+        assert!(
+            script.contains(">&2"),
+            "diagnostics belong on stderr so the journal captures them"
         );
     }
 

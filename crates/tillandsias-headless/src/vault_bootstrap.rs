@@ -1255,6 +1255,35 @@ fn has_shamir_share_in_keyring() -> bool {
     false
 }
 
+/// UNREACHABLE BY CONSTRUCTION — and this comment is the point (701-iu9b).
+///
+/// TRAP 2 asked whether this stub could ship and make the partial-init WIPE
+/// unconditional: `has_shamir_share_in_keyring() == false` turns
+/// `vault_data_volume_exists() && !has_shamir_share_in_keyring()` into "always
+/// a partial init", i.e. wipe a healthy Vault on every boot. That was REFUTED,
+/// twice over:
+///
+///   1. `mod vault_bootstrap;` is itself `#[cfg(feature = "vault")]`
+///      (main.rs:101-103), so with vault OFF this module — and therefore this
+///      item — is never compiled at all.
+///   2. `compile_error!` (main.rs:94-99) fails the build outright for
+///      `listen-vsock` without `vault`, so the dangerous combination cannot be
+///      produced even by accident. The guest build path passes
+///      `--features listen-vsock` while keeping default features, and
+///      `default = ["vault"]`.
+///
+/// The criterion asked for "a test [that] exercises the wipe predicate under
+/// the stub cfg and documents the intended behaviour THERE". The test half is
+/// UNACHIEVABLE — no test can reach an item that is never compiled — but the
+/// documentation half was genuinely undone: the rationale lived only in
+/// main.rs and in the ledger, so a reader arriving HERE, at the item that looks
+/// dangerous, found nothing. Now they do.
+///
+/// NOT DELETED, deliberately. Ten sibling `cfg(not(feature = "vault"))` items
+/// in this file are dead for the same reason, and removing eleven items to
+/// tidy one is a larger regression surface than the tidiness is worth while
+/// the compile_error! guard makes the whole class unreachable. Recorded rather
+/// than swept.
 #[cfg(not(feature = "vault"))]
 fn has_shamir_share_in_keyring() -> bool {
     false
