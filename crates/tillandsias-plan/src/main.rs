@@ -66,6 +66,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "blocking-counts",
     "burndown",
     "capabilities",
+    "capability-matrix",
     "check",
     "closure-evidence-check",
     "compact",
@@ -127,6 +128,11 @@ const USAGE: &str = concat!(
     "                                     predates order 569 and its capabilities are unknowable —\n",
     "                                     that absence is itself the stale-binary signal the forge\n",
     "                                     wrapper branches on.\n",
+    "           capability-matrix         ORDER 808-7yrd. The FLEET HARDWARE matrix, folded from the\n",
+    "                                     `capabilities:` fragment channel: one row per host_id, its\n",
+    "                                     schedulable (device_class, lane, engine) triples, and its\n",
+    "                                     present-but-unusable devices. Distinct from `capabilities`\n",
+    "                                     above, which reports THIS BINARY's subcommands.\n",
     "           check [--strict-fragments]\n",
     "                                     integrity + schema validation (exit 1 on violations).\n",
     "                                     ORDER 796-4ydb. A fragment the fold could not parse is\n",
@@ -2510,6 +2516,61 @@ fn main() {
     let schema = Schema::load(&schema_path).unwrap_or_else(|_| Schema::minimal());
 
     match args[0].as_str() {
+        "capability-matrix" => {
+            // ORDER 808-7yrd. The fleet capability matrix, folded from the
+            // `capabilities:` channel of the SAME fragments every other channel
+            // uses.
+            //
+            // NOT named `capabilities` — that arm is taken by order 569 and
+            // reports this BINARY's subcommand set. Two meanings of the word,
+            // and a reader who conflates them gets a confident wrong answer.
+            //
+            // One line per host, then its schedulable triples. `legacy_tier` is
+            // printed as DERIVED context, never as the routing input: a single
+            // string cannot express "GPU present, no lane", which is the state
+            // every WSL2 host is in.
+            let frags = tillandsias_plan::fragments::load_all(&index);
+            let matrix = tillandsias_plan::fragments::fold_capabilities(&frags);
+            if matrix.is_empty() {
+                println!("capability-matrix: 0 hosts (no `capabilities:` rows in any fragment)");
+            }
+            for (host_id, entry) in &matrix {
+                let kind = entry.document["host"]["host_kind"]
+                    .as_str()
+                    .unwrap_or("unknown");
+                let source = entry.document["host"]["host_id_source"]
+                    .as_str()
+                    .unwrap_or("unknown");
+                let tier = entry.document["legacy_tier"].as_str().unwrap_or("unknown");
+                println!(
+                    "host:{host_id}\tkind:{kind}\tid_source:{source}\tderived_tier:{tier}\tts:{}\twriter:{}\tfrom:{}",
+                    entry.ts, entry.host, entry.source
+                );
+                let triples = tillandsias_plan::fragments::schedulable_triples(&entry.document);
+                if triples.is_empty() {
+                    println!("  schedulable: none");
+                }
+                for (class, lane, engine) in triples {
+                    println!("  schedulable: {class}/{lane}/{engine}");
+                }
+                // Present-unusable devices are reported BESIDE the schedulable
+                // set, because "present but unreachable" and "absent" are
+                // different engineering problems (806-2r4s) and a matrix that
+                // shows only what is schedulable cannot tell them apart.
+                if let Some(devices) = entry.document["devices"].as_sequence() {
+                    for d in devices {
+                        if d["usable"].as_bool() == Some(false) {
+                            println!(
+                                "  present-unusable: {}/{} ({})",
+                                d["device_class"].as_str().unwrap_or("?"),
+                                d["name"].as_str().unwrap_or("?"),
+                                d["unusable_reason"].as_str().unwrap_or("unstated")
+                            );
+                        }
+                    }
+                }
+            }
+        }
         "fragments" => {
             // Report the overlay's state and whether compaction is eligible.
             // Read-only: compaction itself is a separate, deliberate act.

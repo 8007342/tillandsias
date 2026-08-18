@@ -1330,6 +1330,171 @@ impl Ledger {
     }
 }
 
+/// One host's contribution to the fleet capability matrix (order 808-7yrd).
+#[derive(Debug, Clone, PartialEq)]
+pub struct CapabilityEntry {
+    /// The machine this row describes — `HostInfo.host_id` (order 808-43mw).
+    pub host_id: String,
+    /// LWW timestamp, and with `host` the deterministic tiebreak.
+    pub ts: String,
+    /// The writing host kind, matching every other channel's `host:` field.
+    pub host: String,
+    /// The contributed `CapabilityDocument`, carried verbatim.
+    pub document: Value,
+    /// Fragment this row came from, so a reader can cite it.
+    pub source: String,
+}
+
+/// Fold the `capabilities:` channel into the fleet matrix (order 808-7yrd).
+///
+/// # Why this is a fourth channel and not a fourth mechanism
+///
+/// The matrix needs exactly what `plan/index.d` already provides: append-only
+/// fragments, deterministic `(ts, filename)` fold order, and a register whose
+/// winner is chosen by `(ts, host)` rather than by arrival. Building a parallel
+/// store would mean a second compaction, a second malformed-file policy and a
+/// second determinism argument, each able to drift from the one beside it. So
+/// this rides the SAME fragment files and the SAME ordering, and differs only
+/// in its keyspace.
+///
+/// # Keyed by host_id, which is why 808-43mw had to land first
+///
+/// The register is `host_id -> document`. Before 808-43mw a `CapabilityDocument`
+/// could not say which machine it described, so there was no key to fold on —
+/// `kernel_release` is not a substitute, two WSL2 guests report the same one.
+///
+/// # LWW here is a backstop, not the mechanism
+///
+/// Each host writes only its OWN row, so under normal operation there is a
+/// single writer per key and LWW never arbitrates a real conflict. It decides
+/// exactly one thing: which of a host's own successive contributions is
+/// current. That is why plain `(ts, host)` is right here and the status
+/// channel's monotone closure ladder is NOT — capability rows have no ranking,
+/// a later probe simply describes the machine as it is now.
+///
+/// Rows with no `host_id` are SKIPPED rather than folded under a blank key,
+/// which would collect every unidentifiable contribution into one row and
+/// present as a host whose hardware kept changing.
+///
+/// Separate from [`fold`] deliberately: a capability row is not a packet, and
+/// merging it into the packet document would put hardware state in a ledger
+/// whose every other entry is work.
+pub fn fold_capabilities(
+    fragments: &[Fragment],
+) -> std::collections::BTreeMap<String, CapabilityEntry> {
+    let mut matrix: std::collections::BTreeMap<String, CapabilityEntry> =
+        std::collections::BTreeMap::new();
+
+    for frag in fragments {
+        let Some(rows) = frag.doc.get("capabilities").and_then(Value::as_sequence) else {
+            continue;
+        };
+        for row in rows {
+            let Some(document) = row.get("document") else {
+                continue;
+            };
+            // host_id is read from the DOCUMENT, not from a sibling key that
+            // could disagree with it. One source of truth for identity.
+            let Some(host_id) = document
+                .get("host")
+                .and_then(|h| h.get("host_id"))
+                .and_then(Value::as_str)
+                .filter(|s| !s.is_empty())
+            else {
+                continue;
+            };
+            let ts = row
+                .get("ts")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let host = row
+                .get("host")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+
+            let incoming = CapabilityEntry {
+                host_id: host_id.to_string(),
+                ts,
+                host,
+                document: document.clone(),
+                source: frag.name.clone(),
+            };
+            let better = match matrix.get(host_id) {
+                None => true,
+                Some(prev) => {
+                    (incoming.ts.as_str(), incoming.host.as_str())
+                        > (prev.ts.as_str(), prev.host.as_str())
+                }
+            };
+            if better {
+                matrix.insert(host_id.to_string(), incoming);
+            }
+        }
+    }
+
+    matrix
+}
+
+/// The schedulable unit of the matrix: `(device_class, lane, engine)`
+/// (order 808-7yrd).
+///
+/// `legacy_tier` is DERIVED and never authoritative — a single string cannot
+/// express "this GPU is present but has no lane", which is the state every WSL2
+/// host is in. A scheduler asks which triples a host offers; it does not read a
+/// tier and hope.
+///
+/// A device contributes its triples only when `usable` is true AND it has at
+/// least one lane. A present-unusable device (806-2r4s) therefore contributes
+/// NOTHING here while remaining fully visible in the document — which is the
+/// entire point of recording it: "present but unschedulable" and "absent" are
+/// different engineering problems and must not collapse to the same emptiness.
+pub fn schedulable_triples(document: &Value) -> Vec<(String, String, String)> {
+    let mut out = Vec::new();
+    let Some(devices) = document.get("devices").and_then(Value::as_sequence) else {
+        return out;
+    };
+    let engines: Vec<(&str, Vec<&str>)> = document
+        .get("engines")
+        .and_then(Value::as_sequence)
+        .map(|es| {
+            es.iter()
+                .filter_map(|e| {
+                    let name = e.get("name").and_then(Value::as_str)?;
+                    let classes = e
+                        .get("supported_device_classes")
+                        .and_then(Value::as_sequence)
+                        .map(|cs| cs.iter().filter_map(Value::as_str).collect())
+                        .unwrap_or_default();
+                    Some((name, classes))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    for d in devices {
+        if d.get("usable").and_then(Value::as_bool) != Some(true) {
+            continue;
+        }
+        let Some(class) = d.get("device_class").and_then(Value::as_str) else {
+            continue;
+        };
+        let Some(lanes) = d.get("lanes").and_then(Value::as_sequence) else {
+            continue;
+        };
+        for lane in lanes.iter().filter_map(Value::as_str) {
+            for (engine, classes) in &engines {
+                if classes.contains(&class) {
+                    out.push((class.to_string(), lane.to_string(), (*engine).to_string()));
+                }
+            }
+        }
+    }
+    out.sort();
+    out.dedup();
+    out
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2545,5 +2710,261 @@ plan_index:
         assert_items_preserved(&raw, &c.candidate);
         assert_fold_equivalent(&index, &raw);
         let _ = std::fs::remove_dir_all(&d);
+    }
+}
+
+#[cfg(test)]
+mod capability_matrix_tests {
+    use super::*;
+
+    fn frag(name: &str, yaml: &str) -> Fragment {
+        Fragment {
+            name: name.to_string(),
+            path: PathBuf::from(name),
+            doc: serde_yaml::from_str(yaml).expect("fixture parses"),
+            raw: yaml.to_string(),
+        }
+    }
+
+    /// A contribution as a host actually writes it: the whole document under
+    /// `document:`, identity read from inside it.
+    fn row(host_id: &str, ts: &str, host: &str, tier: &str) -> String {
+        let mut s = String::new();
+        s.push_str("capabilities:\n");
+        s.push_str(&format!("  - ts: \"{ts}\"\n"));
+        s.push_str(&format!("    host: {host}\n"));
+        s.push_str("    document:\n");
+        s.push_str("      schema_version: 2\n");
+        s.push_str(&format!("      legacy_tier: {tier}\n"));
+        s.push_str("      devices: []\n");
+        s.push_str("      engines: []\n");
+        s.push_str("      measurements: []\n");
+        s.push_str("      host:\n");
+        s.push_str("        is_battery_present: true\n");
+        s.push_str("        kernel_release: 6.18.33.2-microsoft-standard-WSL2\n");
+        s.push_str(&format!("        host_id: {host_id}\n"));
+        s.push_str("        host_id_source: node-name\n");
+        s.push_str("        host_kind: linux\n");
+        s.push_str(&format!("      timestamp: \"{ts}\"\n"));
+        s
+    }
+
+    /// THE PROPERTY THE MATRIX EXISTS FOR: two hosts contribute and BOTH
+    /// survive. An LWW applied across hosts instead of per-host would keep one
+    /// and silently drop the other.
+    #[test]
+    fn two_hosts_both_survive_the_fold() {
+        let frags = vec![
+            frag(
+                "a-linux.yaml",
+                &row("yoga", "2026-08-18T10:00:00Z", "linux", "cpu"),
+            ),
+            frag(
+                "b-windows.yaml",
+                &row("yolanda", "2026-08-18T10:00:00Z", "windows", "cpu"),
+            ),
+        ];
+        let m = fold_capabilities(&frags);
+        assert_eq!(m.len(), 2, "one row per host_id");
+        assert!(m.contains_key("yoga"));
+        assert!(m.contains_key("yolanda"));
+    }
+
+    /// Two WSL2 guests share a kernel release exactly. They must NOT collapse.
+    #[test]
+    fn hosts_sharing_a_kernel_release_do_not_collapse() {
+        let frags = vec![
+            frag(
+                "a.yaml",
+                &row("yolanda", "2026-08-18T10:00:00Z", "windows", "cpu"),
+            ),
+            frag(
+                "b.yaml",
+                &row("esmeraldinha", "2026-08-18T10:00:00Z", "windows", "cpu"),
+            ),
+        ];
+        let m = fold_capabilities(&frags);
+        assert_eq!(m.len(), 2);
+        assert_eq!(
+            m["yolanda"].document["host"]["kernel_release"],
+            m["esmeraldinha"].document["host"]["kernel_release"],
+            "the kernel collision is real"
+        );
+    }
+
+    /// Within ONE host's own key, the later contribution is current. This is
+    /// the only thing LWW decides here — a re-probe describes the machine as it
+    /// is now, so there is no ranking to preserve.
+    #[test]
+    fn a_hosts_later_contribution_replaces_its_earlier_one() {
+        let frags = vec![
+            frag(
+                "a.yaml",
+                &row("yolanda", "2026-08-18T09:00:00Z", "windows", "cpu"),
+            ),
+            frag(
+                "b.yaml",
+                &row("yolanda", "2026-08-18T11:00:00Z", "windows", "gpu-rocm"),
+            ),
+        ];
+        let m = fold_capabilities(&frags);
+        assert_eq!(m.len(), 1);
+        assert_eq!(
+            m["yolanda"].document["legacy_tier"],
+            Value::String("gpu-rocm".into())
+        );
+    }
+
+    /// Order of arrival must not decide. Folding the same set reversed gives
+    /// the same answer, or two hosts compute different matrices from identical
+    /// inputs — which presents as corruption, not as a sorting bug.
+    #[test]
+    fn the_fold_is_order_independent() {
+        let a = frag(
+            "a.yaml",
+            &row("yolanda", "2026-08-18T09:00:00Z", "windows", "cpu"),
+        );
+        let b = frag(
+            "b.yaml",
+            &row("yolanda", "2026-08-18T11:00:00Z", "windows", "gpu-rocm"),
+        );
+        let forward = fold_capabilities(&[a.clone(), b.clone()]);
+        let backward = fold_capabilities(&[b, a]);
+        assert_eq!(forward, backward);
+    }
+
+    /// Equal timestamps are broken by host deterministically, never by arrival.
+    #[test]
+    fn an_exact_timestamp_tie_is_broken_by_host() {
+        let ts = "2026-08-18T10:00:00Z";
+        let linux = frag("a.yaml", &row("shared", ts, "linux", "cpu"));
+        let windows = frag("b.yaml", &row("shared", ts, "windows", "gpu-rocm"));
+        let forward = fold_capabilities(&[linux.clone(), windows.clone()]);
+        let backward = fold_capabilities(&[windows, linux]);
+        assert_eq!(forward, backward, "the tiebreak must not depend on order");
+        assert_eq!(
+            forward["shared"].host, "windows",
+            "the higher host string wins, deterministically"
+        );
+    }
+
+    /// A row that cannot name its machine is SKIPPED, never folded under a
+    /// blank key — which would collect every unidentifiable contribution into
+    /// one row that reads as a host whose hardware kept changing.
+    #[test]
+    fn a_row_without_a_host_id_is_skipped() {
+        let mut yaml = String::new();
+        yaml.push_str("capabilities:\n");
+        yaml.push_str("  - ts: \"2026-08-18T10:00:00Z\"\n");
+        yaml.push_str("    host: windows\n");
+        yaml.push_str("    document:\n");
+        yaml.push_str("      schema_version: 1\n");
+        yaml.push_str("      legacy_tier: cpu\n");
+        yaml.push_str("      host:\n");
+        yaml.push_str("        is_battery_present: false\n");
+        yaml.push_str("        kernel_release: 6.18.33.2-microsoft-standard-WSL2\n");
+        let m = fold_capabilities(&[frag("v1.yaml", &yaml)]);
+        assert!(m.is_empty(), "a v1 document has no key to fold on");
+    }
+
+    /// Fragments with no `capabilities:` key are untouched — the channel is
+    /// additive and every existing fragment must remain valid.
+    #[test]
+    fn fragments_without_the_channel_are_ignored() {
+        let yaml = "packets:\n  - packet_id: alpha\n    order: 999-zzzz\n    status: ready\n";
+        assert!(fold_capabilities(&[frag("plain.yaml", yaml)]).is_empty());
+    }
+
+    // ---- the schedulable unit ----
+
+    fn doc_with_devices(devices: &str) -> Value {
+        let mut s = String::new();
+        s.push_str("devices:\n");
+        s.push_str(devices);
+        s.push_str("engines:\n");
+        s.push_str("  - name: ollama\n");
+        s.push_str("    backend: llama-server\n");
+        s.push_str("    supported_device_classes: [cpu, gpu]\n");
+        serde_yaml::from_str(&s).expect("fixture parses")
+    }
+
+    /// The schedulable unit is the TRIPLE, not the tier.
+    #[test]
+    fn triples_come_from_usable_devices_with_lanes() {
+        let doc = doc_with_devices(
+            "  - device_class: cpu\n    usable: true\n    lanes: [container, host-native]\n",
+        );
+        assert_eq!(
+            schedulable_triples(&doc),
+            vec![
+                (
+                    "cpu".to_string(),
+                    "container".to_string(),
+                    "ollama".to_string()
+                ),
+                (
+                    "cpu".to_string(),
+                    "host-native".to_string(),
+                    "ollama".to_string()
+                ),
+            ]
+        );
+    }
+
+    /// THE 806-2r4s CASE, and the reason present-unusable records are worth
+    /// emitting at all: this host's GPU is REAL and REPORTED, and contributes
+    /// no schedulable triple. "Present but unschedulable" stays visible in the
+    /// document while correctly offering the scheduler nothing.
+    #[test]
+    fn a_present_unusable_device_contributes_no_triple_but_stays_visible() {
+        let doc = doc_with_devices(
+            "  - device_class: cpu\n    usable: true\n    lanes: [container]\n  - device_class: gpu\n    usable: false\n    unusable_reason: wsl2-no-dri-render-node\n    lanes: []\n",
+        );
+        let triples = schedulable_triples(&doc);
+        assert_eq!(
+            triples,
+            vec![(
+                "cpu".to_string(),
+                "container".to_string(),
+                "ollama".to_string()
+            )]
+        );
+        assert!(
+            !triples.iter().any(|(c, _, _)| c == "gpu"),
+            "an unusable GPU must not be schedulable"
+        );
+        let devices = doc["devices"].as_sequence().unwrap();
+        assert_eq!(
+            devices.len(),
+            2,
+            "but it is still REPORTED, which is the point"
+        );
+    }
+
+    /// A usable device with no lane is equally unschedulable. `usable: true`
+    /// alone is not a lane, and reading it as one is how a scheduler routes to
+    /// a device it cannot open.
+    #[test]
+    fn usable_without_a_lane_is_not_schedulable() {
+        let doc = doc_with_devices("  - device_class: gpu\n    usable: true\n    lanes: []\n");
+        assert!(schedulable_triples(&doc).is_empty());
+    }
+
+    /// An engine that does not support the class contributes no triple, so the
+    /// pairing is a real capability rather than a cross product.
+    #[test]
+    fn an_engine_that_does_not_support_the_class_yields_no_triple() {
+        let mut s = String::new();
+        s.push_str("devices:\n");
+        s.push_str("  - device_class: npu\n    usable: true\n    lanes: [host-native]\n");
+        s.push_str("engines:\n");
+        s.push_str("  - name: ollama\n");
+        s.push_str("    backend: llama-server\n");
+        s.push_str("    supported_device_classes: [cpu, gpu]\n");
+        let doc: Value = serde_yaml::from_str(&s).expect("fixture parses");
+        assert!(
+            schedulable_triples(&doc).is_empty(),
+            "no engine claims npu, so there is nothing to schedule on it"
+        );
     }
 }
