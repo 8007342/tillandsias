@@ -929,6 +929,13 @@ async fn serve_ready_stream(
                 // into a shell string — and can tell whether THIS guest
                 // supports it rather than guessing from a version.
                 tillandsias_control_wire::CAP_EXEC_ARGV_VECTOR.into(),
+                // Order 795-zshi slice 4: advertise that THIS guest heals a
+                // widened CA key mode on ensure_proxy_running's already-running
+                // early-return path, so a host can drop the `chmod 600` from its
+                // exec preamble. Separate from ExecArgvVector deliberately —
+                // they shipped in different commits, so the argv cap does not
+                // imply the heal. See CAP_PROXY_CA_KEY_HEAL's doc comment.
+                tillandsias_control_wire::CAP_PROXY_CA_KEY_HEAL.into(),
                 CAP_PTY_ATTACH_V1.into(),
                 CAP_PTY_HEARTBEAT_V1.into(),
             ],
@@ -2788,10 +2795,37 @@ mod tests {
         .expect("client writes Hello");
         let ack = read_envelope(&mut client).await.expect("HelloAck");
         match ack.body {
-            ControlMessage::HelloAck { server_caps, .. } => assert!(
-                server_caps.iter().any(|c| c == "MetricsSnapshotRequest"),
-                "guest must advertise MetricsSnapshotRequest: {server_caps:?}"
-            ),
+            ControlMessage::HelloAck { server_caps, .. } => {
+                assert!(
+                    server_caps.iter().any(|c| c == "MetricsSnapshotRequest"),
+                    "guest must advertise MetricsSnapshotRequest: {server_caps:?}"
+                );
+                // 795-zshi slice 4. A host may only drop the `chmod 600` from
+                // its exec preamble once the guest heals a widened CA key on
+                // ensure_proxy_running's already-running EARLY-RETURN path.
+                assert!(
+                    server_caps
+                        .iter()
+                        .any(|c| c == tillandsias_control_wire::CAP_PROXY_CA_KEY_HEAL),
+                    "guest must advertise {} so hosts can gate the preamble chmod on the \
+                     BEHAVIOUR rather than on a neighbouring capability: {server_caps:?}",
+                    tillandsias_control_wire::CAP_PROXY_CA_KEY_HEAL
+                );
+                // THE POINT OF A SEPARATE CAPABILITY, asserted rather than
+                // commented: these two are distinct strings. CAP_EXEC_ARGV_VECTOR
+                // shipped in cc4bee155 and the heal in d4e12b425 — two commits —
+                // so a guest built in between advertises the argv cap WITHOUT the
+                // heal. If someone later collapses them into one constant to
+                // "simplify", this fails and the mixed-version argument has to be
+                // re-made rather than silently lost, taking 772-shi9's clamp with
+                // it on exactly the builds it protects.
+                assert_ne!(
+                    tillandsias_control_wire::CAP_PROXY_CA_KEY_HEAL,
+                    tillandsias_control_wire::CAP_EXEC_ARGV_VECTOR,
+                    "the CA-key-heal capability must not be aliased to the argv one — they \
+                     shipped in different commits and do not imply each other"
+                );
+            }
             other => panic!("expected HelloAck, got {other:?}"),
         }
 

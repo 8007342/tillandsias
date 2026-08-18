@@ -98,6 +98,29 @@ pub const CAP_PTY_HEARTBEAT_V2: &str = "pty.heartbeat@v2";
 /// @trace spec:vsock-exec-authz
 pub const CAP_EXEC_ARGV_VECTOR: &str = "ExecArgvVector";
 
+/// Order 795-zshi slice 4: this guest heals a widened ephemeral CA key mode on
+/// the path that actually happens — `ensure_proxy_running`'s already-running
+/// EARLY RETURN — not only on the cold path that reaches `ensure_ca_bundle`.
+///
+/// Hosts feature-detect on THIS before dropping the `chmod 600` from their exec
+/// preamble. It is a SEPARATE capability from `CAP_EXEC_ARGV_VECTOR` on purpose,
+/// and the reason is a dated fact rather than a style preference: the argv arm
+/// shipped in `cc4bee155` and the heal in `d4e12b425` — two distinct commits.
+/// A guest built from anything in between advertises `ExecArgvVector` and does
+/// NOT have the heal, so gating the preamble's `chmod` on the argv capability
+/// would silently drop the clamp for exactly that build window and reintroduce
+/// 772-shi9 (a 0644 key surviving the VM's whole lifetime) on the guests the
+/// clamp exists to protect.
+///
+/// The general rule this instance illustrates: a capability must name the
+/// BEHAVIOUR a caller depends on, never a neighbouring behaviour that happened
+/// to land nearby. Reusing a capability as a proxy for "built after roughly
+/// then" is version-comparison wearing a capability's clothes, and it fails on
+/// exactly the builds a mixed-version fleet actually produces.
+///
+/// @trace spec:vsock-exec-authz
+pub const CAP_PROXY_CA_KEY_HEAL: &str = "ProxyCaKeyHeal";
+
 /// Order 779-dqsv: this number OUTLIVED the transport it was written for.
 /// It was the per-variant cap on `McpFrame`, which order 505 retired (that
 /// path is now refused; see `host-browser-mcp` spec). The live MCP transport
