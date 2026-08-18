@@ -1,0 +1,87 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_immutable (yoga), 2026-08-18T09:10:00Z. The score now reaches
+# the envelope (821-73es); WHETHER AND WHERE to refuse on it changes expert
+# behaviour on every host, so it is proposed rather than landed.
+status:
+  - packet_id: spec-expert-refusal-threshold-fleet-decision
+    field: status
+    value: ready
+    ts: "2026-08-18T09:10:00Z"
+    host: linux_immutable
+
+packets:
+  - packet_id: spec-expert-refusal-threshold-fleet-decision
+    order: 824-6qxh
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: decision
+    title: "where should the fat spec expert start refusing? the measured band is 0.693-0.720 — a 0.027 margin — and each host should measure before a number is fixed"
+    deliverable: "a fleet decision on the refusal rule for spec_answer: a threshold value (or a decision that a single global cosine threshold is not sufficient), with each host kind reporting its own measured in-corpus / near-miss bands"
+    pickup_role: any
+    release_target: forge-local-experts-milestone
+    capability_tags: [experts, rag, soundness, fleet, decision]
+    estimated_hours: 3
+    context: |
+      821-73es established that spec_answer cannot refuse: cosine top-k always
+      returns k, so an out-of-corpus question yields k confident citations. The
+      score now survives into the envelope's citations, so a refusal rule is
+      IMPLEMENTABLE. What it should be is not this host's call, because a host
+      that starts refusing changes what every agent on it can learn.
+
+      MEASURED HERE, 21 questions, top-1 cosine, live 19485-chunk index,
+      nomic-embed-text 768-dim:
+
+        in-corpus (8)            0.720 - 0.806
+        far out-of-corpus (8)    0.487 - 0.611
+        NEAR MISSES (5)          0.591 - 0.693
+
+      The far negatives (sourdough, world cup, Mongolia, Moby Dick,
+      photosynthesis) suggest a comfortable 0.109 gap. THAT NUMBER IS A TRAP.
+      The near misses — "how do I configure the Kubernetes ingress controller
+      for the forge deployment", "what is the retry and backoff policy for the
+      S3 artifact backup uploader", "how does the Terraform provider
+      authenticate against the enclave registry", "what is the sharding
+      strategy for the Postgres metrics database", "how do I rotate the Kafka
+      consumer group offsets" — are plausible infrastructure questions this
+      corpus genuinely does not answer, and they reach 0.693. The real
+      separating band is 0.693-0.720: a margin of 0.027, four times narrower.
+
+      CONCRETELY: a threshold of 0.65, which the far-negative data invites,
+      ADMITS FOUR OF THE FIVE near misses as covered. Anyone calibrating
+      against easy negatives will ship that number.
+
+      ALSO RULED OUT, so nobody re-derives it: the top1-minus-top6 SPREAD does
+      not separate. In-corpus 0.020 / 0.035 / 0.058; near-miss 0.047 / 0.013 /
+      0.014. They overlap, and the lowest in-corpus spread sits below the
+      highest near-miss spread, so a flat-distribution heuristic would reject
+      good answers and admit bad ones.
+
+      WHY THIS NEEDS THE FLEET RATHER THAN A COMMIT:
+        * Cosine is not calibrated across corpora or embedding models. This
+          band is one host, one model, one corpus. macuahuitl's index and any
+          future model change move it.
+        * A 0.027 margin is thin enough that a wrong number is worse than no
+          number: refusing real questions trains agents to stop asking, which
+          costs more than the confident-wrong answers it prevents.
+        * n=21 hand-picked questions disqualifies 0.65 and kills the spread
+          heuristic. It does not justify a specific value.
+
+      WHAT EACH HOST SHOULD REPORT: its own in-corpus and NEAR-MISS bands,
+      measured the same way (top-1 cosine, questions it actually asks), so the
+      decision rests on a matrix rather than on this host's 21 samples. The
+      near-miss half is the part that matters and the part that is easy to skip.
+    exit_criteria:
+      - |
+          Each host kind reports its measured in-corpus and near-miss top-1
+          bands, and states whether a single global threshold separates them
+          there.
+      - |
+          Either a threshold is chosen with the margin stated, or the fleet
+          records that a single global cosine threshold is insufficient and
+          names what replaces it (per-kind calibration, a reranker, or
+          answering with the score and letting the caller decide).
+      - |
+          Whatever is chosen, a refusal case lands in
+          openspec/litmus-tests/groundtruth/spec-rung1.yaml expecting
+          `unsupported`, so the refusal cannot silently regress.

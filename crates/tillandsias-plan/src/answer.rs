@@ -69,7 +69,11 @@ pub enum CitationKind {
 /// payload from §4's table, kept as an open string map rather than a closed
 /// struct so a new kind adds data, not a schema migration — the same
 /// open-world discipline the ledger itself uses.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+// `Eq` is deliberately NOT derived (order 821-73es): `score` is an f32, and
+// f32 has no total equality. Nothing needed `Eq` — no HashSet/HashMap keyed
+// on a citation, no trait bound requiring it — so dropping it costs nothing,
+// while `PartialEq` keeps every assert_eq! in the tests working.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Citation {
     /// Repo-relative. An absolute path or one containing `..` is REFUSED by
     /// [`verify`]: a citation a reader cannot resolve from the checkout root
@@ -98,6 +102,24 @@ pub struct Citation {
     /// "no frame is claimed", which is honest; a fabricated sha would not be.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     commit: Option<String>,
+    /// ORDER 821-73es — how well this span actually matched the query.
+    ///
+    /// Cosine top-k ALWAYS returns k results, so `confidence: retrieved` means
+    /// "k chunks were found", not "the corpus covers this". Without a number,
+    /// nothing downstream could tell those apart: a question the corpus knows
+    /// nothing about came back with six real, verifiable citations. This is the
+    /// signal a consumer needs to decide otherwise.
+    ///
+    /// ADDITIVE AND ABSENT WHEN UNKNOWN, exactly like `commit` above. A
+    /// deterministic expert (plan, methodology) has no similarity to report and
+    /// omits the field rather than writing 1.0, which would read as a perfect
+    /// match rather than as "not applicable".
+    ///
+    /// Carrying it is NOT refusing on it. No threshold is applied anywhere yet;
+    /// measurement on this host put the usable band at 0.693-0.720 against near
+    /// misses, a 0.027 margin too thin to pick a fleet-wide number from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    score: Option<f32>,
 }
 
 impl Citation {
@@ -115,7 +137,19 @@ impl Citation {
             kind,
             authority,
             commit: None,
+            score: None,
         }
+    }
+
+    /// ORDER 821-73es — stamp how well this span matched the query.
+    ///
+    /// A value outside [-1, 1], or NaN, is DROPPED rather than stored — the
+    /// same discipline `with_commit` uses below. A cosine similarity cannot be
+    /// 3.0, so a number that says so is a bug in the caller, and recording it
+    /// would hand a threshold something that is not a similarity at all.
+    pub fn with_score(mut self, score: f32) -> Self {
+        self.score = (score.is_finite() && (-1.0..=1.0).contains(&score)).then_some(score);
+        self
     }
 
     /// ORDER 801-g9nn — stamp the frame this span was read in. A value that is
@@ -438,7 +472,7 @@ fn envelope_commit(envelope: &Envelope) -> Option<String> {
 }
 
 /// The answer envelope. FIELDS ARE PRIVATE ON PURPOSE — see the module doc.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Envelope {
     answer: String,
     citations: Vec<Citation>,
