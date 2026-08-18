@@ -13878,44 +13878,18 @@ async fn run_headless_async(
     // - Start monitoring containers
     // - Initialize enclave network
 
-    // Wave 13 Gap #3: spawn background resource-metric sampler.
-    // @trace spec:resource-metric-collection, spec:observability-metrics
-    // @cheatsheet observability/cheatsheet-metrics.md
+    // Order 798-q4m9: the vsock listener is spawned FIRST, ahead of every
+    // background task below. The bind was already first in program order
+    // inside the vsock task, but the TASK itself was the last thing this
+    // function spawned — behind five others, two of which held a worker
+    // thread. On a multi-vCPU host that is invisible (four cold boots measured
+    // the bind at 61-255 ms); on a 1-vCPU guest the single worker drains the
+    // injection queue in order, so the host-facing control wire waited on a
+    // disk-usage shell-out and a log parse before it could accept.
     //
-    // Wave 19c Gap OBS-005: Run metrics retention check before starting sampler
-    // @trace gap:OBS-005
-    tokio::spawn(async move { run_metrics_retention() });
-
-    // Wave 20d Gap OBS-012: Run evidence bundle retention check before metrics
-    // @trace gap:OBS-012
-    tokio::spawn(async move { run_evidence_bundle_retention() });
-
-    // Wave 20c Gap OBS-010: Run log field cardinality analysis
-    // @trace gap:OBS-010
-    tokio::spawn(run_log_cardinality_analysis());
-
-    // Wave 24a Gap OBS-011: Run trace budget enforcement checks
-    // @trace gap:OBS-011
-    tokio::spawn(run_trace_budget_enforcement());
-
-    // Wave 21c Gap TR-006: Run disk usage check and auto-evict old cached images
-    // @trace gap:TR-006
-    tokio::spawn(async move { run_disk_usage_check() });
-
-    // Wave 21a Gap ON-009: Check and refresh GitHub token if expired
-    // Wave 21b Gap ON-010: Check for missing project dependencies before forge launch
-    // @trace gap:ON-010, spec:forge-environment-discoverability
-    // run_dependency_check();
-
-    let metrics_handle = spawn_metrics_sampler();
-
-    // @trace spec:observability-metrics gap:OBS-009 — spawn the Prometheus
-    // HTTP exporter alongside the sampler. The endpoint is read-only and
-    // bound to localhost only; if the bind fails (port already in use,
-    // socket permission), we log a warning and continue — headless MUST
-    // NOT refuse to start because the diagnostic surface is unavailable.
-    let metrics_http_handle = spawn_metrics_http_server();
-
+    // Everything below is diagnostics, retention and telemetry. None of it is
+    // a precondition for accepting a control-wire connection, so none of it
+    // belongs ahead of the bind.
     // Order 620-duta: report whether `vsock_loopback` is available BEFORE
     // binding. The in-VM socat bridge (the non-elevated host path) needs it,
     // and its absence surfaces later as an opaque connect failure on the host
@@ -13938,6 +13912,61 @@ async fn run_headless_async(
     // socket. The vsock listener is the in-VM service the host-side
     // tray talks to on Windows / macOS.
     let vsock_handle = maybe_spawn_vsock_listener(listen_vsock_port, shutdown_signal.clone());
+
+    // Wave 13 Gap #3: spawn background resource-metric sampler.
+    // @trace spec:resource-metric-collection, spec:observability-metrics
+    // @cheatsheet observability/cheatsheet-metrics.md
+    //
+    // Wave 19c Gap OBS-005: Run metrics retention check before starting sampler
+    // @trace gap:OBS-005
+    tokio::spawn(async move { run_metrics_retention() });
+
+    // Wave 20d Gap OBS-012: Run evidence bundle retention check before metrics
+    // @trace gap:OBS-012
+    tokio::spawn(async move { run_evidence_bundle_retention() });
+
+    // Wave 20c Gap OBS-010: Run log field cardinality analysis
+    // @trace gap:OBS-010
+    tokio::spawn(run_log_cardinality_analysis());
+
+    // Wave 24a Gap OBS-011: Run trace budget enforcement checks
+    // @trace gap:OBS-011
+    //
+    // Order 798-q4m9: spawn_blocking, NOT tokio::spawn. It DOES await the log
+    // read (tokio::fs::read_to_string), so it yields once — but the work after
+    // that read is a serde_json parse of every line in a loop with no further
+    // await, so it holds a tokio WORKER thread for the whole parse. On a
+    // 1-vCPU guest the single worker drains its injection queue in order, so
+    // that parse sat ahead of the vsock bind. Handle::block_on (not
+    // futures::executor::block_on) because the inner await is a tokio fs
+    // future and needs the tokio reactor driven.
+    tokio::task::spawn_blocking(|| {
+        tokio::runtime::Handle::current().block_on(run_trace_budget_enforcement())
+    });
+
+    // Wave 21c Gap TR-006: Run disk usage check and auto-evict old cached images
+    // @trace gap:TR-006
+    //
+    // Order 798-q4m9: spawn_blocking, NOT tokio::spawn. This is a sync fn that
+    // shells out to `bash manage-cache.sh` through a blocking
+    // Command::output() and, on a first boot, materialises every embedded
+    // runtime asset via resolve_runtime_asset_root -> ensure_runtime_assets.
+    // Wrapped in `async move { }` it occupied a worker thread for all of that.
+    tokio::task::spawn_blocking(run_disk_usage_check);
+
+    // Wave 21a Gap ON-009: Check and refresh GitHub token if expired
+    // Wave 21b Gap ON-010: Check for missing project dependencies before forge launch
+    // @trace gap:ON-010, spec:forge-environment-discoverability
+    // run_dependency_check();
+
+    let metrics_handle = spawn_metrics_sampler();
+
+    // @trace spec:observability-metrics gap:OBS-009 — spawn the Prometheus
+    // HTTP exporter alongside the sampler. The endpoint is read-only and
+    // bound to localhost only; if the bind fails (port already in use,
+    // socket permission), we log a warning and continue — headless MUST
+    // NOT refuse to start because the diagnostic surface is unavailable.
+    let metrics_http_handle = spawn_metrics_http_server();
 
     // Main event loop: wait for application shutdown signal.
     wait_for_shutdown_signal(shutdown_signal).await?;

@@ -1,0 +1,94 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by windows (yolanda), 2026-08-18T05:55Z.
+#
+# 798-q4m9's CODE half is done. Its measurement half is NOT, and the packet is
+# deliberately left open. Splitting rather than closing, because criterion 3
+# forbids exactly the shortcut that closing would take.
+
+packets:
+  - packet_id: vsock-bind-latency-measured-on-a-one-vcpu-guest
+    order: 819-qgy2
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: implementation
+    title: "798-q4m9's measurement half: bind latency before and after the spawn reorder, on a guest constrained to ONE vCPU, cold boot — the only configuration where the defect is observable"
+    deliverable: "before/after cold-boot bind latency on a 1-vCPU WSL2 guest, with the readiness clock's origin stated (daemon-start, not `systemctl enable --now`), and the fetch gate's contribution quantified if it can contribute"
+    pickup_role: windows
+    release_target: architecture-audit-epic
+    capability_tags: [windows, wsl2, vsock, performance, measurement]
+    context: |
+      SPLIT from 798-q4m9 (order 264's pattern: when implement+verify does not
+      fit the envelope, split rather than half-claim). The code half landed
+      this cycle; this is the half that did not.
+
+      WHY IT WAS NOT DONE HERE, stated plainly rather than deferred silently.
+      Criterion 3 requires a guest constrained to ONE vCPU. On Windows that
+      means editing %USERPROFILE%\.wslconfig and running `wsl --shutdown` for
+      it to take effect — which stops EVERY distro on the host, including
+      tillandsias-build (this host's Linux-artifact lane, and where
+      ./build.sh --check re-execs) and the running tray. Doing that as a side
+      effect of an unattended loop iteration, on an operator's machine, is not
+      a reasonable unprompted act. It needs either an operator-attended window
+      or a second machine.
+
+      WHY THE CODE HALF IS STILL WORTH HAVING WITHOUT IT: the reorder is
+      correct on its own terms — nothing below the bind is a precondition for
+      accepting a control-wire connection — and moving two blocking bodies off
+      tokio worker threads is right regardless of how much latency it buys. The
+      measurement decides the SIZE of the win, not whether the change was
+      sound.
+
+      WHAT THE PACKET FORBIDS, and why this split exists rather than a closure:
+      "A pass on a multi-vCPU host is not evidence for this packet — that is
+      the exact 'verified where it was written' shape 757-4hdt filed against
+      itself." This host is 8C/16T. Any number it produces today would be the
+      forbidden evidence. 798-q4m9 therefore stays OPEN.
+
+      METHOD when a window exists: set `[wsl2] processors=1` in .wslconfig,
+      `wsl --shutdown`, cold-boot the tillandsias distro, and time from
+      daemon-start to a successful host-side connect — NOT from
+      `systemctl enable --now`, because the unit declares
+      Requires=/After=tillandsias-headless-fetch.service with
+      TimeoutStartSec=300s, and on the download variant of fetch-headless.sh
+      that is up to ~135s of retry plus transfer BEFORE the binding process is
+      even launched. A clock started at the wrong origin attributes that to
+      bind latency. Then repeat on a build carrying the reorder.
+    verifiable_closure: "a before/after bind latency pair from a 1-vCPU cold boot, with the clock origin named"
+
+events:
+  - packet_id: vsock-listener-is-spawned-last-behind-blocking-startup-tasks
+    event:
+      type: note
+      ts: "2026-08-18T05:55:00Z"
+      agent_id: windows-yolanda-opus5-20260818t0519z
+      host: windows
+      summary: >
+        CODE HALF LANDED; packet stays OPEN pending 819-qgy2. Criteria 1 and 2
+        are done, criterion 3 (1-vCPU cold-boot measurement) is split out
+        because performing it requires `wsl --shutdown` on an operator's
+        machine mid-loop, and criterion 4 is recorded in that child packet's
+        method note.
+        (1) `maybe_spawn_vsock_listener` now runs FIRST in run_headless_async,
+        ahead of all five background spawns, carrying its order-620-duta
+        vsock_loopback preflight with it. The bind was always first in program
+        order INSIDE the vsock task; the task itself was the last thing the
+        function spawned. Nothing below it — metrics retention, evidence-bundle
+        retention, log cardinality, trace budget, disk usage — is a
+        precondition for accepting a control-wire connection.
+        (2) Both blocking bodies moved off tokio worker threads.
+        `run_disk_usage_check` is a sync fn (blocking Command::output() to
+        `bash manage-cache.sh`, plus first-boot runtime-asset materialisation)
+        that was wrapped in `async move {}` — now `spawn_blocking(fn)` directly.
+        `run_trace_budget_enforcement` needed more care and the first attempt
+        was WRONG: its comment claimed "no .await inside it", but it does await
+        `tokio::fs::read_to_string`. The real cost is the serde_json parse of
+        every line AFTER that read, with no further yield, so it holds a worker
+        through the parse. Comment corrected to say that. Also switched
+        `futures::executor::block_on` to `tokio::runtime::Handle::current().block_on`
+        — the inner await is a tokio fs future and needs the tokio reactor
+        driven, so the futures executor would have hung rather than sped
+        anything up.
+        Verified: `cargo check -p tillandsias-headless` clean in the Linux
+        build distro, `./build.sh --check` green. NOT verified, and cannot be
+        on this host: that any of it measurably moves bind latency.
