@@ -58,6 +58,10 @@ use std::path::{Path, PathBuf};
 /// being silently skipped.
 pub const ENGINES: &[(&str, &str)] = &[
     (
+        "spec.answer",
+        "the whole-spec RAG corpus via spec::top_k + spec::build_envelope over a CALLER-SUPPLIED query vector (orders 547/551)",
+    ),
+    (
         "plan.answer",
         "plan/index.yaml via answer::answer_question (order 394b)",
     ),
@@ -107,6 +111,24 @@ pub struct Case {
     /// what a human reads when the case goes red.
     #[serde(default)]
     pub why: String,
+    /// Repo-relative path to a JSON array of floats: the EMBEDDING of `query`.
+    ///
+    /// Required by `spec.answer` and meaningless to the other engines. It is
+    /// committed rather than computed because this crate is network-free by
+    /// construction (spec.rs:2) and `spec-retrieve` is already specified as
+    /// "network-free cosine top-k over CALLER-SUPPLIED embeddings" — so the
+    /// grader supplies the vector exactly as every other caller does. The
+    /// alternative, having the grader make an HTTP call, would trade
+    /// determinism for nothing; grading a lexical path instead would be worse
+    /// still, because a green grade would then certify a path production never
+    /// runs.
+    ///
+    /// It pins the set to an embedding model (768-dim nomic-embed-text here).
+    /// That is a managed fact, not a new one: check-dev-embed-model-agreement.sh
+    /// exists so the producer and the query path cannot name different models.
+    /// A model change re-embeds the set; it does not rewrite it.
+    #[serde(default)]
+    pub query_vec: Option<String>,
     pub expect: Expect,
 }
 
@@ -440,6 +462,8 @@ pub struct Harness {
     ledger: Option<Ledger>,
     corpus: Option<methodology::Corpus>,
     cheatsheets: Option<Vec<crate::spec::Chunk>>,
+    spec_vectors: Option<Vec<Vec<f32>>>,
+    spec_chunks: Option<Vec<crate::spec::Chunk>>,
 }
 
 impl Harness {
@@ -451,6 +475,8 @@ impl Harness {
             ledger: None,
             corpus: None,
             cheatsheets: None,
+            spec_vectors: None,
+            spec_chunks: None,
         }
     }
 
@@ -475,6 +501,63 @@ impl Harness {
             self.corpus = Some(methodology::Corpus::load(&self.root)?);
         }
         Ok(self.corpus.as_ref().expect("just loaded"))
+    }
+
+    /// The embedding vectors, index-aligned with `chunk_corpus(root)`.
+    ///
+    /// The chunks are re-derived from the repo (deterministic: sorted files,
+    /// sequential ids), so they are hermetic; only the VECTORS are host state,
+    /// because 19k x 768 floats is not a thing to commit. The alignment between
+    /// them is what the index's fingerprint guarantees, so a count mismatch is
+    /// refused rather than graded — a shifted pairing answers plausibly and
+    /// wrongly, which is the one failure mode a grader must never certify.
+    fn spec_index(&mut self) -> Result<(&[crate::spec::Chunk], &[Vec<f32>]), String> {
+        if self.spec_vectors.is_none() {
+            let dir = std::env::var("TILLANDSIAS_SPEC_INDEX_DIR")
+                .or_else(|_| std::env::var("FORGE_SPEC_INDEX_DIR"))
+                .map_err(|_| {
+                    "spec.answer needs a built index: set TILLANDSIAS_SPEC_INDEX_DIR to a                      directory containing vectors.jsonl (scripts/spec-index-ensure.sh builds one)"
+                        .to_string()
+                })?;
+            let path = PathBuf::from(&dir).join("vectors.jsonl");
+            let text = std::fs::read_to_string(&path)
+                .map_err(|e| format!("read {}: {e}", path.display()))?;
+            let mut out: Vec<Vec<f32>> = Vec::new();
+            for (n, line) in text.lines().enumerate() {
+                if line.trim().is_empty() {
+                    continue;
+                }
+                out.push(serde_json::from_str::<Vec<f32>>(line).map_err(|e| {
+                    format!("{}:{}: not a float vector: {e}", path.display(), n + 1)
+                })?);
+            }
+            self.spec_vectors = Some(out);
+
+            let cpath = PathBuf::from(&dir).join("chunks.jsonl");
+            let ctext = std::fs::read_to_string(&cpath)
+                .map_err(|e| format!("read {}: {e}", cpath.display()))?;
+            let mut cs: Vec<crate::spec::Chunk> = Vec::new();
+            for (n, line) in ctext.lines().enumerate() {
+                if line.trim().is_empty() {
+                    continue;
+                }
+                cs.push(serde_json::from_str(line).map_err(|e| {
+                    format!("{}:{}: not a chunk record: {e}", cpath.display(), n + 1)
+                })?);
+            }
+            self.spec_chunks = Some(cs);
+        }
+        let got = self.spec_vectors.as_ref().expect("just loaded").len();
+        let want = self.spec_chunks.as_ref().expect("just loaded").len();
+        if got != want {
+            return Err(format!(
+                "index is stale: {got} vectors for {want} chunks. The vectors must be                  index-aligned with chunk_corpus(root); rebuild with                  scripts/spec-index-ensure.sh"
+            ));
+        }
+        Ok((
+            self.spec_chunks.as_ref().expect("just loaded"),
+            self.spec_vectors.as_ref().expect("just loaded"),
+        ))
     }
 
     fn cheatsheets(&mut self) -> Result<&[crate::spec::Chunk], String> {
@@ -503,6 +586,34 @@ impl Harness {
             "methodology.path" => {
                 let corpus = self.corpus()?;
                 Ok(methodology::answer_path_query(corpus, &case.query, None))
+            }
+            "spec.answer" => {
+                let rel = case.query_vec.as_deref().ok_or_else(|| {
+                    format!(
+                        "case {:?} uses spec.answer but has no query_vec; the grader supplies                          the embedding (this crate is network-free)",
+                        case.id
+                    )
+                })?;
+                let root = self.root.clone();
+                let qpath = root.join(rel);
+                let qtext = std::fs::read_to_string(&qpath)
+                    .map_err(|e| format!("read {}: {e}", qpath.display()))?;
+                let qvec: Vec<f32> = serde_json::from_str(&qtext)
+                    .map_err(|e| format!("{}: not a float vector: {e}", qpath.display()))?;
+                // BOTH sides from the index, written by one run over one tree.
+                // Re-deriving chunks from the repo was the first shape and it is
+                // wrong: `crates/` is IN the corpus, so editing any Rust file
+                // shifts the pairing. Caught immediately — adding this engine
+                // took the tree to 19485 chunks against 19483 stored vectors.
+                let (chunks, vectors) = self.spec_index()?;
+                let top = crate::spec::top_k(&qvec, vectors, 6);
+                let picked: Vec<crate::spec::Chunk> =
+                    top.iter().map(|(i, _)| chunks[*i].clone()).collect();
+                // The retrieval-only answer is the documented zero-token floor
+                // and is what makes this deterministic. What is graded is the
+                // citation set, not the prose (this packet's own criterion).
+                let answer = crate::spec::retrieval_only_answer(&picked);
+                Ok(crate::spec::build_envelope(&answer, &picked, &root))
             }
             "cheatsheet.ask" => {
                 let root = self.root.clone();

@@ -1,0 +1,87 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-18T05:15:00Z.
+#
+# Why the destructive e2e is unreachable on this host, and it is not 809-w2xy
+# alone: the cheap fallback path is gated on the same credential the expensive
+# path needs, though it never uses it.
+packets:
+  - packet_id: smoke-mode-blocked-by-a-credential-it-never-uses
+    order: 818-cgpn
+    status: implemented
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    title: "smoke mode is verify-only and pushes nothing, yet the Credential Channel Guard blocks it — so when the full lane is credential-blocked the cheap fallback is blocked by the SAME credential and there is no path at all"
+    deliverable: "a smoke run reports the credential verdict instead of failing on it, verified by a live forge smoke lane returning MO-SMOKE: PASS while upstream-auth is stale"
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [meta-orchestration, fail-loud, ci-gates]
+    estimated_hours: 2
+    context: |
+      OBSERVED, macuahuitl 2026-08-18, two consecutive e2e Step 1 runs.
+
+      RUN A — the limiter allowed FULL. The in-forge cycle ran, hit the
+      Credential Channel Guard, got `blocked:upstream-auth-stale` (21504s old
+      against a 900s ceiling) and stopped without a marker. Correct: a full
+      cycle would have pushed.
+
+      RUN B — the limiter had recorded run A, so the launcher chose SMOKE and
+      sent the right prompt ("Use the /meta-orchestration skill in smoke mode
+      (verify-only)"). The agent DID enter smoke mode — it emitted MO-SMOKE
+      grammar — and reported:
+
+        | Credential channel | blocked:upstream-auth-stale (>900s) |
+        | Committable branch | ok:branch-linux-next |
+        | Expert base        | ok:expert-base-ready |
+        | MCP expert health  | ok:experts-healthy |
+        | build.sh --check   | PASS (89s, all gates green) |
+
+        MO-SMOKE: FAIL credential channel blocked (upstream-auth-stale, 22880s > 900s max)
+
+      Everything smoke exists to verify was GREEN. It failed on a push
+      credential, in a mode whose own rule 1 says "a smoke run leaves the repo
+      untouched" — it claims nothing, commits nothing, pushes nothing.
+
+      THE STRUCTURAL POINT. Smoke is the designed fallback for when the full
+      lane is unavailable. Gating it on the same credential means the two paths
+      fail together and there is no path. And because litmus:opencode-prompt-e2e-shape
+      runs inside `./build.sh --ci-full`, that takes Step 1 down, and the
+      runbook's stop rule then forbids §2/§3 — the substrate idempotence test,
+      which never touches a credential at all. That is 808-zrzz's series-wiring
+      observation with a second link now measured.
+
+      A DEPENDENCY NOBODY CAN SEE FROM THE RUNBOOK: which of A or B you get
+      depends on `scripts/forge-e2e-rate-limit.sh` state, i.e. on how recently
+      a full forge cycle ran. Before this packet, both outcomes were failures,
+      so the dependency was invisible; it would have started mattering the
+      moment one of them passed.
+
+      NOT THE AGENT'S MISREADING, or not only. The skill tells every cycle to
+      run the guard at Start Of Cycle and the guard's own section says "before
+      any worker drain or committable work" — it never exempts smoke, so an
+      agent applying it is following the document.
+events:
+  - packet_id: smoke-mode-blocked-by-a-credential-it-never-uses
+    event:
+      type: progress
+      ts: "2026-08-18T05:15:00Z"
+      agent_id: linux-macuahuitl-opus5-20260818T033600Z
+      host: linux_mutable
+      summary: >
+        status 'implemented', deliberately NOT completed. skills/meta-orchestration/SKILL.md
+        gains Smoke Mode Runbook rule 3a — the Credential Channel Guard is a REPORT in smoke
+        mode, never a gate — with the measurement inline, plus a cross-reference from the
+        Credential Channel Guard section so an agent reading either place finds the
+        exemption. The reasoning is the skill's own: rule 1 already says a smoke run
+        performs no committable work, and the guard is a precondition for exactly that.
+        WHY NOT COMPLETED: the deliverable asks for a live forge smoke lane returning
+        MO-SMOKE: PASS while upstream-auth is stale, and no in-forge agent has yet run under
+        the amended skill. A document that says the right thing is not evidence that the
+        loop does it — this session has falsified four causal stories, three of them mine,
+        and "the agent will follow the new text" is exactly that shape. The next forge
+        smoke lane on any host closes it or reopens it.
+      evidence_refs:
+        - "run A (full): blocked:upstream-auth-stale 21504s, no marker — correct, it would have pushed"
+        - "run B (smoke): MO-SMOKE: FAIL credential channel blocked, 22880s > 900s, with every verified surface green incl. build.sh --check PASS"
+        - "skills/meta-orchestration/SKILL.md: Smoke Mode Runbook rule 3a + Credential Channel Guard cross-reference"
+        - "launcher prompt confirmed correct: scripts/litmus-opencode-e2e-launch.sh sends the smoke prompt; the agent entered smoke mode and emitted MO-SMOKE grammar"

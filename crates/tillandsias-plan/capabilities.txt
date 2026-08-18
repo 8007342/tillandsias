@@ -30,8 +30,8 @@ dependencies-of
 expire-claims
 # does not remove the capability — it makes the expert UNDER-report itself, and
 # file are checked against each other BEHAVIOURALLY by
-fragment-misplaced-definitions
 fragment-event-packets
+fragment-misplaced-definitions
 fragment-terminal-events
 fragments
 grade

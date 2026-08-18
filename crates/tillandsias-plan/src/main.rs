@@ -1750,6 +1750,286 @@ pub fn log_cli_usage(tool: &str, outcome: &str, latency_ms: u128) {
     }
 }
 
+/// ORDER 816-kq2z. The three `fragment-*` subcommands parse ONE fragment file
+/// and never consult the ledger — yet they sat in the main dispatch AFTER
+/// `Ledger::load_with_fragments`, which reads a 60,192-line index plus every
+/// fragment in plan/index.d.
+///
+/// MEASURED on macuahuitl 2026-08-18: 133ms per invocation, of which 132ms is
+/// that load. `capabilities`, which returns before it, costs 1ms.
+///
+/// check-fragment-status-loss.sh calls all three once per fragment, so the
+/// waste was 3 x 102 x 132ms ~= 40s on EVERY `./build.sh --check`, on every
+/// host. It crossed litmus:fragment-status-loss-attribution-shape's 30s step
+/// budget when the second and third channels landed (797-qm4t, 812-d45t) —
+/// which is why the symptom was a TIMEOUT rather than a wrong answer, and why
+/// `--check` (no per-phase budget) stayed green while `--ci-full` went red.
+///
+/// Returns true when it handled the subcommand; main must return immediately.
+/// These arms fall off their own end rather than exiting, so a bool is the
+/// safe contract: `std::process::exit` here would skip the stdout flush and
+/// can truncate piped output.
+fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
+    match subcommand {
+        "fragment-misplaced-definitions" => {
+            // ORDER 812-d45t. A PACKET DEFINITION written under the top-level
+            // `events:` key instead of `packets:` is accepted by every gate and
+            // then dropped entirely. Measured 2026-08-18: a closure fragment
+            // filed three follow-up packets that way; `./build.sh --check` was
+            // rc=0, the fragment's own status transition folded correctly, and
+            // all three packets simply did not exist. The author found it only
+            // by asking for the packets back afterwards.
+            //
+            // It is a different hole from 797-qm4t. There the packet_id named
+            // nothing; here the entry is a well-formed definition sitting under
+            // the wrong key, so no packet_id is even claimed — the
+            // unknown-packet check cannot see it, and neither can the
+            // terminal-event or status-block checks, because it declares
+            // neither.
+            //
+            // THE SIGNATURE IS UNAMBIGUOUS: an entry under `events:` that has
+            // NO `event:` key but DOES carry definition fields (order, title,
+            // kind, deliverable). A real event entry always nests `event:`; a
+            // real definition never appears here. Requiring a definition field
+            // rather than merely "no event key" keeps a malformed-but-intended
+            // event from being reported as a lost packet.
+            const EXIT_FRAGMENT_UNPARSEABLE: i32 = 3;
+            let Some(path) = args.get(1) else {
+                eprintln!("usage: tillandsias-plan fragment-misplaced-definitions <fragment.yaml>");
+                std::process::exit(2);
+            };
+            let raw = match std::fs::read_to_string(path) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("error: read {path}: {e}");
+                    std::process::exit(2);
+                }
+            };
+            let doc: serde_yaml::Value = match serde_yaml::from_str(&raw) {
+                Ok(d) => d,
+                Err(e) => {
+                    eprintln!(
+                        "unparseable:{path}: {e} — the misplaced-definition pass cannot read this fragment, so any packet it drops is UNEXAMINED (812-d45t)"
+                    );
+                    std::process::exit(EXIT_FRAGMENT_UNPARSEABLE);
+                }
+            };
+            let mut ids: Vec<String> = Vec::new();
+            if let Some(evs) = doc.get("events").and_then(serde_yaml::Value::as_sequence) {
+                for e in evs {
+                    if e.get("event").is_some() {
+                        continue;
+                    }
+                    let looks_like_definition = ["order", "title", "kind", "deliverable"]
+                        .iter()
+                        .any(|k| e.get(*k).is_some());
+                    if !looks_like_definition {
+                        continue;
+                    }
+                    let pid = e
+                        .get("packet_id")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("<no packet_id>");
+                    ids.push(pid.to_string());
+                }
+            }
+            ids.sort_unstable();
+            ids.dedup();
+            for id in ids {
+                emit(&id);
+            }
+            true
+        }
+        "fragment-event-packets" => {
+            // ORDER 797-qm4t. Sibling of fragment-terminal-events, and the reason
+            // it exists is a loss I caused and then measured.
+            //
+            // The unknown-packet_id checks added on the status and terminal-event
+            // channels close the cases where a fragment CLAIMS a closure. They
+            // cannot see a NON-TERMINAL event — `note`, `progress`, `filed` —
+            // addressed to a packet_id the fold has never heard of. That event is
+            // dropped in total silence: the fold ignores it, the loss guard skips
+            // it, and every validator still answers ok.
+            //
+            // Measured 2026-08-17: fragment 20260817t184639z carried a `note`
+            // event with the full GPU-passthrough measurements for order 406,
+            // addressed to `inference-gpu-passthrough-fat-host-thinnest-rung` —
+            // a plausible id I invented rather than asked for. The real one is
+            // `inference-cuda-bringup-fat-host`. The note is on disk, is not in
+            // the fold, and is not on 406. Nothing reported it; the guard said
+            // ok:no-fragment-status-loss over a corpus containing it.
+            //
+            // Prints EVERY packet_id an events block addresses, whatever the type
+            // (sorted, deduplicated), so the caller can ask the one question this
+            // subcommand exists for: does the fold know this packet at all. Same
+            // parse and the same exit 3 on an unparseable fragment, because
+            // silence from a parser is not evidence of absence (787-f7dh).
+            const EXIT_FRAGMENT_UNPARSEABLE: i32 = 3;
+            let Some(path) = args.get(1) else {
+                eprintln!("usage: tillandsias-plan fragment-event-packets <fragment.yaml>");
+                std::process::exit(2);
+            };
+            let raw = match std::fs::read_to_string(path) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("error: read {path}: {e}");
+                    std::process::exit(2);
+                }
+            };
+            let doc: serde_yaml::Value = match serde_yaml::from_str(&raw) {
+                Ok(d) => d,
+                Err(e) => {
+                    eprintln!(
+                        "unparseable:{path}: {e} — the unknown-packet pass cannot read this fragment, so any event it addresses is UNEXAMINED (797-qm4t)"
+                    );
+                    std::process::exit(EXIT_FRAGMENT_UNPARSEABLE);
+                }
+            };
+            let mut ids: Vec<String> = Vec::new();
+            // Inline: packets: [{packet_id, events: [...]}]. A pid here also
+            // CREATES the packet, so it can never be unknown — collected anyway
+            // so the caller sees one consistent set and decides for itself.
+            if let Some(pkts) = doc.get("packets").and_then(serde_yaml::Value::as_sequence) {
+                for p in pkts {
+                    let Some(pid) = p.get("packet_id").and_then(serde_yaml::Value::as_str) else {
+                        continue;
+                    };
+                    if p.get("events")
+                        .and_then(serde_yaml::Value::as_sequence)
+                        .is_some_and(|evs| !evs.is_empty())
+                    {
+                        ids.push(pid.to_string());
+                    }
+                }
+            }
+            // Top-level: events: [{packet_id, event: {...}}] — the shape that
+            // declares WITHOUT creating, and therefore the one that can address
+            // a packet nobody has ever filed.
+            if let Some(evs) = doc.get("events").and_then(serde_yaml::Value::as_sequence) {
+                for e in evs {
+                    let Some(pid) = e.get("packet_id").and_then(serde_yaml::Value::as_str) else {
+                        continue;
+                    };
+                    if e.get("event").is_some() {
+                        ids.push(pid.to_string());
+                    }
+                }
+            }
+            ids.sort_unstable();
+            ids.dedup();
+            for id in ids {
+                emit(&id);
+            }
+            true
+        }
+        "fragment-terminal-events" => {
+            // ORDER 752-pst5. The closure-event pass of check-fragment-status-loss.sh
+            // reads every fragment in plan/index.d and asks, per packet: does its
+            // events block DECLARE a terminal `completed` event? The shell's old
+            // answer was a line-grep with ad-hoc resets, and it could not tell an
+            // event declaration from PROSE that quotes the marker inside a block
+            // scalar — it invented a completion for packet 751-i9mb whose real
+            // event was `type: filed` (752-pst5). A YAML parse bounds attribution
+            // to the actual events block, so no indent heuristic can silently
+            // disable or widen the check.
+            //
+            // Prints one packet_id per line (sorted, deduplicated), nothing else
+            // on stdout, exit 0.
+            //
+            // ORDER 787-f7dh. An unparseable fragment used to `return` here —
+            // a stderr note and exit 0, on the reasoning that parse failures
+            // are the sibling added-fragments-parse gate's job. That made
+            // "this fragment declares no terminal events" and "this fragment
+            // could not be read" the SAME answer to the caller: empty stdout,
+            // exit 0. The caller (check-fragment-status-loss.sh) additionally
+            // sent stderr to /dev/null, so the note reached nobody and a
+            // fragment carrying an undelivered closure passed the gate green.
+            // Found when the 785-sqe6 fixture wrote `": "` into a summary,
+            // silently invalidating its own YAML.
+            //
+            // The delegation was also an ASSUMPTION rather than a guarantee:
+            // added-fragments-parse is DIFF-SCOPED (698-7n6q), so a malformed
+            // fragment arriving by merge, hand edit, sibling branch, or one
+            // already present before that gate landed is never seen by it.
+            // Exit 3 makes the two cases distinguishable at the point of use;
+            // silence from a parser is not evidence of absence.
+            const EXIT_FRAGMENT_UNPARSEABLE: i32 = 3;
+            let Some(path) = args.get(1) else {
+                eprintln!("usage: tillandsias-plan fragment-terminal-events <fragment.yaml>");
+                std::process::exit(2);
+            };
+            let raw = match std::fs::read_to_string(path) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("error: read {path}: {e}");
+                    std::process::exit(2);
+                }
+            };
+            let doc: serde_yaml::Value = match serde_yaml::from_str(&raw) {
+                Ok(d) => d,
+                Err(e) => {
+                    // Distinguishable, and stdout stays EMPTY so no caller can
+                    // mistake a parse failure for a set of declarations.
+                    eprintln!(
+                        "unparseable:{path}: {e} — the closure-event pass cannot read this fragment, so any terminal event it declares is UNEXAMINED (787-f7dh)"
+                    );
+                    std::process::exit(EXIT_FRAGMENT_UNPARSEABLE);
+                }
+            };
+            // A `declares` entry: the event carries `type: completed`, or nests
+            // `event: completed` / `event: {type: completed}` (the shapes the old
+            // awk reached via `/type: completed/ || /event: completed/`).
+            let declares_terminal = |event: &serde_yaml::Value| -> bool {
+                if event.get("type").and_then(serde_yaml::Value::as_str) == Some("completed") {
+                    return true;
+                }
+                if let Some(inner) = event.get("event")
+                    && (inner.as_str() == Some("completed")
+                        || inner.get("type").and_then(serde_yaml::Value::as_str)
+                            == Some("completed"))
+                {
+                    return true;
+                }
+                false
+            };
+            let mut ids: Vec<String> = Vec::new();
+            // Inline: packets: [{packet_id, events: [{type: completed, ...}]}]
+            if let Some(pkts) = doc.get("packets").and_then(serde_yaml::Value::as_sequence) {
+                for p in pkts {
+                    let Some(pid) = p.get("packet_id").and_then(serde_yaml::Value::as_str) else {
+                        continue;
+                    };
+                    let declares = p
+                        .get("events")
+                        .and_then(serde_yaml::Value::as_sequence)
+                        .is_some_and(|evs| evs.iter().any(declares_terminal));
+                    if declares {
+                        ids.push(pid.to_string());
+                    }
+                }
+            }
+            // Top-level: events: [{packet_id, event: {type: completed, ...}}]
+            if let Some(evs) = doc.get("events").and_then(serde_yaml::Value::as_sequence) {
+                for e in evs {
+                    let Some(pid) = e.get("packet_id").and_then(serde_yaml::Value::as_str) else {
+                        continue;
+                    };
+                    if e.get("event").is_some_and(declares_terminal) {
+                        ids.push(pid.to_string());
+                    }
+                }
+            }
+            ids.sort_unstable();
+            ids.dedup();
+            for id in ids {
+                emit(&id);
+            }
+            true
+        }
+        _ => false,
+    }
+}
+
 fn main() {
     let start_time = std::time::Instant::now();
     let mut args: Vec<String> = std::env::args().skip(1).collect();
@@ -2160,6 +2440,12 @@ fn main() {
     // overlay: a reader that forgets fragments reports a stale ledger with total
     // confidence, and if the CLI, the MCP server and the expert disagree about
     // what the plan says, the retrieval surface is worse than useless.
+    // ORDER 816-kq2z: handled BEFORE the ledger load below, which these
+    // three never use and which costs 132ms of their 133ms.
+    if dispatch_fragment_only(&subcommand, &args) {
+        return;
+    }
+
     let ledger = match Ledger::load_with_fragments(&index) {
         Ok(l) => l,
         Err(e) => {
@@ -2671,258 +2957,6 @@ fn main() {
                     "  A closure (completed/verified/done) must carry an event with evidence_refs (or type completed/verified/falsified). Use set-field --evidence, or add the event (686-7qcm)."
                 );
                 std::process::exit(1);
-            }
-        }
-        "fragment-misplaced-definitions" => {
-            // ORDER 812-d45t. A PACKET DEFINITION written under the top-level
-            // `events:` key instead of `packets:` is accepted by every gate and
-            // then dropped entirely. Measured 2026-08-18: a closure fragment
-            // filed three follow-up packets that way; `./build.sh --check` was
-            // rc=0, the fragment's own status transition folded correctly, and
-            // all three packets simply did not exist. The author found it only
-            // by asking for the packets back afterwards.
-            //
-            // It is a different hole from 797-qm4t. There the packet_id named
-            // nothing; here the entry is a well-formed definition sitting under
-            // the wrong key, so no packet_id is even claimed — the
-            // unknown-packet check cannot see it, and neither can the
-            // terminal-event or status-block checks, because it declares
-            // neither.
-            //
-            // THE SIGNATURE IS UNAMBIGUOUS: an entry under `events:` that has
-            // NO `event:` key but DOES carry definition fields (order, title,
-            // kind, deliverable). A real event entry always nests `event:`; a
-            // real definition never appears here. Requiring a definition field
-            // rather than merely "no event key" keeps a malformed-but-intended
-            // event from being reported as a lost packet.
-            const EXIT_FRAGMENT_UNPARSEABLE: i32 = 3;
-            let Some(path) = args.get(1) else {
-                eprintln!("usage: tillandsias-plan fragment-misplaced-definitions <fragment.yaml>");
-                std::process::exit(2);
-            };
-            let raw = match std::fs::read_to_string(path) {
-                Ok(r) => r,
-                Err(e) => {
-                    eprintln!("error: read {path}: {e}");
-                    std::process::exit(2);
-                }
-            };
-            let doc: serde_yaml::Value = match serde_yaml::from_str(&raw) {
-                Ok(d) => d,
-                Err(e) => {
-                    eprintln!(
-                        "unparseable:{path}: {e} — the misplaced-definition pass cannot read this fragment, so any packet it drops is UNEXAMINED (812-d45t)"
-                    );
-                    std::process::exit(EXIT_FRAGMENT_UNPARSEABLE);
-                }
-            };
-            let mut ids: Vec<String> = Vec::new();
-            if let Some(evs) = doc.get("events").and_then(serde_yaml::Value::as_sequence) {
-                for e in evs {
-                    if e.get("event").is_some() {
-                        continue;
-                    }
-                    let looks_like_definition = ["order", "title", "kind", "deliverable"]
-                        .iter()
-                        .any(|k| e.get(*k).is_some());
-                    if !looks_like_definition {
-                        continue;
-                    }
-                    let pid = e
-                        .get("packet_id")
-                        .and_then(serde_yaml::Value::as_str)
-                        .unwrap_or("<no packet_id>");
-                    ids.push(pid.to_string());
-                }
-            }
-            ids.sort_unstable();
-            ids.dedup();
-            for id in ids {
-                emit(&id);
-            }
-        }
-        "fragment-event-packets" => {
-            // ORDER 797-qm4t. Sibling of fragment-terminal-events, and the reason
-            // it exists is a loss I caused and then measured.
-            //
-            // The unknown-packet_id checks added on the status and terminal-event
-            // channels close the cases where a fragment CLAIMS a closure. They
-            // cannot see a NON-TERMINAL event — `note`, `progress`, `filed` —
-            // addressed to a packet_id the fold has never heard of. That event is
-            // dropped in total silence: the fold ignores it, the loss guard skips
-            // it, and every validator still answers ok.
-            //
-            // Measured 2026-08-17: fragment 20260817t184639z carried a `note`
-            // event with the full GPU-passthrough measurements for order 406,
-            // addressed to `inference-gpu-passthrough-fat-host-thinnest-rung` —
-            // a plausible id I invented rather than asked for. The real one is
-            // `inference-cuda-bringup-fat-host`. The note is on disk, is not in
-            // the fold, and is not on 406. Nothing reported it; the guard said
-            // ok:no-fragment-status-loss over a corpus containing it.
-            //
-            // Prints EVERY packet_id an events block addresses, whatever the type
-            // (sorted, deduplicated), so the caller can ask the one question this
-            // subcommand exists for: does the fold know this packet at all. Same
-            // parse and the same exit 3 on an unparseable fragment, because
-            // silence from a parser is not evidence of absence (787-f7dh).
-            const EXIT_FRAGMENT_UNPARSEABLE: i32 = 3;
-            let Some(path) = args.get(1) else {
-                eprintln!("usage: tillandsias-plan fragment-event-packets <fragment.yaml>");
-                std::process::exit(2);
-            };
-            let raw = match std::fs::read_to_string(path) {
-                Ok(r) => r,
-                Err(e) => {
-                    eprintln!("error: read {path}: {e}");
-                    std::process::exit(2);
-                }
-            };
-            let doc: serde_yaml::Value = match serde_yaml::from_str(&raw) {
-                Ok(d) => d,
-                Err(e) => {
-                    eprintln!(
-                        "unparseable:{path}: {e} — the unknown-packet pass cannot read this fragment, so any event it addresses is UNEXAMINED (797-qm4t)"
-                    );
-                    std::process::exit(EXIT_FRAGMENT_UNPARSEABLE);
-                }
-            };
-            let mut ids: Vec<String> = Vec::new();
-            // Inline: packets: [{packet_id, events: [...]}]. A pid here also
-            // CREATES the packet, so it can never be unknown — collected anyway
-            // so the caller sees one consistent set and decides for itself.
-            if let Some(pkts) = doc.get("packets").and_then(serde_yaml::Value::as_sequence) {
-                for p in pkts {
-                    let Some(pid) = p.get("packet_id").and_then(serde_yaml::Value::as_str) else {
-                        continue;
-                    };
-                    if p.get("events")
-                        .and_then(serde_yaml::Value::as_sequence)
-                        .is_some_and(|evs| !evs.is_empty())
-                    {
-                        ids.push(pid.to_string());
-                    }
-                }
-            }
-            // Top-level: events: [{packet_id, event: {...}}] — the shape that
-            // declares WITHOUT creating, and therefore the one that can address
-            // a packet nobody has ever filed.
-            if let Some(evs) = doc.get("events").and_then(serde_yaml::Value::as_sequence) {
-                for e in evs {
-                    let Some(pid) = e.get("packet_id").and_then(serde_yaml::Value::as_str) else {
-                        continue;
-                    };
-                    if e.get("event").is_some() {
-                        ids.push(pid.to_string());
-                    }
-                }
-            }
-            ids.sort_unstable();
-            ids.dedup();
-            for id in ids {
-                emit(&id);
-            }
-        }
-        "fragment-terminal-events" => {
-            // ORDER 752-pst5. The closure-event pass of check-fragment-status-loss.sh
-            // reads every fragment in plan/index.d and asks, per packet: does its
-            // events block DECLARE a terminal `completed` event? The shell's old
-            // answer was a line-grep with ad-hoc resets, and it could not tell an
-            // event declaration from PROSE that quotes the marker inside a block
-            // scalar — it invented a completion for packet 751-i9mb whose real
-            // event was `type: filed` (752-pst5). A YAML parse bounds attribution
-            // to the actual events block, so no indent heuristic can silently
-            // disable or widen the check.
-            //
-            // Prints one packet_id per line (sorted, deduplicated), nothing else
-            // on stdout, exit 0.
-            //
-            // ORDER 787-f7dh. An unparseable fragment used to `return` here —
-            // a stderr note and exit 0, on the reasoning that parse failures
-            // are the sibling added-fragments-parse gate's job. That made
-            // "this fragment declares no terminal events" and "this fragment
-            // could not be read" the SAME answer to the caller: empty stdout,
-            // exit 0. The caller (check-fragment-status-loss.sh) additionally
-            // sent stderr to /dev/null, so the note reached nobody and a
-            // fragment carrying an undelivered closure passed the gate green.
-            // Found when the 785-sqe6 fixture wrote `": "` into a summary,
-            // silently invalidating its own YAML.
-            //
-            // The delegation was also an ASSUMPTION rather than a guarantee:
-            // added-fragments-parse is DIFF-SCOPED (698-7n6q), so a malformed
-            // fragment arriving by merge, hand edit, sibling branch, or one
-            // already present before that gate landed is never seen by it.
-            // Exit 3 makes the two cases distinguishable at the point of use;
-            // silence from a parser is not evidence of absence.
-            const EXIT_FRAGMENT_UNPARSEABLE: i32 = 3;
-            let Some(path) = args.get(1) else {
-                eprintln!("usage: tillandsias-plan fragment-terminal-events <fragment.yaml>");
-                std::process::exit(2);
-            };
-            let raw = match std::fs::read_to_string(path) {
-                Ok(r) => r,
-                Err(e) => {
-                    eprintln!("error: read {path}: {e}");
-                    std::process::exit(2);
-                }
-            };
-            let doc: serde_yaml::Value = match serde_yaml::from_str(&raw) {
-                Ok(d) => d,
-                Err(e) => {
-                    // Distinguishable, and stdout stays EMPTY so no caller can
-                    // mistake a parse failure for a set of declarations.
-                    eprintln!(
-                        "unparseable:{path}: {e} — the closure-event pass cannot read this fragment, so any terminal event it declares is UNEXAMINED (787-f7dh)"
-                    );
-                    std::process::exit(EXIT_FRAGMENT_UNPARSEABLE);
-                }
-            };
-            // A `declares` entry: the event carries `type: completed`, or nests
-            // `event: completed` / `event: {type: completed}` (the shapes the old
-            // awk reached via `/type: completed/ || /event: completed/`).
-            let declares_terminal = |event: &serde_yaml::Value| -> bool {
-                if event.get("type").and_then(serde_yaml::Value::as_str) == Some("completed") {
-                    return true;
-                }
-                if let Some(inner) = event.get("event")
-                    && (inner.as_str() == Some("completed")
-                        || inner.get("type").and_then(serde_yaml::Value::as_str)
-                            == Some("completed"))
-                {
-                    return true;
-                }
-                false
-            };
-            let mut ids: Vec<String> = Vec::new();
-            // Inline: packets: [{packet_id, events: [{type: completed, ...}]}]
-            if let Some(pkts) = doc.get("packets").and_then(serde_yaml::Value::as_sequence) {
-                for p in pkts {
-                    let Some(pid) = p.get("packet_id").and_then(serde_yaml::Value::as_str) else {
-                        continue;
-                    };
-                    let declares = p
-                        .get("events")
-                        .and_then(serde_yaml::Value::as_sequence)
-                        .is_some_and(|evs| evs.iter().any(declares_terminal));
-                    if declares {
-                        ids.push(pid.to_string());
-                    }
-                }
-            }
-            // Top-level: events: [{packet_id, event: {type: completed, ...}}]
-            if let Some(evs) = doc.get("events").and_then(serde_yaml::Value::as_sequence) {
-                for e in evs {
-                    let Some(pid) = e.get("packet_id").and_then(serde_yaml::Value::as_str) else {
-                        continue;
-                    };
-                    if e.get("event").is_some_and(declares_terminal) {
-                        ids.push(pid.to_string());
-                    }
-                }
-            }
-            ids.sort_unstable();
-            ids.dedup();
-            for id in ids {
-                emit(&id);
             }
         }
         "status" => {

@@ -55,6 +55,20 @@ Hard rules:
    closures). Skip anything that builds, launches containers, or exceeds
    the budget.
 3. Budget: finish well inside ~5 minutes of wall time.
+3a. The **Credential Channel Guard is a REPORT here, never a gate** (order
+   818-cgpn). That guard is a precondition for COMMITTABLE work, and rule 1
+   says a smoke run performs none — it claims nothing, commits nothing and
+   pushes nothing, so an absent or stale push credential cannot harm it.
+   Report the verdict in your output and carry on verifying; do NOT return
+   `MO-SMOKE: FAIL` for it.
+
+   MEASURED on macuahuitl 2026-08-18, twice: with the mirror's upstream-auth
+   verdict stale, the FULL lane blocked (correctly — it would have pushed) and
+   the SMOKE lane returned `MO-SMOKE: FAIL credential channel blocked
+   (upstream-auth-stale, 22880s > 900s max)`. Smoke exists precisely as the
+   cheap path for when the expensive one is unavailable; gating it on the same
+   credential leaves NO path, and takes the substrate-idempotence e2e (§2/§3,
+   which never touch a credential) down with it — see 808-zrzz.
 4. Verdict grammar: your FINAL output line MUST be exactly one of
    `MO-SMOKE: PASS` or `MO-SMOKE: FAIL <one-line reason>`. The launching
    litmus greps for this marker; a smoke run that exits without it is a
@@ -362,7 +376,9 @@ with a loud warning naming the gap, never silently.
 ## Credential Channel Guard
 
 Run immediately after `git fetch` and before any worker drain or committable
-work. The Cowork scheduled-task runtime can inherit dangling session sockets
+work. In SMOKE mode it is a REPORT, not a gate — a smoke run
+performs no committable work, so a stale push credential cannot harm it (order
+818-cgpn; see Smoke Mode Runbook rule 3a). The Cowork scheduled-task runtime can inherit dangling session sockets
 (`DBUS_SESSION_BUS_ADDRESS`, `SSH_AUTH_SOCK` pointing into a non-existent
 `/run/user/<uid>`) so anonymous reads succeed while every `git push` silently
 fails for lack of a credential. See
