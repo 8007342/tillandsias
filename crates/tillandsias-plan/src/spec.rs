@@ -81,7 +81,45 @@ const CORPUS_ROOTS: &[(&str, &str)] = &[
     // would have looked like an empty result, not an error.
     ("crates", "code"),
     ("scripts", "code"),
+    // The third root the packet named, and the one that carried its own
+    // worked example. 803-su4n's Q2 scorecard says the tier MECHANISM is
+    // invisible because "entrypoint.sh:165 reads TILLANDSIAS_INFERENCE_TIER" is
+    // code — and that file is `images/inference/entrypoint.sh`, which lives
+    // under neither `crates` nor `scripts`. Indexing those two roots answered
+    // the question from the HOST side (the Rust launcher) and left the
+    // CONTAINER side, the literal line the packet cited, still unretrievable.
+    ("images", "code"),
 ];
+
+/// Paths pruned from the corpus even though they sit under a root.
+///
+/// `images/default/cheatsheets/` is a BYTE-IDENTICAL copy of `cheatsheets/`
+/// (verified with `diff -rq`: it is staged into the forge image at build time),
+/// and `cheatsheets` is already a corpus root. Indexing both would seat two
+/// identical chunks at every rank — halving the useful width of a top-k, since
+/// the second slot teaches the synthesizer nothing the first did not — and pay
+/// the embed bill twice for it.
+///
+/// TODAY THIS PRUNE REMOVES NOTHING, and that is stated rather than hidden: the
+/// copy is markdown-only and the `code` kind wants `rs`/`sh`, so the extension
+/// filter already excludes it by accident. The prune is here so the day someone
+/// widens `want_ext` — or adds an `("images", "cheatsheet")` row — the
+/// duplication stays a decision instead of a silent regression. Its test is
+/// therefore written against [`is_pruned`], the RULE, not against the corpus: a
+/// corpus-level assertion passes vacuously today and so proves nothing (that is
+/// not a guess — the first version of this test survived emptying the list).
+const CORPUS_PRUNE_PREFIXES: &[&str] = &["images/default/cheatsheets/"];
+
+/// Is this repo-relative path excluded from the corpus by [`CORPUS_PRUNE_PREFIXES`]?
+fn is_pruned(rel: &str) -> bool {
+    CORPUS_PRUNE_PREFIXES.iter().any(|p| rel.starts_with(p))
+}
+
+/// Extension-less filenames that are still code. A Containerfile is the build
+/// recipe for an image and is the best answer in the tree to "what is actually
+/// in this container" — and it has no extension at all, so an extension-only
+/// walker silently misses every one of them.
+const CORPUS_CODE_FILENAMES: &[&str] = &["Containerfile", "Dockerfile"];
 
 /// Walk the whole-spec corpus under `root` and return every chunk. Missing
 /// roots are skipped (an off-Tillandsias project simply has fewer corpora), not
@@ -99,13 +137,23 @@ pub fn chunk_corpus(root: &Path) -> Vec<Chunk> {
             "code" => &["rs", "sh"],
             _ => &["md"],
         };
-        let mut files = walk_files(&dir, want_ext);
+        // Only `code` has extension-less members; a prose root asking for
+        // `Containerfile` would be a bug, not a feature.
+        let want_names: &[&str] = if *kind == "code" {
+            CORPUS_CODE_FILENAMES
+        } else {
+            &[]
+        };
+        let mut files = walk_files(&dir, want_ext, want_names);
         files.sort(); // deterministic ordering => stable chunk ids for a given tree
         for file in files {
             let Ok(text) = std::fs::read_to_string(&file) else {
                 continue;
             };
             let rel = to_repo_relative(root, &file);
+            if is_pruned(&rel) {
+                continue;
+            }
             let file_chunks = match *kind {
                 "methodology" => chunk_yaml(&rel, kind, &text),
                 "code" => chunk_code(&rel, kind, &text),
@@ -121,7 +169,10 @@ pub fn chunk_corpus(root: &Path) -> Vec<Chunk> {
     chunks
 }
 
-fn walk_files(dir: &Path, exts: &[&str]) -> Vec<PathBuf> {
+/// Collect files under `dir` matching either an extension in `exts` or an exact
+/// basename in `names`. The `names` arm exists because the highest-value file in
+/// `images/` has no extension at all (see [`CORPUS_CODE_FILENAMES`]).
+fn walk_files(dir: &Path, exts: &[&str], names: &[&str]) -> Vec<PathBuf> {
     let mut out = Vec::new();
     let mut stack = vec![dir.to_path_buf()];
     while let Some(d) = stack.pop() {
@@ -132,9 +183,17 @@ fn walk_files(dir: &Path, exts: &[&str]) -> Vec<PathBuf> {
             let p = entry.path();
             if p.is_dir() {
                 stack.push(p);
-            } else if let Some(ext) = p.extension().and_then(|e| e.to_str())
-                && exts.iter().any(|w| w.eq_ignore_ascii_case(ext))
-            {
+                continue;
+            }
+            let ext_match = p
+                .extension()
+                .and_then(|e| e.to_str())
+                .is_some_and(|ext| exts.iter().any(|w| w.eq_ignore_ascii_case(ext)));
+            let name_match = p
+                .file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| names.iter().any(|w| w.eq_ignore_ascii_case(n)));
+            if ext_match || name_match {
                 out.push(p);
             }
         }
@@ -265,7 +324,13 @@ fn top_level_key_name(line: &str) -> String {
 /// token a synthesizer can echo, while remaining a literal substring of the
 /// span it is drawn from.
 fn distinctive_key(raw: &str) -> String {
-    let cleaned = raw.trim_start_matches(['#', '-', ' ', '\t']).trim();
+    let cleaned = raw
+        .trim_start_matches(['#', '-', '─', '=', ' ', '\t'])
+        .trim();
+    // Trailing rule characters carry no information and eat the 80-char budget
+    // a banner's actual title needs. Trimming an affix keeps the key a literal
+    // substring of the span, which is the invariant `verify` rests on.
+    let cleaned = cleaned.trim_end_matches(['-', '─', '=', ' ', '\t']).trim();
     let cleaned = if cleaned.is_empty() {
         raw.trim()
     } else {
@@ -332,6 +397,50 @@ fn code_boundary(line: &str, is_rust: bool) -> bool {
     }
 }
 
+/// Does `s` contain a run of `n` or more identical rule characters?
+fn has_rule_run(s: &str, n: usize) -> bool {
+    let mut run = 0usize;
+    let mut last = '\0';
+    for c in s.chars() {
+        if c == '-' || c == '=' || c == '─' {
+            if c == last {
+                run += 1;
+            } else {
+                run = 1;
+                last = c;
+            }
+            if run >= n {
+                return true;
+            }
+        } else {
+            run = 0;
+            last = '\0';
+        }
+    }
+    false
+}
+
+/// Is this a column-0 shell SECTION BANNER — `# ── Preload policy ──────`?
+///
+/// The packet asked for "function / SECTION for shell" and the first cut only
+/// did functions. That is not a cosmetic gap: `images/inference/entrypoint.sh`
+/// is 600 lines with exactly ONE function, so function-only chunking degraded
+/// it to five fixed 120-line windows — the mid-construct citation this whole
+/// packet exists to prevent, reappearing in the very file the packet cited.
+/// Measured across `images` + `scripts`: 787 banner comments, and 9.1% of shell
+/// chunks were landing exactly on the 120-line cap.
+///
+/// A TITLE IS REQUIRED. A bare `# ----------------` is a separator, and a
+/// citation keyed on a row of dashes tells the reader nothing about where they
+/// have been sent — which is the Q3 failure with extra steps.
+fn shell_section_banner(line: &str) -> bool {
+    if !line.starts_with('#') {
+        return false;
+    }
+    let body = &line[1..];
+    has_rule_run(body, 3) && body.chars().any(|c| c.is_alphabetic())
+}
+
 /// Section chunker for CODE (order 803-su4n): each chunk spans one named
 /// construct — a Rust `fn`/`impl`/`struct`/`enum`/`trait`/`mod`, or a shell
 /// function — from its signature to the line before the next one.
@@ -347,17 +456,42 @@ fn code_boundary(line: &str, is_rust: bool) -> bool {
 /// rationale — the order number, the incident, the reason a check exists — that
 /// nothing else in the tree records.
 pub fn chunk_code(rel_path: &str, kind: &str, text: &str) -> Vec<Chunk> {
+    if is_containerfile(rel_path) {
+        return chunk_containerfile(rel_path, kind, text);
+    }
     let is_rust = rel_path.ends_with(".rs");
     let lines: Vec<&str> = text.lines().collect();
     if lines.is_empty() {
         return Vec::new();
     }
 
-    let mut starts: Vec<usize> = Vec::new();
+    // (line index, opened by a section banner rather than a named construct)
+    let mut marks: Vec<(usize, bool)> = Vec::new();
     for (i, l) in lines.iter().enumerate() {
         if code_boundary(l, is_rust) {
-            starts.push(i);
+            marks.push((i, false));
+        } else if !is_rust && shell_section_banner(l) {
+            // Shell only. Rust already has dense fn/impl boundaries (2.4% of
+            // Rust chunks hit the cap, against 9.1% for shell), and a banner
+            // sitting directly above a doc comment would split that doc comment
+            // off the item it documents — a regression paid for a small gain.
+            marks.push((i, true));
         }
+    }
+
+    // A banner that opens nothing is not a citable unit: it steals the opening
+    // line of the construct beneath it and leaves a one-line chunk whose whole
+    // content is a rule. Keep a banner only when it actually heads a body.
+    let mut starts: Vec<usize> = Vec::new();
+    for (idx, &(line_idx, is_banner)) in marks.iter().enumerate() {
+        let next = marks
+            .get(idx + 1)
+            .map(|(n, _)| *n)
+            .unwrap_or_else(|| lines.len());
+        if is_banner && next.saturating_sub(line_idx) < 3 {
+            continue;
+        }
+        starts.push(line_idx);
     }
 
     let mut chunks = Vec::new();
@@ -368,6 +502,116 @@ pub fn chunk_code(rel_path: &str, kind: &str, text: &str) -> Vec<Chunk> {
     for (idx, &s) in starts.iter().enumerate() {
         let end = starts.get(idx + 1).copied().unwrap_or(lines.len());
         push_code_span(&mut chunks, rel_path, kind, s + 1, end, &lines);
+    }
+    chunks
+}
+
+// ── Containerfile ───────────────────────────────────────────────────────────
+
+/// `Containerfile`, `Containerfile.dev`, `Dockerfile`, …
+fn is_containerfile(rel_path: &str) -> bool {
+    let base = rel_path.rsplit('/').next().unwrap_or(rel_path);
+    CORPUS_CODE_FILENAMES
+        .iter()
+        .any(|n| base == *n || base.starts_with(&format!("{n}.")))
+}
+
+/// Column-0 Dockerfile instruction keywords.
+const CONTAINERFILE_INSTRUCTIONS: &[&str] = &[
+    "FROM",
+    "RUN",
+    "COPY",
+    "ADD",
+    "ENV",
+    "ARG",
+    "WORKDIR",
+    "USER",
+    "ENTRYPOINT",
+    "CMD",
+    "LABEL",
+    "EXPOSE",
+    "VOLUME",
+    "HEALTHCHECK",
+    "SHELL",
+    "STOPSIGNAL",
+    "ONBUILD",
+    "MAINTAINER",
+];
+
+/// Would this line open a new instruction, ignoring continuation state?
+/// Column 0 only — an indented `RUN` is inside a heredoc or a continuation, and
+/// treating it as a boundary would cut a shell pipeline in half.
+fn containerfile_instruction(line: &str) -> bool {
+    if line.starts_with(' ') || line.starts_with('\t') {
+        return false;
+    }
+    let first = line.split_whitespace().next().unwrap_or("");
+    CONTAINERFILE_INSTRUCTIONS.contains(&first)
+}
+
+/// The 0-based indices of the lines that open an instruction, with
+/// `\`-continuations held inside the instruction they continue.
+///
+/// SEPARATE FROM THE CHUNKER ON PURPOSE. `HEALTHCHECK … \` / `CMD …` puts an
+/// instruction keyword at column 0 on a continuation line, and if that opened a
+/// boundary the healthcheck would be cited as two unrelated halves. Coalescing
+/// usually reabsorbs such a boundary, which means the bug is invisible at chunk
+/// level and a chunk-level test of it passes whether the guard is there or not
+/// — measured, not assumed: that test survived deleting the guard. The rule is
+/// therefore asserted here, where it lives.
+fn containerfile_boundaries(lines: &[&str]) -> Vec<usize> {
+    let mut starts: Vec<usize> = Vec::new();
+    let mut continued = false;
+    for (i, l) in lines.iter().enumerate() {
+        if !continued && containerfile_instruction(l) {
+            starts.push(i);
+        }
+        continued = l.trim_end().ends_with('\\');
+    }
+    starts
+}
+
+/// Instructions are coalesced until a group reaches this many lines.
+///
+/// Measured, not guessed: `images/default/Containerfile` is 217 lines of which
+/// the majority are single-line `COPY`s. One chunk per instruction would make
+/// ~40 one-line chunks per image — each too small to carry meaning into an
+/// embedding, and each competing for a top-k slot. Coalescing keeps a citation
+/// landing on an instruction line (never mid-`RUN`) while giving the chunk
+/// enough text to retrieve on.
+const MIN_CONTAINERFILE_SPAN_LINES: usize = 12;
+
+/// Section chunker for Containerfiles (order 803-su4n, third root).
+///
+/// A Containerfile has neither functions nor headings, so both existing
+/// chunkers degrade to fixed 120-line windows on it — the mid-construct
+/// citation this packet exists to prevent. The boundary here is the column-0
+/// instruction, with `\`-continuations held inside their instruction so a
+/// multi-line `RUN` is never split at a `&&`.
+pub fn chunk_containerfile(rel_path: &str, kind: &str, text: &str) -> Vec<Chunk> {
+    let lines: Vec<&str> = text.lines().collect();
+    if lines.is_empty() {
+        return Vec::new();
+    }
+    let starts = containerfile_boundaries(&lines);
+
+    let mut chunks = Vec::new();
+    // The header comment above the first FROM is where this repo records which
+    // order added an image and why — same reason the other chunkers keep it.
+    let first = starts.first().copied().unwrap_or(lines.len());
+    if first > 0 && lines[..first].iter().any(|l| !l.trim().is_empty()) {
+        push_code_span(&mut chunks, rel_path, kind, 1, first, &lines);
+    }
+    let mut i = 0usize;
+    while i < starts.len() {
+        let group_start = starts[i];
+        let mut j = i + 1;
+        while j < starts.len() && starts[j] - group_start < MIN_CONTAINERFILE_SPAN_LINES {
+            j += 1;
+        }
+        let end = starts.get(j).copied().unwrap_or(lines.len());
+        push_code_span(&mut chunks, rel_path, kind, group_start + 1, end, &lines);
+        i = j;
     }
     chunks
 }
@@ -710,6 +954,277 @@ mod tests {
                 "piece longer than the cap"
             );
         }
+    }
+
+    /// A straight-line shell script with ONE function must not collapse into
+    /// fixed windows. This is `images/inference/entrypoint.sh` in miniature —
+    /// the file the packet's own Q2 cited, 600 lines with a single function.
+    #[test]
+    fn shell_section_banners_open_chunks() {
+        let mut sh = String::from("#!/usr/bin/env bash\n# preamble rationale\nset -eu\n\n");
+        sh.push_str("# ── Preload policy (order 392a) ──────────────────\n");
+        for i in 0..30 {
+            sh.push_str(&format!("PRELOAD_{i}=1\n"));
+        }
+        sh.push_str("# --- Tier detection ---\n");
+        for i in 0..30 {
+            sh.push_str(&format!("TIER_{i}=1\n"));
+        }
+        let chunks = chunk_code("images/inference/entrypoint.sh", "code", &sh);
+        assert!(
+            chunks.iter().any(|c| c.key.contains("Preload policy")),
+            "banner section missing: {:?}",
+            chunks.iter().map(|c| &c.key).collect::<Vec<_>>()
+        );
+        assert!(chunks.iter().any(|c| c.key.contains("Tier detection")));
+        // Keys are titles, not rows of rule characters.
+        for c in &chunks {
+            assert!(
+                !c.key.starts_with('─') && !c.key.ends_with('─') && !c.key.ends_with('-'),
+                "key still carries rule characters: {:?}",
+                c.key
+            );
+        }
+        // Invariant `verify` rests on, restated for banners.
+        let lines: Vec<&str> = sh.lines().collect();
+        for c in &chunks {
+            let span = lines[c.line_start - 1..c.line_end].join("\n");
+            assert!(span.contains(&c.key), "key {:?} not in span", c.key);
+        }
+    }
+
+    /// A banner sitting directly on top of a function must NOT open its own
+    /// chunk — it would steal the signature line and leave a chunk whose entire
+    /// content is a rule, which is a citation pointing at nothing.
+    #[test]
+    fn banner_directly_above_a_function_does_not_steal_its_signature() {
+        let sh = concat!(
+            "#!/usr/bin/env bash\n",
+            "set -eu\n",
+            "\n",
+            "# ── Helpers ──────────────────\n",
+            "do_thing() {\n",
+            "  echo hi\n",
+            "}\n",
+        );
+        let chunks = chunk_code("scripts/x.sh", "code", sh);
+        let sig = chunks
+            .iter()
+            .find(|c| c.key.contains("do_thing()"))
+            .expect("function chunk missing");
+        assert!(
+            sig.text.contains("echo hi"),
+            "signature chunk lost its body: {:?}",
+            sig.text
+        );
+        assert!(
+            !chunks.iter().any(|c| c.key == "Helpers"),
+            "naked banner became its own chunk"
+        );
+    }
+
+    /// NEGATIVE CONTROL for the banner detector. These are the lines that
+    /// litter every script in the tree; if any of them opened a chunk, the
+    /// shell corpus would shred into unciteable fragments.
+    #[test]
+    fn shell_banner_does_not_fire_on_ordinary_comments() {
+        for line in [
+            "#!/usr/bin/env bash",
+            "# @trace spec:forge-environment-discoverability",
+            "# shellcheck disable=SC2086",
+            "# supports --dry-run and --force",
+            "# ------------------------------", // a rule with no title
+            "echo '# --- not a comment ---'",
+            "  # ── indented, inside a function ──",
+            "",
+        ] {
+            assert!(!shell_section_banner(line), "banner fired on {line:?}");
+        }
+        assert!(shell_section_banner("# ── Preload policy ──────"));
+        assert!(shell_section_banner("# --- Discover validator ---"));
+        assert!(shell_section_banner("# === Config ==="));
+    }
+
+    /// The prune RULE, not its effect on today's corpus. `images/default/
+    /// cheatsheets/` is a byte-identical copy of the `cheatsheets` root; two
+    /// identical chunks at every rank halve the useful width of a top-k. Today
+    /// the extension filter already excludes it, so a corpus-level assertion is
+    /// vacuous — asserting the rule is what can actually go red.
+    #[test]
+    fn duplicated_cheatsheet_copy_is_pruned() {
+        assert!(is_pruned("images/default/cheatsheets/runtime/podman.md"));
+        assert!(is_pruned("images/default/cheatsheets/build/anything.sh"));
+        // Negative controls: the rest of the image tree must stay indexable.
+        assert!(!is_pruned("images/inference/entrypoint.sh"));
+        assert!(!is_pruned("images/default/lib-common.sh"));
+        assert!(!is_pruned("cheatsheets/runtime/podman.md"));
+        assert!(!is_pruned("images/default/Containerfile"));
+    }
+
+    /// A Containerfile is extension-less, so an extension-only walker skipped
+    /// all seven of them. Assert the name arm matches and the extension arm is
+    /// still exclusive — a `names` list that leaked into the prose roots would
+    /// index a Containerfile as a spec.
+    #[test]
+    fn walk_matches_extensionless_names_without_widening_extensions() {
+        let dir = std::env::temp_dir().join(format!("tsp-walk-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("sub")).unwrap();
+        std::fs::write(dir.join("Containerfile"), "FROM x\n").unwrap();
+        std::fs::write(dir.join("sub/entrypoint.sh"), "main() { :; }\n").unwrap();
+        std::fs::write(dir.join("sub/notes.md"), "# no\n").unwrap();
+
+        let mut got = walk_files(&dir, &["sh"], CORPUS_CODE_FILENAMES)
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().to_string())
+            .collect::<Vec<_>>();
+        got.sort();
+        assert_eq!(got, vec!["Containerfile", "entrypoint.sh"]);
+
+        // Prose roots pass an empty names list and must not pick it up.
+        let prose = walk_files(&dir, &["md"], &[]);
+        assert_eq!(
+            prose.len(),
+            1,
+            "md walk should see only notes.md: {prose:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A Containerfile has neither `fn` nor `##`, so both older chunkers
+    /// degrade to fixed windows on it. Assert the boundary is the instruction,
+    /// that a `\`-continuation is held inside its instruction (splitting a
+    /// multi-line RUN at a `&&` is the mid-construct citation this packet
+    /// exists to prevent), and that the header rationale survives.
+    #[test]
+    fn containerfile_chunks_on_instructions_and_holds_continuations() {
+        let cf = concat!(
+            "# order 803 rationale line\n",
+            "# second header line\n",
+            "\n",
+            "FROM registry.example/base:1\n",
+            "RUN microdnf install -y bash curl \\\n",
+            "    && microdnf clean all \\\n",
+            "    && rm -rf /var/cache\n",
+            "COPY entrypoint.sh /usr/local/bin/entrypoint.sh\n",
+            "USER 1000:1000\n",
+            "EXPOSE 11434\n",
+            "ENV HOME=/home/ollama\n",
+            // The idiom the continuation guard exists for: a column-0 `CMD`
+            // that is the SECOND LINE of a HEALTHCHECK, not an instruction of
+            // its own. Without the guard this opens a chunk and the healthcheck
+            // is cited as two unrelated halves.
+            "HEALTHCHECK --interval=5s --retries=12 \\\n",
+            "CMD curl -sf http://127.0.0.1:11434/api/version || exit 1\n",
+            "ENTRYPOINT [\"/usr/local/bin/entrypoint.sh\"]\n",
+        );
+        let chunks = chunk_containerfile("images/inference/Containerfile", "code", cf);
+        assert!(
+            chunks
+                .iter()
+                .any(|c| c.text.contains("order 803 rationale")),
+            "Containerfile header dropped"
+        );
+        // No chunk may OPEN on a continuation line.
+        for c in &chunks {
+            let head = c.text.lines().next().unwrap_or("").trim_start();
+            assert!(!head.starts_with("&&"), "a chunk opened mid-RUN: {head:?}");
+        }
+        // The continuation rule itself, asserted at boundary level. Coalescing
+        // usually reabsorbs a spurious boundary, so a chunk-level assertion
+        // here would pass with the guard deleted — it did, under mutation.
+        let cf_lines: Vec<&str> = cf.lines().collect();
+        let bounds = containerfile_boundaries(&cf_lines);
+        let cmd_line = cf_lines
+            .iter()
+            .position(|l| l.starts_with("CMD curl"))
+            .expect("fixture lost its HEALTHCHECK continuation");
+        assert!(
+            !bounds.contains(&cmd_line),
+            "the CMD continuation of a HEALTHCHECK opened a boundary: {bounds:?}"
+        );
+        assert!(
+            bounds.contains(&(cmd_line - 1)),
+            "the HEALTHCHECK itself must still be a boundary"
+        );
+        // Keys stay literal substrings — the invariant `verify` rests on.
+        let lines: Vec<&str> = cf.lines().collect();
+        for c in &chunks {
+            let span = lines[c.line_start - 1..c.line_end].join("\n");
+            assert!(span.contains(&c.key), "key {:?} not in span", c.key);
+        }
+        // Coalescing: single-line COPY/USER/EXPOSE must not each be a chunk.
+        assert!(
+            chunks.len() <= 3,
+            "expected coalesced groups, got {} chunks: {:?}",
+            chunks.len(),
+            chunks.iter().map(|c| &c.key).collect::<Vec<_>>()
+        );
+        // And chunk_code must route here by filename, not by extension.
+        assert_eq!(
+            chunk_code("images/inference/Containerfile", "code", cf).len(),
+            chunks.len()
+        );
+    }
+
+    /// NEGATIVE CONTROL: an indented instruction word (inside a heredoc, or a
+    /// shell line in a RUN) is not a boundary, and neither is prose.
+    #[test]
+    fn containerfile_boundaries_do_not_fire_on_indented_or_prose_lines() {
+        for line in [
+            "    RUN this is inside a heredoc",
+            "  COPY nothing",
+            "# FROM in a comment",
+            "echo FROM",
+            "",
+        ] {
+            assert!(
+                !containerfile_instruction(line),
+                "boundary fired on {line:?}"
+            );
+        }
+        assert!(containerfile_instruction("FROM scratch"));
+        assert!(containerfile_instruction("HEALTHCHECK --interval=5s CMD x"));
+    }
+
+    /// `images/default/cheatsheets/` is a byte-identical copy of the
+    /// `cheatsheets` root. Two identical chunks at every rank halve the useful
+    /// width of a top-k, so the prune is a retrieval-quality property, not
+    /// housekeeping — assert it rather than relying on today's extension list.
+    #[test]
+    fn pruned_prefixes_are_not_indexed() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        if !root.join("images/default/cheatsheets").is_dir() {
+            return; // open-world: an off-Tillandsias checkout simply has no copy
+        }
+        let chunks = chunk_corpus(&root);
+        assert!(!chunks.is_empty(), "corpus is empty");
+        let leaked: Vec<&str> = chunks
+            .iter()
+            .map(|c| c.path.as_str())
+            .filter(|p| p.starts_with("images/default/cheatsheets/"))
+            .take(3)
+            .collect();
+        assert!(
+            leaked.is_empty(),
+            "pruned prefix leaked into corpus: {leaked:?}"
+        );
+        // …and `images/` IS indexed, so the prune is not a mute.
+        assert!(
+            chunks
+                .iter()
+                .any(|c| c.path == "images/inference/entrypoint.sh"),
+            "images/ root indexed nothing outside the prune"
+        );
+        // The extension-less arm has to survive the WHOLE dispatch, not just a
+        // direct walk_files call — the second thing mutation control caught.
+        assert!(
+            chunks
+                .iter()
+                .any(|c| c.path == "images/inference/Containerfile"),
+            "no Containerfile reached the corpus: the extension-less name arm is \
+             not wired through chunk_corpus"
+        );
     }
 
     #[test]
