@@ -1,0 +1,86 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-18T06:45:00Z.
+#
+# Closed on measurements taken deliberately BEFORE the destructive e2e, which
+# would erase the very artifact the packet is about.
+status:
+  - packet_id: expert-index-lifecycle-belongs-to-the-mirror-not-the-forge
+    field: status
+    value: completed
+    ts: "2026-08-18T06:45:00Z"
+    host: linux_mutable
+
+events:
+  - packet_id: expert-index-lifecycle-belongs-to-the-mirror-not-the-forge
+    event:
+      type: completed
+      ts: "2026-08-18T06:45:00Z"
+      agent_id: linux-macuahuitl-opus5-20260818T033600Z
+      host: linux_mutable
+      summary: >
+        status 'completed' with evidence, measured tonight on the live host. THE STRUCTURE
+        THE DELIVERABLE ASKS FOR EXISTS: podman volume tillandsias-spec-index-tillandsias,
+        578 MB, containing THREE fingerprint-keyed directories each carrying chunks.jsonl,
+        vectors.jsonl and .fingerprint — 58,156 chunks total, one corpus at 19,435 (the
+        803-su4n code corpus). That is a durable, named, corpus+model-fingerprinted store,
+        resolved as tier 3 of spec-index-ensure.sh's precedence and therefore shared by
+        every forge (via the /opt/tillandsias/spec-index read-only mount) and by the
+        bare-metal harness on the same host. THE WARM-HIT CLAIM, bounded rather than timed
+        directly: tonight's in-forge lane reported ok:expert-base-ready and
+        ok:experts-healthy with expert_accuracy 22/22, and the ENTIRE
+        litmus:opencode-prompt-e2e-shape lane — forge launch, cycle, teardown — took 131s.
+        The packet's own cold-build measurement is ~12 minutes for 9,910 chunks. A lane that
+        finishes in 131s cannot have rebuilt the index, so the forge landed warm. That is an
+        upper bound, not a stopwatch on the resolution itself, and it is stated as such.
+        NEGATIVE HALF ALSO MEASURED: /dev/shm/tillandsias-experts, the tmpfs path the index
+        used to live in, was an EMPTY directory tonight — `rmdir` succeeded, which is a
+        stronger proof than a listing because it refuses non-empty directories — and a full
+        ./build.sh --ci-full --install did NOT recreate it. The index no longer lives on
+        tmpfs on this host.
+      evidence_refs:
+        - "podman volume tillandsias-spec-index-tillandsias: 578M, 3 fingerprint dirs, 58,156 chunks (19,435 in the code corpus)"
+        - "scripts/spec-index-ensure.sh tier 3 (named volume) resolved ahead of tier 4 (XDG path, absent on this host)"
+        - "bound: forge lane ok:expert-base-ready + whole lane 131s vs the packet's ~12min cold build"
+        - "negative: /dev/shm/tillandsias-experts empty, rmdir succeeded, not recreated by a full --ci-full run"
+  - packet_id: expert-index-lifecycle-belongs-to-the-mirror-not-the-forge
+    event:
+      type: note
+      ts: "2026-08-18T06:45:00Z"
+      agent_id: linux-macuahuitl-opus5-20260818T033600Z
+      host: linux_mutable
+      summary: |
+        THIS PACKET CHANGED WHAT THE DESTRUCTIVE E2E COSTS, and the operator
+        should know before the next one runs.
+
+        `podman system reset --force` — step 2 of the build-install e2e —
+        destroys every volume, including tillandsias-spec-index-tillandsias.
+        That is 578 MB and three fingerprinted corpora, and the packet's own
+        figure for rebuilding one is ~12 minutes for 9,910 chunks; the code
+        corpus here is 19,435. So the first forge after a destructive e2e now
+        pays a cold index build that it did not pay before this packet landed,
+        because before this the index was in tmpfs and rebuilt every time
+        anyway — the cost did not MOVE, it became VISIBLE at a moment when
+        someone is waiting for a re-provision to finish.
+
+        Not a defect and not an argument against the reset: the whole point of
+        the test is that nothing survives it. But it is a real change to the
+        e2e's wall-clock, it was not part of the packet's stated scope, and it
+        is the kind of thing that gets discovered at 2am by whoever runs the
+        reset rather than by whoever changed the storage tier.
+
+        WORTH CONSIDERING, not decided here: the selective-reset opt-in
+        (TILLANDSIAS_SMOKE_RESET_MODE=selective) already preserves allowlisted
+        upstream base images for exactly this reason — iteration speed on a
+        thing the test is not testing. The spec-index volume has the same
+        character. Whoever picks that up should decide it deliberately rather
+        than letting the first painful rebuild decide it.
+
+        A LEFTOVER THIS MIGRATION LEFT BEHIND, recorded because it cost a red
+        litmus tonight: the empty /dev/shm/tillandsias-experts directory made
+        litmus:forge-experts-teardown-ephemeral step 7 fail with "expert state
+        present on the HOST tmpfs after teardown". There was no state — the
+        check counts the directory NAME, not its contents. Removing the
+        directory fixed it and nothing recreated it. I could not establish what
+        created it; only the in-container lib-common.sh mkdirs that path, but
+        several host-side scripts source that same library, so the mechanism is
+        unproven and I am not asserting one.
