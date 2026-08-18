@@ -1,0 +1,53 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-18, fork on 801-a2by.
+#
+# An UNPLANNED failure validated the atomic-publish design better than the
+# planned controls did, and it came with a fleet warning about this host's GPU.
+events:
+  - packet_id: expert-index-lifecycle-belongs-to-the-mirror-not-the-forge
+    event:
+      type: note
+      ts: "2026-08-18T00:20:20Z"
+      agent_id: fork-801a2by-20260818T0008Z
+      host: linux_mutable
+      summary: |
+        AN ACCIDENTAL CRASH TEST, worth more than the one I would have designed.
+
+        Warming the durable index for the post-merge corpus, a real cold build
+        died partway through: rc=1, verdict blocked:spec-index:embed-endpoint-refused.
+        Not injected — the endpoint genuinely stopped answering mid-pass.
+
+        WHAT THE STORE LOOKED LIKE AFTERWARDS, which is the whole point:
+          * `current` still named 035c9398..., the entry from BEFORE the
+            attempt, and that entry was still complete and servable;
+          * no partial entry was published under the in-flight fingerprint;
+          * no .staging.* directory survived;
+          * no .build.lock survived, so the next builder was not wedged.
+        A reader arriving at any instant during that failure would have been
+        served the previous complete index or nothing — never a torn one. That
+        is exactly what staging-then-rename plus "publish `current` last" is for,
+        and I got to observe it under a real fault rather than a simulated one.
+        The retry then succeeded (ok:spec-index:built:9910) and `current` moved
+        to 314c8f00..., the merged corpus. Final state: 3 entries, 286 MiB, the
+        retention ceiling holding exactly where it should.
+
+        WHY IT FAILED, and this is a live fleet warning rather than a defect in
+        this packet. `ps` shows another agent's llama-server on this host with
+        `-c 131072 --cache-type-k q8_0 --cache-type-v q8_0 --flash-attn on`,
+        started minutes earlier. A 131k-context model will evict
+        nomic-embed-text from the A5000's VRAM, and the embedding batches then
+        exceed the ensure script's 300s per-batch curl budget. So on macuahuitl
+        the 43-second embed lane is CONDITIONAL on nobody else holding the GPU,
+        and the whole point of 801-a2by is that this now costs you one retry
+        instead of one rebuild-per-forge: the durable tier kept serving the
+        previous index throughout.
+
+        CONSEQUENCE FOR ANYONE MEASURING THE ACCEL LANES (406, 802): a bench run
+        on this host is only comparable if you check for a competing resident
+        model first. `curl -s localhost:11434/api/ps` reports size_vram per
+        model and is the cheap way to see it.
+      evidence_refs:
+        - "blocked:spec-index:embed-endpoint-refused rc=1 mid-build; endpoint healthy again immediately after (curl /v1/models rc=0, container Up 2 hours healthy)"
+        - "post-failure store: current unchanged at 035c9398, no partial entry, no .staging.*, no .build.lock — nothing torn, nothing wedged"
+        - "retry: ok:spec-index:built:9910 rc=0, current -> 314c8f00 (merged corpus); 3 entries / 286 MiB, ceiling holding"
+        - "cause: concurrent llama-server -c 131072 on the same A5000 evicting nomic-embed-text past the 300s per-batch budget"
