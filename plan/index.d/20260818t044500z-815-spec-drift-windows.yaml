@@ -1,0 +1,101 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by windows (yolanda), 2026-08-18T04:45Z.
+#
+# Yield of the standing FRESHNESS audit (order 372), second consecutive run.
+# Disposition on openspec/specs/project-bootstrap-readme/spec.md is `updated`,
+# stamped in-file. Two things came out of it: a spec that specified a system
+# nobody built, and — while verifying the edit — a THIRD instance of the
+# host-conditional-test class filed yesterday as 814-75yf.
+
+packets:
+  - packet_id: bound-litmus-pins-a-specs-shape-but-never-its-enumerations
+    order: 815-yace
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: "two active specs list six manifest summarizers; four of those names do not exist, two that do ship are unlisted, and the path is wrong in one — the bound litmus greps for exactly one name, so the lists rot green at coverage_ratio 75"
+    deliverable: "a check that every script path named in a spec's requirements resolves, so an enumeration cannot drift from the tree while its litmus stays green"
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [openspec, testing, fail-loud, docs]
+    context: |
+      FOUND 2026-08-18 auditing openspec/specs/project-bootstrap-readme/spec.md.
+      Its Manifest-summarizers scenario required six scripts. Measured against
+      the tree:
+
+        spec name                actual
+        summarize-cargo.sh       ships
+        summarize-go.sh          ships as summarize-go-mod.sh
+        summarize-package-json   ships
+        summarize-maven.sh       NEVER COMMITTED
+        summarize-gradle.sh      NEVER COMMITTED
+        summarize-flutter.sh     ships as summarize-pubspec.sh
+        (unlisted)               summarize-nix.sh, summarize-pyproject.sh ship
+
+      `git log --diff-filter=A` finds no add-commit for maven or gradle and no
+      plan packet proposes them. The delivering commit a7732bbb2 is titled
+      "implement six language-specific manifest summarizers" — it shipped a
+      DIFFERENT six. So the spec was never descriptive of the built system.
+
+      THE DISPATCH SHAPE IS ALSO WRONG, and this is the part that would mislead
+      an implementer rather than merely misname things. The spec says
+      regenerate-readme.sh "invokes language-specific summarizers" and lists
+      them. It actually globs `/opt/summarizers/*.sh` and
+      `scripts/.tillandsias/summarizers/*.sh` (regenerate-readme.sh:30) — a
+      plugin directory. A reader implementing to spec would hard-code six calls
+      and miss the extension point entirely.
+
+      THE SIBLING SPEC HAS THE SAME LIST AND A WORSE PATH.
+      openspec/specs/project-summarizers/spec.md names maven, gradle and flutter
+      too, under `scripts/summarizers/summarize-*.sh` — a subdirectory that does
+      not exist; the scripts are flat in `scripts/`. Only the audited spec was
+      corrected this cycle; project-summarizers is left for its own audit draw
+      rather than rewritten by a host that was not auditing it.
+
+      WHY IT ROTTED GREEN, which is the actionable half.
+      litmus:project-bootstrap-readme-shape has five steps and pins: the
+      cheatsheet's two-section contract, its provenance metadata, that
+      regenerate-readme.sh and check-readme-discipline.sh exist and are
+      executable, and an OpenCode narrative doc. For summarizers it greps the
+      CHEATSHEET for the single string `summarize-cargo.sh` — which exists. So
+      every step passes while four required scripts are absent and two shipped
+      ones are unmentioned. The litmus pins the spec's SHAPE and never its
+      ENUMERATIONS, and coverage_ratio 75 reads as healthy throughout.
+
+      NOT CLAIMED: that these two specs are the only drifted ones. Two were
+      examined because one was drawn and the other was its sibling.
+    verifiable_closure: "a check that resolves every scripts/... path appearing in an openspec requirement, red against the pre-fix project-summarizers spec"
+
+events:
+  - packet_id: unit-tests-can-encode-linux-only-assumptions-that-only-the-gate-lane-satisfies
+    event:
+      type: note
+      ts: "2026-08-18T04:46:00Z"
+      agent_id: windows-yolanda-opus5-20260818t0419z
+      host: windows
+      summary: >
+        THIRD INSTANCE, found within a day of filing, and it validates the
+        "not a census" caveat this packet was filed with. While verifying an
+        unrelated spec edit, `scripts/run-litmus-test.sh project-bootstrap-readme`
+        on Windows failed at
+        litmus:skills-canonical-and-mcp-first-shape step 1, "every non-generated
+        skill is a symlink into canonical skills/". Cause: `core.symlinks=false`
+        on this host, so although git records mode 120000 for
+        .opencode/skills/* and .claude/skills/*, they materialise on disk as
+        regular 35-byte files containing the target path. The step therefore
+        CANNOT pass on Windows, and passes in the gate only because
+        ./build.sh --check re-execs into the WSL2 Linux build distro.
+        DIFFERENT REMEDY FROM THE METRICS CASE, worth distinguishing. There the
+        test encoded a Linux assumption it did not need, and the fix was to
+        inject the path (73/73 green after). Here the litmus is arguably RIGHT
+        to demand symlinks — Windows cannot provide them without developer mode
+        or elevation — so the fix is not portability but a declared host
+        precondition that SKIPS rather than FAILS, which is the same remedy
+        806-6y3h proposes for ensure_toolbox's P3 property on this host.
+        That makes three known members of the family: 806-6y3h (ensure_toolbox
+        P3), 814-75yf (metrics diskstats test, fixed), and this. Two want a
+        skip-with-precondition; one wanted injection. The deliverable's option
+        (a) — run the suites natively on a non-Linux host each cycle and report
+        the delta — would have surfaced all three on day one, and is looking
+        stronger than option (b) as a result.
