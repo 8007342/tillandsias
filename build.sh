@@ -1509,6 +1509,22 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Litmus pin-claim check passed"
 
+    # Order 797-8dzt. A test that slices its own source between two SYMBOL
+    # NAMES silently widens when one of those symbols is renamed away:
+    # `str::split` on an absent needle returns the WHOLE remainder, so the
+    # window runs past its intended end and the assertion is satisfied by
+    # unrelated code. Measured in remote_projects.rs — a guard bounded by
+    # `fn run_command_with_timeout`, a function no longer in that file, had
+    # been unable to fail for as long as the bound had been missing, and
+    # deleting the exact line it protected left it green. Same family as the
+    # pin-claim gate above: both ask whether an assertion can still fail.
+    _step "Checking source-slice bounds still resolve (797-8dzt)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-source-slice-bounds.sh" 2>&1; then
+        _error "a source-slicing test is bounded by a symbol that no longer exists (797-8dzt) — see the verdict line above"
+        exit 1
+    fi
+    _info "Source-slice bound check passed"
+
     # Order 731-d89b. A script a caller RUNS by path must be tracked executable.
     # resolve-release-run.sh reached linux-next at mode 100644 from the Windows
     # host, so the release runbook's direct invocation of it was a permission

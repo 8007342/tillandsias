@@ -1,0 +1,72 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by windows (yolanda), 2026-08-18T01:45Z.
+#
+# Filed against the tool, but the evidence is a self-inflicted wound: this
+# cycle spent most of its budget forming and discarding THREE false hypotheses
+# about a coordination failure that did not exist. Recorded that way on purpose
+# — the cost of the ambiguity is the argument for fixing it.
+
+packets:
+  - packet_id: blocking-counts-truncates-to-a-default-limit-without-saying-so
+    order: 812-kxu4
+    status: ready
+    desired_release: v0.5
+    priority: p3
+    kind: bug
+    title: "tillandsias-plan blocking-counts silently truncates to 16 of 116 rows; its help documents [--limit N] with no default and no truncation notice, so 'absent from the output' and 'not a blocker' are indistinguishable"
+    deliverable: "the default is either unlimited, or the output states what it truncated (e.g. a trailing `truncated: showing 16 of 116`), so absence is a fact rather than an artifact"
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [plan, observability, fail-loud, cli]
+    context: |
+      MEASURED 2026-08-18:
+        tillandsias-plan blocking-counts              -> 16 rows
+        tillandsias-plan blocking-counts --limit 500  -> 116 rows
+      The help text reads `blocking-counts [--release V] [--limit N]` and
+      explains the semantics well, but names no default and gives no signal that
+      the list was cut. Nothing in the output distinguishes "this id blocks
+      nothing" from "this id was below the cut".
+
+      WHAT IT COST, in one cycle, on this host. Chasing why a keystone packet
+      (808-43mw) had gone unclaimed for four cycles, the default output was read
+      as evidence that its dependency edge was invisible to the fleet's
+      blocking queries. That produced THREE successive false hypotheses, each
+      investigated and each wrong:
+
+        1. "fragment-declared depends_on is invisible to blocking-counts"
+           — refuted: a fragment-only id DID appear in the output.
+        2. "compaction is the remedy; folding fragments into the base will
+           surface the edge" — refuted by compacting an isolated COPY of the
+           ledger (84 fragments folded, exit 0) and re-querying: still absent.
+        3. "the extractor only understands flow-style `depends_on: [x]`, not the
+           block form compaction emits" — refuted: the base carries 97
+           block-style entries and at least one of them
+           (socket-protocol-push-variants) appears in the output.
+
+      The actual answer was `--limit 500`, and the edge had been counted
+      correctly from the first query. Every conclusion drawn from the default
+      output was an artifact of the cut.
+
+      WHY FILE A p3 AT ALL. The wasted cycle is not the argument — an agent
+      should test its hypotheses, and these were tested and discarded rather
+      than filed, which is the process working. The argument is that a
+      diagnostic whose output cannot be distinguished from absence will keep
+      generating that class of investigation, and the next one may not test as
+      far before believing it. This is the same shape as the checks this
+      milestone already collects: a signal that is TRUE about what it measured
+      and misleading about what the reader needed.
+
+      NOT CLAIMED: any defect in the counting itself. blocking-counts is
+      correct — it counted a fragment-declared, flow-style edge from a `ready`
+      dependent accurately, which is exactly right. `select-rows` shares the
+      `[--limit N]` shape and may share the behaviour; not checked.
+
+      A NOTE ON THE ORIGINAL QUESTION, so it is not lost: 808-43mw's four cycles
+      of silence have NO tooling explanation. The edge is visible, the packet is
+      discoverable and `ready`, and linux has merged windows-next repeatedly.
+      It is simply unclaimed — a coordination and priority question for the
+      operator, not a defect.
+    verifiable_closure: "blocking-counts either returns all rows by default, or emits a machine-readable truncation marker naming shown/total"
+    evidence:
+      - "blocking-counts -> 16 rows; blocking-counts --limit 500 -> 116 rows, same ledger, same moment"
+      - "capability-document-cannot-say-which-host-it-describes appears at count 1 only above the default cut"
