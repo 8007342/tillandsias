@@ -1,0 +1,88 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macos (osx-next), 2026-08-18T02:55:00Z.
+#
+# The two macOS handshake sites 690-eug2 split out are bounded, and the
+# duplication that produced two sites is collapsed to one.
+status:
+  - packet_id: macos-tray-handshake-reads-are-unbounded
+    field: status
+    value: completed
+    ts: "2026-08-18T02:55:00Z"
+    host: macos
+
+events:
+  - packet_id: macos-tray-handshake-reads-are-unbounded
+    event:
+      type: completed
+      ts: "2026-08-18T02:55:00Z"
+      agent_id: macos-opus5-metal-20260818T022600Z
+      host: macos
+      summary: >
+        ALL FOUR CRITERIA MET, on macOS hardware as criterion 3 demands.
+        WHY THERE WERE TWO SITES, which the packet could not see from Windows:
+        `open_control_wire_stream` is DUPLICATED — action_host.rs:353 and
+        diagnose.rs:173 are two copies of the same function, and both bounded
+        only the connect (`vz.open_stream` / `open_guest_transport_stream_
+        current_thread`) while leaving the Noise `client_handshake` that follows
+        it untimed. The same unbounded handshake was written twice and fixed
+        neither time. Rather than patch both, the bounded handshake is now ONE
+        pub(crate) helper, secure_handshake_bounded, that both copies call — so
+        the bound and its message cannot drift, which is the condition that
+        produced the pair.
+        CRITERION 1 — both sites read under a deadline naming the stage. The
+        failure says the guest "accepted the connection and then went silent
+        mid-handshake, which is neither a refused connection nor a stale
+        session", in the vsock_exec read_setup_envelope idiom.
+        A THIRD SITE WAS FOUND AND FIXED: the push-subscription loop's
+        control-wire Hello (`client.handshake()`) was ALSO untimed — a second
+        handshake on the same seam, after Noise. A guest that finished Noise and
+        never answered Hello parked the loop forever with `health` stuck false,
+        so the tray showed a stale chip and NEVER RESUBSCRIBED. Bounded at
+        PUSH_HELLO_TIMEOUT (30s), deliberately longer than anything interactive:
+        this connection is long-lived, so failing fast buys nothing; it is
+        bounded at all only because the loop's own recovery — backoff and
+        resubscribe — is unreachable while the await never returns.
+        CRITERION 2 — the diagnose bound is the CALLER's, and that is the
+        deliberate choice for an interactive tool rather than an inherited one.
+        Callers pass 30s (and probe_phase_secure_or_plain passes the readiness
+        probe's own per-attempt budget), so the ceiling is tens of seconds, not
+        the minutes the criterion warns about. A shorter fixed constant was
+        considered and REJECTED: it would make the readiness probe, which
+        legitimately retries against a still-booting guest, fail faster than the
+        guest can reasonably answer. Sharing the caller's Duration also means a
+        stream that is connected but not handshaken is correctly treated as not
+        yet usable — which is what the caller's budget was always for.
+        A FALSE DOC COMMENT WAS CORRECTED, not just the code.
+        action_host.rs's poll_vm_status_once claimed "The 5 s timeout covers
+        connect + handshake + reply". None of that was true: it bounded ONLY
+        vz.open_stream. The handshake half is now genuinely covered; the REPLY
+        still is not, and the comment no longer claims otherwise. A doc comment
+        that overstates a bound is worse than none — it is precisely what stops
+        the next reader from checking.
+        CRITERIA 3 + 4, MEASURED NOT INFERRED. Two tokio tests against REAL
+        sockets. silent_peer_fails_the_secure_handshake_within_the_bound: a
+        listener accepts and then holds the connection writing nothing —
+        literally the packet's "reachable and silent" peer — and the handshake
+        fails bounded, with assertions on both "timed out" and the stage naming.
+        The clock is paused so the 30s bound is proven without waiting 30s;
+        tokio auto-advances when every task is idle, which a silent peer
+        guarantees, making the case deterministic rather than timing-dependent.
+        responsive_peer_completes_the_secure_handshake_untouched drives a real
+        server_handshake on the REAL clock (pausing it there would let the bound
+        fire before genuine handshake I/O completes and turn a passing control
+        into a false failure).
+        FALSIFIED IN BOTH DIRECTIONS, as the packet's shape requires.
+        (a) REMOVE THE BOUND: the silent-peer test does not fail — it HANGS,
+        never returning, and had to be killed after 600s. That is the defect
+        itself reproduced under test, and a stronger demonstration than a red
+        assertion. (b) OVER-BOUND (1ns): the responsive-peer negative control
+        FAILS while the silent-peer test still passes — catching the shape that
+        would satisfy "is it bounded?" while breaking every working connection
+        the tray makes. Restored: 91 tray tests pass, 0 failed.
+      evidence_refs:
+        - "crates/tillandsias-macos-tray/src/action_host.rs — secure_handshake_bounded (one helper, both copies call it) + PUSH_HELLO_TIMEOUT on the Hello"
+        - "crates/tillandsias-macos-tray/src/diagnose.rs — its open_control_wire_stream copy now calls the shared bounded helper"
+        - "action_host.rs poll_vm_status_once — false 'covers connect + handshake + reply' comment corrected"
+        - "tests: silent_peer_fails_the_secure_handshake_within_the_bound (paused clock, real silent socket), responsive_peer_completes_the_secure_handshake_untouched (real clock, real server_handshake)"
+        - "falsified: bound removed -> silent-peer test HANGS (killed at 600s); bound set to 1ns -> responsive-peer control FAILS"
+        - "cargo test -p tillandsias-macos-tray: 91 passed 0 failed"

@@ -189,9 +189,25 @@ async fn open_control_wire_stream(
                 tillandsias_control_wire::WIRE_VERSION,
                 HopId::HostGuest,
             );
-            let secure = client_handshake(stream, &psk)
-                .await
-                .map_err(|e| format!("secure control wire handshake failed: {e}"))?;
+            // 733-mppc. Same defect as action_host.rs's copy of this function,
+            // and WORSE HERE because of where it sits: this is the DIAGNOSTIC
+            // path, so the tool an operator reaches for when the host is sick
+            // was itself the thing that hung. A guest that completes the socket
+            // and then stalls mid-Noise parked `--diagnose` forever.
+            //
+            // THE BOUND IS THE CALLER'S, and for an interactive tool that is the
+            // deliberate choice rather than an inherited one. Criterion 2 warns
+            // against inheriting an exec-shaped timeout that would leave the
+            // diagnostic hanging for minutes; the callers here pass 30s (and
+            // `probe_phase_secure_or_plain` passes the readiness probe's own
+            // per-attempt budget), so the ceiling is tens of seconds, not
+            // minutes — an operator gets an answer while a genuinely slow guest
+            // on a loaded host still completes. A shorter fixed constant was
+            // rejected: it would make the readiness probe, which legitimately
+            // retries against a booting guest, fail faster than the guest can
+            // reasonably answer.
+            let secure =
+                crate::action_host::secure_handshake_bounded(stream, &psk, timeout).await?;
             Ok(ControlWireStream::Secure(Box::new(secure)))
         }
     }
