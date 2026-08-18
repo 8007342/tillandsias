@@ -243,6 +243,7 @@ specs:
   - litmus:no-tracked-binaries-shape
   - litmus:ensure-toolbox-include-shape
   - litmus:sidecar-staleness-stamp-shape
+  - litmus:build-sh-darwin-install-refusal
   coverage_ratio: 100
   last_verified: '2026-08-16'
 - spec_id: direct-podman-calls
