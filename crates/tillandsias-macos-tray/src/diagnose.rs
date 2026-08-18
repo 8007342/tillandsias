@@ -841,6 +841,59 @@ pub fn exec_guest_main(argv: Vec<String>) -> i32 {
     })
 }
 
+/// The guest-side pre-flight both one-shot exec paths run before handing off to
+/// `tillandsias-headless` (795-zshi slice 5).
+///
+/// THIS WAS DUPLICATED VERBATIM at two call sites — `--github-login` and
+/// `--list-cloud-projects` — differing by EXACTLY ONE TOKEN, the headless
+/// subcommand at the end. A `diff` of the two blocks reported a single changed
+/// line. Two copies of a shell string that reaches a guest as one flattened
+/// `-lc` word is the shape this whole packet is about, and it is also how this
+/// codebase keeps producing paired defects: 733-mppc had two copies of
+/// `open_control_wire_stream` and the same unbounded handshake was written twice
+/// and fixed neither time.
+///
+/// WHAT IT DOES, and why each part is still here rather than deleted:
+///   * three `export`s — the control-wire exec env is cleared (no host-env
+///     leak), so HOME, XDG_RUNTIME_DIR and the vault base URL must be set here;
+///   * `install -d -m 0700 "$XDG_RUNTIME_DIR"` — the DesktopUserSession gate
+///     requires it to exist and be writable;
+///   * `podman rm tillandsias-proxy` — redundant with `ensure_proxy_running`'s
+///     own `rm --ignore`, and idempotent (`|| true`);
+///   * the openssl block — first-use CA generation, genuinely needed;
+///   * the trailing unconditional `chmod 600` — redundant since the guest gained
+///     `CAP_PROXY_CA_KEY_HEAL` (795-zshi slice 4), and idempotent.
+///
+/// SLICE 5 WAS BRIEFED TO DELETE THE TWO REDUNDANT LINES BEHIND THAT CAPABILITY.
+/// Measured first, and it does not pay: both are already `|| true`-guarded
+/// no-ops on a healed guest, NEITHER is among the packet's five named
+/// workarounds, and removing them leaves the exports, the `install -d` and the
+/// openssl block — so the preamble REMAINS a shell script and not one
+/// flattening workaround becomes deletable. Buying that with a second
+/// connection and handshake purely to read one capability is a bad trade on a
+/// path with wedge history. The real blocker is the openssl/env work, which has
+/// to move guest-side or into the structured env field, exactly as slice 2 said.
+/// So this slice takes the reduction that IS real — one copy instead of two —
+/// and leaves the capability gate unspent for the slice that can use it.
+fn proxy_exec_preamble(headless_arg: &str) -> String {
+    format!(
+        "export HOME=/root; export XDG_RUNTIME_DIR=/run/user/0; \
+         export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200; \
+         install -d -m 0700 \"$XDG_RUNTIME_DIR\"; \
+         podman rm tillandsias-proxy 2>/dev/null || true; \
+         if ! test -s /tmp/tillandsias-ca/intermediate.key 2>/dev/null; then \
+           mkdir -p /tmp/tillandsias-ca && \
+           openssl req -x509 -newkey rsa:2048 \
+             -keyout /tmp/tillandsias-ca/intermediate.key \
+             -out /tmp/tillandsias-ca/intermediate.crt \
+             -days 25 -nodes -subj '/CN=Tillandsias CA' 2>/dev/null && \
+           chmod 600 /tmp/tillandsias-ca/intermediate.key || true; \
+         fi; \
+         chmod 600 /tmp/tillandsias-ca/intermediate.key 2>/dev/null || true; \
+         exec /usr/local/bin/tillandsias-headless {headless_arg}"
+    )
+}
+
 /// How long a NON-INTERACTIVE stdin gets to answer a prompt before we give up.
 ///
 /// Generous compared to `STDIN_FORWARD_TIMEOUT`'s 5s, because a pipe feeding a
@@ -1202,6 +1255,7 @@ pub fn github_login_main() -> i32 {
             },
         ];
         eprintln!("[github-login] driving guest login (token -> git name -> email)…");
+        let github_login_preamble = proxy_exec_preamble("--github-login");
         let result = exec_over_stream_expect_dynamic(
             stream,
             &[
@@ -1242,20 +1296,10 @@ pub fn github_login_main() -> i32 {
                 //      proxy is already up, BEFORE the ensure_ca_bundle call that
                 //      would otherwise heal it, so the widened key would survive
                 //      for the VM's lifetime.
-                "export HOME=/root; export XDG_RUNTIME_DIR=/run/user/0; \
-                 export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200; \
-                 install -d -m 0700 \"$XDG_RUNTIME_DIR\"; \
-                 podman rm tillandsias-proxy 2>/dev/null || true; \
-                 if ! test -s /tmp/tillandsias-ca/intermediate.key 2>/dev/null; then \
-                   mkdir -p /tmp/tillandsias-ca && \
-                   openssl req -x509 -newkey rsa:2048 \
-                     -keyout /tmp/tillandsias-ca/intermediate.key \
-                     -out /tmp/tillandsias-ca/intermediate.crt \
-                     -days 25 -nodes -subj '/CN=Tillandsias CA' 2>/dev/null && \
-                   chmod 600 /tmp/tillandsias-ca/intermediate.key || true; \
-                 fi; \
-                 chmod 600 /tmp/tillandsias-ca/intermediate.key 2>/dev/null || true; \
-                 exec /usr/local/bin/tillandsias-headless --github-login",
+                // 795-zshi slice 5: one builder, two call sites. See
+                // `proxy_exec_preamble` for what each part does and why the two
+                // redundant lines are still in it.
+                &github_login_preamble,
             ],
             expects,
             |ev| eprintln!("[github-login] {ev}"),
@@ -1542,24 +1586,11 @@ pub fn list_cloud_projects_main() -> i32 {
         // the 0o600 clamp and the unconditional heal-down (772-shi9 — see the
         // reasoning at that site: the proxy gets the key as a 0400 podman
         // secret, so no reader ever needed this file widened).
-        let cmd = "export HOME=/root; export XDG_RUNTIME_DIR=/run/user/0; \
-                   export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200; \
-                   install -d -m 0700 \"$XDG_RUNTIME_DIR\"; \
-                   podman rm tillandsias-proxy 2>/dev/null || true; \
-                   if ! test -s /tmp/tillandsias-ca/intermediate.key 2>/dev/null; then \
-                     mkdir -p /tmp/tillandsias-ca && \
-                     openssl req -x509 -newkey rsa:2048 \
-                       -keyout /tmp/tillandsias-ca/intermediate.key \
-                       -out /tmp/tillandsias-ca/intermediate.crt \
-                       -days 25 -nodes -subj '/CN=Tillandsias CA' 2>/dev/null && \
-                     chmod 600 /tmp/tillandsias-ca/intermediate.key || true; \
-                   fi; \
-                   chmod 600 /tmp/tillandsias-ca/intermediate.key 2>/dev/null || true; \
-                   exec /usr/local/bin/tillandsias-headless --list-cloud-projects";
+        let cmd = proxy_exec_preamble("--list-cloud-projects");
 
         let result = exec_over_stream_with_input_streaming(
             stream,
-            &["/bin/bash", "-lc", cmd],
+            &["/bin/bash", "-lc", cmd.as_str()],
             &[],
             |chunk| {
                 use std::io::Write;
@@ -1795,6 +1826,63 @@ fn parse_aarch64_qcow2_sha(manifest_toml: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    /// 795-zshi slice 5. The two exec preambles were duplicated VERBATIM and
+    /// differed by exactly one token — a `diff` of the two blocks reported a
+    /// single changed line. This pins the property that made the duplication
+    /// dangerous rather than merely untidy: the guest-side pre-flight must be
+    /// THE SAME for both one-shot paths, so a fix to one cannot miss the other.
+    ///
+    /// That is not a hypothetical concern in this file. 733-mppc found two
+    /// copies of `open_control_wire_stream` where the identical unbounded
+    /// handshake had been written twice and fixed neither time.
+    #[test]
+    fn both_exec_paths_share_one_preamble_differing_only_in_the_subcommand() {
+        let login = super::proxy_exec_preamble("--github-login");
+        let projects = super::proxy_exec_preamble("--list-cloud-projects");
+
+        let marker = "exec /usr/local/bin/tillandsias-headless ";
+        let login_head = login.split(marker).next().expect("login preamble head");
+        let projects_head = projects.split(marker).next().expect("projects head");
+        assert_eq!(
+            login_head, projects_head,
+            "both one-shot paths must run the IDENTICAL guest pre-flight; divergence here is \
+             how a fix lands on one path and misses the other"
+        );
+        assert!(login.ends_with(&format!("{marker}--github-login")));
+        assert!(projects.ends_with(&format!("{marker}--list-cloud-projects")));
+    }
+
+    /// The pre-flight's parts, asserted so a future edit cannot quietly drop one.
+    ///
+    /// Each is load-bearing for a reason recorded at `proxy_exec_preamble`: the
+    /// control-wire exec env is CLEARED, so the three exports are the only way
+    /// HOME / XDG_RUNTIME_DIR / the vault base URL reach the guest; the
+    /// `install -d` satisfies the DesktopUserSession gate; the openssl block is
+    /// first-use CA generation.
+    ///
+    /// The two REDUNDANT lines (`podman rm`, the trailing `chmod 600`) are
+    /// asserted present ON PURPOSE. Slice 5 was briefed to delete them behind
+    /// CAP_PROXY_CA_KEY_HEAL and measured that it does not pay — both are
+    /// already `|| true` no-ops, neither is among the packet's five named
+    /// workarounds, and removing them leaves the preamble a shell script
+    /// regardless. If a later slice DOES delete them it must edit this test,
+    /// which is the point: the deletion should be a decision, not a drift.
+    #[test]
+    fn the_preamble_keeps_every_part_that_is_load_bearing() {
+        let p = super::proxy_exec_preamble("--github-login");
+        for needle in [
+            "export HOME=/root",
+            "export XDG_RUNTIME_DIR=/run/user/0",
+            "export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200",
+            "install -d -m 0700",
+            "openssl req -x509",
+            "podman rm tillandsias-proxy",
+            "chmod 600 /tmp/tillandsias-ca/intermediate.key",
+        ] {
+            assert!(p.contains(needle), "preamble lost {needle:?}: {p}");
+        }
+    }
+
     use super::parse_aarch64_qcow2_sha;
     use super::translate_project_path_for_guest;
     use super::{METRICS_STATUS_NO_CAPABILITY, METRICS_STATUS_NO_HANDLE};
@@ -1956,10 +2044,17 @@ mod tests {
     /// fresh-VM first-login name-in-use race (exit 125) returns.
     #[test]
     fn github_login_preamble_pins_the_shared_lock_namespace() {
-        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/diagnose.rs"));
-        let window = source_window(source, "pub fn github_login_main() -> i32");
+        // 795-zshi slice 5 re-expressed this against the BUILT value. It used to
+        // grep the source window of `github_login_main` for the literal, which
+        // broke the moment the preamble moved into `proxy_exec_preamble` — a
+        // correct refactor reading as a regression, the same literal-pin failure
+        // 701-iu9b hit one cycle earlier in vz.rs. Asserting the built string is
+        // also STRICTLY STRONGER: a source-window grep passes on a literal that
+        // is present but unused, whereas this proves the export actually reaches
+        // the guest.
         assert!(
-            window.contains("export XDG_RUNTIME_DIR=/run/user/0;"),
+            super::proxy_exec_preamble("--github-login")
+                .contains("export XDG_RUNTIME_DIR=/run/user/0;"),
             "login preamble must export the lock namespace the headless unit pins (order 259)"
         );
     }
@@ -2154,25 +2249,30 @@ mod tests {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/diagnose.rs"));
         let key = concat!("/tmp/tillandsias-ca/inter", "mediate.key");
 
-        for signature in [
-            "pub fn github_login_main() -> i32",
-            "pub fn list_cloud_projects_main() -> i32",
-        ] {
-            let window = source_window(source, signature);
+        // 795-zshi slice 5 moved these assertions from the two call sites'
+        // SOURCE WINDOWS onto the BUILT preamble. The windows stopped containing
+        // the literal when the duplicated preamble became one builder, so a
+        // correct refactor read as a regression — the same literal-pin failure
+        // 701-iu9b hit in vz.rs one cycle earlier, and the second instance in
+        // this session. Asserting the built value is strictly stronger: a
+        // source-window grep passes on a literal that is present but never
+        // reaches the guest.
+        for arg in ["--github-login", "--list-cloud-projects"] {
+            let preamble = super::proxy_exec_preamble(arg);
             assert!(
-                window.contains(&format!("chmod 600 {key}")),
-                "{signature}: preflight must clamp the CA private key to 0600"
+                preamble.contains(&format!("chmod 600 {key}")),
+                "{arg}: preflight must clamp the CA private key to 0600"
             );
             // The heal must sit OUTSIDE the `test -s` guard: an existing 0644
             // key never reaches the openssl block.
-            let guarded = window
-                .split("fi; \\")
+            let guarded = preamble
+                .split("fi; ")
                 .next()
                 .expect("preamble must contain the test -s guard block");
-            let after_guard = &window[guarded.len()..];
+            let after_guard = &preamble[guarded.len()..];
             assert!(
                 after_guard.contains(&format!("chmod 600 {key}")),
-                "{signature}: the heal-down must run unconditionally, after the guard"
+                "{arg}: the heal-down must run unconditionally, after the guard"
             );
         }
 

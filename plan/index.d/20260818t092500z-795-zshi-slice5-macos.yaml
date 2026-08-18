@@ -1,0 +1,86 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macos (osx-next), 2026-08-18T09:25:00Z.
+#
+# Slice 5. The briefed deletion was measured and does not pay; the duplication
+# it would have touched does. Two more literal source pins repaired.
+events:
+  - packet_id: guest-exec-allowlist-forces-argv-flattening
+    event:
+      type: progress
+      ts: "2026-08-18T09:25:00Z"
+      agent_id: macos-opus5-metal-20260818T082400Z
+      host: macos
+      host_note: slice 5 — de-duplicated the preamble; the capability gate stays unspent, with reasons
+      summary: |
+        SLICE 5, AND THE BRIEFED WORK WAS MEASURED AND DECLINED. Slice 4 left a
+        gate (CAP_PROXY_CA_KEY_HEAL) for deleting the macOS preamble's
+        `podman rm` and `chmod 600`. Before spending it, three facts were
+        checked rather than assumed:
+
+          1. BOTH LINES ARE ALREADY IDEMPOTENT NO-OPS. Each is `|| true`-guarded;
+             the `podman rm` duplicates `ensure_proxy_running`'s own
+             `rm --ignore`, and on a healed guest the `chmod 600` is a no-op.
+          2. NEITHER IS ONE OF THE PACKET'S FIVE NAMED WORKAROUNDS. A grep for
+             build_exec_guest_shell_cmd / argv_survives_wt_reparse /
+             wt_safe_title / wsl_root_sh in that file returns ZERO.
+          3. REMOVING THEM LEAVES THE PREAMBLE A SHELL SCRIPT ANYWAY — three
+             `export`s, an `install -d`, and the conditional openssl block all
+             remain, so not one flattening workaround becomes deletable.
+
+        So the briefed slice would have bought a second connection and handshake
+        — on a path with wedge history — to delete two no-ops, and moved the
+        packet's actual goal exactly nowhere. Declined, with the capability left
+        unspent for the slice that can use it. The real blocker remains the
+        openssl/env work, which must move guest-side or into the structured env
+        field, exactly as slice 2 said.
+
+        WHAT WAS DONE INSTEAD, because it is a real reduction: THE PREAMBLE WAS
+        DUPLICATED VERBATIM at both one-shot call sites (`--github-login` and
+        `--list-cloud-projects`), differing by EXACTLY ONE TOKEN — a `diff` of
+        the two blocks reported a single changed line. Now one builder,
+        `proxy_exec_preamble(headless_arg)`. That matters beyond tidiness: two
+        copies of a guest-bound shell string is precisely how 733-mppc got two
+        `open_control_wire_stream`s with the identical unbounded handshake
+        written twice and fixed neither time — this same session, this same
+        crate.
+
+        THE REFACTOR IS PROVEN BYTE-IDENTICAL, not assumed. The built string was
+        captured from the compiler and diffed against the pre-refactor literal
+        reconstructed from `git show HEAD:` under Rust's `\`-continuation rule:
+        664 bytes each, `cmp` clean. A shell string sent to a guest is exactly
+        the place a "harmless" whitespace drift is not harmless.
+
+        TWO MORE LITERAL SOURCE PINS BROKE, AND BOTH WERE REPAIRED UPWARD.
+        `github_login_preamble_pins_the_shared_lock_namespace` and
+        `guest_ca_preflight_never_widens_the_private_key` both grepped the
+        SOURCE WINDOW of the `*_main` functions for literals that had just moved
+        into the builder, so a correct refactor read as a regression. Both now
+        assert against the BUILT value, which is strictly stronger: a
+        source-window grep passes on a literal that is present but never reaches
+        the guest. THIS IS THE SECOND CYCLE RUNNING that a literal source pin
+        turned a correct change red (701-iu9b hit it in vz.rs), which is worth
+        naming as a pattern rather than fixing twice in silence — the
+        `litmus:litmus-expression-pinning-enforcement-shape` gate discourages
+        adding new ones, but says nothing about the ones already in the tree.
+
+        The CA test's whole-file NEGATIVE scan (no path may `chmod 644/640/664/
+        666/755/777` the key) was left as a source scan deliberately: it asserts
+        ABSENCE across the file, which does not depend on where the literal
+        lives.
+
+        FALSIFIED: dropping the `install -d` line fails the parts test; moving
+        the CA heal back INSIDE the `test -s` guard — the 772-shi9 shape — fails
+        the repaired CA test with "the heal-down must run unconditionally, after
+        the guard". Restored: 98 tray tests pass, 0 failed.
+
+        NOT DONE and out of reach from here: 795-zshi also requires deleting
+        `argv_survives_wt_reparse` and `wt_safe_title` (windows-tray) and the
+        `wsl_root_sh` re-parse hazard, none of which this host can test.
+      evidence_refs:
+        - "crates/tillandsias-macos-tray/src/diagnose.rs — proxy_exec_preamble, one builder for both call sites"
+        - "byte-identity: compiler-built string vs git HEAD literal, 664 bytes each, cmp clean"
+        - "tests: both_exec_paths_share_one_preamble..., the_preamble_keeps_every_part_that_is_load_bearing"
+        - "repaired: github_login_preamble_pins_the_shared_lock_namespace, guest_ca_preflight_never_widens_the_private_key — now assert the BUILT value"
+        - "falsified: install -d removed -> parts test fails; heal moved inside the guard -> CA test fails with the intended message"
+        - "cargo test -p tillandsias-macos-tray: 98 passed 0 failed"
+        - "declined-with-measurement: both target lines are || true no-ops, neither is among the five named workarounds, preamble stays shell regardless"
