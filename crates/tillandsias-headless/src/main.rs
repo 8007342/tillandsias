@@ -6908,6 +6908,21 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
     require_desktop_user_session("tillandsias --init")?;
     report_runtime_lane("--init", debug);
 
+    // Order 834-r6vn: --init does NOT route through ensure_image_exists — it
+    // drives build_image_with_logging directly (order 702-griq's note records
+    // the two paths deliberately asking the same content question by different
+    // routes). So the downgrade guard has to be asserted here as well, or the
+    // single most destructive entry point is the one it does not cover.
+    // MEASURED: with the guard only on the lane path, `--init` against a
+    // deliberately newer planted image tag walked straight past it and began
+    // pulling.
+    //
+    // Placed before any pull or build so the refusal costs nothing and cannot
+    // half-replace an enclave on its way to failing.
+    if let Some(refusal) = downgrade_refusal() {
+        return Err(refusal);
+    }
+
     #[cfg(target_os = "linux")]
     auto_detect_and_configure_ipv6_workaround(debug);
 
