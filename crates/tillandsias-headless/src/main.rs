@@ -122,10 +122,24 @@ pub(crate) const VERSION: &str = include_str!("../../../VERSION");
 /// The long-running headless/tray process owns its registry until application
 /// shutdown, and detached web lanes intentionally keep their mirror alive
 /// after this launcher returns. Interactive CLI lanes and status-check are
-/// different: their project mirror is stopped before the lane returns, so
-/// leaving its AppRole accessor in this short-lived process would turn a
+/// different: their project mirror is USUALLY stopped before the lane returns,
+/// so leaving its AppRole accessor in this short-lived process would turn a
 /// graceful container stop into the same 48h orphan window reserved for
 /// SIGKILL/host loss.
+///
+/// USUALLY, not always — and the difference was a p0 (order 828-k3mq). The
+/// teardown this relies on is [`cleanup_shared_stack_if_no_running_forge`],
+/// which is REFCOUNTED: it returns early without stopping the mirror whenever
+/// another lane container is active, and again on any listing error
+/// (leak-not-destroy). A lane exiting into a live sibling therefore keeps its
+/// mirror by design. This drain used to destroy that mirror's SecretID anyway,
+/// leaving it renewing a client token it could never replace; 24h later, at
+/// max_ttl, re-authentication failed permanently and every forge push was
+/// rejected by the relay gate while clones kept working.
+///
+/// `revoke_pending_container_tokens` now applies the SAME refcount: material
+/// tagged with an owning container is destroyed only once that container is
+/// gone. Do not "simplify" it back into an unconditional drain.
 fn run_cli_with_vault_credential_cleanup<T>(
     debug: bool,
     action: impl FnOnce() -> Result<T, String>,
@@ -3707,9 +3721,14 @@ async fn mint_git_mirror_vault_auto_auth(
     #[cfg(feature = "vault")]
     {
         let instance = format!("{project_name}-{}", std::process::id());
+        // Order 828-k3mq: name the container this material belongs to, so a
+        // lane exit cannot destroy the SecretID of a mirror order 443 kept
+        // running for a sibling lane.
+        let owning_container = format!("tillandsias-git-{project_name}");
         vault_bootstrap::mint_approle_auto_auth_for_container(
             vault_bootstrap::GIT_MIRROR_AGENT_ROLE,
             &instance,
+            Some(owning_container.as_str()),
             debug,
         )
         .await
@@ -9109,6 +9128,9 @@ async fn ensure_ssh_lane_sidecar(
     let secret_name = crate::vault_bootstrap::mint_approle_auto_auth_for_container(
         &crate::vault_bootstrap::mirror_lane_signer_role_name(mirror_id),
         project_name,
+        // Order 828-k3mq: the sidecar is long-running like the mirror, so its
+        // material is bound to the sidecar container, not to this process.
+        Some(ssh_lane_sidecar_container_name(project_name).as_str()),
         debug,
     )
     .await

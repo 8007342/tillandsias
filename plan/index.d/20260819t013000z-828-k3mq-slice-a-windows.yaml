@@ -1,0 +1,82 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by windows (yolanda), 2026-08-19T01:30:00Z, meta-orchestration cycle 1
+# of the operator-directed overnight loop (queue 829-p7wq, entry 1).
+#
+# 828-k3mq SLICE A LANDED. The packet stays open: its second deliverable (a
+# verdict that names a DEAD AGENT TOKEN distinctly from an absent GitHub
+# credential) is untouched, and the live 24h re-verification cannot be done
+# inside one cycle.
+events:
+  - packet_id: mirror-approle-secretid-destroyed-under-a-still-running-mirror
+    event:
+      type: progress
+      ts: "2026-08-19T01:30:00Z"
+      agent_id: windows-yolanda-opus5-20260818t2350z
+      host: windows
+      summary: |
+        SLICE A: the credential drain now carries the same refcount the
+        container teardown always had.
+
+        WHAT CHANGED
+        - AppRoleAutoAuthRegistration gained `owning_container: Option<String>`;
+          mint_approle_auto_auth_for_container takes it and both call sites pass
+          one — the git mirror passes `tillandsias-git-<project>`, the ssh-lane
+          sidecar passes its own container name. `None` keeps the pre-828
+          behaviour, so nothing silently changes for a caller that cannot name
+          an owner.
+        - revoke_pending_container_tokens consults the owner before destroying:
+          Running -> keep and continue; Unknown -> keep, LOUDLY (not
+          debug-gated); Gone -> destroy exactly as before.
+        - The comment at main.rs:120-128 no longer asserts that an interactive
+          lane's mirror "is stopped before the lane returns". It states the
+          teardown is refcounted, names the 24h failure that gap produced, and
+          says not to simplify the drain back into an unconditional one. That
+          comment was load-bearing justification for the destroy, and it was
+          the only place the contradiction was visible.
+
+        THE TRI-STATE IS THE POINT, and it is why `container_running` was NOT
+        reused. That helper collapses every failure to `false` — correct for
+        "should I start this?", and exactly wrong here: a transient `podman
+        inspect` failure would read as "the container is gone" and destroy a
+        live mirror's credential, reproducing the outage through a different
+        door. A new OwningContainerState distinguishes Gone (inspect answered,
+        or said "no such container") from Unknown (inspect could not answer),
+        and Unknown is treated as Running. That is the same leak-not-destroy
+        rule cleanup_shared_stack_if_no_running_forge already applies to a
+        failed container listing, and the role's 48h server-side SecretID TTL
+        is what bounds the orphan — the job that TTL was documented for.
+
+        VERIFICATION. The keep/destroy decision was split into a PURE function,
+        classify_owning_container_output, precisely so it is gateable without a
+        podman daemon — a rule exercisable only against a live daemon is a rule
+        nothing gates, which is how this class keeps shipping. Three tests, all
+        green in the Linux builder:
+          vault_bootstrap::tests::running_owner_is_never_destroyed ... ok
+          vault_bootstrap::tests::exited_owner_is_still_destroyed ... ok
+          vault_bootstrap::tests::unreadable_owner_state_keeps_the_material ... ok
+        The middle one is the CONTROL and is not decoration: without it,
+        "keep everything" would pass the first test while turning the fix into a
+        blanket credential leak. `./build.sh --check` green (clippy strict,
+        -D warnings, --all-targets, 264s of gate phases).
+
+        HONEST LIMIT ON "RED TODAY". The packet's verifiable_closure asks for a
+        test that is red before the fix. These three cannot be run against the
+        pre-fix tree in the literal sense — the decision function did not exist,
+        because the drain had no branch at all. The pre-fix behaviour is the
+        `Running` case returning destroy, which is what the first test now
+        forbids. Recorded rather than glossed.
+
+        STILL OPEN ON THIS PACKET
+        - The `no-credential` verdict still cannot distinguish a dead Vault
+          Agent token from an absent GitHub token, and the operator remedy for
+          the two is opposite ("do NOT run GitHub Login" vs "restore the Vault
+          GitHub token"). Only the relay log tells them apart today.
+        - Live re-verification needs a mirror kept past its 24h max_ttl with a
+          sibling lane having exited under it. That is a next-day observation,
+          not a cycle-scoped one.
+        - Residual by design: this bounds the outage at the SecretID's 48h TTL,
+          not forever. A mirror reused past 48h still dies at its next max_ttl,
+          because APPROLE_AGENT_SECRET_ID_TTL (48h) only ever affords ONE
+          re-auth against a 24h token max_ttl. A durable answer needs
+          re-mint-on-demand for a long-lived mirror, or a mirror lifetime bounded
+          to its credential. Left named so it is not rediscovered as a surprise.

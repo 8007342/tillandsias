@@ -262,6 +262,76 @@ fn revocation_registry() -> &'static Mutex<HashMap<String, String>> {
 struct AppRoleAutoAuthRegistration {
     role: String,
     secret_id_accessor: String,
+    /// The container this material was minted FOR, when the caller knows it.
+    ///
+    /// Order 828-k3mq: the drain must not destroy a SecretID whose container is
+    /// still running. `None` means the caller could not name one, and such a
+    /// registration keeps the pre-828 behaviour (destroy on drain).
+    owning_container: Option<String>,
+}
+
+/// Whether the container an AppRole registration belongs to is still alive.
+///
+/// Order 828-k3mq. Deliberately TRI-STATE, and deliberately NOT
+/// [`container_running`], which collapses every failure to `false`. That
+/// collapse is the right default for "should I start this?" and exactly the
+/// wrong one here: a transient `podman inspect` failure would read as "the
+/// container is gone", and the drain would destroy the credential of a mirror
+/// that is still serving clones — the precise defect 828-k3mq records.
+#[derive(Debug, PartialEq, Eq)]
+enum OwningContainerState {
+    /// Inspect answered and the container is up. Never destroy its material.
+    Running,
+    /// Inspect answered that no such container exists. Safe to destroy.
+    Gone,
+    /// Inspect could not answer. Treated as Running (leak-not-destroy), the
+    /// same rule `cleanup_shared_stack_if_no_running_forge` applies to a failed
+    /// container listing. The role's 48h server-side SecretID TTL bounds the
+    /// resulting orphan, which is the job that TTL exists to do.
+    Unknown,
+}
+
+/// Classify a `podman inspect --format {{.State.Running}}` result.
+///
+/// Split out of [`owning_container_state`] as a PURE function so the
+/// destroy/keep decision is testable without podman — the decision is the
+/// load-bearing half of order 828-k3mq, and a rule that can only be exercised
+/// against a live daemon is a rule nothing gates.
+fn classify_owning_container_output(
+    exit_ok: bool,
+    stdout: &str,
+    stderr: &str,
+) -> OwningContainerState {
+    if exit_ok {
+        return if stdout.trim() == "true" {
+            OwningContainerState::Running
+        } else {
+            OwningContainerState::Gone
+        };
+    }
+    // A non-zero inspect is "no such container" (the container really is gone)
+    // OR a transport failure. Only the former is safe to act on, so the message
+    // is matched explicitly and everything else stays Unknown.
+    let stderr = stderr.to_ascii_lowercase();
+    if stderr.contains("no such container") || stderr.contains("no such object") {
+        OwningContainerState::Gone
+    } else {
+        OwningContainerState::Unknown
+    }
+}
+
+fn owning_container_state(name: &str) -> OwningContainerState {
+    let out = podman_cmd_sync()
+        .args(["inspect", "--format", "{{.State.Running}}", name])
+        .output_bounded(tillandsias_podman::OperationKind::Inspect.default_budget());
+    match out {
+        Ok(o) => classify_owning_container_output(
+            o.status.success(),
+            &String::from_utf8_lossy(&o.stdout),
+            &String::from_utf8_lossy(&o.stderr),
+        ),
+        Err(_) => OwningContainerState::Unknown,
+    }
 }
 
 #[derive(serde::Serialize)]
@@ -1302,6 +1372,7 @@ pub async fn mint_approle_token_for_container(
 pub async fn mint_approle_auto_auth_for_container(
     role: &str,
     container_instance: &str,
+    owning_container: Option<&str>,
     debug: bool,
 ) -> Result<String, String> {
     if !container_running(VAULT_CONTAINER_NAME) {
@@ -1340,6 +1411,7 @@ pub async fn mint_approle_auto_auth_for_container(
     let registration = AppRoleAutoAuthRegistration {
         role: role.to_string(),
         secret_id_accessor,
+        owning_container: owning_container.map(str::to_string),
     };
     match approle_auto_auth_registry().lock() {
         Ok(mut registry) => {
@@ -1472,6 +1544,41 @@ pub async fn revoke_pending_container_tokens(debug: bool) {
     }
 
     for (secret_name, registration) in auto_auth_entries {
+        // Order 828-k3mq: REFCOUNT THE CREDENTIAL THE WAY THE CONTAINER IS
+        // ALREADY REFCOUNTED. `cleanup_shared_stack_if_no_running_forge` keeps
+        // a mirror alive whenever a sibling lane is live (and on any listing
+        // error), so a lane exiting into a live sibling deliberately LEAVES the
+        // mirror running. Destroying its SecretID here anyway left that mirror
+        // renewing a client token it could no longer replace: at max_ttl the
+        // Agent re-login failed "invalid role or secret ID", the retries
+        // tripped Vault's user-lockout, and every forge push was rejected by
+        // the relay gate while clones kept working. Measured on yolanda
+        // 2026-08-18, exactly 24h after the lane exited.
+        if let Some(container) = registration.owning_container.as_deref() {
+            match owning_container_state(container) {
+                OwningContainerState::Running => {
+                    if debug {
+                        eprintln!(
+                            "[tillandsias-vault] keeping AppRole material {secret_name} alive; \
+                             its container {container} is still running (order 828-k3mq)"
+                        );
+                    }
+                    continue;
+                }
+                OwningContainerState::Unknown => {
+                    // Loud, not debug-gated: this is the leak-not-destroy arm
+                    // and the operator should be able to see it happen.
+                    eprintln!(
+                        "[tillandsias-vault] could not determine whether {container} is running; \
+                         keeping its AppRole material {secret_name} rather than risk destroying a \
+                         live mirror's credential (leak-not-destroy, order 828-k3mq). The role's \
+                         48h SecretID TTL bounds this."
+                    );
+                    continue;
+                }
+                OwningContainerState::Gone => {}
+            }
+        }
         if let Some(client) = &client
             && let Err(e) = client
                 .destroy_approle_secret_id_accessor(
@@ -3985,6 +4092,59 @@ mod tests {
     use super::*;
 
     static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+    // ---- order 828-k3mq: the credential drain's keep/destroy decision ----
+
+    /// A RUNNING container's material must survive the drain.
+    ///
+    /// This is the whole defect. `cleanup_shared_stack_if_no_running_forge` is
+    /// refcounted and deliberately leaves a mirror up when a sibling lane is
+    /// live; destroying its SecretID anyway left that mirror renewing a token
+    /// it could never replace, and 24h later every forge push was rejected.
+    #[test]
+    fn running_owner_is_never_destroyed() {
+        assert_eq!(
+            classify_owning_container_output(true, "true\n", ""),
+            OwningContainerState::Running
+        );
+    }
+
+    /// The control, without which "keep everything" would pass the test above.
+    /// Material whose container has exited MUST still be destroyed, or the fix
+    /// degrades into a blanket credential leak.
+    #[test]
+    fn exited_owner_is_still_destroyed() {
+        assert_eq!(
+            classify_owning_container_output(true, "false\n", ""),
+            OwningContainerState::Gone
+        );
+        assert_eq!(
+            classify_owning_container_output(
+                false,
+                "",
+                "Error: no such container tillandsias-git-demo"
+            ),
+            OwningContainerState::Gone
+        );
+    }
+
+    /// An inspect that could not ANSWER is not evidence the container is gone.
+    ///
+    /// `container_running` collapses this case to `false`; reusing it here
+    /// would mean a transient podman failure destroys a live mirror's
+    /// credential — the same outage through a different door. Leak-not-destroy
+    /// instead, bounded by the role's 48h server-side SecretID TTL.
+    #[test]
+    fn unreadable_owner_state_keeps_the_material() {
+        assert_eq!(
+            classify_owning_container_output(false, "", "connection refused"),
+            OwningContainerState::Unknown
+        );
+        assert_eq!(
+            classify_owning_container_output(false, "", ""),
+            OwningContainerState::Unknown
+        );
+    }
 
     /// 701-se6x. The HOST-DELIVERED share must be persisted too, not just the
     /// host-delivered root token.
