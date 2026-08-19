@@ -1,0 +1,95 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by windows (yolanda), 2026-08-19T02:50:00Z, meta-orchestration cycle 2
+# of the overnight loop (queue 829-p7wq, entry 1 continued).
+#
+# 828-k3mq's SECOND deliverable landed. Both deliverables are now in the tree.
+# The packet is released back to `ready` rather than completed, because its
+# stated verifiable_closure asks for something stronger than what was proven —
+# see "WHY NOT COMPLETED" below. Claiming is only safe because releasing is
+# unconditional.
+events:
+  - packet_id: mirror-approle-secretid-destroyed-under-a-still-running-mirror
+    event:
+      type: progress
+      ts: "2026-08-19T02:50:00Z"
+      agent_id: windows-yolanda-opus5-20260818t2350z
+      host: windows
+      summary: |
+        SECOND DELIVERABLE: `no-credential` no longer means two things with
+        opposite remedies.
+
+        THE DEFECT, stated exactly. images/git/probe-upstream-auth.sh tested
+        three conditions in ONE `if` — vault-cli absent, the client-token sink
+        unreadable, and the GitHub secret unreadable — and published
+        `no-credential` for all three. The first two mean the mirror cannot
+        authenticate to Vault AT ALL, so the GitHub token's state is UNKNOWN and
+        running GitHub Login is the wrong move. The third means Vault answered
+        and holds no token, which is precisely what GitHub Login repairs. One
+        word, two opposite operator actions. Measured on this host 2026-08-18:
+        the Agent's AppRole login had been failing for hours, the GitHub token
+        was perfectly valid, and the verdict read `no-credential`.
+
+        WHAT CHANGED
+        - New state `agent-unauthenticated`, ordered BEFORE the GitHub check
+          because nothing the probe says about the GitHub credential means
+          anything until the client token it would be read with is known good.
+          The middle rung is a real `lookup-self`, so an EXPIRED-but-present
+          token is caught, not just an absent sink — that was the actual
+          2026-08-18 shape.
+        - scripts/check-credential-channel.sh gained the matching arm,
+          `blocked:upstream-agent-unauthenticated`, whose message says do NOT
+          run GitHub Login, points at the [vault-agent] log, names the
+          828-k3mq SecretID-destroyed-under-a-live-mirror cause, and warns that
+          repeated failed logins trip Vault's user-lockout so the retry loop
+          must be quiesced before re-issuing anything. The guard's output
+          grammar is `blocked:[a-z0-9-]+`, so no consumer pin changed.
+        - The probe's declared grammar and the litmus's two copies of it were
+          updated together.
+
+        THE RELAY ALREADY DREW THIS LINE; THE VERDICT DID NOT. relay-refs.sh has
+        discriminated on `lookup-self` since order 424 and says "do NOT run
+        GitHub Login" in its log — and litmus:git-mirror-relay-token-expiry
+        pins exactly that ("expired mirror token yields honest re-mint
+        diagnosis, not a false GitHub Login; a valid mirror token with an absent
+        GitHub token still says GitHub Login"). So the knowledge existed one
+        layer down and never reached the published ref the forge actually
+        consumes. This change makes the two layers agree.
+
+        VERIFICATION — a falsifiable PAIR, both green:
+          litmus:forge-upstream-auth-gate step 4/10
+            no vault client            -> agent-unauthenticated  ok
+          litmus:forge-upstream-auth-gate step 5/10
+            working vault-cli that authenticates but holds no github token
+                                       -> no-credential          ok
+        The second is the control and is load-bearing: without it, collapsing
+        every failure back into `agent-unauthenticated` would pass step 4. The
+        pre-existing step-4 fixture asserted `no-credential` for the
+        no-vault-cli case; it was UPDATED, not deleted, because that case's
+        meaning genuinely changed.
+
+        SUITE CONTEXT, so the next reader is not misled: the whole
+        git-mirror-service pre-build suite reads 14/20 on this host. All six
+        failures are pre-existing windows host-environment failures, filed as
+        830-t4qp. The one that touches this change — step 6/10 — was ATTRIBUTED
+        by running the same fixture against `git show HEAD:` and against the
+        edited file: both `rc=1 out=missing:no-credential-channel`, identical.
+        Not a regression from this work.
+
+        WHY NOT COMPLETED, and this is deliberate. The packet's
+        verifiable_closure asks for a test that "mints AppRole auto-auth
+        material for a container, leaves that container RUNNING, runs the
+        CLI-lane credential drain, and asserts the SecretID accessor still
+        authenticates". What exists is narrower: three unit tests over the
+        keep/destroy CLASSIFICATION plus two litmus controls over the verdict
+        SPLIT. Nothing yet exercises revoke_pending_container_tokens end to end
+        against a live container. Marking this completed would claim a closure
+        that was not met, so it goes back to `ready` with the gap named.
+
+        REMAINING ON THIS PACKET
+        - The drain-level integration test the closure actually asks for.
+        - Live re-verification: a mirror kept past 24h max_ttl with a sibling
+          lane having exited under it. Next-day observation, not cycle-scoped.
+        - The structural residual: 48h SecretID TTL affords exactly ONE re-auth
+          against a 24h token max_ttl, so a mirror reused past 48h still dies.
+          Needs re-mint-on-demand, or a mirror lifetime bounded to its
+          credential.

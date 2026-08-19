@@ -1,0 +1,115 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by windows (yolanda), 2026-08-19T02:45:00Z, meta-orchestration cycle 2.
+#
+# MEASURED WHILE VERIFYING 828-k3mq, not sought. Running the git-mirror-service
+# pre-build litmus suite to prove a two-step change gave 70% (14/20) — and every
+# one of the six failures is a WINDOWS HOST ENVIRONMENT failure at HEAD, not a
+# product defect. Recorded because an agent who runs this suite on windows and
+# reads "Status: FAIL" cannot currently tell that from a real regression, which
+# is exactly the condition 782-ih74 filed for two other tests.
+packets:
+  - packet_id: git-mirror-litmus-suite-is-red-by-default-on-windows
+    order: 830-t4qp
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: "six of twenty executed git-mirror-service pre-build litmus tests are red-by-default on windows at HEAD for host-environment reasons, so the suite's FAIL verdict cannot distinguish a real regression from the standing baseline"
+    deliverable: "each of the six is either fixed to be host-portable or explicitly marked as not-executable on windows, so a windows agent running the suite gets a verdict that means something; plus the baseline recorded so the next reader does not re-derive it"
+    pickup_role: windows
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [windows, testing, litmus, git-mirror]
+    estimated_hours: 3
+    context: |
+      MEASURED yolanda 2026-08-19T02:35Z, `scripts/run-litmus-test.sh
+      git-mirror-service --phase pre-build --size instant` at HEAD (windows-next
+      f8ae44fbf plus the in-flight 828-k3mq change, which was PROVEN not to be
+      the cause — see attribution below).
+
+        PASS 14 / FAIL 6 / SKIP 9 — pass rate 70% (14/20 executed)
+
+      THE SIX, and why each is red — three distinct host causes, no product
+      defect among them:
+
+      (a) MISSING GIT IDENTITY IN THE FIXTURE ENVIRONMENT — three tests:
+            litmus:git-mirror-startup-per-ref-tolerance  (step 3/3)
+            litmus:git-mirror-unborn-head-repair         (step 3/8)
+            litmus:git-mirror-stale-reconcile            (step 3/3)
+          All three fail identically with git's "Author identity unknown ...
+          unable to auto-detect email address (got 'bullo@Yolanda.(none)')",
+          then cascade into "src refspec HEAD does not match any" because the
+          seed commit was never created. The fixtures build throwaway repos and
+          commit into them without setting user.name/user.email, which works on
+          a host whose global gitconfig has them and fails on one whose commits
+          go through a different identity path. The fixtures already know how to
+          do this correctly elsewhere — scripts/test-git-mirror-relay-verified-ack.sh
+          exports GIT_AUTHOR_NAME/GIT_COMMITTER_* explicitly and passes here.
+
+      (b) CRLF / WORKING-TREE NORMALISATION — one test:
+            litmus:forge-packed-refs-shared              (step 1/3)
+          Emits "warning: in the working copy of 'f.txt', LF will be replaced by
+          CRLF" and then fails case 2 ("shared packed-refs must see the
+          post-facade ref after gc"). Case 1 — the hazard being reproduced —
+          passes, so the fixture's negative control works and only the positive
+          case is broken by the platform.
+
+      (c) THE NATIVE-WINDOWS COMPILE BREAK — one test:
+            litmus:forge-gitdir-staging-chown            (step 7/7)
+          Its step runs a cargo unit test, which fails to compile natively on
+          windows: `error[E0425]: cannot find function enforce_ca_key_mode`
+          at crates/tillandsias-headless/src/main.rs:3233, because the function
+          is `#[cfg(unix)]` (main.rs:2832) and the call site is not gated. This
+          is invisible to `./build.sh --check`, which re-execs into the
+          tillandsias-build WSL2 distro and compiles for LINUX — so the gate is
+          green while a native `cargo` on the same checkout cannot build the
+          crate at all. Harmless in production (tillandsias-headless runs only
+          in the guest) but it means "native cargo" is not a usable verification
+          lane on this host, which matters to 827-h4tz, whose remedy (a) is a
+          native windows verification of the tray crate.
+
+      (d) THE SIXTH IS A GUARD FIXTURE, and it is the one that needed
+          attribution because 828-k3mq edits the file under test:
+            litmus:forge-upstream-auth-gate              (step 6/10)
+          "guard consumes a FRESH authorized verdict" expects
+          `ok:forge-git-mirror` and gets `missing:no-credential-channel`.
+          ATTRIBUTED, not assumed: the same fixture was run against
+          `git show HEAD:scripts/check-credential-channel.sh` (pre-change) and
+          against the edited file, in the same shell, same minute:
+
+            PRE-CHANGE (HEAD) -> rc=1 out=missing:no-credential-channel
+            MY VERSION        -> rc=1 out=missing:no-credential-channel
+
+          Identical. The step runs the guard under `env PATH=/usr/bin:/bin`
+          against a mirror at an MSYS-translated temp path; the guard's
+          ls-remote consult cannot resolve that combination on windows and falls
+          through to its fail-closed verdict. Pre-existing, host-shaped, and
+          NOT a regression from 828-k3mq — whose own two new steps (4/10 and
+          5/10) both pass.
+
+      WHY THIS IS WORTH A PACKET RATHER THAN A SHRUG. The suite prints
+      "Status: FAIL" and a 70% pass rate. An agent verifying a git-mirror change
+      on windows — which is exactly what a windows cycle does — has no way to
+      tell that 6 of those 6 failures were already there. The cheap half is
+      recording the baseline; the useful half is (a), which is three fixtures
+      away from green and shares one root cause with a fixture that already does
+      it right.
+    verifiable_closure: "re-running scripts/run-litmus-test.sh git-mirror-service --phase pre-build --size instant on a windows host yields either a green suite or a verdict that names the not-executable-here tests explicitly, and the three identity-shaped fixtures pass after exporting GIT_AUTHOR_*/GIT_COMMITTER_* the way test-git-mirror-relay-verified-ack.sh already does"
+    evidence:
+      - "run 2026-08-19T02:35Z: PASS 14 / FAIL 6 / SKIP 9, pass rate 70% (14/20 executed)"
+      - "three fixtures fail on `fatal: unable to auto-detect email address (got 'bullo@Yolanda.(none)')`"
+      - "forge-gitdir-staging-chown step 7 fails on error[E0425] enforce_ca_key_mode, cfg(unix) at main.rs:2832 called ungated at main.rs:3233"
+      - "forge-upstream-auth-gate step 6 A/B: pre-change and post-change both `rc=1 out=missing:no-credential-channel` — pre-existing, not a 828-k3mq regression"
+    next_action: >
+      Start with cause (a): export GIT_AUTHOR_NAME/GIT_AUTHOR_EMAIL/
+      GIT_COMMITTER_NAME/GIT_COMMITTER_EMAIL in the three fixtures, copying the
+      pattern from scripts/test-git-mirror-relay-verified-ack.sh which already
+      passes on this host for exactly that reason. That is three tests for one
+      idea. Then decide whether (c) is fixed by gating the call site or by
+      declaring the crate guest-only and marking the litmus step
+      not-executable-on-windows — that decision also unblocks how 827-h4tz
+      verifies natively.
+    events:
+      - type: discovered
+        ts: "2026-08-19T02:45:00Z"
+        agent_id: windows-yolanda-opus5-20260818t2350z
+        host: windows
