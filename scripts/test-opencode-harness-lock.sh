@@ -109,7 +109,11 @@ echo "case 2 ok: an unheld lock installs exactly once and releases"
 stale="/tmp/opencode_install_test$$stale"
 fresh="/tmp/opencode_install_test$$fresh"
 mkdir -p "$stale" "$fresh"
-touch -d '2 hours ago' "$stale" 2>/dev/null || touch -t "$(date -d '2 hours ago' +%Y%m%d%H%M 2>/dev/null || echo 202001010000)" "$stale" 2>/dev/null || true
+# POSIX `touch -t CCYYMMDDhhmm`, not `touch -d`/`date -d` — those are GNU-isms
+# that BSD date accepts with garbage output, so an exit-code guard cannot catch
+# them (order 761-g36m). A fixed past stamp is all this needs: the sweep's
+# threshold is 5 minutes and any real date far below it proves the same thing.
+touch -t 202001010000 "$stale" 2>/dev/null || true
 opencode_vendor_scratch_clean "" >/dev/null 2>&1 || true
 [ ! -d "$stale" ] || { rm -rf "$stale" "$fresh"; fail "case 3: a stale vendor tree was not swept"; }
 [ -d "$fresh" ] || fail "case 3: a FRESH vendor tree was swept — that can delete a sibling's in-flight extraction"
