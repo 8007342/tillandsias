@@ -399,7 +399,7 @@ failed_reason_for_check() {
         rust-formatting) echo "Rust code not formatted: run 'cargo fmt --all' (see /tmp/fmt-check.log)" ;;
         rust-clippy) echo "Clippy warnings found: run 'cargo clippy --workspace' to see details (see /tmp/clippy-check.log)" ;;
         rust-clippy-all-features) echo "All-features clippy warnings: run 'cargo clippy --workspace --all-targets --all-features -- -D warnings' (see /tmp/clippy-all-features-check.log)" ;;
-        rust-tests) echo "Test failures detected: run 'cargo test --workspace --lib' to see details (see /tmp/test-check.log)" ;;
+        rust-tests) echo "Test failures detected: run 'cargo test --workspace --lib --no-fail-fast' to see details (see /tmp/test-check.log)" ;;
         container-base-policy) echo "Container base-image policy drift found (see /tmp/container-bases.log)" ;;
         cheatsheet-tiers) echo "Cheatsheet tier errors or strict warnings found (see /tmp/cheatsheet-tiers.log)" ;;
         no-python-scripts) echo "Python scripts found in tracked files (see /tmp/no-python-check.log)" ;;
@@ -1022,22 +1022,34 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # Tests - run lib tests only; host-sensitive integration suites are covered by
     # their dedicated litmus/runtime gates rather than the fast deterministic pass.
     # @trace spec:testing
-    if run_rust_on_host cargo test --workspace --lib 2>&1 | tee /tmp/test-check.log; then
+    # --no-fail-fast (order 829-g4xf): without it cargo stops at the first
+    # failing binary, so this pass reported 1 failure where there were 8 and
+    # more than half the workspace never ran.
+    if run_rust_on_host cargo test --workspace --lib --no-fail-fast 2>&1 | tee /tmp/test-check.log; then
         log_pass "All unit tests pass"
         archive_check_log "rust-tests" "pass" /tmp/test-check.log
     else
-        log_fail_tracked "rust-tests" "Test failures detected: run 'cargo test --workspace --lib' to see details (see /tmp/test-check.log)"
+        log_fail_tracked "rust-tests" "Test failures detected: run 'cargo test --workspace --lib --no-fail-fast' to see details (see /tmp/test-check.log)"
         [[ "$VERBOSE" == "1" ]] && cat /tmp/test-check.log >&2
         archive_check_log "rust-tests" "fail" /tmp/test-check.log
     fi
 
-    # Tray feature contract
+    # Tray + vsock-server feature contract
+    #
+    # `listen-vsock` added by order 831-wmn4. This pass named only `tray`, so
+    # `mod vsock_server` — the in-VM control wire's SERVER half — was compiled
+    # by no gate that runs tests, exactly the way `mod tray` had been before
+    # this check existed. Measured 2026-08-19: a new bound test in
+    # vsock_server.rs ran nowhere, while the suite still reported all green.
+    # Same defect as the macOS-tray comment below, one crate over.
+    #
     # @trace spec:tray-app, spec:tray-ux, spec:tray-progress-and-icon-states
-    if run_rust_on_host cargo test -p tillandsias-headless --bin tillandsias --features tray 2>&1 | tee /tmp/tray-check.log; then
-        log_pass "Tray feature tests pass"
+    # @trace spec:vsock-transport
+    if run_rust_on_host cargo test -p tillandsias-headless --bin tillandsias --features tray,listen-vsock --no-fail-fast 2>&1 | tee /tmp/tray-check.log; then
+        log_pass "Tray + vsock-server feature tests pass"
         archive_check_log "tray-contract" "pass" /tmp/tray-check.log
     else
-        log_fail_tracked "tray-contract" "Tray feature tests failed (see /tmp/tray-check.log)"
+        log_fail_tracked "tray-contract" "Tray/vsock-server feature tests failed (see /tmp/tray-check.log)"
         [[ "$VERBOSE" == "1" ]] && cat /tmp/tray-check.log >&2
         archive_check_log "tray-contract" "fail" /tmp/tray-check.log
     fi
@@ -1062,7 +1074,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # Windows it compiles to a stub with nothing to assert.
     if [[ "$(uname -s)" == "Darwin" ]]; then
         # @trace spec:macos-native-tray, spec:tray-ux
-        if run_rust_on_host cargo test -p tillandsias-macos-tray --bins 2>&1 | tee /tmp/macos-tray-check.log; then
+        if run_rust_on_host cargo test -p tillandsias-macos-tray --bins --no-fail-fast 2>&1 | tee /tmp/macos-tray-check.log; then
             log_pass "macOS tray tests pass"
             archive_check_log "macos-tray-tests" "pass" /tmp/macos-tray-check.log
         else

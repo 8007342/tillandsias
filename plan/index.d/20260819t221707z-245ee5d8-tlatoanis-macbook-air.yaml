@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: cargo-test-workspace-stops-at-the-first-failing-target
+    event:
+      type: progress
+      ts: "2026-08-19T22:17:07Z"
+      agent_id: macos-tlatoanis-macbook-air-opus5-20260819t221707z
+      host: Tlatoanis-MacBook-Air
+      summary: >
+        LANDED. --no-fail-fast added to both suite entry points: build.sh --test (cargo test --workspace) and scripts/local-ci.sh's rust-tests check (cargo test --workspace --lib). The failed_reason_for_check hint string was updated to match, so a failing gate prints a command that reproduces the run that produced it.  WHAT THE TRUTHFUL SIGNAL IMMEDIATELY REVEALED, measured on this host today:    cargo test --workspace --lib                 -> 1 failure (run stops there)   cargo test --workspace --lib --no-fail-fast  -> 7 failures across 2 crates  Cargo runs test binaries sequentially and aborts at the first binary that fails, so tillandsias-podman never executed at all. Its 6 failures were not passing; they were unobserved. The gate had been reporting one failure for as long as that was true.  The 7 are 1 real defect plus 6 casualties of a mutex the defect poisoned; filed as 833-8u5g and 833-u85z and fixed this cycle rather than left red. Note the shape: the count this packet corrects was wrong in the direction that hides work, and what it hid was itself a cascade overstating its size.

@@ -4613,6 +4613,23 @@ mod tests {
     fn spawn_terminal_and_reap_does_not_leave_zombies() {
         use std::process::Command;
 
+        // Order 831-wmn4. Linux-only by construction: it counts zombies by
+        // reading /proc (absent on macOS, where the helper silently returns 0
+        // and the assertion becomes vacuous) and it spawns the Linux terminal
+        // launcher, which is not installed here — "No such file or directory".
+        //
+        // SKIPPED LOUDLY rather than #[cfg]-gated so it keeps compiling on
+        // every target. Note the vacuity risk is the interesting half: without
+        // this guard the /proc fallback would make the zombie count 0 on macOS
+        // and the test could PASS while asserting nothing.
+        if !cfg!(target_os = "linux") {
+            eprintln!(
+                "SKIP spawn_terminal_and_reap_does_not_leave_zombies: needs /proc and the \
+                 Linux terminal launcher; on this target the zombie count would be vacuously 0."
+            );
+            return;
+        }
+
         // Find any Z-state (zombie) children currently parented to us.
         /// Count zombie children of THIS process. The delta between two calls is
         /// attributable to what happened in between; the absolute value is not,
@@ -5315,6 +5332,25 @@ mod tests {
             "sock path must end with tillandsias/mcp/alpha-w1/mcp.sock, got: {:?}",
             sock_path
         );
+
+        // Order 831-wmn4: the path assertions above hold on every target and
+        // keep running there. The BIND below cannot: macOS caps
+        // sockaddr_un.sun_path at 104 bytes and its per-user TMPDIR is a long
+        // /var/folders/<hash>/T/ path, so the derived socket path exceeds
+        // SUN_LEN and bind fails with "path must be shorter than SUN_LEN".
+        // That is an environment limit, not a defect in the code under test.
+        //
+        // SKIPPED LOUDLY rather than #[cfg]-gated, so the test still COMPILES
+        // on every target — a cfg-gated test rots silently, which is the whole
+        // failure this packet is about. The tray is Linux-deployed; Linux runs
+        // the assertion.
+        if !cfg!(target_os = "linux") {
+            eprintln!(
+                "SKIP mcp_per_lane_socket_location_and_permissions_0600: bind half is \
+                 Linux-only (macOS SUN_LEN 104 vs this host's TMPDIR). Path assertions ran."
+            );
+            return;
+        }
 
         // Test listener creation and permissions
         let res = start_mcp_socket_server_for_lane("testperlane", "w99");
