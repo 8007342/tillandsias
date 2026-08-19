@@ -25,7 +25,17 @@ ENSURE="$ROOT/images/git/ensure-mirror-head.sh"
 ENTRY="$(mktemp -d)"
 trap 'rm -rf "$ENTRY"' EXIT
 
-export GIT_AUTHOR_NAME=f GIT_COMMITTER_NAME=f GIT_CONFIG_NOSYSTEM=1 HOME="$ENTRY"
+# Order 830-t4qp: the EMAIL halves are load-bearing, not decoration. With only
+# the NAME variables set, git AUTO-DETECTS an address from user@host — which
+# succeeds on a Linux host and fails on a Windows/MSYS one whose hostname has
+# no domain: `fatal: unable to auto-detect email address (got 'bullo@Yolanda.(none)')`.
+# Every commit in this fixture then fails, and the cascade surfaces as the
+# misleading `error: src refspec HEAD does not match any`. Matches the pattern
+# scripts/test-git-mirror-relay-verified-ack.sh already uses, which is why that
+# fixture passes on this host and these three did not.
+export GIT_AUTHOR_NAME=f GIT_AUTHOR_EMAIL=f@example.invalid
+export GIT_COMMITTER_NAME=f GIT_COMMITTER_EMAIL=f@example.invalid
+export GIT_CONFIG_NOSYSTEM=1 HOME="$ENTRY"
 
 fail() { echo "FAIL: $1" >&2; exit 1; }
 
