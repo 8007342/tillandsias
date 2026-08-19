@@ -1446,6 +1446,25 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Carry-forward advisory reported"
 
+    # Order 831-ezea. The archiver is the ONLY bulk drain the ledger has, and
+    # until this line it had ZERO call sites — so its correctness was never
+    # exercised by anything. When it was finally dry-run on 2026-08-19 it
+    # archived two READY rows (424, 437) into a file where they answer `no
+    # packet matches`, while its own `--check` printed "script is idempotent"
+    # and its freshness header cited that as evidence of soundness.
+    #
+    # --check now asserts the actual invariant — archiving moves TERMINAL rows,
+    # so the ready set must be byte-identical across a run — and this wires it
+    # to a caller. 2.0s. Gating a tool nobody invokes yet is deliberate: the
+    # sweep gets its call site under R3, and the gate must predate the sweep
+    # rather than be added after the first bad run.
+    _step "Checking the plan archiver preserves the ready set (831-ezea)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/archive-plan-packets.sh" --check 2>&1; then
+        _error "the plan archiver would change the ready set, or its check could not run"
+        exit 1
+    fi
+    _info "Plan archiver check passed"
+
     # Order 698-7n6q. The sibling of the check above: that one catches a
     # fragment whose declared status the fold DISCARDS; this one catches a
     # fragment the fold cannot READ AT ALL. `tillandsias-plan check` warns about
