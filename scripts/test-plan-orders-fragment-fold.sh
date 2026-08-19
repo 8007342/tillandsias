@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace spec:plan-ledger, order:832-q4mn
+# @trace spec:methodology-accountability, order:832-q4mn
 #
 # Offline fixture for order 832-q4mn: `tillandsias-policy plan-orders` must
 # check the FOLDED ledger (plan/index.yaml ⊕ plan/index.d/), not the base alone.
