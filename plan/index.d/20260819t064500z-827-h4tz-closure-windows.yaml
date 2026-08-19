@@ -1,0 +1,115 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by windows (yolanda), 2026-08-19T06:45:00Z, meta-orchestration cycle 6
+# of the overnight loop (queue 829-p7wq, entry 5).
+#
+# 827-h4tz's CENTRAL PREMISE IS FALSIFIED. The packet says the crate's owning
+# host "cannot satisfy the crate's own staleness guard" and calls that a
+# structural gap. Measured tonight: it can, the path already exists, and
+# running it cleared the advisory in one pass. Recorded in full because the
+# packet was carried for three cycles on a measurement that does not hold.
+events:
+  - packet_id: guest-binary-staleness-guard-names-a-remedy-its-own-host-cannot-run
+    event:
+      type: completed
+      ts: "2026-08-19T06:45:00Z"
+      agent_id: windows-yolanda-opus5-20260818t2350z
+      host: windows
+      summary: |
+        THE REMEDY IS RUNNABLE HERE, AND IT ALREADY SHIPPED.
+
+        scripts/build-guest-binaries.sh does NOT only build with Nix. It has a
+        `build_with_cargo` fallback, already wired
+        (`if ! build_with_nix; then ... build_with_cargo`), which builds both
+        musl targets with plain cargo and stages them. The packet's remedy (a),
+        "a non-Nix build path for the guest binary, runnable in the
+        tillandsias-build distro", describes something that exists.
+
+        THREE OF THE PACKET'S MEASUREMENTS, RE-MEASURED:
+          nix ABSENT (Windows side + build distro) .... CONFIRMED, still absent
+          musl rust target NOT installed .............. FALSE. `rustup target
+              list --installed` in tillandsias-build shows BOTH
+              x86_64-unknown-linux-musl and aarch64-unknown-linux-musl.
+          aarch64 linker unavailable .................. FALSE in effect.
+              aarch64-linux-musl-gcc is absent, but the script's own `elif
+              command -v clang` branch covers it, and clang IS present
+              (/usr/sbin/clang).
+        The likely reason the original reading differed: `command -v rustup`
+        and `command -v cargo` answer ABSENT under a bare `bash -lc` in that
+        distro (a PATH-init quirk) while rustup itself works fine — which is
+        exactly the "inferring capability from presence" trap
+        build-guest-binaries.sh's own header warns about for nix.
+
+        WHAT WAS ACTUALLY WRONG: nobody had run it. The staleness was not a
+        structural impossibility, it was an unexecuted step.
+
+        DONE THIS CYCLE, end to end:
+          scripts/build-guest-binaries.sh (via with-wsl2-builder) -> exit 0
+            "DEGRADED to the local Cargo fallback" (loud, as designed)
+            x86_64 version check passed: Tillandsias v0.4.260817.1
+            aarch64 strings version check passed
+            Verification SUCCESS: both binaries match VERSION 0.4.260817.1
+          scripts/build-windows-tray.ps1 -> exit 0, staged the host-arch binary
+            into assets/ (14,239,064 bytes, was 13,567,216 from Aug 15) and
+            built tillandsias-tray.exe
+          cargo test -p tillandsias-windows-tray -> 94 passed, 0 failed,
+            7 ignored. embedded_guest_headless_matches_workspace_version ... ok
+          check-windows-only-sources-verified.sh stamp --from <transcript>
+            -> ok:windows-sources-verified:4
+
+        THE STAMP REFUSED A BARE ASSERTION, and was right to:
+        "refused:stamp-needs-evidence: ... a stamp with no transcript is an
+        assertion, not a verification". It was re-run against the captured
+        cargo output. Worth recording as a guard that behaved exactly as
+        designed against an agent taking the short path.
+
+        THE ANSWER TO THE PACKET'S OWN OPEN QUESTION — "whether the staged
+        artifact must match the release bit-for-bit, or merely the wire
+        revision". Merely the version. The guard
+        (wsl_lifecycle.rs::embedded_guest_headless_matches_workspace_version)
+        asserts only that the embedded bytes CONTAIN the workspace VERSION
+        string. A cargo-built artifact satisfies it; byte-identity with the Nix
+        release was never the contract. That removes the risk the packet
+        flagged against remedy (a).
+
+        WHAT THIS DOES NOT FIX, and it is the honest residual. The refreshed
+        asset is gitignored (.gitignore:98) and the stamp lives outside the
+        repo, so BOTH are host-local build state. Nothing in the repo changed
+        and nothing can: this condition recurs on every host and every VERSION
+        bump until someone runs the two scripts. The loud half already exists —
+        build-windows-tray.ps1 refuses a staged binary older than the checkout
+        (order 689-gipe) — so a stale asset cannot silently ship. What is
+        missing is only that nothing runs build-guest-binaries.sh BEFORE the
+        tray build. Filed as a note below rather than reopening this packet,
+        whose deliverable ("the owning host CAN refresh the staged binary") is
+        now demonstrated rather than merely argued.
+    evidence:
+      - "scripts/build-guest-binaries.sh exit 0 via with-wsl2-builder: 'Verification SUCCESS: both binaries are correct and match VERSION 0.4.260817.1'"
+      - "scripts/build-windows-tray.ps1 exit 0; assets/tillandsias-headless-x86_64-unknown-linux-musl now 14,239,064 bytes (was 13,567,216, Aug 15)"
+      - "cargo test -p tillandsias-windows-tray: 94 passed, 0 failed, 7 ignored — embedded_guest_headless_matches_workspace_version ok (was the sole failure all night)"
+      - "check-windows-only-sources-verified.sh stamp --from <cargo transcript> -> ok:windows-sources-verified:4 (was stale:windows-sources-unverified on every gate run this session)"
+      - "rustup target list --installed in tillandsias-build: x86_64-unknown-linux-musl AND aarch64-unknown-linux-musl both present"
+
+  - packet_id: guest-binary-staleness-guard-names-a-remedy-its-own-host-cannot-run
+    event:
+      type: note
+      ts: "2026-08-19T06:46:00Z"
+      agent_id: windows-yolanda-opus5-20260818t2350z
+      host: windows
+      summary: |
+        RESIDUAL, named so it is not rediscovered as a surprise: the guest-binary
+        refresh is not wired into anything that runs on its own.
+
+        build-windows-tray.ps1 REFUSES a stale staged binary at build time
+        (order 689-gipe), so the failure is loud and cannot ship silently. But
+        the refresh itself — scripts/build-guest-binaries.sh — is a separate
+        manual step, and both its output (gitignored) and the verification
+        stamp (outside the repo) are host-local. So every host, after every
+        VERSION bump, re-enters the state this packet described until someone
+        runs it by hand.
+
+        The cheap fix is for build-windows-tray.ps1 to RUN build-guest-binaries.sh
+        when the staged binary is missing or predates the checkout, instead of
+        only refusing — it already computes exactly that condition. Not done
+        here: it changes the release lane's build script, which builds with Nix
+        in CI, and deciding whether CI should be allowed to fall through to the
+        cargo path is a release-integrity question rather than a Windows one.
