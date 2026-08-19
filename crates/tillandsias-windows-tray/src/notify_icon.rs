@@ -3942,16 +3942,42 @@ mod tests {
         );
     }
 
-    /// Every project lane died instantly on `/bin/bash: -c: line 1: unexpected
-    /// EOF while looking for matching '"'` because its inline script went
-    /// through wt.exe's re-parser (peke field host, 2026-08-09). Pin that the
-    /// real launch argv is classified unsafe, so it takes the plain console.
+    /// Two properties, and order 823-u5zf flipped which one the REAL argv has.
+    ///
+    /// The predicate itself is unchanged and still refuses any quoted inline
+    /// script — that is the 2026-08-09 peke regression (`/bin/bash: -c: line 1:
+    /// unexpected EOF while looking for matching '"'`, every project lane dead
+    /// on click) and it must stay refused.
+    ///
+    /// What changed is that `launch_spec` no longer PRODUCES such a script for
+    /// a project lane. It emits a verbatim argv, every token of which clears
+    /// the predicate, so the lane now reaches Windows Terminal and gets paste
+    /// and clickable links back — the 805-ek9e field failure that made
+    /// device-code logins impossible to complete.
+    ///
+    /// This test previously hardcoded the old flattened argv "verbatim from
+    /// tray.log" and asserted it was unsafe. That kept passing after the
+    /// product stopped emitting it — a pin that is true about a string nothing
+    /// builds any more says nothing about the product.
     ///
     /// @trace plan/issues/windows-github-login-blank-terminal-2026-08-09.md
     #[test]
-    fn project_lane_argv_is_never_routed_through_wt() {
-        // Verbatim from tray.log, the argv of a cloud project click.
+    fn project_lane_argv_reaches_wt_and_legacy_scripts_still_cannot() {
+        // What launch_spec emits for a cloud project click TODAY.
         let project_argv = vec![
+            "/usr/local/bin/tillandsias-headless".to_string(),
+            "--cloud".to_string(),
+            "8007342/tillandsias".to_string(),
+            "--opencode".to_string(),
+        ];
+        assert!(
+            argv_survives_wt_reparse(&project_argv),
+            "the verbatim project argv must reach wt.exe — this is what restores paste"
+        );
+
+        // NEGATIVE CONTROL: the shape that caused the regression is still
+        // refused, so the guard has not been weakened to get the result above.
+        let legacy_flattened = vec![
             "/bin/bash".to_string(),
             "-lc".to_string(),
             "export HOME=\"${HOME:-/root}\" && exec tillandsias-headless \
@@ -3959,7 +3985,7 @@ mod tests {
                 .to_string(),
         ];
         assert!(
-            !argv_survives_wt_reparse(&project_argv),
+            !argv_survives_wt_reparse(&legacy_flattened),
             "a quoted inline script must never be handed to wt.exe"
         );
 

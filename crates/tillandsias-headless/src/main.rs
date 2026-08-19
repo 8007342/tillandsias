@@ -248,6 +248,16 @@ fn main() {
     // Best-effort by design: a caller that did not set XDG_RUNTIME_DIR, or a
     // read-only path, must not stop the binary starting — every consumer here
     // already has a fallback for an absent runtime dir.
+    // Order 823-u5zf: default the two variables the shell preamble exported,
+    // BEFORE ensure_xdg_runtime_dir reads one of them.
+    //
+    // ensure_xdg_runtime_dir only ASSERTS the directory when the variable is
+    // already set — it returns None when it is unset, by design. The value
+    // itself came from the preamble, so removing the preamble without this
+    // would leave XDG_RUNTIME_DIR unset and silently drop every consumer onto
+    // its fallback. Same for HOME.
+    #[cfg(unix)]
+    ensure_lane_process_env();
     #[cfg(unix)]
     ensure_xdg_runtime_dir();
 
@@ -1175,6 +1185,53 @@ fn format_diagnostics_envelope_line(
     format!(
         "event:diagnostics_envelope timestamp={timestamp} tillandsias_version={tillandsias_version} host_platform={host_platform} agent={agent_kind}"
     )
+}
+
+/// Default `HOME` and `XDG_RUNTIME_DIR` when the launcher did not set them.
+///
+/// Order 823-u5zf. These are the last two things the host-composed shell
+/// preamble did that the binary did not:
+///
+/// ```text
+/// export HOME="${HOME:-/root}"
+/// export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+/// ```
+///
+/// Reproduced here EXACTLY, including `/root` as HOME's fallback, because the
+/// point is parity: a lane must not change behaviour depending on whether it
+/// was launched through the old flattened `bash -lc` argv or the new verbatim
+/// one. Improving the fallback (deriving HOME from the passwd entry, say) is a
+/// separate decision and would make the two launch shapes disagree while both
+/// exist.
+///
+/// WHY THE BINARY AND NOT THE LAUNCHER. `PtyOpenOpts.env` carries only the
+/// terminal identity (TERM/COLORTERM/LANG, audit D7) and the guest PTY handler
+/// `env_clear()`s the child, so on the wire lane there is no other channel for
+/// these. On the Windows lane there is none at all: the tray spawns `wsl.exe`
+/// with `spec.argv` and drops `spec.env` entirely. The process that needs the
+/// value is the only one present on every path.
+///
+/// Both are `${VAR:-default}` semantics: an explicitly set value always wins,
+/// so a caller that knows better is never overridden.
+#[cfg(unix)]
+fn ensure_lane_process_env() {
+    let unset_or_empty = |key: &str| {
+        std::env::var_os(key)
+            .map(|value| value.is_empty())
+            .unwrap_or(true)
+    };
+
+    if unset_or_empty("HOME") {
+        // SAFETY: single-threaded startup, before any subsystem reads env.
+        unsafe { std::env::set_var("HOME", "/root") };
+    }
+
+    if unset_or_empty("XDG_RUNTIME_DIR") {
+        // `id -u` in the preamble; the process's own uid here.
+        let uid = unsafe { libc::getuid() };
+        // SAFETY: as above.
+        unsafe { std::env::set_var("XDG_RUNTIME_DIR", format!("/run/user/{uid}")) };
+    }
 }
 
 /// Create `$XDG_RUNTIME_DIR` at mode 0700 if it does not already exist.
