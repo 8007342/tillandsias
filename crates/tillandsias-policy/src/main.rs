@@ -5049,13 +5049,13 @@ fn plan_orders_fold_fragments(
             else {
                 continue;
             };
-            if let Some((_, value)) = status_overrides.get(&id) {
-                if let Some(map) = step.as_mapping_mut() {
-                    map.insert(
-                        serde_yaml::Value::String("status".to_string()),
-                        serde_yaml::Value::String(value.clone()),
-                    );
-                }
+            if let Some((_, value)) = status_overrides.get(&id)
+                && let Some(map) = step.as_mapping_mut()
+            {
+                map.insert(
+                    serde_yaml::Value::String("status".to_string()),
+                    serde_yaml::Value::String(value.clone()),
+                );
             }
         }
     }
