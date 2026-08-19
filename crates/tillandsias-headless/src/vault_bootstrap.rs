@@ -4240,7 +4240,10 @@ mod tests {
         });
         assert_eq!(destroy.len(), 1);
         assert!(kept.is_empty());
-        assert!(!probed, "an unowned registration must not consult the probe");
+        assert!(
+            !probed,
+            "an unowned registration must not consult the probe"
+        );
     }
 
     /// A mixed drain resolves each entry independently — the realistic shape,
