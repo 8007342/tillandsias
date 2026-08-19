@@ -1418,6 +1418,34 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Fragment status-loss check passed"
 
+    # Order 831-ezea. The sibling of the check above, on the other axis: that
+    # one asks whether a fragment's CLOSURE reached the fold; this one asks
+    # whether a fragment that did NOT close a packet left it resumable. The
+    # loop's only blocking exit condition today is FILING A NEW ROW, so arrival
+    # scales with service — every cycle adds rows and carries none forward.
+    # `next_action` is the carry-forward artifact and it has had a reader since
+    # 606-xu52 (answer.rs next_action_snippet -> the `next:` line of every
+    # `plan next` row); without it the row hands the next agent the packet's own
+    # TITLE as its next step.
+    #
+    # ADVISORY, NOT A GATE, AND `_run` IS DELIBERATE HERE: the script exits 0
+    # even when it names fragments. Measured 2026-08-19, next_action adoption is
+    # 4.6% of ready rows (17/367), so a refusal would reject essentially every
+    # fragment the fleet writes tonight and would be switched off within a day —
+    # and 699-dycj forbids making one host's habit every host's red build. The
+    # promotion bar (>= 40% adoption) and the command that measures it are
+    # recorded in the script's header; promoting it means flipping its `exit 0`
+    # and adding an `_error` branch here. Its own non-zero exits (a broken
+    # checkout) still red the build through the `if !` below, which is why this
+    # is wired as a gate whose guard is currently unarmed rather than as a bare
+    # invocation nobody would notice breaking.
+    _step "Checking that open packets carry a next_action (831-ezea, advisory)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-carry-forward.sh" 2>&1; then
+        _error "the carry-forward advisory could not run — that is a broken checkout, not a clean ledger"
+        exit 1
+    fi
+    _info "Carry-forward advisory reported"
+
     # Order 698-7n6q. The sibling of the check above: that one catches a
     # fragment whose declared status the fold DISCARDS; this one catches a
     # fragment the fold cannot READ AT ALL. `tillandsias-plan check` warns about

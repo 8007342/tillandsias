@@ -15,8 +15,9 @@ spec: observability-convergence
 phase: pre-build
 description: >
   Pin the observability-convergence script surfaces: convergence
-  velocity shell wrapper trace and explicit no-Python retirement
-  stub, evidence bundle generator exit codes, local release preflight trace,
+  velocity shell wrapper trace and its explicit
+  `summary: unavailable:no-rust-checker` verdict (no green no-op),
+  evidence bundle generator exit codes, local release preflight trace,
   dashboard test harness group count, dashboard renderer trace, and
   spec-body convergence score formula + staleness threshold + alert
   thresholds.
@@ -40,12 +41,23 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok: 5 scripts traced"
 
-  - step: "Req convergence velocity: shell wrapper records Python retirement"
+  - step: "Req convergence velocity: shell wrapper emits an unavailable verdict, not a green no-op"
     # The no-Python runtime policy retired the Python implementation.
     # Until a Rust checker lands, the shell wrapper must make the
-    # no-op status explicit instead of silently claiming enforcement.
-    command: "grep -F 'Python retired' scripts/check-convergence-velocity.sh && grep -F 'currently a no-op' scripts/check-convergence-velocity.sh && echo 'ok: python checker retired explicitly'"
-    timeout_ms: 3000
+    # unenforced status explicit instead of silently claiming enforcement.
+    #
+    # ORDER 831-ezea RE-PINNED THIS. It used to grep the source for the
+    # literal 'currently a no-op'. That string was the text of a WARN line on
+    # a script that exited 0 unconditionally — so the pin proved a COMMENT
+    # existed while the guard itself could never be anything but green. The
+    # wrapper now emits the third verdict (`unavailable:<reason>`, the
+    # 702-68zj convention), so pin the BEHAVIOUR: run it and require the
+    # summary line. A regression to a silent green exit now reddens here,
+    # which is the 599-w5jd class this pin was always meant to catch.
+    # 'Python retired' stays pinned in the source: that is the historical
+    # record the no-python-runtime-policy archive note depends on.
+    command: "grep -Fq 'Python retired' scripts/check-convergence-velocity.sh && grep -Fq 'unavailable:no-rust-checker' scripts/check-convergence-velocity.sh && bash scripts/check-convergence-velocity.sh 2>/dev/null | grep -Eq '^summary: unavailable:' && echo 'ok: python checker retired explicitly'"
+    timeout_ms: 5000
     expected_behavior: "ok: python checker retired explicitly"
 
   - step: "Req evidence bundle: generate-evidence-bundle.sh declares 4 exit codes (0/1/2/3)"
@@ -83,7 +95,7 @@ critical_path:
 observability:
   traces:
     - "@trace spec:observability-convergence"
-  expected_log: "convergence computation script surfaces pinned: all 5 @trace, explicit no-op/Python-retired warning, evidence bundle exit code contract, test group count >= 6, staleness threshold, alert thresholds"
+  expected_log: "convergence computation script surfaces pinned: all 5 @trace, explicit unavailable:no-rust-checker verdict, evidence bundle exit code contract, test group count >= 6, staleness threshold, alert thresholds"
   log_fields:
     spec: "observability-convergence"
     test: "observability-convergence-script-shape"
@@ -96,8 +108,9 @@ rollback:
     shell scripts (check-convergence-velocity.sh, generate-
     evidence-bundle.sh, release-preflight-local.sh, test-
     convergence-dashboard.sh, update-convergence-dashboard.sh);
-    explicit check-convergence-velocity no-op/Python-retired warning;
+    check-convergence-velocity's `summary: unavailable:no-rust-checker`
+    verdict (order 831-ezea — it must NOT go back to a green no-op);
     generate-evidence-bundle.sh 4 exit codes; >=6 test groups in
     test-convergence-dashboard.sh; spec body staleness threshold
     (30 days) and alert thresholds (red < 90%, yellow < 95%).
-  command: "grep -n 'spec:observability-convergence\\|Python retired\\|currently a no-op\\|Exit Code\\|30 days\\|red < 90%' scripts/check-convergence-velocity.sh scripts/generate-evidence-bundle.sh scripts/test-convergence-dashboard.sh openspec/specs/observability-convergence/spec.md 2>/dev/null | head -20"
+  command: "grep -n 'spec:observability-convergence\\|Python retired\\|unavailable:no-rust-checker\\|Exit Code\\|30 days\\|red < 90%' scripts/check-convergence-velocity.sh scripts/generate-evidence-bundle.sh scripts/test-convergence-dashboard.sh openspec/specs/observability-convergence/spec.md 2>/dev/null | head -20"

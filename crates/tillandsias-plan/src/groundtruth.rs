@@ -906,7 +906,7 @@ expect:
   confidence: exact
   citations_include:
     - path: methodology/distributed-work.yaml
-      span_contains: ["drain AT MOST ONE plan packet per cycle"]
+      span_contains: ["MAY drain more than one plan packet"]
 "#,
         )
         .expect("probe case parses");

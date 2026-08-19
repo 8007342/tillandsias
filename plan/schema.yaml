@@ -33,11 +33,72 @@ statuses:
   - obsoleted
   - failed
 
+# Optional packet fields with a declared meaning. Open-world still holds —
+# an undeclared field is legal and survives every load — so this section is
+# a CONTRACT WITH FILERS, not a validator: it names what a packet is
+# expected to carry and where each field is read.
+#
+# WHY IT EXISTS (order 831-ezea, 2026-08-19). The carry-forward outcomes in
+# methodology/distributed-work.yaml
+# work_shaping_protocol.large_packet_is_eligible_work — PARTIAL SLICE /
+# SPLIT / AUDIT-DISPOSITION — each name a field that carries a packet
+# forward instead of filing a new one, and this file, the one a filer reads
+# to learn what a packet may hold, named none of them. `next_action` in
+# particular has been READ since order 606-xu52
+# (crates/tillandsias-plan/src/answer.rs `next_action_snippet` -> the
+# `next:` line of every `plan next` row) while declared nowhere. Where a
+# packet omits it the reader falls through to handoff_note -> outcome ->
+# title, i.e. the row advertises the packet's NAME as its next step.
+# MEASURED 2026-08-19: 65 packet-level `next_action:` values across 1126
+# packets in plan/index.yaml.
+#
+# Shape follows methodology/distributed-work.yaml
+# work_shaping_protocol.packet_fields (kind + note). `type` is added here
+# because this file's other field section, reference_fields below, IS a
+# type distinction, and a filer needs to know which of the two a field is.
+#
+# NOT ENGINE-ENFORCED: Schema::load reads required_fields, statuses and
+# reference_fields only (crates/tillandsias-plan/src/lib.rs Schema::load),
+# so nothing declared here can turn `check` red. Declaring a free-text
+# field is safe by construction; declaring a REFERENCE field is not — see
+# the note on reference_fields.
+optional_fields:
+  next_action:
+    kind: recommended
+    type: text
+    note: >
+      One sentence of free text: the first concrete command or edit the
+      next agent should perform. Rendered as the `next:` line of each
+      `plan next` row and truncated to one line, so lead with the
+      imperative and leave context to the packet body. On a PARTIAL SLICE
+      cycle this is the carry-forward act — update it in place so the next
+      cycle resumes instead of replaying.
+
 # Fields whose values must resolve to existing packet_ids (checked by the
 # invariant core; listing them here tells the engine WHERE references live
 # as the schema evolves).
+#
+# ADDING A NAME HERE IS THE ONE EDIT IN THIS FILE THAT CAN GO RED FLEET-WIDE
+# (order 831-ezea). check_integrity classifies every value of a declared
+# reference field: id-shaped and unresolved on a LIVE packet
+# (ready/pending/claimed/blocked) is a VIOLATION and exits 1 on every host;
+# prose-shaped, or unresolved on a retired packet, is a warning. So measure
+# the field's existing values BEFORE declaring it, never after.
+#
+# `split_into` is the standing example of the cost: 37 of the 45 warnings a
+# clean checkout reports are its prose annotations
+# ("227 — container-dependency-graph-satisfier-typestate (slice 3: …)"),
+# spared only because the id grammar classifies them as prose rather than
+# as dangling ids.
 reference_fields:
   - depends_on
   - release_target
   - split_into
   - blocks
+  # AUDIT-DISPOSITION carry-forward: retire a packet by naming its
+  # successor instead of leaving a duplicate live. Measured before
+  # declaring (2026-08-19): one use in the folded corpus,
+  # plan/index.yaml:13537 macos-forge-owned-checkout-isolation ->
+  # macos-forge-no-push-route-lane-decision, which resolves — warnings stay
+  # at 45, violations at 0.
+  - superseded_by

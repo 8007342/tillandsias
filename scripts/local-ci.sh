@@ -1255,9 +1255,28 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # Markdown distillation policy (order 599-4wzr activation): was orphaned.
     log_section "Markdown Distillation Policy"
     if [[ -f "scripts/check-markdown-distillation.sh" ]]; then
-        bash scripts/check-markdown-distillation.sh 2>&1 | tee /tmp/markdown-distillation.log
-        log_pass "Markdown distillation policy checked (advisory)"
-        archive_check_log "markdown-distillation" "pass" /tmp/markdown-distillation.log
+        # ORDER 831-ezea. This ran the checker into `tee` with NO `if`, then
+        # logged `log_pass` unconditionally. `tee` always exits 0, so the
+        # checker's exit 1 was discarded before anything could read it — the
+        # gate printed "✓ Markdown distillation policy checked (advisory)" on
+        # every run, including runs where the checker was naming noncanonical
+        # files on stderr two lines above. Same defect class as the pre-build
+        # litmus scar at the bottom of this file: a check that cannot fail.
+        #
+        # `set -o pipefail` is active (line 27), so `if <cmd> | tee` already
+        # propagates the producer's status — that is the shape used by the
+        # guard-activation audit directly above. PIPESTATUS[0] is read only to
+        # NAME the exit code in the failure message; do not read `$?` there,
+        # it is tee's.
+        if bash scripts/check-markdown-distillation.sh 2>&1 | tee /tmp/markdown-distillation.log; then
+            log_pass "Markdown distillation policy checked"
+            archive_check_log "markdown-distillation" "pass" /tmp/markdown-distillation.log
+        else
+            rc=${PIPESTATUS[0]}
+            log_fail_tracked "markdown-distillation" \
+                "Markdown distillation policy FAILED (exit ${rc}) — noncanonical markdown outside the inventory; see /tmp/markdown-distillation.log"
+            archive_check_log "markdown-distillation" "fail" /tmp/markdown-distillation.log
+        fi
     else
         log_fail_missing_guard "markdown-distillation" "scripts/check-markdown-distillation.sh"
         archive_check_log "markdown-distillation" "skipped"
