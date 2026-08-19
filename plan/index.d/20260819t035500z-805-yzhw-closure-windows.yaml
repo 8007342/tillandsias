@@ -1,0 +1,118 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by windows (yolanda), 2026-08-19T03:55:00Z, meta-orchestration cycle 3
+# of the overnight loop (queue 829-p7wq, entry 3).
+#
+# 805-yzhw CLOSED. This is the defect the operator personally hit and described
+# as "launching opencode from the tray goes into a blank screen and hangs".
+# It was never a hang and never a disk-space problem in the ordinary sense: the
+# lane had already FAILED and was blocked on a keypress, because two concurrent
+# vendor installs filled a 256MB tmpfs that comfortably holds one.
+events:
+  - packet_id: opencode-lane-runs-two-concurrent-vendor-installs-into-a-256m-tmpfs
+    event:
+      type: completed
+      ts: "2026-08-19T03:55:00Z"
+      agent_id: windows-yolanda-opus5-20260818t2350z
+      host: windows
+      summary: |
+        THE LOCK NOW GATES THE INSTALL, NOT JUST ITS RELEASE.
+
+        `require_opencode` took the shared harness-update lock into a `held`
+        flag, logged "opencode install deferring to the in-flight harness
+        updater" when it could not get it — and then called
+        curl_install_opencode UNCONDITIONALLY, because `held` guarded only the
+        two release calls. The mutex faithfully RECORDED a race it did not
+        prevent. Its own comment said as much and was read as describing a
+        fixed condition.
+
+        WHAT CHANGED
+        - New `harness_update_lock_wait_acquire`: a bounded wait (default 180s,
+          TILLANDSIAS_HARNESS_LOCK_WAIT_SECS in fixtures) that turns the loser
+          of the race into a WAITER. The winner is installing the same binary
+          the caller wants, so waiting is useful; a lane must never hang on a
+          harness update, so the budget is finite.
+        - `require_opencode` runs the install ONLY while holding the lock. A
+          caller that waits out the budget falls back to the sibling's cached
+          binary (probed, not assumed) and then to the npm channel — never to a
+          second concurrent extraction.
+        - `curl_install_opencode` now points the vendor script at a private
+          TMPDIR it deletes unconditionally, and sweeps stale
+          /tmp/opencode_install_* trees. The vendor cleans up on success and
+          leaks ~127MB on failure; on a 256MB tmpfs one leak permanently
+          poisons the container for its remaining life, so no retry inside that
+          container could recover. The sweep is AGE-BOUNDED (mmin +5) precisely
+          so it can never delete a sibling's in-flight extraction — the same
+          bug in the other direction.
+        - entrypoint-forge-opencode.sh's init-prompt guard tested `-w` on the
+          directory, which is PERMISSION and says nothing about SPACE. On a
+          full tmpfs the guard passed and the redirect then failed with a bare
+          `echo: write error: No space left on device` that never named /tmp.
+          It now writes, checks the write LANDED, and on failure prints
+          `df -h /tmp` plus the 805-yzhw cause.
+
+        VERIFICATION — and the falsifiability is MEASURED, not claimed.
+        scripts/test-opencode-harness-lock.sh, three cases, all green, wired
+        into litmus:harness-curl-install-shape (step 6/6, [OK]):
+          case 1: a sibling holds the lock -> ZERO second installs, and the
+                  lane falls back to the sibling's cached binary
+          case 2: CONTROL — an unheld lock still installs exactly once and
+                  releases. Load-bearing: a require_opencode that simply never
+                  installed would satisfy case 1 and break every cold lane.
+          case 3: a stale vendor tree is swept; a FRESH one is left alone.
+        RED BEFORE, GREEN AFTER, measured directly: the same case-1 harness run
+        against `git show HEAD:images/default/lib-common.sh` counted **1**
+        install while a sibling held the lock, against the **0** the fixture
+        asserts.
+
+        ONE DIFFERENCE FROM THE STATED CLOSURE, recorded rather than glossed.
+        The packet asked for a test asserting "exactly one vendor install tree
+        exists under /tmp". The fixture instead asserts the second install is
+        never STARTED, which is the cause rather than the symptom and is
+        strictly stronger — no second extraction means no second tree — plus a
+        separate case pinning the sweep. Counting trees would have required a
+        real 256MB tmpfs and the real vendor script; this is hermetic and runs
+        in the pre-build phase.
+
+        NOT PROVEN HERE: the live confirmation, i.e. a real tray-launched
+        OpenCode lane on a cold per-project cache completing without the
+        "Press any key to exit" stop. That needs an attended lane launch and is
+        the natural check on the next operator session. The mechanism is proven;
+        the field observation is not yet repeated.
+    evidence:
+      - "scripts/test-opencode-harness-lock.sh: case 1/2/3 green; PASS: opencode harness-lock fixture (order 805-yzhw)"
+      - "litmus:harness-curl-install-shape STEP 6/6 [OK], whole litmus [PASS]"
+      - "falsifiability A/B: pre-fix require_opencode ran 1 install while a sibling held the lock; post-fix 0"
+      - "bash -n clean on lib-common.sh and entrypoint-forge-opencode.sh"
+
+  - packet_id: git-mirror-litmus-suite-is-red-by-default-on-windows
+    event:
+      type: note
+      ts: "2026-08-19T03:55:00Z"
+      agent_id: windows-yolanda-opus5-20260818t2350z
+      host: windows
+      summary: |
+        SEVENTH RED-BY-DEFAULT TEST, same class, found in the default-image
+        suite rather than git-mirror-service — so this packet's scope is
+        broader than its title suggests.
+
+        litmus:harness-crash-supervision-shape step 2/2 fails on windows:
+
+          scripts/test-harness-supervisor.sh: line 89: pgrep: command not found
+          scripts/test-harness-supervisor.sh: line 91: pgrep: command not found
+          FIXTURE-FAIL: external-kill scenario rc=0 out=''
+
+        MSYS git-bash has no `pgrep`. Every other scenario in that fixture
+        passes, including the wiring scenario that reads
+        entrypoint-forge-opencode.sh. The runner also reports it as a TIMEOUT
+        (31.3s against a 30s budget) with `load1=1.80 over 16 cpus — host NOT
+        saturated`, which is order 820-c8q8's instrumentation correctly saying
+        the budget is the problem, not the machine — but the underlying cause is
+        the missing binary, not slowness.
+
+        Attributed, not assumed: this cycle edited lib-common.sh and
+        entrypoint-forge-opencode.sh, and the scenario that reads the entrypoint
+        PASSED; only the pgrep-dependent scenario failed.
+
+        Remedy is the same shape as cause (a) in this packet: use a portable
+        process probe (`ps` parsing, or the supervisor's own recorded PID file)
+        instead of pgrep, or mark the scenario not-executable-on-windows.
