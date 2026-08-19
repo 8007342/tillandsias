@@ -1,0 +1,101 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by windows (yolanda), 2026-08-19T04:55:00Z, meta-orchestration cycle 4
+# of the overnight loop (queue 829-p7wq, entry 4).
+#
+# 823-u5zf's DELIVERABLE NAMES THE WRONG MECHANISM. Not a nuance: implementing
+# it as written would rewrite Windows lane launch onto the control wire, which
+# is a different subsystem, a much larger change than the packet's own
+# "mechanical, not a design problem" framing, and would discard the native
+# terminal window the operator actually types into. Released back to `ready`
+# with the corrected approach and its measurement, so the next cycle starts
+# from something true.
+events:
+  - packet_id: windows-lane-sends-a-verbatim-argv-and-drops-its-escaping-workarounds
+    event:
+      type: note
+      ts: "2026-08-19T04:55:00Z"
+      agent_id: windows-yolanda-opus5-20260818t2350z
+      host: windows
+      summary: |
+        CORRECTION, MEASURED. The packet's deliverable reads "the Windows tray
+        feature-detects CAP_EXEC_ARGV_VECTOR and sends PtyOpen{argv, env}
+        verbatim". The Windows lane launch does not send PtyOpen and does not
+        touch the control wire.
+
+        WHAT IT ACTUALLY DOES. notify_icon.rs:3765 spawns `wsl.exe` in a native
+        terminal window — `spawn_wsl_console` (conhost) or `spawn_wsl_terminal`
+        (wt.exe) — passing the in-VM argv through CreateProcess. The tray's own
+        log line says so: "opened in-VM PTY in a native terminal (wsl.exe)".
+        Grepping the whole windows-tray crate for PtyOpen / server_caps /
+        CAP_EXEC_ARGV_VECTOR finds only hvsocket.rs test round-trips and one
+        doc comment — no production caller. CAP_EXEC_ARGV_VECTOR and the guest
+        exec allowlist govern the CONTROL-WIRE exec path; the terminal lane is
+        a different transport and neither reads that capability nor could
+        benefit from it without being rewritten onto the wire.
+
+        SO THE SEQUENCING PARAGRAPH IS ALSO MOOT for this rung. "The tray must
+        read HelloAck.server_caps and keep the flattened path for a guest that
+        lacks the capability" describes a negotiation this code path never
+        performs. There is no version-skew hazard here because there is no
+        capability in play.
+
+        THE GOAL IS STILL REACHABLE, AND MORE CHEAPLY THAN THE PACKET THOUGHT.
+        argv_survives_wt_reparse admits tokens of [A-Za-z0-9 / \ . - _ : =].
+        Measured against the real argv, this cycle:
+
+          TODAY (flattened, 3 tokens):
+            PASS  /bin/bash
+            PASS  -lc
+            FAIL  export HOME="${HOME:-/root}" && exec tillandsias-headless \
+                  --cloud '8007342/tillandsias' --claude
+          PROPOSED (verbatim, 4 tokens):
+            PASS  /usr/local/bin/tillandsias-headless
+            PASS  --cloud
+            PASS  8007342/tillandsias
+            PASS  --claude
+
+        One token is the entire reason every project lane falls to conhost. Emit
+        the argv unflattened and the predicate passes on every token, so
+        spawn_wsl_terminal is reached and paste + clickable links return —
+        with NO wire change, NO capability negotiation, and NO PtyOpen.
+
+        WHAT MAKES THAT POSSIBLE NOW, and it is already in the tree: the shell
+        preamble's only irreducible side effect was
+        `install -d -m 0700 "$XDG_RUNTIME_DIR"`, and ensure_xdg_runtime_dir()
+        (main.rs:231, :1180) already moved it into the binary under this very
+        order. What remains in the preamble is pure env defaulting — HOME and
+        TILLANDSIAS_VAULT_API_BASE_URL — which belongs in the binary for the
+        same reason the packet already accepted for XDG_RUNTIME_DIR: "the
+        process needing the directory is the one that should assert it".
+
+        CORRECTED SLICES for whoever takes this next:
+          (a) default HOME and TILLANDSIAS_VAULT_API_BASE_URL in
+              tillandsias-headless when unset, beside ensure_xdg_runtime_dir.
+          (b) vm_login_shell_argv (host-shell/src/pty/mod.rs) emits the verbatim
+              argv instead of composing `/bin/bash -lc <string>`. NOTE: this
+              file is shared with the macOS lane — check build_exec_guest_shell_cmd
+              before assuming the change is Windows-only.
+          (c) update the host-shell tests that assert the flattened preamble
+              (pty/mod.rs ~1054, ~1130, ~1139, ~1155 assert
+              `install -d -m 0700 "$XDG_RUNTIME_DIR"` and the `-lc` string).
+          (d) only then delete argv_survives_wt_reparse (7 sites) and
+              wt_safe_title (4), once nothing can produce a quoting argv.
+
+        VERIFICATION IS AVAILABLE ON THIS HOST, contrary to what 827-h4tz
+        implies at a glance. `cargo test -p tillandsias-windows-tray` builds and
+        runs here: 93 passed, 1 failed, 7 ignored. The single failure is
+        `wsl_lifecycle::tests::embedded_guest_headless_matches_workspace_version`
+        — 827-h4tz's staged-guest version skew, unrelated to argv or wt logic.
+        The seven argv_survives_wt_reparse assertions and four wt_safe_title
+        assertions are among the 93 that pass, so slices (a)-(d) are verifiable
+        without clearing 827-h4tz first. Recorded because the queue was ordered
+        on the opposite assumption.
+
+        NOT STARTED THIS CYCLE, deliberately. The packet's own instruction is
+        "do NOT leave two code paths for the same thing" and the cycle that
+        filed it declined to start on 30 minutes for exactly that reason. This
+        cycle had ~25 minutes left after the measurement above, and slice (b)
+        touches a file shared with macOS plus four test rewrites. Landing half
+        of that on the lane the operator needs for device-code logins is the
+        failure mode the packet warns about. The measurement is the deliverable;
+        the implementation wants a full window.
