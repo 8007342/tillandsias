@@ -4202,20 +4202,58 @@ fn build_inference_run_args(
     // model dirs.
     #[cfg(unix)]
     {
-        fn chown_tree(dir: &Path, uid: u32, gid: u32) {
-            let _ = std::os::unix::fs::chown(dir, Some(uid), Some(gid));
+        /// Returns (failure count, first failure rendered).
+        ///
+        /// Order 804-deux made this report instead of swallowing. Once the
+        /// model cache moves onto a virtio-fs share (macOS), ownership is
+        /// mapped by the HOST and `chown` from inside the guest can fail
+        /// outright. `let _ = chown(...)` turned that into silence — and
+        /// silence here reproduces order 313 exactly: the container runs as
+        /// uid 1000 against a tree it cannot write, and the entrypoint's own
+        /// mkdir/install errors are already swallowed by `2>/dev/null`, so
+        /// the only symptom is `/api/generate` returning HTTP 500 while
+        /// `/api/version` answers. Two silent layers is one too many.
+        fn chown_tree(dir: &Path, uid: u32, gid: u32) -> (u32, Option<String>) {
+            let mut failed = 0u32;
+            let mut first: Option<String> = None;
+
+            if let Err(err) = std::os::unix::fs::chown(dir, Some(uid), Some(gid)) {
+                failed += 1;
+                first = Some(format!("{}: {err}", dir.display()));
+            }
             if let Ok(entries) = std::fs::read_dir(dir) {
                 for entry in entries.flatten() {
                     let p = entry.path();
                     if p.is_dir() {
-                        chown_tree(&p, uid, gid);
-                    } else {
-                        let _ = std::os::unix::fs::chown(&p, Some(uid), Some(gid));
+                        let (sub_failed, sub_first) = chown_tree(&p, uid, gid);
+                        failed += sub_failed;
+                        if first.is_none() {
+                            first = sub_first;
+                        }
+                    } else if let Err(err) = std::os::unix::fs::chown(&p, Some(uid), Some(gid)) {
+                        failed += 1;
+                        if first.is_none() {
+                            first = Some(format!("{}: {err}", p.display()));
+                        }
                     }
                 }
             }
+            (failed, first)
         }
-        chown_tree(&model_cache_dir, 1000, 1000);
+
+        let (failed, first) = chown_tree(&model_cache_dir, 1000, 1000);
+        if failed > 0 {
+            eprintln!(
+                "[tillandsias] WARNING: could not chown {failed} path(s) under {} to uid/gid \
+                 1000 (first: {}). The inference container runs as uid 1000 under \
+                 --userns=keep-id; if it cannot write this tree the ollama engine self-install \
+                 fails and /api/generate returns HTTP 500 while /api/version answers (order 313). \
+                 On a virtio-fs-backed cache this is expected — ownership is set on the host \
+                 side, not here (order 804-deux).",
+                model_cache_dir.display(),
+                first.as_deref().unwrap_or("unknown")
+            );
+        }
     }
 
     let mut args = vec![
