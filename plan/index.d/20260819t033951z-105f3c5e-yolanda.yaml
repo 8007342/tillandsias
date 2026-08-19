@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: opencode-lane-runs-two-concurrent-vendor-installs-into-a-256m-tmpfs
+    field: status
+    value: completed
+    ts: "2026-08-19T03:39:51Z"
+    host: yolanda
+
+events:
+  - packet_id: opencode-lane-runs-two-concurrent-vendor-installs-into-a-256m-tmpfs
+    event:
+      type: completed
+      ts: "2026-08-19T03:39:51Z"
+      host: yolanda
+      summary: >
+        status 'completed' with evidence_refs: b26024112add1a92f305073a5520e9a476518fdf litmus:harness-curl-install-shape step 6/6 [OK]; scripts/test-opencode-harness-lock.sh cases 1-3 green; A/B pre-fix=1 install post-fix=0
+  - packet_id: opencode-lane-runs-two-concurrent-vendor-installs-into-a-256m-tmpfs
+    event:
+      type: note
+      ts: "2026-08-19T03:39:51Z"
+      host: yolanda
+      summary: >
+        lock gates the install; fixture red-before/green-after

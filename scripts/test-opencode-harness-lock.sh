@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace spec:default-image, spec:fail-loud-diagnosis, order:805-yzhw
+# @trace spec:default-image, order:805-yzhw
 #
 # Offline fixture for order 805-yzhw: the harness-update lock must gate the
 # vendor INSTALL, not merely its release.
