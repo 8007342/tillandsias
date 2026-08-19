@@ -1413,6 +1413,41 @@ distributed_work:
         cohesive epic (release_target) to maximize the work-to-orchestration ratio.
       supersedes: >
         The static 1-packet-per-cycle limitation across all forge sessions.
+      non_forge_budget: >
+        Non-forge hosts scale ADAPTIVE 6 -> 10 (order 682-yiz7). This rule
+        previously covered only forge, so the number every bare-metal host
+        actually uses lived solely in scripts/select-work-batch.sh and in a
+        skill paragraph that contradicted it. If this text and that script ever
+        disagree, THE SCRIPT IS AUTHORITATIVE and this line is stale.
+      the_batch_is_a_story: >
+        Order 830-6rte (The Tlatoāni, 2026-08-19). The unit of work is the
+        STORY, not the packet: take the whole batch, implement it as one
+        coherent change, and pay the cycle's fixed costs ONCE — one
+        build/verify pass, one loop-status entry, one attestation. Never
+        ./build.sh --check per packet; never attest per packet.
+        WHY, measured on the fleet 2026-08-16..19: 155 attestation-only commits
+        and 88 ledger-bookkeeping commits in three days, against single digits
+        for every category of product work; over five days, 127 product-code
+        commits against 457 plan-only, 149 attestation-only and 219 merges.
+        EVERY CYCLE PAYS THE SAME EXIT COST WHETHER IT CARRIED ONE PACKET OR
+        EIGHT — loop-status, attestation record, attestation self-check at the
+        new HEAD, and the merges each provokes. Bundling does not shrink the
+        overhead; it amortizes it over more delivered work, which is the only
+        lever available that does not weaken the exit contract itself.
+      count_versus_envelope: >
+        The forge bound is TIME, not a count. "One packet" was always a proxy
+        for "fits in the 600s launch budget", and it is a bad proxy in both
+        directions: three one-line ledger closures fit easily, one large packet
+        does not fit at all. Ask the envelope question about the STORY.
+      how_this_rule_failed_to_reach_anyone: >
+        Recorded because it is an instance of the class it now governs. 707-3x9d
+        lifted the single-packet limit on 2026-08-12. The skill agents actually
+        read went on saying "Drain at most ONE packet per forge cycle" and
+        "Budget is 1 on forge and 3 elsewhere" for a week, in the same paragraph
+        that said 4 and 6. Three numbers for one budget; agents took the
+        smallest. A methodology change that does not land in the skill is
+        "fixed but not enabled", and the fleet spent a week draining one packet
+        at a time while tuned for ten.
       interim_note: >
         Reliance on step timeouts is interim. Order 265 (forge
         heartbeat/liveness signals — we own the launch and the container

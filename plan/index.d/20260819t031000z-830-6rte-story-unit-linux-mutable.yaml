@@ -1,0 +1,142 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-19T03:10:00Z.
+packets:
+  - packet_id: the-batch-is-a-story-and-the-story-is-the-unit-of-work
+    order: 830-6rte
+    status: completed
+    desired_release: v0.5
+    priority: p1
+    kind: chore
+    title: "the single-packet rule was lifted on 2026-08-12 and never reached the skill agents read, so a fleet tuned for ten packets per cycle spent a week draining one"
+    deliverable: "the story is the unit of work, budgets are stated once, and the cycle's fixed exit cost is paid once per story"
+    pickup_role: any
+    release_target: convergence-velocity-milestone
+    capability_tags: [methodology, meta-orchestration, velocity]
+    estimated_hours: 2
+    context: |
+      OPERATOR, 2026-08-19: "that's also why I was asking for bundles of related
+      packets in stories and epics, rather than the 'take a single packet' baked
+      into the ./methodology that I've been fighting you to lift, while you keep
+      claiming orchestration overhead is not that bad."
+
+      They are right, and my own measurements from the same night are the proof.
+      I argued the overhead was tolerable while collecting the data that says it
+      is not.
+
+      THE OVERHEAD, measured on the fleet 2026-08-16..19:
+        record(mo-full), attestation only ....... 155 commits in 3 days
+        chore(plan), ledger bookkeeping .........  88
+        every category of product work ..........  single digits each
+      and over 5 days: 127 product-code commits against 457 plan-only, 149
+      attestation-only and 219 merge commits.
+
+      EVERY CYCLE PAYS THE SAME EXIT COST WHETHER IT CARRIED ONE PACKET OR
+      EIGHT: loop-status entry, attestation record, attestation self-check at
+      the new HEAD, and the merges each of those provokes. A one-packet cycle
+      spends most of itself on the exit contract. Bundling does not make the
+      overhead smaller — it amortizes it over more delivered work, which is the
+      only lever available that does not weaken the contract.
+
+      THE RULE WAS ALREADY LIFTED. This is the sharp part, and it is an instance
+      of the very class the operator has been describing all week. Order
+      707-3x9d amended methodology/distributed-work.yaml on 2026-08-12 to an
+      ADAPTIVE BATCH BUDGET drawn from one cohesive epic, and states outright
+      `supersedes: The static 1-packet-per-cycle limitation across all forge
+      sessions`. scripts/select-work-batch.sh implements 6 -> 10 for non-forge
+      hosts (order 682-yiz7).
+
+      The skill that agents actually read went on saying, for a week:
+        "Drain **at most ONE packet per forge cycle**"
+        "Budget is 1 on forge (order 264) and 3 elsewhere"
+      in the same paragraph whose opening sentence said 4 and 6, while the
+      script said 6 -> 10. THREE NUMBERS FOR ONE BUDGET in one paragraph plus
+      its tool. Agents took the smallest. That is "fixed but not enabled" —
+      the operator's own taxonomy — and it cost the fleet a week of
+      one-packet nights while tuned for ten.
+
+      WHAT CHANGED:
+        * skills/meta-orchestration/SKILL.md — the batch IS a story and the
+          story is the unit; one build/verify pass, one loop-status entry, one
+          attestation per story; never ./build.sh --check per packet, never
+          attest per packet. Budgets stated ONCE with the script named as
+          authoritative on disagreement, and the contradictory restatement
+          deleted rather than reconciled.
+        * the forge rule becomes TIME-bounded, not count-bounded. Order 264's
+          reasoning survives — a litmus-launched cycle lives in a 600s envelope
+          and one that overruns dies with nothing pushed — but "one packet" was
+          only ever a proxy for "fits in 600s", and a bad one in both
+          directions: three one-line closures fit easily, one large packet does
+          not fit at all. The envelope question is now asked about the STORY.
+        * methodology/distributed-work.yaml forge_cycle_budget gains the
+          amortization rule, the non-forge budget (which lived nowhere in
+          methodology, only in the script and a skill paragraph that
+          contradicted it), and a record of how the 707-3x9d change failed to
+          reach anyone.
+
+      NET LINES: this adds to methodology, against the standing constraint that
+      changes there be net-negative. Stated plainly rather than hidden: the
+      addition is ~30 lines, and it is paid for by deleting a contradictory
+      budget statement and by preventing the class of rework the contradiction
+      caused. If the de-slop sweep (829-dkuc) later judges it ritual, it is
+      subject to the same kill rule as everything else.
+status:
+  - packet_id: forge-image-has-no-nix-despite-the-spec-requiring-it
+    field: status
+    value: completed
+    ts: "2026-08-19T03:10:00Z"
+    host: linux_mutable
+
+events:
+  - packet_id: the-batch-is-a-story-and-the-story-is-the-unit-of-work
+    event:
+      type: completed
+      ts: "2026-08-19T03:10:00Z"
+      agent_id: linux-macuahuitl-opus5-20260819T031000Z
+      host: linux_mutable
+      summary: >
+        status 'completed' with evidence. The single-packet rule was lifted by order
+        707-3x9d on 2026-08-12 and never reached the skill agents read: for a week the
+        skill said "Drain at most ONE packet per forge cycle" and "Budget is 1 on forge and
+        3 elsewhere", in the same paragraph whose opening sentence said 4 and 6, while
+        scripts/select-work-batch.sh implemented 6 -> 10 (682-yiz7). Three numbers for one
+        budget; agents took the smallest. Fixed in the three places that disagreed: the
+        skill now states the batch IS a story and the story is the unit of work — one
+        build/verify pass, one loop-status entry, one attestation per story, never per
+        packet — states budgets ONCE and names the script authoritative on disagreement;
+        the forge bound becomes TIME (the 600s envelope) rather than a count, preserving
+        order 264's reasoning while dropping its bad proxy; and methodology
+        forge_cycle_budget gains the amortization rule plus the non-forge budget, which
+        previously existed nowhere in methodology at all. Verified: methodology parses,
+        skills-single-source 5:15, ./build.sh --check rc=0.
+      evidence_refs:
+        - "skills/meta-orchestration/SKILL.md: batch-is-a-story + budgets stated once + script authoritative"
+        - "skills/meta-orchestration/SKILL.md: forge rule time-bounded, not count-bounded (264 reasoning kept)"
+        - "methodology/distributed-work.yaml forge_cycle_budget: the_batch_is_a_story, non_forge_budget, count_versus_envelope, how_this_rule_failed_to_reach_anyone"
+        - "measured overhead: 155 attestation-only + 88 ledger-bookkeeping commits in 3 days vs single-digit product work; 5 days 127 product vs 457 plan-only + 149 attestation + 219 merges"
+        - "the contradiction removed: 707-3x9d supersedes the static 1-packet limit; the skill contradicted it for 7 days"
+  - packet_id: forge-image-has-no-nix-despite-the-spec-requiring-it
+    event:
+      type: completed
+      ts: "2026-08-19T03:10:00Z"
+      agent_id: linux-macuahuitl-opus5-20260819T031000Z
+      host: linux_mutable
+      summary: >
+        status 'completed'. The operator settled the direction: the forge is EPHEMERAL and
+        must be cheap to launch and destroy, so nix belongs to the LONG-LIVED tier beside
+        the inference container, git mirror, router and proxy — "a long lived nix cache
+        dedicated container might end up being necessary". The spec was wrong, not the
+        image. openspec/specs/default-image/spec.md now drops Nix from the required tool
+        set and states the prohibition positively with its reason, and the "Image contains
+        Nix" scenario is replaced by "Image carries NO Nix store" asserting neither `nix`
+        nor `/nix` is present and that a build needing Nix artifacts fetches from the
+        enclave cache service. VERIFIED against the image the destructive e2e rebuilt from
+        scratch: `command -v nix` absent, `/nix` absent — the image already satisfies the
+        corrected spec, which is the point, since the spec was the thing out of step.
+        This also promotes 801-kqme's harmonia service from an optimisation to
+        load-bearing, and the spec now says so rather than leaving it implied.
+        ./build.sh --check rc=0.
+      evidence_refs:
+        - "openspec/specs/default-image/spec.md: Nix dropped from the MUST set; prohibition stated with its lifetime reasoning"
+        - "same file: 'Scenario: Image contains Nix' -> 'Scenario: Image carries NO Nix store'"
+        - "verified on localhost/tillandsias-forge:latest — no nix on PATH, no /nix"
+        - "cache route: 801-kqme harmonia 3.2.0, read-only host-store mount, stack-CA TLS + ed25519 content signing"
