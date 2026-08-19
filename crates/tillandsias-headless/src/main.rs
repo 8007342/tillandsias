@@ -558,6 +558,17 @@ fn main() {
         }
     }
 
+    // Downgrade override. Carried through the environment rather than threaded
+    // as a parameter because the guard fires at the image chokepoint
+    // (`ensure_image_exists`), which every mode reaches by a different route —
+    // the same reason TILLANDSIAS_DEBUG is set here rather than passed down.
+    if user_args.iter().any(|a| a == "--force-downgrade") {
+        // SAFETY: single-threaded argument parsing, before any subsystem runs.
+        unsafe {
+            std::env::set_var(FORCE_DOWNGRADE_ENV, "1");
+        }
+    }
+
     // @trace spec:cli-mode, spec:cli-bash-mode, spec:cli-diagnostics
     let prompt = user_args
         .iter()
@@ -566,6 +577,7 @@ fn main() {
 
     let known_flags = [
         "--headless",
+        "--force-downgrade",
         "--tray",
         "--debug",
         "--diagnostics",
@@ -1316,6 +1328,9 @@ fn print_usage(version: &str) {
     println!("  --prompt TEXT  Send prompt to LLM inference (requires --opencode)");
     println!("  --init         Pre-build container images");
     println!("  --force        Rebuild all images even if cached (use with --init)");
+    println!(
+        "  --force-downgrade Let an OLDER app rebuild a NEWER enclave (rolls the enclave BACK)"
+    );
     println!("  --cache-verify Check cache integrity and report status");
     println!("  --cache-clear  Clear the initialization cache and build state");
     println!(
@@ -2483,6 +2498,68 @@ fn run_image_ensure_detached<D: DetachedImageEnsure>(
     ))
 }
 
+/// Operator override for the downgrade guard, set from `--force-downgrade`.
+const FORCE_DOWNGRADE_ENV: &str = "TILLANDSIAS_FORCE_DOWNGRADE";
+
+/// Every `<repo>:<tag>` podman reports for a tillandsias image.
+///
+/// Best-effort by construction: a podman that cannot answer yields an empty
+/// list, which the guard reads as "no images" and therefore as "proceed". A
+/// version guard must never be the reason a launch fails on a host where the
+/// question could not even be asked.
+fn tillandsias_image_tags() -> Vec<String> {
+    let Ok(out) = podman_cmd_sync()
+        .args(["images", "--format", "{{.Repository}}:{{.Tag}}"])
+        .output_bounded(OperationKind::Inspect.default_budget())
+    else {
+        return Vec::new();
+    };
+    if !out.status.success() {
+        return Vec::new();
+    }
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.contains("tillandsias"))
+        .map(str::to_string)
+        .collect()
+}
+
+/// Refuse to rebuild a NEWER enclave with an OLDER app.
+///
+/// The hazard is a development-machine one: a host accumulates tray binaries
+/// (installed, `target/release`, unpacked `release-artifacts/`), and launching
+/// the wrong one is a two-click mistake. Image freshness is decided by CONTENT
+/// identity (order 702-griq), so an older binary does not see a newer image as
+/// newer — it sees a source-digest mismatch and REBUILDS, silently replacing a
+/// newer runtime with an older one. Nothing downstream reports that anything
+/// moved backwards.
+///
+/// The comparison is legitimate because `methodology/versioning.yaml` declares
+/// the scheme monotonic: YYMMDD "always increases with time" and Build is
+/// "globally monotonic across all machines and branches". See
+/// `tillandsias_core::version_guard` for the decision and its tests.
+///
+/// Returns the refusal text when the launch must stop.
+fn downgrade_refusal() -> Option<String> {
+    use tillandsias_core::version_guard::{DowngradeVerdict, decide_downgrade, refusal_message};
+
+    let force = std::env::var_os(FORCE_DOWNGRADE_ENV).is_some();
+    match decide_downgrade(VERSION.trim(), &tillandsias_image_tags(), force)? {
+        DowngradeVerdict::Proceed => None,
+        DowngradeVerdict::ForcedProceed { app, image, tag } => {
+            // Loud, never debug-gated: an operator who forces a rollback should
+            // see it happen, and so should anyone reading the log afterwards.
+            eprintln!(
+                "[tillandsias] WARNING: --force-downgrade: rebuilding images from app {app} \
+                 over a NEWER enclave ({image}, from {tag}). The enclave is being rolled BACK."
+            );
+            None
+        }
+        DowngradeVerdict::Refuse { app, image, tag } => Some(refusal_message(&app, &image, &tag)),
+    }
+}
+
 pub(crate) fn ensure_image_exists(
     root: &Path,
     image_name: &str,
@@ -2499,6 +2576,13 @@ pub(crate) fn ensure_image_exists(
         return Err(runtime_phase::refusal(&format!(
             "ensure image {image_name}"
         )));
+    }
+    // Refuse BEFORE the detach: the helper runs in its own session with no
+    // controlling tty, so a refusal raised in there would reach the operator as
+    // a bare non-zero exit. Checked here, once, on the path every image build
+    // reaches — the first refusal aborts the whole ensure chain.
+    if let Some(refusal) = downgrade_refusal() {
+        return Err(refusal);
     }
     // Order 270: detach into a session-surviving helper BEFORE taking the
     // image flock — the parent must never be the lock holder (a PTY close
