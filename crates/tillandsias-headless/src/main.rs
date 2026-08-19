@@ -11354,6 +11354,19 @@ fn send_issue_web_session(project_label: &str, cookie_value: &[u8; 32]) -> Resul
     // Encode and write with length prefix (4-byte big-endian).
     let encoded =
         encode(&envelope).map_err(|e| format!("Failed to encode control message: {}", e))?;
+    // Order 828-r2ek: the ACK reader below bounds its inbound frame against
+    // MAX_MESSAGE_BYTES; this write bounded nothing, so the tray could be sent
+    // a frame its own reader is obliged to reject — and the failure would
+    // surface here as a lost ACK rather than as the oversize write that caused
+    // it. Not reachable with today's payload (a project label plus a 32-byte
+    // cookie), which is why it is bounded now rather than after something
+    // makes it reachable.
+    if encoded.len() > MAX_MESSAGE_BYTES {
+        return Err(format!(
+            "control message too large to send: {} > {MAX_MESSAGE_BYTES}",
+            encoded.len()
+        ));
+    }
     let len = encoded.len() as u32;
     let mut frame = len.to_be_bytes().to_vec();
     frame.extend_from_slice(&encoded);

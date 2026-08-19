@@ -1658,6 +1658,15 @@ where
     W: AsyncWriteExt + Unpin,
 {
     let bytes = encode(env).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    // Order 828-r2ek: symmetric with read_envelope's bound above. Without this
+    // the guest emits a frame the host is obliged to reject, so the connection
+    // dies at the reader and the writer never learns why.
+    if bytes.len() > MAX_MESSAGE_BYTES {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "outbound frame too large",
+        ));
+    }
     stream
         .write_all(&(bytes.len() as u32).to_be_bytes())
         .await?;
@@ -1776,6 +1785,62 @@ pub(crate) fn fetch_cloud_projects() -> Vec<CloudProjectEntry> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Order 828-r2ek NEGATIVE CONTROL: the guest refuses to EMIT a frame its
+    /// own reader would refuse to accept.
+    ///
+    /// Before this, `read_envelope` bounded inbound frames at
+    /// `MAX_MESSAGE_BYTES` and `write_envelope` bounded nothing — so the guest
+    /// could put a frame on the wire that every peer in the fleet is obliged
+    /// to reject. The connection then died at the READER, which is the wrong
+    /// end to diagnose from: the writer saw a successful write and a closed
+    /// socket, with nothing linking the two.
+    #[tokio::test]
+    async fn write_envelope_refuses_a_frame_over_the_shared_maximum() {
+        let oversize = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 1,
+            body: ControlMessage::PtyData {
+                session_id: 1,
+                direction: tillandsias_control_wire::PtyDirection::ToHost,
+                bytes: vec![0xCDu8; MAX_MESSAGE_BYTES + 1],
+            },
+        };
+        let mut sink: Vec<u8> = Vec::new();
+        let err = write_envelope(&mut sink, &oversize)
+            .await
+            .expect_err("a frame over MAX_MESSAGE_BYTES must be refused before it is written");
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+        assert!(
+            sink.is_empty(),
+            "the refusal must happen BEFORE any byte reaches the wire, got {} byte(s)",
+            sink.len()
+        );
+
+        // And the boundary is inclusive: a frame at the maximum still goes.
+        let mut payload = vec![0xCDu8; MAX_MESSAGE_BYTES - 64];
+        let at_limit = loop {
+            let candidate = ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: 2,
+                body: ControlMessage::PtyData {
+                    session_id: 1,
+                    direction: tillandsias_control_wire::PtyDirection::ToHost,
+                    bytes: payload.clone(),
+                },
+            };
+            match encode(&candidate).expect("encode").len() {
+                n if n == MAX_MESSAGE_BYTES => break candidate,
+                n if n < MAX_MESSAGE_BYTES => payload.push(0xCD),
+                _ => panic!("overshot MAX_MESSAGE_BYTES while sizing the fixture"),
+            }
+        };
+        let mut sink: Vec<u8> = Vec::new();
+        write_envelope(&mut sink, &at_limit)
+            .await
+            .expect("a frame exactly at MAX_MESSAGE_BYTES must still be written");
+        assert_eq!(sink.len(), 4 + MAX_MESSAGE_BYTES);
+    }
 
     #[test]
     fn pty_heartbeat_requires_explicit_client_capability() {

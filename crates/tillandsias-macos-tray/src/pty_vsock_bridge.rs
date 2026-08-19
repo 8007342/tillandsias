@@ -156,6 +156,20 @@ where
     };
     let bytes =
         encode(&hello).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    // Order 828-r2ek. The HelloAck reader below (:169) bounds its inbound
+    // frame and the PtyData sender (:241) bounds its outbound one; the Hello
+    // that opens the session was the only write on this path with no bound at
+    // all. An oversize Hello is refused by the guest's reader, so the bridge
+    // would fail at HelloAck with no indication that the Hello was the cause.
+    if bytes.len() > MAX_MESSAGE_BYTES {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!(
+                "Hello frame too large ({} > {MAX_MESSAGE_BYTES})",
+                bytes.len()
+            ),
+        ));
+    }
     write_half
         .write_all(&(bytes.len() as u32).to_be_bytes())
         .await?;

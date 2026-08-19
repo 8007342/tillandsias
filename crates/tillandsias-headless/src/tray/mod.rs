@@ -587,6 +587,34 @@ fn write_control_envelope(
 ) -> std::io::Result<()> {
     let payload = encode(envelope)
         .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
+    // Order 828-r2ek. The reader three lines up (:573) has always refused an
+    // inbound frame over MAX_MESSAGE_BYTES; the writer never checked. An
+    // oversize frame therefore went out and the PEER killed the connection,
+    // so the failure surfaced at the wrong end with the sender believing it
+    // had succeeded.
+    //
+    // LOGGED, NOT JUST RETURNED, and that is the whole point here: TEN of the
+    // fifteen call sites discard this Result with
+    // `let _ = write_control_envelope(...)`. A bare `?` would turn a
+    // newly-refused write into a SILENT MISSING REPLY, which presents to a
+    // user as a hang rather than an error — strictly worse than the unbounded
+    // write it replaces. Grep the discard idiom rather than trusting a count;
+    // this comment first shipped citing nine sites and a list of line numbers
+    // that its own edit had already shifted (the 828-itr9 lesson, earned here).
+    if payload.len() > MAX_MESSAGE_BYTES {
+        warn!(
+            spec = "tray-host-control-socket",
+            kind = envelope.body.kind(),
+            len = payload.len(),
+            max = MAX_MESSAGE_BYTES,
+            "refusing to write an oversize control frame; the peer would close \
+             the connection on it. No reply will be sent for this message."
+        );
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "outbound control frame too large",
+        ));
+    }
     stream.write_all(&(payload.len() as u32).to_be_bytes())?;
     stream.write_all(&payload)?;
     stream.flush()
@@ -4450,6 +4478,67 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Order 828-r2ek NEGATIVE CONTROL, and the reason this site needed care
+    /// rather than a one-line bound.
+    ///
+    /// `read_control_envelope` has always refused an inbound frame over
+    /// `MAX_MESSAGE_BYTES`; this writer refused nothing, so the tray could emit
+    /// a frame its own reader would reject. The fix cannot be a bare `?`,
+    /// because nine call sites discard this Result with
+    /// `let _ = write_control_envelope(...)` — a newly-failing write there
+    /// becomes a silent missing reply, which a user experiences as a hang. So
+    /// the refusal is BOTH returned and logged, and this test pins the
+    /// returned half; the `warn!` is what makes the discarded half visible.
+    #[test]
+    fn write_control_envelope_refuses_a_frame_over_the_shared_maximum() {
+        let (mut a, mut b) = std::os::unix::net::UnixStream::pair().expect("UnixStream::pair");
+
+        // DRAIN THE PEER. Without this the test HANGS instead of failing when
+        // the guard is removed, which is a bad test — and finding that out is
+        // what surfaced 832-me6z. `write_control_envelope` does a blocking
+        // `write_all` with no write timeout, so an unbounded frame fills the
+        // socket buffer and blocks forever rather than erroring. Measured: the
+        // falsified run reported "has been running for over 60 seconds" rather
+        // than a failure. A reader here makes the falsified case fail fast and
+        // for the right reason (the write SUCCEEDS, so `expect_err` panics).
+        let reader = std::thread::spawn(move || {
+            use std::io::Read;
+            let mut sink = Vec::new();
+            let _ = b.read_to_end(&mut sink);
+            sink.len()
+        });
+
+        let oversize = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 1,
+            body: ControlMessage::PtyData {
+                session_id: 1,
+                direction: tillandsias_control_wire::PtyDirection::ToHost,
+                bytes: vec![0xCDu8; MAX_MESSAGE_BYTES + 1],
+            },
+        };
+        let err = write_control_envelope(&mut a, &oversize)
+            .expect_err("a frame over MAX_MESSAGE_BYTES must be refused before it is written");
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+        assert_eq!(err.to_string(), "outbound control frame too large");
+
+        // A small envelope on the same stream still writes, so the guard is a
+        // bound and not a break.
+        let ok = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 2,
+            body: ControlMessage::SubscribeAck,
+        };
+        write_control_envelope(&mut a, &ok).expect("a normal envelope must still be written");
+
+        drop(a);
+        let delivered = reader.join().expect("peer reader thread");
+        assert!(
+            delivered > 0,
+            "the small envelope must have reached the peer; only the oversize one is refused"
+        );
+    }
 
     /// ORDER 591-33s6. The cloud overflow row must not be a clickable control
     /// that does nothing.
