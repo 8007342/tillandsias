@@ -1,0 +1,142 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-19T01:20:00Z.
+#
+# The operator's ask: a periodic "de-slopification" step. Backed by a 7-lens
+# audit with adversarial refutation (16 agents, 35 raw findings, 8 verified,
+# 5 confirmed). Filed as ONE multi_cycle packet with three ordered criteria,
+# deliberately not as eight packets — a de-slop step that files eight packets is
+# a net contributor to the disease it treats.
+packets:
+  - packet_id: periodic-deslopification-sweep
+    order: 829-dkuc
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: enhancement
+    multi_cycle: true
+    title: "add a periodic reduction sweep that CHALLENGES recent additions — every finding is a (mutation, predicted observable) pair, unrunnable findings are dropped, and the sweep is subject to its own ritual detector"
+    deliverable: "a scheduled sweep that deletes and retracts more than it adds, proves each finding by mutation, and turns itself off when it stops paying"
+    pickup_role: any
+    release_target: convergence-velocity-milestone
+    capability_tags: [deslop, methodology, ledger, fail-loud]
+    estimated_hours: 12
+    context: |
+      OPERATOR FRAMING, 2026-08-18: "every few days ... we'll run some process of
+      SIMPLIFICATION where we challenge all the recent code additions in favor of
+      simplification, as fix-forward can only go so far ... since we work in a CRDT
+      style we are also harboring all the BAD SUGGESTIONS along with the good ones
+      ... each prompt converges with a skew because of the WEAK LAW OF LARGE
+      NUMBERS ... we need to tell apart the noise from the signal."
+
+      MEASURED STATE (linux-next, 2026-08-18/19):
+        ledger            1120 packets; 410 ready, 633 terminal
+        base index        60,241 lines / 4.3 MB
+        fragments         127, compaction ALREADY eligible and unacted for days
+        ready staleness   166/367 base ready rows untouched >7d or never (45%)
+        `plan check`      55 lines, 45 of them "organic reference debt", exits ok
+        methodology       12,254 lines, 138 uppercase MUST/NEVER, ~2 verified
+                          executable enforcers; grew 9.3:1 over 30 days
+        cycles            ~166 hourly cycles over 5 days produced 127 product-code
+                          commits vs 457 plan-only, 149 attestation-only, 219 merges
+        ledger flow       226 packets filed / 94 closed over 5 days = 2.4:1
+        prior art         scripts/archive-plan-packets.sh cut the ledger 92% on
+                          2026-07-02, was closed as a ONE-SHOT with no cadence, and
+                          the ledger has grown 91x since
+
+      That last line is the finding that decides the design. The garbage collector
+      EXISTS and worked spectacularly once. What is missing is a cadence and an
+      authorization to act.
+
+      THE RETRACTION PRIMITIVE ALSO ALREADY EXISTS AND NEEDS NOTHING BUILT.
+      `set-field <id> status obsoleted` is a LATERAL terminal in status_entry_wins
+      (fragments.rs:309-315): plain LWW, no falsification event, no --evidence
+      required (closure_rank returns None for obsoleted, main.rs:3765-3777). It
+      writes the top-level `status:` block the fold reads, and Ledger::ready()
+      filters status == "ready", so the row leaves SELECTION while every event and
+      every base span stays byte-identical. That is the answer to "keep CRDT
+      semantics but converge clean": you do not delete from the G-Set, you change
+      what the READ returns. Nothing to build; it needs scheduling and budgeting.
+
+      CRITERION 1 — scripts/check-dead-env-branches.sh (~60 lines).
+      Enumerate TILLANDSIAS_[A-Z0-9_]+ read in scripts/ images/ crates/ build.sh;
+      drop those assigned anywhere; drop those documented; keep those in a branch
+      condition. Verdict `dead-env-branches: total=n unassigned=n dead=n
+      verdict=(ok|dead-branches-found)`, exit 1 on any, ship with --self-test that
+      plants a fixture var and asserts the detector names it. A prototype run
+      today yields a 16-row shortlist including TILLANDSIAS_STATUS_CHECK — the
+      variable that makes Step 5 (the forge launch) of orchestrate-enclave.sh
+      UNREACHABLE. Anchor the \b test: TILLANDSIAS_STATUS_CHECK_BIN must NOT be
+      reported (it is assigned at build.sh:1281).
+
+      CRITERION 2 — superseded_by becomes a validated reference, plus one
+      retraction batch. Add superseded_by to plan/schema.yaml reference_fields
+      (PRECONDITION: re-verify the single existing use, plan/index.yaml:13537 ->
+      order 466, still resolves — this is the one way the change turns `check` red
+      fleet-wide). Adopt --reason "deslop:<class>:<detector> superseded_by=<pid>
+      mutation=<id>". Then retract the split-parents whose children carry the work
+      (484, 153, 246, 247, 394, 396 among them). Verify: ready count drops by
+      exactly the number retracted; `check` still exits ok; no retracted parent
+      appears in `next`.
+
+      CRITERION 3 — scripts/check-deslop-due.sh (~120 lines), cloning
+      check-daily-maintenance.sh's already-litigated structure (marker, mandatory
+      --steps refusal, load-bearing exit code, forge exemption, local-vs-UTC day),
+      substituting the ORDER COUNTER for the date:
+
+        DUE when (current_order - order_at_last_sweep) >= 200
+              OR  days_since_last_sweep >= 7        # ceiling, so a quiet fleet still sweeps
+        FLOOR   never more than once per 48h        # so it cannot decay into the hourly loop
+
+      WHY THE ORDER COUNTER AND NOT DAYS, which is a correction to the operator's
+      own proposal and they asked to be argued with: they called days "probably the
+      right lamport clock", but Lamport clocks count EVENTS. `next-order` is
+      already monotone, collision-free, durable, host-skew-free and side-effect
+      free to read, and it advances with WORK — the thing that actually causes the
+      skew. A quiet week should not trigger a sweep; a 936-commit burst should. At
+      the observed ~45 packets/day, 200 orders is about 4.4 days, which lands on
+      the operator's intuition while self-scaling.
+
+      THE CADENCE RESTS ON n=1 AND MUST NOT BE DEFENDED AS DERIVED. One 5-day
+      window produced 8 findings, 5 surviving refutation. Ship 200/7d as a SEED,
+      have the stamp record findings/confirmed/net_lines every sweep, and
+      re-derive from the first four stamps. If sweeps 1-4 average <2 confirmed,
+      double the interval.
+
+      HOW IT AVOIDS BECOMING SLOP — these are not optional, each is computable
+      from the stamp record:
+        * KILL RULE: two consecutive sweeps with zero CONFIRMED findings that led
+          to a merged deletion or an armed guard => red:two-sweeps-zero-confirmed,
+          and THIS PACKET is set to obsoleted with reason "deslop:ritual:self".
+          The step is subject to its own ritual detector, no exemption.
+        * NET-NEGATIVE DIFF: a sweep's own commits, excluding litmus and
+          scripts/check-*, must have deletions > additions. Arming a guard is the
+          one addition allowed, and it is paid for out of deletions elsewhere.
+        * FILING CAP: at most 5 packets per sweep, and it must retract at least as
+          many rows as it files — so the sweep is a strict non-contributor to the
+          2.4:1 growth it is treating.
+        * REFUTATION BAND: over 4 trailing sweeps, 0% refutation =>
+          red:refutation-rate-degenerate:0 (the refuter is not refuting, which
+          makes it an unfalsifiable guard one level up); 100% => the finder is
+          producing nothing real. This audit's own 3/8 = 37.5% sits mid-band.
+
+      THE MECHANISM THAT MAKES IT FALSIFIABLE, and the whole design: a finding is
+      NOT a claim about the code, it is a PAIR of (mutation command, predicted
+      observable). CONFIRMED = mutation applied and the observable changed exactly
+      as predicted. REFUTED = it did not, or a repo citation shows the shape is
+      documented deliberate design. UNRUN = no re-runnable mutation could be
+      constructed — and UNRUN FINDINGS ARE DROPPED, NEVER FILED. That single rule
+      is what stops the step being a prose generator: if you cannot write the
+      command that proves it, you did not find it.
+
+      NAMING: do NOT reuse S1..S7 from the audit. They collide with
+      methodology/verification.yaml -> verification.s_levels, where S1/S2/S3
+      already mean something else. Two meanings for S2 in one repo is itself a
+      divergent-duplicate. Use: dead-path, divergent-duplicate, unfalsifiable-guard,
+      phantom-ref, partial-fix, ledger-residue, ritual.
+
+      OPERATOR DECISIONS OUTSTANDING: (D1) order-count vs plain days for the
+      trigger — nothing else depends on it, it is one comparison. (D4) the class
+      token names above, or a prefix of their choosing.
+
+      FULL AUDIT: 16 agents, 7 lenses, 35 raw findings, 8 adversarially verified,
+      5 confirmed. Headlines recorded in the cycle's loop-status entry.

@@ -842,10 +842,56 @@ order 707-3x9d), so a cycle drains a coherent slice instead of five unrelated su
 made small packets cost more in orientation than in work.
 
 It is minimax-ranked (largest residual first, per `convergence.yaml` →
-`minimax_convergence_strategy`), with score-weighted entropy over the top-3 so
-coverage spreads over time and two concurrent hosts do not collide on one epic.
+`minimax_convergence_strategy`), with score-weighted entropy over the top-3.
 The seed is printed; record it in the loop-status entry so the cycle can be
 replayed. Budget is 1 on forge (order 264) and 3 elsewhere.
+
+**THE SEED DOES NOT SEPARATE CONCURRENT HOSTS. Do not rely on it to.** This
+paragraph used to end "...so coverage spreads over time and two concurrent hosts
+do not collide on one epic". The second half is false and was never measured.
+Measured 2026-08-19 on macuahuitl against the live ledger: three distinct seeds
+(`macuahuitl-`, `yoga-`, `esmeraldinha-20260819`) produced a byte-identical
+batch — same `epic=socket-audit-master`, same `pick=2/3`, same score, same head
+packet. Two independent reasons, and neither is fixable by reseeding:
+
+- The default seed is `${TILLANDSIAS_HOST_KIND:-host}-<date>`
+  (select-work-batch.sh:232). `TILLANDSIAS_HOST_KIND` is set only inside the
+  forge, so every bare-metal host falls back to the literal `host` and they all
+  seed identically. Even when set it is host KIND, so three Linux boxes collide
+  with each other regardless.
+- The `urgent=<packet>` override puts one globally-urgent packet at the head of
+  the batch. Urgency is a property of the PACKET, so it is host-independent by
+  construction and preempts the epic pick on every host at once.
+
+**SEPARATION COMES FROM CLAIMING, which is the mechanism that already exists and
+is sitting at zero.** `next`/`select-work-batch` filter to `unleased`, and
+"leased" means `status: in_progress`. `expire-claims` (order 672-bz7u) reaps
+claims older than 24h so a dead host cannot strand work permanently. As of
+2026-08-19 `expire-claims` reports `in_progress=0` — nothing has been claimed at
+all, so every host is offered every packet, and on 2026-08-18 two hosts
+implemented 798-tk7b six minutes apart (order 814-iyu7, ~4h duplicated).
+
+So, before you implement anything from the batch:
+
+```bash
+tillandsias-plan set-field <order> status in_progress \
+    --host "$(hostname -s)" --reason "claimed for cycle <UTC ts>"
+git add plan/index.d && git commit -m "claim(<order>): <host>" && git push
+```
+
+Push the claim BEFORE the work, not with it — an unpushed claim separates
+nobody. Then:
+
+- **Losing the race is normal and cheap.** The ledger is a CRDT; two hosts can
+  claim in the same window. On your next fetch, if another host's claim event
+  for that order carries an EARLIER timestamp (ties broken by lexicographically
+  smaller hostname), you lost: release yours back to `ready` and take the next
+  batch item. Do not both continue — that is exactly 814-iyu7.
+- **Release on exit, always.** Completed work moves to its terminal status.
+  Work you did NOT finish goes back to `ready` in the same cycle you abandon it.
+  Leaving it `in_progress` hides it from `ready` AND from burndown until the 24h
+  reaper runs — 21 packets were stranded that way on 2026-08-09 (641-e2qa).
+  Claiming is only safe because releasing is unconditional.
 
 The `triage:` line reports `ungrouped=N` — eligible packets with no
 `release_target`. That number is the health of the epic tier itself: when it is
