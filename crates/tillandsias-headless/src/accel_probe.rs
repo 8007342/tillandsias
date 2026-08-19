@@ -747,13 +747,67 @@ fn resolve_host_id() -> (String, String) {
     ("unknown".to_string(), "unknown".to_string())
 }
 
-// @trace spec:accel-capability-probe
+fn is_binary_executable(path: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(meta) = fs::metadata(path) {
+            return meta.is_file() && (meta.permissions().mode() & 0o111 != 0);
+        }
+        false
+    }
+    #[cfg(not(unix))]
+    {
+        path.is_file()
+    }
+}
+
+fn is_binary_available(binary: &str) -> bool {
+    if let Ok(path_var) = std::env::var("PATH") {
+        for dir in std::env::split_paths(&path_var) {
+            let full = dir.join(binary);
+            if is_binary_executable(&full) {
+                return true;
+            }
+        }
+    }
+    for std_path in ["/usr/local/bin", "/usr/bin", "/bin", "/opt/homebrew/bin"] {
+        let full = Path::new(std_path).join(binary);
+        if is_binary_executable(&full) {
+            return true;
+        }
+    }
+    false
+}
+
+// @trace order:803-825k, spec:accel-capability-probe
 fn enumerate_engines() -> Vec<EngineRecord> {
-    vec![EngineRecord {
-        name: "ollama".to_string(),
-        backend: "llama-server".to_string(),
-        supported_device_classes: vec!["cpu".to_string(), "gpu".to_string()],
-    }]
+    enumerate_engines_with(is_binary_available)
+}
+
+fn enumerate_engines_with<F>(mut binary_check: F) -> Vec<EngineRecord>
+where
+    F: FnMut(&str) -> bool,
+{
+    let mut engines = Vec::new();
+
+    if binary_check("ollama") {
+        engines.push(EngineRecord {
+            name: "ollama".to_string(),
+            backend: "llama-server".to_string(),
+            supported_device_classes: vec!["cpu".to_string(), "gpu".to_string()],
+        });
+    }
+
+    if binary_check("llama-server") {
+        engines.push(EngineRecord {
+            name: "llama-server".to_string(),
+            backend: "llama.cpp".to_string(),
+            supported_device_classes: vec!["cpu".to_string(), "gpu".to_string()],
+        });
+    }
+
+    engines
 }
 
 fn num_cpus() -> u32 {
@@ -1533,5 +1587,36 @@ mod tests {
             esmeraldinha.host.kernel_release
         );
         assert_ne!(yolanda.host.host_id, esmeraldinha.host.host_id);
+    }
+
+    #[test]
+    // @trace order:803-825k, spec:accel-capability-probe
+    fn test_enumerate_engines_empty_when_no_engine_available() {
+        let engines = enumerate_engines_with(|_| false);
+        assert!(
+            engines.is_empty(),
+            "a host with no inference engine installed must not advertise any engine records"
+        );
+    }
+
+    #[test]
+    // @trace order:803-825k, spec:accel-capability-probe
+    fn test_enumerate_engines_detects_ollama_and_llama_server() {
+        let only_ollama = enumerate_engines_with(|bin| bin == "ollama");
+        assert_eq!(only_ollama.len(), 1);
+        assert_eq!(only_ollama[0].name, "ollama");
+        assert_eq!(only_ollama[0].backend, "llama-server");
+        assert_eq!(only_ollama[0].supported_device_classes, vec!["cpu", "gpu"]);
+
+        let only_llama = enumerate_engines_with(|bin| bin == "llama-server");
+        assert_eq!(only_llama.len(), 1);
+        assert_eq!(only_llama[0].name, "llama-server");
+        assert_eq!(only_llama[0].backend, "llama.cpp");
+        assert_eq!(only_llama[0].supported_device_classes, vec!["cpu", "gpu"]);
+
+        let both = enumerate_engines_with(|bin| bin == "ollama" || bin == "llama-server");
+        assert_eq!(both.len(), 2);
+        assert_eq!(both[0].name, "ollama");
+        assert_eq!(both[1].name, "llama-server");
     }
 }
