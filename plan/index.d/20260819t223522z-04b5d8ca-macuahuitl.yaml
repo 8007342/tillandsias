@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    field: next_action
+    value: 'Wave 2 remaining: (2) packet-level neglect term so the 100 no-priority rows in answer.rs:1470-1478 rank-9 can be selected. Item (3) archiver is BLOCKED — see 829-dkuc next_action. Item (1) hostname seed is DOWNGRADED: R4 proved satisfied by claiming, so the seed was never what separated hosts. Next blocking criterion is R2 — b needs 14d; today''s baseline is carry-forward 75 of 136 fragments.'
+    ts: "2026-08-19T22:35:22Z"
+    host: macuahuitl
+
+events:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    event:
+      type: note
+      ts: "2026-08-19T22:35:22Z"
+      host: macuahuitl
+      summary: >
+        cycle 1 handoff

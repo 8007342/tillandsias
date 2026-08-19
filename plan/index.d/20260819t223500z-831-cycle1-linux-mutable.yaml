@@ -1,0 +1,102 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-19T22:35:00Z.
+#
+# Sole-host cycle 1. Two events on existing rows, zero new packets — the
+# routing rule applied to the cycle that is building it.
+events:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    event:
+      type: progress
+      ts: "2026-08-19T22:35:00Z"
+      agent_id: linux-macuahuitl-opus5-20260819T222900Z
+      host: linux_mutable
+      summary: |
+        SOLE-HOST CYCLE 1. Two measurements, one of which retires a blocking
+        criterion and one of which blocks a non-blocking one.
+
+        R1 IS LIVE, FIRST TIME THIS CAMPAIGN. Claimed this packet on the real
+        ledger before starting work and pushed the claim ahead of it
+        (f9b70db7d). `expire-claims` now reports in_progress=1, having read 0
+        for the entire campaign while 410 rows sat ready.
+
+        R4 IS SATISFIED BY R1 AND IS NO LONGER BLOCKING — measured, and it
+        removes a gate from the rejoin bar. The test is free and decisive
+        because this packet is p0: if claiming filters, a claimed p0 must
+        disappear from selection. It does.
+          plan next linux        -> 0 occurrences of 831-ezea
+          select-work-batch.sh   -> 0 occurrences of 831-ezea
+        (809-w2xy, also p0, is absent for an unrelated and correct reason:
+        pickup_role operator excludes it from the linux role.) So a claimed head
+        is filtered and the next-best becomes the head. Two hosts still draw the
+        same head when neither has claimed yet, so collisions remain POSSIBLE —
+        but they are now recoverable in one yield rather than producing two
+        implementations. R4 drops from BLOCKING to desirable: it is an
+        efficiency property, not a correctness one.
+
+        A FAILED EXPERIMENT, recorded because I nearly wrote its conclusion
+        down. My first R4 test copied plan/ to a scratch dir, claimed the head
+        there, and re-ran select-work-batch.sh from inside the copy. Both reads
+        returned the same head and I was about to record "R4 is NOT satisfied by
+        claiming". It is invalid: the script sets ROOT from its own BASH_SOURCE
+        (:140), so `cd` into the scratch changes nothing and BOTH reads hit the
+        real ledger. The script has no --index and no env override. Testing the
+        harness instead of the code, for the third time this week.
+
+        WAVE 2 STATUS: item 3 (the archiver call site) is BLOCKED by a
+        correctness bug found by dry-running it — see the 829-dkuc event in this
+        fragment. Items 1 and 2 (hostname seed, packet-level neglect term) are
+        unstarted; with R4 downgraded, item 1 is now lower value than it looked,
+        since the seed was never what separated hosts.
+  - packet_id: periodic-deslopification-sweep
+    event:
+      type: note
+      ts: "2026-08-19T22:35:00Z"
+      agent_id: linux-macuahuitl-opus5-20260819T222900Z
+      host: linux_mutable
+      summary: |
+        THE ONE TRUE GARBAGE COLLECTOR IS UNSAFE TO RUN, which is very likely
+        why it has not run since 2026-07-05 and why the ledger has grown 91x.
+        Found by dry-running it rather than trusting its own --check.
+
+        WHAT IT WOULD DO, measured on a copy: archive 543 packets, cut
+        plan/index.yaml from 60,241 to 25,462 lines — a 58% reduction, the
+        single largest lever available against the queue growth the operator is
+        standing the fleet down over.
+
+        WHAT IT WOULD ALSO DO: silently remove TWO READY ROWS. Live ready = 410;
+        after archiving = 408. The missing two are 424
+        (git-mirror-credential-lifecycle) and 437 (forge-src-tmpfs-topology),
+        and in the archived copy both answer `no packet matches`. Live,
+        schedulable work would have vanished from selection with no verdict
+        naming it.
+
+        ROOT CAUSE, and it is structural rather than a slip:
+        `grep -cE 'index\.d|fragment' scripts/archive-plan-packets.rb` -> 0.
+        THE ARCHIVER NEVER READS plan/index.d AT ALL. It decides from the base
+        index alone. But status is an LWW register over base PLUS fragments, so
+        a packet closed in the base and later REOPENED by a fragment reads
+        terminal to the archiver and ready to everything else. 424 and 437 are
+        exactly that shape.
+
+        A SECOND DEFECT IN THE SAME LINE OF SIGHT:
+        archive-plan-packets.rb:53 decides closure with
+        `line.match?(/^[ \t]*status: (completed|done|obsoleted)/)` — a LINE GREP
+        over raw YAML, which cannot distinguish a packet's own status from one
+        nested inside an event. That is the 752-pst5 class this project already
+        fixed elsewhere by switching to a YAML parse, for exactly this reason.
+
+        WHY --check DID NOT CATCH IT, which is the lesson worth keeping.
+        `--check` copies plan/ and runs the archiver TWICE, then diffs the two
+        outputs. That proves IDEMPOTENCY and nothing else. An archiver that
+        deterministically archives the wrong rows is perfectly idempotent, and
+        --check prints "Check passed: script is idempotent." A self-check that
+        verifies the wrong property is worse than none, because it is quoted as
+        assurance — the freshness stamp in the script header cites --check as
+        evidence the tool is sound.
+
+        BEFORE ANY CADENCE, THE FIX: read the FOLD, not the base index. The
+        binary already exposes it — `tillandsias-plan query --status` answers
+        which packets are terminal under LWW, and Ledger::collect_archived_ids
+        (lib.rs:295) already keeps plan/archive referentially sound. The
+        acceptance test writes itself: ready count MUST be identical before and
+        after, and that assertion is what --check should have been.
