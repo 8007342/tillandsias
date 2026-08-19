@@ -278,7 +278,7 @@ struct AppRoleAutoAuthRegistration {
 /// wrong one here: a transient `podman inspect` failure would read as "the
 /// container is gone", and the drain would destroy the credential of a mirror
 /// that is still serving clones — the precise defect 828-k3mq records.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum OwningContainerState {
     /// Inspect answered and the container is up. Never destroy its material.
     Running,
@@ -318,6 +318,52 @@ fn classify_owning_container_output(
     } else {
         OwningContainerState::Unknown
     }
+}
+
+/// Split drained AppRole registrations into (destroy, keep) by owner liveness.
+///
+/// Order 828-k3mq, closure half. The keep/destroy decision used to live inline
+/// in `revoke_pending_container_tokens`'s loop, which meant the only way to
+/// exercise it was to have a live Vault and a live podman — and a rule that
+/// can only be tested against live infrastructure is a rule nothing gates.
+/// That is the same reasoning that split `classify_owning_container_output`
+/// out of `owning_container_state`, applied one level up: here it is the
+/// DRAIN's behaviour under test, not just the classifier's.
+///
+/// `probe` is injected so a fixture can drive every arm without podman.
+///
+/// A registration with NO owning container is destroyed, preserving pre-828
+/// behaviour for any caller that cannot name one — that arm is asserted too,
+/// because silently starting to keep unowned material would be a credential
+/// leak wearing this fix's clothes.
+///
+/// Returns `(to_destroy, kept)` where `kept` carries the container name and
+/// the observed state so the caller can log the right thing for each arm.
+/// `Gone` never appears in `kept`.
+#[allow(clippy::type_complexity)]
+fn partition_auto_auth_entries<P>(
+    entries: Vec<(String, AppRoleAutoAuthRegistration)>,
+    mut probe: P,
+) -> (
+    Vec<(String, AppRoleAutoAuthRegistration)>,
+    Vec<(String, String, OwningContainerState)>,
+)
+where
+    P: FnMut(&str) -> OwningContainerState,
+{
+    let mut to_destroy = Vec::new();
+    let mut kept = Vec::new();
+    for (secret_name, registration) in entries {
+        let Some(container) = registration.owning_container.clone() else {
+            to_destroy.push((secret_name, registration));
+            continue;
+        };
+        match probe(&container) {
+            OwningContainerState::Gone => to_destroy.push((secret_name, registration)),
+            state => kept.push((secret_name, container, state)),
+        }
+    }
+    (to_destroy, kept)
 }
 
 fn owning_container_state(name: &str) -> OwningContainerState {
@@ -1543,42 +1589,42 @@ pub async fn revoke_pending_container_tokens(debug: bool) {
             .status_bounded(tillandsias_podman::OperationKind::Secret.default_budget());
     }
 
-    for (secret_name, registration) in auto_auth_entries {
-        // Order 828-k3mq: REFCOUNT THE CREDENTIAL THE WAY THE CONTAINER IS
-        // ALREADY REFCOUNTED. `cleanup_shared_stack_if_no_running_forge` keeps
-        // a mirror alive whenever a sibling lane is live (and on any listing
-        // error), so a lane exiting into a live sibling deliberately LEAVES the
-        // mirror running. Destroying its SecretID here anyway left that mirror
-        // renewing a client token it could no longer replace: at max_ttl the
-        // Agent re-login failed "invalid role or secret ID", the retries
-        // tripped Vault's user-lockout, and every forge push was rejected by
-        // the relay gate while clones kept working. Measured on yolanda
-        // 2026-08-18, exactly 24h after the lane exited.
-        if let Some(container) = registration.owning_container.as_deref() {
-            match owning_container_state(container) {
-                OwningContainerState::Running => {
-                    if debug {
-                        eprintln!(
-                            "[tillandsias-vault] keeping AppRole material {secret_name} alive; \
-                             its container {container} is still running (order 828-k3mq)"
-                        );
-                    }
-                    continue;
-                }
-                OwningContainerState::Unknown => {
-                    // Loud, not debug-gated: this is the leak-not-destroy arm
-                    // and the operator should be able to see it happen.
+    // Order 828-k3mq: REFCOUNT THE CREDENTIAL THE WAY THE CONTAINER IS ALREADY
+    // REFCOUNTED. `cleanup_shared_stack_if_no_running_forge` keeps a mirror
+    // alive whenever a sibling lane is live (and on any listing error), so a
+    // lane exiting into a live sibling deliberately LEAVES the mirror running.
+    // Destroying its SecretID here anyway left that mirror renewing a client
+    // token it could no longer replace: at max_ttl the Agent re-login failed
+    // "invalid role or secret ID", the retries tripped Vault's user-lockout,
+    // and every forge push was rejected by the relay gate while clones kept
+    // working. Measured on yolanda 2026-08-18, exactly 24h after the lane
+    // exited.
+    let (auto_auth_entries, kept) =
+        partition_auto_auth_entries(auto_auth_entries, owning_container_state);
+    for (secret_name, container, state) in kept {
+        match state {
+            OwningContainerState::Running => {
+                if debug {
                     eprintln!(
-                        "[tillandsias-vault] could not determine whether {container} is running; \
-                         keeping its AppRole material {secret_name} rather than risk destroying a \
-                         live mirror's credential (leak-not-destroy, order 828-k3mq). The role's \
-                         48h SecretID TTL bounds this."
+                        "[tillandsias-vault] keeping AppRole material {secret_name} alive; \
+                         its container {container} is still running (order 828-k3mq)"
                     );
-                    continue;
                 }
-                OwningContainerState::Gone => {}
             }
+            // Loud, not debug-gated: this is the leak-not-destroy arm and the
+            // operator should be able to see it happen.
+            OwningContainerState::Unknown => eprintln!(
+                "[tillandsias-vault] could not determine whether {container} is running; \
+                 keeping its AppRole material {secret_name} rather than risk destroying a \
+                 live mirror's credential (leak-not-destroy, order 828-k3mq). The role's \
+                 48h SecretID TTL bounds this."
+            ),
+            // partition_auto_auth_entries never returns Gone as kept.
+            OwningContainerState::Gone => {}
         }
+    }
+
+    for (secret_name, registration) in auto_auth_entries {
         if let Some(client) = &client
             && let Err(e) = client
                 .destroy_approle_secret_id_accessor(
@@ -4126,6 +4172,94 @@ mod tests {
             ),
             OwningContainerState::Gone
         );
+    }
+
+    // ---- order 828-k3mq: the DRAIN's keep/destroy behaviour ----------------
+    //
+    // The three tests above pin the CLASSIFIER. These pin the drain, which is
+    // what the packet's closure actually asks for: "mint AppRole auto-auth
+    // material for a container, leave that container RUNNING, run the CLI-lane
+    // credential drain, and assert the SecretID accessor still authenticates".
+    // The accessor cannot be authenticated without a Vault, so the assertion
+    // is made one step earlier and equivalently: the drain must not select
+    // that material for destruction at all.
+
+    fn reg(container: Option<&str>) -> AppRoleAutoAuthRegistration {
+        AppRoleAutoAuthRegistration {
+            role: GIT_MIRROR_AGENT_ROLE.to_string(),
+            secret_id_accessor: "accessor-1".to_string(),
+            owning_container: container.map(str::to_string),
+        }
+    }
+
+    /// THE CLOSURE. A mirror order 443 kept running must keep its credential.
+    #[test]
+    fn drain_keeps_material_whose_container_is_still_running() {
+        let entries = vec![("secret-a".to_string(), reg(Some("tillandsias-git-demo")))];
+        let (destroy, kept) =
+            partition_auto_auth_entries(entries, |_| OwningContainerState::Running);
+        assert!(
+            destroy.is_empty(),
+            "a running mirror's SecretID must never be selected for destruction"
+        );
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].1, "tillandsias-git-demo");
+    }
+
+    /// THE CONTROL. Without it, a drain that destroys nothing would satisfy
+    /// every other test here while leaking a credential per lane exit.
+    #[test]
+    fn drain_destroys_material_whose_container_has_exited() {
+        let entries = vec![("secret-a".to_string(), reg(Some("tillandsias-git-demo")))];
+        let (destroy, kept) = partition_auto_auth_entries(entries, |_| OwningContainerState::Gone);
+        assert_eq!(destroy.len(), 1, "an exited owner's material must still go");
+        assert_eq!(destroy[0].0, "secret-a");
+        assert!(kept.is_empty());
+    }
+
+    /// Leak-not-destroy: an unreadable owner state is treated as alive.
+    #[test]
+    fn drain_keeps_material_when_owner_state_is_unreadable() {
+        let entries = vec![("secret-a".to_string(), reg(Some("tillandsias-git-demo")))];
+        let (destroy, kept) =
+            partition_auto_auth_entries(entries, |_| OwningContainerState::Unknown);
+        assert!(destroy.is_empty());
+        assert_eq!(kept[0].2, OwningContainerState::Unknown);
+    }
+
+    /// PRE-828 PARITY. Material with no named owner is still destroyed —
+    /// starting to keep it would be a credential leak wearing this fix's
+    /// clothes, and the probe must not even be consulted for it.
+    #[test]
+    fn drain_destroys_material_with_no_owning_container() {
+        let entries = vec![("secret-a".to_string(), reg(None))];
+        let mut probed = false;
+        let (destroy, kept) = partition_auto_auth_entries(entries, |_| {
+            probed = true;
+            OwningContainerState::Running
+        });
+        assert_eq!(destroy.len(), 1);
+        assert!(kept.is_empty());
+        assert!(!probed, "an unowned registration must not consult the probe");
+    }
+
+    /// A mixed drain resolves each entry independently — the realistic shape,
+    /// since one lane exit drains every registration the process accumulated.
+    #[test]
+    fn drain_resolves_a_mixed_batch_per_entry() {
+        let entries = vec![
+            ("live".to_string(), reg(Some("container-live"))),
+            ("dead".to_string(), reg(Some("container-dead"))),
+            ("unowned".to_string(), reg(None)),
+        ];
+        let (destroy, kept) = partition_auto_auth_entries(entries, |c| match c {
+            "container-live" => OwningContainerState::Running,
+            _ => OwningContainerState::Gone,
+        });
+        let destroyed: Vec<&str> = destroy.iter().map(|(n, _)| n.as_str()).collect();
+        assert_eq!(destroyed, vec!["dead", "unowned"]);
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].0, "live");
     }
 
     /// An inspect that could not ANSWER is not evidence the container is gone.
