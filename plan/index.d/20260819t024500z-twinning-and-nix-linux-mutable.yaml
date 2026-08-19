@@ -1,0 +1,158 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-19T02:45:00Z.
+#
+# Two operator decisions: keep both implementations of 798-tk7b as bound TWINS,
+# and the forge stays nix-free because it is ephemeral by design.
+events:
+  - packet_id: two-implementations-of-the-enclave-service-report
+    event:
+      type: note
+      ts: "2026-08-19T02:45:00Z"
+      agent_id: linux-macuahuitl-opus5-20260819T024500Z
+      host: linux_mutable
+      summary: |
+        OPERATOR DECISION — KEEP BOTH. Their words: "why not both? CRDT all the
+        way baby. The one proven useful in the long run will remain, the other
+        one will get cleaned up ... they might both provide meaningful insights
+        we don't want to lose."
+
+        Accepted, and the reasoning is stronger than the ruling I was going to
+        ask for. Two hosts independently reached the same diagnosis, the same
+        vocabulary family and the same stale-healthy observation without
+        conferring. That agreement IS the evidence, and deleting one
+        implementation at 20:30 on the strength of having written the other
+        destroys the sample rather than resolving it.
+
+        BUT "KEEP BOTH" AND "ACCUMULATE BOTH" ARE DIFFERENT THINGS, and the
+        difference is the whole content of this decision. Six byte-identical
+        exit_pause traps (828-h7kw) are what unbound duplicates become. Four
+        drifts in orchestrate-enclave.sh (825-uxzu, 826-gsjg) are what happens
+        when a copy diverges from the source of truth it was cloned from. The
+        operator's own proposal — a cross-reference comment, "when updating
+        here, also look at <blah>" — is necessary and NOT sufficient: this
+        project has 138 uppercase MUST/NEVER statements and ~2 working
+        enforcers, so a comment is a rule that rots.
+
+        SO THEY BECOME TWINS, which is a bound pair, on three conditions:
+
+        1. MUTUAL REFERENCE. Each implementation names the other at its head,
+           and each packet names its twin. This is the operator's cross-ref and
+           it is the cheap half.
+        2. A SHARED CONFORMANCE FIXTURE. One fixture, both implementations run
+           against it. Divergence then shows up RED instead of as a comment
+           nobody read. This is the half that makes the cross-reference
+           load-bearing, and it is what would have caught all four
+           orchestrate-enclave drifts on the day they landed. The grammar is
+           already converged (yoga's dialect, adopted here), so the fixture has
+           something concrete to assert.
+        3. A RETIREMENT CRITERION, STATED NOW, NOT LATER. "The one proven useful
+           in the long run will remain" is only true if we say in advance what
+           counts as proof. Otherwise the horizon never arrives and the twins
+           become the six exit_pause copies. Proposed criterion for THIS pair:
+           at the next de-slop sweep that finds both still present, retire the
+           one with zero recorded invocations since twinning — the product
+           surface is invoked by `tillandsias --diagnostics`, the script by
+           cycle-preflight, and both leave traces, so this is measurable rather
+           than a judgement call.
+
+        WHY THIS IS THE CRDT ANSWER AND NOT A DEPARTURE FROM IT. In a CRDT you
+        never delete; the READ resolves. Twinning gives a duplicated pair a
+        resolution function — the retirement criterion — so the read eventually
+        converges on one. A pair with no resolution function is not a CRDT, it
+        is a junk drawer. That distinction is exactly what separates "CRDT all
+        the way" from the accumulation 829-dkuc exists to sweep.
+
+        METHODOLOGY: the operator asked "should we also come up with
+        ./methodology for fixing concurrent correct fixes?" Yes — but NOT as a
+        new section here. methodology/distributed-work.yaml:885 already rules:
+        "Do not grow this section ad hoc — reduce through that packet", naming
+        collaborative-work-scheduling-research (order 335, ready). Twinning is
+        post-collision reconciliation rather than pre-collision dispatch, but it
+        is close enough that routing it through 335 is the disciplined path, and
+        obeying that rule is worth more than the paragraph I would otherwise
+        have added. Recorded against 335 below.
+  - packet_id: collaborative-work-scheduling-research
+    event:
+      type: note
+      ts: "2026-08-19T02:45:00Z"
+      agent_id: linux-macuahuitl-opus5-20260819T024500Z
+      host: linux_mutable
+      summary: |
+        INPUT FOR THIS PACKET, routed here rather than added ad hoc to
+        methodology/distributed-work.yaml, per that file's own rule at :885.
+
+        The packet's known_limits_and_next lists what it does not yet solve:
+        "triage depth, cross-host scheduling, queueing fairness, and
+        anti-starvation — agents can still contend for the same packet". Two
+        measured additions from 2026-08-18/19:
+
+        A. CONTENTION IS NOT HYPOTHETICAL AND HAS A MEASURED CAUSE. Two hosts
+           implemented 798-tk7b six minutes apart (814-iyu7). The cause is not
+           bad luck: `select-work-batch.sh` hands every host the SAME head
+           packet. Measured on macuahuitl with three distinct seeds
+           (macuahuitl-/yoga-/esmeraldinha-20260819) — byte-identical batch,
+           same epic, same pick=2/3, same score. Two independent reasons:
+           the default seed is ${TILLANDSIAS_HOST_KIND:-host}-<date> and that
+           variable is set only inside the forge, so every bare-metal host seeds
+           as the literal "host"; and the `urgent=` override heads the batch and
+           is a PACKET property, so it is host-independent by construction.
+           Reseeding cannot fix either. Separation must come from claiming, and
+           `expire-claims` reported in_progress=0 — the mechanism exists,
+           reaps at 24h, and had never been used. A claim step is now in the
+           skill (commit 7fff8d2a2); this packet should decide whether it
+           belongs in the TOOL instead, e.g. `next --claim` returning and
+           claiming atomically.
+
+        B. POST-COLLISION RECONCILIATION IS A SEPARATE PROBLEM FROM DISPATCH,
+           and this packet currently owns neither. When contention produces two
+           CORRECT implementations, the operator's ruling (814-iyu7) is to keep
+           both as bound TWINS rather than delete one: mutual reference, ONE
+           shared conformance fixture so divergence is red rather than a stale
+           comment, and a retirement criterion stated at twinning time. The
+           third is the load-bearing one — without it, twins decay into the six
+           byte-identical exit_pause copies of 828-h7kw. Whatever this packet
+           lands should carry that shape, or explicitly reject it.
+  - packet_id: forge-image-has-no-nix-despite-the-spec-requiring-it
+    event:
+      type: note
+      ts: "2026-08-19T02:45:00Z"
+      agent_id: linux-macuahuitl-opus5-20260819T024500Z
+      host: linux_mutable
+      summary: |
+        OPERATOR DECISION — THE SPEC IS WRONG, THE IMAGE IS RIGHT. This packet
+        asked whether to add nix to the forge image or correct the spec that
+        demands it. Settled: correct the spec.
+
+        Their reasoning, which is architectural rather than expedient: "the
+        forge cannot have nix because the forge is ephemeral ... the forge should
+        be quick to launch and destroy. The forge's dependency stack like the
+        inference container, the git mirror, router, proxy, etc, those are long
+        lived, and looks like a long lived nix cache dedicated container might
+        end up being necessary."
+
+        So the lifetime split is the design, and nix sits on the wrong side of
+        it. A multi-hundred-megabyte store baked into an image that is meant to
+        be destroyed and relaunched freely taxes exactly the operation the forge
+        exists to make cheap — and it taxes it on every host in a fleet that is
+        about to gain several low-end machines.
+
+        EXACTLY WHAT TO CHANGE, both in openspec/specs/default-image/spec.md:
+          :12  "MUST include OpenCode, OpenSpec CLI, Nix, and essential
+               development tools" -> drop Nix from the required set.
+          :22-24  "#### Scenario: Image contains Nix / WHEN the container starts
+               / THEN `nix` SHALL be available for reproducible builds with
+               flakes enabled" -> remove the scenario, or restate it against the
+               CACHE SERVICE rather than the forge image.
+
+        The replacement statement belongs with the long-lived tier, and 801-kqme
+        (completed) already built it: harmonia 3.2.0 serving a read-only mount
+        of the host store over the enclave, TLS from the stack CA plus an ed25519
+        content-signing key. This decision makes that service load-bearing rather
+        than an optimisation, which is worth saying out loud in the spec: a forge
+        that needs a nix artifact FETCHES it from the cache, and the forge image
+        carries no store of its own.
+
+        WHOEVER TAKES THIS should check whether the edit needs an
+        openspec/changes/ proposal rather than a direct spec edit — six changes
+        in that directory are already 20-97 days stale, so the workflow's
+        actual discipline is worth confirming before adding a seventh.
