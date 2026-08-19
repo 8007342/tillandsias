@@ -1,0 +1,95 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by windows (yolanda), 2026-08-19T12:45:00Z, meta-orchestration cycle 12.
+#
+# THE OVERNIGHT QUEUE CLOSES. Its own verifiable_closure asked for exactly this:
+# "this packet's own event log names which entries closed and which were left,
+# so the morning reader can resume without re-deriving the queue."
+events:
+  - packet_id: windows-overnight-queue-2026-08-18
+    event:
+      type: completed
+      ts: "2026-08-19T12:45:00Z"
+      agent_id: windows-yolanda-opus5-20260818t2350z
+      host: windows
+      summary: |
+        TWELVE CYCLES, 2026-08-18T17:30 PDT -> 2026-08-19T05:45 PDT. Eleven
+        MO-FULL attestations, every one with LOCAL_SHA == REMOTE_SHA. 41 commits
+        on windows-next. Zero cycles ended blocked.
+
+        THE QUEUE, ENTRY BY ENTRY:
+
+        1. 828-k3mq (p0) .................... COMPLETED (cycles 1, 2, 9)
+           The credential drain refcounts its container; the probe splits
+           `agent-unauthenticated` from `no-credential`; the drain's decision is
+           now gateable without live infrastructure. Residual promoted to
+           833-w8rc rather than buried.
+        2. 828-k3mq slice B ................. folded into the above.
+        3. 805-yzhw (p1) .................... COMPLETED (cycle 3)
+           The operator's "OpenCode blank screen and hangs". The harness lock
+           gated only its own release while the install ran unconditionally;
+           two 127MB vendor extractions into a 256MB tmpfs. Fixed, with the
+           leaked-tree sweep and the ENOSPC-vs-permission guard.
+        4. 823-u5zf (p1) .................... FUNCTIONAL HALF LANDED (cycles 4, 5)
+           Cycle 4 found the packet's deliverable named the WRONG MECHANISM
+           (PtyOpen/CAP_EXEC_ARGV_VECTOR; the Windows lane spawns wsl.exe and
+           never touches the control wire) and corrected it with measurement.
+           Cycle 5 landed the verbatim argv, so project lanes now reach Windows
+           Terminal. Left `ready`: the closure also wants the predicates deleted
+           and an OBSERVED lane launch.
+        5. 827-h4tz (p1) .................... COMPLETED (cycle 6)
+           Its central premise was falsified: the cargo fallback already existed
+           and works here. The staleness was an unexecuted step. Tray suite went
+           93/1 -> 94/0 and the windows-sources stamp is taken.
+        6. LEDGER COMPACTION ................ DONE (cycle 7)
+           167 fragments folded, verified packet-for-packet before commit. Gate
+           time fell ~281s -> ~120-160s. Fired from a `--help` probe, which is
+           filed as 831-v9kt.
+        7. OVERFLOW ......................... PARTIALLY DRAINED
+           643-64bx triaged as methodology-gated (cycle 8) rather than taken.
+           628-c7qd / 628-r2vk NOT started — see below.
+
+        FILED ALONG THE WAY, none of it sought:
+          830-t4qp  six git-mirror litmus red-by-default on windows (+1 later)
+          831-v9kt  `compact` executes on --help and ignores every flag
+          832-q4mn  the order-uniqueness gate read the base, not the fold
+                    — COMPLETED cycle 10, with a 5-case fixture
+          833-w8rc  the 48h credential arithmetic 828-k3mq did not remove
+                    — delivery channel identified cycle 11
+
+        WHAT THE OPERATOR STILL OWNS, and none of it can be taken unattended:
+          - an attended lane click: Windows Terminal + paste (closes 805-ek9e
+            and 823-u5zf's observation half)
+          - the ~5min rotation experiment that turns 833-w8rc from inference
+            into measurement
+          - delete `argv_survives_wt_reparse`/`wt_safe_title`, or keep them and
+            make a violation loud
+          - whether 643-64bx becomes pickup_role: operator
+
+        628-r2vk NOT STARTED, and the reason is worth recording because the
+        packet calls itself "the cheapest packet on the list". It is not cheap
+        from here. Its criterion 1 wants a FALSIFIABLE, MACHINE-DECIDED link
+        between a tray source's user-visible surfaces and a matrix row —
+        but openspec/tray-parity-matrix.yaml has 14 rows keyed by free-text
+        `capability:` prose with no stable id to match against, so the check
+        cannot exist until a linking convention does, across three tray crates.
+        Its criterion 2 (add row classes for notifications, status chips,
+        tooltips) needs the REAL parity state on macOS and Linux, which this
+        host cannot observe. Inventing either at 05:30 unattended is how a
+        railguard ends up encoding one host's guess as fleet policy.
+
+        THE RECURRING SHAPE OF THIS NIGHT, offered because four packets share
+        it: a signal that is produced, documented, and unreachable.
+          - the relay knew `lookup-self` from a dead Agent token; the published
+            verdict did not (828-k3mq)
+          - `VAULT_ROLE` is set "so vault-cli knows which login to perform when
+            the secret-id is rotated"; vault-cli has no login path (833-w8rc)
+          - the harness lock recorded a race it did not prevent (805-yzhw)
+          - the order-uniqueness gate validated a document new packets are
+            never written to (832-q4mn)
+        Each was invisible because something adjacent was green.
+      evidence:
+        - "11 MO-FULL attestations in plan/mo-full-attestations.d/yolanda.md, each LOCAL_SHA == REMOTE_SHA"
+        - "41 commits 496ade239..HEAD on windows-next"
+        - "completed this session: 828-k3mq, 805-yzhw, 827-h4tz, 832-q4mn"
+        - "filed this session: 830-t4qp, 831-v9kt, 832-q4mn, 833-w8rc"
+        - "823-u5zf functional half landed; 805-ek9e cause removed, both awaiting an attended observation"
