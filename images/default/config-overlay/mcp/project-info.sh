@@ -22,6 +22,9 @@ for _mcp_log_cand in \
     if [ -r "$_mcp_log_cand" ]; then . "$_mcp_log_cand" 2>/dev/null && break; fi
 done
 command -v mcp_log_usage >/dev/null 2>&1 || mcp_log_usage() { return 0; }
+# 841-ruh9: the same guarantee for the clock. A missing mcp_now_ms under
+# `set -e` would abort the very call the telemetry exists to observe.
+command -v mcp_now_ms >/dev/null 2>&1 || mcp_now_ms() { printf ''; }
 
 # Dev-vs-runtime environment hook: on the bare-metal DEVELOPMENT host this
 # defaults the inference endpoints to loopback and fires the idempotent
@@ -700,7 +703,7 @@ while IFS= read -r line; do
             args=$(echo "$line" | jq -c '.params.arguments // {}')
             error_code=""
             error_msg=""
-            _mcp_t0=$(date +%s%3N 2>/dev/null || echo "")
+            _mcp_t0=$(mcp_now_ms)
             case "$tool" in
                 "project_structure")
                     depth=$(echo "$args" | jq -r '.depth // 3')
@@ -1183,7 +1186,7 @@ ${preview}"
             # with THIS server's name. Best-effort; never fails the call.
             _mcp_lat=""
             if [ -n "$_mcp_t0" ]; then
-                _mcp_t1=$(date +%s%3N 2>/dev/null || echo "")
+                _mcp_t1=$(mcp_now_ms)
                 [ -n "$_mcp_t1" ] && _mcp_lat=$((_mcp_t1 - _mcp_t0))
             fi
             if [ -n "$error_code" ]; then

@@ -1,0 +1,132 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macos (osx-next), 2026-08-20T08:15:00Z.
+#
+# 841-ruh9: project-info died on its FIRST tool call on every macOS host,
+# for three cycles, on a GNU-only date format. Found by the daily gate's
+# "verify the dev-environment experts are up" step, fixed and falsified.
+packets:
+  - packet_id: mcp-servers-die-on-first-tool-call-from-gnu-only-date-format
+    order: 841-ruh9
+    status: done
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    title: "project-info and git-tools read the clock with `date +%s%3N`, a GNU-only format that BSD/macOS passes through LITERALLY with exit 0 — the resulting non-numeric string hits `$((t1 - t0))` and, under `set -euo pipefail`, kills the server mid-tool-call"
+    deliverable: "a portable millisecond clock in the shared telemetry file; both servers answer tools/call on macOS"
+    pickup_role: any
+    release_target: forge-local-experts-milestone
+    capability_tags: [host-shell, mcp, macos, portability, fail-loud]
+    estimated_hours: 2
+    context: |
+      FOUND 2026-08-20 by the Start-Of-Day gate's `dev_environment_experts`
+      step — "verify the expert containers are up + fresh". This is the first
+      cycle that step was actually run to conclusion rather than reported.
+
+      THE SYMPTOM had been in three consecutive handoffs as
+      `mcp: health=down:project-info`, with `mcp_outage: records=19`. I had
+      been reporting it as a standing outage and reading through the CLI
+      binary instead. It was a real outage, and nobody had opened the server.
+
+      THE MECHANISM, in the order it has to be understood:
+
+        1. `scripts/check-mcp-expert-health.sh` does TWO stages — a handshake,
+           then one real `tools/call`. project-info PASSED stage 1 and failed
+           stage 2. So "is it up?" and "does it work?" had different answers,
+           which is exactly the distinction that probe was built for (its own
+           header says a server that is up but unusable is `down`).
+        2. Driving the launcher by hand printed the actual error, which no
+           probe verdict could have carried:
+
+             project-info.sh: line 1187: 17872164023N: value too great for
+             base (error token is "17872164023N")
+
+        3. `%3N` is a GNU extension. BSD `date` does NOT fail on it — it exits
+           0 and emits the token literally. So the guard at every call site,
+
+             _mcp_t1=$(date +%s%3N 2>/dev/null || echo "")
+
+           can never fire: there is no error to catch. `17872164023N` then
+           reaches `$((_mcp_t1 - _mcp_t0))`, bash raises an arithmetic error,
+           and `set -euo pipefail` takes the whole server down — mid-call,
+           after `initialize` had already succeeded.
+
+      WHY forge-plan SURVIVED, which is the detail that makes this diagnosable
+      rather than mysterious: it reads the clock with a plain `date +%s`
+      (forge-plan.sh:374). Same fleet, same host, same shell — one server used
+      the portable form and one did not. The asymmetry in the health verdict
+      was a faithful report of an asymmetry in the source.
+
+      FOUR SITES, TWO FILES: project-info.sh:703,1186 and git-tools.sh:111,157.
+      git-tools is registered in some lanes and not in this checkout's
+      .mcp.json, so it was carrying the same latent break unobserved.
+
+      THE FIX IS PLACEMENT, NOT SUBSTITUTION. mcp-usage-log.sh — sourced by
+      every server already — gains `mcp_now_ms`, digit-validated, degrading to
+      whole seconds and finally to empty. Rewriting the four call sites in
+      place would have worked and would have left the fifth to be written
+      wrong. Same digit-validation shape as build.sh's `_now_ms`, deliberately,
+      so the tree has one idiom for this rather than two.
+
+      NOTE WHAT THE FILE ALREADY PROMISED. mcp-usage-log.sh's own header says:
+      "Telemetry must never block or fail a tool call... A metric that can
+      break what it measures is worse than none." That guarantee was real but
+      scoped to `mcp_log_usage`'s body — the whole append is wrapped
+      `|| true`. The CLOCK READ sat outside it, at the call sites, so the
+      telemetry took down the surface it was measuring in precisely the way the
+      header forbids. A correct invariant, stated in the right file, enforced
+      over the wrong span.
+
+      766-CLASS DIALECT SKEW, third recorded instance. build.sh hit `%3N`
+      on macOS 2026-08-16 and fixed it with digit validation, documenting it at
+      length. That fix did not generalise because nothing scans for the idiom.
+      A grep-level guard for `%N` in tracked shell would have caught all four
+      of these — worth considering, though note 634-39ik's caution: it must
+      assert the property with a negative control, not pin a source expression.
+
+status:
+  - packet_id: mcp-servers-die-on-first-tool-call-from-gnu-only-date-format
+    field: status
+    value: done
+    ts: "2026-08-20T08:15:00Z"
+    host: macos
+
+events:
+  - packet_id: mcp-servers-die-on-first-tool-call-from-gnu-only-date-format
+    event:
+      type: falsified
+      ts: "2026-08-20T08:15:00Z"
+      agent_id: macos-tlatoanis-macbook-air-opus5-20260820t074724z
+      host: macos
+      summary: |
+        FIXED AND FALSIFIED, in that order.
+
+        Before: `scripts/check-mcp-expert-health.sh` -> down:project-info
+        (exit 1), three cycles running. A hand-driven tools/call died with
+        "17872164023N: value too great for base" at project-info.sh:1187.
+
+        After: ok:experts-healthy (exit 0), and project_type answers
+        `git,nix,rust,rust-workspace`. git-tools' git_status likewise answers.
+
+        FALSIFICATION, because a fix whose failure mode is "server exits" is
+        exactly the kind that looks fine once nothing calls it: reverting
+        mcp_now_ms to emit the raw `date +%s%3N` output put the probe straight
+        back to `down:project-info` (exit 1). Restored -> ok:experts-healthy.
+        So the helper is load-bearing, and the probe genuinely discriminates.
+
+        PROCESS NOTE WORTH KEEPING. My first attempt to rewrite the four call
+        sites used `perl -0pi -e` with `$(mcp_now_ms)` in the replacement.
+        Perl expanded `$(` as its GID variable and wrote
+        `_mcp_t0=20 20 12 61 79 ...` into the file, producing a syntax error at
+        a DIFFERENT line than the bug I was fixing. Caught immediately because
+        the next verification run failed for the wrong reason; both files were
+        restored from HEAD (cycle-owned edits, tree verified clean at cycle
+        start) and redone with exact-match edits. A rewrite tool whose
+        replacement syntax collides with the target language's syntax is a
+        hazard on its own.
+      evidence_refs:
+        - "before: check-mcp-expert-health.sh -> down:project-info (exit 1), 3 consecutive cycles, mcp_outage records=19"
+        - "root cause: project-info.sh:1187 `17872164023N: value too great for base` under set -euo pipefail"
+        - "asymmetry explained: forge-plan.sh:374 uses portable `date +%s` and stayed healthy"
+        - "after: ok:experts-healthy (exit 0); project_type -> git,nix,rust,rust-workspace; git_status answers"
+        - "falsified: helper reverted to raw %s%3N -> down:project-info (exit 1); restored -> ok:experts-healthy"
+        - "4 sites fixed: project-info.sh:703,1186 + git-tools.sh:111,157; helper added to shared mcp-usage-log.sh"
