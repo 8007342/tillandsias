@@ -816,10 +816,37 @@ mod tests {
     fn sample_disk_io_returns_empty_on_first_call() {
         // The very first call has no baseline to diff against, mirroring
         // sysinfo's CPU semantics.
-        let mut s = MetricsSampler::new();
+        //
+        // Order 833-8u5g: driven from a FIXTURE, not from the host's real
+        // /proc/diskstats. Under `MetricsSampler::new()` this test asserted two
+        // things that disagree off Linux: `sample_disk_io` returns early with an
+        // empty vec when the diskstats path cannot be read, BEFORE recording a
+        // baseline. So on macOS the emptiness assertion passed for entirely the
+        // wrong reason — no /proc at all, rather than "no baseline yet" — and
+        // the `previous_diskstats.is_some()` line then failed outright.
+        //
+        // Worse than the failure: with only the first assertion this test would
+        // have PASSED off Linux while having degenerated into a duplicate of
+        // sample_disk_io_missing_file_returns_empty below, which covers the
+        // unreadable-path case deliberately. Two tests, one property, and the
+        // interesting one silently uncovered.
+        //
+        // A fixture keeps the baseline property under test on EVERY target,
+        // which is strictly better than skipping it on all but one.
+        let dir = tempfile::tempdir().unwrap();
+        let stats_path = dir.path().join("diskstats");
+        std::fs::write(&stats_path, " 8       0 sda 0 0 0 0 0 0 0 0 0 0 0\n").unwrap();
+        let mut s = MetricsSampler::with_proc_paths(
+            stats_path.to_string_lossy().to_string(),
+            dir.path().join("pressure").to_string_lossy().to_string(),
+        );
+
         let v = s.sample_disk_io();
         assert!(v.is_empty(), "first sample should be empty, got {v:?}");
-        assert!(s.previous_diskstats.is_some());
+        assert!(
+            s.previous_diskstats.is_some(),
+            "the first call must still record a baseline, or no later call can ever diff"
+        );
     }
 
     #[test]

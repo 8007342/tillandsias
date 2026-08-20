@@ -1223,9 +1223,30 @@ while [ $i -lt 2000 ]; do echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; i=$((
             .collect()
     }
 
+    /// Serializes the env-mutating tests below.
+    ///
+    /// Order 833-u85z: this RECOVERS from poisoning instead of unwrapping.
+    /// A `.lock().unwrap()` here meant that any one test panicking while
+    /// holding the guard poisoned the mutex for every test that ran after it,
+    /// converting one failure into N — measured 2026-08-19 as 1 real defect
+    /// (833-8u5g) reported as 6 failures, five of which passed in isolation.
+    ///
+    /// Recovery is sound BECAUSE the guarded data is `()`. Poisoning exists to
+    /// stop a reader from observing state a panicking writer left half-updated;
+    /// with no state there is no such invariant to protect. The lock's only job
+    /// is mutual exclusion over the process-wide environment, and a panicking
+    /// test does not make the *next* test's exclusive access unsafe.
+    ///
+    /// What this deliberately does NOT do is hide the failure: the test that
+    /// actually panicked still fails and still reports. It only stops that
+    /// panic from being restated as five more, which is noise that buries the
+    /// one line worth reading.
     fn env_lock() -> std::sync::MutexGuard<'static, ()> {
         static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
+        ENV_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     #[test]
@@ -1349,8 +1370,56 @@ while [ $i -lt 2000 ]; do echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; i=$((
         }
     }
 
+    /// Negative control for 833-u85z: prove the poison recovery in `env_lock`
+    /// is load-bearing rather than decorative.
+    ///
+    /// Without it this test's second acquisition returns `Err(PoisonError)` and
+    /// the `.unwrap()` that used to be there turns THIS panic into a failure in
+    /// every env-mutating test that runs afterwards. That is not hypothetical —
+    /// it is exactly the 1-real-failure-reported-as-6 cascade measured on
+    /// 2026-08-19, reproduced here deliberately and in one place.
+    ///
+    /// The poisoning is caused in a child thread on purpose: a panic on the
+    /// test thread would fail this test rather than the next one.
+    #[test]
+    fn env_lock_recovers_from_a_poisoned_guard() {
+        let poisoner = std::thread::spawn(|| {
+            let _guard = env_lock();
+            panic!(
+                "833-u85z: deliberate poison, expected — see env_lock_recovers_from_a_poisoned_guard"
+            );
+        });
+        assert!(
+            poisoner.join().is_err(),
+            "the poisoning thread must actually have panicked, or this control asserts nothing"
+        );
+
+        // The assertion IS that this line is reached: under `.lock().unwrap()`
+        // it panics with PoisonError.
+        let _recovered = env_lock();
+    }
+
     #[test]
     fn desktop_user_session_preflight_requires_writable_runtime_dir() {
+        // Order 833-8u5g. `require_desktop_user_session` carries its ENTIRE
+        // body under #[cfg(target_os = "linux")], so on every other target it
+        // is `Ok(())` unconditionally. That makes this test's two assertions
+        // disagree about the same fact: the is_ok() below passes VACUOUSLY and
+        // the is_err() cannot pass at all.
+        //
+        // SKIPPED LOUDLY rather than #[cfg]-gated, matching 831-wmn4: the test
+        // keeps compiling on every target, so it cannot rot unnoticed the way a
+        // cfg-gated one does. XDG_RUNTIME_DIR is a Linux desktop-session
+        // concept; Linux runs the assertions.
+        if !cfg!(target_os = "linux") {
+            eprintln!(
+                "SKIP desktop_user_session_preflight_requires_writable_runtime_dir: \
+                 require_desktop_user_session is #[cfg(target_os = \"linux\")] and returns \
+                 Ok(()) unconditionally here, so the is_ok() half would assert nothing."
+            );
+            return;
+        }
+
         let _guard = env_lock();
         unsafe {
             std::env::remove_var("TILLANDSIAS_PODMAN_REMOTE_URL");
