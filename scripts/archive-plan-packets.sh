@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
-# freshness: auditor=windows-fable5-mo-cycle7-20260816T2320Z date=2026-08-16 verdict=refreshed scope=standing FRESHNESS audit (top unstamped) — still meaningful (ledger archival, coordinator-run; last real archive at packet 134), sound (quoted "$1" makes the no-arg path safe under set -e; --check proves idempotency by double-run diff; the sed rewrite targets plan_tmp so a check never touches the live ledger), and current with today's 777-amku toolbox-first include (_ruby prefers host ruby, falls back to toolbox — correct: this is a linux-coordinator tool, never a forge/windows entry point, so the toolbox fallback is reachable exactly where it runs). No behavior change warranted.
+# freshness: auditor=linux-macuahuitl-opus5-20260820T0032Z date=2026-08-20 verdict=updated scope=831-ezea — the 2026-08-16 audit called this script SOUND and cited "--check proves idempotency by double-run diff" as the evidence. That reasoning was the defect, not the proof: idempotency is the wrong property. An archiver that deterministically archives rows it must not touch is perfectly idempotent, and this one was — it carried two READY rows (424, 437) into the archive while --check printed green, and it ORPHANED 38 live fragment events on its first real run. --check now asserts what actually matters: the ready set is byte-identical across a run, and the sweep creates no new orphaned events. Both are mutation-controlled. First real archive since 2026-07-05: 550 packets, index 60,241 -> 26,344 lines.
+#
+# THE AUDIT LESSON, kept because it is not about this script: a freshness audit
+# that re-reads a tool's self-check and repeats its verdict inherits whatever
+# that check was wrong about. "Sound" here meant "its --check passes", and the
+# --check was measuring the wrong invariant. Ask what property the check
+# ESTABLISHES before treating its green as evidence of anything.
 set -e
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
