@@ -59,6 +59,29 @@
 #       exactly the assumption this packet exists to remove. The cost is one
 #       `./build.sh --check` per host, once.
 #
+# TWO ADDITIONAL FIELDS FOR MEMOIZATION (order 765-tkq2)
+#
+#   toolchain <64-hex>   digest of `rustc -V` + `cargo clippy -V`
+#   stamped   <iso8601>  when the recorded gate passed
+#
+# These are ADDITIVE and deliberately do NOT change what `verify` accepts. The
+# distinction matters and is easy to get backwards:
+#
+#   `verify` answers "did the gate validate these BYTES", which is what
+#   pre-push needs — trunk correctness is a property of the code, and every
+#   other host compiles it with its own toolchain anyway. Requiring a
+#   toolchain match there would force a second fleet-wide re-stamp for no
+#   gain in trunk protection.
+#
+#   `memo-check` answers "would re-running the gate RIGHT HERE produce the
+#   same verdict", which is a strictly stronger question: a clippy bump with
+#   identical bytes yields new lints, so skipping the local re-run would hide
+#   them. Hence memoization requires the toolchain to match and treats a
+#   stamp without the field as stale.
+#
+# So a stamp written before this change keeps working for pre-push and simply
+# never memoizes — fail-closed, no migration.
+#
 # SUBCOMMANDS
 #   compute   print the stamp for the current tree
 #   write     record the current stamp (call after the gate PASSES)
@@ -66,6 +89,11 @@
 #   verify    ok:gate-fresh | stale:<reason>   (exit 0 / non-zero)
 #   scope     print the recorded scope (`full` or a class list) | stale:<reason>
 #   classify  read paths on stdin, print the sorted unique class set
+#   memo-check <dispatch>
+#             ok:gate-fresh <iso8601> | stale:<reason>   (exit 0 / non-zero)
+#             Every condition below must hold, or the answer is stale:
+#               v2 stamp, digest matches, scope is full, toolchain matches,
+#               recorded dispatch equals <dispatch>, stamped timestamp present.
 
 set -uo pipefail
 
@@ -89,6 +117,25 @@ gate_stamp_classify_path() {
 }
 
 GATE_STAMP_KNOWN_CLASSES="plan-ledger rust images specs methodology build-scripts ci docs other"
+
+# Digest of the toolchain whose verdict the stamp records (order 765-tkq2).
+# Only the two compilers whose OUTPUT the gate consumes: rustc decides whether
+# the tree builds, clippy decides whether it is clean. `cargo -V` is
+# deliberately absent — a cargo bump with an identical rustc/clippy cannot
+# change a lint verdict, and every input added here costs a re-run.
+#
+# A probe that cannot run yields the literal "unknown", which never equals a
+# recorded digest, so a host without a toolchain simply never memoizes. That
+# is the correct direction: the failure mode of guessing here is skipping a
+# gate that would have failed.
+gate_stamp_toolchain_digest() {
+    local rustc_v clippy_v
+    rustc_v="$(rustc -V 2>/dev/null)" || rustc_v="unknown"
+    clippy_v="$(cargo clippy -V 2>/dev/null)" || clippy_v="unknown"
+    [[ -n "$rustc_v" ]] || rustc_v="unknown"
+    [[ -n "$clippy_v" ]] || clippy_v="unknown"
+    printf 'rustc:%s\nclippy:%s\n' "$rustc_v" "$clippy_v" | sha256sum | cut -d' ' -f1
+}
 
 gate_stamp_class_is_known() {
     local c
@@ -275,6 +322,8 @@ case "${1:-verify}" in
             printf 'digest %s\n' "$digest"
             printf 'scope %s\n' "$scope_spec"
             printf 'dispatch %s\n' "$dispatch"
+            printf 'toolchain %s\n' "$(gate_stamp_toolchain_digest)"
+            printf 'stamped %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
         } > "$STAMP_FILE" || {
             echo "stale:cannot-write-stamp"
             exit 1
@@ -336,6 +385,76 @@ case "${1:-verify}" in
         fi
         printf '%s\n' "$recorded_scope"
         ;;
+    memo-check)
+        # "Would re-running the gate right here produce the same verdict?"
+        #
+        # Every arm below is fail-CLOSED: the only path to exit 0 is one where
+        # each condition was affirmatively checked. The reasons are distinct
+        # strings on purpose — a memo that refuses should say which assumption
+        # broke, or the next reader learns nothing from it.
+        expected_dispatch="${2:-}"
+        if [[ -z "$expected_dispatch" ]]; then
+            echo "stale:memo-check-needs-a-dispatch"
+            exit 2
+        fi
+        if [[ ! -f "$STAMP_FILE" ]]; then
+            echo "stale:never-run"
+            exit 1
+        fi
+        if ! stamp_is_v2; then
+            echo "stale:legacy-stamp-format"
+            exit 1
+        fi
+        recorded_scope="$(stamp_field scope 2>/dev/null)"
+        # Only a whole-tree gate may be memoized. A scoped stamp vouches for a
+        # subset of the tree, and this memo skips the WHOLE gate — trusting a
+        # subset stamp for that is precisely the silent-green the scope field
+        # was added to prevent. When scoped gates land (765-xpct), the memo
+        # they need is per-class and belongs with them, not here.
+        if [[ "$recorded_scope" != "full" ]]; then
+            echo "stale:scoped-stamp-cannot-memoize-full-gate"
+            exit 1
+        fi
+        recorded_dispatch="$(stamp_field dispatch 2>/dev/null)"
+        # Deliberately an EQUALITY test, not a superset test. `--ci-full` is
+        # documented as the stronger gate and would in fact cover a `--check`,
+        # but "stronger" is a claim nobody has encoded — the dispatch field is
+        # provenance, not an ordering. Inventing an ordering here would be the
+        # same unverified inference the v1-stamp refusal exists to reject. The
+        # cost is one honest re-run after a ci-full; the alternative is a memo
+        # whose soundness rests on a comment.
+        if [[ "$recorded_dispatch" != "$expected_dispatch" ]]; then
+            echo "stale:dispatch-mismatch:${recorded_dispatch:-none}"
+            exit 1
+        fi
+        recorded_toolchain="$(stamp_field toolchain 2>/dev/null)"
+        if [[ -z "$recorded_toolchain" ]]; then
+            # Written before 765-tkq2. Absent is not "assume unchanged".
+            echo "stale:no-toolchain-recorded"
+            exit 1
+        fi
+        if [[ "$recorded_toolchain" != "$(gate_stamp_toolchain_digest)" ]]; then
+            echo "stale:toolchain-changed"
+            exit 1
+        fi
+        recorded_stamped="$(stamp_field stamped 2>/dev/null)"
+        if [[ -z "$recorded_stamped" ]]; then
+            echo "stale:no-timestamp-recorded"
+            exit 1
+        fi
+        recorded="$(stamp_field digest 2>/dev/null)"
+        if [[ -z "$recorded" ]]; then
+            echo "stale:empty-stamp"
+            exit 1
+        fi
+        # Content digest LAST: it is the expensive check (~60ms over ~4200
+        # files) and every cheap disqualifier above has already run.
+        if [[ "$recorded" != "$(compute)" ]]; then
+            echo "stale:tree-changed-since-gate"
+            exit 1
+        fi
+        echo "ok:gate-fresh $recorded_stamped"
+        ;;
     classify)
         # Paths on stdin (one per line) -> the sorted unique class set, one per
         # line. One spawn for a whole diff; the hook must not fork per path.
@@ -345,7 +464,7 @@ case "${1:-verify}" in
         done | LC_ALL=C sort -u
         ;;
     *)
-        echo "usage: gate-stamp.sh [compute|write [--scope S] [--dispatch D]|verify|scope|classify]" >&2
+        echo "usage: gate-stamp.sh [compute|write [--scope S] [--dispatch D]|verify|scope|classify|memo-check <dispatch>]" >&2
         exit 2
         ;;
 esac
