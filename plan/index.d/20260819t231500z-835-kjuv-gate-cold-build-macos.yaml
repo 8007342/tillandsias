@@ -1,0 +1,80 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macos (osx-next), 2026-08-19T23:15:00Z.
+#
+# 835-kjuv: 98% of the pre-push gate's wall clock is a cold DEBUG build of a
+# binary the cycle already built in release, to run a check that takes 0.1s.
+packets:
+  - packet_id: pre-push-gate-cold-debug-build-dominates-its-own-wall-clock
+    order: 835-kjuv
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: optimization
+    title: "the pre-push gate spends 1050s of its 1072s in `cargo run -p tillandsias-plan -- check` — a cold DEBUG build of a binary cycle-preflight already built in release, to run a check that costs 0.108s prebuilt"
+    deliverable: "the gate resolves the plan binary through the shared probe (721-nyev) instead of cargo run, or the debug artifact is warmed once rather than per-gate"
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [host-shell, ci-gates, optimization]
+    estimated_hours: 2
+    context: |
+      MEASURED 2026-08-19 on macOS, one real pre-push gate:
+
+        Gate phases totalled                             1072s
+          of which "Checking plan ledger integrity"      1050s   (98%)
+
+      Then, on the same tree, three ways of running the same check:
+
+        cargo run -q -p tillandsias-plan -- check  (cold)      ~1050s
+        cargo run -q -p tillandsias-plan -- check  (warm)        1.365s
+        ./target/release/tillandsias-plan check                  0.108s
+
+      So the gate's dominant cost is not the check. It is building a DEBUG
+      binary of tillandsias-plan and its dependency graph, in order to run
+      something the release binary — already present, already used by every
+      expert call this cycle made — does in a tenth of a second.
+
+      I FILED THIS AFTER GETTING IT WRONG ONCE, and the wrong version is worth
+      recording because it is the more tempting reading. Seeing 1050s against a
+      step whose command I knew took 0.117s, I concluded the phase timer was
+      misattributing — that 785-ibu9's span-vs-work gap had reappeared and the
+      label was naming the wrong span. It had not. build.sh:1409 really does
+      run `cargo run`, the cost really is inside that `_run`, and the reporter
+      correctly printed no "(+Ns unattributed)" suffix because span and work
+      agree. The instrument was honest; my model of what the step executed was
+      stale. Checking the line before filing turned a false bug report about
+      the timer into a true one about the gate.
+
+      WHY IT GOES COLD, which decides the fix: nothing else in the gate builds
+      debug artifacts. `--check` runs `cargo fmt` and `cargo clippy
+      --workspace --all-targets`, and clippy drives its own compiler with its
+      own fingerprints, so it does not populate the debug binary this step
+      needs. Daily maintenance (`build_cache_hygiene`) then cleans the cache
+      when it is bloated or stale. The first gate after any such GC therefore
+      pays a full cold debug build, and this host had run its daily gate today.
+
+      THE RULE THIS SITS BESIDE, and the reason this is a defect rather than a
+      tuning opportunity: order 721-nyev says every script that RUNS
+      tillandsias-plan must resolve it through the shared probe rather than a
+      hardcoded target/ path — and the gate enforces that rule three steps
+      later, in its own "plan-binary resolution goes through the shared probe"
+      check. build.sh's own ledger step satisfies neither branch: it is not the
+      probe, and it is not a prebuilt path. It is a third thing the rule did
+      not anticipate, which is why the checker for 721-nyev does not flag it.
+      Whatever fix lands should also decide whether `cargo run` belongs in that
+      checker's grammar. The second `_run cargo run` in the file
+      (tillandsias-policy plan-orders) has the same shape and should be
+      considered with it.
+
+      NOT PROPOSING A BLIND SWAP. cycle-preflight.sh already rebuilds
+      tillandsias-plan in release at Start Of Cycle, so the artifact usually
+      exists — but the gate must not silently accept a STALE binary just
+      because it is fast, which is the failure mode `cargo run` was presumably
+      chosen to avoid. The honest fix is the probe plus a freshness assertion,
+      not a hardcoded ./target/release path. A gate that validates the ledger
+      with last week's checker is worse than a slow one.
+
+      VERIFIABLE CLOSURE: the gate's own phase report. After the fix, a warm
+      gate's "Checking plan ledger integrity" phase must be under a second, and
+      a gate run immediately after `cargo clean` must not regress to a cold
+      debug build — the second half is the real test, since the first passes
+      trivially on a warm cache.
