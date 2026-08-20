@@ -18,6 +18,10 @@
 
 version: 1
 name: expert-groundtruth-plan-next
+# Order 786-kjke: see the note in expert-groundtruth-fragment-provenance.yaml.
+# Declared so the obvious glob invocation grades this set against its committed
+# fixture corpus instead of the live ledger.
+corpus: openspec/litmus-tests/groundtruth/fixtures/plan-next/plan/index.yaml
 description: >
   Deterministic plan_next ground truth: the ranking tuple (priority,
   release-targeted first, order) renders identical rows in identical order on

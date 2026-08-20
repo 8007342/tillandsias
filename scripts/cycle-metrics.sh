@@ -478,13 +478,34 @@ GRADE_BIN=""
 . "$REPO_ROOT/scripts/plan-binary-probe.sh"
 GRADE_BIN="$(cd "$REPO_ROOT" && resolve_plan_binary || true)"
 accuracy_line='expert_accuracy: deferred source=litmus:expert-groundtruth-harness'
+# Order 786-kjke: grade EVERY committed query set, not just rung1.
+#
+# This line used to run bare `grade --root .`, which defaults to rung1 and
+# reported `pass=22 total=22 rate=100% source=groundtruth-rung1`. That was
+# TRUE but its scope was undisclosed: six further graded cases in two
+# fixture-backed sets were never in the number. Widening was impossible before
+# now — globbing the directory graded those sets against the live ledger and
+# produced six FALSE reds — and is safe now that each set declares its own
+# corpus. A missing corpus is exit 2, which yields no result line and leaves
+# the `deferred` fallback in place, so this cannot silently under-report.
 if [ -n "$GRADE_BIN" ]; then
-    gr="$(cd "$REPO_ROOT" && ( command -v timeout >/dev/null 2>&1 && timeout 30 "$GRADE_BIN" grade --root . || "$GRADE_BIN" grade --root . ) 2>/dev/null | grep '^groundtruth-result:' | tail -1)"
+    gt_sets="$REPO_ROOT/openspec/litmus-tests/groundtruth"
+    gr=""
+    if [ -d "$gt_sets" ]; then
+        # shellcheck disable=SC2086
+        gr="$(cd "$REPO_ROOT" && ( command -v timeout >/dev/null 2>&1 && timeout 60 "$GRADE_BIN" grade --root . openspec/litmus-tests/groundtruth/*.yaml || "$GRADE_BIN" grade --root . openspec/litmus-tests/groundtruth/*.yaml ) 2>/dev/null | grep '^groundtruth-result:' | tail -1)"
+    fi
+    if [ -z "$gr" ]; then
+        gr="$(cd "$REPO_ROOT" && ( command -v timeout >/dev/null 2>&1 && timeout 30 "$GRADE_BIN" grade --root . || "$GRADE_BIN" grade --root . ) 2>/dev/null | grep '^groundtruth-result:' | tail -1)"
+        gsrc="groundtruth-rung1"
+    else
+        gsrc="groundtruth-all-sets"
+    fi
     if [ -n "$gr" ]; then
         gp="$(printf '%s' "$gr" | sed -n 's/.*pass=\([0-9]*\).*/\1/p')"
         gt="$(printf '%s' "$gr" | sed -n 's/.*total=\([0-9]*\).*/\1/p')"
         if [ -n "$gp" ] && [ -n "$gt" ] && [ "$gt" -gt 0 ]; then
-            accuracy_line="expert_accuracy: pass=${gp} total=${gt} rate=$(( gp * 100 / gt ))% source=groundtruth-rung1"
+            accuracy_line="expert_accuracy: pass=${gp} total=${gt} rate=$(( gp * 100 / gt ))% source=${gsrc}"
         fi
     fi
 fi

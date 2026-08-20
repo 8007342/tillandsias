@@ -1,0 +1,132 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Hand-written in `set-field` shape: worktree isolation refuses the compound
+# invocation the CLI needs, and both packets are unpushed in the parent
+# checkout so `set-field` could not resolve them from here.
+status:
+  - packet_id: ledger-node-claim-accepts-a-node-that-does-not-exist
+    field: status
+    value: completed
+    ts: "2026-08-17T05:30:00Z"
+    host: linux_mutable
+  - packet_id: grade-produces-false-reds-when-a-set-is-graded-against-the-wrong-corpus
+    field: status
+    value: completed
+    ts: "2026-08-17T05:30:00Z"
+    host: linux_mutable
+
+events:
+  - packet_id: ledger-node-claim-accepts-a-node-that-does-not-exist
+    event:
+      type: completed
+      ts: "2026-08-17T05:30:00Z"
+      host: linux_mutable
+      agent_id: fork-790-786-20260817T0500Z
+      summary: >
+        status 'completed' with evidence_refs: scripts/claim-ledger-node.sh —
+        `claim` now resolves the id through `tillandsias-plan status` (the
+        authority: it accepts BOTH a packet_id and an order token, and reads
+        the FOLDED ledger so a packet filed minutes ago in a fragment still
+        resolves — a base-only grep would have produced false refusals, which
+        is worse than the phantom lease). An id that resolves to nothing gets
+        the new typed verdict `unknown:<id>` (exit 2) and NO lease directory is
+        created. `release` and `status` stay permissive by construction and
+        never resolve, so a packet obsoleted or renamed after its lease was
+        taken is still releasable. Unverifiable hosts (no built binary, no
+        ledger) degrade LOUDLY and still lease, per the 702-68zj skip-by-name
+        precedent — refusing there would break claims on a fresh checkout.
+        New hermetic fixture scripts/test-ledger-node-claim-resolution.sh, 8
+        scenarios / 9 assertions, all green, graded against a COMMITTED-SHAPE
+        FIXTURE ledger via the new TILLANDSIAS_LEDGER_CLAIM_INDEX seam rather
+        than the live one, so the cases cannot rot when the real ledger changes
+        (the 680-zphp mutable-pin trap). Verbatim: 'ok: NEGATIVE CONTROL a real
+        packet_id still claims (rc=0)', 'ok: a real order token claims (rc=0)',
+        'ok: a slashed real packet_id claims (rc=0)', 'ok: MUTATION a near-miss
+        id is refused as unknown (rc=2)', 'ok: a refused claim leaves no lease
+        behind', 'ok: release stays permissive for an unresolvable id (rc=0)',
+        'ok: status stays permissive for an unresolvable id', 'ok: an
+        unverifiable ledger degrades LOUDLY and still leases (rc=0)', 'ok:
+        every verdict line matches the grammar (5/5)'.
+        MUTATION CONTROL, non-vacuous: neutering the refusal branch reds
+        EXACTLY the two scenarios this fix owns ('near-miss id was not refused:
+        out=claimed:fixture-reel-node rc=0' and 'a refused claim created a
+        lease: fixture-reel-node.lease') and leaves the negative control green.
+        litmus:ledger-node-claim-shape extended 5 -> 6 steps and PASS via the
+        canonical runner; its four pre-existing lease-MECHANICS steps now point
+        at per-step fixture ledgers through the same seam, so they exercise the
+        real resolution path rather than bypassing it (the AUTH_PROBE shape) —
+        without that they would have gone red, since they claim synthetic ids
+        like shared/node. bash-dialect-clean; ./build.sh --check rc=0 unmasked.
+  - packet_id: grade-produces-false-reds-when-a-set-is-graded-against-the-wrong-corpus
+    event:
+      type: completed
+      ts: "2026-08-17T05:30:00Z"
+      host: linux_mutable
+      agent_id: fork-790-786-20260817T0500Z
+      summary: >
+        status 'completed' with evidence_refs: crates/tillandsias-plan/src/
+        groundtruth.rs gains `QuerySet::corpus` (Option<String>, serde default)
+        and main.rs's grade handler honours it PER SET, caching one Harness per
+        resolved corpus. THE INVARIANT IS INTACT: the module's documented
+        "schema has no corpus" rule governs [`Expect`] — an expectation may
+        never name a corpus, so a second corpus cannot quietly lower the bar,
+        and grade_envelope still takes (&Envelope, &Expect, &Path) and nothing
+        else. This field is not an expectation and the grader never reads it;
+        it only tells the RUNNER which ledger to hand the engine, which is
+        exactly the fact that previously lived in a header comment no machine
+        could read. Documented in the field's own doc comment so the next
+        reader does not think the invariant was violated.
+        A declared corpus fixes BOTH the index and the ROOT for that set:
+        `--index` already implies a root via root_for(), because citations are
+        resolved and re-read relative to it, so honouring the index alone left
+        every fixture citation unresolvable — a different false red in place of
+        the one being fixed. Found by measurement, not review: the first
+        implementation still reported 23/28.
+        RESULT: `tillandsias-plan grade openspec/litmus-tests/groundtruth/
+        *.yaml` — the invocation that reported `pass=22 fail=6`, every one of
+        those six false — now reports `sets=3 total=28 pass=28 fail=0`. Both
+        legacy paths verified unregressed: explicit `--index <fixture> grade
+        <set>` 3/3, and rung1 alone (no corpus declared) 22/22. The override
+        announces itself on stderr; a declared corpus that does not exist is a
+        HARNESS ERROR (exit 2), never a red case, preserving the grade
+        handler's documented 1-vs-2 separation ("the query set moved" must not
+        read as "the experts are wrong").
+        New hermetic fixture scripts/test-groundtruth-corpus-declaration.sh, 6
+        scenarios, all green, each building its own throwaway set + ledger so
+        nothing depends on live ledger contents. Verbatim: 'ok: an undeclared
+        set graded against the wrong ledger FAILS (the original symptom)', 'ok:
+        a declared corpus is honoured — the same case now passes', 'ok:
+        NEGATIVE CONTROL a wrong expectation still FAILS under a declared
+        corpus (rc=1)', 'ok: a declared corpus that is missing is a HARNESS
+        ERROR (rc=2), not a red case', 'ok: the corpus override announces
+        itself on stderr', 'ok: the committed groundtruth glob grades fail=0'.
+        Case 3 is load-bearing: a declared corpus must not become a way to make
+        red things green.
+        SECONDARY QUESTION ANSWERED (the packet asks it explicitly): yes —
+        scripts/cycle-metrics.sh now grades ALL committed sets, because it
+        finally can. It reported `pass=22 total=22 rate=100%
+        source=groundtruth-rung1`, true but undisclosed in scope: six further
+        graded cases were never in the number. Widening was impossible before
+        this change (globbing produced the six false reds) and is safe now. The
+        line reads `expert_accuracy: pass=28 total=28 rate=100%
+        source=groundtruth-all-sets`, and falls back to the rung1-only call,
+        then to `deferred`, if the wider run yields no result — so it cannot
+        silently under-report. litmus:expert-groundtruth-harness extended with
+        a behavioural step delegating to the fixture. cargo test -p
+        tillandsias-plan: 137 + 17 passed, 0 failed. bash-dialect-clean;
+        ./build.sh --check rc=0 unmasked.
+  - packet_id: grade-produces-false-reds-when-a-set-is-graded-against-the-wrong-corpus
+    event:
+      type: note
+      ts: "2026-08-17T05:30:00Z"
+      host: linux_mutable
+      agent_id: fork-790-786-20260817T0500Z
+      summary: >
+        Not folded in, for the parent: litmus:expert-groundtruth-harness could
+        not be run to completion in this worktree — it ENV-FAILed on
+        'podman unresponsive (>5s): stalled storage lock or dead runtime',
+        the documented environmental class
+        (plan/issues/podman-sqlite-lock-zombie-cascade-2026-07-15.md), with
+        several fork agents building concurrently. That is a precondition of
+        the litmus, not a verdict on this change: the step this packet adds
+        was verified directly (fixture 6/6) and the whole suite should be
+        re-run on a quiet host after merge.
