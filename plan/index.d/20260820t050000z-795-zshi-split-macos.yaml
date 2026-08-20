@@ -1,0 +1,247 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macos (osx-next), 2026-08-20T05:00:00Z.
+#
+# 795-zshi split into per-lane slices. The parent's `context:` is now STALE —
+# slice 1 (the verbatim-argv arm) has already landed — and the two design
+# unknowns that would have cost the implementing host a cycle are resolved
+# below rather than left to be rediscovered.
+packets:
+  - packet_id: launch-spec-emits-verbatim-argv-for-project-launches
+    order: 837-m47d
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    parent: guest-exec-allowlist-forces-argv-flattening
+    title: "host-shell `launch_spec` still interpolates the project name into a single-quoted shell word for every project launch, on both the macOS and Windows trays — the verbatim-argv arm it needs now exists and is unused"
+    deliverable: "launch_spec emits ['/usr/local/bin/tillandsias-headless', '--cloud', <project>, '--bash'] as a vector; the project reaches the guest as ONE argv element"
+    pickup_role: any
+    release_target: architecture-audit-epic
+    capability_tags: [rust, vsock, security, architecture]
+    estimated_hours: 4
+    context: |
+      THE SITE, shared by both GUI trays and therefore the highest-leverage
+      one: crates/tillandsias-host-shell/src/pty/mod.rs:358-366.
+
+        Some(p) => vm_login_shell_argv(&format!(
+            "exec tillandsias-headless --cloud '{p}' --bash"))
+
+      The project name is interpolated into a SINGLE-QUOTED shell word, so a
+      name containing `'` closes the quote. `validate_project_name` refuses
+      such names at the top of launch_spec — but that is the guard 773-fx3u
+      landed, not the fix, and the parent packet says so explicitly.
+
+      TWO DESIGN UNKNOWNS, BOTH RESOLVED 2026-08-20 so the implementer does not
+      pay for them again:
+
+        1. IS THE TARGET ADMISSIBLE? Yes. The guest binary installs at
+           /usr/local/bin/tillandsias-headless (tillandsias-vm-layer/src/vz.rs),
+           which is under VERBATIM_ARGV_PREFIXES (`/usr/local/bin/`), and
+           `tillandsias-headless` is not in VERBATIM_ARGV_FORBIDDEN. So
+           exec_argv_is_allowed already accepts the vector form — no allowlist
+           change is needed, and none should be made.
+
+        2. DOES DROPPING THE LOGIN SHELL BREAK THE CHILD'S ENVIRONMENT? Mostly
+           no, and the residue is narrow. The current form uses `/bin/bash -l`
+           specifically because pty_handler.rs:243 `env_clear()`s the child;
+           the comment at pty/mod.rs:313-315 says `-l` rebuilds PATH from the
+           login profile so a bare-name argv[0] resolves. But pty_handler.rs:
+           488-508 ALREADY seeds DEFAULT_CHILD_PATH
+           (/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin) when
+           the caller supplies no PATH, and a verbatim argv[0] is an absolute
+           path that needs no lookup at all. So PATH is covered twice over.
+           WHAT IS NOT YET CONFIRMED, and is the one thing this packet must
+           verify in-guest: whether `tillandsias-headless --cloud <p> --bash`
+           depends on anything else the login profile sets (HOME, XDG_*,
+           locale) once the shell is gone. Verify with `tillandsias-tray
+           --exec-guest` against a live VM before deleting the shell form.
+
+      NOT A WIDENING: everything reachable through the new vector was already
+      reachable through `/bin/bash -lc <string>`, which never inspects the
+      script. What changes is only HOW the request is expressed. The
+      exec_allowlist module documents this at length; do not re-litigate it.
+
+      NEGATIVE CONTROL REQUIRED: a project named `a'b` must reach the guest as
+      one argv element byte-identical to `a'b`, or be refused. Silently
+      splitting is the failure. Note that with the vector form the refusal in
+      validate_project_name may become unnecessary for THIS path — decide that
+      deliberately and say which, rather than leaving both.
+
+  - packet_id: windows-tray-argv-reparse-workarounds-deletable
+    order: 837-svzd
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    parent: guest-exec-allowlist-forces-argv-flattening
+    title: "delete `argv_survives_wt_reparse`, `wt_safe_title` and the `wsl_root_sh` re-parse hazard once launch_spec emits a vector — they exist only to survive a flattening that will no longer happen"
+    deliverable: "a grep for argv_survives_wt_reparse and wt_safe_title returns nothing; wsl_root_sh no longer re-parses a flattened string"
+    pickup_role: windows
+    release_target: architecture-audit-epic
+    depends_on: [launch-spec-emits-verbatim-argv-for-project-launches]
+    capability_tags: [rust, windows, wsl, architecture]
+    estimated_hours: 3
+    context: |
+      SPLIT OUT BY LANE, deliberately, 2026-08-20. The parent's exit criterion
+      2 requires all five workarounds deleted in ONE change. Two of them live
+      in crates/tillandsias-windows-tray/src/notify_icon.rs and one spans
+      crates/tillandsias-vm-layer/src/wsl.rs +
+      crates/tillandsias-windows-tray/src/wsl_lifecycle.rs — none of which
+      COMPILE on a macOS or Linux host, so no other lane can verify a deletion
+      there. 828-r2ek reached the same conclusion about hvsocket.rs on the same
+      grounds; this follows that precedent rather than inventing one.
+
+      BLOCKED ON 837-m47d BY CONSTRUCTION, and the order matters: deleting the
+      workarounds before launch_spec emits a vector removes the only thing
+      making the current flattened form survive wt.exe's argv re-parse. The
+      dependency is recorded so the Windows lane does not pick this up early.
+
+      WHAT EACH ONE IS FOR (do not re-derive):
+        * argv_survives_wt_reparse / wt_safe_title — wt.exe re-parses its argv
+          and treats `;` as its OWN command separator, splitting a bash `-lc`
+          script and trying the last fragment as a Windows executable
+          (ERROR_FILE_NOT_FOUND 0x80070002). See
+          plan/issues/wt-github-login-semicolons-2026-06-30.md.
+        * the `;` -> `&&` rule at pty/mod.rs:325-332 is the SAME defect's
+          mitigation and lives in shared code — it should be re-examined with
+          this packet, but its deletion belongs to whichever lane can prove the
+          GithubLogin script no longer transits wt.exe as a string.
+        * wsl_root_sh's re-parse hazard — same class, WSL's argv handling.
+
+  - packet_id: guest-exec-argv-vector-litmus-and-source-scan
+    order: 837-et6t
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: enhancement
+    parent: guest-exec-allowlist-forces-argv-flattening
+    title: "the parent's named verifiable closure `litmus:guest-exec-argv-vector-no-shell` does not exist — without its source-scan leg the deleted workarounds can silently come back"
+    deliverable: "the litmus exists, drives the trays' launch specs for a project named `a'b`, and fails if any deleted workaround reappears"
+    pickup_role: any
+    release_target: architecture-audit-epic
+    depends_on: [launch-spec-emits-verbatim-argv-for-project-launches]
+    capability_tags: [litmus, ci-gates, fail-loud]
+    estimated_hours: 3
+    context: |
+      The parent names `litmus:guest-exec-argv-vector-no-shell` as its
+      verifiable closure. It has never been written — the only related litmus
+      in the tree is litmus-pty-open-argv-allowlisted.yaml, which pins the
+      allowlist decision, not the end-to-end argv shape.
+
+      THE SOURCE-SCAN LEG IS THE POINT, in the parent's own words: it is what
+      makes this a REDUCTION rather than an addition, because the litmus goes
+      red if `argv_survives_wt_reparse`, `wt_safe_title` or
+      `build_exec_guest_shell_cmd` come back. A deletion with no guard against
+      re-introduction is a deletion that gets undone by whoever next hits the
+      quoting problem and does not know why the workaround went away — which is
+      how this subsystem accumulated five of them.
+
+      CAUTION, 634-39ik: a source-scan leg is exactly the shape the
+      expression-pinning enforcement refuses when it pins how source is
+      currently written with no negative control. Assert the ABSENCE of named
+      symbols (a property that stays true however the code is rewritten), and
+      carry a negative control proving the scan actually fails when a symbol is
+      reintroduced. Otherwise this gate will be refused at the pre-push gate,
+      as one was on this host 2026-08-19.
+
+  - packet_id: exec-guest-shell-join-disposition
+    order: 838-48ca
+    status: ready
+    desired_release: v0.5
+    priority: p3
+    kind: research
+    parent: guest-exec-allowlist-forces-argv-flattening
+    title: "decide whether `build_exec_guest_shell_cmd` should be DELETED or KEPT — the parent lists it among five deletable workarounds, but `--exec-guest 'a | b'` is a documented shell-pipeline use case that a verbatim vector cannot express"
+    deliverable: "a recorded decision, and the parent's exit criterion 2 amended to match it"
+    pickup_role: macos
+    release_target: architecture-audit-epic
+    capability_tags: [macos, architecture, decision]
+    estimated_hours: 1
+    context: |
+      RAISED 2026-08-20 while splitting the parent, because the parent's exit
+      criterion 2 ("a grep for build_exec_guest_shell_cmd returns nothing")
+      may be wrong, and discovering that DURING the implementation would be
+      expensive.
+
+      crates/tillandsias-macos-tray/src/main.rs:304 exists so
+      `--exec-guest head -c 100 /dev/zero | base64` works: the words are joined
+      and run through `/bin/bash -lc`. That is a SHELL PIPELINE. A verbatim
+      argv vector cannot express a pipeline — that is precisely what makes the
+      vector form safe — so deleting the join would REMOVE a documented
+      capability of the diagnostic tool rather than simplify it.
+
+      The other four workarounds are different in kind: they exist to survive
+      a re-parse that the vector form eliminates. This one exists because the
+      caller genuinely asked for a shell.
+
+      THREE HONEST OPTIONS, and the packet should pick one on the record:
+        1. KEEP the join for --exec-guest and amend the parent's criterion,
+           acknowledging it is a shell tool by design.
+        2. SPLIT the flag: --exec-guest for the shell form, a new
+           --exec-guest-argv for the vector form. Two paths, but they express
+           two genuinely different requests.
+        3. DELETE the join and require callers to write the pipeline
+           themselves — which just moves the quoting problem to the caller.
+
+      Note the parent's own warning cuts BOTH ways here: "widening without
+      deleting leaves two code paths for the same thing". Option 2 is two paths
+      for two DIFFERENT things, which is the distinction worth making
+      explicitly rather than resolving by reflex.
+
+status:
+  - packet_id: guest-exec-allowlist-forces-argv-flattening
+    field: status
+    value: ready
+    ts: "2026-08-20T05:00:00Z"
+    host: macos
+
+events:
+  - packet_id: guest-exec-allowlist-forces-argv-flattening
+    event:
+      type: progress
+      ts: "2026-08-20T05:00:00Z"
+      agent_id: macos-tlatoanis-macbook-air-opus5-20260820t043334z
+      host: macos
+      summary: |
+        SPLIT INTO FOUR SLICES, and released back to `ready` rather than
+        implemented. Claimed at 04:33Z, shaped, released the same cycle.
+
+        WHY NOT IMPLEMENT: exit criterion 2 requires all five workarounds
+        deleted in ONE change, and three of them live in windows-tray and
+        wsl.rs, which do not compile on this host. A macOS cycle could delete
+        only the macOS one, which produces exactly the two-code-paths state the
+        parent's own `notes:` forbids. 828-r2ek dispositioned hvsocket.rs the
+        same way on the same grounds.
+
+        THE PARENT'S `context:` IS NOW STALE, which is the finding worth
+        carrying: it states "There is no arm that accepts a plain argv vector
+        for the bare-VM case." That is no longer true. Slice 1 landed —
+        crates/tillandsias-headless/src/exec_allowlist.rs now holds
+        exec_argv_is_allowed with a `other if other.starts_with('/')` arm
+        delegating to verbatim_argv_is_allowed, gated on an absolute path under
+        VERBATIM_ARGV_PREFIXES and refusing VERBATIM_ARGV_FORBIDDEN shells,
+        with 7 tests. It is declared UNCONDITIONALLY (main.rs:13442-13447) so
+        the decision is testable on every host, citing this order. The guest
+        half of exit criterion 1 is therefore DONE and the remaining work is
+        entirely on the HOST side: nobody emits the vector yet.
+
+        TWO DESIGN UNKNOWNS RESOLVED so the implementer does not pay for them:
+        (1) /usr/local/bin/tillandsias-headless is already admissible under the
+        verbatim arm, so NO allowlist change is needed; (2) the login shell is
+        not load-bearing for PATH — pty_handler seeds DEFAULT_CHILD_PATH when
+        the caller supplies none, and an absolute argv[0] needs no lookup. Only
+        the non-PATH login environment (HOME/XDG/locale) remains to be checked
+        in-guest.
+
+        ONE EXIT CRITERION IS PROBABLY WRONG, filed as its own decision packet
+        rather than silently ignored: criterion 2 demands
+        build_exec_guest_shell_cmd be deleted, but `--exec-guest 'a | b'` is a
+        shell PIPELINE and a verbatim vector cannot express one. That
+        workaround differs in kind from the other four — they survive a
+        re-parse, it serves a caller who genuinely asked for a shell.
+      evidence_refs:
+        - "crates/tillandsias-headless/src/exec_allowlist.rs:106 verbatim_argv_is_allowed + 7 tests — slice 1 landed"
+        - "crates/tillandsias-headless/src/main.rs:13442-13447 — module declared unconditionally, citing 795-zshi"
+        - "crates/tillandsias-host-shell/src/pty/mod.rs:358-366 — the unfixed interpolation site, shared by both trays"
+        - "crates/tillandsias-headless/src/pty_handler.rs:488-508 DEFAULT_CHILD_PATH — login shell not load-bearing for PATH"
+        - "grep: argv_survives_wt_reparse + wt_safe_title in windows-tray, build_exec_guest_shell_cmd in macos-tray, wsl_root_sh in vm-layer + windows-tray — 4 of 5 still present"
