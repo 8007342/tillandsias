@@ -157,7 +157,20 @@ case "${1:-check}" in
             exit 1
         fi
         transcript="$(cat "$_stamp_args_from" 2>/dev/null)"
-        if ! printf '%s' "$transcript" | grep -qE '^test .* \.\.\. (ok|FAILED|ignored)'; then
+        # HERE-STRING, NOT A PIPE (order 792-ksr8). `$transcript` is a whole
+        # cargo test transcript; `grep -q` exits on first match and SIGPIPEs
+        # the still-writing `printf`, which `set -uo pipefail` (line 63) then
+        # promotes to the pipeline's status even on a MATCH. A false "no tests
+        # ran" here would stamp a verification that never happened.
+        #
+        # CONCURRENT CORRECT FIXES, resolved 2026-08-20. Two branches changed
+        # this one line for unrelated and both-valid reasons: 801-ajcd made the
+        # refusal message parse as the command it demands (above), and 792-ksr8
+        # replaced the pipe with this here-string. Neither supersedes the other
+        # and taking either side alone silently drops a real fix — so both are
+        # kept. Recorded because the merge machinery cannot tell this case from
+        # a genuine either/or.
+        if ! grep -qE '^test .* \.\.\. (ok|FAILED|ignored)' <<<"$transcript"; then
             echo "refused:stamp-needs-evidence:the transcript contains no test results"
             exit 1
         fi

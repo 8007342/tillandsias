@@ -1545,6 +1545,23 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Expression-pinning enforcement passed"
 
+    # Order 792-ksr8. Refuse a NEWLY ADDED pipeline whose verdict SIGPIPE can
+    # decide: an unbounded producer into an early-exiting consumer, under
+    # pipefail, in an if/while condition. A match then surfaces as a failure
+    # whenever the producer is still writing — which is how a push-blocking
+    # gate returned 1/2/3/4/5/6/13/27 violations on unchanged trees and blocked
+    # four agents in one night. Diff-scoped for the same reason as 634-39ik
+    # above, and here the whole-repo sweep is the ARGUMENT for it: ~50 legacy
+    # sites carry the shape and nearly all are benign (producer size decides,
+    # and it is not statically decidable), so a corpus-wide gate would be a
+    # false-alarm generator. New code gets the safe idiom for free.
+    _step "Checking for newly-added SIGPIPE-decidable verdict pipelines (792-ksr8)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-sigpipe-verdict-pipelines-added.sh" 2>&1; then
+        _error "a newly-added pipeline lets SIGPIPE decide a verdict (792-ksr8)"
+        exit 1
+    fi
+    _info "SIGPIPE verdict-pipeline enforcement passed"
+
     # Order 686-7qcm criterion 3. Refuse a NEWLY ADDED fragment that records a
     # closure rung (completed/verified/done) with no evidence-bearing event —
     # the gate-time backstop to set-field's write-time --evidence requirement,

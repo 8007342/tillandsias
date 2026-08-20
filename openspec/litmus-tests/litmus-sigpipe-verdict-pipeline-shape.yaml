@@ -1,0 +1,55 @@
+# @trace spec:ci-release
+name: litmus:sigpipe-verdict-pipeline-shape
+spec: ci-release
+phase: pre-build
+description: The SIGPIPE race that let a matching grep report a miss is reproducible with its controls, and the diff-scoped enforcer refuses newly-added instances without touching the legacy corpus
+severity: high
+size: instant
+
+# Order 792-ksr8. On 2026-08-17 four agents in one night were each blocked by
+# `scripts/check-litmus-pin-claims.sh` returning 1, 2, 3, 4, 5, 6, 13 and 27
+# violations on UNCHANGED trees — every one false. Mechanism: `grep -q` exits
+# on its first match and closes the pipe, the still-writing producer takes
+# SIGPIPE (141), and `set -o pipefail` promotes that to the pipeline's status
+# even though grep MATCHED.
+#
+# This litmus is BEHAVIOURAL, not a source grep: every step below runs the
+# fixture or the enforcer and reads its verdict. That matters here because the
+# thing under test is a RACE — a source pattern cannot demonstrate that the
+# race exists, only that a shape does, and the whole finding of this packet is
+# that the shape is usually harmless (producer size decides, and ~50 legacy
+# sites carry it benignly). The fixture carries its own controls (late match,
+# pipefail off, the recommended rewrite) so a green run means the mechanism was
+# reproduced AND correctly attributed, not merely that something failed.
+
+preconditions:
+  - scripts/check-sigpipe-verdict-pipelines-added.sh is present and executable
+  - scripts/test-sigpipe-verdict-pipelines.sh is present and executable
+  - git is available (the enforcer is diff-scoped)
+
+critical_path:
+  - step: "the race, its controls, and the recommended fix all behave as claimed"
+    # Reproduces the early-match failure, then proves it is SIGPIPE and not
+    # something else via the late-match and pipefail-off controls, then proves
+    # the here-string rewrite is immune under identical conditions.
+    command: "bash scripts/test-sigpipe-verdict-pipelines.sh 2>&1 | tail -1"
+    timeout_ms: 120000
+    expected_behavior: "ok:sigpipe-verdict-pipelines-fixture:11"
+
+  - step: "the enforcer is clean on this tree and emits exactly one verdict line"
+    command: "out=$(bash scripts/check-sigpipe-verdict-pipelines-added.sh 2>/dev/null); echo \"$out\" | grep -qE '^ok:sigpipe-verdict-added:([0-9]+ checked|base-unavailable)$' && [ \"$(echo \"$out\" | wc -l)\" = 1 ] && echo 'ok: one-line-verdict'"
+    timeout_ms: 60000
+    expected_behavior: "ok: one-line-verdict"
+
+  - step: "the enforcer is wired into the pre-push gate"
+    command: "grep -q 'check-sigpipe-verdict-pipelines-added.sh' build.sh && echo 'ok: wired'"
+    timeout_ms: 3000
+    expected_behavior: "ok: wired"
+
+  - step: "NEGATIVE CONTROL: the legacy corpus is NOT refused — this gate adds enforcement, it does not red standing debt"
+    # ~50 existing verdict pipelines carry the shape benignly. If this step ever
+    # fails, the gate has stopped being diff-scoped and has become the
+    # false-alarm generator the packet argued against (741-2izr).
+    command: "bash scripts/check-sigpipe-verdict-pipelines-added.sh >/dev/null 2>&1 && echo 'ok: legacy-corpus-not-refused'"
+    timeout_ms: 60000
+    expected_behavior: "ok: legacy-corpus-not-refused"

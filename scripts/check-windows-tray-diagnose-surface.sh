@@ -103,18 +103,28 @@ fi
 # reason. Naming a specific test as missing when the truth is "nothing ran" is
 # precisely the misdirection this packet exists to remove, so it gets its own
 # verdict.
-if printf '%s' "$output" | grep -qF "Application Control policy has blocked"; then
+# HERE-STRINGS, NOT PIPES (order 792-ksr8). `$output` is a full `cargo test
+# --nocapture` transcript — tens of KB — and `grep -q` exits on its first
+# match, closing the pipe while `printf` is still writing. Under `set -uo
+# pipefail` (line 39) the resulting SIGPIPE (141) becomes the pipeline's
+# status EVEN THOUGH GREP MATCHED, so a match reads as a miss. Measured on a
+# 200k-line producer: 40/40 false failures for an early match with pipefail
+# on, 0/20 with it off, 0/20 for a late match. The two checks below are the
+# dangerous direction — a false "absent" here makes the toolchain-blocked and
+# no-test-run detectors MISS, so the guard reports on a transcript it never
+# really inspected. A here-string has no second process to signal.
+if grep -qF "Application Control policy has blocked" <<<"$output"; then
     echo "skip:diagnose-surface-unverifiable:windows-toolchain-blocked"
     exit 0
 fi
-if ! printf '%s' "$output" | grep -qE "^test .* \.\.\. (ok|FAILED|ignored)"; then
+if ! grep -qE "^test .* \.\.\. (ok|FAILED|ignored)" <<<"$output"; then
     echo "skip:diagnose-surface-unverifiable:no-test-run"
     exit 0
 fi
 
 missing=""
 for t in "${PINNED_TESTS[@]}"; do
-    if ! printf '%s' "$output" | grep -qF "$t"; then
+    if ! grep -qF "$t" <<<"$output"; then
         # Report the FIRST one: the list is ordered by surface area, and the
         # last-wins bug in the first version made the report arbitrary.
         [ -z "$missing" ] && missing="$t"
@@ -135,7 +145,7 @@ fi
 # red nor inherits it.
 failed=""
 for t in "${PINNED_TESTS[@]}"; do
-    if printf '%s' "$output" | grep -qE "^test .*${t} \.\.\. FAILED"; then
+    if grep -qE "^test .*${t} \.\.\. FAILED" <<<"$output"; then  # 792-ksr8: see the here-string note above
         [ -z "$failed" ] && failed="$t"
     fi
 done
