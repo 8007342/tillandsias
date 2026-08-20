@@ -1,0 +1,82 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macos (osx-next), 2026-08-20T05:45:00Z.
+#
+# 839-veey CORRECTS 835-kjuv, which this same host filed 7 hours earlier on a
+# diagnosis the evidence does not support. Both "slow" gate phases run in ~3s
+# uncontended; the four-figure numbers were contention I created myself.
+packets:
+  - packet_id: gate-phase-timings-are-meaningless-under-self-inflicted-contention
+    order: 839-veey
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: "the gate's phase report inflates 200-300x when anything runs concurrently, and the loop's own habit of backgrounding `./build.sh --check` guarantees that — two packets have now been filed on numbers produced this way, one of them wrong"
+    deliverable: "the phase report either measures under contention honestly (CPU time, or a concurrency marker on the record) or refuses to report; 835-kjuv's diagnosis is corrected"
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [host-shell, ci-gates, telemetry, fail-loud]
+    estimated_hours: 3
+    context: |
+      MEASURED 2026-08-20 on macOS, same tree, same commands, the only
+      difference being what else was running:
+
+        scripts/check-plan-binary-probe-usage.sh
+          during a concurrent gate      918.0s   (the gate's own phase report)
+          uncontended                     2.963s  (1.12s user + 1.50s sys, 88% cpu)
+                                                  -> 310x
+
+        scripts/hooks/pre-commit-openspec.sh
+          during a concurrent gate      920.2s   (15m20s wall, 3.06s CPU, 0% cpu)
+          uncontended                     4.178s  (1.81s user + 1.00s sys, 67% cpu)
+                                                  -> 220x
+
+      The 0%-CPU-for-15-minutes reading is the tell: that process was not
+      computing, it was waiting. Neither script is slow. This host is a
+      MacBook Air, and two heavy jobs on it do not share — they queue.
+
+      THIS CORRECTS 835-kjuv, FILED BY THIS HOST 7 HOURS EARLIER. That packet
+      recorded 1050s against "Checking plan ledger integrity" and concluded the
+      cost was a cold DEBUG build of tillandsias-plan via `cargo run`. The
+      supporting measurements were real — warm `cargo run` 1.365s, prebuilt
+      release binary 0.108s — but the 1050s figure was never established as a
+      cold build. It was INFERRED, from a gate that had been backgrounded while
+      the same agent ran greps, ledger queries and test suites in parallel.
+
+      The evidence against the original diagnosis is that the slowest phase
+      MOVED. This cycle's gate put 918s on the probe-usage scan — a bash script
+      that runs no cargo at all and cannot have paid for a cold build. Two
+      different steps, four-figure numbers on both, ~3s each when measured
+      alone. Whatever is producing those numbers is not specific to `cargo run`.
+
+      835-kjuv's UNDERLYING OBSERVATION SURVIVES and should not be closed as
+      invalid: the gate really does invoke `cargo run` where a probe-resolved
+      prebuilt binary would do, it really is inconsistent with 721-nyev, and a
+      genuinely cold build really would be slow. What does not survive is the
+      claim that this is where the gate's wall clock goes. Amend it to the
+      consistency argument and drop the 98%-of-the-gate framing.
+
+      THE PROCESS FAILURE IS THE POINT, and it is the third instance this fleet
+      has recorded of one shape: 783-xyk5 was filed on a step number that
+      bundled work the guard did not do; 785-ibu9 added span-vs-work
+      attribution to stop exactly that; and 835-kjuv then did it again through
+      a channel 785-ibu9 does not cover. 785-ibu9 separates "time inside this
+      step's `_run`" from "time in the phase's span" — but BOTH are wall clock,
+      so neither can distinguish work from waiting-for-someone-else. The
+      unattributed-gap suffix correctly stayed silent in both cases, because
+      there was no gap: the step really was blocked for that long. The
+      instrument was honest and still produced a false conclusion, twice.
+
+      SHAPE OF THE FIX, not prescribed: record CPU time alongside wall time on
+      each phase record (`times`/`getrusage` are available to bash), and/or
+      stamp a concurrency marker when the gate detects another cargo or gate
+      process. A phase whose wall/CPU ratio is 300:1 should say so rather than
+      present the wall figure as the step's cost. The narrower alternative —
+      refuse to emit a phase report at all when a sibling gate is detected — is
+      cheaper and would also have prevented both bad filings.
+
+      OPERATIONAL NOTE FOR THE LOOP ITSELF, worth more than the tooling fix:
+      backgrounding `./build.sh --check` and continuing to work is what
+      manufactures these numbers, and this cycle did it twice. The gate is not
+      a background task on a 2-core laptop. Either wait for it, or treat every
+      timing it prints as unusable.
