@@ -315,8 +315,8 @@ cases:
           yaml_path: distributed_work.worker_agent_protocol.forge_cycle_budget.rule
           key: "rule:"
           span_contains:
-            - "drain AT MOST ONE plan packet per cycle"
-            - "SPLIT the packet into smaller ready"
+            - "MAY drain more than one plan packet"
+            - "The bound is TIME, never a count"
 
   - id: methodology-no-python
     engine: methodology.ask
@@ -470,7 +470,7 @@ cases:
         - "navigation only"
         - "distributed_work.worker_agent_protocol.forge_cycle_budget"
       answer_excludes:
-        - "drain AT MOST ONE plan packet per cycle"
+        - "MAY drain more than one plan packet"
 
   - id: methodology-refuses-an-unrouted-question
     engine: methodology.ask

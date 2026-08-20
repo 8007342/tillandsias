@@ -110,7 +110,7 @@ critical_path:
     # The load-bearing one. The citation still resolves and the range is still
     # in bounds — only the expected TEXT is wrong, so this can only be caught
     # by re-reading the span from the corpus.
-    command: "PB=$(cat /tmp/.litmus-394d-bin); Q=openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml; sed 's/drain AT MOST ONE plan packet per cycle/drain AS MANY plan packets as you like/' \"$Q\" > /tmp/.litmus-394d-w1.yaml; \"$PB\" grade --root . /tmp/.litmus-394d-w1.yaml > /tmp/.litmus-394d-w1.txt 2>&1 && { echo 'FAIL: a WRONG expected methodology answer was graded GREEN'; exit 1; }; grep -q '^FAIL  methodology-forge-cycle-budget' /tmp/.litmus-394d-w1.txt && grep -q 'cited span does not contain' /tmp/.litmus-394d-w1.txt && echo 'ok: wrong-methodology-quote-is-red'"
+    command: "PB=$(cat /tmp/.litmus-394d-bin); Q=openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml; sed 's/MAY drain more than one plan packet/drain AT MOST ONE plan packet per cycle/' \"$Q\" > /tmp/.litmus-394d-w1.yaml; \"$PB\" grade --root . /tmp/.litmus-394d-w1.yaml > /tmp/.litmus-394d-w1.txt 2>&1 && { echo 'FAIL: a WRONG expected methodology answer was graded GREEN'; exit 1; }; grep -q '^FAIL  methodology-forge-cycle-budget' /tmp/.litmus-394d-w1.txt && grep -q 'cited span does not contain' /tmp/.litmus-394d-w1.txt && echo 'ok: wrong-methodology-quote-is-red'"
     timeout_ms: 120000
     expected_behavior: "ok: wrong-methodology-quote-is-red"
 

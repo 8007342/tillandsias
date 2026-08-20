@@ -14,8 +14,30 @@
 #   - .claude/skills/**, methodology*  (run directly by the orchestration loop)
 #
 # Output: one line per guard, then a machine verdict line matching
-#   ^guard-activation: total=<n> active=<n> orphan=<n> verdict=(ok|orphans-found)$
-# Exit 0 when every guard is active; exit 1 when any orphan is found (fail loud).
+#   ^guard-activation: population=<n> total=<n> active=<n> orphan=<n> verdict=(ok|orphans-found|unavailable:no-guards-enumerated)$
+# Exit 0 when every guard is active; exit 1 when any orphan is found (fail
+# loud) AND exit 1 when the enumeration is empty (see below).
+#
+# POPULATION, AND WHY AN EMPTY ONE IS NOT `ok` (order 831-ezea).
+#
+# MEASURED 2026-08-19: copy this script into a tree whose `scripts/check-*.sh`
+# glob matches nothing and it prints
+#
+#   guard-activation: total=0 active=0 orphan=0 verdict=ok
+#
+# and exits 0. The auditor whose entire thesis is "a guard nobody can prove is
+# running is not a guard" declared every guard active having enumerated none —
+# it is the 599-w5jd class turned on the instrument itself, and it is exactly
+# how a rename of the check-*.sh prefix, a moved scripts/ dir, or a run from
+# the wrong root would delete the whole audit while local-ci printed a tick.
+#
+# So: `population=<n>` is the count enumerated (== total), printed first so no
+# consumer has to know which of the four numbers is the denominator; and
+# population=0 is a REFUSAL, not an ok. Zero guards in a repo that ships 53 is
+# a broken checkout, which is the same judgement local-ci already makes for a
+# missing guard script (log_fail_missing_guard: "a guard that cannot run is not
+# a guard"). local-ci wires this auditor as if/else on its exit status, so the
+# refusal surfaces as a named red rather than a silent pass.
 #
 # Scope note: this proves a guard is WIRED on this checkout. Per 599-4wzr
 # criterion 3, hook INSTALLATION is per-checkout — each platform (Linux, Windows,
@@ -86,11 +108,16 @@ for f in scripts/check-*.sh; do
   fi
 done
 
-if [ "$orphan" -eq 0 ]; then
-  echo "guard-activation: total=$total active=$active orphan=0 verdict=ok"
+if [ "$total" -eq 0 ]; then
+  # EMPTY POPULATION IS A REFUSAL, NOT AN OK (831-ezea — see the header).
+  echo "guard-activation: population=0 total=0 active=0 orphan=0 verdict=unavailable:no-guards-enumerated"
+  echo "scripts/check-*.sh matched no files under $ROOT — the audit proved nothing. Zero guards in a repo that ships dozens means a broken checkout, a moved scripts/ directory, or a renamed guard prefix; it does not mean every guard is active." >&2
+  exit 1
+elif [ "$orphan" -eq 0 ]; then
+  echo "guard-activation: population=$total total=$total active=$active orphan=0 verdict=ok"
   exit 0
 else
-  echo "guard-activation: total=$total active=$active orphan=$orphan verdict=orphans-found"
+  echo "guard-activation: population=$total total=$total active=$active orphan=$orphan verdict=orphans-found"
   printf 'orphans: %s\n' "${orphans[*]}"
   exit 1
 fi

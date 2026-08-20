@@ -836,15 +836,49 @@ scripts/select-work-batch.sh <linux|macos|windows|any>
 ```
 
 Run this once, at the top of the drain, and take the batch it prints. It selects
-ONE epic (`release_target`) and at most `budget` packets from it (default 4 for
-autonomous/pairing forge cycles, 6 for non-forge hosts, 1 for unattended litmus runs;
-order 707-3x9d), so a cycle drains a coherent slice instead of five unrelated subsystems — the scatter that
+ONE epic (`release_target`) and at most `budget` packets from it, so a cycle
+drains a coherent slice instead of five unrelated subsystems — the scatter that
 made small packets cost more in orientation than in work.
+
+**THE BATCH IS A STORY, AND THE STORY IS THE UNIT OF WORK — not the packet.**
+Take the whole batch, implement it as one coherent change, and pay the cycle's
+fixed costs ONCE: one build/verify pass, one loop-status entry, one attestation.
+Do not run `./build.sh --check` per packet, and do not attest per packet.
+
+Why this is the rule and not a preference — measured on the fleet 2026-08-16..19:
+
+| commits, 3 days | count |
+| --------------- | ----- |
+| `record(mo-full)` (attestation only) | 155 |
+| `chore(plan)` (ledger bookkeeping)   |  88 |
+| every category of actual product work | single digits each |
+
+Over 5 days that is 127 product-code commits against 457 plan-only, 149
+attestation-only and 219 merge commits. **Every cycle pays the same exit cost
+whether it carried one packet or eight** — loop-status, attestation record,
+attestation self-check at the new HEAD, and the merges each of those provokes.
+A one-packet cycle spends most of itself on the exit contract. Bundling does not
+make the overhead smaller; it amortizes it across more delivered work, which is
+the only lever available without weakening the contract itself.
+
+Budgets, which the selector already implements — do not restate a different
+number here, and if this text and `scripts/select-work-batch.sh` ever disagree,
+the SCRIPT is right and this paragraph is stale:
+
+- non-forge hosts: adaptive **6 → 10** (order 682-yiz7, evidence-backed tuning)
+- autonomous / pairing forge cycles: adaptive **4**, or `TILLANDSIAS_CYCLE_BUDGET`
+- unattended litmus runs: 1 (order 707-3x9d)
+
+This paragraph used to end "Budget is 1 on forge (order 264) and 3 elsewhere"
+while its own opening sentence said 4 and 6, and the script said 6 → 10. Three
+numbers for one budget, in one paragraph plus its tool. Agents read the smallest
+one, which is how a fleet tuned to 10 spent its nights draining one packet at a
+time.
 
 It is minimax-ranked (largest residual first, per `convergence.yaml` →
 `minimax_convergence_strategy`), with score-weighted entropy over the top-3.
 The seed is printed; record it in the loop-status entry so the cycle can be
-replayed. Budget is 1 on forge (order 264) and 3 elsewhere.
+replayed. Budgets are stated ONCE, above — never restate them here.
 
 **THE SEED DOES NOT SEPARATE CONCURRENT HOSTS. Do not rely on it to.** This
 paragraph used to end "...so coverage spreads over time and two concurrent hosts
@@ -912,10 +946,25 @@ Forge-hosted cycles (`TILLANDSIAS_HOST_KIND=forge`) are the OPPOSITE of
 greedy — decided by The Tlatoāni 2026-07-10 (order 264), replacing the earlier
 "drain as many as possible" exception:
 
-- Drain **at most ONE packet per forge cycle**.
-- Before implementing, estimate whether implement+verify+commit+push fits the
-  launch envelope (litmus-launched forge cycles live inside
-  `litmus:opencode-prompt-e2e-shape` STEP 3's 600s budget).
+- Drain **as much of the batch as fits the envelope, as ONE story** — bounded by
+  TIME, not by a count. Superseded 2026-08-19 by The Tlatoāni, who set order 264
+  in the first place: *"that's also why I was asking for bundles of related
+  packets in stories and epics, rather than the 'take a single packet' baked
+  into the ./methodology that I've been fighting you to lift."*
+
+  Order 264's REASONING survives intact and is the reason this is a time bound
+  rather than a licence: a litmus-launched forge cycle lives inside
+  `litmus:opencode-prompt-e2e-shape` STEP 3's 600s budget, and a cycle that
+  overruns it dies mid-work with nothing pushed. What does NOT survive is the
+  count. "One packet" was a proxy for "fits in 600s", and it is a bad proxy in
+  both directions: three one-line ledger closures fit easily, and one large
+  packet does not fit at all.
+
+  So the forge asks the envelope question about the STORY, not the packet, and
+  the selector's adaptive budget (4, or `TILLANDSIAS_CYCLE_BUDGET`) is the
+  starting size.
+- Before implementing, estimate whether implement+verify+commit+push for the
+  whole story fits the launch envelope.
 - If it does not fit, do NOT start implementing: **split** the packet into
   smaller ready child packets (`split_into` pattern), record the shaping
   events, commit and push. The shaping commit IS that cycle's completed work —

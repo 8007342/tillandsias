@@ -530,6 +530,12 @@ distributed_work:
         Implementing soon-to-be-irrelevant work burns budget and can
         conflict with the specs about to supersede it — the exact anti-value
         churn this rule exists to stop.
+      new_row_only_if_independently_schedulable: >
+        A finding becomes a new ROW only if INDEPENDENTLY SCHEDULABLE: it names
+        owned_files no open row already owns, OR a different pickup_role can
+        claim it than every open row covering that scope. Otherwise it is a
+        next_action clause on that row, or an event on it. Both predicates are
+        already computed as claimed_files (plan_answer, batch selector).
       trace: >
         operator directive 2026-07-17 (Hy3 size-aversion → stale-task
         churn); philosophy.yaml (monotonic reduction); convergence.yaml
@@ -920,10 +926,9 @@ distributed_work:
         finding.
       work_the_forge_agent_can_do_itself: >
         If the packet is `forge`-capability-tagged or `owner_host: any` and
-        fits the forge_cycle_budget (one packet/cycle; split if it will not
-        fit the launch envelope), the in-forge agent CLAIMS and implements it
-        directly rather than only proposing — self-service includes doing the
-        work when the lane is capable.
+        fits the forge_cycle_budget envelope, the in-forge agent CLAIMS and
+        implements it directly rather than only proposing — self-service
+        includes doing the work when the lane is capable.
     discipline:
       - "Every request is a shaped, VERIFIABLE packet/proposal (work_shaping_protocol + large_packet_is_eligible_work), never prose intent alone — a wish an attentive host might honor is not a constraint."
       - "File with agent_id + host=forge so the coordinator can see forge-originated demand and prioritize what unblocks the most lanes."
@@ -1404,15 +1409,44 @@ distributed_work:
     forge_cycle_budget:
       decided_by: "The Tlatoāni (order 264, updated order 707-3x9d 2026-08-12)"
       rule: >
-        Agents running INSIDE a forge container (TILLANDSIAS_HOST_KIND=forge)
-        drain AT MOST ONE plan packet per cycle when running in unattended litmus
-        gates (TILLANDSIAS_LITMUS_STEP) and must SPLIT the packet into smaller ready
-        child packets if it will not fit within the 600s launch budget. Autonomous
-        and pairing forge cycles scale to an ADAPTIVE BATCH BUDGET (default 4,
-        configurable up to 6 via TILLANDSIAS_CYCLE_BUDGET) drawn from a single
-        cohesive epic (release_target) to maximize the work-to-orchestration ratio.
+        YES — a forge cycle MAY drain more than one plan packet. It drains as
+        much of the batch as fits the 600s launch envelope, taken as ONE story.
+        The bound is TIME, never a count. No budget NUMBER lives here:
+        scripts/select-work-batch.sh is the sole authority for all of them,
+        forge and non-forge, defaults and TILLANDSIAS_CYCLE_BUDGET bounds.
       supersedes: >
-        The static 1-packet-per-cycle limitation across all forge sessions.
+        The static 1-packet-per-cycle limit on forge sessions; and (831-ezea)
+        mandatory SPLIT on overrun — minting rows exactly when service
+        saturates manufactures arrival. Overrun means carry less, not split.
+      the_batch_is_a_story: >
+        Order 830-6rte (The Tlatoāni, 2026-08-19). The unit of work is the
+        STORY, not the packet: take the whole batch, implement it as one
+        coherent change, and pay the cycle's fixed costs ONCE — one
+        build/verify pass, one loop-status entry, one attestation. Never
+        ./build.sh --check per packet; never attest per packet.
+        WHY, measured on the fleet 2026-08-16..19: 155 attestation-only commits
+        and 88 ledger-bookkeeping commits in three days, against single digits
+        for every category of product work; over five days, 127 product-code
+        commits against 457 plan-only, 149 attestation-only and 219 merges.
+        EVERY CYCLE PAYS THE SAME EXIT COST WHETHER IT CARRIED ONE PACKET OR
+        EIGHT — loop-status, attestation record, attestation self-check at the
+        new HEAD, and the merges each provokes. Bundling does not shrink the
+        overhead; it amortizes it over more delivered work, which is the only
+        lever available that does not weaken the exit contract itself.
+      count_versus_envelope: >
+        The forge bound is TIME, not a count. "One packet" was always a proxy
+        for "fits in the 600s launch budget", and it is a bad proxy in both
+        directions: three one-line ledger closures fit easily, one large packet
+        does not fit at all. Ask the envelope question about the STORY.
+      how_this_rule_failed_to_reach_anyone: >
+        Recorded because it is an instance of the class it now governs. 707-3x9d
+        lifted the single-packet limit on 2026-08-12. The skill agents actually
+        read went on saying "Drain at most ONE packet per forge cycle" and
+        "Budget is 1 on forge and 3 elsewhere" for a week, in the same paragraph
+        that said 4 and 6. Three numbers for one budget; agents took the
+        smallest. A methodology change that does not land in the skill is
+        "fixed but not enabled", and the fleet spent a week draining one packet
+        at a time while tuned for ten.
       interim_note: >
         Reliance on step timeouts is interim. Order 265 (forge
         heartbeat/liveness signals — we own the launch and the container

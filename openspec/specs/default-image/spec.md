@@ -9,7 +9,9 @@ active
 TBD - created by archiving change attach-here-mvp. Update Purpose after archive.
 ## Requirements
 ### Requirement: Fedora Minimal base image with dev tools
-The default container image SHALL be based on Fedora Minimal and MUST include OpenCode, OpenSpec CLI, Nix, and essential development tools.
+The default container image SHALL be based on Fedora Minimal and MUST include OpenCode, OpenSpec CLI, and essential development tools.
+
+The forge image MUST NOT carry a Nix store. The forge is EPHEMERAL by design — it must be cheap to launch and cheap to destroy — and a multi-hundred-megabyte store baked into it taxes exactly the operation the forge exists to make cheap, on every host in the fleet. Nix belongs to the LONG-LIVED tier alongside the inference container, git mirror, router and proxy. A forge that needs a Nix artifact FETCHES it from the enclave cache service (order 801-kqme: harmonia 3.2.0 serving a read-only mount of the host store, TLS from the stack CA plus an ed25519 content-signing key). Decided by The Tlatoāni, 2026-08-19, order 801-x1nx.
 
 #### Scenario: Image contains OpenCode
 - **WHEN** the container starts
@@ -19,9 +21,11 @@ The default container image SHALL be based on Fedora Minimal and MUST include Op
 - **WHEN** the container starts
 - **THEN** `openspec` SHALL be available in PATH (installed or deferred to first run)
 
-#### Scenario: Image contains Nix
+#### Scenario: Image carries NO Nix store
 - **WHEN** the container starts
-- **THEN** `nix` SHALL be available for reproducible builds with flakes enabled
+- **THEN** neither `nix` nor `/nix` SHALL be present in the forge image
+- **AND** a build needing Nix artifacts SHALL obtain them from the enclave cache
+  service rather than from a store baked into the image
 
 #### Scenario: Image contains git and GitHub CLI
 - **WHEN** the container starts

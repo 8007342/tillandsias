@@ -66,6 +66,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "blocking-counts",
     "burndown",
     "capabilities",
+    "carry-forward-check",
     "check",
     "closure-evidence-check",
     "compact",
@@ -161,6 +162,16 @@ const USAGE: &str = concat!(
     "                                     events block, so PROSE that quotes the marker inside a\n",
     "                                     block scalar is never read as a declaration. Backs the\n",
     "                                     closure-event pass of check-fragment-status-loss.sh.\n",
+    "           carry-forward-check <fragment.yaml>\n",
+    "                                     ORDER 831-ezea. Print the packet_ids this fragment\n",
+    "                                     TOUCHED (has an event for) and LEFT OPEN (no terminal\n",
+    "                                     event, status: value, or declared status) while naming\n",
+    "                                     no `next_action` — one per line, exit 0. Closures are\n",
+    "                                     EXEMPT: a carry-forward note on a terminal row is a dead\n",
+    "                                     letter no selector reads again. Same YAML parse and the\n",
+    "                                     same exit 3 on an unparseable fragment as its three\n",
+    "                                     fragment-* siblings. ADVISORY today (adoption 4.6%),\n",
+    "                                     see scripts/check-carry-forward.sh for the promotion bar.\n",
     "           next-order [prefix]       mint a COLLISION-FREE order token for a new packet\n",
     "                                     (<seq>-<suffix>, e.g. 581-k3f9). Never compute the\n",
     "                                     'next free order' yourself: that reads a ledger snapshot\n",
@@ -1769,8 +1780,211 @@ pub fn log_cli_usage(tool: &str, outcome: &str, latency_ms: u128) {
 /// These arms fall off their own end rather than exiting, so a bool is the
 /// safe contract: `std::process::exit` here would skip the stdout flush and
 /// can truncate piped output.
+/// ORDER 831-ezea. The CARRY-FORWARD GAPS in one fragment: every packet the
+/// fragment TOUCHED and LEFT OPEN while naming no next action.
+///
+/// WHY THIS IS A DISTINCT CHECK. The only blocking exit condition the work loop
+/// enforces today is FILING A NEW ROW. Nothing anywhere requires that a cycle
+/// which picked a packet up and put it down again leaves that packet resumable,
+/// so arrival scales with service: every cycle adds rows and carries none
+/// forward. `next_action` is the field the cold-start selector already reads
+/// (answer.rs `next_action_snippet` -> the `next:` line of every `plan next`
+/// row, since 606-xu52) and it is declared in plan/schema.yaml. Where a packet
+/// omits it that reader falls through to handoff_note -> outcome -> title, so
+/// the row advertises the packet's own NAME as its next step.
+///
+/// TOUCHED means the fragment carries an EVENT for the packet — the same
+/// definition `fragment-event-packets` uses, deliberately, so "addresses a
+/// packet" means one thing across this family. A bare `packets:` definition
+/// with no events is a filing, not a touch.
+///
+/// LEFT OPEN means this fragment does not close the packet. Closure is read
+/// from all three channels a fragment can close on: a terminal EVENT type, a
+/// terminal `status:` LWW value, and a terminal status on an inline `packets:`
+/// declaration. Terminal-set membership is the resolver's
+/// ([`tillandsias_plan::is_terminal_status`], 650-dq6u) rather than a literal
+/// list — a guard laxer OR wider than the resolver is decorative (649-b2e4),
+/// and litmus:terminal-status-vocabulary-shape exists because an earlier guard
+/// drifted to `done|completed|retired|obsolete`.
+///
+/// CLOSURES ARE EXEMPT BY DESIGN, which is the whole reason this is not simply
+/// "every packet named in a fragment needs a next_action". A "what would have
+/// made this cheaper" note on a terminal row is a dead letter: no selector ever
+/// reads that row again, so requiring one would buy nothing and would train
+/// filers to write filler.
+///
+/// CARRIED accepts the two channels a fragment can actually write the field on:
+/// a `packets:` entry with `next_action`, and a `status:` LWW entry with
+/// `field: next_action`. It does NOT accept a next_action nested inside an
+/// EVENT. That shape exists in the corpus — measured 2026-08-19 on
+/// plan/index.yaml, 6 event-nested (indent 10) against 65 packet-level (indent
+/// 6) — but `next_action_snippet` reads the PACKET field, so an event-nested
+/// value is never printed by `plan next`. Accepting it would let a fragment
+/// satisfy this check with a value no selector can reach.
+///
+/// KNOWN LIMIT, stated rather than hidden: a `packets:` entry that RE-declares
+/// an existing packet is a G-Set no-op, so a next_action written there on an
+/// existing packet is discarded by the fold. This subcommand cannot tell a
+/// fresh definition from a re-declaration without loading the ledger, and it
+/// must not load the ledger (it lives with the 816-kq2z fragment-only arms for
+/// the same 132ms reason). The discarded-declaration class is
+/// check-fragment-status-loss.sh's, not this one; the remedy text points at
+/// `set-field`, which writes the LWW channel.
+///
+/// Returns the gap packet_ids, sorted and deduplicated.
+fn carry_forward_gaps(doc: &serde_yaml::Value) -> Vec<String> {
+    use serde_yaml::Value;
+    // Plain `fn`s rather than closures: a closure here infers a single lifetime
+    // for the borrow and the returned &str, which does not compile once the
+    // result outlives the call. Not a style choice.
+    fn text<'a>(v: &'a Value, k: &str) -> Option<&'a str> {
+        v.get(k).and_then(Value::as_str)
+    }
+    fn named(v: &Value, k: &str) -> bool {
+        text(v, k).is_some_and(|t| !t.trim().is_empty())
+    }
+
+    // A terminal EVENT: `type: completed` at the entry, or nested under
+    // `event:` as a scalar or a mapping. Same three shapes
+    // `fragment-terminal-events` accepts (752-pst5), widened from `completed`
+    // alone to the whole closure ladder because a fragment that closes a packet
+    // straight to `verified` or `done` has closed it just as finally. All four
+    // ladder words are live event types in the corpus (measured 2026-08-19:
+    // completed 550, verified 60, done 3, obsoleted 1).
+    let terminal_event = |event: &Value| -> bool {
+        let terminal = |t: Option<&str>| t.is_some_and(tillandsias_plan::is_terminal_status);
+        if terminal(text(event, "type")) {
+            return true;
+        }
+        if let Some(inner) = event.get("event")
+            && (terminal(inner.as_str()) || terminal(text(inner, "type")))
+        {
+            return true;
+        }
+        false
+    };
+
+    let mut touched: Vec<String> = Vec::new();
+    let mut closed: Vec<String> = Vec::new();
+    let mut carried: Vec<String> = Vec::new();
+
+    // Inline: packets: [{packet_id, status, next_action, events: [...]}]
+    if let Some(pkts) = doc.get("packets").and_then(Value::as_sequence) {
+        for p in pkts {
+            let Some(pid) = text(p, "packet_id") else {
+                continue;
+            };
+            let events = p.get("events").and_then(Value::as_sequence);
+            if events.is_some_and(|evs| !evs.is_empty()) {
+                touched.push(pid.to_string());
+            }
+            if events.is_some_and(|evs| evs.iter().any(&terminal_event)) {
+                closed.push(pid.to_string());
+            }
+            if text(p, "status").is_some_and(tillandsias_plan::is_terminal_status) {
+                closed.push(pid.to_string());
+            }
+            if named(p, "next_action") {
+                carried.push(pid.to_string());
+            }
+        }
+    }
+
+    // Top-level: events: [{packet_id, event: {...}}] — declares without
+    // creating, so this is the shape a cycle uses to put a packet down.
+    if let Some(evs) = doc.get("events").and_then(Value::as_sequence) {
+        for e in evs {
+            let Some(pid) = text(e, "packet_id") else {
+                continue;
+            };
+            if e.get("event").is_none() {
+                // A misplaced DEFINITION under `events:` (812-d45t), not an
+                // event. Its own subcommand reports it; counting it as a touch
+                // here would put one authoring mistake in two advisories.
+                continue;
+            }
+            touched.push(pid.to_string());
+            if terminal_event(e) {
+                closed.push(pid.to_string());
+            }
+        }
+    }
+
+    // The LWW channel. `field:` is ANY field, not just status — the key is
+    // misnamed and plan/index.d/README.md says so.
+    if let Some(sts) = doc.get("status").and_then(Value::as_sequence) {
+        for s in sts {
+            let Some(pid) = text(s, "packet_id") else {
+                continue;
+            };
+            match text(s, "field") {
+                Some("status")
+                    if text(s, "value").is_some_and(tillandsias_plan::is_terminal_status) =>
+                {
+                    closed.push(pid.to_string());
+                }
+                Some("next_action") if named(s, "value") => {
+                    carried.push(pid.to_string());
+                }
+                _ => {}
+            }
+        }
+    }
+
+    let mut gaps: Vec<String> = touched
+        .into_iter()
+        .filter(|pid| !closed.contains(pid) && !carried.contains(pid))
+        .collect();
+    gaps.sort_unstable();
+    gaps.dedup();
+    gaps
+}
+
 fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
     match subcommand {
+        "carry-forward-check" => {
+            // ORDER 831-ezea. See [`carry_forward_gaps`] for the contract. This
+            // arm is IO only: read, parse, print one packet_id per line, exit 0.
+            //
+            // ADVISORY BY DESIGN — exit 0 even with gaps. Measured 2026-08-19,
+            // next_action adoption across the fold is 4.6% of ready rows (65
+            // packet-level values in plan/index.yaml). A hard refusal at that
+            // adoption would reject essentially every fragment the fleet writes
+            // tonight, and a gate that blocks everyone on its first night is
+            // switched off within a day. The caller
+            // (scripts/check-carry-forward.sh) prints the advisory and exits 0;
+            // the promotion threshold is recorded there.
+            //
+            // Exit 3 on an unparseable fragment, identically to its three
+            // siblings: silence from a parser is not evidence of absence
+            // (787-f7dh), and "this fragment carries every packet forward" must
+            // never be the same answer as "this fragment could not be read".
+            const EXIT_FRAGMENT_UNPARSEABLE: i32 = 3;
+            let Some(path) = args.get(1) else {
+                eprintln!("usage: tillandsias-plan carry-forward-check <fragment.yaml>");
+                std::process::exit(2);
+            };
+            let raw = match std::fs::read_to_string(path) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("error: read {path}: {e}");
+                    std::process::exit(2);
+                }
+            };
+            let doc: serde_yaml::Value = match serde_yaml::from_str(&raw) {
+                Ok(d) => d,
+                Err(e) => {
+                    eprintln!(
+                        "unparseable:{path}: {e} — the carry-forward pass cannot read this fragment, so any packet it leaves open is UNEXAMINED (831-ezea)"
+                    );
+                    std::process::exit(EXIT_FRAGMENT_UNPARSEABLE);
+                }
+            };
+            for id in carry_forward_gaps(&doc) {
+                emit(&id);
+            }
+            true
+        }
         "fragment-misplaced-definitions" => {
             // ORDER 812-d45t. A PACKET DEFINITION written under the top-level
             // `events:` key instead of `packets:` is accepted by every gate and
@@ -4218,6 +4432,134 @@ mod tests {
             vec![("3".to_string(), "ageless")],
             "no-timestamp packets are reported as unknown-age, never expired"
         );
+    }
+
+    /// ORDER 831-ezea. The carry-forward contract, both directions in one
+    /// fragment so the EXEMPTION is proved rather than asserted: `abandoned` is
+    /// touched-and-left-open with no next_action and must be named; `closed` is
+    /// touched and CLOSED and must not be, even though it too carries no
+    /// next_action. A check that named both would be a check that just counts
+    /// packets.
+    fn gaps_of(raw: &str) -> Vec<String> {
+        let doc: serde_yaml::Value = serde_yaml::from_str(raw).expect("fixture parses");
+        carry_forward_gaps(&doc)
+    }
+
+    #[test]
+    fn carry_forward_names_open_touches_and_exempts_closures() {
+        let raw = concat!(
+            "packets:\n",
+            // Touched, left open, no next_action anywhere -> NAMED.
+            "  - packet_id: abandoned\n    order: 1\n    title: \"a\"\n    status: ready\n",
+            "    events:\n      - type: progress\n        ts: \"2026-08-19T00:00:00Z\"\n",
+            // Touched and CLOSED by a terminal event -> exempt.
+            "  - packet_id: closed-by-event\n    order: 2\n    title: \"b\"\n    status: ready\n",
+            "    events:\n      - type: completed\n        ts: \"2026-08-19T00:00:00Z\"\n",
+            // Touched, left open, but CARRIED at packet level -> exempt.
+            "  - packet_id: carried-inline\n    order: 3\n    title: \"c\"\n    status: ready\n",
+            "    next_action: \"Run scripts/foo.sh and quote the output.\"\n",
+            "    events:\n      - type: progress\n        ts: \"2026-08-19T00:00:00Z\"\n",
+            // Declared straight to a terminal status -> exempt.
+            "  - packet_id: closed-by-declaration\n    order: 4\n    title: \"d\"\n    status: verified\n",
+            "    events:\n      - type: note\n        ts: \"2026-08-19T00:00:00Z\"\n",
+            // A DEFINITION with no events is a filing, not a touch -> not named.
+            "  - packet_id: merely-filed\n    order: 5\n    title: \"e\"\n    status: ready\n",
+        );
+        assert_eq!(
+            gaps_of(raw),
+            vec!["abandoned".to_string()],
+            "only the touched-and-left-open packet with no next_action may be named"
+        );
+    }
+
+    #[test]
+    fn carry_forward_reads_the_top_level_event_and_lww_channels() {
+        let raw = concat!(
+            "events:\n",
+            // Put down with a note, nothing carried -> NAMED.
+            "  - packet_id: open-note\n    event:\n      type: note\n      ts: \"2026-08-19T00:00:00Z\"\n",
+            // Put down with a note, carried on the LWW channel -> exempt.
+            "  - packet_id: open-carried\n    event:\n      type: progress\n      ts: \"2026-08-19T00:00:00Z\"\n",
+            // Closed on the LWW status channel -> exempt.
+            "  - packet_id: closed-lww\n    event:\n      type: note\n      ts: \"2026-08-19T00:00:00Z\"\n",
+            // Closed by a terminal event nested under `event:` -> exempt.
+            "  - packet_id: closed-nested\n    event:\n      type: done\n      ts: \"2026-08-19T00:00:00Z\"\n",
+            "status:\n",
+            "  - packet_id: open-carried\n    field: next_action\n    value: \"Rerun the fixture.\"\n    ts: \"2026-08-19T00:00:00Z\"\n    host: h\n",
+            "  - packet_id: closed-lww\n    field: status\n    value: completed\n    ts: \"2026-08-19T00:00:00Z\"\n    host: h\n",
+        );
+        assert_eq!(
+            gaps_of(raw),
+            vec!["open-note".to_string()],
+            "the LWW next_action and status channels must both be read"
+        );
+    }
+
+    /// ORDER 831-ezea. An EVENT-nested `next_action` must NOT satisfy the
+    /// check. The shape is real — 6 occurrences in plan/index.yaml against 65
+    /// packet-level, measured 2026-08-19 — but `answer.rs next_action_snippet`
+    /// reads the PACKET field, so an event-nested value is never printed on a
+    /// `plan next` row. Accepting it would let a fragment pass with a value no
+    /// selector can reach, which is this order's own failure class.
+    #[test]
+    fn an_event_nested_next_action_does_not_satisfy_carry_forward() {
+        let raw = concat!(
+            "packets:\n",
+            "  - packet_id: buried\n    order: 1\n    title: \"a\"\n    status: ready\n",
+            "    events:\n      - type: progress\n        ts: \"2026-08-19T00:00:00Z\"\n",
+            "        next_action: \"invisible to plan next\"\n",
+        );
+        assert_eq!(
+            gaps_of(raw),
+            vec!["buried".to_string()],
+            "a next_action the cold-start selector cannot read must not exempt the packet"
+        );
+    }
+
+    /// An empty or whitespace-only value is not a carry-forward. Filler is the
+    /// predictable response to any adoption push, so the check refuses it at
+    /// the point where the field is read.
+    #[test]
+    fn a_blank_next_action_is_not_a_carry_forward() {
+        let raw = concat!(
+            "packets:\n",
+            "  - packet_id: blank\n    order: 1\n    title: \"a\"\n    status: ready\n",
+            "    next_action: \"   \"\n",
+            "    events:\n      - type: progress\n        ts: \"2026-08-19T00:00:00Z\"\n",
+        );
+        assert_eq!(gaps_of(raw), vec!["blank".to_string()]);
+    }
+
+    /// A fragment that ONLY closes packets is the exemption in isolation — the
+    /// shape a closure cycle actually writes. It must produce an EMPTY result,
+    /// not a list of every id it mentions.
+    #[test]
+    fn a_pure_closure_fragment_has_no_carry_forward_gaps() {
+        let raw = concat!(
+            "events:\n",
+            "  - packet_id: one\n    event:\n      type: completed\n      ts: \"2026-08-19T00:00:00Z\"\n",
+            "  - packet_id: two\n    event:\n      type: verified\n      ts: \"2026-08-19T00:00:00Z\"\n",
+            "status:\n",
+            "  - packet_id: one\n    field: status\n    value: completed\n    ts: \"2026-08-19T00:00:00Z\"\n    host: h\n",
+            "  - packet_id: two\n    field: status\n    value: verified\n    ts: \"2026-08-19T00:00:00Z\"\n    host: h\n",
+        );
+        assert!(
+            gaps_of(raw).is_empty(),
+            "closures are exempt by design: a carry-forward note on a terminal row is a dead letter"
+        );
+    }
+
+    /// ORDER 812-d45t interaction. A misplaced DEFINITION under `events:`
+    /// carries no `event:` key. It is already reported by
+    /// `fragment-misplaced-definitions`; counting it as a touch here would put
+    /// one authoring mistake into two different advisories.
+    #[test]
+    fn a_misplaced_definition_is_not_counted_as_a_touch() {
+        let raw = concat!(
+            "events:\n",
+            "  - packet_id: misfiled\n    order: 9\n    title: \"written under the wrong key\"\n    kind: fix\n",
+        );
+        assert!(gaps_of(raw).is_empty());
     }
 
     #[test]

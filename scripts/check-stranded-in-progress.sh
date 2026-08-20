@@ -27,7 +27,20 @@
 #
 # GRAMMAR — one line per stranded packet, then one summary line:
 #   ^stranded\t<order>\t<role>\t<packet_id>$
-#   ^summary: (in_progress=<n> stranded=<n> threshold_events=<n>|unavailable:<reason>)$
+#   ^summary: (population=<n> in_progress=<n> stranded=<n> threshold_events=<n>|unavailable:<reason>)$
+#
+# POPULATION (order 831-ezea). Every check verdict names the size of the set it
+# examined, so that a green cannot be misread as health over nothing. Here
+# `population` is DELIBERATELY equal to `in_progress`, and that is the point
+# rather than a redundancy: this sweep's population IS the in_progress set, so
+# the number a reader saw as a clean finding ("nothing in progress — good") was
+# always the denominator ("I examined nothing"). The field does not add a new
+# number, it names the role of one that was already there. Anything that greps
+# `stranded=0` as evidence of health must first read `population=`.
+#
+# An `unavailable:` verdict carries NO population field: the sweep did not look,
+# so the denominator is unknown, not zero. Printing `population=0` there would
+# be the same false all-clear the third verdict exists to prevent.
 #
 # `unavailable:<reason>` (702-68zj) is a THIRD verdict for "this sweep could not
 # be computed" — no runnable plan binary, no jq, a failed or unparseable query.
@@ -119,4 +132,5 @@ if "$PLAN" capabilities 2>/dev/null | grep -qx 'expire-claims'; then
         echo "hint: ${threshold} claim(s) past the 24h TTL — run 'tillandsias-plan expire-claims' to return them to ready (641-e2qa criterion 2)"
     fi
 fi
-printf 'summary: in_progress=%s stranded=%s threshold_events=%s\n' "$total" "$stranded" "${threshold:-0}"
+printf 'summary: population=%s in_progress=%s stranded=%s threshold_events=%s\n' \
+    "$total" "$total" "$stranded" "${threshold:-0}"
