@@ -536,11 +536,64 @@ distributed_work:
         claim it than every open row covering that scope. Otherwise it is a
         next_action clause on that row, or an event on it. Both predicates are
         already computed as claimed_files (plan_answer, batch selector).
+      accumulate_then_promote: >
+        THE OTHER HALF OF THE RULE, and without it the rule above is only a
+        refusal. Observations that are NOT independently schedulable accumulate
+        as events on their row. That accumulation is not a graveyard: when a
+        row's events show a CONFIRMED PATTERN — several independent
+        observations, ideally from different hosts or cycles, converging on one
+        defect or one missing capability — the row has OVERFLOWED and the
+        pattern should be promoted to schedulable work.
+
+        PROMOTION IS TLATOĀNI-GATED (operator ruling, 2026-08-19). An agent may
+        NOTE that a row looks ready to promote and MUST NOT promote it. What
+        counts as a confirmed pattern is not yet expressible as a threshold, and
+        an agent that promotes on its own judgment reintroduces exactly the
+        unbounded arrival this rule exists to bound — by a longer path.
+
+        WHY THIS PRESERVES THE CONVERGENCE GUARANTEE: nothing here adds work.
+        Every observation is still recorded, in full, forever. What changes is
+        only the CURATION AT THE ACCEPTANCE BOUNDARY — whether an observation
+        becomes a schedulable row the moment it is noticed, or waits until a
+        pattern confirms it is worth someone's cycle. The corpus stays
+        monotone; the SELECTABLE set stops growing on every observation.
+
+      why_velocity_is_the_other_lever: >
+        THE SIGN FLIPS AT b = 1, and the previously recorded rejoin target was
+        set on the wrong side of it.
+
+        With arrivals λ = a + b·μ (measured: a = 2.2/day, b = 1.80, r = 0.868)
+        and service μ, the queue moves at
+
+            dL/dt = a + (b − 1)·μ
+
+        so ∂(dL/dt)/∂μ = b − 1. Above b = 1 throughput is a DIVERGENCE
+        multiplier — every host added, every cycle shortened, fills the queue
+        faster. Below b = 1 the same throughput DRAINS it, and the queue
+        converges once μ > a/(1 − b).
+
+        This retires R2's "b ≤ 1.30" as a target: at b = 1.30,
+        dL/dt = 2.2 + 0.30·μ, which is strictly positive for EVERY μ ≥ 0. That
+        criterion cannot converge at any velocity, on any number of hosts. It
+        was chosen as "better than the measured 1.80" without checking which
+        side of the threshold it lands on. THE TARGET IS b < 1. At b = 0.5 and
+        today's μ ≈ 19/day, dL/dt = −7.3/day.
+
+        AND THIS IS WHY OVERHEAD REDUCTION COMPOUNDS (operator, 2026-08-19):
+        halving orchestration overhead roughly doubles both a and μ, so
+        dL/dt doubles — WITH ITS SIGN PRESERVED. Velocity is a multiplier on
+        the direction already travelled, never a fix for the direction. Hence
+        the ordering: get b below 1 by curation FIRST, and only then is the
+        acceleration from the nix cache, a reliable expert system, and shorter
+        cycles self-sustaining rather than self-defeating.
+
       trace: >
         operator directive 2026-07-17 (Hy3 size-aversion → stale-task
-        churn); philosophy.yaml (monotonic reduction); convergence.yaml
-        (drift_control); worker_agent_protocol.select_shaped_work (selection
-        seam); forge_cycle_budget (the forge-scoped split precedent this
+        churn); operator ruling 2026-08-19 (Tlatoāni-gated promotion; velocity
+        as a convergence multiplier); philosophy.yaml (monotonic reduction);
+        convergence.yaml (drift_control);
+        worker_agent_protocol.select_shaped_work (selection seam);
+        forge_cycle_budget (the forge-scoped split precedent this
         generalizes). Mirrored operationally in the /advance-work-from-plan
         and /meta-orchestration reduction-engine sections.
 

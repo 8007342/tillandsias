@@ -32,7 +32,26 @@ FileUtils.mkdir_p(archive_dir)
 # this week. `--index` is passed explicitly so --check's `plan/` -> `plan_tmp/`
 # rewrite redirects the query at the copy along with everything else.
 plan_bin = ENV['TILLANDSIAS_PLAN_BIN'] || 'target/release/tillandsias-plan'
-TERMINAL_STATUSES = %w[completed done obsoleted].freeze
+# `obsoleted` IS DELIBERATELY ABSENT (Tlatoāni ruling, 2026-08-19). It is a
+# terminal status, so archiving it is defensible on its face — and it is exactly
+# wrong under the convergence model.
+#
+# Retraction (`set-field <id> status obsoleted`) is the channel that drains the
+# READY queue, and the whole argument for retracting aggressively is that
+# NOTHING IS LOST: the row stays, its events stay, and the recorded reason for
+# rejecting it is what stops a later agent re-proposing the same idea. Archiving
+# makes a row answer `no packet matches`. So archiving retracted rows deletes
+# precisely the memory that makes retraction safe, in precisely the population
+# retraction produces.
+#
+# Today the exemption is nearly free: 8 obsoleted against 564 completed. It does
+# NOT scale as written — once retraction is the primary drain (~182/week), these
+# rows accumulate in the base index forever and re-create the growth problem
+# they were meant to solve. The follow-on is a TOMBSTONE form: archive a
+# retracted row's event history but keep a compact row carrying id, title, and
+# the retraction reason, so it stays queryable at ~5 lines instead of ~80. That
+# must land BEFORE the first large retraction wave, not after.
+TERMINAL_STATUSES = %w[completed done].freeze
 terminal_ids = {}
 TERMINAL_STATUSES.each do |st|
   # `--limit 0` IS LOad-BEARING, not a default-restating flourish. `query`
@@ -62,6 +81,37 @@ end
 abort "archive-plan-packets: the fold reported ZERO terminal packets, which is " \
       "not a state this ledger reaches. Refusing rather than archiving nothing " \
       "and reporting success." if terminal_ids.empty?
+
+# A ROW STILL ADDRESSED BY A LIVE FRAGMENT IS NOT ARCHIVABLE.
+#
+# Found the hard way: the first real sweep archived 569 packets and immediately
+# turned check-fragment-status-loss.sh red with 38 violations, each reading
+# "an events block addresses it but NO SUCH PACKET is in the fold ... that event
+# was discarded". Archiving a row does not just make the ROW unqueryable — it
+# ORPHANS every plan/index.d event still aimed at it, and the fold then drops
+# those events silently. The files stay in git and vanish from every answer.
+#
+# That is a worse loss than the row itself, and it cannot be fixed by relocating
+# the events: fragments are append-only and immutable once written.
+#
+# So the archivable set is TERMINAL MINUS ADDRESSED. It costs a little of the
+# sweep (38 rows of 569) and keeps the append-only substrate honest, which is
+# the whole point of the CRDT.
+fragments_dir = File.join(File.dirname(index_path), 'index.d')
+addressed_ids = {}
+Dir.glob(File.join(fragments_dir, '*.yaml')).sort.each do |frag|
+  out = `#{plan_bin} fragment-event-packets #{frag} 2>/dev/null`
+  # exit 3 is an unparseable fragment; 796-4ydb says name it and keep going
+  # rather than refusing the fleet, but do NOT treat it as "addresses nothing".
+  unless $?.success?
+    warn "archive-plan-packets: could not read #{frag} — treating every terminal " \
+         "packet as addressed by it is not possible, so REFUSING the sweep rather " \
+         "than archiving rows whose events this fragment may still address."
+    exit 1
+  end
+  out.each_line { |l| k = l.strip; addressed_ids[k] = true unless k.empty? }
+end
+terminal_ids.reject! { |k, _| addressed_ids.key?(k) }
 
 # THE ROW HEADER. `order` is in this alternation because 19 of the 1031 base
 # rows lead with `- order:` rather than `- packet_id:` — YAML mapping keys are

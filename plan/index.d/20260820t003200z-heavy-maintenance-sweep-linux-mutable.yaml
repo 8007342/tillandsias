@@ -1,0 +1,125 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-20T00:32:00Z.
+#
+# The Tlatoāni-authorised heavy maintenance sweep, plus two operator rulings and
+# one correction to a criterion I wrote. Events on existing rows; no new packets.
+events:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    event:
+      type: note
+      ts: "2026-08-20T00:32:00Z"
+      agent_id: linux-macuahuitl-opus5-20260819T232900Z
+      host: linux_mutable
+      summary: |
+        R2 IS RETIRED AND REPLACED. I set its target on the wrong side of the
+        only threshold that matters, and the operator's velocity argument is
+        what exposed it.
+
+        With arrivals lambda = a + b*mu (measured a = 2.2/day, b = 1.80,
+        r = 0.868) and service mu, the queue moves at
+
+            dL/dt = a + (b - 1)*mu        so   d(dL/dt)/d(mu) = b - 1
+
+        THE SIGN FLIPS AT b = 1. Above it, throughput is a DIVERGENCE
+        multiplier — every host added and every cycle shortened fills the queue
+        faster, which is what I correctly concluded at b = 1.80. Below it, the
+        same throughput DRAINS the queue, and it converges once mu > a/(1-b).
+
+        R2's target was "b <= 1.30". At b = 1.30, dL/dt = 2.2 + 0.30*mu, which
+        is STRICTLY POSITIVE FOR EVERY mu >= 0. That criterion cannot converge
+        at any velocity on any number of hosts. I picked 1.30 because it was a
+        visible improvement on the measured 1.80, without checking which side of
+        the threshold it lands on — a target chosen by direction instead of by
+        the arithmetic that defines success.
+
+          R2'' ARRIVAL CURATION PUTS b BELOW 1. Not 1.30. At b = 0.5 and
+              today's mu ~ 19/day, dL/dt = -7.3/day.
+
+        AND THE OPERATOR'S POINT IS THE OTHER HALF (2026-08-19): halving
+        orchestration overhead roughly doubles a AND mu, so dL/dt doubles WITH
+        ITS SIGN PRESERVED. Velocity is a multiplier on the direction already
+        being travelled, never a fix for the direction. That is exactly why the
+        acceleration they describe — nix cache, reliable experts, 30-minute then
+        20-minute cycles — is self-sustaining ONCE b < 1 and self-defeating
+        before it. The ordering is forced: curate first, then accelerate, and
+        then the acceleration compounds.
+
+        Recorded in methodology/distributed-work.yaml ->
+        why_velocity_is_the_other_lever.
+
+        A SECOND CORRECTION, smaller and mine as well. R2's early read cited
+        "carry-forward adoption >= 40% (baseline today 75 of 136 fragments)".
+        Two different denominators got fused: the advisory actually measures
+        next_action adoption across READY ROWS, and reads 4.6% (17/367). The 75
+        of 136 figure counted fragments, which is a different population
+        entirely. The bar is unchanged; the baseline I recorded was not
+        measuring it.
+  - packet_id: periodic-deslopification-sweep
+    event:
+      type: progress
+      ts: "2026-08-20T00:32:00Z"
+      agent_id: linux-macuahuitl-opus5-20260819T232900Z
+      host: linux_mutable
+      summary: |
+        THE FIRST REAL SWEEP RAN. Tlatoāni-authorised, sole host. It also broke
+        the build on its first attempt, in a way neither the acceptance test nor
+        the design anticipated — recorded in full because the failure is the
+        useful part.
+
+        RULING TAKEN, option (c): `obsoleted` is EXEMPT from archiving. A
+        retracted row keeps its reasoning queryable, which is the property the
+        convergence model leans on to call aggressive retraction safe. Costs
+        nothing today at 8 obsoleted vs 564 completed. It does NOT scale as
+        written — once retraction is the primary drain these rows accumulate
+        forever — so the follow-on is a TOMBSTONE form: archive a retracted
+        row's event history, keep a compact row with id, title and the
+        retraction reason at ~5 lines instead of ~80. That must land BEFORE the
+        first large retraction wave.
+
+        ATTEMPT 1 — 569 archived, ready 410 -> 410 identical, index
+        60,241 -> 25,188 lines. Both acceptance assertions green. AND IT TURNED
+        check-fragment-status-loss.sh RED with 38 violations, every one reading
+        "an events block addresses it but NO SUCH PACKET is in the fold ... that
+        event was discarded".
+
+        WHAT I HAD MISSED: archiving a row does not merely make the ROW
+        unqueryable. It ORPHANS every plan/index.d event still aimed at that
+        row, and the fold then drops those events in silence. The files remain
+        in git and disappear from every answer. That is a strictly worse loss
+        than the row, and it CANNOT be repaired by moving the events — fragments
+        are append-only and immutable once written.
+
+        This is the same lesson as the 424/437 absorption, one level up: I
+        verified the invariant I had thought of (ready set preserved) and the
+        one I had not thought of was the one that broke. The difference is that
+        this time an EXISTING gate caught it before the push. A gate written by
+        someone else, for a different reason, three weeks earlier.
+
+        THE RULE THAT WAS MISSING: a row is archivable only if it is TERMINAL
+        AND NOT ADDRESSED by any live fragment. Now enforced in the archiver and
+        asserted in --check as a second invariant, compared BEFORE vs AFTER
+        rather than absolutely, so a fragment that already addresses a
+        never-existent id (a typo, which the advisory tolerates) does not red
+        the gate; only the sweep CREATING new orphans does. Mutation control:
+        deleting the exclusion line -> exit 1 naming exactly the 38 ids.
+
+        ATTEMPT 2, shipped: 550 archived — 19 fewer, precisely the rows with
+        live events still pointing at them. Index 60,241 -> 26,344 lines (56%).
+        Ready 410 -> 410 byte-identical. 577 live packets, references sound.
+        check-fragment-status-loss.sh exit 0.
+
+        ALSO SWEPT: loop_status compaction folded 215 of 218 fragments. NOTE
+        THIS IS NOT A DISTILLATION AND IT DID NOT SHRINK ANYTHING — file COUNT
+        fell 218 -> 3 while plan/loop_status.md GREW from 12,427 to 19,074
+        lines. Folding concatenates; distilling summarises. The 19k-line
+        monolith is now its own retrieval problem and needs real semantic
+        distillation, which I deliberately did NOT attempt unattended: the file
+        carries operator-owned sections that the compactor is required to keep
+        byte-identical, and a 19k-line semantic rewrite is not a safe
+        unsupervised act. Filing the observation, not the edit.
+
+        NOT YET DONE, and it is the half that actually drains READY: retraction.
+        The archiver moves terminal rows only; ready rows are by definition not
+        terminal, so 550 archived packets did not remove one row from the 410.
+        Triage of all 410 is running as five read-only agents; retractions get
+        applied and recorded separately.
