@@ -599,6 +599,32 @@ Any time a worker notices "welp, this isn't great" — an inefficiency, a rough
 edge, a fragile assumption, an advisory-only guard, a repeated manual step, a
 log warning, a deprecation notice — it MUST be filed before the cycle exits.
 
+**CAPTURE IS MANDATORY. A NEW ROW IS NOT.** These are different acts and
+conflating them is what grew the ready queue to 410 rows against a service rate
+of ~19/day. Route every capture:
+
+- **A new ROW** only if INDEPENDENTLY SCHEDULABLE — it names owned files no open
+  row already owns, OR a different `pickup_role` can claim it than every open
+  row covering that scope.
+- **Otherwise an EVENT on the row it belongs to**, or a `next_action` clause on
+  that row. The finding is recorded in full either way; only its *selectability*
+  differs.
+
+**When a row's events show a confirmed pattern — several independent
+observations, ideally from different hosts or cycles, converging on one defect
+or one missing capability — that row has OVERFLOWED and is a promotion
+candidate. NOTE it; do NOT promote it. Promotion is Tlatoāni-gated** (operator
+ruling, 2026-08-19): what counts as a confirmed pattern is not yet expressible
+as a threshold, and an agent promoting on its own judgment restores unbounded
+arrival by a longer path.
+
+Why this is safe, and why it is not a throughput cut: with arrivals
+λ = a + b·μ, the queue moves at `dL/dt = a + (b−1)·μ`. Above b = 1 every extra
+host and every shortened cycle fills the queue FASTER; below b = 1 the same
+velocity drains it. Measured b is 1.80. So curation at the acceptance boundary
+is the *precondition* for velocity paying off at all — see
+`methodology/distributed-work.yaml` → `why_velocity_is_the_other_lever`.
+
 ### Standing FRESHNESS audit class (order 372, methodology `component_freshness`)
 Each cycle, after worker drain, treat the top component the `freshness-advisory`
 CI phase flagged as a claimable audit source. Re-validate ONE component against

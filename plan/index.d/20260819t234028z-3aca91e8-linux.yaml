@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    field: next_action
+    value: 'R2'' IS UNBLOCKED: the archiver is fixed, gated in build.sh --check, and mutation-tested (2 mutants -> exit 1, clean -> 0). Measured on a copy: ready 410 -> 410 identical, 577 archived, base index 60,241 -> 24,716 lines (59%). NOTE the previous root cause was WRONG — fold-blindness was real but not the cause; the cause was ROW_HEADER missing 19 `- order:`-led rows, whose lines were absorbed into the preceding terminal packet. Wave 2 remaining: (2) packet-level neglect term so the 100 no-priority rows in answer.rs:1470-1478 rank-9 can be selected. Item (1) hostname seed stays DOWNGRADED (R4 satisfied by claiming). Next blocking criterion is R2 — b needs 14d; baseline carry-forward 75 of 136 fragments. DO NOT run the sweep yet: see periodic-deslopification-sweep next_action.'
+    ts: "2026-08-19T23:40:28Z"
+    host: linux

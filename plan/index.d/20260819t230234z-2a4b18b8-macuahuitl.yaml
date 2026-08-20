@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: periodic-deslopification-sweep
+    field: next_action
+    value: 'BLOCKER FIRST — do NOT run archive-plan-packets.sh: it reads only plan/index.yaml, never plan/index.d (grep -cE ''index.d|fragment'' = 0), while status is LWW over base+fragments; the 2026-08-19 dry run archived 543 packets AND silently removed two READY rows, 424 and 437. Fix it to read the fold, acceptance test = ready count identical before and after. Its --check only proves idempotency, so it passes today. THEN cadence: EVENT-COUNTED ONLY, (current_order - order_at_last_sweep) >= 200, floor 48h, NO calendar ceiling — a ceiling fires low-yield sweeps on a quiet fortnight and red:two-sweeps-zero-confirmed then retires the reconciler for doing nothing wrong; time-decay is already covered by expire-claims 24h and component_freshness.'
+    ts: "2026-08-19T23:02:34Z"
+    host: macuahuitl
+
+events:
+  - packet_id: periodic-deslopification-sweep
+    event:
+      type: note
+      ts: "2026-08-19T23:02:34Z"
+      host: macuahuitl
+      summary: >
+        restore blocker lost to LWW overwrite; carry both

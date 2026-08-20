@@ -1,0 +1,66 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-19T22:00:00Z.
+packets:
+  - packet_id: set-field-emits-unquoted-values-and-reports-ok
+    order: 832-698m
+    status: completed
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    title: "set-field interpolated the value straight into YAML, so the FIRST production next_action broke the ledger while the tool printed ok"
+    deliverable: "the value is emitted as YAML, and a value containing colon-space round-trips"
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [plan-tooling, fail-loud, deslop]
+    estimated_hours: 1
+    context: |
+      OBSERVED 2026-08-19, minutes after wave 1 made next_action load-bearing.
+      The first production write began "Wave 2: (1) seed …". main.rs emitted
+      `format!("    value: {value}\n")` with no quoting, so the colon-space made
+      it a nested mapping:
+
+        value: Wave 2: (1) seed select-work-batch.sh …
+        -> mapping values are not allowed in this context at line 10 column 18
+
+      set-field printed `ok: …next_action <unset> -> Wave 2: (1) seed…` and
+      exited 0 while writing an unparseable fragment. The fold caught it —
+      `incomplete: 1126 packets from a PARTIAL corpus — 1 fragment(s) could not
+      be read` (796-4ydb) — and the pre-push gate refused. Without those two it
+      would have landed and every host's fold would have been reading a partial
+      ledger.
+
+      WHY IT SURVIVED UNTIL NOW, which is the interesting part. Every other
+      field set-field writes is a controlled vocabulary — status values, ids,
+      hosts — none of which contains colon-space. next_action is the project's
+      first FREE-PROSE field, and prose carries colon-space constantly
+      ("Wave 2: …", "REFUTED: …", "note: …"). The defect was latent for as long
+      as the tool had nothing interesting to say, and it fired on the very first
+      write of the mechanism built to carry findings forward.
+
+      FIXED by emitting through serde_yaml rather than interpolating.
+      NOT CLAIMED: that this is the only unquoted interpolation in the writer.
+      I fixed the one that fired. A sweep of the other body.push_str sites is
+      next_action material on 831-ezea, not a second row.
+events:
+  - packet_id: set-field-emits-unquoted-values-and-reports-ok
+    event:
+      type: completed
+      ts: "2026-08-19T22:00:00Z"
+      agent_id: linux-macuahuitl-opus5-20260819T220000Z
+      host: linux_mutable
+      summary: >
+        status 'completed' with evidence. main.rs set-field now emits the value via
+        serde_yaml instead of interpolating it. CONTROL, on the exact string that broke the
+        live ledger: set-field with "Wave 2: (1) seed on hostname; REFUTED: reseeding alone
+        does nothing — 'host' literal" now writes
+        `value: 'Wave 2: (1) seed on hostname; REFUTED: … ''host'' literal'` — quoted,
+        with the embedded single quotes doubled — and the fragment PARSES where the
+        unfixed binary produced "mapping values are not allowed in this context".
+        The malformed live fragment was removed and rewritten with the fixed binary; the
+        fold returns to `ok: 1126 packets, ids unique, live references sound`. It was
+        committed but never pushed, so nothing downstream ever read it.
+      evidence_refs:
+        - "crates/tillandsias-plan/src/main.rs set-field: serde_yaml emission replacing format! interpolation"
+        - "control: the exact breaking value round-trips and parses; unfixed binary reproduced the error"
+        - "live: incomplete: 1126 from a PARTIAL corpus -> ok: 1126 packets after rewrite"
+        - "caught by 796-4ydb's partial-corpus verdict plus the pre-push gate, not by set-field's own ok"

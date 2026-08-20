@@ -1,0 +1,82 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-19T21:55:00Z.
+#
+# An event on an existing row, not a new packet — 831-ezea's own routing rule.
+# The rejoin bar is criteria ON that packet; it owns no files of its own.
+events:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    event:
+      type: note
+      ts: "2026-08-19T21:55:00Z"
+      agent_id: linux-macuahuitl-opus5-20260819T215500Z
+      host: linux_mutable
+      summary: |
+        THE FLEET-REJOIN READINESS BAR. Operator, 2026-08-19: "As of right now
+        you're the only host working until we figure out how to prevent the
+        ./plan queue from growing unbounded ... we just want to fix our
+        autonomous builds so other hosts can join once you've figured out all
+        the details."
+
+        This is "all the details" made measurable. macuahuitl is sole host as of
+        now; every other host is stood down.
+
+        THE ORGANISING PRINCIPLE, which decides what is blocking and what is
+        merely good: THE BAR IS ONLY ABOUT WHAT MAKES N HOSTS WORSE THAN ONE.
+        A defect that is equally bad with one host is not a rejoin gate — it is
+        ordinary work, and holding the fleet on it would be theatre.
+
+        BLOCKING — each of these degrades super-linearly in host count:
+
+        R1. CLAIMING IS LIVE. `expire-claims` reports in_progress > 0 for at
+            least one full cycle, AND a second caller's `next` is shown to skip
+            the claimed row. This is THE fleet gate: it is the only mechanism
+            that makes N hosts differ from one host doing N cycles. It has read
+            in_progress=0 for the entire campaign while 410 rows sat ready, and
+            that is exactly how two hosts implemented 798-tk7b six minutes apart
+            (814-iyu7, ~4h duplicated). With claiming dead, every additional
+            host multiplies duplicate work.
+
+        R2. ARRIVAL ROUTING DEMONSTRABLY WORKS. b <= 1.30 over 14 days, from the
+            measured 1.80. Early read acceptable in its place: carry-forward
+            adoption >= 40% (baseline today 75 of 136 fragments named by the new
+            advisory) AND net new rows per closure < 1.0 over 3 days. WHY
+            BLOCKING: dL/dt = 2.2 + 0.80*mu is strictly increasing in
+            throughput, so each rejoining host raises mu and the queue diverges
+            FASTER. Adding hosts to a b=1.80 system is the one action guaranteed
+            to make the operator's stated problem worse.
+
+        R4. THE SELECTOR SEPARATES HOSTS. Two callers on the same day get
+            different head packets. Today they do not: three distinct seeds
+            produced a byte-identical batch, because the seed defaults to the
+            literal "host" on every bare-metal box AND `urgent=` heads the batch
+            and is a packet property, host-independent by construction. R1 makes
+            collisions RECOVERABLE; R4 makes them RARE. Both are needed — a
+            fleet that relies on the claim race alone burns a cycle's start on
+            every collision.
+
+        NOT BLOCKING, though all three are real and are wave-2/829-dkuc work:
+
+        R3. The queue SHRINKS rather than merely stops growing —
+            archive-plan-packets.sh gets its one call site and runs, against 543
+            archivable packets / 57.7% of the base index. Equally true with one
+            host, so it is not a rejoin gate.
+        R5. The 100 no-priority rows in answer.rs:1470-1478's rank-9 bucket
+            become reachable at all. Same reasoning.
+        R6. The carry-forward gate promotes from advisory to blocking once
+            adoption clears 40%. Deliberately advisory today: at ~6% a hard gate
+            would refuse nearly every fragment and be switched off within a day.
+
+        HOW THIS CYCLE'S LOOP IS SCOPED. The hourly job is re-armed in SOLE-HOST
+        MODE: work 831-ezea only, do not drain the batch, and do not file a new
+        row unless it is independently schedulable by 831-ezea's own rule —
+        otherwise set next_action or append an event. The loop is now subject to
+        the arrival discipline it exists to build, which is the only honest way
+        to run it while the queue is the problem.
+
+        THE HONEST RISK IN THE PLAN, stated because it will be visible in the
+        data before it is visible in the code: fifteen sole-host cycles tonight
+        will themselves file rows, and b is measured over the whole fleet
+        including me. If b does not move, the first hypothesis to test is not
+        that routing failed but that the sole host did not follow it — I was
+        measured as the LARGEST ledger contributor of five (121 packet_ids in
+        the sampled window), so I am the most likely source of the residual.

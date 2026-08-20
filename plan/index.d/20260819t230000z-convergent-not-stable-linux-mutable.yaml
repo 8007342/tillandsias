@@ -1,0 +1,85 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-19T23:00:00Z.
+#
+# An operator correction that revises 831-ezea's central criterion. Event on an
+# existing row; owns no files of its own.
+events:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    event:
+      type: note
+      ts: "2026-08-19T23:00:00Z"
+      agent_id: linux-macuahuitl-opus5-20260819T230000Z
+      host: linux_mutable
+      summary: |
+        CONVERGENT, NOT STABLE. Operator, 2026-08-19: "looks like you're trying
+        to enforce a 'stable' plan, while we just need a 'recoverable' plan ...
+        We should rather spend a lil time every now and then recovering what
+        slipped, than spending hours and hours trying to enforce agents in a
+        game of whack-a-mole to follow rules in ways we know they don't."
+
+        Accepted, and it invalidates this packet's headline criterion. Recorded
+        in full because the arithmetic changes sign.
+
+        WHAT I WAS BUILDING: stability. lambda < mu — hold arrival below service
+        by refusing writes at the moment they are made. Gates, caps, a routing
+        rule agents must self-apply. Under that model I concluded, correctly for
+        the model, that "no non-negative service rate drains the ready queue".
+
+        WHY THE MODEL WAS WRONG: it counts only ONE service channel, the
+        per-packet one, at 19/day. A reconciliation pass is a SECOND channel and
+        it operates in BULK. The archiver moves 543 packets in a single run. The
+        stability model cannot see that because it is a rate model over a
+        continuous server, and bulk periodic service is not that shape.
+
+        THE ARITHMETIC, and this is the part that matters — TWO QUEUES, not one,
+        and conflating them is what made the earlier answer wrong:
+
+          LEDGER SIZE. 1127 packets, 60,241 base lines. The archiver targets
+          TERMINAL rows: 543 of them, 58% of the base index, in one run. At a
+          7-day cadence that is ~78/day of bulk service against ~45/day arrival.
+          This queue converges comfortably, and it is the one that hurts RAG
+          retrieval and selection cost.
+
+          READY. 410 rows, growing ~26/day net. THE ARCHIVER DOES NOT TOUCH
+          THIS AT ALL — it archives terminal rows, and ready rows are by
+          definition not terminal. So GC alone does NOT answer the operator's
+          question. The channel that drains ready is RETRACTION:
+          `set-field <id> status obsoleted`, the lateral LWW terminal. To hold
+          ready flat needs ~182 retractions/week against +26/day.
+
+          Is 182/week plausible? 257 of 367 ready rows have NEVER been worked
+          and 166 are untouched beyond 7 days. In steady state most of what is
+          filed is never worked, so retracting most of it is not aggressive, it
+          is accurate.
+
+        WHY AGGRESSIVE RETRACTION IS SAFE, which is the whole CRDT point and the
+        answer to "nothing gets lost": obsoleted is a lateral terminal in an
+        append-only log. The row stays. Every event stays. The REASONING for why
+        it was filed stays — and that reasoning is exactly what stops a later
+        agent re-proposing it. Only SELECTION changes. Retraction removes a row
+        from what agents are offered without removing anything from what the
+        corpus remembers. That is the read-side resolution a CRDT is supposed to
+        have, and a G-Set without one is a junk drawer.
+
+        WHAT THIS RETIRES FROM THE REJOIN BAR. R2 was "b <= 1.30" — an arrival
+        suppression target, i.e. stability. It is the wrong criterion. Replace:
+
+          R2' THE RECONCILER RUNS AND IS SAFE. One sweep completes with the
+              ready count NOT reduced by anything the sweep did not deliberately
+              retract, and net(ready) over the period is <= 0.
+
+        That makes the archiver correctness bug found this cycle THE blocker
+        rather than a side quest: it is the only thing standing between here and
+        a convergent plan, and it currently removes two READY rows it was never
+        meant to touch.
+
+        WHERE RECOVERY DOES NOT REACH, stated so the model is not oversold. The
+        ledger and the code are both append-only substrates with full history,
+        so almost anything there is recoverable by a later pass. Outward-facing
+        acts are not: a published release, a pushed tag, a credential seeded
+        upstream. Those remain fix-forward (the standing rule) and no sweep
+        recovers them. And recovery is bounded by CADENCE — an error acted upon
+        before the sweep compounds into what was built on it. Convergence does
+        not remove that risk; it bounds how long the window is open, which is
+        the argument for the sweep interval being event-counted rather than
+        calendar-based.

@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    field: next_action
+    value: 'MERGE THE SIBLINGS FIRST — it is the largest drain available and it is not retraction. 13 rows are already implemented on unmerged branches (windows-next: 795-jjw3, 805-ek9e, 805-yzhw, 808-43mw, 808-7yrd, 809-7e4m, 810-jeg7, half of 806-2r4s; osx-next: 804-deux, 733-mppc, 798-q4m9; local forks: 765-tkq2, 786-kjke). Do osx-next FIRST: 49 commits ahead, does NOT touch plan/index.yaml, so it merges clean. windows-next is 109 ahead and DOES touch plan/index.yaml, so it will conflict with the 2026-08-19 archive sweep — my sequencing error, resolve by keeping linux-next structure and re-applying sibling status rows. HIGHEST-VALUE SINGLE MERGE: 765-tkq2 memoizes build.sh --check 62.3s -> 0.372s, which is the mu lever directly. RETRACTION IS NOT THE DRAIN: triage of all 410 rows yielded 51 (12.4%), not the ~50% I modelled; never-worked measures capacity, not worth. Applied: 18 obsoleted + 23 completed, ready 410 -> 369. Wave 2 remaining: packet-level neglect term for the rank-9 no-priority rows (answer.rs:1470-1478). R2 is RETIRED and replaced by R2-double-prime (b < 1, not 1.30 — 1.30 cannot converge at any velocity).'
+    ts: "2026-08-20T00:54:03Z"
+    host: linux

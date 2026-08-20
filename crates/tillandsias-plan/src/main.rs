@@ -4026,7 +4026,30 @@ fn main() {
             body.push_str("status:\n");
             body.push_str(&format!("  - packet_id: {pid}\n"));
             body.push_str(&format!("    field: {field}\n"));
-            body.push_str(&format!("    value: {value}\n"));
+            // ORDER 832-698m. The value is EMITTED AS YAML, not interpolated.
+            //
+            // This line used to be `format!("    value: {value}\n")`. The first
+            // production write of a `next_action` — a free-prose field this
+            // project had just made load-bearing — began "Wave 2: (1) seed …".
+            // The `: ` turned the scalar into a nested mapping, the fragment
+            // became unparseable, and `set-field` printed
+            // `ok: …next_action <unset> -> Wave 2: (1) seed…` while doing it.
+            // The fold then reported `incomplete: 1126 packets from a PARTIAL
+            // corpus — 1 fragment(s) could not be read` and the pre-push gate
+            // refused, which is the only reason it was caught at all.
+            //
+            // Free text is the DEFAULT case for next_action, and prose carries
+            // colon-space constantly ("Wave 2: …", "REFUTED: …", "note: …").
+            // Every other emitted field here is a controlled vocabulary, which
+            // is why this survived until the day free text arrived.
+            body.push_str(&format!(
+                "    value: {}\n",
+                serde_yaml::to_string(&value)
+                    .unwrap_or_else(|_| format!("{value:?}"))
+                    .trim_end()
+                    .trim_start_matches("--- ")
+                    .trim()
+            ));
             body.push_str(&format!("    ts: \"{ts}\"\n"));
             body.push_str(&format!("    host: {host}\n"));
             let mut event_blocks: Vec<(String, String)> = Vec::new();

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: periodic-deslopification-sweep
+    field: next_action
+    value: 'Trigger is EVENT-COUNTED ONLY: (current_order - order_at_last_sweep) >= 200, floor 48h. DROP the 7-day calendar ceiling — it interacts fatally with the kill rule, since a quiet fortnight fires two low-yield sweeps and red:two-sweeps-zero-confirmed retires the reconciler for doing nothing wrong. Time-decaying properties are already covered by their own TTLs (expire-claims 24h, component_freshness), so the sweep need not carry them. Build check-deslop-due.sh with this single comparison.'
+    ts: "2026-08-19T23:02:11Z"
+    host: macuahuitl
+
+events:
+  - packet_id: periodic-deslopification-sweep
+    event:
+      type: note
+      ts: "2026-08-19T23:02:11Z"
+      host: macuahuitl
+      summary: >
+        D1 revised: event-counted only
