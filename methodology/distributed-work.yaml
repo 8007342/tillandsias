@@ -784,6 +784,60 @@ distributed_work:
         the unrecoverable portion citing the prior lease_id, then claim
         the item fresh."
 
+  concurrent_correct_fixes:
+    rule: >
+      WHEN TWO BRANCHES CHANGE THE SAME LINE AND BOTH CHANGES ARE RIGHT, THE
+      RESOLUTION IS BOTH. Not the newer one, not the one with the better commit
+      message, and never "theirs" because their branch is further ahead.
+
+      This is the CODE analogue of the ledger's merge_policy below, and it needs
+      its own rule because git presents it identically to an either/or conflict.
+      A conflict marker means "two edits, same region" — it carries NO
+      information about whether the edits are alternatives or complements, and
+      the default reading of a conflict is alternatives. That default is wrong
+      often enough to be dangerous, because a fix landing on a fork is usually
+      written from the text as it stood when the fork was cut.
+    the_asymmetry_that_bites: >
+      THE DANGEROUS SHAPE IS NOT A SYMMETRIC TIE. It is a NEWER branch carrying
+      a REAL improvement that was written against a STALE base, so taking its
+      side looks like fast-forwarding a newer fix over an older one while
+      silently reverting a fix it never saw.
+
+      Worked example, 2026-08-20, litmus-ledger-node-claim-shape.yaml. 797-295s
+      had moved the step's capture file from a relative `out.txt` to mktemp,
+      because a timeout stranded an untracked file in the checkout and the
+      meta-orchestration startup boundary then reads that as sibling work — a
+      dirty-start refusal for the NEXT cycle. A fork later rewrote the same step
+      for 790-u8x6 to add a phantom-lease case (fixture index, an `a/nope`
+      claim, `unknown` in the grammar). Real work, correctly done — and written
+      from the pre-797-295s text, so it still redirected into `out.txt`. Taking
+      the fork wholesale would have reinstated a cross-host hazard while
+      appearing to accept the newer change.
+    procedure:
+      - "For each conflicting hunk, name what EACH side changed and WHY, from
+        its commit message, its order number, and the comment it left. If you
+        cannot state the reason for a side, you are not ready to resolve it."
+      - "Ask whether the two reasons are mutually exclusive. Usually they are
+        not: they are two different defects that happen to live on one line."
+      - "If they are not exclusive, COMBINE. Keep both mechanisms and both
+        explanations. The combined hunk carries both order numbers."
+      - "If they genuinely are exclusive, keep the one that survives the other's
+        test, and record the discarded one as an event on its order — never
+        delete a correct fix silently."
+      - "Leave a comment at the resolution site saying it was a concurrent
+        correct fix and naming both orders. The next reader sees one line and
+        cannot otherwise tell it was contested."
+      - "Run the tests BOTH sides brought, not just the ones that already
+        existed. A combination that passes neither side's new test is not a
+        resolution."
+    why_not_a_gate: >
+      There is no checker for this and there probably cannot be one: deciding
+      whether two edits are complements requires knowing what each was FOR,
+      which is not recoverable from the diff. This is one of the few rules that
+      has to live as judgement. What CAN be mechanised is the trail — the
+      both-orders comment at the site, so a later audit can find every place
+      two fixes were fused and re-examine the call.
+
   merge_policy:
     rule: >
       When two agents push concurrent edits to the same plan/ file, the
