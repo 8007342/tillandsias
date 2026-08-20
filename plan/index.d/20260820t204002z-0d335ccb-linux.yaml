@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: periodic-deslopification-sweep
+    field: next_action
+    value: 'BLOCKER — do NOT run the sweep again until the fold can ANSWER about archived packets. The 2026-08-20 sweep was reverted: archiving 550 packets made the expert system return `unsupported` for every one of them, breaking 7 tests in tillandsias-plan --lib (control: 180/0 pre-sweep, 173/7 post, 180/0 after revert). Do NOT fix by re-pointing the fixtures at live packets — that hides the capability loss. THE FIX IS SMALL: Ledger::collect_archived_ids (lib.rs:295-317) already parses full archived packets via collect_packets and then throws away everything but the id; keep them and let `status`/`answer` fall back to the archive flagged as archived, while ready() and the selector keep ignoring it. THEN re-sweep with a NEW acceptance test the last attempt lacked: `cargo test -p tillandsias-plan --lib` must be 180/180 AFTER the sweep, not just before. A ledger-shape assertion (ready set unchanged, no orphaned events) cannot see a capability loss — all of those were green while this shipped. obsoleted stays exempt from archiving (2026-08-19 ruling c) and the tombstone form is still owed before retraction scales.'
+    ts: "2026-08-20T20:40:02Z"
+    host: linux
