@@ -12904,6 +12904,12 @@ plan_index:
       notes: |
         Do NOT fix this by relaxing the VERSION guard. The guard is load-bearing: it exists because main's VERSION is the release identity and a platform branch must not move it. The defect is that a routine local build writes to a file under that guard's protection.
       events:
+        - type: progress
+          ts: "2026-08-20T20:15:58Z"
+          agent_id: "linux-macuahuitl-opus5-20260820T200600Z"
+          host: linux_mutable
+          summary: |
+            HIT LIVE ON linux-next, 2026-08-20, and it cost a refused push plus an amend. Sequence, exactly as the packet describes: ./build.sh --check bumped VERSION 0.4.260817.1 -> 0.4.260820.1 as a side effect of gating; the cycle staged with `git add -A` and committed; the pre-push guard then refused because VERSION changed on a non-main branch. The build CREATES the thing the hook FORBIDS and both are wired into the same cycle. Recovery: `git checkout HEAD~1 --` of VERSION + Cargo.lock + four crate Cargo.tomls, a --amend, and a re-gate under TILLANDSIAS_SKIP_VERSION_BUMP=1. The escape hatch works and build.sh:810-813 does print the exact revert command — which is why 671-jvcg was retracted as a weaker duplicate on 2026-08-19 — but printing a correct recovery for a self-inflicted failure is not the same as not inflicting it. Criterion 1 (the gate must not bump VERSION) stands. Extra datum for whoever claims this: the blast radius is SIX files, so any remedy that reverts only VERSION leaves the tree dirty and the push still refused.
         - type: note
           ts: "2026-08-15T17:17:31Z"
           agent_id: "linux-mutable-20260815-recovery"
