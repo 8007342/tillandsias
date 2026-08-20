@@ -126,3 +126,55 @@ status:
     value: done
     ts: "2026-08-19T22:30:00Z"
     host: macos
+
+events:
+  - packet_id: linux-only-preflight-asserted-unconditionally-in-tests
+    event:
+      type: completed
+      ts: "2026-08-19T22:30:00Z"
+      agent_id: macos-tlatoanis-macbook-air-opus5-20260819t221707z
+      host: macos
+      summary: |
+        Both tests fixed, by DIFFERENT means on purpose.
+
+        desktop_user_session_preflight_requires_writable_runtime_dir skips
+        loudly on non-Linux: its subject, require_desktop_user_session, is
+        entirely #[cfg(target_os = "linux")], so the BEHAVIOUR is
+        platform-specific and there is nothing to assert elsewhere.
+
+        sample_disk_io_returns_empty_on_first_call is fixed PORTABLY via
+        with_proc_paths and a tempdir fixture: only the default PATH was
+        platform-specific, not the property, so it now asserts the
+        first-call-records-a-baseline invariant on every target rather than on
+        one. Prefer redirecting the path over guarding the target.
+      evidence_refs:
+        - "586d6bb3e — fix(tests): the 7 failures the truthful signal exposed"
+        - "cargo test -p tillandsias-metrics --lib --no-fail-fast -> 73 passed, 0 failed (was 72 passed, 1 failed)"
+        - "cargo test -p tillandsias-podman --lib --no-fail-fast -> 160 passed, 0 failed (was 154 passed, 6 failed)"
+        - "cargo test --workspace --lib --no-fail-fast -> 1160 passed, 0 failed across 15 targets"
+  - packet_id: poisoned-test-env-lock-multiplies-one-failure-into-six
+    event:
+      type: falsified
+      ts: "2026-08-19T22:30:00Z"
+      agent_id: macos-tlatoanis-macbook-air-opus5-20260819t221707z
+      host: macos
+      summary: |
+        env_lock() now recovers from poisoning
+        (unwrap_or_else(|poisoned| poisoned.into_inner())) instead of
+        unwrapping. Sound because the guarded data is `()`: poisoning protects
+        a reader from state a panicking writer left half-updated, and there is
+        no state. It hides nothing — the test that actually panicked still
+        fails alone.
+
+        FALSIFIED BEFORE COMMIT, which is why this event is type: falsified.
+        With the guard reverted to .lock().unwrap(), the new negative control
+        env_lock_recovers_from_a_poisoned_guard fails AND poisons five
+        neighbours — reproducing the measured 1-into-6 cascade exactly, 155
+        passed / 6 failed. Restored: 161 passed / 0 failed. Without that step
+        the fix would be unfalsifiable once 833-8u5g stopped anything from
+        panicking.
+      evidence_refs:
+        - "586d6bb3e — fix(tests): the 7 failures the truthful signal exposed"
+        - "falsified (guard reverted to .unwrap()): 155 passed, 6 failed — control fails and poisons 5 neighbours"
+        - "restored: cargo test -p tillandsias-podman --lib --no-fail-fast -> 161 passed, 0 failed"
+        - "isolation control: 5 of the 6 original failures pass when run alone; --test-threads=1 changes nothing (contamination, not a race)"
