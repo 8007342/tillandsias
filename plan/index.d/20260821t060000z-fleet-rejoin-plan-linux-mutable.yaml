@@ -1,0 +1,93 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-21T06:00:00Z.
+#
+# The staged fleet rejoin: which host, in what order, gated on what.
+events:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    event:
+      type: note
+      ts: "2026-08-21T06:00:00Z"
+      agent_id: linux-macuahuitl-opus5-20260820T200600Z
+      host: linux_mutable
+      summary: |
+        THE FLEET REJOIN PLAN. Operator, 2026-08-21: new hosts join from a
+        fresh checkout, fresh instructions, and a fresh harness session, with
+        the bootstrap prompt kept to the plain idempotent
+        "Use the ./skills/meta-orchestration skill."
+
+        THE BOOTSTRAP PROMPT IS THE ACCEPTANCE TEST, not a convenience. If a
+        fresh host needs anything said to it beyond that one sentence, the
+        thing it needed was missing from the skill or the ledger, and THAT is
+        the defect — not the prompt. Every host-specific fact this campaign
+        produced was deliberately written into next_action and fragments rather
+        than into a prompt, for exactly this reason. Do not hand a rejoining
+        host a briefing; if you are tempted to, file what you wanted to say.
+
+        ORDER, AND THE REASON FOR IT. The gating criterion is NOT eagerness, it
+        is MERGE SURFACE plus what each host proves that the previous one
+        could not.
+
+        1. A SECOND LINUX HOST (immutable/Silverblue preferred).
+           WHY FIRST: zero platform divergence, so it adds no cross-platform
+           merge surface at all — the failure mode that cost the most this week
+           (109 commits, a silently duplicated spawn block, a manifest desync
+           git could not see) is structurally absent between two Linux hosts.
+           WHAT IT PROVES that nothing else can: R1's remaining half. Claiming
+           is live — `expire-claims` reports in_progress and a claimed p0
+           disappears from the batch — but that was measured with ONE host
+           claiming against ITSELF. "A second caller's `next` skips the claimed
+           row" has never been observed between two real hosts drawing from one
+           queue. That is the single fleet property still unproven, and it is
+           the only one that decides whether N hosts beat one host doing N
+           cycles.
+           Silverblue also exercises the curl-install path, which is the lane
+           an end user actually takes.
+
+        2. macOS (osx-next).
+           WHY SECOND: it was already running claims correctly on 2026-08-20
+           (`claim(837-m47d)`, `claim(838-48ca)`) — the first independent
+           confirmation R1 works off this machine — and its branch merges
+           cheaply: 82 files, one conflicted, because it merges origin/linux-next
+           constantly. It also has real attended work queued that no other host
+           can do: 804-deux needs a re-provision that destroys an 11.83 GiB VM
+           and its in-VM Vault, and the macOS half of M5's zero-repo cloud
+           submenu is still unobserved.
+
+        3. Windows (windows-next).
+           WHY LAST, and it is not a judgement about the host: it carries the
+           largest merge surface by an order of magnitude (109 commits / 218
+           files, plus the only plan/index.yaml conflict class), and its two
+           open closures — 805-ek9e and the signing chain behind 722-ksnk —
+           need a HUMAN at the machine, not an agent. It also owns the hardware
+           the capability matrix exists for, which is worth having but is
+           blocked behind 843-624y anyway: the `capabilities:` channel has no
+           base representation, so every row it reports is destroyed by the
+           next compaction.
+
+        THE GATE BETWEEN EACH STEP, and this is the part that must not be
+        skipped: measure b over the previous host's participation before adding
+        the next. dL/dt = a + (b-1)*mu, so below b = 1 each host added drains
+        faster and above it each host added fills faster. b is 1.80 today.
+        ADDING HOSTS NOW MAKES THE OPERATOR'S STATED PROBLEM WORSE, and the
+        arrival-routing advisory (9bb3b47bf) is the instrument that says when
+        that has stopped being true.
+
+        A CONCRETE READING FROM THIS WEEK, so the risk is not abstract: the
+        siblings' two merges brought ~130 new rows with them. Ready went
+        367 -> 384 on the merge alone. That is arrival, and it arrived from
+        hosts that were STOOD DOWN.
+
+        WHAT EACH HOST MUST NOT BE TOLD, because the ledger already says it and
+        a prompt would go stale: the branch it uses (skill host-classification
+        plus methodology branch_inventory), the standing gate invocations
+        (TILLANDSIAS_SKIP_VERSION_BUMP=1, TILLANDSIAS_FORCE_CHECK=1), the
+        compaction blocker (843-624y), and the routing rule. All of it is in
+        831-ezea's next_action and the skill. If a rejoining host gets any of
+        it wrong, fix the skill, not the prompt.
+
+        ONE THING A FRESH HOST GENUINELY CANNOT LEARN FROM THE LEDGER and must
+        be handed by the operator: credentials. `gh auth login` / the token
+        seed is out-of-band by construction, and 759-vceg records that the
+        seed path performs ZERO authorization validation, so a host can hold an
+        expired token and report success. Expect that to be the first failure
+        of any rejoining host, and check it before blaming the skill.

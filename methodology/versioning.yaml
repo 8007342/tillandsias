@@ -175,11 +175,32 @@ branch_versioning_discipline:
 
     - name: methodology_refinements_branch
       rule: >
-        Methodology work that is not already finished integration work MUST target
-        the remote methodology-refinements branch. Agents MUST NOT push methodology
-        refinements directly to main. Main receives methodology changes only by an
-        explicit integration merge after review.
-      enforcement: "pre-push hook or reviewer gate rejects direct methodology pushes to main"
+        SUPERSEDED 2026-08-21 — the `methodology-refinements` branch NO LONGER
+        EXISTS and must not be recreated. It was fully merged and was retired
+        with 22 other branches in the operator-directed cleanup that left
+        exactly five: main, linux-next, windows-next, osx-next, gh-pages.
+
+        The rule that survives is the HALF ABOUT MAIN, which is now
+        server-enforced and stronger than a branch convention ever was:
+        methodology changes MUST NOT be pushed directly to main. Since
+        2026-07-28 main is branch-protected with enforce_admins, so a direct
+        push fails for everyone, and every change reaches it through a PR.
+
+        Methodology work therefore lands on the host's PLATFORM BRANCH like any
+        other change — linux-next for the coordinator, windows-next / osx-next
+        for the siblings — and reaches main through the normal release
+        promotion. There is no separate methodology lane and there has not been
+        a working one for some time; this rule pointed at a branch that had
+        been merged and idle since 2026-05-05.
+
+        WHY THE SEPARATE LANE IS NOT REINSTATED: its stated purpose was "their
+        own reviewable convergence lane", but a branch nobody merges is not a
+        review lane, it is a place changes go to be forgotten. The reviewable
+        convergence this project actually got is the ledger — methodology edits
+        carry a plan fragment recording the reasoning, and that fragment is
+        append-only and folds across hosts, which a mutable branch ref cannot
+        do.
+      enforcement: "server-side branch protection on main (enforce_admins, PR required, order 476) — no branch convention needed"
       rationale: >
         Methodology changes alter the bootstrap contract for future agents. They
         require their own reviewable convergence lane rather than being silently

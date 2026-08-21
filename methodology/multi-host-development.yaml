@@ -8,6 +8,58 @@ multi_host_development:
     stable, zero-drift runtime enclave. `plan/` remains the durable inter-agent
     ledger for long-running work, failures, restarts, and idempotent recovery.
 
+  branch_inventory:
+    rule: >
+      THE REMOTE CARRIES EXACTLY FOUR BRANCHES. Anything else is debris from a
+      finished lane and should be retired, not inherited. Verified and enforced
+      by cleanup on 2026-08-21, which took the remote from 28 refs to 4.
+    branches:
+      main: "release only, PR-only, server-side branch protection with enforce_admins since order 476"
+      linux-next: "Linux integration, and the CANONICAL HOME for plan/, methodology/, openspec/ and cheatsheets/"
+      windows-next: "Windows code"
+      osx-next: "macOS code. The name is osx-next. `macos-next` does not exist and never has."
+    retired_gh_pages: >
+      `gh-pages` was deleted 2026-08-21 by operator ruling, and the reasoning is
+      kept because the NEAR-MISS is the lesson, not the outcome.
+
+      It was an orphan branch, 4,477 files, one commit from 2026-03-25 reading
+      "init: gh-pages branch for APT repository" — a multi-platform
+      distribution route the project explored and did not take. Nothing in the
+      tree referenced it. The operator confirmed it unmaintained.
+
+      THE NEAR-MISS: it was flagged NEVER-DELETE hours earlier, on the strength
+      of `gh api .../pages` reporting `status: built` and a live public URL.
+      That reading was correct about the mechanism and wrong about the value —
+      a site can be genuinely served and serve nothing anyone wants. Neither
+      the git evidence nor the API could distinguish "published" from
+      "published and abandoned"; only the operator knew the route had been
+      dropped.
+
+      SO THE RULE IS NOT "check whether Pages is enabled". It is: an orphan
+      branch outside the four is an OPERATOR QUESTION, not an agent decision,
+      in BOTH directions. Deleting it can take down a live surface; keeping it
+      forever on the strength of an HTTP 200 preserves abandoned exploration
+      that then has to be reasoned about by every future cleanup.
+
+      Note also what is still true after the delete: the repository's Pages
+      SETTING remains enabled and now sources from a branch that no longer
+      exists. Deleting a branch does not disable Pages. Whoever revisits this
+      should decide that setting deliberately rather than leaving a published
+      surface pointed at nothing.
+    retiring_a_branch: >
+      A branch is a MUTABLE REF: no merge function, no history of its own,
+      nothing that converges it. It is therefore NOT a CRDT and NOT storage,
+      which is the whole reason the ledger exists. So before deleting a ref
+      that carries unmerged content, RECORD THE FACT IN A PLAN FRAGMENT first —
+      what the branch held, its SHA, and why it is not needed — then delete.
+      The fragment is append-only and folds across hosts; the ref was neither.
+
+      And inspect before deleting, do not sort by date. On 2026-08-20 an
+      unmerged fork branch turned out to hold the build-gate memoization that
+      cut re-gating from 9.94s to 0.44s, and it existed on exactly one disk.
+      "Old and unmerged" is not evidence of "unwanted"; it is evidence of
+      "nobody looked".
+
   platform_branches:
     linux: linux-next
     windows: windows-next

@@ -12,8 +12,8 @@ events:
       agent_id: linux-macuahuitl-opus5-20260820T200600Z
       host: linux_mutable
       summary: |
-        BRANCH RETIREMENT, operator-directed 2026-08-21. Keeping exactly five;
-        retiring 23. The canonical platform branch name is `osx-next` — not
+        BRANCH RETIREMENT, operator-directed 2026-08-21. The remote goes from
+        28 refs to FOUR. The canonical platform branch name is `osx-next` — not
         macos-next, which does not exist and never has.
 
         KEEP:
@@ -22,14 +22,32 @@ events:
                         methodology/, openspec/, cheatsheets/
           windows-next  Windows code
           osx-next      macOS code
-          gh-pages      *** DO NOT DELETE *** 4,477 files, first commit reads
-                        "init: gh-pages branch for APT repository". This is
-                        PUBLISHED PACKAGE HOSTING, not a stale feature branch,
-                        and it is unmerged into linux-next BY DESIGN — it is an
-                        orphan branch serving a website. It sorts into the same
-                        "unmerged, old, untouched since March" bucket as the
-                        genuine debris, which is exactly how it would get
-                        deleted by a cleanup that trusted the sort order.
+
+        GH-PAGES, RETIRED — and the NEAR-MISS is worth more than the outcome.
+        An orphan branch, 4,477 files, one commit from 2026-03-25 reading
+        "init: gh-pages branch for APT repository".
+
+        I first marked it NEVER-DELETE, on evidence that was correct:
+        `gh api .../pages` reported `status: built` with a live public URL, and
+        every heuristic a cleanup would use — unmerged, ancient, untouched
+        since March, not a platform branch — selects it for deletion. So a
+        cleanup trusting the sort order would have taken down a served site.
+
+        The operator then supplied the fact no amount of git or API evidence
+        contained: it was a multi-platform distribution route the project
+        EXPLORED AND DID NOT TAKE, and is unmaintained. A site can be genuinely
+        served and serve nothing anyone wants. Deleted on that ruling.
+
+        THE RULE THAT GENERALISES is not "check whether Pages is enabled". It
+        is that an orphan branch outside the four is an OPERATOR QUESTION in
+        BOTH directions: deleting it can take down a live surface, and keeping
+        it forever on the strength of an HTTP 200 preserves abandoned
+        exploration that every future cleanup then has to re-reason about.
+
+        STILL TRUE AFTER THE DELETE: the repository's Pages SETTING remains
+        enabled and now sources from a branch that no longer exists. Deleting a
+        branch does not disable Pages. That setting is an operator decision and
+        is deliberately left alone here.
 
         RETIRED — 15 FULLY MERGED, i.e. every commit is already an ancestor of
         linux-next and deleting the ref loses literally nothing:
@@ -44,7 +62,7 @@ events:
           and a branch literally named `origin` (someone typed
           `git push origin origin` once).
 
-        RETIRED — 8 UNMERGED. Each was inspected rather than assumed, because
+        RETIRED — 9 UNMERGED (8 below, plus gh-pages above). Each was inspected rather than assumed, because
         two days ago an unmerged fork branch turned out to hold the build-gate
         memoization that cut re-gating from 9.94s to 0.44s, and it existed
         nowhere but one disk. SHAs recorded so the content stays reachable from
@@ -104,15 +122,28 @@ events:
           BREAKS:  One file, "push-probe: 2026-08-19T00:20:04+00:00". A conn...
           PASSES:  One file, a push-probe stamp dated 2026-08-19. A conn...
 
-        A quoted, `key: value`-shaped string carrying an ISO-8601 timestamp,
-        INSIDE A LITERAL BLOCK SCALAR where it should be inert. Same family as
-        832-698m (set-field emitting an unquoted `value:` whose text began
-        "Wave 2: (1)"), one level deeper: there the colon-space broke the
-        PARSE, here it survives the parse and breaks the RE-RENDER.
+        AND THE MECHANISM I FIRST WROTE HERE WAS WRONG — corrected before this
+        fragment was committed, by the fragment falsifying itself.
 
-        Two things follow. First, concrete evidence for 843-624y about WHICH
-        shapes compaction cannot round-trip — the answer is not "malformed
-        YAML", it is well-formed YAML whose text the renderer cannot reproduce.
+        I had recorded the cause as "a quoted `key: value`-shaped string
+        carrying an ISO-8601 timestamp inside a literal block scalar". That is
+        REFUTED by this very file: the two example lines above contain that
+        exact string, verbatim, and the round-trip test PASSES. So the string
+        is not sufficient, and the real trigger is contextual — position,
+        indentation, or surrounding lines — and is NOT isolated.
+
+        797-5kqe again, mine, for the fourth time this week: a true observation
+        (swapping that one line flips the test, measured both directions), a
+        plausible mechanism, and no test that the mechanism produces the
+        symptom. The cheap check was to paste the string back somewhere else
+        and see whether it still broke. It does not.
+
+        WHAT IS ACTUALLY ESTABLISHED, and it is still useful for 843-624y: a
+        well-formed, correctly-parsing fragment can defeat compaction's text
+        round-trip, and the trigger is subtle enough that a careful author
+        reproduced it by accident while documenting the bug. Whoever fixes
+        843-624y should ISOLATE this by bisecting characters rather than lines
+        — the failing artifact is recoverable from this commit's parent.
         Second, and this is the chain worth keeping: this test only runs
         because of tonight's ratchet. ./build.sh --test had been ABORTING under
         `set -e` on the one standing failure before reaching anything, and
