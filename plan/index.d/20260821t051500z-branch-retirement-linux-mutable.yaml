@@ -1,0 +1,100 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-21T05:15:00Z.
+#
+# Retiring 23 of 28 remote branches. Filed BEFORE the deletion, on purpose: a
+# branch is a mutable ref and is not a CRDT. The ledger is. So the fact goes
+# here first and the ref goes after.
+events:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    event:
+      type: note
+      ts: "2026-08-21T05:15:00Z"
+      agent_id: linux-macuahuitl-opus5-20260820T200600Z
+      host: linux_mutable
+      summary: |
+        BRANCH RETIREMENT, operator-directed 2026-08-21. Keeping exactly five;
+        retiring 23. The canonical platform branch name is `osx-next` — not
+        macos-next, which does not exist and never has.
+
+        KEEP:
+          main          release, PR-only, branch-protected
+          linux-next    Linux integration + canonical home for plan/,
+                        methodology/, openspec/, cheatsheets/
+          windows-next  Windows code
+          osx-next      macOS code
+          gh-pages      *** DO NOT DELETE *** 4,477 files, first commit reads
+                        "init: gh-pages branch for APT repository". This is
+                        PUBLISHED PACKAGE HOSTING, not a stale feature branch,
+                        and it is unmerged into linux-next BY DESIGN — it is an
+                        orphan branch serving a website. It sorts into the same
+                        "unmerged, old, untouched since March" bucket as the
+                        genuine debris, which is exactly how it would get
+                        deleted by a cleanup that trusted the sort order.
+
+        RETIRED — 15 FULLY MERGED, i.e. every commit is already an ancestor of
+        linux-next and deleting the ref loses literally nothing:
+          fork-765-tkq2, fork-765mza8, fork-792ksr8,
+          worktree-agent-a87429970fd116db3, wsl-on-windows,
+          methodology-refinements, revert-antigravity-main-push,
+          release/v0.3.260702.2, release/flakehub-macos-fix,
+          release/revert-flakehub-cache, release/version-bump-0.4.260812.1,
+          release/version-bump-0.4.260815.1,
+          macos/702-griq-content-addressed-images,
+          agent/macos/osx-next/20260813-702-griq-content-addressed-images,
+          and a branch literally named `origin` (someone typed
+          `git push origin origin` once).
+
+        RETIRED — 8 UNMERGED. Each was inspected rather than assumed, because
+        two days ago an unmerged fork branch turned out to hold the build-gate
+        memoization that cut re-gating from 9.94s to 0.44s, and it existed
+        nowhere but one disk. SHAs recorded so the content stays reachable from
+        this record after the refs are gone:
+
+          claude/meta-orchestration-skill-uhitvv  e09353292
+            THREE commits, ZERO file difference against the merge base. Its
+            content is already in linux-next; only the commit objects differ.
+          probe/push-check                        aeca9c986
+            One file, "push-probe: 2026-08-19T00:20:04+00:00". A connectivity
+            test artifact.
+          linux-next-debug                        180adb035
+            Two files, a container-crash trail and long-run repro harness,
+            2026-08-02.
+          macos/702-eusw-version-block            0a41002eb
+            One plan note, "URGENT 702-eusw — divergent VERSION blocks all
+            platform-branch pushes". 702-eusw shipped; the gate
+            check-version-bump-isolation.sh runs in build.sh today.
+          agent/result-channel-repair-20260723    79792cb55
+            Twelve files, and its own subject says what it is:
+            "WIP(salvage): result-channel repair, interrupted by codex usage
+            limit".
+          audit                                   799fa6dab
+            Six files from 2026-04-28. Three are already in linux-next
+            (cheatsheets/INDEX.md, podman-in-wsl2.md, wsl2-disk-elasticity.md).
+            Of the three absent: wsl2-network-mirrored-mode.md documents an
+            approach THE OPERATOR LATER RULED AGAINST (eb65080ee; 718-nkm2 was
+            retracted on exactly that ground), so its absence is correct, not
+            an oversight. The other two are root-level BigPickle audit reports
+            of an April codebase.
+          local-backup-20260620                   2220114c6
+            Eight commits. Unique content is
+            plan/issues/forge-credentials-vault-integration-2026-06-20.md, 402
+            lines, absent from HEAD. Topic is live and owned: 72 vault-tagged
+            packets exist, and 246 credential-secrets-architecture-audit is the
+            standing design row for exactly this.
+          claude/forge-standalone-podman-6kBl3    67432fd93
+            THE ONE GENUINELY ABANDONED DESIGN. Four commits, 21 files,
+            2026-05-12: a whole `crates/tillandsias-compose` crate, three
+            compose YAMLs, a run-forge-standalone.sh, and a compose-migration
+            spec. None of it exists at HEAD. It was superseded rather than
+            forgotten — scripts/orchestrate-enclave.sh is what actually
+            orchestrates the enclave today, and run-forge-standalone.sh never
+            landed. Recorded at this length because "we tried compose and went
+            another way" is the kind of fact that stops someone re-proposing
+            it, which is the whole argument for retraction over deletion.
+
+        WHY DELETE AT ALL, given this project's instinct is to keep everything:
+        a branch is a MUTABLE REF and therefore not a CRDT — it has no merge
+        function, no history of its own, and nothing converges it. Twenty-eight
+        refs is not twenty-eight preserved facts; it is twenty-eight things a
+        fresh clone must reason about before it can tell which four matter. The
+        facts belong here, where they are append-only. The refs do not.
