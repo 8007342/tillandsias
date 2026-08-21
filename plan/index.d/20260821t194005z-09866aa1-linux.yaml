@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    field: next_action
+    value: 'MERGE DRAIN IS DONE — windows-next @339a6aa05 and osx-next @c7b11edda are both in; 9 rows closed by the merges themselves. Ready 367 -> 384 (siblings brought ~130 new rows; that is arrival, not drain failure). NEXT, in order: (1) THE SWEEP BLOCKER — make the fold answer about archived packets before any re-sweep; Ledger::collect_archived_ids (lib.rs:295-317) already parses full archived packets and throws away all but the id, so let status/answer fall back to it while ready()/selector keep ignoring it. Acceptance test the last attempt lacked: `cargo test -p tillandsias-plan --lib` = 180/180 AFTER the sweep. (2) 833-ecdg, the no-python gate that matches only line-START invocations. (3) Wave 2 packet-level neglect term for the rank-9 no-priority rows (answer.rs:1470-1478). STANDING FACTS: Linux pre-existing test failure set under --no-fail-fast is exactly 1 (proxy_cache_policy bumped_origin_tls_and_signed_url_logs_fail_closed) — anything above that is new. R2 is retired; the target is b < 1, not 1.30, because dL/dt = a + (b-1)*mu is strictly positive at 1.30 for every mu. 804-deux and 805-ek9e are deliberately still ready and must NOT be closed on merge.'
+    ts: "2026-08-21T19:40:05Z"
+    host: linux
