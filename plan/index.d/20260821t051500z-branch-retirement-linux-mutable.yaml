@@ -54,7 +54,7 @@ events:
             THREE commits, ZERO file difference against the merge base. Its
             content is already in linux-next; only the commit objects differ.
           probe/push-check                        aeca9c986
-            One file, "push-probe: 2026-08-19T00:20:04+00:00". A connectivity
+            One file, a push-probe stamp dated 2026-08-19. A connectivity
             test artifact.
           linux-next-debug                        180adb035
             Two files, a container-crash trail and long-run repro harness,
@@ -91,6 +91,34 @@ events:
             landed. Recorded at this length because "we tried compose and went
             another way" is the kind of fact that stops someone re-proposing
             it, which is the whole argument for retraction over deletion.
+
+        THIS FRAGMENT BROKE COMPACTION, AND THE NEW GATE CAUGHT IT. Recorded
+        here rather than filed elsewhere because the instance IS the evidence.
+
+        Its first draft turned `cargo test -p tillandsias-plan --lib` red on
+        `fragments::compaction_text_tests::
+        compaction_on_the_real_ledger_preserves_every_comment_and_item`
+        (fragments.rs:2683, "the rendered text must fold to the same state").
+        Bisected to ONE LINE, then confirmed by changing only that line:
+
+          BREAKS:  One file, "push-probe: 2026-08-19T00:20:04+00:00". A conn...
+          PASSES:  One file, a push-probe stamp dated 2026-08-19. A conn...
+
+        A quoted, `key: value`-shaped string carrying an ISO-8601 timestamp,
+        INSIDE A LITERAL BLOCK SCALAR where it should be inert. Same family as
+        832-698m (set-field emitting an unquoted `value:` whose text began
+        "Wave 2: (1)"), one level deeper: there the colon-space broke the
+        PARSE, here it survives the parse and breaks the RE-RENDER.
+
+        Two things follow. First, concrete evidence for 843-624y about WHICH
+        shapes compaction cannot round-trip — the answer is not "malformed
+        YAML", it is well-formed YAML whose text the renderer cannot reproduce.
+        Second, and this is the chain worth keeping: this test only runs
+        because of tonight's ratchet. ./build.sh --test had been ABORTING under
+        `set -e` on the one standing failure before reaching anything, and
+        --check ran no cargo test at all. So the round-trip guard existed and
+        was not executing. It executed tonight for the first time in a while,
+        and immediately caught a real defect — mine.
 
         WHY DELETE AT ALL, given this project's instinct is to keep everything:
         a branch is a MUTABLE REF and therefore not a CRDT — it has no merge
