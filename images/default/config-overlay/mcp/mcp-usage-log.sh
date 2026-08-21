@@ -31,6 +31,45 @@
 # tmpfs, a read-only log path, or an absent `date` cannot take down the surface
 # being measured. A metric that can break what it measures is worse than none.
 
+# Millisecond clock for the latency field — PORTABLE, unlike `date +%s%3N`.
+#
+# Order 841-ruh9. `%3N` is a GNU extension. BSD/macOS `date` does not fail on
+# it: it exits 0 and passes the token through LITERALLY, yielding `17872164023N`.
+# So the idiom this replaces —
+#
+#     _mcp_t1=$(date +%s%3N 2>/dev/null || echo "")
+#
+# — has a guard that can never fire, because there is no error to catch. The
+# non-numeric string then reached `$((_mcp_t1 - _mcp_t0))`, which under
+# `set -euo pipefail` aborted the server MID-TOOL-CALL with "value too great
+# for base". project-info answered `initialize` and died on the first real
+# call, for three cycles, on every macOS host.
+#
+# That is precisely the failure this file's header says telemetry must never
+# cause — but the header only ever covered `mcp_log_usage`'s own body, and the
+# clock read lived at the CALL SITES, outside the guarantee. Moving it here is
+# the actual fix; rewriting the four call sites in place would have left the
+# next one to be written wrong again.
+#
+# Validate digits and degrade to whole seconds rather than guessing: latency is
+# telemetry, and a coarse number that cannot crash a tool call beats a precise
+# one that can. Empty output is the honest last resort — the log's latency
+# field is already optional. Same digit-validation shape as build.sh's
+# `_now_ms` (766-class dialect skew), deliberately, so there is one idiom.
+mcp_now_ms() {
+    _mnm_t="$(date +%s%3N 2>/dev/null || true)"
+    case "$_mnm_t" in
+        '' | *[!0-9]*)
+            _mnm_t="$(date +%s 2>/dev/null || true)"
+            case "$_mnm_t" in
+                '' | *[!0-9]*) printf '' ;;
+                *) printf '%s' "$((_mnm_t * 1000))" ;;
+            esac
+            ;;
+        *) printf '%s' "$_mnm_t" ;;
+    esac
+}
+
 # mcp_log_usage <server> <tool> <outcome> [latency_ms] [confidence] [citations]
 mcp_log_usage() {
     _mul_server="${1:-unknown}"

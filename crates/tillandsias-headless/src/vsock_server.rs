@@ -674,6 +674,26 @@ pub async fn run_vsock_listener(
         port,
     };
     let mut listener = bind(&transport).await?;
+    // 798-q4m9 criterion 3: THE BIND MOMENT MUST BE OBSERVABLE, or the packet's
+    // own exit criterion cannot be met by anyone.
+    //
+    // The `info!` below has no subscriber in the guest — measured 2026-08-18:
+    // there is no `tillandsias.log` anywhere in the guest filesystem and no
+    // vsock-transport line in `journalctl -u tillandsias-headless`. So the one
+    // event the criterion asks to time left no trace at all, and an attempt to
+    // measure it instead timed the vsock PREFLIGHT line, which marks when the
+    // listener task was SPAWNED. That is the wrong quantity: `tokio::spawn`
+    // only enqueues, so issuing five spawns costs microseconds and the before/
+    // after readings were 6.624 ms and 6.605 ms — indistinguishable, and
+    // measuring nothing about when the listener actually became reachable.
+    //
+    // eprintln! rather than fixing the tracing subscriber: stderr from this
+    // unit demonstrably reaches the journal with a monotonic timestamp (the
+    // preflight line proves the path), so this is the smallest change that
+    // makes the criterion measurable. Deliberately one line, at the exact
+    // instant `bind` returns, so the timestamp means the listener is reachable
+    // and nothing else.
+    eprintln!("[tillandsias] vsock listener bound port={port}");
     info!(
         spec = "vsock-transport",
         port = port,
@@ -929,6 +949,13 @@ async fn serve_ready_stream(
                 // into a shell string — and can tell whether THIS guest
                 // supports it rather than guessing from a version.
                 tillandsias_control_wire::CAP_EXEC_ARGV_VECTOR.into(),
+                // Order 795-zshi slice 4: advertise that THIS guest heals a
+                // widened CA key mode on ensure_proxy_running's already-running
+                // early-return path, so a host can drop the `chmod 600` from its
+                // exec preamble. Separate from ExecArgvVector deliberately —
+                // they shipped in different commits, so the argv cap does not
+                // imply the heal. See CAP_PROXY_CA_KEY_HEAL's doc comment.
+                tillandsias_control_wire::CAP_PROXY_CA_KEY_HEAL.into(),
                 CAP_PTY_ATTACH_V1.into(),
                 CAP_PTY_HEARTBEAT_V1.into(),
             ],
@@ -1631,6 +1658,15 @@ where
     W: AsyncWriteExt + Unpin,
 {
     let bytes = encode(env).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    // Order 828-r2ek: symmetric with read_envelope's bound above. Without this
+    // the guest emits a frame the host is obliged to reject, so the connection
+    // dies at the reader and the writer never learns why.
+    if bytes.len() > MAX_MESSAGE_BYTES {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "outbound frame too large",
+        ));
+    }
     stream
         .write_all(&(bytes.len() as u32).to_be_bytes())
         .await?;
@@ -1749,6 +1785,62 @@ pub(crate) fn fetch_cloud_projects() -> Vec<CloudProjectEntry> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Order 828-r2ek NEGATIVE CONTROL: the guest refuses to EMIT a frame its
+    /// own reader would refuse to accept.
+    ///
+    /// Before this, `read_envelope` bounded inbound frames at
+    /// `MAX_MESSAGE_BYTES` and `write_envelope` bounded nothing — so the guest
+    /// could put a frame on the wire that every peer in the fleet is obliged
+    /// to reject. The connection then died at the READER, which is the wrong
+    /// end to diagnose from: the writer saw a successful write and a closed
+    /// socket, with nothing linking the two.
+    #[tokio::test]
+    async fn write_envelope_refuses_a_frame_over_the_shared_maximum() {
+        let oversize = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 1,
+            body: ControlMessage::PtyData {
+                session_id: 1,
+                direction: tillandsias_control_wire::PtyDirection::ToHost,
+                bytes: vec![0xCDu8; MAX_MESSAGE_BYTES + 1],
+            },
+        };
+        let mut sink: Vec<u8> = Vec::new();
+        let err = write_envelope(&mut sink, &oversize)
+            .await
+            .expect_err("a frame over MAX_MESSAGE_BYTES must be refused before it is written");
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+        assert!(
+            sink.is_empty(),
+            "the refusal must happen BEFORE any byte reaches the wire, got {} byte(s)",
+            sink.len()
+        );
+
+        // And the boundary is inclusive: a frame at the maximum still goes.
+        let mut payload = vec![0xCDu8; MAX_MESSAGE_BYTES - 64];
+        let at_limit = loop {
+            let candidate = ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: 2,
+                body: ControlMessage::PtyData {
+                    session_id: 1,
+                    direction: tillandsias_control_wire::PtyDirection::ToHost,
+                    bytes: payload.clone(),
+                },
+            };
+            match encode(&candidate).expect("encode").len() {
+                n if n == MAX_MESSAGE_BYTES => break candidate,
+                n if n < MAX_MESSAGE_BYTES => payload.push(0xCD),
+                _ => panic!("overshot MAX_MESSAGE_BYTES while sizing the fixture"),
+            }
+        };
+        let mut sink: Vec<u8> = Vec::new();
+        write_envelope(&mut sink, &at_limit)
+            .await
+            .expect("a frame exactly at MAX_MESSAGE_BYTES must still be written");
+        assert_eq!(sink.len(), 4 + MAX_MESSAGE_BYTES);
+    }
 
     #[test]
     fn pty_heartbeat_requires_explicit_client_capability() {
@@ -2788,10 +2880,37 @@ mod tests {
         .expect("client writes Hello");
         let ack = read_envelope(&mut client).await.expect("HelloAck");
         match ack.body {
-            ControlMessage::HelloAck { server_caps, .. } => assert!(
-                server_caps.iter().any(|c| c == "MetricsSnapshotRequest"),
-                "guest must advertise MetricsSnapshotRequest: {server_caps:?}"
-            ),
+            ControlMessage::HelloAck { server_caps, .. } => {
+                assert!(
+                    server_caps.iter().any(|c| c == "MetricsSnapshotRequest"),
+                    "guest must advertise MetricsSnapshotRequest: {server_caps:?}"
+                );
+                // 795-zshi slice 4. A host may only drop the `chmod 600` from
+                // its exec preamble once the guest heals a widened CA key on
+                // ensure_proxy_running's already-running EARLY-RETURN path.
+                assert!(
+                    server_caps
+                        .iter()
+                        .any(|c| c == tillandsias_control_wire::CAP_PROXY_CA_KEY_HEAL),
+                    "guest must advertise {} so hosts can gate the preamble chmod on the \
+                     BEHAVIOUR rather than on a neighbouring capability: {server_caps:?}",
+                    tillandsias_control_wire::CAP_PROXY_CA_KEY_HEAL
+                );
+                // THE POINT OF A SEPARATE CAPABILITY, asserted rather than
+                // commented: these two are distinct strings. CAP_EXEC_ARGV_VECTOR
+                // shipped in cc4bee155 and the heal in d4e12b425 — two commits —
+                // so a guest built in between advertises the argv cap WITHOUT the
+                // heal. If someone later collapses them into one constant to
+                // "simplify", this fails and the mixed-version argument has to be
+                // re-made rather than silently lost, taking 772-shi9's clamp with
+                // it on exactly the builds it protects.
+                assert_ne!(
+                    tillandsias_control_wire::CAP_PROXY_CA_KEY_HEAL,
+                    tillandsias_control_wire::CAP_EXEC_ARGV_VECTOR,
+                    "the CA-key-heal capability must not be aliased to the argv one — they \
+                     shipped in different commits and do not imply each other"
+                );
+            }
             other => panic!("expected HelloAck, got {other:?}"),
         }
 

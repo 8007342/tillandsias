@@ -35,9 +35,8 @@ use std::time::Duration;
 
 use bytes::{Bytes, BytesMut};
 use futures_util::{SinkExt, StreamExt};
-use tillandsias_control_wire::{
-    ControlEnvelope, ControlMessage, MAX_MESSAGE_BYTES, WIRE_VERSION, decode, encode,
-};
+use tillandsias_control_wire::transport::control_frame_codec;
+use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION, decode, encode};
 use tillandsias_otp::{OtpStore, global, spawn_eviction_task};
 use tokio::net::UnixStream;
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
@@ -124,12 +123,10 @@ async fn main() {
 /// @trace spec:opencode-web-session-otp, spec:tray-host-control-socket
 async fn connect_and_run(socket_path: &std::path::Path, store: &OtpStore) -> std::io::Result<()> {
     let stream = UnixStream::connect(socket_path).await?;
-    let codec = LengthDelimitedCodec::builder()
-        .length_field_length(4)
-        .max_frame_length(MAX_MESSAGE_BYTES)
-        .big_endian()
-        .new_codec();
-    let mut framed = Framed::new(stream, codec);
+    // The shared constructor (order 795-5itp) — this file used to hand-build
+    // the identical builder, which is one more place the 64 KiB bound could
+    // drift from the rest of the tree.
+    let mut framed = Framed::new(stream, control_frame_codec());
 
     // Hello handshake.
     let hello = ControlEnvelope {

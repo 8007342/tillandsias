@@ -1,0 +1,85 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macos (osx-next), 2026-08-18T05:00:00Z.
+#
+# Guest-binary staging can no longer be silently downgraded, and a run that
+# cannot stage says so at the point of action.
+status:
+  - packet_id: guest-binary-staging-is-last-writer-wins-and-invisible
+    field: status
+    value: completed
+    ts: "2026-08-18T05:00:00Z"
+    host: macos
+
+events:
+  - packet_id: guest-binary-staging-is-last-writer-wins-and-invisible
+    event:
+      type: completed
+      ts: "2026-08-18T05:00:00Z"
+      agent_id: macos-opus5-metal-20260818T042300Z
+      host: macos
+      summary: >
+        ALL FOUR CRITERIA MET. Criterion 2 was discharged 2026-08-12 and its
+        evidence was upgraded from a host-side proxy to end-to-end by the
+        2026-08-18 boot (the running guest's /usr/local/bin/tillandsias-headless
+        measured byte-identical to the staged copy). This closes 1, 3 and 4.
+        CRITERION 1 — THE IDENTITY PROBLEM, WHICH IS THE REAL WORK. The criterion
+        demands an identity that "rolls per build, not per VERSION string".
+        sha256 rolls per build but gives NO ORDER — it can say "different", never
+        "older" — and nothing inside the guest artifact carries order either:
+        the headless build.rs embeds only runtime assets, and the control-wire
+        handshake's build_version is the workspace VERSION string, which is this
+        packet's original complaint. The ordering signal therefore had to be
+        manufactured host-side, and the tray crate already had one:
+        TILLANDSIAS_BUILD_TIME from its own build.rs, in %Y-%m-%dT%H:%M:%SZ UTC,
+        which sorts LEXICOGRAPHICALLY — so ordering two stamps needs no date
+        parsing and no new dependency. TILLANDSIAS_GIT_SHA rides along for
+        provenance a human can act on. Written as a sidecar
+        (tillandsias-headless.provenance.json) beside the staged binary, AFTER
+        the copy: a crash between them leaves a stale-or-absent sidecar, which
+        reads as undecidable and re-stages, whereas the other order would claim
+        provenance for bytes that never landed.
+        UNDECIDABLE MUST STAGE, LOUDLY — NEVER REFUSE, and this is the part most
+        likely to be got wrong. A missing sidecar is the state every host is in
+        the first time this ships. Refusing there would freeze the entire fleet
+        on whatever guest binary it happens to have, which is STRICTLY WORSE than
+        the downgrade this packet is about: a downgrade is recoverable by running
+        a newer bundle, a universal freeze is not recoverable at all without
+        deleting files by hand. An "unknown" build_time (build.rs's fallback when
+        neither git nor `date` answers) is excluded from ordering for the same
+        reason — lexicographically "unknown" sorts AFTER every real 2026 stamp,
+        so ordering it would read as newest-always.
+        CRITERION 3 — VERIFIED BEHAVIOURALLY, not just written. A non-bundled run
+        now announces it cannot stage. Measured: `./target/debug/tillandsias-tray
+        --provision` prints the four-line NOT STAGING notice BEFORE its
+        {"status":"already_provisioned"} output, and the staged binary's sha256 is
+        byte-identical before and after (87013bc6…), so the announcement cost
+        nothing and touched nothing. ANNOUNCING IN THE FUNCTION rather than
+        fixing the seven Ok(None)-dropping call sites (diagnose.rs:595, 723, 966,
+        1075, 1384, 1467, 1648 — all seven match only Err) is deliberate: an
+        eighth call site would inherit the same silence, and the fact being
+        reported is a property of this function, not of any caller.
+        CRITERION 4 — the negative control, and falsification proves it earns its
+        place. Five tests drive stage_guest_binary, the REAL decision function,
+        against temp dirs. FALSIFIED IN BOTH DIRECTIONS: removing the refusal
+        (always stage) fails staging_refuses_to_replace_a_newer_binary_with_an
+        _older_one; making the guard refuse EVERYTHING — the degradation the
+        criterion explicitly warns about — fails a_legitimate_upgrade_still_stages
+        and NOTHING ELSE. Restored: 9/9 guest_binary tests, 0 failed.
+        THE TEST SEAM WAS THE OTHER HALF OF THE JOB. The three tests the
+        2026-08-12 slice added call file_sha256 DIRECTLY and never invoke
+        guest_binary_provenance(), so replacing its `Some(b == s)` with
+        `Some(true)` leaves all three green — this project's named "verified where
+        it was written is not verified where it runs" failure, already present in
+        this very file. Since host_src_dir() reads $HOME and this crate has no
+        ENV_LOCK convention, the fix was a path-parameterised core
+        (stage_guest_binary(source, dest, incoming)) that BOTH the product and
+        the tests call, rather than mutating process-global state in tests.
+        A refused downgrade is returned as Ok, not Err: the tray must still boot,
+        with the newer binary that is already staged. Reporting a correct refusal
+        as a failure would turn it into a failed launch.
+      evidence_refs:
+        - "crates/tillandsias-macos-tray/src/guest_binary.rs — StagedProvenance sidecar, StagingDecision, path-parameterised stage_guest_binary"
+        - "criterion 3 measured: --provision on a non-bundled binary prints NOT STAGING; staged sha 87013bc6… identical before/after"
+        - "tests: refuses-downgrade, legitimate-upgrade-still-stages (neg control), absent-sidecar-stages, unknown-build-time-undecidable, identical-is-up-to-date"
+        - "falsified: refusal removed -> downgrade test fails; refuse-everything -> ONLY the upgrade control fails"
+        - "cargo test -p tillandsias-macos-tray guest_binary: 9 passed 0 failed"

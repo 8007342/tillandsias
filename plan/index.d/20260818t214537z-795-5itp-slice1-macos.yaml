@@ -1,0 +1,268 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macos (osx-next), 2026-08-18T21:45:37Z.
+#
+# 795-5itp slice 1: the shared codec, the bound tests that did not exist, and
+# the one production site that could be migrated AND verified on this host.
+# Files three findings surfaced by surveying the sites before touching them.
+packets:
+  - packet_id: proxy-cache-policy-test-pins-a-launch-literal-a-supervisor-broke
+    order: 828-etu6
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: "tests/proxy_cache_policy.rs is RED on osx-next: it greps entrypoint.sh for the literal `exec squid -N`, which the squid-supervisor wrapper displaced — the invariant it guards still holds"
+    deliverable: "the parse-before-launch assertion matches the supervised launch line, or is rewritten to test the ordering property rather than a literal"
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [rust, ci-gates, proxy, fail-loud]
+    estimated_hours: 1
+    context: |
+      OBSERVED 2026-08-18 on osx-next at a474ba5ff, during the 795-5itp
+      workspace test run. `cargo test --workspace` is 801 passed / 1 FAILED,
+      and the one failure is unrelated to that packet.
+
+        crates/tillandsias-headless/tests/proxy_cache_policy.rs:112
+        bumped_origin_tls_and_signed_url_logs_fail_closed
+        panicked at: Squid launch
+
+      PRE-EXISTING, PROVEN NOT MINE: re-run with my working tree stashed
+      (`git stash push -u`) and it fails identically, so it is not a
+      consequence of the framing work. It reads only repo files, so it should
+      be equally red on linux-next and windows-next — this is a fleet-wide
+      red, not a macOS quirk.
+
+      THE MECHANISM. Line 112 does
+
+        let launch = entrypoint.find("exec squid -N").expect("Squid launch");
+
+      but images/proxy/entrypoint.sh:97 now reads
+
+        exec /usr/local/bin/squid-supervisor squid squid -N
+
+      A supervisor was inserted between `exec` and `squid -N`, so the literal
+      no longer occurs and `.expect` panics.
+
+      WORTH SAYING PLAINLY: the property under test is still SATISFIED. The
+      parser gate is at entrypoint.sh:84 and the launch at :97, so
+      parse < launch holds. The test fails on its own brittle literal, not on
+      a regression in the thing it guards — which is the worse failure, because
+      the natural fix ("make it match again") can be done without noticing that
+      the assertion never had to be literal in the first place. Prefer matching
+      the launch by a stable anchor (`squid -N`, or the supervisor path) so a
+      future wrapper does not break it a third time.
+
+  - packet_id: eight-production-control-wire-writes-have-no-length-bound
+    order: 828-r2ek
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: "the control wire bounds its READS at 64 KiB everywhere and its WRITES almost nowhere — eight production send sites can emit a frame every peer is obliged to reject"
+    deliverable: "every production framing write either bounds against MAX_MESSAGE_BYTES or documents why it cannot, and a newly-failing write is logged rather than dropped"
+    pickup_role: any
+    release_target: architecture-audit-epic
+    capability_tags: [rust, tokio, vsock, all-platforms, architecture]
+    estimated_hours: 3
+    context: |
+      SURFACED 2026-08-18 by surveying all ten framing sites for 795-5itp
+      before migrating any of them. The asymmetry is not something the packet
+      predicted and it is the more interesting half of what the survey found.
+
+      READS AGREE. Every bounded read in the tree caps at exactly
+      MAX_MESSAGE_BYTES (65_536), strict `>`, inclusive at the limit:
+      transport.rs:203, main.rs:11338, tray/mod.rs:573, vsock_server.rs:1645,
+      vsock_client.rs:246, pty_vsock_bridge.rs:169 and :275, vsock_exec.rs:355,
+      hvsocket.rs:76 and :167, tests/vsock_listener_e2e.rs:59.
+
+      WRITES DO NOT. Only three bound the send side — vsock_client.rs:229,
+      pty_vsock_bridge.rs:241, vsock_exec.rs:286. These eight do not:
+      tray/mod.rs:590, main.rs:11319, vsock_server.rs:1662, hvsocket.rs:68,
+      hvsocket.rs:145, transport.rs:189, provisioning.rs:182,
+      pty_vsock_bridge.rs:160 (Hello only).
+
+      WHY IT MATTERS AND WHY IT IS NOT URGENT. An oversize frame is emitted,
+      then the PEER rejects it and closes — so the failure surfaces as a
+      dropped connection at the wrong end, with the sender believing it
+      succeeded. No producer is currently known to exceed 64 KiB, which is why
+      this is p2 and not p1.
+
+      THE TRAP FOR WHOEVER FIXES IT, stated because it is easy to walk into:
+      tray/mod.rs discards nine write results with `let _ =` (lines 1264, 1300,
+      1322, 1345, 1370, 1420, 1439, 1456, 1475). Adding a bare `?` there turns
+      a newly-refused write into a SILENT MISSING REPLY, which presents to a
+      user as a hang, not as an error. Add the bound WITH logging.
+
+  - packet_id: three-framing-invariant-tests-go-vacuous-on-rename-not-red
+    order: 828-itr9
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: "three source-scanning tests guard the unbounded-read invariant by grepping for function-name literals — the 795-5itp migration that renames those functions makes them pass while enforcing nothing"
+    deliverable: "the scans fail loudly when their anchor disappears, instead of silently examining the wrong region"
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [rust, ci-gates, fail-loud, architecture]
+    estimated_hours: 2
+    context: |
+      SURFACED 2026-08-18 while planning 795-5itp's remaining slices. This is
+      filed BEFORE the migration that would trip it, because afterwards there
+      is by construction no failing test to notice.
+
+        crates/tillandsias-vm-layer/src/vsock_exec.rs:2016  no_setup_read_is_left_unbounded
+        crates/tillandsias-headless/src/vsock_server.rs:2082
+        crates/tillandsias-headless/src/vsock_server.rs:2103
+
+      All three `include_str!` their own source and locate the production
+      region by a literal. vsock_server.rs:2088 is the clearest case:
+
+        .and_then(|tail| tail.split("\nasync fn read_envelope").next())
+
+      `str::split` on a delimiter that does not occur yields the WHOLE string,
+      so renaming `read_envelope` does not fail the test — it silently widens
+      the scanned region and the assertion continues to pass. The 690-eug2
+      unbounded-read invariant would stop being guarded with no signal at all.
+
+      This is the same class 601-462g named (a gate that greps its own
+      comment), and vsock_exec.rs:2016 already carries a comment about having
+      been bitten by a near neighbour of it — the first version of that scan
+      flagged its own filter expression. The remedy is to assert the anchor
+      EXISTS before using it, so a rename is a red test rather than a silent
+      no-op.
+
+status:
+  - packet_id: nine-hand-rolled-length-prefixed-framing-copies
+    field: status
+    value: ready
+    ts: "2026-08-18T21:45:37Z"
+    host: macos
+
+events:
+  - packet_id: nine-hand-rolled-length-prefixed-framing-copies
+    event:
+      type: progress
+      ts: "2026-08-18T21:45:37Z"
+      agent_id: macos-opus5-metal-20260818T203000Z
+      host: macos
+      summary: |
+        SLICE 1 LANDED. Deliberately NOT closed — criterion 1 names ten sites
+        and one is migrated. Left `ready` rather than `in_progress` so the next
+        host can pick it up; the remaining slices are enumerated below.
+
+        THE PACKET'S PREMISE NEEDED THREE CORRECTIONS, all verified at HEAD
+        before any code moved. Two of them make the job SMALLER than filed:
+
+        1. CRITERION 2 WAS ALREADY MET IN PRODUCTION. The packet's problem
+           statement is "nine independent bounds policies is nine independent
+           chances to get the maximum wrong". Measured: eight of the nine files
+           ALREADY cite one named constant, MAX_MESSAGE_BYTES = 65_536
+           (control-wire/src/lib.rs:52), and every bounded READ in the tree caps
+           at exactly that value with identical semantics. The single "divergent"
+           file, provisioning.rs, turned out to be a mock responder inside
+           `#[cfg(all(test, unix))] mod tests` (:153) — not production framing at
+           all. What is actually duplicated is the reader/writer MECHANICS, not
+           the policy. That is still worth removing, but it is a readability and
+           cancel-safety argument, not the safety argument the packet makes.
+
+        2. THE "Q-OPEN" BLOCKING CRITERION 2 WAS A GHOST. MAX_MESSAGE_BYTES's
+           doc comment cited "design.md Q-OPEN (size-cap reconciliation)" over
+           McpFrame's 4 MiB, which reads as "you cannot honestly claim ONE
+           constant yet". It is stale: order 505 retired McpFrame, it is
+           constructed NOWHERE in the tree (only pattern-matched to be refused —
+           control_dispatch.rs:466 → Unsupported), and the enforcement its cap
+           pointed at lived in `src-tauri/`, a directory that no longer exists.
+           MAX_MCP_FRAME_BYTES survives only as the per-LINE cap on the unrelated
+           NDJSON socket (779-dqsv). There is exactly one framing ceiling.
+
+        3. THE SAME COMMENT WAS FALSE ABOUT ENFORCEMENT, and this is the one
+           worth carrying. It claimed an oversize prefix "trigger[s] an
+           `Error::PayloadTooLarge` response and the connection is closed".
+           ErrorCode::PayloadTooLarge is constructed nowhere outside
+           control-wire's own tests — no framing site has ever sent it. A peer
+           that sends an oversize frame learns only that the wire went away.
+           Corrected in place at lib.rs, with the check that retired each claim.
+           TEN sites, not nine: tests/vsock_listener_e2e.rs:56 frames identically
+           and the filed list omits it.
+
+        WHAT LANDED.
+          * transport::control_frame_codec() — the ONE construction site, all
+            four parameters pinned. max_frame_length is the one that must never
+            be defaulted: LengthDelimitedCodec::new() is 8 MiB, 128x looser than
+            the bound every read site enforces today.
+          * vsock_client.rs migrated onto Framed — the real production host→guest
+            path for BOTH macOS and Windows. Chosen as first because its bounds
+            already matched (nothing moves) and its stream field is private with
+            no accessor, no split and no into_inner, so the buffer-handoff hazard
+            that makes the other sites dangerous cannot arise here.
+          * router-sidecar retro-fitted onto the shared constructor; it had
+            hand-built the identical builder, the one other place the bound
+            could drift.
+
+        THE BOUND HAD NO TEST ANYWHERE — that is the real finding of this slice.
+        Eleven read sites cap at 64 KiB and NOTHING asserted it, in either
+        direction, before today. A migration that dropped max_frame_length would
+        have widened every one of them 128x and shipped green. Six tests added,
+        each falsified:
+          - remove max_frame_length      -> bound test RED (specifically)
+          - bound off by one byte        -> bound test RED (pins inclusivity)
+          - flip to little_endian        -> golden byte-identity test RED
+          - drop the outbound pre-check  -> outbound negative control RED
+          - drop the inbound error remap -> inbound negative control RED
+        Each falsification hit its own test and left the others green.
+
+        CRITERION 3 IS THE EXPENSIVE PART, MEASURED. "The same error surface as
+        before" is not free: falsifying the pre-check showed the codec refuses an
+        oversize encode with kind InvalidInput (not InvalidData) and the decode
+        side reports the literal "frame size too big". Callers here have always
+        seen InvalidData plus "control frame too large" / "inbound control frame
+        too large". Both are preserved explicitly and pinned by tests. Seven
+        distinct error strings exist across the ten sites, and two sites
+        (vsock_exec, main.rs) do not even use io::Error — they return
+        Result<_, String>. Preserving the surface is MORE code than the swap.
+
+        INTEROP IS PROVEN, NOT ASSUMED, which is what makes a partial migration
+        safe: four host-shell tests drive the migrated Framed client against
+        fake guest peers that STILL FRAME BY HAND, and pass. Those peers must
+        stay hand-rolled for exactly that reason; a comment now says so.
+
+        REMAINING SLICES, with the hazard that separates them:
+          - vsock_server.rs, pty_vsock_bridge.rs, hvsocket.rs each read the
+            Hello by hand then hand the stream (or its split halves) onward.
+            Framed OWNS a read buffer; building one for the handshake and
+            dropping it to reclaim the stream silently discards any pipelined
+            bytes — no error, permanent desync, on the interactive PTY path,
+            and only when the peer pipelines. Use Framed::into_parts, never
+            into_inner, and never migrate one function of a pair.
+          - pty_vsock_bridge.rs:241 currently DROPS one oversize message and
+            keeps the session alive (`continue`). A Sink error is terminal, so
+            a naive swap turns that into "kill the PTY session". macOS-only, so
+            no other host's CI would see it.
+          - tray/mod.rs cannot migrate as-is: blocking std UnixStream, thread
+            per connection, and a subscriber registry typed
+            Arc<Mutex<UnixStream>> that cannot hold a Framed. Disposition it
+            under criterion 1's second branch rather than rewriting the tray
+            onto a runtime.
+          - hvsocket.rs is Windows-only, has no production callers (the tray
+            uses vsock_client.rs), and its only tests are #[ignore]d live-WSL
+            ones. Not verifiable from this host; last, on Windows.
+        Filed alongside: 828-r2ek (the eight unbounded WRITES), 828-itr9 (three
+        invariant tests that go vacuous rather than red when this migration
+        renames their anchors — filed BEFORE the slice that would trip them),
+        828-etu6 (an unrelated pre-existing red test found by the full run).
+
+        NOT DONE, SAID PLAINLY: the named verifiable_closure
+        `litmus:one-length-delimited-framing-impl` does not exist and cannot
+        pass yet — its source scan demands at most ONE u32::from_be_bytes in
+        crates/ and there are 16 (was 18). Writing the litmus now would mean
+        writing one that fails, so it belongs with the last migration slice.
+      evidence_refs:
+        - "crates/tillandsias-control-wire/src/transport.rs — control_frame_codec(), the single construction site, all four parameters pinned"
+        - "crates/tillandsias-control-wire/src/lib.rs — MAX_MESSAGE_BYTES doc corrected: PayloadTooLarge is never sent, no per-variant cap exists, the McpFrame Q-OPEN is stale (order 505 retired it; src-tauri/ is gone)"
+        - "crates/tillandsias-host-shell/src/vsock_client.rs — migrated onto Framed; error surface preserved and pinned"
+        - "crates/tillandsias-router-sidecar/{src/main.rs,tests/connect_loop.rs} — retro-fitted onto the shared constructor"
+        - "6 new tests, all falsified: no-bound / off-by-one / little_endian / dropped pre-check / dropped remap each turned exactly one test red"
+        - "measured: codec refuses oversize encode with InvalidInput and decodes with 'frame size too big'; both remapped to the pre-migration surface"
+        - "cargo test -p tillandsias-host-shell -> 84 passed 0 failed, incl. 4 codec-vs-hand-rolled interop tests"
+        - "./build.sh --check -> exit 0 (verified unmasked)"
+        - "cargo test --workspace -> 801 passed, 1 failed; the failure is pre-existing (reproduced with the tree stashed) and filed as 828-etu6"

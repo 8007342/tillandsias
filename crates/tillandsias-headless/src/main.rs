@@ -4490,20 +4490,58 @@ fn build_inference_run_args(
     // model dirs.
     #[cfg(unix)]
     {
-        fn chown_tree(dir: &Path, uid: u32, gid: u32) {
-            let _ = std::os::unix::fs::chown(dir, Some(uid), Some(gid));
+        /// Returns (failure count, first failure rendered).
+        ///
+        /// Order 804-deux made this report instead of swallowing. Once the
+        /// model cache moves onto a virtio-fs share (macOS), ownership is
+        /// mapped by the HOST and `chown` from inside the guest can fail
+        /// outright. `let _ = chown(...)` turned that into silence — and
+        /// silence here reproduces order 313 exactly: the container runs as
+        /// uid 1000 against a tree it cannot write, and the entrypoint's own
+        /// mkdir/install errors are already swallowed by `2>/dev/null`, so
+        /// the only symptom is `/api/generate` returning HTTP 500 while
+        /// `/api/version` answers. Two silent layers is one too many.
+        fn chown_tree(dir: &Path, uid: u32, gid: u32) -> (u32, Option<String>) {
+            let mut failed = 0u32;
+            let mut first: Option<String> = None;
+
+            if let Err(err) = std::os::unix::fs::chown(dir, Some(uid), Some(gid)) {
+                failed += 1;
+                first = Some(format!("{}: {err}", dir.display()));
+            }
             if let Ok(entries) = std::fs::read_dir(dir) {
                 for entry in entries.flatten() {
                     let p = entry.path();
                     if p.is_dir() {
-                        chown_tree(&p, uid, gid);
-                    } else {
-                        let _ = std::os::unix::fs::chown(&p, Some(uid), Some(gid));
+                        let (sub_failed, sub_first) = chown_tree(&p, uid, gid);
+                        failed += sub_failed;
+                        if first.is_none() {
+                            first = sub_first;
+                        }
+                    } else if let Err(err) = std::os::unix::fs::chown(&p, Some(uid), Some(gid)) {
+                        failed += 1;
+                        if first.is_none() {
+                            first = Some(format!("{}: {err}", p.display()));
+                        }
                     }
                 }
             }
+            (failed, first)
         }
-        chown_tree(&model_cache_dir, 1000, 1000);
+
+        let (failed, first) = chown_tree(&model_cache_dir, 1000, 1000);
+        if failed > 0 {
+            eprintln!(
+                "[tillandsias] WARNING: could not chown {failed} path(s) under {} to uid/gid \
+                 1000 (first: {}). The inference container runs as uid 1000 under \
+                 --userns=keep-id; if it cannot write this tree the ollama engine self-install \
+                 fails and /api/generate returns HTTP 500 while /api/version answers (order 313). \
+                 On a virtio-fs-backed cache this is expected — ownership is set on the host \
+                 side, not here (order 804-deux).",
+                model_cache_dir.display(),
+                first.as_deref().unwrap_or("unknown")
+            );
+        }
     }
 
     let mut args = vec![
@@ -11622,6 +11660,19 @@ fn send_issue_web_session(project_label: &str, cookie_value: &[u8; 32]) -> Resul
     // Encode and write with length prefix (4-byte big-endian).
     let encoded =
         encode(&envelope).map_err(|e| format!("Failed to encode control message: {}", e))?;
+    // Order 828-r2ek: the ACK reader below bounds its inbound frame against
+    // MAX_MESSAGE_BYTES; this write bounded nothing, so the tray could be sent
+    // a frame its own reader is obliged to reject — and the failure would
+    // surface here as a lost ACK rather than as the oversize write that caused
+    // it. Not reachable with today's payload (a project label plus a 32-byte
+    // cookie), which is why it is bounded now rather than after something
+    // makes it reachable.
+    if encoded.len() > MAX_MESSAGE_BYTES {
+        return Err(format!(
+            "control message too large to send: {} > {MAX_MESSAGE_BYTES}",
+            encoded.len()
+        ));
+    }
     let len = encoded.len() as u32;
     let mut frame = len.to_be_bytes().to_vec();
     frame.extend_from_slice(&encoded);
@@ -14234,39 +14285,33 @@ async fn run_headless_async(
     // - Start monitoring containers
     // - Initialize enclave network
 
-    // Order 798-q4m9: the vsock listener is spawned FIRST, ahead of every
-    // background task below. The bind was already first in program order
-    // inside the vsock task, but the TASK itself was the last thing this
-    // function spawned — behind five others, two of which held a worker
-    // thread. On a multi-vCPU host that is invisible (four cold boots measured
-    // the bind at 61-255 ms); on a 1-vCPU guest the single worker drains the
-    // injection queue in order, so the host-facing control wire waited on a
-    // disk-usage shell-out and a log parse before it could accept.
+    // ── 798-q4m9: THE VSOCK LISTENER GOES ON THE QUEUE FIRST ────────────────
     //
-    // Everything below is diagnostics, retention and telemetry. None of it is
-    // a precondition for accepting a control-wire connection, so none of it
-    // belongs ahead of the bind.
-    // Order 620-duta: report whether `vsock_loopback` is available BEFORE
-    // binding. The in-VM socat bridge (the non-elevated host path) needs it,
-    // and its absence surfaces later as an opaque connect failure on the host
-    // side — `WSA_ERROR(10060)`, a handshake that times out with nothing in
-    // the guest log explaining why. One line at startup turns that into a
-    // fact someone can read.
+    // The bind was already first in PROGRAM ORDER inside its task — it is the
+    // only `.await` between the task's start and `run_vsock_listener`, which is
+    // what refuted 795-jeym's stated mechanism. But the TASK was spawned LAST,
+    // behind the five background spawns below. On a multi-vCPU host that is
+    // invisible (four cold boots measured the bind at 61-255 ms); on a 1-vCPU
+    // guest the single worker drains the injection queue in order, so anything
+    // queued ahead of the listener delays the thing the host is waiting for.
     //
-    // Diagnostic only, never a gate: the host↔VM virtio path does not need
-    // the module, so refusing to start here would break the working case to
-    // report on the broken one.
+    // Moved here rather than deleting the background work: those tasks are
+    // wanted, they were merely mis-scheduled — the packet says so explicitly.
+    //
+    // The vsock_loopback preflight moves with it: order 620-duta put that line
+    // BEFORE the bind on purpose, so its absence surfaces as a fact at startup
+    // instead of an opaque host-side connect timeout later. Diagnostic only,
+    // never a gate.
     if listen_vsock_port.is_some() {
         eprintln!(
             "[tillandsias] preflight vsock_loopback {}",
             probe_vsock_loopback()
         );
     }
-
     // @trace spec:vsock-transport — when `--listen-vsock <PORT>` was supplied,
-    // bind the control wire on virtio-vsock instead of the Linux Unix
-    // socket. The vsock listener is the in-VM service the host-side
-    // tray talks to on Windows / macOS.
+    // bind the control wire on virtio-vsock instead of the Linux Unix socket.
+    // The vsock listener is the in-VM service the host-side tray talks to on
+    // Windows / macOS.
     let vsock_handle = maybe_spawn_vsock_listener(listen_vsock_port, shutdown_signal.clone());
 
     // Wave 13 Gap #3: spawn background resource-metric sampler.
@@ -14288,26 +14333,19 @@ async fn run_headless_async(
     // Wave 24a Gap OBS-011: Run trace budget enforcement checks
     // @trace gap:OBS-011
     //
-    // Order 798-q4m9: spawn_blocking, NOT tokio::spawn. It DOES await the log
-    // read (tokio::fs::read_to_string), so it yields once — but the work after
-    // that read is a serde_json parse of every line in a loop with no further
-    // await, so it holds a tokio WORKER thread for the whole parse. On a
-    // 1-vCPU guest the single worker drains its injection queue in order, so
-    // that parse sat ahead of the vsock bind. Handle::block_on (not
-    // futures::executor::block_on) because the inner await is a tokio fs
-    // future and needs the tokio reactor driven.
-    tokio::task::spawn_blocking(|| {
-        tokio::runtime::Handle::current().block_on(run_trace_budget_enforcement())
-    });
+    // 798-q4m9: spawn_blocking, not spawn. This parses every line of
+    // tillandsias.log with no yield points, so on `tokio::spawn` it holds a
+    // WORKER thread for the whole parse.
+    tokio::task::spawn_blocking(run_trace_budget_enforcement);
 
     // Wave 21c Gap TR-006: Run disk usage check and auto-evict old cached images
     // @trace gap:TR-006
     //
-    // Order 798-q4m9: spawn_blocking, NOT tokio::spawn. This is a sync fn that
-    // shells out to `bash manage-cache.sh` through a blocking
-    // Command::output() and, on a first boot, materialises every embedded
-    // runtime asset via resolve_runtime_asset_root -> ensure_runtime_assets.
-    // Wrapped in `async move { }` it occupied a worker thread for all of that.
+    // 798-q4m9: spawn_blocking, not `spawn(async move { f() })`. This shells out
+    // via a blocking `Command::output()` and, on a first boot, materializes
+    // every embedded runtime asset to disk — the single most expensive thing
+    // that was queued ahead of the vsock bind. Wrapping a sync fn in an async
+    // block does not make it async; it just hides a blocking call on a worker.
     tokio::task::spawn_blocking(run_disk_usage_check);
 
     // Wave 21a Gap ON-009: Check and refresh GitHub token if expired
@@ -14323,6 +14361,10 @@ async fn run_headless_async(
     // socket permission), we log a warning and continue — headless MUST
     // NOT refuse to start because the diagnostic surface is unavailable.
     let metrics_http_handle = spawn_metrics_http_server();
+
+    // 798-q4m9: the vsock preflight + listener spawn used to sit HERE, last.
+    // They now run before the background spawns above; `vsock_handle` is bound
+    // there. Order 620-duta's reasoning for the preflight moved with it.
 
     // Main event loop: wait for application shutdown signal.
     wait_for_shutdown_signal(shutdown_signal).await?;
@@ -14644,7 +14686,19 @@ async fn run_log_cardinality_analysis() {
 /// and startup continues. Budget tracking is optional observability enhancement.
 ///
 /// @trace gap:OBS-011, spec:runtime-logging
-async fn run_trace_budget_enforcement() {
+/// 798-q4m9: SYNC, and spawned with `spawn_blocking`.
+///
+/// This was an `async fn` whose only `.await` was the log read — but everything
+/// after it serde_json-parses every line of `tillandsias.log` in a loop with NO
+/// yield points, so the task held a tokio WORKER thread for the whole parse.
+/// On a multi-vCPU host that is invisible; on a 1-vCPU guest the single worker
+/// drains the injection queue in order and this sits ahead of the vsock bind.
+///
+/// Made sync rather than sprinkling `yield_now()` through the loop: the read is
+/// a startup one-shot, and a blocking read on a blocking thread is exactly what
+/// `spawn_blocking` is for. Yield points would leave the same CPU-bound loop on
+/// a worker, merely interruptible.
+fn run_trace_budget_enforcement() {
     use tillandsias_core::config;
     use tillandsias_logging::BudgetEnforcer;
 
@@ -14664,7 +14718,7 @@ async fn run_trace_budget_enforcement() {
     let enforcer = BudgetEnforcer::default_config();
 
     // Read log file and estimate cumulative trace costs
-    match tokio::fs::read_to_string(&log_file).await {
+    match std::fs::read_to_string(&log_file) {
         Ok(contents) => {
             let mut trace_count = 0;
 
@@ -15397,6 +15451,86 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
     use tillandsias_podman::{CommandFailure, CommandOutput, FakeBackend, RetryClass};
+
+    /// 798-q4m9 exit criterion 1 + verifiable closure. The vsock listener must
+    /// be the FIRST thing on the runtime's injection queue.
+    ///
+    /// The bind was already first in PROGRAM ORDER inside its own task — that is
+    /// what refuted 795-jeym's stated mechanism — but the TASK was spawned last,
+    /// behind five background spawns. On a 1-vCPU guest the single worker drains
+    /// the injection queue in order, so spawn order IS start order there.
+    ///
+    /// Asserted by source order because the property IS an ordering in this
+    /// function; there is no runtime value to read. Its honest limit is stated
+    /// in the packet and repeated here: this is criterion 1, NOT criterion 3.
+    /// Criterion 3 demands a MEASURED before/after bind latency on a guest
+    /// constrained to one vCPU, and explicitly refuses a multi-vCPU pass as
+    /// evidence. This test cannot supply that and does not claim to.
+    #[test]
+    fn vsock_listener_is_spawned_before_the_background_tasks() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source
+            .split("async fn run_headless_async")
+            .nth(1)
+            .expect("run_headless_async body");
+
+        let vsock = window
+            .find("let vsock_handle = maybe_spawn_vsock_listener(")
+            .expect("run_headless_async must spawn the vsock listener");
+
+        for (label, needle) in [
+            ("metrics retention", "run_metrics_retention()"),
+            (
+                "evidence bundle retention",
+                "run_evidence_bundle_retention()",
+            ),
+            ("log cardinality", "run_log_cardinality_analysis()"),
+            (
+                "trace budget",
+                "spawn_blocking(run_trace_budget_enforcement)",
+            ),
+            ("disk usage", "spawn_blocking(run_disk_usage_check)"),
+        ] {
+            let bg = window
+                .find(needle)
+                .unwrap_or_else(|| panic!("{label} spawn not found ({needle})"));
+            assert!(
+                vsock < bg,
+                "the vsock listener must be queued BEFORE the {label} task — on a 1-vCPU \
+                 guest the single worker runs the injection queue in order (798-q4m9)"
+            );
+        }
+    }
+
+    /// 798-q4m9 exit criterion 2, named individually as the criterion requires.
+    ///
+    /// `tokio::spawn(async move { sync_fn() })` does NOT make a sync function
+    /// async — it parks a blocking call on a worker thread. Both offenders must
+    /// use `spawn_blocking`, and neither may return to the plain-spawn shape.
+    #[test]
+    fn the_two_blocking_startup_tasks_do_not_occupy_worker_threads() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source
+            .split("async fn run_headless_async")
+            .nth(1)
+            .expect("run_headless_async body");
+
+        assert!(
+            window.contains("spawn_blocking(run_disk_usage_check)"),
+            "run_disk_usage_check shells out and materializes runtime assets — it must run on \
+             a blocking thread, not a tokio worker"
+        );
+        assert!(
+            window.contains("spawn_blocking(run_trace_budget_enforcement)"),
+            "run_trace_budget_enforcement parses every log line with no yield points — it must \
+             run on a blocking thread, not a tokio worker"
+        );
+        assert!(
+            !window.contains("tokio::spawn(async move { run_disk_usage_check() })"),
+            "the async-block wrapper is the exact shape 798-q4m9 removed: it hides a blocking \
+             call on a worker rather than moving it off one"
+        );
+    }
 
     /// Serializes every test in this module that mutates a process-global
     /// environment variable.

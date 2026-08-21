@@ -8,6 +8,8 @@ description = "Portable host-side logic shared by the Windows and macOS native t
 publish = false
 
 [dependencies]
+tokio-util = { workspace = true }
+futures-util = { workspace = true }
 tillandsias-core = { path = "../tillandsias-core" }
 tillandsias-control-wire = { path = "../tillandsias-control-wire" }
 tillandsias-secure-channel = { path = "../tillandsias-secure-channel" }

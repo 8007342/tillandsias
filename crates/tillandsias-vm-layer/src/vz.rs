@@ -566,6 +566,25 @@ if ! mountpoint -q /home/forge/src; then
   mount -t virtiofs home-src /home/forge/src || true
 fi
 
+# Mount the host-backed model cache (order 804-deux). Same fstab reasoning as
+# home-src above. This is the path the inference container binds as
+# /home/ollama/.ollama/models, and it holds BOTH the model blobs and the
+# `.tools` engine payload (llama-server, libggml, libllama) — without which
+# /api/version answers while every /api/generate returns HTTP 500, which was
+# the order-406 root cause.
+#
+# Living on a host share rather than inside rootfs.img is the entire point:
+# before this, every VM-directory deletion forced a ~2.47 GB re-download, and
+# the Metal lane exists to justify models far larger than the 379 MiB one that
+# floor assumes. nofail keeps boots green on a tray that predates the share.
+mkdir -p /root/.cache/tillandsias/models
+if ! grep -q "^model-cache " /etc/fstab; then
+  echo "model-cache /root/.cache/tillandsias/models virtiofs nofail 0 0" >> /etc/fstab
+fi
+if ! mountpoint -q /root/.cache/tillandsias/models; then
+  mount -t virtiofs model-cache /root/.cache/tillandsias/models || true
+fi
+
 # Create directory
 mkdir -p /usr/local/lib/tillandsias
 
@@ -579,7 +598,24 @@ if [[ -x "$STAGED" ]]; then
   install -D -m 0755 "$STAGED" "$DEST"
   exit 0
 fi
-if [[ -x "$DEST" ]]; then exit 0; fi
+# 701-iu9b TRAP 1. Say WHY the staged binary was not used, and distinguish the
+# two causes — they call for opposite responses and used to be indistinguishable
+# because this path printed nothing at all.
+#
+# `findmnt` rather than `mountpoint`: findmnt is verified present in this guest
+# (used to read the share during the 2026-08-18 instrumented boot), and under
+# `set -euo pipefail` a MISSING mountpoint binary would make `! mountpoint -q`
+# succeed and report "not mounted" for a share that is fine.
+if ! findmnt -n /home/forge/src >/dev/null 2>&1; then
+  echo "[tillandsias-fetch] staged_binary=unreachable reason=share-not-mounted path=$STAGED" >&2
+  echo "[tillandsias-fetch]   /home/forge/src is not mounted yet, so the host-staged binary is invisible to this unit." >&2
+else
+  echo "[tillandsias-fetch] staged_binary=absent path=$STAGED" >&2
+fi
+if [[ -x "$DEST" ]]; then
+  echo "[tillandsias-fetch] keeping the EXISTING $DEST — it may be OLDER than what the host staged (701-iu9b)." >&2
+  exit 0
+fi
 ARCH="$(uname -m)"
 URL="https://github.com/8007342/tillandsias/releases/latest/download/tillandsias-headless-${ARCH}-unknown-linux-musl"
 TMP="$(mktemp)"
@@ -623,6 +659,7 @@ cat > /etc/systemd/system/tillandsias-headless-fetch.service << 'EOF'
 Description=Ensure tillandsias-headless is present
 After=network-online.target
 Wants=network-online.target
+After=home-forge-src.mount
 Before=tillandsias-headless.service
 [Service]
 Type=oneshot
@@ -722,6 +759,32 @@ fn home_src_dir() -> std::path::PathBuf {
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
         .join("src")
+}
+
+/// Host-side home for the guest's model cache and ollama engine payload.
+///
+/// DELIBERATELY OUTSIDE `image_root()`. On macOS the install, data and config
+/// directories all collapse onto `~/Library/Application Support/tillandsias`,
+/// which IS the VM directory (order 804-bpke found `uninstall.sh` deleting
+/// 11.83 GiB of it while printing "Cache preserved"). Anything stored there —
+/// or inside `rootfs.img`, which lives there — dies with the VM. `~/Library/
+/// Caches` is the idiomatic macOS home for large, re-downloadable state and is
+/// untouched by `--reset-guest` and by any rootfs rebuild, which are the
+/// frequent operations. A deliberate full-wipe e2e still clears it, and that
+/// is correct: that flow is asking for a from-scratch install.
+///
+/// What lives here is ~2.47 GB at the CURRENT model size — a 1.44 GiB ollama
+/// arm64 engine, a 379 MiB qwen2.5:0.5b blob, and the `.tools` payload whose
+/// absence makes `/api/version` answer while every `/api/generate` returns
+/// HTTP 500 (the order-406 root cause).
+///
+/// @trace order:804-deux, order:804-bpke
+#[cfg(target_os = "macos")]
+fn model_cache_dir() -> std::path::PathBuf {
+    std::env::var_os("HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+        .join("Library/Caches/tillandsias/models")
 }
 
 #[cfg(target_os = "macos")]
@@ -1024,6 +1087,31 @@ pub mod boot {
         VZVirtioTraditionalMemoryBalloonDeviceConfiguration, VZVirtualMachineConfiguration,
     };
 
+    /// One host directory exposed to the guest over virtio-fs.
+    ///
+    /// Before order 804-deux this layer could express exactly ONE share: the
+    /// spec carried a single `Option<PathBuf>` and a single tag, and the
+    /// builder installed an `NSArray` of length one. That is why the guest's
+    /// model cache and ollama engine payload live inside `rootfs.img` — not
+    /// because anyone chose the undurable path, but because there was no other
+    /// path to choose. Every VM-directory deletion therefore costs a ~2.47 GB
+    /// re-download, and the Metal lane (397/483/657-s6g8) exists to justify
+    /// models much larger than the 379 MiB one that floor assumes.
+    ///
+    /// @trace order:804-deux, spec:vm-idiomatic-layer
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct VzShare {
+        /// Host directory to expose. Must exist at boot; VZ rejects a missing
+        /// source with a validation error rather than booting without it.
+        pub host_dir: PathBuf,
+        /// virtio-fs tag the guest mounts by (`mount -t virtiofs <tag> …`).
+        /// Must be unique within one configuration.
+        pub tag: String,
+        /// Expose read-only. The guest's model cache must be writable; a
+        /// source share may not be.
+        pub read_only: bool,
+    }
+
     /// Inputs to [`build_vm_configuration`]. The builder consumes a borrow
     /// and produces a retained `VZVirtualMachineConfiguration`; it does NOT
     /// validate (callers do, so they can inspect intermediate state for
@@ -1039,10 +1127,10 @@ pub mod boot {
         pub root_disk: Option<PathBuf>,
         /// Optional cloud-init CIDATA ISO path.
         pub cidata_iso: Option<PathBuf>,
-        /// Optional host directory exposed to the guest over virtio-fs.
-        pub shared_host_dir: Option<PathBuf>,
-        /// virtio-fs tag used by the guest mount command.
-        pub share_tag: String,
+        /// Host directories exposed to the guest over virtio-fs, in order.
+        /// Empty installs no directory-sharing device at all — which is what
+        /// `None` used to mean.
+        pub shares: Vec<VzShare>,
         /// Persistent EFI variable store path. `None` skips NVRAM, which
         /// makes the EFI bootloader invalid; callers should always pass
         /// `Some(...)` for a bootable VM (the file is created if missing).
@@ -1063,8 +1151,7 @@ pub mod boot {
                 memory_bytes: 2 * 1024 * 1024 * 1024,
                 root_disk: None,
                 cidata_iso: None,
-                shared_host_dir: None,
-                share_tag: "home-src".to_string(),
+                shares: Vec::new(),
                 nvram: None,
                 serial_writer_fd: None,
             }
@@ -1205,29 +1292,39 @@ pub mod boot {
                 NSArray::from_id_slice(&[Retained::cast(balloon)]);
             cfg.setMemoryBalloonDevices(&arr_b);
 
-            // virtio-fs host source share. cloud-init mounts this tag at
-            // /home/forge/src before installing the staged headless binary.
-            if let Some(shared_host_dir) = &spec.shared_host_dir {
-                let url = ns_url_for_path(shared_host_dir);
-                let shared_dir = VZSharedDirectory::initWithURL_readOnly(
-                    VZSharedDirectory::alloc(),
-                    &url,
-                    false,
-                );
-                let share = VZSingleDirectoryShare::initWithDirectory(
-                    VZSingleDirectoryShare::alloc(),
-                    &shared_dir,
-                );
-                let fs = VZVirtioFileSystemDeviceConfiguration::initWithTag(
-                    VZVirtioFileSystemDeviceConfiguration::alloc(),
-                    &NSString::from_str(&spec.share_tag),
-                );
-                let share_super: &VZDirectoryShare = &share;
-                fs.setShare(Some(share_super));
-                let fs_super: Retained<VZDirectorySharingDeviceConfiguration> =
-                    Retained::into_super(fs);
+            // virtio-fs shares. `home-src` is mounted by cloud-init at
+            // /home/forge/src before the staged headless binary is installed;
+            // order 804-deux made this a LIST so the model cache and ollama
+            // engine payload can live on a host path instead of inside
+            // rootfs.img, where every VM-directory deletion destroys them.
+            //
+            // One setDirectorySharingDevices call with an N-element array —
+            // VZ replaces the whole device list per call, so calling it once
+            // per share would silently keep only the last one.
+            if !spec.shares.is_empty() {
+                let mut devices: Vec<Retained<VZDirectorySharingDeviceConfiguration>> =
+                    Vec::with_capacity(spec.shares.len());
+                for share_spec in &spec.shares {
+                    let url = ns_url_for_path(&share_spec.host_dir);
+                    let shared_dir = VZSharedDirectory::initWithURL_readOnly(
+                        VZSharedDirectory::alloc(),
+                        &url,
+                        share_spec.read_only,
+                    );
+                    let share = VZSingleDirectoryShare::initWithDirectory(
+                        VZSingleDirectoryShare::alloc(),
+                        &shared_dir,
+                    );
+                    let fs = VZVirtioFileSystemDeviceConfiguration::initWithTag(
+                        VZVirtioFileSystemDeviceConfiguration::alloc(),
+                        &NSString::from_str(&share_spec.tag),
+                    );
+                    let share_super: &VZDirectoryShare = &share;
+                    fs.setShare(Some(share_super));
+                    devices.push(Retained::into_super(fs));
+                }
                 let arr_fs: Retained<NSArray<VZDirectorySharingDeviceConfiguration>> =
-                    NSArray::from_id_slice(&[fs_super]);
+                    NSArray::from_id_slice(&devices);
                 cfg.setDirectorySharingDevices(&arr_fs);
             }
 
@@ -1416,15 +1513,110 @@ impl VmRuntime for VzRuntime {
             None
         };
 
+        // GUEST SIZING: PINNED ON PURPOSE, and here is the measurement (689-eux9).
+        //
+        // MEASURED on macOS Mac17,3 / Apple M5 / 10 logical cores / 16 GiB,
+        // 2026-08-18, two cold `--exec-guest` runs (full cycle: stage, start,
+        // phase Ready, guest exec, stop):
+        //
+        //     VZ start          0.008 / 0.021 s
+        //     phase Ready       8.444 / 8.454 s
+        //     total wall        9.562 / 9.573 s
+        //
+        // In-guest at idle: nproc=4, Mem 3889 MiB total / 3240 MiB available,
+        // and SWAP 3888 MiB total with 0 USED. That zero is the decisive number:
+        // the guest has never touched swap, so it has never been under memory
+        // pressure. The operator question of 2026-08-11 — "is the 4 GiB ceiling
+        // behind the slowness, would 8 GiB help?" — is answered NO by that,
+        // twice over: boot is ~9.5 s end to end, and the slowness had a wholly
+        // different cause (two unbounded waits; in the wedged runs the VM
+        // process did not exist at all — 689-stig).
+        //
+        // WHY PINNED RATHER THAN SCALED TO THE HOST. Two reasons, and the second
+        // is the one that would not be obvious:
+        //   1. No measured pressure to relieve — see the swap figure above.
+        //   2. SCALING WOULD MAKE EVERY CROSS-HOST MEASUREMENT INCOMPARABLE.
+        //      "The guest" has to mean the same thing on every machine or the
+        //      fleet cannot compare numbers taken on different ones. This is not
+        //      hypothetical: 798-q4m9's exit criteria demand a bind-latency
+        //      measurement on a guest constrained to ONE vCPU and explicitly
+        //      refuse a multi-vCPU pass as evidence, and 807-bjjv exists because
+        //      a shared benchmark is worthless when hosts do not run the same
+        //      workload. A host-derived guest size would silently reintroduce
+        //      exactly that variance into every future measurement.
+        //
+        // HONEST LIMIT of the evidence: the memory figures are IDLE. Nothing
+        // here measures the guest under a full forge + container-stack load, so
+        // this justifies keeping the default, not a claim that 4 GiB suffices
+        // for every workload. Revisit with a loaded measurement, not an opinion.
+        //
+        // The `.min(4)` also caps a 10-core host at 4 vCPU, which is what makes
+        // `accel_cpu_cores=4` appear in the guest's capability envelope on a
+        // 10-core Mac — see the 2026-08-17 note on that discrepancy.
+        //
+        // Baseline record: cheatsheets/runtime/macos-vz-guest-boot-baseline.md
+        // MEASUREMENT SEAM — NOT a scaling knob (798-q4m9 criterion 3).
+        //
+        // The sizing above stays PINNED; this does not reopen that. It exists
+        // because criterion 3 demands a bind-latency measurement on a guest
+        // constrained to ONE vCPU and explicitly refuses a multi-vCPU pass as
+        // evidence — and without a seam, producing that number requires a full
+        // signed-bundle rebuild for every measurement, which is enough friction
+        // that the honest answer becomes "not measured".
+        //
+        // Deliberately NOT read from a config file or a menu: it is unset in
+        // every normal launch, and a value outside 1..=the pinned count is
+        // ignored rather than honoured, so it can only ever CONSTRAIN the guest
+        // for a measurement — never grow it, and never make the default
+        // host-dependent (which is the property the pinned decision protects).
+        let pinned_cpu_count = std::thread::available_parallelism()
+            .map(|n| n.get().min(4))
+            .unwrap_or(2);
+        let cpu_count = std::env::var("TILLANDSIAS_VZ_CPU_COUNT_FOR_MEASUREMENT")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .filter(|n| (1..=pinned_cpu_count).contains(n))
+            .inspect(|n| {
+                eprintln!(
+                    "[tillandsias-vz] MEASUREMENT OVERRIDE: cpu_count={n} (pinned default is \
+                     {pinned_cpu_count}). This is a 798-q4m9 measurement seam, not a supported \
+                     configuration."
+                );
+            })
+            .unwrap_or(pinned_cpu_count);
+
+        // VZ refuses to validate a share whose source directory is missing, so
+        // this must exist BEFORE the config is built — on a fresh host nothing
+        // has been downloaded yet and the directory would not otherwise be
+        // there. Failure is not fatal: a VM that boots without its cache share
+        // is degraded (it re-downloads into rootfs.img, the old behaviour), and
+        // that is strictly better than refusing to start.
+        let model_cache = model_cache_dir();
+        let mut shares = vec![boot::VzShare {
+            host_dir: home_src_dir(),
+            tag: "home-src".to_string(),
+            read_only: false,
+        }];
+        match std::fs::create_dir_all(&model_cache) {
+            Ok(()) => shares.push(boot::VzShare {
+                host_dir: model_cache,
+                tag: "model-cache".to_string(),
+                read_only: false,
+            }),
+            Err(err) => eprintln!(
+                "[tillandsias-vz] WARNING: could not create the model cache directory {} ({err}). \
+                 Booting WITHOUT the model-cache share — models will land inside rootfs.img and \
+                 will not survive a VM rebuild (order 804-deux).",
+                model_cache.display()
+            ),
+        }
+
         let spec = boot::VzBootConfig {
-            cpu_count: std::thread::available_parallelism()
-                .map(|n| n.get().min(4))
-                .unwrap_or(2),
+            cpu_count,
             memory_bytes: 4 * 1024 * 1024 * 1024,
             root_disk: Some(rootfs),
             cidata_iso: Some(cidata_iso_path),
-            shared_host_dir: Some(home_src_dir()),
-            share_tag: "home-src".to_string(),
+            shares,
             nvram: Some(self.image_root.join("nvram.bin")),
             serial_writer_fd,
         };
@@ -1963,6 +2155,106 @@ impl VmRuntime for VzRuntime {
 mod tests {
     use super::*;
 
+    /// Order 804-deux, THE LOAD-BEARING TEST. Two shares reach the VZ
+    /// configuration as two devices.
+    ///
+    /// This is the capability the packet's problem statement says did not
+    /// exist: `VzBootConfig` carried a single `Option<PathBuf>` and a single
+    /// tag, and the builder installed an `NSArray` of length one, so the model
+    /// cache had nowhere to live except inside `rootfs.img`. Asserting the
+    /// COUNT is what makes that structural claim falsifiable — it goes red if
+    /// anyone collapses the list back to one, and it goes red for the specific
+    /// mistake that is easiest to make here: calling
+    /// `setDirectorySharingDevices` once per share, which replaces the device
+    /// list each time and silently keeps only the last.
+    ///
+    /// Real VZ objects, on this host — not a source scan.
+    // 804-deux landed this on osx-next, where `pub mod boot` is compiled. That
+    // module is #[cfg(target_os = "macos")] (vz.rs:1066), but this `mod tests` is
+    // #[cfg(test)] ONLY — so on Linux the test below references a module that
+    // does not exist, and the lib-test target fails with E0433, taking
+    // `cargo test --workspace` down with it. Gated at the TEST rather than at the
+    // module because the doc comment is explicit that these need "Real VZ
+    // objects, on this host — not a source scan": they are genuinely macOS-only,
+    // so skipping them off-macOS is honest, whereas widening the cfg on
+    // `mod tests` would silently drop the platform-independent tests beside them.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn two_shares_become_two_directory_sharing_devices() {
+        let a = tempfile::tempdir().unwrap();
+        let b = tempfile::tempdir().unwrap();
+        let spec = boot::VzBootConfig {
+            shares: vec![
+                boot::VzShare {
+                    host_dir: a.path().to_path_buf(),
+                    tag: "home-src".to_string(),
+                    read_only: false,
+                },
+                boot::VzShare {
+                    host_dir: b.path().to_path_buf(),
+                    tag: "model-cache".to_string(),
+                    read_only: false,
+                },
+            ],
+            ..boot::VzBootConfig::defaults()
+        };
+        let cfg = boot::build_vm_configuration(&spec).expect("build config");
+        let devices = unsafe { cfg.directorySharingDevices() };
+        assert_eq!(
+            devices.len(),
+            2,
+            "both shares must reach the VZ config; one device means the list \
+             collapsed or setDirectorySharingDevices was called per-share"
+        );
+    }
+
+    /// The empty case still installs no device at all — what `None` used to
+    /// mean. Guards the other direction of the same change.
+    // 804-deux landed this on osx-next, where `pub mod boot` is compiled. That
+    // module is #[cfg(target_os = "macos")] (vz.rs:1066), but this `mod tests` is
+    // #[cfg(test)] ONLY — so on Linux the test below references a module that
+    // does not exist, and the lib-test target fails with E0433, taking
+    // `cargo test --workspace` down with it. Gated at the TEST rather than at the
+    // module because the doc comment is explicit that these need "Real VZ
+    // objects, on this host — not a source scan": they are genuinely macOS-only,
+    // so skipping them off-macOS is honest, whereas widening the cfg on
+    // `mod tests` would silently drop the platform-independent tests beside them.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn no_shares_installs_no_directory_sharing_device() {
+        let spec = boot::VzBootConfig {
+            shares: Vec::new(),
+            ..boot::VzBootConfig::defaults()
+        };
+        let cfg = boot::build_vm_configuration(&spec).expect("build config");
+        let devices = unsafe { cfg.directorySharingDevices() };
+        assert_eq!(devices.len(), 0, "no shares must install no device");
+    }
+
+    /// The guest half of 804-deux: cloud-init must PERSIST the model-cache
+    /// mount to /etc/fstab, for the same reason the home-src mount is
+    /// persisted — cloud-init runs on first boot only, so a mount issued
+    /// there and not written to fstab evaporates on every later boot, and the
+    /// cache silently reverts to living inside rootfs.img.
+    #[test]
+    fn cloud_init_persists_the_model_cache_mount() {
+        let source = include_str!("vz.rs");
+        assert!(
+            source.contains("model-cache /root/.cache/tillandsias/models virtiofs nofail 0 0"),
+            "cloud-init must persist the model-cache virtio-fs mount in /etc/fstab"
+        );
+        // The mount point must match the path the headless actually derives:
+        // the unit sets Environment=HOME=/root and main.rs joins
+        // `.cache/tillandsias/models` onto $HOME. A mismatch here mounts the
+        // share somewhere nothing reads, and the cache silently stays in the
+        // image with no error anywhere.
+        assert!(
+            source.contains("Environment=HOME=/root"),
+            "the model-cache mount point is derived from the unit's HOME; if that \
+             changes, /root/.cache/tillandsias/models is the wrong path"
+        );
+    }
+
     /// 2026-07-11: the raw disk MUST be grown past the ~5 GB Fedora Cloud
     /// default before first boot, or the forge-base image build runs the
     /// root filesystem out of space and every agent attach dies with a
@@ -2019,16 +2311,36 @@ mod tests {
 
     /// Order 606-r42f: the live boot spec (built inline in `start()`) must
     /// keep the host-protecting clamps the deleted `VzGuestConfig` used to
-    /// pin: CPU capped at 4 and 4 GiB guest memory. Source scan of the
-    /// `VzBootConfig` construction site.
+    /// pin: CPU capped at 4 and 4 GiB guest memory.
+    ///
+    /// WINDOW WIDENED 2026-08-18 (order 804-deux), and the reason is worth
+    /// keeping. This scan used to start at `let spec = boot::VzBootConfig {`,
+    /// which worked only while the cap was written INLINE as
+    /// `cpu_count: available_parallelism().map(|n| n.get().min(4))`. Order
+    /// 798-q4m9 hoisted that into `pinned_cpu_count` a few lines above so a
+    /// measurement seam could constrain it — the cap was unchanged and still
+    /// 4, but the LITERAL left the window and this test went red on a refactor
+    /// that broke nothing. It is the 828-itr9 failure mode with the better
+    /// ending: a scan anchored to a moveable literal, going loudly red instead
+    /// of silently vacuous.
+    ///
+    /// So anchor on the derivation, not on the struct literal, and assert the
+    /// anchor EXISTS before scanning — otherwise a future rename turns this
+    /// back into a test that passes while checking nothing.
     #[test]
     fn live_boot_spec_caps_cpu_at_4_and_carries_4gib_memory() {
         let source = include_str!("vz.rs");
+        let anchor = "let pinned_cpu_count = std::thread::available_parallelism()";
+        assert!(
+            source.contains(anchor),
+            "the cpu_count derivation moved or was renamed — this scan is \
+             anchored to it and would otherwise silently stop checking anything"
+        );
         let window = source
-            .split("let spec = boot::VzBootConfig {")
+            .split(anchor)
             .nth(1)
-            .and_then(|t| t.split("};").next())
-            .expect("start() must build a boot::VzBootConfig spec inline");
+            .and_then(|t| t.split("let cfg = boot::build_vm_configuration").next())
+            .expect("start() must derive cpu_count then build the spec");
         assert!(
             window.contains(".min(4)"),
             "boot spec must cap cpu_count at 4 (host-starvation guard)"
@@ -2289,15 +2601,88 @@ mod tests {
             .and_then(|tail| tail.split("# Write tillandsias-headless.service").next())
             .expect("fetch unit window");
 
+        // 701-iu9b widened this from a LITERAL match on
+        // `if [[ -x "$DEST" ]]; then exit 0; fi` to the property that line was
+        // standing in for. The one-line form had to grow a diagnostic (below),
+        // and pinning its exact spelling made a correct change look like a
+        // regression — the failure mode `litmus:litmus-expression-pinning-
+        // enforcement-shape` exists to discourage. The INTENT is idempotence:
+        // an existing binary must still short-circuit to exit 0.
         assert!(
-            source.contains("if [[ -x \"$DEST\" ]]; then exit 0; fi"),
-            "fetch script must be safe to run when the binary already exists"
+            source.contains("if [[ -x \"$DEST\" ]]; then")
+                && source.contains("[tillandsias-fetch] keeping the EXISTING $DEST"),
+            "fetch script must still be safe to run when the binary already exists, \
+             and must now SAY it kept the existing one"
         );
         assert!(fetch_unit.contains("Type=oneshot"));
         assert!(fetch_unit.contains("RemainAfterExit=yes"));
+
+        // 701-iu9b TRAP 1. The fetch unit must be ordered AFTER the virtiofs
+        // share, or it races the mount that carries the very binary it installs.
+        // Measured on this host 2026-08-18 from systemd's own resolved view:
+        // RequiresMountsFor= was EMPTY and After= omitted the mount. The race
+        // did not fire that boot — mount active at monotonic 3.005s, fetch
+        // started at 4.461s — but the margin was only 1.456s, small enough that
+        // a slower virtiofs mount closes it, and the failure is SILENT: the
+        // script kept the old binary and exited 0.
+        assert!(
+            fetch_unit.contains("After=home-forge-src.mount"),
+            "the fetch unit must be ordered after the share that carries the staged binary"
+        );
+        // ...but NOT via RequiresMountsFor, which implies Requires=. The fstab
+        // entry is deliberately `nofail` because a VZ config may legitimately
+        // omit the share; `tillandsias-headless.service` has
+        // Requires=tillandsias-headless-fetch.service, so a hard requirement
+        // here would turn a benign no-share boot into a DEAD GUEST. That
+        // regression would surface only on a boot, which is exactly the
+        // instrument this fix cannot afford to spend.
+        assert!(
+            !fetch_unit.contains("RequiresMountsFor="),
+            "use plain After=, not RequiresMountsFor= — the latter implies Requires= and would \
+             make a legitimate no-share boot fail the guest entirely"
+        );
         assert!(
             !fetch_unit.contains("ConditionPathExists=!/usr/local/bin/tillandsias-headless"),
             "systemd must run the idempotent oneshot instead of skipping it"
+        );
+    }
+
+    /// 701-iu9b TRAP 1, the diagnostic half. Ordering makes the race unlikely;
+    /// this makes it VISIBLE when it happens anyway — ordering cannot help a
+    /// boot where the share is genuinely absent, and that boot must not look
+    /// identical to a healthy one.
+    ///
+    /// The two causes need opposite responses and used to be indistinguishable,
+    /// because the fall-through printed nothing at all: an unmounted share means
+    /// the staged binary exists and is invisible (retry / check the share); a
+    /// genuinely absent staged file means nothing was ever staged (run the .app
+    /// bundle — 701-kgvk).
+    #[test]
+    fn vz_cloud_init_fetch_script_names_why_it_skipped_the_staged_binary() {
+        let source = include_str!("vz.rs");
+        let script = source
+            .split("# Write fetch-headless.sh")
+            .nth(1)
+            .and_then(|tail| tail.split("# Write headless-preflight.sh").next())
+            .expect("fetch script window");
+
+        assert!(
+            script.contains("staged_binary=unreachable reason=share-not-mounted"),
+            "an unmounted share must be named as the reason, not silently skipped"
+        );
+        assert!(
+            script.contains("staged_binary=absent"),
+            "a genuinely absent staged binary must be distinguishable from an unreachable one"
+        );
+        assert!(
+            script.contains("findmnt"),
+            "probe the mount with findmnt, which is verified present in this guest — under \
+             `set -euo pipefail` a MISSING `mountpoint` binary would make `! mountpoint -q` \
+             succeed and report a healthy share as unmounted"
+        );
+        assert!(
+            script.contains(">&2"),
+            "diagnostics belong on stderr so the journal captures them"
         );
     }
 

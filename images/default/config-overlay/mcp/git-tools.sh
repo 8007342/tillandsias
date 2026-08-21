@@ -31,6 +31,9 @@ for _mcp_log_cand in \
     if [ -r "$_mcp_log_cand" ]; then . "$_mcp_log_cand" 2>/dev/null && break; fi
 done
 command -v mcp_log_usage >/dev/null 2>&1 || mcp_log_usage() { return 0; }
+# 841-ruh9: the same guarantee for the clock. A missing mcp_now_ms under
+# `set -e` would abort the very call the telemetry exists to observe.
+command -v mcp_now_ms >/dev/null 2>&1 || mcp_now_ms() { printf ''; }
 
 # Cache constants — mirror the values set by /usr/local/lib/tillandsias/lib-common.sh
 # so the MCP tools can run in contexts where lib-common.sh wasn't sourced (e.g.,
@@ -108,7 +111,7 @@ while IFS= read -r line; do
         "tools/call")
             tool=$(echo "$line" | jq -r '.params.name')
             args=$(echo "$line" | jq -r '.params.arguments // {}')
-            _mcp_t0=$(date +%s%3N 2>/dev/null || echo "")
+            _mcp_t0=$(mcp_now_ms)
             _mcp_outcome="answered"
             case "$tool" in
                 "git_status")
@@ -154,7 +157,7 @@ while IFS= read -r line; do
             # with THIS server's name. Best-effort; never fails the call.
             _mcp_lat=""
             if [ -n "$_mcp_t0" ]; then
-                _mcp_t1=$(date +%s%3N 2>/dev/null || echo "")
+                _mcp_t1=$(mcp_now_ms)
                 [ -n "$_mcp_t1" ] && _mcp_lat=$((_mcp_t1 - _mcp_t0))
             fi
             mcp_log_usage "git-tools" "$tool" "$_mcp_outcome" "$_mcp_lat"

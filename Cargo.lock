@@ -3077,10 +3077,12 @@ name = "tillandsias-control-wire"
 version = "0.1.170"
 dependencies = [
  "async-trait",
+ "futures-util",
  "postcard",
  "serde",
  "tempfile",
  "tokio",
+ "tokio-util",
  "tokio-vsock",
 ]
 
@@ -3155,6 +3157,7 @@ name = "tillandsias-host-shell"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "futures-util",
  "postcard",
  "serde",
  "tempfile",
@@ -3164,6 +3167,7 @@ dependencies = [
  "tillandsias-secure-channel",
  "tillandsias-vm-layer",
  "tokio",
+ "tokio-util",
  "toml 0.8.2",
  "tracing",
  "windows 0.58.0",

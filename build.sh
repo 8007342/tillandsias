@@ -397,7 +397,8 @@ Usage: ./build.sh [flags]
 Build flags:
   (none)            Debug build (cargo build --workspace)
   --release         Release build (native launcher, optimized)
-  --test            Run test suite (cargo test --workspace)
+  --test            Run test suite (cargo test --workspace --no-fail-fast,
+                    plus the tray/listen-vsock feature pass)
   --check           Type-check only (cargo check --workspace)
   --clean           Clean build artifacts before building
   --ci              Run local CI/CD validation (quick: spec binding, drift, version, fmt, clippy, tests)
@@ -1328,9 +1329,36 @@ fi
 
 # Test build
 if [[ "$FLAG_TEST" == true ]]; then
+    # --no-fail-fast (order 829-g4xf) and the feature pass (order 831-wmn4).
+    # Both exist because the count this prints did not mean what it said:
+    #
+    #   cargo test --workspace                 -> 801 passed,  1 failed
+    #   cargo test --workspace --no-fail-fast  -> 1911 passed, 8 failed
+    #
+    # Cargo runs test binaries sequentially and STOPS at the first one that
+    # fails, so more than half the workspace never ran and seven failures were
+    # invisible behind the first. A truncated run and a complete one look
+    # identical except for totals nobody knows in advance.
     _step "Running tests..."
-    _run cargo test --workspace --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1
+    _run cargo test --workspace --no-fail-fast --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1
     _info "Tests passed"
+
+    # `tray` and `listen-vsock` are NOT default features, so the plain pass
+    # above compiles neither `mod tray` nor `mod vsock_server` — 139 of that
+    # binary's 522 tests. They are not peripheral: one is the Linux tray's
+    # control socket, the other the in-VM control wire's server half. A test
+    # added there runs nowhere and the suite still counts it as coverage
+    # (measured 2026-08-19: two new bound tests reported "0 passed; 383
+    # filtered out", indistinguishable from a filter typo).
+    #
+    # local-ci.sh already runs the `tray` half for exactly this reason and
+    # documents it at length; it does not run `listen-vsock`, which is why
+    # this pass names both.
+    _step "Running feature-gated tests (tray, listen-vsock)..."
+    _run cargo test -p tillandsias-headless --bin tillandsias \
+        --features tray,listen-vsock --no-fail-fast \
+        --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1
+    _info "Feature-gated tests passed"
 
     # Prune dangling images accumulated during the test
     _step "Pruning dangling podman images..."

@@ -60276,6 +60276,58 @@ plan_index:
         deliberately-hanging child and asserts (a) the call returns inside
         budget and (b) the child process is gone afterwards.
       events:
+        - type: note
+          ts: "2026-08-20T15:42:33Z"
+          agent_id: "macos-tlatoanis-macbook-air-opus5-20260820t154233z"
+          host: macos
+          summary: |
+            SCOPING NOTE from macos 2026-08-20 — NOT claimed, NOT started. Read this
+            before picking it up; it names a gap in the deliverable that would otherwise
+            be discovered mid-implementation.
+
+            THE DELIVERABLE AS WRITTEN MAY NOT BE REACHABLE AS WRITTEN. It says
+            wait_bounded/status_bounded should "use the same
+            `tokio::time::timeout(budget, cmd.output())` + `kill_on_drop(true)` shape the
+            same crate already uses correctly". That shape at backend.rs:166 lives inside
+            an `async fn`. `SyncPodmanCommand::wait_bounded` is SYNC and returns
+            `std::io::Result<std::process::Output>` — being sync is the type's entire
+            reason to exist.
+
+            So the fix needs one of three things, and the packet should say which:
+              1. make the two methods async and update all call sites (11 references,
+                 mostly sync `fn`s in tillandsias-headless: main.rs:1280/1297/1319/8004,
+                 vault_bootstrap.rs:803);
+              2. block on a runtime handle from sync code — which PANICS ("Cannot start a
+                 runtime from within a runtime") if any caller is already inside the
+                 tokio runtime tillandsias-headless runs. Verifying that no caller is
+                 is the first real task, and it is not trivial;
+              3. keep it sync and fix the three hazards without tokio — bounded reads on
+                 non-blocking pipes, and a park instead of the 20ms poll.
+
+            THE EXISTING COMMENT DOCUMENTS A HAZARD THE NEW SHAPE MUST STILL ANSWER, and
+            it was learned the hard way. lib.rs:988-1000 explains why the reader threads
+            are ABANDONED rather than joined: killing the child does not close a pipe a
+            GRANDCHILD still holds — an `sh -c` wrapper dies while the `sleep` it spawned
+            keeps the write end open — so the readers may never see EOF. "The first
+            version of this code did exactly that and hung its own test."
+
+            The tokio shape does answer it, and better: dropping the `output()` future on
+            timeout drops the read futures too, so nothing is abandoned, and kill_on_drop
+            kills the child. Worth stating explicitly in the packet so the implementer
+            does not re-derive the grandchild case from scratch — and so exit criterion 4
+            ("the child is actually killed, proven by asserting the pid is gone") is read
+            with the knowledge that the GRANDCHILD may legitimately survive. A test that
+            asserts the grandchild is gone too will fail for the right reason and waste a
+            cycle.
+
+            EXIT CRITERION 2 IS SEPARABLE and is the safe first slice if someone wants
+            partial progress: capping output capture with an explicit constant and
+            reporting the overflow touches neither the sync/async boundary nor the
+            thread-lifetime question, and is fully testable on any host.
+
+            VERIFIED HERE: tillandsias-podman compiles and its lib tests pass on macOS
+            (161 passed, 0 failed, 2026-08-19), so this packet is verifiable off Linux —
+            the podman BINARY is not needed for the unit-level criteria.
         - type: filed
           ts: "2026-08-17T07:10:08Z"
           agent_id: windows-opus5-subtractive-20260817

@@ -1,0 +1,180 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macos (osx-next), 2026-08-19T22:30:00Z.
+#
+# The two defects 829-g4xf's truthful test signal exposed within minutes of
+# landing. Both filed AND fixed this cycle; recorded here because the shape is
+# the point, not the line count.
+packets:
+  - packet_id: linux-only-preflight-asserted-unconditionally-in-tests
+    order: 833-8u5g
+    status: done
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: "two tests assert Linux-only behaviour with no platform guard: require_desktop_user_session is entirely #[cfg(target_os = \"linux\")] and sample_disk_io needs /proc/diskstats, so off Linux one half of each test passes VACUOUSLY and the other fails"
+    deliverable: "each asserts its real property on every target, or skips loudly — never passes for the wrong reason"
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [rust, testing, fail-loud]
+    estimated_hours: 1
+    context: |
+      FOUND 2026-08-19 by landing 829-g4xf, which is what that packet is for:
+      with --no-fail-fast the workspace run went from 1 reported failure to 7,
+      and these are the root causes among them.
+
+      BOTH ARE THE SAME SHAPE, and it is the shape 831-wmn4 had just fixed one
+      crate over: a test whose subject is platform-conditional, with no guard.
+      The failing assertion is not the dangerous half — the VACUOUS one is.
+
+        * desktop_user_session_preflight_requires_writable_runtime_dir
+          require_desktop_user_session carries its ENTIRE body under
+          #[cfg(target_os = "linux")] (lib.rs:216), so off Linux it is
+          `Ok(())` unconditionally. The test's two assertions then disagree
+          about the same fact: `assert!(...is_ok())` passes asserting nothing,
+          and `assert!(...is_err())` cannot pass at all.
+          FIX: skip loudly on non-Linux, keeping it compiled everywhere —
+          831-wmn4's rule that gating a test away is not running it somewhere.
+
+        * sample_disk_io_returns_empty_on_first_call
+          sample_disk_io returns early with an empty vec when
+          /proc/diskstats cannot be read, BEFORE recording a baseline. On
+          macOS the emptiness assertion therefore passed for the wrong reason
+          — no /proc at all, rather than "no baseline yet" — and
+          previous_diskstats.is_some() failed after it.
+          NOTE THE NEAR MISS, which is the more useful half: had this test
+          carried only its first assertion it would have PASSED off Linux
+          while having degenerated into a duplicate of
+          sample_disk_io_missing_file_returns_empty, which covers the
+          unreadable-path case deliberately. Two tests, one property, and the
+          interesting one silently uncovered. Only the second assertion made
+          the degeneration observable.
+          FIX: drive it from a fixture via with_proc_paths, as the two
+          neighbouring tests already do. This one is fixed PORTABLY rather
+          than skipped — the property is not platform-specific, only the
+          default path is, so asserting it on every target beats asserting it
+          on one.
+
+      THE GENERAL RULE WORTH KEEPING: a test that reaches a platform-specific
+      resource by its default path is a platform test whether or not it says
+      so. Prefer redirecting the path over guarding the target; guard only
+      when the BEHAVIOUR, not merely the path, is platform-specific.
+
+  - packet_id: poisoned-test-env-lock-multiplies-one-failure-into-six
+    order: 833-u85z
+    status: done
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: "tillandsias-podman's test env_lock() used .lock().unwrap(), so any one test panicking while holding it poisoned the mutex and restated a single failure as six — five of which pass in isolation"
+    deliverable: "a panicking test fails alone; the guard recovers from poisoning, with a negative control proving it"
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [rust, testing, fail-loud]
+    estimated_hours: 1
+    context: |
+      FOUND 2026-08-19, immediately downstream of 829-g4xf and 833-8u5g.
+
+      MEASURED, and the numbers are the finding:
+
+        cargo test -p tillandsias-podman --lib   -> 6 failures
+        each of 5 of them, run alone             -> passes
+        the 6th (833-8u5g), run alone            -> fails
+
+      All six panicked at the same line, lib.rs:1228:56, with PoisonError.
+      env_lock() serializes the env-mutating tests and was written
+
+        ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
+
+      so when 833-8u5g's test panicked while holding the guard, the mutex was
+      poisoned and every later acquisition unwrapped an Err. One defect,
+      reported as six, with --test-threads=1 making no difference because it
+      is contamination, not a race.
+
+      WHY RECOVERY IS SOUND HERE, not merely convenient: the guarded data is
+      `()`. Poisoning exists to stop a reader observing state a panicking
+      writer left half-updated; with no state there is no such invariant. The
+      lock's only job is mutual exclusion over the process-wide environment,
+      and a panicking test does not make the NEXT test's exclusive access
+      unsafe. Recovery also hides nothing — the test that actually panicked
+      still fails and still reports. It stops that panic being restated as
+      five more, which is noise burying the one line worth reading.
+
+      NEGATIVE CONTROL, because otherwise this fix is unfalsifiable once the
+      root cause is fixed and nothing panics any more:
+      env_lock_recovers_from_a_poisoned_guard poisons the mutex from a CHILD
+      thread (a panic on the test thread would fail the wrong test), asserts
+      the poisoning thread really did panic — or the control asserts nothing —
+      and then re-acquires. FALSIFIED before commit by reverting the guard to
+      .unwrap(): the control fails AND poisons five neighbours, reproducing
+      the 1-into-6 cascade exactly. Restored: 161 passed, 0 failed.
+
+      COMPOUNDS 829-g4xf IN THE OPPOSITE DIRECTION, which is worth stating
+      plainly. That packet found a count too LOW — a truncated run hiding
+      seven failures behind one. This one found the same suite's count too
+      HIGH — one defect inflated into six. Both make the number at the end of
+      a test run mean something other than what it says, and a reader
+      correcting for one would have been misled by the other.
+
+status:
+  - packet_id: linux-only-preflight-asserted-unconditionally-in-tests
+    field: status
+    value: done
+    ts: "2026-08-19T22:30:00Z"
+    host: macos
+  - packet_id: poisoned-test-env-lock-multiplies-one-failure-into-six
+    field: status
+    value: done
+    ts: "2026-08-19T22:30:00Z"
+    host: macos
+
+events:
+  - packet_id: linux-only-preflight-asserted-unconditionally-in-tests
+    event:
+      type: completed
+      ts: "2026-08-19T22:30:00Z"
+      agent_id: macos-tlatoanis-macbook-air-opus5-20260819t221707z
+      host: macos
+      summary: |
+        Both tests fixed, by DIFFERENT means on purpose.
+
+        desktop_user_session_preflight_requires_writable_runtime_dir skips
+        loudly on non-Linux: its subject, require_desktop_user_session, is
+        entirely #[cfg(target_os = "linux")], so the BEHAVIOUR is
+        platform-specific and there is nothing to assert elsewhere.
+
+        sample_disk_io_returns_empty_on_first_call is fixed PORTABLY via
+        with_proc_paths and a tempdir fixture: only the default PATH was
+        platform-specific, not the property, so it now asserts the
+        first-call-records-a-baseline invariant on every target rather than on
+        one. Prefer redirecting the path over guarding the target.
+      evidence_refs:
+        - "586d6bb3e — fix(tests): the 7 failures the truthful signal exposed"
+        - "cargo test -p tillandsias-metrics --lib --no-fail-fast -> 73 passed, 0 failed (was 72 passed, 1 failed)"
+        - "cargo test -p tillandsias-podman --lib --no-fail-fast -> 160 passed, 0 failed (was 154 passed, 6 failed)"
+        - "cargo test --workspace --lib --no-fail-fast -> 1160 passed, 0 failed across 15 targets"
+  - packet_id: poisoned-test-env-lock-multiplies-one-failure-into-six
+    event:
+      type: falsified
+      ts: "2026-08-19T22:30:00Z"
+      agent_id: macos-tlatoanis-macbook-air-opus5-20260819t221707z
+      host: macos
+      summary: |
+        env_lock() now recovers from poisoning
+        (unwrap_or_else(|poisoned| poisoned.into_inner())) instead of
+        unwrapping. Sound because the guarded data is `()`: poisoning protects
+        a reader from state a panicking writer left half-updated, and there is
+        no state. It hides nothing — the test that actually panicked still
+        fails alone.
+
+        FALSIFIED BEFORE COMMIT, which is why this event is type: falsified.
+        With the guard reverted to .lock().unwrap(), the new negative control
+        env_lock_recovers_from_a_poisoned_guard fails AND poisons five
+        neighbours — reproducing the measured 1-into-6 cascade exactly, 155
+        passed / 6 failed. Restored: 161 passed / 0 failed. Without that step
+        the fix would be unfalsifiable once 833-8u5g stopped anything from
+        panicking.
+      evidence_refs:
+        - "586d6bb3e — fix(tests): the 7 failures the truthful signal exposed"
+        - "falsified (guard reverted to .unwrap()): 155 passed, 6 failed — control fails and poisons 5 neighbours"
+        - "restored: cargo test -p tillandsias-podman --lib --no-fail-fast -> 161 passed, 0 failed"
+        - "isolation control: 5 of the 6 original failures pass when run alone; --test-threads=1 changes nothing (contamination, not a race)"

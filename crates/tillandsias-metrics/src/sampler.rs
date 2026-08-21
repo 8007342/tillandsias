@@ -820,17 +820,30 @@ mod tests {
         // sysinfo's CPU semantics — but it MUST still record one, or every
         // subsequent call would also return empty.
         //
-        // Driven from a fixture rather than the real /proc (order 372
-        // freshness audit, 2026-08-18). The previous version called
+        // CONCURRENT CORRECT FIXES, both landing this test on a FIXTURE instead
+        // of the host's real /proc/diskstats: order 372 (linux freshness audit,
+        // 2026-08-18) and order 833-8u5g (macOS). Same change, found twice,
+        // independently — and each host saw a different half of why it matters,
+        // so both are kept.
+        //
+        // WHY IT WAS BROKEN (linux's half): the previous version called
         // MetricsSampler::new(), which reads /proc/diskstats, so the
         // `previous_diskstats.is_some()` assertion silently required a Linux
-        // host: everywhere else `sample_disk_io` takes its unreadable-file
-        // early return, stores no baseline, and the test fails. It passed only
-        // in the Linux build distro — the one lane ./build.sh --check runs —
-        // while failing natively on Windows, and this crate is also a
-        // dependency of tillandsias-macos-tray, which has no /proc either.
-        // The behaviour under test is platform-independent; only the fixture
-        // needed to be.
+        // host. It passed only in the Linux build distro — the one lane
+        // ./build.sh --check runs — while failing natively on Windows, and this
+        // crate is also a dependency of tillandsias-macos-tray, which has no
+        // /proc either.
+        //
+        // WHY IT WAS WORSE THAN A FAILURE (macOS's half): off Linux the
+        // emptiness assertion passed for entirely the WRONG REASON — no /proc at
+        // all, rather than "no baseline yet". With only that first assertion the
+        // test would have gone GREEN off Linux while degenerating into a
+        // duplicate of sample_disk_io_missing_file_returns_empty below, which
+        // covers the unreadable-path case deliberately. Two tests, one property,
+        // and the interesting one silently uncovered.
+        //
+        // A fixture keeps the baseline property under test on EVERY target,
+        // which is strictly better than proving it on one.
         let dir = tempfile::tempdir().unwrap();
         let stats_path = dir.path().join("diskstats");
         std::fs::write(&stats_path, " 8       0 sda 0 0 0 0 0 0 0 0 0 0 0\n").unwrap();
@@ -843,7 +856,7 @@ mod tests {
         assert!(v.is_empty(), "first sample should be empty, got {v:?}");
         assert!(
             s.previous_diskstats.is_some(),
-            "the first call must record a baseline, or every later call is empty too"
+            "the first call must still record a baseline, or no later call can ever diff"
         );
     }
 
