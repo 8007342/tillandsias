@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan expire-claims (order 672-bz7u).
+status:
+  - packet_id: older-app-silently-downgrades-a-newer-enclave
+    field: status
+    value: ready
+    ts: "2026-08-21T22:46:36Z"
+    host: linux
+  - packet_id: version-rolled-forward-to-260819-on-windows-next
+    field: status
+    value: ready
+    ts: "2026-08-21T22:46:36Z"
+    host: linux
+  - packet_id: launch-spec-emits-verbatim-argv-for-project-launches
+    field: status
+    value: ready
+    ts: "2026-08-21T22:46:36Z"
+    host: linux
+
+events:
+  - packet_id: older-app-silently-downgrades-a-newer-enclave
+    event:
+      type: progress
+      ts: "2026-08-21T22:46:36Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-08-19T14:30:00Z (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: version-rolled-forward-to-260819-on-windows-next
+    event:
+      type: progress
+      ts: "2026-08-21T22:46:36Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-08-19T15:00:00Z (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: launch-spec-emits-verbatim-argv-for-project-launches
+    event:
+      type: progress
+      ts: "2026-08-21T22:46:36Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-08-20T19:43:01Z (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
