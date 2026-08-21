@@ -91,6 +91,8 @@ pub struct Ledger {
     /// SATISFIED dependency, not a dangling reference — referential
     /// soundness resolves against active ∪ archived.
     archived_ids: BTreeSet<String>,
+    /// The archived corpus, kept WHOLE. See [`Archive`].
+    archive: Archive,
     /// packet_id -> (line_start, line_end), 1-indexed and INCLUSIVE, over the
     /// raw text this ledger was parsed from. Order 394b: a citation without a
     /// line range is unverifiable, and an unverifiable citation is decoration.
@@ -274,6 +276,47 @@ impl ParkedBlock {
     }
 }
 
+/// The ARCHIVED corpus — completed packets swept out of `plan/index.yaml`
+/// into `plan/archive/*.yaml` — parsed and KEPT, not reduced to a set of ids.
+///
+/// WHY THIS EXISTS. `collect_archived_ids` already parsed every archived
+/// packet out of those files and then discarded everything except the id. That
+/// discard was the whole defect: sweeping 550 terminal packets made
+/// `status <id>` and the `answer` path reply `unsupported: no packet in the
+/// ledger matches any token` for every one of them, so an agent asking what
+/// happened to finished work got a refusal rather than history. The measured
+/// cost of the sweep was 7 red tests out of 203; the measured cost of keeping
+/// what was already parsed is this struct.
+///
+/// WHY IT IS SEPARATE FROM `Ledger::packets`, which is the load-bearing half
+/// of the design. `packets` is the SCHEDULABLE set: `ready`, `next`, `query`
+/// and the batch selector's projection all iterate it directly and filter by
+/// status, so folding history into it would put finished work back in front of
+/// agents looking for something to pick up — a worse failure than the one
+/// being fixed. History is therefore reachable only through the lookups that
+/// ask about a NAMED packet (`resolve`, `blocked_by`, `milestone_children`),
+/// never through the ones that ask "what should I do next".
+///
+/// Indexes mirror the active ones exactly, including the ambiguity policy: an
+/// order claimed by more than one archived packet is dropped rather than
+/// resolved to whichever file was read last.
+#[derive(Default)]
+struct Archive {
+    /// Full archived packet mappings, open-world like the active ones.
+    packets: Vec<Value>,
+    by_id: BTreeMap<String, usize>,
+    by_order: BTreeMap<u64, String>,
+    by_order_token: BTreeMap<String, String>,
+    /// packet_id -> (archive file NAME, line_start, line_end).
+    ///
+    /// The FILE NAME, not a path: the ledger does not know the repo root, and
+    /// a citation must carry a repo-relative path. Callers rebuild the path
+    /// from the same `source_rel` they were already given, the way fragment
+    /// citations do — so a citation into history is as openable as one into
+    /// the live index, and just as verifiable.
+    spans: BTreeMap<String, (String, usize, usize)>,
+}
+
 impl Ledger {
     /// Load the ledger from a plan index file. Walks the whole YAML tree
     /// collecting every mapping that carries a `packet_id` — resilient to
@@ -281,39 +324,98 @@ impl Ledger {
     pub fn load(path: &Path) -> Result<Self, String> {
         let raw =
             std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
-        let archived_ids = Self::collect_archived_ids(path);
+        let archive = Self::collect_archive(path);
+        let archived_ids: BTreeSet<String> = archive.by_id.keys().cloned().collect();
         let mut ledger =
             Self::parse(&raw, archived_ids).map_err(|e| format!("{}: {e}", path.display()))?;
+        ledger.archive = archive;
         ledger.source_path = Some(path.to_path_buf());
         Ok(ledger)
     }
 
-    /// Archive awareness: sibling plan/archive/*.yaml holds completed
-    /// packets. Their ids resolve dependencies (done work) but never enter
-    /// the active packet list. Best-effort — a missing archive dir just
-    /// means no archived ids.
-    fn collect_archived_ids(path: &Path) -> BTreeSet<String> {
-        let mut archived_ids = BTreeSet::new();
-        if let Some(archive_dir) = path.parent().map(|d| d.join("archive"))
-            && let Ok(entries) = std::fs::read_dir(&archive_dir)
-        {
-            for entry in entries.flatten() {
-                let p = entry.path();
-                if p.extension().and_then(|e| e.to_str()) == Some("yaml")
-                    && let Ok(raw) = std::fs::read_to_string(&p)
-                    && let Ok(doc) = serde_yaml::from_str::<Value>(&raw)
-                {
-                    let mut archived = Vec::new();
-                    collect_packets(&doc, &mut archived);
-                    for a in &archived {
-                        if let Some(id) = str_field(a, "packet_id") {
-                            archived_ids.insert(id.to_string());
-                        }
-                    }
+    /// Archive awareness: sibling plan/archive/*.yaml holds completed packets.
+    /// Their ids resolve dependencies (done work) and they answer lookups by
+    /// name, but they never enter the active packet list. Best-effort — a
+    /// missing archive dir just means an empty archive.
+    fn collect_archive(path: &Path) -> Archive {
+        let mut archive = Archive::default();
+        let Some(archive_dir) = path.parent().map(|d| d.join("archive")) else {
+            return archive;
+        };
+        let Ok(entries) = std::fs::read_dir(&archive_dir) else {
+            return archive;
+        };
+        // SORTED. `read_dir` yields entries in filesystem order, which is
+        // unspecified; with first-occurrence-wins below, an unsorted walk would
+        // let two hosts resolve the same id to different files. Determinism in
+        // a retrieval surface is not a nicety — a citation that moves between
+        // runs cannot be audited.
+        let mut files: Vec<PathBuf> = entries
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("yaml"))
+            .collect();
+        files.sort();
+
+        let mut order_claims: BTreeMap<u64, (String, usize)> = BTreeMap::new();
+        let mut token_claims: BTreeMap<String, (String, usize)> = BTreeMap::new();
+        for file in files {
+            let Ok(raw) = std::fs::read_to_string(&file) else {
+                continue;
+            };
+            let Ok(doc) = serde_yaml::from_str::<Value>(&raw) else {
+                continue;
+            };
+            let file_name = file
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or_default()
+                .to_string();
+            let spans = packet_spans(&raw);
+            let mut parsed = Vec::new();
+            collect_packets(&doc, &mut parsed);
+            for a in parsed {
+                let Some(id) = str_field(&a, "packet_id").map(str::to_string) else {
+                    continue;
+                };
+                if archive.by_id.contains_key(&id) {
+                    // FIRST occurrence wins, matching `packet_spans` within a
+                    // file. A packet copied into two archive files is history
+                    // duplicated, not two packets.
+                    continue;
                 }
+                if let Some(order) = a.get("order").and_then(Value::as_u64) {
+                    order_claims
+                        .entry(order)
+                        .and_modify(|(_, n)| *n += 1)
+                        .or_insert((id.clone(), 1));
+                }
+                if let Some(token) = a.get("order").and_then(order_token) {
+                    token_claims
+                        .entry(token)
+                        .and_modify(|(_, n)| *n += 1)
+                        .or_insert((id.clone(), 1));
+                }
+                if let Some(&(start, end)) = spans.get(&id) {
+                    archive
+                        .spans
+                        .insert(id.clone(), (file_name.clone(), start, end));
+                }
+                archive.by_id.insert(id, archive.packets.len());
+                archive.packets.push(a);
             }
         }
-        archived_ids
+        archive.by_order = order_claims
+            .into_iter()
+            .filter(|(_, (_, n))| *n == 1)
+            .map(|(order, (id, _))| (order, id))
+            .collect();
+        archive.by_order_token = token_claims
+            .into_iter()
+            .filter(|(_, (_, n))| *n == 1)
+            .map(|(token, (id, _))| (token, id))
+            .collect();
+        archive
     }
 
     /// Parse a raw ledger string with a known archived-id set — NO file IO.
@@ -380,6 +482,7 @@ impl Ledger {
             by_order,
             by_order_token,
             archived_ids,
+            archive: Archive::default(),
             spans: packet_spans(raw),
             source_path: None,
             origin_sources: BTreeMap::new(),
@@ -517,6 +620,62 @@ impl Ledger {
         self.by_id.contains_key(reference) || self.archived_ids.contains(reference)
     }
 
+    /// Whether this packet_id names ARCHIVED history rather than live work.
+    ///
+    /// The marker every caller needs. A row drawn from the archive is finished
+    /// work that has been swept out of the index; presenting it beside live
+    /// rows without saying so would be a worse answer than the refusal this
+    /// whole change replaces, because it reads as something still in flight.
+    pub fn is_archived(&self, packet_id: &str) -> bool {
+        self.archive.by_id.contains_key(packet_id)
+    }
+
+    /// Resolve a reference against the ARCHIVE only, by the same three lookups
+    /// and the same ambiguity policy [`Self::resolve`] applies to active work.
+    pub fn resolve_archived(&self, reference: &str) -> Option<&Value> {
+        if let Some(&idx) = self.archive.by_id.get(reference) {
+            return Some(&self.archive.packets[idx]);
+        }
+        if let Some(&idx) = reference
+            .parse::<u64>()
+            .ok()
+            .and_then(|n| self.archive.by_order.get(&n))
+            .and_then(|id| self.archive.by_id.get(id))
+        {
+            return Some(&self.archive.packets[idx]);
+        }
+        self.archive
+            .by_order_token
+            .get(&normalize_order_token(reference))
+            .and_then(|id| self.archive.by_id.get(id))
+            .map(|&idx| &self.archive.packets[idx])
+    }
+
+    /// The citable origin of an archived packet: the archive FILE NAME plus a
+    /// 1-indexed inclusive line range within it. `None` for anything that is
+    /// not archived, or whose block could not be located in its file.
+    ///
+    /// The name rather than a path, because the ledger has no repo root to
+    /// make one relative to — see [`Archive::spans`].
+    pub fn archived_span_of(&self, packet_id: &str) -> Option<(&str, usize, usize)> {
+        self.archive
+            .spans
+            .get(packet_id)
+            .map(|(file, start, end)| (file.as_str(), *start, *end))
+    }
+
+    /// Every archived packet, in archive-file then document order.
+    pub fn archived_packets(&self) -> &[Value] {
+        &self.archive.packets
+    }
+
+    /// Active work FIRST, then history. The iteration order for lookups that
+    /// ask about a NAMED packet and its edges — never for the ones that ask
+    /// what is schedulable, which must stay on `packets` alone.
+    fn active_then_archived(&self) -> impl Iterator<Item = &Value> {
+        self.packets.iter().chain(self.archive.packets.iter())
+    }
+
     /// Every packet claiming `reference` as its order, when more than one does.
     ///
     /// Exists so an ambiguous lookup can FAIL INFORMATIVELY. Dropping ambiguous
@@ -530,11 +689,15 @@ impl Ledger {
     /// Returns an empty vec for an unambiguous or absent reference, so callers
     /// can branch on `is_empty()` to distinguish "genuinely unknown" from
     /// "known but ambiguous".
+    /// Archived packets are included. This method is consulted only after
+    /// [`Self::resolve`] has already MISSED — and resolve now searches history
+    /// too — so by the time a caller gets here the reference failed against
+    /// active and archived work alike, and the claimants that explain the miss
+    /// can live in either.
     pub fn ambiguous_claimants(&self, reference: &str) -> Vec<String> {
         let wanted = normalize_order_token(reference);
         let mut ids: Vec<String> = self
-            .packets
-            .iter()
+            .active_then_archived()
             .filter(|p| {
                 p.get("order")
                     .and_then(order_token)
@@ -577,10 +740,27 @@ impl Ledger {
         {
             return Some(&self.packets[*idx]);
         }
-        self.by_order_token
+        if let Some(active) = self
+            .by_order_token
             .get(&normalize_order_token(reference))
             .and_then(|id| self.by_id.get(id))
             .map(|&idx| &self.packets[idx])
+        {
+            return Some(active);
+        }
+        // HISTORY LAST, and only after every active lookup has missed.
+        //
+        // Ordering is the whole safety argument. An archived packet can share
+        // an order token with a live one; consulting the archive first, or
+        // merging the two index spaces, would either answer a live question
+        // with history or make the shared token ambiguous and unresolvable —
+        // both regressions on work agents are currently doing. Asking last
+        // means live behaviour is byte-identical and the archive answers
+        // exactly the references that used to return nothing at all.
+        //
+        // Callers that must distinguish the two ask [`Self::is_archived`];
+        // `status`, the answer rows and the citation path all do.
+        self.resolve_archived(reference)
     }
 
     pub fn id_of(&self, packet: &Value) -> String {
@@ -591,12 +771,19 @@ impl Ledger {
 
     /// Packets whose `depends_on` names the given packet — i.e. what X
     /// blocks. The flagship expert query ("what is blocked by X").
+    ///
+    /// Searches active work AND history. A dependency edge does not stop being
+    /// a fact when its dependent is completed and swept: after an archival
+    /// sweep the entire 394a→394b→394c→394d chain lives in the archive, and a
+    /// dependents search restricted to `packets` answers "nothing depends on
+    /// 394c" — which is false, and false in the direction that reads as "no
+    /// such work". Archived rows are marked as history where they are
+    /// rendered, never hidden and never presented as live.
     pub fn blocked_by(&self, reference: &str) -> Vec<&Value> {
         let Some(target) = self.resolve(reference).map(|p| self.id_of(p)) else {
             return Vec::new();
         };
-        self.packets
-            .iter()
+        self.active_then_archived()
             .filter(|p| str_list(p, "depends_on").contains(&target))
             .collect()
     }
@@ -716,6 +903,15 @@ impl Ledger {
     }
 
     /// Ready packets, optionally filtered by pickup_role (role or "any").
+    ///
+    /// ITERATES `packets` ALONE, and must keep doing so. This is the
+    /// schedulable set — what `next`, `query` and the batch selector project
+    /// from — and the archive holds only terminal work. Chaining history in
+    /// here would hand agents finished packets to redo; the status filter
+    /// below would mask it for well-formed rows and expose it for anything
+    /// archived while still marked `ready`, which is the exact class of bug
+    /// (two ready rows swept into the archive) the sweep's own check exists to
+    /// catch. The ready count is asserted unchanged across this change.
     pub fn ready(&self, role: Option<&str>) -> Vec<&Value> {
         self.packets
             .iter()
@@ -730,12 +926,17 @@ impl Ledger {
     }
 
     /// Children of a milestone (packets whose release_target names it).
+    ///
+    /// Includes archived children, because a burndown that silently drops the
+    /// finished ones is not a burndown — it is a to-do list wearing the name
+    /// of a progress measure, and it reports the same "what is left" whether
+    /// the milestone is 10% or 90% done. Completed children are marked as
+    /// history at the render, so "left" and "done" stay distinguishable.
     pub fn milestone_children(&self, reference: &str) -> Vec<&Value> {
         let Some(target) = self.resolve(reference).map(|p| self.id_of(p)) else {
             return Vec::new();
         };
-        self.packets
-            .iter()
+        self.active_then_archived()
             .filter(|p| str_field(p, "release_target") == Some(target.as_str()))
             .collect()
     }

@@ -699,6 +699,14 @@ fn line(ledger: &Ledger, p: &serde_yaml::Value) -> String {
         .get("status")
         .and_then(serde_yaml::Value::as_str)
         .unwrap_or("?");
+    // ARCHIVED rows say so. Appended as a fourth field ONLY when the packet is
+    // history, so every live row — which is every row `ready`, `query` and
+    // `next` can ever emit — stays byte-identical for the scripts that parse
+    // this on three fields. A caller that never asks about history never sees
+    // the column; one that does cannot miss it.
+    if ledger.is_archived(&id) {
+        return format!("{order}\t{status}\t{id}\tARCHIVED");
+    }
     format!("{order}\t{status}\t{id}")
 }
 

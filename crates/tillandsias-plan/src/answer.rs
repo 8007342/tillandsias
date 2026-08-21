@@ -1326,7 +1326,18 @@ pub fn answer_question(ledger: &Ledger, question: &str, source_rel: &str) -> Env
         );
     }
 
-    let mut body = String::from("order\tstatus\tdesired_release\trelease_target\tpacket_id\n");
+    // The `provenance` column is how a caller tells HISTORY from live work.
+    //
+    // Added as a SIXTH COLUMN rather than folded into `status`, and always
+    // emitted rather than only when something archived shows up. Both choices
+    // are about not lying to a parser: a consumer indexing fields 0..4 reads
+    // exactly what it read before, and a column that appears only sometimes
+    // would make `live` unstated — leaving "no marker" to mean both "live" and
+    // "this build predates the marker". An archived row rendered as if it were
+    // live is a worse answer than the refusal this whole change replaces,
+    // because it sends an agent to work that is already finished.
+    let mut body =
+        String::from("order\tstatus\tdesired_release\trelease_target\tpacket_id\tprovenance\n");
     let mut citations = Vec::new();
     let mut uncitable = Vec::new();
     for p in &packets {
@@ -1366,8 +1377,13 @@ pub fn answer_question(ledger: &Ledger, question: &str, source_rel: &str) -> Env
             uncitable.push(id);
             continue;
         };
+        let provenance = if ledger.is_archived(&id) {
+            "archived"
+        } else {
+            "live"
+        };
         body.push_str(&format!(
-            "{order}\t{status}\t{desired_release}\t{release_target}\t{id}\n"
+            "{order}\t{status}\t{desired_release}\t{release_target}\t{id}\t{provenance}\n"
         ));
         citations.extend(row_citations);
     }
@@ -1415,6 +1431,18 @@ fn packet_row_citations(
                     src.line_end,
                 )
             })
+        })
+        // ARCHIVED work cites the archive file it actually lives in. Third and
+        // last, so nothing about a live packet's citation changes: an archived
+        // packet has no base span and no fragment origin, which is precisely
+        // why every one of these rows used to be dropped as uncitable and the
+        // answer downgraded to `unsupported`. The path is openable and the
+        // span verifies against it under the same order-523 self-check as any
+        // other citation — history is cited, never asserted.
+        .or_else(|| {
+            ledger
+                .archived_span_of(id)
+                .map(|(file, start, end)| (archive_rel(source_rel, file), start, end))
         })?;
     let mut citations = Vec::new();
     let mut origin_authority = BTreeMap::new();
@@ -1769,6 +1797,19 @@ fn file_mtime_epoch(path: &Path) -> Option<i64> {
     )
 }
 
+/// The repo-relative path of an archive file, derived from the index's own
+/// repo-relative path exactly as [`fragment_rel`] below derives a fragment's:
+/// `plan/index.yaml` + `packets-2026-07.yaml` -> `plan/archive/packets-2026-07.yaml`.
+///
+/// Derived rather than stored because the ledger holds absolute paths and a
+/// citation must be repo-relative — the same reason `fragment_rel` exists.
+fn archive_rel(source_rel: &str, archive_file: &str) -> String {
+    match source_rel.rsplit_once('/') {
+        Some((dir, _)) => format!("{dir}/archive/{archive_file}"),
+        None => format!("archive/{archive_file}"),
+    }
+}
+
 /// ORDER 606-h9vy — the repo-relative path of a fragment, derived from the
 /// label the citations use for the index it sits beside:
 /// `plan/index.yaml` + `20260807t0-x-h.yaml` -> `plan/index.d/20260807t0-x-h.yaml`.
@@ -2049,7 +2090,20 @@ mod tests {
                 .any(|v| v.contains("empty or inverted"))
         );
 
-        // (e) a citation for a packet the answer never mentions
+        // (e) a citation for a packet the answer never mentions.
+        //
+        // Cited against "plan/index.yaml" and NOT against `good.path()`,
+        // because `span_of` reads the ledger's own source file and pairing its
+        // line numbers with some other file's path describes no citation at
+        // all. The two were the same file until `status of 394a` could answer
+        // from the archive; after an archival sweep `good.path()` is
+        // plan/archive/*.yaml, the index-derived range lands past that file's
+        // end, and verify short-circuits on "past end of file" — so this case
+        // stopped exercising the decorative check it exists for and started
+        // re-testing case (b). Naming the span's real file restores it: the
+        // citation is now well-formed, in-bounds, and genuinely does contain
+        // the packet it claims. The only thing wrong with it is that the
+        // answer never mentions that packet, which is the point.
         auth.insert("packet_id".into(), "plan-yaml-compiled-editor".into());
         let span = ledger
             .span_of("plan-yaml-compiled-editor")
@@ -2057,7 +2111,7 @@ mod tests {
         let decorative = Envelope::supported(
             env.answer(),
             vec![Citation::new(
-                good.path().into(),
+                "plan/index.yaml".into(),
                 span.0,
                 span.1,
                 CitationKind::Plan,

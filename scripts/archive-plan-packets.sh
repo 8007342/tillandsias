@@ -128,7 +128,33 @@ if [ "$1" == "--check" ]; then
         exit 1
     fi
     rm -rf plan_tmp plan_tmp_bak scripts/archive-plan-packets-check.rb plan_tmp_*.txt
-    echo "Check passed: ready set unchanged (410 rows) AND script is idempotent."
+
+    # THIRD INVARIANT: archiving must not break what the expert system can ANSWER.
+    #
+    # The two assertions above are about ROWS — which ones move, and which
+    # events still reach them. Both were green on 2026-08-20 while the sweep
+    # shipped a capability loss: 550 archived packets became unanswerable, and
+    # `status <id>` and `plan_answer` returned "no packet in the ledger matches
+    # any token" for every one of them. Seven tests in `-p tillandsias-plan
+    # --lib` were red the whole time. A ledger-SHAPE assertion looks at the
+    # ledger; that defect lived in the query engine's reach over it, and no
+    # amount of row-checking here can see it.
+    #
+    # So the last thing this check asks is the only question that closes that
+    # gap: after the sweep, does the crate's own suite still pass? Delegated
+    # rather than inlined because the answer requires a full tree copy and a
+    # cargo run — see the script's header for why it is a tree and not a plan/.
+    echo "Checking the sweep does not break what the expert system can answer..."
+    if ! _answerability="$("$DIR/check-archive-answerability.sh")"; then
+        echo "Check FAILED: the sweep leaves the plan expert unable to answer about"
+        echo "  archived work. This is the 2026-08-20 regression; the ready set and"
+        echo "  the orphan count above are both clean and cannot see it."
+        echo "  $_answerability"
+        exit 1
+    fi
+    echo "  $_answerability"
+
+    echo "Check passed: ready set unchanged, no new orphaned events, archived packets stay answerable, and the script is idempotent."
     exit 0
 fi
 
