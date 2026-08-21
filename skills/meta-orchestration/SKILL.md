@@ -678,6 +678,46 @@ Two rules, both easy to get wrong:
 If `malformed=N` is non-zero, a fragment did not parse and was SKIPPED — its
 contents are absent from every answer. Treat that as a finding, not noise.
 
+### De-slop sweep clock (consult each cycle; act only when due)
+
+```bash
+scripts/check-deslop-due.sh check    # exit 0 = NOT due; exit 1 = due; exit 2 = cannot compute
+```
+
+**Read the exit polarity before wiring anything to it.** The file is named
+`check-deslop-due.sh` and exits **0 when the sweep is NOT due** — same
+convention as `check-daily-maintenance.sh`, where the actionable state is the
+non-zero one and the healthy steady state stays at 0 for callers under `set -e`.
+The idiom is `if ! scripts/check-deslop-due.sh; then run_the_sweep; fi`, or
+branch on the verdict token (`deslop-due` / `deslop-not-due`), which cannot be
+inverted by a copy-paste.
+
+It prints exactly one line carrying the numbers it decided on, e.g.
+`ok:deslop-not-due:order=844 last=834 delta=10 hours=44 reason=under-threshold`.
+The rule is **event-counted only**: due when
+`(current_order - order_at_last_sweep) >= 200`, with a 48h floor so a filing
+burst cannot fire two sweeps in a day, and **no calendar ceiling** — a ceiling
+would fire low-yield sweeps over a quiet fortnight and
+`red:two-sweeps-zero-confirmed` would then retire the reconciler for doing
+nothing wrong. Time-decaying properties already have their own TTLs
+(`expire-claims` 24h, `component_freshness`). This is **not** a build gate and
+nothing in `./build.sh` runs it; it is a scheduler input for this section.
+
+After running a sweep, record it — the marker is committed, not host-local, so
+the whole fleet shares one clock:
+
+```bash
+scripts/check-deslop-due.sh record --examined <rows-looked-at> --confirmed <n> \
+  [--retracted <n>] [--filed <n>] [--net-lines <±n>]
+```
+
+`--examined` and `--confirmed` are mandatory. The sweep's kill rule counts only
+sweeps that **examined new rows**, and this is why: the first real sweep
+retracted 51 of 410 rows (12.4%) against a modelled ~50%, and that pass drained
+accumulated stock. Steady-state yield will be far lower, so **two consecutive
+near-zero sweeps is a normal outcome for a healthy queue**, not evidence the
+reconciler is broken. A sweep that confirms the queue is clean has done its job.
+
 ### Filing a packet: mint its order, never pick one
 
 ```bash
