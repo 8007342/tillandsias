@@ -1330,18 +1330,57 @@ fi
 # Test build
 if [[ "$FLAG_TEST" == true ]]; then
     # --no-fail-fast (order 829-g4xf) and the feature pass (order 831-wmn4).
-    # Both exist because the count this prints did not mean what it said:
+    # Both exist because the count this prints did not mean what it said. BOTH
+    # FIGURES BELOW WERE MEASURED ON MACOS (2026-08-19) and neither is this
+    # host's:
     #
-    #   cargo test --workspace                 -> 801 passed,  1 failed
-    #   cargo test --workspace --no-fail-fast  -> 1911 passed, 8 failed
+    #   cargo test --workspace                 -> 801 passed,  1 failed   [macOS]
+    #   cargo test --workspace --no-fail-fast  -> 1911 passed, 8 failed   [macOS]
     #
     # Cargo runs test binaries sequentially and STOPS at the first one that
     # fails, so more than half the workspace never ran and seven failures were
     # invisible behind the first. A truncated run and a complete one look
     # identical except for totals nobody knows in advance.
+    #
+    # LINUX'S FAILURE SET IS 1, NOT 8 — and that 8 sat here unattributed until
+    # 2026-08-21. Measured on THIS host at f9ee195a9, same command, complete
+    # run:
+    #
+    #   cargo test --workspace --no-fail-fast  -> 1894 passed, 1 failed,
+    #                                             10 ignored              [Linux]
+    #
+    # The one failure is proxy_cache_policy's
+    # bumped_origin_tls_and_signed_url_logs_fail_closed (also measured red on
+    # 2026-08-20 at 81d2315f5, so it predates this cycle). The other seven were
+    # macOS's and arrived with that host's merge. An unattributed count in a
+    # shared file is how a real Linux regression gets waved through as a
+    # known-bad baseline, so every figure here names the host it came from.
+    #
+    # THE VERDICT IS A RATCHET, NOT CARGO'S EXIT CODE. cargo exits non-zero for
+    # that one standing failure, so this dispatch was red on a clean tree and
+    # its exit code carried no information about THIS change. What carries
+    # information is whether the failure SET moved: a failure not named in
+    # scripts/test-known-red.txt is a new regression, and a listed test that
+    # PASSED is a stale entry that must be deleted. Both are red.
+    #
+    # PIPESTATUS, not `$?`: `cmd | tee f` returns TEE's status, and tee happily
+    # succeeds while cargo is failing. The pipe costs `_run`'s phase accounting
+    # for this step (the function body runs in a subshell); --test emits no
+    # phase report, and a live-streamed transcript is worth more here than a
+    # timing record nothing prints.
+    _TEST_TRANSCRIPT="$SCRIPT_DIR/target/test-transcript-workspace.log"
+    mkdir -p "$(dirname "$_TEST_TRANSCRIPT")"
     _step "Running tests..."
-    _run cargo test --workspace --no-fail-fast --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1
-    _info "Tests passed"
+    _test_rc=0
+    _run cargo test --workspace --no-fail-fast --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1 |
+        tee "$_TEST_TRANSCRIPT" || _test_rc="${PIPESTATUS[0]}"
+    if ! _test_baseline_verdict="$(bash "$SCRIPT_DIR/scripts/check-test-baseline.sh" --from "$_TEST_TRANSCRIPT")"; then
+        _error "$_test_baseline_verdict"
+        _error "the workspace failure set moved (cargo rc=$_test_rc) — see the named tests above; transcript: $_TEST_TRANSCRIPT"
+        _error "if a failure is genuinely pre-existing, file its issue and add its key to scripts/test-known-red.txt"
+        exit 1
+    fi
+    _info "$_test_baseline_verdict"
 
     # `tray` and `listen-vsock` are NOT default features, so the plain pass
     # above compiles neither `mod tray` nor `mod vsock_server` — 139 of that
@@ -1354,6 +1393,10 @@ if [[ "$FLAG_TEST" == true ]]; then
     # local-ci.sh already runs the `tray` half for exactly this reason and
     # documents it at length; it does not run `listen-vsock`, which is why
     # this pass names both.
+    #
+    # Deliberately NOT routed through the baseline ratchet: no known-red entry
+    # lives in this pass today, so strict is both correct and stricter. If one
+    # ever does, wrap it the same way rather than deleting the entry.
     _step "Running feature-gated tests (tray, listen-vsock)..."
     _run cargo test -p tillandsias-headless --bin tillandsias \
         --features tray,listen-vsock --no-fail-fast \
@@ -1463,6 +1506,59 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Plan ledger check passed"
+
+    # ── The test baseline (2026-08-20 archive-sweep regression) ───────────
+    #
+    # An archive sweep moved 550 packets out of plan/index.yaml. `--check` was
+    # green every run, so were archive-plan-packets.sh --check (both
+    # invariants), check-fragment-status-loss.sh, and two hand-written
+    # acceptance assertions. Seven tests in `-p tillandsias-plan --lib` were
+    # red the whole time: the expert system could no longer ANSWER about an
+    # archived packet, and a real query returned `unsupported: no packet in
+    # the ledger matches any token`. NONE of those gates runs cargo test — it
+    # lived only in the --test dispatch, which the pre-push gate never calls.
+    # It was caught by accident, taking an unrelated baseline for a pending
+    # merge.
+    #
+    # A ledger SHAPE gate cannot see a CAPABILITY loss. So the smallest suite
+    # that can is now part of the gate that runs every cycle.
+    #
+    # SCOPE IS DELIBERATE: `-p tillandsias-plan --lib` only, 10.4s measured in
+    # this gate on 2026-08-21 (203 tests), and it is exactly where the
+    # regression was — the same suite went 180/0 pre-sweep, 173/7 post-sweep
+    # and 180/0 after the revert, at the 180 tests it held on 2026-08-20. The
+    # FULL workspace suite stays in --test: it is minutes long and --check runs
+    # 2-5x per cycle, which is how a gate gets bypassed.
+    #
+    # The fixture runs first (0.1s, hermetic). A ratchet that cannot go red is
+    # indistinguishable from a passing one — the whole failure class this
+    # block exists for — and the fixture is what proves both directions still
+    # fail. Its own non-vacuity is proven by mutation, in its header.
+    _step "Checking the test-baseline ratchet's own fixture..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-check-test-baseline.sh" 2>&1; then
+        _error "the test-baseline ratchet's fixture failed — the gate below cannot be trusted to go red"
+        exit 1
+    fi
+    _info "Test-baseline fixture passed"
+
+    # PIPESTATUS, not `$?` — `cmd | tee f` returns TEE's status. The verdict is
+    # the ratchet's, not cargo's: a failure not in scripts/test-known-red.txt
+    # is a regression, a listed test that PASSED is a stale entry, and a listed
+    # test this run never built is neither (the workspace's one known-red entry
+    # lives in a different binary and is simply absent here).
+    _step "Running plan ledger unit tests (cargo test -p tillandsias-plan --lib)..."
+    _PLAN_TEST_TRANSCRIPT="$SCRIPT_DIR/target/test-transcript-plan-lib.log"
+    mkdir -p "$(dirname "$_PLAN_TEST_TRANSCRIPT")"
+    _plan_test_rc=0
+    _run cargo test -p tillandsias-plan --lib --no-fail-fast --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1 |
+        tee "$_PLAN_TEST_TRANSCRIPT" || _plan_test_rc="${PIPESTATUS[0]}"
+    if ! _plan_baseline_verdict="$(bash "$SCRIPT_DIR/scripts/check-test-baseline.sh" --from "$_PLAN_TEST_TRANSCRIPT")"; then
+        _error "$_plan_baseline_verdict"
+        _error "the plan ledger suite's failure set moved (cargo rc=$_plan_test_rc) — transcript: $_PLAN_TEST_TRANSCRIPT"
+        _error "a ledger change every shape gate calls clean can still break what the expert system can ANSWER"
+        exit 1
+    fi
+    _info "$_plan_baseline_verdict"
 
     _step "Checking plan order uniqueness (tillandsias-policy plan-orders)..."
     if ! _run cargo run -q --manifest-path "$SCRIPT_DIR/Cargo.toml" -p tillandsias-policy -- plan-orders 2>&1; then

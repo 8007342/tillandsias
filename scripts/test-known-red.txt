@@ -1,0 +1,31 @@
+# Tests allowed to be red on a clean tree (scripts/check-test-baseline.sh).
+# Each entry needs a filed issue; an unexplained name here is how a baseline
+# stops meaning anything.
+#
+# One key per line, `<test-binary-stem>::<test name as cargo printed it>` —
+# the stem is the `Running … (target/debug/deps/<stem>-<hash>)` line above the
+# results, hash stripped. A bare test name is ambiguous across binaries and
+# would excuse a failure it was never meant to cover.
+#
+# THE LIST MAY ONLY SHRINK. The gate fails when a listed test PASSES, so an
+# entry cannot outlive the defect it excuses. Deleting a line is the normal
+# way this file changes; adding one is a deliberate act that needs the issue
+# above it.
+#
+# MEASURED, and this is a per-host number: on Linux at f9ee195a9 (2026-08-21)
+# `cargo test --workspace --no-fail-fast` is 1894 passed, 1 failed, 10 ignored
+# — the one failure is the entry below. macOS's equivalent set was EIGHT
+# (2026-08-20), and none of those seven others are listed here, so a macOS host
+# adopting this gate will see them as new red until it measures and files its
+# own.
+#
+# Fails on any host without a working Squid launch in the test environment:
+# the test brings up a bumped-TLS proxy and asserts the origin-TLS and
+# signed-URL logs fail closed, and it panics at
+# crates/tillandsias-headless/tests/proxy_cache_policy.rs:112 with "Squid
+# launch" before reaching a single assertion. Measured red on linux-next at
+# 81d2315f5 (2026-08-20) and again at f9ee195a9 (2026-08-21); it survived the
+# archive-sweep revert, so it is independent of that cycle's work.
+# NEEDS A FILED ISSUE — there is none yet. This entry is the oldest thing in
+# this file and it must not become the reason the file is ignored.
+proxy_cache_policy::bumped_origin_tls_and_signed_url_logs_fail_closed
