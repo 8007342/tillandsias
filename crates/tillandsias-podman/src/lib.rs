@@ -23,86 +23,17 @@ use std::sync::OnceLock;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
-/// Windows CREATE_NO_WINDOW process creation flag.
-/// @trace spec:cross-platform, spec:windows-wsl-runtime, spec:no-terminal-flicker
-/// @cheatsheet runtime/windows-process-creation.md
-///
-/// When std::process::Command spawns a child on Windows, the child inherits
-/// the parent's console — but if there's no console (GUI tray context) OR
-/// the child is a console program (wsl.exe, podman.exe), Windows allocates
-/// a NEW console window for the child by default. That window flashes for a
-/// few hundred ms before the child exits, producing the "flickering windows"
-/// the user sees during enclave bring-up.
-///
-/// CREATE_NO_WINDOW (0x08000000) tells CreateProcess NOT to allocate a
-/// console for the child. Documented at:
-/// https://learn.microsoft.com/en-us/windows/win32/procthread/process-creation-flags
+// Order 795-jjw3: CREATE_NO_WINDOW, the window helpers and the `wsl.exe`
+// constructor were duplicated here and in `tillandsias-vm-layer`, because
+// neither crate could depend on the other. Both now reach
+// `tillandsias-core::wsl`, which owns the single copy. Re-exported so this
+// crate's call sites (and `podman.exe` spawns, which use `no_window_*` too)
+// are unchanged.
 #[cfg(target_os = "windows")]
-pub const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-
-/// Apply CREATE_NO_WINDOW to a tokio Command on Windows. No-op on other platforms.
-/// All Tillandsias background `wsl.exe` / `podman.exe` invocations should pass
-/// through this so the user never sees a console flash.
-/// @trace spec:cross-platform, spec:windows-wsl-runtime, spec:no-terminal-flicker
-pub fn no_window_async(cmd: &mut tokio::process::Command) -> &mut tokio::process::Command {
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.as_std_mut().creation_flags(CREATE_NO_WINDOW);
-    }
-    cmd
-}
-
-/// Apply CREATE_NO_WINDOW to a synchronous std Command on Windows. No-op elsewhere.
-/// @trace spec:cross-platform, spec:windows-wsl-runtime, spec:no-terminal-flicker
-pub fn no_window_sync(cmd: &mut std::process::Command) -> &mut std::process::Command {
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(CREATE_NO_WINDOW);
-    }
-    cmd
-}
-
-/// The environment variable that makes `wsl.exe` speak UTF-8 instead of
-/// UTF-16LE. Documented WSL behaviour since WSL 0.64.0.
-pub const WSL_UTF8_ENV: &str = "WSL_UTF8";
-
-/// Build a `wsl.exe` command with `WSL_UTF8=1` already applied.
-///
-/// Without the variable, `wsl.exe` writes its OWN output as UTF-16LE and every
-/// reader has to scrub NUL bytes back out. Mirror of
-/// `tillandsias_vm_layer::wsl_command_async` — this crate cannot depend on the
-/// vm-layer crate, and vm-layer cannot depend on this one, which is the same
-/// reason `no_window_async` above is also duplicated. Collapsing both pairs
-/// into one constructor is packet 795-jjw3.
-///
-/// Window policy stays with the caller, deliberately: some `wsl.exe` spawns
-/// want a visible console.
-/// @trace spec:cross-platform
-pub fn wsl_command_async() -> tokio::process::Command {
-    let mut cmd = tokio::process::Command::new("wsl.exe");
-    cmd.env(WSL_UTF8_ENV, "1");
-    cmd
-}
-
-#[cfg(test)]
-mod wsl_command_tests {
-    use super::*;
-
-    #[test]
-    fn wsl_command_async_carries_wsl_utf8() {
-        let cmd = wsl_command_async();
-        let std_cmd = cmd.as_std();
-        assert_eq!(std_cmd.get_program(), "wsl.exe");
-        assert!(
-            std_cmd
-                .get_envs()
-                .any(|(k, v)| k == WSL_UTF8_ENV && v == Some("1".as_ref())),
-            "wsl_command_async must set WSL_UTF8=1"
-        );
-    }
-}
+pub use tillandsias_core::wsl::CREATE_NO_WINDOW;
+pub use tillandsias_core::wsl::{
+    WSL_UTF8_ENV, no_window_async, no_window_sync, wsl_command_async, wsl_command_sync,
+};
 
 pub use backend::{
     BackendRef, CommandFailure, CommandOutput, FakeBackend, OperationKind, PodmanBackend,

@@ -61,6 +61,24 @@ critical_path:
     timeout_ms: 120000
     expected_behavior: "ok: no-grandfathered-groups"
 
+  - step: "the check reads the FOLDED ledger, so a collision filed as a fragment is caught (order 832-q4mn)"
+    # Five hermetic cases over synthetic ledgers in a temp tree. The gate used
+    # to read plan/index.yaml alone — which on this fleet is the one place new
+    # packets are NOT, since every host files them as fragments (582-nqw5). So
+    # new order tokens, precisely where collisions happen, were invisible to
+    # the check that runs on every push; a duplicate waited for whoever next
+    # compacted, days later and usually on another host.
+    #
+    # Case 3 is the real multi-host shape (two hosts, two fragments, neither
+    # colliding with the base). Case 4 pins that the `status:` LWW channel is
+    # applied BEFORE the open-member test — set-field records terminal status
+    # there rather than re-declaring under `packets:`, which would be a G-Set
+    # no-op — and case 5 removes the override to prove case 4 passes because
+    # the channel was read, not because the rule went lax.
+    command: "bash scripts/test-plan-orders-fragment-fold.sh 2>&1 | tail -1"
+    timeout_ms: 180000
+    expected_behavior: "PASS: plan-orders fragment-fold fixture (order 832-q4mn)"
+
 observability:
   traces:
     - "@trace spec:methodology-accountability"

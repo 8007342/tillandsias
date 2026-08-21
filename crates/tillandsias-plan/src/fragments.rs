@@ -1330,6 +1330,366 @@ impl Ledger {
     }
 }
 
+/// One host's contribution to the fleet capability matrix (order 808-7yrd).
+#[derive(Debug, Clone, PartialEq)]
+pub struct CapabilityEntry {
+    /// The machine this row describes — `HostInfo.host_id` (order 808-43mw).
+    pub host_id: String,
+    /// WHICH EXECUTION CONTEXT observed it, e.g. `in-guest`, `windows-host`.
+    ///
+    /// Half of the fold key, and the half that is easy to think unnecessary.
+    /// See [`fold_capabilities`] for the collision it prevents.
+    pub locus: String,
+    /// LWW timestamp, and with `host` the deterministic tiebreak.
+    pub ts: String,
+    /// The writing host kind, matching every other channel's `host:` field.
+    pub host: String,
+    /// The contributed `CapabilityDocument`, carried verbatim.
+    pub document: Value,
+    /// Fragment this row came from, so a reader can cite it.
+    pub source: String,
+}
+
+/// A `capabilities:` row that could not be folded, and why.
+///
+/// Returned rather than dropped: a row silently discarded is indistinguishable
+/// from a host that never contributed, which is the failure mode this whole
+/// channel exists to avoid one level up.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SkippedCapabilityRow {
+    pub source: String,
+    pub reason: String,
+}
+
+/// Fold the `capabilities:` channel into the fleet matrix (order 808-7yrd).
+///
+/// # Why this is a fourth channel and not a fourth mechanism
+///
+/// The matrix needs exactly what `plan/index.d` already provides: append-only
+/// fragments, deterministic `(ts, filename)` fold order, and a register whose
+/// winner is chosen by `(ts, host)` rather than by arrival. Building a parallel
+/// store would mean a second compaction, a second malformed-file policy and a
+/// second determinism argument, each able to drift from the one beside it. So
+/// this rides the SAME fragment files and the SAME ordering, and differs only
+/// in its keyspace.
+///
+/// # The key is `(host_id, locus)`, and the second half is not decoration
+///
+/// 808-43mw had to land first: before it a `CapabilityDocument` could not say
+/// which machine it described, and `kernel_release` is not a substitute because
+/// two WSL2 guests report the same one.
+///
+/// But `host_id` ALONE is not enough, and the reason was found by trying to
+/// implement 809-7e4m on top of this channel rather than by reasoning about it.
+/// On Windows a single machine is observed from TWO execution contexts: the
+/// WSL2 guest sees the CPU and the paravirtual GPU; Windows sees the NPU, the
+/// true GPU name and the machine's real RAM (the guest reports its 7.3 GB VM
+/// slice against 15.2 GB installed). Both contributions describe machine
+/// `yolanda`, so both carry the same `host_id`.
+///
+/// Keyed on `host_id` alone, the second contribution SILENTLY REPLACES the
+/// first — measured, not hypothesised: contributing a Windows-side row erased
+/// the CPU and the GPU from the matrix entirely, leaving a machine that appeared
+/// to have one unusable NPU and nothing else. That is data loss dressed as an
+/// update.
+///
+/// 808-7yrd's premise — "single writer per key by construction, so LWW never
+/// arbitrates a real conflict" — is TRUE, but only once the key includes the
+/// locus. With `(host_id, locus)` each key really does have one writer: the
+/// guest owns `(yolanda, in-guest)`, Windows owns `(yolanda, windows-host)`,
+/// and neither can clobber the other. Assembling a machine's complete row from
+/// its several loci is then the consumer's job, done with everything present,
+/// rather than a merge that happens to run in the right order.
+///
+/// # LWW here is a backstop, not the mechanism
+///
+/// Within one key there is one writer, so LWW decides exactly one thing: which
+/// of that writer's successive probes is current. That is why plain `(ts, host)`
+/// is right and the status channel's monotone closure ladder is NOT — capability
+/// rows have no ranking, a later probe simply describes the machine as it is
+/// now.
+///
+/// # Nothing is dropped in silence
+///
+/// A row missing `host_id` or `locus` cannot be keyed, and is returned in the
+/// skipped list rather than discarded or folded under a blank key. Folding
+/// under a blank key would collect every unidentifiable contribution into one
+/// row presenting as a host whose hardware kept changing; discarding it quietly
+/// would make a misfiled contribution look exactly like a host that never
+/// contributed. Both are the failure this channel exists to prevent.
+///
+/// Separate from [`fold`] deliberately: a capability row is not a packet, and
+/// merging it into the packet document would put hardware state in a ledger
+/// whose every other entry is work.
+pub fn fold_capabilities(
+    fragments: &[Fragment],
+) -> (
+    std::collections::BTreeMap<(String, String), CapabilityEntry>,
+    Vec<SkippedCapabilityRow>,
+) {
+    let mut matrix: std::collections::BTreeMap<(String, String), CapabilityEntry> =
+        std::collections::BTreeMap::new();
+    let mut skipped: Vec<SkippedCapabilityRow> = Vec::new();
+
+    for frag in fragments {
+        let Some(rows) = frag.doc.get("capabilities").and_then(Value::as_sequence) else {
+            continue;
+        };
+        for row in rows {
+            let Some(document) = row.get("document") else {
+                skipped.push(SkippedCapabilityRow {
+                    source: frag.name.clone(),
+                    reason: "row carries no `document:`".to_string(),
+                });
+                continue;
+            };
+            // host_id is read from the DOCUMENT, not from a sibling key that
+            // could disagree with it. One source of truth for identity.
+            let Some(host_id) = document
+                .get("host")
+                .and_then(|h| h.get("host_id"))
+                .and_then(Value::as_str)
+                .filter(|s| !s.is_empty())
+            else {
+                skipped.push(SkippedCapabilityRow {
+                    source: frag.name.clone(),
+                    reason: "document has no `host.host_id` (predates 808-43mw?)".to_string(),
+                });
+                continue;
+            };
+            // The locus is on the ROW, not in the document: it describes the
+            // OBSERVATION, and one probe binary can be run from either side.
+            let Some(locus) = row
+                .get("locus")
+                .and_then(Value::as_str)
+                .filter(|s| !s.is_empty())
+            else {
+                skipped.push(SkippedCapabilityRow {
+                    source: frag.name.clone(),
+                    reason: format!(
+                        "row for host_id `{host_id}` has no `locus:` — refusing to key it, \
+                         because a second context observing the same machine would overwrite it"
+                    ),
+                });
+                continue;
+            };
+            let ts = row
+                .get("ts")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let host = row
+                .get("host")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+
+            let key = (host_id.to_string(), locus.to_string());
+            let incoming = CapabilityEntry {
+                host_id: host_id.to_string(),
+                locus: locus.to_string(),
+                ts,
+                host,
+                document: document.clone(),
+                source: frag.name.clone(),
+            };
+            let better = match matrix.get(&key) {
+                None => true,
+                Some(prev) => {
+                    (incoming.ts.as_str(), incoming.host.as_str())
+                        > (prev.ts.as_str(), prev.host.as_str())
+                }
+            };
+            if better {
+                matrix.insert(key, incoming);
+            }
+        }
+    }
+
+    (matrix, skipped)
+}
+
+/// Why two measurements may not be ranked against each other (order 810-jeg7).
+#[derive(Debug, Clone, PartialEq)]
+pub enum Comparability {
+    /// Same workload, same locus: a ranking is meaningful.
+    Comparable,
+    /// One or both carry no locus, so nothing is known about where they ran.
+    RefusedUnlocated,
+    /// Both located, but at different loci.
+    RefusedDifferentLoci(String, String),
+    /// Different workloads, which is not a slower machine but a different question.
+    RefusedDifferentWorkloads(String, String),
+}
+
+impl Comparability {
+    pub fn is_comparable(&self) -> bool {
+        matches!(self, Comparability::Comparable)
+    }
+
+    /// A one-line reason, for a reader that has to explain the refusal.
+    pub fn reason(&self) -> String {
+        match self {
+            Comparability::Comparable => "comparable".to_string(),
+            Comparability::RefusedUnlocated => {
+                "refused: a measurement without a locus cannot be placed".to_string()
+            }
+            Comparability::RefusedDifferentLoci(a, b) => {
+                format!("refused: different loci ({a} vs {b})")
+            }
+            Comparability::RefusedDifferentWorkloads(a, b) => {
+                format!("refused: different workloads ({a} vs {b})")
+            }
+        }
+    }
+}
+
+/// May these two measurements be ranked against each other? (order 810-jeg7)
+///
+/// # Why this refuses instead of warning
+///
+/// This host measured the SAME suite on the SAME machine at two loci and the
+/// hop cost 5-10% on the embed arm — the same order as the cross-host
+/// differences the fleet matrix exists to detect. It did not merely add noise:
+/// it INVERTED a reported conclusion. Yolanda had been reported
+/// "indistinguishable" from yoga on the prefill-shaped arm; measured at a
+/// common locus it is FASTER. The original reading survived because two errors
+/// cancelled, which is the worst kind of wrong because nothing about it looks
+/// wrong.
+///
+/// A warning attached to a number that is still ranked gets read as a caveat on
+/// a result. A refusal has no such failure mode: there is no ranking to
+/// misread. So the matrix declines rather than annotates.
+///
+/// # An absent locus is refused, not defaulted
+///
+/// `MeasurementRecord.locus` is `Option` at the SCHEMA layer so that writers
+/// predating the field keep recording (see 808-43mw). That compatibility must
+/// not leak upward into the comparison: defaulting an unlabelled record to
+/// "probably the usual locus" would manufacture exactly the false comparability
+/// this exists to prevent. Schema permits absence; the matrix requires
+/// presence. PROBE-9 states that split.
+///
+/// # Workload mismatch refuses too
+///
+/// 810-jeg7 names the locus, but `workload_suite` landed in the same bump for
+/// the same reason and a reader that refuses on locus while silently ranking
+/// across workloads keeps the hole open on the other axis. Two suites are not a
+/// faster and a slower machine; they are different questions.
+pub fn measurements_comparable(a: &Value, b: &Value) -> Comparability {
+    let field = |v: &Value, k: &str| {
+        v.get(k)
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+    };
+
+    let (Some(la), Some(lb)) = (field(a, "locus"), field(b, "locus")) else {
+        return Comparability::RefusedUnlocated;
+    };
+    if la != lb {
+        return Comparability::RefusedDifferentLoci(la, lb);
+    }
+    // Two records that both omit the suite are treated as the same unknown
+    // workload rather than refused: the locus check has already established
+    // they were observed the same way, and 810-jeg7's claim is about locus.
+    // Refusing here would reject every pre-808-43mw pair for a reason that
+    // packet does not make.
+    match (field(a, "workload_suite"), field(b, "workload_suite")) {
+        (Some(wa), Some(wb)) if wa != wb => Comparability::RefusedDifferentWorkloads(wa, wb),
+        (Some(wa), None) => Comparability::RefusedDifferentWorkloads(wa, "unstated".to_string()),
+        (None, Some(wb)) => Comparability::RefusedDifferentWorkloads("unstated".to_string(), wb),
+        _ => Comparability::Comparable,
+    }
+}
+
+/// Split a document's measurements into those the matrix will accept and those
+/// it refuses, with a reason for each refusal (order 810-jeg7).
+///
+/// Returned as a partition rather than filtered in place: a measurement dropped
+/// without a reason is indistinguishable from a measurement never taken, which
+/// is the same silent-loss failure the capability channel's skipped-row list
+/// exists to prevent one level up.
+pub fn partition_measurements(document: &Value) -> (Vec<Value>, Vec<(Value, String)>) {
+    let mut accepted = Vec::new();
+    let mut refused = Vec::new();
+    let Some(ms) = document.get("measurements").and_then(Value::as_sequence) else {
+        return (accepted, refused);
+    };
+    for m in ms {
+        match m
+            .get("locus")
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+        {
+            Some(_) => accepted.push(m.clone()),
+            None => refused.push((
+                m.clone(),
+                "no locus: the matrix cannot place this measurement".to_string(),
+            )),
+        }
+    }
+    (accepted, refused)
+}
+
+/// The schedulable unit of the matrix: `(device_class, lane, engine)`
+/// (order 808-7yrd).
+///
+/// `legacy_tier` is DERIVED and never authoritative — a single string cannot
+/// express "this GPU is present but has no lane", which is the state every WSL2
+/// host is in. A scheduler asks which triples a host offers; it does not read a
+/// tier and hope.
+///
+/// A device contributes its triples only when `usable` is true AND it has at
+/// least one lane. A present-unusable device (806-2r4s) therefore contributes
+/// NOTHING here while remaining fully visible in the document — which is the
+/// entire point of recording it: "present but unschedulable" and "absent" are
+/// different engineering problems and must not collapse to the same emptiness.
+pub fn schedulable_triples(document: &Value) -> Vec<(String, String, String)> {
+    let mut out = Vec::new();
+    let Some(devices) = document.get("devices").and_then(Value::as_sequence) else {
+        return out;
+    };
+    let engines: Vec<(&str, Vec<&str>)> = document
+        .get("engines")
+        .and_then(Value::as_sequence)
+        .map(|es| {
+            es.iter()
+                .filter_map(|e| {
+                    let name = e.get("name").and_then(Value::as_str)?;
+                    let classes = e
+                        .get("supported_device_classes")
+                        .and_then(Value::as_sequence)
+                        .map(|cs| cs.iter().filter_map(Value::as_str).collect())
+                        .unwrap_or_default();
+                    Some((name, classes))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    for d in devices {
+        if d.get("usable").and_then(Value::as_bool) != Some(true) {
+            continue;
+        }
+        let Some(class) = d.get("device_class").and_then(Value::as_str) else {
+            continue;
+        };
+        let Some(lanes) = d.get("lanes").and_then(Value::as_sequence) else {
+            continue;
+        };
+        for lane in lanes.iter().filter_map(Value::as_str) {
+            for (engine, classes) in &engines {
+                if classes.contains(&class) {
+                    out.push((class.to_string(), lane.to_string(), (*engine).to_string()));
+                }
+            }
+        }
+    }
+    out.sort();
+    out.dedup();
+    out
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2545,5 +2905,516 @@ plan_index:
         assert_items_preserved(&raw, &c.candidate);
         assert_fold_equivalent(&index, &raw);
         let _ = std::fs::remove_dir_all(&d);
+    }
+}
+
+#[cfg(test)]
+mod capability_matrix_tests {
+    use super::*;
+
+    fn frag(name: &str, yaml: &str) -> Fragment {
+        Fragment {
+            name: name.to_string(),
+            path: PathBuf::from(name),
+            doc: serde_yaml::from_str(yaml).expect("fixture parses"),
+            raw: yaml.to_string(),
+        }
+    }
+
+    /// A contribution as a host actually writes it: the whole document under
+    /// `document:`, identity read from inside it.
+    fn row(host_id: &str, ts: &str, host: &str, tier: &str) -> String {
+        row_at(host_id, ts, host, tier, "in-guest")
+    }
+
+    fn row_at(host_id: &str, ts: &str, host: &str, tier: &str, locus: &str) -> String {
+        let mut s = String::new();
+        s.push_str("capabilities:\n");
+        s.push_str(&format!("  - ts: \"{ts}\"\n"));
+        s.push_str(&format!("    host: {host}\n"));
+        s.push_str(&format!("    locus: {locus}\n"));
+        s.push_str("    document:\n");
+        s.push_str("      schema_version: 2\n");
+        s.push_str(&format!("      legacy_tier: {tier}\n"));
+        s.push_str("      devices: []\n");
+        s.push_str("      engines: []\n");
+        s.push_str("      measurements: []\n");
+        s.push_str("      host:\n");
+        s.push_str("        is_battery_present: true\n");
+        s.push_str("        kernel_release: 6.18.33.2-microsoft-standard-WSL2\n");
+        s.push_str(&format!("        host_id: {host_id}\n"));
+        s.push_str("        host_id_source: node-name\n");
+        s.push_str("        host_kind: linux\n");
+        s.push_str(&format!("      timestamp: \"{ts}\"\n"));
+        s
+    }
+
+    /// THE PROPERTY THE MATRIX EXISTS FOR: two hosts contribute and BOTH
+    /// survive. An LWW applied across hosts instead of per-host would keep one
+    /// and silently drop the other.
+    #[test]
+    fn two_hosts_both_survive_the_fold() {
+        let frags = vec![
+            frag(
+                "a-linux.yaml",
+                &row("yoga", "2026-08-18T10:00:00Z", "linux", "cpu"),
+            ),
+            frag(
+                "b-windows.yaml",
+                &row("yolanda", "2026-08-18T10:00:00Z", "windows", "cpu"),
+            ),
+        ];
+        let (m, _skipped) = fold_capabilities(&frags);
+        assert_eq!(m.len(), 2, "one row per host_id");
+        assert!(m.contains_key(&("yoga".to_string(), "in-guest".to_string())));
+        assert!(m.contains_key(&("yolanda".to_string(), "in-guest".to_string())));
+    }
+
+    /// Two WSL2 guests share a kernel release exactly. They must NOT collapse.
+    #[test]
+    fn hosts_sharing_a_kernel_release_do_not_collapse() {
+        let frags = vec![
+            frag(
+                "a.yaml",
+                &row("yolanda", "2026-08-18T10:00:00Z", "windows", "cpu"),
+            ),
+            frag(
+                "b.yaml",
+                &row("esmeraldinha", "2026-08-18T10:00:00Z", "windows", "cpu"),
+            ),
+        ];
+        let (m, _skipped) = fold_capabilities(&frags);
+        assert_eq!(m.len(), 2);
+        assert_eq!(
+            m[&("yolanda".to_string(), "in-guest".to_string())].document["host"]["kernel_release"],
+            m[&("esmeraldinha".to_string(), "in-guest".to_string())].document["host"]["kernel_release"],
+            "the kernel collision is real"
+        );
+    }
+
+    /// Within ONE host's own key, the later contribution is current. This is
+    /// the only thing LWW decides here — a re-probe describes the machine as it
+    /// is now, so there is no ranking to preserve.
+    #[test]
+    fn a_hosts_later_contribution_replaces_its_earlier_one() {
+        let frags = vec![
+            frag(
+                "a.yaml",
+                &row("yolanda", "2026-08-18T09:00:00Z", "windows", "cpu"),
+            ),
+            frag(
+                "b.yaml",
+                &row("yolanda", "2026-08-18T11:00:00Z", "windows", "gpu-rocm"),
+            ),
+        ];
+        let (m, _skipped) = fold_capabilities(&frags);
+        assert_eq!(m.len(), 1);
+        assert_eq!(
+            m[&("yolanda".to_string(), "in-guest".to_string())].document["legacy_tier"],
+            Value::String("gpu-rocm".into())
+        );
+    }
+
+    /// Order of arrival must not decide. Folding the same set reversed gives
+    /// the same answer, or two hosts compute different matrices from identical
+    /// inputs — which presents as corruption, not as a sorting bug.
+    #[test]
+    fn the_fold_is_order_independent() {
+        let a = frag(
+            "a.yaml",
+            &row("yolanda", "2026-08-18T09:00:00Z", "windows", "cpu"),
+        );
+        let b = frag(
+            "b.yaml",
+            &row("yolanda", "2026-08-18T11:00:00Z", "windows", "gpu-rocm"),
+        );
+        let (forward, _) = fold_capabilities(&[a.clone(), b.clone()]);
+        let (backward, _) = fold_capabilities(&[b, a]);
+        assert_eq!(forward, backward);
+    }
+
+    /// Equal timestamps are broken by host deterministically, never by arrival.
+    #[test]
+    fn an_exact_timestamp_tie_is_broken_by_host() {
+        let ts = "2026-08-18T10:00:00Z";
+        let linux = frag("a.yaml", &row("shared", ts, "linux", "cpu"));
+        let windows = frag("b.yaml", &row("shared", ts, "windows", "gpu-rocm"));
+        let (forward, _) = fold_capabilities(&[linux.clone(), windows.clone()]);
+        let (backward, _) = fold_capabilities(&[windows, linux]);
+        assert_eq!(forward, backward, "the tiebreak must not depend on order");
+        assert_eq!(
+            forward[&("shared".to_string(), "in-guest".to_string())].host,
+            "windows",
+            "the higher host string wins, deterministically"
+        );
+    }
+
+    /// A row that cannot name its machine is SKIPPED, never folded under a
+    /// blank key — which would collect every unidentifiable contribution into
+    /// one row that reads as a host whose hardware kept changing.
+    #[test]
+    fn a_row_without_a_host_id_is_skipped() {
+        let mut yaml = String::new();
+        yaml.push_str("capabilities:\n");
+        yaml.push_str("  - ts: \"2026-08-18T10:00:00Z\"\n");
+        yaml.push_str("    host: windows\n");
+        yaml.push_str("    document:\n");
+        yaml.push_str("      schema_version: 1\n");
+        yaml.push_str("      legacy_tier: cpu\n");
+        yaml.push_str("      host:\n");
+        yaml.push_str("        is_battery_present: false\n");
+        yaml.push_str("        kernel_release: 6.18.33.2-microsoft-standard-WSL2\n");
+        let (m, skipped) = fold_capabilities(&[frag("v1.yaml", &yaml)]);
+        assert_eq!(skipped.len(), 1, "the unkeyable row must be reported");
+        assert!(m.is_empty(), "a v1 document has no key to fold on");
+    }
+
+    /// Fragments with no `capabilities:` key are untouched — the channel is
+    /// additive and every existing fragment must remain valid.
+    #[test]
+    fn fragments_without_the_channel_are_ignored() {
+        let yaml = "packets:\n  - packet_id: alpha\n    order: 999-zzzz\n    status: ready\n";
+        assert!(fold_capabilities(&[frag("plain.yaml", yaml)]).0.is_empty());
+    }
+
+    /// THE REGRESSION THIS KEY EXISTS FOR, and it was found by implementing
+    /// 809-7e4m on top of the channel rather than by reasoning about it.
+    ///
+    /// On Windows one machine is observed from TWO contexts: the WSL2 guest
+    /// sees the CPU and the paravirtual GPU, Windows sees the NPU. Both
+    /// describe machine `yolanda`, so both carry the same host_id. Keyed on
+    /// host_id alone the second contribution silently replaced the first and
+    /// the CPU and GPU vanished from the matrix — data loss dressed as an
+    /// update. Keyed on (host_id, locus) both survive.
+    #[test]
+    fn two_contexts_observing_one_machine_do_not_overwrite_each_other() {
+        let guest = frag(
+            "guest.yaml",
+            &row_at(
+                "yolanda",
+                "2026-08-18T10:00:00Z",
+                "windows",
+                "cpu",
+                "in-guest",
+            ),
+        );
+        let win = frag(
+            "windows.yaml",
+            &row_at(
+                "yolanda",
+                "2026-08-18T11:00:00Z",
+                "windows",
+                "cpu",
+                "windows-host",
+            ),
+        );
+        let (m, skipped) = fold_capabilities(&[guest, win]);
+
+        assert!(skipped.is_empty(), "both rows are keyable");
+        assert_eq!(
+            m.len(),
+            2,
+            "one machine, two loci, two rows — the LATER row must not replace the earlier"
+        );
+        assert!(m.contains_key(&("yolanda".to_string(), "in-guest".to_string())));
+        assert!(m.contains_key(&("yolanda".to_string(), "windows-host".to_string())));
+        assert_eq!(
+            m[&("yolanda".to_string(), "in-guest".to_string())].host_id,
+            m[&("yolanda".to_string(), "windows-host".to_string())].host_id,
+            "and a consumer can still tell they are the same machine"
+        );
+    }
+
+    /// Within ONE locus, a host's later probe still wins — the locus key must
+    /// not accidentally disable the LWW that keeps a row current.
+    #[test]
+    fn the_locus_key_does_not_disable_lww_within_a_locus() {
+        let old = frag(
+            "a.yaml",
+            &row_at(
+                "yolanda",
+                "2026-08-18T09:00:00Z",
+                "windows",
+                "cpu",
+                "in-guest",
+            ),
+        );
+        let new = frag(
+            "b.yaml",
+            &row_at(
+                "yolanda",
+                "2026-08-18T11:00:00Z",
+                "windows",
+                "gpu-rocm",
+                "in-guest",
+            ),
+        );
+        let (m, _) = fold_capabilities(&[old, new]);
+        assert_eq!(m.len(), 1, "same key, so one survives");
+        assert_eq!(
+            m[&("yolanda".to_string(), "in-guest".to_string())].document["legacy_tier"],
+            Value::String("gpu-rocm".into())
+        );
+    }
+
+    /// A row that cannot be keyed is REPORTED, never dropped in silence: a
+    /// discarded row is indistinguishable from a host that never contributed,
+    /// and "the matrix looks empty" is exactly the symptom a misfiled row
+    /// produces.
+    #[test]
+    fn an_unlocated_row_is_reported_rather_than_dropped() {
+        let mut yaml = String::new();
+        yaml.push_str("capabilities:\n");
+        yaml.push_str("  - ts: \"2026-08-18T10:00:00Z\"\n");
+        yaml.push_str("    host: windows\n");
+        yaml.push_str("    document:\n");
+        yaml.push_str("      schema_version: 2\n");
+        yaml.push_str("      legacy_tier: cpu\n");
+        yaml.push_str("      host:\n");
+        yaml.push_str("        host_id: yolanda\n");
+        let (m, skipped) = fold_capabilities(&[frag("nolocus.yaml", &yaml)]);
+        assert!(m.is_empty(), "an unlocated row must not be keyed");
+        assert_eq!(skipped.len(), 1, "and must be reported");
+        assert_eq!(skipped[0].source, "nolocus.yaml");
+        assert!(
+            skipped[0].reason.contains("locus"),
+            "the reason must name the missing field, got: {}",
+            skipped[0].reason
+        );
+    }
+    // ---- the schedulable unit ----
+
+    fn doc_with_devices(devices: &str) -> Value {
+        let mut s = String::new();
+        s.push_str("devices:\n");
+        s.push_str(devices);
+        s.push_str("engines:\n");
+        s.push_str("  - name: ollama\n");
+        s.push_str("    backend: llama-server\n");
+        s.push_str("    supported_device_classes: [cpu, gpu]\n");
+        serde_yaml::from_str(&s).expect("fixture parses")
+    }
+
+    /// The schedulable unit is the TRIPLE, not the tier.
+    #[test]
+    fn triples_come_from_usable_devices_with_lanes() {
+        let doc = doc_with_devices(
+            "  - device_class: cpu\n    usable: true\n    lanes: [container, host-native]\n",
+        );
+        assert_eq!(
+            schedulable_triples(&doc),
+            vec![
+                (
+                    "cpu".to_string(),
+                    "container".to_string(),
+                    "ollama".to_string()
+                ),
+                (
+                    "cpu".to_string(),
+                    "host-native".to_string(),
+                    "ollama".to_string()
+                ),
+            ]
+        );
+    }
+
+    /// THE 806-2r4s CASE, and the reason present-unusable records are worth
+    /// emitting at all: this host's GPU is REAL and REPORTED, and contributes
+    /// no schedulable triple. "Present but unschedulable" stays visible in the
+    /// document while correctly offering the scheduler nothing.
+    #[test]
+    fn a_present_unusable_device_contributes_no_triple_but_stays_visible() {
+        let doc = doc_with_devices(
+            "  - device_class: cpu\n    usable: true\n    lanes: [container]\n  - device_class: gpu\n    usable: false\n    unusable_reason: wsl2-no-dri-render-node\n    lanes: []\n",
+        );
+        let triples = schedulable_triples(&doc);
+        assert_eq!(
+            triples,
+            vec![(
+                "cpu".to_string(),
+                "container".to_string(),
+                "ollama".to_string()
+            )]
+        );
+        assert!(
+            !triples.iter().any(|(c, _, _)| c == "gpu"),
+            "an unusable GPU must not be schedulable"
+        );
+        let devices = doc["devices"].as_sequence().unwrap();
+        assert_eq!(
+            devices.len(),
+            2,
+            "but it is still REPORTED, which is the point"
+        );
+    }
+
+    /// A usable device with no lane is equally unschedulable. `usable: true`
+    /// alone is not a lane, and reading it as one is how a scheduler routes to
+    /// a device it cannot open.
+    #[test]
+    fn usable_without_a_lane_is_not_schedulable() {
+        let doc = doc_with_devices("  - device_class: gpu\n    usable: true\n    lanes: []\n");
+        assert!(schedulable_triples(&doc).is_empty());
+    }
+
+    /// An engine that does not support the class contributes no triple, so the
+    /// pairing is a real capability rather than a cross product.
+    #[test]
+    fn an_engine_that_does_not_support_the_class_yields_no_triple() {
+        let mut s = String::new();
+        s.push_str("devices:\n");
+        s.push_str("  - device_class: npu\n    usable: true\n    lanes: [host-native]\n");
+        s.push_str("engines:\n");
+        s.push_str("  - name: ollama\n");
+        s.push_str("    backend: llama-server\n");
+        s.push_str("    supported_device_classes: [cpu, gpu]\n");
+        let doc: Value = serde_yaml::from_str(&s).expect("fixture parses");
+        assert!(
+            schedulable_triples(&doc).is_empty(),
+            "no engine claims npu, so there is nothing to schedule on it"
+        );
+    }
+}
+
+#[cfg(test)]
+mod measurement_comparability_tests {
+    use super::*;
+
+    fn m(locus: Option<&str>, suite: Option<&str>, decode: f64) -> Value {
+        let mut s = String::new();
+        s.push_str("device: cpu\nengine: ollama\n");
+        s.push_str(&format!("decode_tps: {decode}\n"));
+        if let Some(l) = locus {
+            s.push_str(&format!("locus: {l}\n"));
+        }
+        if let Some(w) = suite {
+            s.push_str(&format!("workload_suite: {w}\n"));
+        }
+        serde_yaml::from_str(&s).expect("fixture parses")
+    }
+
+    /// THE MEASUREMENT THIS RULE COMES FROM. Same suite, same machine, two
+    /// loci, 5-10% apart on the embed arm — and that gap once inverted a
+    /// cross-host conclusion. These must not be ranked.
+    #[test]
+    fn two_loci_are_refused_even_for_the_same_suite_and_machine() {
+        let in_guest = m(Some("in-guest"), Some("802-2536-v1"), 91.6);
+        let mirrored = m(Some("host-side-via-mirror"), Some("802-2536-v1"), 87.2);
+        let v = measurements_comparable(&in_guest, &mirrored);
+        assert!(!v.is_comparable());
+        assert_eq!(
+            v,
+            Comparability::RefusedDifferentLoci(
+                "in-guest".to_string(),
+                "host-side-via-mirror".to_string()
+            )
+        );
+        assert!(v.reason().contains("different loci"));
+    }
+
+    /// Same locus, same suite: this is the case a ranking is FOR.
+    #[test]
+    fn one_locus_and_one_suite_is_comparable() {
+        let a = m(Some("in-guest"), Some("802-2536-v1"), 91.6);
+        let b = m(Some("in-guest"), Some("802-2536-v1"), 109.1);
+        assert!(measurements_comparable(&a, &b).is_comparable());
+    }
+
+    /// An absent locus is REFUSED, never defaulted. The schema keeps the field
+    /// optional so pre-808-43mw writers keep recording; that compatibility must
+    /// not leak upward into a comparison, because defaulting would manufacture
+    /// exactly the false comparability this exists to prevent.
+    #[test]
+    fn an_unlocated_measurement_is_refused_not_defaulted() {
+        let located = m(Some("in-guest"), Some("802-2536-v1"), 91.6);
+        let bare = m(None, Some("802-2536-v1"), 87.2);
+        assert_eq!(
+            measurements_comparable(&located, &bare),
+            Comparability::RefusedUnlocated
+        );
+        assert_eq!(
+            measurements_comparable(&bare, &located),
+            Comparability::RefusedUnlocated,
+            "the refusal is symmetric"
+        );
+        assert_eq!(
+            measurements_comparable(&bare, &bare),
+            Comparability::RefusedUnlocated,
+            "two unlocated records are not comparable merely by both being unlocated"
+        );
+    }
+
+    /// An empty-string locus is absence, not a locus named "".
+    #[test]
+    fn an_empty_locus_counts_as_absent() {
+        let a = m(Some("in-guest"), Some("802-2536-v1"), 91.6);
+        let empty: Value = serde_yaml::from_str(
+            "device: cpu\nengine: ollama\ndecode_tps: 87.2\nlocus: \"\"\nworkload_suite: 802-2536-v1\n",
+        )
+        .expect("fixture parses");
+        assert_eq!(
+            measurements_comparable(&a, &empty),
+            Comparability::RefusedUnlocated
+        );
+    }
+
+    /// Different workloads are a different question, not a faster machine.
+    /// 810-jeg7 names the locus, but workload_suite landed in the same bump for
+    /// the same reason, and refusing on one axis while silently ranking on the
+    /// other keeps the hole open.
+    #[test]
+    fn different_workloads_are_refused_at_a_common_locus() {
+        let a = m(Some("in-guest"), Some("802-2536-v1"), 91.6);
+        let b = m(Some("in-guest"), Some("some-other-suite"), 300.0);
+        let v = measurements_comparable(&a, &b);
+        assert!(!v.is_comparable());
+        assert!(v.reason().contains("different workloads"));
+    }
+
+    /// A stated suite against an unstated one is refused: "unstated" is not a
+    /// wildcard that matches whatever it is compared against.
+    #[test]
+    fn a_stated_suite_against_an_unstated_one_is_refused() {
+        let stated = m(Some("in-guest"), Some("802-2536-v1"), 91.6);
+        let unstated = m(Some("in-guest"), None, 87.2);
+        assert!(!measurements_comparable(&stated, &unstated).is_comparable());
+    }
+
+    /// Two records that BOTH omit the suite stay comparable: the locus check
+    /// already established they were observed the same way, and refusing here
+    /// would reject every pre-808-43mw pair for a reason 810-jeg7 does not make.
+    #[test]
+    fn two_records_both_omitting_the_suite_remain_comparable() {
+        let a = m(Some("in-guest"), None, 91.6);
+        let b = m(Some("in-guest"), None, 87.2);
+        assert!(measurements_comparable(&a, &b).is_comparable());
+    }
+
+    /// Refused measurements are PARTITIONED with a reason, never dropped: a
+    /// measurement discarded silently is indistinguishable from one never
+    /// taken.
+    #[test]
+    fn unlocated_measurements_are_partitioned_with_a_reason() {
+        let doc: Value = serde_yaml::from_str(
+            "measurements:\n  - device: cpu\n    engine: ollama\n    locus: in-guest\n  - device: gpu\n    engine: ollama\n",
+        )
+        .expect("fixture parses");
+        let (accepted, refused) = partition_measurements(&doc);
+        assert_eq!(accepted.len(), 1);
+        assert_eq!(refused.len(), 1);
+        assert!(
+            refused[0].1.contains("locus"),
+            "the reason must name the missing field, got: {}",
+            refused[0].1
+        );
+    }
+
+    /// A document with no measurements partitions to two empty lists rather
+    /// than erroring — an unmeasured host is a normal state.
+    #[test]
+    fn a_document_without_measurements_partitions_empty() {
+        let doc: Value = serde_yaml::from_str("devices: []\n").expect("fixture parses");
+        let (accepted, refused) = partition_measurements(&doc);
+        assert!(accepted.is_empty() && refused.is_empty());
     }
 }

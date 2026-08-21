@@ -1,0 +1,94 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by windows (yolanda), 2026-08-19T11:45:00Z, meta-orchestration cycle 11.
+#
+# 833-w8rc's BLOCKING DESIGN QUESTION, answered as far as reading can answer it.
+# The packet said "the hard part is delivery: the material currently crosses the
+# boundary as a Podman secret read at container START, so a running container
+# has no channel to receive a new one — that is the real design question this
+# packet has to answer." There IS a channel, it is already load-bearing, and
+# one small experiment would turn this from strongly-evidenced into measured.
+events:
+  - packet_id: mirror-outlives-its-credential-past-48h-by-construction
+    event:
+      type: progress
+      ts: "2026-08-19T11:45:00Z"
+      agent_id: windows-yolanda-opus5-20260818t2350z
+      host: windows
+      summary: |
+        THE CHANNEL EXISTS AND IS ALREADY IN USE: the Agent's tmpfs SecretID
+        file.
+
+        The Podman secret is read EXACTLY ONCE, at container start.
+        images/git/vault-agent-bootstrap.sh reads /run/secrets/vault-approle,
+        writes `role_id` and `secret_id` into two tmpfs files at 0400, and then
+        `exec`s Vault Agent. After that moment the Podman secret is irrelevant
+        to the running container — which is why destroying it (as the host does)
+        never disturbed a live mirror, and why 828-k3mq's symptom only appeared
+        at max_ttl.
+
+        What Agent consumes from then on is the FILE:
+
+          images/git/vault-agent.hcl
+            secret_id_file_path = "/tmp/tillandsias-vault-secret-id"
+            remove_secret_id_file_after_reading = false
+
+        The option is the evidence. Vault Agent's approle auto-auth DELETES the
+        secret_id file after reading it by default; the whole reason to set it
+        false is that the file must survive to be read AGAIN on the next
+        authentication. This repo's own comment beside it states that rationale
+        outright: "Re-authentication after the client token reaches max_ttl
+        needs the same launch-scoped SecretID."
+
+        SO THE ROTATION SHAPE IS: write fresh material into
+        /tmp/tillandsias-vault-secret-id inside the RUNNING container, and the
+        Agent's next authentication attempt picks it up. No restart, no new
+        Podman secret, no change to how the material is minted — the host
+        already knows how (mint_approle_auto_auth_for_container) and, since
+        828-k3mq, already knows which container owns it.
+
+        DELIVERY MUST BE ON STDIN, not argv. Order 424's rule ("the token
+        travels on stdin, never argv/env/URL") applies verbatim:
+        `podman exec -i <container> sh -c 'cat > /tmp/tillandsias-vault-secret-id'`
+        with the value piped in. The container runs --read-only with /tmp as a
+        writable tmpfs and Agent runs as uid 1000, so the write is possible
+        without relaxing any posture.
+
+        NOT MEASURED, AND I AM NOT PRETENDING OTHERWISE. That Agent re-reads
+        the file per authentication is inferred from the option's documented
+        semantics plus this repo's stated rationale — strong, but inference.
+        The experiment that settles it is small and needs a live enclave:
+
+          1. bring a mirror up, let its AppRole material be destroyed (or
+             destroy the accessor by hand) so auth is failing every ~4 min;
+          2. mint fresh AppRole material for that role;
+          3. pipe the new secret_id into the container's tmpfs file;
+          4. watch `podman logs` for the next `agent.auth.handler:
+             authentication successful` WITHOUT a restart.
+
+        That is ~5 minutes attended and it converts the whole packet from a
+        design question into an implementation task. Deliberately NOT done
+        unattended at 04:30: it needs the enclave up, and landing a credential
+        ROTATION mechanism whose central premise is unverified would be exactly
+        the pattern this milestone keeps filing packets about.
+
+        WHAT THE REPO ALREADY EXPECTED, and did not build. `policy_role_name`
+        in vault_bootstrap.rs carries: "containers wire `VAULT_ROLE=<this
+        string>` into their launch env so `vault-cli` knows which login to
+        perform WHEN THE SECRET-ID IS ROTATED." VAULT_ROLE is indeed set on the
+        mirror (measured: `VAULT_ROLE=git-mirror-agent`). But vault-cli has no
+        approle login path at all — grepping it finds only `renew-self`. So the
+        env var exists for a rotation that was anticipated and never
+        implemented, which is the same write-only-signal shape 806-2r4s and
+        824-vr2d record elsewhere. Worth noting rather than deleting: it is
+        about to become load-bearing if the rotation lands here.
+
+        STILL OPEN ON THIS PACKET after this cycle:
+          - the experiment above (attended, ~5 min);
+          - the host-side trigger: WHEN to rotate. Options are a periodic check
+            against SecretID age, or reacting to the mirror's own
+            `agent-unauthenticated` verdict (828-k3mq) — the latter is
+            attractive because the signal already exists and is already
+            published where the host can read it, but it is reactive, so the
+            mirror is briefly write-blocked before rotation fires;
+          - whether rotation should also re-mint the ROLE_ID file (it does not
+            change, so probably not).

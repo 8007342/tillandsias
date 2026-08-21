@@ -267,7 +267,9 @@ The cache MUST be invalidated and re-probed when any of the following change:
 device, the engine inventory, or the device set itself.
 
 The document MUST NOT contain secrets, device serial numbers, or host
-identifiers beyond what routing requires.
+identifiers beyond what routing requires. PROBE-9 defines the one identifier
+routing does require (`host_id`) and bounds it; this clause forbids everything
+else.
 
 @trace spec:accel-capability-probe
 
@@ -284,6 +286,67 @@ identifiers beyond what routing requires.
 - **WHEN** the probe runs twice with no hardware, driver, or engine change
 - **THEN** the device set, vendors, `usable` flags, and lane lists MUST be
   identical between the two documents
+
+### Requirement: PROBE-9 — The document names the host it describes
+
+The capability document MUST carry a `host_id` identifying the machine it
+describes, and a `host_id_source` recording how that identifier was obtained
+(`input` when supplied by the operator, `node-name` when derived, `unknown`
+when nothing answered).
+
+`host_id` MUST be the identifier the fleet already uses for that machine — the
+short node name, lowercased, as produced by `scripts/agent-identity.sh`'s
+`tillandsias_node_name` and used to name `plan/mo-full-attestations.d/<host>.md`.
+A probe MUST NOT mint a second name for a machine that already has one.
+
+`kernel_release` MUST NOT be used as a host identifier. Two WSL2 guests report
+byte-identical kernel releases, so keying on it merges distinct machines into
+one row silently.
+
+`host_id` MUST NOT be empty. A probe that cannot determine a name MUST report
+`unknown` for both fields, so that unidentifiable hosts are visibly
+unidentified rather than folded together under a blank key.
+
+This is the host identifier PROBE-8 permits as "what routing requires": the
+fleet capability matrix folds `host_id -> document`, so without it there is no
+routing across hosts at all. It does not license serial numbers, secrets, or
+any identifier beyond the machine's existing fleet name.
+
+Measurements MUST be labelled with the workload that produced them
+(`workload_suite`) and the execution context they ran in (`locus`). A consumer
+comparing measurements MUST refuse to rank two records taken at different loci
+rather than ranking them silently: the locus difference has been measured at
+5-10% on the embed arm, which is the same order as the cross-host differences
+the matrix exists to detect.
+
+These labels are OPTIONAL in the document schema and REQUIRED by the matrix
+consumer. The split is deliberate: the schema must keep accepting records from
+writers that predate the labels, while a matrix that accepts an unlabelled
+record cannot honour the refusal rule above.
+
+@trace spec:accel-capability-probe
+
+#### Scenario: Two hosts with the same kernel remain distinct
+- **WHEN** two WSL2 guests report the same `kernel_release`
+- **THEN** their documents MUST carry different `host_id` values
+- **AND** a matrix folding on `host_id` MUST retain both rows
+
+#### Scenario: An operator-supplied name overrides the derived one
+- **WHEN** the host identity input is set
+- **THEN** `host_id` MUST take that value, normalised to the short lowercased
+  form
+- **AND** `host_id_source` MUST report `input`
+
+#### Scenario: An unlabelled measurement is not silently ranked
+- **WHEN** two measurement records carry different `locus` values, or either
+  omits it
+- **THEN** the matrix consumer MUST refuse a direct comparison rather than
+  ranking them
+
+#### Scenario: A document that cannot name itself is refused
+- **WHEN** a cached document carries no `host_id`
+- **THEN** it MUST be treated as stale and re-probed, never read as a host
+  whose identifier is empty
 
 ## Gating for dependent packets
 
@@ -311,6 +374,8 @@ Bind to tests in `openspec/litmus-bindings.yaml`:
 Gating points:
 - `capabilities.json` carries `schema_version`, `devices`, `engines`,
   `measurements`, and a derived `legacy_tier`
+- `capabilities.json` carries a non-empty `host_id` and a `host_id_source`,
+  and `kernel_release` is never used as a host identifier (PROBE-9)
 - Every device record carries `usable`, and `usable: false` carries an
   `unusable_reason`
 - NPU vendor comes from `uevent` `DRIVER=`, never from a product string

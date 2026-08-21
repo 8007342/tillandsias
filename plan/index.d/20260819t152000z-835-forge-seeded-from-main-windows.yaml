@@ -1,0 +1,105 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by windows (yolanda), 2026-08-19T15:20:00Z.
+#
+# FOUND BY AN IN-FORGE AGENT CONFIDENTLY REPORTING A FIXED BLOCKER AS OPEN.
+# The operator ran OpenCode in the forge and asked BigPickle about forge status
+# and pending work. It answered that the git-mirror is blocked
+# (`blocked:upstream-auth-unpublished`), citing evidence dated 2026-08-17, and
+# recommended operator action on the Vault GitHub token. Every part of that
+# answer is a faithful reading of the checkout it was given. None of it is true
+# of the running system.
+packets:
+  - packet_id: forge-experts-answer-from-main-not-the-branch-the-work-is-on
+    order: 835-h2wq
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    title: "every in-forge expert answers from main's ledger because the lane seeds TILLANDSIAS_FORGE_SEED_BRANCH=main, so an agent asked about current state confidently reports days-old blockers as open"
+    deliverable: "an in-forge agent's plan answers reflect the branch the operator is actually working on, or the forge states plainly which branch it is answering from so a stale answer is legible as stale"
+    pickup_role: any
+    release_target: forge-local-experts-milestone
+    capability_tags: [forge, experts, plan, multi-host, fail-loud]
+    estimated_hours: 4
+    context: |
+      MEASURED live, yolanda 2026-08-19T18:1xZ, against the operator's own
+      running OpenCode session.
+
+      WHAT THE AGENT SAID (verbatim summary): "the mirror's Vault GitHub token
+      has intermittent/failing upstream write authorization... Guard verdict:
+      blocked:upstream-auth-unpublished... No refs/tillandsias/upstream-auth/*
+      verdict refs on origin... Every forge cycle refuses worker drain... The
+      operator needs to repair/re-seed the Vault GitHub token's push
+      permission." It also reported 250+ ready packets and no MO-FULL markers.
+
+      WHAT IS ACTUALLY TRUE, measured in the same minutes:
+        mirror verdict   refs/tillandsias/upstream-auth/authorized/1787163205
+        agent token      VALID
+        github token     readable
+        guard IN-FORGE   ok:forge-git-mirror
+        forge ls-remote  refs/tillandsias/upstream-auth/authorized/1787163327
+      The credential channel is healthy and the forge can see it over the
+      mirror transport. 13 MO-FULL markers were emitted on windows-next in the
+      preceding twelve hours.
+
+      THE CAUSE IS NOT THE MIRROR, WHICH IS CURRENT. The mirror carries
+      windows-next at 56b2910af — a push from minutes earlier. The forge simply
+      was not pointed at it:
+
+        TILLANDSIAS_FORGE_SEED_BRANCH=main
+        forge checkout: 0bba6525f on main
+          ("Merge pull request #99 ... release/version-bump-0.4.260817.1")
+
+      Spot-check of that checkout's ledger: 828-k3mq ABSENT, 830-t4qp ABSENT,
+      832-q4mn ABSENT, 834-r6vn ABSENT. All four were filed on windows-next
+      after 2026-08-18T17:00 PDT. So the expert answered correctly from a
+      two-day-old ledger in which the credential blocker WAS open — 809-w2xy
+      and its relatives were the live state on main.
+
+      WHY THIS IS WORSE THAN AN EXPERT THAT FAILS. check-forge-expert-base.sh
+      already guards a related hazard and states it: a forge seeded from main
+      "builds a pre-expert binary and then reports `experts: ready` truthfully
+      while every plan_answer returns confidence=unsupported. Truthful state,
+      wrong artifact." That guard fires when main lacks the expert SOURCES.
+      Here main has them, so the expert builds and works — and returns
+      confident, well-cited, wrong-for-today answers. A refusal is legible; a
+      confident stale answer is not, and it cost the operator a round trip plus
+      a recommendation to re-seed a Vault token that does not need re-seeding.
+
+      THIS FLEET MAKES IT STRUCTURAL, not incidental. Every host commits to a
+      platform branch (linux-next / windows-next / osx-next) and main advances
+      only through PR merges — so main is ALWAYS behind by design, and the
+      distance grows across a working day. An in-forge expert seeded from main
+      is therefore always answering from the least current ledger the project
+      has. On 2026-08-19 that distance was 47 commits.
+
+      NOT DIAGNOSED HERE: why the seed is main when the host checkout is on
+      windows-next. check-forge-expert-base.sh describes the launcher as
+      seeding "from THIS checkout's current branch
+      (read_host_project_current_branch -> TILLANDSIAS_FORGE_SEED_BRANCH)",
+      which would have given windows-next. The env in the running forge says
+      `main`, so either that resolution is not being used on this path, or a
+      cloud-project launch resolves the default branch instead. Worth reading
+      before choosing a fix — the answer decides whether this is a one-line
+      resolution bug or a deliberate policy that needs a different remedy.
+
+      REMEDY SHAPES, none chosen:
+        (a) seed the host's current branch, which is what the comment already
+            claims happens;
+        (b) keep seeding main but make the forge STATE its branch and head in
+            the startup context, so every expert answer carries "as of
+            main@0bba6525f" and a stale answer is legible;
+        (c) both — (b) is cheap and is worth doing regardless of (a), because
+            it converts a silent wrongness into a visible one.
+    verifiable_closure: "an in-forge agent asked 'what is the current state of X' either answers from the branch the operator is working on, or its answer names the branch and head it is answering from; asserted by a fixture that seeds a forge at a known-stale commit and greps the agent-visible startup context for that head"
+    evidence:
+      - "TILLANDSIAS_FORGE_SEED_BRANCH=main in the running forge; checkout 0bba6525f on main"
+      - "828-k3mq, 830-t4qp, 832-q4mn, 834-r6vn all ABSENT from the forge's ledger; all filed on windows-next 2026-08-18/19"
+      - "mirror carries windows-next at 56b2910af — the mirror is current, the seed is not"
+      - "live: verdict authorized/1787163205, agent token VALID, github token readable, in-forge guard ok:forge-git-mirror"
+      - "the agent's report recommended re-seeding a Vault GitHub token that measurement shows is working"
+    events:
+      - type: discovered
+        ts: "2026-08-19T15:20:00Z"
+        agent_id: windows-yolanda-opus5-20260819t1430z
+        host: windows

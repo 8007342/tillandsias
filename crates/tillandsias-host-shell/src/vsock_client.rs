@@ -105,6 +105,10 @@ pub struct Client {
     stream: Box<dyn AsyncReadWrite + Unpin + Send>,
     next_seq: AtomicU64,
     transport: Transport,
+    /// Capabilities the guest advertised in HelloAck, recorded so hosts can
+    /// feature-detect instead of comparing wire versions (order 823-u5zf).
+    /// Empty until `handshake()` has run.
+    server_caps: Vec<String>,
 }
 
 impl Client {
@@ -116,6 +120,7 @@ impl Client {
             stream,
             next_seq: AtomicU64::new(1),
             transport,
+            server_caps: Vec::new(),
         })
     }
 
@@ -144,6 +149,7 @@ impl Client {
             stream,
             next_seq: AtomicU64::new(1),
             transport,
+            server_caps: Vec::new(),
         }
     }
 
@@ -174,6 +180,7 @@ impl Client {
             ControlMessage::HelloAck {
                 wire_version,
                 build_version,
+                server_caps,
                 ..
             } => {
                 if wire_version != WIRE_VERSION {
@@ -185,6 +192,12 @@ impl Client {
                         ),
                     ));
                 }
+                // Order 823-u5zf: record what the guest advertised. The
+                // capability list was destructured away here, so
+                // CAP_EXEC_ARGV_VECTOR's own rule — "hosts MUST feature-detect
+                // on this ... read HelloAck.server_caps, never compare wire
+                // versions" — was impossible for any caller to follow.
+                self.server_caps = server_caps;
                 Ok((wire_version, build_version))
             }
             other => Err(io::Error::new(
@@ -192,6 +205,32 @@ impl Client {
                 format!("expected HelloAck, got {:?}", other),
             )),
         }
+    }
+
+    /// Capabilities the guest advertised in its `HelloAck`.
+    ///
+    /// Empty before [`Client::handshake`] has run — an empty slice therefore
+    /// means "not yet asked", never "the guest supports nothing". Callers that
+    /// branch on a capability must handshake first.
+    pub fn server_caps(&self) -> &[String] {
+        &self.server_caps
+    }
+
+    /// Does the guest advertise `cap`?
+    ///
+    /// This is the feature-detection path the wire's own capability constants
+    /// mandate: `CAP_EXEC_ARGV_VECTOR`'s doc says hosts "MUST feature-detect on
+    /// this before sending that shape ... read `HelloAck.server_caps`, never
+    /// compare wire versions", because this fleet routinely runs a host newer
+    /// than the guest binary staged beside it. Before order 823-u5zf the
+    /// handshake discarded the list, so that rule could not be followed by
+    /// anyone.
+    ///
+    /// Fails CLOSED: an un-handshaked client reports every capability absent,
+    /// so a caller that forgets to handshake takes the conservative path rather
+    /// than sending a shape the guest may refuse.
+    pub fn supports(&self, cap: &str) -> bool {
+        self.server_caps.iter().any(|c| c == cap)
     }
 
     /// Send a single envelope and await the next inbound envelope. Callers
@@ -487,7 +526,10 @@ mod tests {
                 seq: env.seq,
                 body: ControlMessage::HelloAck {
                     wire_version: WIRE_VERSION,
-                    server_caps: vec!["v1".to_string()],
+                    server_caps: vec![
+                        "v1".to_string(),
+                        tillandsias_control_wire::CAP_EXEC_ARGV_VECTOR.to_string(),
+                    ],
                     build_version: None,
                 },
             };
@@ -517,6 +559,40 @@ mod tests {
             .expect("handshake succeeds");
         // After handshake the next seq is 2 (we consumed 1 for Hello).
         assert_eq!(client.next_seq.load(Ordering::Relaxed), 2);
+
+        // Order 823-u5zf: the guest's advertised capabilities must SURVIVE the
+        // handshake. They were destructured away, so CAP_EXEC_ARGV_VECTOR's own
+        // rule — "hosts MUST feature-detect on this ... read
+        // HelloAck.server_caps, never compare wire versions" — could not be
+        // followed by any caller.
+        assert!(
+            client.supports(tillandsias_control_wire::CAP_EXEC_ARGV_VECTOR),
+            "advertised capability must be readable after handshake, got {:?}",
+            client.server_caps()
+        );
+        assert!(client.supports("v1"));
+        assert!(
+            !client.supports("definitely-not-advertised"),
+            "an unadvertised capability must report absent"
+        );
+    }
+
+    /// Fails CLOSED: a client that has not handshaked reports every capability
+    /// absent, so a caller that forgets takes the conservative path rather than
+    /// sending a shape the guest may refuse.
+    /// @trace spec:vsock-transport
+    #[tokio::test]
+    async fn capabilities_are_absent_before_handshake() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("control.sock");
+        let _server = spawn_hello_responder(path.clone()).await;
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let client = Client::connect(Transport::Unix(path))
+            .await
+            .expect("connect succeeds");
+        assert!(client.server_caps().is_empty());
+        assert!(!client.supports(tillandsias_control_wire::CAP_EXEC_ARGV_VECTOR));
     }
 
     /// `Client::from_stream` accepts a pre-opened stream (the macOS

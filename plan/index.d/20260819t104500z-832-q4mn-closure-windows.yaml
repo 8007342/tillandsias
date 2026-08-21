@@ -1,0 +1,86 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by windows (yolanda), 2026-08-19T10:45:00Z, meta-orchestration cycle 10.
+events:
+  - packet_id: order-uniqueness-gate-reads-the-base-not-the-folded-ledger
+    event:
+      type: completed
+      ts: "2026-08-19T10:45:00Z"
+      agent_id: windows-yolanda-opus5-20260818t2350z
+      host: windows
+      summary: |
+        plan-orders now checks the FOLDED ledger.
+
+        `plan_orders_fold_fragments` overlays `plan/index.d/*.yaml` onto the
+        base's `plan_index.steps` before the uniqueness pass, using the same
+        base ⊕ fragments shape `tillandsias-plan check` already uses so the two
+        cannot disagree about what the ledger is. Fragments resolve relative to
+        the index under test, so `--index` on a fixture tree reads that tree's
+        fragments. An unparseable fragment is a hard error: skipping it would
+        restore exactly the blindness this order removes.
+
+        THE PART I ALMOST GOT WRONG, recorded because the near-miss is the
+        lesson. Folding only `packets:` would have read every
+        fragment-completed packet as still OPEN — and "is any member open" is
+        precisely what the duplicate rule turns on, so a done-only group whose
+        closure lives in a fragment would have started reporting a false
+        violation. `set-field` records terminal status in a `status:` LWW
+        channel and deliberately does NOT re-declare under `packets:`, because
+        `packets:` is a G-Set and the re-declaration would be a silent no-op
+        (order 636-9m79 / 642-fedr, stated in the fragment header itself). The
+        fold therefore applies that channel, last-write-wins by the fragment's
+        own ts, before the open-member test.
+
+        VERIFICATION — scripts/test-plan-orders-fragment-fold.sh, five hermetic
+        cases over synthetic ledgers, wired as step 8/8 of
+        litmus:plan-index-order-uniqueness (whole suite 16/16 green):
+          1. a fragment colliding with a base order is CAUGHT   (red before)
+          2. CONTROL: a fresh-order fragment passes AND is counted
+          3. two fragments colliding with EACH OTHER are caught — the real
+             multi-host shape, neither colliding with the base
+          4. the status LWW channel is applied before the open-member test
+          5. NEGATIVE CONTROL: removing that override restores the violation,
+             so case 4 passes because the channel was read and not because the
+             rule went lax
+
+        Case 4 failed on first run and was RIGHT to. My fixture had one member
+        open and one completed and expected grandfathering; grandfathering
+        requires EVERY member terminal, so that group is a genuine violation.
+        The fixture was wrong, not the code — corrected so the base member is
+        already terminal and the fragment closes the other, which makes the
+        channel the thing that flips the verdict.
+
+        Live ledger after the change: `ok: plan orders unique among open
+        packets (1129 packets, 3 from fragments, 0 grandfathered)`. The verdict
+        line now reports the fragment contribution, so a reader can see the
+        fold happened rather than trust that it did.
+      evidence:
+        - "scripts/test-plan-orders-fragment-fold.sh: 5/5 cases pass; PASS: plan-orders fragment-fold fixture (order 832-q4mn)"
+        - "litmus:plan-index-order-uniqueness step 8/8 [OK]; methodology-accountability suite 16 passed / 0 failed (100%)"
+        - "before: a fragment declaring an order already in the base still produced `ok: plan orders unique`; after: `duplicate-order:828-k3mq: ...` and a non-zero verdict"
+        - "live ledger: ok: plan orders unique among open packets (1129 packets, 3 from fragments, 0 grandfathered)"
+
+  - packet_id: order-uniqueness-gate-reads-the-base-not-the-folded-ledger
+    event:
+      type: note
+      ts: "2026-08-19T10:46:00Z"
+      agent_id: windows-yolanda-opus5-20260818t2350z
+      host: windows
+      summary: |
+        ONE SECOND IMPLEMENTATION LEFT DISAGREEING, named rather than left to
+        be discovered.
+
+        litmus:plan-index-order-uniqueness step 2 runs the cargo binary when
+        cargo is present and otherwise falls back to an inline ruby
+        reimplementation of the rule. That ruby reads
+        `YAML.load_file('plan/index.yaml')[...]['steps']` — the BASE only — so
+        on a host without cargo the gate still has the blindness this order
+        removed, and now the two implementations disagree by construction.
+
+        Not fixed here: rewriting a multi-line ruby one-liner embedded in a
+        YAML scalar at the end of a cycle is exactly the kind of edit that
+        looks free and is not, and the fallback is dead on every host that
+        builds this repo (cargo is a hard requirement of ./build.sh). Worth
+        either teaching the ruby to fold index.d the same way, or deleting the
+        fallback outright on the grounds that a host without cargo cannot run
+        the gate that matters anyway — the second is probably right, and is a
+        decision rather than a mechanical change.

@@ -1,0 +1,82 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by windows (yolanda), 2026-08-19T07:45:00Z, meta-orchestration cycle 7.
+#
+# FOUND BY TRIGGERING IT. `tillandsias-plan compact --help` did not print
+# usage — it compacted 167 fragments into the base and deleted them. The
+# operation was wanted (queued as 829-p7wq entry 6) and its result verified
+# sound, so nothing was lost; but the same keystroke on a host that had NOT
+# queued it would have performed the largest-blast-radius write in the project
+# from a command whose entire purpose was to ask what the command does.
+packets:
+  - packet_id: plan-compact-executes-on-help-and-ignores-every-flag
+    order: 831-v9kt
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: "tillandsias-plan compact ignores ALL arguments — `--help` and `--dry-run` both perform the compaction — so the one operation the loop_status calls 'the largest blast radius available here' has no way to be inspected before it runs"
+    deliverable: "compact refuses unknown flags, supports --help as usage-only, and offers a --dry-run that reports what it WOULD fold and remove without writing; a caller can find out what it does without doing it"
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [rust, plan, cli, fail-loud]
+    estimated_hours: 2
+    context: |
+      MEASURED yolanda 2026-08-19T07:2xZ, twice, deliberately after the fact
+      (safe to re-run once the fragment set is empty):
+
+        $ tillandsias-plan compact --help
+        ok: nothing to compact (0 fragments)
+        $ tillandsias-plan compact --dry-run
+        ok: nothing to compact (0 fragments)
+
+      Neither printed usage. Neither refused the unknown flag. Both took the
+      write path and reported the write's result. The first invocation of the
+      night — `compact --help`, issued to READ the interface before choosing
+      whether to run it — answered:
+
+        ok: compacted 167 fragment(s) into plan/index.yaml (167 removed)
+
+      WHY THIS IS WORTH A PACKET AND NOT A SHRUG. The project's own words for
+      this operation, from the 2026-08-18T05:19 PDT windows cycle that DECLINED
+      to run it: "it rewrites a 31k-line base and deletes 143 fragments by name.
+      That is the largest-blast-radius operation available here... A large
+      ledger rewrite wants room to go wrong in." A cycle that reasons that
+      carefully about WHETHER to compact, and then types `--help` to check the
+      interface first, gets the compaction anyway. The care is defeated by the
+      tool.
+
+      IT IS ALSO THE ONE COMMAND WHERE A DRY RUN IS OBVIOUSLY WANTED. Every
+      other verb here reports (`status`, `query`, `fragments`, `check`); this
+      one mutates 168 files. `fragments` lists what WOULD be folded, so the
+      information exists — it simply is not reachable through the verb that
+      acts on it.
+
+      NOT A NEAR-MISS THIS TIME, and that is luck rather than design: the
+      compaction was queued work for this very cycle (829-p7wq entry 6), the
+      window was chosen for it, and the result was verified before commit —
+      1133 packets ids-unique references-sound, all six recent status
+      transitions intact (805-yzhw/827-h4tz completed, 823-u5zf/828-k3mq/
+      829-p7wq/830-t4qp ready), no-fragment-status-loss, ./build.sh --check
+      green. On a host that had not queued it, the same command would have
+      rewritten the ledger with no one having decided to.
+
+      SCOPE NOTE: loop-status-compact is the sibling verb and was not tested
+      here. Whether it shares the behaviour should be checked in the same pass.
+    verifiable_closure: "`tillandsias-plan compact --help` prints usage and exits without writing (asserted by a fixture that counts plan/index.d/ files before and after), `compact --dry-run` reports the fold set and writes nothing, and an unknown flag is refused non-zero rather than ignored — with a negative control proving a bare `compact` still folds"
+    evidence:
+      - "compact --help -> 'ok: compacted 167 fragment(s) into plan/index.yaml (167 removed)' on the first invocation; 'ok: nothing to compact (0 fragments)' on re-test with an empty fragment set"
+      - "compact --dry-run -> identical write-path output, no usage, no refusal"
+      - "plan/loop_status.d 2026-08-18T05:19 PDT (windows): compaction is 'the largest-blast-radius operation available here'"
+    next_action: >
+      Add argument parsing to the compact verb: `--help` prints usage and
+      returns 0 without touching the tree; `--dry-run` prints the fragments it
+      would fold and the resulting base line count, and writes nothing; any
+      other flag is refused non-zero and names itself. Keep bare `compact`
+      behaving exactly as today so no caller changes. Then check
+      loop-status-compact for the same shape — it folds a different tree but
+      has the same mutate-without-inspection surface.
+    events:
+      - type: discovered
+        ts: "2026-08-19T07:45:00Z"
+        agent_id: windows-yolanda-opus5-20260818t2350z
+        host: windows

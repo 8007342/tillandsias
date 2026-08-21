@@ -122,10 +122,24 @@ pub(crate) const VERSION: &str = include_str!("../../../VERSION");
 /// The long-running headless/tray process owns its registry until application
 /// shutdown, and detached web lanes intentionally keep their mirror alive
 /// after this launcher returns. Interactive CLI lanes and status-check are
-/// different: their project mirror is stopped before the lane returns, so
-/// leaving its AppRole accessor in this short-lived process would turn a
+/// different: their project mirror is USUALLY stopped before the lane returns,
+/// so leaving its AppRole accessor in this short-lived process would turn a
 /// graceful container stop into the same 48h orphan window reserved for
 /// SIGKILL/host loss.
+///
+/// USUALLY, not always — and the difference was a p0 (order 828-k3mq). The
+/// teardown this relies on is [`cleanup_shared_stack_if_no_running_forge`],
+/// which is REFCOUNTED: it returns early without stopping the mirror whenever
+/// another lane container is active, and again on any listing error
+/// (leak-not-destroy). A lane exiting into a live sibling therefore keeps its
+/// mirror by design. This drain used to destroy that mirror's SecretID anyway,
+/// leaving it renewing a client token it could never replace; 24h later, at
+/// max_ttl, re-authentication failed permanently and every forge push was
+/// rejected by the relay gate while clones kept working.
+///
+/// `revoke_pending_container_tokens` now applies the SAME refcount: material
+/// tagged with an owning container is destroyed only once that container is
+/// gone. Do not "simplify" it back into an unconditional drain.
 fn run_cli_with_vault_credential_cleanup<T>(
     debug: bool,
     action: impl FnOnce() -> Result<T, String>,
@@ -213,6 +227,39 @@ fn main() {
             let _ = unsafe { libc::setpgid(0, 0) };
         }
     }
+
+    // Order 823-u5zf: guarantee XDG_RUNTIME_DIR exists at mode 0700 before any
+    // subsystem derives a path under it.
+    //
+    // This lived in the host-composed shell preamble as
+    // `install -d -m 0700 "$XDG_RUNTIME_DIR"`, which is the last thing keeping
+    // the lane launch tied to `/bin/bash -lc <string>`. The guest exec
+    // allowlist already accepts a verbatim argv and the wire already carries
+    // `env`, so the ONLY reason a shell remained in the chain was this one
+    // side effect. Moving it into the binary that depends on it removes that
+    // reason — and is the better home regardless: the process needing the
+    // directory is the one that should assert it.
+    //
+    // The MODE is the point, not existence. `create_dir_all` further down
+    // (control_socket_host_dir and friends) would happily create the parent at
+    // 0755-minus-umask; XDG_RUNTIME_DIR holds control sockets and must be
+    // user-private, which is why the shell said `-m 0700`.
+    //
+    // Best-effort by design: a caller that did not set XDG_RUNTIME_DIR, or a
+    // read-only path, must not stop the binary starting — every consumer here
+    // already has a fallback for an absent runtime dir.
+    // Order 823-u5zf: default the two variables the shell preamble exported,
+    // BEFORE ensure_xdg_runtime_dir reads one of them.
+    //
+    // ensure_xdg_runtime_dir only ASSERTS the directory when the variable is
+    // already set — it returns None when it is unset, by design. The value
+    // itself came from the preamble, so removing the preamble without this
+    // would leave XDG_RUNTIME_DIR unset and silently drop every consumer onto
+    // its fallback. Same for HOME.
+    #[cfg(unix)]
+    ensure_lane_process_env();
+    #[cfg(unix)]
+    ensure_xdg_runtime_dir();
 
     let version = VERSION.trim();
 
@@ -511,6 +558,17 @@ fn main() {
         }
     }
 
+    // Downgrade override. Carried through the environment rather than threaded
+    // as a parameter because the guard fires at the image chokepoint
+    // (`ensure_image_exists`), which every mode reaches by a different route —
+    // the same reason TILLANDSIAS_DEBUG is set here rather than passed down.
+    if user_args.iter().any(|a| a == "--force-downgrade") {
+        // SAFETY: single-threaded argument parsing, before any subsystem runs.
+        unsafe {
+            std::env::set_var(FORCE_DOWNGRADE_ENV, "1");
+        }
+    }
+
     // @trace spec:cli-mode, spec:cli-bash-mode, spec:cli-diagnostics
     let prompt = user_args
         .iter()
@@ -519,6 +577,7 @@ fn main() {
 
     let known_flags = [
         "--headless",
+        "--force-downgrade",
         "--tray",
         "--debug",
         "--diagnostics",
@@ -1140,6 +1199,97 @@ fn format_diagnostics_envelope_line(
     )
 }
 
+/// Default `HOME` and `XDG_RUNTIME_DIR` when the launcher did not set them.
+///
+/// Order 823-u5zf. These are the last two things the host-composed shell
+/// preamble did that the binary did not:
+///
+/// ```text
+/// export HOME="${HOME:-/root}"
+/// export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+/// ```
+///
+/// Reproduced here EXACTLY, including `/root` as HOME's fallback, because the
+/// point is parity: a lane must not change behaviour depending on whether it
+/// was launched through the old flattened `bash -lc` argv or the new verbatim
+/// one. Improving the fallback (deriving HOME from the passwd entry, say) is a
+/// separate decision and would make the two launch shapes disagree while both
+/// exist.
+///
+/// WHY THE BINARY AND NOT THE LAUNCHER. `PtyOpenOpts.env` carries only the
+/// terminal identity (TERM/COLORTERM/LANG, audit D7) and the guest PTY handler
+/// `env_clear()`s the child, so on the wire lane there is no other channel for
+/// these. On the Windows lane there is none at all: the tray spawns `wsl.exe`
+/// with `spec.argv` and drops `spec.env` entirely. The process that needs the
+/// value is the only one present on every path.
+///
+/// Both are `${VAR:-default}` semantics: an explicitly set value always wins,
+/// so a caller that knows better is never overridden.
+#[cfg(unix)]
+fn ensure_lane_process_env() {
+    let unset_or_empty = |key: &str| {
+        std::env::var_os(key)
+            .map(|value| value.is_empty())
+            .unwrap_or(true)
+    };
+
+    if unset_or_empty("HOME") {
+        // SAFETY: single-threaded startup, before any subsystem reads env.
+        unsafe { std::env::set_var("HOME", "/root") };
+    }
+
+    if unset_or_empty("XDG_RUNTIME_DIR") {
+        // `id -u` in the preamble; the process's own uid here.
+        let uid = unsafe { libc::getuid() };
+        // SAFETY: as above.
+        unsafe { std::env::set_var("XDG_RUNTIME_DIR", format!("/run/user/{uid}")) };
+    }
+}
+
+/// Create `$XDG_RUNTIME_DIR` at mode 0700 if it does not already exist.
+///
+/// Order 823-u5zf. Replaces `install -d -m 0700 "$XDG_RUNTIME_DIR"` from the
+/// host-composed shell preamble — the last side effect keeping a shell in the
+/// lane-launch chain.
+///
+/// Returns the path it ensured, or `None` when `XDG_RUNTIME_DIR` is unset or
+/// the directory could not be created. Never fails the caller: every consumer
+/// of the runtime dir in this binary already falls back when it is absent, so
+/// refusing to start here would break the working case to report on the
+/// broken one.
+///
+/// `create_dir_all` is deliberately NOT used alone: it would create the
+/// directory at 0755-minus-umask, and XDG_RUNTIME_DIR holds control sockets
+/// that must be user-private. The mode is set explicitly afterwards so an
+/// existing directory with wrong permissions is corrected too.
+#[cfg(unix)]
+fn ensure_xdg_runtime_dir() -> Option<PathBuf> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let raw = std::env::var_os("XDG_RUNTIME_DIR")?;
+    let dir = PathBuf::from(raw);
+    if dir.as_os_str().is_empty() {
+        return None;
+    }
+
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        eprintln!(
+            "[tillandsias] XDG_RUNTIME_DIR {} could not be created ({e}); \
+             continuing with per-consumer fallbacks",
+            dir.display()
+        );
+        return None;
+    }
+
+    if let Err(e) = std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)) {
+        eprintln!(
+            "[tillandsias] XDG_RUNTIME_DIR {} could not be set to 0700 ({e})",
+            dir.display()
+        );
+    }
+
+    Some(dir)
+}
 fn print_usage(version: &str) {
     println!("Tillandsias v{}", version);
     println!("Usage: tillandsias [--headless|--tray] [config_path]");
@@ -1178,6 +1328,9 @@ fn print_usage(version: &str) {
     println!("  --prompt TEXT  Send prompt to LLM inference (requires --opencode)");
     println!("  --init         Pre-build container images");
     println!("  --force        Rebuild all images even if cached (use with --init)");
+    println!(
+        "  --force-downgrade Let an OLDER app rebuild a NEWER enclave (rolls the enclave BACK)"
+    );
     println!("  --cache-verify Check cache integrity and report status");
     println!("  --cache-clear  Clear the initialization cache and build state");
     println!(
@@ -2345,6 +2498,68 @@ fn run_image_ensure_detached<D: DetachedImageEnsure>(
     ))
 }
 
+/// Operator override for the downgrade guard, set from `--force-downgrade`.
+const FORCE_DOWNGRADE_ENV: &str = "TILLANDSIAS_FORCE_DOWNGRADE";
+
+/// Every `<repo>:<tag>` podman reports for a tillandsias image.
+///
+/// Best-effort by construction: a podman that cannot answer yields an empty
+/// list, which the guard reads as "no images" and therefore as "proceed". A
+/// version guard must never be the reason a launch fails on a host where the
+/// question could not even be asked.
+fn tillandsias_image_tags() -> Vec<String> {
+    let Ok(out) = podman_cmd_sync()
+        .args(["images", "--format", "{{.Repository}}:{{.Tag}}"])
+        .output_bounded(OperationKind::Inspect.default_budget())
+    else {
+        return Vec::new();
+    };
+    if !out.status.success() {
+        return Vec::new();
+    }
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.contains("tillandsias"))
+        .map(str::to_string)
+        .collect()
+}
+
+/// Refuse to rebuild a NEWER enclave with an OLDER app.
+///
+/// The hazard is a development-machine one: a host accumulates tray binaries
+/// (installed, `target/release`, unpacked `release-artifacts/`), and launching
+/// the wrong one is a two-click mistake. Image freshness is decided by CONTENT
+/// identity (order 702-griq), so an older binary does not see a newer image as
+/// newer — it sees a source-digest mismatch and REBUILDS, silently replacing a
+/// newer runtime with an older one. Nothing downstream reports that anything
+/// moved backwards.
+///
+/// The comparison is legitimate because `methodology/versioning.yaml` declares
+/// the scheme monotonic: YYMMDD "always increases with time" and Build is
+/// "globally monotonic across all machines and branches". See
+/// `tillandsias_core::version_guard` for the decision and its tests.
+///
+/// Returns the refusal text when the launch must stop.
+fn downgrade_refusal() -> Option<String> {
+    use tillandsias_core::version_guard::{DowngradeVerdict, decide_downgrade, refusal_message};
+
+    let force = std::env::var_os(FORCE_DOWNGRADE_ENV).is_some();
+    match decide_downgrade(VERSION.trim(), &tillandsias_image_tags(), force)? {
+        DowngradeVerdict::Proceed => None,
+        DowngradeVerdict::ForcedProceed { app, image, tag } => {
+            // Loud, never debug-gated: an operator who forces a rollback should
+            // see it happen, and so should anyone reading the log afterwards.
+            eprintln!(
+                "[tillandsias] WARNING: --force-downgrade: rebuilding images from app {app} \
+                 over a NEWER enclave ({image}, from {tag}). The enclave is being rolled BACK."
+            );
+            None
+        }
+        DowngradeVerdict::Refuse { app, image, tag } => Some(refusal_message(&app, &image, &tag)),
+    }
+}
+
 pub(crate) fn ensure_image_exists(
     root: &Path,
     image_name: &str,
@@ -2361,6 +2576,13 @@ pub(crate) fn ensure_image_exists(
         return Err(runtime_phase::refusal(&format!(
             "ensure image {image_name}"
         )));
+    }
+    // Refuse BEFORE the detach: the helper runs in its own session with no
+    // controlling tty, so a refusal raised in there would reach the operator as
+    // a bare non-zero exit. Checked here, once, on the path every image build
+    // reaches — the first refusal aborts the whole ensure chain.
+    if let Some(refusal) = downgrade_refusal() {
+        return Err(refusal);
     }
     // Order 270: detach into a session-surviving helper BEFORE taking the
     // image flock — the parent must never be the lock holder (a PTY close
@@ -3524,6 +3746,67 @@ fn report_seed_staleness(project_path: &Path, seed: &str) {
     }
 }
 
+/// Order 823-u5zf: the runtime dir must land at 0700, because that mode is the
+/// whole reason the shell preamble said `install -d -m 0700` rather than
+/// relying on the `create_dir_all` every consumer already does.
+#[cfg(all(test, unix))]
+mod xdg_runtime_dir_tests {
+    use super::ensure_xdg_runtime_dir;
+    use std::os::unix::fs::PermissionsExt;
+
+    /// Serialised: these mutate the process-wide XDG_RUNTIME_DIR.
+    fn with_env<T>(value: Option<&std::path::Path>, f: impl FnOnce() -> T) -> T {
+        let prev = std::env::var_os("XDG_RUNTIME_DIR");
+        match value {
+            Some(p) => unsafe { std::env::set_var("XDG_RUNTIME_DIR", p) },
+            None => unsafe { std::env::remove_var("XDG_RUNTIME_DIR") },
+        }
+        let out = f();
+        match prev {
+            Some(v) => unsafe { std::env::set_var("XDG_RUNTIME_DIR", v) },
+            None => unsafe { std::env::remove_var("XDG_RUNTIME_DIR") },
+        }
+        out
+    }
+
+    #[test]
+    fn creates_a_missing_runtime_dir_at_0700() {
+        let tmp = tempfile::tempdir().unwrap();
+        let target = tmp.path().join("run-user-0");
+        assert!(!target.exists());
+
+        let got = with_env(Some(&target), ensure_xdg_runtime_dir);
+
+        assert_eq!(got.as_deref(), Some(target.as_path()));
+        assert!(target.is_dir(), "the directory must exist afterwards");
+        let mode = std::fs::metadata(&target).unwrap().permissions().mode() & 0o777;
+        assert_eq!(
+            mode, 0o700,
+            "XDG_RUNTIME_DIR holds control sockets and must be user-private, got {mode:o}"
+        );
+    }
+
+    #[test]
+    fn corrects_the_mode_of_an_existing_runtime_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let target = tmp.path().join("already-there");
+        std::fs::create_dir_all(&target).unwrap();
+        std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        with_env(Some(&target), ensure_xdg_runtime_dir);
+
+        let mode = std::fs::metadata(&target).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o700, "a pre-existing 0755 dir must be tightened");
+    }
+
+    /// Never fails the caller: an unset variable is a no-op, because every
+    /// consumer of the runtime dir already falls back when it is absent.
+    #[test]
+    fn unset_variable_is_a_noop() {
+        assert!(with_env(None, ensure_xdg_runtime_dir).is_none());
+    }
+}
+
 #[cfg(test)]
 mod seed_staleness_tests {
     use super::format_seed_staleness;
@@ -3579,9 +3862,14 @@ async fn mint_git_mirror_vault_auto_auth(
     #[cfg(feature = "vault")]
     {
         let instance = format!("{project_name}-{}", std::process::id());
+        // Order 828-k3mq: name the container this material belongs to, so a
+        // lane exit cannot destroy the SecretID of a mirror order 443 kept
+        // running for a sibling lane.
+        let owning_container = format!("tillandsias-git-{project_name}");
         vault_bootstrap::mint_approle_auto_auth_for_container(
             vault_bootstrap::GIT_MIRROR_AGENT_ROLE,
             &instance,
+            Some(owning_container.as_str()),
             debug,
         )
         .await
@@ -6620,6 +6908,21 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
     require_desktop_user_session("tillandsias --init")?;
     report_runtime_lane("--init", debug);
 
+    // Order 834-r6vn: --init does NOT route through ensure_image_exists — it
+    // drives build_image_with_logging directly (order 702-griq's note records
+    // the two paths deliberately asking the same content question by different
+    // routes). So the downgrade guard has to be asserted here as well, or the
+    // single most destructive entry point is the one it does not cover.
+    // MEASURED: with the guard only on the lane path, `--init` against a
+    // deliberately newer planted image tag walked straight past it and began
+    // pulling.
+    //
+    // Placed before any pull or build so the refusal costs nothing and cannot
+    // half-replace an enclave on its way to failing.
+    if let Some(refusal) = downgrade_refusal() {
+        return Err(refusal);
+    }
+
     #[cfg(target_os = "linux")]
     auto_detect_and_configure_ipv6_workaround(debug);
 
@@ -8981,6 +9284,9 @@ async fn ensure_ssh_lane_sidecar(
     let secret_name = crate::vault_bootstrap::mint_approle_auto_auth_for_container(
         &crate::vault_bootstrap::mirror_lane_signer_role_name(mirror_id),
         project_name,
+        // Order 828-k3mq: the sidecar is long-running like the mirror, so its
+        // material is bound to the sidecar container, not to this process.
+        Some(ssh_lane_sidecar_container_name(project_name).as_str()),
         debug,
     )
     .await
@@ -13928,44 +14234,18 @@ async fn run_headless_async(
     // - Start monitoring containers
     // - Initialize enclave network
 
-    // Wave 13 Gap #3: spawn background resource-metric sampler.
-    // @trace spec:resource-metric-collection, spec:observability-metrics
-    // @cheatsheet observability/cheatsheet-metrics.md
+    // Order 798-q4m9: the vsock listener is spawned FIRST, ahead of every
+    // background task below. The bind was already first in program order
+    // inside the vsock task, but the TASK itself was the last thing this
+    // function spawned — behind five others, two of which held a worker
+    // thread. On a multi-vCPU host that is invisible (four cold boots measured
+    // the bind at 61-255 ms); on a 1-vCPU guest the single worker drains the
+    // injection queue in order, so the host-facing control wire waited on a
+    // disk-usage shell-out and a log parse before it could accept.
     //
-    // Wave 19c Gap OBS-005: Run metrics retention check before starting sampler
-    // @trace gap:OBS-005
-    tokio::spawn(async move { run_metrics_retention() });
-
-    // Wave 20d Gap OBS-012: Run evidence bundle retention check before metrics
-    // @trace gap:OBS-012
-    tokio::spawn(async move { run_evidence_bundle_retention() });
-
-    // Wave 20c Gap OBS-010: Run log field cardinality analysis
-    // @trace gap:OBS-010
-    tokio::spawn(run_log_cardinality_analysis());
-
-    // Wave 24a Gap OBS-011: Run trace budget enforcement checks
-    // @trace gap:OBS-011
-    tokio::spawn(run_trace_budget_enforcement());
-
-    // Wave 21c Gap TR-006: Run disk usage check and auto-evict old cached images
-    // @trace gap:TR-006
-    tokio::spawn(async move { run_disk_usage_check() });
-
-    // Wave 21a Gap ON-009: Check and refresh GitHub token if expired
-    // Wave 21b Gap ON-010: Check for missing project dependencies before forge launch
-    // @trace gap:ON-010, spec:forge-environment-discoverability
-    // run_dependency_check();
-
-    let metrics_handle = spawn_metrics_sampler();
-
-    // @trace spec:observability-metrics gap:OBS-009 — spawn the Prometheus
-    // HTTP exporter alongside the sampler. The endpoint is read-only and
-    // bound to localhost only; if the bind fails (port already in use,
-    // socket permission), we log a warning and continue — headless MUST
-    // NOT refuse to start because the diagnostic surface is unavailable.
-    let metrics_http_handle = spawn_metrics_http_server();
-
+    // Everything below is diagnostics, retention and telemetry. None of it is
+    // a precondition for accepting a control-wire connection, so none of it
+    // belongs ahead of the bind.
     // Order 620-duta: report whether `vsock_loopback` is available BEFORE
     // binding. The in-VM socat bridge (the non-elevated host path) needs it,
     // and its absence surfaces later as an opaque connect failure on the host
@@ -13988,6 +14268,61 @@ async fn run_headless_async(
     // socket. The vsock listener is the in-VM service the host-side
     // tray talks to on Windows / macOS.
     let vsock_handle = maybe_spawn_vsock_listener(listen_vsock_port, shutdown_signal.clone());
+
+    // Wave 13 Gap #3: spawn background resource-metric sampler.
+    // @trace spec:resource-metric-collection, spec:observability-metrics
+    // @cheatsheet observability/cheatsheet-metrics.md
+    //
+    // Wave 19c Gap OBS-005: Run metrics retention check before starting sampler
+    // @trace gap:OBS-005
+    tokio::spawn(async move { run_metrics_retention() });
+
+    // Wave 20d Gap OBS-012: Run evidence bundle retention check before metrics
+    // @trace gap:OBS-012
+    tokio::spawn(async move { run_evidence_bundle_retention() });
+
+    // Wave 20c Gap OBS-010: Run log field cardinality analysis
+    // @trace gap:OBS-010
+    tokio::spawn(run_log_cardinality_analysis());
+
+    // Wave 24a Gap OBS-011: Run trace budget enforcement checks
+    // @trace gap:OBS-011
+    //
+    // Order 798-q4m9: spawn_blocking, NOT tokio::spawn. It DOES await the log
+    // read (tokio::fs::read_to_string), so it yields once — but the work after
+    // that read is a serde_json parse of every line in a loop with no further
+    // await, so it holds a tokio WORKER thread for the whole parse. On a
+    // 1-vCPU guest the single worker drains its injection queue in order, so
+    // that parse sat ahead of the vsock bind. Handle::block_on (not
+    // futures::executor::block_on) because the inner await is a tokio fs
+    // future and needs the tokio reactor driven.
+    tokio::task::spawn_blocking(|| {
+        tokio::runtime::Handle::current().block_on(run_trace_budget_enforcement())
+    });
+
+    // Wave 21c Gap TR-006: Run disk usage check and auto-evict old cached images
+    // @trace gap:TR-006
+    //
+    // Order 798-q4m9: spawn_blocking, NOT tokio::spawn. This is a sync fn that
+    // shells out to `bash manage-cache.sh` through a blocking
+    // Command::output() and, on a first boot, materialises every embedded
+    // runtime asset via resolve_runtime_asset_root -> ensure_runtime_assets.
+    // Wrapped in `async move { }` it occupied a worker thread for all of that.
+    tokio::task::spawn_blocking(run_disk_usage_check);
+
+    // Wave 21a Gap ON-009: Check and refresh GitHub token if expired
+    // Wave 21b Gap ON-010: Check for missing project dependencies before forge launch
+    // @trace gap:ON-010, spec:forge-environment-discoverability
+    // run_dependency_check();
+
+    let metrics_handle = spawn_metrics_sampler();
+
+    // @trace spec:observability-metrics gap:OBS-009 — spawn the Prometheus
+    // HTTP exporter alongside the sampler. The endpoint is read-only and
+    // bound to localhost only; if the bind fails (port already in use,
+    // socket permission), we log a warning and continue — headless MUST
+    // NOT refuse to start because the diagnostic surface is unavailable.
+    let metrics_http_handle = spawn_metrics_http_server();
 
     // Main event loop: wait for application shutdown signal.
     wait_for_shutdown_signal(shutdown_signal).await?;

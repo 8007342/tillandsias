@@ -34,8 +34,16 @@ fi
 #   blocked:upstream-push-unauthorized  mirror reachable, but its credential is
 #                                       currently REFUSED by upstream (the
 #                                       2026-08-15 GitHub 403 state)
-#   blocked:upstream-no-credential      mirror reachable, but no upstream
-#                                       credential is readable from Vault
+#   blocked:upstream-no-credential      mirror reachable, Vault ANSWERS it, but
+#                                       holds no GitHub token — GitHub Login
+#                                       is the remedy
+#   blocked:upstream-agent-unauthenticated
+#                                       mirror reachable, but its OWN Vault
+#                                       client token is dead, so no credential
+#                                       can be read and the GitHub token's
+#                                       state is UNKNOWN. Do NOT run GitHub
+#                                       Login; repair the Agent's AppRole
+#                                       login (order 828-k3mq)
 #   blocked:upstream-auth-stale         mirror's verdict is older than
 #                                       TILLANDSIAS_CRED_AUTH_MAX_AGE (default
 #                                       900s) — yesterday's token epoch proves
@@ -195,6 +203,16 @@ forge_upstream_auth_verdict() {
     no-credential)
       echo "[check-credential-channel] The mirror is reachable but has NO upstream credential readable from Vault (mirror-published verdict: no-credential). A push would fail with 'run GitHub Login' — stop BEFORE worker drain and restore the Vault-provided GitHub token." >&2
       echo "blocked:upstream-no-credential"
+      return 1
+      ;;
+    agent-unauthenticated)
+      # Order 828-k3mq. Deliberately NOT folded into no-credential above: the
+      # remedies are opposite. There, Vault answered and holds no GitHub token,
+      # so GitHub Login is the fix. Here the mirror's OWN Vault client token is
+      # dead, the GitHub token's state is UNKNOWN, and running GitHub Login
+      # treats a symptom the operator can see for a cause they cannot.
+      echo "[check-credential-channel] The mirror is reachable but its OWN Vault client token is dead (mirror-published verdict: agent-unauthenticated), so it cannot read ANY credential and the GitHub token's state is UNKNOWN. Do NOT run GitHub Login — that repairs a different failure. Inspect the mirror's [vault-agent] log: if its AppRole login is failing with 'invalid role or secret ID', the SecretID was destroyed while this mirror kept running (order 828-k3mq) and the fix is to recreate the mirror, not to touch the GitHub credential. Repeated failed logins also trip Vault's user-lockout, so quiesce the retry loop before re-issuing anything." >&2
+      echo "blocked:upstream-agent-unauthenticated"
       return 1
       ;;
     *)

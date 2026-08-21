@@ -22,7 +22,7 @@
 #
 #   refs/tillandsias/upstream-auth/<state>/<epoch>
 #
-# <state> is one of authorized | denied | no-credential | local-only | error;
+# <state> is one of authorized | denied | no-credential | agent-unauthenticated | local-only | error;
 # <epoch> is the probe's unix time, so a consumer can bound staleness
 # (yesterday's verdict is from yesterday's token epoch — the bug in a hat).
 # The namespace is OUTSIDE refs/heads and refs/tags, so the startup retry
@@ -36,8 +36,16 @@
 # the same transport a push takes.
 #
 # Emits exactly one line on stdout matching the falsifiable grammar
-#   ^upstream-auth:(authorized|denied|no-credential|local-only|error):[0-9]+$
-# and exits 0 (authorized | local-only) or 1 (denied | no-credential | error);
+#   ^upstream-auth:(authorized|denied|no-credential|agent-unauthenticated|local-only|error):[0-9]+$
+# and exits 0 (authorized | local-only) or 1 (everything else);
+#
+# `no-credential` vs `agent-unauthenticated` is a REMEDY distinction, not a
+# shade of the same fact (order 828-k3mq). `no-credential` means Vault answered
+# and holds no GitHub token — GitHub Login repairs it. `agent-unauthenticated`
+# means the mirror's OWN Vault client token is dead, so the GitHub token's state
+# is UNKNOWN and running GitHub Login is the wrong move; the Agent's AppRole
+# login is what needs repair. The relay has always drawn this line in its log
+# ("do NOT run GitHub Login"); the published verdict now draws it too.
 # 2 is usage. Diagnostics go to stderr/log, always credential-redacted.
 #
 # Testability seams (same pattern as RELAY_REF/ENSURE_HEAD/RECONCILE_HEADS):
@@ -122,10 +130,30 @@ case "$REMOTE_URL" in
         # never persisted.
         VAULT_CLI="${VAULT_CLI:-vault-cli}"
         VAULT_TOKEN_FILE="${VAULT_TOKEN_FILE:-/run/secrets/vault-token}"
-        if ! command -v "$VAULT_CLI" >/dev/null 2>&1 \
-           || [ ! -r "$VAULT_TOKEN_FILE" ] \
-           || ! "$VAULT_CLI" read -field=token secret/github/token >/dev/null 2>&1; then
-            log_msg "no upstream credential is currently readable from Vault; a push would fail before reaching GitHub"
+        # ORDER 828-k3mq: TWO FAILURES, TWO REMEDIES, AND THEY USED TO SHARE A
+        # WORD. This block collapsed "the mirror's own Vault client token is
+        # dead" and "Vault answers but holds no GitHub token" into one
+        # `no-credential` verdict. The operator actions are OPPOSITE — the
+        # first is repaired by the Vault Agent re-authenticating (and the relay
+        # explicitly says "do NOT run GitHub Login"), the second is repaired by
+        # running GitHub Login — so a single word sent half the readers the
+        # wrong way. Measured on yolanda 2026-08-18: the Agent's AppRole login
+        # had been failing for hours, the GitHub token was perfectly valid, and
+        # the verdict said `no-credential`.
+        #
+        # Ordered deliberately: nothing this probe says about the GitHub
+        # credential means anything until the client token it would be read
+        # with is known good.
+        if ! command -v "$VAULT_CLI" >/dev/null 2>&1 || [ ! -r "$VAULT_TOKEN_FILE" ]; then
+            log_msg "the mirror's Vault client token sink is absent or unreadable ($VAULT_TOKEN_FILE); the Agent has not authenticated, so the GitHub credential cannot be read and its state is UNKNOWN. Inspect the [vault-agent] log; do NOT run GitHub Login on the strength of this verdict."
+            finish agent-unauthenticated
+        fi
+        if ! "$VAULT_CLI" lookup-self >/dev/null 2>&1; then
+            log_msg "the mirror's Vault client token is expired or rejected (lookup-self failed); the Agent cannot re-authenticate, so the GitHub credential cannot be read and its state is UNKNOWN. This is the order 828-k3mq shape — check whether the AppRole SecretID was destroyed under a still-running mirror. Do NOT run GitHub Login."
+            finish agent-unauthenticated
+        fi
+        if ! "$VAULT_CLI" read -field=token secret/github/token >/dev/null 2>&1; then
+            log_msg "Vault answers this mirror, but holds no readable upstream credential at secret/github/token; a push would fail before reaching GitHub. THIS is the state GitHub Login repairs."
             finish no-credential
         fi
         # Keep the URL clean (order 424) and wire the same stdin credential

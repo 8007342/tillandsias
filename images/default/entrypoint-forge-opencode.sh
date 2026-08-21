@@ -140,18 +140,34 @@ show_banner "opencode"
 # routing decision (/startup) is taken inside the OpenCode session.
 # This survives OpenCode upgrades and is idempotent across container restarts.
 OPENCODE_INIT_PROMPT="/tmp/opencode-init-prompt.txt"
-if [ -w "$(dirname "$OPENCODE_INIT_PROMPT")" ]; then
+# Order 805-yzhw: this guard used to be `[ -w "$(dirname ...)" ]`, which tests
+# PERMISSION and says nothing about SPACE. On a full tmpfs the guard passes,
+# the redirect then fails, and the operator gets a bare
+# `line NNN: echo: write error: No space left on device` that never mentions
+# /tmp — the condition that actually broke the lane. Write first, then check
+# whether the write landed, and name the filesystem when it did not.
+_oc_write_init_prompt() {
     if [ -n "${TILLANDSIAS_OPENCODE_PROMPT:-}" ]; then
         {
             echo "run /startup"
             printf '\n%s\n' "$TILLANDSIAS_OPENCODE_PROMPT"
-        } > "$OPENCODE_INIT_PROMPT"
-        trace_lifecycle "startup" "synthetic startup prompt plus optional user prompt written to $OPENCODE_INIT_PROMPT"
+        } > "$OPENCODE_INIT_PROMPT" 2>/dev/null
     else
-        echo "run /startup" > "$OPENCODE_INIT_PROMPT"
-        trace_lifecycle "startup" "synthetic first prompt written to $OPENCODE_INIT_PROMPT"
+        echo "run /startup" > "$OPENCODE_INIT_PROMPT" 2>/dev/null
     fi
+    [ -s "$OPENCODE_INIT_PROMPT" ]
+}
+
+if _oc_write_init_prompt; then
+    trace_lifecycle "startup" "synthetic startup prompt written to $OPENCODE_INIT_PROMPT"
     export OPENCODE_INIT_PROMPT_FILE="$OPENCODE_INIT_PROMPT"
+else
+    rm -f "$OPENCODE_INIT_PROMPT" 2>/dev/null || true
+    echo "[entrypoint] WARNING: could not write $OPENCODE_INIT_PROMPT — the /startup routing prompt will not be injected." >&2
+    echo "[entrypoint] /tmp usage in this container:" >&2
+    df -h /tmp >&2 2>/dev/null || true
+    echo "[entrypoint] If /tmp is full this is order 805-yzhw: a failed vendor harness install can leave a ~127MB tree behind on a 256MB tmpfs." >&2
+    trace_lifecycle "startup" "synthetic first prompt NOT written (see /tmp usage above)"
 fi
 
 # ── Renderer environment: full-TUI parity with native Linux / WSL2 ─────────

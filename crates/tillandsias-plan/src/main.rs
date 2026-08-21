@@ -66,6 +66,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "blocking-counts",
     "burndown",
     "capabilities",
+    "capability-matrix",
     "carry-forward-check",
     "check",
     "closure-evidence-check",
@@ -128,6 +129,11 @@ const USAGE: &str = concat!(
     "                                     predates order 569 and its capabilities are unknowable —\n",
     "                                     that absence is itself the stale-binary signal the forge\n",
     "                                     wrapper branches on.\n",
+    "           capability-matrix         ORDER 808-7yrd. The FLEET HARDWARE matrix, folded from the\n",
+    "                                     `capabilities:` fragment channel: one row per host_id, its\n",
+    "                                     schedulable (device_class, lane, engine) triples, and its\n",
+    "                                     present-but-unusable devices. Distinct from `capabilities`\n",
+    "                                     above, which reports THIS BINARY's subcommands.\n",
     "           check [--strict-fragments]\n",
     "                                     integrity + schema validation (exit 1 on violations).\n",
     "                                     ORDER 796-4ydb. A fragment the fold could not parse is\n",
@@ -2784,6 +2790,124 @@ fn main() {
     let schema = Schema::load(&schema_path).unwrap_or_else(|_| Schema::minimal());
 
     match args[0].as_str() {
+        "capability-matrix" => {
+            // ORDER 808-7yrd. The fleet capability matrix, folded from the
+            // `capabilities:` channel of the SAME fragments every other channel
+            // uses.
+            //
+            // NOT named `capabilities` — that arm is taken by order 569 and
+            // reports this BINARY's subcommand set. Two meanings of the word,
+            // and a reader who conflates them gets a confident wrong answer.
+            //
+            // One line per host, then its schedulable triples. `legacy_tier` is
+            // printed as DERIVED context, never as the routing input: a single
+            // string cannot express "GPU present, no lane", which is the state
+            // every WSL2 host is in.
+            let frags = tillandsias_plan::fragments::load_all(&index);
+            let (matrix, skipped) = tillandsias_plan::fragments::fold_capabilities(&frags);
+            if matrix.is_empty() {
+                println!("capability-matrix: 0 rows (no `capabilities:` rows in any fragment)");
+            }
+            for ((host_id, locus), entry) in &matrix {
+                let kind = entry.document["host"]["host_kind"]
+                    .as_str()
+                    .unwrap_or("unknown");
+                let source = entry.document["host"]["host_id_source"]
+                    .as_str()
+                    .unwrap_or("unknown");
+                let tier = entry.document["legacy_tier"].as_str().unwrap_or("unknown");
+                println!(
+                    "host:{host_id}\tlocus:{locus}\tkind:{kind}\tid_source:{source}\tderived_tier:{tier}\tts:{}\twriter:{}\tfrom:{}",
+                    entry.ts, entry.host, entry.source
+                );
+                // Machine RAM, when the contributing context knows it. This is
+                // deliberately NOT a field on the Rust `HostInfo` (adding one
+                // would give a second home to a value DeviceRecord already
+                // owns), so without printing it here the number is carried in
+                // the ledger and visible to nobody — the write-only field this
+                // milestone keeps collecting. Printing it is the cheap half of
+                // that fix; typing it waits for a consumer that needs
+                // machine-capacity RAM as distinct from context-available RAM.
+                //
+                // Two loci legitimately disagree: this machine's guest reports
+                // its 7.3 GB VM slice and Windows reports 15.2 GB installed.
+                // Neither is wrong, which is why the figure is printed per-row
+                // rather than once per host.
+                if let Some(ram) = entry.document["host"]["system_ram_gb"].as_f64() {
+                    println!("  machine_ram_gb: {ram:.2}");
+                }
+                let triples = tillandsias_plan::fragments::schedulable_triples(&entry.document);
+                if triples.is_empty() {
+                    println!("  schedulable: none");
+                }
+                for (class, lane, engine) in triples {
+                    println!("  schedulable: {class}/{lane}/{engine}");
+                }
+                // Measurements the matrix will not place (order 810-jeg7). An
+                // unlocated number is refused rather than shown as a plain
+                // figure, because the locus difference has been measured at
+                // 5-10% on the embed arm — enough to have inverted a cross-host
+                // conclusion once. Reported rather than dropped: a measurement
+                // discarded in silence is indistinguishable from one never
+                // taken.
+                let (placed, unplaced) =
+                    tillandsias_plan::fragments::partition_measurements(&entry.document);
+                for meas in &placed {
+                    println!(
+                        "  measured: {}/{} suite:{} decode_tps:{}",
+                        meas["device"].as_str().unwrap_or("?"),
+                        meas["engine"].as_str().unwrap_or("?"),
+                        meas["workload_suite"].as_str().unwrap_or("unstated"),
+                        meas["decode_tps"].as_f64().unwrap_or(f64::NAN)
+                    );
+                }
+                for (meas, why) in &unplaced {
+                    println!(
+                        "  measurement-refused: {}/{} ({why})",
+                        meas["device"].as_str().unwrap_or("?"),
+                        meas["engine"].as_str().unwrap_or("?")
+                    );
+                }
+                // Present-unusable devices are reported BESIDE the schedulable
+                // set, because "present but unreachable" and "absent" are
+                // different engineering problems (806-2r4s) and a matrix that
+                // shows only what is schedulable cannot tell them apart.
+                if let Some(devices) = entry.document["devices"].as_sequence() {
+                    for d in devices {
+                        if d["usable"].as_bool() == Some(false) {
+                            // `os_status` is printed BESIDE the reason, not
+                            // folded into it, because they are two independent
+                            // facts and 806-2r4s is precisely about not
+                            // collapsing them. Windows calls this NPU healthy
+                            // AND we cannot reach it; a reader who sees only
+                            // the reason cannot tell "the OS says it is
+                            // broken" from "the OS says it is fine and our
+                            // lanes cannot get to it" — which are different
+                            // engineering problems. Omitted when the
+                            // contributing context did not report one, rather
+                            // than guessed.
+                            let os_status = d["os_status"]
+                                .as_str()
+                                .map(|s| format!(" os_status:{s}"))
+                                .unwrap_or_default();
+                            println!(
+                                "  present-unusable: {}/{} ({}){os_status}",
+                                d["device_class"].as_str().unwrap_or("?"),
+                                d["name"].as_str().unwrap_or("?"),
+                                d["unusable_reason"].as_str().unwrap_or("unstated")
+                            );
+                        }
+                    }
+                }
+            }
+            // Reported, never silent: a row that could not be keyed is
+            // indistinguishable from a host that never contributed unless the
+            // reader is told, and "the matrix looks empty" is exactly the
+            // symptom a misfiled row produces.
+            for s in &skipped {
+                println!("skipped: {} ({})", s.source, s.reason);
+            }
+        }
         "fragments" => {
             // Report the overlay's state and whether compaction is eligible.
             // Read-only: compaction itself is a separate, deliberate act.

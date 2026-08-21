@@ -1721,6 +1721,20 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Script exec-bit check passed"
 
+    # Order 795-jjw3. Exactly one module may construct a `wsl.exe` child, so a
+    # cross-cutting policy about wsl.exe is set once rather than N times.
+    # Collapsing the duplicate constructors was a one-time edit; this check is
+    # what keeps it collapsed. The previous duplication cost something real:
+    # WSL_UTF8 landed at 6 of 17 call sites and the other 11 hand-scrubbed NUL
+    # bytes out of UTF-16LE output, indistinguishable by grep from the
+    # legitimate scrubs on hcsdiag.exe and CIM output.
+    _step "Checking wsl.exe has a single constructor (795-jjw3)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-wsl-exe-single-constructor.sh" 2>&1; then
+        _error "a second wsl.exe constructor appeared (795-jjw3) — see the violation lines above"
+        exit 1
+    fi
+    _info "wsl.exe single-constructor check passed"
+
     # Order 716-f5kc. REPORT, not refusal. A Linux build of the Windows tray
     # compiles src/stubs/ and goes green without ever parsing the edited file,
     # which produced two unverified changes on 2026-08-13 alone. Refusing here

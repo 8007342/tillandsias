@@ -4942,6 +4942,126 @@ fn plan_orders_check(yaml: &serde_yaml::Value) -> Result<(usize, usize), Vec<Str
     }
 }
 
+/// Overlay `plan/index.d/*.yaml` onto the base's `plan_index.steps`.
+///
+/// Order 832-q4mn. This check used to read the base document alone, which on
+/// this fleet is the one place new packets are NOT. Every host files new
+/// packets as FRAGMENTS by design (582-nqw5: a shared monolith conflicts
+/// between concurrent writers), so new order tokens — exactly where
+/// collisions happen — were invisible to the gate that runs on every push. A
+/// duplicate waited for whoever next compacted, which could be days later and
+/// on another host.
+///
+/// Demonstrated before the fix: a fragment declaring an order the base already
+/// carried still produced `ok: plan orders unique`.
+///
+/// The fold is deliberately the SAME shape `tillandsias-plan check` already
+/// uses — base ⊕ fragments — so the two do not disagree about what the ledger
+/// is. Fragments are located relative to the index being checked, so `--index`
+/// on a fixture tree picks up that tree's fragments rather than the repo's.
+///
+/// A fragment that cannot be parsed is a hard error: silently skipping it
+/// would restore the exact blindness this order removes.
+fn plan_orders_fold_fragments(
+    index_path: &Path,
+    yaml: &mut serde_yaml::Value,
+) -> Result<usize, String> {
+    let dir = index_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("index.d");
+    if !dir.is_dir() {
+        return Ok(0);
+    }
+
+    let mut paths: Vec<PathBuf> = fs::read_dir(&dir)
+        .map_err(|e| format!("{}: {e}", dir.display()))?
+        .filter_map(|entry| entry.ok().map(|e| e.path()))
+        .filter(|p| {
+            p.extension()
+                .is_some_and(|ext| ext == "yaml" || ext == "yml")
+        })
+        .collect();
+    paths.sort();
+
+    let mut folded = Vec::new();
+    // packet_id -> (ts, status). Fragments also carry a `status:` LWW channel
+    // (set-field, order 636-9m79/642-fedr) which is how a packet declared in
+    // the base reaches a terminal state — set-field deliberately does NOT
+    // re-declare under `packets:`, because `packets:` is a G-Set and the
+    // re-declaration would be a silent no-op. Folding only `packets:` would
+    // therefore read every fragment-completed packet as still open, and this
+    // check's whole duplicate rule turns on "is any member open".
+    let mut status_overrides: std::collections::BTreeMap<String, (String, String)> =
+        std::collections::BTreeMap::new();
+
+    for path in &paths {
+        let text = fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let doc: serde_yaml::Value =
+            serde_yaml::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+        // A fragment may carry only `events:`; that is normal and contributes
+        // no order tokens.
+        if let Some(packets) = doc.get("packets").and_then(|p| p.as_sequence()) {
+            folded.extend(packets.iter().cloned());
+        }
+        if let Some(entries) = doc.get("status").and_then(|s| s.as_sequence()) {
+            for entry in entries {
+                if entry.get("field").and_then(|v| v.as_str()) != Some("status") {
+                    continue;
+                }
+                let (Some(id), Some(value)) = (
+                    entry.get("packet_id").and_then(|v| v.as_str()),
+                    entry.get("value").and_then(|v| v.as_str()),
+                ) else {
+                    continue;
+                };
+                let ts = entry.get("ts").and_then(|v| v.as_str()).unwrap_or("");
+                // Last write wins, ordered by the fragment's own timestamp.
+                let slot = status_overrides.entry(id.to_string());
+                match slot {
+                    std::collections::btree_map::Entry::Vacant(v) => {
+                        v.insert((ts.to_string(), value.to_string()));
+                    }
+                    std::collections::btree_map::Entry::Occupied(mut o) => {
+                        if ts >= o.get().0.as_str() {
+                            o.insert((ts.to_string(), value.to_string()));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let count = folded.len();
+    let steps = yaml
+        .get_mut("plan_index")
+        .and_then(|p| p.get_mut("steps"))
+        .and_then(|s| s.as_sequence_mut())
+        .ok_or_else(|| "plan_index.steps sequence not found".to_string())?;
+    steps.extend(folded);
+
+    if !status_overrides.is_empty() {
+        for step in steps.iter_mut() {
+            let Some(id) = step
+                .get("packet_id")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+            else {
+                continue;
+            };
+            if let Some((_, value)) = status_overrides.get(&id)
+                && let Some(map) = step.as_mapping_mut()
+            {
+                map.insert(
+                    serde_yaml::Value::String("status".to_string()),
+                    serde_yaml::Value::String(value.clone()),
+                );
+            }
+        }
+    }
+    Ok(count)
+}
+
 fn plan_orders(args: &[String]) {
     let mut index_path = PathBuf::from("plan/index.yaml");
     let mut idx = 0;
@@ -4970,7 +5090,7 @@ fn plan_orders(args: &[String]) {
             process::exit(2);
         }
     };
-    let yaml: serde_yaml::Value = match serde_yaml::from_str(&content) {
+    let mut yaml: serde_yaml::Value = match serde_yaml::from_str(&content) {
         Ok(yaml) => yaml,
         Err(err) => {
             eprintln!("{}: {err}", index_path.display());
@@ -4978,10 +5098,19 @@ fn plan_orders(args: &[String]) {
         }
     };
 
+    // Order 832-q4mn: check the FOLDED ledger. See plan_orders_fold_fragments.
+    let folded = match plan_orders_fold_fragments(&index_path, &mut yaml) {
+        Ok(n) => n,
+        Err(err) => {
+            eprintln!("plan-orders: {err}");
+            process::exit(2);
+        }
+    };
+
     match plan_orders_check(&yaml) {
         Ok((packets, grandfathered)) => {
             println!(
-                "ok: plan orders unique among open packets ({packets} packets, {grandfathered} grandfathered done-only duplicate groups)"
+                "ok: plan orders unique among open packets ({packets} packets, {folded} from fragments, {grandfathered} grandfathered done-only duplicate groups)"
             );
         }
         Err(violations) => {

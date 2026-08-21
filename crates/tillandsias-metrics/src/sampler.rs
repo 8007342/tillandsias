@@ -10,6 +10,8 @@
 //! @trace spec:observability-metrics, spec:resource-metric-collection
 //! @cheatsheet observability/cheatsheet-metrics.md
 
+// freshness: auditor=windows-yolanda-opus5-20260818t0319z date=2026-08-18 verdict=updated scope=standing FRESHNESS audit (order 372; freshness-next draw, seed=20260818). LIVE, not obsoletable — MetricsSampler and archive_old_metrics are consumed by tillandsias-headless (metrics_server.rs, main.rs) and the crate is a dependency of tillandsias-macos-tray. Sound: /proc absence degrades honestly (PsiMetric::unavailable, diskstats early-return), 24 tests in-file, no TODO/FIXME. The documented partial-PSI collapse (a present /proc/pressure with one unreadable file reports 0.0 under available=true) is deliberate and stated in the doc comment; left as-is because all three files appear together on any CONFIG_PSI kernel. UPDATED because the audit found a test that could only pass on Linux: sample_disk_io_returns_empty_on_first_call built its sampler with MetricsSampler::new(), which reads the real /proc/diskstats, so its previous_diskstats.is_some() assertion required a /proc host. It failed natively on Windows (72 pass / 1 fail) and would fail on macOS for the same reason, while passing in the WSL2 Linux build distro — the only lane ./build.sh --check exercises. Rewritten onto the fixture pattern the file already uses (with_proc_paths + tempdir), so it now asserts the platform-independent claim on every platform: 73/73 green natively on Windows.
+
 use crate::error::MetricsError;
 use crate::models::{CpuMetric, DiskIoMetric, DiskMetric, MemoryMetric, PsiMetric};
 use chrono::Utc;
@@ -815,11 +817,34 @@ mod tests {
     #[test]
     fn sample_disk_io_returns_empty_on_first_call() {
         // The very first call has no baseline to diff against, mirroring
-        // sysinfo's CPU semantics.
-        let mut s = MetricsSampler::new();
+        // sysinfo's CPU semantics — but it MUST still record one, or every
+        // subsequent call would also return empty.
+        //
+        // Driven from a fixture rather than the real /proc (order 372
+        // freshness audit, 2026-08-18). The previous version called
+        // MetricsSampler::new(), which reads /proc/diskstats, so the
+        // `previous_diskstats.is_some()` assertion silently required a Linux
+        // host: everywhere else `sample_disk_io` takes its unreadable-file
+        // early return, stores no baseline, and the test fails. It passed only
+        // in the Linux build distro — the one lane ./build.sh --check runs —
+        // while failing natively on Windows, and this crate is also a
+        // dependency of tillandsias-macos-tray, which has no /proc either.
+        // The behaviour under test is platform-independent; only the fixture
+        // needed to be.
+        let dir = tempfile::tempdir().unwrap();
+        let stats_path = dir.path().join("diskstats");
+        std::fs::write(&stats_path, " 8       0 sda 0 0 0 0 0 0 0 0 0 0 0\n").unwrap();
+        let mut s = MetricsSampler::with_proc_paths(
+            stats_path.to_string_lossy().to_string(),
+            dir.path().join("pressure").to_string_lossy().to_string(),
+        );
+
         let v = s.sample_disk_io();
         assert!(v.is_empty(), "first sample should be empty, got {v:?}");
-        assert!(s.previous_diskstats.is_some());
+        assert!(
+            s.previous_diskstats.is_some(),
+            "the first call must record a baseline, or every later call is empty too"
+        );
     }
 
     #[test]

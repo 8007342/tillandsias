@@ -50,6 +50,27 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok: lib-common-parses"
 
+  - step: "the harness-update lock gates the vendor INSTALL, not just its release (order 805-yzhw)"
+    # Hermetic fixture, three cases. The lock used to be recorded and not
+    # enforced: require_opencode kept `held` for its two release calls and ran
+    # curl_install_opencode unconditionally, so a lane whose backgrounded
+    # ensure_forge_harnesses already held the lock ran a SECOND 127MB vendor
+    # extraction into the same 256MB /tmp tmpfs. Both died with
+    # `tar: Wrote only 2560 of 10240 bytes`, neither cleaned up, and the lane
+    # stopped at "Press any key to exit" — which an operator reads as a hang.
+    #
+    # Case 2 is the control that keeps the fix honest (an always-skip
+    # require_opencode would satisfy case 1 and break every cold lane), and
+    # case 3 pins the leaked-tree sweep as age-bounded so it can never delete a
+    # sibling's in-flight extraction.
+    #
+    # Falsifiability MEASURED, not assumed: the same case-1 harness run against
+    # `git show HEAD:images/default/lib-common.sh` before the fix counted 1
+    # install while a sibling held the lock, against the 0 this asserts.
+    command: "bash scripts/test-opencode-harness-lock.sh 2>&1 | tail -1"
+    timeout_ms: 20000
+    expected_behavior: "PASS: opencode harness-lock fixture (order 805-yzhw)"
+
 observability:
   traces:
     - "@trace spec:default-image"

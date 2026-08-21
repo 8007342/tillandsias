@@ -27,7 +27,7 @@ description: >
   probe images/git/probe-upstream-auth.sh determines current upstream push
   authorization non-mutatingly, publishes a falsifiable verdict ref
   (refs/tillandsias/upstream-auth/<state>/<epoch>) plus one stdout line
-  matching ^upstream-auth:(authorized|denied|no-credential|local-only|error):[0-9]+$,
+  matching ^upstream-auth:(authorized|denied|no-credential|agent-unauthenticated|local-only|error):[0-9]+$,
   and the forge branch of scripts/check-credential-channel.sh yields
   ok:forge-git-mirror ONLY for a fresh authorized (or local-only) verdict —
   denied, stale, and unpublished verdicts each yield a loud blocked:* verdict
@@ -62,13 +62,30 @@ critical_path:
     timeout_ms: 10000
     expected_behavior: "ok: probe-403-goes-denied"
 
-  - step: "NEGATIVE CONTROL (absent credential): an https upstream with no readable Vault credential publishes no-credential/<epoch>, exits 1, and never touches the network"
+  - step: "NEGATIVE CONTROL (mirror cannot reach Vault at all): no vault client publishes agent-unauthenticated/<epoch>, exits 1, and never touches the network"
     # VAULT_CLI points at a nonexistent path, so the probe must refuse before
     # any push attempt — hermetic by construction (the https branch returns
     # before the transport is ever dialed).
-    command: "d=$(mktemp -d); git init -q --bare \"$d/m\"; git -C \"$d/m\" remote add origin https://github.com/8007342/tillandsias.git; out=$(VAULT_CLI=\"$d/no-such-vault-cli\" images/git/probe-upstream-auth.sh \"$d/m\" 2>/dev/null); rc=$?; ref=$(git -C \"$d/m\" for-each-ref --format='%(refname)' refs/tillandsias/upstream-auth); rm -rf \"$d\"; case \"$out\" in upstream-auth:no-credential:*) :;; *) echo \"FAIL: out=$out\"; exit 1;; esac; case \"$ref\" in refs/tillandsias/upstream-auth/no-credential/*) :;; *) echo \"FAIL: ref=$ref\"; exit 1;; esac; [ \"$rc\" = 1 ] && echo 'ok: probe-absent-credential-goes-red' || { echo \"FAIL: rc=$rc\"; exit 1; }"
+    #
+    # Order 828-k3mq changed what this case MEANS. It used to publish
+    # `no-credential`, which reads as "GitHub Login will fix this". A mirror
+    # with no vault client cannot read ANY secret, so the GitHub token's state
+    # is unknown and GitHub Login is the wrong remedy. Paired with the step
+    # below, which is the case that word is now reserved for.
+    command: "d=$(mktemp -d); git init -q --bare \"$d/m\"; git -C \"$d/m\" remote add origin https://github.com/8007342/tillandsias.git; out=$(VAULT_CLI=\"$d/no-such-vault-cli\" images/git/probe-upstream-auth.sh \"$d/m\" 2>/dev/null); rc=$?; ref=$(git -C \"$d/m\" for-each-ref --format='%(refname)' refs/tillandsias/upstream-auth); rm -rf \"$d\"; case \"$out\" in upstream-auth:agent-unauthenticated:*) :;; *) echo \"FAIL: out=$out\"; exit 1;; esac; case \"$ref\" in refs/tillandsias/upstream-auth/agent-unauthenticated/*) :;; *) echo \"FAIL: ref=$ref\"; exit 1;; esac; [ \"$rc\" = 1 ] && echo 'ok: probe-dead-agent-token-is-not-no-credential' || { echo \"FAIL: rc=$rc\"; exit 1; }"
     timeout_ms: 8000
-    expected_behavior: "ok: probe-absent-credential-goes-red"
+    expected_behavior: "ok: probe-dead-agent-token-is-not-no-credential"
+
+  - step: "NEGATIVE CONTROL (Vault answers, GitHub token absent): a WORKING vault client that holds no github token publishes no-credential/<epoch> — the state GitHub Login actually repairs"
+    # THE OTHER HALF OF THE PAIR, and the reason the split is falsifiable
+    # rather than asserted (order 828-k3mq). The stub authenticates fine
+    # (`lookup-self` exits 0) and only the secret read fails, which is exactly
+    # the shape a mirror has when its Agent is healthy but nobody has run
+    # GitHub Login. Without this control, collapsing every failure back into
+    # `agent-unauthenticated` would pass the step above.
+    command: "d=$(mktemp -d); git init -q --bare \"$d/m\"; git -C \"$d/m\" remote add origin https://github.com/8007342/tillandsias.git; : > \"$d/token\"; printf '%s\\n%s\\n' '#!/bin/sh' 'case \"$1\" in lookup-self) exit 0;; *) exit 1;; esac' > \"$d/vault-cli\"; chmod +x \"$d/vault-cli\"; out=$(VAULT_CLI=\"$d/vault-cli\" VAULT_TOKEN_FILE=\"$d/token\" images/git/probe-upstream-auth.sh \"$d/m\" 2>/dev/null); rc=$?; ref=$(git -C \"$d/m\" for-each-ref --format='%(refname)' refs/tillandsias/upstream-auth); rm -rf \"$d\"; case \"$out\" in upstream-auth:no-credential:*) :;; *) echo \"FAIL: out=$out\"; exit 1;; esac; case \"$ref\" in refs/tillandsias/upstream-auth/no-credential/*) :;; *) echo \"FAIL: ref=$ref\"; exit 1;; esac; [ \"$rc\" = 1 ] && echo 'ok: probe-absent-github-token-is-no-credential' || { echo \"FAIL: rc=$rc\"; exit 1; }"
+    timeout_ms: 8000
+    expected_behavior: "ok: probe-absent-github-token-is-no-credential"
 
   - step: "guard consumes a FRESH authorized verdict: ok:forge-git-mirror, exit 0"
     # TILLANDSIAS_CRED_AUTH_PROBE_URL seam: the guard runs its REAL ls-remote
@@ -116,7 +133,7 @@ rollback:
   on_failure: >
     The upstream write-authorization gate drifted. Restore
     images/git/probe-upstream-auth.sh emitting exactly one line matching
-    ^upstream-auth:(authorized|denied|no-credential|local-only|error):[0-9]+$
+    ^upstream-auth:(authorized|denied|no-credential|agent-unauthenticated|local-only|error):[0-9]+$
     and publishing the same state as the single ref
     refs/tillandsias/upstream-auth/<state>/<epoch>; restore
     forge_upstream_auth_verdict() in scripts/check-credential-channel.sh
@@ -124,4 +141,4 @@ rollback:
     stale / unpublished to their blocked:* verdicts with exit 1; restore the
     entrypoint's run_auth_probe wiring (startup + every reconcile tick) and
     the Containerfile COPY of the probe. See order 756-2jnj.
-  command: "grep -nE 'forge_upstream_auth_verdict|blocked:upstream-(push-unauthorized|no-credential|auth-stale|auth-unpublished)' scripts/check-credential-channel.sh | head -10"
+  command: "grep -nE 'forge_upstream_auth_verdict|blocked:upstream-(push-unauthorized|no-credential|agent-unauthenticated|auth-stale|auth-unpublished)' scripts/check-credential-channel.sh | head -10"

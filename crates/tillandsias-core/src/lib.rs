@@ -13,6 +13,8 @@ pub mod secrets;
 pub mod singleton;
 pub mod state;
 pub mod tools;
+pub mod version_guard;
+pub mod wsl;
 
 // Re-export logging module
 pub use tillandsias_logging as logging;
