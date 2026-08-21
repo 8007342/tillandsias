@@ -11,6 +11,7 @@
 # and fails if the binary answers "unknown subcommand". Removing a token here
 answer
 append-event
+arrival-routing-check
 # `[a-z][a-z0-9-]*` only. Comments (`#`) and blank lines are ignored by every
 blocked-by
 blocked-closure

@@ -61,6 +61,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "set-field",
     "append-event",
     "answer",
+    "arrival-routing-check",
     "blocked-by",
     "blocked-closure",
     "blocking-counts",
@@ -178,6 +179,20 @@ const USAGE: &str = concat!(
     "                                     same exit 3 on an unparseable fragment as its three\n",
     "                                     fragment-* siblings. ADVISORY today (adoption 4.6%),\n",
     "                                     see scripts/check-carry-forward.sh for the promotion bar.\n",
+    "           arrival-routing-check <fragment.yaml>...\n",
+    "                                     ORDER 831-ezea, the ARRIVAL half of carry-forward.\n",
+    "                                     Print `population|<n>` (rows the named fragments NEWLY\n",
+    "                                     DEFINE, by origin, so a G-Set re-declaration is not an\n",
+    "                                     arrival) then one `overlap|<id>|<predicate>|<sentence>`\n",
+    "                                     per collision with an OPEN row. Predicates: owned_files\n",
+    "                                     (the rule as written, from the same fold answer_next\n",
+    "                                     uses for claim exclusion, at OpenRows scope), and\n",
+    "                                     deliverable / title (normalized string EQUALITY only —\n",
+    "                                     the re-filing class, never semantic sameness). Does NOT\n",
+    "                                     decide the pickup_role disjunct: both roles are printed\n",
+    "                                     for the reader. Exit 0 with overlaps (ADVISORY, bar in\n",
+    "                                     scripts/check-arrival-routing.sh), 3 on a named fragment\n",
+    "                                     the fold could not read.\n",
     "           next-order [prefix]       mint a COLLISION-FREE order token for a new packet\n",
     "                                     (<seq>-<suffix>, e.g. 581-k3f9). Never compute the\n",
     "                                     'next free order' yourself: that reads a ledger snapshot\n",
@@ -3223,6 +3238,200 @@ fn main() {
                     // said so in a comment; that is what a condition with no
                     // machine-readable form costs its callers.
                     std::process::exit(EXIT_FOLD_INCOMPLETE);
+                }
+            }
+        }
+        "arrival-routing-check" => {
+            // ORDER 831-ezea, the ARRIVAL half. Its sibling carry-forward-check
+            // asks whether a cycle left the rows it touched resumable; this one
+            // asks whether the rows it FILED should have been rows at all.
+            //
+            // THE RULE (methodology/distributed-work.yaml ->
+            // new_row_only_if_independently_schedulable): a finding becomes a
+            // NEW ROW only if it is independently schedulable — it names
+            // owned_files no open row already owns, OR a different pickup_role
+            // can claim it than every open row covering that scope. Otherwise
+            // it is a next_action clause or an event on the row it belongs to.
+            // Arrivals measured at lambda = 2.2 + 1.80*mu, so dL/dt = a +
+            // (b-1)*mu and the sign flips at b = 1: at b = 1.80 every extra
+            // cycle fills the queue faster than it drains, and this rule is the
+            // only lever that moves b.
+            //
+            // WHAT IT DECIDES, and it is only the FIRST disjunct: file-scope
+            // overlap, from [`answer::owned_file_owners`] at `OpenRows` scope —
+            // the same fold `answer_next` uses for its claim exclusion, called
+            // at a wider scope rather than copied. It does NOT decide the
+            // pickup_role disjunct and does NOT judge whether two rows are
+            // "really" the same work; both roles are PRINTED so the reader can
+            // apply the half a machine cannot.
+            //
+            // DELIVERABLE / TITLE are a second, weaker predicate: normalized
+            // string EQUALITY, nothing cleverer. It catches the re-filing class
+            // (a finding written twice in the same words) and nothing else.
+            // Stated as its own predicate token so a reader can never mistake
+            // it for semantic sameness — see scripts/check-arrival-routing.sh.
+            //
+            // NEWLY DEFINED is decided by `origin_source_of`, not by the
+            // fragment text: a `packets:` entry that RE-declares an existing
+            // packet is a G-Set no-op whose origin stays the base, so it is
+            // correctly not counted as an arrival. That is the distinction
+            // carry-forward-check documents itself as unable to make — this arm
+            // can make it because it loads the ledger.
+            //
+            // Output, one record per line, `|`-delimited so a bash 3.2 caller
+            // can cut it:
+            //   population|<n>                     ALWAYS first. A verdict that
+            //                                      names its own denominator
+            //                                      can never be misread as
+            //                                      health over an empty set.
+            //   overlap|<new_id>|<predicate>|<sentence>
+            // Exit 0 even with overlaps — ADVISORY, see the script's header for
+            // the promotion bar. Exit 2 on usage. Exit 3 when a NAMED fragment
+            // is one the fold could not read: its packets are absent from the
+            // ledger entirely, so "no arrivals" and "unreadable" would
+            // otherwise be the same answer (787-f7dh).
+            const EXIT_FRAGMENT_UNPARSEABLE: i32 = 3;
+            let frags = &args[1..];
+            if frags.is_empty() {
+                eprintln!(
+                    "usage: tillandsias-plan arrival-routing-check <fragment.yaml> [<fragment.yaml>...]"
+                );
+                std::process::exit(2);
+            }
+            // FieldSource carries a fragment FILENAME, not a path, so the
+            // comparison is on basenames at both ends.
+            let basename = |p: &Path| {
+                p.file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default()
+            };
+            let named: std::collections::BTreeSet<String> =
+                frags.iter().map(|f| basename(Path::new(f))).collect();
+
+            let unread: Vec<String> = ledger
+                .skipped_fragments()
+                .iter()
+                .map(|p| basename(p))
+                .filter(|n| named.contains(n))
+                .collect();
+            if !unread.is_empty() {
+                eprintln!(
+                    "unparseable:{} — the fold could not read {} named fragment(s), so any row \
+                     they file is UNEXAMINED by the arrival rule, not cleared by it (831-ezea)",
+                    unread.join(","),
+                    unread.len()
+                );
+                std::process::exit(EXIT_FRAGMENT_UNPARSEABLE);
+            }
+
+            // Normalized text: lowercased, punctuation dropped, whitespace
+            // collapsed. Deliberately dumb — see the predicate note above.
+            fn normalized(text: &str) -> String {
+                text.split_whitespace()
+                    .map(|w| {
+                        w.chars()
+                            .filter(|c| c.is_alphanumeric())
+                            .flat_map(char::to_lowercase)
+                            .collect::<String>()
+                    })
+                    .filter(|w| !w.is_empty())
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            }
+
+            let new_rows: Vec<String> = ledger
+                .packets
+                .iter()
+                .map(|p| ledger.id_of(p))
+                .filter(|id| {
+                    ledger
+                        .origin_source_of(id)
+                        .is_some_and(|s| named.contains(&s.fragment_name))
+                })
+                .collect();
+            emit(&format!("population|{}", new_rows.len()));
+
+            let owners = answer::owned_file_owners(&ledger, answer::OwnershipScope::OpenRows);
+            let mut by_deliverable: std::collections::BTreeMap<
+                String,
+                std::collections::BTreeSet<String>,
+            > = std::collections::BTreeMap::new();
+            let mut by_title = by_deliverable.clone();
+            for p in &ledger.packets {
+                if str_field(p, "status").is_some_and(tillandsias_plan::is_terminal_status) {
+                    continue;
+                }
+                let id = ledger.id_of(p);
+                for (field, map) in [
+                    ("deliverable", &mut by_deliverable),
+                    ("title", &mut by_title),
+                ] {
+                    if let Some(v) = str_field(p, field) {
+                        let key = normalized(v);
+                        if !key.is_empty() {
+                            map.entry(key).or_default().insert(id.clone());
+                        }
+                    }
+                }
+            }
+
+            // "status=<s>, role=<r>" for the row an arrival collides with. The
+            // role is the pickup_role DISJUNCT's raw material and this arm
+            // refuses to evaluate it for the reader.
+            let describe = |id: &str| -> String {
+                let Some(p) = ledger.resolve(id) else {
+                    return "status=?, role=?".into();
+                };
+                format!(
+                    "status={}, pickup_role={}",
+                    str_field(p, "status").unwrap_or("?"),
+                    str_field(p, "pickup_role").unwrap_or("unset")
+                )
+            };
+
+            for id in &new_rows {
+                let Some(p) = ledger.resolve(id) else {
+                    continue;
+                };
+                let mine = format!(
+                    "pickup_role={}",
+                    str_field(p, "pickup_role").unwrap_or("unset")
+                );
+                // SELF is excluded; a SIBLING row born in the same change is
+                // NOT. Two rows filed together over one file scope is the same
+                // arrival defect as one filed over an inherited scope, and
+                // suppressing it would make the gate blind to the case a single
+                // fragment produces on its own.
+                for f in str_list(p, "owned_files") {
+                    let Some(holders) = owners.get(&f) else {
+                        continue;
+                    };
+                    for other in holders.iter().filter(|o| o.as_str() != id.as_str()) {
+                        emit(&format!(
+                            "overlap|{id}|owned_files|{id} ({mine}) claims owned_file '{f}', \
+                             already owned by OPEN row {other} ({})",
+                            describe(other)
+                        ));
+                    }
+                }
+                for (field, map) in [("deliverable", &by_deliverable), ("title", &by_title)] {
+                    let Some(v) = str_field(p, field) else {
+                        continue;
+                    };
+                    let key = normalized(v);
+                    if key.is_empty() {
+                        continue;
+                    }
+                    let Some(holders) = map.get(&key) else {
+                        continue;
+                    };
+                    for other in holders.iter().filter(|o| o.as_str() != id.as_str()) {
+                        emit(&format!(
+                            "overlap|{id}|{field}|{id} ({mine}) states the same {field} as OPEN \
+                             row {other} ({}) — verbatim after normalization",
+                            describe(other)
+                        ));
+                    }
                 }
             }
         }

@@ -1622,6 +1622,36 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Carry-forward advisory reported"
 
+    # Order 831-ezea, the OTHER half of the same arithmetic. Carry-forward above
+    # is about SERVICE — did the cycle leave the rows it touched resumable. This
+    # one is about ARRIVAL — should the rows the cycle FILED have been rows at
+    # all. Arrivals measured at lambda = 2.2 + 1.80*mu, so dL/dt = a + (b-1)*mu
+    # and the sign flips at b = 1: at b = 1.80 the ready queue drains at NO
+    # service rate and adding hosts diverges faster. Every budget in the
+    # methodology caps service; new_row_only_if_independently_schedulable is the
+    # only rule that touches arrival, and until this line it was prose with no
+    # checker — written by the host measured as the largest single filer.
+    #
+    # ADVISORY, AND ONLY HALF THE RULE — the script's header says so in its own
+    # words. It checks the owned_files disjunct (reusing answer.rs
+    # `owned_file_owners`, the same fold the selector uses for claim exclusion)
+    # plus a normalized-equality heuristic on deliverable/title. It does NOT
+    # decide the pickup_role disjunct and does not judge whether two rows are
+    # really the same work; it prints both roles and leaves the call to the
+    # filer. Diff-scoped to fragments this change ADDS, so an inherited row can
+    # never shout at a host that did not file it (699-dycj).
+    #
+    # `_run` with `if !` is deliberate, exactly as above: the advisory itself
+    # exits 0, so only a pass that CANNOT RUN reds the build. Promotion bar —
+    # open rows carrying owned_files at >= 40%, today 0.6% (3/490) — is recorded
+    # in the script header along with the clause that must never be promoted.
+    _step "Checking that newly filed rows are independently schedulable (831-ezea, advisory)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-arrival-routing.sh" 2>&1; then
+        _error "the arrival-routing advisory could not run — that is a broken checkout, not a clean ledger"
+        exit 1
+    fi
+    _info "Arrival-routing advisory reported"
+
     # Order 831-ezea. The archiver is the ONLY bulk drain the ledger has, and
     # until this line it had ZERO call sites — so its correctness was never
     # exercised by anything. When it was finally dry-run on 2026-08-19 it

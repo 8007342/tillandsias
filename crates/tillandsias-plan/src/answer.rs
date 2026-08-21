@@ -1545,6 +1545,70 @@ fn next_action_snippet(p: &serde_yaml::Value) -> String {
     truncate(&one_line, NEXT_ACTION_SNIPPET_CHARS)
 }
 
+/// Which rows count as OWNING the paths in their `owned_files`. The two scopes
+/// are genuinely different questions and both are load-bearing, so naming them
+/// is cheaper than two folds that drift.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum OwnershipScope {
+    /// Rows under an ACTIVE claim: a live `lease`, or `status: in_progress` /
+    /// `claimed`. What [`answer_next`] must exclude — handing two agents the
+    /// same file scope is a merge conflict the selector could have prevented.
+    ActiveClaims,
+    /// Every OPEN row: any packet whose status is not terminal
+    /// ([`crate::is_terminal_status`]). Strictly wider than `ActiveClaims`,
+    /// and it is the scope the ARRIVAL rule is written over —
+    /// `methodology/distributed-work.yaml` →
+    /// `new_row_only_if_independently_schedulable` reads "it names owned_files
+    /// no OPEN row already owns", not "no claimed row".
+    OpenRows,
+}
+
+/// The `owned_files` ownership index over `scope`: file path → the packet_ids
+/// that declare it. Sorted throughout, so two hosts render identical results
+/// from identical ledgers.
+///
+/// ONE COMPUTATION, TWO READERS, on purpose. [`answer_next`] built this fold
+/// inline and consumed only the KEY SET; the arrival-routing check (order
+/// 831-ezea, `scripts/check-arrival-routing.sh`) needs the same fold plus the
+/// owner names, and re-deriving "who owns this file" beside the selector is
+/// exactly how an invariant with two implementations acquires two answers.
+/// 831-ezea's own design note claims a second copy already exists at
+/// `main.rs:3195`; it does not — that line is the `check` arm — so this is the
+/// first and, deliberately, the only fold of `owned_files` in the crate.
+pub fn owned_file_owners(
+    ledger: &Ledger,
+    scope: OwnershipScope,
+) -> BTreeMap<String, BTreeSet<String>> {
+    let mut index: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for p in &ledger.packets {
+        let selected = match scope {
+            OwnershipScope::ActiveClaims => {
+                let leased = p.get("lease").is_some_and(|v| !v.is_null());
+                let in_flight = matches!(
+                    crate::str_field(p, "status"),
+                    Some("in_progress" | "claimed")
+                );
+                leased || in_flight
+            }
+            // A packet with NO status counts as open. `status` is a
+            // required_field, so this is a malformed row rather than a
+            // terminal one, and treating an unreadable row as closed would
+            // silently shrink the set the arrival rule is measured against.
+            OwnershipScope::OpenRows => {
+                !crate::str_field(p, "status").is_some_and(crate::is_terminal_status)
+            }
+        };
+        if !selected {
+            continue;
+        }
+        let id = ledger.id_of(p);
+        for f in crate::str_list(p, "owned_files") {
+            index.entry(f).or_default().insert(id.clone());
+        }
+    }
+    index
+}
+
 /// ORDER 606-xu52 — the cold-start selector. At most [`NEXT_LIMIT_MAX`] cited,
 /// release-aware, role-compatible, dependency-clear, unleased `ready` packets,
 /// each with the reason it ranked and its concrete next action.
@@ -1596,20 +1660,12 @@ pub fn answer_next(
         .map(str::to_string)
         .collect();
     // File scopes under an active claim: owned_files of every leased or
-    // in-flight packet.
-    let mut claimed_files: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-    for p in &ledger.packets {
-        let leased = p.get("lease").is_some_and(|v| !v.is_null());
-        let in_flight = matches!(
-            crate::str_field(p, "status"),
-            Some("in_progress" | "claimed")
-        );
-        if leased || in_flight {
-            for f in crate::str_list(p, "owned_files") {
-                claimed_files.insert(f);
-            }
-        }
-    }
+    // in-flight packet. The fold lives in [`owned_file_owners`] — this call
+    // site wants only the key set, the arrival-routing check wants the owners
+    // too, and one fold serves both.
+    let claimed_files: BTreeSet<String> = owned_file_owners(ledger, OwnershipScope::ActiveClaims)
+        .into_keys()
+        .collect();
 
     let mut eligible: Vec<&serde_yaml::Value> = ledger
         .ready(role)
@@ -2373,6 +2429,62 @@ mod tests {
         );
         assert_eq!(env.confidence(), Confidence::Unsupported);
         assert!(env.answer().starts_with("unsupported:"));
+    }
+
+    /// ORDER 831-ezea. The two ownership scopes are DIFFERENT SETS and the
+    /// difference is load-bearing: the selector excludes ACTIVE CLAIMS, the
+    /// arrival rule reads every OPEN row. A regression that collapsed
+    /// `OpenRows` onto `ActiveClaims` would leave
+    /// `scripts/check-arrival-routing.sh` reporting green over an almost-empty
+    /// set on any ledger where nothing happens to be in flight — the exact
+    /// green-over-nothing failure 831-ezea was filed against.
+    #[test]
+    fn owned_file_owners_separates_active_claims_from_open_rows() {
+        let raw = concat!(
+            "steps:\n",
+            "  - packet_id: claimed-row\n    order: 990\n    status: in_progress\n",
+            "    owned_files: [flake.nix]\n",
+            "  - packet_id: open-row\n    order: 991\n    status: ready\n",
+            "    owned_files: [flake.nix, build.sh]\n",
+            "  - packet_id: closed-row\n    order: 992\n    status: completed\n",
+            "    owned_files: [build.sh]\n",
+        );
+        let ledger = Ledger::parse(raw, BTreeSet::new()).expect("parses");
+
+        let active = owned_file_owners(&ledger, OwnershipScope::ActiveClaims);
+        assert_eq!(
+            active.keys().map(String::as_str).collect::<Vec<_>>(),
+            ["flake.nix"]
+        );
+        assert_eq!(
+            active["flake.nix"]
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            ["claimed-row"]
+        );
+
+        let open = owned_file_owners(&ledger, OwnershipScope::OpenRows);
+        // A TERMINAL row is not an owner: `closed-row` also names build.sh and
+        // must not appear, or the rule would route new work away from files
+        // nobody is holding.
+        assert_eq!(
+            open["build.sh"]
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            ["open-row"]
+        );
+        // flake.nix is CONTENDED across the claimed row and the merely-open
+        // one. Only the wider scope sees the second owner, which is the whole
+        // reason the arrival check does not reuse the narrow one.
+        assert_eq!(
+            open["flake.nix"]
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            ["claimed-row", "open-row"]
+        );
     }
 
     /// The envelope's JSON shape IS the contract (§4). Field names and the
