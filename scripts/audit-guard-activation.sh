@@ -59,6 +59,25 @@ surfaces=(
   .claude/skills
   methodology.yaml
   methodology
+  # SECOND-LEVEL INVOKERS. A guard can be wired through a script that is itself
+  # invoked by build.sh, and a surface list of only top-level entry points
+  # cannot see that. Measured 2026-08-21: check-archive-answerability.sh is
+  # invoked at scripts/archive-plan-packets.sh:148, which build.sh invokes at
+  # :1668 — wired, running, and reported `orphan=1`, which reds
+  # scripts/local-ci.sh. That is the SAME false-accusation failure the grep -R
+  # note above documents, arriving through a different door: the guard was
+  # correct and the auditor could not see it.
+  #
+  # Listed explicitly rather than resolved transitively ON PURPOSE. The
+  # transitive closure — treat every script reachable from a surface as a
+  # surface — would make nearly every scripts/*.sh an invoker, and since
+  # activation is decided by `grep -Rl <basename>`, a guard merely NAMED in a
+  # comment anywhere in that set would count as active. That trades a loud
+  # false orphan for a silent false ACTIVE, which is the failure this auditor
+  # exists to catch. Extending the list is cheap and stays honest; if it grows
+  # past a handful, the right fix is to distinguish invocation from mention,
+  # not to widen the net.
+  scripts/archive-plan-packets.sh
 )
 
 # Self-reference guard: don't count a script referencing its OWN name, and don't
