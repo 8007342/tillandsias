@@ -78,9 +78,30 @@ TERMINAL_STATUSES.each do |st|
     end
   end
 end
-abort "archive-plan-packets: the fold reported ZERO terminal packets, which is " \
-      "not a state this ledger reaches. Refusing rather than archiving nothing " \
-      "and reporting success." if terminal_ids.empty?
+# REFUSE A BROKEN READ, NOT AN ALREADY-ARCHIVED LEDGER.
+#
+# The first version of this guard aborted whenever the terminal set was empty,
+# on the premise that "zero terminal packets is not a state this ledger
+# reaches". That premise is FALSE, and the check that exercises this script
+# proves it: --check runs the archiver TWICE against one copy, and after the
+# first run every terminal row has moved to plan_tmp/archive — so the second
+# run legitimately sees zero. Measured 2026-08-21 on a copy: run 1 archived 661
+# packets, after which the copy reported completed=0 done=0 with 510 packets
+# still live, and run 2 aborted. A guard that fires on the correct steady state
+# is not a guard, it is an outage.
+#
+# The condition actually worth refusing is a fold that returns NOTHING AT ALL —
+# a wrong --index, an unreadable base, a binary that answers but cannot parse.
+# Zero terminal against a non-empty ledger means the work is done.
+all_ids = `#{plan_bin} --index #{index_path} query --limit 0 2>/dev/null`
+abort "archive-plan-packets: the fold reports NO PACKETS AT ALL for " \
+      "#{index_path}. That is an unreadable ledger, not an empty one — refusing " \
+      "rather than archiving nothing and reporting success." unless $?.success? && all_ids.lines.any? { |l| !l.strip.empty? }
+
+if terminal_ids.empty?
+  puts "Archived 0 packets (no terminal rows remain — already archived)."
+  exit 0
+end
 
 # A ROW STILL ADDRESSED BY A LIVE FRAGMENT IS NOT ARCHIVABLE.
 #

@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    field: next_action
+    value: 'SWEEP DONE — base index 33,379 lines (was 72,168), 510 live packets, 388 ready, 0 fragments pending, every archived row still answerable (`status 76` -> completed ... ARCHIVED). Compaction and archiving are BOTH SAFE now; the old DO-NOT-RUN text on this row was stale for hours after the fix landed. ORDERED NEXT: (1) finish 843-624y — the capabilities WRITE path. compact/compact_text still never serialise the channel, so `capability-matrix` reports 0 rows with exit 0 while 808-7yrd reads completed; compaction now REFUSES capability fragments rather than eating them, which stops the bleeding but stores nothing. Then restore the two yolanda rows from 1d7ae93ef^ and make capability-matrix distinguish EMPTY from UNREPORTED. (2) 844-aq78 — the login lane at main.rs:763 is the only CLI lane not wrapped in run_cli_with_vault_credential_cleanup. (3) File a row for the test-known-red seed (proxy_cache_policy bumped_origin_tls_and_signed_url_logs_fail_closed) — the precedent requires a filed issue per entry. (4) Expert rung 2, the path to a DERIVED next_action: 821-73es + 824-6qxh are the refusal interlock, 760-hzi4 + 552 availability, 797-qv4z fidelity, 810-k8jy corpus boundaries. STANDING: TILLANDSIAS_FORCE_CHECK=1 for any verification (plain --check short-circuits on the stamp); TILLANDSIAS_SKIP_VERSION_BUMP=1 on every build.sh (643-64bx); Linux pre-existing test failures = exactly 1; R2 target is b < 1, not 1.30. MEASURED THIS CYCLE: the plan-lib suite went 10.5s -> 3.31s on a 58%-smaller ledger.'
+    ts: "2026-08-21T23:49:25Z"
+    host: linux

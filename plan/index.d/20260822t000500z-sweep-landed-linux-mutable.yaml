@@ -1,0 +1,92 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-22T00:05:00Z.
+events:
+  - packet_id: periodic-deslopification-sweep
+    event:
+      type: progress
+      ts: "2026-08-22T00:05:00Z"
+      agent_id: linux-macuahuitl-opus5-20260821T234300Z
+      host: linux_mutable
+      summary: |
+        THE SWEEP LANDED, AND THIS TIME THE ARCHIVED ROWS STILL ANSWER. Both
+        halves ran for the first time since the gates went in.
+
+        COMPACTION — the first since 843-624y. 101 fragments folded, ZERO
+        refused, so every one of them was well-formed. That is worth stating
+        because I hand-authored most of them this week, and hand-authoring is
+        the precondition for the flattened-event shape that accounts for 82% of
+        all loss this bug has ever caused. The new coverage check had nothing
+        to refuse.
+          index 72,168 -> 78,654 lines (folding ADDS to the base)
+          fragments 101 -> 0, ready 388 -> 388 byte-identical
+          content spot-checked by phrase, not by count: the four longest
+          hand-written events all survive verbatim in the base.
+
+        ARCHIVE SWEEP — 661 packets.
+          index 78,654 -> 33,379 lines, a 58% reduction
+          ready 388 -> 388, BYTE-IDENTICAL
+          live packets 1,171 -> 510
+          plan check: ok, references sound
+
+        AND THE ONE THAT MATTERS, the thing that was broken on 2026-08-20 and
+        forced the revert:
+          $ tillandsias-plan status 76
+          76  completed  github-e2e/forge-base-missing-ux  ARCHIVED
+        It resolves, AND it is marked ARCHIVED. Last time this answered "no
+        packet in the ledger matches any token" for all 550 archived rows and
+        took seven tests down with it. This time `cargo test -p tillandsias-plan
+        --lib` is 204/204 AFTER the sweep — the acceptance test the first
+        attempt lacked, now gated as check-archive-answerability.sh
+        (204/204 after archiving 710, ready unchanged at 388).
+
+        A MEASURED SIDE EFFECT WORTH HAVING: the plan-lib suite went from ~10.5s
+        to 3.31s across the sweep — 3x, on a ledger 58% smaller. That is direct
+        evidence for the operator's standing intuition that smaller retrieval
+        corpora perform better, and it is the first time this campaign has
+        measured it rather than asserted it.
+
+        A BUG I INTRODUCED AND THIS RUN CAUGHT. My own "zero terminal packets"
+        guard, added yesterday, aborted the check. Its premise — "zero terminal
+        is not a state this ledger reaches" — is FALSE, and the very check that
+        exercises the script proves it: --check runs the archiver TWICE against
+        one copy, so after run 1 every terminal row has moved to the archive and
+        run 2 legitimately sees zero. Measured on a copy: run 1 archived 661,
+        after which the copy reported completed=0 done=0 with 510 packets still
+        live, and run 2 aborted.
+
+        A guard that fires on the correct steady state is not a guard, it is an
+        outage. Corrected to refuse the condition actually worth refusing — a
+        fold that returns NO PACKETS AT ALL, i.e. a wrong --index or an
+        unreadable base — while zero-terminal against a non-empty ledger now
+        prints "already archived" and exits 0. Third time this week I have
+        written a premise I did not test; the pattern is that the untested
+        premise is always the one about what states are IMPOSSIBLE.
+
+        NEXT SWEEP CADENCE is unchanged and now has a real datum: this one
+        moved 661 packets at order ~844. check-deslop-due.sh triggers at
+        >= 200 orders with a 48h floor and no calendar ceiling.
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    event:
+      type: progress
+      ts: "2026-08-22T00:06:00Z"
+      agent_id: linux-macuahuitl-opus5-20260821T234300Z
+      host: linux_mutable
+      summary: |
+        ROADMAP ITEM 2 IS DONE, and item 1's blocker text on THIS row was stale
+        while the deslop row's was current — the LWW-scalar drift again, in
+        exactly the way that keeps costing.
+
+        This row's next_action still read "DO NOT run `plan compact` until this
+        lands" hours after 0fb83b73c landed the fix and after
+        periodic-deslopification-sweep's next_action had been updated to
+        withdraw the blocker. Two rows carrying the same instruction, one
+        updated, one not. A cycle reading only this row would have skipped the
+        sweep; a cycle reading only the other would have run it. Nothing
+        reconciles them, which is precisely the argument for deriving
+        next_action from events rather than storing it — the operator's
+        2026-08-21 design.
+
+        STATE AFTER THIS CYCLE: base index 33,379 lines (was 72,168 at cycle
+        start), 510 live packets, 388 ready, 0 fragments pending. The ledger is
+        smaller than at any point this campaign and every archived row is still
+        answerable.
