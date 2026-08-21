@@ -2977,8 +2977,38 @@ fn main() {
                     std::process::exit(1);
                 }
             };
+            // ORDER 843-624y. Fragments whose records the rendered candidate
+            // does NOT carry are refused rather than consumed, and they are
+            // REPORTED. Silence would trade one failure for another: before
+            // this fix such a fragment was DELETED having contributed nothing;
+            // if we merely skipped it, it would accumulate forever with nobody
+            // told why compaction stopped shrinking the base.
+            //
+            // Loud on purpose. A refusal means a fragment shape the fold cannot
+            // absorb — a defect in the writer or in the fold, to be FIXED, not
+            // a file to route around.
+            if !c.refused.is_empty() {
+                eprintln!(
+                    "warning: {} fragment(s) NOT consumed — the compacted base would not carry \
+                     their records, so they are left on disk rather than deleted (843-624y):",
+                    c.refused.len()
+                );
+                for (path, gaps) in &c.refused {
+                    eprintln!("  {}", path.display());
+                    for g in gaps {
+                        eprintln!("      {g}");
+                    }
+                }
+            }
             if c.consumed.is_empty() {
-                println!("ok: nothing to compact (0 fragments)");
+                if c.refused.is_empty() {
+                    println!("ok: nothing to compact (0 fragments)");
+                } else {
+                    println!(
+                        "ok: nothing compacted — all {} fragment(s) refused (see above)",
+                        c.refused.len()
+                    );
+                }
                 return;
             }
             // The gate: the merged ledger must load AND pass integrity before it

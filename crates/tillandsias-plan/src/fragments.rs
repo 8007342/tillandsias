@@ -630,6 +630,118 @@ fn fragment_filename(utc_compact: &str, suffix: &str, host: &str, ext: &str) -> 
 pub struct Compaction {
     pub merged: Value,
     pub consumed: Vec<PathBuf>,
+    /// Fragments compaction REFUSED to consume, with the records of theirs that
+    /// did not reach the base (order 843-624y). Surfacing these is the point: a
+    /// fragment the fold cannot absorb is a defect to fix, not a file to
+    /// silently delete or silently keep forever.
+    pub refused: Vec<(PathBuf, Vec<String>)>,
+}
+
+/// Which of `frag`'s records did NOT reach `result`?
+///
+/// ORDER 843-624y. THE CONTRACT ON [`Compaction`] SAYS "the fragments it
+/// FOLDED". Both compaction paths used to compute
+/// `fragments.iter().map(|f| f.path.clone())` — the fragments it LOADED — and
+/// then delete exactly that list. Every fragment whose content the fold did not
+/// absorb was therefore removed from the repo having contributed nothing.
+///
+/// That is not hypothetical. `git show
+/// 9d12276ca^:plan/index.d/20260814t200300z-736-macos-control-wire-evidence.yaml`
+/// resolves and carries `packet_id: v04-release-gate-macos-e2e-evidence, order:
+/// 735-6iki`; its text appears nowhere under plan/ today. A v0.4 release-gate
+/// closure, deleted by the garbage collector. 1,144 fragment files have been
+/// deleted across history and nothing distinguished the folded from the eaten.
+///
+/// THE SIBLING ALREADY DOES THIS CORRECTLY, 300 lines away:
+/// `loop_status::verify_compaction` walks every fragment section and refuses
+/// with "compaction would LOSE fragment {} section `{}`". This is that check,
+/// for the ledger's record shapes.
+///
+/// Deliberately NOT flagged: a `status:` write that lost LWW. Losing a
+/// last-writer race is the designed semantics, not data loss — the packet is
+/// present and the write is simply not the winner. Flagging it would refuse
+/// nearly every real compaction and the guard would be switched off within a
+/// day. What IS flagged is a status write whose packet does not exist at all,
+/// because that write was discarded rather than outranked.
+fn fragment_coverage_gaps(result: &Value, frag: &Fragment) -> Vec<String> {
+    let mut gaps = Vec::new();
+    let mut packets = Vec::new();
+    crate::collect_packets(result, &mut packets);
+
+    let mut ids: BTreeSet<&str> = BTreeSet::new();
+    let mut events: BTreeSet<String> = BTreeSet::new();
+    for p in &packets {
+        if let Some(id) = p.get("packet_id").and_then(Value::as_str) {
+            ids.insert(id);
+            if let Some(evs) = p.get("events").and_then(Value::as_sequence) {
+                for e in evs {
+                    events.insert(event_identity(id, e));
+                }
+            }
+        }
+    }
+
+    if let Some(ps) = frag.doc.get("packets").and_then(Value::as_sequence) {
+        for p in ps {
+            match p.get("packet_id").and_then(Value::as_str) {
+                Some(id) if !ids.contains(id) => {
+                    gaps.push(format!("packet `{id}` declared under `packets:`"))
+                }
+                None => gaps.push("a `packets:` entry carrying no packet_id".to_string()),
+                _ => {}
+            }
+        }
+    }
+
+    if let Some(evs) = frag.doc.get("events").and_then(Value::as_sequence) {
+        for entry in evs {
+            let Some(pid) = entry.get("packet_id").and_then(Value::as_str) else {
+                gaps.push("an `events:` entry carrying no packet_id".to_string());
+                continue;
+            };
+            // A list item under `events:` with no `event:` block is a packet
+            // DEFINITION written under the wrong key (812-d45t). The fold
+            // `continue`s past it in silence. Order 801-kqme lost three whole
+            // follow-up packets exactly this way.
+            let Some(event) = entry.get("event") else {
+                gaps.push(format!(
+                    "an `events:` entry for `{pid}` with no `event:` block — a packet DEFINITION under the wrong key (812-d45t); the fold skips it"
+                ));
+                continue;
+            };
+            if !events.contains(&event_identity(pid, event)) {
+                gaps.push(format!(
+                    "an event for `{pid}` — that packet is not in the fold, so the event was discarded"
+                ));
+            }
+        }
+    }
+
+    if let Some(us) = frag.doc.get("status").and_then(Value::as_sequence) {
+        for u in us {
+            if let Some(pid) = u.get("packet_id").and_then(Value::as_str)
+                && !ids.contains(pid)
+            {
+                gaps.push(format!(
+                    "a `status:` write for `{pid}` — no such packet in the fold, so the write was discarded"
+                ));
+            }
+        }
+    }
+
+    // The `capabilities:` channel is READ by `fold_capabilities` and never
+    // WRITTEN by either compaction path, so it has no base representation at
+    // all. Consuming such a fragment destroys 100% of the channel rather than
+    // the ~1% the parse-failure case loses. Measured 2026-08-21:
+    // `capability-matrix` reports 0 rows while packet 808-7yrd, which declared
+    // the channel delivered, reads `completed`.
+    if frag.doc.get("capabilities").is_some() {
+        gaps.push(
+            "a `capabilities:` block — the fold reads this channel but compaction never serialises it into the base, so consuming this fragment destroys every row in it".to_string(),
+        );
+    }
+
+    gaps
 }
 
 /// Fold every fragment into the base and report what was consumed.
@@ -639,10 +751,21 @@ pub struct Compaction {
 /// the parse/integrity gate belongs between this and the write.
 pub fn compact(base: &Value, index: &Path) -> Compaction {
     let fragments = load_all(index);
-    let consumed = fragments.iter().map(|f| f.path.clone()).collect();
+    let merged = fold(base, &fragments);
+    let mut consumed = Vec::new();
+    let mut refused = Vec::new();
+    for f in &fragments {
+        let gaps = fragment_coverage_gaps(&merged, f);
+        if gaps.is_empty() {
+            consumed.push(f.path.clone());
+        } else {
+            refused.push((f.path.clone(), gaps));
+        }
+    }
     Compaction {
-        merged: fold(base, &fragments),
+        merged,
         consumed,
+        refused,
     }
 }
 
@@ -654,6 +777,9 @@ pub fn compact(base: &Value, index: &Path) -> Compaction {
 pub struct CompactionText {
     pub candidate: String,
     pub consumed: Vec<PathBuf>,
+    /// Fragments compaction REFUSED to consume, with the records of theirs that
+    /// the rendered candidate does not carry (order 843-624y).
+    pub refused: Vec<(PathBuf, Vec<String>)>,
 }
 /// Format-preserving, text-level compaction.
 ///
@@ -683,6 +809,7 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
         return Ok(CompactionText {
             candidate: raw,
             consumed: Vec::new(),
+            refused: Vec::new(),
         });
     }
     let merged = fold(&base, &fragments);
@@ -867,10 +994,29 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
     }
     candidate = lines.join("\n") + "\n";
 
-    let consumed = fragments.iter().map(|f| f.path.clone()).collect();
+    // ORDER 843-624y. Coverage is checked against the RE-PARSED CANDIDATE, not
+    // against `merged`, and the distinction is the whole fix on this path. The
+    // failure mode here is not that the fold missed something — it is that the
+    // RENDERER dropped something the fold held. `capabilities:` is exactly
+    // that: fold_capabilities reads it, no writer emits it, so it lives in
+    // `merged` and never in the text that replaces the base. Checking against
+    // `merged` would call that covered and delete the only copy.
+    let written: Value = serde_yaml::from_str(&candidate)
+        .map_err(|e| format!("compaction candidate does not parse: {e}"))?;
+    let mut consumed = Vec::new();
+    let mut refused = Vec::new();
+    for f in &fragments {
+        let gaps = fragment_coverage_gaps(&written, f);
+        if gaps.is_empty() {
+            consumed.push(f.path.clone());
+        } else {
+            refused.push((f.path.clone(), gaps));
+        }
+    }
     Ok(CompactionText {
         candidate,
         consumed,
+        refused,
     })
 }
 

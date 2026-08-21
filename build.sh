@@ -1541,6 +1541,23 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Test-baseline fixture passed"
 
+    # Order 843-624y. Compaction is the ONE ledger operation that can destroy:
+    # everything else here is append-only. Both compaction paths used to report
+    # every LOADED fragment as consumed and the caller deleted exactly that
+    # list, so a fragment the fold could not absorb was removed having
+    # contributed nothing. A v0.4 release-gate closure went that way
+    # (9d12276ca^, order 735-6iki) and 1,144 fragment files have been deleted
+    # across history with nothing distinguishing folded from eaten.
+    #
+    # Hermetic — the fixture builds its own ledger under mktemp and never
+    # touches plan/, which matters more than usual for a test of a deleter.
+    _step "Checking compaction deletes only what it folded (843-624y)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-compaction-coverage.sh" 2>&1; then
+        _error "compaction would delete fragments it never folded — that is silent data loss"
+        exit 1
+    fi
+    _info "Compaction coverage fixture passed"
+
     # PIPESTATUS, not `$?` — `cmd | tee f` returns TEE's status. The verdict is
     # the ratchet's, not cargo's: a failure not in scripts/test-known-red.txt
     # is a regression, a listed test that PASSED is a stale entry, and a listed
