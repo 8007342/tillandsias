@@ -186,7 +186,49 @@ if [ "${1:-}" = "--where" ]; then
     printf 'spec-index:project=%s\n' "$TILLANDSIAS_PROJECT"
     printf 'spec-index:volume=%s\n' "$SPEC_INDEX_VOLUME"
     printf 'spec-index:root=%s\n' "$INDEX_ROOT"
-    printf 'spec-index:serving=%s\n' "$(_tillandsias_spec_index_paths | sed -n 2p)"
+    # ORDER 760-hzi4. `serving=` is the line every consumer parses and its shape
+    # is unchanged. What is new is that this report no longer describes TWO
+    # DIFFERENT DIRECTORIES as if they were one.
+    #
+    # The bug, measured on macuahuitl 2026-08-22: `serving=` is overridable to
+    # an EXACT directory via FORGE_SPEC_INDEX_DIR, while `entries=` counted
+    # $INDEX_ROOT — a different path. With a stale override this printed
+    #   serving=/mnt/c/Users/bullo/.../target/spec-index      (does not exist)
+    #   entries=3                                             (of the LOCAL root)
+    # and a reader concludes the served directory holds three indices. It holds
+    # nothing; it is not even a directory on this host. That misreading cost an
+    # hour and produced a wrong conclusion about whether this host had an index
+    # at all — the premise of this very packet.
+    #
+    # The BUILD path already refuses an unwritable destination loudly and names
+    # FORGE_SPEC_INDEX_DIR and 789-nc2s while doing it. The QUERY path said
+    # nothing, which is the "reports a verdict it could not compute" shape.
+    _serving="$(_tillandsias_spec_index_paths | sed -n 2p)"
+    printf 'spec-index:serving=%s\n' "$_serving"
+    if [ -n "$_serving" ] && [ -d "$_serving" ]; then
+        printf 'spec-index:serving-exists=yes\n'
+    else
+        printf 'spec-index:serving-exists=no\n'
+        {
+            echo "spec-index: the resolved serving directory does not exist:"
+            echo "  $_serving"
+            echo "If that path belongs to another machine, FORGE_SPEC_INDEX_DIR or"
+            echo "FORGE_SPEC_INDEX_ROOT is set in this environment (789-nc2s). A"
+            echo "session started before 2b1f8d188 keeps the stale value until it"
+            echo "restarts; \`env -u FORGE_SPEC_INDEX_DIR\` resolves locally."
+        } >&2
+    fi
+    # `entries` DELIBERATELY still counts $INDEX_ROOT, and is left alone.
+    #
+    # The first draft of this fix repointed it at `serving`, on the reasoning
+    # that a reader sees the two lines together and assumes they describe one
+    # directory. That was an over-correction: `entries` pairs with `keep` below
+    # — they are the retention accounting for index GENERATIONS under the root
+    # ("3 kept of 3"), and repointing it produced the incoherent `entries=2,
+    # keep=3` where 2 was a file count and 3 a generation count. The ambiguity
+    # that actually misled a reader was not entries-versus-serving; it was a
+    # `serving=` path that did not exist and said nothing about it. One line
+    # fixes that, and it is the line above.
     printf 'spec-index:entries=%s\n' "$(ls -1 "$INDEX_ROOT" 2>/dev/null | grep -cv '^current$')"
     printf 'spec-index:keep=%s\n' "${TILLANDSIAS_SPEC_INDEX_KEEP:-3}"
     exit 0

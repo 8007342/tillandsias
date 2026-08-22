@@ -1,0 +1,66 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-22T04:00:00Z.
+status:
+  - packet_id: dev-host-spec-rag-index-never-built
+    field: status
+    value: ready
+    ts: "2026-08-22T04:00:00Z"
+    host: linux_mutable
+
+events:
+  - packet_id: dev-host-spec-rag-index-never-built
+    event:
+      type: progress
+      ts: "2026-08-22T04:00:00Z"
+      agent_id: linux-macuahuitl-opus5-20260822T034300Z
+      host: linux_mutable
+      summary: |
+        THE REPORTING GAP IS FIXED. The packet stays READY because its fleet
+        half is not mine to close — released from in_progress rather than
+        claimed-and-abandoned.
+
+        WHAT WAS WRONG WITH THE REPORT. `--where` printed a `serving=` path and
+        never checked it existed. On this host, with a stale
+        FORGE_SPEC_INDEX_DIR, that meant:
+          spec-index:serving=/mnt/c/Users/bullo/.../target/spec-index
+        A Windows path, on Fedora, naming a directory that is not there — with
+        exit 0 and no warning. That is what made this host look like it had no
+        index, which is this packet's entire premise. It has one: 198 MB, in a
+        podman volume, serving real chunks.
+
+        THE FIX: `serving-exists=yes|no`, plus a stderr note on `no` that names
+        FORGE_SPEC_INDEX_DIR and 789-nc2s and says `env -u` resolves locally —
+        mirroring the message the BUILD path already prints when it refuses an
+        unwritable destination. The build path was loud; the query path was
+        silent; now both say the same thing.
+
+        `serving=` IS BYTE-IDENTICAL — scripts/bench-accel-lane.sh:67 parses it
+        with sed, and that consumer keeps working. It is also already defensive
+        (`[ -s "$_bal_dir/chunks.jsonl" ]` before use, with a fallback), so the
+        damage from the silent report was confined to human readers. Which is
+        where it landed: it cost an hour and produced a wrong conclusion about
+        whether this host had an index.
+
+        AN OVER-CORRECTION I MADE AND BACKED OUT, recorded because the reasoning
+        is the useful part. My first draft also repointed `entries=` at the
+        serving directory, on the theory that a reader sees the two lines
+        together and assumes one directory. Wrong: `entries` pairs with `keep`
+        as the retention accounting for index GENERATIONS under the root ("3 of
+        3 kept"), and repointing it produced `entries=2, keep=3` — a file count
+        beside a generation count, which is a NEW incoherence traded for the old
+        one. The ambiguity that actually misled a reader was a `serving=` path
+        that did not exist and said nothing. One line fixes that; the second
+        change was me fixing a problem I had invented.
+
+        NON-VACUITY, unmasked: with the stale override still set, removing the
+        `[ -d "$_serving" ]` test makes the report print `serving-exists=yes`
+        for a path that is not there — the exact false green. Restored, it
+        prints `no`. Source byte-identical after restore.
+
+        WHY THIS ROW STAYS OPEN. Its title is "dev-host-spec-rag-index-never-
+        built" and that premise is now DISPROVEN ON macuahuitl — but the packet
+        is fleet-shaped and I have evidence from one host. Whoever picks it up
+        should run `env -u FORGE_SPEC_INDEX_DIR scripts/spec-index-ensure.sh
+        --where` on the other dev hosts: if they all report
+        `serving-exists=yes`, close it as stale; if any reports `no`, the
+        original premise holds there and the packet is about THAT host.
