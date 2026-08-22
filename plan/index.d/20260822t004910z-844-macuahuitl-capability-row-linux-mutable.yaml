@@ -1,0 +1,118 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-22T00:49:10Z.
+#
+# macuahuitl contributes its capability row. Verbatim `tillandsias
+# --capabilities` output, not hand-written — a channel whose rows are
+# fixtures is a channel nothing writes.
+#
+# WHY NOW: the coverage line added to capability-matrix this cycle reported
+# "1 of 6 known host(s) reporting — SILENT: ... macuahuitl ...". It named this
+# host on its first run. Acting on the report rather than filing a packet
+# about it.
+#
+# AND WHY THIS HOST HAD NEVER CONTRIBUTED — it was version skew, not neglect,
+# and the first attempt at this row FAILED because of it. The INSTALLED
+# binary is v0.4.260818.1 and emits `schema_version: 1` with a host block of
+# only {is_battery_present, kernel_release}: no host_id at all. The fold
+# requires document.host.host_id and skips the row with the exactly-right
+# message "document has no `host.host_id` (predates 808-43mw?)". It does.
+# 808-43mw landed on windows-next and reached linux-next only in the
+# 2026-08-21 merge, so every capability probe run from the installed binary
+# on this host produces an unfileable document. Rebuilding from HEAD gives
+# schema_version 2 with host_id=macuahuitl, host_id_source=node-name,
+# host_kind=linux.
+#
+# LOCUS `bare-metal` IS A NEW VALUE in an open vocabulary holding only
+# `in-guest` and `windows-host`. Those exist because a WSL2 guest and its
+# Windows host see DIFFERENT hardware — the guest cannot see the NPU — so
+# locus records which execution context observed. This host has no
+# virtualization boundary between observer and hardware, so neither value is
+# honest. `bare-metal` names that condition rather than the platform, so a
+# bare-metal macOS or Windows host can reuse it.
+#
+# Read it with: tillandsias-plan capability-matrix
+capabilities:
+  - ts: "2026-08-22T00:49:10Z"
+    host: linux_mutable
+    locus: bare-metal
+    document:
+      {
+        "schema_version": 2,
+        "legacy_tier": "gpu-cuda",
+        "devices": [
+          {
+            "device_class": "cpu",
+            "vendor": "intel",
+            "name": "Intel(R) Core(TM) Ultra 7 265KF",
+            "device_node": null,
+            "fw_version": null,
+            "driver": null,
+            "usable": true,
+            "unusable_reason": null,
+            "lanes": [
+              "container",
+              "host-native"
+            ],
+            "memory_bandwidth_gbps": null,
+            "memory_bandwidth_source": "unknown",
+            "cpu_flags": [
+              "fma",
+              "avx",
+              "avx2",
+              "avx_vnni"
+            ],
+            "cpu_cores": {
+              "physical": 20,
+              "logical": 20
+            },
+            "system_ram_gb": 62.411041259765625
+          },
+          {
+            "device_class": "gpu",
+            "vendor": "nvidia",
+            "name": "NVIDIA RTX A5000",
+            "device_node": "/dev/nvidia0",
+            "fw_version": null,
+            "driver": null,
+            "usable": true,
+            "unusable_reason": null,
+            "lanes": [
+              "container",
+              "host-native"
+            ],
+            "memory_bandwidth_gbps": null,
+            "memory_bandwidth_source": "unknown",
+            "cpu_flags": null,
+            "cpu_cores": null,
+            "system_ram_gb": null
+          },
+          {
+            "device_class": "npu",
+            "vendor": "Intel NPU",
+            "name": "Intel NPU",
+            "device_node": "/dev/accel/accel0",
+            "fw_version": null,
+            "driver": "intel_vpu",
+            "usable": false,
+            "unusable_reason": "engine-missing",
+            "lanes": [
+              "host-native"
+            ],
+            "memory_bandwidth_gbps": null,
+            "memory_bandwidth_source": "unknown",
+            "cpu_flags": null,
+            "cpu_cores": null,
+            "system_ram_gb": null
+          }
+        ],
+        "engines": [],
+        "measurements": [],
+        "host": {
+          "is_battery_present": false,
+          "kernel_release": "7.1.8-200.fc44.x86_64",
+          "host_id": "macuahuitl",
+          "host_id_source": "node-name",
+          "host_kind": "linux"
+        },
+        "timestamp": "2026-08-22T00:48:50.873919791+00:00"
+      }

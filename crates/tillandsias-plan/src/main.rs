@@ -2828,8 +2828,80 @@ fn main() {
             // every WSL2 host is in.
             let frags = tillandsias_plan::fragments::load_all(&index);
             let (matrix, skipped) = tillandsias_plan::fragments::fold_capabilities(&frags);
+
+            // ORDER 843-624y. EMPTY IS NOT THE SAME FACT AS UNREPORTED, and
+            // until now this arm could not tell them apart: it printed
+            // "0 rows" and exited 0, which reads identically to a healthy
+            // fleet that simply has not probed yet. It printed exactly that
+            // for four days while the channel's only two rows sat destroyed by
+            // compaction, and 808-7yrd — the packet that DELIVERED the channel
+            // — read `completed` the whole time.
+            //
+            // The known-host set is taken from the per-host attestation
+            // ledgers, which is a PROXY and is stated as one: a host appears
+            // there once it has completed a full-mode cycle, so it answers
+            // "which hosts are real and working", not "which hosts should
+            // report capabilities". A host that has never run a cycle is
+            // invisible here, and that is the right failure direction — better
+            // to under-claim the fleet than to invent members of it.
+            let attest_dir = index
+                .parent()
+                .map(|d| d.join("mo-full-attestations.d"))
+                .unwrap_or_default();
+            let mut known: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+            if let Ok(entries) = std::fs::read_dir(&attest_dir) {
+                for e in entries.flatten() {
+                    let p = e.path();
+                    if p.extension().and_then(|x| x.to_str()) == Some("md")
+                        && let Some(stem) = p.file_stem().and_then(|s| s.to_str())
+                        && stem != "README"
+                    {
+                        known.insert(stem.to_string());
+                    }
+                }
+            }
+            let reporting: std::collections::BTreeSet<&str> =
+                matrix.keys().map(|(h, _)| h.as_str()).collect();
+            let missing: Vec<&String> = known
+                .iter()
+                .filter(|h| !reporting.contains(h.as_str()))
+                .collect();
+
             if matrix.is_empty() {
-                println!("capability-matrix: 0 rows (no `capabilities:` rows in any fragment)");
+                if known.is_empty() {
+                    println!(
+                        "capability-matrix: 0 rows, and NO KNOWN HOSTS — nothing has completed a full-mode cycle here, so the fleet is unknown rather than silent"
+                    );
+                } else {
+                    println!(
+                        "capability-matrix: 0 rows — UNREPORTED by all {} known host(s): {}. This is a GAP, not an empty fleet: every one of these has completed a cycle and none has contributed a capability row.",
+                        known.len(),
+                        known
+                            .iter()
+                            .map(String::as_str)
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
+                }
+            } else {
+                println!(
+                    "capability-matrix: {} row(s), {} of {} known host(s) reporting{}",
+                    matrix.len(),
+                    reporting.len(),
+                    known.len(),
+                    if missing.is_empty() {
+                        String::new()
+                    } else {
+                        format!(
+                            " — SILENT: {}",
+                            missing
+                                .iter()
+                                .map(|s| s.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        )
+                    }
+                );
             }
             for ((host_id, locus), entry) in &matrix {
                 let kind = entry.document["host"]["host_kind"]
