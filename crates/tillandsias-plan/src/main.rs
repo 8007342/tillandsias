@@ -136,6 +136,11 @@ const USAGE: &str = concat!(
     "                                     schedulable (device_class, lane, engine) triples, and its\n",
     "                                     present-but-unusable devices. Distinct from `capabilities`\n",
     "                                     above, which reports THIS BINARY's subcommands.\n",
+    "           corpus-coverage           Which repository file types the spec/answer corpus indexes,\n",
+    "                                     which it DECLINES and why. Read-only. The declined list is\n",
+    "                                     explicit so an answer's absence can be attributed to a\n",
+    "                                     deliberate boundary rather than mistaken for a retrieval\n",
+    "                                     miss — the two look identical from the asking side.\n",
     "           check [--strict-fragments]\n",
     "                                     integrity + schema validation (exit 1 on violations).\n",
     "                                     ORDER 796-4ydb. A fragment the fold could not parse is\n",
@@ -3091,6 +3096,47 @@ fn main() {
             // append — the refusal-to-round-trip rationale that preceded this
             // implementation is recorded in packet
             // format-preserving-ledger-compaction.
+            // A MUTATING SUBCOMMAND MUST NOT RUN ON AN UNRECOGNISED FLAG, and
+            // `--help` must never BE the mutation.
+            //
+            // This arm read none of its arguments until 2026-08-22: every token
+            // after `compact` — `--help`, `--dry-run`, a typo — was ignored and
+            // the fold executed regardless. So asking the command what it did
+            // was the same act as running it, on the one ledger command
+            // carrying a p0 (843-624y) and a standing operator prohibition. It
+            // was found exactly that way, by an agent running `compact --help`
+            // to read usage and folding 27 live fragments instead.
+            //
+            // The safety added for 843-624y held — the three unfoldable
+            // fragments were refused and survived — which is why this cost a
+            // revert and not data. Two defects, one of them latent: the arm
+            // was unsafe to INVOKE long before it was safe to RUN.
+            let mut dry_run = false;
+            for a in &args[1..] {
+                match a.as_str() {
+                    "--help" | "-h" => {
+                        println!("usage: tillandsias-plan compact [--dry-run]");
+                        println!();
+                        println!("Folds every foldable fragment in plan/index.d/ into the base");
+                        println!("plan/index.yaml and deletes EXACTLY the ones folded. MUTATING.");
+                        println!();
+                        println!(
+                            "  --dry-run, -n   validate the fold and report it; write nothing"
+                        );
+                        println!();
+                        println!("`tillandsias-plan fragments` reports overlay state read-only.");
+                        return;
+                    }
+                    "--dry-run" | "-n" => dry_run = true,
+                    other => {
+                        eprintln!(
+                            "error: compact: unknown argument {other:?} — refusing rather than \
+                             compacting, because this command mutates the ledger"
+                        );
+                        std::process::exit(2);
+                    }
+                }
+            }
             let c = match tillandsias_plan::fragments::compact_text(&index) {
                 Ok(c) => c,
                 Err(e) => {
@@ -3165,6 +3211,20 @@ fn main() {
                     );
                     std::process::exit(1);
                 }
+            }
+            // Deliberately AFTER parse + integrity: the useful half of a
+            // dry-run is learning the fold would be ACCEPTED, which only the
+            // validation above can answer. Stopping earlier would report a
+            // count and prove nothing.
+            if dry_run {
+                println!(
+                    "ok: dry-run — would fold {} fragment(s) into {} and delete them; \
+                     {} refused; nothing written",
+                    c.consumed.len(),
+                    index.display(),
+                    c.refused.len()
+                );
+                return;
             }
             if let Err(e) = std::fs::write(&index, &c.candidate) {
                 eprintln!("error: write {}: {e}", index.display());

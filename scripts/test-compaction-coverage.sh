@@ -136,6 +136,64 @@ ck "an all-refused run leaves the fragment alone" \
    "present" "$([ -e "$TMPE/index.d/20260101t000001z-misplaced.yaml" ] && echo present || echo absent)"
 rm -rf "$TMPE"
 
+# ARGUMENT SAFETY. `compact` ignored every argument until 2026-08-22, so
+# `compact --help` performed the compaction — reading the usage WAS the
+# mutation. These assert the three shapes an unrecognised or read-only
+# invocation must have, and each one checks that the ledger is UNTOUCHED,
+# because "exited 0" is not the property that matters here.
+TMPF="$(mktemp -d "${TMPDIR:-/tmp}/compaction-coverage-c.XXXXXX")"
+mkdir -p "$TMPF/index.d"
+cp "$TMPD/index.yaml" "$TMPF/index.yaml"
+# A foldable fragment: if any of these invocations mutates, it disappears.
+cat >"$TMPF/index.d/20260101t000000z-good.yaml" <<'YAML'
+events:
+  - packet_id: fixture/alpha
+    event:
+      type: progress
+      ts: "2026-01-01T00:00:00Z"
+      agent_id: fixture
+      host: fixture
+      summary: A well-formed event that the fold absorbs
+YAML
+base_before="$(cksum <"$TMPF/index.yaml")"
+
+out3="$("$PLAN" --index "$TMPF/index.yaml" compact --help 2>&1)"; rc3=$?
+ck "--help exits 0" "0" "$rc3"
+ck "--help prints usage, not a compaction report" \
+   "yes" "$(grep -q '^usage: tillandsias-plan compact' <<<"$out3" && echo yes || echo no)"
+ck "--help says the command MUTATES" \
+   "yes" "$(grep -q 'MUTATING' <<<"$out3" && echo yes || echo no)"
+ck "--help left the fragment on disk" \
+   "present" "$([ -e "$TMPF/index.d/20260101t000000z-good.yaml" ] && echo present || echo absent)"
+ck "--help left the base byte-identical" \
+   "$base_before" "$(cksum <"$TMPF/index.yaml")"
+
+set +e
+out4="$("$PLAN" --index "$TMPF/index.yaml" compact --bogus 2>&1)"; rc4=$?
+set -e
+ck "an unknown argument REFUSES (exit 2)" "2" "$rc4"
+ck "the refusal names the argument" \
+   "yes" "$(grep -q -- '--bogus' <<<"$out4" && echo yes || echo no)"
+ck "an unknown argument left the fragment on disk" \
+   "present" "$([ -e "$TMPF/index.d/20260101t000000z-good.yaml" ] && echo present || echo absent)"
+
+out5="$("$PLAN" --index "$TMPF/index.yaml" compact --dry-run 2>&1)"; rc5=$?
+ck "--dry-run exits 0" "0" "$rc5"
+ck "--dry-run reports what it WOULD fold" \
+   "yes" "$(grep -q 'dry-run — would fold 1 fragment' <<<"$out5" && echo yes || echo no)"
+ck "--dry-run wrote nothing to the base" \
+   "$base_before" "$(cksum <"$TMPF/index.yaml")"
+ck "--dry-run left the fragment on disk" \
+   "present" "$([ -e "$TMPF/index.d/20260101t000000z-good.yaml" ] && echo present || echo absent)"
+
+# CONTROL, both directions: the same fragment in the same tree MUST still be
+# consumed by a bare `compact`. Without this the four assertions above would
+# also pass against a build where compaction silently stopped working.
+"$PLAN" --index "$TMPF/index.yaml" compact >/dev/null 2>&1
+ck "CONTROL: a bare compact still consumes it" \
+   "absent" "$([ -e "$TMPF/index.d/20260101t000000z-good.yaml" ] && echo present || echo absent)"
+rm -rf "$TMPF"
+
 printf 'compaction-coverage: %s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1
 echo "ok:compaction-coverage:$pass"

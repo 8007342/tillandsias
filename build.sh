@@ -1563,11 +1563,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # is a regression, a listed test that PASSED is a stale entry, and a listed
     # test this run never built is neither (the workspace's one known-red entry
     # lives in a different binary and is simply absent here).
-    _step "Running plan ledger unit tests (cargo test -p tillandsias-plan --lib)..."
+    # `--lib` WAS HERE UNTIL 2026-08-22, and it made this ratchet blind to the
+    # binary's own tests. Two of them — the pair asserting every dispatch arm
+    # and every declared capability appears in the usage text — sat RED for
+    # several cycles while `--check` reported green, because a subcommand added
+    # earlier in the campaign was never documented. The ratchet's whole premise
+    # is that no gate ran `cargo test`; scoping it to one target recreated that
+    # blind spot inside the fix. Dropping `--lib` covers the bin and integration
+    # targets too, and cost ~0.0s: the bin suite is 23 assertions of pure text.
+    _step "Running plan ledger tests (cargo test -p tillandsias-plan, all targets)..."
     _PLAN_TEST_TRANSCRIPT="$SCRIPT_DIR/target/test-transcript-plan-lib.log"
     mkdir -p "$(dirname "$_PLAN_TEST_TRANSCRIPT")"
     _plan_test_rc=0
-    _run cargo test -p tillandsias-plan --lib --no-fail-fast --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1 |
+    _run cargo test -p tillandsias-plan --no-fail-fast --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1 |
         tee "$_PLAN_TEST_TRANSCRIPT" || _plan_test_rc="${PIPESTATUS[0]}"
     if ! _plan_baseline_verdict="$(bash "$SCRIPT_DIR/scripts/check-test-baseline.sh" --from "$_PLAN_TEST_TRANSCRIPT")"; then
         _error "$_plan_baseline_verdict"
