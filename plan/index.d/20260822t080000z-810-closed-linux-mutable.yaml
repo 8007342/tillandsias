@@ -1,0 +1,74 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-22T08:00:00Z.
+status:
+  - packet_id: rag-corpus-config-languages-still-have-no-boundary-rule
+    field: status
+    value: completed
+    ts: "2026-08-22T08:00:00Z"
+    host: linux_mutable
+
+events:
+  - packet_id: rag-corpus-config-languages-still-have-no-boundary-rule
+    event:
+      type: completed
+      ts: "2026-08-22T08:00:00Z"
+      agent_id: linux-macuahuitl-opus5-20260822T074300Z
+      host: linux_mutable
+      summary: |
+        RETRIEVAL CONFIRMED ON THE SERVED INDEX. The closing check this row's
+        next_action asked for, run and passed.
+
+        cycle-preflight rebuilt the served volume on its own — the corpus
+        fingerprint moved because crates/ IS a corpus root, so editing spec.rs
+        changed the corpus that spec.rs indexes. Served generation
+        39b60df2 carries ps1 61 chunks, hcl 14, te 2, fish 20.
+
+        REACHABLE AND WINNING, top-1 against the live index:
+          "path secret/data/claude/oauth capabilities create update read"
+            -> images/vault/policies/claude-forge.hcl        0.7809
+               (claude-login.hcl second at 0.7710 — the pair, correctly)
+          "policy_module tillandsias_headless type tillandsias_headless_exec_t"
+            -> images/selinux/tillandsias_headless.te        0.8386
+          "New-Shortcut function that writes a WScript.Shell shortcut object"
+            -> scripts/build-and-install-windows-local.ps1   0.7636
+
+        AND A RESULT I ALMOST MISREAD AS A FAILURE. My first three probes were
+        natural-language questions — "how does the Windows installer detect
+        whether the WSL platform feature is enabled", "what does the claude
+        forge Vault policy permit", "what SELinux rules does the headless
+        container need". NONE returned a newly-indexed file. All three returned
+        PROSE: windows-installer-prereqs.md, the tillandsias-vault spec,
+        container-lifecycle.md.
+
+        That is correct behaviour, not a defect, and worth writing down so the
+        next person does not "fix" it. A cheatsheet written to EXPLAIN the WSL
+        prerequisites is a better answer to a conceptual question than the
+        installer's source, and the embedder is right to prefer it. Code wins
+        when the question is code-shaped — a function name, a policy path, a
+        type declaration — which is exactly the class of question 803-su4n
+        indexed code to serve. Two corpora answering different question shapes
+        is the design working.
+
+        Had I stopped at the first three probes I would have recorded "indexed
+        but unreachable" and filed a ranking packet that did not need to exist.
+        The literal-content probes are what separated "does not win a
+        conceptual query" from "cannot be retrieved at all", and only the second
+        would have been a defect.
+
+        BOTH HALVES OF THE PACKET ARE DONE:
+          boundary rules — ps1, hcl, te/fc/if/cil, fish indexed; toml, json,
+            txt, art, plists, config fragments and four single-file languages
+            declined with reasons in CORPUS_DECLINED.
+          visibility — `tillandsias-plan corpus-coverage`, advisory in
+            ./build.sh --check, reporting ok:corpus-coverage:32 class(es),
+            0 unclassified. A class that is neither indexed nor declined now
+            appears as UNCLASSIFIED instead of as silence, which was the
+            packet's actual complaint.
+
+        Known limit, stated rather than left for someone to discover: neither
+        hcl nor the SELinux set gets boundary detection, so each file is one
+        span bounded by the 797-qv4z character budget. That is coarse and it is
+        why the probes above had to be quite specific. If it proves too coarse
+        in practice, a `path "x" {` boundary rule is the follow-up — but the
+        evidence here is that specific queries reach them at 0.78-0.84, so it is
+        not urgent.
