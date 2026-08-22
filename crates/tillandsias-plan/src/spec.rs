@@ -307,9 +307,114 @@ pub fn chunk_yaml(rel_path: &str, kind: &str, text: &str) -> Vec<Chunk> {
     for (idx, &s) in starts.iter().enumerate() {
         let end = starts.get(idx + 1).copied().unwrap_or(lines.len());
         let key = top_level_key_name(lines[s]);
-        push_chunk(&mut chunks, rel_path, kind, s + 1, end, &key, &lines);
+        push_yaml_span(&mut chunks, rel_path, kind, s + 1, end, &key, &lines);
     }
     chunks
+}
+
+/// The largest chunk this indexer will emit, in characters.
+///
+/// ORDER 797-qv4z. It exists because the EMBEDDER truncates and says nothing.
+/// scripts/spec-index-ensure.sh feeds the embedding endpoint
+/// `((.text // "") | .[0:$max])` with max = 6000, while chunks.jsonl keeps the
+/// FULL text — so an oversized chunk gets a vector built from its first 6000
+/// characters and a citation that claims the whole span. Retrieval matches on a
+/// prefix; the reader is shown the lot.
+///
+/// Measured on the live index 2026-08-22, before this fix: 129 chunks over the
+/// limit holding 1,106,377 characters, of which 332,377 (30%) were never
+/// embedded. The five worst were all methodology files, and
+/// methodology/distributed-work.yaml — 102,265 bytes in TWO chunks — had 5.9%
+/// of itself embedded. The packet recorded 11 chunks and 168,137 characters
+/// when it was filed; both roughly doubled while nobody was measuring.
+///
+/// 4000, not 6000, so a chunk that grows slightly between index builds does not
+/// silently cross the embedder's cut. The margin is the point.
+const MAX_YAML_CHUNK_CHARS: usize = 4000;
+
+/// Emit `[start, end]` as chunks, subdividing at deeper indentation until each
+/// fits [`MAX_YAML_CHUNK_CHARS`].
+///
+/// WHY THE OLD CODE UNDER-SPLIT: `chunk_yaml` cuts at COLUMN-0 keys only.
+/// A methodology file has a handful of them, so everything beneath one becomes
+/// a single chunk no matter how large — 102 KB in two pieces, while
+/// openspec/specs/git-mirror-service/spec.md, of comparable size, chunked into
+/// 64 because the MARKDOWN path splits on headings. The YAML path had no
+/// budget at all.
+///
+/// Subdividing at the next indentation level keeps chunks semantically whole:
+/// a nested key and its block travel together, which is what makes a citation
+/// worth reading. The line-window fallback is last and deliberately crude — a
+/// block with no inner keys is prose, and prose has no better seam.
+fn push_yaml_span(
+    out: &mut Vec<Chunk>,
+    rel_path: &str,
+    kind: &str,
+    line_start: usize,
+    line_end: usize,
+    key: &str,
+    lines: &[&str],
+) {
+    if line_end < line_start {
+        return;
+    }
+    let len: usize = lines[line_start - 1..line_end]
+        .iter()
+        .map(|l| l.len() + 1)
+        .sum();
+    if len <= MAX_YAML_CHUNK_CHARS {
+        push_chunk(out, rel_path, kind, line_start, line_end, key, lines);
+        return;
+    }
+
+    // Find the shallowest indentation INSIDE this span that yields more than
+    // one key. Shallowest first keeps the pieces as large — and as coherent —
+    // as the budget allows.
+    for indent in [2usize, 4, 6, 8] {
+        let mut cuts: Vec<usize> = Vec::new();
+        for (i, &l) in lines.iter().enumerate().take(line_end).skip(line_start) {
+            let trimmed = l.trim_start();
+            if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with('-') {
+                continue;
+            }
+            if l.len() - trimmed.len() == indent && trimmed.contains(':') {
+                cuts.push(i);
+            }
+        }
+        if cuts.len() < 2 {
+            continue;
+        }
+        // The head — the parent key line and anything before the first cut —
+        // stays with the parent so the block is not orphaned from its name.
+        let first = cuts[0];
+        if first > line_start - 1 {
+            push_chunk(out, rel_path, kind, line_start, first, key, lines);
+        }
+        for (n, &c) in cuts.iter().enumerate() {
+            let end = cuts.get(n + 1).copied().unwrap_or(line_end);
+            let sub = lines[c].trim().trim_end_matches(':');
+            let sub_key = format!("{key}.{}", sub.split(':').next().unwrap_or(sub).trim());
+            push_yaml_span(out, rel_path, kind, c + 1, end, &sub_key, lines);
+        }
+        return;
+    }
+
+    // No inner keys: fall back to fixed line windows so an enormous prose block
+    // is still embedded in full rather than truncated to its first 6000 chars.
+    let mut s = line_start;
+    while s <= line_end {
+        let mut e = s;
+        let mut acc = 0usize;
+        while e <= line_end && acc + lines[e - 1].len() < MAX_YAML_CHUNK_CHARS {
+            acc += lines[e - 1].len() + 1;
+            e += 1;
+        }
+        if e == s {
+            e = s + 1; // one line longer than the budget: emit it alone
+        }
+        push_chunk(out, rel_path, kind, s, e - 1, key, lines);
+        s = e;
+    }
 }
 
 /// A column-0, non-comment line of the form `name:` or `name: value`.
@@ -649,7 +754,26 @@ fn push_code_span(
 ) {
     let mut start = line_start;
     while start <= line_end {
-        let end = std::cmp::min(start + MAX_CODE_SPAN_LINES - 1, line_end);
+        // ORDER 797-qv4z. A LINE budget does not bound CHARACTERS, and the
+        // embedder cuts on characters. 120 lines of a wide shell script or a
+        // comment-heavy Rust file runs well past the 6000-char truncation in
+        // scripts/spec-index-ensure.sh, so the tail of the span gets a vector
+        // that never saw it. Measured after the YAML fix landed: 61 .sh and
+        // 52 .rs chunks were still over the cut, holding 102,710 unembedded
+        // characters between them.
+        //
+        // So take whichever limit binds FIRST. The line cap stays because it is
+        // what keeps a citation readable; the char cap is what keeps it
+        // truthful.
+        let mut end = std::cmp::min(start + MAX_CODE_SPAN_LINES - 1, line_end);
+        let mut acc = 0usize;
+        for i in start..=end {
+            acc += lines[i - 1].len() + 1;
+            if acc > MAX_YAML_CHUNK_CHARS && i > start {
+                end = i - 1;
+                break;
+            }
+        }
         let key = lines[start - 1..end]
             .iter()
             .find(|l| !l.trim().is_empty())

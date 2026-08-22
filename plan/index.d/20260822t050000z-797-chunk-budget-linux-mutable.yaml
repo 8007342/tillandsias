@@ -1,0 +1,86 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-22T05:00:00Z.
+events:
+  - packet_id: spec-index-chunks-must-fit-the-embedding-context
+    event:
+      type: progress
+      ts: "2026-08-22T05:00:00Z"
+      agent_id: linux-macuahuitl-opus5-20260822T044300Z
+      host: linux_mutable
+      summary: |
+        THE CHUNKER NOW HAS A CHARACTER BUDGET. 129 oversized chunks -> 2;
+        332,377 unembedded characters -> 11,191, a 96.6% cut.
+
+        THE PACKET'S NUMBERS WERE STALE AND THE DEFECT HAD ROUGHLY DOUBLED.
+        Filed as "11 chunks silently lose 168,137 characters". Measured on the
+        live index 2026-08-22: 129 chunks, 332,377 characters. Nobody was
+        watching the number, and it grew.
+
+        THE MECHANISM, stated precisely because "loss" understates it.
+        scripts/spec-index-ensure.sh:413 feeds the embedder
+        `((.text // "") | .[0:$max])` with max=6000, while chunks.jsonl keeps
+        the FULL text. So an oversized chunk gets a vector built from its first
+        6000 characters and a citation that claims the whole span. Retrieval
+        matches on a prefix and the reader is shown the lot — that is a
+        CORRECTNESS problem for citations, not merely a recall problem.
+
+        WHY YAML AND NOT MARKDOWN. `chunk_yaml` split at COLUMN-0 keys only. A
+        methodology file has a handful, so everything beneath one became a
+        single chunk at any size. The contrast is stark and was the diagnosis:
+          methodology/distributed-work.yaml   102,265 bytes ->   2 chunks
+          openspec/specs/git-mirror-service/spec.md          ->  64 chunks
+        Comparable size; the markdown path splits on headings and the YAML path
+        had no budget at all.
+
+        THE FIVE WORST WERE ALL METHODOLOGY FILES, and distributed-work.yaml had
+        5.9% OF ITSELF EMBEDDED. That is the file this campaign has been writing
+        its durable rules into all week — the routing rule, concurrent correct
+        fixes, the branch inventory, why velocity is the other lever. I was
+        putting methodology into the least retrievable file in the corpus, and
+        `methodology_ask` searches vectors built from its first 6000 bytes.
+        Worth stating plainly for the operator's derived-next_action design: of
+        the five corpora, METHODOLOGY was the worst served.
+
+        THE FIX, two budgets rather than one:
+          * chunk_yaml subdivides an over-budget span at the SHALLOWEST inner
+            indentation that yields more than one key, recursively, so a nested
+            key travels with its block and citations stay coherent. A block with
+            no inner keys is prose and falls back to line windows.
+          * push_code_span gained a CHARACTER cap beside its existing
+            MAX_CODE_SPAN_LINES=120. A line budget does not bound characters,
+            and 61 .sh plus 52 .rs chunks were still over after the YAML fix.
+            The line cap keeps a citation readable; the char cap keeps it
+            truthful.
+          * Budget is 4000, not 6000, so a chunk that grows slightly between
+            index builds does not silently cross the embedder's cut. The margin
+            is the point.
+
+        MEASURED, before -> after, on the real corpus:
+          chunks                20,373 -> 20,657
+          over the 6000 cut        129 ->      2
+          characters unembedded 332,377 ->  11,191
+          largest chunk        101,853 -> 14,869
+          distributed-work.yaml      2 ->    120 chunks
+          multi-host-development     2 ->     58 chunks
+
+        NON-VACUITY, unmasked: raising MAX_YAML_CHUNK_CHARS to 200,000
+        reproduces the original defect — over=130, lost=333,094, within noise of
+        the pre-fix 129/332,377 (the corpus grew a little today). Restored:
+        over=2, lost=11,191. 204/204 plan-lib tests, clippy -D warnings 0.
+
+        THE 2 THAT REMAIN ARE MARKDOWN and I stopped deliberately. The largest
+        is cheatsheets/INDEX.md at 14,869. The markdown path is the one that
+        works well everywhere else — 64 chunks for a spec of similar size — so
+        adding a third budget there would change the shape of ~20,000 chunks to
+        recover 11,191 characters. Recorded rather than done; if it matters, it
+        is one more call to the same helper.
+
+        THE INDEX ON DISK IS STALE AND THIS FIX DOES NOTHING UNTIL IT IS
+        REBUILT. Everything above is measured with `spec-index --out <tmp>`,
+        which chunks without embedding. The served volume still holds the old
+        2-chunk distributed-work.yaml. A rebuild is the next action and it is
+        also the honest test: the refusal bands measured on this host yesterday
+        (in-corpus 0.7196-0.9102, near-miss 0.5821-0.6889, margin 0.031) were
+        taken against the OLD index and should be re-measured after, because
+        120 coherent methodology chunks will retrieve differently from 2
+        truncated ones.

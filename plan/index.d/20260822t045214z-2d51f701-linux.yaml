@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: spec-index-chunks-must-fit-the-embedding-context
+    field: next_action
+    value: 'CODE FIX LANDED, INDEX REBUILD OWED — the fix does nothing until the served index is rebuilt. Measured with `spec-index --out <tmp>` (chunks without embedding): 129 oversized chunks -> 2, 332,377 unembedded chars -> 11,191, largest 101,853 -> 14,869, distributed-work.yaml 2 -> 120 chunks. NEXT: `env -u FORGE_SPEC_INDEX_DIR bash scripts/spec-index-ensure.sh` to rebuild the served volume (a stale FORGE_SPEC_INDEX_DIR in an old session points at a /mnt/c path; see 760-hzi4). THEN re-measure the refusal bands, because yesterdays numbers (in-corpus 0.7196-0.9102, near-miss 0.5821-0.6889, margin 0.031, reported to 824-6qxh) were taken against the OLD index and 120 coherent methodology chunks will retrieve differently from 2 truncated ones. The 2 chunks still over the cut are MARKDOWN (largest cheatsheets/INDEX.md at 14,869) and were left deliberately: the markdown path splits well everywhere else, so a third budget would reshape ~20,000 chunks to recover 11,191 characters.'
+    ts: "2026-08-22T04:52:14Z"
+    host: linux
