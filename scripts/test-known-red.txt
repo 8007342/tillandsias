@@ -26,6 +26,6 @@
 # launch" before reaching a single assertion. Measured red on linux-next at
 # 81d2315f5 (2026-08-20) and again at f9ee195a9 (2026-08-21); it survived the
 # archive-sweep revert, so it is independent of that cycle's work.
-# NEEDS A FILED ISSUE — there is none yet. This entry is the oldest thing in
+# FILED AS 845-7a88 (2026-08-22). This entry is the oldest thing in
 # this file and it must not become the reason the file is ignored.
 proxy_cache_policy::bumped_origin_tls_and_signed_url_logs_fail_closed
