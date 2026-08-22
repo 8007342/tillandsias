@@ -79,7 +79,7 @@ fn citation_kind_of(kind: &str) -> CitationKind {
 
 /// The corpus roots and the citation-kind each maps to. Kept as data so a new
 /// corpus is one row, not a code change.
-const CORPUS_ROOTS: &[(&str, &str)] = &[
+pub const CORPUS_ROOTS: &[(&str, &str)] = &[
     ("openspec/specs", "spec"),
     ("cheatsheets", "cheatsheet"),
     ("docs/cheatsheets", "cheatsheet"),
@@ -138,6 +138,134 @@ fn is_pruned(rel: &str) -> bool {
 /// walker silently misses every one of them.
 const CORPUS_CODE_FILENAMES: &[&str] = &["Containerfile", "Dockerfile"];
 
+/// Extensions the `code` corpora index. ORDER 810-k8jy.
+///
+/// `ps1` and `hcl` were added 2026-08-22. Both already lived INSIDE a code root
+/// — 7 PowerShell files under `scripts/`, 14 HCL under `images/` — and were
+/// excluded by nothing but this list, which is what made the gap invisible: the
+/// walker returns them as "no files matched" rather than as "declined".
+///
+/// ps1 is the whole Windows build and install surface (install-windows.ps1,
+/// build-windows-tray.ps1). 803-su4n's argument for indexing code at all was
+/// that the questions costing the most hours were code questions; Windows
+/// questions are code questions, and the fleet-rejoin plan has Windows coming
+/// back. Its chunking works by accident and the accident is worth naming:
+/// `code_boundary`'s shell branch already accepts `function name`, which is
+/// PowerShell's exact syntax.
+///
+/// hcl is the Vault policy set — the only place "what is this role actually
+/// allowed to do" is written down. It gets NO boundary detection (`path "x" {`
+/// matches neither the Rust nor the shell rule), so an HCL file becomes one
+/// span subdivided by the character budget. That is imperfect and it is still
+/// strictly better than absent: bounded, retrievable, and honest about which
+/// file it came from.
+/// SELinux policy — `te` (type enforcement), `fc` (file contexts), `if`
+/// (interfaces), `cil`. Six files, and the third class 810-k8jy named by hand.
+/// Same argument as hcl: this is where "what is this container actually
+/// permitted to do" is written, and it is written nowhere else. Also no
+/// boundary detection, so each becomes one budget-bounded span.
+const CORPUS_CODE_EXTS: &[&str] = &["rs", "sh", "ps1", "hcl", "fish", "te", "fc", "if", "cil"];
+
+/// File classes DELIBERATELY not indexed, with the reason. ORDER 810-k8jy.
+///
+/// The packet's deliverable is "either a boundary rule per remaining file
+/// class, or a recorded decision that the class is not worth retrieving — the
+/// point is that the gap stops being invisible". This list is the second half.
+/// scripts/check-corpus-coverage.sh reads it, so a class that is neither
+/// indexed nor declined shows up as a question instead of as silence.
+///
+/// Each of these is a judgement, not a fact, and each can be reversed by moving
+/// its extension into [`CORPUS_CODE_EXTS`] and deleting the row.
+pub const CORPUS_DECLINED: &[(&str, &str)] = &[
+    (
+        "toml",
+        "dependency manifests and locale tables. Cargo.toml is version pins, \
+         which cosine similarity answers worse than reading the file; and \
+         locales/*.toml ships in ZERO artifacts (792-7bt5) so indexing it would \
+         retrieve strings no tray renders.",
+    ),
+    (
+        "json",
+        "configs and test fixtures — .mcp.json, litmus payloads. Structured \
+         data with almost no natural-language content to embed; a question \
+         about MCP registration is answered by the overlay script that WRITES \
+         the json, which is already indexed.",
+    ),
+    (
+        "txt",
+        "registries, one entry per line: capabilities.txt, the brew allowlist, \
+         test-known-red.txt. Embedding a list produces a vector that means \
+         nothing in particular. These need REFERENTIAL-INTEGRITY gates, not \
+         retrieval — and capabilities.txt already has one.",
+    ),
+    ("svg", "tray icons. Vector art has no prose."),
+    (
+        "ps1xml",
+        "PowerShell formatting descriptors, generated. No prose.",
+    ),
+    ("png", "raster art. No prose."),
+    ("icns", "macOS icon bundle. No prose."),
+    ("ico", "Windows icon. No prose."),
+    (
+        "entitlements",
+        "an Apple plist of capability booleans. The REASONS live in \
+         build-macos-tray.sh and the specs, both indexed; the plist is the \
+         machine-readable echo.",
+    ),
+    ("framework", "a macOS framework stub path, not a document."),
+    (
+        "manifest",
+        "a Windows application manifest — XML capability declarations, same \
+         shape and same reasoning as entitlements.",
+    ),
+    (
+        "Caddyfile",
+        "the reverse-proxy config. One file, and openspec/specs/\
+         reverse-proxy-internal is the indexed prose that explains it.",
+    ),
+    (
+        "conf",
+        "squid.conf. Same as Caddyfile: the spec that explains it is indexed, \
+         and the config is 4 directives whose meaning is not in the file.",
+    ),
+    (
+        "rc",
+        "a dotfile-shaped runtime config staged into an image. No prose.",
+    ),
+    (
+        "base",
+        "a Containerfile FROM-line fragment, meaningless in isolation.",
+    ),
+    ("core", "an image-layer fragment, same as base."),
+    (
+        "example",
+        "a sample env file. Its keys are documented in the scripts that read \
+         them, which are indexed.",
+    ),
+    (
+        "template",
+        "a substitution skeleton — its content is placeholders.",
+    ),
+    ("stamp", "a build marker, one line, generated."),
+    (
+        "awk",
+        "one 30-line filter. Declined as a SINGLE-FILE LANGUAGE: adding an \
+         extension to the corpus is cheap, but each one also widens what the \
+         chunker must handle sensibly, and a lone file cannot pay for that. \
+         If a second .awk appears, revisit — the coverage report will keep \
+         showing the class either way.",
+    ),
+    (
+        "c",
+        "one TLS test-server fixture. Single-file language, as awk.",
+    ),
+    (
+        "js",
+        "one browser-injection shim. Single-file language, as awk.",
+    ),
+    ("rb", "one archive helper. Single-file language, as awk."),
+];
+
 /// Walk the whole-spec corpus under `root` and return every chunk. Missing
 /// roots are skipped (an off-Tillandsias project simply has fewer corpora), not
 /// an error — the same open-world discipline the ledger uses.
@@ -151,7 +279,7 @@ pub fn chunk_corpus(root: &Path) -> Vec<Chunk> {
         }
         let want_ext: &[&str] = match *kind {
             "methodology" => &["yaml", "yml"],
-            "code" => &["rs", "sh"],
+            "code" => CORPUS_CODE_EXTS,
             _ => &["md"],
         };
         // Only `code` has extension-less members; a prose root asking for
@@ -1029,6 +1157,90 @@ pub fn answer_cheatsheet_query(root: &Path, chunks: &[Chunk], query: &str) -> En
             Freshness::for_source(&root.join("cheatsheets")),
         )
     }
+}
+
+/// Report every file class under a corpus root and how the indexer treats it.
+/// ORDER 810-k8jy.
+///
+/// The packet's complaint was not that HCL and PowerShell were missing — it was
+/// that their absence was INVISIBLE. `walk_files` returns "no match" for a
+/// declined class and for a class nobody has considered, and those are the same
+/// silence. This turns the second one into a question.
+///
+/// Returns `(extension, count, verdict)` sorted by count, verdict being
+/// `indexed`, `declined:<reason>` or `UNCLASSIFIED`.
+pub fn corpus_coverage(root: &Path) -> Vec<(String, usize, String)> {
+    let mut seen: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+    for (rel_root, _kind) in CORPUS_ROOTS {
+        let dir = root.join(rel_root);
+        if !dir.is_dir() {
+            continue;
+        }
+        let mut stack = vec![dir];
+        while let Some(d) = stack.pop() {
+            let Ok(rd) = std::fs::read_dir(&d) else {
+                continue;
+            };
+            for e in rd.flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    // target/ and .git/ are build and VCS state, never corpus.
+                    let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                    if name != "target" && !name.starts_with('.') {
+                        stack.push(p);
+                    }
+                    continue;
+                }
+                let rel = to_repo_relative(root, &p);
+                if is_pruned(&rel) {
+                    continue;
+                }
+                let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                // Only real extensions. Two shapes are deliberately skipped
+                // because reporting them is noise, not news:
+                //   * a dotfile (`.gitkeep`, `.zshrc`) — Path::extension reads
+                //     the whole name as an extension, so every one appears as
+                //     its own class;
+                //   * an extension-LESS file whose name merely contains dots
+                //     (`tillandsias-headless-x86_64-unknown-linux-musl`), which
+                //     reads as a `.musl` class that does not exist.
+                // Extension-less files that ARE corpus members are handled by
+                // CORPUS_CODE_FILENAMES, which is an exact-name list.
+                if name.starts_with('.') {
+                    continue;
+                }
+                let Some(ext) = p.extension().and_then(|x| x.to_str()) else {
+                    continue;
+                };
+                let ext = ext.to_string();
+                if ext.is_empty() || ext.contains('-') {
+                    continue;
+                }
+                *seen.entry(ext).or_insert(0) += 1;
+            }
+        }
+    }
+    let indexed: std::collections::BTreeSet<&str> = CORPUS_CODE_EXTS
+        .iter()
+        .copied()
+        .chain(["yaml", "yml", "md"])
+        .chain(CORPUS_CODE_FILENAMES.iter().copied())
+        .collect();
+    let mut out: Vec<(String, usize, String)> = seen
+        .into_iter()
+        .map(|(ext, n)| {
+            let verdict = if indexed.contains(ext.as_str()) {
+                "indexed".to_string()
+            } else if let Some((_, why)) = CORPUS_DECLINED.iter().find(|(e, _)| *e == ext) {
+                format!("declined:{why}")
+            } else {
+                "UNCLASSIFIED".to_string()
+            };
+            (ext, n, verdict)
+        })
+        .collect();
+    out.sort_by_key(|(_, n, _)| std::cmp::Reverse(*n));
+    out
 }
 
 #[cfg(test)]

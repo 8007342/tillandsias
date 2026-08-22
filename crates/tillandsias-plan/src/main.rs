@@ -72,6 +72,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "check",
     "closure-evidence-check",
     "compact",
+    "corpus-coverage",
     "dependencies-of",
     "expire-claims",
     "fragment-event-packets",
@@ -2031,6 +2032,58 @@ fn carry_forward_gaps(doc: &serde_yaml::Value) -> Vec<String> {
 
 fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
     match subcommand {
+        "corpus-coverage" => {
+            // ORDER 810-k8jy. Every file class under a corpus root, and how the
+            // indexer treats it. The packet's complaint was not that HCL and
+            // PowerShell were missing — it was that their absence was
+            // INVISIBLE: `walk_files` returns "no match" for a class nobody
+            // considered and for one deliberately declined, and those two
+            // silences are identical. UNCLASSIFIED is the difference.
+            //
+            // Advisory by design. A new file class appearing in the tree is
+            // news, not a build break, and redding the gate for it would get
+            // the check switched off the first time someone adds a .lock.
+            let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            let rows = tillandsias_plan::spec::corpus_coverage(&root);
+            let unclassified: Vec<&(String, usize, String)> = rows
+                .iter()
+                .filter(|(_, _, v)| v.as_str() == "UNCLASSIFIED")
+                .collect();
+            for (ext, n, verdict) in &rows {
+                let short = verdict
+                    .split_once(':')
+                    .map(|(k, _)| k)
+                    .unwrap_or(verdict.as_str());
+                println!("{short}\t{n}\t.{ext}");
+            }
+            if unclassified.is_empty() {
+                println!(
+                    "ok:corpus-coverage:{} class(es), 0 unclassified",
+                    rows.len()
+                );
+            } else {
+                println!(
+                    "advisory:corpus-coverage:{} class(es) NEITHER indexed NOR declined — {}",
+                    unclassified.len(),
+                    unclassified
+                        .iter()
+                        .map(|(e, n, _)| format!(".{e}({n})"))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                );
+                eprintln!(
+                    "A class here is a decision nobody has made yet. Add it to \
+                     CORPUS_CODE_EXTS to index it, or to CORPUS_DECLINED with the \
+                     reason (spec.rs, order 810-k8jy)."
+                );
+            }
+            // This dispatcher is the LEDGER-FREE fast path and its arms return
+            // whether they handled the subcommand. corpus-coverage belongs here
+            // rather than in the main match precisely because it walks the
+            // filesystem and never folds the plan — the 133ms ledger load would
+            // be pure waste (the same reason the fragment-* arms moved here).
+            true
+        }
         "carry-forward-check" => {
             // ORDER 831-ezea. See [`carry_forward_gaps`] for the contract. This
             // arm is IO only: read, parse, print one packet_id per line, exit 0.

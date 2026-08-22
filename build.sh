@@ -1639,6 +1639,30 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Carry-forward advisory reported"
 
+    # Order 810-k8jy. Which file classes under a corpus root the RAG indexer
+    # indexes, declines, or has never been told about. ADVISORY like the
+    # carry-forward line above, and for the same reason: a new file class in the
+    # tree is news, not a build break, and redding the gate the first time
+    # someone adds a .lock is how a check gets switched off.
+    #
+    # The packet's complaint was not that HCL, PowerShell and SELinux policy
+    # were unindexed — it was that their absence was INVISIBLE. walk_files
+    # returns "no files matched" for a class deliberately declined and for a
+    # class nobody has considered, and those two silences are identical.
+    # UNCLASSIFIED is the difference.
+    # `cargo run -q` like the ledger-integrity step above, not a target/ path:
+    # check-plan-binary-probe-usage.sh reds the build for a hardcoded
+    # target/release path, and it is right to (704-zcgi). The subcommand lives
+    # on the LEDGER-FREE dispatch path, so this costs a walk, not a fold.
+    _step "Reporting RAG corpus coverage (810-k8jy, advisory)..."
+    if ! _run cargo run -q --manifest-path "$SCRIPT_DIR/Cargo.toml" -p tillandsias-plan -- corpus-coverage >/dev/null 2>&1; then
+        _error "the corpus-coverage report could not run — a broken checkout, not an unclassified tree"
+        exit 1
+    fi
+    # Printed separately from the run above so the verdict is not swallowed by
+    # a pipeline whose exit status belongs to `tail` (727-kmks, hit twice today).
+    _info "$(cargo run -q --manifest-path "$SCRIPT_DIR/Cargo.toml" -p tillandsias-plan -- corpus-coverage 2>/dev/null | tail -1)"
+
     # Order 831-ezea, the OTHER half of the same arithmetic. Carry-forward above
     # is about SERVICE — did the cycle leave the rows it touched resumable. This
     # one is about ARRIVAL — should the rows the cycle FILED have been rows at
