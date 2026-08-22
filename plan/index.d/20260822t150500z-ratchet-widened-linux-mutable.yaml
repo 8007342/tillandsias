@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-22T15:05:00Z.
+events:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    event:
+      type: progress
+      ts: "2026-08-22T15:05:00Z"
+      agent_id: linux-macuahuitl-opus5-20260822T144300Z
+      host: linux_mutable
+      summary: |
+        THE TEST RATCHET RECREATED THE BLIND SPOT IT WAS BUILT TO CLOSE.
+
+        `scripts/check-test-baseline.sh` exists because NO gate ran `cargo
+        test`: five shape gates were green while seven plan tests were red. The
+        fix wired a ratchet into `./build.sh --check`, and scoped it to
+        `cargo test -p tillandsias-plan --lib`.
+
+        That `--lib` put the BINARY's 23 tests outside the ratchet. Two of them
+        had been failing for several cycles behind a green --check:
+
+          tests::every_dispatch_arm_is_documented_in_usage
+          tests::every_declared_capability_is_documented_in_usage
+
+        Both fail on `corpus-coverage` — a subcommand I added earlier in this
+        campaign and never listed in the usage text. The panic message is
+        exactly the argument for the gate: "a subcommand nobody can discover
+        might as well not exist."
+
+        So the same cycle produced two instances of ONE shape: a command whose
+        usage is undiscoverable (`compact --help`, which mutated instead of
+        printing) and a command absent from usage entirely (`corpus-coverage`).
+        The second was invisible because the ratchet meant to see it was scoped
+        one target too narrow.
+
+        FIXED. `corpus-coverage` documented; `--lib` dropped from build.sh:1570
+        so the ratchet covers bin and integration targets. Cost measured at
+        ~0.0s — the bin suite is 23 assertions over static text.
+
+        MUTATION CONTROL, both directions, and the FIRST ATTEMPT WAS INVALID. I
+        renamed the usage line to `XXcorpus-coverageXX` and --check stayed green
+        (exit 0), which I nearly recorded as "the gate does not fire". The
+        assertion does a SUBSTRING search, and my mutant still contained the
+        substring. Deleting the line outright:
+          mutated   -> test FAILED, "the plan ledger suite's failure set moved
+                       (cargo rc=101)", ./build.sh --check exit 1
+          restored  -> 204/204 lib, 23/23 bin, --check exit 0
+        A mutation that does not actually remove the property under test proves
+        nothing about the gate, and it fails in the direction that flatters the
+        gate — the same false-pass shape as this morning's R4 refusal-string
+        comparison. Twice in one day: the check that a NEGATIVE control is
+        genuinely negative is now the step I keep skipping.
+
+        WHAT THIS SAYS ABOUT THE OTHER RATCHETS. The workspace-level call at
+        build.sh:1377 runs `cargo test --workspace`, so it has no target gap.
+        This was the narrow one. Worth asking of any future ratchet: name the
+        set it does NOT cover, because a ratchet's scope is invisible from its
+        green line.
