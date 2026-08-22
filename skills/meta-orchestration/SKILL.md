@@ -398,6 +398,20 @@ bound, but that reading says nothing about what a second host does to it —
 which is precisely why hosts rejoin one at a time and the number is re-measured
 after each.
 
+**If you are on immutable Linux (Silverblue/Kinoite), two things differ.**
+First, `./build.sh` transparently re-execs inside the `tillandsias-builder`
+toolbox (`scripts/with-tillandsias-builder.sh`), creating it with
+`toolbox create --assumeyes` on first use. So unlike a mutable host, your gate
+NEEDS a working podman — a Silverblue box with podman broken cannot run
+`--check` at all, where a mutable box happily would. Expect the first `--check`
+of a fresh checkout to spend minutes pulling an image and installing a
+toolchain; that is the toolbox being built, not a hang.
+Second, `scripts/e2e-preflight.sh` carries NO immutability logic and will report
+`eligible` to you. Do not believe it: the skill's E2E table routes immutable
+Linux to `/smoke-curl-install-and-test-e2e` (test a PUBLISHED release), never to
+`/build-install-and-smoke-test-e2e` (test a LOCAL build). The preflight is
+answering a narrower question than the one you are asking it.
+
 **Expect to be offered other hosts' abandoned work.** Claims expire on a 24h
 lease, and expired rows return to the pool with their history intact — a row
 you are offered may have been started elsewhere and dropped. Read the row's
