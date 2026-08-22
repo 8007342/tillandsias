@@ -9017,6 +9017,7 @@ plan_index:
           summary: |
             DEPENDENCY SATISFIED, AND THE DESIGN QUESTION IT LOOKED LIKE IT HAD IS ALREADY ANSWERED IN THE CONTRACT. This packet depends_on fat-spec-corpus-index and has been unrunnable because the index had no vectors -- the embedding step existed only as prose in a refusal message until 0a1c2ae24/070021f2f. There is now a real index on this host (18269 chunks then, 19483 after images/ landed) and spec_answer returns confidence=retrieved with code and spec citations. THE APPARENT BLOCKER: the grader lives in tillandsias-plan, which is network-free by design (spec.rs:2, 'Order 547 — network-free RAG index'), while a spec answer needs a query EMBEDDING. That reads at first like a hard tension: either the grader makes an HTTP call and stops being hermetic, or it grades a lexical path that is not the path production uses -- which would be worse, because a green grade would then certify something users never run. It is NOT a tension. spec-retrieve's own contract already resolves it: main.rs:257 describes it as 'network-free cosine top-k over CALLER-SUPPLIED embeddings'. So the spec.answer engine supplies the query vector rather than computing it, exactly as every other caller of spec-retrieve already does, and grading stays hermetic and deterministic while still exercising the real retrieval and envelope path. WHAT THAT COSTS, stated so it is a decision and not a surprise: a committed query vector is model-pinned (768-dim nomic-embed-text here), so the query set is tied to an embedding model. That pinning is already a managed fact rather than a new one -- scripts/check-dev-embed-model-agreement.sh exists precisely because the producer and the query path must name the same model, and it would fail loudly if they drifted. Whoever implements should note the set becomes invalid under a model change, which is a re-embed of the set, not a rewrite. THE SHAPE IS OTHERWISE READY: ENGINES (groundtruth.rs:59) currently registers plan.answer, methodology.ask, methodology.path, cheatsheet.ask and rejects an unregistered engine loudly at the registration site; Harness::run has one arm per engine; Expect grades the ENVELOPE -- confidence, min/max citations, citation_kind, citations_include and citations_exclude -- never prose, which is exactly what this packet's exit criteria ask for, and citations_exclude is already the mechanism for the falsifiability spot-check the third criterion wants. Sets load from openspec/litmus-tests/groundtruth/. Case carries deny_unknown_fields, so a query-vector field is a schema addition rather than a free-form annotation. NOT CLAIMED OR STARTED: I did not take this packet -- it is a 6h implementation and I reached this conclusion with ~15 minutes of cycle left, and half of a grading engine is worse than none because a partial set reads as coverage.
     - packet_id: spec-index-commit-freshness
+      next_action: 'PART 2 OF 4 IS ALREADY DONE — content-hash stale detection works and was observed rebuilding three times unprompted tonight (8f7c918a -> f2d668ba -> 39b60df2). Stop counting it as owed. THE OTHER THREE ARE UNIMPLEMENTED: grep for delta|reuse|content_hash|incremental in scripts/spec-index-ensure.sh returns nothing; every rebuild re-embeds every chunk. MEASURED PRICE on this host: 1.52s per 64-chunk batch, 20,657 chunks = 323 batches = ~490s (eight minutes) per full rebuild, 609 MB for three retained generations. WASTE RATIO: a one-file edit changes ~0.6% of chunks (rewriting distributed-work.yaml touches 120 of 20,657) and pays 100% of the embed — roughly 325x. Note crates/ is a corpus root, so editing spec.rs itself forces a full re-embed; that is how the cost surfaced. IMPLEMENTATION HAZARD, do not skip: the embed loop is LINE-POSITIONAL and its per-batch arity check exists because "a shifted index answers plausibly and wrongly". A content_hash delta join can produce exactly that shift WHILE PASSING that check, since the batches it does embed are all the right size. So the delta path needs its OWN per-chunk identity assertion (reused row content_hash == hash of the chunk it was paired with), plus a negative control that corrupts one pairing and proves assembly refuses. Without that, delta is worse than the full rebuild it replaces.'
       order: 552
       desired_release: v0.5
       release_target: forge-local-experts-milestone
@@ -9048,6 +9049,75 @@ plan_index:
           host: linux-immutable
           summary: |
             CROSS-REFERENCE (yoga 2026-08-17): scoping of 760-hzi4 established that the spec RAG index is built on NO host — this packet's body is unimplemented, and the embedding producer does not exist in any language (read_vectors only reads vectors.jsonl; the producer exists only as prose inside forge-plan.sh's refusal message). 760-hzi4 was filed believing the index existed in-forge and was merely missing on dev hosts; it is therefore a duplicate of THIS packet's scope, not a parity gap. Whoever picks either one should merge or re-point them rather than implement both. Also relevant: 551 spec-expert-groundtruth cannot grade a corpus that has no vectors, so it is effectively blocked behind this.
+        - type: progress
+          ts: "2026-08-22T09:00:00Z"
+          agent_id: linux-macuahuitl-opus5-20260822T084300Z
+          host: linux_mutable
+          summary: |
+            ONE OF THE FOUR PARTS IS ALREADY DONE, AND THE OTHER THREE NOW HAVE A
+            PRICE. Measured, not estimated.
+        
+            PART 2 — CONTENT-HASH STALE DETECTION — WORKS TODAY, observed three
+            times tonight without being asked. The served generation is named by a
+            hash over the corpus, so editing a corpus file moves the fingerprint and
+            cycle-preflight rebuilds. Watched it happen at 8f7c918a -> f2d668ba ->
+            39b60df2 across this session. Nothing to build; the packet should stop
+            counting it as owed.
+        
+            THE OTHER THREE HAVE NO IMPLEMENTATION AT ALL:
+            `grep -niE 'delta|reuse|content_hash|previous|incremental'
+            scripts/spec-index-ensure.sh` returns NOTHING. Every rebuild re-embeds
+            every chunk.
+        
+            THE PRICE, measured on this host against the live endpoint:
+              one batch of 64 chunks          1.52 s
+              full corpus                     20,657 chunks = 323 batches
+              FULL REBUILD                    ~490 s, call it eight minutes
+              three generations retained      609 MB on disk (198 + 205 + 207)
+        
+            AND THE WASTE RATIO, which is the actual argument. A typical edit
+            touches one file. Rewriting methodology/distributed-work.yaml — the
+            largest file in the corpus — changes 120 of 20,657 chunks, or 0.6%. So a
+            one-file edit currently pays 100% of an eight-minute embed to update
+            0.6% of the index. Delta would make that ~1.5 s. Roughly 325x.
+        
+            I TRIGGERED THREE OF THESE TONIGHT BY ACCIDENT, which is how the cost
+            became visible: `crates/` is a corpus root, so every edit to
+            crates/tillandsias-plan/src/spec.rs — the file that IMPLEMENTS the
+            chunker — changes the corpus that the chunker indexes and forces a full
+            re-embed. About 25 minutes of GPU time for changes touching a handful of
+            files.
+        
+            WHY I DID NOT IMPLEMENT IT THIS CYCLE, stated as a judgement rather than
+            left as a gap. The embed loop is line-positional: vectors.jsonl line N
+            pairs with chunks.jsonl line N, and it carries a per-batch arity check
+            whose comment says exactly why — "a server that silently drops one input
+            shifts every subsequent pairing, and a shifted index answers plausibly
+            and wrongly".
+        
+            A delta join REUSES vectors from a prior generation keyed by
+            content_hash, and a mis-join produces precisely that shifted index —
+            while passing the existing per-batch arity check, because the batches it
+            does embed are all the right size. The guard that protects the current
+            path is structurally blind to the failure the new path introduces. That
+            is not a reason never to build it; it is a reason the build must come
+            with its OWN identity check, and not be written at 02:00 at the end of a
+            long session on a 200 MB data path whose failure mode is silent and
+            confidently wrong.
+        
+            THE DESIGN, so the next cycle starts from here:
+              * Chunk already carries `content_hash` — the data model supports this
+                and only the builder does not use it.
+              * Reuse must be keyed on (content_hash) and verified per chunk, not
+                per batch: after assembly, assert that every reused row's
+                content_hash equals the hash of the chunk it was paired with. That
+                is the check the current arity test cannot express.
+              * The non-vacuity control writes itself: corrupt one cached pairing on
+                purpose and the assembly must refuse. If it does not, the delta path
+                is worse than the full rebuild it replaces.
+              * Retention is a separate lever worth pricing at the same time: 609 MB
+                for three generations, and delta makes a generation cheap enough
+                that `keep` could plausibly go up rather than down.
     - packet_id: harness-mcp-expert-validation
       order: 554
       desired_release: v0.5
@@ -20600,6 +20670,7 @@ plan_index:
           summary: |
             operator ruling: ~/src is being retired entirely; successor 776-jcf3 carries the real removal gate
     - packet_id: dev-host-spec-rag-index-never-built
+      next_action: 'PREMISE DISPROVEN ON macuahuitl, fleet half open. This host HAS an index — 198 MB podman volume, serving real chunks, in-corpus retrieval 0.72-0.91. It looked absent because `--where` printed a serving= path it never stat-ed; with a stale FORGE_SPEC_INDEX_DIR that was a /mnt/c Windows path on Fedora. FIXED: --where now prints serving-exists=yes|no plus a stderr note naming FORGE_SPEC_INDEX_DIR and 789-nc2s (serving= is byte-identical; bench-accel-lane.sh:67 parses it). NEXT, and it is one command per host: run `env -u FORGE_SPEC_INDEX_DIR scripts/spec-index-ensure.sh --where` on the other dev hosts. All serving-exists=yes -> close this as stale. Any no -> the original premise holds THERE and this packet is about that host, not the fleet. Do not close on macuahuitl evidence alone.'
       order: 760-hzi4
       status: ready
       desired_release: v0.5
@@ -20700,6 +20771,98 @@ plan_index:
             (789-nc2s) — and writing to the operator's shell profile changes their
             interactive environment to make every commit fork a 12-minute rebuild.
             That is the operator's call, not a side effect of a drain cycle.
+        - type: note
+          ts: "2026-08-22T03:01:00Z"
+          agent_id: linux-macuahuitl-opus5-20260822T024300Z
+          host: linux_mutable
+          summary: |
+            THIS PACKET'S PREMISE IS STALE ON macuahuitl — the index EXISTS. And the
+            thing that made it look absent is worth more than the correction.
+        
+            MEASURED: the index is a podman volume at
+            .../volumes/tillandsias-spec-index-tillandsias/_data/8f7c918a...,
+            198 MB, carrying chunks.jsonl and vectors.jsonl, and it serves — top-1
+            retrieval returns real spec chunks with plausible cosines (see the
+            824-6qxh event in this fragment for the full band measurement).
+        
+            WHY IT LOOKED MISSING: `spec-index-ensure.sh --where` reported
+              spec-index:serving=/mnt/c/Users/bullo/claudia/tillandsias/target/spec-index
+            A WINDOWS PATH, on a Fedora host, naming a directory that does not
+            exist. Cause: FORGE_SPEC_INDEX_DIR is exported into THIS AGENT SESSION
+            with a stale value. That is 789-nc2s exactly, and that packet is
+            `completed` — it removed the value from the tracked config in 2b1f8d188
+            — but its own note says every session started before that commit keeps
+            the stale value until it restarts. This session is one of them.
+            `env -u FORGE_SPEC_INDEX_DIR` resolves correctly to the local volume.
+        
+            THE GAP THAT REMAINS, and it is not 789-nc2s's: the BUILD path refuses
+            an unwritable destination loudly (`blocked:spec-index:
+            destination-unwritable`, with a message that names FORGE_SPEC_INDEX_DIR
+            and 789-nc2s). The QUERY path does not. `--where` printed a confident
+            `serving=` line for a path that does not exist, with no warning and exit
+            0 — so a reader asking "where is the index" gets an answer that is wrong
+            in the one way that matters. Same shape as every other "reports a
+            verdict it could not compute" instance this week: `--where` should stat
+            the path it names and say so when it is absent.
+        
+            RECOMMEND: re-scope this packet from "never built" to that `--where`
+            gap, or close it and file the gap, once someone confirms the index also
+            exists on the OTHER dev hosts — this event establishes it for macuahuitl
+            only, and the packet is fleet-shaped.
+        - type: progress
+          ts: "2026-08-22T04:00:00Z"
+          agent_id: linux-macuahuitl-opus5-20260822T034300Z
+          host: linux_mutable
+          summary: |
+            THE REPORTING GAP IS FIXED. The packet stays READY because its fleet
+            half is not mine to close — released from in_progress rather than
+            claimed-and-abandoned.
+        
+            WHAT WAS WRONG WITH THE REPORT. `--where` printed a `serving=` path and
+            never checked it existed. On this host, with a stale
+            FORGE_SPEC_INDEX_DIR, that meant:
+              spec-index:serving=/mnt/c/Users/bullo/.../target/spec-index
+            A Windows path, on Fedora, naming a directory that is not there — with
+            exit 0 and no warning. That is what made this host look like it had no
+            index, which is this packet's entire premise. It has one: 198 MB, in a
+            podman volume, serving real chunks.
+        
+            THE FIX: `serving-exists=yes|no`, plus a stderr note on `no` that names
+            FORGE_SPEC_INDEX_DIR and 789-nc2s and says `env -u` resolves locally —
+            mirroring the message the BUILD path already prints when it refuses an
+            unwritable destination. The build path was loud; the query path was
+            silent; now both say the same thing.
+        
+            `serving=` IS BYTE-IDENTICAL — scripts/bench-accel-lane.sh:67 parses it
+            with sed, and that consumer keeps working. It is also already defensive
+            (`[ -s "$_bal_dir/chunks.jsonl" ]` before use, with a fallback), so the
+            damage from the silent report was confined to human readers. Which is
+            where it landed: it cost an hour and produced a wrong conclusion about
+            whether this host had an index.
+        
+            AN OVER-CORRECTION I MADE AND BACKED OUT, recorded because the reasoning
+            is the useful part. My first draft also repointed `entries=` at the
+            serving directory, on the theory that a reader sees the two lines
+            together and assumes one directory. Wrong: `entries` pairs with `keep`
+            as the retention accounting for index GENERATIONS under the root ("3 of
+            3 kept"), and repointing it produced `entries=2, keep=3` — a file count
+            beside a generation count, which is a NEW incoherence traded for the old
+            one. The ambiguity that actually misled a reader was a `serving=` path
+            that did not exist and said nothing. One line fixes that; the second
+            change was me fixing a problem I had invented.
+        
+            NON-VACUITY, unmasked: with the stale override still set, removing the
+            `[ -d "$_serving" ]` test makes the report print `serving-exists=yes`
+            for a path that is not there — the exact false green. Restored, it
+            prints `no`. Source byte-identical after restore.
+        
+            WHY THIS ROW STAYS OPEN. Its title is "dev-host-spec-rag-index-never-
+            built" and that premise is now DISPROVEN ON macuahuitl — but the packet
+            is fleet-shaped and I have evidence from one host. Whoever picks it up
+            should run `env -u FORGE_SPEC_INDEX_DIR scripts/spec-index-ensure.sh
+            --where` on the other dev hosts: if they all report
+            `serving-exists=yes`, close it as stale; if any reports `no`, the
+            original premise holds there and the packet is about THAT host.
     - packet_id: stale-user-level-expert-install-refresh
       order: 760-nwzr
       status: ready
@@ -22679,6 +22842,41 @@ plan_index:
             litmus:accel-envelope-reaches-the-forge passes unchanged.
 
 
+      events:
+        - type: note
+          ts: "2026-08-22T00:56:00Z"
+          agent_id: linux-macuahuitl-opus5-20260822T004300Z
+          host: linux_mutable
+          summary: |
+            FIRST REAL LINUX CAPABILITY ROW CONFIRMS THIS PACKET, with a
+            counterexample sharper than the packet's own statement.
+        
+            macuahuitl's row, from a HEAD-built probe:
+              devices: cpu/Intel Core Ultra 7 265KF  usable=true  lanes=container,host-native
+                       gpu/NVIDIA RTX A5000          usable=true  lanes=container,host-native
+                       npu/Intel NPU                 usable=false reason=engine-missing
+              engines: []
+              -> capability-matrix prints `schedulable: none`
+        
+            A HOST WITH A USABLE RTX A5000 REPORTS NOTHING SCHEDULABLE. And it is
+            not a quiet host: this same cycle's preflight returned
+            `ok:dev-inference-ready:qwen2.5:0.5b:nomic-embed-text`, so ollama is
+            running and serving models on this machine right now. The engine exists
+            in reality and `engines: []` in the document.
+        
+            This is the packet's first half — "5b8da3dbe added enumerate_engines()
+            but accel_envelope() never reads doc.engines" — observed from the
+            consumer side rather than the source side. schedulable_triples needs a
+            (device, lane, ENGINE) triple, so an empty engines list makes every
+            device unschedulable no matter how usable it is, and the matrix
+            under-reports the fleet's best GPU as nothing.
+        
+            Worth noting for whoever claims this: the NPU row is CORRECT — it says
+            usable=false with unusable_reason=engine-missing, which is exactly the
+            present-unusable distinction 806-2r4s built. So the document can express
+            "hardware present, no engine". The gap is that a device with a
+            WORKING engine cannot express it, because engines are never enumerated
+            into the document at all.
     - packet_id: igpu-acceleration-opt-in-for-wsl2-hosts
       release_target: stable-milestone-v1
       order: 793-a8e7
@@ -23296,6 +23494,12 @@ plan_index:
         deleting the five workarounds leaves two code paths for the same thing,
         which is how this subsystem got here.
       events:
+        - type: note
+          ts: "2026-08-22T23:53:18Z"
+          agent_id: "linux-lenovinha-claude-20260822t235318z"
+          host: lenovinha
+          summary: |
+            RESIDUAL surfaced while closing child 837-m47d (2026-08-22): the tray launch path does NOT feature-detect CAP_EXEC_ARGV_VECTOR. launch_spec unconditionally emits the verbatim vector, and vsock_client.rs's own capability doc (:211-236, 824-vr2d) says hosts MUST read HelloAck.server_caps before sending a shape the guest may lack — an old guest without the verbatim arm refuses the vector with PermissionDenied 'exec allowlist violation'. Bounded in practice (trays ship with their guest image) but it is an undischarged MUST from this epic's own 2026-08-18 sequencing note ('the tray must still read server_caps and keep the flattened path for a guest that lacks the capability'). Whoever drives this epic's closure litmus (litmus:guest-exec-argv-vector-no-shell) should either discharge it (feature-detect + fallback in the two tray callers) or record the deliberate decision that a version-skewed guest is out of contract — with the mixed-version failure mode named either way.
         - type: progress
           ts: "2026-08-17T20:24:46Z"
           agent_id: "macos-tlatoanis-macbook-air-fable5-20260817t1923z"
@@ -24090,6 +24294,7 @@ plan_index:
             wrong. Both defects exist; only E4 explains that log.
 
     - packet_id: podman-sync-wait-bounded-busy-polls-two-detached-threads
+      next_action: 'Implement slice B per the 2026-08-22 decision event: replace both 20ms try_wait loops with a parked deadline wait (wait-timeout crate or cfg''d waitpid/WaitForSingleObject), kill+wait on expiry, readers stay abandoned; then add the thread::sleep-in-wait-loop scan to check-podman-sync-budgets.sh with a fixture case, and the hanging-child unit test asserting the pid is gone after timeout. New-dependency decision (wait-timeout crate vs hand-rolled cfg pair) should be made deliberately at review.'
       order: 795-hzpg
       status: ready
       kind: enhancement
@@ -24159,6 +24364,12 @@ plan_index:
         deliberately-hanging child and asserts (a) the call returns inside
         budget and (b) the child process is gone afterwards.
       events:
+        - type: progress
+          ts: "2026-08-22T23:53:05Z"
+          agent_id: "linux-lenovinha-claude-20260822t235305z"
+          host: lenovinha
+          summary: |
+            DESIGN DECIDED (the choice the two prior scoping notes demanded) + SLICE A LANDED. DECISION: OPTION 3 — keep the methods SYNC and bound them natively, restating the deliverable accordingly. Options 1 and 2 are dead on evidence gathered this cycle: (1) going async cannot cover impl Drop for AppRoleSecretLease (vault_bootstrap.rs:1531 — Drop is sync by language), reaches ~45 transitive call sites not 11, and would demolish 714-4r6w's deliberate compile-time sync-budget type; (2) block_on PANICS today — status_bounded already executes on tokio worker threads at vault_bootstrap.rs:1506/1618/1672 (inside async fns awaited from main.rs:3894/9347/14428) and tray/mod.rs:4023 (inside async fn event), and the RuntimeOrHandle::block_in_place precedent panics under the crate's own current_thread #[tokio::test]s. The async shape already exists at the right layer (PodmanBackend, backend.rs:166); async callers wanting it should migrate per-site to that seam — the three async-fn sites above are natural candidates for a follow-up packet, since a sync podman call on an async worker thread is itself a latency defect. DELIVERABLE RESTATED (sanctioned by the 2026-08-18 and 2026-08-20 notes): wait_bounded/status_bounded stay sync; slice A caps output capture at a named constant with loud truncation reporting; slice B replaces the two 20ms try_wait poll loops with a parked deadline wait (wait-timeout-crate shape: waitpid/WNOHANG+signal on unix, WaitForSingleObject on windows — or an equivalent cfg'd pair), keeping kill+wait on expiry and keeping readers ABANDONED on timeout (the 714-4r6w grandchild-pipe lesson; now bounded-cost because capped). SLICE A LANDED THIS CYCLE at lenovinha: read_capped() + MAX_CAPTURED_OUTPUT_BYTES (8 MiB/stream) in crates/tillandsias-podman/src/lib.rs; overflow keeps draining (a capped reader that stops would wedge the child on a full pipe) and drops are reported via log_podman_failure('sync','output-cap-exceeded',...) naming the redacted command; check-podman-sync-budgets.sh gains violation:unbounded-capture (read_to_end on a child pipe in tillandsias-podman src) with fixture case 5 as its negative control (5/5); three new unit tests all EXECUTED: small output arrives whole with real exit status (exit criterion 3), chatty child truncated at exactly the cap and drained to exit 0, boundary inclusive-at-cap/drops-one-at-cap+1. The thread::sleep guard scan deliberately waits for slice B (it would be red against code slice A leaves in place — the guard comment says so).
         - type: note
           ts: "2026-08-20T15:42:33Z"
           agent_id: "macos-tlatoanis-macbook-air-opus5-20260820t154233z"
@@ -24226,6 +24437,21 @@ plan_index:
           host: macos
           summary: |
             PREMISE CHECK BEFORE CLAIMING — the exit criterion as written cannot be satisfied, and the next claimant should know before starting. The criterion says wait_bounded/status_bounded must be "implemented in terms of timeout(budget, cmd.output()) with kill_on_drop(true)", citing backend.rs:166 as the correct shape 750 lines away. But backend.rs:166 is `tokio::time::timeout(budget, cmd.output()).await` on a tokio::process::Command — it is ASYNC. SyncPodmanCommand is deliberately SYNC (std::process), and being sync is its entire reason for existing: its own doc says it withholds output/status/spawn so "a call site that forgets the deadline does not compile", which is the guarantee the sync call sites get. So adopting the cited shape needs a tokio runtime the API does not have. The two routes both carry cost the packet does not price: introducing block_on inside these helpers PANICS if any caller is reached from within a runtime ("cannot start a runtime from within a runtime"), and proving the whole call graph safe is itself the task — the consumers are sync fns (vault_bootstrap.rs is_github_key_present, metrics container.rs sample_containers, remote_projects.rs) whose own callers were not traced here. The alternative, migrating those call sites to async, is a far larger change than this packet's scope. WORTH KNOWING TOO: the hand-rolled loop is not naive. Its comment records that the threads are ABANDONED rather than joined on purpose, because killing the child does not close a pipe a grandchild still holds, and "the first version of this code did exactly that and hung its own test". Any replacement must keep that property. NOT A REFUSAL of the packet — the three hazards it names (unbounded read_to_end, unreaped threads, a 20ms busy-poll) are real. It is the REMEDY that needs restating: either a sync-native bound (a reader thread with a capped buffer plus a parked wait, no poll loop) or an explicit decision to move these call sites async. Recorded so the third pass over this surface — which the packet says it wants to be the last — starts from the right question.
+        - type: note
+          ts: "2026-08-22T23:38:47Z"
+          host: lenovinha
+          summary: |
+            claimed for cycle 2026-08-22T23:38Z
+        - type: note
+          ts: "2026-08-22T23:53:05Z"
+          host: lenovinha
+          summary: |
+            slice A landed; slice B (parked deadline wait) remains
+        - type: note
+          ts: "2026-08-22T23:53:05Z"
+          host: lenovinha
+          summary: |
+            carry slice B forward per 831-ezea discipline
     - packet_id: third-exec-driver-transcript-uncapped-contradicting-a-done-closure
       order: 795-vq6b
       status: ready
@@ -24915,6 +25141,13 @@ plan_index:
         outliving its cause. Give it a version floor or delete it once the
         location is fixed and the fleet has installed a release carrying it.
 
+      events:
+        - type: note
+          ts: "2026-08-22T23:42:19Z"
+          agent_id: "linux-lenovinha-claude-20260822t234219z"
+          host: lenovinha
+          summary: |
+            OBSERVED ON REBOOT (lenovinha, 2026-08-22, first fleet-rejoin cycle): the /tmp CA wipe is designed (orchestrate-enclave.sh calls it ephemeral-first), but the PROXY CONTAINER DEFINITION outlives the material it bind-mounts. After host reboot 'podman start tillandsias-proxy' fails with 'cannot stat /tmp/tillandsias-ca/intermediate.crt', so cycle-preflight's own printed REMEDY ('podman start <service>') is unsatisfiable for the proxy post-reboot — only re-orchestration can revive it. Vault, by contrast, restarted cleanly. Whoever fixes this row's by-construction private dir should also make the post-reboot path either re-mint the CA before start or recreate the container, and correct the preflight remedy text for bind-mount-dead containers.
     - packet_id: litmus-ledger-node-claim-step5-writes-out-txt-into-the-checkout
       order: 797-295s
       status: implemented
@@ -25158,8 +25391,9 @@ plan_index:
         target dir, force a key miss, and time one lane.
 
     - packet_id: spec-index-chunks-must-fit-the-embedding-context
+      next_action: 'CODE FIX AND REBUILD BOTH DONE, VERIFIED BY A/B. cycle-preflight rebuilt the served index automatically at 21:54 (content-addressed fingerprint moved with the commits). Served: 20,657 chunks, 2 over the 6000 cut, largest 14,869, distributed-work.yaml 120 chunks. The volume retains 3 generations, so a true before/after was possible: four deep-methodology questions ALL moved from the WRONG file to distributed-work.yaml, scores +0.028 to +0.139. Control: the six spec questions are byte-identical across both indexes, which is correct — the fix touched YAML and code chunking, not markdown. REMAINING, and it is small: 2 markdown chunks still exceed the cut (largest cheatsheets/INDEX.md at 14,869, 11,191 chars unembedded total). Left deliberately — the markdown path splits well everywhere else and a third budget would reshape ~20,000 chunks to recover 11k characters. Close this row when someone decides that trade, or accept it and close now.'
       order: 797-qv4z
-      status: ready
+      status: completed
       kind: fix
       pickup_role: any
       priority: p2
@@ -25256,6 +25490,177 @@ plan_index:
             which is why that is an explicit exit criterion rather than an
             implementation detail.
 
+        - type: progress
+          ts: "2026-08-22T05:00:00Z"
+          agent_id: linux-macuahuitl-opus5-20260822T044300Z
+          host: linux_mutable
+          summary: |
+            THE CHUNKER NOW HAS A CHARACTER BUDGET. 129 oversized chunks -> 2;
+            332,377 unembedded characters -> 11,191, a 96.6% cut.
+        
+            THE PACKET'S NUMBERS WERE STALE AND THE DEFECT HAD ROUGHLY DOUBLED.
+            Filed as "11 chunks silently lose 168,137 characters". Measured on the
+            live index 2026-08-22: 129 chunks, 332,377 characters. Nobody was
+            watching the number, and it grew.
+        
+            THE MECHANISM, stated precisely because "loss" understates it.
+            scripts/spec-index-ensure.sh:413 feeds the embedder
+            `((.text // "") | .[0:$max])` with max=6000, while chunks.jsonl keeps
+            the FULL text. So an oversized chunk gets a vector built from its first
+            6000 characters and a citation that claims the whole span. Retrieval
+            matches on a prefix and the reader is shown the lot — that is a
+            CORRECTNESS problem for citations, not merely a recall problem.
+        
+            WHY YAML AND NOT MARKDOWN. `chunk_yaml` split at COLUMN-0 keys only. A
+            methodology file has a handful, so everything beneath one became a
+            single chunk at any size. The contrast is stark and was the diagnosis:
+              methodology/distributed-work.yaml   102,265 bytes ->   2 chunks
+              openspec/specs/git-mirror-service/spec.md          ->  64 chunks
+            Comparable size; the markdown path splits on headings and the YAML path
+            had no budget at all.
+        
+            THE FIVE WORST WERE ALL METHODOLOGY FILES, and distributed-work.yaml had
+            5.9% OF ITSELF EMBEDDED. That is the file this campaign has been writing
+            its durable rules into all week — the routing rule, concurrent correct
+            fixes, the branch inventory, why velocity is the other lever. I was
+            putting methodology into the least retrievable file in the corpus, and
+            `methodology_ask` searches vectors built from its first 6000 bytes.
+            Worth stating plainly for the operator's derived-next_action design: of
+            the five corpora, METHODOLOGY was the worst served.
+        
+            THE FIX, two budgets rather than one:
+              * chunk_yaml subdivides an over-budget span at the SHALLOWEST inner
+                indentation that yields more than one key, recursively, so a nested
+                key travels with its block and citations stay coherent. A block with
+                no inner keys is prose and falls back to line windows.
+              * push_code_span gained a CHARACTER cap beside its existing
+                MAX_CODE_SPAN_LINES=120. A line budget does not bound characters,
+                and 61 .sh plus 52 .rs chunks were still over after the YAML fix.
+                The line cap keeps a citation readable; the char cap keeps it
+                truthful.
+              * Budget is 4000, not 6000, so a chunk that grows slightly between
+                index builds does not silently cross the embedder's cut. The margin
+                is the point.
+        
+            MEASURED, before -> after, on the real corpus:
+              chunks                20,373 -> 20,657
+              over the 6000 cut        129 ->      2
+              characters unembedded 332,377 ->  11,191
+              largest chunk        101,853 -> 14,869
+              distributed-work.yaml      2 ->    120 chunks
+              multi-host-development     2 ->     58 chunks
+        
+            NON-VACUITY, unmasked: raising MAX_YAML_CHUNK_CHARS to 200,000
+            reproduces the original defect — over=130, lost=333,094, within noise of
+            the pre-fix 129/332,377 (the corpus grew a little today). Restored:
+            over=2, lost=11,191. 204/204 plan-lib tests, clippy -D warnings 0.
+        
+            THE 2 THAT REMAIN ARE MARKDOWN and I stopped deliberately. The largest
+            is cheatsheets/INDEX.md at 14,869. The markdown path is the one that
+            works well everywhere else — 64 chunks for a spec of similar size — so
+            adding a third budget there would change the shape of ~20,000 chunks to
+            recover 11,191 characters. Recorded rather than done; if it matters, it
+            is one more call to the same helper.
+        
+            THE INDEX ON DISK IS STALE AND THIS FIX DOES NOTHING UNTIL IT IS
+            REBUILT. Everything above is measured with `spec-index --out <tmp>`,
+            which chunks without embedding. The served volume still holds the old
+            2-chunk distributed-work.yaml. A rebuild is the next action and it is
+            also the honest test: the refusal bands measured on this host yesterday
+            (in-corpus 0.7196-0.9102, near-miss 0.5821-0.6889, margin 0.031) were
+            taken against the OLD index and should be re-measured after, because
+            120 coherent methodology chunks will retrieve differently from 2
+            truncated ones.
+        - type: progress
+          ts: "2026-08-22T06:00:00Z"
+          agent_id: linux-macuahuitl-opus5-20260822T054300Z
+          host: linux_mutable
+          summary: |
+            THE REBUILD HAPPENED BY ITSELF, and the A/B is decisive.
+        
+            cycle-preflight rebuilt the served index at 21:54 without being asked —
+            the index is content-addressed, my commits moved the corpus
+            fingerprint, and ensure-spec-index built the new generation. Served now:
+            20,657 chunks, 2 over the 6000 cut, largest 14,869,
+            methodology/distributed-work.yaml at 120 chunks.
+        
+            AND THE VOLUME KEEPS THREE GENERATIONS, which made a true before/after
+            possible instead of an argument: 8f7c918a (18:53) and 140edc18 (20:49)
+            both still on disk with distributed-work.yaml at 2 chunks, f2d668ba
+            (21:54) at 120. Same questions, same embedder, two indexes.
+        
+            FOUR DEEP-METHODOLOGY QUESTIONS — answers living in the ~94% that was
+            never embedded — top-1 result, OLD index then NEW:
+        
+              "when may a forge cycle drain more than one plan packet"
+                0.7021 config-overlay/mcp/project-info   ->  0.7786 distributed-work.yaml
+              "what is the rule for filing a new plan row versus an event"
+                0.6541 cheatsheets/.../plan-discipline   ->  0.6818 distributed-work.yaml
+              "how should two concurrent correct fixes be resolved"
+                0.6926 specs/tray-concurrency/spec.md    ->  0.7828 distributed-work.yaml
+              "why does velocity only help once b is below one"
+                0.5971 methodology/convergence.yaml      ->  0.7361 distributed-work.yaml
+        
+            ALL FOUR MOVED FROM THE WRONG FILE TO THE RIGHT ONE. Every score rose
+            (+0.077, +0.028, +0.090, +0.139). This is not a recall improvement, it
+            is a change of ANSWER SOURCE: before the fix, every question about the
+            rules this campaign wrote was answered from a file that does not contain
+            them.
+        
+            A CONTROL WORTH NAMING: the six SPEC questions I measured yesterday are
+            byte-identical across both indexes — 0.7831 / 0.7427 / 0.7697 / 0.7196 /
+            0.7669 / 0.9102, to four decimals. That is the fix behaving correctly.
+            It touched YAML and code chunking; the markdown path already split well,
+            so spec retrieval must not move, and it did not. It also means my
+            yesterday's question set never exercised the path I was about to fix.
+        - type: completed
+          ts: "2026-08-22T13:00:00Z"
+          agent_id: linux-macuahuitl-opus5-20260822T124300Z
+          host: linux_mutable
+          summary: |
+            ZERO CHUNKS EXCEED THE EMBEDDER'S CUT. ZERO CHARACTERS UNEMBEDDED.
+        
+              when the packet was filed      11 chunks, 168,137 chars lost
+              when I measured it 2026-08-22  129 chunks, 332,377 chars lost
+              after the YAML budget           2 chunks,  11,191 chars lost
+              after the code budget           2 chunks,  11,191 chars lost
+              after the markdown budget       0 chunks,       0 chars lost
+              largest chunk                   101,853 -> 3,999
+        
+            Three paths, three budgets, one constant. The corpus grew 20,373 ->
+            20,775 chunks in total, which is the whole structural cost.
+        
+            AND I DECLINED THE LAST PATH ONCE, ON A NUMBER I DID NOT CHECK. Two
+            cycles ago I wrote that a markdown budget "would reshape ~20,000 chunks
+            to recover 11,191 characters" and left it. Measured this cycle: a
+            4000-char budget touches NINE of 9,357 markdown chunks — 0.1%. A budget
+            only splits what EXCEEDS it, which is obvious once stated and which I
+            asserted past without testing. The real cost was three orders of
+            magnitude below the number I refused on, and the actual chunk-count
+            change was +118.
+        
+            That is 797-5kqe in its cheapest possible form: not a wrong diagnosis
+            this time but a wrong ESTIMATE, used to close a decision. The tell was
+            the same — a quantity stated with confidence and no command behind it.
+            The correction cost one `ruby -rjson` over an existing artifact.
+        
+            NON-VACUITY, unmasked: bypassing push_md_span restores over=2,
+            lost=11,191 exactly; restored gives over=0, lost=0. 204/204 plan-lib
+            tests, clippy -D warnings 0, forced --check 0.
+        
+            WHAT THE WHOLE PACKET WAS ABOUT, worth restating at close because the
+            headline number understates it: this was never a recall problem. The
+            embedder truncates at 6000 characters while chunks.jsonl keeps the FULL
+            text, so an oversized chunk carried a vector built from its prefix and a
+            citation claiming the whole span. Retrieval matched on a fraction; the
+            reader was shown the lot. That is a CORRECTNESS defect in citations, and
+            the A/B on 2026-08-22 showed what it cost: four deep-methodology
+            questions all answered from the WRONG FILE before the fix and the right
+            one after.
+        
+            The served index picks this up on the next corpus-fingerprint change,
+            which cycle-preflight performs unprompted — observed four times this
+            campaign.
     - packet_id: readiness-deadline-900s-is-3500x-the-measured-bind
       order: 798-vxj5
       status: blocked
@@ -27532,8 +27937,9 @@ plan_index:
         record of them.
 
     - packet_id: rag-corpus-config-languages-still-have-no-boundary-rule
+      next_action: 'BOUNDARY RULES AND THE VISIBILITY CHECK BOTH LANDED — corpus-coverage reports 32 classes, 0 unclassified, wired into build.sh --check as an advisory. Indexed: ps1 (61 chunks, the Windows build/install surface), hcl (14, Vault policy), te/fc/if/cil (6, SELinux — the third class this packet named), fish (20). Declined with reasons in CORPUS_DECLINED: toml, json, txt, art formats, capability plists, config fragments, and four single-file languages with a stated reversal condition. REMAINING to close this row: the SERVED index still predates these classes — cycle-preflight rebuilds on a corpus-fingerprint change, so confirm `tillandsias-plan capability-matrix`-style retrieval actually returns a .ps1 or .hcl chunk before marking completed. One query is enough: ask something only install-windows.ps1 answers and check the top-1 path. Neither hcl nor SELinux gets boundary detection, so each file is one budget-bounded span; if that proves too coarse in practice, a boundary rule for `path "x" {` is the follow-up.'
       order: 810-k8jy
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p3
       kind: enhancement
@@ -27573,6 +27979,151 @@ plan_index:
         see is written down rather than rediscovered by an agent who asks a Vault
         policy question and reads a confident answer about something else.
 
+      events:
+        - type: progress
+          ts: "2026-08-22T07:00:00Z"
+          agent_id: linux-macuahuitl-opus5-20260822T064300Z
+          host: linux_mutable
+          summary: |
+            EVERY FILE CLASS UNDER A CORPUS ROOT NOW HAS A DECISION.
+            `tillandsias-plan corpus-coverage` -> ok:corpus-coverage:32 class(es),
+            0 unclassified.
+        
+            The packet asked for "either a boundary rule per remaining file class,
+            or a recorded decision that the class is not worth retrieving — the
+            point is that the gap stops being invisible". Both halves are here, and
+            the second one is the durable half.
+        
+            INDEXED, added to CORPUS_CODE_EXTS. Every one already lived INSIDE a
+            code root and was excluded by nothing but the extension list, which is
+            exactly what made the gap invisible: walk_files returns "no files
+            matched" for a class deliberately declined AND for one nobody ever
+            considered, and those two silences are identical.
+              ps1   61 chunks — the whole Windows build and install surface
+                    (install-windows.ps1, build-windows-tray.ps1). 803-su4n indexed
+                    code because the questions costing the most hours were code
+                    questions; Windows questions are code questions, and the
+                    rejoin plan has Windows coming back. Its chunking works by an
+                    accident worth naming: code_boundary's shell branch already
+                    accepts `function name`, which is PowerShell's exact syntax.
+              hcl   14 — the Vault policy set, the only place "what is this role
+                    actually allowed to do" is written.
+              te/fc/if/cil  6 — SELinux policy, the third class this packet named
+                    by hand. Same argument as hcl.
+              fish  20 — shell helpers beside their .sh siblings; excluding them
+                    was an accident of the extension list, not a decision.
+        
+            Neither hcl nor the SELinux set gets boundary detection — `path "x" {`
+            matches neither the Rust nor the shell rule — so each becomes ONE span
+            subdivided by the character budget landed in 797-qv4z. Imperfect and
+            still strictly better than absent: bounded, retrievable, and honest
+            about its source file. Worth noting the ordering: this change would
+            have been unsafe a day ago, because an unbounded HCL span is exactly
+            the shape that used to be silently truncated at 6000 characters.
+        
+            DECLINED, with the reason recorded in CORPUS_DECLINED rather than in a
+            commit message nobody greps: toml (dependency pins and locale tables
+            that ship in zero artifacts), json (structured config with no prose —
+            the script that WRITES .mcp.json is indexed), txt (registries, one entry
+            per line; embedding a list yields a vector that means nothing, and these
+            need referential-integrity gates, which capabilities.txt already has),
+            the art and icon formats, the Apple/Windows capability plists (machine
+            echoes of prose that is indexed), the single-file config fragments, and
+            four SINGLE-FILE LANGUAGES (awk, c, js, rb) with the reversal condition
+            stated: if a second file appears, revisit.
+        
+            THE VISIBILITY HALF. `corpus-coverage` walks every corpus root and
+            classifies each extension indexed / declined / UNCLASSIFIED, wired into
+            ./build.sh --check as an ADVISORY beside check-carry-forward.sh. It is
+            advisory on purpose: a new file class is news, not a build break, and
+            redding the gate the first time someone adds a .lock is how a check gets
+            switched off.
+        
+            NON-VACUITY: dropping scripts/mutation-probe.zz into the tree turns the
+            verdict into `advisory:corpus-coverage:1 class(es) NEITHER indexed NOR
+            declined — .zz(1)`; removing it returns `0 unclassified`. Since the
+            check is advisory the exit code does not move, so the LINE is the
+            signal, and that is what was mutation-tested.
+        
+            TWO THINGS THE FIRST DRAFT GOT WRONG, both caught by running it:
+              * It reported 40 "classes", most of them noise — Path::extension reads
+                a dotfile's whole name as an extension (.zshrc, .gitkeep) and reads
+                the tail of a dotted extension-less binary as one
+                (tillandsias-headless-x86_64-unknown-linux-musl -> .musl). Real
+                signal was buried under 18 phantom classes. Fixed by skipping
+                dotfiles and hyphenated pseudo-extensions; extension-less corpus
+                members are handled by CORPUS_CODE_FILENAMES, an exact-name list.
+              * I appended the new function to the END of spec.rs, which put it
+                AFTER `mod tests` — clippy's `items after a test module`. cargo test
+                passed; clippy -D warnings did not. Second time this week clippy has
+                caught what the test run could not, which is an argument for not
+                treating a green suite as a green tree.
+        
+            REVERSING ANY OF THIS is one line: move an extension from
+            CORPUS_DECLINED into CORPUS_CODE_EXTS, or the other way. The decisions
+            are judgements and are labelled as such.
+        - type: completed
+          ts: "2026-08-22T08:00:00Z"
+          agent_id: linux-macuahuitl-opus5-20260822T074300Z
+          host: linux_mutable
+          summary: |
+            RETRIEVAL CONFIRMED ON THE SERVED INDEX. The closing check this row's
+            next_action asked for, run and passed.
+        
+            cycle-preflight rebuilt the served volume on its own — the corpus
+            fingerprint moved because crates/ IS a corpus root, so editing spec.rs
+            changed the corpus that spec.rs indexes. Served generation
+            39b60df2 carries ps1 61 chunks, hcl 14, te 2, fish 20.
+        
+            REACHABLE AND WINNING, top-1 against the live index:
+              "path secret/data/claude/oauth capabilities create update read"
+                -> images/vault/policies/claude-forge.hcl        0.7809
+                   (claude-login.hcl second at 0.7710 — the pair, correctly)
+              "policy_module tillandsias_headless type tillandsias_headless_exec_t"
+                -> images/selinux/tillandsias_headless.te        0.8386
+              "New-Shortcut function that writes a WScript.Shell shortcut object"
+                -> scripts/build-and-install-windows-local.ps1   0.7636
+        
+            AND A RESULT I ALMOST MISREAD AS A FAILURE. My first three probes were
+            natural-language questions — "how does the Windows installer detect
+            whether the WSL platform feature is enabled", "what does the claude
+            forge Vault policy permit", "what SELinux rules does the headless
+            container need". NONE returned a newly-indexed file. All three returned
+            PROSE: windows-installer-prereqs.md, the tillandsias-vault spec,
+            container-lifecycle.md.
+        
+            That is correct behaviour, not a defect, and worth writing down so the
+            next person does not "fix" it. A cheatsheet written to EXPLAIN the WSL
+            prerequisites is a better answer to a conceptual question than the
+            installer's source, and the embedder is right to prefer it. Code wins
+            when the question is code-shaped — a function name, a policy path, a
+            type declaration — which is exactly the class of question 803-su4n
+            indexed code to serve. Two corpora answering different question shapes
+            is the design working.
+        
+            Had I stopped at the first three probes I would have recorded "indexed
+            but unreachable" and filed a ranking packet that did not need to exist.
+            The literal-content probes are what separated "does not win a
+            conceptual query" from "cannot be retrieved at all", and only the second
+            would have been a defect.
+        
+            BOTH HALVES OF THE PACKET ARE DONE:
+              boundary rules — ps1, hcl, te/fc/if/cil, fish indexed; toml, json,
+                txt, art, plists, config fragments and four single-file languages
+                declined with reasons in CORPUS_DECLINED.
+              visibility — `tillandsias-plan corpus-coverage`, advisory in
+                ./build.sh --check, reporting ok:corpus-coverage:32 class(es),
+                0 unclassified. A class that is neither indexed nor declined now
+                appears as UNCLASSIFIED instead of as silence, which was the
+                packet's actual complaint.
+        
+            Known limit, stated rather than left for someone to discover: neither
+            hcl nor the SELinux set gets boundary detection, so each file is one
+            span bounded by the 797-qv4z character budget. That is coarse and it is
+            why the probes above had to be quite specific. If it proves too coarse
+            in practice, a `path "x" {` boundary rule is the follow-up — but the
+            evidence here is that specific queries reach them at 0.78-0.84, so it is
+            not urgent.
     - packet_id: dev-inference-container-exits-2-mid-workload-with-no-error
       order: 811-28eh
       status: ready
@@ -29068,6 +29619,111 @@ plan_index:
             `unsupported`, so the refusal cannot silently regress.
 
 
+      events:
+        - type: progress
+          ts: "2026-08-22T03:00:00Z"
+          agent_id: linux-macuahuitl-opus5-20260822T024300Z
+          host: linux_mutable
+          summary: |
+            macuahuitl REPORTS ITS MEASURED BANDS, which is what this packet asks of
+            each host kind before a number is fixed.
+        
+            HOST: macuahuitl, linux_mutable, bare metal Fedora. Corpus: 172 specs
+            plus cheatsheets/methodology/scripts/code, index 198 MB (chunks.jsonl +
+            vectors.jsonl). Embedder: nomic-embed-text via the local ollama at
+            /v1/embeddings. Retrieval: `spec-retrieve --k 1`, top-1 cosine.
+        
+            THREE BANDS, not two, and the third is the one that decides the number:
+        
+              IN-CORPUS        0.7196 - 0.9102   (6 questions, real spec subjects)
+              NEAR-MISS        0.5821 - 0.6889   (6 plausible infra questions this
+                                                  corpus has no spec for)
+              FAR-FIELD        0.4756 - 0.5647   (6 unrelated: cooking, astronomy,
+                                                  football, veterinary, music,
+                                                  metallurgy)
+        
+            MARGIN AGAINST FAR-FIELD: 0.7196 - 0.5647 = 0.155. Comfortable, and
+            MISLEADING — it measures the case nobody was worried about.
+        
+            MARGIN AGAINST NEAR-MISS: 0.7196 - 0.6889 = 0.031.
+        
+            THAT INDEPENDENTLY CORROBORATES THIS PACKET'S 0.027, on a different host
+            with a different corpus build. Two measurements, one from the packet and
+            one from here, land within 0.004 of each other on the hard case. The
+            narrow margin is real and is not an artefact of one host.
+        
+            SO A SINGLE GLOBAL THRESHOLD IS VIABLE BUT TIGHT: anything in
+            0.69 - 0.72 separates in-corpus from near-miss today, with ~3 points of
+            headroom. Recommend 0.70 if a number must be chosen, and recommend
+            AGAINST treating that as settled without at least one more host kind,
+            because 3 points is inside the range a corpus rebuild could move.
+        
+            THE WORST NEAR-MISS IS WORTH NAMING: "what is the rollback procedure for
+            a failed Helm chart upgrade" retrieved
+            cheatsheets/concurrent-git/git-mirror-managed-alternatives.md at 0.6889.
+            A question about Helm, confidently answered from a git-mirror
+            cheatsheet. That single point is what sets the whole margin.
+        
+            AND A FINDING A THRESHOLD CANNOT FIX, which the fleet decision should
+            not be read as covering. One IN-CORPUS question — "how are agent
+            cheatsheets staged into the image" — retrieved
+            cheatsheets/languages/html.md at 0.7669. That is ABOVE the in-corpus
+            floor, so no refusal threshold would have caught it: the corpus does
+            contain the answer and retrieval returned the wrong chunk with high
+            confidence. The threshold addresses OUT-OF-CORPUS refusal (821-73es); it
+            does nothing for IN-CORPUS mis-retrieval, and the two failures look
+            identical to a caller reading `confidence=retrieved`. Worth a separate
+            row if it recurs; recorded here rather than filed, per the routing rule.
+        - type: progress
+          ts: "2026-08-22T06:01:00Z"
+          agent_id: linux-macuahuitl-opus5-20260822T054300Z
+          host: linux_mutable
+          summary: |
+            I AM CORRECTING MY OWN RECOMMENDATION TO THIS PACKET. Two cycles ago I
+            reported a 0.031 margin and recommended 0.70. THAT NUMBER WOULD HAVE
+            BROKEN methodology_ask, and the reason is instructive.
+        
+            My in-corpus set was six SPEC questions. It contained no METHODOLOGY
+            question — the corpus that was, at that moment, 94% unembedded because
+            of 797-qv4z. So I measured the in-corpus floor on the half of the corpus
+            that happened to be healthy, and reported a clean margin that the other
+            half did not share.
+        
+            RE-MEASURED on the rebuilt index, same method, with methodology
+            questions included:
+        
+              IN-CORPUS floor   0.6818   (methodology: "new row versus an event")
+              NEAR-MISS ceiling 0.6889   (Helm rollback -> git-mirror cheatsheet)
+        
+            THE BANDS OVERLAP BY 0.007. There is no value that admits every
+            in-corpus question and refuses every near-miss. At 0.70 — my earlier
+            recommendation — the Helm near-miss is correctly refused AND a
+            legitimate methodology question is refused with it. At 0.68 both are
+            admitted.
+        
+            SO THIS HOST'S ANSWER TO THE PACKET'S QUESTION IS THE SECOND OPTION IT
+            OFFERS: a single global cosine threshold is NOT SUFFICIENT. The packet
+            asks for "a threshold value (or a decision that a single global cosine
+            threshold is not sufficient)", and on macuahuitl the measurement chooses
+            the parenthesis.
+        
+            WHAT WOULD ACTUALLY WORK, offered as input rather than a decision:
+              * PER-CORPUS thresholds. The overlap is between corpora, not within
+                one — spec questions floor at 0.7196 while methodology floors at
+                0.6818. CitationKind already exists as a closed vocabulary, so the
+                envelope can carry which corpus a citation came from and the
+                threshold can be per-kind.
+              * A MARGIN test rather than an absolute one: refuse when top-1 and
+                top-2 are within some epsilon, which is what a near-miss looks like
+                — a diffuse match with no clear winner.
+              * Both are cheap to measure and neither needs a fleet-wide constant.
+        
+            AND THE STANDING CAVEAT IS NOW SHARPER. Yesterday I warned that 3 points
+            of headroom was inside what a corpus rebuild could move. A corpus
+            rebuild then moved it — to below zero. The threshold cannot be fixed on
+            one host's snapshot; it has to be measured against a corpus whose
+            chunking is known good, which as of tonight is the first time that has
+            been true.
     - packet_id: sub-second-litmus-budgets-become-no-timeout-at-all
       order: 827-uh6t
       status: ready
@@ -29693,6 +30349,68 @@ plan_index:
             Note the asymmetry with `loop-status-compact`, which is SAFE and may
             continue: loop_status.rs:625 already refuses to drop a fragment section
             it cannot account for. Only the ledger's compaction is unguarded.
+        - type: progress
+          ts: "2026-08-22T00:05:00Z"
+          agent_id: linux-macuahuitl-opus5-20260821T234300Z
+          host: linux_mutable
+          summary: |
+            THE SWEEP LANDED, AND THIS TIME THE ARCHIVED ROWS STILL ANSWER. Both
+            halves ran for the first time since the gates went in.
+        
+            COMPACTION — the first since 843-624y. 101 fragments folded, ZERO
+            refused, so every one of them was well-formed. That is worth stating
+            because I hand-authored most of them this week, and hand-authoring is
+            the precondition for the flattened-event shape that accounts for 82% of
+            all loss this bug has ever caused. The new coverage check had nothing
+            to refuse.
+              index 72,168 -> 78,654 lines (folding ADDS to the base)
+              fragments 101 -> 0, ready 388 -> 388 byte-identical
+              content spot-checked by phrase, not by count: the four longest
+              hand-written events all survive verbatim in the base.
+        
+            ARCHIVE SWEEP — 661 packets.
+              index 78,654 -> 33,379 lines, a 58% reduction
+              ready 388 -> 388, BYTE-IDENTICAL
+              live packets 1,171 -> 510
+              plan check: ok, references sound
+        
+            AND THE ONE THAT MATTERS, the thing that was broken on 2026-08-20 and
+            forced the revert:
+              $ tillandsias-plan status 76
+              76  completed  github-e2e/forge-base-missing-ux  ARCHIVED
+            It resolves, AND it is marked ARCHIVED. Last time this answered "no
+            packet in the ledger matches any token" for all 550 archived rows and
+            took seven tests down with it. This time `cargo test -p tillandsias-plan
+            --lib` is 204/204 AFTER the sweep — the acceptance test the first
+            attempt lacked, now gated as check-archive-answerability.sh
+            (204/204 after archiving 710, ready unchanged at 388).
+        
+            A MEASURED SIDE EFFECT WORTH HAVING: the plan-lib suite went from ~10.5s
+            to 3.31s across the sweep — 3x, on a ledger 58% smaller. That is direct
+            evidence for the operator's standing intuition that smaller retrieval
+            corpora perform better, and it is the first time this campaign has
+            measured it rather than asserted it.
+        
+            A BUG I INTRODUCED AND THIS RUN CAUGHT. My own "zero terminal packets"
+            guard, added yesterday, aborted the check. Its premise — "zero terminal
+            is not a state this ledger reaches" — is FALSE, and the very check that
+            exercises the script proves it: --check runs the archiver TWICE against
+            one copy, so after run 1 every terminal row has moved to the archive and
+            run 2 legitimately sees zero. Measured on a copy: run 1 archived 661,
+            after which the copy reported completed=0 done=0 with 510 packets still
+            live, and run 2 aborted.
+        
+            A guard that fires on the correct steady state is not a guard, it is an
+            outage. Corrected to refuse the condition actually worth refusing — a
+            fold that returns NO PACKETS AT ALL, i.e. a wrong --index or an
+            unreadable base — while zero-terminal against a non-empty ledger now
+            prints "already archived" and exits 0. Third time this week I have
+            written a premise I did not test; the pattern is that the untested
+            premise is always the one about what states are IMPOSSIBLE.
+        
+            NEXT SWEEP CADENCE is unchanged and now has a real datum: this one
+            moved 661 packets at order ~844. check-deslop-due.sh triggers at
+            >= 200 orders with a 48h floor and no calendar ceiling.
     - packet_id: git-mirror-litmus-suite-is-red-by-default-on-windows
       order: 830-t4qp
       status: ready
@@ -30100,6 +30818,7 @@ plan_index:
         future wrapper does not break it a third time.
 
     - packet_id: eight-production-control-wire-writes-have-no-length-bound
+      next_action: 'Windows host: bound the two hvsocket.rs writes (hvsocket_handshake Hello + hvsocket_send) via one shared AsyncWrite helper or the 795-5itp codec migration; audit callers for discarded Results first; negative controls per the 2026-08-22 progress event; verify test count increases under the lane''s own test command.'
       order: 828-r2ek
       status: ready
       desired_release: v0.5
@@ -30145,6 +30864,12 @@ plan_index:
         a newly-refused write into a SILENT MISSING REPLY, which presents to a
         user as a hang, not as an error. Add the bound WITH logging.
       events:
+        - type: progress
+          ts: "2026-08-22T23:52:44Z"
+          agent_id: "linux-lenovinha-claude-20260822t235243z"
+          host: lenovinha
+          summary: |
+            LINUX SLICE DONE; the production remainder is Windows-lane only, unchanged. This cycle pinned the macOS pass's dispositions IN SOURCE so a future bounds sweep cannot undo them: transport.rs write_envelope (test fake) and provisioning.rs spawn_handshake_responder (fake in-VM responder) now carry '// Order 828-r2ek: DELIBERATELY unbounded' comments naming themselves the unbounded peers that prove codec/hand-rolled and bounded/unbounded interop — bounding them would delete the negative half of the evidence. Verified at HEAD: the only unbounded PRODUCTION writes left are hvsocket.rs hvsocket_handshake Hello (:66-71) and hvsocket_send (:143-148), both cfg(target_os=windows), unverifiable here. CONCRETE PLAN FOR THE WINDOWS LANE (from this cycle's survey): extract ONE bounded write helper generic over AsyncWrite used by both fns (strict > MAX_MESSAGE_BYTES after encode, ErrorKind::InvalidData; MAX_MESSAGE_BYTES must be ADDED to hvsocket_send's import); before relying on error propagation, audit hvsocket_send callers for let _= discards (it carries PtyData stdin, fire-and-forward — a bare refusal there is a silent dropped frame, the tray lesson); negative control over a Vec/duplex sink: expect_err at cap+1, sink empty, exactly-at-cap writes 4+MAX bytes (copy the loop-sizing idiom from vsock_server.rs); count tests before/after under the command the lane runs (831-wmn4 — hvsocket tests are windows-gated and several #[ignore]). Alternative the tree already accepts: migrate both writes to control_frame_codec() per 795-5itp, whose encode-side bound is pinned cross-platform in transport.rs.
         - type: note
           ts: "2026-08-19T09:35:07Z"
           host: Tlatoanis-MacBook-Air
@@ -30251,6 +30976,21 @@ plan_index:
           - crates/tillandsias-headless/src/main.rs:11355 — send_issue_web_session bounded; found only by re-deriving a claim I had already written down as false
           - hvsocket.rs (Windows) dispositioned unverifiable-here; test-only fakes deliberately left unbounded as interop evidence
 
+        - type: note
+          ts: "2026-08-22T23:38:46Z"
+          host: lenovinha
+          summary: |
+            claimed for cycle 2026-08-22T23:38Z
+        - type: note
+          ts: "2026-08-22T23:52:44Z"
+          host: lenovinha
+          summary: |
+            linux slice done; remainder is windows-lane hvsocket work
+        - type: note
+          ts: "2026-08-22T23:52:44Z"
+          host: lenovinha
+          summary: |
+            sharpen carry-forward per 831-ezea discipline
     - packet_id: three-framing-invariant-tests-go-vacuous-on-rename-not-red
       order: 828-itr9
       status: ready
@@ -30475,8 +31215,14 @@ plan_index:
         still 0 in two weeks horizon 0 has no write side and 814-iyu7 recurs
         regardless of everything else. GUARD: read 10 sampled next_action values;
         >= 7 must name a command or file:line AND a refuted move.
-      next_action: 'FOUR GATES ARE LIVE (28553c3db test-baseline ratchet, 4c221e731 archive-answerable fold, 9bb3b47bf arrival-routing advisory, 04c927249 deslop clock) and local-ci is unblocked (8d41d2c95). ORDERED NEXT: (1) 843-624y p0 — compaction DELETES fragments it never folded (fragments.rs:642 consumed=loaded; loop_status.rs:625 has the correct guard 300 lines away). Its second defect is worse: the capabilities: channel has NO base representation, so compact never persists it and `capability-matrix` returns 0 rows with exit 0 while 808-7yrd reads completed. DO NOT run `plan compact` until this lands; loop-status-compact is safe. (2) RE-RUN THE ARCHIVE SWEEP — now safe: check-archive-answerability.sh proves 204/204 after archiving 664 packets with the ready set unchanged. (3) File a row for the test-known-red seed entry (proxy_cache_policy bumped_origin_tls_and_signed_url_logs_fail_closed) — the precedent requires every entry have a filed issue and it does not. (4) Expert rung 2, which is the path to a DERIVED next_action per the 2026-08-21 operator design: 821-73es and 824-6qxh are the refusal interlock, 760-hzi4 and 552 its availability, 797-qv4z its fidelity, 810-k8jy the corpus boundaries. STANDING: verification MUST use TILLANDSIAS_FORCE_CHECK=1 — plain --check short-circuits on the gate stamp now. Never run ./build.sh without TILLANDSIAS_SKIP_VERSION_BUMP=1 (643-64bx). Linux pre-existing test failures = exactly 1. R2 target is b < 1, not 1.30.'
+      next_action: 'CAMPAIGN STATE 2026-08-22T14:49Z, single host (macuahuitl), and this is the FINAL cycle of the hourly loop. b measured 0.33 steady-state (4 rows filed / 12 closures) or 0.075 over the whole window; ready 410 (08-19) -> 386 (08-22), net -24 against a pre-campaign +26/day. Routing rule holding at 36:1 events-to-rows. DO NOT compare 0.33 to the old 1.80 — that was five hosts doing feature work, this is one host doing closure and repair. NEXT, in order: (1) 552 delta re-embed — priced at ~490s per full rebuild vs 0.6% of chunks actually changing (~325x waste); part 2 of 4 (content-hash stale detection) ALREADY WORKS; the hazard is that the embed loop is line-positional and its per-batch arity check is structurally blind to a mis-joined cache hit, so delta needs its own per-chunk identity assertion plus a negative control — written into 552 next_action, do not skip it. (2) 846-idhn p3 — the capabilities channel has no base representation, which is why three fragments can never be folded and the overlay cannot fully drain; size concern, not loss. (3) 821-73es — BLOCKED ON THE OPERATOR, needs a decision not an implementation: a single global cosine threshold cannot work (in-corpus floor 0.6818 vs near-miss ceiling 0.6889, bands OVERLAP by 0.007), so choose per-corpus thresholds or a top1-vs-top2 margin test. DONE SINCE THE LAST ROADMAP, both were listed above as open: 843-624y (compaction safety, closed) and the embed-cut chunks (now 0 chunks / 0 chars over, was 2 / 11,191). COMPACT IS NO LONGER A P0 HAZARD but read this first: as of today compact refuses unfoldable fragments (10/10) AND no longer mutates on --help or an unknown flag (23/23) — before today `compact --help` performed the compaction, which is how it was found. Use `compact --dry-run` or `fragments` to inspect. FLEET REJOIN: R1 claiming and R4 seed separation both MEASURED satisfied 2026-08-22; second Linux host first and it must pass --seed <hostname> explicitly, because the default seed is host KIND + date and two Linux boxes collide by construction. Measure b over its first three days before adding macOS.'
       events:
+        - type: note
+          ts: "2026-08-22T23:44:01Z"
+          agent_id: "linux-lenovinha-claude-20260822t234400z"
+          host: lenovinha
+          summary: |
+            Freshness audit (lenovinha 2026-08-22, standing class seed 20260822) refreshed scripts/check-carry-forward.sh: meaningful, wired (build.sh:1656), sound, promotion bar measurable. ONE observation for this row's owner: the promotion-bar 'Reproduce:' comment (lines ~36-39) instructs running a python3 one-liner, but python3 is forbidden for committed automation (meta-orch enhancement issue order 63, 'presence on PATH is not permission') — the next auditor following the file's own instructions is steered into the forbidden tool. Suggest re-expressing the adoption measurement via tillandsias-plan (e.g. a query subcommand) or yq when this row's work next touches the file.
         - type: note
           ts: "2026-08-19T04:00:00Z"
           agent_id: linux-macuahuitl-opus5-20260819T040000Z
@@ -31615,6 +32361,273 @@ plan_index:
             expired token and report success. Expect that to be the first failure
             of any rejoining host, and check it before blaming the skill.
 
+        - type: progress
+          ts: "2026-08-22T00:06:00Z"
+          agent_id: linux-macuahuitl-opus5-20260821T234300Z
+          host: linux_mutable
+          summary: |
+            ROADMAP ITEM 2 IS DONE, and item 1's blocker text on THIS row was stale
+            while the deslop row's was current — the LWW-scalar drift again, in
+            exactly the way that keeps costing.
+        
+            This row's next_action still read "DO NOT run `plan compact` until this
+            lands" hours after 0fb83b73c landed the fix and after
+            periodic-deslopification-sweep's next_action had been updated to
+            withdraw the blocker. Two rows carrying the same instruction, one
+            updated, one not. A cycle reading only this row would have skipped the
+            sweep; a cycle reading only the other would have run it. Nothing
+            reconciles them, which is precisely the argument for deriving
+            next_action from events rather than storing it — the operator's
+            2026-08-21 design.
+        
+            STATE AFTER THIS CYCLE: base index 33,379 lines (was 72,168 at cycle
+            start), 510 live packets, 388 ready, 0 fragments pending. The ledger is
+            smaller than at any point this campaign and every archived row is still
+            answerable.
+        - type: progress
+          ts: "2026-08-22T10:00:00Z"
+          agent_id: linux-macuahuitl-opus5-20260822T094300Z
+          host: linux_mutable
+          summary: |
+            THE QUEUE SHRANK. First time this campaign, and the first time anyone
+            measured it rather than arguing about it.
+        
+              ready at campaign start (2026-08-19)   410
+              ready now (2026-08-22)                 386
+              net                                    -24 over three days
+        
+            Against a pre-campaign trend of +26/DAY. So the sign flipped: roughly
+            +78 expected over this window, -24 observed.
+        
+            THE ROUTING RULE, measured on its own terms. Since 2026-08-19 this host
+            appended 146 EVENTS and filed 4 ROWS — a 36:1 ratio. Before the rule
+            most of those 146 observations would have become rows, because "capture
+            is mandatory" and "a new row" were the same act. They are now different
+            acts and the ledger shows it.
+        
+            b, WITH THE ARITHMETIC STATED SO IT CAN BE CHECKED:
+              terminal writes by this host   53   (29 completed, 6 done, 18 obsoleted)
+              rows filed by this host         4   (833-ecdg, 843-624y, 844-aq78, 845-7a88)
+              b over the whole window         4/53 = 0.075
+              b excluding the one-time sweep  4/12 = 0.33
+        
+            The second number is the one to quote. 41 of the 53 closures came from
+            the 2026-08-19 triage, which drained accumulated STOCK and cannot
+            recur — steady state is 12 closures, and 4 filings against those is
+            0.33. Both are below the R2'' target of b < 1; at 0.33 and mu ~ 19/day,
+            dL/dt = 2.2 - 0.67*19 = -10.5/day, which is the sign the whole campaign
+            was for.
+        
+            THREE CAVEATS, because a number this good invites over-reading:
+        
+            1. I AM NOT COMPARING 0.33 TO 1.80. The 1.80 was measured across FIVE
+               hosts doing feature work. This is ONE host over three days doing
+               almost entirely closure and repair. Different population, different
+               work shape. The honest claim is "the routing rule is compatible with
+               b well under 1 on this host", not "curation cut b by 5x".
+        
+            2. A CLOSING CAMPAIGN FLATTERS THE RATIO. Filing is what feature work
+               does; I spent three days fixing gates and closing rows. The test that
+               matters is a cycle that BUILDS something and still files few rows —
+               and 844-aq78 is a small piece of that evidence: real defect, real
+               fix, and it was already a row rather than a new one.
+        
+            3. EVENTS ARE NOT FREE, and the 36:1 should not be read as costless. 146
+               events grow the base and get folded by compaction. What they do not
+               do is enter READY, which is the queue the operator stood the fleet
+               down over. The cost moved from the selectable set to the corpus, and
+               the corpus has its own bound (the 2026-08-22 sweep took the base from
+               72,168 to 33,379 lines).
+        
+            WHAT THIS DOES NOT SETTLE. R2'' is a FLEET criterion and this is a
+            single-host reading. The rejoin plan's gate — measure b over the
+            previous host's participation before adding the next — is unchanged and
+            this measurement is exactly the baseline it needs. The first rejoining
+            host should be measured the same way: events appended versus rows filed,
+            and terminal writes versus filings, over its first three days.
+        - type: progress
+          ts: "2026-08-22T12:00:00Z"
+          agent_id: linux-macuahuitl-opus5-20260822T114300Z
+          host: linux_mutable
+          summary: |
+            THE BOOTSTRAP CONTRACT WAS FALSE, AND I WAS THE ONE HIDING IT.
+        
+            The fleet-rejoin plan I filed on 2026-08-21 states the rule plainly:
+            "THE BOOTSTRAP PROMPT IS THE ACCEPTANCE TEST. If a fresh host needs
+            anything said to it beyond that one sentence, the thing it needed was
+            missing from the skill or the ledger, and THAT is the defect — not the
+            prompt."
+        
+            I then ran ten cycles feeding myself, through operator prompt text,
+            three facts the skill does not contain. Tested rather than assumed:
+        
+              grep -c TILLANDSIAS_SKIP_VERSION_BUMP  skills/meta-orchestration/SKILL.md -> 0
+              grep -c TILLANDSIAS_FORCE_CHECK        skills/meta-orchestration/SKILL.md -> 0
+              grep -niE 'next_action|831-ezea|roadmap'                                  -> nothing about direction
+        
+            WHAT A FRESH HOST WOULD ACTUALLY HAVE DONE, all three measured this week
+            on this host:
+              * run `./build.sh --check` without SKIP_VERSION_BUMP, bump VERSION as
+                a side effect, and have its own push refused by the pre-push guard
+                (643-64bx). Blast radius six files, so reverting VERSION alone does
+                not clear it.
+              * trust a plain `--check` green that MEMOISED and re-ran nothing
+                (765-tkq2, 0.4s instead of 10s) — correct for an inner loop, useless
+                as evidence.
+              * have no idea where standing direction lives.
+        
+            FIXED IN THE SKILL, which is where it always belonged: a "How to invoke
+            the gate" section carrying both variables WITH their reasons, and a
+            "Where standing direction lives" section pointing at
+            `answer "what is the current Direction?"` and `next <role>`.
+        
+            AND A SECOND FINDING THAT IS SHARPER THAN THE FIRST. The roadmap I have
+            been maintaining all campaign lives in 831-ezea's `next_action` — and
+            831-ezea is CLAIMED. Claiming removes a row from selection, so
+            `next linux` does not show it: measured, the top five are 606-um5s,
+            626-w3fn, 627-c9c2, 628-c7qd, 628-p5tj, and the campaign row is absent.
+        
+            THE ROADMAP IS INVISIBLE TO EXACTLY THE AUDIENCE IT IS FOR. That is R1
+            working as designed — a claimed row SHOULD be hidden from other hosts —
+            and it means a claimed row is the wrong home for anything a future host
+            must read. Recorded in the skill: standing direction goes in the
+            Direction section or the skill itself; `next_action` is for the row's
+            own next step.
+        
+            This is the third time this campaign that a mechanism working correctly
+            produced a wrong outcome because something was stored in the wrong
+            place — after the LWW next_action clobber and the carry-forward on a
+            terminal row. The pattern is not "the mechanism is broken", it is "the
+            durable thing was parked somewhere the mechanism deliberately hides".
+        - type: progress
+          ts: "2026-08-22T13:48:00Z"
+          agent_id: linux-macuahuitl-opus5-20260822T134300Z
+          host: linux_mutable
+          summary: |
+            THE REJOIN BAR, MEASURED RATHER THAN ASSERTED. Every blocking criterion
+            re-tested today against the live tree.
+        
+            R1 — CLAIMING IS LIVE. SATISFIED.
+              `expire-claims` reports in_progress=1, and the claimed row is HIDDEN
+              from selection: `next linux` returns 0 occurrences of 831-ezea. Both
+              halves, on a real claim rather than a fixture.
+        
+            R4 — THE SELECTOR SEPARATES HOSTS. SATISFIED, and this is the one that
+            FAILED on 2026-08-19, when three distinct seeds produced a
+            byte-identical batch. Measured today with `select-work-batch.sh linux
+            --seed <host>`:
+                hostA  epic=socket-audit-master     pick=2/3  7 packets
+                       606-um5s, 330, 469, 470, 471, 147, 148
+                hostB  epic=architecture-audit-epic pick=1/3  8 packets
+                       795-zshi, 837-m47d, 795-5itp, 795-hzpg, 828-r2ek, 335, 245, 251
+              Disjoint. And the `urgent=` override that defeated seeding before no
+              longer forces both to one head — hostA carries
+              urgent=nix-supported-release-and-crane-migration and hostB carries
+              none, so urgency is now inside the seeded selection instead of above
+              it. The script also grew a `--seed` flag it did not have in August 19's
+              measurement, which is why that test could not have passed then.
+        
+              BUT SEPARATION IS AVAILABLE, NOT AUTOMATIC, and the distinction is the
+              whole finding. select-work-batch.sh:232 defaults the seed to
+              `${TILLANDSIAS_HOST_KIND:-host}-$(date -u +%Y%m%d)` — host KIND and
+              date, NOT host identity. Two Linux boxes derive the SAME seed every
+              day whether or not that variable is set, because a kind is shared by
+              construction. So R4 passes only for callers that pass --seed
+              explicitly, and a second host that forgets the flag collides exactly
+              as the fleet did before the flag existed.
+        
+              I only caught this by checking a claim I was about to repeat from the
+              2026-08-19 finding rather than re-derive. My draft said the default
+              "seeds to a literal identical on every bare-metal box", which is true
+              but for the wrong reason and understates it — the collision does not
+              depend on the variable being unset. Recorded in the skill's fleet-join
+              section with the line cited, since the flag is now a REQUIREMENT for a
+              rejoining host and nothing enforces it.
+        
+            R2'' — b < 1. SINGLE-HOST READING ONLY: 0.33 steady-state, 0.075 over
+              the whole window, with ready 410 -> 386. That is the baseline, not the
+              criterion; b is a FLEET property and one host cannot close it.
+        
+            SO THE SECOND LINUX HOST IS UNBLOCKED on the bar's own terms. What it
+            proves that nothing else can is R1's remaining half — a claimed row
+            skipped by a DIFFERENT host. Everything measured so far is one host
+            claiming against itself.
+        
+            TWO THINGS THE MEASUREMENT TURNED UP THAT ARE NOT ON THE BAR:
+        
+            macOS's CLAIM EXPIRED AND ITS WORK RETURNED TO THE POOL. 837-m47d,
+            claimed by tlatoanis-macbook-air on 2026-08-20, appears in hostB's batch
+            today — the 24h lease TTL reaped it and the row is selectable again.
+            That is `expire-claims` working, and it is worth the rejoining host
+            knowing: some of what it will be offered is work another host started
+            and did not finish, so read the row's events before assuming it is
+            fresh.
+        
+            AND I NEARLY RECORDED A FALSE PASS ON R4. My first test ran
+            `select-work-batch.sh --seed hostA` without the positional ROLE, so the
+            script refused with `refused:bad-role:unknown argument hostA`. Three
+            refusals differing only in the seed name are three DIFFERENT strings, so
+            my equality check reported "R4 SATISFIED: seeds separate" — from
+            comparing error messages. Caught by asking what specifically differed
+            instead of trusting the boolean. The real test needed the role first and
+            a diff of the batches, which is what the numbers above are.
+        - type: note
+          ts: "2026-08-22T14:50:11Z"
+          host: linux_mutable
+          summary: |
+            roadmap refresh: 2 of 4 items closed; compact prohibition narrowed; rejoin bar measured
+        - type: progress
+          ts: "2026-08-22T15:05:00Z"
+          agent_id: linux-macuahuitl-opus5-20260822T144300Z
+          host: linux_mutable
+          summary: |
+            THE TEST RATCHET RECREATED THE BLIND SPOT IT WAS BUILT TO CLOSE.
+        
+            `scripts/check-test-baseline.sh` exists because NO gate ran `cargo
+            test`: five shape gates were green while seven plan tests were red. The
+            fix wired a ratchet into `./build.sh --check`, and scoped it to
+            `cargo test -p tillandsias-plan --lib`.
+        
+            That `--lib` put the BINARY's 23 tests outside the ratchet. Two of them
+            had been failing for several cycles behind a green --check:
+        
+              tests::every_dispatch_arm_is_documented_in_usage
+              tests::every_declared_capability_is_documented_in_usage
+        
+            Both fail on `corpus-coverage` — a subcommand I added earlier in this
+            campaign and never listed in the usage text. The panic message is
+            exactly the argument for the gate: "a subcommand nobody can discover
+            might as well not exist."
+        
+            So the same cycle produced two instances of ONE shape: a command whose
+            usage is undiscoverable (`compact --help`, which mutated instead of
+            printing) and a command absent from usage entirely (`corpus-coverage`).
+            The second was invisible because the ratchet meant to see it was scoped
+            one target too narrow.
+        
+            FIXED. `corpus-coverage` documented; `--lib` dropped from build.sh:1570
+            so the ratchet covers bin and integration targets. Cost measured at
+            ~0.0s — the bin suite is 23 assertions over static text.
+        
+            MUTATION CONTROL, both directions, and the FIRST ATTEMPT WAS INVALID. I
+            renamed the usage line to `XXcorpus-coverageXX` and --check stayed green
+            (exit 0), which I nearly recorded as "the gate does not fire". The
+            assertion does a SUBSTRING search, and my mutant still contained the
+            substring. Deleting the line outright:
+              mutated   -> test FAILED, "the plan ledger suite's failure set moved
+                           (cargo rc=101)", ./build.sh --check exit 1
+              restored  -> 204/204 lib, 23/23 bin, --check exit 0
+            A mutation that does not actually remove the property under test proves
+            nothing about the gate, and it fails in the direction that flatters the
+            gate — the same false-pass shape as this morning's R4 refusal-string
+            comparison. Twice in one day: the check that a NEGATIVE control is
+            genuinely negative is now the step I keep skipping.
+        
+            WHAT THIS SAYS ABOUT THE OTHER RATCHETS. The workspace-level call at
+            build.sh:1377 runs `cargo test --workspace`, so it has no target gap.
+            This was the narrow one. Worth asking of any future ratchet: name the
+            set it does NOT cover, because a ratchet's scope is invisible from its
+            green line.
     - packet_id: macos-guest-cannot-reach-a-host-native-service
       order: 830-xsk2
       status: ready
@@ -32657,7 +33670,7 @@ plan_index:
 
     - packet_id: launch-spec-emits-verbatim-argv-for-project-launches
       order: 837-m47d
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p1
       kind: bug
@@ -32720,6 +33733,12 @@ plan_index:
         validate_project_name may become unnecessary for THIS path — decide that
         deliberately and say which, rather than leaving both.
       events:
+        - type: completed
+          ts: "2026-08-22T23:52:15Z"
+          agent_id: "linux-lenovinha-claude-20260822t235215z"
+          host: lenovinha
+          summary: |
+            VERIFIED ALREADY IMPLEMENTED AT HEAD, closing with evidence rather than re-implementing. The deliverable landed as order 823-u5zf (commit c5bd2bd72): launch_spec (crates/tillandsias-host-shell/src/pty/mod.rs:391-404) emits [/usr/local/bin/tillandsias-headless, --cloud, <project>, --bash|<agent-flag>] as a verbatim vector via GUEST_HEADLESS_BIN; vm_login_shell_argv's sole remaining caller is the GithubLogin no-project lane, which interpolates no name. EVIDENCE, all run on lenovinha at b629bb379+: cargo test -p tillandsias-host-shell pty:: = 28 passed (launch_spec_routes_project_clicks_through_orchestrated_launch byte-pins the vector; launch_spec_refuses_hostile_project_names pins all 20 hostile names incl. a'b); cargo test -p tillandsias-headless --bin tillandsias exec_allowlist = 7 passed (verbatim arm accepts /usr/local/bin/tillandsias-headless, refuses shells/traversal; verbatim_arm_grants_nothing_the_bash_arm_did_not pins not-a-widening). Design unknown 2 (login-profile env) discharged by 823-u5zf's own evidence: ensure_xdg_runtime_dir (main.rs:1291, 3 tests incl. tightening a pre-existing 0755 dir) and ensure_lane_process_env (main.rs:1254) exist at HEAD. The negative-control decision the packet demanded is recorded in-tree: validator KEPT deliberately (belt and braces, pty/mod.rs launch_spec_still_accepts_legitimate_project_names comment) — hostile names are refused, never split. THIS CYCLE also corrected four stale comments that still described the interpolation (pty/mod.rs validate_project_name doc + launch_spec preamble, notify_icon.rs project-name comment, action_host.rs m10 test doc citing a nonexistent test).
         - type: note
           ts: "2026-08-20T19:43:01Z"
           host: Tlatoanis-MacBook-Air
@@ -32731,6 +33750,21 @@ plan_index:
           summary: |
             Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-08-20T19:43:01Z (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
 
+        - type: note
+          ts: "2026-08-22T23:38:46Z"
+          host: lenovinha
+          summary: |
+            claimed for cycle 2026-08-22T23:38Z
+        - type: completed
+          ts: "2026-08-22T23:54:18Z"
+          host: lenovinha
+          summary: |
+            status 'completed' with evidence_refs: e861f921b cargo test -p tillandsias-host-shell pty:: 28 passed 0 failed; cargo test -p tillandsias-headless --bin tillandsias exec_allowlist 7 passed 0 failed; ./build.sh --check rc=0 at e861f921b
+        - type: note
+          ts: "2026-08-22T23:54:18Z"
+          host: lenovinha
+          summary: |
+            verified implemented by 823-u5zf; closure evidence in the 2026-08-22 completed event
     - packet_id: windows-tray-argv-reparse-workarounds-deletable
       order: 837-svzd
       status: ready
@@ -32777,6 +33811,13 @@ plan_index:
             GithubLogin script no longer transits wt.exe as a string.
           * wsl_root_sh's re-parse hazard — same class, WSL's argv handling.
 
+      events:
+        - type: note
+          ts: "2026-08-22T23:53:18Z"
+          agent_id: "linux-lenovinha-claude-20260822t235318z"
+          host: lenovinha
+          summary: |
+            VERIFY BEFORE IMPLEMENTING (from the 2026-08-22 lenovinha survey): notify_icon.rs:3756-3759 claims argv_survives_wt_reparse is ALREADY deleted (orders 823-u5zf + 836-smm2), and parent 837-m47d closed this cycle as already-implemented-at-HEAD. This packet may be partially or fully done — grep for argv_survives_wt_reparse, wt_safe_title, and the wsl_root_sh re-parse hazard at HEAD on the windows lane FIRST; if the greps come back empty, close with evidence instead of re-implementing (the 837-m47d shape exactly).
     - packet_id: guest-exec-argv-vector-litmus-and-source-scan
       order: 837-et6t
       status: ready
@@ -33060,7 +34101,7 @@ plan_index:
       packet_id: ledger-compaction-deletes-fragments-it-never-folded
       desired_release: v0.5
       title: plan compact marks every LOADED fragment consumed, not every FOLDED one, then deletes them — measured evidence loss
-      status: in_progress
+      status: completed
       kind: fix
       pickup_role: linux
       priority: p0
@@ -33343,11 +34384,209 @@ plan_index:
             enumeration does not depend on a text search finding anything). ~25s
             over the 1,144 deletions.
 
+        - type: progress
+          ts: "2026-08-22T00:55:00Z"
+          agent_id: linux-macuahuitl-opus5-20260822T004300Z
+          host: linux_mutable
+          summary: |
+            THE FLEET CAPABILITY MATRIX HAS ROWS. It reported 0 for its entire
+            existence while the packet that delivered it read `completed`.
+        
+              capability-matrix: 3 row(s), 2 of 6 known host(s) reporting
+                — SILENT: esmeraldinha, forge, tlatoanis-macbook-air, yoga
+        
+            RESTORING THE TWO DESTROYED ROWS IS SAFE NOW, and the reason is the
+            earlier fix rather than the write path. I had recorded "do not restore
+            until compaction can serialise the channel, or the next compaction eats
+            them again". That is no longer the constraint: compaction now REFUSES a
+            fragment carrying `capabilities:` instead of consuming it, so the rows
+            persist as fragments indefinitely and fold_capabilities reads fragments.
+            The channel works today. Restored yolanda's two rows verbatim from
+            1d7ae93ef^ — in-guest and windows-host, the pair that proves why locus
+            exists.
+        
+            EMPTY IS NOW DISTINGUISHABLE FROM UNREPORTED, which was the outstanding
+            addendum criterion. The arm printed "0 rows" and exited 0 — identical to
+            a healthy fleet that has not probed. It now reports coverage against the
+            known-host set, taken from the per-host attestation ledgers. Three
+            states, all exercised:
+              populated  "3 row(s), 2 of 6 known host(s) reporting — SILENT: ..."
+              empty+hosts "0 rows — UNREPORTED by all 3 known host(s): ... This is a
+                           GAP, not an empty fleet"
+              no hosts    "0 rows, and NO KNOWN HOSTS — nothing has completed a
+                           full-mode cycle here"
+            The known-host set is a PROXY and says so in the code: a host appears
+            once it has completed a full-mode cycle, so it answers "which hosts are
+            real and working", not "which hosts owe a capability row". A host that
+            never ran a cycle is invisible, which is the right failure direction.
+        
+            AND THE COVERAGE LINE EARNED ITS KEEP ON ITS FIRST RUN by naming THIS
+            host as silent. Acting on the report rather than filing a packet about
+            it: macuahuitl now contributes a row, verbatim probe output.
+        
+            WHY macuahuitl HAD NEVER CONTRIBUTED — VERSION SKEW, not neglect, and
+            the first attempt at the row FAILED on it. The INSTALLED binary is
+            v0.4.260818.1 and emits `schema_version: 1` with a host block of only
+            {is_battery_present, kernel_release} — NO host_id. fold_capabilities
+            requires document.host.host_id and skips such a row with the
+            exactly-right message "document has no `host.host_id` (predates
+            808-43mw?)". It does predate it: 808-43mw landed on windows-next and
+            reached linux-next only in the 2026-08-21 merge. So every probe run
+            from the installed binary on this host produces an UNFILEABLE document,
+            silently. Rebuilding from HEAD gives schema_version 2 with
+            host_id=macuahuitl, host_id_source=node-name, host_kind=linux.
+        
+            That generalises to the rejoin plan: a host whose installed binary
+            predates the merge that reached it cannot contribute to this channel,
+            and nothing tells it so — the row is simply skipped. Any rejoining host
+            should rebuild before its first capability probe.
+        
+            LOCUS `bare-metal` IS A NEW VALUE. The vocabulary held only `in-guest`
+            and `windows-host`, which exist because a WSL2 guest and its Windows
+            host see different hardware — the guest cannot see the NPU. Locus
+            records which execution context observed. This host has no
+            virtualization boundary between observer and hardware, so neither value
+            is honest; `bare-metal` names the condition rather than the platform, so
+            a bare-metal macOS or Windows host can reuse it.
+        
+            WHAT IS STILL OWED on this packet: the capabilities WRITE path.
+            compact/compact_text still never serialise the channel into the base, so
+            these rows live only as fragments. That is now a SIZE concern rather
+            than a LOSS one — bounded at roughly one row per host per locus — which
+            is why it is no longer blocking anything.
+        - type: completed
+          ts: "2026-08-22T11:00:00Z"
+          agent_id: linux-macuahuitl-opus5-20260822T104300Z
+          host: linux_mutable
+          summary: |
+            THE GARBAGE COLLECTOR NO LONGER DESTROYS. All four exit criteria met,
+            re-checked at close rather than recalled:
+        
+              1. compact/compact_text consume ONLY fragments whose records reached
+                 the result. scripts/test-compaction-coverage.sh passes 10/10 on the
+                 live tree today, wired into ./build.sh --check.
+              2. Negative control: replacing the coverage call with an always-empty
+                 gap list gives exit 1 and 7/10 failed, the decisive assertion
+                 reading "the misplaced-definition fragment SURVIVED (expected
+                 present, got ABSENT)" — the mutant DELETES it, reproducing the data
+                 loss rather than merely failing.
+              3. The enumeration is exhaustive, not sampled: 1,144 deletions
+                 carrying 2,562 records, 33 provably dropped, 5 later re-filed by
+                 hand, 28 GENUINELY LOST — 1.09%. Two independent methods (recover
+                 blobs and search HEAD; simulate the fold's accept test) converged
+                 on the same set.
+              4. 735-6iki recorded NOT recovered and not worth recovering, with the
+                 reason: v0.4 shipped and both packets it attested are terminal. Its
+                 substance is preserved by being written into the ledger.
+        
+            THE PATTERN THE ENUMERATION FOUND is the durable part: 23 of 28 losses
+            (82%) were ONE schema mistake — the flattened event, body emitted at one
+            level instead of nested under `event:` — and EVERY loss was hand-authored
+            YAML. Fragments written by `tillandsias-plan set-field` were correctly
+            shaped without exception. The coverage check now refuses that shape, so
+            the dominant mode cannot recur.
+        
+            WHAT I GOT WRONG ALONG THE WAY, both caught by running things:
+              * The zero-terminal guard I added aborted --check, because "zero
+                terminal packets is impossible" is false for an ALREADY-ARCHIVED
+                ledger — which is exactly what the idempotency second run creates.
+                A guard that fires on the correct steady state is an outage.
+              * The addressed-fragment exclusion was HALF-APPLIED: terminal_ids is
+                keyed by both order and packet_id, the exclusion rejected only the
+                packet_id, and a row headed by `- order:` was archived out from
+                under a live fragment. The original 424/437 asymmetry, third
+                instance. Fixed with an alias map.
+        
+            THE ONE ADDENDUM NOT MET is split to 846-idhn: compaction still never
+            serialises the `capabilities:` channel. That is now a SIZE concern
+            rather than a LOSS one — the coverage check refuses those fragments
+            instead of eating them, so the rows persist and the matrix reads them
+            (3 rows, 2 of 6 hosts, measured today). Splitting rather than holding
+            this p0 open, because a p0 kept alive for bounded fragment accumulation
+            misreports what is urgent — and this ledger is read by agents choosing
+            what to work on.
+        - type: progress
+          ts: "2026-08-22T14:49:36Z"
+          agent_id: linux-macuahuitl-opus5-20260822T144300Z
+          host: linux_mutable
+          summary: |
+            `compact --help` PERFORMED THE COMPACTION. Reading the usage WAS the
+            mutation.
+        
+            Found by doing it. I ran `tillandsias-plan compact --help` to learn the
+            flags before touching anything — on the one ledger command carrying a
+            p0 and a standing operator prohibition — and it folded 27 live
+            fragments into the base and deleted them, including three filed earlier
+            the same day.
+        
+            THE ARM READ NONE OF ITS ARGUMENTS. main.rs's `"compact" =>` branch went
+            straight to `compact_text` without inspecting `args`, so every token
+            after the subcommand — `--help`, `--dry-run`, a typo, anything — was
+            ignored and the fold ran regardless. There was no invocation of this
+            command that did not mutate.
+        
+            WHAT SAVED IT WAS THE 843-624y FIX ITSELF. The three unfoldable
+            capabilities fragments were refused and survived on disk exactly as
+            designed, and the 27 folded ones were genuinely carried into the base —
+            I spot-checked four distinctive records and found each present. So the
+            cost was a revert, not data. Reverted with `git checkout` (everything
+            was committed), tree returned to clean, startup boundary re-verified ok.
+        
+            I reverted rather than kept it despite the fold looking correct, because
+            I had verified 4 of 27 fragments and 796-4ydb is precisely the error of
+            generalising from a partial corpus — and because an unsanctioned
+            mutation should not be ratified by the fact that it happened to work.
+        
+            TWO DEFECTS, ONE LATENT UNDER THE OTHER. 843-624y made compaction safe
+            to RUN. It was never safe to INVOKE, and that second defect was
+            invisible while the first one dominated: nobody reaches for `--help` on
+            a command they have been told not to run at all.
+        
+            FIXED. The arm now parses its arguments before doing any work:
+              --help/-h    prints usage, exits 0, touches nothing; names
+                           `fragments` as the read-only way to inspect the overlay
+              --dry-run/-n validates the fold through parse AND integrity, reports
+                           what it would consume and refuse, writes nothing
+              unknown      refuses with exit 2 and names the argument, rather than
+                           compacting
+            --dry-run stops AFTER validation deliberately: the useful half of a dry
+            run is learning the fold would be ACCEPTED, which only the integrity
+            check can answer. A count alone would prove nothing.
+        
+            GATE, and I watched it go RED. Thirteen assertions added to
+            scripts/test-compaction-coverage.sh (10 -> 23), each checking the LEDGER
+            IS UNTOUCHED rather than merely that the command exited 0 — the base
+            cksum is compared byte-for-byte and the foldable fragment must still
+            exist. Four of them (`--help prints usage`, `--help says MUTATES`,
+            `unknown argument REFUSES (exit 2)`, `the refusal names the argument`)
+            failed against the pre-fix release binary under these exact assertions
+            and pass after, which is the mutation control. A CONTROL assertion in
+            the other direction — a bare `compact` must STILL consume the fragment —
+            guards against "fixed" meaning "compaction quietly stopped working".
+        
+            AND THE FIRST RUN OF MY OWN GATE WAS INVALID, twice over. I wrote the
+            fixture fragment against an invented packet_id
+            (`compaction-argument-safety-probe`) when the fixture base declares
+            `fixture/alpha`, so the fragment was unfoldable and the CONTROL failed;
+            and the harness resolves ./target/release while I had built only debug,
+            so the first six failures were an old binary plus a bad fixture rather
+            than the code. Both are repeats: the invented-slug orphan event I filed
+            on 2026-08-21, and 796-4ydb's partial-corpus shape. Checking WHICH
+            binary a harness resolves is now the first thing to ask when a new
+            assertion fails.
+        
+            SO THE PROHIBITION CAN NARROW BUT NOT LIFT. `compact` no longer eats
+            unfolded fragments (10/10 before this cycle) and no longer mutates on a
+            read-only invocation (23/23 now). What remains is 846-idhn: the
+            capabilities channel still has no base representation, so those three
+            fragments can never be folded and the overlay cannot fully drain. Use
+            `compact --dry-run` or `fragments` to inspect; a bare `compact` is now
+            an ordinary deliberate act rather than a p0 hazard.
     - order: 844-aq78
       packet_id: provider-login-lane-skips-the-vault-credential-cleanup-wrapper
       desired_release: v0.5
       title: The interactive login lane is the only CLI lane not wrapped in run_cli_with_vault_credential_cleanup, so a clean login leaks its AppRole accessor
-      status: ready
+      status: completed
       kind: fix
       pickup_role: linux
       priority: p2
@@ -33377,3 +34616,165 @@ plan_index:
         - The login dispatch at main.rs:763 goes through run_cli_with_vault_credential_cleanup like its four siblings, or a comment at that site states why it must not and what cleans up instead.
         - 'A test or fixture pins it: after a SUCCESSFUL login lane, no AppRole accessor is left for the orphan sweep. A source-scan assertion that the wrapper is present is acceptable only if it also fails when the wrapper is removed — demonstrate that.'
         - The three existing plan/ mentions of run_cli_with_vault_credential_cleanup are checked and confirmed to describe a DIFFERENT defect, so this packet is not a duplicate. (Checked once on 2026-08-21 and they do; re-check before claiming, since the ledger moves.)
+      events:
+        - type: completed
+          ts: "2026-08-22T02:00:00Z"
+          agent_id: linux-macuahuitl-opus5-20260822T014400Z
+          host: linux_mutable
+          summary: |
+            THE LOGIN LANE IS WRAPPED. All three exit criteria met, and the test
+            found a site the packet did not know about.
+        
+            CRITERION 1 — the dispatch at main.rs:763 now goes through
+            `run_cli_with_vault_credential_cleanup` like its four siblings
+            (:865/:891 status-check, :918/:943 the agent lanes). The `exit(1)` stays
+            OUTSIDE the wrapper deliberately: `std::process::exit` runs no
+            destructors, so the drain has to have already happened by the time it is
+            reached — the shape every sibling uses.
+        
+            AND IT IS ONLY SAFE BECAUSE 828-k3mq LANDED FIRST, which I checked
+            before touching it rather than after. The naive version of this change
+            was a p0 in the OPPOSITE direction: the drain used to be unconditional
+            while the mirror teardown it assumes is REFCOUNTED, so a lane exiting
+            into a live sibling destroyed a SecretID that sibling still needed —
+            renewing a client token it could never replace until max_ttl killed
+            every push 24 hours later. `revoke_pending_container_tokens` now applies
+            the same refcount, and its doc comment says "do not simplify it back
+            into an unconditional drain". So wrapping one more lane adds a drain
+            that respects the owning container rather than one that races it.
+        
+            CRITERION 3 — the pre-existing mentions describe a DIFFERENT defect,
+            re-verified. They belong to 828-k3mq
+            (mirror-approle-secretid-destroyed-under-a-still-running-mirror,
+            `completed`), which is about the wrapper being too AGGRESSIVE. This
+            packet is about one lane not having it at all. The two are in tension,
+            which is exactly why the check mattered: had 828-k3mq still been open,
+            the right move would have been to leave the lane unwrapped and say so.
+            Note those mentions are now in plan/archive/packets-2026-08.yaml rather
+            than the live base — the sweep moved them, and they were still findable,
+            which is the archive-answerability fix earning its keep.
+        
+            CRITERION 2 — a test that pins it, and the packet required that a
+            source-scan count ONLY if it fails when the wrapper is removed.
+            `every_interactive_cli_lane_drains_its_vault_credentials`. Mutation
+            control, unmasked: delete the wrapper from the login dispatch -> exit
+            101, restore -> exit 0, source byte-identical.
+        
+            THE TEST FOUND A SECOND UNWRAPPED SITE ON ITS FIRST RUN, which the
+            packet did not mention: `run_provider_login(&config, debug)?;` at
+            main.rs:13463, inside `ensure_provider_auth`. That one is CORRECT as
+            written — the function is called by the agent lanes, which are already
+            wrapped at their own dispatch sites, so wrapping it again would nest one
+            drain inside another. Recorded as a named exception with its reason
+            rather than by loosening the rule until it passed. The packet claimed
+            one unwrapped dispatch; there were two, and the second was fine.
+        
+            TWO THINGS THE TEST GOT WRONG BEFORE IT GOT THEM RIGHT, kept because
+            both are general:
+              * It matched ITS OWN DATA. The scan reads the file it lives in, so the
+                array of call signatures was itself a hit and the first run failed
+                on its own literal. A dispatch site is never preceded by a quote; a
+                table entry always is.
+              * Proximity alone cannot express "wrapped by my caller". That needed
+                an explicit list with reasons, which is the same discipline
+                windows-only-known-red.txt states: an unexplained entry is how a
+                gate stops meaning anything.
+        
+            Verified: clippy -D warnings 0, ./build.sh --check 0 (forced).
+    - order: 845-7a88
+      packet_id: proxy-cache-policy-bumped-origin-tls-test-is-the-standing-known-red
+      desired_release: v0.5
+      title: proxy_cache_policy::bumped_origin_tls_and_signed_url_logs_fail_closed is Linux's only standing test failure and has no filed issue
+      status: ready
+      kind: fix
+      pickup_role: linux
+      priority: p3
+      capability_tags:
+        - testing
+        - proxy
+        - tls
+        - known-red
+        - gate
+      deliverable: crates/tillandsias-headless/tests/proxy_cache_policy.rs
+      depends_on: []
+      context: |
+        THE ENTRY EXISTS BECAUSE THE PRECEDENT DEMANDS ONE. scripts/ test-known-red.txt seeds exactly one tolerated failure, and the file it is modelled on — scripts/windows-only-known-red.txt — states the rule in its own header: "Each entry needs a filed issue; an unexplained name here is how a stamp stops meaning anything." The seed was written with an in-line admission that no issue existed, which is honest but is not a filed issue. The agent that added it flagged this against itself. This row closes that.
+        THE FAILURE. `cargo test -p tillandsias-headless --test proxy_cache_policy` -> bumped_origin_tls_and_signed_url_logs_fail_closed FAILED, panicking at tests/proxy_cache_policy.rs:112. Measured red on linux-next at 81d2315f5 (2026-08-20), again at f9ee195a9 (2026-08-21), and it survived the archive sweep revert, so it is independent of that cycle's work.
+        WHY IT MATTERS MORE THAN A SINGLE RED TEST. Until 28553c3db this one failure returned 101 from `_run cargo test --workspace --no-fail-fast`, `set -e` aborted the whole --test dispatch, and the feature-gated pass (546 tests, tray + listen-vsock) NEVER RAN. One un-triaged failure was silently costing the fleet an entire test lane. The ratchet made --test green again by tolerating it; that is a stopgap, and this row is the un-stopgapping.
+        Linux's pre-existing failure set under --no-fail-fast is EXACTLY ONE. Any second entry in test-known-red.txt should be treated as a regression until proven otherwise.
+      exit_criteria:
+        - The test passes, or it is deleted with a recorded reason why the property it asserted is no longer worth asserting. `bumped origin TLS and signed-url logs fail closed` is a security-shaped property, so deletion needs an argument, not a shrug.
+        - 'scripts/test-known-red.txt has ZERO entries afterwards, and the ratchet''s stale-entry direction proves it: a listed test that now passes must red the gate, so removing the fix without removing the entry cannot pass silently.'
+        - If it cannot be fixed now, this row's number replaces the `NEEDS A FILED ISSUE` line in test-known-red.txt so the entry cites its issue as the precedent requires.
+
+    - order: 846-idhn
+      packet_id: capabilities-channel-has-no-base-representation
+      desired_release: v0.6
+      title: compaction never serialises the `capabilities:` channel, so its rows live only as fragments and can never be folded
+      status: ready
+      kind: enhancement
+      pickup_role: linux
+      priority: p3
+      capability_tags:
+        - plan
+        - ledger
+        - crdt
+        - capabilities
+        - compaction
+        - rust
+      deliverable: crates/tillandsias-plan/src/fragments.rs
+      depends_on: []
+      context: |
+        SPLIT FROM 843-624y, which closed on the data-loss bug it was filed for. This is the residue, and it is deliberately p3 rather than inheriting p0.
+        `fold_capabilities` (fragments.rs) READS the `capabilities:` channel; neither `compact` nor `compact_text` ever WRITES it. So the channel has no representation in plan/index.yaml and its rows exist only as fragments.
+        WHY THIS IS NO LONGER URGENT, and the reason is 843-624y's fix rather than anything done here. Compaction used to CONSUME those fragments and delete them, destroying 100% of the channel — that is how yolanda's only two rows were lost (1d7ae93ef). The coverage check now REFUSES a fragment carrying `capabilities:`, so the rows persist indefinitely and the matrix reads them. Measured 2026-08-22: `capability-matrix` reports 3 rows, 2 of 6 known hosts.
+        SO THE COST IS NOW SIZE, NOT LOSS: capability fragments accumulate in plan/index.d and never fold. The bound is small — roughly one row per host per locus, three today for a six-host fleet — which is why this is p3 and not p0.
+        THE SHAPE OF THE FIX, so it is not re-derived: `compact_text` is format-preserving TEXT manipulation, so this is not "serialise a struct". It means emitting a top-level `capabilities:` block into the base text and teaching `fold_capabilities` to read base ⊕ fragments the way every other channel is read. The general invariant it satisfies is already written down on 843-624y: FOR EVERY CHANNEL THE FOLD CAN READ, COMPACTION MUST BE ABLE TO WRITE IT BACK. A read path without a matching write path is a channel that silently empties itself — and today the only thing standing between this one and that outcome is a refusal.
+      exit_criteria:
+        - A fragment carrying `capabilities:` is CONSUMED by compaction rather than refused, and `capability-matrix` reports the same rows afterwards as before. Same before/after shape the archive sweep uses.
+        - fold_capabilities reads the base as well as the fragments, so a folded row is indistinguishable from a fragment row to every caller.
+        - 'The generic round-trip assertion from 843-624y covers it: a fragment carrying each known top-level key survives fold -> compact -> fold byte-equivalently, so the NEXT channel added cannot repeat this.'
+        - 'Negative control: remove the capabilities writer and the round-trip assertion goes red naming that channel.'
+
+    - order: 847-wgy4
+      packet_id: work-selection-cannot-separate-more-hosts-than-frontier-epics
+      desired_release: v0.6
+      title: select-work-batch picks among top-K frontier epics, so N hosts collide into K batches however unique their seeds are
+      status: ready
+      kind: enhancement
+      pickup_role: linux
+      priority: p2
+      capability_tags:
+        - plan
+        - fleet
+        - scheduling
+        - multi-host
+        - shell
+      deliverable: scripts/select-work-batch.sh
+      depends_on: []
+      estimated_hours: 6
+      context: |
+        THE SEED WAS FIXED AND IT IS NOT ENOUGH. As of 2026-08-22 the default seed is a real host identity (derive-host-identity.sh: <osgroup>-<cpu>-<accel>-<hostname>, unique by hostname) instead of `${TILLANDSIAS_HOST_KIND:-host}-<date>`, which every same-kind host shared. That removes the collision-by-construction.
+        It does not remove collisions. The entropy step picks among the top-K frontier epics with K=3, so the OUTPUT SPACE IS THREE BATCHES WIDE no matter how well-distributed the seeds are. Measured over the eight identities the announced fleet will present:
+        
+          silverblue-ryzen7-amd+nvidia-hilaptop1   forge-local-experts (3/3)
+          windows-ryzen7-amd+npu-hilaptop2         architecture-audit  (1/3)
+          silverblue-ryzen5-amd+npu-hilaptop3      forge-local-experts (3/3)
+          windows-i9-intel-lowlap1                 architecture-audit  (1/3)
+          silverblue-core-ultra-intel-lowlap2      socket-audit        (2/3)
+          macos-m5-apple-mstudio                   forge-local-experts (3/3)
+          silverblue-i7-intel-oldair               architecture-audit  (1/3)
+          linux-core-ultra-npu+nvidia-macuahuitl   socket-audit        (2/3)
+        
+        Eight hosts into three buckets: 3/3/2. Pigeonhole, every day. R1 claiming keeps that merely wasteful rather than duplicated — each colliding host burns its cycle start discovering the head packet is taken — but a fleet whose members all begin at the same packet is not a fleet.
+        AND THE MECHANISM WAS NEVER MEANT TO DO THIS. The top-K pick is an ANTI-STARVATION device: it exists so a permanently-second epic still gets worked on ONE host over TIME (the comment at select-work-batch.sh says so explicitly, and the epsilon floor was added when squared weights sent 94.6% to the top epic). Reading it as host separation is reading a time-diversity mechanism as a space-diversity mechanism. R4 on the fleet rejoin bar asserted the latter; the selector only ever provided the former.
+        WHAT THE FLEET ACTUALLY NEEDS is routing by CAPABILITY, which the ledger already has vocabulary for: every packet carries `capability_tags` and `pickup_role`, and 808-7yrd's capability matrix describes what each host IS. The announced fleet makes this concrete — an NVIDIA+AMD Silverblue laptop, two AMD-NPU machines that differ only by OS (Ryzen 5 Silverblue vs Ryzen 7 Windows 11, a near-controlled A/B for OS-specific defects), two low-end Intel boxes that are the deliberate performance floor, an M5 mac, and a 14-year-old Intel MacBook Air running Silverblue. Handing all of them the same three-epic lottery wastes precisely the property that makes the fleet worth having.
+      exit_criteria: |
+        (1) Two hosts with different capability profiles asking for work on the same day receive DISJOINT batches, demonstrated across the eight identity strings above rather than two hand-picked seeds — the 2026-08-19 R4 test passed on three seeds and the property was still false. (2) A packet tagged for an accelerator the host lacks is never offered to it, with a negative control proving the filter can exclude. (3) The anti-starvation property is PRESERVED and shown preserved: no epic on the frontier becomes unreachable for the fleet as a whole. Capability routing that starves an epic has traded one failure for another. (4) Hosts with no capability row still receive work — an unprobed host must degrade to today's behaviour, not to an empty batch.
+      events:
+        - type: filed
+          ts: "2026-08-22T23:20:42Z"
+          agent_id: linux-macuahuitl-opus5-20260822T144300Z
+          host: linux_mutable
+          summary: |
+            Filed as its own row rather than an event on the rejoin campaign, because it is independently schedulable and because it CORRECTS a campaign claim: I reported R4 satisfied on 2026-08-22 after measuring two seeds that returned disjoint batches. Eleven seeds return three batches, and two real hostnames — macuahuitl and yoga — return a byte-identical one. The two seeds I picked happened to land in different buckets. That is the third false pass this campaign from a test whose sample could not distinguish the hypothesis from its negation.
