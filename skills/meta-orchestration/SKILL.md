@@ -321,6 +321,51 @@ Then favor the expert system for the cycle's work-pull/triage/debug/research
 (methodology `expert_first_work`): ask the experts first; on a gap, fall back
 with a loud warning naming the gap, never silently.
 
+## How to invoke the gate (read this before your first `./build.sh`)
+
+Two environment variables are not optional and neither is discoverable by
+reading `build.sh`. They were carried in operator prompt text for ten cycles
+before anyone noticed the skill never mentioned them — which meant the
+bootstrap contract ("Use the ./skills/meta-orchestration skill." and nothing
+else) was quietly false for any fresh host.
+
+```bash
+TILLANDSIAS_SKIP_VERSION_BUMP=1 ./build.sh --check                  # every time
+TILLANDSIAS_SKIP_VERSION_BUMP=1 TILLANDSIAS_FORCE_CHECK=1 ./build.sh --check   # to VERIFY
+```
+
+- **`TILLANDSIAS_SKIP_VERSION_BUMP=1` — always.** Without it the gate bumps
+  VERSION as a side effect and the pre-push hook then refuses YOUR OWN push,
+  because VERSION may not change on a platform branch (643-64bx). The blast
+  radius is six files — VERSION, Cargo.lock and four crate Cargo.tomls — so a
+  remedy that reverts only VERSION leaves the tree dirty and the push still
+  refused. Measured live on linux-next 2026-08-20.
+- **`TILLANDSIAS_FORCE_CHECK=1` whenever the green matters.** Since 765-tkq2 a
+  plain `--check` MEMOISES: on an unchanged tree it prints `ok:gate-fresh` and
+  re-runs nothing, in 0.4s instead of 10s. That is correct for the inner loop
+  and useless as evidence. A green you did not force proves only that the tree
+  has not changed since some earlier green.
+
+## Where standing direction lives
+
+Ask, do not guess:
+
+```bash
+tillandsias-plan answer "what is the current Direction?"
+tillandsias-plan next <role>
+```
+
+The Direction section is operator-owned and is the one place a theme is
+declared. Per-row carry-forward lives in each row's `next_action`, which
+`next` prints beside the row it belongs to.
+
+**A caveat learned the hard way, 2026-08-22.** Cross-cutting direction parked in
+the `next_action` of a CLAIMED row is invisible: claiming removes the row from
+selection, so `next` never shows it and a fresh host cannot find it. That is
+R1 working as designed, and it means a claimed row is the wrong home for
+anything a future host must read. Standing direction belongs in the Direction
+section or in this skill; `next_action` is for the row's own next step.
+
 ## Start Of Cycle
 
 0. **Rebuild the instrument before using it** (operator directive 2026-08-13):

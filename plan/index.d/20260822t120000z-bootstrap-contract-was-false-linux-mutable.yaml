@@ -1,0 +1,59 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-22T12:00:00Z.
+events:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    event:
+      type: progress
+      ts: "2026-08-22T12:00:00Z"
+      agent_id: linux-macuahuitl-opus5-20260822T114300Z
+      host: linux_mutable
+      summary: |
+        THE BOOTSTRAP CONTRACT WAS FALSE, AND I WAS THE ONE HIDING IT.
+
+        The fleet-rejoin plan I filed on 2026-08-21 states the rule plainly:
+        "THE BOOTSTRAP PROMPT IS THE ACCEPTANCE TEST. If a fresh host needs
+        anything said to it beyond that one sentence, the thing it needed was
+        missing from the skill or the ledger, and THAT is the defect — not the
+        prompt."
+
+        I then ran ten cycles feeding myself, through operator prompt text,
+        three facts the skill does not contain. Tested rather than assumed:
+
+          grep -c TILLANDSIAS_SKIP_VERSION_BUMP  skills/meta-orchestration/SKILL.md -> 0
+          grep -c TILLANDSIAS_FORCE_CHECK        skills/meta-orchestration/SKILL.md -> 0
+          grep -niE 'next_action|831-ezea|roadmap'                                  -> nothing about direction
+
+        WHAT A FRESH HOST WOULD ACTUALLY HAVE DONE, all three measured this week
+        on this host:
+          * run `./build.sh --check` without SKIP_VERSION_BUMP, bump VERSION as
+            a side effect, and have its own push refused by the pre-push guard
+            (643-64bx). Blast radius six files, so reverting VERSION alone does
+            not clear it.
+          * trust a plain `--check` green that MEMOISED and re-ran nothing
+            (765-tkq2, 0.4s instead of 10s) — correct for an inner loop, useless
+            as evidence.
+          * have no idea where standing direction lives.
+
+        FIXED IN THE SKILL, which is where it always belonged: a "How to invoke
+        the gate" section carrying both variables WITH their reasons, and a
+        "Where standing direction lives" section pointing at
+        `answer "what is the current Direction?"` and `next <role>`.
+
+        AND A SECOND FINDING THAT IS SHARPER THAN THE FIRST. The roadmap I have
+        been maintaining all campaign lives in 831-ezea's `next_action` — and
+        831-ezea is CLAIMED. Claiming removes a row from selection, so
+        `next linux` does not show it: measured, the top five are 606-um5s,
+        626-w3fn, 627-c9c2, 628-c7qd, 628-p5tj, and the campaign row is absent.
+
+        THE ROADMAP IS INVISIBLE TO EXACTLY THE AUDIENCE IT IS FOR. That is R1
+        working as designed — a claimed row SHOULD be hidden from other hosts —
+        and it means a claimed row is the wrong home for anything a future host
+        must read. Recorded in the skill: standing direction goes in the
+        Direction section or the skill itself; `next_action` is for the row's
+        own next step.
+
+        This is the third time this campaign that a mechanism working correctly
+        produced a wrong outcome because something was stored in the wrong
+        place — after the LWW next_action clobber and the carry-forward on a
+        terminal row. The pattern is not "the mechanism is broken", it is "the
+        durable thing was parked somewhere the mechanism deliberately hides".
