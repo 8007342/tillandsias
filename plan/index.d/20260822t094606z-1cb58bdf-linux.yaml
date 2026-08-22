@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    field: next_action
+    value: 'R2-DOUBLE-PRIME HAS ITS FIRST MEASUREMENT, single-host. ready 410 (2026-08-19) -> 386 (2026-08-22), net -24 against a pre-campaign +26/day. Routing rule measured: 146 events appended vs 4 rows filed, 36:1. b = 4/53 = 0.075 over the whole window, or 4/12 = 0.33 excluding the one-time triage sweep — quote the second. Both under the b < 1 target. DO NOT compare 0.33 to the 1.80: that was five hosts doing feature work, this is one host doing closure and repair. NEXT, in order: (1) 843-624y in_progress — the capabilities WRITE path is all that remains; compaction refuses those fragments rather than eating them so it is a size concern, not loss. (2) 552 — delta re-embed, priced at ~490s per full rebuild vs 0.6% of chunks actually changing; the hazard is written into its next_action and must not be skipped. (3) 821-73es — BLOCKED ON THE OPERATOR: my measurement says a single global cosine threshold cannot work (in-corpus floor 0.6818 vs near-miss ceiling 0.6889, overlapping by 0.007), so the fleet decision needs to choose per-corpus thresholds or a top1-vs-top2 margin test. (4) The 2 markdown chunks still over the embed cut, 11,191 chars — deliberately left. FLEET REJOIN unchanged: second Linux host first, and measure its b the same way over its first three days.'
+    ts: "2026-08-22T09:46:06Z"
+    host: linux
