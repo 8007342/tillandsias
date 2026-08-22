@@ -1,0 +1,77 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-22T13:48:00Z.
+events:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    event:
+      type: progress
+      ts: "2026-08-22T13:48:00Z"
+      agent_id: linux-macuahuitl-opus5-20260822T134300Z
+      host: linux_mutable
+      summary: |
+        THE REJOIN BAR, MEASURED RATHER THAN ASSERTED. Every blocking criterion
+        re-tested today against the live tree.
+
+        R1 — CLAIMING IS LIVE. SATISFIED.
+          `expire-claims` reports in_progress=1, and the claimed row is HIDDEN
+          from selection: `next linux` returns 0 occurrences of 831-ezea. Both
+          halves, on a real claim rather than a fixture.
+
+        R4 — THE SELECTOR SEPARATES HOSTS. SATISFIED, and this is the one that
+        FAILED on 2026-08-19, when three distinct seeds produced a
+        byte-identical batch. Measured today with `select-work-batch.sh linux
+        --seed <host>`:
+            hostA  epic=socket-audit-master     pick=2/3  7 packets
+                   606-um5s, 330, 469, 470, 471, 147, 148
+            hostB  epic=architecture-audit-epic pick=1/3  8 packets
+                   795-zshi, 837-m47d, 795-5itp, 795-hzpg, 828-r2ek, 335, 245, 251
+          Disjoint. And the `urgent=` override that defeated seeding before no
+          longer forces both to one head — hostA carries
+          urgent=nix-supported-release-and-crane-migration and hostB carries
+          none, so urgency is now inside the seeded selection instead of above
+          it. The script also grew a `--seed` flag it did not have in August 19's
+          measurement, which is why that test could not have passed then.
+
+          BUT SEPARATION IS AVAILABLE, NOT AUTOMATIC, and the distinction is the
+          whole finding. select-work-batch.sh:232 defaults the seed to
+          `${TILLANDSIAS_HOST_KIND:-host}-$(date -u +%Y%m%d)` — host KIND and
+          date, NOT host identity. Two Linux boxes derive the SAME seed every
+          day whether or not that variable is set, because a kind is shared by
+          construction. So R4 passes only for callers that pass --seed
+          explicitly, and a second host that forgets the flag collides exactly
+          as the fleet did before the flag existed.
+
+          I only caught this by checking a claim I was about to repeat from the
+          2026-08-19 finding rather than re-derive. My draft said the default
+          "seeds to a literal identical on every bare-metal box", which is true
+          but for the wrong reason and understates it — the collision does not
+          depend on the variable being unset. Recorded in the skill's fleet-join
+          section with the line cited, since the flag is now a REQUIREMENT for a
+          rejoining host and nothing enforces it.
+
+        R2'' — b < 1. SINGLE-HOST READING ONLY: 0.33 steady-state, 0.075 over
+          the whole window, with ready 410 -> 386. That is the baseline, not the
+          criterion; b is a FLEET property and one host cannot close it.
+
+        SO THE SECOND LINUX HOST IS UNBLOCKED on the bar's own terms. What it
+        proves that nothing else can is R1's remaining half — a claimed row
+        skipped by a DIFFERENT host. Everything measured so far is one host
+        claiming against itself.
+
+        TWO THINGS THE MEASUREMENT TURNED UP THAT ARE NOT ON THE BAR:
+
+        macOS's CLAIM EXPIRED AND ITS WORK RETURNED TO THE POOL. 837-m47d,
+        claimed by tlatoanis-macbook-air on 2026-08-20, appears in hostB's batch
+        today — the 24h lease TTL reaped it and the row is selectable again.
+        That is `expire-claims` working, and it is worth the rejoining host
+        knowing: some of what it will be offered is work another host started
+        and did not finish, so read the row's events before assuming it is
+        fresh.
+
+        AND I NEARLY RECORDED A FALSE PASS ON R4. My first test ran
+        `select-work-batch.sh --seed hostA` without the positional ROLE, so the
+        script refused with `refused:bad-role:unknown argument hostA`. Three
+        refusals differing only in the seed name are three DIFFERENT strings, so
+        my equality check reported "R4 SATISFIED: seeds separate" — from
+        comparing error messages. Caught by asking what specifically differed
+        instead of trusting the boolean. The real test needed the role first and
+        a diff of the batches, which is what the numbers above are.

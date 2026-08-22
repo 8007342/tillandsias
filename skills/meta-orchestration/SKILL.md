@@ -366,6 +366,48 @@ R1 working as designed, and it means a claimed row is the wrong home for
 anything a future host must read. Standing direction belongs in the Direction
 section or in this skill; `next_action` is for the row's own next step.
 
+## Joining the fleet (read this if you are not macuahuitl)
+
+As of 2026-08-22 the fleet is deliberately ONE host — `linux_mutable`
+(macuahuitl) on `linux-next` — while three mechanisms that only matter with
+multiple hosts were repaired. The rejoin order is second Linux, then macOS,
+then Windows, each gated on measuring the queue's growth over the previous
+host's participation.
+
+Two of the three blocking criteria are measured satisfied:
+
+- **Claiming is live.** `expire-claims` reports a non-zero `in_progress`, and a
+  claimed row is genuinely hidden from `next <role>`. Verified on a real claim,
+  both halves. What one host CANNOT prove is the cross-host half — a row
+  claimed HERE being skipped THERE. That is the second host's first job, and it
+  is worth doing deliberately before it drains anything.
+- **The selector separates hosts.** `select-work-batch.sh <role> --seed <host>`
+  returns disjoint batches for different seeds — different epic, different
+  packets, and `urgent=` no longer forces every host to one head. This FAILED
+  on 2026-08-19 (three seeds, one byte-identical batch) and the `--seed` flag
+  did not exist then. **Pass your hostname as `--seed`.** The default is
+  `${TILLANDSIAS_HOST_KIND:-host}-$(date -u +%Y%m%d)`
+  (`scripts/select-work-batch.sh:232`), which varies by host KIND and date — not
+  by host. Two Linux boxes therefore derive the same seed every day whether or
+  not that variable is set, so separation is available but NOT automatic: a
+  second host that forgets the flag collides exactly as the fleet did before.
+
+The third is a fleet property no single host can close: the queue must stop
+growing faster than it drains. One host currently measures well inside the
+bound, but that reading says nothing about what a second host does to it —
+which is precisely why hosts rejoin one at a time and the number is re-measured
+after each.
+
+**Expect to be offered other hosts' abandoned work.** Claims expire on a 24h
+lease, and expired rows return to the pool with their history intact — a row
+you are offered may have been started elsewhere and dropped. Read the row's
+events before assuming it is fresh.
+
+The bootstrap prompt is `Use the ./skills/meta-orchestration skill.` and nothing
+else. If you needed something said to you beyond that sentence, the thing you
+needed was missing from this skill or the ledger, and THAT is the defect worth
+filing — not the prompt.
+
 ## Start Of Cycle
 
 0. **Rebuild the instrument before using it** (operator directive 2026-08-13):
