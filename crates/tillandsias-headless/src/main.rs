@@ -760,7 +760,32 @@ fn main() {
             token_script,
             input_mode,
         };
-        if let Err(e) = run_provider_login(&config, debug) {
+        // ORDER 844-aq78. WRAPPED, like every other interactive CLI lane. This
+        // dispatch was the only one calling its action directly: :865 and :891
+        // (status-check) and :918/:943 (the agent lanes) all go through
+        // `run_cli_with_vault_credential_cleanup`, and this one did not, so a
+        // login left the AppRole accessor it minted to the 48h orphan window
+        // that is supposed to be reserved for SIGKILL and host loss.
+        //
+        // The login lane is the WORST one to leave unwrapped, because it is the
+        // lane whose whole job is minting credentials.
+        //
+        // SAFE ONLY BECAUSE 828-k3mq LANDED FIRST, and this is worth stating
+        // because the naive version of this change was once a p0 in the
+        // opposite direction. The drain used to be unconditional while the
+        // mirror teardown it assumed is REFCOUNTED, so a lane exiting into a
+        // live sibling destroyed a SecretID that sibling still needed —
+        // renewing a client token it could never replace until max_ttl killed
+        // every push 24h later. `revoke_pending_container_tokens` now applies
+        // the same refcount, so wrapping one more lane adds a drain that
+        // respects the owning container rather than one that races it.
+        //
+        // The `exit(1)` stays OUTSIDE the wrapper on purpose: `std::process::
+        // exit` runs no destructors, so cleanup has to have already happened by
+        // the time it is reached. That is the shape every sibling uses.
+        if let Err(e) =
+            run_cli_with_vault_credential_cleanup(debug, || run_provider_login(&config, debug))
+        {
             eprintln!("Error: {}", e);
             std::process::exit(1);
         }
@@ -15868,6 +15893,93 @@ mod tests {
             window.contains("detected_cuda_major"),
             "CUDA runner selection must be based on the detected UMD major"
         );
+    }
+
+    /// ORDER 844-aq78. Every interactive CLI lane must drain the Vault
+    /// credentials it minted before the dispatcher returns.
+    ///
+    /// The login lane was the one exception — dispatched directly while
+    /// status-check and the four agent lanes all went through
+    /// `run_cli_with_vault_credential_cleanup` — so a login left its AppRole
+    /// accessor to the 48h orphan window meant for SIGKILL and host loss. The
+    /// lane whose entire job is minting credentials was the lane not cleaning
+    /// them up.
+    ///
+    /// A SOURCE SCAN, and the packet's criterion says that is acceptable only
+    /// if it FAILS when the wrapper is removed. It does: deleting the wrapper
+    /// from the login dispatch reds this test, measured, and the search is by
+    /// PROXIMITY rather than by an exact formatted string so a rustfmt line
+    /// break cannot quietly satisfy it.
+    #[test]
+    fn every_interactive_cli_lane_drains_its_vault_credentials() {
+        let source = include_str!("main.rs");
+        const WRAPPER: &str = "run_cli_with_vault_credential_cleanup";
+
+        // Each entry is a lane's ACTION call as it appears at its dispatch
+        // site. The wrapper must appear within the preceding window — the
+        // closure form puts it a line or two above the call.
+        for call in [
+            "run_provider_login(&config, debug)",
+            "run_status_check(debug)",
+        ] {
+            let mut found = 0usize;
+            let mut from = 0usize;
+            while let Some(rel) = source[from..].find(call) {
+                let at = from + rel;
+                from = at + call.len();
+                // Skip the function DEFINITION, comments, and — the one that
+                // actually bit — THIS TEST'S OWN DATA. The scan reads the file
+                // it lives in, so the array of call signatures above is itself
+                // a match, and the first run failed on its own literal. A
+                // dispatch site is never preceded by a quote; a table entry
+                // always is.
+                if source[..at].ends_with('"') {
+                    continue;
+                }
+                let line_start = source[..at].rfind('\n').map(|i| i + 1).unwrap_or(0);
+                let line = &source[line_start..at];
+                if line.contains("fn ") || line.trim_start().starts_with("//") {
+                    continue;
+                }
+                found += 1;
+
+                // A call can be legitimately unwrapped when its CALLER is
+                // already inside the wrapper — wrapping again would nest one
+                // drain inside another. Those are named here with the reason,
+                // rather than loosening the rule until it passes.
+                //
+                // This list is not decoration: the first run of this test found
+                // `ensure_provider_auth`, a site the packet did not know about.
+                // The packet said one unwrapped dispatch; there were two, and
+                // the second turned out to be correct as written.
+                const WRAPPED_BY_CALLER: &[(&str, &str)] = &[(
+                    "fn ensure_provider_auth(",
+                    "called by the agent lanes (--opencode/--claude/--codex/--antigravity), \
+                     which are themselves wrapped at their dispatch sites",
+                )];
+                let enclosing_is_exempt = WRAPPED_BY_CALLER.iter().any(|(sig, _)| {
+                    source[..at].rfind(sig).is_some_and(|f| {
+                        !source[f..at].contains("\nfn ") && !source[f..at].contains("\npub fn ")
+                    })
+                });
+                if enclosing_is_exempt {
+                    continue;
+                }
+
+                let back = at.saturating_sub(400);
+                assert!(
+                    source[back..at].contains(WRAPPER),
+                    "{call} is dispatched WITHOUT {WRAPPER} — that lane leaks its \
+                     AppRole accessor into the 48h orphan window (844-aq78). If its \
+                     caller already wraps it, add it to WRAPPED_BY_CALLER with the reason."
+                );
+            }
+            assert!(
+                found > 0,
+                "no dispatch site found for {call}; this test has gone vacuous — \
+                 the call was renamed and the scan silently checks nothing"
+            );
+        }
     }
 
     #[test]

@@ -53,6 +53,15 @@ plan_bin = ENV['TILLANDSIAS_PLAN_BIN'] || 'target/release/tillandsias-plan'
 # must land BEFORE the first large retraction wave, not after.
 TERMINAL_STATUSES = %w[completed done].freeze
 terminal_ids = {}
+# order <-> packet_id, both directions. A row's HEADER may be keyed by either
+# (19 of the base rows lead with `- order:`), so any set operation on ids has to
+# act on BOTH names for one packet or it is silently half-applied. That
+# asymmetry is the original 424/437 bug wearing a different hat, and it bit
+# again on 2026-08-22: the addressed-fragment exclusion below rejected the
+# packet_id and left the order key behind, so a row whose header is `- order:`
+# was archived despite a live fragment addressing it, and the orphan invariant
+# caught it one gate later.
+id_aliases = Hash.new { |h, k| h[k] = [] }
 TERMINAL_STATUSES.each do |st|
   # `--limit 0` IS LOad-BEARING, not a default-restating flourish. `query`
   # defaults to a limit of TWENTY and says nothing when it truncates, so the
@@ -72,9 +81,12 @@ TERMINAL_STATUSES.each do |st|
   # keyed by EITHER (`- packet_id:` or `- id:`), so accept both as lookup keys.
   out.each_line do |l|
     cols = l.split("\t")
-    [cols[0], cols[1]].each do |k|
-      k = k.to_s.strip
-      terminal_ids[k] = true unless k.empty?
+    names = [cols[0], cols[1]].map { |k| k.to_s.strip }.reject(&:empty?)
+    names.each do |k|
+      terminal_ids[k] = true
+      # Every name of a packet aliases every other name of it, so a later
+      # rejection by ANY name removes ALL of them.
+      id_aliases[k] = names
     end
   end
 end
@@ -132,7 +144,15 @@ Dir.glob(File.join(fragments_dir, '*.yaml')).sort.each do |frag|
   end
   out.each_line { |l| k = l.strip; addressed_ids[k] = true unless k.empty? }
 end
-terminal_ids.reject! { |k, _| addressed_ids.key?(k) }
+# Reject by EVERY name of an addressed packet, not just the name the fragment
+# happened to use. A fragment addresses packets by packet_id; a base row may be
+# headed by `- order:`. Rejecting only the packet_id leaves the order key in the
+# terminal set, the header lookup hits it, and the row is archived out from
+# under the very fragment that addresses it.
+addressed_ids.keys.each do |name|
+  id_aliases[name].each { |alias_name| terminal_ids.delete(alias_name) }
+  terminal_ids.delete(name)
+end
 
 # THE ROW HEADER. `order` is in this alternation because 19 of the 1031 base
 # rows lead with `- order:` rather than `- packet_id:` — YAML mapping keys are
