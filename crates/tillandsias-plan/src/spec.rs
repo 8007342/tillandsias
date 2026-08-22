@@ -396,9 +396,91 @@ pub fn chunk_markdown(rel_path: &str, kind: &str, text: &str) -> Vec<Chunk> {
         let end = starts.get(idx + 1).copied().unwrap_or(lines.len());
         let key = md_heading(lines[s]).unwrap_or("section").to_string();
         // s is 0-based; citation lines are 1-indexed inclusive.
-        push_chunk(&mut chunks, rel_path, kind, s + 1, end, &key, &lines);
+        //
+        // ORDER 797-qv4z, third and last path. A markdown section between two
+        // headings has no inner bound, so a long heading-free stretch runs past
+        // the embedder's 6000-character cut exactly as the YAML and code paths
+        // did.
+        //
+        // I DECLINED THIS ONCE, ON A BAD ESTIMATE. The stated reason was that a
+        // third budget "would reshape ~20,000 chunks to recover 11,191
+        // characters". Measured afterwards: a 4000-char budget touches NINE of
+        // 9,357 markdown chunks — 0.1%, not 20,000. A budget only splits what
+        // exceeds it, which I asserted without checking. The cost was three
+        // orders of magnitude smaller than the number I refused on.
+        push_md_span(&mut chunks, rel_path, kind, s + 1, end, &key, &lines);
     }
     chunks
+}
+
+/// Emit `[start, end]` as markdown chunks, subdividing when a section runs past
+/// [`MAX_YAML_CHUNK_CHARS`].
+///
+/// Splits at DEEPER headings first, so a chunk stays a coherent subsection and
+/// its citation still names something a reader recognises. Only a section with
+/// no inner heading falls back to line windows — that is genuinely
+/// undifferentiated prose, and prose has no better seam.
+fn push_md_span(
+    out: &mut Vec<Chunk>,
+    rel_path: &str,
+    kind: &str,
+    line_start: usize,
+    line_end: usize,
+    key: &str,
+    lines: &[&str],
+) {
+    if line_end < line_start {
+        return;
+    }
+    let len: usize = lines[line_start - 1..line_end]
+        .iter()
+        .map(|l| l.len() + 1)
+        .sum();
+    if len <= MAX_YAML_CHUNK_CHARS {
+        push_chunk(out, rel_path, kind, line_start, line_end, key, lines);
+        return;
+    }
+
+    // The heading that opens this span sets the depth to beat; anything deeper
+    // is a subsection of it and a legitimate cut.
+    let own_depth = lines[line_start - 1]
+        .chars()
+        .take_while(|c| *c == '#')
+        .count();
+    let cuts: Vec<usize> = (line_start..line_end)
+        .filter(|&i| {
+            let d = lines[i].chars().take_while(|c| *c == '#').count();
+            d > own_depth && md_heading(lines[i]).is_some()
+        })
+        .collect();
+
+    if !cuts.is_empty() {
+        let first = cuts[0];
+        if first > line_start - 1 {
+            push_chunk(out, rel_path, kind, line_start, first, key, lines);
+        }
+        for (n, &c) in cuts.iter().enumerate() {
+            let end = cuts.get(n + 1).copied().unwrap_or(line_end);
+            let sub = md_heading(lines[c]).unwrap_or("section").to_string();
+            push_md_span(out, rel_path, kind, c + 1, end, &sub, lines);
+        }
+        return;
+    }
+
+    let mut s = line_start;
+    while s <= line_end {
+        let mut e = s;
+        let mut acc = 0usize;
+        while e <= line_end && acc + lines[e - 1].len() < MAX_YAML_CHUNK_CHARS {
+            acc += lines[e - 1].len() + 1;
+            e += 1;
+        }
+        if e == s {
+            e = s + 1;
+        }
+        push_chunk(out, rel_path, kind, s, e - 1, key, lines);
+        s = e;
+    }
 }
 
 /// Section chunker for YAML: each chunk spans a top-level (column-0) key to the
