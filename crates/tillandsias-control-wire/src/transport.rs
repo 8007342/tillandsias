@@ -218,6 +218,11 @@ mod tests {
     #[cfg(unix)]
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+    // Order 828-r2ek: DELIBERATELY unbounded, and it must stay that way. This
+    // hand-rolled test fake is the peer that proves codec/hand-rolled and
+    // bounded/unbounded interop; giving it the MAX_MESSAGE_BYTES bound would
+    // delete the negative half of that evidence. Do not "fix" it in a
+    // bounds sweep.
     #[cfg(unix)]
     async fn write_envelope<W>(stream: &mut W, env: &ControlEnvelope) -> io::Result<()>
     where

@@ -146,16 +146,23 @@ impl std::error::Error for ProjectNameRefused {}
 
 /// Refuse a project name that cannot safely cross the guest launch path.
 ///
-/// WHY THIS EXISTS. [`launch_spec`] interpolates the project name into a
-/// SINGLE-QUOTED shell word — `exec tillandsias-headless --cloud '<p>' …` —
-/// which the guest then runs through `/bin/bash -lc`. Until 2026-08-17 that
+/// WHY THIS EXISTS. [`launch_spec`] USED to interpolate the project name into
+/// a SINGLE-QUOTED shell word — `exec tillandsias-headless --cloud '<p>' …` —
+/// which the guest then ran through `/bin/bash -lc`. Until 2026-08-17 that
 /// interpolation had no escaping and no validation, and for LOCAL projects the
 /// name is a directory name read verbatim off disk by
 /// `tillandsias_headless::local_projects::scan_project_root` (`file_name()`).
-/// A directory literally named `a'b` closes the quote and everything after it
-/// is bash source. The same string also crosses `std::process` MSVC quoting and
-/// (on Windows) wt.exe's own re-parser, both of which have already produced
-/// field crashes — see plan/issues/windows-github-login-blank-terminal-2026-08-09.md
+/// A directory literally named `a'b` closed the quote and everything after it
+/// was bash source. Order 823-u5zf removed that layer: project launches now
+/// emit a verbatim argv VECTOR, so the quote-breakout is structurally gone.
+/// The validator stays anyway — deliberately (belt and braces, recorded at
+/// `launch_spec_still_accepts_legitimate_project_names`) and because it is
+/// still load-bearing on its own: a leading `-` reads as a FLAG to the guest
+/// binary (the guest's verbatim-argv arm inspects no arguments), `.`/`..`
+/// traverse against the projects root, and on Windows the name still crosses
+/// `std::process` MSVC quoting and wt.exe's re-parser, both of which have
+/// produced field crashes — see
+/// plan/issues/windows-github-login-blank-terminal-2026-08-09.md
 /// and plan/issues/wt-github-login-semicolons-2026-06-30.md.
 ///
 /// REFUSE, DO NOT SANITIZE. A silently rewritten name launches the WRONG
@@ -171,8 +178,11 @@ impl std::error::Error for ProjectNameRefused {}
 /// including every shell metacharacter, every quote, and whitespace — is
 /// refused.
 ///
-/// THIS IS A GUARD, NOT THE FIX. The real fix is to stop flattening argv into
-/// a shell string at all; that is packet 795-zshi.
+/// THE FIX LANDED; THIS GUARD REMAINS BY DECISION. Packet 795-zshi's real fix
+/// — stop flattening argv into a shell string — landed for project launches as
+/// order 823-u5zf (verbatim vector, byte-pinned in this module's tests). The
+/// one lane still composed through `vm_login_shell_argv` is GithubLogin, which
+/// interpolates no project name.
 ///
 /// @trace spec:host-shell-architecture, spec:remote-projects
 pub fn validate_project_name(name: &str) -> Result<(), ProjectNameRefused> {
@@ -297,10 +307,12 @@ pub fn launch_spec(
     rows: u16,
     cols: u16,
 ) -> Result<PtyOpenOpts, ProjectNameRefused> {
-    // Fail BEFORE building anything. `project` is interpolated into a
-    // single-quoted shell word below and the name may come verbatim off disk;
-    // see `validate_project_name` for the full reasoning. Refusal is loud and
-    // names the offending character — this is deliberately not a sanitizer.
+    // Fail BEFORE building anything. `project` reaches the guest as ONE
+    // verbatim argv element below (823-u5zf — no quoting layer remains), but
+    // the name may come verbatim off disk and the validator still blocks
+    // flag-shaped names, traversal, and wt-unsafe tokens; kept deliberately —
+    // see `validate_project_name`. Refusal is loud and names the offending
+    // character — this is deliberately not a sanitizer.
     if let Some(p) = project {
         validate_project_name(p)?;
     }

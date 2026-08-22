@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # @trace spec:ci-release
+# freshness: auditor=linux-lenovinha-fable5-20260822t2345z date=2026-08-22 verdict=refreshed scope=full file audit on the standing freshness class (seed 20260822): wired at build.sh:1656, advisory-by-design with measured 4.6% adoption + 40% promotion bar, grammar falsifiable; one observation routed as an event on 831-ezea (python3 reproduce snippet contradicts the no-python discipline for the next auditor who follows it)
 #
 # check-carry-forward.sh — name the packets a cycle picked up and put back down
 # without saying what to do next.

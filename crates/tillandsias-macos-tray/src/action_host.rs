@@ -3951,15 +3951,16 @@ mod tests {
     /// m10: pin the dispatcher's `Attach`/`Maintain` arm contract — every
     /// click on a per-project menu row resolves via the shared
     /// `intent_for_action` table to a `(PtyIntent, Some(project))` tuple
-    /// that `attach_pty` threads into `launch_spec`, producing a forge-
-    /// container-wrapped argv (`podman exec -it tillandsias-<p>-forge …`)
-    /// rather than a bare-VM shell. A future refactor of either
+    /// that `attach_pty` threads into `launch_spec`, producing the
+    /// orchestrated verbatim-argv launch
+    /// (`/usr/local/bin/tillandsias-headless --cloud <p> …`, order
+    /// 823-u5zf) rather than a bare-VM shell. A future refactor of either
     /// `intent_for_action` or the dispatcher's resolve path that lost
     /// the project would silently dump users into the wrong shell.
     ///
-    /// The host-shell crate already byte-pins `launch_spec`'s wrapping
-    /// behaviour for `project=Some` (`launch_spec_wraps_in_forge_podman_
-    /// exec_when_project_given` at pty/mod.rs:632). This macOS-side test
+    /// The host-shell crate already byte-pins `launch_spec`'s vector for
+    /// `project=Some` (`launch_spec_routes_project_clicks_through_
+    /// orchestrated_launch` in pty/mod.rs). This macOS-side test
     /// pins the LINK: the macOS dispatcher invokes `intent_for_action`
     /// with the right arguments to produce a non-None project.
     #[test]

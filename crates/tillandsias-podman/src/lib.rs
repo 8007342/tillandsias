@@ -892,24 +892,10 @@ impl SyncPodmanCommand {
         budget: std::time::Duration,
         redacted_args: &[String],
     ) -> std::io::Result<std::process::Output> {
-        use std::io::Read;
-
-        let mut stdout_pipe = child.stdout.take();
-        let mut stderr_pipe = child.stderr.take();
-        let stdout_reader = std::thread::spawn(move || {
-            let mut buf = Vec::new();
-            if let Some(pipe) = stdout_pipe.as_mut() {
-                let _ = pipe.read_to_end(&mut buf);
-            }
-            buf
-        });
-        let stderr_reader = std::thread::spawn(move || {
-            let mut buf = Vec::new();
-            if let Some(pipe) = stderr_pipe.as_mut() {
-                let _ = pipe.read_to_end(&mut buf);
-            }
-            buf
-        });
+        let stdout_pipe = child.stdout.take();
+        let stderr_pipe = child.stderr.take();
+        let stdout_reader = std::thread::spawn(move || read_capped(stdout_pipe));
+        let stderr_reader = std::thread::spawn(move || read_capped(stderr_pipe));
 
         let started = std::time::Instant::now();
         let status = loop {
@@ -942,10 +928,24 @@ impl SyncPodmanCommand {
             }
         };
 
+        let (stdout, stdout_dropped) = stdout_reader.join().unwrap_or_default();
+        let (stderr, stderr_dropped) = stderr_reader.join().unwrap_or_default();
+        // Order 795-hzpg (slice A): exceeding the cap is REPORTED, never
+        // silent — a consumer parsing truncated JSON should find this line
+        // next to its parse error, naming the command that overflowed.
+        if stdout_dropped > 0 || stderr_dropped > 0 {
+            let message = format!(
+                "podman sync output exceeded the {MAX_CAPTURED_OUTPUT_BYTES}-byte capture cap \
+                 (stdout dropped {stdout_dropped} byte(s), stderr dropped {stderr_dropped} byte(s)): \
+                 podman {}",
+                redacted_args.join(" ")
+            );
+            log_podman_failure("sync", "output-cap-exceeded", &message);
+        }
         Ok(std::process::Output {
             status,
-            stdout: stdout_reader.join().unwrap_or_default(),
-            stderr: stderr_reader.join().unwrap_or_default(),
+            stdout,
+            stderr,
         })
     }
 
@@ -976,6 +976,44 @@ impl SyncPodmanCommand {
             }
         }
     }
+}
+
+/// Cap on captured child stdout/stderr, per stream (order 795-hzpg, slice A).
+///
+/// Large enough for the biggest legitimate consumer in the tree — multi-object
+/// `podman inspect`/`images --format json` output measures in the tens to
+/// hundreds of KiB — and small enough that a runaway child (a `logs --follow`
+/// mistake, a wedged stream) cannot grow host memory without bound. This cap is
+/// also what makes the timeout path's abandoned reader threads bounded-COST:
+/// before it, a reader left draining a grandchild's pipe could grow forever.
+const MAX_CAPTURED_OUTPUT_BYTES: usize = 8 * 1024 * 1024;
+
+/// Drain a child pipe into a buffer capped at [`MAX_CAPTURED_OUTPUT_BYTES`],
+/// returning the (possibly truncated) capture and how many bytes were dropped.
+///
+/// On overflow the pipe is still drained to EOF — stopping the read would
+/// block the child on a full pipe, converting an over-chatty child into a
+/// hung one, which is the exact failure `wait_bounded` exists to prevent. The
+/// caller reports the dropped count loudly; truncation is never silent.
+fn read_capped<R: std::io::Read>(pipe: Option<R>) -> (Vec<u8>, u64) {
+    let mut buf = Vec::new();
+    let mut dropped: u64 = 0;
+    if let Some(mut pipe) = pipe {
+        let mut chunk = [0u8; 8192];
+        loop {
+            match pipe.read(&mut chunk) {
+                Ok(0) => break,
+                Ok(n) => {
+                    let room = MAX_CAPTURED_OUTPUT_BYTES.saturating_sub(buf.len());
+                    let take = n.min(room);
+                    buf.extend_from_slice(&chunk[..take]);
+                    dropped += (n - take) as u64;
+                }
+                Err(_) => break,
+            }
+        }
+    }
+    (buf, dropped)
 }
 
 /// Same as [`podman_cmd`] but for synchronous use. Returns a
@@ -1561,5 +1599,74 @@ while [ $i -lt 2000 ]; do echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; i=$((
             ),
             "missing failure line in stderr:\n{stderr}"
         );
+    }
+
+    /// Order 795-hzpg exit criterion 3 (NEGATIVE CONTROL): a child that exits
+    /// normally well inside the budget still yields its FULL stdout and its
+    /// real exit status — the cap must not shave a byte off ordinary output.
+    #[cfg(unix)]
+    #[test]
+    fn wait_bounded_small_output_arrives_whole_with_real_status() {
+        let mut cmd = std::process::Command::new("sh");
+        cmd.args(["-c", "printf hello; printf oops >&2; exit 3"])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        let child = cmd.spawn().expect("spawn sh");
+        let out = SyncPodmanCommand::wait_bounded(
+            child,
+            std::time::Duration::from_secs(30),
+            &["<test>".to_string()],
+        )
+        .expect("wait_bounded");
+        assert_eq!(out.stdout, b"hello");
+        assert_eq!(out.stderr, b"oops");
+        assert_eq!(out.status.code(), Some(3), "real exit status must survive");
+    }
+
+    /// Order 795-hzpg slice A: a chatty child is truncated at EXACTLY the cap,
+    /// drained to EOF (so it never blocks on a full pipe), and still reports
+    /// its real exit status. The dropped bytes are reported via
+    /// `log_podman_failure`; this test pins the boundary and the drain.
+    #[cfg(unix)]
+    #[test]
+    fn wait_bounded_caps_a_chatty_child_at_the_named_constant() {
+        let over = MAX_CAPTURED_OUTPUT_BYTES + 4096;
+        let mut cmd = std::process::Command::new("sh");
+        cmd.args(["-c", &format!("head -c {over} /dev/zero")])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        let child = cmd.spawn().expect("spawn sh");
+        let out = SyncPodmanCommand::wait_bounded(
+            child,
+            std::time::Duration::from_secs(60),
+            &["<test>".to_string()],
+        )
+        .expect("wait_bounded");
+        assert_eq!(
+            out.stdout.len(),
+            MAX_CAPTURED_OUTPUT_BYTES,
+            "capture must stop at exactly the named cap"
+        );
+        assert!(
+            out.status.success(),
+            "the child was drained, not wedged: it must exit 0, got {:?}",
+            out.status
+        );
+    }
+
+    /// The capped reader itself: the boundary is inclusive at the cap (a
+    /// payload of exactly MAX_CAPTURED_OUTPUT_BYTES drops nothing) and one
+    /// byte over drops exactly one.
+    #[test]
+    fn read_capped_boundary_is_inclusive_at_the_cap() {
+        let exact = vec![0u8; MAX_CAPTURED_OUTPUT_BYTES];
+        let (buf, dropped) = read_capped(Some(std::io::Cursor::new(exact)));
+        assert_eq!(buf.len(), MAX_CAPTURED_OUTPUT_BYTES);
+        assert_eq!(dropped, 0, "a payload exactly at the cap is not truncated");
+
+        let one_over = vec![0u8; MAX_CAPTURED_OUTPUT_BYTES + 1];
+        let (buf, dropped) = read_capped(Some(std::io::Cursor::new(one_over)));
+        assert_eq!(buf.len(), MAX_CAPTURED_OUTPUT_BYTES);
+        assert_eq!(dropped, 1, "one byte over the cap drops exactly one byte");
     }
 }

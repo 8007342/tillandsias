@@ -17,8 +17,16 @@
 #      removed (34 call sites across six files, every one of them a wait that
 #      could not end).
 #
+#   3. an unbounded `read_to_end` on a child pipe in tillandsias-podman src
+#      (order 795-hzpg slice A) — capture must go through the capped reader in
+#      `SyncPodmanCommand::wait_bounded`, whose truncation is reported, never
+#      silent. (The packet's other scan — `thread::sleep` inside a wait loop —
+#      lands with slice B, when the 20ms poll is replaced by a parked deadline
+#      wait; adding it now would be red against code slice A deliberately
+#      leaves in place.)
+#
 # Prints exactly one line matching
-# `^(ok:podman-sync-bounded|violation:(direct-command|escape-hatch-grew)):[0-9]+$`
+# `^(ok:podman-sync-bounded|violation:(direct-command|escape-hatch-grew|unbounded-capture)):[0-9]+$`
 # and exits 0 only on ok.
 
 set -uo pipefail
@@ -66,6 +74,22 @@ if [ "$hatches" -gt "$ALLOWED_ESCAPE_HATCHES" ]; then
     echo "expected at most $ALLOWED_ESCAPE_HATCHES caller-owned spawn(s); found $hatches:" >&2
     grep -rn --include=*.rs 'spawn_caller_owned_lifetime()' "$SEARCH_ROOT" \
         | grep -v 'pub fn spawn_caller_owned_lifetime' >&2
+    exit 1
+fi
+
+# 3) An unbounded capture of a child pipe in the podman crate (795-hzpg A).
+#
+# Product source only — mirrors the tests exemption above. Comment lines are
+# excluded so the capped reader's own documentation cannot trip the scan.
+find_unbounded_capture() {
+    grep -rn --include=*.rs 'read_to_end' "$SEARCH_ROOT" 2>/dev/null \
+        | grep 'tillandsias-podman/src/' \
+        | grep -vE ':[0-9]+: *//'
+}
+capture=$(find_unbounded_capture | wc -l | tr -d ' ')
+if [ "$capture" -ne 0 ]; then
+    echo "violation:unbounded-capture:$capture"
+    find_unbounded_capture >&2
     exit 1
 fi
 

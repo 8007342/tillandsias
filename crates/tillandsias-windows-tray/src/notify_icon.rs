@@ -3711,13 +3711,13 @@ fn launch_open_shell_terminal(action: &MenuAction) {
     };
     // Default geometry until the tray owns a real terminal surface to size from.
     //
-    // A project name that would break out of the guest's single-quoted
-    // `--cloud '<p>'` word is REFUSED here rather than interpolated (E3,
-    // 2026-08-17). For local projects the name comes verbatim off disk, so a
-    // directory called `a'b` used to close the quote. The refusal names the
-    // offending character; it deliberately does not sanitize, because a
-    // silently rewritten name launches a DIFFERENT project than the one
-    // clicked. `tracing::error!` is the loud channel here: this function has no
+    // Hostile project names are REFUSED here (E3, 2026-08-17). launch_spec
+    // now emits the project as ONE verbatim argv element (823-u5zf), so the
+    // old single-quoted `--cloud '<p>'` breakout is structurally gone; the
+    // refusal stays because names come verbatim off disk and it is what keeps
+    // every token wt-safe (belt and braces). It deliberately does not
+    // sanitize, because a silently rewritten name launches a DIFFERENT
+    // project than the one clicked. `tracing::error!` is the loud channel here: this function has no
     // HWND in scope for a balloon, and ERROR relays to tray.log AND the Windows
     // Event Log (source "Tillandsias"), which is the surface a GUI-only user is
     // pointed at by `--logs` and `--diagnose`.
