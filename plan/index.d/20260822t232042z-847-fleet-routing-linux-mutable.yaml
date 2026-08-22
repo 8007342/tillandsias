@@ -1,0 +1,93 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-22T23:20:42Z.
+#
+# The host-identity fix landed with this fragment; the part naming CANNOT fix
+# is filed here as its own row, because it is independently schedulable and
+# because leaving it as an addendum would let "unique seeds" read as "hosts
+# separated", which is measurably false.
+packets:
+  - order: 847-wgy4
+    packet_id: work-selection-cannot-separate-more-hosts-than-frontier-epics
+    desired_release: v0.6
+    title: "select-work-batch picks among top-K frontier epics, so N hosts collide into K batches however unique their seeds are"
+    status: ready
+    kind: enhancement
+    pickup_role: linux
+    priority: p2
+    capability_tags: [plan, fleet, scheduling, multi-host, shell]
+    deliverable: scripts/select-work-batch.sh
+    depends_on: []
+    estimated_hours: 6
+    context: >
+      THE SEED WAS FIXED AND IT IS NOT ENOUGH. As of 2026-08-22 the default
+      seed is a real host identity (derive-host-identity.sh:
+      <osgroup>-<cpu>-<accel>-<hostname>, unique by hostname) instead of
+      `${TILLANDSIAS_HOST_KIND:-host}-<date>`, which every same-kind host
+      shared. That removes the collision-by-construction.
+
+      It does not remove collisions. The entropy step picks among the top-K
+      frontier epics with K=3, so the OUTPUT SPACE IS THREE BATCHES WIDE no
+      matter how well-distributed the seeds are. Measured over the eight
+      identities the announced fleet will present:
+
+        silverblue-ryzen7-amd+nvidia-hilaptop1   forge-local-experts (3/3)
+        windows-ryzen7-amd+npu-hilaptop2         architecture-audit  (1/3)
+        silverblue-ryzen5-amd+npu-hilaptop3      forge-local-experts (3/3)
+        windows-i9-intel-lowlap1                 architecture-audit  (1/3)
+        silverblue-core-ultra-intel-lowlap2      socket-audit        (2/3)
+        macos-m5-apple-mstudio                   forge-local-experts (3/3)
+        silverblue-i7-intel-oldair               architecture-audit  (1/3)
+        linux-core-ultra-npu+nvidia-macuahuitl   socket-audit        (2/3)
+
+      Eight hosts into three buckets: 3/3/2. Pigeonhole, every day. R1 claiming
+      keeps that merely wasteful rather than duplicated — each colliding host
+      burns its cycle start discovering the head packet is taken — but a fleet
+      whose members all begin at the same packet is not a fleet.
+
+      AND THE MECHANISM WAS NEVER MEANT TO DO THIS. The top-K pick is an
+      ANTI-STARVATION device: it exists so a permanently-second epic still gets
+      worked on ONE host over TIME (the comment at select-work-batch.sh says so
+      explicitly, and the epsilon floor was added when squared weights sent
+      94.6% to the top epic). Reading it as host separation is reading a
+      time-diversity mechanism as a space-diversity mechanism. R4 on the fleet
+      rejoin bar asserted the latter; the selector only ever provided the former.
+
+      WHAT THE FLEET ACTUALLY NEEDS is routing by CAPABILITY, which the ledger
+      already has vocabulary for: every packet carries `capability_tags` and
+      `pickup_role`, and 808-7yrd's capability matrix describes what each host
+      IS. The announced fleet makes this concrete — an NVIDIA+AMD Silverblue
+      laptop, two AMD-NPU machines that differ only by OS (Ryzen 5 Silverblue
+      vs Ryzen 7 Windows 11, a near-controlled A/B for OS-specific defects),
+      two low-end Intel boxes that are the deliberate performance floor, an M5
+      mac, and a 14-year-old Intel MacBook Air running Silverblue. Handing all
+      of them the same three-epic lottery wastes precisely the property that
+      makes the fleet worth having.
+    exit_criteria: >
+      (1) Two hosts with different capability profiles asking for work on the
+      same day receive DISJOINT batches, demonstrated across the eight identity
+      strings above rather than two hand-picked seeds — the 2026-08-19 R4 test
+      passed on three seeds and the property was still false.
+      (2) A packet tagged for an accelerator the host lacks is never offered to
+      it, with a negative control proving the filter can exclude.
+      (3) The anti-starvation property is PRESERVED and shown preserved: no epic
+      on the frontier becomes unreachable for the fleet as a whole. Capability
+      routing that starves an epic has traded one failure for another.
+      (4) Hosts with no capability row still receive work — an unprobed host
+      must degrade to today's behaviour, not to an empty batch.
+
+events:
+  - packet_id: work-selection-cannot-separate-more-hosts-than-frontier-epics
+    event:
+      type: filed
+      ts: "2026-08-22T23:20:42Z"
+      agent_id: linux-macuahuitl-opus5-20260822T144300Z
+      host: linux_mutable
+      summary: >
+        Filed as its own row rather than an event on the rejoin campaign,
+        because it is independently schedulable and because it CORRECTS a
+        campaign claim: I reported R4 satisfied on 2026-08-22 after measuring
+        two seeds that returned disjoint batches. Eleven seeds return three
+        batches, and two real hostnames — macuahuitl and yoga — return a
+        byte-identical one. The two seeds I picked happened to land in different
+        buckets. That is the third false pass this campaign from a test whose
+        sample could not distinguish the hypothesis from its negation.

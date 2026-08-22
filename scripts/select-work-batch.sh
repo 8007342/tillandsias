@@ -97,8 +97,25 @@
 # replayed and audited) while the SEQUENCE spreads coverage over time and across
 # hosts. Predictable drain is a property of batch SIZE, which the budget fixes
 # absolutely; it was never a property of always choosing the same work.
-# Default seed = host kind + UTC date, so one host varies day to day and two
-# hosts on the same day diverge.
+# Default seed = host IDENTITY + UTC date, so one host varies day to day and
+# two hosts on the same day diverge.
+#
+# IT USED TO BE HOST *KIND* + DATE, and that is not an identity: `linux_mutable`
+# or the bare fallback `host` is shared by every box of that kind, so all five
+# Silverblue laptops in the fleet derived a byte-identical seed on any given day
+# and picked the same epic. The documented workaround was "pass --seed", which
+# is an invariant that depends on nine operators remembering a flag.
+# scripts/derive-host-identity.sh replaces it with
+# <osgroup>-<cpu>-<accel>-<hostname>, unique by hostname and readable in a
+# roster. Operator directive, 2026-08-22.
+#
+# THIS ALONE DOES NOT SEPARATE HOSTS, and it must not be sold as if it does.
+# The pick below chooses among the top-K frontier epics (K=3 by default), so the
+# output space is THREE batches wide however good the seed is. Nine hosts into
+# three buckets collide by pigeonhole, every day. Unique seeds make the choice
+# well-distributed; they cannot make it injective. Real separation needs
+# capability-aware routing — see the fleet-routing packet — and until then R1
+# claiming is what keeps a collision merely wasteful rather than duplicated.
 #
 # KNOWN TRADEOFF of the date-based default: every cycle on one host that day
 # picks the SAME epic until its packets drain. That is mostly a FEATURE — it
@@ -229,7 +246,22 @@ REL_ARG=()
 [ -n "$RELEASE" ] && REL_ARG=(--release "$RELEASE")
 
 if [ -z "$SEED" ]; then
-    SEED="${TILLANDSIAS_HOST_KIND:-host}-$(date -u +%Y%m%d)"
+    # The identity probe is read-only, needs no build, and degrades to `unknown`
+    # components rather than guessing. If it is missing or fails outright, fall
+    # back to the old kind+date shape rather than refusing — a work selector
+    # that cannot run because a naming helper is absent would be a worse
+    # failure than a colliding seed, and the fallback is exactly the behaviour
+    # that shipped before.
+    _identity=""
+    if [ -x "$(dirname "$0")/derive-host-identity.sh" ]; then
+        _identity="$("$(dirname "$0")/derive-host-identity.sh" 2>/dev/null || true)"
+    fi
+    if [ -n "$_identity" ]; then
+        SEED="${_identity}-$(date -u +%Y%m%d)"
+    else
+        SEED="${TILLANDSIAS_HOST_KIND:-host}-$(date -u +%Y%m%d)"
+        echo "note: derive-host-identity.sh unavailable — seeding by host KIND, which COLLIDES across same-kind hosts" >&2
+    fi
 fi
 
 # jq, not yq: the input is tillandsias-plan --json (pure JSON), macOS hosts

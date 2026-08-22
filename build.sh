@@ -1534,6 +1534,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # indistinguishable from a passing one — the whole failure class this
     # block exists for — and the fixture is what proves both directions still
     # fail. Its own non-vacuity is proven by mutation, in its header.
+    # Host identity seeds work selection on every host in the fleet, and its
+    # two vendor-detection traps ("VGA compatible controller" contains `ati`;
+    # "Non-VGA unclassified device" contains `vga`) are invisible on any single
+    # box — they only misfire on hardware that machine does not have. The
+    # fixture is hermetic for exactly that reason.
+    _step "Checking host-identity derivation..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-derive-host-identity.sh" 2>&1; then
+        _error "host identity derivation is wrong — every host's work seed depends on it"
+        exit 1
+    fi
+    _info "Host-identity fixture passed"
+
     _step "Checking the test-baseline ratchet's own fixture..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-check-test-baseline.sh" 2>&1; then
         _error "the test-baseline ratchet's fixture failed — the gate below cannot be trusted to go red"
