@@ -131,6 +131,35 @@ number: it is ~1.5-2.3 s per sub-query if verification is DETERMINISTIC (citatio
 checking, its Tier A), and ~40 s if the model must re-read the passage to judge it.
 On this tier that choice is the difference between a usable layer and an unusable one.
 
+**UPDATE 2026-08-23, after macuahuitl's Tier B result redirected the design.** That
+measurement concluded `k=1 is the bottleneck — unfold the question, retrieve per
+sub-query, judge each, accumulate`, so the k=6 figure above is superseded by a
+change in the DESIGN, not corrected as an error. Re-costed at k=1 here:
+
+| judge call shape | evidence | wall |
+|---|---|---|
+| k=1 (one retrieved chunk) | ~380 tok | **~4.3 s** |
+| k=6 | ~2800 tok | ~40 s |
+
+So a complement pair is ~8.6 s and **30 s buys ~3 sub-queries, 60 s ~7**. The
+fan-out this tier can afford is modest but real.
+
+**LATENCY IS NOT WHAT BLOCKS THE LAYER HERE.** Running 853-6gz3's own complement
+self-check against the only judge this tier can run (`qwen2.5:0.5b`, the image
+ceiling of 849-tz8g):
+
+| passage | "does it answer?" | "is it MISSING the answer?" | verdict |
+|---|---|---|---|
+| one that DOES answer | YES | NO | coherent |
+| a CSS passage that does NOT | NO | NO | **self-contradiction** |
+
+The judge is coherent on the in-corpus case and contradicts itself on the
+out-of-corpus one — which is exactly the case the layer exists to handle (821-73es:
+the expert cannot refuse an out-of-corpus question). The complement mechanism
+CATCHES it, which is the mechanism working as designed; but a layer whose judge is
+untrustworthy where it matters must refuse rather than answer. **On this tier
+853-6gz3 is gated by judge CAPABILITY, not by throughput** — and that is 849-tz8g.
+
 ## Common pitfalls
 
 - **Reusing one prompt across reps.** ollama caches the KV prefix, so reps 2+ report
