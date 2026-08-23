@@ -1,0 +1,114 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-23T21:44:03Z.
+packets:
+  - order: 864-p2rk
+    packet_id: index-cache-key-ignored-the-document-prefix-so-prefixed-builds-were-fake
+    desired_release: v0.5
+    title: "content_hash is the text alone, so a prefixed build reused unprefixed vectors and the identity assertion agreed"
+    status: completed
+    kind: defect
+    pickup_role: any
+    priority: p0
+    capability_tags: [rag, inference, cache, correctness]
+    deliverable: scripts/spec-index-ensure.sh
+    depends_on: []
+    estimated_hours: 3
+    discovered_by: "the first prefixed index build ever attempted here finishing in five seconds"
+    context: >
+      A FULL nomic INDEX TAKES ~8 MINUTES. The first prefixed build finished in
+      FIVE SECONDS and declared itself verified:
+
+        spec-index:delta reused=21123 embed=3 of 21126
+        spec-index:delta identity-verified=5 reused samples
+
+      content_hash is hash_hex(span) — the TEXT AND NOTHING ELSE — so a chunk
+      keeps the same hash whether or not a prefix will be prepended to it before
+      embedding. The fingerprint covered corpus + model but not the prefix, so
+      the delta served UNPREFIXED vectors to a build that had asked for
+      prefixed ones, and published them under a name that claimed otherwise.
+
+      THE SAFETY NET CONFIRMED IT, which is the part worth dwelling on. The
+      identity assertion exists precisely to catch a mis-joined reuse: it
+      re-embeds a deterministic sample and compares bytes. It passed, because
+      it re-embeds through the same code path that does not apply the prefix.
+      It compared wrong against wrong and got agreement. A checker that shares
+      the defect it is checking for will always agree, and it reports that
+      agreement as verification.
+
+      Had this not been caught by the clock, the next measurement would have
+      been an UNPREFIXED index reported as the prefix result — and the prefix
+      caveat, which is currently the last open question in the 824-6qxh
+      campaign, would have been "answered" with the very number it was meant to
+      test against.
+
+      THIS IS ORDER 552's MODEL-KEY DEFECT IN A SECOND DIMENSION. That one was
+      fixed by adding the model to the key. The lesson it should have taught
+      was not "add the model" but "ANYTHING THAT CHANGES THE EMBEDDED BYTES
+      BELONGS IN THE KEY" — otherwise the key gets extended one incident at a
+      time, and each extension looks complete until the next input appears.
+
+      WHY PREFIXES MATTER AT ALL, and why this was being attempted: several
+      embedders are trained with an asymmetric query/passage convention and
+      document it as REQUIRED. nomic-embed-text wants "search_document: " on
+      passages and "search_query: " on queries. This harness applied neither,
+      to any model, in every comparison filed. nomic's own template is a bare
+      `{{ .Prompt }}`, so nothing supplied it downstream either. Every filed
+      "a bigger embedder separates worse" result therefore carries the caveat —
+      and nomic, which has the strictest documented requirement, is the model
+      that looked BEST.
+    exit_criteria: >
+      (1) The document prefix is part of the fingerprint, so a prefixed build
+      cannot collide with an unprefixed one.
+      (2) A generation records its prefix in a `.prefix` marker and a generation
+      whose marker disagrees is never reused — the same rule `.model` already
+      gets.
+      (3) Verified in BOTH directions, since a fix that simply disables the
+      delta would also pass a one-sided test:
+          prefixed   -> reused=0     embed=21126 of 21126
+          unprefixed -> reused=21120 embed=6
+      (4) The empty prefix produces a byte-identical payload to the old form, so
+      every historical measurement reproduces exactly.
+
+events:
+  - packet_id: index-cache-key-ignored-the-document-prefix-so-prefixed-builds-were-fake
+    event:
+      type: completed
+      ts: "2026-08-23T21:44:03Z"
+      agent_id: linux-macuahuitl-opus5-20260823T213400Z
+      host: linux_mutable
+      evidence_refs:
+        - "the five-second build: spec-index:delta reused=21123 embed=3 of 21126, identity-verified=5"
+        - "after the fix, prefixed: reused=0 embed=21126 of 21126"
+        - "after the fix, unprefixed: reused=21120 embed=6 (delta still works)"
+        - "payload equivalence: jq with an empty prefix is byte-identical to the pre-change form"
+      merge_affordance: merge-now
+      merge_reason: >
+        Any host attempting a prefixed index gets a silently unprefixed one that
+        passes its own identity assertion. The result is not a crash but a wrong
+        measurement that looks verified, which is the most expensive kind.
+      summary: >
+        Prefix support added to both halves of the harness
+        (TILLANDSIAS_EMBED_DOC_PREFIX on passages in spec-index-ensure.sh,
+        TILLANDSIAS_EMBED_QUERY_PREFIX on queries in measure-bands.sh), and the
+        cache key extended to cover the prefix in all three places `.model` is
+        already handled: the fingerprint, a per-generation `.prefix` marker, and
+        the reuse guard.
+
+  - packet_id: spec-expert-refusal-threshold-fleet-decision
+    event:
+      type: progress
+      ts: "2026-08-23T21:44:03Z"
+      agent_id: linux-macuahuitl-opus5-20260823T213400Z
+      host: linux_mutable
+      summary: >
+        The prefix experiment is RUNNING as a background job, this time with a
+        guard: stage 2 refuses to measure unless stage 1's log says reused=0, so
+        a fake index can never again be measured as a real one. Writing outside
+        the checkout per 864-q7dm.
+
+        Also recorded for whoever reads the three filed embedder comparisons:
+        NONE of them used prefixes, and nomic — the model that scored best — is
+        the one whose documentation is most insistent that they are required.
+        The monotonic "bigger is worse" trend stands as a refutation of "a
+        bigger embedder rescues the threshold" and remains silent on how these
+        models behave used correctly.
