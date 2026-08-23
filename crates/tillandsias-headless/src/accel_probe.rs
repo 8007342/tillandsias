@@ -486,6 +486,41 @@ fn amd_gpu_disposition(
     )
 }
 
+/// Intel's admission ticket, the sibling of `amd_gpu_disposition`.
+///
+/// Order 855-wrr3. An i915/xe RENDER NODE PROVES A DISPLAY/MEDIA DRIVER, NEVER
+/// A COMPUTE LANE. Alder Lake-N ships /dev/dri/renderD128 on a part no engine
+/// in this project can offload to, and Intel was the one vendor with no
+/// disposition check at all: it fell through to the last-resort arm, which
+/// hardcodes `usable: true` because a DRM card exists. On the fleet's declared
+/// LOWER-BOUND host that published `accel_class=workstation-gpu` for a 4-core
+/// N150 while the SAME BINARY's `--inference-tier` answered `tier:cpu`.
+///
+/// The ticket is an Intel compute runtime — Level Zero or an OpenCL ICD — the
+/// same shape as ROCm's gfx agent. Without it the device is present-unusable
+/// with the reason named, which the matrix renders distinctly from absent.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn intel_gpu_disposition(
+    compute_runtime: bool,
+    render_node: bool,
+) -> (bool, Vec<String>, Option<String>) {
+    if !compute_runtime {
+        return (
+            false,
+            vec!["host-native".to_string()],
+            Some("intel-compute-runtime-missing".to_string()),
+        );
+    }
+    if !render_node {
+        return (false, vec![], Some("render-node-missing".to_string()));
+    }
+    (
+        true,
+        vec!["container".to_string(), "host-native".to_string()],
+        None,
+    )
+}
+
 /// Every /sys/class/drm/card<N> as (pci_address, vendor_id, driver), sorted
 /// by card number. Reads sysfs only; anything unreadable is skipped rather
 /// than guessed.
@@ -586,6 +621,31 @@ fn rocm_gfx_present() -> bool {
         .unwrap_or(false)
 }
 
+/// Is an Intel COMPUTE runtime installed? Filesystem probe only — no
+/// subprocess, and nothing substring-matches prose (the comp-ATI-ble trap).
+/// Level Zero is the primary ticket; an Intel OpenCL ICD is accepted as the
+/// secondary. Mesa's Vulkan ICD is deliberately NOT evidence here: it is
+/// present in the Fedora Silverblue base on every Intel host and would
+/// re-admit exactly the display silicon this check exists to exclude.
+#[cfg(target_os = "linux")]
+fn intel_compute_runtime_present() -> bool {
+    const ZE: [&str; 4] = [
+        "/usr/lib64/libze_intel_gpu.so.1",
+        "/usr/lib64/libze_loader.so.1",
+        "/usr/lib/x86_64-linux-gnu/libze_intel_gpu.so.1",
+        "/usr/lib/x86_64-linux-gnu/libze_loader.so.1",
+    ];
+    if ZE.iter().any(|p| Path::new(p).exists()) {
+        return true;
+    }
+    fs::read_dir("/etc/OpenCL/vendors")
+        .map(|d| {
+            d.flatten()
+                .any(|e| e.file_name().to_string_lossy().contains("intel"))
+        })
+        .unwrap_or(false)
+}
+
 fn enumerate_gpus(effective_tier: &str) -> Vec<DeviceRecord> {
     let mut gpus = Vec::new();
 
@@ -664,6 +724,7 @@ fn enumerate_gpus(effective_tier: &str) -> Vec<DeviceRecord> {
         // (the comp-ATI-ble trap; see scripts/derive-host-identity.sh).
         let rocm_gfx = rocm_gfx_present();
         let kfd = Path::new("/dev/kfd").exists();
+        let intel_rt = intel_compute_runtime_present();
         for (pci_addr, vendor_id, driver) in drm_cards() {
             let render_node = drm_render_node_for(&pci_addr);
             match (vendor_id.as_str(), driver.as_deref()) {
@@ -681,6 +742,29 @@ fn enumerate_gpus(effective_tier: &str) -> Vec<DeviceRecord> {
                         device_node: render_node,
                         fw_version: None,
                         driver: Some("amdgpu".to_string()),
+                        usable,
+                        unusable_reason,
+                        lanes,
+                        memory_bandwidth_gbps: None,
+                        memory_bandwidth_source: "unknown".to_string(),
+                        cpu_flags: None,
+                        cpu_cores: None,
+                        system_ram_gb: None,
+                    });
+                }
+                // Order 855-wrr3: Intel now has a disposition of its own
+                // instead of falling to the last-resort `usable: true` arm.
+                ("0x8086", Some("i915")) | ("0x8086", Some("xe")) => {
+                    let (usable, lanes, unusable_reason) =
+                        intel_gpu_disposition(intel_rt, render_node.is_some());
+                    gpus.push(DeviceRecord {
+                        device_class: "gpu".to_string(),
+                        vendor: "intel".to_string(),
+                        name: pci_device_name_via_lspci(&pci_addr)
+                            .unwrap_or_else(|| "Intel GPU".to_string()),
+                        device_node: render_node,
+                        fw_version: None,
+                        driver,
                         usable,
                         unusable_reason,
                         lanes,
@@ -1887,6 +1971,51 @@ mod tests {
         assert!(usable);
         assert_eq!(lanes, vec!["container", "host-native"]);
         assert_eq!(reason, None);
+    }
+
+    #[test]
+    // @trace order:855-wrr3, spec:accel-capability-probe
+    fn test_intel_gpu_disposition_fails_closed_without_a_compute_runtime() {
+        // A render node is a DISPLAY driver, not a compute lane. Without an
+        // Intel compute runtime the device is present-unusable, reason named.
+        let (usable, lanes, reason) = intel_gpu_disposition(false, true);
+        assert!(!usable);
+        assert_eq!(lanes, vec!["host-native"]);
+        assert_eq!(reason.as_deref(), Some("intel-compute-runtime-missing"));
+
+        let (usable, lanes, reason) = intel_gpu_disposition(true, false);
+        assert!(!usable);
+        assert!(lanes.is_empty(), "no render node = no lane to reach it on");
+        assert_eq!(reason.as_deref(), Some("render-node-missing"));
+
+        let (usable, lanes, reason) = intel_gpu_disposition(true, true);
+        assert!(usable);
+        assert_eq!(lanes, vec!["container", "host-native"]);
+        assert_eq!(reason, None);
+    }
+
+    #[test]
+    // @trace order:855-wrr3, spec:accel-capability-probe
+    fn test_intel_igpu_with_only_a_render_node_is_not_a_workstation_gpu() {
+        // The live regression from order 855-wrr3: host pirria, a 4-core
+        // Alder Lake-N N150 that is the fleet's declared LOWER BOUND, published
+        // accel_class=workstation-gpu because /dev/dri/renderD128 exists — while
+        // the same binary's --inference-tier answered `tier:cpu` and the engine
+        // reported initial_count=0 devices, total_vram=0 B.
+        let mut d = device(
+            "gpu",
+            "Alder Lake-N [Intel Graphics]",
+            &["host-native"],
+            Some("intel-compute-runtime-missing"),
+        );
+        d.usable = false;
+        let env = accel_envelope(&doc_with(vec![d]));
+        assert!(env.contains("accel_class=cpu-only"), "{env}");
+        assert!(env.contains("accel_gpu=present-unusable"), "{env}");
+        assert!(
+            env.contains("accel_reason=intel-compute-runtime-missing"),
+            "{env}"
+        );
     }
 
     #[test]

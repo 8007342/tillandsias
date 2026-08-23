@@ -1,0 +1,139 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_immutable (yoga), 2026-08-23T04:20:00Z.
+#
+# The two platform children of 856-s56y, filed per
+# new_row_only_if_independently_schedulable — each names owned files no open
+# row owns (packaging/launchd/, packaging/windows/) and a pickup_role
+# (macos, windows) no open row covering the scheduler scope carries. The
+# Linux half landed with the parent's claim this cycle; these rows exist so
+# the non-Linux hosts can claim their halves without waiting on anything.
+packets:
+  - order: 858-h7ke
+    packet_id: durable-scheduler-launchd-macos
+    desired_release: v0.6
+    title: "macOS half of 856-s56y: a launchd agent fires the unattended cycle, survives reboot, and does not stack"
+    status: ready
+    kind: enhancement
+    pickup_role: macos
+    priority: p1
+    capability_tags: [fleet, cadence, automation, launchd, macos]
+    deliverable: packaging/launchd/
+    depends_on: []
+    estimated_hours: 4
+    context: >
+      Parent 856-s56y measured the gap (attestation gaps of 1161-1976 minutes
+      where a terminal closed or a machine rebooted) and the Linux half now
+      exists as the reference shape, landed 2026-08-23 on linux-next. REUSE
+      IT, do not re-derive. scripts/tillandsias-cycle-driver.sh is
+      platform-neutral on purpose — flock no-stacking, JSONL outcome log,
+      one fresh agent session per fire via ./repeat --times 1 (whose
+      timeout(1) fallback already handles stock macOS). What macOS needs is
+      only the launchd wrapper around it, sibling of
+      packaging/systemd/user/tillandsias-cycle.{service,timer}.in +
+      scripts/install-cycle-timer.sh. launchd notes measured nowhere yet —
+      verify on the real Mac: StartInterval counts from LOAD not completion,
+      so either accept wall-clock cadence plus the driver's overlap-skip
+      (sufficient — the skip is exit 0 by design), or use KeepAlive with
+      ThrottleInterval for completion spacing. RunAtLoad + LaunchAgents
+      handles reboot; note a LaunchAgent needs a logged-in user on stock
+      macOS — if the Mac mini runs headless with auto-login that satisfies
+      criterion 1's spirit, SAY SO in the row rather than silently accepting
+      a weaker property, or use a LaunchDaemon and own the root/user
+      boundary explicitly.
+    exit_criteria: >
+      (1) A cycle fires on schedule on the macOS host with no terminal open,
+      demonstrated by an attestation or JSONL record from a fire nobody
+      launched by hand. (2) Survives a reboot without a human re-arming it,
+      stated with what was actually rebooted and observed. (3) Interval
+      per-host configurable at install time. (4) A failing cycle does not
+      stop the schedule, and an overlapping fire skips — reuse
+      scripts/test-cycle-driver.sh (already passes on any POSIX host with
+      flock) and state the launchd-level behaviour. (5)
+      scripts/check-cycle-scheduler.sh grows a launchd arm answering the
+      same grammar (ok:cycle-scheduler:next=..:last=..:lastrc=..) or a
+      sibling script does; either way the operator asks one command.
+
+  - order: 858-3v74
+    packet_id: durable-scheduler-task-scheduler-windows
+    desired_release: v0.6
+    title: "Windows half of 856-s56y: a Task Scheduler task fires the unattended cycle, survives reboot, and does not stack"
+    status: ready
+    kind: enhancement
+    pickup_role: windows
+    priority: p1
+    capability_tags: [fleet, cadence, automation, windows]
+    deliverable: packaging/windows/
+    depends_on: []
+    estimated_hours: 4
+    context: >
+      Parent 856-s56y measured the gap; the Linux half (systemd user timer +
+      scripts/tillandsias-cycle-driver.sh + scripts/install-cycle-timer.sh,
+      landed 2026-08-23 on linux-next) is the reference shape. The driver is
+      bash and the Windows cycle already runs through Git Bash (the
+      credential guard's documented lane — PowerShell's bash alias is an
+      isolated WSL session that lacks host credentials, see the skill's
+      Windows note), so the likely shape is schtasks /create running
+      'C:\Program Files\Git\bin\bash.exe' scripts/tillandsias-cycle-driver.sh
+      with ONSTART + repetition triggers, or Register-ScheduledTask from a
+      small packaging/windows/install-cycle-task.ps1. Task Scheduler has the
+      no-stacking property natively (MultipleInstances=IgnoreNew) — set it
+      AND keep the driver's flock, since the flock also excludes an
+      operator's manual ./repeat. 'Run whether user is logged on or not'
+      plus a boot trigger covers criteria 1-2; measure what stored
+      credentials that requires on the real host rather than guessing.
+    exit_criteria: >
+      (1) A cycle fires on schedule on the Windows host with no terminal
+      open and no user logged in, demonstrated by an attestation or JSONL
+      record from a fire nobody launched by hand. (2) Survives a reboot
+      without a human re-arming it, stated with what was rebooted and
+      observed. (3) Interval per-host configurable at install time. (4) A
+      failing cycle does not stop the schedule; an overlapping fire is
+      ignored or skips (MultipleInstances=IgnoreNew and/or the driver's
+      flock) — demonstrated, not asserted. (5) The operator can ask the
+      host when it last fired, when it fires next, and whether the last
+      fire succeeded, in one command answering the
+      ok:cycle-scheduler:... grammar.
+
+events:
+  - packet_id: no-durable-scheduler-exists-on-any-host
+    event:
+      type: progress
+      ts: "2026-08-23T04:20:00Z"
+      agent_id: linux-yoga-fable5-20260823T034500Z
+      host: linux_immutable
+      summary: >
+        LINUX HALF LANDED AND ARMED LIVE ON YOGA, per-criterion status —
+        (1) fires with no terminal: structural (systemd user timer, enabled,
+        WantedBy timers.target); the first unattended REAL fire is scheduled
+        for 2026-08-23T06:12:42Z and its evidence (JSONL + attestation) is
+        the next cycle's to attach. (2) reboot survival: timer enabled +
+        OnBootSec re-arm + loginctl Linger=yes verified on the host — the
+        logout-death property of ./repeat is specifically what lingering
+        removes. (3) per-host interval: install-cycle-timer.sh --interval,
+        yoga armed at 2h; operator mandate 4h for roughly-4-core hosts.
+        (4) BOTH HALVES DEMONSTRATED, one hermetically and one live — a
+        fixture (scripts/test-cycle-driver.sh, 4/4 PASS) proves failure
+        passthrough and overlap-skip at the driver, and the install's own
+        immediate fire hit a deliberately held lock and SKIPPED (journal +
+        JSONL skipped=true records exist), while OnUnitInactiveSec makes
+        wall-clock stacking structurally impossible — the interval is not
+        even scheduled until the previous cycle completes, mirroring the
+        ./repeat --wait spacing whose 50-69 minute gaps this packet cites
+        as the proven pattern. (5) scripts/check-cycle-scheduler.sh answers
+        ok:cycle-scheduler:next=..:last=..:lastrc=.. from live systemd
+        state plus the driver's JSONL, no transcript involved. Two systemd
+        property traps recorded in that script's comments for the next
+        platform (show prints formatted strings despite USec names;
+        NextElapseUSecRealtime is unset for monotonic timers while
+        list-timers computes it). HEADLESS CREDENTIAL CAVEAT, named not
+        solved — a boot-fired cycle has no unlocked keyring, so
+        check-credential-channel.sh will fail loud unless the operator
+        seeds GH_TOKEN via ~/.config/tillandsias/cycle.env
+        (EnvironmentFile, already wired) or .git/.gh-credentials; that
+        seeding is operator-owned. WHAT REMAINS on this row — attach the
+        first unattended real-fire evidence, then the non-Linux halves via
+        children 858-h7ke (macOS launchd) and 858-3v74 (Windows Task
+        Scheduler), filed in this fragment, independently schedulable
+        (different owned files, different pickup_role). Claim returned to
+        ready so the row is visible; the Linux implementation is DONE — do
+        not redo it, take the children.
