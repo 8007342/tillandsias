@@ -105,6 +105,81 @@ plan_binary_has() {
     "$bin" capabilities 2>/dev/null | grep -qx "$subcommand"
 }
 
+# ── Point-of-use freshness (order 851-cduu) ──────────────────────────────────
+#
+# resolve_plan_binary proves the artifact RUNS; it cannot prove the artifact
+# matches the checkout. That gap produced two field breaches in one day
+# (2026-08-23): on yolanda the Windows gate executes in WSL against a
+# CARGO_TARGET_DIR cycle-preflight never rebuilds, so a 6-day-stale
+# tillandsias-plan red-gated a behaviour fixture (and, run by hand, deleted
+# every fragment it loaded — it predated 843-624y); on macuahuitl preflight
+# built the RIGHT artifact but runs once per cycle, so sibling work pulled
+# mid-cycle left check-resumable-claim-dirt.sh answering
+# unattributable:plan-query-failed for 11 hours. Per-copy refresh lanes do not
+# close this class: wsl-plan-expert-ensure.sh reported wsl-ok on yolanda while
+# the gate's cache copy sat six days stale, because it refreshes the copy it
+# knows about, not the copy the consumer resolves. A stale instrument does not
+# fail; it answers wrong. So the verification happens at the POINT OF USE, in
+# the locus about to consume the answer — not at cycle start, not in whichever
+# locus preflight ran.
+#
+# ensure_fresh_plan_binary: resolve, vintage-check against the worktree, and
+# when stale rebuild IN THIS LOCUS (cargo build is incremental — the fresh
+# case costs a no-op; after a large merge it costs exactly the rebuild the
+# consumer was missing). Contract:
+#   prints path, returns 0  — resolved binary is current for this tree
+#   prints nothing, returns 1 — no runnable binary (same as resolve_plan_binary)
+#   prints nothing, returns 2 — binary exists but is STALE and could not be
+#                               refreshed here (no cargo, or the build failed).
+#                               Callers MUST refuse loudly on 2, never consume.
+# A TILLANDSIAS_PLAN_BIN override passes through on existence alone, exactly
+# as resolve_plan_binary treats it: the caller named the binary (litmus stubs
+# depend on this), so freshness judgment would collapse the distinction
+# 704-zcgi preserves.
+#
+# The vintage test is cargo's own model, MTIMES: git writes files at
+# checkout/merge time, so any instrument source newer than the binary means
+# the binary predates this tree. Deliberately NOT commit timestamps — %ct is
+# stamped on the ORIGIN host hours before a merge lands here, so a commit-time
+# comparison calls a pre-merge binary fresh. The source set is the crate plus
+# Cargo.lock (tillandsias-plan carries no sibling path deps — workspace
+# serde/serde_yaml/serde_json only; widen this set if that ever changes).
+# Call from the repo root, the same working-directory contract the ./target
+# candidates above already assume.
+plan_binary_is_stale() {   # $1 = binary path; true when any source FILE is newer
+    # -type f: directory mtimes bump on any entry add/remove (an editor temp
+    # file, a scratch dir) without the build inputs changing; content lives in
+    # files, which is also cargo's own fingerprint surface.
+    [ -n "$(find crates/tillandsias-plan Cargo.lock -type f -newer "$1" -print -quit 2>/dev/null)" ]
+}
+
+ensure_fresh_plan_binary() {
+    local bin
+    if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ]; then
+        resolve_plan_binary
+        return $?
+    fi
+    if ! bin="$(resolve_plan_binary)"; then
+        # Nothing runnable anywhere: try to create one, then re-resolve.
+        command -v cargo >/dev/null 2>&1 || return 1
+        cargo build --release -p tillandsias-plan >/dev/null 2>&1 || return 1
+        bin="$(resolve_plan_binary)" || return 1
+    fi
+    if ! plan_binary_is_stale "$bin"; then
+        printf '%s\n' "$bin"
+        return 0
+    fi
+    if command -v cargo >/dev/null 2>&1 \
+        && cargo build --release -p tillandsias-plan >/dev/null 2>&1; then
+        bin="$(resolve_plan_binary)" || return 1
+        if ! plan_binary_is_stale "$bin"; then
+            printf '%s\n' "$bin"
+            return 0
+        fi
+    fi
+    return 2
+}
+
 # ── Generic run-don't-stat probe for ANY target/ binary (order 770-ifeg) ─────
 #
 # The same rule generalized beyond tillandsias-plan. Every script that execs a

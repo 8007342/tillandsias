@@ -1591,6 +1591,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Compaction coverage fixture passed"
 
+    # Order 851-cduu. The instrument gate for every ledger check in this file:
+    # a stale tillandsias-plan does not fail, it answers wrong (measured twice
+    # on 2026-08-23 — yolanda's WSL gate cache, macuahuitl's mid-cycle pull).
+    # ensure_fresh_plan_binary's point-of-use contract is what stands between
+    # those checks and a binary built for another checkout; this fixture pins
+    # the contract hermetically.
+    _step "Checking point-of-use instrument freshness (851-cduu)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-plan-binary-freshness.sh" 2>&1; then
+        _error "ensure_fresh_plan_binary broke its contract — a stale instrument could pass for HEAD"
+        exit 1
+    fi
+    _info "Instrument freshness fixture passed"
+
     # PIPESTATUS, not `$?` — `cmd | tee f` returns TEE's status. The verdict is
     # the ratchet's, not cargo's: a failure not in scripts/test-known-red.txt
     # is a regression, a listed test that PASSED is a stale entry, and a listed

@@ -78,11 +78,21 @@ if [ "$1" == "--check" ]; then
     # of this block did exactly that and the build gate caught it, which is the
     # gate working as designed — three scripts had already written that same
     # wrong probe independently.
-    if ! PLAN_BIN="$(resolve_plan_binary)"; then
+    # 851-cduu: ensure, not resolve. On this exact call site the Windows gate
+    # (executing in WSL against a CARGO_TARGET_DIR preflight never rebuilds)
+    # consulted a 6-day-stale binary. Freshness is verified HERE, in the locus
+    # about to consume the answer; the fresh case costs a no-op cargo build.
+    PLAN_BIN="$(ensure_fresh_plan_binary)" && _fresh_rc=0 || _fresh_rc=$?
+    if [ "$_fresh_rc" -eq 2 ]; then
+        echo "Check FAILED: the resolved tillandsias-plan is STALE for this tree and"
+        echo "  could not be rebuilt in this locus (851-cduu). A stale instrument does"
+        echo "  not fail; it answers wrong — refusing to evaluate the ready-set"
+        echo "  invariant with a binary built for another checkout."
+        exit 1
+    elif [ "$_fresh_rc" -ne 0 ]; then
         echo "Check FAILED: no runnable tillandsias-plan, so the ready-set invariant"
         echo "  cannot be evaluated. Refusing to fall back to the idempotency-only"
         echo "  check — that is precisely the false green this assertion replaces."
-        rm -rf plan_tmp plan_tmp_bak scripts/archive-plan-packets-check.rb plan_tmp_*.txt
         exit 1
     fi
     # The .rb resolves the same binary; hand it the probed answer rather than

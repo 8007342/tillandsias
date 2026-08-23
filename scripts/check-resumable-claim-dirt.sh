@@ -90,10 +90,19 @@ fi
 
 # ── condition 2: a live claim owned by this host ─────────────────────────────
 . "$(dirname "${BASH_SOURCE[0]}")/plan-binary-probe.sh"
-PLAN="$(resolve_plan_binary)" || {
+# 851-cduu: ensure, not resolve — this guard was silently inert for 11 hours
+# on macuahuitl behind a binary preflight had built BEFORE sibling work was
+# pulled mid-cycle: every dirty tree answered unattributable:plan-query-failed,
+# reopening the wedge 833-fpe7 had just closed. Freshness is verified here, at
+# the point of use, in whatever locus is executing this guard.
+PLAN="$(ensure_fresh_plan_binary)" && _fresh_rc=0 || _fresh_rc=$?
+if [ "$_fresh_rc" -eq 2 ]; then
+    echo "unattributable:stale-plan-binary"
+    exit 2
+elif [ "$_fresh_rc" -ne 0 ]; then
     echo "unattributable:no-runnable-plan-binary"
     exit 2
-}
+fi
 
 host="${TILLANDSIAS_WORKSTATION:-}"
 if [[ -z "$host" ]]; then
