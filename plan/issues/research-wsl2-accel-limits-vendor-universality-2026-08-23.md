@@ -81,3 +81,94 @@ family, not a point. Left as a recorded caveat for whoever works 850-bif2 —
 the row-on-join design should decide which guest a Windows machine's
 in-guest row canonically describes (the product's `tillandsias` distro being
 the obvious candidate), or add the distro to the key.
+
+---
+
+## Intel confirmation — esmeraldinha, 2026-08-23 (closes the question)
+
+- Added by windows host **esmeraldinha** (Intel N100, the fleet's declared
+  lower bound), at `windows-next` head `fb80c579a` (= `origin/linux-next`,
+  fast-forwarded this cycle from a 6-day-stale `6d3648424`).
+- Rows published this cycle:
+  `plan/index.d/20260823t042922z-capability-row-esmeraldinha-windows-host.yaml`
+  (locus `windows-host`) and the `in-guest` row filed alongside it.
+- Verdict: **AGREES with yolanda. No correction is owed.** The claim
+  reproduces on Intel silicon, and one scoping caveat below is a limit on
+  what THIS machine can witness, not a defect in the claim.
+
+### The GPU limit reproduces exactly
+
+The Windows-host locus sees one accelerator, `Intel(R) UHD Graphics`
+(`PCI\VEN_8086&DEV_46D1`, Alder Lake-N 24EU, driver 32.0.101.7088,
+`os_status: OK`) and adjudicates it `usable: false` /
+`unusable_reason: wsl2-no-dri-render-node` — the same reason string yolanda's
+Radeon 860M carries. Structural evidence gathered in the runtime `tillandsias`
+WSL2 distro (kernel 6.18.33.2-microsoft-standard-WSL2, the same kernel yolanda
+probed):
+
+- `/dev/dxg` present (`crw-rw-rw- 10, 258`); `/usr/lib/wsl/lib` carries
+  `libd3d12.so`, `libd3d12core.so`, `libdxcore.so` — DirectX lane fully wired.
+- `/dev/dri` **ABSENT** — no DRM driver binds the paravirtual adapter.
+- `/dev/accel*` **ABSENT**; no `amdxdna`, `ivpu` or `intel_vpu` in
+  `/proc/modules`.
+- Guest PCI bus carries exactly three functions, all paravirtual:
+  `0x1af4:0x105a` (class `0x088000`), `0x1af4:0x1043` (class `0x010000`), and
+  `0x1414:0x008e` class **`0x030200`** — the Microsoft 3D-controller GPU-PV
+  endpoint. `grep -l 0x8086 /sys/bus/pci/devices/*/vendor` returns **nothing**:
+  no Intel function crosses the boundary, exactly as no AMD function crossed
+  yolanda's.
+
+One immaterial packaging difference, recorded so a future reader does not
+mistake it for a discrepancy: yolanda found `dxgkrnl` in `/proc/modules`; here
+it is **built into the kernel** (`kernel/drivers/hv/dxgkrnl/dxgkrnl.ko` appears
+in `modules.builtin`, and `/proc/modules` holds 23 unrelated entries). Same
+driver, same lane, different packaging.
+
+### A detail that strengthens the mechanism argument
+
+The guest is *not* vendor-blind in general: `/proc/cpuinfo` reports
+`model name: Intel(R) N100`, and `kvm_intel`, `intel_rapl_msr` and
+`intel_rapl_common` are all loaded. The CPU's vendor identity crosses the
+boundary intact because the CPU is not paravirtualised. What is absorbed
+host-side is specifically the **graphics adapter**, which is projected as a
+Microsoft `0x1414` class-`0x030200` function. That is a sharper statement of
+yolanda's mechanism than "the vendor identity is absorbed", and it is what
+makes the limit structural rather than a driver-packaging accident.
+
+### Scoping caveat, stated loudly because the prompt assumed otherwise
+
+The coordinator's framing was that esmeraldinha's "Intel UHD row confirms the
+Intel half for free". That is true for **`wsl2-no-dri-render-node`** and false
+for **`wsl2-npu-not-exposed`**, for a reason that has nothing to do with WSL2:
+
+**The N100 has no NPU at all.** The Windows-host probe enumerated exactly one
+accelerator device on this machine, the UHD iGPU. There is no Intel NPU here to
+be unexposed, so this host cannot witness `wsl2-npu-not-exposed` on Intel
+silicon — its absence from the row is "no such device", not "device hidden".
+
+The NPU conclusion still holds here, but by **mechanism rather than by direct
+observation**: the structural premise it rests on — no PCI passthrough, only
+paravirtual functions on the guest bus, therefore no `/dev/accel*` possible for
+any vendor — IS directly confirmed on Intel above. What remains unwitnessed is
+the specific pairing (Intel NPU + WSL2 guest). Closing that would need an Intel
+Core Ultra / Meteor Lake-or-later part running WSL2. The fleet's only Intel NPU
+today is macuahuitl's (`present-unusable: npu/Intel NPU (engine-missing)`), and
+it is bare-metal Linux, so it cannot close it either.
+
+This does not weaken the deliverable — schedulers must still not expect any
+WSL2 in-guest row from any vendor to offer `npu/*` or a DRI-backed GPU lane —
+but the evidence grade differs between the two halves and the record should say
+so rather than round both up to "measured".
+
+### Follow-up: the distro-dependency caveat is now demonstrated, not just predicted
+
+yolanda left a caveat that in-guest rows are distro-dependent and that the
+`host+locus` fold key cannot express which guest was probed. This cycle
+demonstrates it with a concrete divergence: esmeraldinha's in-guest row was
+deliberately taken in the **runtime `tillandsias` distro** (yolanda's was taken
+in `tillandsias-build`), where ollama 0.32.14 and podman are both installed and
+`qwen2.5:0.5b`, `phi3.5:3.8b` and `nomic-embed-text` are resident. The two
+machines' in-guest rows therefore differ in `engines`/`schedulable` for reasons
+that are pure probe-context, not hardware. Recommend the row-on-join design
+adopt the product's `tillandsias` distro as the canonical in-guest locus, or
+add the distro to the fold key.
