@@ -1185,10 +1185,37 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
                     Value::Mapping(m)
                 })
                 .collect();
-            let mut block = serde_yaml::Mapping::new();
-            block.insert("capabilities".into(), Value::Sequence(rows));
-            let rendered = serde_yaml::to_string(&Value::Mapping(block))
+            let body = serde_yaml::to_string(&Value::Sequence(rows))
                 .map_err(|e| format!("refusing to compact: cannot render capabilities: {e}"))?;
+            // TWO THINGS SERDE GETS WRONG FOR THIS LEDGER, both found by folding
+            // the real base and watching what broke.
+            //
+            // (1) UNQUOTED TIMESTAMPS. serde drops quotes from a string that
+            // looks unambiguous, but a bare ISO-8601 scalar is inferred as a
+            // Time by Psych, and `YAML.load_file` (safe_load in Psych 5)
+            // refuses to construct one: the whole base became unparseable to
+            // every ruby tool in this repo, and the archiver is one. This is the
+            // known class in
+            // plan/issues/compaction-folds-unquoted-timestamps-past-the-fragment-gate-2026-08-13.md,
+            // reproduced by a new writer. Quote every date-like scalar.
+            //
+            // (2) SEQUENCE ITEMS AT COLUMN 0. `- ts:` is legal YAML under a
+            // top-level key but it broke IDEMPOTENCE: the replace-existing-block
+            // pass below strips lines that begin with whitespace, so a SECOND
+            // fold removed `capabilities:` and orphaned every `- ` item after
+            // it. Indenting the sequence makes the block uniformly
+            // whitespace-led, so stripping it is exact and folding twice is a
+            // no-op — which is the property the idempotency test checks.
+            let mut rendered = String::from("capabilities:\n");
+            for line in body.lines() {
+                if line.trim().is_empty() {
+                    continue;
+                }
+                let quoted = quote_datelike_scalar(line);
+                rendered.push_str("  ");
+                rendered.push_str(&quoted);
+                rendered.push('\n');
+            }
             // Replace any existing top-level block rather than appending a
             // second one: two `capabilities:` keys is not a merge, it is a
             // document where the later silently wins and the earlier is lost.
@@ -3932,4 +3959,39 @@ mod measurement_comparability_tests {
         let (accepted, refused) = partition_measurements(&doc);
         assert!(accepted.is_empty() && refused.is_empty());
     }
+}
+
+/// Quote a bare ISO-8601 scalar so Psych cannot infer a `Time` from it.
+///
+/// serde_yaml emits `ts: 2026-08-23T04:38:31Z` without quotes because the
+/// string is unambiguous to serde. It is not unambiguous to ruby: Psych's
+/// scalar scanner constructs a `Time`, and `YAML.load_file` (safe_load since
+/// Psych 5) then refuses the document with `Tried to load unspecified class:
+/// Time`. One such scalar makes the entire base unreadable to every ruby tool
+/// in this repo, the plan archiver included.
+///
+/// Conservative by construction: it rewrites only a `key: value` line whose
+/// value is date-shaped and not already quoted, and leaves everything else —
+/// including block scalars, comments and nested keys — byte-identical.
+fn quote_datelike_scalar(line: &str) -> String {
+    let Some(colon) = line.find(": ") else {
+        return line.to_string();
+    };
+    let (key, rest) = line.split_at(colon + 2);
+    let value = rest.trim_end();
+    if value.starts_with('"') || value.starts_with('\'') || value.is_empty() {
+        return line.to_string();
+    }
+    // YYYY-MM-DD, optionally followed by a time. Anything else is left alone.
+    let b = value.as_bytes();
+    let date_shaped = b.len() >= 10
+        && b[0..4].iter().all(u8::is_ascii_digit)
+        && b[4] == b'-'
+        && b[5..7].iter().all(u8::is_ascii_digit)
+        && b[7] == b'-'
+        && b[8..10].iter().all(u8::is_ascii_digit);
+    if !date_shaped {
+        return line.to_string();
+    }
+    format!("{key}\"{value}\"")
 }

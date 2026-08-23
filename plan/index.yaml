@@ -12760,6 +12760,12 @@ plan_index:
       notes: |
         Do NOT fix this by relaxing the VERSION guard. The guard is load-bearing: it exists because main's VERSION is the release identity and a platform branch must not move it. The defect is that a routine local build writes to a file under that guard's protection.
       events:
+        - type: note
+          ts: "2026-08-23T13:24:05Z"
+          agent_id: "windows-yolanda-fable5-20260823T131933Z"
+          host: windows
+          summary: |
+            Cycle-6 windows analysis: what remains of this packet is PURELY the policy contradiction — versioning.yaml's Build counter is designed to flow through branches with LUB merges while pre-push-version-guard forbids that flow on every non-main push. Criterion 2 landed 2026-08-10; ./build.sh --check already deliberately never bumps (build.sh:1155), so the everyday-gate surface is closed. Criteria 1+3 are un-startable without an operator ruling; filed as 862-zhr2 (pending, deliverable plan/issues/decision-version-counter-tracked-vs-guard-2026-08-23.md, resolution A recommended). Status set pending so selectors stop offering un-startable work — the 628-c7qd lesson.
         - type: progress
           ts: "2026-08-20T20:38:44Z"
           agent_id: "linux-macuahuitl-opus5-20260820T200600Z"
@@ -27909,6 +27915,13 @@ plan_index:
             the AMD lane is unmeasurable by fleet decision rather than by defect.
 
 
+      events:
+        - type: note
+          ts: "2026-08-23T13:47:37Z"
+          agent_id: "linux-lenovinha-claude-20260823t134737z"
+          host: lenovinha
+          summary: |
+            LENOVINHA VOTE (exit criterion 1, host kind linux_immutable AMD+NVIDIA): APPROVE shipping mesa vulkan userspace (loader + RADV ICD) in the inference image, CONDITIONAL APPROVE on /dev/dri passthrough — gated strictly on tier gpu-rocm (or an explicit future vulkan tier), NEVER on cpu or gpu-cuda tiers. Reasons, measured against this host's silicon (capability row 850-bif2): (1) the driver in the image is INERT without device passthrough, is open-source and kernel-version-independent (the packet's own 408-mirror argument), and unblocks yoga — the fleet's one gpu-rocm-usable host — from measuring the crossover the decision actually needs; refusing the package to avoid a placement bug is treating a router defect with an inventory hole. (2) On THIS host the passthrough condition must not fire: effective tier is cpu (RTX 3070 present-usable but cdi-spec-missing; the Cezanne iGPU is a 2GiB-carve-out Vega sharing DDR4 with a strong Zen3 CPU at ~8C/16T) — decode on that iGPU is a likely regression and embeddings are unproven here; the windows host's 587ms/chunk CPU crossover does not transfer to a CPU an order of magnitude faster (the packet's own caution, seconded with this host's numbers). (3) The OLLAMA_VULKAN=true hazard is real and the condition should be stated in the image change itself: presence must not choose placement — either pin OLLAMA_VULKAN off outside gpu-rocm tiers or land the workload-shape router before the first non-yoga host gets a /dev/dri passthrough. Net: image yes; passthrough tier-gated; placement pinned until routed-by-shape exists.
     - packet_id: e2e-step1-blocks-the-destruction-gate-on-a-forge-lane-failure
       order: 808-zrzz
       status: ready
@@ -29034,6 +29047,12 @@ plan_index:
         today and tens of GB once 408's GPU tier pulls larger models. The fix
         must adopt an existing cache rather than silently starting a new one.
       events:
+        - type: completed
+          ts: "2026-08-23T13:50:38Z"
+          agent_id: "linux-lenovinha-claude-20260823t135038z"
+          host: lenovinha
+          summary: |
+            FIXED at aa5892c86, with the packet's own ten-minute experiment run FIRST and the split confirmed REAL: XDG_CACHE_HOME set, the accel probe wrote capabilities.json under HOME/.cache while shell consumers resolved under the XDG root. tillandsias_core::cache_root is the one resolution (XDG -> HOME/.cache incl. the USERPROFILE Windows spelling -> temp; pure half cache_root_from unit-tested, incl. empty-XDG-treated-as-unset). All six deviating sites routed: model cache (build_inference_run_args), forge_gitconfig_dir, write_forge_gitconfig, write_forge_repo_gitdir, image_builder packages cache, capabilities_cache_path (its TILLANDSIAS_CACHE_DIR override preserved). THE MIGRATION per the deliverable: adopt_legacy_cache moves a lone pre-XDG model dir (rename), KEEPS USING the legacy path on rename failure rather than silently re-downloading, and on both-exist prefers XDG loudly without ever deleting — three unit tests pin move/idempotence/never-delete. Verified live both directions post-fix: XDG honored; unset-XDG hosts byte-identical. Note for the fleet: on a host that sets XDG_CACHE_HOME the capabilities/gitconfig/packages caches MOVE (all regenerate cheaply); only the model cache carries the adoption logic, as the deliverable scoped.
         - type: note
           ts: "2026-08-18T03:55:00Z"
           agent_id: linux-macuahuitl-opus5-20260818T033600Z
