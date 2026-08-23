@@ -313,8 +313,32 @@ n_chunks="$(wc -l < "$work/chunks.jsonl" | tr -d '[:space:]')"
 # IDEMPOTENCE. The fingerprint covers the chunk corpus AND the model, because
 # re-embedding the same text with a different model produces a different vector
 # space, and mixing two spaces in one file yields confident nonsense.
+#
+# ...AND THE DOCUMENT PREFIX, for exactly the same reason (864-p2rk). Prefixing
+# a passage with "search_document: " changes what is embedded, so it changes
+# the space — but `content_hash` is hash_hex(span), the TEXT AND NOTHING ELSE,
+# so the chunk keeps its hash and the delta happily reuses UNPREFIXED vectors
+# for a build that asked for prefixed ones.
+#
+# Measured 2026-08-23, on the first prefixed build ever attempted here:
+#   spec-index:delta reused=21123 embed=3 of 21126
+#   spec-index:delta identity-verified=5 reused samples
+# A full nomic index takes ~8 minutes; that one finished in FIVE SECONDS and
+# declared itself verified. The identity assertion did not catch it because it
+# re-embeds the sample through the same unprefixed path, so it compared wrong
+# against wrong and agreed.
+#
+# This is the model-key defect of order 552 recurring in a second dimension.
+# The lesson it should have taught was not "add the model to the key" but
+# "anything that changes the embedded BYTES belongs in the key", so the key now
+# covers every input to the embedding call rather than being extended one
+# incident at a time.
 fingerprint="$(
-    { "${PORTABLE_SHA256[@]}" < "$work/chunks.jsonl"; printf '%s\n' "$EMBED_MODEL"; } | "${PORTABLE_SHA256[@]}" | cut -d' ' -f1
+    {
+        "${PORTABLE_SHA256[@]}" < "$work/chunks.jsonl"
+        printf '%s\n' "$EMBED_MODEL"
+        printf '%s\n' "${TILLANDSIAS_EMBED_DOC_PREFIX:-}"
+    } | "${PORTABLE_SHA256[@]}" | cut -d' ' -f1
 )"
 INDEX_DIR="$INDEX_ROOT/$fingerprint"
 
@@ -473,6 +497,9 @@ if [ "$DELTA" = "1" ]; then
         # one full rebuild per model, once, and self-heals thereafter.
         [ -f "${gen%/}/.model" ] || continue
         [ "$(cat "${gen%/}/.model" 2>/dev/null)" = "$EMBED_MODEL" ] || continue
+        # 864-p2rk: same rule for the document prefix. A generation with no .prefix
+        # marker predates prefixes and is only reusable by an unprefixed build.
+        [ "$(cat "${gen%/}/.prefix" 2>/dev/null)" = "${TILLANDSIAS_EMBED_DOC_PREFIX:-}" ] || continue
         # Without that equality this paste would mint a hash->vector map that
         # is wrong from its first line.
         paste -d '\t' \
@@ -510,7 +537,15 @@ fi
 for part in "$work"/b/part-*; do
     [ -e "$part" ] || break
     want="$(wc -l < "$part" | tr -d '[:space:]')"
-    jq -sc --arg m "$EMBED_MODEL" '{model:$m, input:.}' "$part" > "$work/payload.json" || {
+    # DOCUMENT PREFIX (864-p2rk). Several embedders are trained with an
+    # asymmetric query/passage convention and are documented as REQUIRING it —
+    # nomic-embed-text wants "search_document: " on passages and
+    # "search_query: " on queries. This harness applied neither, to any model,
+    # in every comparison filed so far. nomic's own template is a bare
+    # `{{ .Prompt }}`, so nothing supplies it downstream either. Empty by
+    # default, which reproduces every historical measurement exactly.
+    jq -sc --arg m "$EMBED_MODEL" --arg p "${TILLANDSIAS_EMBED_DOC_PREFIX:-}" \
+        '{model:$m, input:[.[] | $p + .]}' "$part" > "$work/payload.json" || {
         echo "blocked:spec-index:payload-failed"; exit 1; }
     # `-f` IS THE BUG THIS BLOCK KEEPS RE-LEARNING, so it is gone. curl's --fail
     # makes an HTTP 400 an exit-22 failure AND DISCARDS THE RESPONSE BODY — the
@@ -644,6 +679,7 @@ printf '%s\n' "$fingerprint" > "$stage/.fingerprint"
 # loop: a generation is reusable only by a build using the SAME model, because
 # content_hash covers the text and not the model that embedded it.
 printf %s\\n "$EMBED_MODEL" > "$stage/.model"
+printf %s\\n "${TILLANDSIAS_EMBED_DOC_PREFIX:-}" > "$stage/.prefix"
 # ORDER 801-g9nn — THE FRAME THIS ENTRY DESCRIBES.
 #
 # The fingerprint proves an entry describes corpus X. It says nothing about
@@ -673,7 +709,7 @@ fi
 # read-only mount, so a 0600 entry would be a permission refusal that looks
 # exactly like a missing index.
 chmod 0755 "$stage" 2>/dev/null || true
-chmod 0644 "$stage/chunks.jsonl" "$stage/vectors.jsonl" "$stage/.fingerprint" "$stage/.model" 2>/dev/null || true
+chmod 0644 "$stage/chunks.jsonl" "$stage/vectors.jsonl" "$stage/.fingerprint" "$stage/.model" "$stage/.prefix" 2>/dev/null || true
 if [ -d "$INDEX_DIR" ]; then
     # Lost a race we hold the lock against, or a partial entry survived. Never
     # `mv` onto an existing directory: that NESTS the staging dir inside it.
