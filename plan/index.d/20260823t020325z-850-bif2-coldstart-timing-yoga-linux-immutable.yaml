@@ -1,0 +1,73 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_immutable (yoga), 2026-08-23T02:03:25Z.
+#
+# Routed as an EVENT, not a row, per methodology/distributed-work.yaml →
+# new_row_only_if_independently_schedulable: the finding's natural owned_file
+# is the "Joining the fleet" section of skills/meta-orchestration/SKILL.md,
+# whose scope open row 850-bif2 (in_progress, lenovinha) already covers, at
+# the same pickup_role. The numbers accumulate here for the in-flight skill
+# edit to fold in; promoting a competing row would be the arrival inflation
+# 831-ezea exists to stop.
+events:
+  - packet_id: joining-host-must-publish-a-capability-row
+    event:
+      type: note
+      ts: "2026-08-23T02:03:25Z"
+      agent_id: linux-yoga-fable5-20260823T014500Z
+      host: linux_immutable
+      summary: >
+        SILVERBLUE BOOTSTRAP TIMING, MEASURED — the skill's "spend minutes
+        pulling an image and installing a toolchain" claim
+        (skills/meta-orchestration/SKILL.md, Joining-the-fleet section) now
+        has numbers with provenance. The claim itself was UNMEASURED at
+        birth. Added by commit b629bb379 (macuahuitl, 2026-08-22, ~16 min
+        BEFORE lenovinha's first rejoin commit), citing no measurement, and
+        macuahuitl structurally cannot execute that path (Workstation, no
+        rpm-ostree, with-tillandsias-builder.sh returns at its Silverblue
+        guard). lenovinha's rejoin numbers (loop_status.d
+        20260822t233140z-266ebb24-lenovinha.md, build_check_ms_avg=65808
+        over 111 steps) are WARM-REJOIN figures from a host whose toolbox,
+        images and caches predate the measurement. No genuinely-fresh
+        Silverblue cold-start wall clock existed anywhere in the repo. The
+        one genuinely pristine run (yolanda 2026-07-13, commit 79682b9fa)
+        recorded no timing.
+
+        MEASURED on yoga (Silverblue 44, AMD Ryzen AI 5 340, 12 threads,
+        14 GiB RAM, NVMe, ~250 Mbit/s to the Fedora registry), 2026-08-23,
+        by tearing down the tillandsias-builder container and re-running the
+        real path. (1) fedora-toolbox:44 pull, genuinely cold via an
+        isolated podman --root — 11.5 s wall, 355 MiB compressed download,
+        1.09 GB on disk. Note the registry :44 tag has drifted from the
+        6-day-old local copy (single-layer image now). (2) toolbox create
+        with the image local — 0.1 s; fresh-host create is therefore
+        pull-dominated (~12 s here). (3) First TILLANDSIAS_SKIP_VERSION_BUMP=1
+        TILLANDSIAS_FORCE_CHECK=1 ./build.sh --check on the fresh container —
+        131.9 s wall, rc=0, zero retries, gate stamp recorded. Decomposition
+        from per-line timestamps — dnf build-tools install 17 s, rustup phase
+        14 s (re-downloaded all 8 components), gate itself ~100 s
+        (near-cold compile; target/ held 56 M residue). Reconstructed
+        fresh-bootstrap floor ~2.5 min on this class of hardware. WARM
+        RESIDUE the teardown cannot remove without destroying operator home
+        data, stated so the floor reads as a floor. ~/.cargo (1.1 G registry
+        cache) and ~/.rustup settings survive in the shared $HOME, and
+        crates.io index + crate downloads on a truly pristine host would add
+        network-bound minutes on a slow link. "Minutes" is the right order
+        of magnitude; the measured decomposition says which minutes and why.
+
+        SUGGESTED FOLD for this row's in-flight skill edit (deliberately not
+        edited here — the section is claimed): replace the unmeasured
+        sentence with the measured decomposition and its provenance, and
+        keep the two real traps it correctly states (podman required;
+        first run is not a hang).
+
+        SECONDARY OBSERVATION, correcting this row's own context: on
+        bare-metal Linux the AMD GPU is NOT undetectable. yoga's published
+        row (20260823t020325z-850-bif2-yoga-capability-row-linux-immutable
+        .yaml, same-commit) shows the generic Vulkan/DRI path reporting the
+        Radeon 840M usable=true as "Vulkan GPU" with legacy_tier=gpu-rocm
+        derived from host rocminfo (gfx1152). The zero-rocm/amdgpu gap costs
+        vendor IDENTIFICATION (name, VRAM, bandwidth — all null/generic),
+        not presence; cannot-be-detected is the WSL2-guest locus. For the
+        dual-vendor fix, note legacy_tier flips to cpu wherever rocminfo is
+        off PATH (measured: absent in the builder toolbox), so tier is a
+        PATH fact, not a hardware fact.
