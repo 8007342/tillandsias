@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga during the 2026-08-23 meta-orchestration cycle.
+packets:
+  - packet_id: orchestrate-enclave-argument-handling
+    order: 861-hisq
+    status: ready
+    desired_release: v0.5
+    kind: bug
+    priority: p2
+    pickup_role: linux
+    capability_tags:
+      - tooling
+      - enclave
+    title: |
+      orchestrate-enclave.sh executes on ANY argv (no usage/refusal path) and its bare invocation names the git mirror container 'tillandsias-git-.'
+    context: |
+      Observed live on yoga 2026-08-23 while repairing the post-reboot enclave.
+      (1) `scripts/orchestrate-enclave.sh --help` RAN the full orchestration —
+      regenerated the CA, restarted the proxy — and then passed `--help`
+      through as PROJECT_PATH, so the mirror step derived its container name
+      via `basename --help` and died printing basename's usage. A flag is
+      consumed as a positional path; there is no usage or refusal branch at
+      all. (2) A bare invocation defaults PROJECT_PATH to `.`
+      (`PROJECT_PATH="${1:-.}"`, PROJECT_NAME from `basename`), and
+      `basename .` is `.`, so the mirror container is created as
+      `tillandsias-git-.` and fails its health check — the default invocation
+      is broken by construction. (3) The script reads as a bring-up tool but
+      is a full lifecycle harness: its cleanup step removes the proxy, mirror
+      and inference containers on exit, which surprises anyone using it as the
+      preflight's suggested "re-run the enclave orchestration" remedy.
+    exit_criteria:
+      - |
+        An argv beginning with '-' is refused with a usage line and non-zero exit, never consumed as PROJECT_PATH.
+      - |
+        A bare invocation either resolves PROJECT_PATH to an absolute path before basename (so the mirror name is never 'tillandsias-git-.') or refuses with usage; a litmus-style check pins whichever shape is chosen.
+      - |
+        The script's teardown-on-exit behaviour is stated in its header comment, and cycle-preflight's remedy text no longer points service repair at it (or the script gains a mode that leaves services running).
+    events:
+      - type: filed
+        ts: "2026-08-23T11:31:00Z"
+        agent_id: linux-yoga-fable5-20260823t1101z
+        host: linux-immutable
+        summary: |
+          Filed after the post-reboot enclave repair; see the 2026-08-23
+          section appended to
+          plan/issues/vm-proxy-ca-tmpfs-restart-fragility-2026-07-06.md for
+          the full session evidence.

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: set-field-writes-unquoted-yaml-scalars
+    field: status
+    value: completed
+    ts: "2026-08-23T11:26:59Z"
+    host: yoga
+
+events:
+  - packet_id: set-field-writes-unquoted-yaml-scalars
+    event:
+      type: completed
+      ts: "2026-08-23T11:26:59Z"
+      host: yoga
+      summary: >
+        status 'completed' with evidence_refs: commit 90fc4af66 + cargo test -p tillandsias-plan (232 green: set_field_body_round_trips_hostile_prose, set_field_body_round_trips_value_beside_events, verify_written_lww_accepts_good_and_refuses_corrupt) + forced ./build.sh --check green
