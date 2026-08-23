@@ -54,7 +54,13 @@ for f in "$TESTS_DIR"/litmus-*.yaml; do
     [ -n "$name" ] || continue
     files=$((files + 1))
     on_disk="${on_disk}${name}"$'\n'
-    if printf '%s\n' "$bound" | grep -qxF "$name"; then
+    # Herestrings, NEVER `printf | grep -q`: under this file's pipefail,
+    # grep -q exiting at first match can SIGPIPE the printf and flip a MATCH
+    # into a failed pipeline — under suite load the race fired on random
+    # files each run, reporting phantom unbound/dangling names (observed
+    # live on yoga 2026-08-23, three runs, three different name sets). The
+    # sigpipe-verdict-pipeline lesson, one gate later.
+    if grep -qxF "$name" <<< "$bound"; then
         bound_n=$((bound_n + 1))
         continue
     fi
@@ -62,7 +68,7 @@ for f in "$TESTS_DIR"/litmus-*.yaml; do
         retired=$((retired + 1))
         continue
     fi
-    if [ -n "$grand" ] && printf '%s\n' "$grand" | grep -qxF "$name"; then
+    if [ -n "$grand" ] && grep -qxF "$name" <<< "$grand"; then
         grandfathered=$((grandfathered + 1))
         continue
     fi
@@ -84,7 +90,8 @@ fi
 dangling=""
 while IFS= read -r b; do
     [ -n "$b" ] || continue
-    printf '%s' "$on_disk" | grep -qxF "$b" || {
+    # Herestring for the same SIGPIPE-under-pipefail reason as above.
+    grep -qxF "$b" <<< "$on_disk" || {
         [ -n "$dangling" ] && dangling="$dangling,"
         dangling="$dangling$b"
     }
