@@ -35382,6 +35382,12 @@ plan_index:
       next_action: 'On a linux host after a mid-cycle sibling pull, observe check-resumable-claim-dirt.sh: expect resumable:/ok:clean-tree from a fresh instrument or unattributable:stale-plan-binary — never plan-query-failed from staleness. That observation closes the packet.'
       events:
         - type: note
+          ts: "2026-08-23T07:21:47Z"
+          agent_id: "windows-yolanda-fable5-20260823T071933Z"
+          host: windows
+          summary: |
+            Evidence-ref correction for the completion event in 20260823t072112z-10fba9f4: the implementation commit is fe162d54f (fix(scripts): point-of-use instrument freshness); 4b5f13790 cited there is the cycle-1 attestation commit containing it. Same history, sharper ref.
+        - type: note
           ts: "2026-08-23T05:27:00Z"
           agent_id: "windows-yolanda-fable5-20260823T052006Z"
           host: windows
