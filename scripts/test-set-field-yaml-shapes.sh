@@ -44,6 +44,15 @@ elif [ "$_fresh_rc" -ne 0 ]; then
     exit 2
 fi
 
+# Ruby is the validator every case below consults; without it `|| echo invalid`
+# converts "no validator" into "invalid fragment" and all seven cases false-
+# fail (yoga host-side run, 2026-08-23 — ruby lives in the builder toolbox,
+# not on the Silverblue host). Refuse loudly instead of lying about the shapes.
+if ! command -v ruby >/dev/null 2>&1; then
+    echo "fail:set-field-yaml-shapes:no-ruby-validator — run inside the builder toolbox (./build.sh --check) where ruby is provisioned"
+    exit 2
+fi
+
 pass=0
 fail=0
 ck() { # ck <description> <expected> <actual>

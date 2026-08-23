@@ -171,6 +171,16 @@ ensure_fresh_plan_binary() {
     fi
     if command -v cargo >/dev/null 2>&1 \
         && cargo build --release -p tillandsias-plan >/dev/null 2>&1; then
+        # A zero-exit build means the release artifact matches the tree by
+        # cargo's own HASH-BASED fingerprints — but a no-op build never
+        # touches the binary, so the mtime vintage test above can still call
+        # it stale when a source file's mtime moved without its bytes (live
+        # case: `git checkout -- Cargo.lock` restoring identical bytes, yoga
+        # 2026-08-23, refused the gate's set-field fixture as
+        # stale-plan-binary). Record cargo's verdict in the mtime domain for
+        # the artifact THIS build governs; a PATH-installed binary the build
+        # does not produce is deliberately not touched.
+        touch "${CARGO_TARGET_DIR:-target}/release/tillandsias-plan" 2>/dev/null || true
         bin="$(resolve_plan_binary)" || return 1
         if ! plan_binary_is_stale "$bin"; then
             printf '%s\n' "$bin"

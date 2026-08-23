@@ -113,6 +113,40 @@ distributed_work:
             and that refusal was correct. If compaction ever regresses to
             round-tripping YAML, restore the refusal; do not accept a lossy fold
             to make the tool run.
+          concurrency_block: >
+            ORDER 627-c9c2. plan/index.yaml is a CONCURRENCY BLOCK: direct
+            in-place updates are forbidden for normal work. Every normal
+            ledger change — filing a packet, appending an event, correcting a
+            field — flows through a NEW plan/index.d/ fragment (via
+            tillandsias-plan set-field, or a fragment file only you could
+            have named), never through an edit to the base. The base admits
+            exactly one writer, compaction, under the guards below. A direct
+            base edit forfeits both properties the design rests on (one
+            writer per file; immutable once written) and, when pushed through
+            the enclave mirror, is additionally refused by the mirror's YAML
+            gate — see mirror_psych_gate.
+          mirror_psych_gate: >
+            ORDER 627-c9c2, learned from a twice-rejected forge push
+            2026-08-09. The enclave git mirror's pre-receive hook
+            (images/git/pre-receive-hook.sh) validates every changed .yaml
+            file — with tillandsias-policy validate-yaml when the image
+            carries it, else ruby -ryaml YAML.load_file, which in Psych 5 is
+            safe_load with an EMPTY permitted_classes list. Psych 5 speaks
+            YAML 1.1, where a BARE ISO timestamp
+            (ts: 2026-...Z, unquoted) builds a Time object — refused as
+            Psych::DisallowedClass. Consequences, in force: (1) fragments
+            QUOTE every timestamp-shaped scalar; the tillandsias-plan writers
+            do this for ts: lines, LWW value: lines (775-b4qz) and
+            compaction's folded output (quote_timestamp_line) — one more
+            reason never to hand-author a fragment. (2) The base
+            plan/index.yaml carries ~110 HISTORICAL bare timestamps that
+            text-level compaction must not rewrite, and the hook validates
+            the whole changed file, not the diff — so ANY commit touching the
+            base fails the mirror wholesale. Compaction therefore runs only
+            on hosts whose push channel reaches upstream directly (gh
+            keyring/token), never from a forge routed through the mirror; a
+            mirror-routed cycle that needs a ledger write reroutes it through
+            a fragment, which is always sufficient for normal work.
         exceptions:
           - "Status fields in YAML index files (plan/index.yaml) ARE
             last-writer-wins; this is the trade-off for queryability.
