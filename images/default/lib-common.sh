@@ -3970,6 +3970,26 @@ inject_startup_context() {
     # So the verdict rests on two things that are true of ANY project:
     #   - did the checkout land on the branch this launch was GATED on, and
     #   - can this base actually build the expert.
+    # Order 835-h2wq: the head being answered FROM, and how far the newest
+    # mirror branch is ahead of it. base_state=ok cannot see this case — a
+    # seed that MATCHES an old branch agrees with itself while the expert
+    # answers from a days-old ledger with confident, well-cited, wrong-for-
+    # today answers. Separately-sourceable lib (the lib-inference-state.sh
+    # precedent), fail-soft: a missing lib degrades to unknown/0, never
+    # breaks a launch.
+    local _base_head="unknown" _ledger_lag_h=0 _ledger_newest="unknown"
+    local _ledger_freshness_lib="${BASH_SOURCE[0]%/*}/lib-ledger-freshness.sh"
+    if [[ -r "$_ledger_freshness_lib" ]]; then
+        # shellcheck source=lib-ledger-freshness.sh
+        source "$_ledger_freshness_lib" || true
+        if declare -F tillandsias_ledger_freshness >/dev/null 2>&1; then
+            tillandsias_ledger_freshness "$project_dir" || true
+            _base_head="$TILLANDSIAS_BASE_HEAD"
+            _ledger_lag_h="$TILLANDSIAS_LEDGER_LAG_H"
+            _ledger_newest="$TILLANDSIAS_LEDGER_NEWEST"
+        fi
+    fi
+
     local _base_state _base_detail _seed
     _seed="${TILLANDSIAS_FORGE_SEED_BRANCH:-}"
     if [[ "$branch" == "unknown" ]]; then
@@ -4010,8 +4030,9 @@ inject_startup_context() {
 **Project**: ${project_name}
 **Startup branch**: ${branch} — \`base_state=${_base_state}\`
 > Note: Branch is a startup snapshot; agents may switch branches during orchestration.
-> Machine-readable (branch on this, do not parse the prose): \`base_state=${_base_state} base_actual=${branch} base_expected=${_seed:-<unset>} expert_sources=${_expert_sources}\`
+> Machine-readable (branch on this, do not parse the prose): \`base_state=${_base_state} base_actual=${branch} base_expected=${_seed:-<unset>} base_head=${_base_head} ledger_lag_h=${_ledger_lag_h} ledger_newest=${_ledger_newest} expert_sources=${_expert_sources}\`
 > \`base_state\` is one of \`ok\` | \`mismatch\` | \`unknown\`. ${_base_detail}.
+> EVERY expert answer reflects THIS checkout at \`${branch}@${_base_head}\` (order 835-h2wq). A nonzero \`ledger_lag_h\` means the mirror carries a branch (\`ledger_newest=${_ledger_newest}\`) whose newest commit is ~${_ledger_lag_h}h ahead of this base — rows filed there are INVISIBLE to the experts here, and a confident answer about "current" blockers, packet counts, or fleet state may be days stale. \`base_state=ok\` does NOT clear this: a seed that matches an old branch agrees with itself. When reporting plan or fleet state, say "as of \`${branch}@${_base_head}\`"; when \`ledger_lag_h\` is large, prefer switching to (or at least reading) \`${_ledger_newest}\` before recommending operator action.
 > \`expert_sources=absent\` means this checkout HAS a \`crates/tillandsias-plan\` but NOT \`src/answer.rs\`, so the expert build produces a PRE-EXPERT binary: \`experts: ready\` is then reported truthfully while every \`plan_answer\` / \`methodology_path\` call returns \`confidence=unsupported\`. That is order 531, and note \`base_state\` can read \`ok\` in this situation — the launch landed exactly where it was gated, on a base that cannot build the expert. Do NOT read \`unsupported\` as "the plan has no answer"; it means the ARTIFACT is wrong. Switch to a branch carrying the expert sources before trusting any expert answer, and report which branch you moved to. (\`n/a\` means this project has no plan-expert crate at all, which is normal off-Tillandsias.)
 **Version**: ${version}
 **Agent**: ${agent_name}

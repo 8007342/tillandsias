@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_immutable (yoga), 2026-08-23T05:44:00Z.
+events:
+  - packet_id: no-durable-scheduler-exists-on-any-host
+    event:
+      type: progress
+      ts: "2026-08-23T05:44:00Z"
+      agent_id: linux-yoga-fable5-20260823T054300Z
+      host: linux_immutable
+      summary: >
+        SCHEDULER HANDOVER, and why the interim operator loop had to die for
+        the fire evidence to exist. Since arming, every timer fire has
+        SKIPPED against a live session's held lock — by design, but the
+        arithmetic makes it permanent, not incidental. The session-scoped
+        operator loop fires 2-hourly at hh11 and the timer re-arms 2h from
+        each skip, landing ~90s later at hh12 — two 2-hour clocks phase-locked
+        one minute apart, so while the session lives the timer NEVER runs a
+        real cycle and the "attach first unattended real-fire evidence"
+        next_action on this row is starved by the very loop that wrote it.
+        The overlap machinery is what proved itself instead, twice live-adjacent
+        (fixture 4/4; the install-time fire skipping against a held lock —
+        and the 06:12:42Z fire due minutes after this event meets the same
+        held lock, its skip record joining the JSONL when it lands) — an overlapping fire is a recorded skip,
+        exit 0, schedule intact. RESOLUTION, this cycle — the interim loop
+        is retired; the durable scheduler this row built now owns the
+        cadence alone. Next real fire ~08:12Z tonight, unattended by
+        construction. WHERE THE EVIDENCE ACCRUES, for whoever attaches it —
+        per-fire rc/duration/skipped rows in
+        ~/.cache/tillandsias/cycle-scheduler.jsonl on yoga (surface via
+        scripts/check-cycle-scheduler.sh, criterion-5 grammar), full-cycle
+        proof in plan/mo-full-attestations.d/yoga.md entries whose cycles no
+        operator prompt launched, service-level trail in journalctl --user
+        -u tillandsias-cycle.service. HONESTY LINE HELD — tonight's fires
+        are scheduler-launched with an operator session merely coexisting;
+        criterion 1's full "no user logged in" demonstration lands at the
+        next natural logout or reboot epoch, which is operator lifecycle,
+        not something a session should force. Criterion 2's live reboot
+        proof rides the same epoch; the structural half (enabled +
+        OnBootSec + Linger=yes) is verified and recorded.
