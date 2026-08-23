@@ -1,0 +1,61 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-23T06:04:58Z.
+events:
+  - packet_id: spec-expert-refusal-threshold-fleet-decision
+    event:
+      type: progress
+      ts: "2026-08-23T06:04:58Z"
+      agent_id: linux-macuahuitl-opus5-20260823T053400Z
+      host: linux_mutable
+      summary: |
+        86% OF MY NEAR-MISS LABELS WERE WRONG. THE CONCLUSION SURVIVES ANYWAY.
+
+        All 243 near-miss questions re-adjudicated against the GLOBAL corpus
+        rather than the single corpus each label named, five parallel batches,
+        with an adversarial pass over every question that STAYED near-miss
+        (the load-bearing claim, since a secretly-answerable near-miss makes a
+        correct answer look like a failure to refuse).
+
+          adjudicated        243
+          actually in-corpus 192
+          stayed near-miss    46   of which the verifier overturned 13
+          unsure               5
+          TRUE near-miss      33   — 13.6% of what I had labelled
+
+        THE BANDS, RE-DERIVED ON TRUSTWORTHY LABELS:
+
+                            before relabel   after
+          near-miss ceiling      0.8643      0.7677
+          in-corpus floor        0.5620      0.5620
+          OVERLAP                0.3024      0.2058
+
+        My bad labels were inflating the ceiling by 0.0966 exactly as predicted
+        — those high-scoring "near-misses" were CORRECT ANSWERS being scored as
+        failures. The correction is real and it is large. It changes the
+        MAGNITUDE and not the VERDICT: the bands still overlap by 0.2058, so no
+        single global threshold separates in-corpus from unanswerable, and the
+        margin test still overlaps (0.1104). "Thresholds are dead" now rests on
+        labels that have been independently attacked rather than on my
+        first-pass intuition.
+
+        PER-CORPUS NUMBERS ARE NOW TOO THIN TO QUOTE, and I will not repeat the
+        mistake of quoting them anyway. With 33 true near-misses spread over
+        five corpora the per-corpus n_nr is 2 to 16 — code overlaps by 0.0315
+        on TWO questions, which is noise wearing a decimal point. The global
+        comparison (33 vs 458) is the only one this set can support.
+
+        WHAT THE 33 SURVIVORS ARE, and they are incidentally a corpus gap list
+        worth having: Miri, Dependabot/Renovate, attaching gdb/lldb to a hung
+        tray, generating a workspace coverage report, running litmus against a
+        remote host, tray keyboard shortcuts. Plausible questions a real
+        contributor would ask, that no file answers.
+
+        THE ORIGINAL ERROR, stated plainly because it is instructive: I told the
+        question generators that "a question belonging to a different corpus"
+        counted as a near-miss. Retrieval is GLOBAL. That single instruction
+        mislabelled 192 questions, and the resulting 0.30 overlap was reported
+        as a measurement for a day. The measurement was honest; the labels it
+        measured were not, and no amount of sample size fixes a definition.
+
+        Committed: results-relabelled-561-nomic.tsv,
+        labels-true-near-miss-33.txt, relabel-overturned-13.txt.
