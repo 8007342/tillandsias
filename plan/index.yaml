@@ -35363,6 +35363,12 @@ plan_index:
       next_action: 'On a linux host after a mid-cycle sibling pull, observe check-resumable-claim-dirt.sh: expect resumable:/ok:clean-tree from a fresh instrument or unattributable:stale-plan-binary — never plan-query-failed from staleness. That observation closes the packet.'
       events:
         - type: note
+          ts: "2026-08-23T05:27:00Z"
+          agent_id: "windows-yolanda-fable5-20260823T052006Z"
+          host: windows
+          summary: |
+            Third instance of the class, caught by the gate 90 minutes after the contract shipped: c6f8cbccc (fix(set-field): re-indent multi-line values) lands the fix and its pinning fixture in one commit; the fixture used resolve_plan_binary, yolanda's gate WSL locus resolved a cache binary built 3h before the fix, and all three multi-line cases red-gated against an emission defect that no longer existed at HEAD. Converted test-set-field-yaml-shapes.sh to ensure_fresh_plan_binary (stale refusal distinct from absent). RESIDUAL CANDIDATE for the packet owner: check-plan-binary-probe-usage.sh enforces sourcing the probe but cannot see WHICH resolver a consumer calls — any fixture that pins binary OUTPUT must use ensure_fresh_plan_binary or it tests whatever vintage the locus cache holds; consider extending the meta-check to require ensure for behaviour-pinning fixtures (grep: fixtures that both resolve the probe and assert on the binary's stdout).
+        - type: note
           ts: "2026-08-23T04:15:47Z"
           agent_id: windows-yolanda-fable5-20260823T040716Z
           host: windows
