@@ -16087,8 +16087,10 @@ mod tests {
             main_window
                 .matches("run_cli_with_vault_credential_cleanup(debug")
                 .count(),
-            4,
-            "both status dispatches plus OpenCode and forge-agent CLI dispatches must clean up"
+            5,
+            "both status dispatches, OpenCode, forge-agent, and provider-login CLI \
+             dispatches must clean up (5 as of the provider-login dispatch; a new \
+             dispatch that wraps itself in the cleanup is compliance, not drift)"
         );
         assert!(
             !main_window
@@ -21802,6 +21804,18 @@ esac
 
         // SAFETY: serialized with all other environment-mutating tests.
         unsafe { std::env::remove_var("HOME") };
+        // Order 815-gdjk moved facade staging to the XDG-first cache_root
+        // resolver, whose temp_dir() fallback survives the HOME removal above
+        // — so this fixture's error-forcing silently stopped forcing (live on
+        // macOS 2026-08-23: the facade built happily under $TMPDIR and the
+        // fail-closed mask never appeared; same on any platform, temp_dir()
+        // needs no HOME). Poison the FIRST link of the chain instead: an
+        // XDG_CACHE_HOME under a regular FILE fails create_dir_all with
+        // ENOTDIR deterministically everywhere.
+        let xdg_prev = std::env::var_os("XDG_CACHE_HOME");
+        let xdg_poison_file = tmp.path().join("xdg-poison-file");
+        std::fs::write(&xdg_poison_file, b"not a directory").expect("write xdg poison file");
+        unsafe { std::env::set_var("XDG_CACHE_HOME", xdg_poison_file.join("sub")) };
         let fail_closed_agent = build_forge_agent_run_args(
             &project_path,
             "alpha",
@@ -21835,6 +21849,10 @@ esac
         }
 
         // SAFETY: serialized with all other environment-mutating tests.
+        match xdg_prev {
+            Some(v) => unsafe { std::env::set_var("XDG_CACHE_HOME", v) },
+            None => unsafe { std::env::remove_var("XDG_CACHE_HOME") },
+        }
         match original_home {
             Some(home) => unsafe { std::env::set_var("HOME", home) },
             None => unsafe { std::env::remove_var("HOME") },
