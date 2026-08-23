@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Portable SHA-256 (851-28b5): coreutils sha256sum on Linux/forge/WSL; stock
+# macOS before 13 ships only `shasum`. Identical "<hex>  <name>" output.
+if command -v sha256sum >/dev/null 2>&1; then
+    PORTABLE_SHA256=(sha256sum)
+else
+    PORTABLE_SHA256=(shasum -a 256)
+fi
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_SH="$ROOT/build.sh"
 EVIDENCE_SCRIPT="$ROOT/scripts/generate-evidence-bundle.sh"
@@ -96,8 +104,8 @@ fixture_dir="$(mktemp -d "${TMPDIR:-/tmp}/tillandsias-dashboard-local.XXXXXX")"
 trap 'rm -rf "$fixture_dir"' EXIT
 tracked_md="$ROOT/docs/convergence/centicolon-dashboard.md"
 tracked_json="$ROOT/docs/convergence/centicolon-dashboard.json"
-tracked_md_before="$(sha256sum "$tracked_md")"
-tracked_json_before="$(sha256sum "$tracked_json")"
+tracked_md_before="$("${PORTABLE_SHA256[@]}" "$tracked_md")"
+tracked_json_before="$("${PORTABLE_SHA256[@]}" "$tracked_json")"
 
 SOURCE=/dev/null \
     MD_OUT="$fixture_dir/centicolon-dashboard.md" \
@@ -108,7 +116,7 @@ SOURCE=/dev/null \
 
 test -s "$fixture_dir/centicolon-dashboard.md"
 jq -e . "$fixture_dir/centicolon-dashboard.json" >/dev/null
-test "$(sha256sum "$tracked_md")" = "$tracked_md_before"
-test "$(sha256sum "$tracked_json")" = "$tracked_json_before"
+test "$("${PORTABLE_SHA256[@]}" "$tracked_md")" = "$tracked_md_before"
+test "$("${PORTABLE_SHA256[@]}" "$tracked_json")" = "$tracked_json_before"
 
 echo "ci-full-install-prep: ok"

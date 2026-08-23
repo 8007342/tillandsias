@@ -64,7 +64,10 @@ PROBE="$(resolve_probe)" || { echo "error: no runnable tillandsias binary (build
 
 # --capabilities prints the one-line envelope, then the pretty JSON document.
 raw="$("$PROBE" --capabilities 2>/dev/null)" || { echo "error: $PROBE --capabilities failed" >&2; exit 1; }
-doc="$(printf '%s\n' "$raw" | sed '1{/^accel_class=/d}')"
+# The `;` before `}` is required by BSD sed (macOS) and harmless on GNU —
+# without it the probe failed on the exact host kind 850-bif2 exists to make
+# visible (851-28b5 defect class, found on the first macOS run).
+doc="$(printf '%s\n' "$raw" | sed '1{/^accel_class=/d;}')"
 printf '%s' "$doc" | jq -e '.schema_version == 2 and (.host.host_id | length > 0)' >/dev/null \
     || { echo "error: probe document is not a valid schema-2 capability document with a host_id" >&2; exit 1; }
 

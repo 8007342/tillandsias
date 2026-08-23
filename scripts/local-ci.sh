@@ -988,7 +988,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # 765-uti9 quick win (audit F4c): --all-targets aligns this lane with
     # build.sh --check's clippy flavor, so the two share fingerprints instead
     # of recompiling — and coverage strictly widens (trunk is already held
-    # clean at --all-targets -D warnings by the pre-push gate). The heavy
+    # clean at --all-targets -D warnings by the local gate). The heavy
     # --all-features flavor below is deliberately untouched.
     if run_rust_on_host cargo clippy --workspace --all-targets -- -D warnings 2>&1 | tee /tmp/clippy-check.log; then
         log_pass "Clippy checks pass (no warnings)"

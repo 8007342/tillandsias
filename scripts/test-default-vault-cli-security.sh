@@ -5,6 +5,14 @@
 
 set -euo pipefail
 
+# Portable SHA-256 (851-28b5): coreutils sha256sum on Linux/forge/WSL; stock
+# macOS before 13 ships only `shasum`. Identical "<hex>  <name>" output.
+if command -v sha256sum >/dev/null 2>&1; then
+    PORTABLE_SHA256=(sha256sum)
+else
+    PORTABLE_SHA256=(shasum -a 256)
+fi
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEFAULT_CLI="$ROOT/images/default/vault-cli.sh"
 GIT_CLI="$ROOT/images/git/vault-cli.sh"
@@ -25,7 +33,7 @@ printf '%s\n' 'fixture-ca' >"$WORK/ca.crt"
 printf '%s\n' 'token-that-must-never-enter-curl-argv' >"$WORK/vault-token"
 EXPECTED_HEADER_SHA="$(
     printf '%s\n' 'X-Vault-Token: token-that-must-never-enter-curl-argv' \
-        | sha256sum \
+        | "${PORTABLE_SHA256[@]}" \
         | awk '{print $1}'
 )"
 export EXPECTED_HEADER_SHA
@@ -85,8 +93,10 @@ else
     [[ "$header_arg" == @* ]] || exit 69
     header_file="${header_arg#@}"
     [[ -r "$header_file" ]] || exit 70
-    [[ "$(stat -c '%a' "$header_file")" == 600 ]] || exit 71
-    header_sha="$(sha256sum "$header_file" | awk '{print $1}')"
+    # BSD/GNU stat and digest dual-branches (851-28b5): the stub is its own
+    # script (quoted heredoc), so it cannot see the parent's dispatch array.
+    [[ "$(stat -c '%a' "$header_file" 2>/dev/null || stat -f '%Lp' "$header_file")" == 600 ]] || exit 71
+    header_sha="$({ command -v sha256sum >/dev/null 2>&1 && sha256sum "$header_file" || shasum -a 256 "$header_file"; } | awk '{print $1}')"
     [[ "$header_sha" == "$EXPECTED_HEADER_SHA" ]] || exit 72
     printf '%s\n' ok >>"$CAPTURE_DIR/header-checks"
 fi

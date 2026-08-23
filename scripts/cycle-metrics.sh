@@ -553,7 +553,7 @@ printf 'flow: cycles=%s avg_completed_per_cycle=%s avg_commits_per_cycle=%s over
 # each line is parsed with `fromjson?` so a malformed row is dropped, never fatal
 # — fail-soft exactly like the flow: block above. The two named averages scope to
 # distinct step namespaces so nested emitters cannot double-count:
-#   build_check_ms_avg — step == "build-check"     (build.sh --check, the pre-push gate)
+#   build_check_ms_avg — step == "build-check"     (build.sh --check, the local gate)
 #   litmus_ms_avg      — step matches ^litmus       (run-litmus-test.sh suite)
 # `slowest` is the single step:ms with the largest duration across ALL records —
 # the one fact to look at first, in the spirit of the verdict line.

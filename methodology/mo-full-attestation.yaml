@@ -7,7 +7,7 @@ mo_full_attestation:
     parses is decorative — the 2026-08-10 breach (651-2x5s) shipped a marker
     whose first eight characters came from `git push` output and whose
     remaining 32 were invented to look like a SHA, and no check ran. A marker
-    recorded durably is evidence automation can consume and the pre-push gate
+    recorded durably is evidence automation can consume and the local gate
     can re-verify.
 
   marker_grammar: "MO-FULL: <DISPOSITION> <LOCAL_SHA> <BRANCH> <REMOTE_SHA>"

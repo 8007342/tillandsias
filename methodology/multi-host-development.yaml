@@ -390,9 +390,19 @@ multi_host_development:
         pre_push_gate_amendment, 2026-07-28): a mid-cycle lane checkpoint
         must not require a trunk merge — durability beats integration
         freshness for work-in-progress refs. The gate's INTENT is preserved
-        at the boundary instead: the lane green-exit procedure
-        (lane-exit.sh, order 502) and ledger checkpoints MUST merge
-        origin/linux-next first when the lane's <base> is not linux-next.
+        at the boundary instead: the lane green-exit procedure and ledger
+        checkpoints MUST merge origin/linux-next first when the lane's
+        <base> is not linux-next. That procedure is NOT YET BUILT — its
+        sole sanctioned command, scripts/lane-exit.sh, is ordered by the
+        order-502 packet forge-lane-branch-seeding-optin, which is pending
+        deliberately behind the authenticated write transport
+        (security-rescope 2026-08-06); until it lands no agent/* or
+        salvage/* refs are seeded, so this exclusion is vacuously
+        satisfied. (Rewritten per philosophy.yaml
+        obsolete_mechanism_live_intent by 851-28b5: the prior text cited
+        lane-exit.sh in the present tense though it exists nowhere in the
+        tree or its history — the intent is live, the mechanism is
+        future.)
       race_exception: >
         If the coordinator is actively merging your already-pushed head (your
         commits are in flight toward linux-next), do NOT race them with a second

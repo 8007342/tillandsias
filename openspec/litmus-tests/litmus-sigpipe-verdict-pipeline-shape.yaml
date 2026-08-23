@@ -41,7 +41,7 @@ critical_path:
     timeout_ms: 60000
     expected_behavior: "ok: one-line-verdict"
 
-  - step: "the enforcer is wired into the pre-push gate"
+  - step: "the enforcer is wired into the local gate"
     command: "grep -q 'check-sigpipe-verdict-pipelines-added.sh' build.sh && echo 'ok: wired'"
     timeout_ms: 3000
     expected_behavior: "ok: wired"

@@ -30,6 +30,14 @@
 
 set -uo pipefail   # NOT -e: the annex must not abort its caller on a substep.
 
+# Portable SHA-256 (851-28b5): coreutils sha256sum on Linux/forge/WSL; stock
+# macOS before 13 ships only `shasum`. Identical "<hex>  <name>" output.
+if command -v sha256sum >/dev/null 2>&1; then
+    PORTABLE_SHA256=(sha256sum)
+else
+    PORTABLE_SHA256=(shasum -a 256)
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
@@ -77,7 +85,7 @@ if [[ ! -s "$PROMPT_FILE" ]]; then
   exit 0
 fi
 
-PROMPT_SHA="$(sha256sum "$PROMPT_FILE" | cut -d' ' -f1)"
+PROMPT_SHA="$("${PORTABLE_SHA256[@]}" "$PROMPT_FILE" | cut -d' ' -f1)"
 
 # --- dedup: already captured this cycle for this prompt? -------------------
 if [[ -f "$MARKER" ]]; then
