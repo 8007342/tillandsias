@@ -18,13 +18,17 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 . "$ROOT/scripts/plan-binary-probe.sh"
-if POLICY="$(resolve_target_binary tillandsias-policy release "$ROOT")"; then
-    :
-else
-    # No prebuilt binary — build one; the litmus precondition names cargo.
+# BUILD IN THE EXECUTING LOCUS FIRST, then resolve — the 851-cduu rule, and
+# this fixture found the cross-locus variant on its first gate run: inside
+# the WSL gate lane, resolve-first found the checkout's Windows .exe (binfmt
+# interop makes `--help` succeed) and handed it a WSL-internal mktemp path
+# the Windows process cannot see — every case answered rc=2. A locus-native
+# build (incremental no-op when warm; honours CARGO_TARGET_DIR) guarantees
+# the probed binary and the fixture's paths live in the same world.
+if command -v cargo >/dev/null 2>&1; then
     cargo build -q --release -p tillandsias-policy || exit 2
-    POLICY="$(resolve_target_binary tillandsias-policy release "$ROOT")" || exit 2
 fi
+POLICY="$(resolve_target_binary tillandsias-policy release "$ROOT")" || exit 2
 
 pass=0; fail=0
 ck() { # ck <description> <expected-substring-or-empty> <haystack> <want-rc> <got-rc>
