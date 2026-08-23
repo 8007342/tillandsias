@@ -423,12 +423,76 @@ jq -c --argjson max "$MAX_CHARS" \
     "$work/chunks.jsonl" > "$work/texts.jsonl" || {
     echo "blocked:spec-index:text-extract-failed"; exit 1; }
 
-mkdir -p "$work/b"
-split -l "$BATCH" -a 5 -d "$work/texts.jsonl" "$work/b/part-" || {
-    echo "blocked:spec-index:split-failed"; exit 1; }
+# ── DELTA RE-EMBED (order 552) ──────────────────────────────────────────────
+#
+# Every rebuild re-embedded every chunk: ~490s for 20,657 chunks at 1.52s per
+# 64-chunk batch, while a one-file edit changes ~0.6% of them. Roughly 325x
+# waste, and `crates/` is a corpus root, so editing the indexer itself forced a
+# full re-embed.
+#
+# THE JOIN IS BY CONTENT HASH, NEVER BY POSITION, and that is the whole safety
+# argument. chunks.jsonl and vectors.jsonl are LINE-ALIGNED, and the existing
+# per-batch arity check exists because "a shifted index answers plausibly and
+# wrongly". A delta that paired reused vectors positionally would reproduce
+# exactly that shift WHILE PASSING that check, because every batch it does
+# embed is the right size. So reuse is keyed on the chunk's own content_hash
+# and a prior generation is only read after its own arity is verified.
+#
+# That still cannot see a source generation that was ALREADY mis-joined before
+# we read it, so the assembled result is additionally spot-checked below by
+# re-embedding a deterministic sample of reused chunks and comparing bytes.
+DELTA="${TILLANDSIAS_SPEC_INDEX_DELTA:-1}"
+: > "$work/reuse.tsv"
+n_reused=0
+if [ "$DELTA" = "1" ]; then
+    for gen in "$INDEX_ROOT"/*/; do
+        [ -d "$gen" ] || continue
+        # ARITY AGAINST THE GENERATION'S OWN CHUNK COUNT, not the current
+        # corpus size. `_entry_complete` compares against $n_chunks because it
+        # validates THIS build's entry; reusing it here rejected every prior
+        # generation the moment the corpus grew by a single chunk, and the
+        # delta silently degraded to a full rebuild while reporting reused=0.
+        # Measured: 99.3% of hashes (19,720 of 19,850) were reusable and none
+        # were reused.
+        _g_c="$(wc -l < "${gen%/}/chunks.jsonl" 2>/dev/null | tr -d '[:space:]')"
+        _g_v="$(wc -l < "${gen%/}/vectors.jsonl" 2>/dev/null | tr -d '[:space:]')"
+        [ -n "$_g_c" ] && [ "$_g_c" = "$_g_v" ] && [ "$_g_c" != "0" ] || continue
+        # Without that equality this paste would mint a hash->vector map that
+        # is wrong from its first line.
+        paste -d '\t' \
+            <(jq -r '.content_hash // empty' "${gen%/}/chunks.jsonl") \
+            "${gen%/}/vectors.jsonl" 2>/dev/null >> "$work/reuse.tsv" || true
+    done
+    # First occurrence wins; identical content hashes carry identical text and
+    # therefore identical vectors under a fixed model.
+    if [ -s "$work/reuse.tsv" ]; then
+        awk -F'\t' '!seen[$1]++ && $1 != "" && $2 != ""' "$work/reuse.tsv" > "$work/reuse-uniq.tsv"
+        mv "$work/reuse-uniq.tsv" "$work/reuse.tsv"
+    fi
+fi
 
-: > "$work/vectors.jsonl"
+# Per-chunk decision, in chunk order: REUSE <vector> or EMBED.
+jq -r '.content_hash // ""' "$work/chunks.jsonl" > "$work/hashes.txt"
+paste -d '\t' "$work/hashes.txt" "$work/texts.jsonl" > "$work/plan.tsv"
+awk -F'\t' -v reuse="$work/reuse.tsv" '
+BEGIN { while ((getline l < reuse) > 0) { i = index(l, "\t"); if (i) v[substr(l,1,i-1)] = substr(l,i+1) } }
+{ if ($1 != "" && ($1 in v)) printf "R\t%s\n", v[$1]; else printf "E\t%s\n", $2 }
+' "$work/plan.tsv" > "$work/decisions.tsv"
+
+awk -F'\t' '$1=="E"{print $2}' "$work/decisions.tsv" > "$work/todo-texts.jsonl"
+n_reused="$(awk -F'\t' '$1=="R"' "$work/decisions.tsv" | wc -l | tr -d '[:space:]')"
+n_todo="$(wc -l < "$work/todo-texts.jsonl" | tr -d '[:space:]')"
+printf 'spec-index:delta reused=%s embed=%s of %s\n' "$n_reused" "$n_todo" "$n_chunks" >&2
+
+mkdir -p "$work/b"
+if [ "$n_todo" -gt 0 ]; then
+    split -l "$BATCH" -a 5 -d "$work/todo-texts.jsonl" "$work/b/part-" || {
+        echo "blocked:spec-index:split-failed"; exit 1; }
+fi
+
+: > "$work/new-vecs.jsonl"
 for part in "$work"/b/part-*; do
+    [ -e "$part" ] || break
     want="$(wc -l < "$part" | tr -d '[:space:]')"
     jq -sc --arg m "$EMBED_MODEL" '{model:$m, input:.}' "$part" > "$work/payload.json" || {
         echo "blocked:spec-index:payload-failed"; exit 1; }
@@ -450,8 +514,60 @@ for part in "$work"/b/part-*; do
         echo "blocked:spec-index:batch-arity-$got-of-$want"
         exit 1
     fi
-    cat "$work/batch-vecs.jsonl" >> "$work/vectors.jsonl"
+    cat "$work/batch-vecs.jsonl" >> "$work/new-vecs.jsonl"
 done
+
+# ── ASSEMBLE IN CHUNK ORDER ─────────────────────────────────────────────────
+# Walk the decisions in order: a REUSE line carries its vector inline (already
+# joined by hash), an EMBED line consumes the next freshly-embedded vector.
+# Consuming in order is safe here because todo-texts.jsonl was produced from
+# the SAME pass in the SAME order.
+awk -F'\t' -v newf="$work/new-vecs.jsonl" '
+$1 == "R" { print $2; next }
+$1 == "E" { if ((getline nv < newf) > 0) print nv; else { print "MISSING" > "/dev/stderr"; bad=1 } }
+END { if (bad) exit 1 }
+' "$work/decisions.tsv" > "$work/vectors.jsonl" || {
+    echo "blocked:spec-index:delta-assembly-underran"; exit 1; }
+
+# EVERY new vector must have been consumed. A leftover means the decision list
+# and the embed list disagreed, which is the shift this design exists to avoid.
+_new_emitted="$(wc -l < "$work/new-vecs.jsonl" | tr -d '[:space:]')"
+_new_wanted="$(awk -F'\t' '$1=="E"' "$work/decisions.tsv" | wc -l | tr -d '[:space:]')"
+if [ "$_new_emitted" != "$_new_wanted" ]; then
+    echo "blocked:spec-index:delta-embedded-$_new_emitted-for-$_new_wanted-misses"
+    exit 1
+fi
+
+# ── PER-CHUNK IDENTITY ASSERTION (order 552, do not remove) ─────────────────
+#
+# The arity checks above cannot see a REUSED vector paired with the wrong
+# chunk: the count is right and the bytes are opaque. So re-embed a
+# deterministic sample of reused chunks and compare the result to what the
+# cache handed us. Deterministic (first N reused) rather than random so a
+# negative control can target a sampled row and the failure is reproducible.
+_sample="${TILLANDSIAS_SPEC_INDEX_VERIFY_SAMPLE:-5}"
+if [ "$n_reused" -gt 0 ] && [ "$_sample" -gt 0 ]; then
+    _checked=0
+    _line=0
+    while IFS= read -r dec && [ "$_checked" -lt "$_sample" ]; do
+        _line=$((_line + 1))
+        case "$dec" in R*) ;; *) continue ;; esac
+        _cached="${dec#R	}"
+        _text="$(sed -n "${_line}p" "$work/texts.jsonl")"
+        _probe="$(jq -nc --arg m "$EMBED_MODEL" --argjson t "$_text" '{model:$m, input:[$t]}')"
+        _got="$(curl -fsS --max-time 120 "$EMBED_EP/embeddings" -H 'Content-Type: application/json' \
+            -d "$_probe" 2>/dev/null | jq -c '.data[0].embedding' 2>/dev/null)"
+        [ -n "$_got" ] && [ "$_got" != null ] || continue   # endpoint hiccup: not a mis-join
+        if [ "$_got" != "$_cached" ]; then
+            echo "blocked:spec-index:delta-identity-mismatch-at-chunk-$_line"
+            echo "  a REUSED vector is not the embedding of the chunk it was paired with;" >&2
+            echo "  the delta cache is mis-joined and this index would answer plausibly and wrongly" >&2
+            exit 1
+        fi
+        _checked=$((_checked + 1))
+    done < "$work/decisions.tsv"
+    printf 'spec-index:delta identity-verified=%s reused samples\n' "$_checked" >&2
+fi
 
 n_vecs="$(wc -l < "$work/vectors.jsonl" | tr -d '[:space:]')"
 if [ "$n_vecs" != "$n_chunks" ]; then
