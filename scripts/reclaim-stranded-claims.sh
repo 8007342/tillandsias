@@ -23,23 +23,21 @@
 # idempotent-merge). Being wrong here costs a duplicated glance. Being wrong
 # about closure costs the work.
 #
-# EVIDENCE REQUIRED. A packet is reclaimed only when ALL hold:
-#   * status is in_progress,
-#   * no progress / completed / blocked event was ever recorded,
-#   * its newest claim event is older than the TTL (default 4h, matching
-#     scripts/claim-ledger-node.sh).
-# A packet with no claim event at all is NOT reclaimed — absent evidence is not
-# evidence of abandonment, and that case wants a human.
+# EVIDENCE REQUIRED (order 662-s9z5: evaluated by `tillandsias-plan
+# expire-claims`, the one owner of claim-age semantics — see the delegation
+# block below). A packet is reclaimed only when its newest recorded activity
+# is older than the TTL (default 24h, the fleet claim TTL). A packet with no
+# parseable activity at all is refused as `unknown-age` — absent evidence is
+# not evidence of abandonment, and that case wants a human. Every candidate
+# NOT reclaimed gets a typed `refused` line; an apply run that reclaims
+# nothing exits non-zero.
 #
-# DRY RUN BY DEFAULT. Prints the fragment it would write. `--apply` writes it.
+# DRY RUN BY DEFAULT. `--apply` writes the reclaim fragment (via the binary).
 #
-# GRAMMAR:
-#   ^reclaim\t<packet_id>\t<claim_ts>\tage=<hours>h$
-#   ^summary: candidates=<n> reclaimed=<n> mode=(dry-run|apply)$
 
 set -uo pipefail
 
-TTL_HOURS=4
+TTL_HOURS=24
 APPLY=0
 NOW_EPOCH=""
 
@@ -61,90 +59,85 @@ command -v jq >/dev/null 2>&1 || { echo "summary: candidates=0 reclaimed=0 mode=
 # took the first candidate with an executable bit, which on a shared
 # Windows/WSL checkout selects the Linux ELF sitting beside the runnable .exe.
 . "$(dirname "${BASH_SOURCE[0]}")/plan-binary-probe.sh"
-# Order 859-b2zc. The host label below is written INTO the ledger — as an
-# event's `host:` field and as the fragment's filename — and it used to come
-# from `hostname -s || echo unknown`. No Fedora image ships a `hostname`
-# binary, so in a forge this script did not fail: it recorded `host: unknown`
-# and wrote `...-reclaim-stranded-host.yaml`, durably, into an append-only
-# fragment nobody can edit afterwards. A wrong value that persists is worse
-# than a refusal.
-# shellcheck source=scripts/agent-identity.sh
-. "$(dirname "${BASH_SOURCE[0]}")/agent-identity.sh"
-RECLAIM_HOST="$(tillandsias_lower "$(tillandsias_agent_workstation)")"
-[ -n "$RECLAIM_HOST" ] || RECLAIM_HOST=unknown
 PLAN="$(resolve_plan_binary || true)"
 [ -n "$PLAN" ] || { echo "summary: candidates=0 reclaimed=0 mode=refused-no-plan-binary"; exit 1; }
 
 [ -n "$NOW_EPOCH" ] || NOW_EPOCH="$(date -u +%s)"
-CUTOFF=$((NOW_EPOCH - TTL_HOURS * 3600))
 
-# Portable ISO8601 -> epoch. GNU date takes -d; BSD date needs -j -f.
-iso_to_epoch() {
-    local iso="$1"
-    date -u -d "$iso" +%s 2>/dev/null \
-        || date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "$iso" +%s 2>/dev/null \
-        || echo ""
-}
+# ── ORDER 662-s9z5: delegate to the binary; refuse in types; never no-op ─────
+#
+# The old body re-derived claim age by grepping the ledger for `type: claim`
+# events — which do not exist: the claim convention writes `type: note` with a
+# "claimed for cycle" summary. Every candidate was silently skipped, and
+# `candidates=7 reclaimed=0 mode=apply` read like a successful run for an
+# entire session. That is the shell-side brittle parsing 456 eliminated,
+# reinvented — so the fix is DELETION, not repair (discard-over-repair):
+# `tillandsias-plan expire-claims` (672-bz7u) already owns claim-age from the
+# folded ledger, writes proper reclaim fragments with attribution events, and
+# fails conservative on unknown age. This wrapper adds what 662-s9z5's exit
+# criteria demand on top: a TYPED verdict for every candidate it will not
+# touch, and a non-zero exit when an apply run reclaims nothing — silence is
+# no longer an available outcome.
+#
+# TTL default is now 24h, matching the fleet claim TTL (672-bz7u, the skill's
+# claim protocol). The old 4h default borrowed claim-ledger-node's NODE lease
+# TTL — the wrong scale for packet claims by a factor of six.
+#
+# GRAMMAR:
+#   ^reclaim\t<order>\t<packet_id>\t<last_activity_ts>$      (reclaimed, or would be)
+#   ^refused\t<order>\t<packet_id>\t(within-ttl|unknown-age)$
+#   ^summary: candidates=<n> reclaimed=<n> refused=<n> mode=(dry-run|apply)$
+# Exit: 0 clean; 1 when mode=apply && candidates>0 && reclaimed==0 (typed
+# refusals above say WHY per candidate), and on infra refusals as before.
 
-stranded="$(./scripts/check-stranded-in-progress.sh 2>/dev/null | awk -F'\t' '$1=="stranded"{print $4}')"
+# Candidate set FIRST — an apply run mutates the ledger, and a snapshot taken
+# after it would count the packets just reclaimed as never-candidates (the
+# fixture's case 1 caught exactly that ordering on this rewrite's first draft).
+stranded="$(./scripts/check-stranded-in-progress.sh 2>/dev/null \
+    | awk -F'\t' '$1=="stranded"{print $2 "\t" $4}')"
+
+expire_args=(expire-claims --ttl-hours "$TTL_HOURS")
+[ -n "$NOW_EPOCH" ] && expire_args+=(--now-epoch "$NOW_EPOCH")
+[ "$APPLY" -eq 1 ] || expire_args+=(--dry-run)
+if ! expire_out="$("$PLAN" "${expire_args[@]}" 2>&1)"; then
+    echo "summary: candidates=0 reclaimed=0 refused=0 mode=refused-expire-claims-failed"
+    printf '%s\n' "$expire_out" | head -3 >&2
+    exit 1
+fi
+
 candidates=0
 reclaimed=0
-entries=""
-
-if [ -n "$stranded" ]; then
-    while IFS= read -r pid; do
-        [ -n "$pid" ] || continue
-        candidates=$((candidates + 1))
-        # Newest claim ts for this packet.
-        #
-        # Scope to the packet BLOCK rather than a fixed -A window: in the base
-        # ledger a packet's events can sit hundreds of lines below its
-        # packet_id, so `grep -A6` silently found nothing and the reclaimer
-        # reported 20 candidates and 0 reclaims — a no-op wearing the costume of
-        # "nothing was eligible". The block ends at the next packet_id at the
-        # same-or-shallower indent.
-        claim_ts="$(awk -v pid="$pid" '
-            $0 ~ ("packet_id: " pid "$") { inpkt = 1; next }
-            inpkt && /packet_id:/        { inpkt = 0 }
-            inpkt && (/type: claim/ || /event: claim/) { want = 1; next }
-            inpkt && want && /ts:/ { v = $2; gsub(/[",]/, "", v); print v; want = 0 }
-        ' plan/index.yaml plan/index.d/*.yaml 2>/dev/null | sort | tail -1)"
-        [ -n "$claim_ts" ] || continue          # no claim recorded -> not evidence of abandonment
-        ce="$(iso_to_epoch "$claim_ts")"
-        [ -n "$ce" ] || continue
-        [ "$ce" -lt "$CUTOFF" ] || continue
-        age=$(( (NOW_EPOCH - ce) / 3600 ))
-        printf 'reclaim\t%s\t%s\tage=%sh\n' "$pid" "$claim_ts" "$age"
-        entries="${entries}  - packet_id: ${pid}
-    field: status
-    value: ready
-    ts: \"$(date -u -d "@${NOW_EPOCH}" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "${NOW_EPOCH}" +%Y-%m-%dT%H:%M:%SZ)\"
-    host: ${RECLAIM_HOST}
-"
+refused=0
+while IFS=$'\t' read -r order pid; do
+    [ -n "$pid" ] || continue
+    candidates=$((candidates + 1))
+    line="$(printf '%s\n' "$expire_out" \
+        | awk -F'\t' -v p="$pid" '($1=="expired-claim" || $1=="expire-candidate") && $3==p {print; exit}')"
+    if [ -n "$line" ]; then
+        printf 'reclaim\t%s\t%s\t%s\n' "$order" "$pid" "$(printf '%s' "$line" | cut -f4)"
         reclaimed=$((reclaimed + 1))
-    done <<< "$stranded"
-fi
-
-if [ "$reclaimed" -gt 0 ]; then
-    ts_file="$(date -u -d "@${NOW_EPOCH}" +%Y%m%dt%H%M%Sz 2>/dev/null || date -u -r "${NOW_EPOCH}" +%Y%m%dt%H%M%Sz)"
-    frag="plan/index.d/${ts_file}-reclaim-stranded-${RECLAIM_HOST}.yaml"
-    body="# Ledger fragment — append-only, IMMUTABLE once written.
-# Generated by scripts/reclaim-stranded-claims.sh (order 641-e2qa).
-#
-# Each packet below was in_progress with NO progress/completed/blocked event
-# ever recorded and a claim older than ${TTL_HOURS}h. Returning it to \`ready\`
-# destroys nothing — code, commits and events are untouched — it only makes the
-# packet visible to claimants again.
-status:
-${entries}"
-    if [ "$APPLY" -eq 1 ]; then
-        printf '%s' "$body" > "$frag"
-        echo "wrote: $frag"
+    elif printf '%s\n' "$expire_out" | awk -F'\t' -v p="$pid" '$1=="unknown-age" && $3==p {found=1} END{exit !found}'; then
+        printf 'refused\t%s\t%s\tunknown-age\n' "$order" "$pid"
+        refused=$((refused + 1))
     else
-        echo "--- would write (dry run; pass --apply) ---"
-        printf '%s' "$body"
+        # The reaper kept it: newest recorded activity is inside the TTL. A
+        # fresh or legitimately long-running claim is DECLINED, loudly — the
+        # negative control 662-s9z5 demands.
+        printf 'refused\t%s\t%s\twithin-ttl\n' "$order" "$pid"
+        refused=$((refused + 1))
     fi
-fi
+done <<< "$stranded"
 
-printf 'summary: candidates=%s reclaimed=%s mode=%s\n' \
-    "$candidates" "$reclaimed" "$([ "$APPLY" -eq 1 ] && echo apply || echo dry-run)"
+# Surface the fragment the binary wrote (apply) so the caller commits it.
+printf '%s\n' "$expire_out" | grep '^fragment: ' || true
+
+printf 'summary: candidates=%s reclaimed=%s refused=%s mode=%s\n' \
+    "$candidates" "$reclaimed" "$refused" "$([ "$APPLY" -eq 1 ] && echo apply || echo dry-run)"
+
+if [ "$APPLY" -eq 1 ] && [ "$candidates" -gt 0 ] && [ "$reclaimed" -eq 0 ]; then
+    # Every candidate has a typed refusal above; the non-zero exit is what
+    # stops a no-op sweep from reading as success in a cycle log (662-s9z5
+    # exit criterion 2).
+    exit 1
+fi
+exit 0

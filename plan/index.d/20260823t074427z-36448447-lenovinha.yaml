@@ -5,17 +5,17 @@
 # corrects ANY field (642-fedr). Re-declaring the packet under
 # `packets:` would be a G-Set no-op and would silently do nothing.
 status:
-  - packet_id: forge-experts-answer-from-main-not-the-branch-the-work-is-on
+  - packet_id: reclaim-stranded-claims-finds-candidates-and-reclaims-none
     field: status
     value: in_progress
-    ts: "2026-08-23T05:43:10Z"
+    ts: "2026-08-23T07:44:27Z"
     host: lenovinha
 
 events:
-  - packet_id: forge-experts-answer-from-main-not-the-branch-the-work-is-on
+  - packet_id: reclaim-stranded-claims-finds-candidates-and-reclaims-none
     event:
       type: note
-      ts: "2026-08-23T05:43:10Z"
+      ts: "2026-08-23T07:44:27Z"
       host: lenovinha
       summary: >
-        claimed for cycle 2026-08-23T05:43Z (loop-2, routed epic forge-local-experts)
+        claimed for cycle 2026-08-23T07:44Z (loop-3, routed epic convergence-velocity)

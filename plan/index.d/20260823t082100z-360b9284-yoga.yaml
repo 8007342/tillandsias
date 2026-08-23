@@ -5,17 +5,17 @@
 # corrects ANY field (642-fedr). Re-declaring the packet under
 # `packets:` would be a G-Set no-op and would silently do nothing.
 status:
-  - packet_id: archival-sweep-broke-four-groundtruth-citation-pins
+  - packet_id: harness-affinity-worker-selection
     field: status
     value: in_progress
-    ts: "2026-08-23T05:43:09Z"
-    host: lenovinha
+    ts: "2026-08-23T08:21:00Z"
+    host: yoga
 
 events:
-  - packet_id: archival-sweep-broke-four-groundtruth-citation-pins
+  - packet_id: harness-affinity-worker-selection
     event:
       type: note
-      ts: "2026-08-23T05:43:09Z"
-      host: lenovinha
+      ts: "2026-08-23T08:21:00Z"
+      host: yoga
       summary: >
-        claimed for cycle 2026-08-23T05:43Z (loop-2, routed epic forge-local-experts)
+        claimed for cycle 2026-08-23T08:13:15Z

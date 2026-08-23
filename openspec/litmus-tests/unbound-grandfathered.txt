@@ -1,0 +1,26 @@
+# Historical unbound litmus files (order 660-ryhn) — the RATCHET LIST.
+#
+# Every name here is an executable assertion that exists on disk and has NEVER
+# been run by any suite. They predate the creation-time gate
+# (scripts/check-litmus-bindings.sh) and are grandfathered so that turning the
+# gate on did not flip 11 undiagnosed tests red at once — the packet's own
+# triage calls blind binding the wrong move.
+#
+# THE ONLY LEGITIMATE EDIT TO THIS FILE IS A DELETION (or marking the file
+# itself `phase: retired` and deleting the line). Bind these in small batches,
+# run each, and record failures as findings. Adding a NEW name here defeats
+# the gate and the fixture's negative control exists to catch exactly that
+# review smell. Sibling routing note from the packet: the two tray-menu
+# renders tests belong to the macos/windows lanes.
+litmus:ca-ephemeral
+litmus:control-dispatch-shape
+litmus:drain-vs-self-heal
+litmus:cross-platform-terminal-attach
+litmus:macos-tray-menu-renders
+litmus:mount-cleanup
+litmus:pty-open-argv-allowlisted
+litmus:publish-local-e2e
+litmus:tray-host-control-socket-unix-shape
+litmus:vm-provisioning-idempotent
+litmus:vm-shutdown-drains-forges
+litmus:windows-tray-menu-renders

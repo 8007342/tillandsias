@@ -5,17 +5,17 @@
 # corrects ANY field (642-fedr). Re-declaring the packet under
 # `packets:` would be a G-Set no-op and would silently do nothing.
 status:
-  - packet_id: brew-aarch64-harness-strategy
+  - packet_id: an-unregistered-litmus-file-never-runs-and-nothing-says-so
     field: status
-    value: ready
-    ts: "2026-08-23T05:56:25Z"
-    host: tlatoanis-macbook-air
+    value: in_progress
+    ts: "2026-08-23T07:44:27Z"
+    host: lenovinha
 
 events:
-  - packet_id: brew-aarch64-harness-strategy
+  - packet_id: an-unregistered-litmus-file-never-runs-and-nothing-says-so
     event:
       type: note
-      ts: "2026-08-23T05:56:25Z"
-      host: tlatoanis-macbook-air
+      ts: "2026-08-23T07:44:27Z"
+      host: lenovinha
       summary: >
-        cycle-scoped claim released; criteria 1+3 done, criterion 2 remains
+        claimed for cycle 2026-08-23T07:44Z (loop-3, routed epic convergence-velocity)
