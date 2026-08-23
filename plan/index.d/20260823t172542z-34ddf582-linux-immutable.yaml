@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-local-gate-is-slower-than-the-fleets-push-interval-and-misreports-stale-instruments
+    field: status
+    value: implemented
+    ts: "2026-08-23T17:25:42Z"
+    host: linux_immutable
+
+events:
+  - packet_id: the-local-gate-is-slower-than-the-fleets-push-interval-and-misreports-stale-instruments
+    event:
+      type: note
+      ts: "2026-08-23T17:25:42Z"
+      host: linux_immutable
+      summary: >
+        implemented and verified on pirria this cycle; see the event fragment for evidence and for the criteria deliberately left open

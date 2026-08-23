@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: low-end-tier-cannot-validate-the-expert-layers-commodity-hardware-claim
+    field: status
+    value: ready
+    ts: "2026-08-23T17:23:05Z"
+    host: linux_immutable
+
+events:
+  - packet_id: low-end-tier-cannot-validate-the-expert-layers-commodity-hardware-claim
+    event:
+      type: note
+      ts: "2026-08-23T17:23:05Z"
+      host: linux_immutable
+      summary: >
+        fleet convention: a packet with an unmet depends_on stays ready and lets the EDGE express the blockage (precedent: spec-cheatsheet-contradiction-audit, event-push-architecture). blocking-counts counts only READY dependents, so status:blocked hid the very affordance this packet exists to create

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: spec-expert-refusal-threshold-fleet-decision
+    field: depends_on
+    value: ''
+    ts: "2026-08-23T17:21:25Z"
+    host: linux_immutable
+
+events:
+  - packet_id: spec-expert-refusal-threshold-fleet-decision
+    event:
+      type: note
+      ts: "2026-08-23T17:21:25Z"
+      host: linux_immutable
+      summary: >
+        reverting my own bad write: set-field renders every value as a YAML SCALAR (lww_value_lines -> serde_yaml::to_string(&str)), so a list-valued reference field becomes the prose string '[...]' and forms no edge — it only adds to the organic reference debt this ledger already warns about. The blockage is instead recorded as packets that declare depends_on at FILING time, which is the mechanism that works.
