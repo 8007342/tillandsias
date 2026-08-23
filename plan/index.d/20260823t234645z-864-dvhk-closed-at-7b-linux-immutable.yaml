@@ -1,0 +1,91 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_immutable (pirria), 2026-08-23T23:46:45Z.
+events:
+  - packet_id: low-end-tier-cannot-validate-the-expert-layers-commodity-hardware-claim
+    event:
+      type: implemented
+      ts: "2026-08-23T23:46:45Z"
+      agent_id: linux-pirria-opus5-20260823T210000Z
+      host: linux_immutable
+      evidence_refs:
+        - "qwen2.5:7b loaded and served on a 4-core/16GB host: size 5.06GB, size_vram=0 via /api/ps"
+        - "decode 4.58/4.53/4.58 tok/s; k=1 judge call 42.8/36.7/43.4 s"
+        - "same two-framing probe at 0.5B, 3.8B and 7B — degenerate at all three"
+      summary: >
+        CLOSED WITH A DEPLOYMENT ANSWER, AND A CORRECTION TO MY OWN PRIOR
+        CONCLUSION. Last cycle I filed that 3.8B was WORSE than 0.5B on
+        853-6gz3's complement self-check and inferred a capability CLIFF
+        somewhere above 3.8B. I pulled qwen2.5:7b — the exact judge macuahuitl's
+        positive Tier B used — and ran the identical probe. There is no cliff.
+
+          qwen2.5:0.5b  in-corpus YES/NO  coherent      | out NO/NO contradiction | k=1  4.3 s
+          phi3.5:3.8b   in-corpus YES/YES contradiction | out NO/NO contradiction | k=1 26.5 s
+          qwen2.5:7b    in-corpus YES/YES contradiction | out NO/NO contradiction | k=1 41.0 s
+
+        THE PROBE DOES NOT DISCRIMINATE ACROSS 14x OF MODEL SIZE, and that is
+        the finding about the instrument. Only the SMALLEST model is coherent on
+        one case, which is the shape of luck rather than capability. Verified it
+        is not a parsing artefact: raw output from 7B is literally [YES] with
+        eval_count=2 to BOTH "does the passage answer X" and "is the passage
+        MISSING the answer to X". So my last-cycle inference — bigger judge,
+        worse coherence — was OVER-READ from an instrument that cannot support
+        it. Retracted.
+
+        WHAT IT DOES ESTABLISH, and it is the thing 853-6gz3 needs. The bare
+        two-framing complement is DEGENERATE AT EVERY SIZE THIS TIER CAN RUN.
+        853-6gz3's own context recorded exactly this for qwen2.5:0.5b; it now
+        reproduces at 3.8B and 7B. So judge SIZE is not the lever on this
+        probe — the prompt/protocol is. macuahuitl's Tier B caught 17
+        self-contradictions in 73 with the SAME model, so whatever its harness
+        does differently is the thing that matters, not the parameter count.
+        Anyone tempted to fix complement degeneracy by scaling the judge should
+        read this first.
+
+        THE DEPLOYMENT ANSWER, which is what the packet asked for and does not
+        depend on the probe at all:
+
+          judge      k=1 call   complement pair   n=3 fan-out
+          0.5B          4.3 s          8.6 s          25.8 s
+          3.8B         26.5 s         53.0 s         159.0 s
+          7B           41.0 s         82.0 s         246.0 s
+
+        A 7B judge RUNS on this tier — it loaded, served, and decoded at
+        4.56 tok/s with 5.06 GB resident on a 16 GB host. It is not affordable:
+        one complement pair costs ~82 s, and 853-6gz3's design wants several
+        sub-questions. So the expert layer's "runs locally on commodity
+        hardware" claim holds for the MACHINE and fails for the LATENCY, at any
+        judge size large enough to be worth trusting.
+
+        A SECOND-HOST CONFIRMATION OF 849-tz8g's RESCOPING, obtained for free:
+        qwen2.5:7b loaded and served cleanly here with nothing else resident.
+        That packet's next_action says isolated loads pass and the aborts are a
+        concurrent-residency scheduling defect — measured on macuahuitl. It now
+        holds on a second host, on very different hardware.
+
+  - packet_id: expert-validation-layer-returns-verified-not-merely-verifiable
+    event:
+      type: note
+      ts: "2026-08-23T23:46:45Z"
+      agent_id: linux-pirria-opus5-20260823T210000Z
+      host: linux_immutable
+      summary: >
+        THE COMPLEMENT DEGENERACY IS NOT A SMALL-MODEL PROBLEM. This packet's
+        context records that qwen2.5:0.5b answered YES to both "does the passage
+        answer the question?" and "is the passage MISSING the answer?" — the
+        observation that motivates the complement pair as a self-check. Measured
+        on pirria today with the identical bare framing at three sizes:
+
+          0.5B  YES/NO on the answering passage, NO/NO on the CSS one
+          3.8B  YES/YES and NO/NO
+          7B    YES/YES and NO/NO  (raw [YES] to both, eval_count=2)
+
+        A 14x increase in judge size does not restore complement coherence on
+        this framing. Since this packet's own Tier B result caught 17
+        contradictions in 73 questions using qwen2.5:7b, the difference is the
+        HARNESS, not the model — its prompting, its evidence selection, or its
+        scoring. Worth pinning explicitly in the design, because "use a bigger
+        judge" is the obvious remediation and it is measurably not the one.
+
+        Offered as evidence, not a claim about the layer: one prompt pair, one
+        framing, temperature 0, num_predict 6. It says the bare framing is
+        degenerate; it does not say the layer is.

@@ -159,19 +159,29 @@ change in the DESIGN, not corrected as an error. Re-costed at k=1 here:
 So a complement pair is ~8.6 s and **30 s buys ~3 sub-queries, 60 s ~7**. The
 fan-out this tier can afford is modest but real.
 
-**A BIGGER JUDGE IS NOT THE FIX — measured at 3.8B, 2026-08-23.** The obvious
-move is a larger judge. It costs 6.2x and is strictly worse:
+**A BIGGER JUDGE IS NOT THE FIX — measured at 0.5B, 3.8B and 7B, 2026-08-23.**
 
-| judge | in-corpus | out-of-corpus | k=1 call |
-|---|---|---|---|
-| qwen2.5:0.5b | YES/NO coherent | NO/NO contradiction | ~4.3 s |
-| phi3.5:3.8b | **YES/YES contradiction** | NO/NO contradiction | **~26.5 s** |
+| judge | in-corpus | out-of-corpus | k=1 call | complement pair |
+|---|---|---|---|---|
+| qwen2.5:0.5b | YES/NO coherent | NO/NO contradiction | ~4.3 s | 8.6 s |
+| phi3.5:3.8b | YES/YES contradiction | NO/NO contradiction | ~26.5 s | 53 s |
+| qwen2.5:7b | YES/YES contradiction | NO/NO contradiction | **~41 s** | **82 s** |
 
-There is a capability CLIFF, not a gradient, and 3.8B is on the wrong side of it.
-macuahuitl's positive Tier B used qwen2.5:7b — different family, 2x larger again.
-Extrapolating the 0.5B→3.8B slope puts a 7B k=1 call near 50 s here, so a
-complement pair is ~100 s. (One prompt pair, one family — suggestive of a cliff,
-not proof of where it sits.)
+**Two separate results, and do not confuse them.**
+
+*On capability*: the bare two-framing complement is DEGENERATE AT EVERY SIZE —
+7B answers a literal `YES` (eval_count=2) to both "does this answer X" and "is
+this MISSING the answer to X". A 14x size increase changes nothing, so a probe on
+which 0.5B and 7B score alike is measuring the PROMPT, not the model. An earlier
+version of this sheet inferred a capability "cliff" above 3.8B from the 0.5B/3.8B
+pair; 7B refutes it and that claim is withdrawn. Since 853-6gz3's own Tier B
+caught 17 contradictions in 73 questions using this same qwen2.5:7b, the lever is
+the harness, not the parameter count.
+
+*On cost*: this is solid and independent of the probe. A 7B judge RUNS here —
+5.06 GB resident on 16 GB, 4.56 tok/s decode, `size_vram=0` — but one complement
+pair costs ~82 s. **The commodity-hardware claim holds for the machine and fails
+for the latency**, at any judge size worth trusting.
 
 **LATENCY IS NOT WHAT BLOCKS THE LAYER HERE.** Running 853-6gz3's own complement
 self-check against the only judge this tier can run (`qwen2.5:0.5b`, the image
