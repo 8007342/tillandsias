@@ -29047,6 +29047,12 @@ plan_index:
         today and tens of GB once 408's GPU tier pulls larger models. The fix
         must adopt an existing cache rather than silently starting a new one.
       events:
+        - type: completed
+          ts: "2026-08-23T13:50:38Z"
+          agent_id: "linux-lenovinha-claude-20260823t135038z"
+          host: lenovinha
+          summary: |
+            FIXED at aa5892c86, with the packet's own ten-minute experiment run FIRST and the split confirmed REAL: XDG_CACHE_HOME set, the accel probe wrote capabilities.json under HOME/.cache while shell consumers resolved under the XDG root. tillandsias_core::cache_root is the one resolution (XDG -> HOME/.cache incl. the USERPROFILE Windows spelling -> temp; pure half cache_root_from unit-tested, incl. empty-XDG-treated-as-unset). All six deviating sites routed: model cache (build_inference_run_args), forge_gitconfig_dir, write_forge_gitconfig, write_forge_repo_gitdir, image_builder packages cache, capabilities_cache_path (its TILLANDSIAS_CACHE_DIR override preserved). THE MIGRATION per the deliverable: adopt_legacy_cache moves a lone pre-XDG model dir (rename), KEEPS USING the legacy path on rename failure rather than silently re-downloading, and on both-exist prefers XDG loudly without ever deleting — three unit tests pin move/idempotence/never-delete. Verified live both directions post-fix: XDG honored; unset-XDG hosts byte-identical. Note for the fleet: on a host that sets XDG_CACHE_HOME the capabilities/gitconfig/packages caches MOVE (all regenerate cheaply); only the model cache carries the adoption logic, as the deliverable scoped.
         - type: note
           ts: "2026-08-18T03:55:00Z"
           agent_id: linux-macuahuitl-opus5-20260818T033600Z
