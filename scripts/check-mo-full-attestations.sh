@@ -323,13 +323,57 @@ if [ "$violations" -gt 0 ]; then
     echo "violation:mo-full-attestations:$violations"
     exit 1
 fi
+
+# A HOST WITH NO FILE IS INVISIBLE TO A GATE THAT ENUMERATES FILES.
+#
+# The loop above walks "$ledger_dir"/*.md, so it validates the hosts that HAVE
+# a ledger and says nothing about the ones that should. Measured 2026-08-23:
+# this gate reported `ok: 7 files ... verified` while pirria — a host that had
+# been working, pushing and closing packets for over a day — had never written
+# an attestation at all. A block on pirria would have been undetectable,
+# because the only signal a coordinator has for a dead host is a stale
+# attestation, and pirria had none to go stale.
+#
+# The capability matrix is a real roster: a host publishes a row in its first
+# cycle (850-bif2), so "has a capability row but no attestation" is a
+# well-defined and cheap question.
+#
+# REPORTED, NOT REFUSED, and the asymmetry is deliberate. Refusing THIS host's
+# push because a DIFFERENT host has not attested punishes the wrong machine for
+# something it cannot fix. A host that joined minutes ago and has not finished
+# its first cycle is also legitimately absent. So the silence is named on the
+# verdict line where a coordinator reads it every cycle, and blocks nobody.
+# RESOLVE, do not ENSURE. This runs inside the pre-push hook, where
+# ensure_fresh_plan_binary would kick off a cargo build mid-push — expensive on
+# a slow host and re-entrant on a fast one. And a hardcoded target/ path is
+# refused outright by the plan-binary-probe gate (721-nyev), which caught this
+# exact shortcut here. If no binary resolves, the roster check degrades to
+# silence: it is an observability nicety, and the grammar and reachability
+# checks above are this gate's actual job.
+_silent=""
+# shellcheck source=scripts/plan-binary-probe.sh
+. "$ROOT/scripts/plan-binary-probe.sh" 2>/dev/null || true
+_roster_bin=""
+if command -v resolve_plan_binary >/dev/null 2>&1; then
+    _roster_bin="$(resolve_plan_binary 2>/dev/null || true)"
+fi
+if [ -n "$_roster_bin" ] && _roster="$("$_roster_bin" capability-matrix --hosts 2>/dev/null)"; then
+    while IFS=$'\t' read -r _h _rest; do
+        [ -n "$_h" ] || continue
+        [ -f "$ledger_dir/$_h.md" ] || _silent="${_silent:+$_silent,}$_h"
+    done <<EOF
+$_roster
+EOF
+fi
+_silent_note=""
+[ -n "$_silent" ] && _silent_note=" — NEVER ATTESTED: $_silent (in the capability roster, no ledger file)"
 if [ "$files" -eq 0 ]; then
     echo "ok:mo-full-attestations:no-ledger-dir 0 markers verified"
     exit 0
 fi
 if [ -z "$own_file" ]; then
-    echo "ok:mo-full-attestations:$files files $markers markers grammar-verified (no own-host file '$host.md' — reachability owned by the recording host)"
+    echo "ok:mo-full-attestations:$files files $markers markers grammar-verified (no own-host file '$host.md' — reachability owned by the recording host)$_silent_note"
     exit 0
 fi
-echo "ok:mo-full-attestations:$files files $markers markers verified ($host.md reachability-checked)"
+echo "ok:mo-full-attestations:$files files $markers markers verified ($host.md reachability-checked)$_silent_note"
 exit 0
