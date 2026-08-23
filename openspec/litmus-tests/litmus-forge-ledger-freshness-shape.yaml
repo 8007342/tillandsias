@@ -1,0 +1,75 @@
+# @trace spec:default-image
+#
+# Pins the ledger-freshness surface of the forge startup context (order
+# 835-h2wq). A forge seeded from an old branch builds a WORKING expert over an
+# old ledger; its answers are confident, well-cited, and wrong-for-today —
+# measured live when an agent recommended re-seeding a healthy Vault token
+# from a two-day-old ledger. base_state cannot see this case: a seed that
+# MATCHES an old branch agrees with itself. The startup context therefore
+# states the head being answered from (base_head) and how far the newest
+# mirror branch is ahead of it (ledger_lag_h / ledger_newest), computed by a
+# separately-sourceable lib so this fixture exercises the REAL function
+# against a seeded repo rather than grep-pinning a heredoc.
+name: litmus:forge-ledger-freshness-shape
+spec: default-image
+phase: pre-build
+description: >
+  Pin images/default/lib-ledger-freshness.sh: a checkout seeded at a
+  known-stale commit reports that head and the hours the newest origin branch
+  is ahead (functional, seeded repo with pinned committer dates); a current
+  checkout reports lag 0; a non-repo degrades to unknown/0 without failing;
+  and inject_startup_context sources the lib fail-soft and emits
+  base_head/ledger_lag_h/ledger_newest in the machine-readable line.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains images/default/lib-ledger-freshness.sh and images/default/lib-common.sh
+  - git is available in PATH
+
+critical_path:
+  - step: "FUNCTIONAL: a checkout seeded at a known-stale commit names that head and the ~10h lag to the newest origin branch"
+    command: "root=$(pwd); t=$(mktemp -d); trap 'rm -rf \"$t\"' EXIT; git init -q -b work \"$t/up\"; git -C \"$t/up\" config user.email f@f; git -C \"$t/up\" config user.name f; GIT_AUTHOR_DATE='@1787400000 +0000' GIT_COMMITTER_DATE='@1787400000 +0000' git -C \"$t/up\" commit -q --allow-empty -m old; old=$(git -C \"$t/up\" rev-parse --short HEAD); git -C \"$t/up\" branch -q newer; git -C \"$t/up\" switch -q newer; GIT_AUTHOR_DATE='@1787436000 +0000' GIT_COMMITTER_DATE='@1787436000 +0000' git -C \"$t/up\" commit -q --allow-empty -m new; git -C \"$t/up\" switch -q work; git clone -q -b work \"$t/up\" \"$t/clone\"; . \"$root/images/default/lib-ledger-freshness.sh\"; tillandsias_ledger_freshness \"$t/clone\"; [ \"$TILLANDSIAS_BASE_HEAD\" = \"$old\" ] && [ \"$TILLANDSIAS_LEDGER_LAG_H\" = 10 ] && [ \"$TILLANDSIAS_LEDGER_NEWEST\" = newer ] && echo 'ok: stale head named with lag' || { echo \"FAIL: head=$TILLANDSIAS_BASE_HEAD lag=$TILLANDSIAS_LEDGER_LAG_H newest=$TILLANDSIAS_LEDGER_NEWEST want head=$old lag=10 newest=newer\"; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: stale head named with lag"
+
+  - step: "FUNCTIONAL: a checkout ON the newest branch reports lag 0"
+    command: "root=$(pwd); t=$(mktemp -d); trap 'rm -rf \"$t\"' EXIT; git init -q -b work \"$t/up\"; git -C \"$t/up\" config user.email f@f; git -C \"$t/up\" config user.name f; GIT_AUTHOR_DATE='@1787400000 +0000' GIT_COMMITTER_DATE='@1787400000 +0000' git -C \"$t/up\" commit -q --allow-empty -m only; git clone -q \"$t/up\" \"$t/clone\"; . \"$root/images/default/lib-ledger-freshness.sh\"; tillandsias_ledger_freshness \"$t/clone\"; [ \"$TILLANDSIAS_LEDGER_LAG_H\" = 0 ] && [ \"$TILLANDSIAS_LEDGER_NEWEST\" = work ] && echo 'ok: current checkout lags zero' || { echo \"FAIL: lag=$TILLANDSIAS_LEDGER_LAG_H newest=$TILLANDSIAS_LEDGER_NEWEST\"; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: current checkout lags zero"
+
+  - step: "NEGATIVE CONTROL: a non-repo directory degrades to unknown/0 and still returns 0"
+    command: "t=$(mktemp -d); trap 'rm -rf \"$t\"' EXIT; . images/default/lib-ledger-freshness.sh; tillandsias_ledger_freshness \"$t\" || { echo 'FAIL: returned nonzero'; exit 1; }; [ \"$TILLANDSIAS_BASE_HEAD\" = unknown ] && [ \"$TILLANDSIAS_LEDGER_LAG_H\" = 0 ] && [ \"$TILLANDSIAS_LEDGER_NEWEST\" = unknown ] && echo 'ok: non-repo degrades honestly' || { echo \"FAIL: head=$TILLANDSIAS_BASE_HEAD lag=$TILLANDSIAS_LEDGER_LAG_H newest=$TILLANDSIAS_LEDGER_NEWEST\"; exit 1; }"
+    timeout_ms: 10000
+    expected_behavior: "ok: non-repo degrades honestly"
+
+  - step: "the startup-context generator sources the lib FAIL-SOFT and emits the fields"
+    command: "grep -q 'lib-ledger-freshness.sh' images/default/lib-common.sh && grep -q 'base_head=\\${_base_head}' images/default/lib-common.sh && grep -q 'ledger_lag_h=\\${_ledger_lag_h}' images/default/lib-common.sh && grep -q 'ledger_newest=\\${_ledger_newest}' images/default/lib-common.sh && grep -B2 'source \"\\$_ledger_freshness_lib\"' images/default/lib-common.sh | grep -q '\\-r ' && echo 'ok: generator wires the lib fail-soft'"
+    timeout_ms: 3000
+    expected_behavior: "ok: generator wires the lib fail-soft"
+
+  - step: "the agent-facing prose says staleness is not cleared by base_state=ok"
+    command: "grep -q 'base_state=ok\\\\` does NOT clear this' images/default/lib-common.sh && echo 'ok: prose warns past base_state'"
+    timeout_ms: 3000
+    expected_behavior: "ok: prose warns past base_state"
+
+observability:
+  traces:
+    - "@trace spec:default-image"
+  expected_log: "forge ledger freshness pinned (stale head named, lag measured, fail-soft wiring)"
+  log_fields:
+    spec: "default-image"
+    test: "forge-ledger-freshness-shape"
+    artifact: "images/default/lib-ledger-freshness.sh + images/default/lib-common.sh"
+
+rollback:
+  on_failure: >
+    The ledger-freshness surface drifted. Restore
+    images/default/lib-ledger-freshness.sh (tillandsias_ledger_freshness
+    setting TILLANDSIAS_BASE_HEAD / TILLANDSIAS_LEDGER_LAG_H /
+    TILLANDSIAS_LEDGER_NEWEST from the checkout HEAD and the newest
+    refs/remotes/origin committer-date, fail-soft, no branch judged by name)
+    and inject_startup_context's fail-soft sourcing plus the
+    base_head/ledger_lag_h/ledger_newest fields and the base_state=ok caveat
+    in the machine-readable block.
+  command: "bash -c '. images/default/lib-ledger-freshness.sh; tillandsias_ledger_freshness .; echo head=$TILLANDSIAS_BASE_HEAD lag=$TILLANDSIAS_LEDGER_LAG_H newest=$TILLANDSIAS_LEDGER_NEWEST'"
