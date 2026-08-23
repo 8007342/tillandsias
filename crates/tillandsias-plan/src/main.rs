@@ -3518,6 +3518,28 @@ fn main() {
                 // condition — one word for one thing across the CLI.
                 emit(&format!("malformed: {}", bad.display()));
             }
+
+            // ORDER 866-pvsx. A fragment ENTRY the fold cannot use is a
+            // different loss from a fragment FILE it cannot parse, and until
+            // now only the second one was reported here. The first was detected
+            // — `fragment_coverage_gaps` has caught this shape all along — but
+            // only inside `compact`, where the verdict is used to refuse
+            // DELETING the fragment. That protects the bytes and tells the
+            // author nothing, and it only happens when the fragment count makes
+            // compaction eligible. A dropped entry in a small overlay is
+            // therefore reported to nobody, indefinitely.
+            //
+            // Reported, never refused, for exactly the 699-dycj reason spelled
+            // out below for `malformed:`: `build.sh` runs this on every host, so
+            // a refusal would turn one host's typo into every other host's red
+            // build on a file they did not write. `--strict-fragments` arms the
+            // refusal for callers that cannot tolerate a partial write.
+            let dropped = tillandsias_plan::fragments::overlay_coverage_gaps(&index);
+            for (path, gaps) in &dropped {
+                for gap in gaps {
+                    emit(&format!("dropped-entry: {}: {gap}", path.display()));
+                }
+            }
             if !report.violations.is_empty() && !skipped.is_empty() {
                 // WHY THIS CAVEAT IS NOT DECORATION: a `depends_on` whose
                 // target is DEFINED in the unreadable fragment reports here as
@@ -3536,7 +3558,15 @@ fn main() {
                 }
                 std::process::exit(1);
             }
-            if skipped.is_empty() {
+            // ORDER 866-pvsx. An unusable ENTRY makes the corpus partial for
+            // the same reason an unreadable FILE does — filed work is absent
+            // from every answer derived from this ledger — so it lands the
+            // verdict in the same place. The two causes stay named separately:
+            // one is repaired by fixing a parse error, the other by rewriting an
+            // entry the fold cannot use, and a reader who confuses them repairs
+            // the wrong thing.
+            let dropped_entries: usize = dropped.iter().map(|(_, g)| g.len()).sum();
+            if skipped.is_empty() && dropped_entries == 0 {
                 // `emit`, not `println!`: this line is routinely piped
                 // (litmus:parked-blocks-visibility-shape does `check | grep -q`),
                 // and `println!` PANICS with exit 101 when the reader closes
@@ -3554,21 +3584,26 @@ fn main() {
                 // was never read is the precise lie this order was filed
                 // against — the checks that follow the colon are all true, and
                 // they were run over less than the plan.
+                let cause = match (skipped.len(), dropped_entries) {
+                    (0, d) => format!(
+                        "{d} fragment entr{} the fold could not use",
+                        if d == 1 { "y" } else { "ies" }
+                    ),
+                    (s, 0) => format!("{s} fragment(s) could not be read"),
+                    (s, d) => format!(
+                        "{s} fragment(s) could not be read and {d} entr{} the fold could not use",
+                        if d == 1 { "y" } else { "ies" }
+                    ),
+                };
                 emit(&format!(
-                    "incomplete: {} packets from a PARTIAL corpus — {} fragment(s) could not be \
-                     read; ids unique and live references sound across what WAS read \
-                     ({} parked-block edge{})",
+                    "incomplete: {} packets from a PARTIAL corpus — {cause}; ids unique and live \
+                     references sound across what WAS read ({} parked-block edge{})",
                     ledger.packets.len(),
-                    skipped.len(),
                     parked.len(),
                     if parked.len() == 1 { "" } else { "s" }
                 ));
                 if strict_fragments {
-                    eprintln!(
-                        "refusing (--strict-fragments): the fold skipped {} unreadable \
-                         fragment(s); this ledger is incomplete",
-                        skipped.len()
-                    );
+                    eprintln!("refusing (--strict-fragments): {cause}; this ledger is incomplete");
                     // DISTINCT EXIT CODE, so a caller can tell "incomplete
                     // corpus" from "unsound ledger" WITHOUT parsing prose. The
                     // pre-push plan-only lane used to grep this binary's stderr

@@ -814,9 +814,47 @@ fn fragment_coverage_gaps(result: &Value, frag: &Fragment) -> Vec<String> {
             // `continue`s past it in silence. Order 801-kqme lost three whole
             // follow-up packets exactly this way.
             let Some(event) = entry.get("event") else {
-                gaps.push(format!(
-                    "an `events:` entry for `{pid}` with no `event:` block — a packet DEFINITION under the wrong key (812-d45t); the fold skips it"
-                ));
+                // TWO DIFFERENT MISTAKES REACH THIS LINE and they are repaired
+                // differently, so they are named differently (866-pvsx). A
+                // DEFINITION here is a packet written under the wrong key: move
+                // it to `packets:`. Anything else is a directive the fold has no
+                // handler for — usually a hand-written guess at a key the
+                // set-field subcommand would have emitted correctly — and the
+                // repair is to rewrite the entry, not relocate it.
+                //
+                // Reporting both as 812-d45t was itself misleading: it sent me
+                // looking for a lost packet definition when what I had written
+                // was a bogus `set_field:` key.
+                let definition_fields: Vec<&str> = ["order", "title", "kind", "deliverable"]
+                    .into_iter()
+                    .filter(|k| entry.get(*k).is_some())
+                    .collect();
+                if definition_fields.is_empty() {
+                    let mut unknown: Vec<String> = entry
+                        .as_mapping()
+                        .map(|m| {
+                            m.keys()
+                                .filter_map(Value::as_str)
+                                .filter(|k| *k != "packet_id")
+                                .map(str::to_string)
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    unknown.sort_unstable();
+                    let named = if unknown.is_empty() {
+                        "no payload key at all".to_string()
+                    } else {
+                        format!("unrecognized key(s) {}", unknown.join(", "))
+                    };
+                    gaps.push(format!(
+                        "an `events:` entry for `{pid}` with no `event:` block and {named} — the fold has no handler for it and skips it in silence, so this write did NOT land (866-pvsx); use the `set-field` subcommand rather than hand-writing the entry"
+                    ));
+                } else {
+                    gaps.push(format!(
+                        "an `events:` entry for `{pid}` with no `event:` block but definition field(s) {} — a packet DEFINITION under the wrong key (812-d45t); move it under `packets:`",
+                        definition_fields.join(", ")
+                    ));
+                }
                 continue;
             };
             if !events.contains(&event_identity(pid, event)) {
@@ -902,6 +940,60 @@ fn fragment_coverage_gaps(result: &Value, frag: &Fragment) -> Vec<String> {
     }
 
     gaps
+}
+
+/// ORDER 866-pvsx. The same coverage question [`compact`] asks, asked at READ
+/// time instead of at garbage-collection time, for every fragment currently in
+/// the overlay.
+///
+/// WHY THIS EXISTS WHEN `fragment_coverage_gaps` ALREADY DID. The detection was
+/// never the missing piece — I filed 866-pvsx believing the fold had no idea
+/// these entries existed, and that was wrong. `fragment_coverage_gaps` catches
+/// this shape precisely. What it does with the answer is refuse to DELETE the
+/// fragment, which protects the bytes on disk and tells the author nothing. It
+/// only runs when a compaction runs, and compaction runs when the fragment
+/// COUNT makes it eligible — so a dropped entry stays unreported for as long as
+/// the overlay stays small, which is indefinitely.
+///
+/// MEASURED, by making the mistake (lenovinha, 2026-08-23). I hand-wrote a
+/// `set_field:` key into an events entry to release a claim. The fold does not
+/// know that key, so it skipped the entry; `yq` parsed the file, the
+/// closure-evidence and misplaced-definition passes were both silent — the
+/// latter correctly, since it requires definition fields and mine carried none
+/// — and `check` reported `ok: 550 packets, ids unique, live references
+/// sound`. The packet count even ROSE, because the `packets:` half of the same
+/// fragment folded perfectly. Every signal available to me said the write had
+/// landed. The claim was still open, and I found that only because I happened
+/// to re-list live claims afterwards.
+///
+/// The consequence is not cosmetic: fragments are immutable and five hosts
+/// write them concurrently, so nothing will ever re-apply the dropped
+/// directive. A host that believes it released a claim and did not strands that
+/// packet from both `ready` queries and burndown until the 24h reaper runs —
+/// 641-e2qa, reached by an honest typo rather than by an abandoned cycle.
+///
+/// Returns one entry per fragment that has gaps, in load order, so a caller can
+/// name the file AND the specific entry. Empty for a clean overlay, so the
+/// common case costs a caller nothing.
+/// A base that does not parse yields NO gaps rather than a panic: `check` has
+/// its own, louder answer for that, and this pass must never be the thing that
+/// makes an unreadable ledger fail differently.
+pub fn overlay_coverage_gaps(index: &Path) -> Vec<(PathBuf, Vec<String>)> {
+    let Ok(raw) = std::fs::read_to_string(index) else {
+        return Vec::new();
+    };
+    let Ok(base) = serde_yaml::from_str::<Value>(&raw) else {
+        return Vec::new();
+    };
+    let fragments = load_all(index);
+    let merged = fold(&base, &fragments);
+    fragments
+        .iter()
+        .filter_map(|f| {
+            let gaps = fragment_coverage_gaps(&merged, f);
+            (!gaps.is_empty()).then(|| (f.path.clone(), gaps))
+        })
+        .collect()
 }
 
 /// Fold every fragment into the base and report what was consumed.
@@ -4025,4 +4117,118 @@ fn quote_datelike_scalar(line: &str) -> String {
         return line.to_string();
     }
     format!("{key}\"{value}\"")
+}
+
+/// ORDER 866-pvsx. The read-time coverage report: an entry the fold cannot use
+/// must be NAMED, and the two ways an `events:` entry goes unusable must be
+/// told apart, because they are repaired differently.
+#[cfg(test)]
+mod overlay_coverage_gap_tests {
+    use super::*;
+
+    const BASE: &str = "\
+plan_index:
+  version: v1
+  steps:
+    - packet_id: an-existing-packet
+      order: 001-aaaa
+      status: ready
+      title: a packet that already exists in the base
+";
+
+    fn scratch(tag: &str, fragment: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("tilland-ocg-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(d.join("plan/index.d")).expect("mkdir");
+        std::fs::write(d.join("plan/index.yaml"), BASE).expect("write base");
+        std::fs::write(d.join("plan/index.d/20260823t200000z-t.yaml"), fragment)
+            .expect("write frag");
+        d
+    }
+
+    fn gaps_for(tag: &str, fragment: &str) -> Vec<String> {
+        let d = scratch(tag, fragment);
+        overlay_coverage_gaps(&d.join("plan/index.yaml"))
+            .into_iter()
+            .flat_map(|(_, g)| g)
+            .collect()
+    }
+
+    /// THE DEFECT THAT MOTIVATED THE ORDER, reproduced exactly: a hand-written
+    /// directive key the fold has no handler for. Before this pass, every gate
+    /// reported success and the write did not land.
+    #[test]
+    fn unrecognized_directive_key_is_named_with_the_key() {
+        let gaps = gaps_for(
+            "unknown-key",
+            "events:\n  - packet_id: an-existing-packet\n    set_field:\n      status: ready\n",
+        );
+        assert_eq!(gaps.len(), 1, "expected exactly one gap, got {gaps:?}");
+        assert!(
+            gaps[0].contains("set_field"),
+            "must name the offending key: {gaps:?}"
+        );
+        assert!(
+            gaps[0].contains("866-pvsx"),
+            "must cite its own order: {gaps:?}"
+        );
+        assert!(
+            !gaps[0].contains("812-d45t"),
+            "must NOT be reported as a misplaced definition — that sends the reader \
+             looking for a lost packet: {gaps:?}"
+        );
+    }
+
+    /// The sibling shape keeps its own, different diagnosis: this one really is
+    /// a packet definition under the wrong key and the repair is to relocate it.
+    #[test]
+    fn misplaced_definition_keeps_the_812_diagnosis() {
+        let gaps = gaps_for(
+            "misplaced-def",
+            "events:\n  - packet_id: a-brand-new-packet\n    order: 002-bbbb\n    title: t\n    kind: bug\n",
+        );
+        assert_eq!(gaps.len(), 1, "expected exactly one gap, got {gaps:?}");
+        assert!(gaps[0].contains("812-d45t"), "{gaps:?}");
+        assert!(
+            gaps[0].contains("packets:"),
+            "must say where to move it: {gaps:?}"
+        );
+        assert!(!gaps[0].contains("866-pvsx"), "{gaps:?}");
+    }
+
+    /// An entry with a packet_id and nothing else is still a dropped write, and
+    /// must not fall through the key-naming branch into an empty list.
+    #[test]
+    fn entry_with_no_payload_at_all_is_still_reported() {
+        let gaps = gaps_for("bare", "events:\n  - packet_id: an-existing-packet\n");
+        assert_eq!(gaps.len(), 1, "{gaps:?}");
+        assert!(gaps[0].contains("no payload key at all"), "{gaps:?}");
+    }
+
+    /// THE NEGATIVE CONTROL. A well-formed event reports nothing — without this
+    /// the pass could be firing on everything and the tests above would still
+    /// pass, which is the failure mode a guard this noisy would be switched off
+    /// for within a day.
+    #[test]
+    fn a_well_formed_event_reports_nothing() {
+        let gaps = gaps_for(
+            "clean",
+            "events:\n  - packet_id: an-existing-packet\n    event:\n      type: progress\n      \
+             ts: \"2026-08-23T20:00:00Z\"\n      agent_id: t\n      host: linux\n      summary: s\n",
+        );
+        assert!(
+            gaps.is_empty(),
+            "clean overlay must be silent, got {gaps:?}"
+        );
+    }
+
+    /// An unreadable base yields no gaps rather than a panic — `check` has its
+    /// own louder answer for that, and this pass must never change how an
+    /// unreadable ledger fails.
+    #[test]
+    fn unparseable_base_yields_no_gaps_instead_of_panicking() {
+        let d = scratch("badbase", "events:\n  - packet_id: an-existing-packet\n");
+        std::fs::write(d.join("plan/index.yaml"), "\tnot: [valid\n").expect("write bad base");
+        assert!(overlay_coverage_gaps(&d.join("plan/index.yaml")).is_empty());
+    }
 }
