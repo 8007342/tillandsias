@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: amd-rocm-gpu-passthrough-research
+    field: next_action
+    value: 'LIKELY ANSWERABLE FROM EVIDENCE THAT ALREADY EXISTS. yoga (Silverblue Ryzen5, AMD) reports derived_tier gpu-rocm with `schedulable: gpu/container/ollama` in the live capability matrix — an AMD GPU serving ollama INSIDE a container, which is the passthrough this research packet was filed to investigate. Before designing anything, extract from yoga how that lane came to work: CDI spec, or a /dev/kfd + /dev/dri device+group passthrough, and which of the two the row reflects. Contrast with lenovinha, whose AMD Cezanne is `rocm-runtime-missing` on the same OS family — two AMD Silverblue hosts, one working lane and one not, is a controlled pair for exactly this question. Feeds the operator release gate on 549.'
+    ts: "2026-08-23T16:08:26Z"
+    host: linux_mutable
+
+events:
+  - packet_id: amd-rocm-gpu-passthrough-research
+    event:
+      type: note
+      ts: "2026-08-23T16:08:26Z"
+      host: linux_mutable
+      summary: >
+        yoga's working ROCm container lane is evidence for this research row

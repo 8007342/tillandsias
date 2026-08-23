@@ -1,0 +1,68 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-23T16:08:58Z.
+events:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    event:
+      type: progress
+      ts: "2026-08-23T16:08:58Z"
+      agent_id: linux-macuahuitl-opus5-20260823T153400Z
+      host: linux_mutable
+      summary: |
+        RELEASE READINESS, MEASURED — and BigPickle is not wasting cycles, it
+        is not being invoked at all.
+
+        THE FORGE E2E HAS NOT RUN SINCE 2026-08-19, and the reason is
+        structural rather than a failure. `_run_litmus_phase post-build e2e`
+        and `runtime e2e` both sit inside `if [[ "$FLAG_CI_FULL" == true ]]`
+        (build.sh:1288-1303). Every host's routine cycle runs `./build.sh
+        --check`, which never reaches them. The forge HAS attested twice —
+        2026-08-18 on linux-next and 2026-08-19 on windows-next — so the lane
+        works; nothing has called it since. Zero of the 70 recorded
+        loop_status entries mention ci-full.
+
+        The operator's worry inverts: no cycles are being burned on a forge
+        that never reports. The forge simply stops existing between --ci-full
+        runs, and there have been none in four days.
+
+        E2E EVIDENCE FOR THE THREE PLATFORMS EXISTS AND IS SIX DAYS STALE. The
+        newest is plan/issues/smoke-e2e-findings-v0.4.260817.1-2026-08-17.md,
+        with windows and yoga variants dated 2026-08-16, all against
+        v0.4.260817.1. main is 716 commits behind linux-next. A release runs
+        --ci-full as its gate (merge-to-main-and-release step 3), so cutting
+        one is also what brings the e2e lane and the forge back.
+
+        THE OPERATOR'S STABLE-RELEASE GATE, and one half of it is blocked by
+        something we already measured. The condition is the local expert system
+        running on an accelerator on BOTH Windows/Silverblue twins.
+
+          yoga (Silverblue Ryzen5, AMD)   derived_tier gpu-rocm,
+                                          schedulable: gpu/container/ollama
+          yolanda (Win11 Ryzen7, AMD)     schedulable: none at BOTH loci —
+                                          npu wsl2-npu-not-exposed,
+                                          gpu wsl2-no-dri-render-node
+
+        yoga is the ONLY host in the fleet with a GPU container lane, and it is
+        AMD ROCm. yolanda has no usable accelerator lane at all, and 854-8p9d
+        already established that this is VENDOR-UNIVERSAL: the WSL2 guest PCI
+        bus carries only Microsoft paravirtual functions, no DRM driver binds
+        for any vendor, and there is no PCI passthrough. No amount of work on
+        our side puts an accelerator under an expert inside WSL2. The choices
+        are a native-Windows-host expert outside WSL2, waiting on Microsoft, or
+        gating stable on the Linux twin alone — an operator decision.
+
+        AND A CORRECTION TO A PREMISE I WAS ASKED ABOUT. The dual-GPU host is
+        NOT passing CUDA or Vulkan through to podman. lenovinha reports
+        derived_tier cpu with `schedulable: cpu/container/ollama`, and its
+        RTX 3070 as `present-unscheduled ... usable; no engine covers lanes
+        [host-native]` — usable, no container lane. macuahuitl claims
+        derived_tier gpu-cuda while reporting `schedulable: none`, on a row
+        whose ts predates the engine-lane work; that row is stale and this host
+        owes a re-probe. Exactly one GPU container lane exists fleet-wide.
+
+        ROUTED RATHER THAN RE-FILED: the release gate maps onto v0.5 rows that
+        already exist. 549 fat-spec-expert-gpu-slot (capability-gated GPU
+        embed+synthesis, Vulkan pinned) carries the gate and the WSL2 blocker;
+        410 amd-rocm-gpu-passthrough-research is likely answerable from yoga's
+        working lane, with lenovinha's rocm-runtime-missing Cezanne as a
+        controlled contrast — two AMD Silverblue hosts, one lane that works and
+        one that does not.
