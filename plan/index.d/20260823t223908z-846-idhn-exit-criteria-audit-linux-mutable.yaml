@@ -1,0 +1,104 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-23T22:39:08Z.
+packets:
+  - order: 864-v8kr
+    packet_id: fold-capabilities-needs-its-base-injected-by-every-caller-separately
+    desired_release: v0.5
+    title: "the base is spliced in as a synthetic fragment at two call sites, so a third caller silently sees an empty matrix"
+    status: ready
+    kind: defect
+    pickup_role: any
+    priority: p2
+    capability_tags: [plan, crdt, ledger, capabilities]
+    deliverable: crates/tillandsias-plan/src/fragments.rs
+    depends_on: []
+    estimated_hours: 2
+    discovered_by: "auditing 846-idhn's exit criteria rather than trusting its implemented status"
+    context: >
+      `fold_capabilities(fragments: &[Fragment])` takes ONLY fragments. It never
+      reads plan/index.yaml. The base rows reach it because each caller builds a
+      synthetic Fragment named "0000-base" from the base document and prepends
+      it:
+
+        crates/tillandsias-plan/src/main.rs:2922    (capability-matrix)
+        crates/tillandsias-plan/src/fragments.rs:1272
+
+      Both production callers do it, so the behaviour is correct today and
+      `capability-matrix` reports all 7 hosts. But the base-reading is
+      DUPLICATED CALLER-SIDE rather than being a property of the fold, and the
+      duplication is invisible from the function's signature: nothing about
+      `fold_capabilities(&frags)` suggests the caller owes it a synthetic
+      fragment first.
+
+      846-idhn's exit criterion 2 states the requirement exactly — "fold_capabilities
+      reads the base as well as the fragments, so a folded row is
+      indistinguishable from a fragment row to EVERY CALLER". Two callers
+      satisfying it by convention is not every caller satisfying it by
+      construction. A third one gets an empty-looking matrix and no error, which
+      is the failure mode this whole channel already had once when compaction
+      consumed its fragments (843-624y, yolanda's two rows).
+
+      THE FIX IS SMALL AND SHOULD NOT BE DEFERRED FOR ITS SIZE: give
+      fold_capabilities the index path (or a base Value) so the splice happens
+      once, inside, and delete both caller-side copies. The signature then
+      states the contract instead of relying on the reader knowing it.
+    exit_criteria: >
+      (1) The base splice happens inside the fold, and neither call site builds
+      a "0000-base" Fragment.
+      (2) A test calls the fold WITHOUT any caller-side preparation and still
+      sees base rows — the property that distinguishes construction from
+      convention.
+      (3) capability-matrix reports the same 7 hosts before and after.
+
+events:
+  - packet_id: fold-capabilities-needs-its-base-injected-by-every-caller-separately
+    event:
+      type: filed
+      ts: "2026-08-23T22:39:08Z"
+      agent_id: linux-macuahuitl-opus5-20260823T223400Z
+      host: linux_mutable
+      summary: >
+        Found while auditing 846-idhn rather than while anything failed. Both
+        production callers currently do the right thing; the packet is to make
+        that structural instead of remembered.
+
+  - packet_id: capabilities-channel-has-no-base-representation
+    event:
+      type: progress
+      ts: "2026-08-23T22:39:08Z"
+      agent_id: linux-macuahuitl-opus5-20260823T223400Z
+      host: linux_mutable
+      summary: >
+        EXIT-CRITERIA AUDIT, because `implemented` is a claim and this packet's
+        criteria are unusually specific. Two of four are met; it is NOT closable
+        and I am not closing it.
+
+        EC1 — a capabilities fragment is CONSUMED rather than refused, and the
+        matrix is unchanged afterwards: MET in the sense that compaction no
+        longer refuses (`compact --dry-run` reports 24 fragments, 0 refused) and
+        `capability-matrix` reports 7 hosts against 9 base rows. Caveat recorded
+        honestly: the overlay holds no capabilities-carrying fragment right now,
+        so "0 refused" is not a positive observation of the capabilities path
+        specifically — it is the absence of a refusal with nothing to refuse.
+
+        EC2 — fold_capabilities reads the base so a folded row is
+        indistinguishable to EVERY caller: MET BEHAVIOURALLY, NOT STRUCTURALLY.
+        The function reads only fragments; both production callers splice the
+        base in as a synthetic "0000-base" Fragment. Filed as 864-v8kr.
+
+        EC3 — a generic round-trip assertion covering EVERY known top-level key,
+        "so the NEXT channel added cannot repeat this": NOT MET. There is no
+        such test. The round-trip tests in fragments.rs
+        (set_field_body_round_trips_*) cover set-field value escaping, not
+        channel survival across fold -> compact -> fold. The four channels the
+        folder knows are packets, events, status and capabilities; nothing
+        asserts the set is closed or that each survives.
+
+        EC4 — negative control, remove the capabilities writer and the
+        assertion goes red naming that channel: NOT MET, and cannot be until
+        EC3 exists.
+
+        EC3 IS THE VALUABLE HALF AND IT IS THE MISSING HALF. EC1 and EC2 fix
+        this channel; EC3 is the one that generalises, and it is precisely the
+        criterion that would have caught 864-p2rk's cousin earlier today — a
+        key that fails to cover an input to the operation it keys.
