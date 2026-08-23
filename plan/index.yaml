@@ -13181,6 +13181,12 @@ plan_index:
         Found while adding litmus:podman-egress-control-shape for 653-zzkb. That test is now bound and passing (4/4 for spec proxy-container), so this packet is about the general gap, not that specific test.
         Second-order note worth keeping: the new test's OWN first assertion was wrong — it used `${http_proxy:-unset}` to check neutralization, and `:-` treats an empty value as unset, so it reported a correctly-neutralized variable as a failure. Use `${x+declared}` to test declaredness. The bug was in the ruler again, and this time the ruler caught itself only because it had finally been wired up to run.
       events:
+        - type: completed
+          ts: "2026-08-23T07:55:19Z"
+          agent_id: "linux-lenovinha-claude-20260823t075519z"
+          host: lenovinha
+          summary: |
+            EXIT CRITERIA 2+3 CLOSED at 5f29965ce (criterion 1's reconciliation was answered 2026-08-10 and re-measured today: 378 files, 361 bound, 6 retired, 12 grandfathered). check-litmus-bindings.sh is the creation-time gate the windows host's event asked for: a NEW unbound litmus file refuses BY NAME in ./build.sh --check (wired beside the pin-claims gate), phase:retired is the sanctioned unbound state, and the 12 historical strays live in unbound-grandfathered.txt — a deletions-only ratchet, because the packet's own triage calls blind-binding the wrong move. Dangling bindings refuse in the other direction, and the 13-day-dangling litmus:recipe-release-tag-symmetric registration is removed. NEGATIVE CONTROL (criterion 3) is fixture case 3 — a well-formed unbound file makes the check fail naming it, the exact state the packet was filed from; fixture 5/5, litmus:litmus-bindings-reconciliation-shape registered and green. The gate's FIRST LIVE RUN found an 18th stray (litmus:drain-vs-self-heal) that every prior hand count had missed — grandfathered with the rest. Residual for sibling lanes, unchanged from the 2026-08-10 events: the two tray-menu-renders strays belong to macos/windows; bind-in-small-batches guidance stands, ratchet list is the worklist.
         - ts: "2026-08-10T11:35:00Z"
           event: filed
           summary: |
@@ -13360,6 +13366,12 @@ plan_index:
       notes: |
         Related to 641-e2qa (stranded packets invisible both ways), which Windows has been draining by hand. This is the automated path that should have made that unnecessary. Worth pairing them when either is picked up.
       events:
+        - type: completed
+          ts: "2026-08-23T07:55:19Z"
+          agent_id: "linux-lenovinha-claude-20260823t075519z"
+          host: lenovinha
+          summary: |
+            FIXED at 5f29965ce, root cause named: the reclaimer grepped for 'type: claim' events, which have never existed — the claim convention writes type:note with a claimed-for-cycle summary — so claim_ts was always empty and every candidate silently skipped; candidates=7 reclaimed=0 mode=apply printed as a success line for a session. Discard-over-repair: the age logic is DELETED, not repaired — the body delegates to tillandsias-plan expire-claims (672-bz7u, the one owner of claim-age from the folded ledger, proper attribution fragments, unknown-age fail-conservative), and adds the typed layer the exit criteria demand: refused\t<order>\t<pid>\t(within-ttl|unknown-age) for every candidate not touched (criterion 1's OR), exit 1 when apply reclaims nothing (criterion 2 — silence is no longer an available outcome), and the fresh-claim decline (criterion 3) demonstrated BOTH hermetically (fixture case 2) and LIVE: this cycle's own two fresh claims plus macuahuitl's 831-ezea all refused within-ttl by name with apply rc=1. TTL default 4h->24h (the old value borrowed claim-ledger-node's NODE lease TTL, wrong scale by six). Fixture 3/3 through the real binary incl. a 48h-stale claim genuinely reclaimed and the packet back to ready; the fixture's case 1 caught the rewrite's own ordering bug (candidates snapshot must precede the mutating apply).
         - ts: "2026-08-10T14:15:00Z"
           event: filed
           summary: |
