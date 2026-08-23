@@ -170,6 +170,7 @@ specs:
   - litmus:sigpipe-verdict-pipeline-shape
   - litmus:gate-stamp-portable-digest
   - litmus:macos-portability-residuals
+  - litmus:sidecar-arch-derivation
   coverage_ratio: 75
   last_verified: '2026-08-17'
 - spec_id: codex-tray-launcher
