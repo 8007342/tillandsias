@@ -1934,6 +1934,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # never been written. Both empty shapes fail here — a name no test declares,
     # and a test no spec binds (execution is binding-driven, so an unbound test
     # runs in no suite and is as inert as a missing one).
+    # Order 660-ryhn. The mirror image of 721-77yu: a litmus FILE nothing
+    # binds never executes in any suite, and the suite prints PASS while the
+    # author's assertions have run zero times. 26 files were in that state
+    # when measured, security-critical ones among them. Creation-time gate:
+    # retired files are exempt, historical strays are grandfathered (ratchet
+    # list — deletions only), NEW unbound files refuse here.
+    _step "Checking every litmus file is bound, retired, or grandfathered (660-ryhn)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-bindings.sh" 2>&1; then
+        _error "a litmus file exists that no suite will ever run, or a binding names no file (660-ryhn) — see the verdict line above"
+        exit 1
+    fi
+    _info "Litmus bindings reconciliation passed"
+
     _step "Checking litmus pin claims resolve and execute (721-77yu)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-pin-claims.sh" 2>&1; then
         _error "a script claims a litmus pin that cannot execute (721-77yu) — see the verdict line above"
