@@ -30379,6 +30379,12 @@ plan_index:
         5 confirmed. Headlines recorded in the cycle's loop-status entry.
 
       events:
+        - type: progress
+          ts: "2026-08-23T09:48:15Z"
+          agent_id: "linux-lenovinha-claude-20260823t094815z"
+          host: lenovinha
+          summary: |
+            CRITERION 1 LANDED at 66ecab52f (cycle-scoped claim, returning to ready per long_running_packets). scripts/check-dead-env-branches.sh with --self-test, verdict grammar as specified, exit 1 on findings. Three classification decisions the next slice should inherit rather than re-derive: (1) TUNABLES ARE NOT DEAD — a ${VAR:-nonempty} read runs the same code either way, so only bare/empty-default/${VAR:+} and rust env reads are gating shapes; 50 undocumented tunables are excluded and counted. (2) plan/ does NOT count as documentation — the ledger describing a var (this packet describes TILLANDSIAS_STATUS_CHECK) is a record about it, not a seam declaration; counting it would let every filed finding immunize its own subject. The detector also excludes its OWN comments from the doc pass for the same reason. (3) rustfmt splits set_var/.env from their string argument — a one-line-forward join pass; without it TILLANDSIAS_PODMAN_STORAGE_CONF false-positived. LIVE RESULT: total=346 unassigned=126 dead=13, both packet anchors verified (STATUS_CHECK reported, STATUS_CHECK_BIN spared). The 13 are the sweep's worklist — deliberately NOT wired into ./build.sh --check while the backlog is nonzero (the 660-ryhn blind-binding lesson). REMAINING CRITERIA: 2 (superseded_by schema + retraction batch — the schema half turns check red fleet-wide if the single existing use is not re-verified first, plan/index.yaml order 466), 4+ (sweep protocol with kill rule / net-negative diff / filing cap / refutation band; criterion 3's check-deslop-due.sh already exists at HEAD).
         - type: note
           ts: "2026-08-19T02:15:00Z"
           agent_id: linux-macuahuitl-opus5-20260819T021500Z
