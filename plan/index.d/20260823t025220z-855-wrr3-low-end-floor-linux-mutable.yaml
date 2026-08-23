@@ -1,0 +1,111 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-23T02:52:20Z.
+packets:
+  - order: 855-wrr3
+    packet_id: establish-the-low-end-cpu-only-inference-floor
+    desired_release: v0.6
+    title: "measure what the fleet's weakest host can actually serve, so the expert layer has a floor instead of an assumption"
+    status: ready
+    kind: research
+    pickup_role: linux
+    priority: p2
+    capability_tags: [fleet, capabilities, inference, cpu, low-end, experts]
+    deliverable: cheatsheets/runtime/
+    depends_on: []
+    estimated_hours: 6
+    context: >
+      OPERATOR DIRECTIVE 2026-08-23. Two low-end machines are joining: an Intel
+      Alder Lake-N Windows 11 host and its Silverblue cousin. They are not near
+      identical — different vendors — but have very similar capability. This row
+      is for the SILVERBLUE one; its Windows cousin pairs with it later, the
+      same way 854-8p9d pairs yolanda with the Ryzen5.
+
+      PRECEDENT, and it is an operator mandate rather than my inference:
+      esmeraldinha (Intel N100, 4 Alder Lake-N E-cores, no SMT, single-channel
+      DDR4 at a ~21.3 GB/s ceiling, UHD 24EU iGPU on the same bus) was declared
+      on 2026-08-16 "the fleet's deliberate LOWER BOUND; perf packets only, no
+      general drain" (plan/loop_status.md:3896). The Silverblue cousin inherits
+      that mandate. It is not a throughput contributor and must not be graded
+      as one — a 4-core host pulled into the general queue produces slow
+      duplicates of work a fast host already claimed.
+
+      WHY THE FLOOR MATTERS RATHER THAN BEING A CURIOSITY. 853-6gz3's whole
+      argument is that the expert validation layer runs LOCALLY on commodity
+      hardware — unfold, fan out, verify, fold, all numerical methods, tuned on
+      the high-end host and run everywhere. That claim is currently untested at
+      the bottom. If the layer cannot serve on 4 Alder Lake-N cores, its
+      deployment story is "runs on workstations", which is a different and much
+      weaker product. This host is the one that can falsify it.
+
+      WHAT IS ALREADY KNOWN ABOUT THE INFERENCE SUBSTRATE, so time is not spent
+      rediscovering it: the pinned image (tillandsias-inference:v0.4.260818.1,
+      ollama 0.32.14) runs ONLY nomic-embed-text (137M) and qwen2.5:0.5b.
+      mxbai-embed-large, qwen3-embedding:4b, qwen2.5:3b and 7b all abort with
+      GGML_ASSERT or `llama-server terminated: signal: aborted`, and bge-m3
+      works single-input but aborts on batches — measured on macuahuitl with
+      21 GB of VRAM free, so the image is the ceiling, not the hardware
+      (849-tz8g). On a CPU-only host the question is different and open: what
+      does a 0.5B model actually cost per call with no GPU at all, and is a
+      leaner server (llama.cpp directly, or another low-end-oriented runtime)
+      materially better than ollama here?
+
+      THE iGPU IS PROBABLY NOT A COMPUTE DEVICE and the row should say so
+      plainly if that is what the probe finds. An Alder Lake-N UHD part sharing
+      a single-channel bus with the CPU is display silicon; "present-unusable"
+      with an honest reason is a CORRECT capability row, and far more useful
+      than a usable claim the scheduler will act on and regret. lenovinha's row
+      already models this shape for its AMD Cezanne (rocm-runtime-missing).
+    exit_criteria: >
+      (1) The host's capability row is published and folds in
+      `capability-matrix`, produced by the self-serve path 850-bif2 landed
+      (host-capability-probe.sh --fragment + check-capability-row.sh) rather
+      than hand-assembled. Silent hosts drop from 3 to 2.
+      (2) The iGPU is adjudicated with evidence: usable or present-unusable
+      WITH A NAMED REASON. "Unknown" is not an outcome; a probe that cannot
+      decide is itself the finding.
+      (3) A measured CPU-only inference floor: tokens/sec and per-call latency
+      for the embedder and for qwen2.5:0.5b, with the exact command. Compare
+      against macuahuitl's numbers already in the ledger (nomic 28 ms/embed,
+      batches of 64) so the delta is a ratio, not an adjective.
+      (4) A verdict on whether the expert layer (853-6gz3) is viable here,
+      expressed as a per-call budget: at this host's measured latency, how many
+      unfold-and-verify sub-queries fit in a tolerable answer time? That number
+      is the floor 853-6gz3 must design against.
+      (5) At least one alternative low-end runtime evaluated against ollama on
+      the same model and prompt, or an explicit finding that none is available
+      on Silverblue without layering.
+      (6) A cheatsheet with provenance recording the wall-clock cost of a COLD
+      bootstrap on this class of machine — toolbox create, image pull, first
+      full cargo build — because that number is what tells the fleet whether a
+      given host can hold any cadence at all, and it is measurable exactly once
+      per host.
+
+events:
+  - packet_id: establish-the-low-end-cpu-only-inference-floor
+    event:
+      type: filed
+      ts: "2026-08-23T02:52:20Z"
+      agent_id: linux-macuahuitl-opus5-20260822T144300Z
+      host: linux_mutable
+      summary: >
+        Filed so the low-end host's prompt can be short and its work durable.
+
+        OPERATOR CONSTRAINTS recorded verbatim because they change what
+        "healthy" looks like on this machine: 4 cores; building the whole
+        project will take a long time and will likely break timeouts on launch;
+        cadence around every 4 hours rather than hourly. A cycle that looks
+        stalled here is probably just slow, and the failure mode to guard
+        against is an operator or a timeout killing a build that was going to
+        succeed.
+
+        TWO KNOBS THAT MATTER, both verified in-tree today:
+        TILLANDSIAS_BUILD_TIMEOUT_SECS bounds each podman build and defaults to
+        1800s (scripts/build-image.sh:455) — likely too tight for this class of
+        host. CYCLE_PREFLIGHT_SKIP_BUILD=1 skips the instrument rebuild
+        (scripts/cycle-preflight.sh:80) and is TEMPTING HERE AND SHOULD BE
+        AVOIDED: measured on macuahuitl the same day, a plan binary 11 hours
+        stale made the entire 833-fpe7 resumable-dirt detector inert — it
+        answered `unattributable:plan-query-failed` for every dirty tree, which
+        falls through to the dirty-start refusal, silently restoring the very
+        wedge 833-fpe7 had just closed. Slow is recoverable; stale is not
+        visible.
