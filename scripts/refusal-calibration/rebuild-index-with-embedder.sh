@@ -82,18 +82,47 @@ gpu_sample >> "$OUT/gpu-samples.tsv"
 resident_before="$(curl -s "$ENDPOINT/api/ps" 2>/dev/null \
     | grep -oE '"model":"[^"]+"' | sed 's/"model":"//;s/"//' | sort -u)"
 echo "resident before: ${resident_before:-<none>}" >&2
-for m in $resident_before; do
-    # keep_alive 0 is the documented eviction: it returns once the runner is
-    # released rather than merely scheduling it.
-    curl -s "$ENDPOINT/api/generate" \
-        -d "{\"model\":\"$m\",\"keep_alive\":0,\"prompt\":\"\"}" >/dev/null 2>&1
+evict_all() {
+    local m
+    for m in $(curl -s "$ENDPOINT/api/ps" 2>/dev/null \
+               | grep -oE '"model":"[^"]+"' | sed 's/"model":"//;s/"//' | sort -u); do
+        # Two endpoints, because a model only unloads through the one it serves:
+        # /api/generate for generative models, /api/embed for embedding-only
+        # ones. Sending both is idempotent and costs one refused request.
+        curl -s "$ENDPOINT/api/generate" \
+            -d "{\"model\":\"$m\",\"keep_alive\":0,\"prompt\":\"\"}" >/dev/null 2>&1
+        curl -s "$ENDPOINT/api/embed" \
+            -d "{\"model\":\"$m\",\"keep_alive\":0,\"input\":\"\"}" >/dev/null 2>&1
+    done
+}
+
+# EVICT, THEN VERIFY, AND REFUSE RATHER THAN PROCEED — the first version of this
+# block warned and carried on, which cost a four-minute build and produced a
+# misleading verdict. Measured 2026-08-23: eviction raced an in-flight request,
+# qwen2.5:0.5b survived, bge-m3 loaded beside it, and the builder failed with
+# `blocked:spec-index:embed-endpoint-refused` — an endpoint error for what was
+# actually a residency problem, exactly the misattribution 849-tz8g already
+# made once. Nothing re-warms the card (verified: empty for 40s after
+# eviction), so a retry loop wins deterministically. A serialiser that warns
+# and continues is not a serialiser.
+evicted=0
+for attempt in 1 2 3 4 5; do
+    evict_all
+    sleep 2
+    resident_after="$(curl -s "$ENDPOINT/api/ps" 2>/dev/null \
+        | grep -oE '"model":"[^"]+"' | sed 's/"model":"//;s/"//' | sort -u)"
+    if [ -z "$resident_after" ]; then evicted=1; break; fi
+    echo "evict attempt $attempt: still resident: $(echo "$resident_after" | tr '\n' ' ')" >&2
 done
-sleep 3
-resident_after="$(curl -s "$ENDPOINT/api/ps" 2>/dev/null \
-    | grep -oE '"model":"[^"]+"' | sed 's/"model":"//;s/"//' | sort -u)"
-if [ -n "$resident_after" ]; then
-    echo "warn: still resident after eviction: $resident_after" >&2
+if [ "$evicted" -ne 1 ]; then
+    cleanup 2>/dev/null
+    echo "could not clear the card after 5 attempts; still resident: $(echo "$resident_after" | tr '\n' ' ')" >&2
+    echo "  Loading '$MODEL' beside these is the 849-tz8g abort — refusing to start a" >&2
+    echo "  build that would fail in minutes and blame the endpoint for it." >&2
+    echo "blocked:index-rebuild:card-not-clear"
+    exit 1
 fi
+echo "card clear — proceeding with $MODEL" >&2
 gpu_sample >> "$OUT/gpu-samples.tsv"
 
 # Background sampler for the duration — a single before/after pair cannot see a
