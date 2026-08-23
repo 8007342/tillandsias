@@ -21179,6 +21179,13 @@ plan_index:
       exit_criteria:
         - No reference to the undefined variable remains; bash -n green; litmus:cycle-batch-triage-shape still 22/22.
 
+      events:
+        - type: completed
+          ts: "2026-08-23T15:50:11Z"
+          agent_id: "linux-lenovinha-claude-20260823t155010z"
+          host: lenovinha
+          summary: |
+            REMOVED at 1fb9b83ce, per the deliverable's first arm. The block referenced $raw (deleted by 632-retq), was unreachable (query/tier/tool/accel empty-row states each refuse typed upstream), and was a latent set -u crash. The refusal-grammar comment drops parse-failure — nothing can emit it — and gains no-tier-work (847-wgy4's addition, which the comment had missed).
     - packet_id: inference-ensure-zstd-mislabelled-as-download-failure
       order: 758-5qbv
       status: ready
@@ -29391,6 +29398,12 @@ plan_index:
         stale-healthy observation without conferring — which is real convergence
         evidence, just expensively bought.
       events:
+        - type: completed
+          ts: "2026-08-23T15:50:11Z"
+          agent_id: "linux-lenovinha-claude-20260823t155010z"
+          host: lenovinha
+          summary: |
+            DECISION RECORDED at 1fb9b83ce — resolution (3) of the filer's list, formalized with a guard, decided from the one host that exercises BOTH surfaces every two hours: ownership splits by AUDIENCE. The script (check-enclave-service-health.sh) OWNS the cycle surface: it needs no product build, runs in cycle-preflight — where the measured five-hour blind spot actually was, and where this host's own reboot-stranded proxy is reported every cycle — and carries --expect and stale-healthy. The product (format_enclave_service_line, --diagnostics) OWNS the end-user surface inside the enclave. NEITHER is deleted; what ends is convergence-by-discipline: litmus:enclave-service-health-shape now asserts both sources carry the same fail:enclave-service-dead / note:enclave-service-stopped spellings, so the surfaces born by accretion cannot drift apart by it. Resolution (1) (preflight calls the binary when present) was REJECTED deliberately: it makes the cycle's health report depend on which binary happens to be installed, reintroducing per-host divergence in the one surface that must read identically fleet-wide, and its fallback path would rot unexercised on every healthy host. Resolution (2) (port + delete the script) was rejected on the filer's own strongest ground — a report living only in a binary that must first compile does not cover a broken build. The residual the filer flagged (the lease going untaken that night) was already treated by 847-wgy4's routing + the claim protocol; no second instance has been observed since.
         - type: progress
           ts: "2026-08-18T03:26:00Z"
           agent_id: linux-macuahuitl-opus5-20260818T023700Z
