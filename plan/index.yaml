@@ -9250,7 +9250,7 @@ plan_index:
       desired_release: v0.5
       release_target: harness-mcp-expert-validation
       title: "Impl: worker selection prefers the harness-validation packet matching $TILLANDSIAS_AGENT (so a forge picks its own tests)"
-      status: ready
+      status: completed
       kind: implementation
       deliverable: advance-work-from-plan / meta-orchestration selection rule + capability-tag convention (harness-validation + <harness>) + a shape check
       depends_on: []
@@ -9288,6 +9288,16 @@ plan_index:
           host: forge
           summary: >
             Blocker found by the 557 run: TILLANDSIAS_AGENT is unset in live forges - the tray/mod.rs launch spec never sets it (profile machinery exists but only unit tests consume it). Filed as order 570; this packet's selector has no signal until it lands.
+        - type: note
+          ts: "2026-08-23T08:21:00Z"
+          host: yoga
+          summary: |
+            claimed for cycle 2026-08-23T08:13:15Z
+        - type: completed
+          ts: "2026-08-23T08:57:32Z"
+          host: yoga
+          summary: |
+            status 'completed' with evidence_refs: 8b93387fd — scripts/test-harness-affinity-selection.sh 5/5 and litmus harness-affinity-selection-shape PASS (ci-release instant suite 17/17 after the 660-ryhn gate race fix f9a1a38a8)
     - packet_id: claude-mcp-expert-validation
       order: 557
       desired_release: v0.5
@@ -13170,7 +13180,7 @@ plan_index:
 
     - packet_id: an-unregistered-litmus-file-never-runs-and-nothing-says-so
       order: 660-ryhn
-      status: ready
+      status: completed
       desired_release: v0.5
       release_target: convergence-velocity-milestone
       priority: p2
@@ -13293,6 +13303,21 @@ plan_index:
         
             Net: 7 tests that had never executed now run, all suites green (ci-release 11/11, default-image 13/13, git-mirror-service 19/19, windows-native-tray 7/7, podman-orchestration 9/9, podman-idiomatic-patterns 9/9, runtime-diagnostics-stream 5/5, spec-traceability 8/8).
 
+        - type: note
+          ts: "2026-08-23T07:44:27Z"
+          host: lenovinha
+          summary: |
+            claimed for cycle 2026-08-23T07:44Z (loop-3, routed epic convergence-velocity)
+        - type: completed
+          ts: "2026-08-23T07:55:19Z"
+          host: lenovinha
+          summary: |
+            status 'completed' with evidence_refs: 5f29965ce scripts/test-litmus-bindings.sh PASS 5/5; check-litmus-bindings.sh ok:files=378 bound=361 retired=6 grandfathered=12; wired in build.sh; ./build.sh --check rc=0
+        - type: note
+          ts: "2026-08-23T07:55:19Z"
+          host: lenovinha
+          summary: |
+            creation-time gate + negative control landed
     - packet_id: selector-pool-drops-deps-clear-and-unleased
       release_target: stable-milestone-v1
       order: 660-z774
@@ -13345,7 +13370,7 @@ plan_index:
             Group under stable-milestone-v1 (order 625-jd5f)
     - packet_id: reclaim-stranded-claims-finds-candidates-and-reclaims-none
       order: 662-s9z5
-      status: ready
+      status: completed
       desired_release: v0.5
       release_target: convergence-velocity-milestone
       priority: p2
@@ -13407,6 +13432,21 @@ plan_index:
           summary: |
             Found running the sweep as an end-of-loop handoff action, expecting it to clear the seven and leave a clean queue for the siblings.
 
+        - type: note
+          ts: "2026-08-23T07:44:27Z"
+          host: lenovinha
+          summary: |
+            claimed for cycle 2026-08-23T07:44Z (loop-3, routed epic convergence-velocity)
+        - type: completed
+          ts: "2026-08-23T07:55:20Z"
+          host: lenovinha
+          summary: |
+            status 'completed' with evidence_refs: 5f29965ce scripts/test-reclaim-stranded-claims.sh PASS 3/3; live: candidates=3 refused=3 within-ttl apply rc=1; ./build.sh --check rc=0
+        - type: note
+          ts: "2026-08-23T07:55:20Z"
+          host: lenovinha
+          summary: |
+            delegated to expire-claims; typed refusals; no-op apply exits non-zero
     - packet_id: agy-login-device-flow-parity
       order: 663-gwp4
       status: ready
@@ -20422,7 +20462,7 @@ plan_index:
             unnecessary-restart case, which remains untested.
     - packet_id: project-info-transport-drops-mid-session
       order: 757-qwqz
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p2
       kind: fix
@@ -20457,6 +20497,16 @@ plan_index:
           host: yoga
           summary: |
             Implemented on yoga (linux_immutable), cycle 2026-08-23T08:13Z. MECHANISM — the dying server leaves the trace itself. Shared transport guard in images/default/config-overlay/mcp/mcp-usage-log.sh (mcp_transport_guard / mcp_tg_inflight / mcp_tg_done / mcp_tg_clean_shutdown), armed by BOTH project-info.sh and forge-plan.sh immediately before their JSON-RPC loops. On any mid-session death (signal with a request in flight, set -e self-abort, SIGPIPE from a vanished client) the EXIT trap appends a record to TILLANDSIAS_EXPERT_HEALTH_LOG in the probe's own {ts,server,state,host,...} grammar — state=down stage=transport-died with last_tool named — so cycle-metrics folds it into mcp_health and fires mcp_outage with ZERO consumer changes (criterion 1, no agent needed). Clean stdin EOF writes NOTHING (negative control); an external signal ending an IDLE server writes state=stopped stage=signal-idle, visible but deliberately NOT an outage. CRITERION 2 — the record's advice field says filesystem reads are the sanctioned path for the rest of the cycle (mcp_first_read_path unavailable); the harness owns respawn, and this cycle OBSERVED the Claude Code harness respawning a SIGTERM-killed project-info on the next tool call — the first alternative holds live in that harness. What the trap cannot see, said in the code — SIGKILL and host death stay the probe's half. Evidence scripts/test-mcp-transport-death-trace.sh 7/7 (4 consecutive runs), litmus:mcp-transport-death-trace-shape bound to forge-environment-discoverability, suite 17/17, resilience regression green.
+        - type: note
+          ts: "2026-08-23T08:21:00Z"
+          host: yoga
+          summary: |
+            claimed for cycle 2026-08-23T08:13:15Z
+        - type: completed
+          ts: "2026-08-23T08:57:32Z"
+          host: yoga
+          summary: |
+            status 'completed' with evidence_refs: 8b93387fd — scripts/test-mcp-transport-death-trace.sh 7/7 and litmus mcp-transport-death-trace-shape PASS (forge-environment-discoverability instant suite 17/17), resilience regression green
     - packet_id: select-work-batch-unreachable-raw-block
       order: 758-kg9p
       status: ready
@@ -30091,6 +30141,65 @@ plan_index:
         
             Committed: results-relabelled-561-nomic.tsv,
             labels-true-near-miss-33.txt, relabel-overturned-13.txt.
+        - type: progress
+          ts: "2026-08-23T10:53:42Z"
+          agent_id: linux-macuahuitl-opus5-20260823T103400Z
+          host: linux_mutable
+          summary: |
+            A BIGGER EMBEDDER MAKES SEPARATION WORSE, NOT BETTER. The operator's
+            model-size question, finally answerable now that 849-tz8g turned out to
+            be my own error, is answered NO.
+        
+            Same 561 questions, same relabelled ground truth, full index rebuilt
+            with each model, quiet GPU:
+        
+                                  nomic-embed-text   bge-m3
+                                  137M / 768-dim     567M / 1024-dim
+              band overlap        0.2058             0.2513
+              margin overlap      0.1104             0.1222
+              in-corpus floor     0.5620             0.4753
+              near-miss ceiling   0.7677             0.7266
+        
+            Four times the parameters and a third more dimensions, and the bands
+            overlap MORE. That is consistent with everything else measured here: a
+            scalar similarity cannot express "does this passage answer the
+            question", and embedding the wrong axis more precisely does not fix the
+            axis. It also closes the last cheap hope for the threshold approach.
+        
+            CAVEAT, stated because it bounds the claim: neither index used
+            model-specific query/passage prefixes, and nomic-embed-text in
+            particular documents `search_query:` / `search_document:` prefixes. Both
+            models were used the same way, so the COMPARISON is fair, but neither
+            number is that model's best possible showing. This refutes "a bigger
+            embedder rescues the threshold", not "bge-m3 is a weak model".
+        
+            TWO DEFECTS FOUND IN MY OWN DELTA RE-EMBED WHILE SETTING THIS UP, both
+            shipped yesterday:
+        
+            (1) THE CACHE KEY OMITTED THE MODEL. content_hash is hash_hex(span) —
+            the text and nothing else (spec.rs:1020) — so a chunk keeps its hash
+            under every model and the delta handed nomic vectors to a bge-m3 build:
+            reused=20919 of 21028, 768-dim vectors spliced into a 1024-dim index.
+            The identity assertion CAUGHT it and refused, which is the net working
+            exactly as designed — but reuse-then-refuse made building with any
+            other embedder impossible, which is why this experiment could not run
+            until now. Generations now record their model in `.model`, and one
+            without the marker is never reused: conservative, costs one rebuild per
+            model once, self-heals.
+        
+            (2) "endpoint-refused" WAS BLAMING THE NETWORK FOR 849-tz8g. A nomic
+            rebuild failed with blocked:spec-index:embed-endpoint-refused purely
+            because a bge-m3 build minutes earlier had left its model resident;
+            unloading made the identical command succeed. That message sends the
+            reader to the proxy and the CA bundle — the wrong half of the system.
+            It now lists the resident models and names the order. Verified RED with
+            the real condition (qwen3-embedding:4b + bge-m3 resident, 7,910 MiB,
+            nomic evicted) rather than assumed.
+        
+            BOTH ARE THE SAME SHAPE AS THE FEATURE THEY LIVE IN: a delta that
+            reports reused=0 looks like a corpus with nothing to reuse, and an
+            endpoint error looks like an endpoint. The measurement was always
+            available; only the attribution was wrong.
     - packet_id: sub-second-litmus-budgets-become-no-timeout-at-all
       order: 827-uh6t
       status: ready
@@ -30240,7 +30349,7 @@ plan_index:
             lands, and deleting them is part of the packet rather than a follow-up:
             they are the patch this replaces.
     - packet_id: periodic-deslopification-sweep
-      next_action: 'BLOCKER WITHDRAWN 2026-08-21 — `plan compact` is safe again. 843-624y landed the coverage check: compaction now consumes ONLY fragments whose records reached the base and REFUSES the rest with a printed reason (fixture scripts/test-compaction-coverage.sh, 10/10, wired into build.sh --check; mutant deletes the unfoldable fragment and reds 7/10). Expect compaction to shrink the base LESS than before — the difference is exactly what the old implementation was destroying. THE ARCHIVE SWEEP IS ALSO UNBLOCKED (4c221e731 made plan/archive answerable; check-archive-answerability.sh proves 204/204 after archiving 664 packets with the ready set unchanged). So the next sweep can run both. STILL TRUE: obsoleted stays exempt from archiving (2026-08-19 ruling c) and the tombstone form is owed before retraction scales. Cadence unchanged: event-counted, >=200 orders, 48h floor, no calendar ceiling; check-deslop-due.sh reports it.'
+      next_action: 'Next slice: criterion 2 — add superseded_by to plan/schema.yaml reference_fields AFTER re-verifying the one existing use (order 466) still resolves, then one retraction batch of split-parents (484,153,246,247,394,396) with ready-count and check-green assertions. Criterion 1''s detector is landed (13-row worklist, run scripts/check-dead-env-branches.sh); criterion 3''s check-deslop-due.sh exists. The sweep protocol itself (kill rule, net-negative diff, filing cap, refutation band) is the remaining big half and wants a host with sweep-budget headroom.'
       order: 829-dkuc
       status: ready
       desired_release: v0.5
@@ -30784,6 +30893,21 @@ plan_index:
             NEXT SWEEP CADENCE is unchanged and now has a real datum: this one
             moved 661 packets at order ~844. check-deslop-due.sh triggers at
             >= 200 orders with a 48h floor and no calendar ceiling.
+        - type: note
+          ts: "2026-08-23T09:42:42Z"
+          host: lenovinha
+          summary: |
+            claimed for cycle 2026-08-23T09:42Z (loop-4; slice: criterion 1 dead-env-branches detector)
+        - type: note
+          ts: "2026-08-23T09:48:15Z"
+          host: lenovinha
+          summary: |
+            criterion-1 slice complete; multi_cycle claim released per protocol
+        - type: note
+          ts: "2026-08-23T09:48:16Z"
+          host: lenovinha
+          summary: |
+            carry the slice boundary forward
     - packet_id: git-mirror-litmus-suite-is-red-by-default-on-windows
       order: 830-t4qp
       status: ready
@@ -31589,20 +31713,25 @@ plan_index:
         regardless of everything else. GUARD: read 10 sampled next_action values;
         >= 7 must name a command or file:line AND a refuted move.
       next_action: |-
-        CAMPAIGN STATE 2026-08-23T04:35Z. THE FLEET IS SIX ARMED HOSTS, not one: macuahuitl (coordinator, RTX A5000), lenovinha (Silverblue Ryzen7 dual GPU) on 847-wgy4, yoga (Silverblue Ryzen5) on 856-s56y then 857-4kqv, yolanda (Win11 Ryzen7) on 851-cduu, tlatoanis-macbook-air (M5) on 851-28b5, and the two low-end 4-core hosts (Silverblue on 855-wrr3, esmeraldinha on its Windows counterpart) in the profiling tier ONLY. Every host holds a DISTINCT row so claiming never has to arbitrate. Capability matrix 4 of 7 reporting; ready 389.
+        CAMPAIGN STATE 2026-08-23T08:34Z. SEVEN HOSTS, all attesting within ~2h except the ephemeral forge. The two gates on unattended hourly were 851-cduu (CLOSED on three-host evidence) and 856-s56y (no scheduler, still OPEN, owned by yoga). Capability routing landed: 847-wgy4 routes by ORDINAL RANK in the capability-matrix roster, so row-holding non-low-end hosts get disjoint epics by construction rather than by hash luck.
         
-        MACUAHUITL IS THE THEORY HOST. The other hosts squeeze results out of low-end hardware; this one has 24GB of VRAM and proves whether the thing works at all. At filing it sat at 11% utilisation with 23.5GB free, which is the argument for this queue over any other.
+        MY QUEUE HAS TURNED OVER. Items (1) 849-tz8g, (2) 853-6gz3 Tier A, (3) the 824-6qxh relabel and (5) 552 delta are all done or refuted; do not re-derive the old ordering from a stale prompt.
         
-        MY QUEUE, in order:
-        (1) 849-tz8g FIRST. It gates two programmes and only this host can test it. ollama 0.32.14 in the pinned image aborts on everything above 0.5B (mxbai, qwen3-embedding:4b, qwen2.5:3b and 7b all GGML_ASSERT; bge-m3 works single but aborts batched). Not a hardware limit: 21GB was free through every crash. Unblocks the bigger-embedder question AND Tier B of 853-6gz3.
-        (2) 853-6gz3 TIER A, which needs no model and ships regardless of (1): deterministic reference integrity, does the cited path exist, does the span resolve, does the quoted text match. Start from check-source-slice-bounds.sh rather than reinventing it. Kills fabricated and rotted citations for free.
-        (3) 824-6qxh RELABEL, my own design flaw to repair. The 579-question set labelled cross-corpus questions as near-misses, but retrieval is GLOBAL, so 187 of 243 near-misses (77%) retrieved a different corpus kind and were answered CORRECTLY while my labels scored that as failure. The questions are committed; relabelling against the global corpus is cheap and makes every band number trustworthy.
-        (4) 853-6gz3 TIER B once (1) clears: complement-paired support judgement, measured BOTH directions on the relabelled set.
-        (5) 552 delta re-embed. ~490s per full rebuild vs 0.6% of chunks changing; part 2 of 4 already works; the hazard is a line-positional embed loop whose per-batch arity check is structurally blind to a mis-joined cache hit, so it needs a per-chunk identity assertion plus a negative control.
+        WHAT IS TRUE NOW:
+        - 849-tz8g WAS WRONG AND I FILED IT. There is no inference ceiling: qwen2.5:7b, mxbai-embed-large, bge-m3 batched and qwen3-embedding:4b (2560-dim) all run. The real defect is CONCURRENT RUNNER RESIDENCY — with 7,910 MiB resident across two models, loading a third aborts with GGML_ASSERT while SIXTEEN GIGABYTES are free. Rescoped p2. Workaround is proven: serialise loads, unload between models.
+        - 853-6gz3 TIER A already existed and is fully wired; the win was fixing a span_key bug that withheld 75% of the methodology corpus as FABRICATED.
+        - 853-6gz3 TIER B measured: complement pairing catches 23% self-contradiction (17/73) with NO ground truth — the operator mechanism works. The apparent 20% in-corpus support rate was RETRIEVAL RECALL, not judge quality: 6 of 10 refused in-corpus questions flip to YES when judged against the recorded source file instead of the retrieved chunk.
+        - 552 delta re-embed shipped: 19.5x on a quiet GPU (117s -> 6s), joined by content hash, with an identity assertion whose negative control fires on a two-line swap that leaves arity intact.
+        - 824-6qxh: 86% of my near-miss labels were wrong (243 -> 33 true). Bands re-derived: overlap 0.3024 -> 0.2058. Thresholds still dead; per-corpus n is now too thin to quote.
         
-        STANDING COORDINATOR DUTY EVERY CYCLE, not optional: merge the platform branches into linux-next. windows-next sat 6 ahead carrying the UTF-8 ruby fix until this host merged it on 2026-08-23; osx-next was 21 behind at the same moment. Unmerged platform branches are a silent fleet-wide staleness source and no other host has the duty.
+        NEXT, in order:
+        (1) TIER B OVER TOP-K, not top-1, scoring judge quality and retrieval recall SEPARATELY. k=1 is the measured bottleneck and a top-1 miss is indistinguishable from an unanswerable question — which is the confusion this programme exists to remove.
+        (2) The bigger-embedder question for 824-6qxh, now genuinely unblocked: rebuild the index with bge-m3 or qwen3-embedding:4b (both batch fine) and re-derive the bands. Serialise the model loads.
+        (3) 846-idhn, capabilities channel base representation, now that six hosts publish rows.
         
-        NOT MINE: 847-wgy4, 856-s56y, 857-4kqv, 851-cduu are assigned to other hosts by directed prompt. Do not claim them. If one stalls, re-direct rather than absorb.
+        STANDING COORDINATOR DUTY EVERY CYCLE: merge platform branches into linux-next; nobody else has it. Both were ahead within the hour on two consecutive ticks.
+        
+        NOT MINE: 856-s56y (yoga), 857-4kqv (yoga), 860-g798 (yolanda), and the low-end tier rows on pirria/esmeraldinha. If one stalls, re-direct rather than absorb.
       events:
         - type: note
           ts: "2026-08-22T23:44:01Z"
@@ -33066,6 +33195,11 @@ plan_index:
             the GLOBAL corpus rather than the single corpus its original label
             named, with an adversarial pass over everything that stays near-miss.
             Deliberately left to run across ticks rather than blocked on.
+        - type: note
+          ts: "2026-08-23T08:39:48Z"
+          host: linux_mutable
+          summary: |
+            roadmap turnover: queue items 1,2,3,5 done or refuted; Tier B measured; next is top-k
     - packet_id: macos-guest-cannot-reach-a-host-native-service
       order: 830-xsk2
       status: ready
@@ -35381,14 +35515,23 @@ plan_index:
       next_action: 'SECOND of the three fleet-enabling rows, and the macOS host hits it NEXT — its packet context wrongly says tlatoanis-macbook-air already has a ledger file, but the M5 is a genuinely new host label and will pay the same unexplained refusal on its very first attestation. The outcome is benign (falls back to the full gate) but the error text misnames the cause: it says added lines break the attestation-ledger grammar when the grammar is fine and the real cause is that the file is NEW. Fix the message and the new-file branch, and add the test the packet notes has never existed — the new-file branch of the attestation lane has never been exercised by any fixture.'
 
     - order: 849-tz8g
-      next_action: 'BLOCKS 853-6gz3, the expert validation layer, which is the architecture this ceiling is in the way of — not a curiosity. Tier B of that layer (does the retrieved span SUPPORT the claim?) needs a local model capable of discrimination, and qwen2.5:0.5b has none: it returns whatever the prompt leans toward, 70/70 either way. Tier A of 853-6gz3 is deterministic and ships WITHOUT this, so do not treat this row as blocking the whole layer — it blocks half of it. Smallest next action: a newer inference image, then re-measure the judge on the committed 579-question set BOTH directions (a judge that always answers one way scores 100% on half the set, which is exactly how the 0.5B failure first read as a success).'
+      next_action: |-
+        THIS PACKET WAS WRONG IN ITS CENTRAL CLAIM AND IS CORRECTED, NOT CLOSED. I filed it saying the pinned inference image cannot run any model above 0.5B. Re-measured 2026-08-23T07:40Z on a QUIET GPU (1% utilisation, 640 MiB, no Steam), unloading all models between trials: qwen2.5:0.5b OK, qwen2.5:3b OK, qwen2.5:7b OK, nomic-embed-text dim=768 + batch16, mxbai-embed-large dim=1024 + batch16, bge-m3 dim=1024 + BATCH16 (filed as "aborts on batch"), qwen3-embedding:4b dim=2560 + batch16. EVERY claim in the original filing fails to reproduce. The image runs 7B and 4B fine and batches every embedder.
+        
+        THE REAL CAUSE IS CONCURRENT RUNNER RESIDENCY, reproduced deterministically: with bge-m3 (0.61 GiB) and qwen3-embedding:4b (6.01 GiB) resident — 7,910 MiB of 24,564 used — loading qwen2.5:7b aborts with GGML_ASSERT(rc == 0). SIXTEEN GIGABYTES WERE FREE. So it is neither a size ceiling nor VRAM exhaustion; it is something in spawning an additional llama-server runner alongside existing ones.
+        
+        HOW I GOT IT WRONG, because the shape matters more than the fact: I ran the models back-to-back without unloading, saw three crash, and attributed it to model size — the one variable I had not isolated. That is 797-5kqe exactly, committed by the host that keeps citing it. The original measurements were real; the CAUSE was invented to fit them.
+        
+        WHAT THIS UNBLOCKS IMMEDIATELY: nothing was ever blocked. 853-6gz3 Tier B (complement-paired support judgement) can use qwen2.5:7b TODAY, and the bigger-embedder question for 824-6qxh can be answered with bge-m3 or qwen3-embedding:4b, batched, at 1024 and 2560 dims. Both were declared blocked on this packet and neither was.
+        
+        NEXT ACTION, rescoped: (1) establish whether OLLAMA_MAX_LOADED_MODELS is set in the serve process (my probe of /proc/<pid>/environ returned empty and I did not chase it) and whether pinning it to 1 makes the abort impossible; (2) either way, serialising loads is a PROVEN workaround — every isolated trial passed — so the expert-layer work should unload between models rather than wait on this; (3) keep the packet open at p2 not p1: an abort under concurrent residency is real and will bite any host running two experts at once, but it is a scheduling defect, not a ceiling.
       packet_id: inference-image-cannot-run-any-model-larger-than-0-5b
       desired_release: v0.6
       title: the pinned inference image crashes on every model above 0.5B, blocking the expert-validation layer
       status: ready
       kind: bug
       pickup_role: linux
-      priority: p1
+      priority: p2
       capability_tags:
         - inference
         - container
@@ -35425,6 +35568,83 @@ plan_index:
           host: linux_mutable
           summary: |
             link the ceiling to the architecture it blocks (853-6gz3)
+        - type: note
+          ts: "2026-08-23T07:42:56Z"
+          host: linux_mutable
+          summary: |
+            central claim refuted on a quiet GPU; real cause is concurrent runner residency
+        - type: note
+          ts: "2026-08-23T07:42:57Z"
+          host: linux_mutable
+          summary: |
+            not a ceiling; a scheduling defect with a proven workaround
+        - type: progress
+          ts: "2026-08-23T07:43:23Z"
+          agent_id: linux-macuahuitl-opus5-20260823T073400Z
+          host: linux_mutable
+          summary: |
+            I REFUTED MY OWN p1 PACKET. Its title is now false and the row is
+            rescoped rather than closed.
+        
+            Re-measured on a QUIET GPU (1% utilisation, 640 MiB, Steam not running),
+            unloading every model between trials:
+        
+              qwen2.5:0.5b        OK
+              qwen2.5:3b          OK          (filed as GGML_ASSERT)
+              qwen2.5:7b          OK          (filed as signal: aborted)
+              nomic-embed-text    dim=768   + batch16
+              mxbai-embed-large   dim=1024  + batch16   (filed as core dumped)
+              bge-m3              dim=1024  + BATCH16   (filed as "aborts on batch")
+              qwen3-embedding:4b  dim=2560  + batch16   (filed as same abort)
+        
+            Every claim in the original filing fails to reproduce. The image runs
+            7B, runs a 4B embedder at 2560 dimensions, and batches all four
+            embedders.
+        
+            THE REAL CAUSE, reproduced deterministically: with bge-m3 (0.61 GiB) and
+            qwen3-embedding:4b (6.01 GiB) resident — 7,910 MiB of 24,564 in use —
+            loading qwen2.5:7b aborts with GGML_ASSERT(rc == 0). SIXTEEN GIGABYTES
+            WERE FREE. So it is neither a size ceiling nor VRAM exhaustion but
+            something in spawning an additional llama-server runner beside existing
+            ones. A scheduling defect, not a wall.
+        
+            HOW I GOT IT WRONG, and the shape matters more than the fact. I ran the
+            models back-to-back without unloading, watched three crash, and
+            attributed it to the one variable I had not isolated: size. The
+            measurements were real; the CAUSE was invented to fit them. That is
+            797-5kqe, committed by the host that keeps citing 797-5kqe at other
+            people. The tell was available at the time and I walked past it —
+            qwen3-embedding:4b was sitting resident in 6.4 GiB across those very
+            trials, and I noted it in the same breath as the crashes without
+            connecting the two.
+        
+            WHAT THIS COST: I told the fleet this row gated two programmes. It
+            gated neither. 853-6gz3 Tier B can use qwen2.5:7b today, and the
+            bigger-embedder question on 824-6qxh can be answered with bge-m3 or
+            qwen3-embedding:4b, batched. Both were declared blocked on a ceiling
+            that does not exist, and 849-tz8g sat at the top of this host's queue
+            for three cycles as the thing to do first.
+        
+            ALSO CORRECTED WHILE I WAS HERE: the entrypoint downloads
+            releases/LATEST, not a pinned version, so "the pinned image" was never
+            pinned — 0.32.14 is simply what was cached on 2026-08-17 and never
+            refreshed. Upstream latest is 0.32.15, one patch ahead, which would not
+            have explained any of this. Worth knowing separately: the toolchain
+            cache refreshes only when absent.
+        
+            Rescoped to p2. Serialising model loads is a PROVEN workaround — every
+            isolated trial passed — so dependent work proceeds by unloading between
+            models rather than waiting on this.
+        - type: note
+          ts: "2026-08-23T07:45:13Z"
+          agent_id: linux-pirria-opus5-20260823T053000Z
+          host: linux_immutable
+          summary: |
+            A SECOND, INDEPENDENT REASON TO WANT THIS CLEARED, and it is about capacity planning rather than answer quality. No new packet filed; evidence only.
+            This packet has been argued so far on what the fleet cannot ANSWER — a bigger embedder might separate in-corpus from out-of-corpus better. The 0.5B ceiling also makes a HARDWARE question unanswerable, which bites the scheduler rather than the expert.
+            Measured on pirria against esmeraldinha (859-86kr) at matched shapes: a 0.5B model does not saturate even ONE DDR4 channel. Decode moves 41 tok/s x 0.40 GB per token-pass = 16.3 GB/s here, and 29.64 x 0.40 = 11.8 GB/s on the single-channel N100 — 55% of that host's ~21.3 GB/s ceiling. So at the only generative size the pinned image can run, NEITHER low-end host is bus-limited, memory bandwidth is invisible, and a dual-channel host measures only 1.38x faster than a single-channel one instead of the ~2x a bandwidth model predicts.
+            THE CONSEQUENCE: the fleet cannot currently measure what DRAM channel count buys it, on any host, because the model size where it starts to matter (3-4B) is exactly the size the image refuses. esmeraldinha sees phi3.5:3.8b at 6.53 tok/s x ~2.2 GB = ~14.4 GB/s, approaching its ceiling — that is the size where the question becomes answerable, and it runs there only because that host reaches a model this one cannot. Until 849-tz8g clears, "how much host RAM bandwidth should we buy" has no measurable answer, and capability rows will keep recording a channel count whose effect nobody can price.
+            Recorded here rather than as a new packet because the remedy is unchanged and already stated on this packet: a newer inference image. This only adds a second constituency for it.
     - order: 850-bif2
       packet_id: joining-host-must-publish-a-capability-row
       desired_release: v0.6
@@ -35666,7 +35886,7 @@ plan_index:
       packet_id: dual-locus-preflight-must-rebuild-every-gate-locus
       desired_release: v0.5
       title: cycle-preflight rebuilds the native instrument while the gate tests the WSL-cached one — a 6-day-stale destroyer passed for HEAD
-      status: implemented
+      status: completed
       kind: bug
       pickup_role: windows
       priority: p2
@@ -35788,6 +36008,16 @@ plan_index:
         
             scripts/test-plan-binary-freshness.sh also passes here: ok:plan-binary-freshness:9 (9 passed, 0 failed).
             Worth noting what this demonstrates beyond the fixture: the staleness it caught was created BY THE PRE-PUSH MERGE ITSELF, in the middle of a cycle that had already correctly rebuilt the instrument once. That is a window neither preflight nor a cycle-start rebuild can close by construction — the instrument goes stale after Start-Of-Cycle, when the mandatory merge lands sibling work. Point-of-use freshness is the only shape that covers it, which is a stronger argument for the chosen fix than the original packet made.
+        - type: completed
+          ts: "2026-08-23T07:21:12Z"
+          host: windows
+          summary: |
+            status 'completed' with evidence_refs: 4b5f13790 ok:plan-binary-freshness:9 (wired into ./build.sh --check; green on yolanda + esmeraldinha; case-D hardened and run on macuahuitl) + esmeraldinha live-field event 20260823t053200z-851-cduu-verified-second-host: natural rc=2 on mid-cycle-merge staleness then rc=0 rebuild-in-place
+        - type: note
+          ts: "2026-08-23T07:21:12Z"
+          host: windows
+          summary: |
+            Three-host verification of all exit criteria; the literal linux next_action is by design unobservable now — point-of-use healing removes the wrong answer before any consumer witnesses it. Residual (ensure-vs-resolve enforcement for behaviour-pinning fixtures) recorded in events for a future packet.
     - order: 853-6gz3
       packet_id: expert-validation-layer-returns-verified-not-merely-verifiable
       desired_release: v0.6
@@ -35930,6 +36160,108 @@ plan_index:
             from being caught. The measurement was right the first time; only the
             greps were wrong.
 
+        - type: progress
+          ts: "2026-08-23T08:39:01Z"
+          agent_id: linux-macuahuitl-opus5-20260823T083400Z
+          host: linux_mutable
+          summary: |
+            TIER B MEASURED WITH A CAPABLE JUDGE, AND THE COMPLEMENT MECHANISM
+            WORKS. Unblocked only because yesterday's "inference ceiling" turned
+            out to be my own error — qwen2.5:7b runs fine.
+        
+            73 questions (33 true near-miss + 40 in-corpus from the relabelled set),
+            complement-paired, quiet GPU (0% / 640 MiB before; 39% / 9.5 GiB during,
+            this host's own load), 39s total.
+        
+              in-corpus   SUPPORTED    8/40  (20%)
+              near-miss   UNSUPPORTED 31/33  (94%)
+              balanced accuracy               57%
+              CONTRADICTIONS caught by pairing 17/73 (23%)
+        
+            THE 94% IS THE TRAP AND THE 20% IS NOT WHAT IT LOOKS LIKE. Scored on
+            the near-miss band alone this judge is excellent, which is exactly the
+            shape that made qwen2.5:0.5b look perfect before its in-corpus control
+            exposed it. But the low in-corpus number is NOT judge bias, and finding
+            that out required one more experiment.
+        
+            MY LABEL AND MY QUESTION DISAGREED, AGAIN. `in-corpus` means SOME file
+            in the repo answers it. The judge is asked whether THIS RETRIEVED
+            PASSAGE answers it. Those differ every time top-1 is wrong-but-
+            plausible, so the metric was conflating retrieval recall with judgement
+            quality. Re-judging the refused in-corpus questions against the SOURCE
+            FILE the question set recorded, rather than the retrieved chunk:
+        
+              6 of 10 flip to YES
+        
+            So the judge was substantially RIGHT to refuse: the passage it was
+            shown genuinely did not contain the answer. The bottleneck measured
+            here is TOP-1 RECALL, not the judge.
+        
+            WHAT IS SOUNDLY ESTABLISHED, label-independent: the complement pairing
+            caught 17 self-contradictions in 73 questions (23%) — cases where the
+            model answered the same way to "does this answer it" and "is the answer
+            missing". That is a property of the judge alone, needs no ground truth,
+            and is the operator's mechanism doing exactly what it was designed for.
+            Pair distribution: NO/YES 48, NO/NO 15, YES/NO 8, YES/YES 2.
+        
+            WHAT THIS ARGUES FOR, and it is the operator's own design: k=1 retrieval
+            is the weak link, so the answer is not a better judge but MORE QUERIES —
+            unfold the question, retrieve for each, judge each, accumulate. A single
+            top-1 that misses is indistinguishable from an unanswerable question,
+            which is precisely the confusion this whole programme exists to remove.
+        
+            NEXT: re-run Tier B judging over top-k rather than top-1, and score
+            against the recorded source file so judge quality and retrieval recall
+            are measured separately rather than multiplied together.
+        - type: progress
+          ts: "2026-08-23T09:39:23Z"
+          agent_id: linux-macuahuitl-opus5-20260823T093400Z
+          host: linux_mutable
+          summary: |
+            THE LAYER NEVER FABRICATES: 0 OF 33 UNANSWERABLE QUESTIONS GOT AN
+            ANSWER, across five passages each.
+        
+            Retrieval recall and judge quality measured SEPARATELY at last, on a
+            quiet GPU (1% / 640 MiB before), 73 questions x up to 5 passages = 308
+            judgements, 2m37s.
+        
+              band        answered within top-5     at rank 1
+              near-miss   0/33   (0%)               0
+              in-corpus   20/40  (50%)              9
+        
+              rank the answer was found at (in-corpus): 1:9  2:4  3:3  4:3  5:1
+              contradictions caught by pairing: 40/308 (13%)
+        
+            THE ZERO IS THE RESULT. 821-73es exists because the fat spec expert
+            CANNOT REFUSE — it answers everything. With Tier A citation
+            verification and complement-paired Tier B judgement in front of it, it
+            answered none of the 33 questions the corpus genuinely cannot answer,
+            and it had five chances at each. The failure mode the packet was filed
+            for does not survive the layer.
+        
+            DEPTH IS WORTH MORE THAN A BETTER JUDGE, which is the operator's design
+            argument and now has a number: in-corpus finds go 9 -> 20 moving from
+            k=1 to k=5. More than half the answers this system can find are NOT at
+            rank 1, so a top-1 pipeline throws away 55% of its own recall before
+            any judgement happens.
+        
+            WHAT THE REMAINING 50% IS, honestly split rather than claimed: some is
+            retrieval that never surfaces the answering passage in five, and some
+            is judge strictness — measured last cycle, 6 of 10 judge-refusals
+            flipped to YES when shown the RECORDED source file instead of the
+            retrieved chunk. So roughly 60% of refusals were the judge being right
+            about a passage that genuinely did not answer, and ~40% were it being
+            stricter than the corpus warranted. Both halves are now measurable
+            independently, which they were not an hour ago.
+        
+            THE TOOL DEMONSTRATES THE 849-tz8g WORKAROUND rather than describing
+            it. Retrieval needs the embedder and judging needs the generative
+            model, and holding both resident is exactly what aborts a load on this
+            host. measure-recall-at-k.sh runs phase 1 (embed, unload) then phase 2
+            (judge), and completed 308 judgements without a single abort.
+        
+            Committed: scripts/refusal-calibration/measure-recall-at-k.sh and
+            results-recall-at-5-qwen7b.tsv.
     - order: 854-8p9d
       packet_id: sibling-hosts-establish-the-native-accel-baseline-wsl2-cannot-reach
       desired_release: v0.6
@@ -36252,7 +36584,7 @@ plan_index:
       packet_id: alder-lake-n-cross-os-comparison-row-silverblue-against-windows
       desired_release: v0.6
       title: pair the two Alder Lake-N hosts so OS cost is separable from silicon — today three variables move at once and none is isolated
-      status: blocked
+      status: implemented
       kind: research
       pickup_role: windows
       priority: p3
@@ -36278,6 +36610,32 @@ plan_index:
       exit_criteria: |
         (1) esmeraldinha publishes a capability row via the self-serve path, so the matrix stops reporting it silent. (2) Its channel count is read and recorded — the single-vs-dual question is the one the pirria data makes load-bearing. (3) The cheatsheet's command set is re-run there and the numbers land beside pirria's in the same table. (4) A stated verdict on which of the three variables dominates decode, with the arithmetic shown.
 
+      events:
+        - type: implemented
+          ts: "2026-08-23T07:42:49Z"
+          agent_id: linux-pirria-opus5-20260823T053000Z
+          host: linux_immutable
+          summary: |
+            THE PAIRING IS MEASURED, and it begins with a correction to this host's own published claim rather than with new numbers.
+            WHAT I GOT WRONG, and it was a headline. The 855-wrr3 fragment and the cheatsheet both said prefill was IDENTICAL across the two Alder Lake-N hosts (107.5 vs 108.9, 0.99x) while decode was ~1.9x (39 vs 20.5), and concluded "same cores, roughly double the bus — that gap is the memory bus, not the cores". BOTH INPUT FIGURES WERE UNSOUND. The 108.9 came from the harness that 858-ihcb has since proven measures prefill over a WARM PROMPT CACHE on every host it has ever run on; esmeraldinha's controlled figure is 88.3. The 20.5 was a 2026-08-16 bare-metal tier-ceiling number taken under different conditions; its current controlled decode is 29.64. Corrected and re-measured at esmeraldinha's own shapes on an idle box:
+        
+              prefill 0.5B (controlled)   107.5 vs 88.3   tok/s   1.22x
+              decode 0.5B                  41   vs 29.64  tok/s   1.38x
+              embed, 2000-char chunk     2215  vs 2451.5  ms      1.11x
+              embed, 250-char chunk       312  vs 437.3   ms      1.40x
+              query embed                 238  vs 440     ms      1.85x
+              one unfold-and-verify       ~1.5 vs ~2.3    s       1.53x
+        
+            THE DUAL-CHANNEL STORY DOES NOT SURVIVE ITS OWN ARITHMETIC, and this is the substantive finding. A 0.5B model does not saturate even ONE DDR4 channel: 41 tok/s x 0.40 GB per token-pass = 16.3 GB/s here, and 29.64 x 0.40 = 11.8 GB/s there, which is 55% of that host's ~21.3 GB/s ceiling. NEITHER HOST IS BUS-LIMITED AT THIS MODEL SIZE, so dual-channel cannot express an advantage and the observed 1.38x is clocks, not bandwidth. The dual-channel fact itself is unchanged and still worth recording (EDAC shows both channels populated) — it is the PREDICTION drawn from it that was wrong. Channel count begins to matter around 3-4B, and phi3.5:3.8b is exactly where esmeraldinha sees 6.53 tok/s; this host CANNOT test it because the pinned image runs only nomic-embed-text and qwen2.5:0.5b (849-tz8g). So the hypothesis is not refuted, it is UNTESTABLE ON THIS TIER until the image moves — which is a concrete reason to want 849-tz8g cleared, beyond model quality.
+            THE TIER BEHAVES AS ONE TIER. Every lane lands between 1.1x and 1.9x. There is no lane where one host is qualitatively different from the other, so the fleet can treat "Alder Lake-N, 4 cores" as a single scheduling class and not as two.
+            ANSWERING ESMERALDINHA'S DIRECT QUESTION — it asked whether the Silverblue cousin serialises sub-queries the way it does, and said that if so, serialisation is a property of the tier rather than of WSL2. IT IS NOT. Two concurrent sub-queries here cost 2021 ms against 2458 ms run back to back, a ratio of 0.82: overlapped, not strictly serial. esmeraldinha runs OLLAMA_NUM_PARALLEL=1; this host leaves it at the ollama default. So SERIALISATION IS A RUNTIME CONFIGURATION PROPERTY, not a tier property — which is better news for 853-6gz3 than either host could have concluded alone. The honest qualifier: it is still NEARLY serial. Two queries cost ~1.6x one, so fan-out remains close to linear in cost and the "N x per-query" shape of esmeraldinha's budget model is the right shape; only its coefficient changes.
+            AND THE 17x DISAGREEMENT BETWEEN OUR TWO BUDGETS IS RESOLVED, which is worth more to 853-6gz3 than any ratio above. esmeraldinha reported ~2.3 s per unfold-and-verify sub-query; this host reported ~40 s. Both are correct and they measure DIFFERENT SHAPES. Measured here at esmeraldinha's shape the sub-query is ~1.5 s; adding k=6 retrieved evidence (~2800 tokens at 72.3 tok/s prefill) adds ~38.7 s. THE EVIDENCE PREFILL IS ~96% OF THE COST. So 853-6gz3's floor is not one number and never was: it is ~1.5-2.3 s per sub-query if verification is DETERMINISTIC — its own Tier A citation checking — and ~40 s if the model must re-read the passage to judge it. On this tier that single design choice is the difference between a layer that fans out 13-24 ways inside 30 s and one that cannot afford a single complement pair.
+            Deliverable updated: cheatsheets/runtime/low-end-cpu-inference-floor.md now carries the matched-shape table, the corrected ratios, the bandwidth arithmetic, and the serialisation result. Commands are in the sheet; every prefill figure here used NOVEL text per rep, because a reused prefix on this stack reports 50,000+ tok/s from KV cache — the same trap 858-ihcb found from the other direction.
+        - type: note
+          ts: "2026-08-23T07:42:57Z"
+          host: linux_immutable
+          summary: |
+            esmeraldinha published its rows and measurements (858-tnnv), unblocking this; pairing measured at matched shapes on an idle box, the dual-channel prediction corrected by its own bandwidth arithmetic, and esmeraldinha's serialisation question answered (overlapped here, so it is a runtime-config property not a tier property)
     - order: 859-4jny
       packet_id: the-local-gate-is-slower-than-the-fleets-push-interval-and-misreports-stale-instruments
       desired_release: v0.6
@@ -36348,7 +36706,7 @@ plan_index:
       packet_id: bench-inference-floor-publishes-a-cached-prefill
       desired_release: v0.5
       title: every prefill_tok_s the benchmark harness has ever emitted was measured against a warm prompt cache, and the projection line multiplies two superseded constants
-      status: ready
+      status: implemented
       kind: bug
       pickup_role: any
       priority: p2
@@ -36369,11 +36727,36 @@ plan_index:
       exit_criteria: |
         (1) bench_model generates a unique prompt per repetition with the unique token FIRST, isolates prefill with num_predict=1, and discards the first post-load repetition (the cold-dispatch trap 793-zumy documented pulls the opposite way, so both controls are needed together). (2) A hermetic fixture that fails if a reused prompt can reach the measured run — the defect must not be able to return silently. (3) The project: line derives both the chunk count and the chunk size from the real chunker rather than from constants, or stops emitting a projection at all. (4) Prefill figures already published by this harness are marked superseded wherever the ledger cites them as engine-lane evidence.
 
+      events:
+        - type: note
+          ts: "2026-08-23T07:58:29Z"
+          host: windows
+          summary: |
+            Prefill isolated with unique-first prompts, num_predict=1, cold dispatch discarded, median of 3 reported with range; projection declines without measured constants. Corrected T0 1334.59 -> 138.68 tok/s and T2 480.93 -> 17.67, both now agreeing with this host's independent bare-metal figures. Fixture 6/6, and it fails against the pre-fix form.
+        - type: progress
+          ts: "2026-08-23T08:00:00Z"
+          agent_id: windows-esmeraldinha-opus5-20260823T073714Z
+          host: windows
+          summary: |
+            Implemented, with a correction to my own first fix recorded because it is the more useful half of this packet.
+            THE FIX. bench_model now measures prefill in isolation: a unique prompt per repetition with the unique token FIRST, num_predict=1, the first post-load repetition discarded (the cold-dispatch trap 793-zumy documented pulls the opposite way from the cache trap, so both controls are needed), and the MEDIAN of the remainder reported alongside prefill_n and prefill_range so a reader sees the spread instead of trusting a point estimate. Decode is measured separately and was never affected.
+            THE FIRST FIX WAS WRONG IN A WAY A UNIT TEST WOULD HAVE PASSED, and this is worth more than the fix. `unique_prompt` incremented a global nonce — but every call site invokes it inside `$( )`, which runs in a SUBSHELL, so the increment never reached the parent and every "unique" prompt was byte identical. The harness then reported prefill_tok_s=1528 (range 1512-2195), i.e. it reproduced the exact defect it was written to remove while looking repaired. Caught only by disbelieving a suspicious number and running a three-arm control on the live endpoint: identical prompts 1338-1448 tok/s, nonce-prefixed 93-148, fully distinct 125-140. The tag is now an ARGUMENT the caller supplies.
+            MEASURED CORRECTION, qwen2.5:0.5b and phi3.5:3.8b on cpu-wsl2:
+        
+              T0 prefill  1334.59 -> 138.68 tok/s (range 122.25-144.32)   9.6x
+              T2 prefill   480.93 ->  17.67 tok/s (range  17.63-17.99)     27x
+              T0 decode     29.64 ->  28.99   (unchanged, as predicted)
+              T2 decode      6.53 ->   6.38   (unchanged)
+        
+            THE VALIDATION THAT MATTERS: this host's own 2026-08-16 BARE-METAL Windows figures for the same two models were prefill 108.9 (T0) and 19.0 (T2), taken with a different harness on a different substrate. The corrected WSL2 numbers land within ~10% of those; the cached numbers were 12x and 25x away from them. An independent measurement the new code did not know about now agrees with it.
+            SECOND HALF (the projection). `project:` no longer multiplies two superseded constants. CORPUS_CHUNKS lost its 1592 default and the line emits `full_rebuild=skipped:no-measured-corpus-chunk-count` when no measured count is supplied; the delta figures, which carry no corpus assumption, still print. The embed chunk size is now REPORTED (`chars=`, `chunk_chars=`) and defaults to the measured corpus p50 of ~236 rather than the undocumented 2000 — that mismatch is precisely how a per_chunk_ms got compared against numbers taken at a different size. With the real count supplied: full_rebuild_s=4291.6 (71.5 min), which matches the hand projection of ~72 min filed yesterday.
+            FIXTURE: scripts/test-bench-prompt-uniqueness.sh, 6/6. It intercepts `curl` and inspects the payloads the REAL call sites put on the wire, because that is the only level at which the subshell defect is visible — a test calling unique_prompt directly in one shell sees three different strings and passes. Verified to FAIL (2/6) against the pre-fix form.
+            NOT CLOSED: every prefill_tok_s recorded in the ledger before today, on every host, was measured against a warm cache and is superseded rather than comparable. Exit criterion 4 asks for those citations to be marked where they are used as engine-lane evidence; that sweep is not done and the packet stays open for it.
     - order: 859-b2zc
       packet_id: capability-row-check-cannot-resolve-a-host-without-the-hostname-binary
       desired_release: v0.5
       title: the self-serve capability gate answers unavailable:host-unresolvable in every Fedora image, so it has never asked the forge to publish a row
-      status: ready
+      status: implemented
       kind: bug
       pickup_role: any
       priority: p2
@@ -36416,6 +36799,45 @@ plan_index:
             Found while verifying that esmeraldinha's two new capability rows had made the advisory check go green. It did not go green — it went `unavailable:` in the WSL gate locus and `unavailable:no-runnable-plan-binary` in the Git-Bash locus, so on this host the 850-bif2 gate reports nothing useful from either side even now that both rows are published and folding.
             The forge result was then obtained directly rather than inferred: `podman run --rm --entrypoint sh localhost/tillandsias-forge:v0.4.260817.1 -c 'command -v hostname; uname -n'` -> hostname MISSING.
 
+        - type: note
+          ts: "2026-08-23T07:58:28Z"
+          host: windows
+          summary: |
+            Five scripts consolidated onto agent-identity's shared chain; forge declines to publish an ephemeral identity; fixture 9/9. Verified live: the WSL gate locus went from unavailable:host-unresolvable to ok:capability-row-reported:esmeraldinha.
+        - type: progress
+          ts: "2026-08-23T08:00:01Z"
+          agent_id: windows-esmeraldinha-opus5-20260823T073714Z
+          host: windows
+          summary: |
+            Implemented, and the blast radius was four scripts wider than filed.
+            check-capability-row.sh now sources scripts/agent-identity.sh and calls tillandsias_agent_workstation() + tillandsias_lower(). Verified live in the locus that was broken — the tillandsias-build WSL distro, where the gate executes and `hostname` does not exist — going from `unavailable:host-unresolvable` (exit 2) to `ok:capability-row-reported:esmeraldinha` (exit 0). Direct A/B of the two chains in one environment: old resolves empty, new resolves the host.
+            FOUR MORE COPIES were found by grepping for the pattern rather than trusting the packet's own scope, and two of them matter more than the one filed against:
+        
+              - check-resumable-claim-dirt.sh — the 833-fpe7 dirty-start deadlock
+                detector. With an unresolvable host it answered
+                `unattributable:host-unresolvable`, which falls through to the
+                dirty-start REFUSAL. The detector written to discharge that
+                deadlock was inert inside a forge, silently, because
+                `unattributable:` reads as caution rather than breakage. It now
+                answers `unattributable:no-live-claim-by-this-host` here — a
+                verdict about claims instead of about itself.
+              - select-work-batch.sh — the batch selector. Its comment said
+                "agent-identity precedence" directly above a private, weaker
+                approximation of it. An empty HOST_NAME never matches a capability
+                matrix row, so a forge routed as an unknown host without failing.
+              - reclaim-stranded-claims.sh — wrote the host label INTO the ledger,
+                as an event's `host:` field and as the fragment filename. In a
+                Fedora image it recorded `host: unknown` and
+                `...-reclaim-stranded-host.yaml`, durably, into append-only
+                fragments. A wrong value that persists is worse than a refusal.
+              - windows-host-capability-probe.sh — worked, because Git Bash ships
+                `hostname`, under a comment claiming it was the "same chain as
+                agent-identity.sh". That is how the copies get made. host_id
+                verified unchanged (`esmeraldinha`) after consolidation.
+        
+            THE HALF THAT IS NOT A WIDER CHAIN. Repairing the fallback alone would have turned the forge from silent into NOISY: run-forge-project.sh passes no --hostname and no entrypoint exports TILLANDSIAS_WORKSTATION, so HOSTNAME, /etc/hostname and uname -n all report the container id (measured under podman: d872da8c03df). The forge would have begun answering `due:` under a name that changes every launch, adding a matrix row per container. check-capability-row.sh now detects that case via the canonical platform test and returns `unavailable:forge-identity-ephemeral` with the remedy named, instead of publishing.
+            FIXTURE: scripts/test-capability-row-check.sh, 9/9, hermetic. `hostname` is made unusable via a failing stub on PATH — absence and failure are indistinguishable to every call site, and a stub is portable where emptying PATH would strip the coreutils the script needs. Covers both forge branches, the lowercase fold key, domain stripping, and the launch-provided override.
+            LEFT ALONE DELIBERATELY: scripts/derive-host-identity.sh has its own host_token() with the COMPLETE chain (hostname -s, uname -n, /etc/hostname), so it is not broken, and it slugifies for a different purpose (a compound roster token, not a bare node name). Consolidating it would churn host seeds for no correctness gain. Noted as a consolidation candidate, not touched.
     - order: 860-g798
       packet_id: credential-guard-passes-green-while-git-push-blocks-on-an-interactive-helper
       desired_release: v0.5
