@@ -44,6 +44,30 @@ echo "[router] base:    $BASE ($(wc -l < $BASE) lines)"
 echo "[router] dynamic: $DYNAMIC ($(wc -l < $DYNAMIC) lines)"
 echo "[router] merged:  $MERGED ($(wc -l < $MERGED) lines)"
 
+# --- 723-ji4v sidecar-executability guard begin ---
+# Fail LOUD on a wrong-arch sidecar (order 723-ji4v). An x86-64 sidecar in
+# the aarch64 VZ guest made the supervise loop below respawn ENOEXEC once a
+# second forever while Caddy's forward_auth 502'd and the tray reported a
+# healthy router — OTP gating silently dead. The check is STATIC (ELF
+# e_machine, bytes 18-19, little-endian, vs uname -m): the sidecar serves
+# rather than parses argv, so an exec probe could bind and hang. dd/od/awk
+# are busybox-safe. An unknown machine or unreadable header degrades to the
+# old behavior rather than refusing a container it cannot judge.
+SIDECAR_BIN=/usr/local/bin/tillandsias-router-sidecar
+e_machine="$(dd if="$SIDECAR_BIN" bs=1 skip=18 count=2 2>/dev/null | od -An -tu1 | awk 'NR==1 {print $1 + $2 * 256}')"
+case "$(uname -m)" in
+    x86_64)  want_machine=62 ;;
+    aarch64) want_machine=183 ;;
+    *)       want_machine="" ;;
+esac
+if [ -n "$want_machine" ] && [ -n "$e_machine" ] && [ "$e_machine" != "$want_machine" ]; then
+    echo "[router] FATAL: sidecar ELF machine=$e_machine does not match this guest ($(uname -m) wants $want_machine)." >&2
+    echo "[router]   A wrong-arch sidecar cannot exec; refusing to start rather than 502 silently (723-ji4v)." >&2
+    echo "[router]   Rebuild and restage: scripts/build-sidecar.sh derives the target from the machine." >&2
+    exit 1
+fi
+# --- 723-ji4v sidecar-executability guard end ---
+
 # @trace spec:opencode-web-session-otp
 # Supervise the sidecar in the background. `until ...; do sleep 1; done`
 # keeps respawning it if it exits — the loop runs in a subshell so it

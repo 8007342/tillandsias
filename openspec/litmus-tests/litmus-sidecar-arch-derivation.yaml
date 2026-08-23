@@ -1,0 +1,48 @@
+# @trace spec:ci-release
+# @trace order:723-ji4v
+#
+# Pins the router sidecar's per-arch build chain. build-sidecar.sh pinned
+# TARGET=x86_64-unknown-linux-musl unconditionally, so every Apple-Silicon
+# host staged an x86-64 ELF for its aarch64 VZ guest — deterministic ENOEXEC
+# at exec time, degraded by the router entrypoint to a silent 502 while the
+# tray reported a healthy router (OTP gating dead, failing open-looking).
+# Now: TARGET derives from the machine (loud rc 2 on unknown), the linker
+# env vars derive their names from the triple, staging refuses a
+# wrong-arch ELF, and the entrypoint refuses a wrong-arch sidecar
+# statically (ELF e_machine vs uname -m) instead of respawning it forever.
+name: litmus:sidecar-arch-derivation
+spec: ci-release
+phase: pre-build
+description: >
+  Pin 723-ji4v: build-sidecar.sh derives its musl triple from the machine
+  and refuses unknown machines and wrong-arch artifacts; the router
+  entrypoint fails loud on a wrong-arch sidecar. Behavioral fixture with
+  crafted ELF headers, per-arch negative controls, and cmp-verified mutant
+  arms for both the derivation and the guard.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/build-sidecar.sh and images/router/entrypoint.sh
+  - workspace contains scripts/test-sidecar-arch-derivation.sh
+  - shell utilities (bash, awk, sed, od, dd) are available in PATH
+
+critical_path:
+  - step: "scripts parse and the fixture is executable"
+    command: "bash -n scripts/build-sidecar.sh && bash -n images/router/entrypoint.sh && test -x scripts/test-sidecar-arch-derivation.sh && echo 'ok: parses'"
+    timeout_ms: 5000
+    expected_behavior: "ok: parses"
+
+  - step: "all fixture scenarios pass (derivation, override, loud unknown, guard both directions, mutant arms)"
+    command: "bash scripts/test-sidecar-arch-derivation.sh 2>&1 | tail -1"
+    timeout_ms: 60000
+    expected_behavior: "ok:sidecar-arch-derivation-fixture:17"
+
+  - step: "LIVE: any staged sidecar on this host matches this host's machine (a wrong-arch artifact is exactly the shipped defect)"
+    command: "b=images/router/tillandsias-router-sidecar; if [ ! -f \"$b\" ]; then echo 'ok: not-staged-here'; else m=$(uname -m); case \"$m\" in x86_64|amd64) pat='x86-64';; arm64|aarch64) pat='aarch64';; *) pat='';; esac; if [ -z \"$pat\" ]; then echo 'ok: unjudged-machine'; elif file \"$b\" | grep -Eqi \"$pat\"; then echo 'ok: staged-arch-matches'; else echo \"FAIL: staged sidecar is $(file -b \"$b\") on a $m host\"; fi; fi"
+    timeout_ms: 10000
+    expected_behavior: "ok: (not-staged-here|unjudged-machine|staged-arch-matches)"
+
+evidence:
+  artifact: "scripts/build-sidecar.sh + images/router/entrypoint.sh + scripts/test-sidecar-arch-derivation.sh"
+  measured_on: "macOS Darwin 25.6.0 (Apple Silicon) 2026-08-23 — staged artifact was x86-64 before the fix, ARM aarch64 after a 12.1s rust-lld cross-build; fixture 17/17"
