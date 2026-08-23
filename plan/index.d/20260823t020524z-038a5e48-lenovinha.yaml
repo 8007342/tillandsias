@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: joining-host-must-publish-a-capability-row
+    field: status
+    value: completed
+    ts: "2026-08-23T02:05:24Z"
+    host: lenovinha
+
+events:
+  - packet_id: joining-host-must-publish-a-capability-row
+    event:
+      type: completed
+      ts: "2026-08-23T02:05:24Z"
+      host: lenovinha
+      summary: >
+        status 'completed' with evidence_refs: 54ed95240 cargo test -p tillandsias-headless --bin tillandsias accel_probe 28 passed; cargo test -p tillandsias-plan 205+24 passed; live probe on lenovinha shows both GPUs + container-lane ollama; capability-matrix 4 rows 3/7 reporting with lenovinha row folded; ./build.sh --check rc=0
+  - packet_id: joining-host-must-publish-a-capability-row
+    event:
+      type: note
+      ts: "2026-08-23T02:05:24Z"
+      host: lenovinha
+      summary: >
+        implemented + verified on real AMD+NVIDIA silicon this cycle
