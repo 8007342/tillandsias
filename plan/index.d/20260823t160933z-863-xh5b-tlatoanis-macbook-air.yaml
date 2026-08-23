@@ -1,0 +1,64 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macos (tlatoanis-macbook-air), 2026-08-23. The first full
+# local-ci run on a Darwin host surfaced these; none introduced by that run.
+
+packets:
+  - packet_id: first-macos-local-ci-run-surfaced-fleet-hygiene-reds
+    order: 863-xh5b
+    status: ready
+    kind: bug
+    pickup_role: any
+    priority: p2
+    desired_release: v0.5
+    depends_on: []
+    capability_tags:
+      - all-platforms
+      - ci
+    tags:
+      - local-ci
+      - macos
+      - fleet-hygiene
+    title: >
+      The first full local-ci pre-build run on macOS (local-ci-20260823T155236Z)
+      was red on four checks; one was the checker itself broken on BSD (fixed
+      in-cycle: validate-spec-cheatsheet-binding.sh's GNU head -n -1 reported
+      a binding percentage computed from nothing — 100% once fixed). Three
+      remain, none macOS-caused: (a) guard-activation names four orphaned
+      guards shipped with no invoker on any activation surface
+      (check-cycle-scheduler.sh — yoga's 856-s56y evidence surface,
+      check-daily-maintenance.sh, check-dead-env-branches.sh,
+      check-deslop-due.sh); (b) markdown-distillation flags five noncanonical
+      files outside the inventory (.github/copilot-instructions.md, AGENTS.md,
+      GEMINI.md, images/default/startup-context-addendum.md,
+      scripts/refusal-calibration/README.md); (c) litmus-pre-build carries
+      host-lane failures on macOS at least including
+      litmus:cache-recovery-fresh-start (expects an installed binary this
+      dev host has never curl-installed) and a routing-fixture failure
+      (undiagnosed — logs at /tmp/litmus-pre-build.log of that run).
+    deliverable: scripts/ + methodology/markdown-distillation.yaml inventories
+    context: >
+      Filed as coordination items rather than fixed unilaterally: the orphan
+      guards need their owners to wire or retire them (yoga's is likely
+      awaiting the 856-s56y child rows); the markdown inventory is policy
+      (CLAUDE.md's distillation audit); the litmus lane failures need a
+      decision about which litmus are macOS-host-applicable — possibly an
+      eligibility dimension like the e2e table's, rather than per-test fixes.
+    exit_criteria:
+      - Each orphaned guard is invoked from a named activation surface or
+        retired per obsolete_mechanism_live_intent.
+      - The five markdown files carry inventory rows or are distilled.
+      - local-ci pre-build on a macOS host reaches a verdict red only on
+        genuinely-red content (a lane-eligibility decision recorded for any
+        litmus that cannot apply here).
+    verifiable_closure: >
+      scripts/local-ci.sh --phase pre-build exit 0 on a Darwin host, or exit
+      1 with every failure traceable to real content rather than lane or
+      portability artifacts.
+    events:
+      - type: filed
+        ts: "2026-08-23T16:09:33Z"
+        agent_id: macos-tlatoanis-macbook-air-claude-20260823t154119z
+        host: tlatoanis-macbook-air
+        summary: >
+          Filed from loop iteration 7, the cycle that closed 731-5qz7; the
+          binding-checker BSD fix landed in the same cycle (28bffc71f).
