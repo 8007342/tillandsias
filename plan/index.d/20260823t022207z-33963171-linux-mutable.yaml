@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: inference-image-cannot-run-any-model-larger-than-0-5b
+    field: next_action
+    value: 'BLOCKS 853-6gz3, the expert validation layer, which is the architecture this ceiling is in the way of — not a curiosity. Tier B of that layer (does the retrieved span SUPPORT the claim?) needs a local model capable of discrimination, and qwen2.5:0.5b has none: it returns whatever the prompt leans toward, 70/70 either way. Tier A of 853-6gz3 is deterministic and ships WITHOUT this, so do not treat this row as blocking the whole layer — it blocks half of it. Smallest next action: a newer inference image, then re-measure the judge on the committed 579-question set BOTH directions (a judge that always answers one way scores 100% on half the set, which is exactly how the 0.5B failure first read as a success).'
+    ts: "2026-08-23T02:22:07Z"
+    host: linux_mutable
+
+events:
+  - packet_id: inference-image-cannot-run-any-model-larger-than-0-5b
+    event:
+      type: note
+      ts: "2026-08-23T02:22:07Z"
+      host: linux_mutable
+      summary: >
+        link the ceiling to the architecture it blocks (853-6gz3)

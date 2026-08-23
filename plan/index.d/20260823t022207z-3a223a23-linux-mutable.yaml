@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: fat-spec-expert-cannot-refuse-an-out-of-corpus-question
+    field: next_action
+    value: 'THE THRESHOLD APPROACH IS DEAD — do not implement one. Measured at n=579: in-corpus and out-of-corpus bands overlap by 0.3024 globally and 0.17-0.28 in EVERY corpus; a top1-vs-top2 margin overlaps by 0.1306, worse than the raw score. Harness and data at scripts/refusal-calibration/. The replacement is 853-6gz3, the expert validation layer, which decides refusal by WHICH CHUNK WON and whether its citation verifies, not by how high it scored. Two things can close part of this row before 853-6gz3 lands: Tier A deterministic citation verification (unblocked today), and the declined-alternatives content measured on 824-6qxh, which converted 2 of 5 out-of-corpus questions into correct answers with zero in-corpus regression.'
+    ts: "2026-08-23T02:22:07Z"
+    host: linux_mutable
+
+events:
+  - packet_id: fat-spec-expert-cannot-refuse-an-out-of-corpus-question
+    event:
+      type: note
+      ts: "2026-08-23T02:22:07Z"
+      host: linux_mutable
+      summary: >
+        record that thresholds are measured dead and name the replacement
