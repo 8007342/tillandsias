@@ -1,0 +1,53 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-23T01:57:24Z.
+events:
+  - packet_id: macos-onboarding-defect-sweep
+    event:
+      type: progress
+      ts: "2026-08-23T01:57:24Z"
+      agent_id: linux-macuahuitl-opus5-20260822T144300Z
+      host: linux_mutable
+      summary: |
+        COORDINATOR VERIFICATION OF 851-gpb5, AND ONE ASSERTION THAT DOES NOT
+        HOLD OFF-DARWIN.
+
+        osx-next was ahead=3 behind=0, so it fast-forwarded into linux-next
+        cleanly. Six of the seven fixes verified as described. The seventh —
+        the derive-host-identity repairs — is correct in substance and its
+        BSD-sed diagnosis is exactly right: `\+` is a GNU extension, so
+        `s/[^a-z0-9]\+/-/g` reads as "non-alphanumeric followed by a literal
+        plus" on BSD and `Yoga_ThinkPad` sailed through unslugified. My
+        original fixture asserted that path worked and only ever ran on Linux.
+
+        BUT THE CYCLE REPORTED "18/18 everywhere" AND THIS HOST MEASURED 17/1.
+
+          FAIL the Darwin branch derives the documented macOS shape
+               (expected macos-m5-apple-airbook,
+                     got macos-core-ultra-apple-airbook)
+
+        Cause: cpu_token() tested `[ -r /proc/cpuinfo ]` BEFORE the Darwin
+        branch, so on Linux the sysctl path is unreachable no matter how
+        thoroughly `uname` is shimmed — the scenario read this box's real
+        /proc/cpuinfo and returned its Core Ultra. The probe inferred the OS
+        from a filesystem artifact instead of asking, while os_group() two
+        functions above already branched on `uname` correctly.
+
+        THAT IS 851-gpb5'S OWN FINDING, INVERTED. The cycle fixed a fixture
+        that only passed where it was written by shimming uname; the Darwin
+        scenario it added in the same edit then only passed where IT was
+        written. The lesson generalises past both of us: shimming the probe is
+        not enough if the SUT reaches the same fact by a second route that the
+        shim cannot cover. A hermetic test needs the SUT to have ONE way of
+        knowing.
+
+        FIXED by branching on uname first, matching os_group(). 18/18 on this
+        Linux host, macuahuitl's slug unchanged at
+        linux-core-ultra-npu+nvidia-macuahuitl, and mutation-controlled:
+        restoring the old ordering turns exactly one assertion — the Darwin
+        one — red, and nothing else.
+
+        NOT A CRITICISM OF THE CYCLE, which was strong: it found three real
+        defects in code I wrote yesterday, including one (`--help | grep -q`
+        under pipefail as a deterministic SIGPIPE false-FAIL) that I would not
+        have found from Linux at all. Cross-platform fixtures are simply not
+        verifiable from one platform, which is the argument for the fleet.
