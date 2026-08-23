@@ -21,10 +21,16 @@ source "$DIR/ensure_toolbox.sh"
 # dependency too — resolved by execution, through the one shared probe.
 source "$DIR/plan-binary-probe.sh"
 _ruby() {
+    # -E UTF-8:UTF-8 pins Ruby's default external/internal encodings. On an
+    # unset-locale host (measured 2026-08-23: the WSL lane the Windows gate
+    # runs in has LANG/LC_ALL empty) default_external is US-ASCII, and the
+    # ledger's first em-dash kills String#match? with "invalid byte sequence
+    # in US-ASCII". The ledger is UTF-8 by construction; zero behavior change
+    # where the locale already says so.
     if command -v ruby >/dev/null 2>&1; then
-        ruby "$@"
+        ruby -E UTF-8:UTF-8 "$@"
     else
-        toolbox run --container tillandsias-builder ruby "$@"
+        toolbox run --container tillandsias-builder ruby -E UTF-8:UTF-8 "$@"
     fi
 }
 
