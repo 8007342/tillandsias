@@ -109,13 +109,16 @@
 # <osgroup>-<cpu>-<accel>-<hostname>, unique by hostname and readable in a
 # roster. Operator directive, 2026-08-22.
 #
-# THIS ALONE DOES NOT SEPARATE HOSTS, and it must not be sold as if it does.
-# The pick below chooses among the top-K frontier epics (K=3 by default), so the
-# output space is THREE batches wide however good the seed is. Nine hosts into
-# three buckets collide by pigeonhole, every day. Unique seeds make the choice
-# well-distributed; they cannot make it injective. Real separation needs
-# capability-aware routing — see the fleet-routing packet — and until then R1
-# claiming is what keeps a collision merely wasteful rather than duplicated.
+# THE SEED ALONE DOES NOT SEPARATE HOSTS — the ROSTER does (order 847-wgy4).
+# A host with a published capability row is routed by its ORDINAL RANK in the
+# shared `capability-matrix --hosts` roster, rotated daily, over a frontier
+# widened to the roster size: distinct hosts hold distinct ranks, so any two
+# row-holding hosts get DISJOINT epics whenever the frontier has room — which
+# no hash or seed can promise (8 hashed hosts over 11 epics expect ~2.5
+# birthday collisions; ordinals expect zero). The seeded top-K pick below
+# remains the path for hosts with NO row, where R1 claiming keeps their
+# collisions merely wasteful rather than duplicated. Separation therefore
+# GROWS as 850-bif2 rows land, host by host, with no flag to remember.
 #
 # KNOWN TRADEOFF of the date-based default: every cycle on one host that day
 # picks the SAME epic until its packets drain. That is mostly a FEATURE — it
@@ -264,6 +267,63 @@ if [ -z "$SEED" ]; then
     fi
 fi
 
+# ── CAPABILITY-AWARE ROUTING INPUTS (order 847-wgy4) ─────────────────────────
+# The seed cannot separate hosts (see THIS ALONE DOES NOT SEPARATE HOSTS
+# above); the capability matrix can. `capability-matrix --hosts` is a sorted,
+# deterministic roster of every host with a published row — identical on every
+# host at the same ledger state — so a host's ORDINAL POSITION in it is a
+# collision-free routing key: distinct hosts get distinct ranks by
+# construction, which is stronger than any hash and needs no coordination.
+#
+# Seams: TILLANDSIAS_CAP_HOSTS (set-even-empty) injects a fixture roster;
+# TILLANDSIAS_HOST_TIER overrides the local core probe;
+# TILLANDSIAS_HOST_ACCELS (set-even-empty) overrides the accel set;
+# TILLANDSIAS_WORKSTATION names this host (agent-identity precedence).
+HOST_NAME="${TILLANDSIAS_WORKSTATION:-}"
+if [ -z "$HOST_NAME" ]; then
+    HOST_NAME="$(hostname -s 2>/dev/null || hostname 2>/dev/null || echo '')"
+fi
+HOST_NAME="$(printf '%s' "$HOST_NAME" | tr '[:upper:]' '[:lower:]')"
+
+if [ -n "${TILLANDSIAS_CAP_HOSTS+x}" ]; then
+    CAP_HOSTS="$TILLANDSIAS_CAP_HOSTS"
+else
+    # A matrix the binary cannot serve is an ABSENT roster, never a fatal
+    # fault: routing degrades to the seeded pick (exit criterion 4).
+    CAP_HOSTS="$("$PLAN" capability-matrix --hosts 2>/dev/null || true)"
+fi
+MY_CAP_LINE=""
+[ -n "$HOST_NAME" ] && MY_CAP_LINE="$(printf '%s\n' "$CAP_HOSTS" | awk -F'\t' -v h="$HOST_NAME" '$1==h' | head -1)"
+
+# THE LOW-END TIER (operator mandate 2026-08-16/23, stated in the skill's
+# fleet section): machines with roughly four physical cores are the fleet's
+# deliberate LOWER BOUND and take profiling/characterization work in their own
+# tier, NEVER the general queue — a slow host in the general queue produces
+# slow duplicates of work a faster host already claimed. The probe is local
+# (the selector runs on the host it selects for), so the mandate holds even
+# for a host with no capability row.
+if [ -n "${TILLANDSIAS_HOST_TIER:-}" ]; then
+    HOST_TIER="$TILLANDSIAS_HOST_TIER"
+else
+    _phys=""
+    if [ -r /proc/cpuinfo ]; then
+        _phys="$(awk -F: '/^physical id/{p=$2} /^core id/{seen[p":"$2]=1} END{n=0; for (k in seen) n++; print n}' /proc/cpuinfo 2>/dev/null)"
+    fi
+    if [ -z "$_phys" ] || [ "${_phys:-0}" -eq 0 ]; then
+        _phys="$(sysctl -n hw.physicalcpu 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 0)"
+    fi
+    case "$_phys" in ''|*[!0-9]*) _phys=0 ;; esac
+    if [ "$_phys" -ge 1 ] && [ "$_phys" -le 4 ]; then
+        HOST_TIER="low-end"
+    else
+        HOST_TIER="general"
+    fi
+fi
+# The tag(s) that name tier-reserved work. Enrolling a tag here asserts "this
+# work exists to run on the floor and a fast host running it produces WRONG
+# results, not faster ones" — 855-wrr3 is the charter carrier.
+TIER_TAGS="low-end"
+
 # jq, not yq: the input is tillandsias-plan --json (pure JSON), macOS hosts
 # ship jq but not yq, and the forge image installs both — Fedora's yq is the
 # jq wrapper, so the swap is behavior-identical on Linux.
@@ -350,6 +410,60 @@ if [ -z "$rows" ]; then
     exit 1
 fi
 
+# ── THE TIER GATE (order 847-wgy4; operator mandate) ─────────────────────────
+# A low-end host's pool is EXACTLY the tier-tagged work; everyone else's pool
+# EXCLUDES it. Both directions matter: the floor host in the general queue
+# produces slow duplicates, and a fast host draining the floor's profiling
+# work produces measurements of the wrong machine — data that is worse than
+# no data. An empty tier pool REFUSES rather than falling back to the general
+# queue; the mandate says never, not "unless idle".
+TIER_FILTERED=0
+for tier_tag in $TIER_TAGS; do
+    tier_err="$(mktemp)"
+    # DELIBERATELY UNSCOPED BY RELEASE: the tier pool is small and
+    # hand-curated (855-wrr3 is its charter row, filed v0.6 while v0.5 was
+    # active), and profiling the floor is valuable whenever it was filed —
+    # release-scoping a two-row pool idles the floor host for a bookkeeping
+    # reason. The general pool it is subtracted FROM stays release-scoped, so
+    # an out-of-release tier row simply never appears there to subtract.
+    tier_rows="$("$PLAN" select-rows --status ready --claimable-by "$ROLE" \
+        --tag "$tier_tag" --limit 400 2>"$tier_err")"
+    tier_rc=$?
+    if [ "$tier_rc" -ne 0 ]; then
+        reason="$(tr -d '\r' < "$tier_err" | grep -m1 . || true)"
+        rm -f "$tier_err"
+        echo "refused:query-failed:${PLAN} select-rows --tag ${tier_tag} exited ${tier_rc}: ${reason:-<no stderr>}"
+        exit 1
+    fi
+    rm -f "$tier_err"
+    if [ "$HOST_TIER" = "low-end" ]; then
+        # KEEP only the tier carriers (union across TIER_TAGS accumulates).
+        TIER_POOL="${TIER_POOL:-}${TIER_POOL:+$'\n'}${tier_rows}"
+    elif [ -n "$tier_rows" ]; then
+        # General host: SUBTRACT the tier carriers.
+        before_n="$(printf '%s\n' "$rows" | grep -c .)"
+        rows="$({ printf '%s\n' "$tier_rows"; printf '==CAPDROP==\n'; printf '%s\n' "$rows"; } \
+            | awk -F'\t' '
+                $0 == "==CAPDROP==" { in_pool = 1; next }
+                !in_pool { drop[$4] = 1; next }
+                !($4 in drop)')"
+        after_n="$(printf '%s\n' "$rows" | grep -c .)"
+        TIER_FILTERED=$((TIER_FILTERED + before_n - after_n))
+    fi
+done
+if [ "$HOST_TIER" = "low-end" ]; then
+    rows="$(printf '%s\n' "${TIER_POOL:-}" | awk -F'\t' 'NF >= 4 && !seen[$4]++')"
+    if [ -z "$rows" ]; then
+        echo "refused:no-tier-work:this is a low-end host (tier gate, 847-wgy4) and no ready packet tagged [${TIER_TAGS}] is claimable by role ${ROLE} — the mandate forbids the general queue; file or free tier work rather than draining generally"
+        exit 1
+    fi
+fi
+
+if [ -z "$rows" ]; then
+    echo "refused:no-eligible-work:every ready packet claimable by role ${ROLE} is tier-reserved for the low-end floor (tier_filtered=${TIER_FILTERED})"
+    exit 1
+fi
+
 # HOST TOOL CAPABILITIES (failed-forge handoff 2026-08-15, P3; sibling of the
 # order 660-z774 pool-fidelity family). pickup_role answers "which LANE may
 # claim this"; it says nothing about what the HOST can actually run. The live
@@ -419,6 +533,59 @@ done
 
 if [ -z "$rows" ]; then
     echo "refused:no-eligible-work:every ready packet claimable by role ${ROLE} needs a tool this host lacks (caps_filtered=${CAPS_FILTERED}; install the tool or declare TILLANDSIAS_HOST_CAPS)"
+    exit 1
+fi
+
+# ── ACCELERATOR CAPABILITY SUBTRACTION (order 847-wgy4, exit criterion 2) ────
+# Same subtract-don't-project mechanism as TOOL_CAP_TAGS above, but the
+# presence test reads the host's own capability-matrix row instead of
+# `command -v`: a packet tagged for an accelerator this host lacks is never
+# offered to it. Enrolling a tag here asserts "no host without USABLE
+# <hardware> can make progress on ANY packet tagged <tag>".
+#
+# A host with NO matrix row (and no TILLANDSIAS_HOST_ACCELS seam) skips the
+# subtraction entirely — exit criterion 4: an unprobed host degrades to
+# today's behaviour, never to an emptier pool than today's.
+ACCEL_CAP_TAGS="cuda rocm npu metal"
+ACCEL_FILTERED=0
+if [ -n "${TILLANDSIAS_HOST_ACCELS+x}" ] || [ -n "$MY_CAP_LINE" ]; then
+    if [ -n "${TILLANDSIAS_HOST_ACCELS+x}" ]; then
+        HOST_ACCELS=" ${TILLANDSIAS_HOST_ACCELS} "
+    else
+        HOST_ACCELS=" "
+        _accels="$(printf '%s' "$MY_CAP_LINE" | cut -f3)"
+        case "$_accels" in *"gpu:nvidia:usable"*) HOST_ACCELS="${HOST_ACCELS}cuda " ;; esac
+        case "$_accels" in *"gpu:amd:usable"*)    HOST_ACCELS="${HOST_ACCELS}rocm " ;; esac
+        case "$_accels" in *"npu:"*":usable"*)    HOST_ACCELS="${HOST_ACCELS}npu " ;; esac
+        case "$_accels" in *"gpu:apple:usable"*)  HOST_ACCELS="${HOST_ACCELS}metal " ;; esac
+    fi
+    for accel in $ACCEL_CAP_TAGS; do
+        case "$HOST_ACCELS" in *" ${accel} "*) continue ;; esac
+        accel_err="$(mktemp)"
+        accel_rows="$("$PLAN" select-rows --status ready --claimable-by "$ROLE" \
+            "${REL_ARG[@]+"${REL_ARG[@]}"}" --tag "$accel" --limit 400 2>"$accel_err")"
+        accel_rc=$?
+        if [ "$accel_rc" -ne 0 ]; then
+            reason="$(tr -d '\r' < "$accel_err" | grep -m1 . || true)"
+            rm -f "$accel_err"
+            echo "refused:query-failed:${PLAN} select-rows --tag ${accel} exited ${accel_rc}: ${reason:-<no stderr>}"
+            exit 1
+        fi
+        rm -f "$accel_err"
+        [ -n "$accel_rows" ] || continue
+        before_n="$(printf '%s\n' "$rows" | grep -c .)"
+        rows="$({ printf '%s\n' "$accel_rows"; printf '==CAPDROP==\n'; printf '%s\n' "$rows"; } \
+            | awk -F'\t' '
+                $0 == "==CAPDROP==" { in_pool = 1; next }
+                !in_pool { drop[$4] = 1; next }
+                !($4 in drop)')"
+        after_n="$(printf '%s\n' "$rows" | grep -c .)"
+        ACCEL_FILTERED=$((ACCEL_FILTERED + before_n - after_n))
+    done
+fi
+
+if [ -z "$rows" ]; then
+    echo "refused:no-eligible-work:every ready packet claimable by role ${ROLE} needs an accelerator this host lacks (accel_filtered=${ACCEL_FILTERED})"
     exit 1
 fi
 
@@ -519,6 +686,42 @@ epic_count="$(printf '%s\n' "$scored" | grep -c .)"
 k="$TOPK"; [ "$k" -gt "$epic_count" ] && k="$epic_count"; [ "$k" -lt 1 ] && k=1
 seed_num="$(printf '%s' "$SEED" | cksum | cut -d' ' -f1)"
 
+# ── ORDINAL ROUTING (order 847-wgy4, exit criteria 1 + 3) ────────────────────
+# When this host has a capability-matrix row, its pick is its ORDINAL RANK in
+# the shared roster, rotated daily, over a frontier WIDENED to the roster
+# size. Distinct hosts hold distinct ranks, and (rank + rot) mod width with a
+# fleet-uniform rot keeps them distinct — so any two row-holding hosts get
+# DISJOINT epics whenever the frontier has room, which no hash can promise
+# (over 11 epics, 8 hashed hosts expect ~2.5 collisions by birthday; ordinals
+# expect zero). The seeded draw below remains for rowless hosts (exit
+# criterion 4) — R1 claiming still keeps THEIR collisions merely wasteful.
+#
+# ANTI-STARVATION IS WIDENED, NOT TRADED: width >= the old K, so every epic
+# reachable yesterday is reachable today; the daily rotation walks every host
+# across every frontier slot over `width` days (a permanently-second epic is
+# now worked by SOME host most days, not one host occasionally); and epics
+# below the frontier enter it exactly as before, by score. The rotation is a
+# function of the UTC DATE alone — deriving it from the per-host seed would
+# de-align the ranks and reintroduce the collisions this exists to remove.
+ROUTE="seed"
+if [ -n "$MY_CAP_LINE" ] && [ "$HOST_TIER" != "low-end" ]; then
+    roster_n="$(printf '%s\n' "$CAP_HOSTS" | grep -c .)"
+    my_rank="$(printf '%s\n' "$CAP_HOSTS" | awk -F'\t' -v h="$HOST_NAME" '$1==h{print NR; exit}')"
+    if [ -n "$my_rank" ] && [ "$roster_n" -ge 1 ]; then
+        width="$TOPK"
+        [ "$roster_n" -gt "$width" ] && width="$roster_n"
+        [ "$width" -gt "$epic_count" ] && width="$epic_count"
+        [ "$width" -lt 1 ] && width=1
+        # TILLANDSIAS_ROUTE_ROT pins the rotation for fixtures (the
+        # anti-starvation litmus walks it); live it is a function of the UTC
+        # DATE alone, fleet-uniform by construction.
+        day_rot="${TILLANDSIAS_ROUTE_ROT:-$(date -u +%Y%m%d | cksum | cut -d' ' -f1)}"
+        routed_pick=$(( ( (my_rank - 1 + day_rot) % width ) + 1 ))
+        k="$width"
+        ROUTE="rank:${my_rank}/${roster_n}:width=${width}"
+    fi
+fi
+
 # SCORE-WEIGHTED, not uniform. Uniform choice over the top-K re-introduces the
 # very anti-pattern minimax forbids: with scores 22.8 / 19.7 / 8.5, a uniform
 # pick takes the 8.5 a third of the time — chasing a low-residual obligation
@@ -553,19 +756,23 @@ probs="$(printf '%s\n' "$scored" | head -n "$k" \
             }
         }')"
 
-pick="$(printf '%s\n' "$probs" \
-    | awk -F'\t' -v seed="$seed_num" '
-        { p[NR] = $1 + 0; total += p[NR]; }
-        END {
-            if (total <= 0) { print 1; exit }
-            r = (seed % 1000000) / 1000000.0 * total;
-            acc = 0;
-            for (i = 1; i <= NR; i++) {
-                acc += p[i];
-                if (r < acc) { print i; exit }
-            }
-            print NR;
-        }')"
+if [ "$ROUTE" != "seed" ]; then
+    pick="$routed_pick"
+else
+    pick="$(printf '%s\n' "$probs" \
+        | awk -F'\t' -v seed="$seed_num" '
+            { p[NR] = $1 + 0; total += p[NR]; }
+            END {
+                if (total <= 0) { print 1; exit }
+                r = (seed % 1000000) / 1000000.0 * total;
+                acc = 0;
+                for (i = 1; i <= NR; i++) {
+                    acc += p[i];
+                    if (r < acc) { print i; exit }
+                }
+                print NR;
+            }')"
+fi
 chosen="$(printf '%s\n' "$scored" | sed -n "${pick}p" | cut -f2)"
 chosen_score="$(printf '%s\n' "$scored" | sed -n "${pick}p" | cut -f1)"
 
@@ -611,8 +818,9 @@ fi
 
 size="$(printf '%s\n' "$batch" | grep -c .)"
 
-printf 'batch: epic=%s role=%s release=%s size=%s budget=%s score=%s seed=%s pick=%s/%s%s\n' \
+printf 'batch: epic=%s role=%s release=%s size=%s budget=%s score=%s seed=%s pick=%s/%s%s%s\n' \
     "$chosen" "$ROLE" "$release" "$size" "$BUDGET" "$chosen_score" "$SEED" "$pick" "$k" \
+    "$( if [ "$HOST_TIER" = "low-end" ]; then printf ' route=tier:low-end'; elif [ "$ROUTE" != "seed" ]; then printf ' route=%s' "$ROUTE"; fi )" \
     "$( [ -n "${URGENT_NOTE:-}" ] && printf ' urgent=%s' "$URGENT_NOTE" )"
 printf '%s\n' "$batch" | while IFS=$'\t' read -r rank epic order pid prio rel; do
     [ -n "$pid" ] || continue
@@ -626,9 +834,11 @@ urgency_unscored="$(printf '%s\n' "$rows" | awk -F'\t' '$1==99' | grep -c .)"
 # caps_filtered rides the triage line ONLY when the host-capability subtraction
 # dropped rows (same conditional idiom as the header's `urgent=`), so a fully
 # capable host emits byte-identical output to the pre-filter selector.
-printf 'triage: eligible=%s grouped=%s ungrouped=%s epics=%s urgency_unscored=%s%s\n' \
+printf 'triage: eligible=%s grouped=%s ungrouped=%s epics=%s urgency_unscored=%s%s%s%s\n' \
     "$eligible" "$grouped" "$ungrouped" "$epics" "$urgency_unscored" \
-    "$( [ "${CAPS_FILTERED:-0}" -gt 0 ] && printf ' caps_filtered=%s' "$CAPS_FILTERED" )"
+    "$( [ "${CAPS_FILTERED:-0}" -gt 0 ] && printf ' caps_filtered=%s' "$CAPS_FILTERED" )" \
+    "$( [ "${TIER_FILTERED:-0}" -gt 0 ] && printf ' tier_filtered=%s' "$TIER_FILTERED" )" \
+    "$( [ "${ACCEL_FILTERED:-0}" -gt 0 ] && printf ' accel_filtered=%s' "$ACCEL_FILTERED" )"
 # The frontier is printed so a cycle can justify its choice, and so a human can
 # see what it did NOT pick. An unexplained selection is unauditable.
 printf '%s\n' "$scored" | head -n "$k" | while IFS=$'\t' read -r sc e c b n; do

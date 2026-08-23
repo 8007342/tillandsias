@@ -2887,6 +2887,60 @@ fn main() {
             let frags = tillandsias_plan::fragments::load_all(&index);
             let (matrix, skipped) = tillandsias_plan::fragments::fold_capabilities(&frags);
 
+            // ORDER 847-wgy4. `--hosts` is the ROUTING projection: one line
+            // per distinct host_id, sorted (BTreeMap order), as
+            //   <host_id>\t<derived_tier>\t<accels>
+            // where accels is a comma-joined, sorted union across the host's
+            // loci of `<class>:<vendor>:<usable|unusable>` for every gpu/npu
+            // device, or `none`. The selector consumes this to (a) rank a
+            // host among the matrix's hosts for collision-free epic routing
+            // and (b) decide which accelerator tags the host can serve.
+            // Sorted, deterministic, and machine-parseable — the human view
+            // below stays the human view.
+            if args.iter().any(|a| a == "--hosts") {
+                let mut hosts: std::collections::BTreeMap<
+                    &str,
+                    (String, std::collections::BTreeSet<String>),
+                > = std::collections::BTreeMap::new();
+                for ((host_id, _locus), entry) in &matrix {
+                    let tier = entry.document["legacy_tier"].as_str().unwrap_or("unknown");
+                    let slot = hosts
+                        .entry(host_id.as_str())
+                        .or_insert_with(|| (tier.to_string(), Default::default()));
+                    // Newest-locus tier wins only when the stored one is
+                    // unknown/cpu — a machine is at least its most capable
+                    // locus.
+                    if slot.0 == "unknown" || (slot.0 == "cpu" && tier != "unknown") {
+                        slot.0 = tier.to_string();
+                    }
+                    if let Some(devices) = entry.document["devices"].as_sequence() {
+                        for d in devices {
+                            let class = d["device_class"].as_str().unwrap_or("");
+                            if class != "gpu" && class != "npu" {
+                                continue;
+                            }
+                            let vendor = d["vendor"].as_str().unwrap_or("unknown");
+                            let usable = if d["usable"].as_bool() == Some(true) {
+                                "usable"
+                            } else {
+                                "unusable"
+                            };
+                            slot.1.insert(format!("{class}:{vendor}:{usable}"));
+                        }
+                    }
+                }
+                for (host_id, (tier, accels)) in &hosts {
+                    let accel_csv = if accels.is_empty() {
+                        "none".to_string()
+                    } else {
+                        accels.iter().cloned().collect::<Vec<_>>().join(",")
+                    };
+                    println!("{host_id}\t{tier}\t{accel_csv}");
+                }
+                log_cli_usage(&subcommand, "answered", start_time.elapsed().as_millis());
+                return;
+            }
+
             // ORDER 843-624y. EMPTY IS NOT THE SAME FACT AS UNREPORTED, and
             // until now this arm could not tell them apart: it printed
             // "0 rows" and exited 0, which reads identically to a healthy

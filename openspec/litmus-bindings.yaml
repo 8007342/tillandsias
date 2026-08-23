@@ -152,6 +152,7 @@ specs:
   - litmus:stable-channel-shape
   - litmus:smoke-release-channel-shape
   - litmus:cycle-batch-triage-shape
+  - litmus:capability-routing-shape
   - litmus:pickup-role-grammar-shape
   - litmus:terminal-status-vocabulary-shape
   - litmus:local-ci-self-clean-evidence

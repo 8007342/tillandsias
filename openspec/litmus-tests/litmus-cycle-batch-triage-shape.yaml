@@ -27,7 +27,7 @@ critical_path:
     # broke the step, CORRECTLY: unlike the expression-pinned guards repaired
     # earlier this session, an output grammar is a genuine contract, so changing
     # the output without changing the contract is the defect, not the test.
-    command: "scripts/select-work-batch.sh linux | head -1 | grep -qE '^batch: epic=[A-Za-z0-9._-]+ role=linux release=[^ ]+ size=[0-9]+ budget=[0-9]+ score=[0-9.]+ seed=[^ ]+ pick=[0-9]+/[0-9]+( urgent=[A-Za-z0-9._-]+)?$' && echo 'ok: batch grammar'"
+    command: "scripts/select-work-batch.sh linux | head -1 | grep -qE '^batch: epic=[A-Za-z0-9._-]+ role=linux release=[^ ]+ size=[0-9]+ budget=[0-9]+ score=[0-9.]+ seed=[^ ]+ pick=[0-9]+/[0-9]+( route=(rank:[0-9]+/[0-9]+:width=[0-9]+|tier:low-end))?( urgent=[A-Za-z0-9._-]+)?$' && echo 'ok: batch grammar'"
     timeout_ms: 30000
     expected_behavior: "ok: batch grammar"
 
@@ -57,7 +57,7 @@ critical_path:
   # trains people to re-run it. The properties that matter — a floor exists, and
   # minimax still dominates — are exact, not statistical.
   - step: "ENTROPY FLOOR: no frontier epic is starved"
-    command: "out=$(scripts/select-work-batch.sh linux 2>/dev/null); n=$(printf '%s\\n' \"$out\" | grep -c \"^frontier$(printf '\\t')\"); if [ \"$n\" -lt 2 ]; then echo \"ok: entropy floor n/a (single-epic frontier)\"; exit 0; fi; min=$(printf '%s\\n' \"$out\" | grep \"^frontier$(printf '\\t')\" | sed 's/.*p=//' | sort -g | head -1); awk -v m=\"$min\" 'BEGIN { if (m+0 < 0.02) { print \"FAIL: frontier epic starved at p=\" m; exit 1 } print \"ok: entropy floor min_p=\" m }'"
+    command: "out=$(scripts/select-work-batch.sh linux 2>/dev/null); if printf '%s\\n' \"$out\" | head -1 | grep -q ' route=rank:'; then echo 'ok: entropy floor n/a (ordinal routing, 847-wgy4 — the ROTATION covers the frontier, asserted by litmus:capability-routing-shape case 3; the p column is informational on a routed host)'; exit 0; fi; n=$(printf '%s\\n' \"$out\" | grep -c \"^frontier$(printf '\\t')\"); if [ \"$n\" -lt 2 ]; then echo \"ok: entropy floor n/a (single-epic frontier)\"; exit 0; fi; min=$(printf '%s\\n' \"$out\" | grep \"^frontier$(printf '\\t')\" | sed 's/.*p=//' | sort -g | head -1); awk -v m=\"$min\" 'BEGIN { if (m+0 < 0.02) { print \"FAIL: frontier epic starved at p=\" m; exit 1 } print \"ok: entropy floor min_p=\" m }'"
     timeout_ms: 60000
     expected_behavior: "ok: entropy floor"
 
