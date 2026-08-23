@@ -152,6 +152,7 @@ specs:
   - litmus:stable-channel-shape
   - litmus:smoke-release-channel-shape
   - litmus:cycle-batch-triage-shape
+  - litmus:harness-affinity-selection-shape
   - litmus:capability-routing-shape
   - litmus:pickup-role-grammar-shape
   - litmus:terminal-status-vocabulary-shape
@@ -377,6 +378,7 @@ specs:
   - litmus:project-answer-synthesis-refusal-typed
   - litmus:generic-index-deterministic-subset
   - litmus:mcp-usage-telemetry-shape
+  - litmus:mcp-transport-death-trace-shape
   coverage_ratio: 80
   last_verified: '2026-08-10'
 - spec_id: forge-forward-compat

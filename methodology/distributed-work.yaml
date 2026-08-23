@@ -1513,6 +1513,37 @@ distributed_work:
           If blocked or failed, write a 'blocked' or 'failed' event with a clear error/reason
           under the item's events list, update status, release the lease, and switch to a ready fallback task.
 
+    harness_affinity_selection:
+      decided_by: "order 555 (routing enabler for the operator's harness-validation ask)"
+      rule: >
+        A forge cycle that knows which harness drives it
+        (TILLANDSIAS_HOST_KIND=forge AND TILLANDSIAS_AGENT set to a
+        tag-shaped harness name: opencode, claude, codex, antigravity,
+        gemini, ...) MUST prefer a ready packet tagged
+        [harness-validation, <that harness>] over the general backlog — an
+        OpenCode forge claims the OpenCode validation packet, never a random
+        platform packet. scripts/select-work-batch.sh implements this: the
+        affinity pick takes the batch HEAD (above the order-645 urgent slot —
+        a validation forge that defers its own validation never validates its
+        harness) and the header confesses it with `harness=<packet_id>`.
+      convention: >
+        A harness-validation packet tags capability_tags
+        [harness-validation, <harness>]. The affinity query is
+        release-unscoped for the tier-pool reason: the pool is small and
+        hand-curated, and validating THIS harness is valuable whenever its
+        packet was filed.
+      fallback: >
+        No matching ready packet, a non-tag-shaped agent name, or a non-forge
+        host leaves the batch untouched — never idle. Bare-metal hosts never
+        enter the branch: a host that runs many harnesses proves nothing
+        about any one of them.
+      pinned_by: "litmus:harness-affinity-selection-shape (fixture-proven; scripts/test-harness-affinity-selection.sh)"
+      live_signal_gap: >
+        Order 570: the tray launch spec does not yet export TILLANDSIAS_AGENT
+        into live forges, so until it lands the affinity branch fires only in
+        fixtures. The selector rule is deliberately in place first, so 570's
+        landing turns routing on without a second selector change.
+
     forge_cycle_budget:
       decided_by: "The Tlatoāni (order 264, updated order 707-3x9d 2026-08-12)"
       rule: >

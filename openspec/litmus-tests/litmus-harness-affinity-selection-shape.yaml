@@ -1,0 +1,50 @@
+# @trace order:555, spec:ci-release
+name: litmus:harness-affinity-selection-shape
+spec: ci-release
+phase: pre-build
+size: instant
+severity: high
+description: >
+  Harness-affinity worker selection (order 555): a forge cycle that knows
+  which harness drives it (TILLANDSIAS_HOST_KIND=forge with TILLANDSIAS_AGENT
+  set) prefers a ready packet tagged [harness-validation, <that harness>]
+  over the general backlog, so an OpenCode forge claims the OpenCode
+  validation packet instead of a random platform packet — the routing enabler
+  for the operator's "run plain meta-orchestration in a harness and it picks
+  its own tests" ask. The pick takes the batch head and the header confesses
+  it (harness=<packet_id>); with no matching ready packet, a non-tag-shaped
+  agent name, or a non-forge host, selection falls back to the normal batch
+  untouched (never idle). Fixture-proven end to end against
+  scripts/select-work-batch.sh via the TILLANDSIAS_PLAN_BIN seam. The live
+  signal depends on the launch profile actually exporting TILLANDSIAS_AGENT
+  (order 570); until that lands the affinity branch is exercised only by this
+  fixture.
+
+preconditions:
+  - workspace contains scripts/select-work-batch.sh
+  - workspace contains scripts/test-harness-affinity-selection.sh
+  - target/release/tillandsias-plan is built (cargo build --release -p tillandsias-plan)
+
+critical_path:
+  - step: "all five affinity vectors hold: matching packet takes the head with harness= confessed, no-match falls back non-empty, non-forge hosts never enter the branch, an in-epic match moves without duplicating, a non-tag-shaped agent name falls back"
+    command: "bash scripts/test-harness-affinity-selection.sh 2>&1 | tail -1"
+    timeout_ms: 60000
+    expected_behavior: "ok:harness-affinity-selection:5"
+
+observability:
+  traces:
+    - "@trace order:555"
+    - "@trace spec:ci-release"
+  expected_log: >
+    A forge batch header carries harness=<packet_id> exactly when the
+    affinity pick displaced the head; every fallback path leaves the batch
+    byte-identical to the affinity-less selection.
+  log_fields:
+    spec: "ci-release"
+    test: "harness-affinity-selection-shape"
+
+failure_modes:
+  - "the affinity branch loses its forge scoping and a bare-metal host running many harnesses steals single-harness validation packets"
+  - "the fallback path goes idle (empty batch) when no [harness-validation, <agent>] packet is ready, instead of returning the normal batch"
+  - "an unsanitized TILLANDSIAS_AGENT value reaches select-rows as a malformed tag argument instead of falling back"
+  - "the harness= header token disappears and an affinity displacement becomes indistinguishable from ordinary epic selection"

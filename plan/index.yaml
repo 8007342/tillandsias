@@ -9276,6 +9276,12 @@ plan_index:
         - "the rule is documented in methodology/distributed-work.yaml and pinned by a shape check"
 
       events:
+        - type: completed
+          ts: "2026-08-23T08:57:32Z"
+          agent_id: "linux-yoga-fable5-20260823T081315Z"
+          host: yoga
+          summary: |
+            Implemented on yoga, cycle 2026-08-23T08:13Z, commit 8b93387fd. select-work-batch.sh now runs the harness-affinity head pick — TILLANDSIAS_HOST_KIND=forge with a tag-shaped TILLANDSIAS_AGENT queries select-rows for a ready [harness-validation, <agent>] packet (all-match tags, release-unscoped like the tier pool) and moves it to the batch HEAD, header confessing harness=<packet_id>; no match, bad agent name, or non-forge host leaves the batch byte-identical (never idle). Exit criteria — (1) fixture proves TILLANDSIAS_AGENT=opencode selects the [harness-validation, opencode] packet (scripts/test-harness-affinity-selection.sh vector 1, plus dedup vector 4); (2) fallback proven by vectors 2/3/5; (3) documented in methodology/distributed-work.yaml worker_agent_protocol.harness_affinity_selection and pinned by litmus harness-affinity-selection-shape bound under ci-release. The batch-header grammar litmus gained the optional harness= group. LIVE SIGNAL still gated on order 570 — TILLANDSIAS_AGENT is unset in live forges; the selector rule lands first so 570 turns routing on without a second selector change.
         - type: progress
           ts: "2026-08-01T01:28:30Z"
           agent_id: "forge-claude-fable-metaorch-20260801"
@@ -11578,6 +11584,12 @@ plan_index:
       notes: |
         Order 270 (macos-attach-first-use-materialization-blackout, status ready) already owns "materialization emits a progress signal the tray can render" for the IMAGE-BUILD half. This packet is the same defect one layer out — container lifecycle and the sign-in preflight — and cross-platform. Whoever claims either should read both; they may merge.
       events:
+        - type: note
+          ts: "2026-08-23T08:57:55Z"
+          agent_id: "linux-yoga-fable5-20260823T081315Z"
+          host: yoga
+          summary: |
+            Selection observation from yoga 2026-08-23 — the selector's urgent= override put this packet at the head of a linux batch (seed yoga, epic harness-mcp-expert-validation), but the row carries blocked_on operator UX approval with no approval event recorded, so an autonomous cycle cannot drain it and every host offered it must re-derive that refusal. While the approval is pending, globally-urgent head placement spends its one preemption slot on work nobody may start. Not changing status (ready-with-blocked_on may be intentional selector-visible state), recording so the pattern is visible if it recurs.
         - type: filed
           ts: "2026-08-09T06:25:00Z"
           agent_id: windows-claude-fable-20260809t062500z
@@ -13181,6 +13193,12 @@ plan_index:
         Found while adding litmus:podman-egress-control-shape for 653-zzkb. That test is now bound and passing (4/4 for spec proxy-container), so this packet is about the general gap, not that specific test.
         Second-order note worth keeping: the new test's OWN first assertion was wrong — it used `${http_proxy:-unset}` to check neutralization, and `:-` treats an empty value as unset, so it reported a correctly-neutralized variable as a failure. Use `${x+declared}` to test declaredness. The bug was in the ruler again, and this time the ruler caught itself only because it had finally been wired up to run.
       events:
+        - type: note
+          ts: "2026-08-23T08:57:55Z"
+          agent_id: "linux-yoga-fable5-20260823T081315Z"
+          host: yoga
+          summary: |
+            Field defect found and fixed by yoga 2026-08-23 (f9a1a38a8) — check-litmus-bindings.sh ran printf-into-grep -q under its own pipefail, so grep exiting at first match could SIGPIPE the printf and flip a MATCH into a failed pipeline. Under litmus suite load the race fired on random files each run (three suite runs, three different phantom unbound/dangling name sets — cheatsheet-tooling-structure once, build-sh-darwin-tool-remediation+ci-release-musl-binary-policy once, a 5-name dangling set once); standalone runs pass, which is why the fixture never caught it. Herestrings now; the sigpipe-verdict-pipeline lesson, one gate later.
         - type: completed
           ts: "2026-08-23T07:55:19Z"
           agent_id: "linux-lenovinha-claude-20260823t075519z"
@@ -20420,6 +20438,13 @@ plan_index:
         - A project-info transport failure after a healthy start leaves a durable trace (telemetry line or filed finding) without relying on the agent noticing.
         - Either the server is restarted/reconnected automatically, or the failure verdict tells the agent the fallback (filesystem reads) is now the sanctioned path for the rest of the cycle.
 
+      events:
+        - type: completed
+          ts: "2026-08-23T08:54:59Z"
+          agent_id: "linux-yoga-fable5-20260823T081315Z"
+          host: yoga
+          summary: |
+            Implemented on yoga (linux_immutable), cycle 2026-08-23T08:13Z. MECHANISM — the dying server leaves the trace itself. Shared transport guard in images/default/config-overlay/mcp/mcp-usage-log.sh (mcp_transport_guard / mcp_tg_inflight / mcp_tg_done / mcp_tg_clean_shutdown), armed by BOTH project-info.sh and forge-plan.sh immediately before their JSON-RPC loops. On any mid-session death (signal with a request in flight, set -e self-abort, SIGPIPE from a vanished client) the EXIT trap appends a record to TILLANDSIAS_EXPERT_HEALTH_LOG in the probe's own {ts,server,state,host,...} grammar — state=down stage=transport-died with last_tool named — so cycle-metrics folds it into mcp_health and fires mcp_outage with ZERO consumer changes (criterion 1, no agent needed). Clean stdin EOF writes NOTHING (negative control); an external signal ending an IDLE server writes state=stopped stage=signal-idle, visible but deliberately NOT an outage. CRITERION 2 — the record's advice field says filesystem reads are the sanctioned path for the rest of the cycle (mcp_first_read_path unavailable); the harness owns respawn, and this cycle OBSERVED the Claude Code harness respawning a SIGTERM-killed project-info on the next tool call — the first alternative holds live in that harness. What the trap cannot see, said in the code — SIGKILL and host death stay the probe's half. Evidence scripts/test-mcp-transport-death-trace.sh 7/7 (4 consecutive runs), litmus:mcp-transport-death-trace-shape bound to forge-environment-discoverability, suite 17/17, resilience regression green.
     - packet_id: select-work-batch-unreachable-raw-block
       order: 758-kg9p
       status: ready
@@ -36038,6 +36063,12 @@ plan_index:
         (1) A cycle fires on schedule with NO terminal open and NO user logged in, demonstrated on at least one Linux host and one non-Linux host. (2) It SURVIVES A REBOOT without a human re-arming it — this is the property `./repeat` lacks and the one the attestation gaps are made of. (3) The interval is per-host configurable, because the fleet is not uniform: roughly-4-core hosts run every 4 hours by operator mandate while the fast hosts run hourly or 2-hourly. (4) A failing cycle does not stop the schedule, and a cycle that is still running when the next fire is due does not stack a second one on top of it. Overlap is worse than a missed tick: two cycles in one checkout fight over the same worktree boundary. (5) The scheduler's own state is observable — an operator can ask a host "when did you last fire, when do you fire next, did the last one succeed" without reading a transcript.
       next_action: attach first unattended real-fire evidence from yoga then close the non-linux halves via children 858-h7ke and 858-3v74
       events:
+        - type: progress
+          ts: "2026-08-23T08:57:55Z"
+          agent_id: "linux-yoga-fable5-20260823T081315Z"
+          host: yoga
+          summary: |
+            FIRST UNATTENDED SCHEDULER-LAUNCHED REAL FIRE — this cycle IS the evidence the next_action awaited, attached from inside it. The 2026-08-23 08:12:51Z timer fire launched a full meta-orchestration cycle with NO operator prompt anywhere in its ancestry, verified from within the running cycle by walking its own process tree — tillandsias-cycle.timer -> tillandsias-cycle.service (Invocation b1f94a5f49a8484d95cba68de5fa3cf7, Active activating since 08:12:51Z, Main PID 374306 scripts/tillandsias-cycle-driver.sh) -> ./repeat --times 1 -> timeout 5400 run-in-pty claude --print 'Use the ./skills/meta-orchestration skill.'. The predicted ~08:12Z fire (previous event) landed on schedule after the interim loop's retirement, exactly as the handover argued it would. The cycle it launched claimed, implemented and closed 757-qwqz + 555 (commit 8b93387fd), fixed the 660-ryhn gate race (f9a1a38a8), and its MO-FULL attestation in plan/mo-full-attestations.d/yoga.md is the full-cycle proof — an attestation no operator prompt produced. The fire's own rc/duration row joins ~/.cache/tillandsias/cycle-scheduler.jsonl when the service exits (rows are written at fire end; at event time the JSONL's last rows are the 04:12/06:12 skips, matching check-cycle-scheduler's next=pending-current-cycle lastrc=0). ENVELOPE LESSON worth carrying — the driver's timeout 5400 gives a scheduler-launched cycle a HARD 90m envelope; this cycle deferred the destructive curl-install e2e on that ground (a podman reset + provision + nested smoke does not fit beside a full drain), so e2e wants its own dedicated fire or a longer per-class envelope. Criterion 1's strict no-user-logged-in demonstration and criterion 2's live reboot proof still ride the next natural logout/reboot epoch (operator lifecycle); the non-Linux halves remain children 858-h7ke and 858-3v74.
         - type: filed
           ts: "2026-08-23T03:36:50Z"
           agent_id: linux-macuahuitl-opus5-20260822T144300Z

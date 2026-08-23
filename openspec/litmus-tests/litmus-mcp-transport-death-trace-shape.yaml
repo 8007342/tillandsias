@@ -1,0 +1,54 @@
+# @trace spec:forge-environment-discoverability
+name: litmus:mcp-transport-death-trace-shape
+spec: forge-environment-discoverability
+phase: pre-build
+size: instant
+severity: critical
+description: >
+  A stdio MCP expert server that dies MID-SESSION must leave a durable trace
+  without any agent noticing (order 757-qwqz). Witnessed twice on 2026-08-15:
+  project-info's transport closed mid cited-span read ("MCP error -32000"),
+  every tool deregistered for the session, and the ledger showed nothing —
+  the start-of-cycle health probe had truthfully reported healthy, and a dead
+  server writes no usage rows, so a systematically-dying server was
+  indistinguishable from an unused one. The shared transport guard
+  (mcp-usage-log.sh, armed by both project-info.sh and forge-plan.sh) makes
+  the DYING PROCESS append a record to the same JSONL health log the probe
+  writes, in the probe's grammar, so cycle-metrics folds it into `mcp:
+  health=` and fires `mcp_outage:` with zero consumer changes. Clean stdin
+  EOF stays silent (the negative control); an external signal ending an IDLE
+  server is visible as state=stopped but deliberately NOT an outage; a death
+  with a request in flight — or a set -e self-abort — is state=down with the
+  tool named, and IS counted by the cycle-metrics outage grep. The record's
+  `advice` field carries the criterion-2 verdict: filesystem reads are the
+  sanctioned path for the rest of the cycle (the harness owns respawn; the
+  server cannot reconnect itself).
+
+preconditions:
+  - workspace contains images/default/config-overlay/mcp/mcp-usage-log.sh
+  - workspace contains images/default/config-overlay/mcp/project-info.sh
+  - workspace contains images/default/config-overlay/mcp/forge-plan.sh
+  - workspace contains scripts/test-mcp-transport-death-trace.sh
+
+critical_path:
+  - step: "all seven death-trace vectors hold: in-flight signal, set -e abort, clean-shutdown silence, real-server clean EOF silence, idle-signal visibility without outage, client-vanish mid-write outage with tool named, forge-plan parity"
+    command: "bash scripts/test-mcp-transport-death-trace.sh 2>&1 | tail -1"
+    timeout_ms: 120000
+    expected_behavior: "ok:mcp-transport-death-trace:7"
+
+observability:
+  traces:
+    - "@trace order:757-qwqz"
+    - "@trace spec:forge-environment-discoverability"
+  expected_log: >
+    A mid-session server death appends {server,state,stage,rc,last_tool,advice}
+    to TILLANDSIAS_EXPERT_HEALTH_LOG; clean EOF appends nothing.
+  log_fields:
+    spec: "forge-environment-discoverability"
+    test: "mcp-transport-death-trace-shape"
+
+failure_modes:
+  - "a server stops arming mcp_transport_guard (or a CLI subcommand path arms it) and deaths go untraced or clean CLI exits record false outages"
+  - "the record grammar drifts from the probe's {ts,server,state,host} keys and cycle-metrics stops folding the trace into mcp_outage:"
+  - "idle-signal teardown gets recorded as state=down and every client-initiated session end becomes a false outage nobody reads"
+  - "mcp_tg_done is dropped from a response path and every subsequent idle death misreports the stale tool as in flight"
