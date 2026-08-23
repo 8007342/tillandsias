@@ -168,6 +168,7 @@ specs:
   - litmus:selector-urgency-not-inert-shape
   - litmus:sigpipe-verdict-pipeline-shape
   - litmus:gate-stamp-portable-digest
+  - litmus:macos-portability-residuals
   coverage_ratio: 75
   last_verified: '2026-08-17'
 - spec_id: codex-tray-launcher

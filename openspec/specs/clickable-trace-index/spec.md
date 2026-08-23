@@ -91,7 +91,7 @@ For each active spec that has at least one `@trace` annotation in the codebase, 
 
 `build.sh` MUST invoke `generate-traces.sh` in regeneration mode on every build
 that is not a test-only or check-only invocation, so `TRACES.md` stays current
-without a separate manual step. Before writing a pre-push gate stamp,
+without a separate manual step. Before writing a local-gate stamp,
 `build.sh` MUST invoke `generate-traces.sh --check` and MUST refuse the stamp
 when the committed indexes are stale. Validation mode MUST NOT modify tracked
 files.
@@ -112,7 +112,7 @@ files.
 - **GIVEN** the committed `TRACES.md` evidence does not match the current
   `@trace` annotations
 - **WHEN** a gate-bearing `build.sh` invocation otherwise passes
-- **THEN** the invocation SHALL fail before writing the pre-push gate stamp
+- **THEN** the invocation SHALL fail before writing the local-gate stamp
 - **AND** it SHALL print the non-mutating trace-check remedy
 
 ### Requirement: Project observatorium view

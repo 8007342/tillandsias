@@ -102,6 +102,14 @@
 #   scripts/spec-index-ensure.sh --where     # print the resolved tier, no build
 set -uo pipefail
 
+# Portable SHA-256 (851-28b5): coreutils sha256sum on Linux/forge/WSL; stock
+# macOS before 13 ships only `shasum`. Identical "<hex>  <name>" output.
+if command -v sha256sum >/dev/null 2>&1; then
+    PORTABLE_SHA256=(sha256sum)
+else
+    PORTABLE_SHA256=(shasum -a 256)
+fi
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # ── DURABLE ROOT RESOLUTION ──────────────────────────────────────────────────
@@ -306,7 +314,7 @@ n_chunks="$(wc -l < "$work/chunks.jsonl" | tr -d '[:space:]')"
 # re-embedding the same text with a different model produces a different vector
 # space, and mixing two spaces in one file yields confident nonsense.
 fingerprint="$(
-    { sha256sum < "$work/chunks.jsonl"; printf '%s\n' "$EMBED_MODEL"; } | sha256sum | cut -d' ' -f1
+    { "${PORTABLE_SHA256[@]}" < "$work/chunks.jsonl"; printf '%s\n' "$EMBED_MODEL"; } | "${PORTABLE_SHA256[@]}" | cut -d' ' -f1
 )"
 INDEX_DIR="$INDEX_ROOT/$fingerprint"
 

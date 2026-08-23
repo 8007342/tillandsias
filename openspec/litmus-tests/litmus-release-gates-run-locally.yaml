@@ -23,7 +23,7 @@ spec: methodology-accountability
 phase: pre-build
 description: >
   Assert that the release validations which do not need GitHub secrets run on
-  local hardware and are enforced by the pre-push gate: the preflight exists and
+  local hardware and are enforced at push time by the pre-push hook: the preflight exists and
   passes, its gates are absent from release.yml, the pre-push hook composes
   fail-fast, build.sh installs the hooks, and the stamp mechanism can actually
   refuse a stale tree.

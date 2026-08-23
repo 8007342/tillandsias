@@ -1,0 +1,58 @@
+# @trace spec:ci-release
+# @trace order:851-28b5
+#
+# Pins the drained state of the 851-28b5 residuals — the portability and
+# vocabulary defects catalogued (but deliberately deferred) by the 851-gpb5
+# macOS onboarding sweep. Each step is a seeded-defect-equivalent grep:
+# reintroducing the defect class at any pinned site flips exactly that step
+# red. Container/CI-only scripts (materialize-macos-tar-to-img.sh,
+# checksum.sh, build-image.sh's degrades-to-unknown digest, release.yml's
+# ubuntu runner steps) are deliberately NOT pinned — they never run on a
+# macOS host and bare coreutils there is correct.
+name: litmus:macos-portability-residuals
+spec: ci-release
+phase: pre-build
+description: >
+  Pin 851-28b5: macOS-plausible scripts digest only through the
+  PORTABLE_SHA256 dispatch; uninstall.sh carries no GNU-only `xargs -r`;
+  check-pickup-role-grammar.sh splits records with awk (BSD sed emits a
+  literal 'n' for \n in a replacement and silently undercounted);
+  "pre-push gate" no longer means ./build.sh --check anywhere the 851-gpb5
+  vocabulary reservation reaches; and methodology's lane_exclusion states
+  honestly that lane-exit.sh is future (order-502 packet), not present.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains the scripts and methodology files named in the steps
+  - shell utilities (bash, grep) are available in PATH
+
+critical_path:
+  - step: "macOS-plausible scripts digest only through the portable dispatch"
+    command: "bad=0; for f in scripts/test-gate-stamp-memoization.sh scripts/spec-index-ensure.sh scripts/check-windows-only-sources-verified.sh scripts/test-default-vault-cli-security.sh scripts/hash-image-sources.sh scripts/test-release-asset-integrity.sh scripts/forge-diagnostics-annex.sh scripts/test-build-sh-ci-full-install-prep.sh scripts/host-capability-probe.sh; do grep -n 'sha256sum' \"$f\" | grep -v 'PORTABLE_SHA256' | grep -v 'command -v' | grep -v 'shasum' | grep -vE '^[0-9]+:[[:space:]]*#' | grep . && { echo \"FAIL: bare digest in $f\"; bad=1; }; done; [ \"$bad\" -eq 0 ] && echo 'ok: dispatch-only'"
+    timeout_ms: 10000
+    expected_behavior: "ok: dispatch-only"
+
+  - step: "uninstall.sh survives empty image lists without GNU-only xargs -r"
+    command: "if grep -q 'xargs -r' scripts/uninstall.sh; then echo 'FAIL: xargs -r reappeared in uninstall.sh'; else echo 'ok: guarded-xargs'; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok: guarded-xargs"
+
+  - step: "pickup-role extraction actually splits the record stream (behavioral: an unsplit stream — the BSD-sed failure shape — extracts at most one role per line and cannot reach a double-digit total)"
+    command: "out=$(scripts/check-pickup-role-grammar.sh 2>/dev/null); n=$(printf '%s' \"$out\" | sed -n 's/.*total=\\([0-9][0-9]*\\).*/\\1/p'); if [ -n \"$n\" ] && [ \"$n\" -ge 10 ]; then echo 'ok: stream-splits'; else echo \"FAIL: total=${n:-unparsed} — the record split is not working [$out]\"; fi"
+    timeout_ms: 30000
+    expected_behavior: "ok: stream-splits"
+
+  - step: "the build-gate sense of 'pre-push gate' stays out of the renamed prose sites"
+    command: "hits=$(grep -l 'pre-push gate' methodology/mo-full-attestation.yaml methodology/agent-observability.yaml scripts/check-mo-full-attestations.sh scripts/check-added-fragments-parse.sh scripts/check-plan-schema-divergence.sh scripts/check-test-baseline.sh scripts/cycle-metrics.sh scripts/local-ci.sh openspec/litmus-tests/litmus-sigpipe-verdict-pipeline-shape.yaml openspec/litmus-tests/litmus-mo-full-attestation-ledger-shape.yaml openspec/specs/clickable-trace-index/spec.md openspec/litmus-tests/litmus-release-gates-run-locally.yaml 2>/dev/null); if [ -n \"$hits\" ]; then echo \"FAIL: phrase returned in: $hits\"; else echo 'ok: vocabulary-reserved'; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok: vocabulary-reserved"
+
+  - step: "lane_exclusion names lane-exit.sh as future work borne by the order-502 packet (rewrite, never close — philosophy.yaml obsolete_mechanism_live_intent)"
+    command: "grep -q 'NOT YET BUILT' methodology/multi-host-development.yaml && grep -q 'forge-lane-branch-seeding-optin' methodology/multi-host-development.yaml && grep -q 'MUST merge' methodology/multi-host-development.yaml && echo 'ok: honest-forward-reference'"
+    timeout_ms: 5000
+    expected_behavior: "ok: honest-forward-reference"
+
+evidence:
+  artifact: "the nine dispatch-converted scripts + uninstall.sh + check-pickup-role-grammar.sh + methodology/multi-host-development.yaml lane_exclusion"
+  measured_on: "macOS Darwin 25.6.0 2026-08-23 — all five pins green after the 851-28b5 drain; sweep evidence in the packet's closing event"

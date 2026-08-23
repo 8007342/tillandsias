@@ -19,6 +19,14 @@
 # Run: scripts/test-gate-stamp-memoization.sh   (exit 0 = pass)
 set -uo pipefail
 
+# Portable SHA-256 (851-28b5): coreutils sha256sum on Linux/forge/WSL; stock
+# macOS before 13 ships only `shasum`. Identical "<hex>  <name>" output.
+if command -v sha256sum >/dev/null 2>&1; then
+    PORTABLE_SHA256=(sha256sum)
+else
+    PORTABLE_SHA256=(shasum -a 256)
+fi
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GATE_STAMP="$ROOT/scripts/gate-stamp.sh"
 fail=0
@@ -217,12 +225,12 @@ fi
 STAMP_PATH="$(git -C "$ROOT" rev-parse --absolute-git-dir)/tillandsias-gate-stamp"
 VICTIM="crates/tillandsias-vault-client/src/error.rs"
 bash "$ROOT/scripts/gate-stamp.sh" write --scope full --dispatch check >/dev/null 2>&1
-before="$(sha256sum "$STAMP_PATH" | cut -d' ' -f1)"
+before="$("${PORTABLE_SHA256[@]}" "$STAMP_PATH" | cut -d' ' -f1)"
 printf 'pub fn   memo_fixture_badfmt( )->u8{1}\n' >> "$ROOT/$VICTIM"
 TILLANDSIAS_FORCE_CHECK=1 timeout 300 "$ROOT/build.sh" --check > "$TDIR/red.log" 2>&1
 red_rc=$?
 git -C "$ROOT" checkout -- "$VICTIM"
-after="$(sha256sum "$STAMP_PATH" | cut -d' ' -f1)"
+after="$("${PORTABLE_SHA256[@]}" "$STAMP_PATH" | cut -d' ' -f1)"
 if [ "$red_rc" -ne 0 ] && [ "$before" = "$after" ]; then
     ok "a RED gate writes no stamp, so nothing can memoize it as green"
 else
