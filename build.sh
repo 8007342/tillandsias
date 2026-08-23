@@ -1559,6 +1559,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # On 2026-08-23 git rename detection paired two hosts' set-field fragments
     # after concurrent compactions and wrote conflict markers into both; they
     # presented as renames, so the diff-scoped gate could not see them.
+    # A typo'd packet_id does not corrupt anything and does not fail anything —
+    # the fold refuses the fragment, the file survives, and the record is
+    # invisible. One sat here for fourteen hours being reported on every
+    # compaction while three cycle reports called it a benign refusal.
+    _step "Checking every fragment event lands on a real packet..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-events-land.sh" 2>&1; then
+        _error "an event is attached to no packet — invisible, not merely unfolded"
+        exit 1
+    fi
+    _info "All fragment events land"
+
     _step "Checking every ledger fragment is intact (whole overlay)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-all-fragments-intact.sh" 2>&1; then
         _error "a ledger fragment is damaged — append-only files are restored, not merged"

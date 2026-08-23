@@ -820,8 +820,20 @@ fn fragment_coverage_gaps(result: &Value, frag: &Fragment) -> Vec<String> {
                 continue;
             };
             if !events.contains(&event_identity(pid, event)) {
+                // NAME THE CONSEQUENCE, NOT THE SHAPE. This used to read "that
+                // packet is not in the fold, so the event was discarded",
+                // which describes a mechanism and reads as bookkeeping. One
+                // such fragment sat in this overlay for FOURTEEN HOURS being
+                // reported on every single compaction, and three separate
+                // cycle reports — mine and the macOS host's — classified it as
+                // a benign permanent refusal worth an eventual tombstone. It
+                // was a coordinator finding filed against
+                // `macos-onboarding-defect-sweep`, one word short of
+                // `macos-host-onboarding-defect-sweep`. Nobody reading that
+                // packet ever saw it. The refusal was correct and the wording
+                // is what made it easy to file away.
                 gaps.push(format!(
-                    "an event for `{pid}` — that packet is not in the fold, so the event was discarded"
+                    "an event for `{pid}` — NO SUCH PACKET, so this event is attached to nothing and no reader of any packet will ever see it; check the id for a typo"
                 ));
             }
         }

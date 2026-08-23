@@ -1,7 +1,12 @@
 # Ledger fragment — append-only, IMMUTABLE once written.
-# Filed by linux_mutable (macuahuitl), 2026-08-23T01:57:24Z.
+# Filed by linux_mutable (macuahuitl), 2026-08-23T15:36:04Z.
+#
+# RECOVERY of an event that has been invisible since 2026-08-23T01:57:24Z. It
+# was filed against packet_id `macos-onboarding-defect-sweep`, which exists
+# nowhere; the packet is `macos-host-onboarding-defect-sweep` (851-gpb5). One
+# missing word.
 events:
-  - packet_id: macos-onboarding-defect-sweep
+  - packet_id: macos-host-onboarding-defect-sweep
     event:
       type: progress
       ts: "2026-08-23T01:57:24Z"
@@ -10,6 +15,13 @@ events:
       summary: |
         COORDINATOR VERIFICATION OF 851-gpb5, AND ONE ASSERTION THAT DOES NOT
         HOLD OFF-DARWIN.
+
+        [RE-FILED 2026-08-23T15:36:04Z. Originally written at the ts above against
+        a packet_id that does not exist — `macos-onboarding-defect-sweep`, one
+        word short of `macos-host-onboarding-defect-sweep`. The fold refused to
+        consume the fragment, which is why the file survived, but the event
+        attached to nothing and no reader of 851-gpb5 saw it for fourteen
+        hours. Content below is verbatim.]
 
         osx-next was ahead=3 behind=0, so it fast-forwarded into linux-next
         cleanly. Six of the seven fixes verified as described. The seventh —
@@ -51,3 +63,33 @@ events:
         under pipefail as a deterministic SIGPIPE false-FAIL) that I would not
         have found from Linux at all. Cross-platform fixtures are simply not
         verifiable from one platform, which is the argument for the fleet.
+
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    event:
+      type: note
+      ts: "2026-08-23T15:36:04Z"
+      agent_id: linux-macuahuitl-opus5-20260823T153400Z
+      host: linux_mutable
+      summary: |
+        A TYPO'D packet_id IS SILENT DATA LOSS THAT LOOKS LIKE A TIDY REFUSAL.
+
+        The fragment above sat in the overlay for fourteen hours as the
+        "known permanent refusal" — the one thing standing between the overlay
+        and zero, described in three separate cycle reports (mine and the
+        Mac's) as benign and worth a tombstone. It was not benign. It was a
+        real coordinator finding attached to a packet that does not exist, and
+        every reader of 851-gpb5 has been missing it.
+
+        WHAT MADE IT INVISIBLE IS THAT THE SYSTEM BEHAVED CORRECTLY. The fold
+        refused to consume a fragment whose records the base would not carry
+        (843-624y), which is exactly right and is why the file still existed to
+        be recovered. `compact` reported it every single run. I read that
+        report at least four times and classified it as a nuisance because the
+        wording — "that packet is not in the fold" — describes a shape, not a
+        consequence. A refusal that names the packet it could not find, and
+        then says nothing about what was therefore lost, reads as bookkeeping.
+
+        WORTH A GATE, and cheap: a fragment whose packet_id matches no packet
+        in the fold is not a permanent refusal to live with, it is a
+        misfiled record. `fragment-event-packets` already computes the join;
+        nothing asserts it is non-empty on the way in.
