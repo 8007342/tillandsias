@@ -576,6 +576,62 @@ case "$out" in
     *) echo "ok: no advisory for a definition under packets:" ;;
 esac
 
+# ── 864-hv2n: awk state must not leak BETWEEN fragment files ────────────────
+# The extraction kept `pid` in a global that nothing reset per file. A fragment
+# whose last `  - packet_id:` is an EVENT leaves that id dangling; the next
+# file's first `    status:` was then printed under it. Here a.yaml ends with a
+# dangling event on beta-packet (folds in_progress) and b.yaml declares a
+# terminal status for an unrelated NEW packet. The pre-fix scanner reported
+# "beta-packet: declared 'completed'" — a violation against a packet no
+# fragment declares, blocking a push over work nobody had touched.
+S="$TDIR/cross-file-leak"; sandbox "$S"
+cat >"$S/plan/index.d/a.yaml" <<'F'
+events:
+  - packet_id: beta-packet
+    event:
+      type: note
+      ts: "2026-08-23T17:00:00Z"
+      host: fixture
+      summary: "a trailing event, deliberately the last packet_id in this file"
+F
+cat >"$S/plan/index.d/b.yaml" <<'F'
+packets:
+  - order: 902
+    packet_id: gamma-fresh
+    status: completed
+    kind: fix
+    title: "declared complete at birth in a LATER file"
+    depends_on: []
+F
+out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+case "$out" in
+    *beta-packet*)
+        echo "FAIL: status leaked across files onto beta-packet; out=$out" >&2; fail=1 ;;
+    *) echo "ok: awk state does not leak between fragment files" ;;
+esac
+assert "a later file's own declaration is judged on its own merits" 0 "" "$rc" "$out"
+
+# ── 864-hv2n: the house style must actually be SEEN ─────────────────────────
+# Fragments open a packet with `  - order:` and put `    packet_id:` beneath it.
+# The pre-fix scanner keyed on `  - packet_id:` as the item start, so it never
+# matched a real packet declaration — the pass was dead for its stated purpose
+# while appearing to work. This is the genuine loss it should always have
+# caught: alpha-packet already exists as `ready`, so re-declaring it `completed`
+# under `packets:` is discarded by the G-Set.
+S="$TDIR/house-style-declaration"; sandbox "$S"
+cat >"$S/plan/index.d/a.yaml" <<'F'
+packets:
+  - order: 900
+    packet_id: alpha-packet
+    status: completed
+    kind: fix
+    title: "re-declared terminal in house key order — the G-Set drops this"
+    depends_on: []
+F
+out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+assert "order-first declaration is seen and its loss refused" 1 \
+    "alpha-packet" "$rc" "$out"
+
 if [ "$fail" -eq 0 ]; then
     echo "ok: all fragment-status-loss scenarios passed"
     exit 0

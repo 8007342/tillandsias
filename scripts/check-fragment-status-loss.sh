@@ -59,9 +59,40 @@ PLAN="$(resolve_plan_binary)" || PLAN=""
 
 # Every (packet_id, status) pair declared under a `packets:` list in any
 # fragment. Deliberately ignores the `status:` LWW channel — that one works.
+# ORDER 864-hv2n. This pass was BOTH blind and noisy, and the two faults hid
+# each other. The previous extraction was:
+#
+#     /^  - packet_id:/ { pid = $3; st = ""; next }
+#     /^    status:/    { if (pid != "" && st == "") { st = $2; print pid "\t" st; pid = "" } }
+#
+# BLIND: it keys on `  - packet_id:` as the start of a packet, but the repo's
+# house style opens a packet with `  - order:` and puts `    packet_id:` on the
+# next line (every fragment written this month). So the pattern it matched was
+# almost never a PACKET — it was the `  - packet_id:` entries under `events:`,
+# which is the one section this pass is supposed to ignore.
+#
+# NOISY: awk state is global, and nothing reset `pid` between FILES. A fragment
+# whose last `  - packet_id:` is an event (no `    status:` after it) leaves
+# `pid` dangling into the NEXT file, where the first `    status:` line — quite
+# possibly a legitimate declaration for an unrelated packet in an unrelated
+# fragment — gets printed under the previous file's packet_id. On 2026-08-23
+# that reported `three-horizon-cycle-model-arrival-control-by-routing: declared
+# 'completed'` when no fragment anywhere declares that packet's status; the
+# `completed` came from a different fragment, for a different packet, filed
+# eight minutes later. Two further pairs were misattributed the same way.
+#
+# So the gate refused a push over a packet that was never touched, while never
+# once checking the class it exists to check. Fixed: reset per file, scope to
+# the `packets:` section, and accept either key order within an item.
 declared="$(awk '
-    /^  - packet_id:/ { pid = $3; st = ""; next }
-    /^    status:/    { if (pid != "" && st == "") { st = $2; print pid "\t" st; pid = "" } }
+    function flush() { if (pid != "" && st != "") print pid "\t" st; pid = ""; st = "" }
+    FNR == 1                                                 { flush(); sect = "" }
+    /^packets:[[:space:]]*$/                                 { flush(); sect = "packets"; next }
+    /^[a-z_]+:[[:space:]]*$/                                 { flush(); sect = "";        next }
+    sect == "packets" && /^  - /                             { flush() }
+    sect == "packets" && /^(  - |    )packet_id:[[:space:]]/ { pid = $NF }
+    sect == "packets" && /^(  - |    )status:[[:space:]]/    { st  = $NF }
+    END { flush() }
 ' "$FRAG_DIR"/*.yaml 2>/dev/null | sort -u)"
 
 # ORDER 797-qm4t. The LWW `status:` block, scanned ONLY to ask "does this
@@ -71,7 +102,11 @@ declared="$(awk '
 # is how a closure was written against an invented packet_id and collected four
 # green signals. Section-scoped, because `  - packet_id:` also appears under
 # `packets:` and `events:`.
+# The `FNR == 1` reset is the same 864-hv2n fix as above: this pass is
+# section-scoped, but `in_s`/`pid` were still global across files, so a fragment
+# ending inside its `status:` block carried that state into the next fragment.
 declared_lww="$(awk '
+    FNR == 1 { in_s = 0; pid = "" }
     /^status:[[:space:]]*$/ { in_s = 1; pid = ""; next }
     /^[a-z_]+:[[:space:]]*$/ { in_s = 0; pid = "" }
     in_s && /^  - packet_id:/ { pid = $3; next }
@@ -233,7 +268,19 @@ fi
 #
 # Only genuinely-nothing-to-examine exits early now. A fragment set carrying
 # events and no declarations reaches the join below, which is the whole point.
-if [ -z "$declared" ] && [ -z "$declared_events" ]; then
+#
+# THIS GUARD CLAIMED A THIRD PASS IN 864-hv2n, and the mechanism is worth
+# recording because the comment above did not prevent it. The misplaced-
+# definition advisory (812-d45t) is computed above but PRINTED below, so it is
+# reachable only if this guard lets execution through. It always did — but by
+# accident: a packet definition misfiled under `events:` matched the old
+# `declared` awk (which keyed on `  - packet_id:`, the events-section shape),
+# so `declared` came back non-empty and carried the advisory past this line.
+# Fixing that awk to scan only `packets:` made `declared` correctly empty for
+# such a fragment, and the advisory silently vanished — a gate losing its voice
+# because an unrelated bug it had been leaning on was repaired. `_misdef_seen`
+# now keeps itself alive rather than depending on another pass's mistake.
+if [ -z "$declared" ] && [ -z "$declared_events" ] && [ -z "$_misdef_seen" ]; then
     echo "ok:no-fragment-status-loss:0 checked"
     exit 0
 fi

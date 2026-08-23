@@ -1,0 +1,224 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-23T17:09:48Z.
+packets:
+  - order: 864-r3wq
+    packet_id: promote-stable-gate-cannot-see-its-own-evidence-format
+    desired_release: v0.5
+    title: "the stable-promotion evidence gate is line-scoped and the e2e skill writes its verdict across a filename and a heading, so a real PASS reads as no evidence"
+    status: completed
+    kind: defect
+    pickup_role: any
+    priority: p0
+    capability_tags: [ci, release, gates, evidence]
+    deliverable: scripts/promote-stable.sh
+    depends_on: []
+    estimated_hours: 2
+    discovered_by: "operator question 'What's waiting on my call?' (2026-08-23)"
+    context: >
+      A RELEASE GATE THAT CANNOT RECOGNISE THE EVIDENCE ITS OWN SIBLING SKILL
+      PRODUCES. promote-stable.sh required "e2e"|"smoke" AND "PASS" AND the
+      version to co-occur on a SINGLE LINE:
+
+        grep -rIlE "(e2e|smoke).*(PASS|pass).*${V}|${V}.*(e2e|smoke).*(PASS|pass)"
+
+      grep is line-scoped. What /smoke-curl-install-and-test-e2e actually writes
+      is plan/issues/smoke-e2e-findings-v<version>-<date>.md containing
+
+        ## Run 2026-08-17T17:58Z→18:06Z — **PASS** (tag v0.4.260817.1, build commit 0bba6525f)
+
+      The words "smoke" and "e2e" appear ONLY in the filename. The verdict line
+      carries PASS and the version but never repeats them. Zero lines in the
+      file can satisfy the pattern, so a dated, unambiguous PASS for
+      v0.4.260817.1 present since 2026-08-17 was reported as "No e2e PASS
+      evidence for 0.4.260817.1 found under plan/".
+
+      THE STALL FED ITSELF, which is why it survived six days. Gate says no
+      evidence -> nobody promotes -> no release newer than the last tested one
+      -> hosts running the e2e skill defer with "no release newer than last
+      tested evidence" -> no new evidence is produced -> gate still says no
+      evidence. Every individual host was behaving correctly and the fleet
+      still converged on doing nothing. lenovinha's deferral, which read as a
+      host being conservative, was the second half of this loop.
+
+      RELATED TO 752-pst5 (grep instead of parse) BUT NOT THE SAME. 752-pst5 is
+      about grepping structured output rather than parsing it. This is narrower
+      and nastier: the grep is over prose where it belongs, but the PREDICATE
+      assumed a line is the unit of evidence when the evidence is a FILE — a
+      filename asserting what kind of record this is, and a body asserting the
+      verdict. No amount of pattern-tuning inside a line-scoped search can see
+      across that boundary.
+
+      I ALSO CAUSED AN INCIDENT PROVING THE FIX, recorded here rather than
+      quietly: testing the repaired gate with `bash scripts/promote-stable.sh
+      v0.4.260817.1 | head -4` PERFORMED the promotion (the script promotes; it
+      has no dry-run), and `head` then killed it with SIGPIPE (rc=141) partway
+      through, leaving a SPLIT state — the GitHub release flipped to Latest so
+      /releases/latest served v0.4.260817.1 to every curl-install, while the
+      remote `stable` git tag still pointed at v0.4.260810.1 because the push
+      never ran. Reverted within minutes to the exact prior state (release back
+      to prerelease=true, make_latest restored to v0.4.260810.1 — GitHub's
+      make_latest is STICKY and does not recompute when a release is demoted,
+      so demotion alone left /releases/latest wrong; local stable tag reset to
+      the remote value). Two follow-ons filed: 864-8tqv (no dry-run on a
+      promotion script) and 864-mk2p (the sticky make_latest demotion trap,
+      which the script's own header comment gets wrong).
+    exit_criteria: >
+      (1) The gate accepts the shape /smoke-curl-install-and-test-e2e actually
+      writes, proven by a test that FAILS against the pre-fix gate.
+      (2) It is not thereby loosened: a correctly named evidence file whose
+      verdict is FAIL must still be refused, and so must a PASS naming a
+      different version. Both pinned as negative controls.
+      (3) Version dots are regex-escaped — unescaped, 0.4.260817.1 also matches
+      0X4X260817X1, and on a release gate accidental permissiveness is the
+      wrong direction to be wrong.
+      (4) The legacy single-line evidence shape keeps working.
+
+  - order: 864-8tqv
+    packet_id: promotion-script-has-no-dry-run
+    desired_release: v0.5
+    title: "promote-stable.sh performs an outward-facing channel flip with no way to ask whether it would"
+    status: ready
+    kind: enhancement
+    pickup_role: any
+    priority: p1
+    capability_tags: [ci, release, affordances, safety]
+    deliverable: scripts/promote-stable.sh
+    depends_on: [promote-stable-gate-cannot-see-its-own-evidence-format]
+    estimated_hours: 3
+    context: >
+      There is no way to ask promote-stable.sh "would you promote?" without it
+      promoting. The only observable it offers is the side effect. So the
+      natural way to test a change to its EVIDENCE GATE — run it and read the
+      verdict — publishes a release channel change to every user, and I did
+      exactly that on 2026-08-23 while verifying 864-r3wq.
+
+      This is the same affordance argument the operator made on 2026-08-23 about
+      errors carrying recommendations (863-7mhg, the main-branch pre-push hook),
+      applied to the other end: a command whose effect is irreversible-ish and
+      outward-facing should be ASKABLE. `--dry-run` printing
+      `would-promote:<tag>` / `refused:<reason>:<tag>` and touching nothing
+      costs almost nothing and removes the whole class.
+
+      Pairs with the observation that the gate's own test suite
+      (scripts/test-promote-stable-evidence-gate.sh) had to stub `gh` and `git`
+      onto PATH and copy the script into a fixture tree to test the gate in
+      isolation. That ceremony is a symptom: the decision and the action are
+      welded together. --dry-run is the cheap fix; splitting the gate into a
+      callable predicate is the thorough one.
+    exit_criteria: >
+      (1) `--dry-run` exercises tag validation, release existence, and the full
+      evidence gate, prints the verdict it WOULD print, and performs no
+      `gh release edit`, no `git tag`, and no push.
+      (2) Proven by asserting the release's prerelease flag and the stable tag
+      are byte-identical before and after a --dry-run of a promotable tag.
+      (3) The existing gate test drops its `gh`/`git` stubs in favour of
+      --dry-run, which is the point: if the test still needs stubs, the dry-run
+      is not covering the real path.
+
+  - order: 864-mk2p
+    packet_id: github-make-latest-is-sticky-so-demotion-does-not-restore
+    desired_release: v0.5
+    title: "the documented way to undo a promotion does not undo it — make_latest is sticky"
+    status: ready
+    kind: defect
+    pickup_role: any
+    priority: p1
+    capability_tags: [ci, release, docs, github-api]
+    deliverable: scripts/promote-stable.sh
+    depends_on: [promote-stable-gate-cannot-see-its-own-evidence-format]
+    estimated_hours: 2
+    context: >
+      promote-stable.sh's header says:
+
+        # Demote a mistaken promotion with: gh release edit <tag> --prerelease
+
+      MEASURED FALSE on 2026-08-23. Running exactly that set prerelease=true and
+      /releases/latest STILL resolved to the demoted tag. GitHub's `make_latest`
+      is an explicit sticky field: once a release is marked latest it stays
+      latest, and the API does NOT recompute "newest non-prerelease by date"
+      just because the current holder became a prerelease. The README's
+      /releases/latest/download/... install URLs therefore kept serving a
+      release that had been demoted — the exact state the demotion was supposed
+      to end.
+
+      Restoring it required explicitly re-marking the intended release:
+
+        gh api -X PATCH repos/<owner>/<repo>/releases/<id> -f make_latest=true
+
+      The remediation instruction being wrong is worse than it being absent: it
+      is read at the moment of an incident, by someone who wants the blast
+      radius to stop, and it reports success while leaving the channel wrong.
+      An affordance that lies is a trap wearing a helpful face.
+    exit_criteria: >
+      (1) A `demote` path in the script that restores /releases/latest to the
+      correct release and VERIFIES it by re-reading
+      repos/<owner>/<repo>/releases/latest, rather than assuming demotion
+      recomputes.
+      (2) The header comment replaced by a pointer to that path, since the
+      hand-run command it currently recommends does not achieve its stated
+      effect.
+      (3) A note recorded where the release runbooks can find it: demotion is
+      not the inverse of promotion on the GitHub API.
+
+events:
+  - packet_id: promote-stable-gate-cannot-see-its-own-evidence-format
+    event:
+      type: completed
+      ts: "2026-08-23T17:09:48Z"
+      agent_id: linux-macuahuitl-opus5-20260823T153400Z
+      host: linux_mutable
+      evidence_refs:
+        - "scripts/test-promote-stable-evidence-gate.sh 6/6, hermetic (fixture REPO_ROOT, gh+git stubbed, no network)"
+        - "MUTATION: the real-evidence case returns refused:no-evidence against the pre-fix gate from `git show HEAD:scripts/promote-stable.sh`"
+        - "negative controls hold: correctly-named file with FAIL -> refused; PASS for another version -> refused; 0X4X260817X1 -> refused"
+        - "plan/issues/smoke-e2e-findings-v0.4.260817.1-2026-08-17.md — the PASS that existed for six days and could not be seen"
+      merge_affordance: merge-now
+      merge_reason: >
+        Unblocks the stable promotion the operator has been waiting on, and any
+        host that runs promote-stable.sh before merging will be told there is no
+        evidence when there is. Costs one script + one test file; no rebuild of
+        anything a sibling compiles.
+      summary: >
+        Fixed by widening WHERE the "this is e2e evidence" signal may come from
+        (the file's NAME) while leaving WHAT COUNTS AS A VERDICT untouched: a
+        file must still assert PASS for this exact version. Version dots are now
+        regex-escaped.
+
+        scripts/test-promote-stable-evidence-gate.sh, 6/6, hermetic (fixture
+        REPO_ROOT via BASH_SOURCE, gh+git stubbed onto PATH, no network):
+          - real e2e-skill evidence shape          -> promoted     [WAS BROKEN]
+          - no evidence at all                     -> refused
+          - correctly named file, FAIL verdict     -> refused
+          - PASS for a different version           -> refused
+          - legacy single-line shape               -> promoted
+          - regex dots vs 0X4X260817X1             -> refused
+
+        MUTATION CONTROL, because a test that passes before and after proves
+        nothing: case 1 was replayed against the pre-fix gate reconstructed from
+        `git show HEAD:scripts/promote-stable.sh` and returned
+        refused:no-evidence. The defect was real and the test detects it.
+
+  - packet_id: promotion-script-has-no-dry-run
+    event:
+      type: filed
+      ts: "2026-08-23T17:09:48Z"
+      agent_id: linux-macuahuitl-opus5-20260823T153400Z
+      host: linux_mutable
+      summary: >
+        Filed from a self-inflicted incident while verifying 864-r3wq: piping
+        the promotion script to `head -4` both PROMOTED (no dry-run exists) and
+        then SIGPIPE-killed it mid-run, splitting the release channel from the
+        stable git tag. Reverted in full. The missing affordance is the cause,
+        not the pipe.
+
+  - packet_id: github-make-latest-is-sticky-so-demotion-does-not-restore
+    event:
+      type: filed
+      ts: "2026-08-23T17:09:48Z"
+      agent_id: linux-macuahuitl-opus5-20260823T153400Z
+      host: linux_mutable
+      summary: >
+        Measured during the same revert: `gh release edit <tag> --prerelease`,
+        the remediation the script's own header recommends, set prerelease=true
+        and left /releases/latest pointing at the demoted release. Required an
+        explicit make_latest=true PATCH on the intended release to restore.
