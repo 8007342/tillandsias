@@ -30489,6 +30489,12 @@ plan_index:
 
       events:
         - type: progress
+          ts: "2026-08-23T11:43:13Z"
+          agent_id: "linux-lenovinha-claude-20260823t114313z"
+          host: lenovinha
+          summary: |
+            CRITERION 2 COMPLETE at 06d859499 (cycle-scoped claim, returning to ready). The schema half was ALREADY LANDED — superseded_by has been in plan/schema.yaml reference_fields since 2026-08-19 with its measurement comment, and its one indexed use has since been archived cleanly (plan/archive/packets-2026-07.yaml) with check green throughout — so this slice verified rather than re-implemented it (the 837-m47d shape, third occurrence). The retraction batch: FIVE split-parents obsoleted (484, 153, 246, 247, 394; 396 was already obsoleted by the first sweep), every child resolved BEFORE retraction — 484b-e ready + 484a archived-completed; 230+231 both archived-completed (153 was pure residue); 246a/246b/247a/247b pending; 394's four rung-1 children completed with 394e carrying the remainder. All three packet assertions held: ready count 385->380 (exactly -5), plan check green, no retracted parent appears in next. Reason form adopted as specified: deslop:ledger-residue:split-audit superseded_by=<children>. Net ledger delta: -5 rows, +0 filed — the sweep discipline's strict-non-contributor rule honored by its own bookkeeping slice. REMAINING for the sweep proper: criteria 4+ (the scheduled sweep protocol: kill rule, net-negative diff, filing cap, refutation band, mutation-pair findings) — the big half; criterion 1's detector (13-row worklist) and this criterion's primitives are now all in place for it.
+        - type: progress
           ts: "2026-08-23T09:48:15Z"
           agent_id: "linux-lenovinha-claude-20260823t094815z"
           host: lenovinha
