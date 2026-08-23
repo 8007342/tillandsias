@@ -27,7 +27,19 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 . "$ROOT/scripts/plan-binary-probe.sh"
-if ! PLAN="$(resolve_plan_binary)"; then
+# 851-cduu: ensure, not resolve — this fixture PINS THE BINARY'S OUTPUT, so a
+# stale instrument fails its assertions spuriously. Proven on its very first
+# dual-locus run (yolanda, 2026-08-23): c6f8cbccc ships the multi-line
+# re-indent fix and this fixture in one commit, the gate's WSL locus resolved
+# a cache binary built three hours before that fix, and all three multi-line
+# cases went red against an emission defect that no longer existed at HEAD.
+PLAN="$(ensure_fresh_plan_binary)" && _fresh_rc=0 || _fresh_rc=$?
+if [ "$_fresh_rc" -eq 2 ]; then
+    echo "fail:set-field-yaml-shapes:stale-plan-binary — the resolved binary predates"
+    echo "  this tree and could not be rebuilt in this locus; its emission shapes"
+    echo "  would test another checkout's set-field, not HEAD's"
+    exit 2
+elif [ "$_fresh_rc" -ne 0 ]; then
     echo "fail:set-field-yaml-shapes:no-runnable-plan-binary"
     exit 2
 fi
