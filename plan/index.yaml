@@ -2457,6 +2457,12 @@ plan_index:
         - "Platform Abstraction Layer mapped (Linux bare, WSL2, macOS VZ, Silverblue Toolbox — bridge/forwarding mechanism)"
         - "Spec/Cheatsheet patch list published with specific file:line references"
       events:
+        - type: progress
+          ts: "2026-08-23T15:24:20Z"
+          agent_id: "windows-yolanda-fable5-20260823T151934Z"
+          host: windows
+          summary: |
+            REVISION PASS 2 (windows slice, cycle-scoped claim): the Windows/WSL facts the 2026-07-14 verification flagged are revised in the deliverable with live yolanda evidence — W1: fleet Windows reality is NAT + DNS-tunnel (wslinfo=nat, resolv 10.255.255.254, no .wslconfig), 'mirrored resolv.conf handling' is a misnomer on current defaults; W2: the control wire is privilege-routed across TWO transports (elevated AF_HYPERV direct vs standard-user wsl.exe stdio bridge, hvsocket.rs order 312) where the draft's platform matrix lists one; W3: guest vsock is BUILT-IN on current WSL kernels (module-presence probes false-negative; device-node is the signal); W4: /run/WSL marker verified live-current. Non-Windows revision items (RuntimeLane in tillandsias-podman, ForgeLaunch/container matrix, Vault-in-init, cooked-read login) left with location pointers for the owning hosts. Packet stays phase:review multi_cycle — the linux/macos slices and the 3-agent re-verification remain.
         - type: claim
           ts: "2026-07-09T19:46:00Z"
           agent_id: "linux-macuahuitl-fable5-20260709T1923Z"

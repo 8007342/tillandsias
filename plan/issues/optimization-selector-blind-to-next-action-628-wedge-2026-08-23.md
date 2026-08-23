@@ -60,3 +60,18 @@ or record the ruling that dissolves it.
 2. Owner of 628-w9sm: record the ruling or fix the inverted depends_on.
 3. Capability routing: verification substrate (can this host RUN what it
    changes?) as a routing input, not only device tags.
+
+---
+
+## Instance 2, same day (cycle #7): the urgent slot offered a `kind: milestone` criteria-holder
+
+`batch: … urgent=architecture-audit-epic` — 647-6c3g, whose own notes read
+"Never claim this for implementation; claim the children". The selector's
+urgent slot is blind to `kind: milestone` exactly as it is blind to
+`next_action` fences: it offered the criteria-holder itself as the
+implementable packet. The cycle routed around it by hand (claimed the one
+live child, 245, whose dependents 246/247 are obsoleted-split and 248 waits
+on it) — but the routing knowledge lived in this agent, not the machine.
+Adds to the smallest-next-actions list: the urgent slot must exclude
+`kind: milestone` rows (they are heads to group BY, not rows to hand out),
+which is one status-tier test away from what it already does.

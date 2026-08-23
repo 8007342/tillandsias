@@ -350,3 +350,67 @@ encrypted control channel; slices 1-3 of 141 landed, 4 and 6 remain —
   `127.0.0.1:3129` (`build.sh:355-411`), distinct from the proxy image's
   orphaned :3129.
 
+
+---
+
+# REVISION PASS 2 — Windows/WSL slice (2026-08-23, yolanda, order 245 cycle-scoped claim)
+
+Scope: the Windows/WSL claims the 2026-07-14 GPT verification flagged as
+predating current reality ("mirrored WSL networking documentation" on the
+revision list), verified against code at windows-next HEAD and LIVE state on
+yolanda (the fleet's reference dual-locus Windows host). Findings, not
+opinions; each carries its source. Non-Windows items on the revision list
+(RuntimeLane, ForgeLaunch modeling, Vault-in-init, cooked-read GitHub-login)
+are NOT revised here — location pointers only, for the host that owns them.
+
+## W1. The fleet's Windows reality is NAT + DNS-tunnel, not mirrored — MEASURED
+
+`wslinfo --networking-mode` on yolanda: **`nat`**. No `%USERPROFILE%\.wslconfig`
+exists on this host, so WSL defaults apply — and any documentation or code
+comment assuming `networkingMode=mirrored` describes a configuration no fleet
+Windows host is known to run. Guest DNS is the WSL DNS tunnel: `/etc/resolv.conf`
+carries `nameserver 10.255.255.254` (dnsTunneling default), NOT the classic
+NAT-gateway 172.x address. Consequence for §2/§4: `ensure_enclave_host_dns`'s
+WSL arm must be read against the tunnel address, and "mirrored resolv.conf
+handling" (draft line ~123) is a misnomer on current defaults — the handling
+is NAT-mode DNS-tunnel handling. The mirrored-mode branch, if kept, is
+speculative until a fleet host actually runs mirrored networking.
+
+## W2. The Windows control wire is PRIVILEGE-ROUTED, two transports — the draft says one
+
+Draft §4 row (line ~261) lists "hvsock" alone. Current code
+(`crates/tillandsias-windows-tray/src/hvsocket.rs`, order 312): elevated
+processes take direct **AF_HYPERV** (`open_hvsocket_stream`); standard-user
+processes take the **`wsl.exe` stdio bridge** (`open_wsl_stdio_bridge`) —
+two genuinely different network paths with different failure modes (the
+stdio bridge is the lane the N100 `handshake: early eof` family lived in;
+see plan/archive/packets-2026-08.yaml, socat CID-1/ENETUNREACH). The §4
+platform matrix should carry both, with the privilege condition.
+
+## W3. Guest-side vsock is BUILT-IN on current WSL kernels — detection caveat
+
+`/dev/vsock` exists in the guest while `vsock` is absent from `/proc/modules`
+(built into 6.18.33.2-microsoft-standard-WSL2, same packaging shift
+esmeraldinha recorded for dxgkrnl in the capability audit). Any probe that
+tests vsock availability by module presence false-negatives on current
+kernels; device-node presence is the correct signal. (`vsock_loopback`
+remains a distinct, loadable module and the historical N100 wedge.)
+
+## W4. Detection markers verified live
+
+`/run/WSL` (draft line ~111) is real and populated on a live guest
+(interop files: `<pid>_interop`) — headless/main.rs:2872 reads it. Marker
+current; no correction.
+
+## W5. Pointers for the non-Windows revision items (NOT revised here)
+
+- RuntimeLane: lives in `crates/tillandsias-podman/src/lib.rs` — the §1
+  taxonomy table predates it and should be re-expressed in its terms by a
+  host that can run the podman lanes.
+- The draft's §1.1 CONTAINER matrix and §3 ForgeLaunch modeling: forge-lane
+  facts; a linux host with podman must re-verify.
+- Vault-in-init and the cooked-read GitHub-login fix: touch the credential
+  flow documented in §2; the 246a/246b split children own the deeper pass.
+
+Cross-reference per the epic's rule: W2's failure-mode citation IS 606-9wqd
+territory seen from the Windows side; cited, not re-derived.
