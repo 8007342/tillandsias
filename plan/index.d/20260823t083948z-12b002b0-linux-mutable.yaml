@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    field: next_action
+    value: |-
+      CAMPAIGN STATE 2026-08-23T08:34Z. SEVEN HOSTS, all attesting within ~2h except the ephemeral forge. The two gates on unattended hourly were 851-cduu (CLOSED on three-host evidence) and 856-s56y (no scheduler, still OPEN, owned by yoga). Capability routing landed: 847-wgy4 routes by ORDINAL RANK in the capability-matrix roster, so row-holding non-low-end hosts get disjoint epics by construction rather than by hash luck.
+
+      MY QUEUE HAS TURNED OVER. Items (1) 849-tz8g, (2) 853-6gz3 Tier A, (3) the 824-6qxh relabel and (5) 552 delta are all done or refuted; do not re-derive the old ordering from a stale prompt.
+
+      WHAT IS TRUE NOW:
+      - 849-tz8g WAS WRONG AND I FILED IT. There is no inference ceiling: qwen2.5:7b, mxbai-embed-large, bge-m3 batched and qwen3-embedding:4b (2560-dim) all run. The real defect is CONCURRENT RUNNER RESIDENCY — with 7,910 MiB resident across two models, loading a third aborts with GGML_ASSERT while SIXTEEN GIGABYTES are free. Rescoped p2. Workaround is proven: serialise loads, unload between models.
+      - 853-6gz3 TIER A already existed and is fully wired; the win was fixing a span_key bug that withheld 75% of the methodology corpus as FABRICATED.
+      - 853-6gz3 TIER B measured: complement pairing catches 23% self-contradiction (17/73) with NO ground truth — the operator mechanism works. The apparent 20% in-corpus support rate was RETRIEVAL RECALL, not judge quality: 6 of 10 refused in-corpus questions flip to YES when judged against the recorded source file instead of the retrieved chunk.
+      - 552 delta re-embed shipped: 19.5x on a quiet GPU (117s -> 6s), joined by content hash, with an identity assertion whose negative control fires on a two-line swap that leaves arity intact.
+      - 824-6qxh: 86% of my near-miss labels were wrong (243 -> 33 true). Bands re-derived: overlap 0.3024 -> 0.2058. Thresholds still dead; per-corpus n is now too thin to quote.
+
+      NEXT, in order:
+      (1) TIER B OVER TOP-K, not top-1, scoring judge quality and retrieval recall SEPARATELY. k=1 is the measured bottleneck and a top-1 miss is indistinguishable from an unanswerable question — which is the confusion this programme exists to remove.
+      (2) The bigger-embedder question for 824-6qxh, now genuinely unblocked: rebuild the index with bge-m3 or qwen3-embedding:4b (both batch fine) and re-derive the bands. Serialise the model loads.
+      (3) 846-idhn, capabilities channel base representation, now that six hosts publish rows.
+
+      STANDING COORDINATOR DUTY EVERY CYCLE: merge platform branches into linux-next; nobody else has it. Both were ahead within the hour on two consecutive ticks.
+
+      NOT MINE: 856-s56y (yoga), 857-4kqv (yoga), 860-g798 (yolanda), and the low-end tier rows on pirria/esmeraldinha. If one stalls, re-direct rather than absorb.
+    ts: "2026-08-23T08:39:48Z"
+    host: linux_mutable
+
+events:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    event:
+      type: note
+      ts: "2026-08-23T08:39:48Z"
+      host: linux_mutable
+      summary: >
+        roadmap turnover: queue items 1,2,3,5 done or refuted; Tier B measured; next is top-k

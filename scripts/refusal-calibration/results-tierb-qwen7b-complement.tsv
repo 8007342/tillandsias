@@ -1,0 +1,74 @@
+band	verdict	pair	top1	question
+near	UNSUPPORTED	NO/YES	0.68842924	Is cargo-audit or cargo-deny run as part of any gate?
+near	UNSUPPORTED	NO/YES	0.7038652	What line-coverage percentage must the Rust unit tests reach?
+near	UNSUPPORTED	NO/YES	0.6958143	How many days may a deprecated spec sit before it must be moved to obsolete?
+near	UNSUPPORTED	NO/YES	0.7035648	What is the current head commit of origin/osx-next?
+near	UNSUPPORTED	NO/YES	0.705121	How many delegates are allowed at ramp stage 1?
+near	UNSUPPORTED	NO/YES	0.6846984	How long may a packet stay `blocked` before it must be escalated to the operator?
+near	UNSUPPORTED	NO/YES	0.64186054	How do I attach gdb or lldb to a hung tray process and get a backtrace?
+near	UNSUPPORTED	NO/YES	0.6791115	What ack-latency number should page someone for the git mirror?
+near	UNSUPPORTED	NO/YES	0.76773185	What is the SHA-256 of the current published tillandsias-linux-x86_64 binary?
+near	UNSUPPORTED	NO/YES	0.7465771	What screen-reader support does the tray menu have?
+near	UNSUPPORTED	NO/YES	0.7485693	Are there keyboard shortcuts for opening the tray menu?
+near	UNSUPPORTED	NO/YES	0.66724074	How do I run the litmus suite against a remote host?
+near	UNSUPPORTED	NO/YES	0.64973557	How many releases have been published so far?
+near	UNSUPPORTED	NO/YES	0.62384015	Which model does NanoClawV2 itself run on?
+near	UNSUPPORTED	NO/YES	0.72479916	Is there an uptime or availability target for the enclave services?
+near	UNSUPPORTED	NO/YES	0.7028757	Do you run Dependabot or Renovate to keep Cargo.lock current?
+near	UNSUPPORTED	NO/YES	0.6889388	Is there a cargo-fuzz target for the control-wire frame parser?
+near	CONTRADICTION	NO/NO	0.62366194	Does the test suite run under Miri?
+near	UNSUPPORTED	NO/YES	0.7561118	What's the test coverage percentage for the workspace?
+near	UNSUPPORTED	NO/YES	0.63679385	What in-corpus and near-miss cosine bands did the macOS host measure for spec_answer?
+near	UNSUPPORTED	NO/YES	0.66894037	Which specific fragments were folded in the 101-fragment compaction on 2026-08-22?
+near	UNSUPPORTED	NO/YES	0.6687394	How long did the 661-packet archive sweep take in wall-clock seconds?
+near	UNSUPPORTED	NO/YES	0.6672285	How many bytes is plan/index.yaml after the sweep?
+near	UNSUPPORTED	NO/YES	0.6306934	What's the upstream Bun issue number for the arm64 segfault we hit?
+near	UNSUPPORTED	NO/YES	0.6696559	Which commit introduced the em-dash into install-windows.ps1 that broke saved-file runs?
+near	UNSUPPORTED	NO/YES	0.5771859	What did the five Raspberry Pi 5 nodes cost?
+near	UNSUPPORTED	NO/YES	0.6174496	Is there a support email or chat channel where users report problems?
+near	UNSUPPORTED	NO/YES	0.6195968	What's the security vulnerability disclosure process for this project?
+near	UNSUPPORTED	NO/YES	0.7273018	When is v1.0 scheduled to ship?
+near	UNSUPPORTED	NO/YES	0.70882434	What's the p50 end-to-end wall-clock time of a complete ./build.sh --ci-full run?
+near	UNSUPPORTED	NO/YES	0.7004116	What memory limit is set on the tray process itself?
+near	UNSUPPORTED	NO/YES	0.65448976	Which cargo-fuzz targets exist for the control-wire decoder?
+near	CONTRADICTION	NO/NO	0.61894125	How do I generate a code coverage report for the workspace?
+in	CONTRADICTION	NO/NO	0.86075944	Which litmus tests are currently bound in litmus-bindings.yaml?
+in	UNSUPPORTED	NO/YES	0.7509292	What telemetry thresholds must be green before the concurrency stage can be lifted?
+in	CONTRADICTION	NO/NO	0.75596386	How is Vault unsealed when the stack comes up?
+in	SUPPORTED	YES/NO	0.7613964	What statuses can an unknown event have?
+in	UNSUPPORTED	NO/YES	0.7952232	Which Vault policy grants the git mirror its push credential, and what paths does it allow?
+in	UNSUPPORTED	NO/YES	0.6423897	Which vector store backs the expert index?
+in	CONTRADICTION	YES/YES	0.74296826	What is the minimum Windows version supported for a Tillandsias host?
+in	SUPPORTED	YES/NO	0.76590574	What steps does the release GitHub Actions workflow run?
+in	SUPPORTED	YES/NO	0.7763242	Which tracing levels reach the Windows Event Log?
+in	UNSUPPORTED	NO/YES	0.74924487	How do I chain Squid to my company's outbound proxy?
+in	SUPPORTED	YES/NO	0.68269163	Should I work out a packet's residual centicolons by hand?
+in	UNSUPPORTED	NO/YES	0.6343733	What Apple Developer Team ID do we sign and notarize with?
+in	SUPPORTED	YES/NO	0.74652684	spec id format?
+in	UNSUPPORTED	NO/YES	0.70660424	Where does the agent_id in a lease come from — can I compose it myself?
+in	UNSUPPORTED	NO/YES	0.79938835	How fast does an 'instant' litmus test have to be, and what may it do?
+in	UNSUPPORTED	NO/YES	0.7393024	What is the byte limit for total cheatsheet size?
+in	CONTRADICTION	NO/NO	0.74363065	Which opencode release is baked into the current forge image?
+in	CONTRADICTION	YES/YES	0.75688607	Which packages does the forge image install into the container?
+in	UNSUPPORTED	NO/YES	0.7673471	What is the OpenCode Web session cookie called and how long does the browser keep it?
+in	SUPPORTED	YES/NO	0.72792923	What does the release workflow actually publish?
+in	CONTRADICTION	NO/NO	0.7930709	Which panels are in the CentiColon convergence dashboard?
+in	UNSUPPORTED	NO/YES	0.78081954	Where does Vault store the GitHub token, and how long do the per-container tokens live?
+in	UNSUPPORTED	NO/YES	0.733643	Does Tillandsias run on FreeBSD?
+in	UNSUPPORTED	NO/YES	0.76814544	enclave service names and ports?
+in	CONTRADICTION	NO/NO	0.7782607	How do I register a new litmus test so scripts/run-litmus-test.sh picks it up?
+in	CONTRADICTION	NO/NO	0.61512446	What does the ExecOneShot control-wire operation do?
+in	CONTRADICTION	NO/NO	0.7586986	Which branch do checkpoints go to and what should the commit subject look like?
+in	CONTRADICTION	NO/NO	0.6205684	What's the one-sentence core principle behind all of this?
+in	UNSUPPORTED	NO/YES	0.7510966	Where does the curl installer put the binary if ~/.local/bin isn't on my PATH?
+in	SUPPORTED	YES/NO	0.7295071	Which forge paths are RAM-backed, and what size caps do they have?
+in	UNSUPPORTED	NO/YES	0.7272752	Where does the git author name and email live — same place as the token?
+in	UNSUPPORTED	NO/YES	0.72152376	Why do agents keep undoing each other's formatting?
+in	CONTRADICTION	NO/NO	0.70950335	I've got a 6 GB GPU. Which models get pre-pulled and which are lazy?
+in	CONTRADICTION	NO/NO	0.84417474	What does the cookie-auth-best-practices cheatsheet recommend?
+in	UNSUPPORTED	NO/YES	0.69573295	scanner default watch dir?
+in	CONTRADICTION	NO/NO	0.7266253	What command starts an autonomous session, and what must I read first?
+in	SUPPORTED	YES/NO	0.81735545	Which model does the inference container serve by default?
+in	UNSUPPORTED	NO/YES	0.675144	What's the right way to change a packet's status field?
+in	CONTRADICTION	NO/NO	0.6449614	I hit a broken test while doing something unrelated. Am I obliged to file it?
+in	CONTRADICTION	NO/NO	0.59792954	How does a normal user end up on a stable build instead of a broken daily?
