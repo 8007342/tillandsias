@@ -214,12 +214,10 @@ pub fn capabilities_cache_path() -> PathBuf {
     //
     // A cache is by definition discardable, so the temp dir is the correct home
     // for one with nowhere else to live.
-    let base = std::env::var("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| std::env::temp_dir());
-    base.join(".cache")
-        .join("tillandsias")
-        .join("capabilities.json")
+    // Order 815-gdjk: XDG-first via the shared resolver (this probe was the
+    // measured half of the split: with XDG_CACHE_HOME set it wrote here
+    // while every shell consumer resolved under the XDG root).
+    tillandsias_core::cache_root::cache_root().join("capabilities.json")
 }
 
 // @trace spec:accel-capability-probe

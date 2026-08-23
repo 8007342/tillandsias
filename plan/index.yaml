@@ -27915,6 +27915,13 @@ plan_index:
             the AMD lane is unmeasurable by fleet decision rather than by defect.
 
 
+      events:
+        - type: note
+          ts: "2026-08-23T13:47:37Z"
+          agent_id: "linux-lenovinha-claude-20260823t134737z"
+          host: lenovinha
+          summary: |
+            LENOVINHA VOTE (exit criterion 1, host kind linux_immutable AMD+NVIDIA): APPROVE shipping mesa vulkan userspace (loader + RADV ICD) in the inference image, CONDITIONAL APPROVE on /dev/dri passthrough — gated strictly on tier gpu-rocm (or an explicit future vulkan tier), NEVER on cpu or gpu-cuda tiers. Reasons, measured against this host's silicon (capability row 850-bif2): (1) the driver in the image is INERT without device passthrough, is open-source and kernel-version-independent (the packet's own 408-mirror argument), and unblocks yoga — the fleet's one gpu-rocm-usable host — from measuring the crossover the decision actually needs; refusing the package to avoid a placement bug is treating a router defect with an inventory hole. (2) On THIS host the passthrough condition must not fire: effective tier is cpu (RTX 3070 present-usable but cdi-spec-missing; the Cezanne iGPU is a 2GiB-carve-out Vega sharing DDR4 with a strong Zen3 CPU at ~8C/16T) — decode on that iGPU is a likely regression and embeddings are unproven here; the windows host's 587ms/chunk CPU crossover does not transfer to a CPU an order of magnitude faster (the packet's own caution, seconded with this host's numbers). (3) The OLLAMA_VULKAN=true hazard is real and the condition should be stated in the image change itself: presence must not choose placement — either pin OLLAMA_VULKAN off outside gpu-rocm tiers or land the workload-shape router before the first non-yoga host gets a /dev/dri passthrough. Net: image yes; passthrough tier-gated; placement pinned until routed-by-shape exists.
     - packet_id: e2e-step1-blocks-the-destruction-gate-on-a-forge-lane-failure
       order: 808-zrzz
       status: ready

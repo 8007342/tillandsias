@@ -4511,8 +4511,17 @@ fn build_inference_run_args(
     image: &str,
     skip_runtime_pulls: bool,
 ) -> Vec<String> {
-    let home_dir = std::env::var("HOME").unwrap_or_else(|_| String::from("/home/forge"));
-    let model_cache_dir = Path::new(&home_dir).join(".cache/tillandsias/models");
+    // Order 815-gdjk: XDG-first via the shared resolver, ADOPTING a pre-XDG
+    // model dir rather than orphaning it — this cache is 1.5 GB on the CPU
+    // tier and grows to tens of GB on GPU tiers; silently starting a fresh
+    // one is a re-download nobody asked for.
+    let legacy_model_dir = std::env::var("HOME")
+        .map(|h| Path::new(&h).join(".cache/tillandsias/models"))
+        .unwrap_or_else(|_| Path::new("/home/forge").join(".cache/tillandsias/models"));
+    let model_cache_dir = tillandsias_core::cache_root::adopt_legacy_cache(
+        &legacy_model_dir,
+        &tillandsias_core::cache_root::cache_root().join("models"),
+    );
     let _ = std::fs::create_dir_all(&model_cache_dir);
     // Order 313 ROOT CAUSE (windows lane 2026-07-23, airtight repro): this
     // dir is bind-mounted into the hardened inference container, which runs
@@ -9208,13 +9217,8 @@ const FORGE_SSH_KNOWN_HOSTS: &str = "/run/tillandsias/ssh-known_hosts";
 
 #[cfg_attr(not(feature = "tray"), allow(dead_code))]
 fn forge_gitconfig_dir() -> Option<PathBuf> {
-    let home = std::env::var("HOME").ok()?;
-    Some(
-        PathBuf::from(home)
-            .join(".cache")
-            .join("tillandsias")
-            .join("forge-gitconfig"),
-    )
+    // Order 815-gdjk: XDG-first via the shared resolver.
+    Some(tillandsias_core::cache_root::cache_root().join("forge-gitconfig"))
 }
 
 /// Host-side cache of the ssh-host-signer CA public key, written by
@@ -9424,11 +9428,8 @@ pub(crate) fn write_forge_gitconfig(
     mirror_id: Option<&str>,
     project_path: &Path,
 ) -> Option<PathBuf> {
-    let home = std::env::var("HOME").ok()?;
-    let forge_git_dir = PathBuf::from(home)
-        .join(".cache")
-        .join("tillandsias")
-        .join("forge-gitconfig");
+    // Order 815-gdjk: XDG-first via the shared resolver.
+    let forge_git_dir = tillandsias_core::cache_root::cache_root().join("forge-gitconfig");
     std::fs::create_dir_all(&forge_git_dir).ok()?;
 
     let config_path = forge_git_dir.join(format!("{}.config", project_name));
@@ -9742,10 +9743,8 @@ fn write_forge_repo_gitdir(project_name: &str, project_path: &Path) -> Option<Fo
         return None;
     }
 
-    let home = std::env::var("HOME").ok()?;
-    let root = PathBuf::from(home)
-        .join(".cache")
-        .join("tillandsias")
+    // Order 815-gdjk: XDG-first via the shared resolver.
+    let root = tillandsias_core::cache_root::cache_root()
         .join("forge-repo-gitdir")
         .join(project_name);
     std::fs::create_dir_all(root.join("objects")).ok()?;
