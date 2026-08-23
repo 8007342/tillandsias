@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: capability-row-check-cannot-resolve-a-host-without-the-hostname-binary
+    field: status
+    value: implemented
+    ts: "2026-08-23T07:58:28Z"
+    host: windows
+
+events:
+  - packet_id: capability-row-check-cannot-resolve-a-host-without-the-hostname-binary
+    event:
+      type: note
+      ts: "2026-08-23T07:58:28Z"
+      host: windows
+      summary: >
+        Five scripts consolidated onto agent-identity's shared chain; forge declines to publish an ephemeral identity; fixture 9/9. Verified live: the WSL gate locus went from unavailable:host-unresolvable to ok:capability-row-reported:esmeraldinha.
