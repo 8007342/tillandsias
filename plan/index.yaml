@@ -2743,6 +2743,7 @@ plan_index:
           summary: |
             Group under socket-audit-master (order 625-jd5f)
     - packet_id: brew-aarch64-harness-strategy
+      next_action: 'On a cycle running the macOS local-build e2e (/build-install-and-smoke-test-e2e, pristine aarch64 guest): verify each harness in the 2026-08-23 inventory installs via its designated channel with visible progress or one actionable failure line, no silent 127s (exit criterion 2); then close 317 citing the inventory + litmus:brew-ondemand-tools-shape Tier-2 step'
       release_target: harness-mcp-expert-validation
       order: 317
       desired_release: v0.5
@@ -2799,6 +2800,21 @@ plan_index:
           host: forge
           summary: |
             Group under harness-mcp-expert-validation (order 625-jd5f)
+        - type: note
+          ts: "2026-08-23T05:47:39Z"
+          host: tlatoanis-macbook-air
+          summary: |
+            claimed for cycle 2026-08-23T05:41Z (slice: inventory + shim Tier-2 warning; in-guest verification deferred to an e2e cycle)
+        - type: note
+          ts: "2026-08-23T05:56:25Z"
+          host: tlatoanis-macbook-air
+          summary: |
+            cycle-scoped claim released; criteria 1+3 done, criterion 2 remains
+        - type: note
+          ts: "2026-08-23T05:56:25Z"
+          host: tlatoanis-macbook-air
+          summary: |
+            carry-forward
     - packet_id: mirror-credential-helper-broker
       release_target: socket-audit-master
       order: 319
@@ -9124,6 +9140,72 @@ plan_index:
               * Retention is a separate lever worth pricing at the same time: 609 MB
                 for three generations, and delta makes a generation cheap enough
                 that `keep` could plausibly go up rather than down.
+        - type: progress
+          ts: "2026-08-23T06:44:56Z"
+          agent_id: linux-macuahuitl-opus5-20260823T063400Z
+          host: linux_mutable
+          summary: |
+            DELTA RE-EMBED IMPLEMENTED, WITH THE IDENTITY ASSERTION THE PACKET
+            DEMANDED — and the hazard it warned about is now demonstrably caught.
+        
+            Measured on the live 20,963-chunk index, one line appended to
+            methodology/philosophy.yaml:
+        
+              before   reused=0      embed=20963 of 20963
+              after    reused=20960  embed=3     of 20963
+        
+            THE JOIN IS BY CONTENT HASH, NEVER BY POSITION. chunks.jsonl and
+            vectors.jsonl are line-aligned, and the existing per-batch arity check
+            exists because "a shifted index answers plausibly and wrongly". A delta
+            that paired reused vectors positionally would reproduce that shift
+            WHILE PASSING that check, since every batch it does embed is the right
+            size. Reuse is therefore keyed on each chunk's own content_hash, and a
+            prior generation is read only after its own arity is verified.
+        
+            THAT IS STILL NOT ENOUGH, which is the packet's actual point: none of
+            the arity checks can see a source generation that was ALREADY
+            mis-joined, because the counts are right and the bytes are opaque. So
+            the assembled index is spot-checked by RE-EMBEDDING a deterministic
+            sample of reused chunks and comparing bytes to what the cache handed
+            over. Deterministic (first N reused) rather than random so a control
+            can target a sampled row.
+        
+            NEGATIVE CONTROL, run twice — once before the arity fix below and once
+            after, because I changed the guard's input path and an unre-run control
+            is not a control. Swapping two lines of a prior generation's
+            vectors.jsonl leaves arity PERFECTLY intact (20963/20963) and is
+            invisible to every pre-existing check. The identity assertion refuses:
+        
+              blocked:spec-index:delta-identity-mismatch-at-chunk-1
+              rc=1
+        
+            Restored, it builds green at reused=20960, identity-verified=5.
+        
+            AND I NEARLY SHIPPED IT SILENTLY DEGRADED. The first live run reported
+            `reused=0` while the scratch-volume runs reused 20,962. Rather than
+            accept that as a corpus property I measured the hash overlap between
+            generations: 19,720 of 19,850 (99.3%) were reusable and NONE were being
+            reused. Cause: the cache loop called `_entry_complete`, which compares
+            a directory's vector count against $n_chunks — the CURRENT corpus size.
+            That is correct for validating THIS build's entry and wrong for a prior
+            generation: the moment the corpus grew by one chunk every older
+            generation was rejected. Fixed to compare each generation against its
+            OWN chunk count.
+        
+            That failure mode deserves naming because it is the quiet one: the
+            feature was present, wired, gated and green, and did nothing. A delta
+            that reports reused=0 looks exactly like a corpus with no reusable
+            content, and the only thing separating those two readings was measuring
+            the overlap.
+        
+            TIMING DELIBERATELY NOT FILED. Steam is running on this host (39%
+            utilisation, 3561 MiB), so the wall-clock numbers this run produced are
+            contaminated and would be wrong in exactly the way this campaign keeps
+            catching. The REUSE RATIO above is structural, not temporal, and stands
+            on its own. The speed claim is owed on a quiet GPU.
+        
+            Kill switch: TILLANDSIAS_SPEC_INDEX_DELTA=0 restores the full rebuild.
+            Sample size: TILLANDSIAS_SPEC_INDEX_VERIFY_SAMPLE (default 5).
     - packet_id: harness-mcp-expert-validation
       order: 554
       desired_release: v0.5
@@ -11613,6 +11695,7 @@ plan_index:
           summary: |
             Group under stable-milestone-v1 (order 625-jd5f)
     - packet_id: tray-shared-string-resource-layer
+      next_action: 'Do NOT start the string layer: both 2026-08-17 measurements (see events) refute it as written — wait for 628-w9sm (pending drift ruling) and the code->toml corpus regeneration routed via 792-77bt (completed); when w9sm rules, re-derive this packet''s exit criteria 2+3 which are mutually exclusive as written'
       release_target: stable-milestone-v1
       order: 628-c7qd
       status: ready
@@ -11708,6 +11791,11 @@ plan_index:
           host: forge
           summary: |
             Group under stable-milestone-v1 (order 625-jd5f)
+        - type: note
+          ts: "2026-08-23T05:56:39Z"
+          host: tlatoanis-macbook-air
+          summary: |
+            carry-forward: selector re-offers an unexecutable urgent packet every cycle
     - packet_id: tray-menu-builder-convergence
       release_target: stable-milestone-v1
       order: 628-p5tj
@@ -22762,6 +22850,16 @@ plan_index:
             produce the same envelope they produced before the change.
 
 
+      events:
+        - type: note
+          ts: "2026-08-23T04:50:02Z"
+          agent_id: windows-esmeraldinha-opus5-20260823T042116Z
+          host: windows
+          summary: |
+            Evidence, not a new packet — this one already names the defect.
+            esmeraldinha published two capability rows this cycle and BOTH carry gpu present-unusable / wsl2-no-dri-render-node. Structurally that is correct for the distro's current provisioning state: /dev/dri absent, /dev/accel* absent, the guest PCI bus carrying only virtio and one Microsoft 0x1414:0x008e class-0x030200 function, and ollama's own discovery finding `inference compute id=cpu library=cpu` and nothing else even with OLLAMA_VULKAN already true in its environment.
+            But this host MEASURED on 2026-08-17 that the same Intel UHD is reachable from inside WSL2 through /dev/dxg via Mesa dzn — ollama bound it at 100% offload and delivered 190.6 tok/s prefill, 2.16x the CPU lane. yolanda measured the same path on AMD the day before. So the reason string is a PROVISIONING statement wearing the costume of a HARDWARE statement, and the matrix now publishes it twice for a machine that has already used the device it calls unusable.
+            Per 806-2r4s this is "ship a lane", not "buy hardware", and yolanda's universality write-up said so carefully as "could in principle". It is stronger than in principle — measured on both vendors the fleet owns (793-zumy AMD, this host Intel), enablement reduced to three Fedora packages under 793-a8e7. A scheduler reading present-unusable will not ship the lane, so the vocabulary is doing the wrong work here.
     - packet_id: capability-envelope-side-and-engine-qualified
       release_target: stable-milestone-v1
       order: 793-qr4t
@@ -29888,6 +29986,62 @@ plan_index:
             were mostly citations into plan/index.d/ fragments that lenovinha's
             fold commit e84f37b40 deleted four hours earlier — a fragment path is
             not a durable citation, because folding is designed to remove it.
+        - type: progress
+          ts: "2026-08-23T06:04:58Z"
+          agent_id: linux-macuahuitl-opus5-20260823T053400Z
+          host: linux_mutable
+          summary: |
+            86% OF MY NEAR-MISS LABELS WERE WRONG. THE CONCLUSION SURVIVES ANYWAY.
+        
+            All 243 near-miss questions re-adjudicated against the GLOBAL corpus
+            rather than the single corpus each label named, five parallel batches,
+            with an adversarial pass over every question that STAYED near-miss
+            (the load-bearing claim, since a secretly-answerable near-miss makes a
+            correct answer look like a failure to refuse).
+        
+              adjudicated        243
+              actually in-corpus 192
+              stayed near-miss    46   of which the verifier overturned 13
+              unsure               5
+              TRUE near-miss      33   — 13.6% of what I had labelled
+        
+            THE BANDS, RE-DERIVED ON TRUSTWORTHY LABELS:
+        
+                                before relabel   after
+              near-miss ceiling      0.8643      0.7677
+              in-corpus floor        0.5620      0.5620
+              OVERLAP                0.3024      0.2058
+        
+            My bad labels were inflating the ceiling by 0.0966 exactly as predicted
+            — those high-scoring "near-misses" were CORRECT ANSWERS being scored as
+            failures. The correction is real and it is large. It changes the
+            MAGNITUDE and not the VERDICT: the bands still overlap by 0.2058, so no
+            single global threshold separates in-corpus from unanswerable, and the
+            margin test still overlaps (0.1104). "Thresholds are dead" now rests on
+            labels that have been independently attacked rather than on my
+            first-pass intuition.
+        
+            PER-CORPUS NUMBERS ARE NOW TOO THIN TO QUOTE, and I will not repeat the
+            mistake of quoting them anyway. With 33 true near-misses spread over
+            five corpora the per-corpus n_nr is 2 to 16 — code overlaps by 0.0315
+            on TWO questions, which is noise wearing a decimal point. The global
+            comparison (33 vs 458) is the only one this set can support.
+        
+            WHAT THE 33 SURVIVORS ARE, and they are incidentally a corpus gap list
+            worth having: Miri, Dependabot/Renovate, attaching gdb/lldb to a hung
+            tray, generating a workspace coverage report, running litmus against a
+            remote host, tray keyboard shortcuts. Plausible questions a real
+            contributor would ask, that no file answers.
+        
+            THE ORIGINAL ERROR, stated plainly because it is instructive: I told the
+            question generators that "a question belonging to a different corpus"
+            counted as a near-miss. Retrieval is GLOBAL. That single instruction
+            mislabelled 192 questions, and the resulting 0.30 overlap was reported
+            as a measurement for a day. The measurement was honest; the labels it
+            measured were not, and no amount of sample size fixes a definition.
+        
+            Committed: results-relabelled-561-nomic.tsv,
+            labels-true-near-miss-33.txt, relabel-overturned-13.txt.
     - packet_id: sub-second-litmus-budgets-become-no-timeout-at-all
       order: 827-uh6t
       status: ready
@@ -32811,6 +32965,52 @@ plan_index:
           host: linux_mutable
           summary: |
             roadmap refresh: six armed hosts; macuahuitl queue ordered; coordinator duty standing
+        - type: progress
+          ts: "2026-08-23T05:37:11Z"
+          agent_id: linux-macuahuitl-opus5-20260823T053400Z
+          host: linux_mutable
+          summary: |
+            COORDINATOR HEARTBEAT 05:34Z, and it paid for itself again.
+        
+            windows-next was 4 AHEAD and is now merged. That is two consecutive
+            hourly ticks where a platform branch had drifted ahead within the hour —
+            the duty is not occasional. osx-next is 0 ahead / 16 behind, which is
+            fine: it self-corrects on the Mac's next cycle, whose merge is
+            pre-push-enforced.
+        
+            Claims: in_progress=1, expired=0. Attestation ages: lenovinha 0h,
+            yolanda 0h, yoga 1h, tlatoanis-macbook-air 1h, macuahuitl 14h (this
+            cycle closes it), forge 82h (ephemeral, expected), esmeraldinha 136h.
+        
+            ESMERALDINHA IS SILENT BUT NOT NECESSARILY STUCK. It was armed this
+            session with a six-day-stale checkout on four Alder Lake-N cores; its
+            first cycle has to fast-forward ~10 commits, rebuild both loci, and pay
+            a cold WSL toolchain. That is plausibly hours, and its prompt says so.
+            Worth re-checking at 136h+2 rather than intervening now — but if it is
+            still silent by the next tick, the likely cause is the cold-boot rootfs
+            gap at with-wsl2-builder.sh:122, which no host has yet hit and fixed.
+        
+            YOLANDA FIXED MY FIXTURE AND FOUND A THIRD 851-cduu INSTANCE. It
+            converted scripts/test-set-field-yaml-shapes.sh from resolve_plan_binary
+            to ensure_fresh_plan_binary: commit c6f8cbccc shipped the multi-line
+            re-indent AND the fixture together, the gate's WSL locus resolved a
+            cache binary built three hours before that fix, and all three
+            multi-line cases went red against an emission defect that no longer
+            existed at HEAD. A behaviour-pinning fixture must not test a stale
+            instrument, and mine did. That is the correct fix and I have kept it.
+        
+            GPU MEASUREMENTS SKIPPED THIS CYCLE, BY RULE. Steam is running (25%
+            utilisation, 1831 MiB). 849-tz8g is the top of my queue and it ends in
+            an inference benchmark, so it is deferred rather than measured badly —
+            a latency taken under external load is wrong in exactly the way this
+            campaign keeps catching. Took queue item (3) instead, which needs no
+            timing at all.
+        
+            LONG-HORIZON WORK STARTED: the 824-6qxh relabel is running in the
+            background over all 243 near-miss questions, adjudicating each against
+            the GLOBAL corpus rather than the single corpus its original label
+            named, with an adversarial pass over everything that stays near-miss.
+            Deliberately left to run across ticks rather than blocked on.
     - packet_id: macos-guest-cannot-reach-a-host-native-service
       order: 830-xsk2
       status: ready
@@ -33329,8 +33529,9 @@ plan_index:
             Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-08-19T15:00:00Z (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
 
     - packet_id: forge-experts-answer-from-main-not-the-branch-the-work-is-on
+      next_action: 'Policy residual for the Tlatoani or a windows host that can reproduce the yolanda path: decide which branch a --cloud checkout should track at launch (default-branch today; operator''s working branch is not derivable host-side). Remedy (b) is landed, so stale answers are now legible either way; any change here is UX, not correctness. Fix reaches forges at next image rebuild.'
       order: 835-h2wq
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p1
       kind: bug
@@ -33434,6 +33635,26 @@ plan_index:
           agent_id: windows-yolanda-opus5-20260819t1430z
           host: windows
 
+        - type: note
+          ts: "2026-08-23T05:43:10Z"
+          host: lenovinha
+          summary: |
+            claimed for cycle 2026-08-23T05:43Z (loop-2, routed epic forge-local-experts)
+        - type: completed
+          ts: "2026-08-23T05:50:40Z"
+          host: lenovinha
+          summary: |
+            status 'completed' with evidence_refs: 53b28c745 litmus:forge-ledger-freshness-shape 5/5 incl. functional stale-commit fixture; default-image instant suite PASS; ./build.sh --check rc=0
+        - type: note
+          ts: "2026-08-23T05:50:40Z"
+          host: lenovinha
+          summary: |
+            deliverable's OR satisfied via remedy (b); diagnosis recorded
+        - type: note
+          ts: "2026-08-23T05:50:40Z"
+          host: lenovinha
+          summary: |
+            carry the policy question without blocking closure
     - packet_id: delete-windows-argv-workarounds
       order: 836-smm2
       status: ready
@@ -34164,7 +34385,7 @@ plan_index:
 
     - packet_id: archival-sweep-broke-four-groundtruth-citation-pins
       order: 840-jt7k
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p2
       kind: bug
@@ -34248,6 +34469,21 @@ plan_index:
           host: lenovinha
           summary: |
             VERIFIED FIXED AT HEAD, closing with evidence rather than re-implementing (the 837-m47d shape). Both halves of the deliverable landed as 4c221e731 'fix(plan): make plan/archive ANSWERABLE, and gate the sweep on it': (1) collect_archived_ids no longer discards archived packet content, so the grader resolves citations into plan/archive/*.yaml — option 1 of the packet's three, chosen by that commit; (2) the archiver's acceptance now includes the harness: archive-plan-packets.sh:183 refuses the sweep when check-archive-answerability.sh (new, 222 lines) fails, exactly the 'add the harness to the archiver's acceptance assertions' criterion. Evidence on lenovinha at 489cb230f+: tillandsias-plan grade = groundtruth-result: sets=1 total=22 pass=22 fail=0 (the four named FAILs — plan-active-release-experts-milestone, plan-blocked-by-394c, plan-closure-downstream-of-394a, plan-status-of-394a — all pass); expert_accuracy in cycle metrics restored to 100% fleet-wide since 2026-08-21.
+        - type: note
+          ts: "2026-08-23T05:43:09Z"
+          host: lenovinha
+          summary: |
+            claimed for cycle 2026-08-23T05:43Z (loop-2, routed epic forge-local-experts)
+        - type: completed
+          ts: "2026-08-23T05:50:39Z"
+          host: lenovinha
+          summary: |
+            status 'completed' with evidence_refs: 53b28c745 tillandsias-plan grade 22/22 pass; archive-plan-packets.sh:183 gates on check-archive-answerability.sh
+        - type: note
+          ts: "2026-08-23T05:50:39Z"
+          host: lenovinha
+          summary: |
+            verified fixed by 4c221e731; evidence event this cycle
     - packet_id: mcp-fix-does-not-reach-a-running-session-and-the-probe-cannot-tell
       order: 842-nw95
       status: ready
@@ -35215,6 +35451,20 @@ plan_index:
           host: windows
           summary: |
             yolanda refreshed BOTH its capability rows at probe v0.4.260817.1 (fragments 20260823t015456z-49df4525-yolanda.yaml windows-host, 20260823t015759z-61d6612c-yolanda.yaml in-guest), and answered the coordinator's open question: the npu wsl2-npu-not-exposed and gpu wsl2-no-dri-render-node limits are WSL2-universal, NOT Intel-specific — yolanda is itself AMD (Ryzen AI 7 350, XDNA NPU VEN_1022&DEV_17F0, Radeon 860M VEN_1002); the guest PCI bus carries only Microsoft 0x1414 3D-controller paravirtual functions, no DRM driver binds (no /dev/dri for any vendor), and no PCI passthrough exists (no /dev/accel* possible). The fleet's Intel N100 is esmeraldinha, still silent; its future row confirms the Intel half. Full evidence: plan/issues/research-wsl2-accel-limits-vendor-universality-2026-08-23.md. Caveat for this packet's design: in-guest rows are DISTRO-dependent (ollama present in the 08-18 probe context, absent in tillandsias-build today, so yolanda's in-guest schedulable set dropped to none) and the host+locus fold key cannot express which guest was probed — decide the canonical guest or key the distro.
+        - type: note
+          ts: "2026-08-23T04:50:04Z"
+          agent_id: windows-esmeraldinha-opus5-20260823T042116Z
+          host: windows
+          summary: |
+            esmeraldinha, the last silent Windows host, published both loci this cycle through the self-serve path: capability-matrix moved from "5 row(s), 4 of 7 known host(s) reporting" to "7 row(s), 5 of 7", SILENT down to forge and tlatoanis-macbook-air.
+            The in-guest row is the first WSL2 row in the matrix that is actually SCHEDULABLE (cpu/container/ollama + cpu/host-native/ollama), and that is entirely a probe-context effect rather than a hardware one: it was deliberately taken in the RUNTIME `tillandsias` distro, which carries ollama 0.32.14 and podman, where yolanda's sibling row was taken in tillandsias-build, which carries neither. This demonstrates the distro-dependency caveat yolanda predicted, with a concrete divergence rather than a hypothetical.
+            Recommendation for the row-on-join design: make the product's `tillandsias` distro the canonical in-guest locus, or add the distro to the host+locus fold key. A second, practical constraint for whoever implements that: the runtime distro sets [automount] enabled = false in /etc/wsl.conf, so the checkout is NOT visible at /mnt/c there and no in-tree script can run in place — the probe binary and scripts had to be copied in via \\wsl.localhost. A self-serve path that assumes the checkout is reachable will fail in exactly the distro this recommendation makes canonical.
+        - type: note
+          ts: "2026-08-23T04:54:01Z"
+          agent_id: windows-esmeraldinha-opus5-20260823T042116Z
+          host: windows
+          summary: |
+            Filed 859-b2zc against this packet's own advisory checker. The gate 850-bif2 shipped to make silent hosts self-correcting has never been able to fire inside a Fedora image, forge included, because check-capability-row.sh depends on a `hostname` binary those images do not carry. Worth knowing before anyone reads the remaining two SILENT rows as inattention.
     - packet_id: macos-host-onboarding-defect-sweep
       order: 851-gpb5
       status: done
@@ -35451,6 +35701,38 @@ plan_index:
         
             The guard itself is sound and I have left it alone.
 
+        - type: note
+          ts: "2026-08-23T04:50:03Z"
+          agent_id: windows-esmeraldinha-opus5-20260823T042116Z
+          host: windows
+          summary: |
+            Independent second-host confirmation, and it sharpens the hazard.
+            esmeraldinha's WSL locus binary was mtime 2026-08-17 05:20:45 -0700, 1,647,416 bytes — six days behind HEAD and predating 07cfec83e ("compact must not mutate on --help", 2026-08-22 07:52:42). The same destroyer. Rebuilt in the gate's own locus and re-verified through the sanctioned probe: same resolved path, mtime 2026-08-22 21:24:31, 1,945,456 bytes, 41 capabilities.
+            THE SHARPENING: this checkout was a FRESH CLONE, 40 minutes old (reflog bottoms out at `clone:` 2026-08-22 20:40:32), and ./target/ did not exist at all, so resolve_plan_binary in the Git-Bash locus returned nothing. Every freshness signal available inside the checkout was maximally reassuring — clone minutes old, clean status, no build directory, HEAD at origin/linux-next — and all four were irrelevant, because the locus the gate resolves lives inside the WSL distro's filesystem, OUTSIDE the checkout. Re-cloning does not touch it; neither does deleting target/ or git clean -xdf.
+            Consequence for exit criterion (1): the two loci here disagreed not on vintage but on EXISTENCE, so a preflight verdict that merely names which locus it rebuilt would have reported the native lane truthfully and left the only locus that matters stale. And the vintage handshake should be anchored to the checkout (built from a tree containing `git rev-parse HEAD`), not to the clock — an mtime check passes a binary rebuilt five minutes ago from a stale worktree.
+            Related, same family, found in the same minutes: .git/hooks/ on this fresh clone held only *.sample and core.hooksPath was unset at every scope, so pre-push-linux-next-merged.sh was installed nowhere and enforcing nothing until scripts/install-hooks.sh was run. Hook enforcement is a post-first-build property, not a post-clone property.
+        - type: note
+          ts: "2026-08-23T05:32:00Z"
+          agent_id: windows-esmeraldinha-opus5-20260823T042116Z
+          host: windows
+          summary: |
+            INDEPENDENT VERIFICATION on the second Windows host, and it caught a real staleness rather than a synthetic one.
+            ensure_fresh_plan_binary (4b5f13790) landed mid-cycle here, arriving in the pre-push merge of origin/linux-next. Exercised immediately after that merge, in the gate's own WSL locus:
+        
+              - First call: rc=2, empty path — "stale and NOT refreshable here".
+                CORRECT on both halves. The merge had just pulled newer
+                crates/tillandsias-plan sources, so the binary this cycle rebuilt
+                at 04:24 was genuinely stale again seven minutes later; and the
+                call was made from a shell without /root/.cargo/env sourced, so
+                cargo was absent and the in-locus rebuild could not run. rc=2 is
+                exactly the contract for that state, and it was silent as
+                specified.
+              - Second call, same locus with cargo on PATH: rc=0, rebuilt in
+                place, mtime advanced to the second of the call, size 1945456 ->
+                1959056 (the merge did change plan sources), 41 capabilities.
+        
+            scripts/test-plan-binary-freshness.sh also passes here: ok:plan-binary-freshness:9 (9 passed, 0 failed).
+            Worth noting what this demonstrates beyond the fixture: the staleness it caught was created BY THE PRE-PUSH MERGE ITSELF, in the middle of a cycle that had already correctly rebuilt the instrument once. That is a window neither preflight nor a cycle-start rebuild can close by construction — the instrument goes stale after Start-Of-Cycle, when the mandatory merge lands sibling work. Point-of-use freshness is the only shape that covers it, which is a stronger argument for the chosen fix than the original packet made.
     - order: 853-6gz3
       packet_id: expert-validation-layer-returns-verified-not-merely-verifiable
       desired_release: v0.6
@@ -35709,6 +35991,14 @@ plan_index:
           summary: |
             all six exit criteria met on pirria and pushed at c9caa2984: capability row published and visible in capability-matrix; iGPU adjudicated present-unusable with reason vulkan-backend-absent-from-pinned-image; embedder and qwen2.5-0.5b floor measured with exact commands and cross-host ratios; per-call budget measured at k=6 evidence; llama-server evaluated against ollama as a negative result; cheatsheet with provenance recording the cold bootstrap
 
+        - type: note
+          ts: "2026-08-23T04:50:01Z"
+          agent_id: windows-esmeraldinha-opus5-20260823T042116Z
+          host: windows
+          summary: |
+            The Windows cousin is measured and filed as 858-tnnv; this packet is NOT claimed and stays with the Silverblue host, per the coordinator.
+            THE ONE NUMBER THE SILVERBLUE ROW SHOULD COMPARE ITSELF AGAINST, and it is not a throughput figure: on this host the expert layer's sub-queries are STRICTLY SERIAL. OLLAMA_NUM_PARALLEL=1, four cores, a single memory channel — fanning out does not overlap, it time-slices the same ~21.3 GB/s. At ~2.3 s per unfold-and-verify sub-query (1.9 s generate + 0.44 s to embed the query), the budget is: 10 s answer -> ~4 sub-queries, 30 s -> ~13, 60 s -> ~26.
+            That makes 853-6gz3's floor N x 2.3 s in the fan-out width N, which is a qualitative difference from macuahuitl rather than a slower version of it: a design where fan-out is nearly free does not degrade gracefully here, it degrades linearly. Worth checking whether the Silverblue cousin's runtime serialises the same way — if it does, that is a property of the tier and not of WSL2.
     - order: 856-s56y
       packet_id: no-durable-scheduler-exists-on-any-host
       desired_release: v0.6
@@ -35750,6 +36040,12 @@ plan_index:
           summary: |
             LINUX HALF LANDED AND ARMED LIVE ON YOGA, per-criterion status — (1) fires with no terminal: structural (systemd user timer, enabled, WantedBy timers.target); the first unattended REAL fire is scheduled for 2026-08-23T06:12:42Z and its evidence (JSONL + attestation) is the next cycle's to attach. (2) reboot survival: timer enabled + OnBootSec re-arm + loginctl Linger=yes verified on the host — the logout-death property of ./repeat is specifically what lingering removes. (3) per-host interval: install-cycle-timer.sh --interval, yoga armed at 2h; operator mandate 4h for roughly-4-core hosts. (4) BOTH HALVES DEMONSTRATED, one hermetically and one live — a fixture (scripts/test-cycle-driver.sh, 4/4 PASS) proves failure passthrough and overlap-skip at the driver, and the install's own immediate fire hit a deliberately held lock and SKIPPED (journal + JSONL skipped=true records exist), while OnUnitInactiveSec makes wall-clock stacking structurally impossible — the interval is not even scheduled until the previous cycle completes, mirroring the ./repeat --wait spacing whose 50-69 minute gaps this packet cites as the proven pattern. (5) scripts/check-cycle-scheduler.sh answers ok:cycle-scheduler:next=..:last=..:lastrc=.. from live systemd state plus the driver's JSONL, no transcript involved. Two systemd property traps recorded in that script's comments for the next platform (show prints formatted strings despite USec names; NextElapseUSecRealtime is unset for monotonic timers while list-timers computes it). HEADLESS CREDENTIAL CAVEAT, named not solved — a boot-fired cycle has no unlocked keyring, so check-credential-channel.sh will fail loud unless the operator seeds GH_TOKEN via ~/.config/tillandsias/cycle.env (EnvironmentFile, already wired) or .git/.gh-credentials; that seeding is operator-owned. WHAT REMAINS on this row — attach the first unattended real-fire evidence, then the non-Linux halves via children 858-h7ke (macOS launchd) and 858-3v74 (Windows Task Scheduler), filed in this fragment, independently schedulable (different owned files, different pickup_role). Claim returned to ready so the row is visible; the Linux implementation is DONE — do not redo it, take the children.
 
+        - type: progress
+          ts: "2026-08-23T05:44:00Z"
+          agent_id: linux-yoga-fable5-20260823T054300Z
+          host: linux_immutable
+          summary: |
+            SCHEDULER HANDOVER, and why the interim operator loop had to die for the fire evidence to exist. Since arming, every timer fire has SKIPPED against a live session's held lock — by design, but the arithmetic makes it permanent, not incidental. The session-scoped operator loop fires 2-hourly at hh11 and the timer re-arms 2h from each skip, landing ~90s later at hh12 — two 2-hour clocks phase-locked one minute apart, so while the session lives the timer NEVER runs a real cycle and the "attach first unattended real-fire evidence" next_action on this row is starved by the very loop that wrote it. The overlap machinery is what proved itself instead, twice live-adjacent (fixture 4/4; the install-time fire skipping against a held lock — and the 06:12:42Z fire due minutes after this event meets the same held lock, its skip record joining the JSONL when it lands) — an overlapping fire is a recorded skip, exit 0, schedule intact. RESOLUTION, this cycle — the interim loop is retired; the durable scheduler this row built now owns the cadence alone. Next real fire ~08:12Z tonight, unattended by construction. WHERE THE EVIDENCE ACCRUES, for whoever attaches it — per-fire rc/duration/skipped rows in ~/.cache/tillandsias/cycle-scheduler.jsonl on yoga (surface via scripts/check-cycle-scheduler.sh, criterion-5 grammar), full-cycle proof in plan/mo-full-attestations.d/yoga.md entries whose cycles no operator prompt launched, service-level trail in journalctl --user -u tillandsias-cycle.service. HONESTY LINE HELD — tonight's fires are scheduler-launched with an operator session merely coexisting; criterion 1's full "no user logged in" demonstration lands at the next natural logout or reboot epoch, which is operator lifecycle, not something a session should force. Criterion 2's live reboot proof rides the same epoch; the structural half (enabled + OnBootSec + Linger=yes) is verified and recorded.
     - order: 857-4kqv
       packet_id: nothing-bounds-what-the-fleet-spends-or-backs-off-when-throttled
       desired_release: v0.6
@@ -35948,3 +36244,169 @@ plan_index:
         HALF TWO — THE GATE IS SLOWER THAN THE FLEET PUSHES. ./build.sh --check on this host is 336 s cold and minutes warm whenever a touched crate must re-check. Between gate START and push, origin/linux-next moved TWICE in one session (c9caa2984 -> 649fc5534, then 649fc5534 -> a3cf9f5dd), so the pre-push hook refused with "The gate validated a different tree than the one you are pushing" and the whole cycle had to be repeated. A rebase invalidates the stamp, re-gating takes minutes, and on an active day the window never closes on the first try. This is not a correctness bug and the hook is right to refuse — but it means a slow host can spend more wall clock losing races than doing work, and it silently penalises exactly the hosts the fleet added on purpose. It was worked around here with a retry loop (rebase -> gate -> push, repeat), which is the shape a supported fix could take.
       exit_criteria: |
         (1) A stale plan binary is reported AS staleness — the gate compares the resolved binary against the sources it is checking and says so, or rebuilds it — so no agent chases a phantom defect in set-field again. (2) A supported way to land from a slow host: either the gate stamp survives a rebase that does not touch gated inputs, or build.sh grows a documented rebase-gate-push retry, rather than every slow host inventing its own loop. (3) Both are measured on a 4-core host, since neither reproduces on a fast one.
+    - order: 858-tnnv
+      packet_id: establish-the-low-end-cpu-only-inference-floor-windows
+      desired_release: v0.6
+      title: 'the Windows half of the low-end floor: what an N100 serves from inside WSL2, measured against the Silverblue cousin and the reference host'
+      status: implemented
+      kind: research
+      pickup_role: windows
+      priority: p2
+      capability_tags:
+        - fleet
+        - capabilities
+        - inference
+        - cpu
+        - low-end
+        - experts
+        - windows
+        - wsl2
+      deliverable: plan/issues/research/esmeraldinha-wsl2-cpu-inference-floor-2026-08-23.md
+      depends_on: []
+      estimated_hours: 4
+      context: |
+        The Windows sibling of 855-wrr3, filed rather than claimed: the coordinator directed that the Silverblue row stay with the Silverblue host and that this host file its own, measuring the same numbers so the Intel and AMD low-end tiers become directly comparable.
+        SUBSTRATE DIFFERENCE, stated because it is the whole point of having two rows: 855-wrr3's host is Silverblue bare-metal with podman. This host runs inference inside a WSL2 guest (the runtime `tillandsias` distro, Fedora 44, kernel 6.18.33.2-microsoft-standard-WSL2) on host-native ollama 0.32.14 — the same ollama version the pinned tillandsias-inference image carries, which is what makes the rows comparable at all. Hardware: Intel N100, 4 Alder Lake-N E-cores, no SMT, single-channel DDR4-2667 (~21.3 GB/s ceiling), Intel UHD 24EU sharing that bus, 15.78 GB machine RAM of which 7.76 GB reaches the guest.
+        Operator mandate 2026-08-16 unchanged: this host is the fleet's deliberate LOWER BOUND, perf packets only, no general drain. This packet is a perf packet and no general-queue work was taken this cycle.
+      exit_criteria: |
+        (1) Both capability rows published and folding in `capability-matrix`, produced by the self-serve path (850-bif2) rather than hand-assembled — windows-host via scripts/windows-host-capability-probe.sh --fragment and in-guest via verbatim `tillandsias --capabilities`. DONE: matrix moved from "4 of 7 reporting" to "5 of 7"; esmeraldinha is no longer SILENT. (2) The UHD 24EU iGPU adjudicated with evidence, not left "unknown". DONE: present-unusable / wsl2-no-dri-render-node, confirmed structurally AND qualified — see the 793-zumy event below, because the reason string is a provisioning statement typed as a hardware statement. (3) Measured per-call latency and tokens/sec for the embedder and qwen2.5:0.5b with exact commands, expressed against the reference host as a ratio. DONE: decode 29.64 tok/s; embedder 408.3 ms/embed at batch-64, which is 14.6x macuahuitl's 28 ms. (4) A per-call budget for the 853-6gz3 expert layer. DONE: ~2.3 s per unfold-and-verify sub-query end to end, and STRICTLY SERIAL here (OLLAMA_NUM_PARALLEL=1, 4 cores, one memory channel), so the floor is N x 2.3 s in the fan-out width N. NOT CLOSED BY THIS PACKET, and deliberately not gating it: no alternative low-end runtime was evaluated (855 criterion 5 — llama.cpp is absent from the runtime distro and installing it is a host mutation outside this cycle), and no TRUE cold-bootstrap number was obtained (855 criterion 6 — the WSL cargo cache survived this checkout's re-clone, which is the 851-cduu hazard rather than a cold start). Both remain live under 855-wrr3 for the Silverblue side and are named as residuals in the deliverable.
+      events:
+        - type: filed
+          ts: "2026-08-23T04:50:00Z"
+          agent_id: windows-esmeraldinha-opus5-20260823T042116Z
+          host: windows
+          summary: |
+            Filed and implemented in the same cycle. Headline numbers, all taken on an idle box (both cargo builds complete, shared WSL2 VM quiet), engine verified by /api/ps rather than claimed (engine=cpu offload_pct=0):
+            DECODE qwen2.5:0.5b 29.64 tok/s (200 tokens); phi3.5:3.8b 6.53 tok/s. The 2026-08-16 BARE-METAL Windows figures were 28.9 and 5.96, so the WSL2 substrate costs nothing on the CPU decode lane — a useful negative result for the 718-nkm2 substrate decision.
+            EMBEDDER nomic-embed-text: 437.3 ms/embed at 250 chars (the measured corpus p50), 2451.5 ms at 2000 chars, 408.3 ms at batch-64. Batching buys 6.6%, reproducing the 2026-08-16 finding that the cost here is irreducible compute rather than per-call overhead.
+            THE RATIO 855-wrr3 ASKED FOR: 408.3 ms vs macuahuitl's 28 ms at the same batch shape — the floor is 14.6x slower at the embedder.
+            CORPUS, using the corrected 9,909-chunk constant: full re-embed 72 min sequential / 67 min batched; delta-10 4.4 s; delta-40 17.5 s. Order 552's conclusion stands with a WSL2 number behind it — a synchronous commit-time re-embed cannot meet the 1-2 s budget at any realistic delta size.
+            Exact commands and every caveat: plan/issues/research/esmeraldinha-wsl2-cpu-inference-floor-2026-08-23.md
+
+    - order: 858-ihcb
+      packet_id: bench-inference-floor-publishes-a-cached-prefill
+      desired_release: v0.5
+      title: every prefill_tok_s the benchmark harness has ever emitted was measured against a warm prompt cache, and the projection line multiplies two superseded constants
+      status: ready
+      kind: bug
+      pickup_role: any
+      priority: p2
+      capability_tags:
+        - inference
+        - benchmark
+        - measurement
+        - fleet
+      deliverable: scripts/bench-inference-floor.sh
+      depends_on: []
+      estimated_hours: 2
+      context: |
+        D1. scripts/bench-inference-floor.sh bench_model() runs a warm-up with the IDENTICAL prompt, then measures with the same prompt. The warm-up's output is discarded, as its comment says, but the KV cache it fills is not — so prompt_eval_duration on the measured run covers a cache hit and prefill_tok_s is inflated by an unknown factor.
+        Measured on esmeraldinha 2026-08-23, qwen2.5:0.5b, one server, one model: identical prompt repeated gives 934.4 / 1008.4 tok/s (prompt_eval_ms 87 / 81 for 82 prompt tokens); the harness itself reported 1334.59 tok/s this cycle. The same model, lane and machine under full 793-zumy controls on 2026-08-17 measured 88.3 tok/s.
+        A second, instructive wrong answer is recorded with it: appending a UNIQUE SUFFIX to a shared prompt does not defeat the cache either, since the long common PREFIX is still reusable and only the novel tail is evaluated (365.8 / 474.3 / 394.1 tok/s). The control that works is a prompt that is unique EARLY, which is exactly what 793-zumy's method already specified and what this harness did not adopt.
+        Scope: decode is UNAFFECTED (four measurements across two harnesses and six days agree inside 3%), and so is the embed: line. Only prefill_tok_s is wrong — but it is wrong on every host that has ever run this harness, and those numbers are not comparable to the 793-zumy-method figures already in the ledger. Engine-lane decisions in images/inference/engine-tuning.sh are the consumer this matters to.
+        D2, same file. The `project:` line multiplies CORPUS_CHUNKS (defaults to 1592, the estimate the 2026-08-17 measurement replaced with a measured 9,909) by the per-chunk cost of a 2000-char chunk, when the real corpus p50 is ~236 chars. This cycle it emitted full_rebuild_s=3918.5 (65 min) against a true ~72 min. It is close BY CANCELLATION — the chunk count is 6.2x too low and the per-chunk cost is 5.6x too high — so it will stop being close the moment either input is corrected on its own.
+      exit_criteria: |
+        (1) bench_model generates a unique prompt per repetition with the unique token FIRST, isolates prefill with num_predict=1, and discards the first post-load repetition (the cold-dispatch trap 793-zumy documented pulls the opposite way, so both controls are needed together). (2) A hermetic fixture that fails if a reused prompt can reach the measured run — the defect must not be able to return silently. (3) The project: line derives both the chunk count and the chunk size from the real chunker rather than from constants, or stops emitting a projection at all. (4) Prefill figures already published by this harness are marked superseded wherever the ledger cites them as engine-lane evidence.
+
+    - order: 859-b2zc
+      packet_id: capability-row-check-cannot-resolve-a-host-without-the-hostname-binary
+      desired_release: v0.5
+      title: the self-serve capability gate answers unavailable:host-unresolvable in every Fedora image, so it has never asked the forge to publish a row
+      status: ready
+      kind: bug
+      pickup_role: any
+      priority: p2
+      capability_tags:
+        - capabilities
+        - fleet
+        - forge
+        - wsl2
+        - probe
+        - identity
+      deliverable: scripts/check-capability-row.sh
+      depends_on: []
+      estimated_hours: 1
+      context: |
+        scripts/check-capability-row.sh resolves the host with
+        
+          host="$(hostname -s 2>/dev/null || hostname 2>/dev/null || echo '')"
+        
+        and refuses with `unavailable:host-unresolvable` (exit 2) when that is empty. The `hostname` BINARY IS NOT INSTALLED in the Fedora images this project runs on, so the check can never answer `ok:` or `due:` there — only `unavailable:`.
+        Measured on esmeraldinha 2026-08-23, three loci:
+          - WSL distro tillandsias-build (where ./build.sh --check re-execs, so
+            the locus the gate runs in): `hostname: command not found`;
+            uname -n = Esmeraldinha, /etc/hostname = Esmeraldinha. Verdict:
+            unavailable:host-unresolvable.
+          - WSL distro tillandsias (runtime): same, hostname absent.
+          - localhost/tillandsias-forge:v0.4.260817.1, run directly under
+            podman: hostname MISSING, uname -n = 9ec7fbc6ca20.
+        
+        WHY THIS IS WORTH A PACKET RATHER THAN A ONE-LINE FIX IN PASSING. The capability matrix reports "5 of 7 known hosts reporting — SILENT: forge, tlatoanis-macbook-air" as of this cycle. 850-bif2's whole design is that this check makes the question falsifiable so the Start-Of-Day gate acts on it: "a joining host's first cycle answers `due:` and publishes, every later cycle answers `ok:` for free". Inside the forge that gate has never been able to fire — it has always answered `unavailable:`, which is the one verdict that asks nobody to do anything. So one of the two remaining silent hosts is silent for a mechanical reason, not because nobody got to it.
+        IT IS ALSO A KNOWN BUG, REINTRODUCED. scripts/agent-identity.sh already carries the correct chain as a sourceable function, `tillandsias_node_name()` — hostname -s, then hostname, then uname -n, then /etc/hostname, then strip domain and lowercase — added under order 743-mgf3, whose own comment says in as many words that "some environments ship no `hostname`". check-capability-row.sh (order 850-bif2, newer) re-derived the chain inline and dropped exactly the two fallbacks that work in a container image. This is the 704-zcgi shape applied to a different probe: an instance re-implementing a shared helper and losing the lesson the shared helper exists to hold. The fix is to source the helper, not to widen the inline chain — widening it leaves a fourth copy to drift.
+        SECOND-ORDER POINT, so whoever takes this does not declare victory early: sourcing the helper makes the forge answer `due:` instead of `unavailable:`, but `uname -n` inside a container returns the ephemeral container id (9ec7fbc6ca20 above), not a stable fleet host id. A forge that publishes a row keyed on that would add a new matrix row per container rather than filling the `forge` slot. The forge needs TILLANDSIAS_WORKSTATION (or whatever agent-identity.sh already uses to produce a stable forge identity) set in its environment for the row to be worth publishing. Fixing the chain without fixing the identity turns a silent host into a noisy one.
+      exit_criteria: |
+        (1) check-capability-row.sh sources scripts/agent-identity.sh and uses tillandsias_node_name() rather than an inline chain; no fourth copy of the chain remains in the tree. (2) Run inside localhost/tillandsias-forge and in a Fedora WSL distro, the script answers `ok:` or `due:` — never `unavailable:host-unresolvable`. (3) The forge's published host identity is STABLE across container restarts, or the check declines to publish and says why; a matrix that grows a row per forge container is a regression, not progress. (4) A hermetic fixture with `hostname` removed from PATH pins the behaviour, so the fallbacks cannot be dropped a third time.
+      events:
+        - type: filed
+          ts: "2026-08-23T04:54:00Z"
+          agent_id: windows-esmeraldinha-opus5-20260823T042116Z
+          host: windows
+          summary: |
+            Found while verifying that esmeraldinha's two new capability rows had made the advisory check go green. It did not go green — it went `unavailable:` in the WSL gate locus and `unavailable:no-runnable-plan-binary` in the Git-Bash locus, so on this host the 850-bif2 gate reports nothing useful from either side even now that both rows are published and folding.
+            The forge result was then obtained directly rather than inferred: `podman run --rm --entrypoint sh localhost/tillandsias-forge:v0.4.260817.1 -c 'command -v hostname; uname -n'` -> hostname MISSING.
+
+    - order: 860-g798
+      packet_id: credential-guard-passes-green-while-git-push-blocks-on-an-interactive-helper
+      desired_release: v0.5
+      title: ok:gh-keyring proves the gh CLI has a token, not that git can push with it — a fresh clone passes the guard and then hangs forever on Git Credential Manager
+      status: ready
+      kind: bug
+      pickup_role: any
+      priority: p1
+      capability_tags:
+        - credentials
+        - guard
+        - windows
+        - unattended
+        - exit-contract
+      deliverable: scripts/check-credential-channel.sh
+      depends_on: []
+      estimated_hours: 2
+      context: |
+        scripts/check-credential-channel.sh returns `ok:gh-keyring` (exit 0) when `gh auth status` succeeds. That proves the **gh CLI** holds a token. It does not prove **git** is configured to use it, and on a fresh clone it is not: `credential.helper` resolves to the system-level `manager` (Git Credential Manager), which authenticates by opening an interactive prompt.
+        The guard's own docstring already names this exact category error one level down — "Reads (git fetch/git ls-remote) succeeding is NOT evidence of a credential channel — public-repo reads are anonymous. Verify write capability explicitly." The `gh` arm makes the same mistake one level up: a token that exists somewhere is not a channel git can use.
+        MEASURED THIS CYCLE, on esmeraldinha:
+          - 04:22 Start-Of-Cycle: `ok:gh-keyring`, exit 0. Cycle proceeds into
+            committable work, exactly as the guard sanctions.
+          - 06:03 first `git push`: no output for >10 minutes. Diagnosed live —
+            `git-credential-manager` present with 10.9 s of accumulated CPU,
+            blocked on a prompt no unattended session can answer. Killed.
+          - 06:12 after seeding `<git-dir>/.gh-credentials` from `gh auth token`
+            and resetting the helper chain (an empty `credential.helper` entry
+            is required to drop the system `manager` — `--replace-all` alone
+            leaves it first in the list): the SAME push completed in **18
+            seconds**, `ok:linux-next-merged:1` and the local-gate hook both
+            green.
+        
+        WHY p1 RATHER THAN p2. On an attended host this is a confusing ten minutes. On an unattended one it is a wedged cycle holding unpushed commits — precisely the "accreting local-only commits that cannot be pushed" failure the guard's own comment calls "the precise velocity-killer this guard prevents", and a Non-Negotiable Exit Contract violation. It is also SILENT: the guard is green, so nothing in the cycle's output points at credentials, and the symptom presents as a slow or hung build rather than as an auth problem. This host is the fleet's floor and is *expected* to be slow, which makes the misdiagnosis strictly more likely here than anywhere else.
+        POPULATION AT RISK: every fresh clone. `.git/.gh-credentials` is repo-local by design, so it does not survive re-cloning, while `gh auth status` keeps succeeding globally and keeps the guard green. This checkout was cloned 2026-08-22 20:40:32, forty minutes before the cycle began. Same family as the two other fresh-clone gaps found this cycle (no git hooks installed, no git user identity configured) and recorded on 851-cduu: a checkout that looks new is not thereby ready.
+      exit_criteria: |
+        (1) The `gh` arm no longer returns a bare `ok:`. Either it verifies that git itself can authenticate non-interactively — the cheap form is to run an authenticated remote operation under `GIT_TERMINAL_PROMPT=0` and fail on a non-zero exit, rather than inspecting config, since the effective helper chain across system/global/local scopes is awkward to read correctly — or it returns a DISTINCT verdict (e.g. `ok:gh-cli-only`) that the cycle must resolve by seeding the repo-local store before any committable work. (2) A verdict that names an interactive-only helper as the blocker, so the failure is legible the first time instead of on the second diagnosis pass. (3) The cycle exports `GIT_TERMINAL_PROMPT=0` (and equivalently `GCM_INTERACTIVE=never`) around pushes, so a credential problem fails fast and loudly instead of hanging until an operator or a timeout kills it. A guard that cannot see the hazard is one problem; a hang with no output is a separate and independently fixable one. (4) A hermetic fixture: `gh auth status` succeeding while the configured helper is interactive-only must NOT produce a bare `ok:`.
+      events:
+        - type: filed
+          ts: "2026-08-23T06:16:00Z"
+          agent_id: windows-esmeraldinha-opus5-20260823T042116Z
+          host: windows
+          summary: |
+            Found by being bitten by it: the cycle's own push hung for ten minutes behind a guard that had reported the channel healthy at Start-Of-Cycle.
+            The repair that worked, recorded so the next host on a fresh clone can apply it in one step rather than diagnosing it:
+        
+              GITDIR="$(git rev-parse --absolute-git-dir)"
+              umask 077
+              printf 'https://<user>:%s@github.com\n' "$(gh auth token)" \
+                > "$GITDIR/.gh-credentials"
+              git config --local --replace-all credential.helper ""
+              git config --local --add credential.helper \
+                "store --file=$GITDIR/.gh-credentials"
+        
+            The empty entry is load-bearing: it resets the helper list so the system-level `manager` is dropped. Without it the store is merely appended after GCM and GCM still wins. After this the guard returns `ok:gh-credentials-store` — its strongest verdict, and the one that actually implies a usable non-interactive channel.
