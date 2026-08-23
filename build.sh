@@ -700,7 +700,15 @@ _require_host_build_tools() {
     fi
     if [[ "${#missing[@]}" -gt 0 ]]; then
         _error "Missing host build tools: ${missing[*]}"
-        _error "Install the Fedora build dependencies, then rerun this command."
+        # Remediation must name THIS host's package path (order 851-gpb5): the
+        # Fedora line on a Mac strands the operator at the first --check.
+        if [[ "$(uname -s)" == "Darwin" ]]; then
+            _error "macOS: install the Xcode Command Line Tools for gcc (xcode-select --install),"
+            _error "pkg-config via Homebrew (brew install pkg-config), and the Rust tools via"
+            _error "rustup (https://rustup.rs; rustup component add rustfmt clippy). Then rerun."
+        else
+            _error "Install the Fedora build dependencies, then rerun this command."
+        fi
         exit 1
     fi
 

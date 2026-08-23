@@ -167,6 +167,7 @@ specs:
   - litmus:sidecar-is-a-build-graph-input
   - litmus:selector-urgency-not-inert-shape
   - litmus:sigpipe-verdict-pipeline-shape
+  - litmus:gate-stamp-portable-digest
   coverage_ratio: 75
   last_verified: '2026-08-17'
 - spec_id: codex-tray-launcher
@@ -245,6 +246,7 @@ specs:
   - litmus:ensure-toolbox-include-shape
   - litmus:sidecar-staleness-stamp-shape
   - litmus:build-sh-darwin-install-refusal
+  - litmus:build-sh-darwin-tool-remediation
   coverage_ratio: 100
   last_verified: '2026-08-16'
 - spec_id: direct-podman-calls
@@ -657,6 +659,7 @@ specs:
   - litmus:forge-findings-persistence-shape
   - litmus:mo-full-attestation-ledger-shape
   - litmus:startup-context-addendum-shape
+  - litmus:pre-push-linux-next-merged-shape
   coverage_ratio: 100
   last_verified: '2026-07-14'
 - spec_id: logging-levels

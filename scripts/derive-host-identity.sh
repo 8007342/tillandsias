@@ -63,10 +63,18 @@ os_group() {
 # ---------------------------------------------------------------- cpu token
 cpu_token() {
     local model=""
-    if [ -r /proc/cpuinfo ]; then
-        model="$(sed -n 's/^model name[[:space:]]*: //p' /proc/cpuinfo | head -1)"
-    elif [ "$(uname -s 2>/dev/null)" = Darwin ]; then
+    # ASK uname, do not infer the OS from a filesystem artifact. This tested
+    # `[ -r /proc/cpuinfo ]` FIRST until 2026-08-23, which made the Darwin
+    # branch unreachable on Linux however thoroughly `uname` was shimmed — so
+    # the macOS scenario added in 851-gpb5 passed on a Mac and failed on every
+    # Linux host, reporting `macos-core-ultra-apple-airbook` from this box's
+    # real /proc/cpuinfo. That is the same only-passes-where-it-was-written
+    # failure 851-gpb5 fixed, one probe further down and pointing the other
+    # way. os_group() above already branches on uname; this now matches it.
+    if [ "$(uname -s 2>/dev/null)" = Darwin ]; then
         model="$(sysctl -n machdep.cpu.brand_string 2>/dev/null || true)"
+    elif [ -r /proc/cpuinfo ]; then
+        model="$(sed -n 's/^model name[[:space:]]*: //p' /proc/cpuinfo | head -1)"
     fi
     [ -n "$model" ] || { echo unknown; return; }
     # Ordered most-specific first: Apple silicon, Ryzen, Core i, Xeon, Threadripper.
@@ -148,9 +156,13 @@ host_token() {
     [ -n "$h" ] || [ ! -r /etc/hostname ] || h="$(cut -d. -f1 </etc/hostname)"
     [ -n "$h" ] || { echo unknown; return; }
     # Slugify: lowercase, non-alphanumerics to `-`, collapse, trim.
+    # Plain BRE only (851-gpb5): `\+` is a GNU sed extension that BSD sed
+    # reads as a LITERAL plus, so on macOS the substitution never fired and
+    # `Yoga_ThinkPad` sailed through as `yoga_thinkpad` — two identities for
+    # one host, on exactly the platform this script's own docstring exemplifies.
     printf '%s' "$h" |
         tr '[:upper:]' '[:lower:]' |
-        sed -e 's/[^a-z0-9]\+/-/g' -e 's/^-\+//' -e 's/-\+$//'
+        sed -e 's/[^a-z0-9][^a-z0-9]*/-/g' -e 's/^--*//' -e 's/--*$//'
 }
 
 main() {

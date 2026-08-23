@@ -62,10 +62,12 @@ critical_path:
     # must stay non-executable, so ")" is permitted only after "$(".
     command: "scripts/test-script-exec-bits.sh 2>&1 | tail -1"
     timeout_ms: 60000
-    # 7 -> 10 with order 770-dyqr's non-shell caller scenarios. The count is
-    # pinned deliberately: it is how a wholesale fixture rewrite that drops
-    # coverage gets caught, which already happened once under 758-jw6v.
-    expected_behavior: "ok:script-exec-bits-fixture:10"
+    # 7 -> 10 with order 770-dyqr's non-shell caller scenarios; 10 -> 11 with
+    # order 851-gpb5's portable-xargs pin (no GNU-only `xargs -r`, hit by the
+    # first macOS host). The count is pinned deliberately: it is how a
+    # wholesale fixture rewrite that drops coverage gets caught, which already
+    # happened once under 758-jw6v.
+    expected_behavior: "ok:script-exec-bits-fixture:11"
 
 observability:
   traces:

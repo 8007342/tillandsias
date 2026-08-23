@@ -1,0 +1,71 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macos (tlatoanis-macbook-air), 2026-08-23T01:45:00Z.
+# Residuals split out of the 851-gpb5 onboarding sweep: same defect classes,
+# sites the sweep verified but did not touch (operator scope was the six named
+# defects + the fleet paragraph).
+
+packets:
+  - packet_id: macos-portability-residuals-after-onboarding-sweep
+    order: 851-28b5
+    status: ready
+    kind: bug
+    pickup_role: any
+    priority: p3
+    desired_release: v0.5
+    depends_on: []
+    capability_tags:
+      - bash
+      - all-platforms
+    tags:
+      - portability
+      - macos
+      - onboarding
+    title: >
+      Portability residuals catalogued during the macOS onboarding sweep
+      (851-gpb5): bare `sha256sum` in macOS-plausible scripts
+      (test-gate-stamp-memoization.sh:220,225; spec-index-ensure.sh:309;
+      check-windows-only-sources-verified.sh:98-99;
+      test-default-vault-cli-security.sh:28,89; hash-image-sources.sh:79-97;
+      test-release-asset-integrity.sh multiple; forge-diagnostics-annex.sh:80);
+      GNU-only `xargs -r` with genuinely-possibly-empty input in
+      uninstall.sh:260-261; the "pre-push gate" name still used for the
+      build-gate sense OUTSIDE the skill (agent-observability.yaml:302,
+      mo-full-attestation.yaml:10, six check-* script comments,
+      cycle-metrics.sh:556, local-ci.sh:991); and
+      methodology/multi-host-development.yaml lane_exclusion (:394) cites a
+      lane-exit.sh that exists nowhere in the tree — a second
+      stated-but-unenforced clause of the same rule 851-gpb5 mechanized.
+    deliverable: >
+      Each residual either fixed with the established portable pattern
+      (GATE_STAMP_SHA256-style dispatch; drop or guard `xargs -r`), renamed to
+      "local gate" where the build-gate sense is meant, or — for
+      lane_exclusion — the ghost reference repaired or tombstoned per
+      methodology discipline.
+    context: >
+      Sites enumerated with line numbers by the 851-gpb5 confirmation pass on
+      osx-next @ cef7c023b; line numbers will drift, re-derive before editing.
+      None are live breakages on macOS 13+ (Apple ships /sbin/sha256sum since
+      Ventura; modern BSD xargs accepts -r) — these are the same latent class
+      851-gpb5 fixed in the gate-critical paths. gate-stamp.sh:246 keeps
+      `xargs -0 -r` DELIBERATELY: its input can be empty and GNU xargs without
+      -r would run the digest tool on an empty stdin and emit a bogus frame.
+    exit_criteria:
+      - No bare sha256sum in scripts a macOS/dev host executes (container-only
+        paths exempt; state which in the closing event).
+      - uninstall.sh image-prune lines survive empty input on GNU xargs
+        without -r (guard or while-read).
+      - Prose outside the skill that means ./build.sh --check no longer calls
+        it "the pre-push gate".
+      - lane_exclusion either points at real code or carries a tombstone.
+    verifiable_closure: >
+      Extend litmus:gate-stamp-portable-digest's no-bare-digest grep to the
+      named scripts (or per-script pins), plus a grep pin that the build-gate
+      sense of "pre-push gate" does not reappear in the named prose sites.
+    events:
+      - type: filed
+        ts: "2026-08-23T01:45:00Z"
+        agent_id: macos-tlatoanis-macbook-air-claude-20260823t014147z
+        host: tlatoanis-macbook-air
+        summary: >
+          Filed from the 851-gpb5 onboarding cycle as its reduction-engine
+          residual; shaped ready for any host.
