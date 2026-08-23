@@ -160,6 +160,43 @@ CATCHES it, which is the mechanism working as designed; but a layer whose judge 
 untrustworthy where it matters must refuse rather than answer. **On this tier
 853-6gz3 is gated by judge CAPABILITY, not by throughput** — and that is 849-tz8g.
 
+## Use the shared harness for any cross-host claim
+
+`scripts/bench-inference-floor.sh` is the fleet's producer. Run it rather than
+hand-rolling, because a ratio is only meaningful when BOTH sides used the same
+harness:
+
+```bash
+BENCH_ENDPOINT=http://127.0.0.1:11434 BENCH_ENGINE_LABEL=cpu-silverblue-native \
+  BENCH_MODELS="qwen2.5:0.5b=T0" scripts/bench-inference-floor.sh
+```
+
+Measured here 2026-08-23 (engine=cpu, offload_pct=0, verified via /api/ps):
+
+| | pirria (N150, native) | esmeraldinha (N100, WSL2) |
+|---|---|---|
+| prefill, ollama HTTP | 123.27 / 146.24 tok/s | ~125 |
+| decode, 200 tok | 37.03 / 39.08 tok/s | 28.99-29.64 |
+| embed, 250-char chunk | 339.8 ms | 437.3 ms |
+
+**Prefill is indistinguishable between the two hosts; decode is reliably ~1.3x.**
+Two back-to-back harness runs here returned prefill 123.27 and 146.24 — a ~19%
+run-to-run spread that is WIDER than the within-run range each reports
+(115-127, 146-155). Do not read a prefill ratio finer than that spread from a
+single run.
+
+**The mechanism behind decode's ~1.3x is NOT established.** Memory bandwidth is
+ruled out at this model size by the arithmetic above (neither host saturates a
+channel). The remaining candidates are DRAM data rate and sustained all-core
+clock, neither of which this host can read without root. Do not attribute it.
+
+**A cautionary history, because this ratio was computed three times before it was
+right.** Comparing one host's careful number against another host's careful number
+is not a ratio if the two used different methods: the same pair of hosts yielded
+"prefill identical", then "1.22x", then "indistinguishable" — the first from a
+warm-cache harness figure, the second from two different methods, the third from
+one shared harness on both sides. Only the third is worth anything.
+
 ## Common pitfalls
 
 - **Reusing one prompt across reps.** ollama caches the KV prefix, so reps 2+ report
