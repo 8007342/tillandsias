@@ -2770,6 +2770,12 @@ plan_index:
         - "aarch64 guest: every inventoried harness installs via its designated channel with visible progress, or fails with one actionable line (no silent 127s)"
         - "shim wrapper owns the Tier-2 warning with a one-line policy statement"
       events:
+        - type: progress
+          ts: "2026-08-23T05:56:25Z"
+          agent_id: "macos-tlatoanis-macbook-air-claude-20260823t054123z"
+          host: tlatoanis-macbook-air
+          summary: |
+            Cycle 2026-08-23T05:41Z (macOS host): exit criteria 1 and 3 delivered. INVENTORY (criterion 1) written into plan/issues/brew-aarch64-harness-strategy-2026-07-12.md with dual provenance (in-repo file:line + official-docs URLs): no harness installs via brew and none should — Claude Code and Codex document brew only as macOS-only CASKS, OpenCode's own tap cannot run on aarch64 Linux (Homebrew Tier 2), Gemini CLI's brew formula is x86_64-Linux-only and the CLI is not even installed in the image (provider credential only), Antigravity documents no brew at all; every harness already installs via its official channel with runtime arch detection (claude+opencode vendor curl, codex+openspec npm @latest, agy vendor script), which Containerfile.base:43-48 records as the deliberate aarch64 strategy. direnv stays on the order-294 brew shim (vendor scopes brew to macOS; official linux-arm64 release binary exists if the shim channel is ever tightened). SHIM (criterion 3): brew-shim-exec.sh now owns the aarch64 Tier-2 policy in one line on the install path only — pinned by scripts/test-brew-shim-tier2-warning.sh (8/8: per-arch AND per-path negative controls, cmp-verified mutant arm) wired as a new step of litmus:brew-ondemand-tools-shape. REMAINING (criterion 2): in-guest verification on a pristine aarch64 guest is the next_action, owned by whichever cycle runs the macOS local-build e2e.
         - type: filed
           ts: "2026-07-12T23:30:00Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260712T2205Z"
