@@ -1,0 +1,88 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-23T15:46:27Z.
+packets:
+  - order: 863-7mhg
+    packet_id: closed-packets-must-carry-a-merge-affordance
+    desired_release: v0.6
+    title: "a closing packet says nothing about whether siblings should merge it now, later, or not until it is complete"
+    status: ready
+    kind: enhancement
+    pickup_role: any
+    priority: p2
+    capability_tags: [plan, fleet, coordination, methodology, crdt]
+    deliverable: methodology/multi-host-development.yaml
+    depends_on: []
+    estimated_hours: 6
+    context: >
+      OPERATOR DESIGN 2026-08-23, and it is the same shape as the affordance
+      vocabulary already specified for the expert layer (853-6gz3): a closed
+      vocabulary carrying a mandatory reason, so the READER gets agency rather
+      than a number to interpret.
+
+      THE PROBLEM IS ONLY VISIBLE FROM A SLOW HOST. Every host currently merges
+      origin/linux-next on the same cadence regardless of what is in it,
+      because nothing in a commit or a closed packet says whether the merge is
+      worth its cost. On macuahuitl that cost is seconds and the question never
+      arises. On esmeraldinha (Intel N100) or pirria (Alder Lake-N) it is tens
+      of minutes of rebuild per cycle, much of it re-establishing state the
+      cycle did not need. The fleet's fastest host cannot feel the tax its own
+      merge cadence imposes on its slowest, which is exactly the class of
+      bottleneck the low-end tier was added to surface.
+
+      WHAT A CLOSING PACKET SHOULD DECLARE, in the operator's own framing:
+        merge-now        — carries a fix siblings are actively hurt by; take
+                           the cost immediately, and say what it fixes
+        merge-when-idle  — real progress, nothing urgent; fold it in on the
+                           next merge you were going to do anyway
+        partial-hold     — partial progress that may BREAK on merge; wait for
+                           the completing packet, which must be named
+        no-merge-needed  — nothing a sibling's build or answers depend on
+                           (ledger prose, host-local findings, tier reports)
+
+      DERIVED WHERE POSSIBLE, NOT JUST ASSERTED. A packet whose deliverable is
+      only plan/** changes nothing a sibling compiles, and a packet touching
+      build.sh or a shared gate changes what every sibling's next push must
+      pass. Both are computable from the diff, so the default should be derived
+      and the author should only have to OVERRIDE it — an affordance nobody has
+      to remember to write is the only kind that survives a busy cycle.
+
+      THIS PAIRS WITH side_branch_for_cost_constrained_hosts (methodology,
+      2026-08-23), which lets a slow host defer merges. The affordance is what
+      tells it WHICH deferrals are safe; without it, deferring is a guess.
+    exit_criteria: >
+      (1) A closing packet carries an affordance from a CLOSED vocabulary with
+      a mandatory reason, and a closure with an empty reason is a hard error
+      rather than a default — the same rule the expert layer's affordances get.
+      (2) The default is DERIVED from the change's own shape (plan-only vs
+      shared-gate vs crate source), and the author overrides rather than
+      authors. Prove the derivation on at least ten historical closures.
+      (3) A host can ask "what is waiting for me and is any of it merge-now?"
+      in one command, and the answer cites the packets.
+      (4) `partial-hold` NAMES the completing packet. A hold with no named
+      release condition is an indefinite block wearing a temporary label, and
+      it must be refused at write time.
+      (5) MEASURED on a low-end host: merge frequency falls and nothing breaks
+      that the previous cadence would have caught. If it cannot be measured on
+      esmeraldinha or pirria it is not demonstrated — the fast hosts cannot
+      feel this either way.
+
+events:
+  - packet_id: closed-packets-must-carry-a-merge-affordance
+    event:
+      type: filed
+      ts: "2026-08-23T15:46:27Z"
+      agent_id: linux-macuahuitl-opus5-20260823T153400Z
+      host: linux_mutable
+      summary: >
+        Filed from an esmeraldinha finding relayed by the operator: at a 4-hour
+        cadence the low-end Windows host still spends a large fraction of every
+        cycle merging and rebuilding, and much of that is staying current for
+        its own sake rather than for anything the cycle needed.
+
+        Recorded alongside it, because the two are one idea: methodology now
+        names side_branch_for_cost_constrained_hosts. The mechanism already
+        existed and nobody had written it down — the pre-push merge gate
+        matches exactly refs/heads/osx-next and refs/heads/windows-next, so a
+        `<platform>-side-<feature>` branch is ALREADY ungated and pays the
+        merge once at promotion instead of once per cycle. esmeraldinha reached
+        for that shape on its own; the methodology just had not caught up.

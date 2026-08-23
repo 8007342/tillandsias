@@ -37,7 +37,11 @@ scaffold() {
     git init -q "$dir"
     mkdir -p "$dir/plan" "$dir/scripts"
     printf '%s' "$ledger" > "$dir/plan/index.yaml"
-    cp "$DETECTOR" "$ROOT/scripts/plan-binary-probe.sh" "$dir/scripts/"
+    # agent-identity.sh joined the detector's dependencies with 859-b2zc
+    # (host resolution goes through the shared helper — the inline chain was
+    # empty inside forge images). The fixture ships what the subject sources.
+    cp "$DETECTOR" "$ROOT/scripts/plan-binary-probe.sh" \
+       "$ROOT/scripts/agent-identity.sh" "$dir/scripts/"
     git -C "$dir" add -A
     git -C "$dir" -c user.name=fixture -c user.email=fixture@invalid \
         commit -q -m scaffold

@@ -114,11 +114,15 @@ out="$(TILLANDSIAS_HOST_TIER=low-end TILLANDSIAS_CAP_HOSTS= bash "$SEL" linux)" 
     || fail "case 5: low-end selection refused while tier work exists: $out"
 printf '%s\n' "$out" | head -1 | grep -q 'route=tier:low-end' \
     || fail "case 5: low-end batch not marked route=tier:low-end: $(printf '%s\n' "$out" | head -1)"
-# The refusal half: a role with no tier-tagged claimable work must REFUSE,
-# never fall back to the general queue.
-out2="$(TILLANDSIAS_HOST_TIER=low-end TILLANDSIAS_CAP_HOSTS= bash "$SEL" macos)"
+# The refusal half: a tier with no claimable work must REFUSE, never fall
+# back to the general queue. Driven through the TILLANDSIAS_TIER_TAGS seam
+# with a tag no packet carries — the earlier form asked for role macos and
+# broke the day the ledger gained role-any low-end work (861-n7f5): a
+# refusal case must not depend on what the live ledger happens to lack.
+out2="$(TILLANDSIAS_HOST_TIER=low-end TILLANDSIAS_CAP_HOSTS= \
+    TILLANDSIAS_TIER_TAGS=fixture-tier-tag-no-packet-carries bash "$SEL" linux)"
 rc2=$?
-[ "$rc2" -ne 0 ] || fail "case 5: low-end macos should refuse (no tier work), got: $(printf '%s\n' "$out2" | head -1)"
+[ "$rc2" -ne 0 ] || fail "case 5: an empty tier must refuse, got: $(printf '%s\n' "$out2" | head -1)"
 printf '%s' "$out2" | grep -q '^refused:no-tier-work:' \
     || fail "case 5: expected refused:no-tier-work, got: $out2"
 echo "ok: case 5 — low-end host gets tier work only, and refuses rather than draining generally"

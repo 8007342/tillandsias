@@ -54,7 +54,7 @@
 #          `caps_filtered=` appears ONLY when host-capability filtering dropped
 #          rows (see HOST TOOL CAPABILITIES below).
 # or exactly one refusal line:
-#   ^refused:(no-eligible-work|no-plan-binary|missing-tool|parse-failure|stale-plan-binary|query-failed|bad-role):.*$
+#   ^refused:(no-eligible-work|no-plan-binary|missing-tool|stale-plan-binary|query-failed|bad-role|no-tier-work):.*$
 # Exit 0 on a batch, 1 on refusal.
 #
 # "NO WORK" MUST MEAN NO WORK (order 631-*, Windows host 2026-08-09)
@@ -330,7 +330,11 @@ fi
 # The tag(s) that name tier-reserved work. Enrolling a tag here asserts "this
 # work exists to run on the floor and a fast host running it produces WRONG
 # results, not faster ones" — 855-wrr3 is the charter carrier.
-TIER_TAGS="low-end"
+# TILLANDSIAS_TIER_TAGS is a FIXTURE seam only (litmus:capability-routing-
+# shape's refusal case must not depend on which roles happen to have tier
+# work in the live ledger — it broke the day 861-n7f5 landed with role any).
+# Enrolling a real tag still happens HERE, deliberately, never via the env.
+TIER_TAGS="${TILLANDSIAS_TIER_TAGS:-low-end}"
 
 # jq, not yq: the input is tillandsias-plan --json (pure JSON), macOS hosts
 # ship jq but not yq, and the forge image installs both — Fedora's yq is the
@@ -602,17 +606,13 @@ fi
 # weight is exactly the "residual it is holding up" minimax asks us to maximise.
 depcounts="$("$PLAN" blocking-counts "${REL_ARG[@]+"${REL_ARG[@]}"}" --limit 400 2>/dev/null)"
 
-if [ -z "$rows" ]; then
-    # Distinguish "the query returned an empty array" (a real terminal state)
-    # from "the query returned packets and the projection dropped them" (a
-    # tooling fault). `[]` is 2 bytes; anything longer carried packets.
-    if [ "${#raw}" -gt 2 ]; then
-        echo "refused:parse-failure:tillandsias-plan returned ${#raw} bytes for role ${ROLE} but the jq projection yielded no rows"
-        exit 1
-    fi
-    echo "refused:no-eligible-work:no ready packets for role ${ROLE}"
-    exit 1
-fi
+# Order 758-kg9p: the second empty-rows block that stood here was a
+# pre-632-retq draft — it referenced `$raw`, a variable the select-rows
+# migration deleted, so under `set -u` it was a latent crash wearing a
+# fallback's costume, and it was unreachable anyway: every way `rows` can
+# empty (query, tier gate, tool caps, accel caps) already refuses with its
+# own typed verdict upstream. Removed rather than repaired — a fallback
+# that cannot run and cannot be tested guards nothing.
 
 eligible="$(printf '%s\n' "$rows" | grep -c .)"
 ungrouped="$(printf '%s\n' "$rows" | awk -F'\t' '$2=="UNGROUPED"' | grep -c .)"

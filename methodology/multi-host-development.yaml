@@ -248,6 +248,35 @@ multi_host_development:
       lane green-exit procedure and ledger checkpoints MUST merge
       origin/linux-next first when <base> != linux-next, preserving the
       gate's intent for platform branches.
+    side_branch_for_cost_constrained_hosts: >
+      A host MAY work on `<platform>-side-<feature>` instead of committing
+      every cycle to its platform branch, and that ref is ALREADY ungated:
+      scripts/hooks/pre-push-linux-next-merged.sh matches exactly
+      refs/heads/osx-next and refs/heads/windows-next, so a side branch pushes
+      without a trunk merge. The merge is paid ONCE, when the side branch is
+      promoted to the platform branch, rather than once per cycle.
+
+      WHY THIS IS A REAL DISCIPLINE AND NOT A LOOPHOLE. The pre_push_gate
+      exists so a platform branch never exports conflicts to the coordinator.
+      A side branch exports nothing until it is promoted, at which point the
+      gate applies in full. The rationale is the one already recorded above for
+      agent/* and salvage/*: a mid-cycle checkpoint must not require a trunk
+      merge, because durability beats integration.
+
+      WHO IT IS FOR, and this is a measured cost rather than a preference. On a
+      four-core host (esmeraldinha, an Intel N100; pirria, an Alder Lake-N) a
+      per-cycle merge of origin/linux-next can cost tens of minutes of rebuild,
+      much of it re-establishing state the cycle did not need. The same merge on
+      macuahuitl is seconds and invisible. A cadence that is free on the fastest
+      host is not therefore free, and the fleet's low-end members are the only
+      ones who can see the difference.
+
+      THE COORDINATOR'S DUTY IS UNCHANGED: it merges PLATFORM branches into
+      linux-next. Side branches are the host's own and are never merged by the
+      coordinator; a host promotes its own work when the feature is coherent.
+      A side branch idle beyond the lane deadlines in sweep_role below is
+      treated the same way as any other stale lane.
+
     sweep_role: >
       Lane/salvage backstop (enumerate, sweep-merge, packet, escalate,
       archive+delete) binds to the coordinate-multihost-work ROLE — any host

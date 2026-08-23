@@ -79,3 +79,13 @@ critical_path:
     command: "grep -q 'check-enclave-service-health.sh' scripts/cycle-preflight.sh && echo 'ok: preflight-wired'"
     timeout_ms: 3000
     expected_behavior: "ok: preflight-wired"
+
+  - step: "TWO SURFACES, ONE VOCABULARY (814-iyu7 decision): the product's end-user formatter emits the SAME spellings the cycle surface pins — the convergence bought by four duplicated hours stays converged by guard, not by discipline"
+    # Decision recorded on 814-iyu7 (2026-08-23): the script OWNS the cycle
+    # surface (no build required, --expect, stale-healthy), the product OWNS
+    # the end-user surface (--diagnostics inside the enclave); neither is
+    # deleted, and the shared grammar is pinned HERE so the surfaces cannot
+    # drift apart by accretion — which is how they were born.
+    command: "grep -q 'fail:enclave-service-dead:service={name}:state={state}:rc={exit_code}:signal={signal}' crates/tillandsias-headless/src/main.rs && grep -q 'fail:enclave-service-dead:service=' scripts/check-enclave-service-health.sh && grep -q 'note:enclave-service-stopped' crates/tillandsias-headless/src/main.rs && grep -q 'note:enclave-service-stopped' scripts/check-enclave-service-health.sh && echo 'ok: one vocabulary, both surfaces'"
+    timeout_ms: 3000
+    expected_behavior: "ok: one vocabulary, both surfaces"
