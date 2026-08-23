@@ -381,13 +381,24 @@ section or in this skill; `next_action` is for the row's own next step.
 
 ## Joining the fleet (read this if you are not macuahuitl)
 
-As of 2026-08-22 the fleet is deliberately ONE host — `linux_mutable`
-(macuahuitl) on `linux-next` — while three mechanisms that only matter with
-multiple hosts were repaired. The rejoin order is second Linux, then macOS,
-then Windows, each gated on measuring the queue's growth over the previous
-host's participation.
+As of 2026-08-23 the fleet is FIVE working hosts, not one: macuahuitl
+(`linux_mutable`, coordinator), lenovinha and yoga (Silverblue, `linux-next`),
+tlatoanis-macbook-air (`osx-next`), and yolanda (Windows 11, `windows-next`).
+All five have completed attested cycles. The staged rejoin this section used to
+describe is DONE; the three mechanisms it was gating on — claiming, the
+first-attestation lane, and capability rows — all landed on 2026-08-22/23.
 
-Two of the three blocking criteria are measured satisfied:
+NOT EVERY HOST IS A DRAIN HOST. Machines with roughly four cores are the
+fleet's deliberate LOWER BOUND and take profiling and characterization work in
+their own tier, never the general queue (operator mandate 2026-08-16 for
+esmeraldinha, extended 2026-08-23 to its Silverblue cousin). A slow host in the
+general queue produces slow duplicates of work a faster host already claimed.
+Until capability-aware routing lands (847-wgy4) this distinction is carried by
+the invoking prompt, not by the selector — so if you are on such a host and
+were not told, ask before draining.
+
+The criteria that gated the original rejoin, kept because they are still what
+"working" means:
 
 - **Claiming is live.** `expire-claims` reports a non-zero `in_progress`, and a
   claimed row is genuinely hidden from `next <role>`. Verified on a real claim,
