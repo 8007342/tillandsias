@@ -391,6 +391,49 @@ if [ -n "${_misdef_seen:-}" ]; then
         echo "  advisory: ${_ml} is a packet DEFINITION under \`events:\` — the fold DROPS it; move it under the top-level \`packets:\` key" >&2
     done
 fi
+# `query` reads the LIVE fold only, while set-field's write-gate resolver and
+# per-packet `status` also answer from plan/archive rows ("archived rows still
+# answer", c1f6595c5). A terminal declaration against an ARCHIVED packet
+# therefore flags above as "NO SUCH PACKET is in the fold" even though the
+# answering surface has already applied it — live case 2026-08-23: the
+# 829-dkuc retraction batch obsoleted five archived split-parents on
+# lenovinha, the fragments rode the plan-only push lane, and every host's
+# next full gate went red on closures that were not lost. Re-ask the
+# resolver before failing: declared == resolved is supersession of an
+# archived row (advisory, same 699-dycj terms as the channels above);
+# anything else stays a hard violation.
+if [ -n "$violations" ]; then
+    _kept=""
+    _archived_adv=""
+    while IFS= read -r _vl; do
+        [ -n "$_vl" ] || continue
+        case "$_vl" in
+            *"in a fragment status block but NO SUCH PACKET is in the fold"*)
+                _pid="${_vl%%:*}"
+                _want="$(printf '%s\n' "$_vl" | sed -n "s/.*declared '\([a-z-]*\)'.*/\1/p")"
+                _got="$("$PLAN" status "$_pid" 2>/dev/null | awk '{print $2}' | head -1)"
+                if [ -n "$_got" ] && [ "$_got" = "$_want" ]; then
+                    _archived_adv="${_archived_adv}${_pid}: declared '${_want}' targets an ARCHIVED row — absent from the live fold (query) but the resolver reports it applied; supersession of an archived packet, not a lost closure
+"
+                else
+                    _kept="${_kept}${_vl}
+"
+                fi
+                ;;
+            *)
+                _kept="${_kept}${_vl}
+"
+                ;;
+        esac
+    done <<VIOLATIONS_EOF
+$violations
+VIOLATIONS_EOF
+    violations="$(printf '%s' "$_kept" | grep -v '^$' || true)"
+    if [ -n "$_archived_adv" ]; then
+        printf '%s' "$_archived_adv" | sed 's/^/  advisory: /' >&2
+    fi
+fi
+
 [ -n "$violations" ] && violations="${violations}"$'\n'
 
 if [ -n "$violations" ]; then
