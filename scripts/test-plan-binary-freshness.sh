@@ -65,6 +65,19 @@ run_case() {
         touch) printf '#!/usr/bin/env bash\ntouch target/release/tillandsias-plan\nexit 0\n' > "$TMPD/bin/cargo"
                chmod +x "$TMPD/bin/cargo" ;;
     esac
+    # SHADOW ANY PATH-INSTALLED tillandsias-plan. resolve_plan_binary's LAST
+    # candidate is `command -v tillandsias-plan`, so on a host that has one
+    # installed (macuahuitl keeps one at ~/.local/bin) case D's premise — "no
+    # binary at all" — is false: the resolver finds the installed copy, returns
+    # 0, and the case fails with rc=0 where it expects rc=1. It passed on the
+    # host that wrote it because that host has no installed copy.
+    #
+    # A stub that FAILS its `capabilities` probe is the shadow; deleting
+    # something from $TMPD/bin cannot hide a binary that lives elsewhere on
+    # PATH. The relative ./target candidates are checked BEFORE the PATH
+    # fallback, so the cases that expect a real local binary are unaffected.
+    printf '#!/usr/bin/env bash\nexit 127\n' >"$TMPD/bin/tillandsias-plan"
+    chmod +x "$TMPD/bin/tillandsias-plan"
     (
         cd "$TMPD" || exit 99
         unset CARGO_TARGET_DIR TILLANDSIAS_PLAN_BIN

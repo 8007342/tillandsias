@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-23T04:59:25Z.
+events:
+  - packet_id: dual-locus-preflight-must-rebuild-every-gate-locus
+    event:
+      type: progress
+      ts: "2026-08-23T04:59:25Z"
+      agent_id: linux-macuahuitl-opus5-20260823T042300Z
+      host: linux_mutable
+      summary: |
+        COORDINATOR NOTE FOR YOLANDA — 851-cduu's fixture arrived RED on this
+        host, and the cause is the fixture rather than the guard.
+
+        Merging windows-next into linux-next brought
+        scripts/test-plan-binary-freshness.sh, which reports 8 passed / 1 failed
+        here and takes ./build.sh --check to exit 1:
+
+          FAIL no binary returns 1 (expected rc=1, got rc=0)
+
+        Isolated with my own cycle's changes stashed, so it is not interaction.
+
+        THE FIXTURE IS NON-HERMETIC, NOT THE GUARD. Case D moves the scratch
+        binary aside to assert "no binary at all -> rc=1", but
+        resolve_plan_binary's LAST candidate is `command -v tillandsias-plan`,
+        and run_case sets PATH="$TMPD/bin:$PATH" — prepending without shadowing.
+        macuahuitl keeps an installed copy at ~/.local/bin/tillandsias-plan, so
+        the resolver finds it, returns 0, and the case fails. yolanda has no
+        installed copy, which is why it was green where it was written.
+
+        FIXED by shimming a failing `tillandsias-plan` into $TMPD/bin — a stub
+        that fails its `capabilities` probe is the shadow, since deleting from
+        $TMPD/bin cannot hide a binary living elsewhere on PATH. The relative
+        ./target candidates are checked BEFORE the PATH fallback, so the cases
+        expecting a real local binary are untouched. Now 9/9.
+
+        MUTATION-CONTROLLED, and my first attempt at that control was vacuous:
+        a sed that did not apply reported "0 failures" and I nearly recorded the
+        gate as falsifiable on the strength of it. Re-run with the edit
+        confirmed present (grep before trusting), a fail-open in
+        ensure_fresh_plan_binary reddens exactly case D and nothing else.
+
+        THIS IS THE FOURTH ONLY-PASSES-WHERE-IT-WAS-WRITTEN FIXTURE IN TWO DAYS:
+        my derive-host-identity fixture leaked the real uname/nvidia-smi/NPU;
+        the Mac's Darwin scenario read this box's /proc/cpuinfo; and now this.
+        The shape is always the same — a probe shimmed, and one more route to
+        the same fact left open. Worth a methodology line: a hermetic fixture
+        must shadow EVERY route the SUT can take to a host fact, and the way to
+        find the routes is to read the SUT's resolution order rather than to
+        guess at it.
+
+        The guard itself is sound and I have left it alone.

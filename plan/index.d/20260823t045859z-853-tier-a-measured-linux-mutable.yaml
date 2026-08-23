@@ -1,0 +1,67 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-23T04:58:59Z.
+events:
+  - packet_id: expert-validation-layer-returns-verified-not-merely-verifiable
+    event:
+      type: progress
+      ts: "2026-08-23T04:58:59Z"
+      agent_id: linux-macuahuitl-opus5-20260823T042300Z
+      host: linux_mutable
+      summary: |
+        TIER A ALREADY EXISTS — AND IT WAS WITHHOLDING 75% OF THE METHODOLOGY
+        CORPUS AS "FABRICATED".
+
+        I filed 853-6gz3 planning to BUILD deterministic reference integrity.
+        It is already built and fully wired: emit_verified_envelope ->
+        self_verified -> answer::verify runs on all four envelope-producing
+        subcommands (answer, next, spec-envelope, methodology-ask), and on
+        violation it REPLACES the answer with an unsupported: refusal naming
+        them. Tier A of the design is done; 853-6gz3's scope shrinks to Tier B.
+
+        SO THE QUESTION BECAME: DOES IT EVER FIRE? Measured through the real
+        spec-retrieve -> spec-envelope pipeline, 50 in-corpus questions:
+
+                        BEFORE            AFTER
+          methodology    4 pass / 12 WITHHELD    16 pass / 0
+          spec          11 pass /  0             11 pass / 0
+          cheatsheet    17 pass /  0             17 pass / 0
+          code           6 pass /  0              6 pass / 0
+
+        On the L0 ledger path it fires 0/100 — correct, and near-tautological
+        there, because L0 builds citations from the very tree it just read.
+
+        THE CAUSE: TWO PRODUCERS, TWO KEY SHAPES, ONE SHARED CHECK.
+        methodology.rs:456 stores `hit.decl` — the literal YAML declaration
+        token `rule:`, colon included, chosen deliberately so a span match
+        proves the key is DECLARED there rather than merely mentioned. spec.rs
+        builds the SAME CitationKind::Methodology from index chunks and stores
+        the dotted YAML PATH instead — `philosophy.core_principle` — which
+        appears in no file, because it is synthesised by walking the tree.
+        span_key() demanded the key verbatim, so every methodology answer served
+        through RAG failed as FABRICATED. Now: pass a colon-terminated decl
+        token through unchanged, else check `<leaf>:`.
+
+        WHY IT MATTERED AND WHY IT STAYED INVISIBLE. The methodology corpus is
+        this project's declared source of truth (CLAUDE.md), so the corpus most
+        likely to be asked an authoritative question was the one answering
+        "unsupported" — and a withheld answer is indistinguishable from a corpus
+        that genuinely does not know. It reads as 821-73es ("the expert cannot
+        refuse") when it is the opposite failure: refusing far too much, for a
+        false reason.
+
+        CONTROLS, both directions: an honest citation returns `retrieved`; the
+        SAME key against a span that is not its block is still WITHHELD as
+        FABRICATED; a citation pointing at the wrong file is still unsupported.
+        205/205 lib, 24/24 bin, forced --check green.
+
+        AND I WAS WRONG FOUR TIMES GETTING HERE, all the same way — grepping
+        where I should have read (752-pst5, this project's own named class).
+        In order: "verify is never called from production" (it is, through a
+        wrapper my pattern missed); "the emitter self-check does not exist" (it
+        does); "spec-envelope and methodology-ask are uncovered" (an awk
+        arm-attribution artifact — all four are covered); and "methodology keys
+        are never literal" (true only of the INDEX producer; the lexical
+        producer already did it right, and my first fix broke it by appending a
+        second colon to `rule:`). Each wrong conclusion was one `sed -n` away
+        from being caught. The measurement was right the first time; only the
+        greps were wrong.
