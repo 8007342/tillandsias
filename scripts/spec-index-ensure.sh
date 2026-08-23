@@ -457,6 +457,22 @@ if [ "$DELTA" = "1" ]; then
         _g_c="$(wc -l < "${gen%/}/chunks.jsonl" 2>/dev/null | tr -d '[:space:]')"
         _g_v="$(wc -l < "${gen%/}/vectors.jsonl" 2>/dev/null | tr -d '[:space:]')"
         [ -n "$_g_c" ] && [ "$_g_c" = "$_g_v" ] && [ "$_g_c" != "0" ] || continue
+        # THE CACHE KEY MUST INCLUDE THE EMBEDDING MODEL. `content_hash` is
+        # hash_hex(span) — the TEXT and nothing else (spec.rs:1020) — so a
+        # chunk keeps the same hash under every model, and a delta keyed on it
+        # alone hands nomic-embed-text vectors to a bge-m3 build. Measured
+        # 2026-08-23: reused=20919 of 21028, 768-dim vectors spliced into a
+        # 1024-dim index. The identity assertion caught it and refused, which
+        # is the net working — but reuse-then-refuse makes building with ANY
+        # other embedder impossible, so the model belongs in the key.
+        #
+        # A generation with NO .model marker is never reused. That is
+        # deliberate and conservative: the marker did not exist before this
+        # change, so the alternative is guessing which model wrote a
+        # generation, and a wrong guess is the exact failure above. It costs
+        # one full rebuild per model, once, and self-heals thereafter.
+        [ -f "${gen%/}/.model" ] || continue
+        [ "$(cat "${gen%/}/.model" 2>/dev/null)" = "$EMBED_MODEL" ] || continue
         # Without that equality this paste would mint a hash->vector map that
         # is wrong from its first line.
         paste -d '\t' \
@@ -499,7 +515,21 @@ for part in "$work"/b/part-*; do
     if ! curl -fsS --max-time 300 "$EMBED_EP/embeddings" \
             -H 'Content-Type: application/json' \
             -d @"$work/payload.json" > "$work/resp.json" 2>/dev/null; then
+        # NAME THE LIKELY CAUSE INSTEAD OF BLAMING THE NETWORK. An abort while
+        # another model is resident is 849-tz8g, not an unreachable endpoint:
+        # measured 2026-08-23, a nomic rebuild refused here purely because a
+        # bge-m3 build minutes earlier had left its model loaded, and unloading
+        # made the identical command succeed. "endpoint-refused" sends the
+        # reader to the proxy and the CA bundle, which is the wrong half of the
+        # system entirely.
+        _resident="$(curl -fsS --max-time 5 "${EMBED_EP%/v1}/api/ps" 2>/dev/null \
+            | jq -r '[.models[]?.name] | join(", ")' 2>/dev/null)"
         echo "blocked:spec-index:embed-endpoint-refused"
+        if [ -n "$_resident" ] && [ "$_resident" != "$EMBED_MODEL" ]; then
+            echo "  models resident right now: ${_resident}" >&2
+            echo "  loading another model beside these aborts on this host (849-tz8g);" >&2
+            echo "  unload them and retry before suspecting the endpoint." >&2
+        fi
         exit 1
     fi
     if ! jq -c '.data[].embedding' "$work/resp.json" > "$work/batch-vecs.jsonl" 2>/dev/null; then
@@ -584,6 +614,10 @@ rm -rf "$stage"; mkdir -p "$stage" || { echo "blocked:spec-index:cannot-stage"; 
 cp "$work/chunks.jsonl" "$stage/chunks.jsonl" || { echo "blocked:spec-index:copy-failed"; exit 1; }
 cp "$work/vectors.jsonl" "$stage/vectors.jsonl" || { echo "blocked:spec-index:copy-failed"; exit 1; }
 printf '%s\n' "$fingerprint" > "$stage/.fingerprint"
+# The embedding model that produced these vectors. Read by the delta cache
+# loop: a generation is reusable only by a build using the SAME model, because
+# content_hash covers the text and not the model that embedded it.
+printf %s\\n "$EMBED_MODEL" > "$stage/.model"
 # ORDER 801-g9nn — THE FRAME THIS ENTRY DESCRIBES.
 #
 # The fingerprint proves an entry describes corpus X. It says nothing about
@@ -613,7 +647,7 @@ fi
 # read-only mount, so a 0600 entry would be a permission refusal that looks
 # exactly like a missing index.
 chmod 0755 "$stage" 2>/dev/null || true
-chmod 0644 "$stage/chunks.jsonl" "$stage/vectors.jsonl" "$stage/.fingerprint" 2>/dev/null || true
+chmod 0644 "$stage/chunks.jsonl" "$stage/vectors.jsonl" "$stage/.fingerprint" "$stage/.model" 2>/dev/null || true
 if [ -d "$INDEX_DIR" ]; then
     # Lost a race we hold the lock against, or a partial entry survived. Never
     # `mv` onto an existing directory: that NESTS the staging dir inside it.
