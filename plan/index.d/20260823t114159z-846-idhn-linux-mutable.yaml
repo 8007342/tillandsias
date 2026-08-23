@@ -1,0 +1,68 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-23T11:41:59Z.
+status:
+  - packet_id: capabilities-channel-has-no-base-representation
+    field: status
+    value: implemented
+    ts: "2026-08-23T11:41:59Z"
+    host: linux_mutable
+
+events:
+  - packet_id: capabilities-channel-has-no-base-representation
+    event:
+      type: progress
+      ts: "2026-08-23T11:41:59Z"
+      agent_id: linux-macuahuitl-opus5-20260823T113400Z
+      host: linux_mutable
+      summary: |
+        THE CHANNEL HAS A BASE NOW, AND THE OVERLAY CAN DRAIN.
+
+        Measured before: 12 of 16 fragments carried `capabilities:` and were
+        PERMANENTLY unfoldable; `compact --dry-run` would fold 3 and refuse 13.
+        The overlay could never drain below those 12, and it grew by one per
+        host per capability refresh — seven hosts across two loci each.
+
+        After: `compact --dry-run` folds 15 and refuses 1, and the survivor is
+        an unrelated genuine orphan (an event for a packet not in the fold).
+
+        TWO HALVES, AND SHIPPING EITHER ALONE WOULD HAVE BEEN WORSE THAN
+        NEITHER.
+
+        (1) WRITE. compact_text now serialises the channel into the base,
+        FOLDED at write time rather than appended: it reuses fold_capabilities
+        itself, so the base stays bounded at (host_id, locus) pairs instead of
+        growing per refresh, and the base and the live matrix are produced by
+        THE SAME LWW rule. A second implementation of "which row wins" is
+        exactly how two readers come to disagree. Any existing top-level block
+        is REPLACED, never appended beside — two `capabilities:` keys is not a
+        merge, it is a document where the later silently wins.
+
+        (2) READ. `capability-matrix` loaded only plan/index.d/, so the moment
+        a fold consumed the fragments the matrix would have gone EMPTY — the
+        precise silent-emptiness this channel exists to prevent. The base is now
+        presented as a synthetic fragment. Precedence is the ROW's own
+        (ts, host), never fragment order, so its position in the slice is
+        irrelevant and I did not have to invent a sort key.
+
+        THE REFUSAL BECAME A REAL CHECK rather than being deleted. It was
+        unconditional — correct while no writer existed. It now asks what every
+        other channel is asked: does the CANDIDATE carry this fragment's rows?
+        Keyed on (host_id, locus) and NOT on the row verbatim, because these are
+        LWW: a fragment whose row a later probe superseded is superseded, not
+        lost, and demanding the exact row back would refuse every fragment the
+        fleet has since re-probed.
+
+        VERIFIED END TO END on a hermetic fixture, both directions:
+          before compact  1 row (from the fragment)
+          compact         folds it, deletes it, base gains the block
+          after compact   1 row (from the base)
+        Mutation control: disabling the base read gives `0 rows, and NO KNOWN
+        HOSTS` on the same compacted fixture; restoring gives 1 row back.
+        205/205 lib, 24/24 bin, clippy -D warnings clean, forced --check green.
+
+        NOT FOLDED ON THE LIVE LEDGER THIS CYCLE, deliberately. The capability
+        exists and dry-run confirms it; actually consuming 15 fragments is a
+        separate deliberate act, and a trial fold on a COPY refused on an
+        unrelated integrity violation (an archived `depends_on` reads as
+        unresolved when the copy carries no archived-ids set). That is worth
+        understanding before folding the real thing.

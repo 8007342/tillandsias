@@ -735,10 +735,48 @@ fn fragment_coverage_gaps(result: &Value, frag: &Fragment) -> Vec<String> {
     // the ~1% the parse-failure case loses. Measured 2026-08-21:
     // `capability-matrix` reports 0 rows while packet 808-7yrd, which declared
     // the channel delivered, reads `completed`.
-    if frag.doc.get("capabilities").is_some() {
-        gaps.push(
-            "a `capabilities:` block — the fold reads this channel but compaction never serialises it into the base, so consuming this fragment destroys every row in it".to_string(),
-        );
+    // ORDER 846-idhn. This was an UNCONDITIONAL refusal, correct while the
+    // renderer had no idea the channel existed. Now that compaction serialises
+    // `capabilities:` into the base, the honest question is the same one every
+    // other channel is asked: does the CANDIDATE carry this fragment's rows?
+    //
+    // The key is (host_id, locus), NOT the row verbatim. Capability rows are
+    // LWW by (ts, host), so a fragment's row legitimately LOSES to a newer one
+    // for the same host and locus — that is superseded, not lost, and
+    // demanding the exact row back would refuse every fragment a later probe
+    // has replaced.
+    if let Some(rows) = frag.doc.get("capabilities").and_then(Value::as_sequence) {
+        let mut present: BTreeSet<(String, String)> = BTreeSet::new();
+        if let Some(base_rows) = result.get("capabilities").and_then(Value::as_sequence) {
+            for r in base_rows {
+                let host_id = r
+                    .get("document")
+                    .and_then(|d| d.get("host"))
+                    .and_then(|h| h.get("host_id"))
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                let locus = r.get("locus").and_then(Value::as_str).unwrap_or_default();
+                present.insert((host_id.to_string(), locus.to_string()));
+            }
+        }
+        for r in rows {
+            let host_id = r
+                .get("document")
+                .and_then(|d| d.get("host"))
+                .and_then(|h| h.get("host_id"))
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let locus = r.get("locus").and_then(Value::as_str).unwrap_or_default();
+            if host_id.is_empty() {
+                gaps.push(
+                    "a `capabilities:` row whose document carries no host.host_id, so nothing can be matched against the base".to_string(),
+                );
+            } else if !present.contains(&(host_id.to_string(), locus.to_string())) {
+                gaps.push(format!(
+                    "a `capabilities:` row for {host_id}/{locus} — the compacted base carries no row for that host and locus, so consuming this fragment would lose it"
+                ));
+            }
+        }
     }
 
     gaps
@@ -993,6 +1031,78 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
         apply_lww(&mut lines, pid, field, value)?;
     }
     candidate = lines.join("\n") + "\n";
+
+    // ORDER 846-idhn — GIVE THE `capabilities:` CHANNEL A BASE REPRESENTATION.
+    //
+    // Until now this renderer emitted packets, events and LWW field writes and
+    // simply had no idea the channel existed, so `fold_capabilities` read rows
+    // that nothing could ever write back. Compaction therefore refused every
+    // fragment carrying one, permanently: measured 2026-08-23, 12 of 16
+    // fragments were unfoldable for this reason alone and the overlay could not
+    // drain below them. It grows by one per host per capability refresh, and
+    // the fleet is now seven hosts across two loci each.
+    //
+    // FOLDED AT WRITE TIME, NOT APPENDED. Reusing `fold_capabilities` rather
+    // than concatenating rows keeps the base bounded at (host_id, locus) pairs
+    // instead of growing once per refresh, and it means the base and the live
+    // matrix are produced by THE SAME LWW rule — a second implementation of
+    // "which row wins" is exactly how two readers come to disagree.
+    //
+    // Precedence is the ROW's own (ts, host), never fragment order, so the
+    // synthetic base fragment below can sit anywhere in the slice.
+    {
+        let base_doc: Value = serde_yaml::from_str(&candidate).unwrap_or(Value::Null);
+        let mut all: Vec<Fragment> = Vec::new();
+        if base_doc.get("capabilities").is_some() {
+            all.push(Fragment {
+                name: "0000-base".to_string(),
+                path: PathBuf::from("plan/index.yaml"),
+                doc: base_doc,
+                raw: String::new(),
+            });
+        }
+        all.extend(fragments.iter().cloned());
+        let (matrix, _skipped) = fold_capabilities(&all);
+        if !matrix.is_empty() {
+            let rows: Vec<Value> = matrix
+                .values()
+                .map(|e| {
+                    let mut m = serde_yaml::Mapping::new();
+                    m.insert("ts".into(), Value::String(e.ts.clone()));
+                    m.insert("host".into(), Value::String(e.host.clone()));
+                    m.insert("locus".into(), Value::String(e.locus.clone()));
+                    m.insert("document".into(), e.document.clone());
+                    Value::Mapping(m)
+                })
+                .collect();
+            let mut block = serde_yaml::Mapping::new();
+            block.insert("capabilities".into(), Value::Sequence(rows));
+            let rendered = serde_yaml::to_string(&Value::Mapping(block))
+                .map_err(|e| format!("refusing to compact: cannot render capabilities: {e}"))?;
+            // Replace any existing top-level block rather than appending a
+            // second one: two `capabilities:` keys is not a merge, it is a
+            // document where the later silently wins and the earlier is lost.
+            let mut kept: Vec<String> = Vec::new();
+            let mut in_block = false;
+            for l in candidate.lines() {
+                if l == "capabilities:" {
+                    in_block = true;
+                    continue;
+                }
+                if in_block {
+                    if l.starts_with(' ') || l.trim().is_empty() {
+                        continue;
+                    }
+                    in_block = false;
+                }
+                kept.push(l.to_string());
+            }
+            while kept.last().is_some_and(|l| l.trim().is_empty()) {
+                kept.pop();
+            }
+            candidate = kept.join("\n") + "\n" + rendered.trim_end() + "\n";
+        }
+    }
 
     // ORDER 843-624y. Coverage is checked against the RE-PARSED CANDIDATE, not
     // against `merged`, and the distinction is the whole fix on this path. The

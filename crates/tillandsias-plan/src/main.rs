@@ -2884,7 +2884,27 @@ fn main() {
             // printed as DERIVED context, never as the routing input: a single
             // string cannot express "GPU present, no lane", which is the state
             // every WSL2 host is in.
-            let frags = tillandsias_plan::fragments::load_all(&index);
+            // ORDER 846-idhn. The base now CARRIES capability rows (compaction
+            // serialises the channel), so reading only plan/index.d/ would show
+            // an empty matrix the moment a fold consumed the fragments — the
+            // exact silent-emptiness this channel exists to avoid. The base is
+            // presented as a synthetic fragment; precedence is the row's own
+            // (ts, host), so its position in the slice does not matter.
+            let mut frags = tillandsias_plan::fragments::load_all(&index);
+            if let Ok(raw) = std::fs::read_to_string(&index)
+                && let Ok(doc) = serde_yaml::from_str::<serde_yaml::Value>(&raw)
+                && doc.get("capabilities").is_some()
+            {
+                frags.insert(
+                    0,
+                    tillandsias_plan::fragments::Fragment {
+                        name: "0000-base".to_string(),
+                        path: index.clone(),
+                        doc,
+                        raw,
+                    },
+                );
+            }
             let (matrix, skipped) = tillandsias_plan::fragments::fold_capabilities(&frags);
 
             // ORDER 847-wgy4. `--hosts` is the ROUTING projection: one line
