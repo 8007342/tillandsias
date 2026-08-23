@@ -78,6 +78,21 @@ gpu_sample() {
 echo -e "ts\tutil_mem\tnon_ollama_vram_mib" > "$OUT/gpu-samples.tsv"
 gpu_sample >> "$OUT/gpu-samples.tsv"
 
+# STATE FILE, because "is my background job still running?" must be a FILE READ
+# and never a process guess. This host runs long-horizon jobs across cycles by
+# design, so the question gets asked every tick — and `pgrep -f
+# rebuild-index-with-embedder` answers it WRONG, because the checking shell's
+# own command line contains that string and pgrep matches itself. On
+# 2026-08-23 that reported a job as "still running" twenty-six minutes after it
+# had successfully finished, and the same self-match shape had already produced
+# a phantom "steam is running" hit earlier the same day. A probe that matches
+# the act of probing is not a probe.
+#
+# Read this file, not the process table:
+#   running:<model>:<start-epoch>  |  done:<model>:<seconds>  |  failed:<model>:<reason>
+_state() { printf '%s\n' "$1" > "$OUT/.state"; }
+_state "running:$MODEL:$(date +%s)"
+
 # ── SERIALISE: unload every resident model before loading the target ────────
 resident_before="$(curl -s "$ENDPOINT/api/ps" 2>/dev/null \
     | grep -oE '"model":"[^"]+"' | sed 's/"model":"//;s/"//' | sort -u)"
@@ -115,10 +130,15 @@ for attempt in 1 2 3 4 5; do
     echo "evict attempt $attempt: still resident: $(echo "$resident_after" | tr '\n' ' ')" >&2
 done
 if [ "$evicted" -ne 1 ]; then
-    cleanup 2>/dev/null
+    # No cleanup call here on purpose: the GPU sampler is not started until
+    # after this gate, so there is nothing to reap. An earlier draft called
+    # cleanup() from this branch, which was both a no-op and a call to a
+    # function defined thirty lines LATER — silently swallowed, and misleading
+    # to anyone reading the refusal path.
     echo "could not clear the card after 5 attempts; still resident: $(echo "$resident_after" | tr '\n' ' ')" >&2
     echo "  Loading '$MODEL' beside these is the 849-tz8g abort — refusing to start a" >&2
     echo "  build that would fail in minutes and blame the endpoint for it." >&2
+    _state "failed:$MODEL:card-not-clear"
     echo "blocked:index-rebuild:card-not-clear"
     exit 1
 fi
@@ -161,6 +181,7 @@ printf 'contaminated_samples\t%s\n' "$contaminated" >> "$OUT/timings.tsv"
 cat "$OUT/timings.tsv"
 
 if [ "$rc" -ne 0 ]; then
+    _state "failed:$MODEL:builder-exit-$rc"
     echo "blocked:index-rebuild:builder-exit-$rc (see $OUT/build.log)"
     exit 1
 fi
@@ -169,4 +190,5 @@ if [ "$contaminated" -gt 0 ]; then
 fi
 IDXROOT="${TILLANDSIAS_SPEC_INDEX_ROOT:-$HOME/.local/share/containers/storage/volumes/tillandsias-spec-index-tillandsias/_data}"
 fp="$(tr -d '[:space:]' < "$IDXROOT/current" 2>/dev/null)"
+_state "done:$MODEL:$elapsed"
 echo "ok:index-rebuilt:$MODEL:${fp:-unknown}:$elapsed"
