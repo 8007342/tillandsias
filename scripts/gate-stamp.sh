@@ -97,6 +97,21 @@
 
 set -uo pipefail
 
+# ── Portable SHA-256 (order 851-gpb5) ─────────────────────────────────────────
+# `sha256sum` is coreutils (Linux/forge/WSL); Apple only added /sbin/sha256sum
+# in macOS 13, and stock macOS otherwise ships `shasum`. Both print the same
+# digest in the same "<hex>  <name>" line shape, so every first-field parse
+# below works with either tool and the emitted frames — and therefore existing
+# stamps — stay byte-identical across hosts (pinned by
+# scripts/test-gate-stamp-portable-digest.sh). Same dispatch as
+# scripts/build-sidecar.sh::_sha256; kept local because this script is
+# deliberately self-contained.
+if command -v sha256sum >/dev/null 2>&1; then
+    GATE_STAMP_SHA256=(sha256sum)
+else
+    GATE_STAMP_SHA256=(shasum -a 256)
+fi
+
 # ── Change-class taxonomy (order 765-dt8h) ────────────────────────────────────
 # TOTAL by construction: the final `*)` arm is what makes an unclassified path
 # fail closed instead of silently belonging to whatever a scoped gate claimed.
@@ -134,7 +149,7 @@ gate_stamp_toolchain_digest() {
     clippy_v="$(cargo clippy -V 2>/dev/null)" || clippy_v="unknown"
     [[ -n "$rustc_v" ]] || rustc_v="unknown"
     [[ -n "$clippy_v" ]] || clippy_v="unknown"
-    printf 'rustc:%s\nclippy:%s\n' "$rustc_v" "$clippy_v" | sha256sum | cut -d' ' -f1
+    printf 'rustc:%s\nclippy:%s\n' "$rustc_v" "$clippy_v" | "${GATE_STAMP_SHA256[@]}" | cut -d' ' -f1
 }
 
 gate_stamp_class_is_known() {
@@ -234,7 +249,7 @@ compute() {
     done < <(
         for ((i = 0; i < ${#paths[@]}; i++)); do
             [[ "${kinds[i]}" == file ]] && printf '%s\0' "$REPO_ROOT/${paths[i]}"
-        done | xargs -0 -r sha256sum
+        done | xargs -0 -r "${GATE_STAMP_SHA256[@]}"
     )
     for ((i = 0; i < ${#paths[@]}; i++)); do
         [[ "${kinds[i]}" == file ]] && nfiles=$((nfiles + 1))
@@ -247,7 +262,7 @@ compute() {
     fi
     for ((i = 0; i < ${#paths[@]}; i++)); do
         if [[ "${kinds[i]}" == symlink ]]; then
-            digest="$(readlink "$REPO_ROOT/${paths[i]}" | sha256sum | cut -d' ' -f1)" || return 1
+            digest="$(readlink "$REPO_ROOT/${paths[i]}" | "${GATE_STAMP_SHA256[@]}" | cut -d' ' -f1)" || return 1
             symlink_digests+=("$digest")
         fi
     done
@@ -261,7 +276,7 @@ compute() {
             printf 'file\0%s\0%s\0' "${paths[i]}" "${file_digests[fidx]}"
             fidx=$((fidx + 1))
         fi
-    done | sha256sum | cut -d' ' -f1
+    done | "${GATE_STAMP_SHA256[@]}" | cut -d' ' -f1
 }
 
 # Read one keyed field out of a v2 stamp. Prints nothing for a v1/legacy or

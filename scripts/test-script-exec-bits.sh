@@ -157,6 +157,19 @@ else
     failures+=("missing-helper-refuses")
 fi
 
+# ── portable-xargs (order 851-gpb5) ──────────────────────────────────────────
+# `xargs -r` is GNU findutils syntax; the first macOS host hit it during fleet
+# onboarding. The empty-input case -r guards against is unreachable in the
+# checker ($caller_files is verified non-empty before the sweep), so the flag
+# was dropped rather than emulated. Pinned so it cannot come back: re-adding
+# -r turns this line red on every host.
+if grep -q 'xargs -r' "$CHECK"; then
+    echo "FAIL  portable-xargs: GNU-only 'xargs -r' reappeared in the checker"
+    failures+=("portable-xargs")
+else
+    echo "PASS  portable-xargs"
+fi
+
 if [ "${#failures[@]}" -gt 0 ]; then
     echo "FAIL: ${#failures[@]} scenario(s): ${failures[*]}"
     exit 1
@@ -170,6 +183,6 @@ fi
 #   bare-invocation-executable          -> executable-bare-ok
 #   interpreter-prefixed-non-executable -> interpreter-prefixed-ok
 #   sourced-library-non-executable      -> sourced-ok
-echo "PASS: script-exec-bits fixture 10/10 scenarios green (bare-invocation-refused, interpreter-prefixed-ok, sourced-ok, executable-bare-ok, command-substitution-refused, after-pipe-refused, missing-helper-refuses, litmus-command-bare-refused, litmus-command-interpreter-ok, workflow-bare-refused)"
-echo "ok:script-exec-bits-fixture:10"
+echo "PASS: script-exec-bits fixture 11/11 scenarios green (bare-invocation-refused, interpreter-prefixed-ok, sourced-ok, executable-bare-ok, command-substitution-refused, after-pipe-refused, missing-helper-refuses, litmus-command-bare-refused, litmus-command-interpreter-ok, workflow-bare-refused, portable-xargs)"
+echo "ok:script-exec-bits-fixture:11"
 exit 0

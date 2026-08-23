@@ -148,9 +148,13 @@ host_token() {
     [ -n "$h" ] || [ ! -r /etc/hostname ] || h="$(cut -d. -f1 </etc/hostname)"
     [ -n "$h" ] || { echo unknown; return; }
     # Slugify: lowercase, non-alphanumerics to `-`, collapse, trim.
+    # Plain BRE only (851-gpb5): `\+` is a GNU sed extension that BSD sed
+    # reads as a LITERAL plus, so on macOS the substitution never fired and
+    # `Yoga_ThinkPad` sailed through as `yoga_thinkpad` — two identities for
+    # one host, on exactly the platform this script's own docstring exemplifies.
     printf '%s' "$h" |
         tr '[:upper:]' '[:lower:]' |
-        sed -e 's/[^a-z0-9]\+/-/g' -e 's/^-\+//' -e 's/-\+$//'
+        sed -e 's/[^a-z0-9][^a-z0-9]*/-/g' -e 's/^--*//' -e 's/--*$//'
 }
 
 main() {

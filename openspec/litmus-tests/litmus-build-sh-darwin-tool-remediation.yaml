@@ -1,0 +1,48 @@
+# @trace spec:dev-build
+# @trace order:851-gpb5
+#
+# Pins _require_host_build_tools' per-OS remediation. The function requires
+# pkg-config (among others) and on any failure told EVERY host to "Install the
+# Fedora build dependencies" — the first macOS host's first `./build.sh
+# --check` ended in remediation advice for a distribution it does not run.
+# 723-whrx established --check/--test as supported Darwin paths, so the
+# message is reachable there. The fixture extracts the function from the real
+# build.sh bytes and drives it through a shim uname/PATH, so every host in
+# the fleet exercises BOTH branches, and its mutation-control arm proves the
+# Darwin branch (not just the wording) is what is pinned.
+name: litmus:build-sh-darwin-tool-remediation
+spec: dev-build
+phase: pre-build
+description: >
+  Pin build.sh: when host build tools are missing, Darwin gets macOS
+  remediation (xcode-select / brew / rustup) and never the Fedora line; Linux
+  keeps the Fedora line and never the macOS one; a mutant with the Darwin
+  test neutered is caught by the fixture; and the meta-orchestration skill
+  names scripts/build-macos-tray.sh so the macOS build path is discoverable.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains build.sh
+  - workspace contains scripts/test-build-sh-darwin-tool-remediation.sh
+  - shell utilities (bash, grep, awk, sed) are available in PATH
+
+critical_path:
+  - step: "build.sh and the fixture parse and the fixture is executable"
+    command: "bash -n build.sh && bash -n scripts/test-build-sh-darwin-tool-remediation.sh && test -x scripts/test-build-sh-darwin-tool-remediation.sh && echo 'ok: parses'"
+    timeout_ms: 5000
+    expected_behavior: "ok: parses"
+
+  - step: "all fixture scenarios pass (both branches, both mutation controls, skill build-path pin)"
+    command: "bash scripts/test-build-sh-darwin-tool-remediation.sh 2>&1 | tail -1"
+    timeout_ms: 60000
+    expected_behavior: "ok:build-sh-darwin-tool-remediation-fixture:14"
+
+  - step: "NEGATIVE CONTROL: the Fedora remediation still exists for Linux hosts"
+    command: "grep -q 'Install the Fedora build dependencies, then rerun this command.' build.sh && echo 'ok: fedora-line-survives' || echo 'FAIL: the Linux remediation was lost'"
+    timeout_ms: 5000
+    expected_behavior: "ok: fedora-line-survives"
+
+evidence:
+  artifact: "build.sh + scripts/test-build-sh-darwin-tool-remediation.sh"
+  measured_on: "macOS Darwin 25.6.0 2026-08-22 — 14/14 fixture checks green via shim uname on the Mac itself"

@@ -102,8 +102,11 @@ if [ "${#candidates[@]}" -gt 0 ]; then
     # precision does not matter here — the awk pass re-tests each hit against
     # each candidate — so this only has to be a superset.
     alt="$(printf '%s|' "${candidates[@]}")"; alt="${alt%|}"
+    # No `-r`: it is GNU-only (order 851-gpb5), and the empty-input case it
+    # guards against cannot occur — $caller_files is verified non-empty above,
+    # so xargs always hands grep at least one file operand.
     printf '%s\n' "$caller_files" \
-        | xargs -r grep -nHE "((^|[;&|(])[[:space:]]*\"?(${alt}))|(\\\$\\([[:space:]]*\"?(${alt}))|(command:[[:space:]]*\"?(${alt}))" \
+        | xargs grep -nHE "((^|[;&|(])[[:space:]]*\"?(${alt}))|(\\\$\\([[:space:]]*\"?(${alt}))|(command:[[:space:]]*\"?(${alt}))" \
             > "$_eb_tmp/hits" 2>/dev/null
 
     while IFS=$'\t' read -r path hit; do

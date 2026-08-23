@@ -1,0 +1,103 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macos (tlatoanis-macbook-air), 2026-08-23T01:41:47Z, the macOS
+# fleet-rejoin onboarding cycle (operator-directed: "fix your own onboarding,
+# not drain packets").
+
+packets:
+  - packet_id: macos-host-onboarding-defect-sweep
+    order: 851-gpb5
+    status: done
+    kind: bug
+    pickup_role: macos
+    priority: p2
+    desired_release: v0.5
+    depends_on: []
+    capability_tags:
+      - bash
+      - macos
+      - git-hooks
+    tags:
+      - fleet-rejoin
+      - onboarding
+      - portability
+      - pre-push
+    title: >
+      Six macOS-onboarding defects verified by the operator on linux-next
+      2026-08-22, plus a seventh found live: (1) build.sh
+      _require_host_build_tools gave Fedora remediation on Darwin; (2)
+      methodology's pull_merge_cadence.pre_push_gate (merge origin/linux-next
+      before EVERY platform push) was stated in the meta-orchestration skill
+      nowhere and enforced by no code; (3) "pre-push gate" was name-collided
+      (skill: ./build.sh --check vs methodology: the merge rule), concealing
+      (2); (4) the skill never named scripts/build-macos-tray.sh; (5)
+      gate-stamp.sh called bare sha256sum at four sites (absent on macOS <=
+      12); (6) check-script-exec-bits.sh used GNU-only `xargs -r`; (7 — found
+      when this cycle's own gate went red) derive-host-identity: the fixture
+      pinned lspci/nvidia-smi/hostname but not uname, so the real Mac leaked
+      `apple` into every mocked scenario; the SUT's slugify used GNU-sed `\+`
+      (literal on BSD sed, so Yoga_ThinkPad stayed yoga_thinkpad); and the
+      fixture's `--help | grep -q` under pipefail died of SIGPIPE
+      deterministically on Darwin.
+    deliverable: >
+      All seven fixed on osx-next with mutation-controlled fixtures;
+      ./build.sh --check green on the first macOS host; a macOS paragraph in
+      the skill's "Joining the fleet" so the next Darwin host needs none of
+      this.
+    context: >
+      Every fix carries a fixture with an embedded mutation-control arm
+      (cmp-verified mutants; exactly the bound assertion goes red):
+      scripts/test-build-sh-darwin-tool-remediation.sh (14 checks — extracts
+      the function from the real build.sh bytes and drives both branches via
+      shim uname/PATH on every host), scripts/test-pre-push-linux-next-merged.sh
+      (12 checks — hermetic two-repo topology; also pins the skill's statement
+      of the methodology gate and the retirement of the colliding name),
+      scripts/test-gate-stamp-portable-digest.sh (9 checks — proves the digest
+      is BYTE-IDENTICAL across sha256sum/shasum so existing stamps stay
+      valid), scripts/test-script-exec-bits.sh (+portable-xargs pin, 11
+      checks), scripts/test-derive-host-identity.sh (18 checks, +uname/sysctl
+      shims, +Darwin-shape scenario, case-based --help). Enforcement for (2):
+      scripts/hooks/pre-push-linux-next-merged.sh, composed FIRST into the v5
+      generated pre-push hook (scripts/install-hooks.sh; marker
+      tillandsias-pre-push-v5), gating refs/heads/{osx-next,windows-next}
+      against the locally-recorded origin/linux-next — race-safe per the
+      methodology's race_exception, fetch half stays procedural (skill
+      Finalization step 6). Terminology: "local gate" now always means
+      ./build.sh --check in the skill; "pre-push gate" is reserved for the
+      methodology rule. New litmus: litmus:pre-push-linux-next-merged-shape,
+      litmus:gate-stamp-portable-digest, litmus:build-sh-darwin-tool-remediation.
+    exit_criteria:
+      - Darwin remediation in _require_host_build_tools; Fedora line survives
+        for Linux (fixture + litmus negative control).
+      - pull_merge_cadence.pre_push_gate stated in the skill Finalization and
+        enforced by the v5 pre-push hook on both platform branches.
+      - The skill uses "pre-push gate" only for the methodology rule.
+      - scripts/build-macos-tray.sh named in the skill (E2E Gates + fleet
+        paragraph).
+      - gate-stamp.sh digests through the portable dispatch; byte-identical
+        across tools.
+      - No `xargs -r` in check-script-exec-bits.sh (pinned).
+      - test-derive-host-identity.sh 18/18 on Darwin and Linux; slugify pure
+        BRE.
+    verifiable_closure: >
+      litmus:pre-push-linux-next-merged-shape + litmus:gate-stamp-portable-digest
+      + litmus:build-sh-darwin-tool-remediation + litmus:script-exec-bit-shape
+      (count 11) + ./build.sh --check exit 0 on a Darwin host.
+    events:
+      - type: filed
+        ts: "2026-08-23T01:41:47Z"
+        agent_id: macos-tlatoanis-macbook-air-claude-20260823t014147z
+        host: tlatoanis-macbook-air
+        summary: >
+          Filed and implemented in the same operator-directed onboarding
+          cycle; six defects confirmed against osx-next HEAD (== linux-next
+          cef7c023b) by an 8-agent verification pass before any edit.
+      - type: completed
+        ts: "2026-08-23T01:41:47Z"
+        agent_id: macos-tlatoanis-macbook-air-claude-20260823t014147z
+        host: tlatoanis-macbook-air
+        summary: >
+          All fixtures green on Darwin 25.6.0 (bash 3.2 lane): 14/14, 12/12,
+          9/9, 11/11, 18/18; mutation controls verified red->green in-fixture
+          every run; ./build.sh --check green after the derive-host-identity
+          fix (its first run on this host was the red that surfaced defect 7).
+          Residuals split into 851-28b5.

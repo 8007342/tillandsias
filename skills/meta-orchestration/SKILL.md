@@ -168,7 +168,7 @@ nothing parses unless the litmus launcher runs; an operator-prompt or `./repeat`
 cycle emits it into the void. `record` closes that: it runs the SAME
 verification and appends the verified line to the per-host ledger under
 `plan/mo-full-attestations.d/<host>.md`, a committed, machine-parseable log the
-pre-push gate (`scripts/check-mo-full-attestations.sh`, wired into
+local gate (`scripts/check-mo-full-attestations.sh`, wired into
 `./build.sh --check`) re-verifies. Automation consumes the ledger, never the
 transcript. The ledger line attests the cycle's WORK head; committing the
 ledger moves the head, so the terminal marker is re-derived at the head that
@@ -411,6 +411,30 @@ Second, `scripts/e2e-preflight.sh` carries NO immutability logic and will report
 Linux to `/smoke-curl-install-and-test-e2e` (test a PUBLISHED release), never to
 `/build-install-and-smoke-test-e2e` (test a LOCAL build). The preflight is
 answering a narrower question than the one you are asking it.
+
+**If you are on macOS (Darwin), most defaults hold — these are the parts that
+do not** (851-gpb5, learned by the first Mac to join). Your branch is
+`osx-next`: commit and push everything there, and before EVERY push merge
+`origin/linux-next` into it — methodology's pre-push gate
+(`pull_merge_cadence.pre_push_gate`; Finalization step 6). Run
+`scripts/install-hooks.sh` once so the v5 pre-push hook actually enforces that
+merge on your checkout. `./build.sh --check`/`--test` work natively (host
+tools: Xcode Command Line Tools for gcc, `brew install pkg-config`, rustup
+with the rustfmt and clippy components), but `--install` is REFUSED by design
+(723-whrx): the macOS build path is `scripts/build-macos-tray.sh` — wrapped by
+`/build-macos-tray`, which also files findings to
+`plan/issues/macos-build-findings-<DATE>.md` — and local-build e2e
+(`/build-install-and-smoke-test-e2e`) destroys and re-provisions the
+Virtualization.framework VM directory, not a podman store. The system shell is
+bash 3.2 with BSD userland: no GNU-only flags in anything a Mac must run (no
+`xargs -r`, no suffix-less `sed -i`), and `sha256sum` only exists on macOS
+13+ — use the `sha256sum`-or-`shasum -a 256` dispatch
+(`scripts/build-sidecar.sh`, `scripts/gate-stamp.sh`). Expect the MCP experts
+to be DOWN on first boot (`down:forge-plan`, `degraded(not-built)`):
+`scripts/cycle-preflight.sh` builds `./target/release/tillandsias-plan`, the
+same binary the MCP wrapper serves — work through it by path and record the
+outage, per `mcp_first_read_path`. And like every joining host, pass your
+hostname as `--seed` to `select-work-batch.sh`.
 
 **Expect to be offered other hosts' abandoned work.** Claims expire on a 24h
 lease, and expired rows return to the pool with their history intact — a row
@@ -1220,6 +1244,11 @@ and skip the local-build gate without re-litigating it. Pinned by
 Rules:
 
 - Local-build e2e uses `/build-install-and-smoke-test-e2e`.
+- On macOS the local build that gate exercises is
+  `scripts/build-macos-tray.sh` (the `/build-macos-tray` skill wraps it and
+  files findings to `plan/issues/macos-build-findings-<DATE>.md`);
+  `./build.sh --install` is refused on Darwin by design (723-whrx), so there
+  is no build.sh install path to look for.
 - Published-release e2e uses `/smoke-curl-install-and-test-e2e`.
 - Destructive substrate reset is expected setup on Tillandsias smoke hosts.
   `podman system reset --force` is a precondition for Linux idempotence tests,
@@ -1308,7 +1337,7 @@ distinct — measure before you optimize:
   `slowest=<step>:<ms>`). "Time spent building, testing" is the most likely
   bottleneck and was invisible until the build/test/litmus entry points began
   appending one duration record per heavy step (packet 682-emvg). `build.sh
-  --check` (the pre-push gate), each `scripts/local-ci.sh` litmus phase, and each
+  --check` (the local gate), each `scripts/local-ci.sh` litmus phase, and each
   `scripts/run-litmus-test.sh` suite now self-instrument — best-effort, the
   timing write never changes the wrapped step's exit code or output. It reads
   `source=absent` until this host has run one instrumented step. `slowest` names
@@ -1383,14 +1412,34 @@ Before exit:
    `plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md` order 63).
    Its presence on PATH is not permission. The forge startup context lists what
    is actually available.
-4. Run the local pre-push gate: `./build.sh --check` and fix what it reports.
+4. Run the local gate: `./build.sh --check` and fix what it reports.
    An unparseable or unformatted push poisons every downstream clone. Push CI
    no longer exists on any working branch — only the manually-dispatched
    release workflow remains (litmus:github-actions-budget) — so this gate is
    the ONLY trunk protection. Do not push past a red gate (evidence case:
    `plan/issues/local-gate-evidence-query-packets-clippy-2026-08-09.md`).
+
+   Terminology (851-gpb5): this skill called this step "the pre-push gate"
+   for months while methodology used the SAME name for a different rule —
+   the step-6 merge below — and the collision kept that rule invisible.
+   Here "local gate" always means `./build.sh --check`; "pre-push gate" is
+   reserved for methodology's `pull_merge_cadence.pre_push_gate`.
 5. Commit targeted files only.
-6. Push the relevant branch.
+6. Satisfy methodology's pre-push gate (`pull_merge_cadence.pre_push_gate`,
+   `methodology/multi-host-development.yaml`), then push the relevant branch.
+   On a non-`linux-next` branch (`osx-next`, `windows-next`, any shared
+   non-trunk branch; `agent/*` and `salvage/*` are exempt) that gate
+   requires, before EVERY push — not just at cycle start:
+
+   ```bash
+   git fetch origin && git merge origin/linux-next   # resolve conflicts locally
+   ```
+
+   The v5 pre-push hook enforces the merge half on the two platform branches
+   (`scripts/hooks/pre-push-linux-next-merged.sh`, installed by
+   `scripts/install-hooks.sh`); the fetch half stays yours — the hook can
+   only compare against the `origin/linux-next` your last fetch recorded. If
+   the hook refuses, merge and push again; never `--no-verify` past it.
 7. If a startup boundary was recorded, run the guard's `verify` mode. A guard
    failure is a blocker: do not attempt destructive Git cleanup. Finalization
    never deletes, restores, or resets a worktree path.
@@ -1448,7 +1497,7 @@ Before exit:
    edit it. If any step prints `MO-FULL: FAIL …` and exits non-zero, do NOT
    emit a marker — treat it as a blocker (a missing marker is itself the loud
    failure). The ledger line and the emitted line differ by exactly the
-   bookkeeping commit; both are real commits the pre-push gate
+   bookkeeping commit; both are real commits the local gate
    (`scripts/check-mo-full-attestations.sh`) verifies exist and are reachable.
    This gives EVERY full-mode lane the same convergence verification the
    litmus launcher's `check` applies to its one lane, and leaves a durable

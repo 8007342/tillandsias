@@ -1,0 +1,45 @@
+# @trace spec:ci-release
+# @trace order:851-gpb5
+#
+# Pins gate-stamp.sh's portable SHA-256 dispatch. The stamp called bare
+# `sha256sum` at four sites; a Mac without it (Apple only added /sbin/sha256sum
+# in macOS 13) loses gate memoization SILENTLY — compute fails, build.sh
+# discards memo-check stderr, and the pre-push hook perpetually demands a gate
+# re-run whose stamp can never be written. The property pinned is stronger
+# than "compute succeeds": the digest must be BYTE-IDENTICAL whichever tool
+# computed it, or a host switching tools would invalidate every stamp.
+name: litmus:gate-stamp-portable-digest
+spec: ci-release
+phase: pre-build
+description: >
+  Pin scripts/gate-stamp.sh: compute succeeds and yields the SAME digest with
+  sha256sum on PATH and with only shasum on PATH; the fixture's
+  mutation-control arm proves a reverted (bare-sha256sum) stamp fails exactly
+  the sha256sum-less scenario.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/gate-stamp.sh
+  - workspace contains scripts/test-gate-stamp-portable-digest.sh
+  - git, bash, and sha256sum or shasum are available in PATH
+
+critical_path:
+  - step: "stamp and fixture parse and the fixture is executable"
+    command: "bash -n scripts/gate-stamp.sh && bash -n scripts/test-gate-stamp-portable-digest.sh && test -x scripts/test-gate-stamp-portable-digest.sh && echo 'ok: parses'"
+    timeout_ms: 5000
+    expected_behavior: "ok: parses"
+
+  - step: "all fixture scenarios pass (cross-tool digest equality, farm PATH, mutation control both directions)"
+    command: "bash scripts/test-gate-stamp-portable-digest.sh 2>&1 | tail -1"
+    timeout_ms: 60000
+    expected_behavior: "ok:gate-stamp-portable-digest-fixture:9"
+
+  - step: "no bare digest call remains in gate-stamp.sh (every site goes through the dispatch)"
+    command: "if grep -nE '\\| *sha256sum|xargs -0 -r sha256sum' scripts/gate-stamp.sh | grep -v GATE_STAMP_SHA256 | grep -vE '^ *[0-9]+: *#'; then echo 'FAIL: bare sha256sum call reappeared'; else echo 'ok: dispatch only'; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok: dispatch only"
+
+evidence:
+  artifact: "scripts/gate-stamp.sh + scripts/test-gate-stamp-portable-digest.sh"
+  measured_on: "macOS Darwin 25.6.0 2026-08-22 — 9/9 fixture checks green; D1 == D2 across sha256sum/shasum"

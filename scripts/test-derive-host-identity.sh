@@ -59,6 +59,28 @@ no_nvidia_smi() {
     printf '#!/usr/bin/env bash\nexit 1\n' >"$BIN/nvidia-smi"
     chmod +x "$BIN/nvidia-smi"
 }
+
+# `uname -s` decides the os group AND the apple accel token, so it must be
+# pinned like every other probe (851-gpb5). The first ten runs of this fixture
+# on a Mac failed 10/17: the real Darwin uname injected `apple` into every
+# mocked-Linux scenario and swapped the cpu probe to the real sysctl — the
+# same only-passes-on-the-box-that-wrote-it failure the header warns about,
+# one probe further down. sysctl is pinned for the same reason in the Darwin
+# scenario (and harmlessly shadowed everywhere else).
+mk_uname() {
+    cat >"$BIN/uname" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "$1"
+EOF
+    chmod +x "$BIN/uname"
+}
+mk_sysctl() {
+    cat >"$BIN/sysctl" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "$1"
+EOF
+    chmod +x "$BIN/sysctl"
+}
 yes_nvidia_smi() {
     printf '#!/usr/bin/env bash\necho "GPU 0: NVIDIA Fake"\n' >"$BIN/nvidia-smi"
     chmod +x "$BIN/nvidia-smi"
@@ -81,6 +103,8 @@ run() {
 accel_of() { run --explain | awk -F'\t' '$1=="accel"{print $2}'; }
 
 # ---------------------------------------------------------------- THE TRAPS
+mk_uname Linux
+mk_sysctl ""
 mk_hostname trapbox
 no_nvidia_smi
 mk_lspci '02:00.0 "VGA compatible controller" "NVIDIA Corporation" "GA102GL [RTX A5000]" -r a1 "" ""' \
@@ -149,13 +173,40 @@ ck "a degraded probe still exits 0" "0" "$(
     echo $?
 )"
 
+# -------------------------------------------------------------------- DARWIN
+# The macOS branch, exercised hermetically on EVERY host: uname and sysctl are
+# shims, so a Linux box tests the Darwin path exactly as a Mac tests it (and a
+# Mac no longer tests it by accident in every scenario above). The expected
+# slug is the SUT docstring's own macOS example shape. This is the pin on the
+# `apple` accel branch — remove `add apple` and this goes red while every
+# Linux scenario above stays green.
+mk_uname Darwin
+mk_sysctl 'Apple M5'
+mk_hostname airbook
+mk_lspci
+no_nvidia_smi
+ck "the Darwin branch derives the documented macOS shape" \
+    "macos-m5-apple-airbook" "$(run)"
+mk_uname Linux
+mk_sysctl ""
+
 # ------------------------------------------------------------- ARGUMENT SAFETY
 ck "--help exits 0" "0" "$(
     run --help >/dev/null 2>&1
     echo $?
 )"
-ck "--help prints usage" \
-    "yes" "$(run --help | grep -q '^usage: derive-host-identity.sh' && echo yes || echo no)"
+# CAPTURE, then match with `case` — no `| grep -q` under pipefail (851-gpb5).
+# BSD grep -q exits at the first matching line, the SUT's remaining usage
+# lines hit a closed pipe, and the pipeline's status becomes SIGPIPE's 141:
+# on a Mac this check answered "no" against correct output, deterministically.
+# The sigpipe-verdict-pipelines family exists precisely to keep this shape
+# out of gates; a fixture is not exempt.
+help_out="$(run --help)"
+case "$help_out" in
+    "usage: derive-host-identity.sh"*) help_verdict=yes ;;
+    *) help_verdict=no ;;
+esac
+ck "--help prints usage" "yes" "$help_verdict"
 ck "an unknown argument exits 2" "2" "$(
     run --bogus >/dev/null 2>&1
     echo $?
