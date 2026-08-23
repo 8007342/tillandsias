@@ -1,0 +1,92 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-23T00:00:49Z.
+events:
+  - packet_id: spec-expert-refusal-threshold-fleet-decision
+    event:
+      type: progress
+      ts: "2026-08-23T00:00:49Z"
+      agent_id: linux-macuahuitl-opus5-20260822T144300Z
+      host: linux_mutable
+      summary: |
+        NEGATIVE CASES WORK, AND THEY CHANGE WHAT THE DECISION IS ABOUT.
+        Operator proposal 2026-08-22: stop treating refusal as a threshold and
+        put "not enough information" IN the corpus as trained-for behaviour.
+
+        Tested against the live 20,776-chunk index with nomic-embed-text by
+        cloning it and appending three chunks. Measured, not argued:
+
+                              BEFORE                        AFTER
+          Helm rollback       0.6889 git-mirror cheatsheet  0.8047 declined-alternatives
+          docker-compose      0.6528 socket-container-health 0.7045 declined-alternatives
+          ansible playbook    0.6646 distributed-work.yaml   0.6646 distributed-work.yaml
+          "flibber flobber"   0.5463 nix-flake-basics        0.5463 nix-flake-basics
+          sourdough bread     0.5676 a spec                  0.5676 a spec
+
+          out-of-corpus correctly refused   0/5 -> 2/5
+          in-corpus unharmed                5/5 -> 5/5, identical chunks AND scores
+
+        WHY THE TWO THAT WORKED, WORKED. Cosine similarity is TOPICAL. A chunk
+        about Helm out-competes a git-mirror cheatsheet on a Helm question, and
+        the chunk it returns says truthfully that this project does not use
+        Helm. That is BETTER than a refusal: it is a fact, not a withholding.
+
+        WHY THE OTHER THREE DID NOT, and this is the limit of the idea as
+        stated. The literal sentinel — "when you don't know, say you don't
+        know" — never wins anything, because it has NO TOPIC to be similar to.
+        Nonsense retrieves whatever is accidentally nearest (0.5463 on a nix
+        cheatsheet) and always will. The ansible question failed even though
+        the injected chunk names Ansible: one sentence among five tools does
+        not move a chunk's embedding. Coverage is per-topic and earned per topic.
+
+        SO IT IS NOT A GENERAL REFUSAL MECHANISM — it converts ANTICIPATED
+        near-misses into correct answers. That is worth a lot, because the
+        near-misses that overlap the in-corpus band ARE the plausible ones
+        (Helm, Compose, Ansible, Terraform, systemd), which is exactly the
+        anticipatable set. Nonsense sits at 0.5463 against an in-corpus floor
+        of 0.6818 and is trivially separable by threshold. The two approaches
+        are COMPLEMENTARY: negatives handle the overlap, a threshold handles
+        the far field.
+
+        AND THE CONTENT IS OWED ANYWAY. The project declined these
+        alternatives deliberately; the corpus is silent about the declining,
+        and a silent non-choice is indistinguishable from an oversight to a
+        reader and to a retriever alike. CORPUS_DECLINED in spec.rs already
+        applies this principle to corpus boundaries.
+
+        I ALMOST REPORTED THE OPPOSITE. analyze-bands.sh scores the THRESHOLD
+        hypothesis, in which a near-miss must score LOW. Run against the
+        injected index it reported the overlap widening from 0.0071 to 0.1229
+        — a catastrophic-looking regression — while the system was in fact
+        answering correctly, because the near-misses now score HIGH on a chunk
+        that refuses them. The metric was built for a different hypothesis and
+        did not transfer. Recorded in the harness README, because the number is
+        genuine and the interpretation is the trap.
+
+        THE MARGIN TEST IS ALSO DEAD, measured earlier this cycle: in-corpus
+        margins 0.0025-0.1353 vs near-miss 0.0007-0.0179, overlapping by 0.0154
+        — worse than the raw score's 0.0072. Both obvious rules fail.
+
+        HARNESS COMMITTED at scripts/refusal-calibration/ so the next
+        measurement is a command rather than a rediscovery.
+
+  - packet_id: spec-expert-refusal-threshold-fleet-decision
+    event:
+      type: blocked
+      ts: "2026-08-23T00:00:49Z"
+      agent_id: linux-macuahuitl-opus5-20260822T144300Z
+      host: linux_mutable
+      summary: |
+        DOES A BIGGER EMBEDDER SEPARATE BETTER? UNANSWERED — the pinned
+        inference image cannot run one. tillandsias-inference:v0.4.260818.1
+        ships ollama 0.32.14:
+
+          nomic-embed-text   137M  works, 768-dim, 28ms, batches of 64
+          mxbai-embed-large  334M  llama-server aborted (core dumped)
+          qwen3-embedding:4b 4.0B  same abort; still occupies 6.4GB VRAM
+          bge-m3             567M  works SINGLE (1024-dim), ABORTS on batch
+
+        bge-m3 measured 1943ms/embed while qwen3 was resident and 417ms after
+        evicting it — still 15x nomic, so a full index is ~2.4h at BATCH=1
+        versus ~8min batched. The A5000 is not the constraint; the image is.
+        Answering the operator's model-size question needs a newer inference
+        image first, and that is the smallest next action.
