@@ -518,6 +518,30 @@ filing — not the prompt.
    dirty-start refusal exactly as written; never commit, discard, or clean it.
    An `ok:clean-tree` verdict means there is nothing to merge. The checker is a
    falsifiable machine decision; do not substitute prose judgment for it.
+4b. **Resumable claim dirt (deterministic, order 833-fpe7)**: when the dirt is
+   NOT the opsx set, run the second detector before refusing:
+   ```bash
+   scripts/check-resumable-claim-dirt.sh
+   ```
+   It prints exactly one line matching
+   `^(resumable:<order>(,<order>)*|ok:clean-tree|unattributable:.*)$` and exits
+   `0` only when EVERY dirty path is tracked, the folded ledger names a live
+   claim OWNED BY THIS HOST (`tillandsias-plan expire-claims --list-live`:
+   claim-convention event host, both claim and activity inside the TTL), and
+   every dirty path's mtime postdates the oldest such claim. That is the
+   signature of this host's OWN previous cycle interrupted between implement
+   and commit — the dirt the refusal would otherwise deadlock on until
+   expire-claims launders finished work into lost work (the 833-fpe7 shape;
+   814-iyu7 arriving by a second route).
+
+   `resumable:` is a licence to REVIEW AND LAND, never to auto-commit: read
+   the diff against each named order's packet, land what implements it as its
+   own commit(s) citing the orders, then re-anchor with the guard's
+   `re-snapshot` — the same sequence order 540 sanctions. Whether an edit
+   IMPLEMENTS the packet beside it is the agent's judgment; the detector only
+   removes the deadlock. Any `unattributable:` verdict falls through to the
+   dirty-start refusal exactly as written. Pinned by
+   `litmus:resumable-claim-dirt-shape`.
 5. Update the active local branch from remote with fast-forward or an explicit
    merge from `origin/linux-next` into the platform branch when appropriate.
 

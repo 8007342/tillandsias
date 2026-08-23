@@ -33415,6 +33415,13 @@ plan_index:
         so the next reader sees the refusal was overridden deliberately, on named
         evidence, rather than skipped.
 
+      events:
+        - type: completed
+          ts: "2026-08-23T01:31:43Z"
+          agent_id: "linux-lenovinha-claude-20260823t013143z"
+          host: lenovinha
+          summary: |
+            IMPLEMENTED at 20163b1f1, every element of the packet's shape: (1) scripts/check-resumable-claim-dirt.sh prints exactly one line of the prescribed grammar ^(resumable:<order>(,<order>)*|ok:clean-tree|unattributable:.*)$ with order-540 exit conventions, exit 0 only when all four conditions hold (tracked-only dirt; >=1 live claim owned by THIS host; every mtime after the oldest own claim; claim inside the expire-claims TTL). (2) Ownership is read from the claim-convention event ('claimed for cycle' summary), never the newest event's host — last-toucher attribution would have misassigned a row another host merely noted on (measured live: this host's freshness note on macuahuitl's 831-ezea). tillandsias-plan expire-claims grew --list-live (read-only), with a unit test pinning owner-vs-toucher, claim-less refusal, and the propped-up-stale-claim exclusion. (3) The verdict stops at review: SKILL.md step 4b wires the detector between the opsx detector and the refusal, licensing REVIEW AND LAND + re-snapshot, never auto-commit — and litmus:resumable-claim-dirt-shape step 5 pins that sentence. (4) Hermetic negative controls per the packet's own list: scripts/test-resumable-claim-dirt.sh 6/6 (clean tree; untracked refuses; dirt predating the claim refuses; another host's claim refuses; claim past TTL refuses; resumable names BOTH orders). Live self-validation: the detector, run mid-implementation on this very cycle's tree, refused while its own file was untracked and answered resumable:833-fpe7 once staged — the detector's first real verdict was about the claim dirt of the cycle building it.
     - packet_id: ghost-trace-windows-wsl-runtime-outnumbers-the-real-spec
       order: 834-7ut9
       status: ready

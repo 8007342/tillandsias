@@ -1,0 +1,79 @@
+# @trace spec:meta-orchestration
+#
+# Pins the resumable-claim-dirt detector (order 833-fpe7). The dirty-start
+# refusal treats every dirty path as immutable operator work; applied to the
+# host's OWN interrupted claimed work that refusal deadlocks the unattended
+# loop (every cycle refuses identically) and expire-claims then launders the
+# claim away while the diff rots — finished work becomes lost work. Order 540
+# solved the same shape for opsx dirt with a deterministic detector; this
+# litmus pins the analogous detector for claim dirt: its falsifiable grammar,
+# its fail-closed negative controls (a detector that only ever says
+# `resumable:` is the deadlock with extra steps), the binary's live-claim
+# listing it consults, and the skill's wiring to it.
+name: litmus:resumable-claim-dirt-shape
+spec: meta-orchestration
+phase: pre-build
+description: >
+  Pin scripts/check-resumable-claim-dirt.sh: the verdict grammar
+  ^(resumable:<order>(,<order>)*|ok:clean-tree|unattributable:.*)$ with
+  order-540 exit conventions (0 resumable / 4 clean / 3 refuse / 2 infra),
+  the six hermetic fixture cases in scripts/test-resumable-claim-dirt.sh
+  (clean tree; untracked refuses; dirt predating the claim refuses; another
+  host's claim refuses; claim past TTL refuses; own live claims pass naming
+  every order), the `tillandsias-plan expire-claims --list-live` row shape it
+  consumes, and the meta-orchestration skill's consultation of the detector.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/check-resumable-claim-dirt.sh
+  - workspace contains scripts/test-resumable-claim-dirt.sh
+  - workspace contains skills/meta-orchestration/SKILL.md
+  - a runnable tillandsias-plan binary is resolvable (plan-binary-probe)
+
+critical_path:
+  - step: "the hermetic fixture passes all six cases through the real binary"
+    command: "bash scripts/test-resumable-claim-dirt.sh 2>&1 | tail -1 | grep -qx 'PASS: resumable claim dirt (6/6)' && echo 'ok: fixture 6/6'"
+    timeout_ms: 30000
+    expected_behavior: "ok: fixture 6/6"
+
+  - step: "the detector emits exactly one well-formed verdict line on this live tree"
+    command: "out=$(bash scripts/check-resumable-claim-dirt.sh); rc=$?; n=$(printf '%s\\n' \"$out\" | grep -cE '^(resumable:[0-9A-Za-z-]+(,[0-9A-Za-z-]+)*|ok:clean-tree|unattributable:.*)$'); [ \"$n\" = 1 ] && [ $rc -eq 0 -o $rc -eq 2 -o $rc -eq 3 -o $rc -eq 4 ] && echo 'ok: well-formed verdict' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: well-formed verdict"
+
+  - step: "the binary's list-live rows carry owner host and claim ts (six tab-separated fields)"
+    command: "grep -q 'list-live' crates/tillandsias-plan/src/main.rs && grep -q 'fn live_claims' crates/tillandsias-plan/src/main.rs && echo 'ok: list-live present'"
+    timeout_ms: 3000
+    expected_behavior: "ok: list-live present"
+
+  - step: "the meta-orchestration skill consults the detector"
+    command: "grep -q 'check-resumable-claim-dirt.sh' skills/meta-orchestration/SKILL.md && echo 'ok: skill-consults-detector'"
+    timeout_ms: 3000
+    expected_behavior: "ok: skill-consults-detector"
+
+  - step: "the verdict stops at review — the skill wiring must not auto-commit on resumable"
+    command: "grep -A24 'check-resumable-claim-dirt.sh' skills/meta-orchestration/SKILL.md | grep -qiE 'REVIEW AND LAND|never to auto-commit' && echo 'ok: review-not-autocommit'"
+    timeout_ms: 3000
+    expected_behavior: "ok: review-not-autocommit"
+
+observability:
+  traces:
+    - "@trace spec:meta-orchestration"
+  expected_log: "resumable-claim-dirt detector pinned (grammar + negative controls + binary row shape + skill wiring)"
+  log_fields:
+    spec: "meta-orchestration"
+    test: "resumable-claim-dirt-shape"
+    artifact: "scripts/check-resumable-claim-dirt.sh + scripts/test-resumable-claim-dirt.sh + skills/meta-orchestration/SKILL.md"
+
+rollback:
+  on_failure: >
+    The resumable-claim-dirt detector drifted. Restore
+    scripts/check-resumable-claim-dirt.sh emitting exactly one line matching
+    ^(resumable:<order>(,<order>)*|ok:clean-tree|unattributable:.*)$ with exit
+    0 only when every dirty path is tracked, the folded ledger names a live
+    claim owned by this host (expire-claims --list-live, claim-convention
+    event host), and every dirty path's mtime postdates the oldest such
+    claim; keep scripts/test-resumable-claim-dirt.sh's six cases green and
+    the SKILL.md consultation (review-gated, never auto-commit) intact.
+  command: "bash scripts/test-resumable-claim-dirt.sh 2>&1 | tail -3"
