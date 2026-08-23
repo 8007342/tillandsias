@@ -1,5 +1,6 @@
 # @trace spec:methodology-accountability
 # @trace order:582-26mm (mcp-and-expert-read-paths-use-the-fragment-overlay)
+# freshness: auditor=linux-yoga-fable5-20260823t1101z date=2026-08-23 verdict=updated scope=order-372 audit found the suite red — check-plan-ledger-readers.sh's comment exemption never matched grep -n's 'NN:'-prefixed lines, so a ruby recipe in a COMMENT (check-arrival-routing.sh) read as a violation; scanner fixed (prefix stripped before classification), negative control re-verified, suite green end-to-end
 #
 # Pins that EVERY content reader of plan/index.yaml sees the FOLDED ledger
 # (base ⊕ plan/index.d/ fragments), never the base alone.
