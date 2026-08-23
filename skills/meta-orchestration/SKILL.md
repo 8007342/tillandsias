@@ -416,9 +416,15 @@ First, `./build.sh` transparently re-execs inside the `tillandsias-builder`
 toolbox (`scripts/with-tillandsias-builder.sh`), creating it with
 `toolbox create --assumeyes` on first use. So unlike a mutable host, your gate
 NEEDS a working podman — a Silverblue box with podman broken cannot run
-`--check` at all, where a mutable box happily would. Expect the first `--check`
-of a fresh checkout to spend minutes pulling an image and installing a
-toolchain; that is the toolbox being built, not a hang.
+`--check` at all, where a mutable box happily would. The first `--check` of a
+fresh checkout spends its opening minutes building the toolbox — measured on
+yoga (Silverblue, Ryzen AI 5 340, ~250 Mbit/s registry link, 2026-08-23; filed
+as an event on 850-bif2): image pull 11.5s (355 MiB compressed), `toolbox
+create` 0.1s, then 131.9s for the first forced `--check` (dnf 17s, rustup 14s,
+gate ~100s), with a warm `~/.cargo` — a truly pristine home also pays crates.io
+downloads on top. That is the toolbox being built, not a hang. (The previous
+"minutes" figure here was an unmeasured inference written on a mutable host
+that never executes this path — b629bb379.)
 Second, `scripts/e2e-preflight.sh` carries NO immutability logic and will report
 `eligible` to you. Do not believe it: the skill's E2E table routes immutable
 Linux to `/smoke-curl-install-and-test-e2e` (test a PUBLISHED release), never to
