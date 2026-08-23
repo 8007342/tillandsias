@@ -11756,6 +11756,12 @@ plan_index:
       notes: |
         Foundation packet. Can run in parallel with 628-p5tj. Blocks 628-h4nx and 628-w9sm.
       events:
+        - type: note
+          ts: "2026-08-23T09:21:46Z"
+          agent_id: "windows-yolanda-fable5-20260823T091940Z"
+          host: windows
+          summary: |
+            SKIPPED by windows (yolanda) loop cycle #4 despite selector urgent-rank: this packet's own next_action forbids starting (2026-08-17 refutation; criteria 2+3 mutually exclusive as written) and the 628-w9sm ruling it waits on is pending. Do not trust the batch rank here — the selector does not read next_action. Wedge detail + selector gap filed: plan/issues/optimization-selector-blind-to-next-action-628-wedge-2026-08-23.md
         - type: progress
           ts: "2026-08-17T07:29:47Z"
           agent_id: "macos-tlatoanis-macbook-air-fable5-20260817t0723z"
@@ -11978,6 +11984,12 @@ plan_index:
       notes: |
         GOVERNANCE: reconciling drift CHANGES a user-visible string on whichever platform loses, which spec:tray-ux forbids without recorded operator approval for the exact surface. The claiming agent brings the inventory and PROPOSED canonical spellings to the operator and waits — including for cases where one side is obviously a typo. `🔑 GitHubLogin` vs `🔑 GitHub Login` is exactly such a case and still needs the ruling.
       events:
+        - type: note
+          ts: "2026-08-23T09:21:46Z"
+          agent_id: "windows-yolanda-fable5-20260823T091940Z"
+          host: windows
+          summary: |
+            WEDGE surfaced by windows (yolanda): this packet is pending a ruling that 628-c7qd waits on, while its own depends_on names c7qd — the edge records the pre-refutation sequencing (layer first) that the 2026-08-17 measurement inverted (ruling first). Each row now waits on the other. Owner should record the ruling or drop/invert the depends_on; not edited from this drive-by cycle because the ruling is operator-gated under spec:tray-ux. Details: plan/issues/optimization-selector-blind-to-next-action-628-wedge-2026-08-23.md
         - type: progress
           ts: "2026-08-17T06:26:15Z"
           agent_id: "macos-tlatoanis-macbook-air-fable5-20260817t0623z"
