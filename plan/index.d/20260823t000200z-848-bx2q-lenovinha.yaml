@@ -1,0 +1,69 @@
+packets:
+  - packet_id: pre-push-plan-lane-rejects-first-attestation-of-a-new-host
+    order: 848-bx2q
+    status: ready
+    kind: bug
+    pickup_role: any
+    priority: p3
+    desired_release: v0.5
+    depends_on: []
+    capability_tags:
+      - bash
+      - git-hooks
+      - all-platforms
+    tags:
+      - fleet-rejoin
+      - attestation
+      - pre-push
+    title: >
+      The pre-push plan-only lane rejects the FIRST attestation record of a
+      newly joining host: mo-full-attest.sh record writes a 5-line '# ' header
+      into a new per-host ledger, and the lane's added-line grammar
+      (scripts/hooks/pre-push-local-gate.sh:319 region) admits only blank,
+      '## <ts> <host>', and MO-FULL lines — so the tool's own output fails the
+      tool's own gate, exactly once per host, at fleet-rejoin time.
+    deliverable: >
+      A new host's first `mo-full-attest.sh record` commit passes the plan-only
+      lane without a full gate, and the lane still refuses genuinely malformed
+      added lines.
+    context: >
+      Measured on lenovinha 2026-08-22 (the second-Linux fleet rejoin, first
+      cycle): `scripts/mo-full-attest.sh record` created
+      plan/mo-full-attestations.d/lenovinha.md with its documented 5-line
+      comment header + one verified marker; `git push` was refused with
+      "added lines break the attestation-ledger grammar (full gate required)"
+      while the dedicated checker (scripts/check-mo-full-attestations.sh)
+      PASSED the same file ("7 files 271 markers verified,
+      lenovinha.md reachability-checked"). Cause: in
+      scripts/hooks/pre-push-local-gate.sh, when the pushed file has no remote
+      base ("bases[$i]" empty) the WHOLE blob is treated as added lines, and
+      the alternation grep admits no '# ' comment lines. Existing hosts never
+      hit it (their pushes append only entry lines); every JOINING host hits it
+      exactly once — macOS is next in the rejoin order. The fallback is benign
+      (full gate) but costs the cheapest lane a ~40s+ full gate and the error
+      text misnames the cause: the grammar is fine, the header is the tool's
+      own output.
+    exit_criteria:
+      - >
+        The new-file branch of the plan-only lane accepts the exact header
+        block mo-full-attest.sh record writes (e.g. admit '^# ' lines when the
+        file is new, or delegate the new-file case to
+        check-mo-full-attestations.sh scoped to that file).
+      - >
+        NEGATIVE CONTROL: a genuinely malformed added line (a hand-typed
+        MO-FULL with a short SHA, a stray prose line) is still refused in both
+        the new-file and append cases.
+    verifiable_closure: >
+      A hermetic fixture case alongside the existing hook/attestation fixtures
+      (scripts/test-mo-full-attest.sh family): seed a repo with no per-host
+      ledger, run `record`, and assert the plan-only lane validator accepts the
+      resulting blob while a corrupted variant is refused.
+    events:
+      - type: filed
+        ts: "2026-08-23T00:02:00Z"
+        agent_id: linux-lenovinha-claude-20260823t000200z
+        host: lenovinha
+        summary: >
+          Filed from the first lenovinha fleet-rejoin cycle; hit live on this
+          cycle's own attestation push and worked around via the full gate as
+          the hook instructs.
