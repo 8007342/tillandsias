@@ -1,0 +1,72 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-23T00:51:05Z.
+packets:
+  - order: 849-tz8g
+    packet_id: inference-image-cannot-run-any-model-larger-than-0-5b
+    desired_release: v0.6
+    title: "the pinned inference image crashes on every model above 0.5B, blocking the expert-validation layer"
+    status: ready
+    kind: bug
+    pickup_role: linux
+    priority: p1
+    capability_tags: [inference, container, gpu, experts, rag]
+    deliverable: images/inference/
+    depends_on: []
+    estimated_hours: 4
+    context: >
+      MEASURED 2026-08-22 on macuahuitl (RTX A5000, 24 GB, 21 GB free).
+      tillandsias-dev-inference runs tillandsias-inference:v0.4.260818.1,
+      ollama 0.32.14. What that image can actually run:
+
+        nomic-embed-text  137M   works, 768-dim, 28ms, batches of 64
+        qwen2.5:0.5b      494M   works
+        bge-m3            567M   works SINGLE (1024-dim, 417ms) but ABORTS on
+                                 batched input, so a full index is ~2.4h
+                                 instead of ~8min
+        mxbai-embed-large 334M   llama-server terminated: signal: aborted
+        qwen3-embedding   4.0B   same abort; still occupies 6.4GB VRAM
+        qwen2.5:3b        3.1B   GGML_ASSERT(rc == 0) failed
+        qwen2.5:7b        7.6B   GGML_ASSERT(rc == 0) failed
+
+      THIS NOW BLOCKS A PROGRAM, NOT A CURIOSITY. Two independent lines of work
+      both dead-end here:
+
+      (1) DOES A BIGGER EMBEDDER SEPARATE THE BANDS? Unanswerable. At n=579 no
+      cosine threshold separates in-corpus from out-of-corpus at any
+      granularity (global overlap 0.3024; every corpus overlaps 0.17-0.28).
+      Whether a stronger embedder fixes that is the obvious next question and
+      cannot be asked.
+
+      (2) THE EXPERT-VALIDATION LAYER (operator design, 2026-08-22) needs a
+      local model that can judge whether a retrieved span supports a claim.
+      qwen2.5:0.5b CANNOT: measured over 70 questions it returns whatever the
+      prompt leans toward — 70/70 UNSUPPORTED under a refusal-leaning prompt
+      (including all 40 in-corpus), then 70/70 SUPPORTED under a neutral one
+      (including all 30 far-field). It is tracking prompt shape, not content.
+      That is BIAS, not variance, and no amount of repeated sampling converges
+      away from it.
+
+      THE COMPLEMENT PROBE DETECTS THIS WITHOUT GROUND TRUTH, which is the
+      operator's point and is worth recording as a working result even though
+      the judge failed. Asking both "does the passage answer the question?" and
+      "is the passage MISSING the answer?" of qwen2.5:0.5b returns YES to BOTH,
+      on a passage that genuinely answers and on one that does not. A
+      single-prompt harness sees a confident working judge; the complement pair
+      exposes the contradiction with no labelled set, at runtime. So the
+      validation layer can police its own judge — but it still needs a judge
+      capable of discrimination, and this image has none.
+
+      NOT A HARDWARE LIMIT. 21 GB of VRAM sat free through every one of these
+      crashes. The ceiling is the image.
+    exit_criteria: >
+      (1) A model of at least 7B answers a support-judgement prompt without
+      aborting, demonstrated on this host.
+      (2) bge-m3 (or a comparable 1024-dim embedder) accepts BATCHED input, so
+      an index rebuild stays in minutes rather than hours.
+      (3) A negative control: the pre-upgrade image still reproduces
+      GGML_ASSERT on the same prompt, so the fix is attributed to the upgrade
+      rather than to a warm cache or a changed prompt.
+      (4) The judge is re-measured on the committed 579-question set BOTH
+      directions — in-corpus SUPPORTED rate and out-of-corpus UNSUPPORTED rate
+      — because a judge that always answers one way scores 100% on half the set
+      and that is exactly how the 0.5B failure first read as a success.
