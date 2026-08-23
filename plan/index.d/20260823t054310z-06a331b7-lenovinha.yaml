@@ -5,17 +5,17 @@
 # corrects ANY field (642-fedr). Re-declaring the packet under
 # `packets:` would be a G-Set no-op and would silently do nothing.
 status:
-  - packet_id: work-selection-cannot-separate-more-hosts-than-frontier-epics
+  - packet_id: forge-experts-answer-from-main-not-the-branch-the-work-is-on
     field: status
     value: in_progress
-    ts: "2026-08-23T04:11:56Z"
+    ts: "2026-08-23T05:43:10Z"
     host: lenovinha
 
 events:
-  - packet_id: work-selection-cannot-separate-more-hosts-than-frontier-epics
+  - packet_id: forge-experts-answer-from-main-not-the-branch-the-work-is-on
     event:
       type: note
-      ts: "2026-08-23T04:11:56Z"
+      ts: "2026-08-23T05:43:10Z"
       host: lenovinha
       summary: >
-        claimed for cycle 2026-08-23T04:11Z (operator /loop directive: capability-aware routing)
+        claimed for cycle 2026-08-23T05:43Z (loop-2, routed epic forge-local-experts)

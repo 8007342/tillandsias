@@ -5,17 +5,17 @@
 # corrects ANY field (642-fedr). Re-declaring the packet under
 # `packets:` would be a G-Set no-op and would silently do nothing.
 status:
-  - packet_id: dual-locus-preflight-must-rebuild-every-gate-locus
+  - packet_id: archival-sweep-broke-four-groundtruth-citation-pins
     field: status
-    value: implemented
-    ts: "2026-08-23T04:15:47Z"
-    host: windows
+    value: in_progress
+    ts: "2026-08-23T05:43:09Z"
+    host: lenovinha
 
 events:
-  - packet_id: dual-locus-preflight-must-rebuild-every-gate-locus
+  - packet_id: archival-sweep-broke-four-groundtruth-citation-pins
     event:
       type: note
-      ts: "2026-08-23T04:15:47Z"
-      host: windows
+      ts: "2026-08-23T05:43:09Z"
+      host: lenovinha
       summary: >
-        All three exit criteria have hermetic + this-host evidence; field evidence from a Linux mid-cycle pull is the residual
+        claimed for cycle 2026-08-23T05:43Z (loop-2, routed epic forge-local-experts)
