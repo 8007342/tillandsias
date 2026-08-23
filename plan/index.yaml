@@ -33423,6 +33423,12 @@ plan_index:
         - 'live: verdict authorized/1787163205, agent token VALID, github token readable, in-forge guard ok:forge-git-mirror'
         - the agent's report recommended re-seeding a Vault GitHub token that measurement shows is working
       events:
+        - type: completed
+          ts: "2026-08-23T05:50:39Z"
+          agent_id: "linux-lenovinha-claude-20260823t055039z"
+          host: lenovinha
+          summary: |
+            CLOSED VIA THE DELIVERABLE'S SECOND ARM at 53b28c745: 'the forge states plainly which branch it is answering from so a stale answer is legible as stale' — remedy (b), which the packet itself called worth doing regardless. The startup context's machine-readable line now carries base_head/ledger_lag_h/ledger_newest (lib-ledger-freshness.sh, separately sourceable, no branch judged by name — newest origin committer-date vs HEAD's, origin/HEAD excluded), and the prose instructs the agent: answers reflect <branch>@<base_head>; rows on ledger_newest are INVISIBLE here; base_state=ok does NOT clear this; say 'as of ...' and read the newer branch before recommending operator action. Pinned by litmus:forge-ledger-freshness-shape (5/5, functional fixture at a known-stale commit — the packet's named closure). DIAGNOSIS of the 'not diagnosed here' question, so nobody re-derives it: the seed was never mis-resolved. --cloud launches resolve a SEPARATE checkout (resolve_cloud_project_checkout, main.rs:5406: projects_root()/<repo>, materialized by gh repo clone) which sits on the repo's DEFAULT branch; read_host_project_current_branch honestly reports THAT checkout. check-forge-expert-base.sh's description is true of tray/local launches and vacuously true here — 'this checkout' is the cloud clone, not the operator's dev checkout. RESIDUAL (deliberately not implemented): which branch a cloud checkout should track is a product-policy question (operator intent is not derivable host-side); with (b) landed the staleness is at least legible. NOTE the fix rides the forge IMAGE (lib-common.sh is image content, not mounted-checkout content) — it reaches forges at the next image rebuild.
         - type: discovered
           ts: "2026-08-19T15:20:00Z"
           agent_id: windows-yolanda-opus5-20260819t1430z
@@ -34235,6 +34241,13 @@ plan_index:
         prints expert_accuracy every cycle and the previous cycle's 100% was
         still in the handoff to compare against.
 
+      events:
+        - type: completed
+          ts: "2026-08-23T05:50:39Z"
+          agent_id: "linux-lenovinha-claude-20260823t055039z"
+          host: lenovinha
+          summary: |
+            VERIFIED FIXED AT HEAD, closing with evidence rather than re-implementing (the 837-m47d shape). Both halves of the deliverable landed as 4c221e731 'fix(plan): make plan/archive ANSWERABLE, and gate the sweep on it': (1) collect_archived_ids no longer discards archived packet content, so the grader resolves citations into plan/archive/*.yaml — option 1 of the packet's three, chosen by that commit; (2) the archiver's acceptance now includes the harness: archive-plan-packets.sh:183 refuses the sweep when check-archive-answerability.sh (new, 222 lines) fails, exactly the 'add the harness to the archiver's acceptance assertions' criterion. Evidence on lenovinha at 489cb230f+: tillandsias-plan grade = groundtruth-result: sets=1 total=22 pass=22 fail=0 (the four named FAILs — plan-active-release-experts-milestone, plan-blocked-by-394c, plan-closure-downstream-of-394a, plan-status-of-394a — all pass); expert_accuracy in cycle metrics restored to 100% fleet-wide since 2026-08-21.
     - packet_id: mcp-fix-does-not-reach-a-running-session-and-the-probe-cannot-tell
       order: 842-nw95
       status: ready

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: archival-sweep-broke-four-groundtruth-citation-pins
+    field: status
+    value: completed
+    ts: "2026-08-23T05:50:39Z"
+    host: lenovinha
+
+events:
+  - packet_id: archival-sweep-broke-four-groundtruth-citation-pins
+    event:
+      type: completed
+      ts: "2026-08-23T05:50:39Z"
+      host: lenovinha
+      summary: >
+        status 'completed' with evidence_refs: 53b28c745 tillandsias-plan grade 22/22 pass; archive-plan-packets.sh:183 gates on check-archive-answerability.sh
+  - packet_id: archival-sweep-broke-four-groundtruth-citation-pins
+    event:
+      type: note
+      ts: "2026-08-23T05:50:39Z"
+      host: lenovinha
+      summary: >
+        verified fixed by 4c221e731; evidence event this cycle
