@@ -56,12 +56,50 @@ record() { # rc skipped
         "$1" "$2" "$(uname -n | cut -d. -f1)" >> "$LOG" 2>/dev/null || true
 }
 
-# ── no-stacking lock (held for the whole cycle via fd 9) ─────────────────────
+# ── no-stacking lock (held for the whole cycle) ──────────────────────────────
+# TWO ARMS (856-s56y, found by the macOS launchd verifier 2026-08-23): the
+# original unconditional `flock -n 9` assumed util-linux flock(1), which stock
+# macOS does not ship — the invocation failed command-not-found, `if !` read
+# that as "lock held", and EVERY fire on a Darwin host skipped with exit 0,
+# indistinguishable from the designed skip. The silent cadence death this
+# driver exists to prevent, produced by the driver itself.
+#
+# flock arm: locks fd 9's open file description; auto-releases on process
+# death. mkdir arm (POSIX; runtime_language_policy forbids reaching for
+# another interpreter here): atomic mkdir plus liveness-checked staleness —
+# a lock whose recorded PID is dead, or older than 10800s (2x the default
+# 90m cycle cap, covering PID reuse), is reclaimed; the reclaim's mkdir race
+# elects exactly one winner. The trap approximates flock's auto-release; a
+# SIGKILLed cycle is covered by the liveness check on the next fire.
 exec 9>"$LOCK" || { echo "fail:cycle-driver:rc=3"; exit 3; }
-if ! flock -n 9; then
-    record 0 true
-    echo "skip:overlap-lock-held"
-    exit 0
+if command -v flock >/dev/null 2>&1; then
+    if ! flock -n 9; then
+        record 0 true
+        echo "skip:overlap-lock-held"
+        exit 0
+    fi
+else
+    LOCKD="$LOCK.d"
+    if ! mkdir "$LOCKD" 2>/dev/null; then
+        _holder="$(cat "$LOCKD/pid" 2>/dev/null || true)"
+        _born="$(cat "$LOCKD/epoch" 2>/dev/null || echo 0)"
+        case "$_born" in *[!0-9]*|"") _born=0 ;; esac
+        _age=$(( $(date +%s) - _born ))
+        if [ -n "$_holder" ] && kill -0 "$_holder" 2>/dev/null && [ "$_age" -le 10800 ]; then
+            record 0 true
+            echo "skip:overlap-lock-held"
+            exit 0
+        fi
+        rm -rf "$LOCKD" 2>/dev/null || true
+        if ! mkdir "$LOCKD" 2>/dev/null; then
+            record 0 true
+            echo "skip:overlap-lock-held"
+            exit 0
+        fi
+    fi
+    printf '%s\n' "$$" > "$LOCKD/pid"
+    date +%s > "$LOCKD/epoch"
+    trap 'rm -rf "$LOCKD" 2>/dev/null || true' EXIT
 fi
 
 # ── resolve the one-cycle command ────────────────────────────────────────────

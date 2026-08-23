@@ -36426,6 +36426,12 @@ plan_index:
       next_action: attach first unattended real-fire evidence from yoga then close the non-linux halves via children 858-h7ke and 858-3v74
       events:
         - type: progress
+          ts: "2026-08-23T13:55:21Z"
+          agent_id: "macos-tlatoanis-macbook-air-claude-20260823t134117z"
+          host: tlatoanis-macbook-air
+          summary: |
+            MACOS LAUNCHD PRECONDITION, found and fixed by the standing Darwin verifier (cycle 2026-08-23T13:41Z). The cycle driver the launchd child will wrap could never fire on macOS: the no-stacking lock was an unconditional flock -n 9, and stock macOS ships no flock(1) — command-not-found read as lock-held, so EVERY fire skipped with exit 0 and a skip:overlap-lock-held verdict indistinguishable from the designed skip. Found by running scripts/test-cycle-driver.sh here (FAIL on its first case). FIXED with two arms per runtime_language_policy (POSIX shell, no new interpreter): flock(1) where it exists, else atomic mkdir with PID-liveness + 10800s over-age staleness reclaim (2x the default 90m cap, covers PID reuse) and a trap release; the reclaim's mkdir race elects one winner. Fixture extended 4/4 -> 8/8: a PATH farm hides flock so the mkdir arm runs on EVERY host, scenarios cover no-flock success + live-holder skip + dead-holder reclaim + a cmp-verified liveness-mutation control. 8/8 green on this Mac — the driver now genuinely fires here. NOTE for the child rows: the fixture is wired into no litmus yet; pin its 8/8 line when the per-platform children land. This host remains the standing launchd verifier; the child row is STILL unfiled as of this cycle. When it lands, this host's session cron retires per the yoga handover's phase-lock lesson.
+        - type: progress
           ts: "2026-08-23T08:57:55Z"
           agent_id: "linux-yoga-fable5-20260823T081315Z"
           host: yoga

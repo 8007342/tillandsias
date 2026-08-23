@@ -1,0 +1,77 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macos (tlatoanis-macbook-air), the 2026-08-23T13:41Z cycle that
+# hit this live: its compaction was REVERTED (uncommitted, fully restored,
+# nothing lost) after the tripwire went red.
+
+packets:
+  - packet_id: capabilities-base-fold-emits-a-block-the-candidate-parser-rejects
+    order: 862-cq3x
+    status: ready
+    kind: defect
+    pickup_role: linux
+    priority: p1
+    desired_release: v0.5
+    depends_on: []
+    capability_tags:
+      - plan-ledger
+      - rust
+    tags:
+      - compaction
+      - capabilities-channel
+      - 846-idhn
+    title: >
+      Folding capability rows into the base (846-idhn) writes the top-level
+      `capabilities:` block at a position the compaction candidate parser
+      rejects — compaction_on_the_real_ledger_preserves_every_comment_and_item
+      goes red on ANY ledger that has folded capability fragments, and every
+      host is currently at compaction-eligible with capability fragments
+      pending, so the fleet's next compaction ships a base its own tripwire
+      calls broken.
+    deliverable: crates/tillandsias-plan/src/fragments.rs
+    context: >
+      Reproduced on macos 2026-08-23T13:41Z at HEAD 9dc8adb81, real ledger,
+      39 fragments: `tillandsias-plan compact` exits 0 (one warning: the
+      known typo'd-id fragment 20260823t015724z-851-darwin-probe refuses
+      because packet macos-onboarding-defect-sweep exists nowhere — separate,
+      benign, permanent refusal worth its own eventual tombstone); the folded
+      base PARSES under ruby -ryaml and `check` passes at 537 packets — but
+      `cargo test -p tillandsias-plan --lib compaction_on_the_real_ledger`
+      panics "compaction candidate does not parse: did not find expected key
+      at line 37269 column 1, while parsing a block mapping". Line 37269 of
+      the folded base is the `capabilities:` key at column 0, emitted
+      immediately after the last packet's exit_criteria — mid-document,
+      after plan_index content. serde_yaml's candidate parse rejects that
+      placement; ruby tolerates it. Recovery on this host: the compaction
+      was uncommitted, `git checkout -- plan/index.yaml plan/index.d/`
+      restored 39 fragments and every capability row; verified green
+      (fragments malformed=0, check ok, tripwire ok, capability-matrix
+      reporting). NOTE ALSO: `--index <copy>` replay mode folded the base
+      but deleted no fragment files, so replays diverge from live compaction
+      — worth a look while in the file.
+    exit_criteria:
+      - >
+        Compaction of a ledger carrying capability fragments produces a
+        candidate the tripwire test itself accepts: serialize the
+        `capabilities:` base block where the candidate parser expects it
+        (or teach exactly one parser the truth — but the tripwire's parse
+        IS the gate's definition of well-formed).
+      - >
+        The tripwire runs against a fixture ledger WITH capability fragments
+        so the class cannot land silently again (the current test only
+        covers it when the real ledger happens to carry such fragments).
+      - >
+        NEGATIVE CONTROL: a ledger with zero capability fragments compacts
+        byte-identically to today.
+    verifiable_closure: >
+      compaction_on_the_real_ledger_preserves_every_comment_and_item green
+      immediately AFTER a real `tillandsias-plan compact` on a ledger with
+      capability fragments; plus the new fixture-ledger case.
+    events:
+      - type: filed
+        ts: "2026-08-23T13:56:27Z"
+        agent_id: macos-tlatoanis-macbook-air-claude-20260823t134117z
+        host: tlatoanis-macbook-air
+        summary: >
+          Filed from the cycle that hit it; this host is deliberately NOT
+          compacting until this closes, and other hosts should hold
+          compaction too — the fold is eligible fleet-wide right now.

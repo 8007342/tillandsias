@@ -45,19 +45,75 @@ run_driver false; rc=$?
 [ "$(verdict)" = "fail:cycle-driver:rc=1" ] || fail "failure-verdict:$(verdict)"
 lastlog | grep -q '"rc":1,"skipped":false' || fail "failure-jsonl:$(lastlog)"
 
-# 3 — overlap: a concurrent holder makes the fire a SKIP, exit 0
+# 3 — overlap: a concurrent holder makes the fire a SKIP, exit 0.
+# ARM-AWARE (856-s56y macOS finding): with flock(1) present the holder is a
+# real flock on fd 8, exactly as before; without it (stock macOS) the holder
+# is the mkdir arm's lock directory carrying THIS live pid.
 LOCK="$FX/root/.git/tillandsias-cycle.lock"
 [ -d "$FX/root/.git" ] || LOCK="$FX/root/tillandsias-cycle.lock"
-exec 8>"$LOCK"
-flock -n 8 || fail "fixture-cannot-take-lock"
+if command -v flock >/dev/null 2>&1; then
+    exec 8>"$LOCK"
+    flock -n 8 || fail "fixture-cannot-take-lock"
+else
+    mkdir "$LOCK.d" || fail "fixture-cannot-take-lockdir"
+    printf '%s\n' "$$" > "$LOCK.d/pid"
+    date +%s > "$LOCK.d/epoch"
+fi
 run_driver true; rc=$?
 [ "$rc" -eq 0 ] || fail "overlap-rc:$rc"
 [ "$(verdict)" = "skip:overlap-lock-held" ] || fail "overlap-verdict:$(verdict)"
 lastlog | grep -q '"skipped":true' || fail "overlap-jsonl:$(lastlog)"
-exec 8>&-
+if command -v flock >/dev/null 2>&1; then exec 8>&-; else rm -rf "$LOCK.d"; fi
 
 # 4 — lock released: the next fire runs
 run_driver true; rc=$?
 [ "$rc" -eq 0 ] && [ "$(verdict)" = "ok:cycle-fired:rc=0" ] || fail "release:$rc:$(verdict)"
 
-echo "PASS: cycle-driver fixture 4/4 (success, failure-passthrough, overlap-skip, lock-release)"
+# ── The no-flock arm, exercised on EVERY host (856-s56y macOS finding) ───────
+# The original unconditional `flock -n 9` skipped every fire on stock macOS
+# (command-not-found read as "lock held") — silent cadence death, exit 0. A
+# PATH farm that simply omits flock drives the mkdir arm on Linux exactly as
+# a Mac drives it natively, per the fleet's shim-both-platforms discipline: a
+# hermetic test needs the SUT to have one way of knowing.
+FARM="$FX/farm"
+mkdir -p "$FARM"
+for t in bash sh git date mkdir cat rm uname cut tail dirname grep; do
+    p="$(command -v "$t" 2>/dev/null)" && ln -s "$p" "$FARM/$t"
+done
+run_farm() { # driver-path -> rc; stdout to $FX/out
+    TILLANDSIAS_CYCLE_ROOT="$FX/root" \
+    TILLANDSIAS_CYCLE_STATE_DIR="$FX/state" \
+    TILLANDSIAS_CYCLE_CMD=true \
+    PATH="$FARM" \
+        "$FARM/bash" "${1:-$DRIVER}" > "$FX/out" 2>/dev/null
+}
+PATH="$FARM" "$FARM/bash" -c 'command -v flock' >/dev/null 2>&1 \
+    && fail "farm-hides-flock:still-resolvable"
+
+# 5 — no-flock success: fires, and the lock directory is released on exit
+run_farm; rc=$?
+[ "$rc" -eq 0 ] && [ "$(verdict)" = "ok:cycle-fired:rc=0" ] || fail "noflock-success:$rc:$(verdict)"
+[ ! -d "$LOCK.d" ] || fail "noflock-lockdir-not-released"
+
+# 6 — no-flock overlap: a LIVE holder skips
+mkdir "$LOCK.d" && printf '%s\n' "$$" > "$LOCK.d/pid" && date +%s > "$LOCK.d/epoch"
+run_farm; rc=$?
+[ "$rc" -eq 0 ] && [ "$(verdict)" = "skip:overlap-lock-held" ] || fail "noflock-overlap:$rc:$(verdict)"
+
+# 7 — no-flock staleness: a DEAD holder is reclaimed and the fire proceeds
+printf '%s\n' 99999999 > "$LOCK.d/pid"
+run_farm; rc=$?
+[ "$rc" -eq 0 ] && [ "$(verdict)" = "ok:cycle-fired:rc=0" ] || fail "noflock-stale-reclaim:$rc:$(verdict)"
+[ ! -d "$LOCK.d" ] || fail "noflock-stale-lockdir-not-released"
+
+# 8 — MUTATION CONTROL: neuter the liveness test and the live-holder overlap
+# scenario must go red (the mutant FIRES where the real driver skips). A sed
+# that changed nothing proves nothing — cmp-verified.
+sed 's/kill -0 "$_holder" 2>\/dev\/null/false/' "$DRIVER" > "$FX/driver-mutant.sh"
+cmp -s "$DRIVER" "$FX/driver-mutant.sh" && fail "mutation-not-applied"
+mkdir "$LOCK.d" && printf '%s\n' "$$" > "$LOCK.d/pid" && date +%s > "$LOCK.d/epoch"
+run_farm "$FX/driver-mutant.sh"; rc=$?
+[ "$(verdict)" = "ok:cycle-fired:rc=0" ] || fail "mutation-control-not-detected:$(verdict)"
+rm -rf "$LOCK.d" 2>/dev/null || true
+
+echo "PASS: cycle-driver fixture 8/8 (success, failure-passthrough, overlap-skip, lock-release, noflock-success, noflock-overlap, noflock-stale-reclaim, noflock-liveness-mutation-control)"
