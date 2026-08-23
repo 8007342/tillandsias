@@ -4686,14 +4686,39 @@ fn main() {
             // colon-space constantly ("Wave 2: …", "REFUTED: …", "note: …").
             // Every other emitted field here is a controlled vocabulary, which
             // is why this survived until the day free text arrived.
-            body.push_str(&format!(
-                "    value: {}\n",
-                serde_yaml::to_string(&value)
-                    .unwrap_or_else(|_| format!("{value:?}"))
-                    .trim_end()
-                    .trim_start_matches("--- ")
-                    .trim()
-            ));
+            // ...AND THE SAME LINE BROKE AGAIN ON THE NEXT SHAPE, 2026-08-23.
+            //
+            // 832-698m routed the value through serde_yaml so a `: ` in prose
+            // could not open a nested mapping. Correct, and insufficient: for a
+            // MULTI-LINE string serde_yaml emits a BLOCK SCALAR whose
+            // continuation lines are indented two spaces from the DOCUMENT
+            // ROOT, and this splices it after a key at column 4. YAML requires
+            // block-scalar content to be indented deeper than its key, so the
+            // fragment parsed as far as `value: |-` and then died with
+            // "did not find expected '-' indicator".
+            //
+            // Same failure signature as last time — `set-field` printed `ok:`
+            // and the pre-push gate is what refused — and the same root cause
+            // one shape further along: free prose is the DEFAULT for
+            // next_action, and prose that is worth reading eventually contains
+            // a newline. Re-indent every continuation line under the key.
+            let rendered = serde_yaml::to_string(&value)
+                .unwrap_or_else(|_| format!("{value:?}"))
+                .trim_end()
+                .trim_start_matches("--- ")
+                .trim()
+                .to_string();
+            let mut lines = rendered.lines();
+            let head = lines.next().unwrap_or_default().to_string();
+            let mut emitted = format!("    value: {head}\n");
+            for line in lines {
+                if line.is_empty() {
+                    emitted.push('\n');
+                } else {
+                    emitted.push_str(&format!("    {line}\n"));
+                }
+            }
+            body.push_str(&emitted);
             body.push_str(&format!("    ts: \"{ts}\"\n"));
             body.push_str(&format!("    host: {host}\n"));
             let mut event_blocks: Vec<(String, String)> = Vec::new();

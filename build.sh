@@ -1547,6 +1547,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # "Non-VGA unclassified device" contains `vga`) are invisible on any single
     # box — they only misfire on hardware that machine does not have. The
     # fixture is hermetic for exactly that reason.
+    # set-field writes the ledger's LWW channel, and it has now emitted
+    # unparseable YAML twice from two different value shapes (832-698m's
+    # colon-space, then a multi-line block scalar indented under its own key).
+    # Both times it printed `ok:` and the pre-push gate was the only thing that
+    # noticed. A writer that reports success while corrupting an append-only
+    # record needs a fixture, not a third incident.
+    _step "Checking set-field emits valid YAML for every value shape..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-set-field-yaml-shapes.sh" 2>&1; then
+        _error "set-field can write an unparseable ledger fragment — the ledger is append-only"
+        exit 1
+    fi
+    _info "set-field YAML-shape fixture passed"
+
     _step "Checking host-identity derivation..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-derive-host-identity.sh" 2>&1; then
         _error "host identity derivation is wrong — every host's work seed depends on it"

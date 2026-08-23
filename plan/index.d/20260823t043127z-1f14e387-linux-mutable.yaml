@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    field: next_action
+    value: |-
+      CAMPAIGN STATE 2026-08-23T04:35Z. THE FLEET IS SIX ARMED HOSTS, not one: macuahuitl (coordinator, RTX A5000), lenovinha (Silverblue Ryzen7 dual GPU) on 847-wgy4, yoga (Silverblue Ryzen5) on 856-s56y then 857-4kqv, yolanda (Win11 Ryzen7) on 851-cduu, tlatoanis-macbook-air (M5) on 851-28b5, and the two low-end 4-core hosts (Silverblue on 855-wrr3, esmeraldinha on its Windows counterpart) in the profiling tier ONLY. Every host holds a DISTINCT row so claiming never has to arbitrate. Capability matrix 4 of 7 reporting; ready 389.
+
+      MACUAHUITL IS THE THEORY HOST. The other hosts squeeze results out of low-end hardware; this one has 24GB of VRAM and proves whether the thing works at all. At filing it sat at 11% utilisation with 23.5GB free, which is the argument for this queue over any other.
+
+      MY QUEUE, in order:
+      (1) 849-tz8g FIRST. It gates two programmes and only this host can test it. ollama 0.32.14 in the pinned image aborts on everything above 0.5B (mxbai, qwen3-embedding:4b, qwen2.5:3b and 7b all GGML_ASSERT; bge-m3 works single but aborts batched). Not a hardware limit: 21GB was free through every crash. Unblocks the bigger-embedder question AND Tier B of 853-6gz3.
+      (2) 853-6gz3 TIER A, which needs no model and ships regardless of (1): deterministic reference integrity, does the cited path exist, does the span resolve, does the quoted text match. Start from check-source-slice-bounds.sh rather than reinventing it. Kills fabricated and rotted citations for free.
+      (3) 824-6qxh RELABEL, my own design flaw to repair. The 579-question set labelled cross-corpus questions as near-misses, but retrieval is GLOBAL, so 187 of 243 near-misses (77%) retrieved a different corpus kind and were answered CORRECTLY while my labels scored that as failure. The questions are committed; relabelling against the global corpus is cheap and makes every band number trustworthy.
+      (4) 853-6gz3 TIER B once (1) clears: complement-paired support judgement, measured BOTH directions on the relabelled set.
+      (5) 552 delta re-embed. ~490s per full rebuild vs 0.6% of chunks changing; part 2 of 4 already works; the hazard is a line-positional embed loop whose per-batch arity check is structurally blind to a mis-joined cache hit, so it needs a per-chunk identity assertion plus a negative control.
+
+      STANDING COORDINATOR DUTY EVERY CYCLE, not optional: merge the platform branches into linux-next. windows-next sat 6 ahead carrying the UTF-8 ruby fix until this host merged it on 2026-08-23; osx-next was 21 behind at the same moment. Unmerged platform branches are a silent fleet-wide staleness source and no other host has the duty.
+
+      NOT MINE: 847-wgy4, 856-s56y, 857-4kqv, 851-cduu are assigned to other hosts by directed prompt. Do not claim them. If one stalls, re-direct rather than absorb.
+    ts: "2026-08-23T04:31:27Z"
+    host: linux_mutable
+
+events:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    event:
+      type: note
+      ts: "2026-08-23T04:31:27Z"
+      host: linux_mutable
+      summary: >
+        roadmap refresh: six armed hosts; macuahuitl queue ordered; coordinator duty standing
