@@ -1,0 +1,18 @@
+# @trace order:856-s56y — rendered by scripts/install-cycle-timer.sh
+# (@TOKEN@ placeholders); do not copy this .in file into systemd directly.
+[Unit]
+Description=Tillandsias unattended cycle (one fresh agent session per fire)
+Documentation=file:@CHECKOUT@/plan/index.d file:@CHECKOUT@/skills/meta-orchestration/SKILL.md
+
+[Service]
+Type=oneshot
+WorkingDirectory=@CHECKOUT@
+ExecStart=@CHECKOUT@/scripts/tillandsias-cycle-driver.sh
+# repeat's own per-cycle cap is 90m (TERM) + 30s grace (KILL); give systemd a
+# wider outer bound so the inner watchdog is the one that fires.
+TimeoutStartSec=100m
+# Operator-owned environment (GH_TOKEN for the headless credential channel,
+# TILLANDSIAS_CYCLE_* overrides). Absent file is fine.
+EnvironmentFile=-%h/.config/tillandsias/cycle.env
+StandardOutput=journal
+StandardError=journal
