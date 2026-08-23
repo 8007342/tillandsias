@@ -29724,6 +29724,158 @@ plan_index:
             one host's snapshot; it has to be measured against a corpus whose
             chunking is known good, which as of tonight is the first time that has
             been true.
+        - type: progress
+          ts: "2026-08-23T00:00:49Z"
+          agent_id: linux-macuahuitl-opus5-20260822T144300Z
+          host: linux_mutable
+          summary: |
+            NEGATIVE CASES WORK, AND THEY CHANGE WHAT THE DECISION IS ABOUT.
+            Operator proposal 2026-08-22: stop treating refusal as a threshold and
+            put "not enough information" IN the corpus as trained-for behaviour.
+        
+            Tested against the live 20,776-chunk index with nomic-embed-text by
+            cloning it and appending three chunks. Measured, not argued:
+        
+                                  BEFORE                        AFTER
+              Helm rollback       0.6889 git-mirror cheatsheet  0.8047 declined-alternatives
+              docker-compose      0.6528 socket-container-health 0.7045 declined-alternatives
+              ansible playbook    0.6646 distributed-work.yaml   0.6646 distributed-work.yaml
+              "flibber flobber"   0.5463 nix-flake-basics        0.5463 nix-flake-basics
+              sourdough bread     0.5676 a spec                  0.5676 a spec
+        
+              out-of-corpus correctly refused   0/5 -> 2/5
+              in-corpus unharmed                5/5 -> 5/5, identical chunks AND scores
+        
+            WHY THE TWO THAT WORKED, WORKED. Cosine similarity is TOPICAL. A chunk
+            about Helm out-competes a git-mirror cheatsheet on a Helm question, and
+            the chunk it returns says truthfully that this project does not use
+            Helm. That is BETTER than a refusal: it is a fact, not a withholding.
+        
+            WHY THE OTHER THREE DID NOT, and this is the limit of the idea as
+            stated. The literal sentinel — "when you don't know, say you don't
+            know" — never wins anything, because it has NO TOPIC to be similar to.
+            Nonsense retrieves whatever is accidentally nearest (0.5463 on a nix
+            cheatsheet) and always will. The ansible question failed even though
+            the injected chunk names Ansible: one sentence among five tools does
+            not move a chunk's embedding. Coverage is per-topic and earned per topic.
+        
+            SO IT IS NOT A GENERAL REFUSAL MECHANISM — it converts ANTICIPATED
+            near-misses into correct answers. That is worth a lot, because the
+            near-misses that overlap the in-corpus band ARE the plausible ones
+            (Helm, Compose, Ansible, Terraform, systemd), which is exactly the
+            anticipatable set. Nonsense sits at 0.5463 against an in-corpus floor
+            of 0.6818 and is trivially separable by threshold. The two approaches
+            are COMPLEMENTARY: negatives handle the overlap, a threshold handles
+            the far field.
+        
+            AND THE CONTENT IS OWED ANYWAY. The project declined these
+            alternatives deliberately; the corpus is silent about the declining,
+            and a silent non-choice is indistinguishable from an oversight to a
+            reader and to a retriever alike. CORPUS_DECLINED in spec.rs already
+            applies this principle to corpus boundaries.
+        
+            I ALMOST REPORTED THE OPPOSITE. analyze-bands.sh scores the THRESHOLD
+            hypothesis, in which a near-miss must score LOW. Run against the
+            injected index it reported the overlap widening from 0.0071 to 0.1229
+            — a catastrophic-looking regression — while the system was in fact
+            answering correctly, because the near-misses now score HIGH on a chunk
+            that refuses them. The metric was built for a different hypothesis and
+            did not transfer. Recorded in the harness README, because the number is
+            genuine and the interpretation is the trap.
+        
+            THE MARGIN TEST IS ALSO DEAD, measured earlier this cycle: in-corpus
+            margins 0.0025-0.1353 vs near-miss 0.0007-0.0179, overlapping by 0.0154
+            — worse than the raw score's 0.0072. Both obvious rules fail.
+        
+            HARNESS COMMITTED at scripts/refusal-calibration/ so the next
+            measurement is a command rather than a rediscovery.
+        - type: blocked
+          ts: "2026-08-23T00:00:49Z"
+          agent_id: linux-macuahuitl-opus5-20260822T144300Z
+          host: linux_mutable
+          summary: |
+            DOES A BIGGER EMBEDDER SEPARATE BETTER? UNANSWERED — the pinned
+            inference image cannot run one. tillandsias-inference:v0.4.260818.1
+            ships ollama 0.32.14:
+        
+              nomic-embed-text   137M  works, 768-dim, 28ms, batches of 64
+              mxbai-embed-large  334M  llama-server aborted (core dumped)
+              qwen3-embedding:4b 4.0B  same abort; still occupies 6.4GB VRAM
+              bge-m3             567M  works SINGLE (1024-dim), ABORTS on batch
+        
+            bge-m3 measured 1943ms/embed while qwen3 was resident and 417ms after
+            evicting it — still 15x nomic, so a full index is ~2.4h at BATCH=1
+            versus ~8min batched. The A5000 is not the constraint; the image is.
+            Answering the operator's model-size question needs a newer inference
+            image first, and that is the smallest next action.
+        - type: progress
+          ts: "2026-08-23T00:29:13Z"
+          agent_id: linux-macuahuitl-opus5-20260822T144300Z
+          host: linux_mutable
+          summary: |
+            THE SAMPLE WENT FROM 12 TO 579 AND THE RECOMMENDATION INVERTED.
+        
+            Operator directive: widen to 50 questions per corpus. Done — 579
+            questions across methodology/cheatsheets/spec/plan/code, generated
+            against real files and independently audited, 35 audited-mislabelled
+            items excluded. Measured on the live 20,776-chunk index, nomic-embed-text.
+        
+                            n=12 (2026-08-22 am)      n=579 (this measurement)
+              global        overlap 0.0072            overlap 0.3024
+              methodology   SEPARATES by 0.0946       OVERLAPS by 0.2791
+              cheatsheets   SEPARATES by 0.0209       OVERLAPS by 0.2818
+              spec          -                         OVERLAPS by 0.1897
+              plan          -                         OVERLAPS by 0.2591
+              code          -                         OVERLAPS by 0.1746
+              margin test   overlap 0.0154            overlap 0.1306
+        
+            I RECOMMENDED PER-CORPUS THRESHOLDS ON TWELVE QUESTIONS. At a realistic
+            sample every corpus overlaps by 0.17 to 0.28. The cheatsheet margin I
+            flagged as "thin and shrinking" did not shrink, it inverted by an order
+            of magnitude. No threshold rule measured so far survives n=579.
+        
+            TWO DESIGN FAULTS IN MY OWN WIDENED SET, and both make the numbers
+            PESSIMISTIC, so the true picture is better than 0.30 — but not good.
+        
+            (1) CROSS-CORPUS QUESTIONS ARE NOT OUT-OF-CORPUS. I instructed the
+            generators that "a question belonging to a different corpus" counts as
+            a near-miss. It does not: RETRIEVAL IS GLOBAL. "Which command archives
+            an OpenSpec change", labelled a methodology near-miss, correctly
+            retrieves docs/cheatsheets/openspec-install.md at 0.8643 — the system
+            answered it right and my label called that a failure. 187 of 243
+            near-miss questions (77%) retrieved a corpus kind other than their
+            label, so the near-miss ceiling is largely made of correct answers.
+        
+            (2) THE CORPUS IS BROADER THAN "THIS PROJECT". cheatsheets/ carries
+            general technical reference — CSS, PostgreSQL, languages — so my
+            far-field band is contaminated too: "how do I vertically center a div
+            with flexbox" scores 0.6797 on cheatsheets/languages/css.md, and
+            "postgresql jsonb indexing" 0.6911 on a postgresql cheatsheet. Both are
+            genuinely answerable. Only questions like LoRA training (0.6411 on
+            convergence.yaml) and JVM GC tuning (0.6392) are truly far-field, and
+            they still reach 0.64 against an in-corpus FLOOR of 0.5620.
+        
+            SO THE CLEAN COMPARISON I CAN MAKE — in-corpus floor 0.5620 vs
+            far-field ceiling 0.6911 — STILL OVERLAPS, by 0.1292. Even the easy
+            band does not separate at scale.
+        
+            WHAT THIS MEANS FOR THE DECISION. A score threshold is not a viable
+            refusal mechanism for this corpus at any granularity tested. That
+            strengthens the negative-case result recorded earlier today, which is
+            scored by WHICH CHUNK WON rather than by how high it scored and is
+            therefore untouched by every problem above.
+        
+            WHAT THE SET IS WORTH KEEPING FOR. Committed at
+            scripts/refusal-calibration/questions-wide-579.jsonl with its results.
+            It needs RELABELLING against the global corpus before the near-miss
+            band can be trusted — that relabelling is the smallest next action on
+            this packet, and it is cheap now that the questions exist.
+        
+            THE AUDIT EARNED ITS COST. Independent auditors found mislabel rates of
+            2, 3, 12, 15 and 8 out of 40 checked per corpus. The plan corpus cases
+            were mostly citations into plan/index.d/ fragments that lenovinha's
+            fold commit e84f37b40 deleted four hours earlier — a fragment path is
+            not a durable citation, because folding is designed to remove it.
     - packet_id: sub-second-litmus-budgets-become-no-timeout-at-all
       order: 827-uh6t
       status: ready
@@ -33317,8 +33469,9 @@ plan_index:
             This packet deletes the now-dead workaround functions.
 
     - packet_id: dirty-start-refusal-has-no-resume-path-for-own-claimed-work
+      next_action: 'FLEET-BLOCKING as of 2026-08-22: the operator is about to put hosts on unattended hourly loops, and this defect is what makes that unsafe. In `./repeat` nothing clears a dirty tree between iterations, so ONE interrupted cycle wedges the host forever — every later cycle re-reads the same dirt and refuses. Attended, it costs a cycle; unattended, it costs the host. Take this FIRST of the three fleet-enabling rows. The resume path must distinguish the host OWN interrupted claimed work (resumable — it is this host, this claim, recorded in the ledger) from sibling/operator dirt (never touchable, the existing refusal is correct). Mutation-control it: a fixture where the dirty path IS the host own claimed work must RESUME, and one where it is not must still REFUSE. A fix that resumes both is worse than the wedge.'
       order: 833-fpe7
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p2
       kind: enhancement
@@ -33422,6 +33575,26 @@ plan_index:
           host: lenovinha
           summary: |
             IMPLEMENTED at 20163b1f1, every element of the packet's shape: (1) scripts/check-resumable-claim-dirt.sh prints exactly one line of the prescribed grammar ^(resumable:<order>(,<order>)*|ok:clean-tree|unattributable:.*)$ with order-540 exit conventions, exit 0 only when all four conditions hold (tracked-only dirt; >=1 live claim owned by THIS host; every mtime after the oldest own claim; claim inside the expire-claims TTL). (2) Ownership is read from the claim-convention event ('claimed for cycle' summary), never the newest event's host — last-toucher attribution would have misassigned a row another host merely noted on (measured live: this host's freshness note on macuahuitl's 831-ezea). tillandsias-plan expire-claims grew --list-live (read-only), with a unit test pinning owner-vs-toucher, claim-less refusal, and the propped-up-stale-claim exclusion. (3) The verdict stops at review: SKILL.md step 4b wires the detector between the opsx detector and the refusal, licensing REVIEW AND LAND + re-snapshot, never auto-commit — and litmus:resumable-claim-dirt-shape step 5 pins that sentence. (4) Hermetic negative controls per the packet's own list: scripts/test-resumable-claim-dirt.sh 6/6 (clean tree; untracked refuses; dirt predating the claim refuses; another host's claim refuses; claim past TTL refuses; resumable names BOTH orders). Live self-validation: the detector, run mid-implementation on this very cycle's tree, refused while its own file was untracked and answered resumable:833-fpe7 once staged — the detector's first real verdict was about the claim dirt of the cycle building it.
+        - type: note
+          ts: "2026-08-23T01:08:49Z"
+          host: linux_mutable
+          summary: |
+            fleet unattended-cadence blocker; ordered first in the three-row story
+        - type: note
+          ts: "2026-08-23T01:16:39Z"
+          host: lenovinha
+          summary: |
+            claimed for cycle 2026-08-23T01:16Z (operator-ordered story)
+        - type: completed
+          ts: "2026-08-23T01:31:44Z"
+          host: lenovinha
+          summary: |
+            status 'completed' with evidence_refs: 20163b1f1 scripts/test-resumable-claim-dirt.sh PASS 6/6; run-litmus-test.sh meta-orchestration --size instant PASS 16/16 incl. litmus:resumable-claim-dirt-shape; cargo test -p tillandsias-plan 204+24 passed; ./build.sh --check rc=0
+        - type: note
+          ts: "2026-08-23T01:31:44Z"
+          host: lenovinha
+          summary: |
+            implemented + litmus-pinned this cycle
     - packet_id: ghost-trace-windows-wsl-runtime-outnumbers-the-real-spec
       order: 834-7ut9
       status: ready
@@ -34785,3 +34958,286 @@ plan_index:
           host: linux_mutable
           summary: |
             Filed as its own row rather than an event on the rejoin campaign, because it is independently schedulable and because it CORRECTS a campaign claim: I reported R4 satisfied on 2026-08-22 after measuring two seeds that returned disjoint batches. Eleven seeds return three batches, and two real hostnames — macuahuitl and yoga — return a byte-identical one. The two seeds I picked happened to land in different buckets. That is the third false pass this campaign from a test whose sample could not distinguish the hypothesis from its negation.
+    - packet_id: pre-push-plan-lane-rejects-first-attestation-of-a-new-host
+      order: 848-bx2q
+      status: completed
+      kind: bug
+      pickup_role: any
+      priority: p3
+      desired_release: v0.5
+      depends_on: []
+      capability_tags:
+        - bash
+        - git-hooks
+        - all-platforms
+      tags:
+        - fleet-rejoin
+        - attestation
+        - pre-push
+      title: |
+        The pre-push plan-only lane rejects the FIRST attestation record of a newly joining host: mo-full-attest.sh record writes a 5-line '# ' header into a new per-host ledger, and the lane's added-line grammar (scripts/hooks/pre-push-local-gate.sh:319 region) admits only blank, '## <ts> <host>', and MO-FULL lines — so the tool's own output fails the tool's own gate, exactly once per host, at fleet-rejoin time.
+      deliverable: |
+        A new host's first `mo-full-attest.sh record` commit passes the plan-only lane without a full gate, and the lane still refuses genuinely malformed added lines.
+      context: |
+        Measured on lenovinha 2026-08-22 (the second-Linux fleet rejoin, first cycle): `scripts/mo-full-attest.sh record` created plan/mo-full-attestations.d/lenovinha.md with its documented 5-line comment header + one verified marker; `git push` was refused with "added lines break the attestation-ledger grammar (full gate required)" while the dedicated checker (scripts/check-mo-full-attestations.sh) PASSED the same file ("7 files 271 markers verified, lenovinha.md reachability-checked"). Cause: in scripts/hooks/pre-push-local-gate.sh, when the pushed file has no remote base ("bases[$i]" empty) the WHOLE blob is treated as added lines, and the alternation grep admits no '# ' comment lines. Existing hosts never hit it (their pushes append only entry lines); every JOINING host hits it exactly once — macOS is next in the rejoin order. The fallback is benign (full gate) but costs the cheapest lane a ~40s+ full gate and the error text misnames the cause: the grammar is fine, the header is the tool's own output.
+      exit_criteria:
+        - |
+            The new-file branch of the plan-only lane accepts the exact header block mo-full-attest.sh record writes (e.g. admit '^# ' lines when the file is new, or delegate the new-file case to check-mo-full-attestations.sh scoped to that file).
+
+        - |
+            NEGATIVE CONTROL: a genuinely malformed added line (a hand-typed MO-FULL with a short SHA, a stray prose line) is still refused in both the new-file and append cases.
+
+      verifiable_closure: |
+        A hermetic fixture case alongside the existing hook/attestation fixtures (scripts/test-mo-full-attest.sh family): seed a repo with no per-host ledger, run `record`, and assert the plan-only lane validator accepts the resulting blob while a corrupted variant is refused.
+      events:
+        - type: filed
+          ts: "2026-08-23T00:02:00Z"
+          agent_id: linux-lenovinha-claude-20260823t000200z
+          host: lenovinha
+          summary: |
+            Filed from the first lenovinha fleet-rejoin cycle; hit live on this cycle's own attestation push and worked around via the full gate as the hook instructs.
+        - type: note
+          ts: "2026-08-23T01:08:49Z"
+          host: linux_mutable
+          summary: |
+            ordered second; macOS onboarding depends on it
+        - type: note
+          ts: "2026-08-23T01:32:01Z"
+          host: lenovinha
+          summary: |
+            claimed for cycle 2026-08-23T01:32Z (operator-ordered story, item 2)
+        - type: completed
+          ts: "2026-08-23T01:41:16Z"
+          agent_id: linux-lenovinha-claude-20260823t014116z
+          host: lenovinha
+          summary: |
+            FIXED at 7f3fd70a6, both exit criteria proven behaviorally. The new-file branch of the plan-only lane now strips LEADING '# ' comment lines (the exact header mo-full-attest.sh record writes) before applying the unchanged added-line grammar, so a joining host's first attestation record passes the cheap lane; a '# ' line after content, a short-SHA marker, or stray prose still refuse. Closure is the packet's named shape: litmus:plan-only-push-lane-shape grew two hermetic BEHAVIORAL steps (real git push through the installed hook against a bare origin) — step 7 ACCEPT: new ledger with the record header + valid marker, lane validates, remote advances; step 8 REFUSE: new ledger with malformed marker + stray prose, grammar refusal, remote does not move. Full suite 10/10 green; existing 767-iukh append/rewrite steps unchanged and still green (the append case's grammar is untouched — header admission is scoped to the no-remote-base branch only).
+        - type: completed
+          ts: "2026-08-23T01:41:16Z"
+          host: lenovinha
+          summary: |
+            status 'completed' with evidence_refs: 7f3fd70a6 litmus:plan-only-push-lane-shape 10/10 incl. ACCEPT first-attestation and REFUSE malformed-new-ledger; methodology-accountability instant suite PASS; ./build.sh --check rc=0
+        - type: note
+          ts: "2026-08-23T01:41:16Z"
+          host: lenovinha
+          summary: |
+            fixed + behaviorally litmus-pinned this cycle
+      next_action: 'SECOND of the three fleet-enabling rows, and the macOS host hits it NEXT — its packet context wrongly says tlatoanis-macbook-air already has a ledger file, but the M5 is a genuinely new host label and will pay the same unexplained refusal on its very first attestation. The outcome is benign (falls back to the full gate) but the error text misnames the cause: it says added lines break the attestation-ledger grammar when the grammar is fine and the real cause is that the file is NEW. Fix the message and the new-file branch, and add the test the packet notes has never existed — the new-file branch of the attestation lane has never been exercised by any fixture.'
+
+    - order: 849-tz8g
+      packet_id: inference-image-cannot-run-any-model-larger-than-0-5b
+      desired_release: v0.6
+      title: the pinned inference image crashes on every model above 0.5B, blocking the expert-validation layer
+      status: ready
+      kind: bug
+      pickup_role: linux
+      priority: p1
+      capability_tags:
+        - inference
+        - container
+        - gpu
+        - experts
+        - rag
+      deliverable: images/inference/
+      depends_on: []
+      estimated_hours: 4
+      context: |
+        MEASURED 2026-08-22 on macuahuitl (RTX A5000, 24 GB, 21 GB free). tillandsias-dev-inference runs tillandsias-inference:v0.4.260818.1, ollama 0.32.14. What that image can actually run:
+        
+          nomic-embed-text  137M   works, 768-dim, 28ms, batches of 64
+          qwen2.5:0.5b      494M   works
+          bge-m3            567M   works SINGLE (1024-dim, 417ms) but ABORTS on
+                                   batched input, so a full index is ~2.4h
+                                   instead of ~8min
+          mxbai-embed-large 334M   llama-server terminated: signal: aborted
+          qwen3-embedding   4.0B   same abort; still occupies 6.4GB VRAM
+          qwen2.5:3b        3.1B   GGML_ASSERT(rc == 0) failed
+          qwen2.5:7b        7.6B   GGML_ASSERT(rc == 0) failed
+        
+        THIS NOW BLOCKS A PROGRAM, NOT A CURIOSITY. Two independent lines of work both dead-end here:
+        (1) DOES A BIGGER EMBEDDER SEPARATE THE BANDS? Unanswerable. At n=579 no cosine threshold separates in-corpus from out-of-corpus at any granularity (global overlap 0.3024; every corpus overlaps 0.17-0.28). Whether a stronger embedder fixes that is the obvious next question and cannot be asked.
+        (2) THE EXPERT-VALIDATION LAYER (operator design, 2026-08-22) needs a local model that can judge whether a retrieved span supports a claim. qwen2.5:0.5b CANNOT: measured over 70 questions it returns whatever the prompt leans toward — 70/70 UNSUPPORTED under a refusal-leaning prompt (including all 40 in-corpus), then 70/70 SUPPORTED under a neutral one (including all 30 far-field). It is tracking prompt shape, not content. That is BIAS, not variance, and no amount of repeated sampling converges away from it.
+        THE COMPLEMENT PROBE DETECTS THIS WITHOUT GROUND TRUTH, which is the operator's point and is worth recording as a working result even though the judge failed. Asking both "does the passage answer the question?" and "is the passage MISSING the answer?" of qwen2.5:0.5b returns YES to BOTH, on a passage that genuinely answers and on one that does not. A single-prompt harness sees a confident working judge; the complement pair exposes the contradiction with no labelled set, at runtime. So the validation layer can police its own judge — but it still needs a judge capable of discrimination, and this image has none.
+        NOT A HARDWARE LIMIT. 21 GB of VRAM sat free through every one of these crashes. The ceiling is the image.
+      exit_criteria: |
+        (1) A model of at least 7B answers a support-judgement prompt without aborting, demonstrated on this host. (2) bge-m3 (or a comparable 1024-dim embedder) accepts BATCHED input, so an index rebuild stays in minutes rather than hours. (3) A negative control: the pre-upgrade image still reproduces GGML_ASSERT on the same prompt, so the fix is attributed to the upgrade rather than to a warm cache or a changed prompt. (4) The judge is re-measured on the committed 579-question set BOTH directions — in-corpus SUPPORTED rate and out-of-corpus UNSUPPORTED rate — because a judge that always answers one way scores 100% on half the set and that is exactly how the 0.5B failure first read as a success.
+
+    - order: 850-bif2
+      packet_id: joining-host-must-publish-a-capability-row
+      desired_release: v0.6
+      title: the capability matrix is silent for 5 of 7 hosts because nothing tells a joining host to publish a row
+      status: completed
+      kind: bug
+      pickup_role: linux
+      priority: p2
+      capability_tags:
+        - fleet
+        - capabilities
+        - gpu
+        - npu
+        - probe
+        - rust
+      deliverable: crates/tillandsias-headless/src/accel_probe.rs
+      depends_on: []
+      estimated_hours: 5
+      context: |
+        THIRD of the three fleet-enabling rows (after 833-fpe7 and 848-bx2q). Measured 2026-08-22:
+        
+          capability-matrix: 3 row(s), 2 of 7 known host(s) reporting
+          SILENT: esmeraldinha, forge, lenovinha, tlatoanis-macbook-air, yoga
+        
+        lenovinha joined, drained work, and published nothing — not because it failed, but because the skill never asks. The "Joining the fleet" section says nothing about capability rows, and the only GENERATOR in the repo is scripts/windows-host-capability-probe.sh --fragment. On Linux the row is hand-assembled around machine-generated probe output.
+        THIS BLOCKS 847-wgy4. Capability-aware routing is the fix for N hosts colliding into K frontier epics, and it cannot route to hardware the matrix cannot see. Five silent hosts is not a degraded matrix, it is an absent one.
+        AND THE PROBE IS WRONG WHERE IT DOES RUN. macuahuitl's own row derives derived_tier gpu-cuda and then reports "schedulable none" — an RTX A5000 that the matrix does not list as usable for anything. accel_probe.rs contains ZERO rocm/amdgpu references (verified: grep returns nothing), so AMD GPUs cannot be detected at all.
+        LENOVINHA IS THE RIGHT HOST TO FIX THIS ON, and that is the point of ordering it here: it is the fleet's only AMD+NVIDIA machine, so it is the one host where the dual-vendor path can be written and verified against real silicon rather than inferred. Every other host would be guessing. The host-identity probe added today (scripts/derive-host-identity.sh) already detects both vendors correctly by reading the CLASS and VENDOR fields of lspci -mm — note it does NOT substring-match the line, because "VGA compatible controller" contains "ati" and "Non-VGA unclassified device" contains "vga", which produced two false vendors on macuahuitl before it was fixed. Reuse that parse; do not re-derive it.
+      exit_criteria: |
+        (1) A joining host publishes a capability row WITHOUT being told to — i.e. the skill or the cycle does it, and a fresh host's first cycle leaves a row behind. (2) lenovinha's row lists BOTH its AMD and NVIDIA GPUs, with usable/ unusable stated and a reason for any unusable entry. (3) macuahuitl's row stops reporting "schedulable none" while deriving gpu-cuda, or explains in the row why a working A5000 is not schedulable. (4) A negative control: a host with no accelerator still produces a valid row rather than an empty or absent one — silence and "nothing here" must remain distinguishable, which is the whole complaint above.
+      next_action: 'Already-reporting hosts re-run their capability probe with a binary at or past 54ed95240 and re-file their row: macuahuitl''s will gain cpu/container/ollama + gpu/container/ollama (ending schedulable:none); yolanda''s two loci refresh engines. New hosts get rows automatically via the daily gate''s check-capability-row consultation.'
+      events:
+        - type: note
+          ts: "2026-08-23T01:09:20Z"
+          agent_id: linux-macuahuitl-opus5-20260822T144300Z
+          host: linux_mutable
+          summary: |
+            THIS FRAGMENT WAS FIRST WRITTEN THROUGH AN UNQUOTED HEREDOC AND THE SHELL EXECUTED ITS BACKTICKS. Two spans became "command not found" and a third ran lspci -mm, dumping this machine's entire PCI bus — 30-odd lines of Thunderbolt, SATA and ISA bridge inventory — into the middle of a packet about capability rows. Caught before push only because ./build.sh --check refused the tree.
+            Recording it because the failure mode generalises past my typo: a ledger fragment is APPEND-ONLY and IMMUTABLE once written, and writing one with an unquoted heredoc makes arbitrary command output land in a record nothing is supposed to rewrite. Every fragment written by a shell heredoc should use a QUOTED delimiter and substitute timestamps afterwards, never interpolate the document.
+        - type: note
+          ts: "2026-08-23T01:41:16Z"
+          host: lenovinha
+          summary: |
+            claimed for cycle 2026-08-23T01:41Z (operator-ordered story, item 3)
+        - type: note
+          ts: "2026-08-23T02:03:25Z"
+          agent_id: linux-yoga-fable5-20260823T014500Z
+          host: linux_immutable
+          summary: |
+            SILVERBLUE BOOTSTRAP TIMING, MEASURED — the skill's "spend minutes pulling an image and installing a toolchain" claim (skills/meta-orchestration/SKILL.md, Joining-the-fleet section) now has numbers with provenance. The claim itself was UNMEASURED at birth. Added by commit b629bb379 (macuahuitl, 2026-08-22, ~16 min BEFORE lenovinha's first rejoin commit), citing no measurement, and macuahuitl structurally cannot execute that path (Workstation, no rpm-ostree, with-tillandsias-builder.sh returns at its Silverblue guard). lenovinha's rejoin numbers (loop_status.d 20260822t233140z-266ebb24-lenovinha.md, build_check_ms_avg=65808 over 111 steps) are WARM-REJOIN figures from a host whose toolbox, images and caches predate the measurement. No genuinely-fresh Silverblue cold-start wall clock existed anywhere in the repo. The one genuinely pristine run (yolanda 2026-07-13, commit 79682b9fa) recorded no timing.
+            MEASURED on yoga (Silverblue 44, AMD Ryzen AI 5 340, 12 threads, 14 GiB RAM, NVMe, ~250 Mbit/s to the Fedora registry), 2026-08-23, by tearing down the tillandsias-builder container and re-running the real path. (1) fedora-toolbox:44 pull, genuinely cold via an isolated podman --root — 11.5 s wall, 355 MiB compressed download, 1.09 GB on disk. Note the registry :44 tag has drifted from the 6-day-old local copy (single-layer image now). (2) toolbox create with the image local — 0.1 s; fresh-host create is therefore pull-dominated (~12 s here). (3) First TILLANDSIAS_SKIP_VERSION_BUMP=1 TILLANDSIAS_FORCE_CHECK=1 ./build.sh --check on the fresh container — 131.9 s wall, rc=0, zero retries, gate stamp recorded. Decomposition from per-line timestamps — dnf build-tools install 17 s, rustup phase 14 s (re-downloaded all 8 components), gate itself ~100 s (near-cold compile; target/ held 56 M residue). Reconstructed fresh-bootstrap floor ~2.5 min on this class of hardware. WARM RESIDUE the teardown cannot remove without destroying operator home data, stated so the floor reads as a floor. ~/.cargo (1.1 G registry cache) and ~/.rustup settings survive in the shared $HOME, and crates.io index + crate downloads on a truly pristine host would add network-bound minutes on a slow link. "Minutes" is the right order of magnitude; the measured decomposition says which minutes and why.
+            SUGGESTED FOLD for this row's in-flight skill edit (deliberately not edited here — the section is claimed): replace the unmeasured sentence with the measured decomposition and its provenance, and keep the two real traps it correctly states (podman required; first run is not a hang).
+            SECONDARY OBSERVATION, correcting this row's own context: on bare-metal Linux the AMD GPU is NOT undetectable. yoga's published row (20260823t020325z-850-bif2-yoga-capability-row-linux-immutable .yaml, same-commit) shows the generic Vulkan/DRI path reporting the Radeon 840M usable=true as "Vulkan GPU" with legacy_tier=gpu-rocm derived from host rocminfo (gfx1152). The zero-rocm/amdgpu gap costs vendor IDENTIFICATION (name, VRAM, bandwidth — all null/generic), not presence; cannot-be-detected is the WSL2-guest locus. For the dual-vendor fix, note legacy_tier flips to cpu wherever rocminfo is off PATH (measured: absent in the builder toolbox), so tier is a PATH fact, not a hardware fact.
+        - type: completed
+          ts: "2026-08-23T02:05:23Z"
+          agent_id: linux-lenovinha-claude-20260823t020523z
+          host: lenovinha
+          summary: |
+            IMPLEMENTED at 54ed95240 on the host the packet named as the right one, all four exit criteria: (EC1) publication is now asked for and falsifiable — scripts/check-capability-row.sh (ok:capability-row-reported / due:no-capability-row / unavailable:*), consulted by the skill's Start-Of-Day gate and fleet-join section; scripts/host-capability-probe.sh --fragment wraps the real probe into a ready-to-file row (bare-metal/in-guest loci; windows-host keeps its generator), and lenovinha's own first-cycle-after-implementation left a row behind (plan/index.d/20260823t015529z-850-bif2-capability-row-lenovinha.yaml). (EC2) lenovinha's row lists BOTH GPUs against real silicon: NVIDIA RTX 3070 Laptop (usable, host-native lane, cdi-spec-missing) AND AMD Cezanne (present-unusable, rocm-runtime-missing, /dev/dri/renderD128, driver amdgpu) — enumeration now walks /sys/class/drm by PCI vendor id + uevent DRIVER (the identity-probe parse, never substring prose), so an AMD card beside an NVIDIA one is no longer invisible and the old hardcoded vendor 'amd' guess is gone; amd_gpu_disposition is pure and unit-tested (rocm-runtime-missing / kfd-missing / render-node-missing; rocm-smi alone deliberately not evidence). (EC3) explained AND fixed: capability-matrix now prints present-unscheduled for usable devices with no triple — macuahuitl's row TODAY reads 'present-unscheduled: gpu/NVIDIA RTX A5000 (usable; no engine covers lanes [container,host-native])' instead of hiding it; the root cause (host-PATH-only engine probe on a fleet whose ollama lives in the tillandsias-inference image) is fixed by EngineRecord.lanes (serde-default None = every lane, all old rows keep semantics) + a container-lane ollama record when the inference image is present (bounded podman surface, 714-4r6w) + schedulable_triples honoring engine lanes. (EC4) negative control: test_cpu_only_probe_yields_a_valid_document_not_silence runs on every gating host — an accelerator-less probe still yields schema-2 with a CPU device and a non-empty host_id; the matrix distinguishes a cpu-only row from SILENT. FLEET FOLLOW-UP recorded as this packet's residual: every already-reporting host (macuahuitl, yolanda both loci) should re-run its probe with a binary carrying this order — macuahuitl's next probe gains cpu/container/ollama + gpu/container/ollama and stops reading schedulable:none.
+        - type: completed
+          ts: "2026-08-23T02:05:24Z"
+          host: lenovinha
+          summary: |
+            status 'completed' with evidence_refs: 54ed95240 cargo test -p tillandsias-headless --bin tillandsias accel_probe 28 passed; cargo test -p tillandsias-plan 205+24 passed; live probe on lenovinha shows both GPUs + container-lane ollama; capability-matrix 4 rows 3/7 reporting with lenovinha row folded; ./build.sh --check rc=0
+        - type: note
+          ts: "2026-08-23T02:05:24Z"
+          host: lenovinha
+          summary: |
+            implemented + verified on real AMD+NVIDIA silicon this cycle
+        - type: note
+          ts: "2026-08-23T02:05:24Z"
+          host: lenovinha
+          summary: |
+            route the fleet refresh without a new row
+
+    - packet_id: macos-host-onboarding-defect-sweep
+      order: 851-gpb5
+      status: done
+      kind: bug
+      pickup_role: macos
+      priority: p2
+      desired_release: v0.5
+      depends_on: []
+      capability_tags:
+        - bash
+        - macos
+        - git-hooks
+      tags:
+        - fleet-rejoin
+        - onboarding
+        - portability
+        - pre-push
+      title: |
+        Six macOS-onboarding defects verified by the operator on linux-next 2026-08-22, plus a seventh found live: (1) build.sh _require_host_build_tools gave Fedora remediation on Darwin; (2) methodology's pull_merge_cadence.pre_push_gate (merge origin/linux-next before EVERY platform push) was stated in the meta-orchestration skill nowhere and enforced by no code; (3) "pre-push gate" was name-collided (skill: ./build.sh --check vs methodology: the merge rule), concealing (2); (4) the skill never named scripts/build-macos-tray.sh; (5) gate-stamp.sh called bare sha256sum at four sites (absent on macOS <= 12); (6) check-script-exec-bits.sh used GNU-only `xargs -r`; (7 — found when this cycle's own gate went red) derive-host-identity: the fixture pinned lspci/nvidia-smi/hostname but not uname, so the real Mac leaked `apple` into every mocked scenario; the SUT's slugify used GNU-sed `\+` (literal on BSD sed, so Yoga_ThinkPad stayed yoga_thinkpad); and the fixture's `--help | grep -q` under pipefail died of SIGPIPE deterministically on Darwin.
+      deliverable: |
+        All seven fixed on osx-next with mutation-controlled fixtures; ./build.sh --check green on the first macOS host; a macOS paragraph in the skill's "Joining the fleet" so the next Darwin host needs none of this.
+      context: |
+        Every fix carries a fixture with an embedded mutation-control arm (cmp-verified mutants; exactly the bound assertion goes red): scripts/test-build-sh-darwin-tool-remediation.sh (14 checks — extracts the function from the real build.sh bytes and drives both branches via shim uname/PATH on every host), scripts/test-pre-push-linux-next-merged.sh (12 checks — hermetic two-repo topology; also pins the skill's statement of the methodology gate and the retirement of the colliding name), scripts/test-gate-stamp-portable-digest.sh (9 checks — proves the digest is BYTE-IDENTICAL across sha256sum/shasum so existing stamps stay valid), scripts/test-script-exec-bits.sh (+portable-xargs pin, 11 checks), scripts/test-derive-host-identity.sh (18 checks, +uname/sysctl shims, +Darwin-shape scenario, case-based --help). Enforcement for (2): scripts/hooks/pre-push-linux-next-merged.sh, composed FIRST into the v5 generated pre-push hook (scripts/install-hooks.sh; marker tillandsias-pre-push-v5), gating refs/heads/{osx-next,windows-next} against the locally-recorded origin/linux-next — race-safe per the methodology's race_exception, fetch half stays procedural (skill Finalization step 6). Terminology: "local gate" now always means ./build.sh --check in the skill; "pre-push gate" is reserved for the methodology rule. New litmus: litmus:pre-push-linux-next-merged-shape, litmus:gate-stamp-portable-digest, litmus:build-sh-darwin-tool-remediation.
+      exit_criteria:
+        - Darwin remediation in _require_host_build_tools; Fedora line survives for Linux (fixture + litmus negative control).
+        - pull_merge_cadence.pre_push_gate stated in the skill Finalization and enforced by the v5 pre-push hook on both platform branches.
+        - The skill uses "pre-push gate" only for the methodology rule.
+        - scripts/build-macos-tray.sh named in the skill (E2E Gates + fleet paragraph).
+        - gate-stamp.sh digests through the portable dispatch; byte-identical across tools.
+        - No `xargs -r` in check-script-exec-bits.sh (pinned).
+        - test-derive-host-identity.sh 18/18 on Darwin and Linux; slugify pure BRE.
+      verifiable_closure: |
+        litmus:pre-push-linux-next-merged-shape + litmus:gate-stamp-portable-digest + litmus:build-sh-darwin-tool-remediation + litmus:script-exec-bit-shape (count 11) + ./build.sh --check exit 0 on a Darwin host.
+      events:
+        - type: filed
+          ts: "2026-08-23T01:41:47Z"
+          agent_id: macos-tlatoanis-macbook-air-claude-20260823t014147z
+          host: tlatoanis-macbook-air
+          summary: |
+            Filed and implemented in the same operator-directed onboarding cycle; six defects confirmed against osx-next HEAD (== linux-next cef7c023b) by an 8-agent verification pass before any edit.
+        - type: completed
+          ts: "2026-08-23T01:41:47Z"
+          agent_id: macos-tlatoanis-macbook-air-claude-20260823t014147z
+          host: tlatoanis-macbook-air
+          summary: |
+            All fixtures green on Darwin 25.6.0 (bash 3.2 lane): 14/14, 12/12, 9/9, 11/11, 18/18; mutation controls verified red->green in-fixture every run; ./build.sh --check green after the derive-host-identity fix (its first run on this host was the red that surfaced defect 7). Residuals split into 851-28b5.
+
+    - packet_id: macos-portability-residuals-after-onboarding-sweep
+      order: 851-28b5
+      status: ready
+      kind: bug
+      pickup_role: any
+      priority: p3
+      desired_release: v0.5
+      depends_on: []
+      capability_tags:
+        - bash
+        - all-platforms
+      tags:
+        - portability
+        - macos
+        - onboarding
+      title: |
+        Portability residuals catalogued during the macOS onboarding sweep (851-gpb5): bare `sha256sum` in macOS-plausible scripts (test-gate-stamp-memoization.sh:220,225; spec-index-ensure.sh:309; check-windows-only-sources-verified.sh:98-99; test-default-vault-cli-security.sh:28,89; hash-image-sources.sh:79-97; test-release-asset-integrity.sh multiple; forge-diagnostics-annex.sh:80); GNU-only `xargs -r` with genuinely-possibly-empty input in uninstall.sh:260-261; the "pre-push gate" name still used for the build-gate sense OUTSIDE the skill (agent-observability.yaml:302, mo-full-attestation.yaml:10, six check-* script comments, cycle-metrics.sh:556, local-ci.sh:991); and methodology/multi-host-development.yaml lane_exclusion (:394) cites a lane-exit.sh that exists nowhere in the tree — a second stated-but-unenforced clause of the same rule 851-gpb5 mechanized.
+      deliverable: |
+        Each residual either fixed with the established portable pattern (GATE_STAMP_SHA256-style dispatch; drop or guard `xargs -r`), renamed to "local gate" where the build-gate sense is meant, or — for lane_exclusion — the ghost reference repaired or tombstoned per methodology discipline.
+      context: |
+        Sites enumerated with line numbers by the 851-gpb5 confirmation pass on osx-next @ cef7c023b; line numbers will drift, re-derive before editing. None are live breakages on macOS 13+ (Apple ships /sbin/sha256sum since Ventura; modern BSD xargs accepts -r) — these are the same latent class 851-gpb5 fixed in the gate-critical paths. gate-stamp.sh:246 keeps `xargs -0 -r` DELIBERATELY: its input can be empty and GNU xargs without -r would run the digest tool on an empty stdin and emit a bogus frame.
+      exit_criteria:
+        - No bare sha256sum in scripts a macOS/dev host executes (container-only paths exempt; state which in the closing event).
+        - uninstall.sh image-prune lines survive empty input on GNU xargs without -r (guard or while-read).
+        - Prose outside the skill that means ./build.sh --check no longer calls it "the pre-push gate".
+        - lane_exclusion either points at real code or carries a tombstone.
+      verifiable_closure: |
+        Extend litmus:gate-stamp-portable-digest's no-bare-digest grep to the named scripts (or per-script pins), plus a grep pin that the build-gate sense of "pre-push gate" does not reappear in the named prose sites.
+      events:
+        - type: filed
+          ts: "2026-08-23T01:45:00Z"
+          agent_id: macos-tlatoanis-macbook-air-claude-20260823t014147z
+          host: tlatoanis-macbook-air
+          summary: |
+            Filed from the 851-gpb5 onboarding cycle as its reduction-engine residual; shaped ready for any host.
+
+    - order: 852-dk9z
+      packet_id: accel-capability-cache-serves-stale-document-across-probe-code-changes
+      desired_release: v0.6
+      title: load_or_probe's cache key cannot see probe-code changes, so a rebuilt binary republishes its predecessor's document as a fresh probe
+      status: ready
+      kind: bug
+      pickup_role: linux
+      priority: p2
+      capability_tags:
+        - capabilities
+        - probe
+        - cache
+        - rust
+      deliverable: crates/tillandsias-headless/src/accel_probe.rs
+      depends_on: []
+      estimated_hours: 2
+      context: |
+        Measured live on yoga, 2026-08-23, minutes after 54ed95240 (850-bif2's AMD-aware enumeration) landed. The binary was rebuilt at 366f2baff and run via scripts/host-capability-probe.sh --fragment against a cache directory holding the PRE-fix run's document. load_or_probe invalidates only on parse failure, schema_version mismatch, or legacy_tier mismatch. All three matched (schema 2, gpu-rocm), so the rebuilt binary served the bc6c619d0-era document verbatim — generic "Vulkan GPU", driver null, engines [] — and the generator wrapped it into a ready-to-file row that LOOKED like the new code's output. Nothing on the row says which code probed it. Caught pre-commit only because the expected marketing-name change from 54ed95240 was known and absent; re-running with a fresh cache dir produced the correct "Krackan [Radeon 840M / 860M Graphics]" + driver amdgpu + container-lane ollama document.
+        This is the confidently-wrong-row failure class the matrix exists to prevent (cf. the (host_id, locus) LWW lesson in the 2026-08 archive), reached through the cache rather than the fold: staleness dressed as a probe. Any probe-code change that alters document CONTENT without bumping schema_version or flipping legacy_tier is invisible to the cache key, which makes every future enumeration fix (and there will be more: the NPU arm, macOS) silently non-observable on hosts with a warm cache. Sibling hazard, recorded in yoga's first row fragment header rather than here: when the cache IS invalidated (v1 to v2), the rewrite silently discards the old cache's measurement rows.
+      exit_criteria: |
+        (1) The cache key includes a probe-code identity — crate version or a dedicated probe revision constant — OR the --capabilities path takes a freshness flag the generator uses; either way a rebuilt binary can no longer serve a document produced by different probe code as if it had probed. (2) A unit test pins it: a cached document stamped with an old probe identity is re-probed, not served, by a binary with a newer one. (3) scripts/host-capability-probe.sh publishes only fresh probes by construction, so a published capability row can never be a stale-cache artifact. (4) Negative control: an unchanged binary still serves its own cache (the cache continues to exist for the server's hot path).
