@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by windows (esmeraldinha), 2026-08-23T05:32:00Z.
+
+events:
+  - packet_id: dual-locus-preflight-must-rebuild-every-gate-locus
+    event:
+      type: note
+      ts: "2026-08-23T05:32:00Z"
+      agent_id: windows-esmeraldinha-opus5-20260823T042116Z
+      host: windows
+      summary: >
+        INDEPENDENT VERIFICATION on the second Windows host, and it caught a
+        real staleness rather than a synthetic one.
+
+        ensure_fresh_plan_binary (4b5f13790) landed mid-cycle here, arriving in
+        the pre-push merge of origin/linux-next. Exercised immediately after
+        that merge, in the gate's own WSL locus:
+
+          - First call: rc=2, empty path — "stale and NOT refreshable here".
+            CORRECT on both halves. The merge had just pulled newer
+            crates/tillandsias-plan sources, so the binary this cycle rebuilt
+            at 04:24 was genuinely stale again seven minutes later; and the
+            call was made from a shell without /root/.cargo/env sourced, so
+            cargo was absent and the in-locus rebuild could not run. rc=2 is
+            exactly the contract for that state, and it was silent as
+            specified.
+          - Second call, same locus with cargo on PATH: rc=0, rebuilt in
+            place, mtime advanced to the second of the call, size 1945456 ->
+            1959056 (the merge did change plan sources), 41 capabilities.
+
+        scripts/test-plan-binary-freshness.sh also passes here:
+        ok:plan-binary-freshness:9 (9 passed, 0 failed).
+
+        Worth noting what this demonstrates beyond the fixture: the staleness
+        it caught was created BY THE PRE-PUSH MERGE ITSELF, in the middle of a
+        cycle that had already correctly rebuilt the instrument once. That is
+        a window neither preflight nor a cycle-start rebuild can close by
+        construction — the instrument goes stale after Start-Of-Cycle, when
+        the mandatory merge lands sibling work. Point-of-use freshness is the
+        only shape that covers it, which is a stronger argument for the chosen
+        fix than the original packet made.

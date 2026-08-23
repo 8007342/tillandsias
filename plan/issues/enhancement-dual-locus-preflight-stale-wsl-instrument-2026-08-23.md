@@ -112,6 +112,14 @@ is "built from a source tree containing `git rev-parse HEAD`", which is what
 `plan_binary_has <subcommand-introduced-at-this-head>` approximates today and
 what an embedded source-vintage would answer exactly.
 
+**Answered while this was being written** — `ensure_fresh_plan_binary` landed
+in `4b5f13790` and its fixture addresses exactly this, in the opposite
+direction and for a good reason: it compares **source mtimes**, because
+"commit timestamps are stamped on the ORIGIN host and would call a pre-merge
+binary fresh". That is a sharper objection to checkout-anchoring than the
+suggestion above, and it wins. The paragraph is kept rather than deleted so
+the reasoning is legible, not because the suggestion still stands.
+
 ## Related, same family: a fresh clone has no pre-push gate
 
 Found in the same minutes and recorded here rather than separately because it
@@ -135,11 +143,18 @@ host that has not yet built. The same fact answers this one: **hook enforcement
 is a post-first-build property, not a post-clone property**, and any claim that
 a rule "is now enforced by the hook" inherits that qualifier.
 
-### Caution on fix direction 1: "rebuild EVERY locus" is harmful on this host
+### Why point-of-use was the right call, from the other Windows host
 
-Direction 1 offers two forms — rebuild the instrument in every locus the gate
-executes in, **or** name in the verdict which locus was rebuilt. On a Windows
-host the first form should not be taken literally, and the reason is not cost.
+**Read this as corroboration, not as a review.** It was drafted as a caution
+against fix direction 1's "rebuild the instrument in EVERY locus" form, before
+`4b5f13790` landed `ensure_fresh_plan_binary` — which does not do that. The
+implemented rule is point-of-use freshness with a loud refusal (rc 0 current
+or rebuilt-in-locus, rc 1 no binary, rc 2 stale and not refreshable here). That
+is the narrower rule, and the argument below is why the broader one would have
+been a mistake on this hardware — so it is kept as rationale for what landed.
+
+On a Windows host "rebuild every locus" should not be taken literally, and the
+reason is not cost.
 
 `scripts/with-wsl2-builder.sh` points `CARGO_TARGET_DIR` at a distro-native path
 precisely so a cargo target tree never lands on the NTFS volume ("9p-backed
