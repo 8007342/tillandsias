@@ -61,7 +61,11 @@ for spec_file in "${SPECS_DIR}"/*/spec.md; do
     ((++SPECS_WITH_SECTION))
 
     # Extract sources section
-    sources=$(sed -n '/^## Sources of Truth/,/^## /p' "$spec_file" | head -n -1)
+    # `sed '$d'`, not `head -n -1`: negative counts are GNU-only and BSD head
+    # rejects them outright, so on macOS this checker errored per-spec and
+    # reported a binding percentage computed from nothing (851-28b5 class,
+    # found on this host's first full local-ci run 2026-08-23).
+    sources=$(sed -n '/^## Sources of Truth/,/^## /p' "$spec_file" | sed '$d')
 
     # Count valid cheatsheet refs
     valid_count=0
