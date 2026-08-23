@@ -1,0 +1,580 @@
+band	corpus	top1	top2	margin	top1_kind	top1_path	question
+in	methodology	0.7253849	0.72239935	0.0030	spec	openspec/specs/log-schema-versioning/spec.md	Which file is actually the source of truth for how this project works — CLAUDE.md or something else?
+in	methodology	0.67196923	0.6520819	0.0199	spec	openspec/specs/build-script-architecture/spec.md	can I write a python script for the build?
+in	methodology	0.7742179	0.73397607	0.0402	spec	openspec/specs/knowledge-source-of-truth/spec.md	How old can a freshness stamp get before the component counts as stale?
+in	methodology	0.75647205	0.7454715	0.0110	code	scripts/nix-toolbox.sh	Why can't I just run `nix store gc` on the tillandsias nix store?
+in	methodology	0.6449614	0.6387091	0.0063	code	crates/tillandsias-logging/src/log_entry.rs	I hit a broken test while doing something unrelated. Am I obliged to file it?
+in	methodology	0.6816021	0.6750723	0.0065	code	images/default/lib-common.sh	There's a skill in .claude/skills and one in .opencode/skills — which do I edit?
+in	methodology	0.7266253	0.71524674	0.0114	methodology	methodology/bootstrap/router.yaml	What command starts an autonomous session, and what must I read first?
+in	methodology	0.68006796	0.63347876	0.0466	methodology	methodology/bootstrap/router.yaml	how many intents can I pick from the router?
+in	methodology	0.6750908	0.63860774	0.0365	methodology	methodology/bootstrap/router.yaml	Before I edit any source, what do I have to record?
+in	methodology	0.7431404	0.67908895	0.0641	methodology	methodology/convergence.yaml	Is there a hard limit on how big the methodology may grow relative to the codebase?
+in	methodology	0.77186775	0.7367575	0.0351	spec	openspec/specs/versioning/spec.md	What is the version string format?
+in	methodology	0.7725015	0.7693505	0.0032	methodology	methodology/versioning.yaml	Which branch is allowed to change the VERSION file?
+in	methodology	0.59792954	0.5909665	0.0070	code	scripts/install-windows.ps1	How does a normal user end up on a stable build instead of a broken daily?
+in	methodology	0.791218	0.78526646	0.0060	methodology	methodology/event/001-direct-main-methodology-push.yaml	Should methodology changes go on the methodology-refinements branch?
+in	methodology	0.6205684	0.619592	0.0010	spec	openspec/specs/default-image/spec.md	What's the one-sentence core principle behind all of this?
+in	methodology	0.7089512	0.69631106	0.0126	methodology	methodology/event/017-podman-runtime-blocker.yaml	My podman stack is wedged. Do I repair it or blow it away?
+in	methodology	0.642959	0.6421972	0.0008	cheatsheet	cheatsheets/runtime/socket-container-health.md	Why do we prefer many tiny fast model calls over one big careful one?
+in	methodology	0.7083637	0.6928354	0.0155	methodology	methodology/philosophy.yaml	A packet's stated implementation approach is dead but the goal still matters. Do I close it?
+in	methodology	0.80368155	0.7893443	0.0143	methodology	methodology/litmus.yaml	What ambiguity score does a spec need before it can go active?
+in	methodology	0.74652684	0.71761954	0.0289	methodology	methodology/spec-system.yaml	spec id format?
+in	methodology	0.6583001	0.61195886	0.0463	methodology	methodology/verification.yaml	What are the S-levels and what does S2 mean?
+in	methodology	0.7526853	0.6866451	0.0660	methodology	methodology/proximity.yaml	What exactly is a CentiColon measuring?
+in	methodology	0.6663175	0.6637765	0.0025	spec	openspec/specs/clickable-trace-index/spec.md	What arguments does the #[trace] macro take?
+in	methodology	0.7460162	0.7012975	0.0447	methodology	methodology/ci.yaml	Why is there only one GitHub Actions workflow?
+in	methodology	0.79938835	0.7846844	0.0147	methodology	methodology/litmus.yaml	How fast does an 'instant' litmus test have to be, and what may it do?
+in	methodology	0.78695834	0.78465927	0.0023	methodology	methodology/litmus.yaml	What fraction of active specs must have litmus tests?
+in	methodology	0.7125524	0.71196175	0.0006	spec	openspec/specs/knowledge-source-of-truth/spec.md	Can a cheatsheet cite our own repo notes as its source?
+in	methodology	0.7242927	0.7132867	0.0110	code	scripts/hooks/pre-push-local-gate.sh	Is images/default/cheatsheets/ supposed to be committed, given it's gitignored?
+in	methodology	0.62590504	0.60340583	0.0225	code	crates/tillandsias-headless/src/vsock_server.rs	Is there a cap on how often a host may push?
+in	methodology	0.6485991	0.6349577	0.0136	cheatsheet	docs/cheatsheets/tray-litmus-timeout-constraints.md	Can the recurring loop decide by itself to start treating build warnings as findings?
+in	methodology	0.7285054	0.71616983	0.0123	spec	openspec/specs/wsl-daemon-orchestration/spec.md	Are blocking calls allowed in the tray event loop?
+in	methodology	0.8449074	0.80494297	0.0400	methodology	methodology/multi-host-development.yaml	Is the macOS branch called macos-next?
+in	methodology	0.73037195	0.69907993	0.0313	cheatsheet	cheatsheets/concurrent-git/agent-handoff.md	What do I have to do before every push to windows-next?
+in	methodology	0.6235628	0.62343234	0.0001	code	crates/tillandsias-headless/src/vault_bootstrap.rs	Can I ssh into the guest VM to read its journals while debugging?
+in	methodology	0.6480631	0.63892	0.0091	methodology	methodology/multi-host-development.yaml	How many branches does the remote carry?
+in	methodology	0.5852528	0.58445334	0.0008	methodology	methodology/distributed-work.yaml	How long is a work claim good for?
+in	methodology	0.7402056	0.7099156	0.0303	methodology	methodology/distributed-work.yaml	What's the difference between completed, verified and done on a packet?
+in	methodology	0.68088746	0.6602259	0.0207	methodology	methodology/distributed-work.yaml	How do I get an order number for a packet I'm filing?
+in	methodology	0.675144	0.6741099	0.0010	methodology	methodology/distributed-work.yaml	What's the right way to change a packet's status field?
+in	methodology	0.71765405	0.6928121	0.0248	methodology	methodology/distributed-work.yaml	When am I allowed to just read plan/index.yaml instead of asking the MCP expert?
+in	methodology	0.70660424	0.68270844	0.0239	methodology	methodology/distributed-work.yaml	Where does the agent_id in a lease come from — can I compose it myself?
+in	methodology	0.68655515	0.68591577	0.0006	cheatsheet	cheatsheets/runtime/runtime-limitations.md	I'm running inside the forge and a tool I need isn't there. Where do I file for it?
+in	methodology	0.78412944	0.7341709	0.0500	methodology	methodology/agent-observability.yaml	How long without activity before an in-progress task shows as stale?
+in	methodology	0.730808	0.6908688	0.0399	methodology	methodology/agent-observability.yaml	How is the expert answer_rate computed?
+in	methodology	0.673217	0.63044375	0.0428	methodology	methodology/multi-host-development.yaml	Should I stash my uncommitted work before pulling?
+in	methodology	0.72400177	0.7224027	0.0016	methodology	methodology/markdown-distillation.yaml	Which markdown directories count as canonical rather than intake?
+in	methodology	0.7286836	0.72748536	0.0012	methodology	methodology/provenance.yaml	What claim-strength labels can a methodology claim carry?
+in	methodology	0.7667138	0.7643198	0.0024	methodology	methodology/provenance.yaml	Do we claim Banach-style contraction convergence?
+in	methodology	0.7613964	0.71890795	0.0425	methodology	methodology/event/index.yaml	What statuses can an unknown event have?
+in	methodology	0.8567473	0.70191425	0.1548	methodology	methodology/mo-full-attestation.yaml	What does the MO-FULL attestation line look like?
+in	methodology	0.64358157	0.6385099	0.0051	spec	openspec/specs/mcp-on-demand/spec.md	How many agents can I run in parallel on this host right now?
+in	methodology	0.7546568	0.7137307	0.0409	spec	openspec/specs/forge-as-only-runtime/spec.md	Can a forge improvement proposal ask for an extra host directory mount?
+in	methodology	0.7670544	0.72408205	0.0430	methodology	methodology/next-forge-better.yaml	How do I tell whether to fix something in the forge or file it for the builder?
+in	methodology	0.81579816	0.75012434	0.0657	methodology	methodology/litmus-framework.yaml	Where does the litmus framework put its mock boundary?
+in	methodology	0.68269163	0.65584326	0.0268	methodology	methodology/litmus-centicolon-wiring.yaml	Should I work out a packet's residual centicolons by hand?
+near	methodology	0.7068819	0.672603	0.0343	spec	openspec/specs/forge-environment-discoverability/spec.md	Which Helm chart do we use to deploy the enclave services?
+near	methodology	0.6420714	0.6357376	0.0063	cheatsheet	cheatsheets/build/podman-image-management.md	Is there a docker-compose file for bringing the service stack up locally?
+near	methodology	0.63615924	0.62803686	0.0081	cheatsheet	cheatsheets/runtime/everything-in-forge.md	Do we use Ansible or any configuration-management tool to provision the dev hosts?
+near	methodology	0.7023998	0.6840942	0.0183	cheatsheet	cheatsheets/runtime/codex-agent-entrypoints.md	Which Terraform modules manage the GitHub repository settings and branch protection?
+near	methodology	0.7359767	0.71715826	0.0188	code	scripts/with-tillandsias-builder.sh	What Rust toolchain version is pinned for builds?
+near	methodology	0.71065694	0.70544755	0.0052	code	scripts/local-ci.sh	What clippy or rustfmt lint configuration do we enforce beyond -D warnings?
+near	methodology	0.68842924	0.6712604	0.0172	code	scripts/gate-stamp.sh	Is cargo-audit or cargo-deny run as part of any gate?
+near	methodology	0.7038652	0.7008331	0.0030	spec	openspec/specs/spec-trace-coverage-threshold/spec.md	What line-coverage percentage must the Rust unit tests reach?
+near	methodology	0.74471736	0.6903287	0.0544	cheatsheet	cheatsheets/concurrent-git/branches.md	How many approvals does the linux-next to main PR need before it can merge?
+near	methodology	0.655798	0.65262306	0.0032	methodology	methodology/bootstrap/router.yaml	Is there a CODEOWNERS file deciding who reviews methodology changes?
+near	methodology	0.77110285	0.74313885	0.0280	cheatsheet	cheatsheets/build/build-strategy.md	What open-source license is Tillandsias itself released under?
+near	methodology	0.6853149	0.661348	0.0240	methodology	methodology/convergence.yaml	What is the actual numeric value of V_min, the minimum acceptable convergence velocity?
+near	methodology	0.7127614	0.7016991	0.0111	cheatsheet	cheatsheets/observability/cheatsheet-metrics.md	What are the w1 through w5 weights in the cheatsheet scoring function?
+near	methodology	0.7393024	0.72400886	0.0153	cheatsheet	cheatsheets/runtime/forge-hot-cold-split.md	What is the byte limit for total cheatsheet size?
+near	methodology	0.6998277	0.6439063	0.0559	code	crates/tillandsias-plan/src/answer.rs	What do the priority ranks p0 through p3 actually mean, and who assigns them?
+near	methodology	0.6867103	0.6791421	0.0076	code	crates/tillandsias-core/src/config.rs	How should estimated_hours on a packet be estimated, and what scale is it on?
+near	methodology	0.71967876	0.66472507	0.0550	methodology	methodology/distributed-work.yaml	What exact characters are in the alphabet used for the 4-character order-token suffix?
+near	methodology	0.6855652	0.6560825	0.0295	code	scripts/nix-toolbox.sh	Which four musl flake outputs have their crane deps closures pinned as GC roots?
+near	methodology	0.7567738	0.73664296	0.0201	methodology	methodology/distributed-work.yaml	Which host owns the crates/tillandsias-plan crate?
+near	methodology	0.71226484	0.70408016	0.0082	methodology	methodology/multi-host-development.yaml	What is the naming convention for a hotfix branch?
+near	methodology	0.6958143	0.69489735	0.0009	spec	openspec/specs/observability-convergence/spec.md	How many days may a deprecated spec sit before it must be moved to obsolete?
+near	methodology	0.6291608	0.61155736	0.0176	methodology	methodology/versioning.yaml	What time of day does the daily merge-to-main-and-release run?
+near	methodology	0.7608996	0.74063754	0.0203	cheatsheet	docs/cheatsheets/mitm-proxy-design.md	Which signing key or certificate is used to sign the release binaries?
+near	methodology	0.67778903	0.667957	0.0098	cheatsheet	cheatsheets/runtime/macos-vz-guest-boot-baseline.md	Do the macOS release artifacts need Apple notarization, and how is that done?
+near	methodology	0.78812665	0.7701732	0.0180	code	scripts/install-windows.ps1	What is the curl one-liner an end user runs to install Tillandsias?
+near	methodology	0.7053055	0.69108987	0.0142	cheatsheet	cheatsheets/runtime/local-inference.md	Which embedding model do the on-demand RAG experts use?
+near	methodology	0.70179087	0.6777711	0.0240	code	crates/tillandsias-plan/src/lib.rs	What chunk size and overlap do the expert corpora use when indexing?
+near	methodology	0.6423897	0.61913204	0.0233	code	images/default/lib-expert-capability.sh	Which vector store backs the expert index?
+near	methodology	0.7689097	0.76746345	0.0014	spec	openspec/specs/mcp-on-demand/spec.md	How do I start the forge-plan MCP server by hand if it isn't running?
+near	methodology	0.7253315	0.7132154	0.0121	cheatsheet	docs/cheatsheets/openspec-install.md	What files must an openspec/changes/<id>/ directory contain?
+near	methodology	0.86431605	0.7998583	0.0645	cheatsheet	docs/cheatsheets/openspec-install.md	Which command archives an OpenSpec change once implementation is finished?
+near	methodology	0.67151296	0.64934736	0.0222	cheatsheet	cheatsheets/runtime/container-image-tagging.md	What does ./build.sh --graphs actually produce?
+near	methodology	0.7782607	0.7560001	0.0223	cheatsheet	docs/cheatsheets/litmus-stdlib-authoring.md	How do I register a new litmus test so scripts/run-litmus-test.sh picks it up?
+near	methodology	0.73880935	0.7176402	0.0212	code	crates/tillandsias-control-wire/src/lib.rs	What are all the control-wire message variants?
+near	methodology	0.61512446	0.6134071	0.0017	spec	openspec/specs/vsock-exec-authz/spec.md	What does the ExecOneShot control-wire operation do?
+near	methodology	0.7977672	0.7653429	0.0324	spec	openspec/specs/reverse-proxy-internal/spec.md	How does the git-mirror service authenticate to GitHub?
+near	methodology	0.75596386	0.73512167	0.0208	spec	openspec/specs/tillandsias-vault/spec.md	How is Vault unsealed when the stack comes up?
+near	methodology	0.7055231	0.7047075	0.0008	cheatsheet	docs/cheatsheets/mitm-proxy-design.md	What key algorithm do the per-lane SSH-CA certificates use?
+near	methodology	0.6916234	0.68399554	0.0076	code	crates/tillandsias-plan/src/lib.rs	How many packets are currently open in the ledger?
+near	methodology	0.6248376	0.5977254	0.0271	methodology	methodology/distributed-work.yaml	What is work order 759 about?
+near	methodology	0.7035648	0.69967437	0.0039	methodology	methodology/multi-host-development.yaml	What is the current head commit of origin/osx-next?
+near	methodology	0.7565923	0.73465514	0.0219	spec	openspec/specs/no-terminal-flicker/spec.md	What is the tray's startup emoji progression, step by step?
+near	methodology	0.705121	0.6122503	0.0929	methodology	methodology/in-forge-delegation.yaml	How many delegates are allowed at ramp stage 1?
+near	methodology	0.7509292	0.71760213	0.0333	methodology	methodology/in-forge-delegation.yaml	What telemetry thresholds must be green before the concurrency stage can be lifted?
+near	methodology	0.6846984	0.6762206	0.0085	methodology	methodology/distributed-work.yaml	How long may a packet stay `blocked` before it must be escalated to the operator?
+near	methodology	0.644431	0.62597567	0.0185	code	crates/tillandsias-vm-layer/src/vsock_exec.rs	Who emits the agent heartbeat, and at what interval?
+near	methodology	0.8390204	0.718131	0.1209	methodology	methodology/distributed-work.yaml	What is the token budget for a full in-forge e2e cycle?
+near	methodology	0.7092654	0.69710153	0.0122	cheatsheet	docs/cheatsheets/mitm-proxy-design.md	How do I install the tillandsias-plan CLI on a fresh host?
+near	methodology	0.6783888	0.67447764	0.0039	spec	openspec/specs/graceful-shutdown/spec.md	What does the output of `tillandsias-plan burndown` look like?
+near	methodology	0.71539396	0.70066077	0.0147	methodology	methodology/multi-host-development.yaml	How do I resolve a Cargo.lock merge conflict between two platform branches?
+near	methodology	0.74296826	0.72660387	0.0164	cheatsheet	cheatsheets/runtime/windows-installer-prereqs.md	What is the minimum Windows version supported for a Tillandsias host?
+near	methodology	0.7971893	0.7848945	0.0123	spec	openspec/specs/macos-native-tray/spec.md	Which macOS version is required for the Virtualization.framework guest?
+far	methodology	0.55895585	0.54813826	0.0108	cheatsheet	cheatsheets/build/nix-flake-basics.md	What is the flibber flobber?
+far	methodology	0.5533263	0.5514854	0.0018	code	crates/tillandsias-core/src/genus.rs	How many zorptangles fit inside a standard quibnark?
+far	methodology	0.5776057	0.5711141	0.0065	code	crates/tillandsias-headless/src/runtime_phase.rs	Does the wumbo-schnitzel protocol support left-handed marmalade mode?
+far	methodology	0.6131587	0.5999315	0.0132	spec	openspec/specs/mcp-tool-socket/spec.md	Is a grimsley-blort compatible with a thrunkle socket?
+far	methodology	0.58967173	0.5735555	0.0161	cheatsheet	cheatsheets/languages/css.md	How do I center a div horizontally and vertically in CSS?
+far	methodology	0.5937554	0.5937554	0.0000	code	crates/tillandsias-headless/src/event_pusher.rs	What's the difference between TCP and UDP?
+far	methodology	0.60815686	0.6080883	0.0001	cheatsheet	cheatsheets/utils/psql.md	How do I set up a read replica for a Postgres database on Amazon RDS?
+far	methodology	0.58822817	0.5876728	0.0006	methodology	methodology/event/002-user-runtime-lifecycle-refinement.yaml	How do I fine-tune a YOLOv8 object detector on a custom image dataset?
+far	methodology	0.6055297	0.5935519	0.0120	methodology	methodology/event/017-podman-runtime-blocker.yaml	What's the best way to keep a sourdough starter alive?
+far	methodology	0.5016022	0.48748395	0.0141	methodology	methodology/math-foundations.yaml	Who won the 1998 FIFA World Cup?
+far	methodology	0.51122737	0.51122737	0.0000	cheatsheet	cheatsheets/runtime/socket-container-health.md	What is the capital of Mongolia?
+far	methodology	0.5657871	0.555402	0.0104	cheatsheet	cheatsheets/utils/podman-secrets.md	What do mitochondria do in a cell?
+far	methodology	0.5571876	0.55014443	0.0070	methodology	methodology/event/020-tray-binary-test-discovery.yaml	Write me a haiku about rain on a tin roof.
+in	cheatsheets	0.7100621	0.7100385	0.0000	code	images/default/lib-common.sh	Which Claude model does the forge use by default?
+in	cheatsheets	0.6762386	0.67423546	0.0020	cheatsheet	cheatsheets/runtime/opencode-web-launch.md	Two agents both want to start OpenCode on 5173. What do we do?
+in	cheatsheets	0.76624674	0.74415153	0.0221	cheatsheet	docs/cheatsheets/openspec-install.md	Can I archive an OpenSpec change while some tasks are still unchecked?
+in	cheatsheets	0.7360376	0.727741	0.0083	methodology	methodology/multi-host-development.yaml	which branch does macOS work go on?
+in	cheatsheets	0.7098401	0.6776294	0.0322	methodology	methodology/distributed-work.yaml	How long is an agent's lease on a work item good for by default?
+in	cheatsheets	0.7469975	0.7384468	0.0086	cheatsheet	cheatsheets/concurrent-git/commit-attribution.md	Besides Co-Authored-By, what trailer marks which tool and model produced a commit?
+in	cheatsheets	0.74348676	0.72449833	0.0190	cheatsheet	cheatsheets/concurrent-git/git-mirror-enterprise-practices.md	Why didn't we just use Gitea's push mirror instead of writing our own relay?
+in	cheatsheets	0.7487387	0.7076122	0.0411	cheatsheet	cheatsheets/concurrent-git/plan-discipline.md	What are the three iron rules for writing to plan/?
+in	cheatsheets	0.7295071	0.7125012	0.0170	spec	openspec/specs/forge-hot-cold-split/spec.md	Which forge paths are RAM-backed, and what size caps do they have?
+in	cheatsheets	0.7909815	0.77829075	0.0127	cheatsheet	cheatsheets/runtime/everything-in-forge.md	What kinds of bind mounts is a forge container allowed to have?
+in	cheatsheets	0.76814544	0.745209	0.0229	code	scripts/nix-cache-service.sh	enclave service names and ports?
+in	cheatsheets	0.7122172	0.68762696	0.0246	spec	openspec/specs/forge-standalone/spec.md	The forge is missing a tool I need. What am I supposed to do about it?
+in	cheatsheets	0.80202425	0.7901367	0.0119	cheatsheet	cheatsheets/runtime/forge-standalone-runner.md	What exactly does run-forge-standalone.sh give me?
+in	cheatsheets	0.7660429	0.757479	0.0086	spec	openspec/specs/browser-isolation-tray-integration/spec.md	Before Chromium opens for OpenCode Web, what should the route probes return?
+in	cheatsheets	0.7686473	0.70029235	0.0684	cheatsheet	cheatsheets/runtime/statusnotifier-tray.md	Which D-Bus interfaces does the Linux tray expose, and is GTK allowed as the backend?
+in	cheatsheets	0.7913113	0.7719114	0.0194	spec	openspec/specs/macos-native-tray/spec.md	Why can't `--diagnose` on macOS report live control-wire status?
+in	cheatsheets	0.72340894	0.7125113	0.0109	cheatsheet	cheatsheets/runtime/windows-tray-diagnostics.md	How big does the Windows tray log get before it rolls over?
+in	cheatsheets	0.70950335	0.6762728	0.0332	cheatsheet	cheatsheets/runtime/ollama-model-management.md	I've got a 6 GB GPU. Which models get pre-pulled and which are lazy?
+in	cheatsheets	0.8114953	0.7942204	0.0173	cheatsheet	cheatsheets/runtime/cheatsheet-tier-system.md	What are the three cheatsheet tiers and where does each read its source at runtime?
+in	cheatsheets	0.7368441	0.7231351	0.0137	spec	openspec/specs/cheatsheet-source-layer/spec.md	What states does a cheatsheet pass through between being written and being re-verified?
+in	cheatsheets	0.7034455	0.66920173	0.0342	cheatsheet	cheatsheets/runtime/forge-localization.md	How does the forge decide which language to greet me in?
+in	cheatsheets	0.7510966	0.7483896	0.0027	spec	openspec/specs/linux-native-portable-executable/spec.md	Where does the curl installer put the binary if ~/.local/bin isn't on my PATH?
+in	cheatsheets	0.66891265	0.64696765	0.0219	spec	openspec/specs/enclave-network/spec.md	How fast is the enclave supposed to hand control back to the user?
+in	cheatsheets	0.78081954	0.7729792	0.0078	cheatsheet	cheatsheets/utils/tillandsias-secrets-architecture.md	Where does Vault store the GitHub token, and how long do the per-container tokens live?
+in	cheatsheets	0.72961193	0.72216535	0.0074	cheatsheet	docs/cheatsheets/container-lifecycle.md	How do I completely remove Tillandsias and its leftovers from a Linux box?
+in	cheatsheets	0.70092356	0.69938326	0.0015	cheatsheet	cheatsheets/runtime/forge-paths-ephemeral-vs-persistent.md	Which directories inside the forge are read-only image layers versus writable and persisted?
+in	cheatsheets	0.69490254	0.6742916	0.0206	cheatsheet	cheatsheets/runtime/agent-startup-skills.md	A repo has three tracked files. Which startup skill does /startup route to?
+in	cheatsheets	0.72792923	0.72316766	0.0048	spec	openspec/specs/ci-release/spec.md	What does the release workflow actually publish?
+in	cheatsheets	0.7110392	0.6995644	0.0115	cheatsheet	cheatsheets/build/cargo.md	Why does a binary I `cargo install`ed vanish between forge sessions?
+in	cheatsheets	0.6728795	0.6664878	0.0064	cheatsheet	cheatsheets/build/cmake.md	Can I build an Android APK in the forge?
+in	cheatsheets	0.56195945	0.5616458	0.0003	cheatsheet	cheatsheets/runtime/wslg-chromium-passthrough.md	does rg support lookbehind?
+in	cheatsheets	0.79019856	0.7559154	0.0343	cheatsheet	cheatsheets/utils/gh-cli.md	What's the GitHub API rate limit if I haven't run gh auth login?
+in	cheatsheets	0.7054206	0.69082034	0.0146	cheatsheet	cheatsheets/utils/jq.md	jq — difference between --arg and --argjson?
+in	cheatsheets	0.7308753	0.7275504	0.0033	cheatsheet	cheatsheets/welcome/readme-discipline.md	What two top-level sections must a Tillandsias-managed README have?
+in	cheatsheets	0.73635316	0.70157295	0.0348	cheatsheet	cheatsheets/ux/ux-message-budget.md	How many characters can the tray STATUS chip line be?
+in	cheatsheets	0.780612	0.77680695	0.0038	spec	openspec/specs/default-image/spec.md	Where do agents inside the forge find the list of available cheatsheets?
+in	cheatsheets	0.78930825	0.7734639	0.0158	cheatsheet	cheatsheets/runtime/cheatsheet-architecture-v2.md	Can I cite my own reasoning about the project as a cheatsheet's provenance?
+in	cheatsheets	0.78645545	0.7324021	0.0541	cheatsheet	docs/cheatsheets/verification-levels.md	What does L2 mean in the verification-level framework?
+in	cheatsheets	0.78326875	0.7757237	0.0075	cheatsheet	docs/cheatsheets/openspec-methodology.md	Which Rust items are required to carry an @trace annotation?
+in	cheatsheets	0.7404711	0.73900485	0.0015	code	scripts/litmus-stdlib.sh	Which litmus helper asserts that a pattern is NOT present in a file?
+in	cheatsheets	0.7637146	0.7614927	0.0022	code	scripts/test-opencode-entrypoint-prompt.sh	What Node version does OpenSpec require?
+in	cheatsheets	0.73363584	0.7295975	0.0040	cheatsheet	cheatsheets/utils/podman-secrets.md	Where is the GitHub token kept on each operating system?
+in	cheatsheets	0.7272752	0.6601199	0.0672	cheatsheet	docs/cheatsheets/secrets-management.md	Where does the git author name and email live — same place as the token?
+in	cheatsheets	0.7498279	0.72177804	0.0280	cheatsheet	cheatsheets/utils/git-workflows.md	Is GIT_ASKPASS still part of the credential path?
+in	cheatsheets	0.75773484	0.75046635	0.0073	cheatsheet	docs/cheatsheets/windows-bash.md	Calling bash.exe from Rust on Windows says 'No such file or directory' for a C:/... script path. Why?
+in	cheatsheets	0.7578978	0.7380697	0.0198	cheatsheet	cheatsheets/runtime/enclave-network.md	Why do the enclave DNS aliases stop resolving on Windows and macOS?
+in	cheatsheets	0.7053751	0.6993472	0.0060	spec	openspec/specs/tray-menu/spec.md	How many items does the tray menu show at launch?
+in	cheatsheets	0.7969532	0.7332857	0.0637	spec	openspec/specs/tray-icon-lifecycle/spec.md	What do the different plant shapes on the tray icon mean?
+in	cheatsheets	0.7313213	0.69182044	0.0395	cheatsheet	docs/cheatsheets/storage-budget.md	How much disk is the whole enclave stack supposed to need?
+in	cheatsheets	0.7801193	0.7251247	0.0550	code	crates/tillandsias-host-shell/src/pty/mod.rs	What are the validation rules for a project name?
+in	cheatsheets	0.79414105	0.69786096	0.0963	cheatsheet	docs/cheatsheets/centicolon-dashboard.md	How do I regenerate the convergence dashboard?
+in	cheatsheets	0.7963595	0.73028404	0.0661	cheatsheet	docs/cheatsheets/opencode-csp-hash-injection.md	OpenCode's inline theme script gets blocked by CSP. What's our workaround?
+in	cheatsheets	0.8525919	0.7575274	0.0951	cheatsheet	docs/cheatsheets/opencode-proxy-egress.md	What's the canonical NO_PROXY value for the forge and inference profiles?
+in	cheatsheets	0.79780483	0.7717641	0.0260	cheatsheet	docs/cheatsheets/init-incremental-builds.md	Where does --init track which images already built successfully?
+in	cheatsheets	0.75370497	0.74266565	0.0110	cheatsheet	docs/cheatsheets/fedora-minimal-containers.md	Which container images are allowed to be Alpine and which have to be Fedora?
+near	cheatsheets	0.6690945	0.6667352	0.0024	cheatsheet	cheatsheets/runtime/container-image-tagging.md	How do I package the Tillandsias enclave as a Helm chart?
+near	cheatsheets	0.69266176	0.68569654	0.0070	spec	openspec/specs/podman-idiomatic-patterns/spec.md	Is there a docker-compose.yml for bringing the enclave up locally?
+near	cheatsheets	0.70864916	0.70508724	0.0036	spec	openspec/specs/enclave-network/spec.md	Can I export the running enclave to a Kubernetes manifest with `podman generate kube`?
+near	cheatsheets	0.65557486	0.65373194	0.0018	methodology	methodology/multi-host-development.yaml	Is there an Ansible playbook for provisioning a new developer host?
+near	cheatsheets	0.675062	0.66812164	0.0069	cheatsheet	cheatsheets/build/validation-ci.md	Where's the Terraform module for the release infrastructure?
+near	cheatsheets	0.62819415	0.62319857	0.0050	code	crates/tillandsias-metrics/src/lib.rs	How do I point Prometheus at the enclave and build a Grafana dashboard from it?
+near	cheatsheets	0.6807166	0.6806427	0.0001	cheatsheet	docs/cheatsheets/podman-logging.md	What does the Jenkins pipeline for Tillandsias look like?
+near	cheatsheets	0.67495626	0.67065346	0.0043	cheatsheet	cheatsheets/runtime/networking.md	Is emacs available inside the forge?
+near	cheatsheets	0.64186054	0.6415261	0.0003	cheatsheet	cheatsheets/runtime/wsl2-provisioning.md	How do I attach gdb or lldb to a hung tray process and get a backtrace?
+near	cheatsheets	0.7694792	0.7512972	0.0182	spec	openspec/specs/runtime-logging/spec.md	What's the rotation and retention policy for the external logs under /var/log/tillandsias/external?
+near	cheatsheets	0.7370238	0.7282206	0.0088	spec	openspec/specs/forge-hot-cold-split/spec.md	What CPU limit do forge containers run with?
+near	cheatsheets	0.72689164	0.72655016	0.0003	spec	openspec/specs/tray-menu/spec.md	Are there keyboard shortcuts for the tray menu?
+near	cheatsheets	0.7536721	0.7448574	0.0088	code	crates/tillandsias-core/src/genus.rs	How does Tillandsias decide which genus icon a given project gets?
+near	cheatsheets	0.6986084	0.6844954	0.0141	spec	openspec/specs/graceful-shutdown/spec.md	How many forge containers can run at the same time on a Linux host?
+near	cheatsheets	0.791654	0.7806633	0.0110	spec	openspec/specs/methodology-accountability/spec.md	What are the required fields of a litmus test YAML — steps, expect, phase, size?
+near	cheatsheets	0.81288075	0.7761064	0.0368	methodology	methodology/event/025-litmus-test-sizing-taxonomy.yaml	What does `--size instant` mean, and what other sizes can I pass to run-litmus-test.sh?
+near	cheatsheets	0.78854984	0.7733254	0.0152	cheatsheet	cheatsheets/runtime/networking.md	How often does the tillandsias-github-token podman secret get rotated?
+near	cheatsheets	0.742402	0.7219547	0.0204	cheatsheet	cheatsheets/build/build-strategy.md	What licence is Tillandsias itself released under?
+near	cheatsheets	0.63283813	0.61570764	0.0171	cheatsheet	cheatsheets/concurrent-git/branches.md	How many approvals does a PR need before it can be merged?
+near	cheatsheets	0.7009853	0.6813561	0.0196	spec	openspec/specs/cli-mode/spec.md	What's the minimum supported Rust version for this workspace?
+near	cheatsheets	0.6645558	0.6605949	0.0040	cheatsheet	cheatsheets/runtime/macos-tray-diagnostics.md	Walk me through notarizing Tillandsias.app with Apple.
+near	cheatsheets	0.6829272	0.6766653	0.0063	spec	openspec/specs/git-mirror-service/spec.md	How do I back up and restore the tillandsias-mirror-<project> volume?
+near	cheatsheets	0.67810017	0.6740542	0.0040	spec	openspec/specs/tray-app/spec.md	How do I set which agent the tray launches by default?
+near	cheatsheets	0.6892695	0.68666625	0.0026	spec	openspec/specs/default-image/spec.md	What SELinux policy module ships with the forge image?
+near	cheatsheets	0.71114475	0.7043821	0.0068	spec	openspec/specs/inference-container/spec.md	How many concurrent requests can the inference container handle before it queues?
+near	cheatsheets	0.69098336	0.67547405	0.0155	spec	openspec/specs/cheatsheets-license-tiered/spec.md	Can I turn off cheatsheet-telemetry event emission?
+near	cheatsheets	0.7227623	0.71384144	0.0089	cheatsheet	docs/cheatsheets/logging-levels.md	Where does the Linux tray write its log file?
+near	cheatsheets	0.7148956	0.707843	0.0071	methodology	methodology/distributed-work.yaml	What fields does an entry in plan/index.yaml have?
+near	cheatsheets	0.6446041	0.6444056	0.0002	methodology	methodology/distributed-work.yaml	What's the current Direction, and which packet should I pick up next?
+near	cheatsheets	0.8117218	0.76617277	0.0455	methodology	methodology/multi-host-development.yaml	What exactly does methodology's pull_merge_cadence.pre_push_gate require?
+near	cheatsheets	0.83609015	0.74524546	0.0908	code	images/default/lib-common.sh	Show me the implementation of rewrite_origin_for_enclave_push().
+near	cheatsheets	0.79163736	0.7630686	0.0286	cheatsheet	docs/cheatsheets/cache-semantics-implementation.md	What are the acceptance criteria in openspec/specs/forge-as-only-runtime/spec.md?
+near	cheatsheets	0.7475477	0.72131956	0.0262	cheatsheet	cheatsheets/agents/openspec.md	Which headings must a design.md contain for `openspec validate` to pass?
+near	cheatsheets	0.67443043	0.6733626	0.0011	spec	openspec/specs/certificate-validation/spec.md	Is there mTLS between the enclave containers?
+near	cheatsheets	0.75932235	0.7300918	0.0292	spec	openspec/specs/enclave-network/spec.md	Does the enclave network support IPv6?
+near	cheatsheets	0.66024965	0.6547994	0.0055	cheatsheet	docs/cheatsheets/wsl-bash.md	Can I install and run Tillandsias on a machine with no internet at all?
+near	cheatsheets	0.6546126	0.6544498	0.0002	spec	openspec/specs/podman-idiomatic-patterns/spec.md	Can two user accounts on the same machine share one enclave?
+near	cheatsheets	0.7574485	0.74263537	0.0148	spec	openspec/specs/binary-signing/spec.md	How do I verify the Cosign signature on a downloaded Tillandsias release?
+near	cheatsheets	0.7108138	0.69903195	0.0118	code	scripts/install-macos.sh	How do I roll back to the previous Tillandsias release if a new one breaks?
+near	cheatsheets	0.7213998	0.7150349	0.0064	cheatsheet	cheatsheets/runtime/cheatsheet-pull-on-demand.md	When does the pull-on-demand cheatsheet cache get evicted?
+near	cheatsheets	0.76784164	0.748568	0.0193	cheatsheet	cheatsheets/runtime/forge-cache-semantics.md	Is there a size cap on the per-project cache, and what cleans it up?
+near	cheatsheets	0.8437674	0.81635046	0.0274	cheatsheet	docs/cheatsheets/secrets-management.md	What happens if creating the tillandsias-github-token podman secret fails when the git service launches?
+near	cheatsheets	0.6847409	0.6829339	0.0018	spec	openspec/specs/git-mirror-service/spec.md	How do I configure the mirror to talk to a GitHub Enterprise Server instead of github.com?
+near	cheatsheets	0.70214957	0.69653356	0.0056	spec	openspec/specs/forge-hot-cold-split/spec.md	What happens when the project workspace tmpfs hits its ~1 GB cap mid-build?
+near	cheatsheets	0.7111613	0.70186234	0.0093	cheatsheet	cheatsheets/utils/podman-secrets.md	What's the procedure for adding a new item to the tray menu end to end?
+near	cheatsheets	0.7013255	0.69006234	0.0113	spec	openspec/specs/forge-staleness/spec.md	How do we bump the forge base image from Fedora 43 to Fedora 44?
+near	cheatsheets	0.7771578	0.7466057	0.0306	cheatsheet	cheatsheets/runtime/cache-architecture.md	Does upgrading Tillandsias migrate the existing per-project caches, or are they rebuilt?
+near	cheatsheets	0.6887209	0.68762857	0.0011	cheatsheet	cheatsheets/runtime/macos-tray-diagnostics.md	What's the version-negotiation rule between the tray and the in-VM headless on the control wire?
+near	cheatsheets	0.67871124	0.6637204	0.0150	spec	openspec/specs/windows-native-tray/spec.md	Which commit or release introduced the exit-code-3 CONVERGING behaviour on the Windows tray?
+near	cheatsheets	0.6791115	0.6766731	0.0024	spec	openspec/specs/git-mirror-service/spec.md	What ack-latency number should page someone for the git mirror?
+far	cheatsheets	0.55895585	0.54813826	0.0108	cheatsheet	cheatsheets/build/nix-flake-basics.md	What is the flibber flobber?
+far	cheatsheets	0.5653997	0.56187826	0.0035	methodology	methodology/distributed-work.yaml	How many quonts fit inside a wibbled zorptangle before it snarfles?
+far	cheatsheets	0.6058259	0.58204263	0.0238	code	scripts/check-litmus-expression-pinning-added.sh	Explain the difference between a grumbleflatch and a semi-grumbleflatch in plain English.
+far	cheatsheets	0.57441515	0.5572735	0.0171	code	scripts/claim-ledger-node.sh	Is the moon's blorptitude increasing this quarter?
+far	cheatsheets	0.60380614	0.5786085	0.0252	spec	openspec/specs/tray-progress-and-icon-states/spec.md	What's a good recipe for sourdough starter if my kitchen runs cold?
+far	cheatsheets	0.57708293	0.5532625	0.0238	cheatsheet	cheatsheets/observability/cheatsheet-metrics.md	Who won the 1998 FIFA World Cup final and what was the score?
+far	cheatsheets	0.54383135	0.5373587	0.0065	cheatsheet	cheatsheets/runtime/portable-executable-transparent-mode.md	How do I get rid of aphids on my tomato plants without pesticides?
+far	cheatsheets	0.47966167	0.47850618	0.0012	cheatsheet	cheatsheets/runtime/ephemeral-lifecycle.md	What's the capital of Burkina Faso?
+far	cheatsheets	0.53430915	0.51726604	0.0170	methodology	methodology/proximity.yaml	What are the tax implications of exercising incentive stock options in the US?
+far	cheatsheets	0.5868423	0.57753223	0.0093	cheatsheet	docs/cheatsheets/git-mirror-lifecycle-audit.md	How do I configure an Oracle RAC cluster for automatic failover?
+far	cheatsheets	0.6392426	0.62617016	0.0131	cheatsheet	docs/cheatsheets/tray-rapid-switch.md	What's the best way to tune JVM garbage collection for a low-latency trading system?
+far	cheatsheets	0.627928	0.60404354	0.0239	code	images/default/lib-common.sh	How do I set up a Salesforce Apex trigger that fires on record update?
+far	cheatsheets	0.6225293	0.60317016	0.0194	cheatsheet	cheatsheets/runtime/gpu-tier-detection.md	Write me a CUDA kernel for tiled matrix multiplication using shared memory.
+far	cheatsheets	0.6204562	0.6180344	0.0024	methodology	methodology/bootstrap/router.yaml	How do I configure BGP route reflectors on a Juniper MX router?
+in	spec	0.7356241	0.7162912	0.0193	spec	openspec/specs/versioning/spec.md	What does the VERSION file look like — how many parts does the version number have?
+in	spec	0.7501363	0.74690545	0.0032	cheatsheet	cheatsheets/runtime/networking.md	which git tags are allowed to be force-pushed?
+in	spec	0.7335363	0.7297045	0.0038	cheatsheet	cheatsheets/runtime/codex-agent-entrypoints.md	Which agent CLIs have to be present inside the forge image?
+in	spec	0.678579	0.67390627	0.0047	cheatsheet	cheatsheets/runtime/everything-in-forge.md	Can the forge container see my home directory?
+in	spec	0.734227	0.71073484	0.0235	code	crates/tillandsias-headless/src/main.rs	What values is TILLANDSIAS_AGENT_RESULT_FORMAT allowed to take?
+in	spec	0.8211797	0.79278123	0.0284	spec	openspec/specs/enclave-network/spec.md	How is the enclave network created and which container is allowed out to the internet?
+in	spec	0.7696465	0.7440648	0.0256	spec	openspec/specs/default-image/spec.md	Does the forge image ship a Nix store?
+in	spec	0.77067125	0.71113425	0.0595	spec	openspec/specs/default-image/spec.md	What is the default opencode model in the bundled config, and what is small_model clamped to?
+in	spec	0.77732354	0.771653	0.0057	spec	openspec/specs/tray-progress-and-icon-states/spec.md	How many tray icon states are there and what are they called?
+in	spec	0.7241038	0.70302474	0.0211	spec	openspec/specs/singleton-guard/spec.md	Where does the singleton lock file live on each OS?
+in	spec	0.78249824	0.70810217	0.0744	spec	openspec/specs/build-lock/spec.md	Is build-lock still a live spec?
+in	spec	0.7864542	0.7818457	0.0046	cheatsheet	cheatsheets/utils/podman-secrets.md	Where is the Vault auto-unseal key kept?
+in	spec	0.76831394	0.7465254	0.0218	spec	openspec/specs/tillandsias-vault/spec.md	What Vault ACL policies exist and can the forge read the GitHub token?
+in	spec	0.77809095	0.76190406	0.0162	spec	openspec/specs/git-mirror-service/spec.md	Where do the bare project mirrors live inside the git service container?
+in	spec	0.75185126	0.70358974	0.0483	spec	openspec/specs/git-mirror-service/spec.md	Which receive.* settings are forced on the mirror at every service start?
+in	spec	0.7550303	0.74608874	0.0089	spec	openspec/specs/vsock-transport/spec.md	vsock port for the control wire?
+in	spec	0.72218513	0.7100228	0.0122	spec	openspec/specs/vsock-exec-authz/spec.md	Which executables can the host ask the VM to exec over the control wire?
+in	spec	0.8350809	0.77690965	0.0582	cheatsheet	docs/cheatsheets/wsl-bash.md	What does a WSL2 distro need before Tillandsias containers will run in it?
+in	spec	0.72429025	0.6838701	0.0404	spec	openspec/specs/forge-welcome/spec.md	What shell do I land in when I open the Terminal from the tray?
+in	spec	0.75651133	0.7541968	0.0023	spec	openspec/specs/web-image/spec.md	What base image and web server does the web-image use, and how big can it be?
+in	spec	0.78865665	0.77168393	0.0170	spec	openspec/specs/nix-cache-service/spec.md	How does an ephemeral forge get a warm nix cache without mounting the host store?
+in	spec	0.7519487	0.7459222	0.0060	cheatsheet	docs/cheatsheets/windows-bash.md	What environment variables must NOT be present in a forge container?
+in	spec	0.80146974	0.7667909	0.0347	spec	openspec/specs/forge-hot-cold-split/spec.md	Which paths in the forge are RAM-backed tmpfs, and what are their size caps?
+in	spec	0.74141824	0.73837715	0.0030	spec	openspec/specs/forge-hot-cold-split/spec.md	What happens if the host doesn't have enough free RAM to launch a forge?
+in	spec	0.7975	0.7975	0.0000	cheatsheet	cheatsheets/runtime/forge-cache-semantics.md	Where does cargo put its downloads inside the forge?
+in	spec	0.7287703	0.720251	0.0085	cheatsheet	docs/cheatsheets/mitm-proxy-design.md	What are the two proxy ports and how do they differ?
+in	spec	0.78381604	0.7514403	0.0324	cheatsheet	cheatsheets/runtime/socket-enclave-diagnostics.md	Which models get pulled at each inference tier?
+in	spec	0.77567655	0.7746097	0.0011	spec	openspec/specs/host-browser-mcp/spec.md	Where does the per-lane MCP socket live and what are its permissions?
+in	spec	0.7047909	0.70399797	0.0008	spec	openspec/specs/host-browser-mcp/spec.md	How fast can the same project reopen the same URL in a browser window?
+in	spec	0.7503697	0.7486916	0.0017	spec	openspec/specs/opencode-web-session/spec.md	What is the OpenCode Web session cookie called and what flags does it carry?
+in	spec	0.80387276	0.7945727	0.0093	spec	openspec/specs/subdomain-naming-flip/spec.md	Is the URL project.opencode.localhost or opencode.project.localhost?
+in	spec	0.76922256	0.7078398	0.0614	code	crates/tillandsias-headless/src/main.rs	How do I open the Observatorium for a project and what hostname does it get?
+in	spec	0.6987779	0.6981981	0.0006	spec	openspec/specs/app-lifecycle/spec.md	How does the Windows tray survive an Explorer crash?
+in	spec	0.7378051	0.73227286	0.0055	spec	openspec/specs/macos-native-tray/spec.md	Why isn't the tray showing up in the macOS Dock?
+in	spec	0.7463915	0.7298549	0.0165	cheatsheet	docs/cheatsheets/tray-state-machine.md	How does the tray tell 'GitHub is down' apart from 'you're not logged in'?
+in	spec	0.78023344	0.7438557	0.0364	spec	openspec/specs/init-command/spec.md	In what order does --init build the images, and what exit codes does it use?
+in	spec	0.80975735	0.79904044	0.0107	spec	openspec/specs/ci-release/spec.md	What is the Linux release artifact called and why must it be musl?
+in	spec	0.81894934	0.79315144	0.0258	spec	openspec/specs/ci-release/spec.md	What is GitHub Actions allowed to do for a release, and what has to run locally?
+in	spec	0.7260913	0.722073	0.0040	spec	openspec/specs/runtime-diagnostics-stream/spec.md	Where does the tray write its log file on Linux?
+in	spec	0.7691981	0.76047206	0.0087	cheatsheet	cheatsheets/runtime/fedora-minimal-wsl2.md	Which podman security flags are non-negotiable?
+in	spec	0.7417985	0.71302944	0.0288	spec	openspec/specs/app-lifecycle/spec.md	Is there a confirmation before Destroy wipes an app's data?
+in	spec	0.7519748	0.70491654	0.0471	spec	openspec/specs/no-terminal-flicker/spec.md	What are the seven per-project tools in the tray submenu?
+in	spec	0.6716363	0.64801365	0.0236	cheatsheet	docs/cheatsheets/logging-levels.md	Does the project scanner poll the filesystem?
+in	spec	0.734144	0.70989066	0.0243	cheatsheet	cheatsheets/runtime/portable-executable-transparent-mode.md	What JSON does headless mode print when it starts and stops?
+in	spec	0.72879505	0.72524804	0.0035	spec	openspec/specs/podman-registries-config/spec.md	Why doesn't podman prompt me to choose a registry when starting the stack?
+in	spec	0.6867867	0.66578156	0.0210	spec	openspec/specs/no-terminal-flicker/spec.md	Is the cloud submenu logout-reset behaviour implemented on all three platforms?
+in	spec	0.7581468	0.7493884	0.0088	code	scripts/hooks/pre-commit-openspec.sh	what is the ghost trace baseline file for
+in	spec	0.7690504	0.7615695	0.0075	methodology	methodology/litmus.yaml	What do the phase labels on litmus tests mean?
+in	spec	0.74472433	0.74366975	0.0011	spec	openspec/specs/cheatsheet-source-layer/spec.md	Why is agent-cheatsheets showing zero litmus coverage?
+in	spec	0.82135546	0.8202004	0.0012	spec	openspec/specs/cache-recovery-mechanism/spec.md	Why is a missing cache_version file not an error?
+in	spec	0.7498681	0.7274752	0.0224	cheatsheet	cheatsheets/web/cdp.md	Where does the bundled Chromium come from and where is it cached?
+in	spec	0.7653337	0.7084998	0.0568	spec	openspec/specs/spec-traceability/spec.md	Does a stale @trace comment break the build?
+in	spec	0.6617165	0.65338624	0.0083	cheatsheet	docs/cheatsheets/script-hardening.md	What file does the accelerator probe write?
+in	spec	0.69214255	0.6781787	0.0140	spec	openspec/specs/tray-projects-rename/spec.md	Which languages is the i18n wave adding to the forge?
+in	spec	0.6422377	0.61471474	0.0275	spec	openspec/specs/tray-menu/spec.md	what's the lobster in the tray menu
+near	spec	0.75326407	0.7528917	0.0004	spec	openspec/specs/codex-tray-launcher/spec.md	What does cheatsheets/runtime/everything-in-forge.md actually say?
+near	spec	0.7080909	0.7045168	0.0036	code	crates/tillandsias-metrics/src/dashboard.rs	Which Grafana dashboard should I import to visualise the convergence metrics?
+near	spec	0.65557486	0.65373194	0.0018	methodology	methodology/multi-host-development.yaml	Is there an Ansible playbook for provisioning a new developer host?
+near	spec	0.68616563	0.6726723	0.0135	spec	openspec/specs/dev-build/spec.md	Is there a Terraform module for the release infrastructure?
+near	spec	0.59353185	0.58443433	0.0091	code	crates/tillandsias-headless/src/main.rs	Does the project run a Jenkins job for nightly builds?
+near	spec	0.77075815	0.7422231	0.0285	cheatsheet	cheatsheets/build/build-strategy.md	What open-source licence is Tillandsias itself released under?
+near	spec	0.7202515	0.71981955	0.0004	code	crates/tillandsias-headless/src/main.rs	What is the exact function signature of launch_forge_agent?
+near	spec	0.7679461	0.7522827	0.0157	cheatsheet	cheatsheets/runtime/networking.md	How many domains are in images/proxy/allowlist.txt?
+near	spec	0.76773185	0.7491442	0.0186	spec	openspec/specs/install-progress/spec.md	What is the SHA-256 of the current published tillandsias-linux-x86_64 binary?
+near	spec	0.7508925	0.7464906	0.0044	spec	openspec/specs/tillandsias-vault/spec.md	How do I back up and restore the tillandsias-vault-data volume?
+near	spec	0.6797998	0.6671411	0.0127	code	scripts/hooks/pre-commit-openspec.sh	Which script implements the ghost-trace baseline may-only-shrink ratchet?
+near	spec	0.6524422	0.63945615	0.0130	spec	openspec/specs/graceful-shutdown/spec.md	How many forge lanes can run concurrently on one host?
+near	spec	0.6811921	0.6784699	0.0027	code	scripts/test-mirror-host-cert-and-sshd.sh	What happens if the host disk fills up in the middle of an image build?
+near	spec	0.6880127	0.6706164	0.0174	cheatsheet	cheatsheets/runtime/statusnotifier-tray.md	Is there a Flatpak or Snap package of the Linux tray?
+near	spec	0.733643	0.6928327	0.0408	cheatsheet	cheatsheets/runtime/container-image-tagging.md	Does Tillandsias run on FreeBSD?
+near	spec	0.75570667	0.7420289	0.0137	code	images/git/entrypoint.sh	What's the retry and backoff policy when the upstream git push in relay-refs.sh fails?
+near	spec	0.7418693	0.72042274	0.0214	spec	openspec/specs/host-shell-architecture/spec.md	What is the timeout on the Hello/HelloAck handshake over vsock?
+near	spec	0.7465771	0.72486925	0.0217	spec	openspec/specs/tray-menu/spec.md	What screen-reader support does the tray menu have?
+near	spec	0.7485693	0.70721453	0.0414	spec	openspec/specs/no-terminal-flicker/spec.md	Are there keyboard shortcuts for opening the tray menu?
+near	spec	0.66730136	0.65553313	0.0118	cheatsheet	cheatsheets/runtime/portable-executable-transparent-mode.md	Does the tray play a sound when a build finishes?
+near	spec	0.66724074	0.6602094	0.0070	methodology	methodology/event/012-litmus-podman-runtime-blocker.yaml	How do I run the litmus suite against a remote host?
+near	spec	0.64973557	0.6486759	0.0011	methodology	methodology/proximity.yaml	How many releases have been published so far?
+near	spec	0.74924487	0.728192	0.0211	spec	openspec/specs/subdomain-routing-via-reverse-proxy/spec.md	How do I chain Squid to my company's outbound proxy?
+near	spec	0.7296715	0.7206969	0.0090	spec	openspec/specs/native-secrets-store/spec.md	What is the complete set of OAuth scopes the GitHub login requests?
+near	spec	0.69647	0.6445765	0.0519	spec	openspec/specs/forge-welcome/spec.md	What are the actual rotating tips shown in the forge welcome banner?
+near	spec	0.66867024	0.66060835	0.0081	cheatsheet	cheatsheets/runtime/dedicated-service-account-podman.md	Can a team share one Tillandsias install with LDAP or SAML sign-in?
+near	spec	0.73711675	0.73523957	0.0019	cheatsheet	docs/cheatsheets/secrets-management.md	Does the GitHub sign-in flow support hardware security keys or TOTP?
+near	spec	0.6758695	0.67009354	0.0058	spec	openspec/specs/forge-hot-cold-split/spec.md	What are the minimum RAM and disk requirements to run the whole stack?
+near	spec	0.7303853	0.715048	0.0153	spec	openspec/specs/no-terminal-flicker/spec.md	What are the steps to add a brand-new leaf action to the per-project tray submenu?
+near	spec	0.76290125	0.7585727	0.0043	methodology	methodology/event/029-podman-control-plane-split-brain.yaml	Which Rust crates does tillandsias-podman depend on?
+near	spec	0.83192843	0.8078651	0.0241	code	images/default/Containerfile	Which registry hosts the tillandsias-forge image?
+near	spec	0.79941624	0.7654394	0.0340	cheatsheet	docs/cheatsheets/windows-setup.md	What is the minimum podman version required on native Linux?
+near	spec	0.7122727	0.71139634	0.0009	spec	openspec/specs/graceful-shutdown/spec.md	What happens to running forge containers when the laptop suspends and resumes?
+near	spec	0.67795265	0.6708605	0.0071	methodology	methodology/provenance.yaml	What usage telemetry is sent to Tillandsias servers, and how do I opt out?
+near	spec	0.64674586	0.64482135	0.0019	spec	openspec/specs/git-mirror-service/spec.md	How do I move my mirrors and per-project caches to a new machine?
+near	spec	0.62384015	0.62208796	0.0018	methodology	methodology/event/029-podman-control-plane-split-brain.yaml	Which model does NanoClawV2 itself run on?
+near	spec	0.82291436	0.7977692	0.0251	spec	openspec/specs/methodology-accountability/spec.md	What is the YAML schema for writing a new litmus test?
+near	spec	0.72113657	0.715598	0.0055	code	crates/tillandsias-headless/src/tray/mod.rs	How many projects can appear in the Cloud submenu before it overflows?
+near	spec	0.72479916	0.7150748	0.0097	spec	openspec/specs/async-inference-launch/spec.md	Is there an uptime or availability target for the enclave services?
+near	spec	0.68056	0.67122716	0.0093	code	crates/tillandsias-logging/src/event_collector.rs	How big is the built forge image on disk?
+near	spec	0.74363065	0.7432096	0.0004	spec	openspec/specs/forge-opencode-onboarding/spec.md	Which opencode release is baked into the current forge image?
+near	spec	0.7380894	0.7144703	0.0236	cheatsheet	docs/cheatsheets/tray-icon-ux.md	How is the tray icon changed for dark desktop themes?
+far	spec	0.55895585	0.54813826	0.0108	cheatsheet	cheatsheets/build/nix-flake-basics.md	What is the flibber flobber?
+far	spec	0.5814218	0.56977135	0.0117	methodology	methodology/distributed-work.yaml	How many wobbles fit in a snarfblat before the quimbles overflow?
+far	spec	0.5216511	0.51128274	0.0104	spec	openspec/specs/default-image/spec.md	Is the zorbulent frimbus compatible with a left-handed trundlewick?
+far	spec	0.5461716	0.5427173	0.0035	methodology	methodology/event/007-build-script-architecture-litmus-tombstone.yaml	What's a good recipe for sourdough starter in a humid climate?
+far	spec	0.57708293	0.5532625	0.0238	cheatsheet	cheatsheets/observability/cheatsheet-metrics.md	Who won the 1998 FIFA World Cup final and what was the score?
+far	spec	0.56841844	0.5490444	0.0194	code	scripts/test-image-build-convergence.sh	How do I get red wine out of a wool carpet?
+far	spec	0.5252291	0.5054788	0.0198	code	scripts/test-ledger-node-claim-resolution.sh	What's the difference between a Roth IRA and a traditional IRA?
+far	spec	0.6020423	0.5867439	0.0153	cheatsheet	cheatsheets/languages/toml.md	What key does a bass clarinet transpose to?
+far	spec	0.5882197	0.58611375	0.0021	cheatsheet	cheatsheets/utils/jq.md	How do I set up a Kafka consumer group with exactly-once semantics in Java?
+far	spec	0.6911159	0.6774955	0.0136	cheatsheet	cheatsheets/data/postgresql-indexing-basics.md	What's the best way to index a PostgreSQL jsonb column for containment queries?
+far	spec	0.61942196	0.5944686	0.0250	cheatsheet	cheatsheets/architecture/enclave-service-catalog-research.md	How do I write a custom Kubernetes admission webhook in Go?
+far	spec	0.64123017	0.6348868	0.0063	spec	openspec/specs/clickable-trace-index/spec.md	Why is my React useEffect running twice in development?
+far	spec	0.57526565	0.56644064	0.0088	code	images/default/config-overlay/shell-helpers.sh	How do I configure Nginx to serve a Django app over gunicorn with TLS?
+in	plan	0.6911348	0.67770666	0.0134	code	crates/tillandsias-plan/src/fragments.rs	ledger fragment filename format?
+in	plan	0.6399134	0.61006945	0.0298	methodology	methodology/distributed-work.yaml	How do I get a work-order number that won't collide with another host's?
+in	plan	0.7326815	0.7309656	0.0017	code	crates/tillandsias-plan/src/fragments.rs	What happens if I change a packet's status by re-declaring it under `packets:` in a new fragment?
+in	plan	0.62522954	0.61821353	0.0070	code	crates/tillandsias-vault-client/src/lib.rs	The channel is called `status:` but I need to change pickup_role. Is that allowed?
+in	plan	0.7047029	0.69588995	0.0088	methodology	methodology/distributed-work.yaml	what statuses can a packet be in
+in	plan	0.7586986	0.7221537	0.0365	methodology	methodology/between-commits-work-discipline.yaml	Which branch do checkpoints go to and what should the commit subject look like?
+in	plan	0.73687357	0.71296775	0.0239	methodology	methodology/agent-observability.yaml	What exactly does a claim lease?
+in	plan	0.6585151	0.65011513	0.0084	methodology	methodology/agent-observability.yaml	Why was 0.65 the wrong refusal threshold to pick for the spec expert?
+in	plan	0.7423033	0.7171324	0.0252	cheatsheet	cheatsheets/build/podman-image-management.md	why is the forge nix flake still on an end-of-life nixpkgs
+in	plan	0.63743156	0.63622373	0.0012	cheatsheet	cheatsheets/runtime/vz-framework-provisioning.md	What hardware is on macuahuitl?
+in	plan	0.668511	0.64736986	0.0211	cheatsheet	docs/cheatsheets/fedora-minimal-containers.md	spec-index-ensure.sh --where printed a C:\Users path on my Fedora box. why?
+in	plan	0.7135552	0.68734163	0.0262	cheatsheet	cheatsheets/concurrent-git/git-mirror-enterprise-practices.md	Is the mirror push 403 specific to one agent harness, one OS, or one release?
+in	plan	0.74957746	0.73767257	0.0119	cheatsheet	cheatsheets/runtime/hashicorp-vault-tillandsias.md	who can read the proxy's TLS interception CA private key
+in	plan	0.76314557	0.76067686	0.0025	code	scripts/forge-e2e-rate-limit.sh	What is the correct class slug for the full in-forge meta-orchestration e2e rate limiter?
+in	plan	0.7173114	0.6953045	0.0220	spec	openspec/specs/remote-projects/spec.md	There's python in the repo — where, and why is that a problem?
+in	plan	0.69790536	0.6656596	0.0322	methodology	methodology/provenance.yaml	Did we decide to adopt OpenTelemetry for loop telemetry?
+in	plan	0.6998985	0.66913265	0.0308	cheatsheet	cheatsheets/runtime/tray-state-machine.md	What actually changes when a component graduates from a dev toolbox to a production enclave container?
+in	plan	0.71504366	0.69112635	0.0239	code	scripts/with-tillandsias-builder.sh	Why is there a toolbox wrapper in build.sh at all?
+in	plan	0.65394706	0.59018767	0.0638	code	crates/tillandsias-macos-tray/src/main.rs	steps to notarize the mac dmg?
+in	plan	0.70181787	0.6981777	0.0036	code	images/default/entrypoint-forge-opencode-web.sh	OpenCode crashed in the mac forge — was that our bug?
+in	plan	0.7572943	0.7309978	0.0263	cheatsheet	cheatsheets/runtime/fedora-minimal-wsl2.md	Does the WSL2 kernel support vsock loopback?
+in	plan	0.7373796	0.7373796	0.0000	spec	openspec/specs/ci-release/spec.md	run-litmus-test.sh printed PASS but zero tests executed. known issue?
+in	plan	0.71887136	0.7054601	0.0134	code	scripts/with-tillandsias-builder.sh	Why does the build keep trying to create a toolbox that already exists?
+in	plan	0.61411333	0.5893954	0.0247	cheatsheet	cheatsheets/runtime/powershell.md	I saved install-windows.ps1 and ran it, and it never downloaded anything. What is going on?
+in	plan	0.6168833	0.61481375	0.0021	code	scripts/build-macos-dmg.sh	every agent lane failed on a fresh macOS VM with a microdnf space error
+in	plan	0.6894809	0.6886874	0.0008	code	crates/tillandsias-headless/src/main.rs	github login through Windows Terminal fails with error 0x80070002
+in	plan	0.71864253	0.6976403	0.0210	spec	openspec/specs/versioning/spec.md	How does a daily build become the stable release?
+in	plan	0.69036597	0.68510425	0.0053	methodology	methodology/versioning.yaml	Why wasn't v0.4.260809.1 promoted to stable?
+in	plan	0.6516216	0.5931907	0.0584	methodology	methodology/multi-host-development.yaml	somebody pushed straight to main — what did that break?
+in	plan	0.74834716	0.7318162	0.0165	code	crates/tillandsias-plan/src/lib.rs	Are there duplicate order numbers in the ledger, and does anything catch them?
+in	plan	0.6640454	0.64938104	0.0147	cheatsheet	docs/cheatsheets/runtime/wsl/architecture-isolation.md	Why did a Windows cycle end up claiming a Linux-owned packet?
+in	plan	0.6636115	0.65868914	0.0049	methodology	methodology/event/019-runtime-podman-health-gate.yaml	podman ps hung for a minute and a half during CI. what causes that?
+in	plan	0.69094306	0.6893855	0.0016	spec	openspec/specs/tillandsias-vault/spec.md	tillandsias --init exits 126 at vault launch on Silverblue
+in	plan	0.6040281	0.58187276	0.0222	spec	openspec/specs/inference-container/spec.md	Can the NPU actually serve an expert model, or is that still theory?
+in	plan	0.6016488	0.5936246	0.0080	code	crates/tillandsias-metrics/src/models.rs	is the iGPU actually faster than CPU for the fat spec expert?
+in	plan	0.6280263	0.6277707	0.0003	spec	openspec/specs/accel-capability-probe/spec.md	Which NPU vendors have a workable Linux story?
+in	plan	0.6225744	0.6011054	0.0215	methodology	methodology/agent-observability.yaml	How much time does an hourly cycle burn before any real work happens?
+in	plan	0.6885019	0.68742466	0.0011	methodology	methodology/multi-host-development.yaml	Every branch was green before pushing, so why did the merge fail nine litmus steps?
+in	plan	0.67028046	0.6504478	0.0198	cheatsheet	cheatsheets/concurrent-git/branches.md	the release runbook tried to merge PR #null
+in	plan	0.7042447	0.6913411	0.0129	cheatsheet	cheatsheets/runtime/forge-loss-on-shutdown-window.md	What were the two data-loss paths found in the forge overnight on 2026-07-19?
+in	plan	0.74755883	0.7335738	0.0140	code	crates/tillandsias-headless/src/main.rs	Why couldn't the Windows forge rewrite git URLs to the mirror?
+in	plan	0.65469426	0.65375847	0.0009	spec	openspec/specs/git-mirror-service/spec.md	Should we just adopt Gitea or Forgejo instead of maintaining our own mirror?
+in	plan	0.76577264	0.7412522	0.0245	cheatsheet	cheatsheets/runtime/windows-installer-prereqs.md	Does `wsl --terminate` give me a genuinely cold kernel?
+in	plan	0.6159819	0.6148571	0.0011	cheatsheet	cheatsheets/runtime/gpu-tier-detection.md	cpu or igpu for embeddings?
+in	plan	0.72152376	0.6815929	0.0399	methodology	methodology/distributed-work.yaml	Why do agents keep undoing each other's formatting?
+in	plan	0.80165935	0.7428757	0.0588	spec	openspec/specs/wsl-daemon-orchestration/spec.md	The WSL distro reboots every time I close my last shell. Why?
+in	plan	0.73163915	0.6895497	0.0421	methodology	methodology/distributed-work.yaml	select-work-batch says no eligible work but query shows 7 ready packets
+near	plan	0.7398825	0.7343488	0.0055	cheatsheet	docs/cheatsheets/podman-logging.md	Where is the Podman Quadlet unit file for the tillandsias-vault container?
+near	plan	0.6909995	0.6676803	0.0233	cheatsheet	cheatsheets/runtime/statusnotifier-tray.md	How do I install the Linux tray as a Flatpak?
+near	plan	0.61416584	0.6053893	0.0088	cheatsheet	docs/cheatsheets/fedora-minimal-containers.md	Which repo do I add to get the .rpm or .deb package?
+near	plan	0.62976575	0.6187762	0.0110	code	images/default/lib-common.sh	Is there an AUR package for Arch users?
+near	plan	0.7081611	0.7067725	0.0014	cheatsheet	cheatsheets/runtime/socket-container-orchestration.md	What Docker Hub organization are the enclave images published under?
+near	plan	0.5986877	0.5879256	0.0108	methodology	methodology/multi-host-development.yaml	Does the mesh use Tailscale or WireGuard between nodes?
+near	plan	0.7028757	0.6431972	0.0597	cheatsheet	cheatsheets/build/nix-flake-caching.md	Do you run Dependabot or Renovate to keep Cargo.lock current?
+near	plan	0.6889388	0.67794657	0.0110	code	crates/tillandsias-control-wire/src/lib.rs	Is there a cargo-fuzz target for the control-wire frame parser?
+near	plan	0.62366194	0.617125	0.0065	spec	openspec/specs/wsl-runtime/spec.md	Does the test suite run under Miri?
+near	plan	0.6310167	0.6258255	0.0052	spec	openspec/specs/accel-capability-probe/spec.md	Where are the Criterion benchmarks, and how do I capture a flamegraph of a slow cycle?
+near	plan	0.66785187	0.6236211	0.0442	methodology	methodology/proximity.yaml	Is there a web dashboard where I can see the fleet's packet status?
+near	plan	0.6435512	0.63161504	0.0119	cheatsheet	cheatsheets/runtime/cdp-security.md	Which Kubernetes distribution do the five always-on Raspberry Pi nodes run?
+near	plan	0.77616704	0.73261523	0.0436	spec	openspec/specs/tray-app/spec.md	Is there an iOS or Android companion app for the tray?
+near	plan	0.6749601	0.63560945	0.0394	cheatsheet	docs/cheatsheets/windows-bash.md	Where's the WiX/MSI installer project for Windows?
+near	plan	0.7187933	0.6608857	0.0579	spec	openspec/specs/no-terminal-flicker/spec.md	Is there a Chocolatey package for the Windows tray?
+near	plan	0.6977384	0.67722416	0.0205	spec	openspec/specs/menu-action-error-handling/spec.md	Do tray crashes get reported to Sentry or any crash-reporting service?
+near	plan	0.7561118	0.6456949	0.1104	cheatsheet	docs/cheatsheets/cache-semantics-implementation.md	What's the test coverage percentage for the workspace?
+near	plan	0.6978179	0.6725102	0.0253	cheatsheet	docs/cheatsheets/openspec-methodology.md	Is there a code-search index like Sourcegraph for agents to browse the repo?
+near	plan	0.8216346	0.74114835	0.0805	spec	openspec/specs/forge-offline/spec.md	What does the forge-offline spec actually require, clause by clause?
+near	plan	0.7378438	0.66692173	0.0709	methodology	methodology/distributed-work.yaml	Walk me through the numbered steps of the /meta-orchestration skill.
+near	plan	0.81940806	0.7584694	0.0609	cheatsheet	cheatsheets/concurrent-git/crdt-ledger-fragments.md	What's in cheatsheets/concurrent-git/crdt-ledger-fragments.md?
+near	plan	0.86075944	0.86026484	0.0005	spec	openspec/specs/podman-container-handle/spec.md	Which litmus tests are currently bound in litmus-bindings.yaml?
+near	plan	0.78434247	0.7500292	0.0343	code	scripts/nix-cache-service.sh	Show me the function signature and body of ensure_ca_bundle.
+near	plan	0.63679385	0.6282401	0.0086	spec	openspec/specs/observability-convergence/spec.md	What in-corpus and near-miss cosine bands did the macOS host measure for spec_answer?
+near	plan	0.6866368	0.67538774	0.0112	cheatsheet	cheatsheets/concurrent-git/git-mirror-managed-alternatives.md	What refusal threshold did the fleet finally standardize on for spec_answer?
+near	plan	0.66894037	0.653325	0.0156	code	crates/tillandsias-plan/src/loop_status.rs	Which specific fragments were folded in the 101-fragment compaction on 2026-08-22?
+near	plan	0.6687394	0.6288978	0.0398	code	scripts/cycle-metrics.sh	How long did the 661-packet archive sweep take in wall-clock seconds?
+near	plan	0.6672285	0.6624373	0.0048	methodology	methodology/multi-host-development.yaml	How many bytes is plan/index.yaml after the sweep?
+near	plan	0.6343733	0.6338061	0.0006	cheatsheet	docs/cheatsheets/github-credential-tools.md	What Apple Developer Team ID do we sign and notarize with?
+near	plan	0.6306934	0.63039577	0.0003	code	scripts/test-pre-push-version-guard-sigpipe.sh	What's the upstream Bun issue number for the arm64 segfault we hit?
+near	plan	0.7060949	0.6858424	0.0203	code	images/proxy/Containerfile	Was the squid destructor segfault ever reported upstream, and what's the bug ID?
+near	plan	0.7194875	0.7124903	0.0070	code	images/default/entrypoint-forge-claude.sh	Which model does the claude harness default to when a forge lane launches without --model?
+near	plan	0.70388025	0.69305474	0.0108	cheatsheet	cheatsheets/runtime/forge-paths-ephemeral-vs-persistent.md	Which 17 locale bundles ship with the forge, and which 15 are unstaged on the nix path?
+near	plan	0.6696559	0.66802067	0.0016	code	scripts/diagnose-windows.ps1	Which commit introduced the em-dash into install-windows.ps1 that broke saved-file runs?
+near	plan	0.64808774	0.6452167	0.0029	spec	openspec/specs/nix-builder/spec.md	How long does a cold full nix build of the guest binaries actually take?
+near	plan	0.5771859	0.57398385	0.0032	code	crates/tillandsias-logging/src/budget_enforcer.rs	What did the five Raspberry Pi 5 nodes cost?
+near	plan	0.6847037	0.6710039	0.0137	cheatsheet	cheatsheets/runtime/wsl-browser-isolation.md	What is the exact Fedora cloud image build the Pi nodes should boot?
+near	plan	0.6132374	0.6104098	0.0028	spec	openspec/specs/project-bootstrap-readme/spec.md	Is there a getting-started guide or user manual for a non-developer installing this?
+near	plan	0.71684253	0.71278304	0.0041	cheatsheet	docs/cheatsheets/tray-icon-ux.md	What keyboard shortcuts does the tray support?
+near	plan	0.6174496	0.6052386	0.0122	spec	openspec/specs/tray-host-control-socket/spec.md	Is there a support email or chat channel where users report problems?
+near	plan	0.69514054	0.6315023	0.0636	cheatsheet	cheatsheets/INDEX.md	What's the published privacy policy — what data leaves the user's machine?
+near	plan	0.6253628	0.60604554	0.0193	methodology	methodology/distributed-work.yaml	How do outside contributors submit changes — is there a CONTRIBUTING guide?
+near	plan	0.6195968	0.61338216	0.0062	methodology	methodology/provenance.yaml	What's the security vulnerability disclosure process for this project?
+near	plan	0.7273018	0.7273018	0.0000	methodology	methodology/agent-observability.yaml	When is v1.0 scheduled to ship?
+near	plan	0.65814275	0.6512037	0.0069	methodology	methodology/distributed-work.yaml	How many packets are in plan/archive in total right now?
+near	plan	0.70882434	0.68885165	0.0200	cheatsheet	docs/cheatsheets/tray-litmus-timeout-constraints.md	What's the p50 end-to-end wall-clock time of a complete ./build.sh --ci-full run?
+near	plan	0.7004116	0.69581175	0.0046	spec	openspec/specs/tray-concurrency/spec.md	What memory limit is set on the tray process itself?
+near	plan	0.7952232	0.7841967	0.0110	spec	openspec/specs/git-mirror-service/spec.md	Which Vault policy grants the git mirror its push credential, and what paths does it allow?
+near	plan	0.68470466	0.6797589	0.0049	code	crates/tillandsias-plan/src/main.rs	What is the retention policy for entries in plan/loop_status.md and its fragment directory?
+near	plan	0.6637738	0.6505066	0.0133	code	scripts/install-macos.sh	How do I roll a user back to the previous stable release if today's daily broke their install?
+near	plan	0.6722723	0.66313404	0.0091	spec	openspec/specs/knowledge-source-of-truth/spec.md	What are the exact SmartScreen reputation thresholds — how many downloads or days before the warning stops?
+near	plan	0.6678941	0.6425326	0.0254	methodology	methodology/multi-host-development.yaml	Which OSI license did the operator choose for the repo?
+near	plan	0.72242486	0.701032	0.0214	code	scripts/hooks/post-commit-expert-refresh.sh	How many chunks does the code corpus contribute versus the spec corpus in the RAG index?
+far	plan	0.55895585	0.54813826	0.0108	cheatsheet	cheatsheets/build/nix-flake-basics.md	What is the flibber flobber?
+far	plan	0.53940564	0.5365261	0.0029	code	crates/tillandsias-core/src/genus.rs	How many wingdangles fit inside a standard snorgle before it quaxes?
+far	plan	0.54717666	0.5411454	0.0060	methodology	methodology/litmus.yaml	Is the zorbulent quaximeter compatible with a left-handed grommet spline?
+far	plan	0.5629657	0.5629657	0.0000	methodology	methodology/event/030-multi-host-branch-coordination.yaml	Who won the 2024 Formula 1 drivers' championship?
+far	plan	0.48937604	0.4869932	0.0024	cheatsheet	cheatsheets/runtime/ephemeral-lifecycle.md	What is the capital of Burkina Faso?
+far	plan	0.5799197	0.5382218	0.0417	cheatsheet	cheatsheets/runtime/vz-framework-provisioning.md	How long should I braise a lamb shank, and at what oven temperature?
+far	plan	0.56032425	0.55033976	0.0100	methodology	methodology/litmus.yaml	What are the early symptoms of feline hyperthyroidism?
+far	plan	0.56811124	0.5519309	0.0162	cheatsheet	cheatsheets/test/selenium.md	Explain the difference between a sonnet and a villanelle.
+far	plan	0.5879698	0.5878165	0.0002	code	images/proxy/squid-supervisor.sh	Roughly how many years ago did the Chicxulub impact occur?
+far	plan	0.57989746	0.55253637	0.0274	cheatsheet	cheatsheets/runtime/socket-container-health.md	What's the standard tuning for a mandolin?
+far	plan	0.5734655	0.5699379	0.0035	code	scripts/forge-liveness-probe.sh	When is the personal income tax filing deadline in Portugal?
+far	plan	0.6124149	0.61095655	0.0015	methodology	methodology/event/021-status-icon-mapping-gap.yaml	How do I build a custom Shopify storefront theme with Liquid templates?
+far	plan	0.6602595	0.64988554	0.0104	cheatsheet	cheatsheets/languages/css.md	What does the CSS `contain: layout` property actually do to the render tree?
+far	plan	0.5932617	0.5875074	0.0058	code	scripts/macos-tray-ax-smoke.sh	How do I write a Salesforce Apex trigger that fires after insert?
+far	plan	0.63375443	0.6313372	0.0024	cheatsheet	cheatsheets/runtime/vz-framework-provisioning.md	What's the correct way to set up a sidechain compressor on a bus in Ableton Live?
+in	code	0.7763253	0.75264555	0.0237	spec	openspec/specs/forge-hot-cold-split/spec.md	What headroom factor does the pre-flight host RAM check use before it lets a forge launch?
+in	code	0.7660298	0.7537374	0.0123	code	crates/tillandsias-core/src/preflight.rs	How is the --memory ceiling for a forge container calculated?
+in	code	0.7567532	0.7524247	0.0043	code	crates/tillandsias-headless/src/main.rs	is there an env var to bypass the single-instance lock?
+in	code	0.7745179	0.6966884	0.0778	code	crates/tillandsias-core/src/genus.rs	How many tillandsia genera are in the pool, and do they all have their own icon artwork?
+in	code	0.744722	0.72941625	0.0153	code	crates/tillandsias-headless/src/main.rs	What does the image version guard do with a tag it cannot parse?
+in	code	0.71917045	0.6896885	0.0295	spec	openspec/specs/tray-app/spec.md	Which coding agent does a fresh install default to?
+in	code	0.796098	0.7629011	0.0332	spec	openspec/specs/cli-mode/spec.md	Can a container profile turn off the podman security flags for a particular container type?
+in	code	0.72314394	0.71780384	0.0053	code	crates/tillandsias-scanner/src/detect.rs	How does the scanner work out what kind of project a directory is, and in what order does it check?
+in	code	0.69573295	0.6759639	0.0198	code	crates/tillandsias-core/src/config.rs	scanner default watch dir?
+in	code	0.7673471	0.76692003	0.0004	code	crates/tillandsias-otp/src/lib.rs	What is the OpenCode Web session cookie called and how long does the browser keep it?
+in	code	0.73243105	0.7282246	0.0042	spec	openspec/specs/chromium-safe-variant/spec.md	What stops a session cookie from being readable in a process memory dump after the session ends?
+in	code	0.74974746	0.7449177	0.0048	cheatsheet	docs/cheatsheets/browser-isolation.md	Why does browser.open refuse to open an opencode.* URL?
+in	code	0.75693876	0.7195991	0.0373	spec	openspec/specs/browser-mcp-server/spec.md	What message framing does the browser MCP server use over stdio?
+in	code	0.79781806	0.76707697	0.0307	spec	openspec/specs/tray-host-control-socket/spec.md	what's the frame format on the tray-host control socket?
+in	code	0.77902734	0.7695488	0.0095	spec	openspec/specs/vsock-transport/spec.md	What is the maximum control-wire message size, and what happens if a peer sends a bigger length prefix?
+in	code	0.7078502	0.7037463	0.0041	code	crates/tillandsias-secure-channel/src/lib.rs	Why derive the control-channel key from the build version instead of just comparing versions in the handshake?
+in	code	0.6926058	0.67028034	0.0223	spec	openspec/specs/host-guest-transport/spec.md	Which argv shapes is the guest allowed to spawn on a host PTY request?
+in	code	0.72575456	0.67151827	0.0542	code	crates/tillandsias-headless/src/resource_lock.rs	Where do the advisory per-resource locks live, and what happens if the holder is killed?
+in	code	0.7375479	0.7226145	0.0149	code	scripts/dev-inference-ensure.sh	When does the runtime refuse to create or remove containers?
+in	code	0.8010901	0.76480985	0.0363	spec	openspec/specs/inference-engine-slots/spec.md	Can I register an NPU device against the ollama engine slot?
+in	code	0.74632466	0.7210305	0.0253	code	crates/tillandsias-headless/src/pty_input_probe.rs	How does the guest actually tell whether a PTY process is blocked waiting for input?
+in	code	0.79265136	0.7891893	0.0035	spec	openspec/specs/podman-idiomatic-patterns/spec.md	Which podman flags are mandatory on every Tillandsias container launch?
+in	code	0.7407222	0.7257274	0.0150	cheatsheet	cheatsheets/runtime/socket-enclave-diagnostics.md	Is there a timeout on podman invocations, or can one hang forever?
+in	code	0.78475845	0.77260524	0.0122	spec	openspec/specs/forge-hot-cold-split/spec.md	What tmpfs size caps does a forge container get?
+in	code	0.7122007	0.70040053	0.0118	spec	openspec/specs/runtime-logging/spec.md	what's the log rotation policy?
+in	code	0.7568096	0.7510237	0.0058	code	crates/tillandsias-metrics/src/prometheus_exporter.rs	What names does the Prometheus exporter use for the container metrics?
+in	code	0.7821229	0.7659933	0.0161	cheatsheet	cheatsheets/utils/podman-secrets.md	How is the Vault unseal key derived so the user never sees a passphrase?
+in	code	0.73046213	0.73015577	0.0003	code	images/router/entrypoint.sh	How does the router sidecar answer Caddy's forward_auth, and on what port?
+in	code	0.7503072	0.7446481	0.0057	spec	openspec/specs/versioning/spec.md	Why does the host-shell crate not use CARGO_PKG_VERSION for its version string?
+in	code	0.7763242	0.7719793	0.0043	code	crates/tillandsias-windows-tray/src/eventlog.rs	Which tracing levels reach the Windows Event Log?
+in	code	0.6761265	0.66809666	0.0080	cheatsheet	cheatsheets/runtime/hashicorp-vault-tillandsias.md	Where does the macOS tray keep the installation UUID?
+in	code	0.6883607	0.6571931	0.0312	spec	openspec/specs/forge-environment-discoverability/spec.md	What answers can the plan expert give about how my checkout sits relative to a citation's commit?
+in	code	0.698521	0.69691795	0.0016	methodology	methodology/multi-host-development.yaml	What is scripts/ensure_toolbox.sh supposed to do on a Mac or a plain mutable Fedora box?
+in	code	0.76562494	0.7010515	0.0646	methodology	methodology/provenance.yaml	Why does the repo ban bash 4 constructs in scripts?
+in	code	0.6695478	0.6545679	0.0150	methodology	methodology/event/020-tray-binary-test-discovery.yaml	How does the tracked-binary guard decide something is a binary?
+in	code	0.69374406	0.68858904	0.0052	code	crates/tillandsias-headless/src/main.rs	Which script paths are required to be committed executable?
+in	code	0.7015123	0.6994672	0.0020	code	scripts/hooks/pre-push-local-gate.sh	What is actually recorded in the gate stamp, and why did it need a scope field?
+in	code	0.72488165	0.6948891	0.0300	cheatsheet	cheatsheets/build/validation-ci.md	What release channels can the Linux installer pull from?
+in	code	0.72544986	0.7198865	0.0056	code	scripts/uninstall.sh	Does uninstalling remove the PATH lines the installer added to my shell rc files?
+in	code	0.7259466	0.70028126	0.0257	methodology	methodology/distributed-work.yaml	How does the fleet derive a unique name for a host?
+in	code	0.7056163	0.6793637	0.0263	methodology	methodology/distributed-work.yaml	What shape is a worker agent's lease id, and what happens if a component comes out empty?
+in	code	0.7357437	0.72830796	0.0074	spec	openspec/specs/install-progress/spec.md	How do I verify a downloaded Tillandsias binary is genuine?
+in	code	0.76731604	0.7577002	0.0096	spec	openspec/specs/browser-isolation-framework/spec.md	Which base images are the container images allowed to build FROM?
+in	code	0.7321144	0.7275215	0.0046	code	crates/tillandsias-headless/src/main.rs	Is there a faster reset than `podman system reset --force` for smoke iterations?
+in	code	0.7455667	0.74041134	0.0052	code	scripts/with-tillandsias-builder.sh	Why must podman-neutralize-proxy.sh be sourced rather than executed?
+in	code	0.6867089	0.6785151	0.0082	cheatsheet	cheatsheets/runtime/container-gpu.md	What does nvidia-cdi-ensure.sh print, and does it need sudo?
+in	code	0.7291482	0.69972235	0.0294	code	scripts/nix-toolbox.sh	What are the fallback rungs for getting a usable nix, and how large can the store grow before gc?
+in	code	0.78326863	0.77165985	0.0116	code	scripts/manage-cache.sh	At what disk usage does the cache manager start evicting images?
+in	code	0.7013202	0.6930057	0.0083	code	scripts/run-litmus-test.sh	What do the litmus runner's exit codes mean, and is --diff-scope safe to trust?
+in	code	0.71448386	0.6599127	0.0546	cheatsheet	docs/cheatsheets/script-hardening.md	Why does local-ci.sh explicitly do `set +e` after sourcing the builder wrapper?
+in	code	0.74338466	0.7333117	0.0101	code	scripts/hooks/pre-commit-openspec.sh	What single line does the trace coverage tool emit, and how do I make it fail on ghosts?
+in	code	0.73397815	0.7126926	0.0213	spec	openspec/specs/versioning/spec.md	What has to be true before a daily release can be promoted to stable?
+in	code	0.7102129	0.6866124	0.0236	code	scripts/delegate-outcome.sh	How is a forge agent classified as alive or dead?
+in	code	0.69022363	0.6718143	0.0184	code	scripts/e2e-preflight.sh	How does a host decide it is eligible to run the E2E gate?
+near	code	0.7151455	0.713893	0.0013	spec	openspec/specs/enclave-network/spec.md	Where are the Podman Quadlet .container unit files for the enclave services?
+near	code	0.67883813	0.66495603	0.0139	spec	openspec/specs/opencode-web-session-otp/spec.md	How many digits is the OTP code and what time step does it use?
+near	code	0.7420522	0.71454495	0.0275	spec	openspec/specs/host-browser-mcp/spec.md	Can the browser MCP drive Firefox instead of Chromium?
+near	code	0.6230345	0.6133813	0.0097	spec	openspec/specs/distributed-tracing/spec.md	How do I ship the tracing spans to an OTLP collector?
+near	code	0.65823746	0.6468201	0.0114	cheatsheet	docs/cheatsheets/centicolon-dashboard.md	Where are the Grafana dashboard JSON files for the container metrics?
+near	code	0.7795641	0.7624884	0.0171	spec	openspec/specs/tillandsias-vault/spec.md	Can Vault be configured to auto-unseal with AWS KMS instead of the derived key?
+near	code	0.6654398	0.6653358	0.0001	code	crates/tillandsias-headless/src/vault_bootstrap.rs	How do I take and restore a snapshot of the Vault data?
+near	code	0.83199555	0.73007536	0.1019	code	crates/tillandsias-headless/src/exec_allowlist.rs	Are there property-based tests for the exec allowlist?
+near	code	0.65448976	0.6517993	0.0027	cheatsheet	cheatsheets/runtime/portable-executable-transparent-mode.md	Which cargo-fuzz targets exist for the control-wire decoder?
+near	code	0.61894125	0.616223	0.0027	spec	openspec/specs/spec-trace-coverage-threshold/spec.md	How do I generate a code coverage report for the workspace?
+near	code	0.71372116	0.67965966	0.0341	code	images/default/locales/pt.sh	What does the Portuguese forge help text say?
+near	code	0.7226287	0.6920057	0.0306	spec	openspec/specs/no-terminal-flicker/spec.md	Is there a Windows on ARM (aarch64) build of the tray?
+near	code	0.75688607	0.74129605	0.0156	spec	openspec/specs/default-image/spec.md	Which packages does the forge image install into the container?
+near	code	0.76429486	0.7549461	0.0093	cheatsheet	cheatsheets/runtime/hashicorp-vault-tillandsias.md	Which exact capability verbs does images/vault/policies/forge.hcl grant on its path?
+near	code	0.81735545	0.8019159	0.0154	spec	openspec/specs/inference-container/spec.md	Which model does the inference container serve by default?
+near	code	0.76590574	0.75238806	0.0135	spec	openspec/specs/ci-release/spec.md	What steps does the release GitHub Actions workflow run?
+near	code	0.6903648	0.6811463	0.0092	methodology	methodology/event/014-ci-full-phase-split.yaml	What exactly does ./build.sh --ci-full do end to end?
+near	code	0.7778237	0.7564602	0.0214	cheatsheet	cheatsheets/runtime/container-image-tagging.md	What version is Tillandsias on right now?
+near	code	0.78346956	0.7659976	0.0175	methodology	methodology/multi-host-development.yaml	What does the methodology say about merging origin/linux-next before pushing a platform branch?
+near	code	0.6399867	0.6164869	0.0235	code	crates/tillandsias-headless/src/main.rs	What is the current Direction for the project?
+near	code	0.6447529	0.644133	0.0006	code	crates/tillandsias-plan/src/lib.rs	How many v0.5 packets are still ready to claim?
+near	code	0.79653853	0.69948685	0.0971	spec	openspec/specs/vsock-exec-authz/spec.md	What does spec:vsock-exec-authz actually require?
+near	code	0.84417474	0.71354234	0.1306	cheatsheet	cheatsheets/web/cookie-auth-best-practices.md	What does the cookie-auth-best-practices cheatsheet recommend?
+near	code	0.7701404	0.70504314	0.0651	methodology	methodology/distributed-work.yaml	What steps does the /meta-orchestration skill run, in order?
+near	code	0.7530365	0.74657536	0.0065	methodology	methodology/litmus-framework.yaml	What does litmus:agent-identity-canonical-source-shape assert?
+near	code	0.7930709	0.7602047	0.0329	cheatsheet	docs/cheatsheets/centicolon-dashboard.md	Which panels are in the CentiColon convergence dashboard?
+near	code	0.70092434	0.68397665	0.0169	methodology	methodology/event/021-status-icon-mapping-gap.yaml	Where is the register that defines the OBS-### gap ids?
+near	code	0.7192247	0.69640225	0.0228	spec	openspec/specs/tray-minimal-ux/spec.md	Where does the tray download an update from when the update check fires?
+near	code	0.6785233	0.66480225	0.0137	cheatsheet	cheatsheets/web/cookie-auth-best-practices.md	Does the sidecar rate-limit repeated failed cookie validations?
+near	code	0.6392988	0.6366691	0.0026	cheatsheet	cheatsheets/runtime/macos-vz-gui-research-v2.md	Which Apple Developer Team ID signs the macOS DMG?
+near	code	0.7561983	0.7121608	0.0440	spec	openspec/specs/no-terminal-flicker/spec.md	Is there a winget manifest for installing the Windows tray?
+near	code	0.66724384	0.64563054	0.0216	cheatsheet	cheatsheets/web/protobuf.md	Where is the protobuf service definition for the control API?
+near	code	0.66652864	0.643076	0.0235	spec	openspec/specs/cli-mode/spec.md	What does the observatorium web page actually render?
+near	code	0.7856825	0.7800051	0.0057	methodology	methodology/litmus.yaml	How many litmus tests are in the suite?
+near	code	0.7664669	0.7306438	0.0358	cheatsheet	cheatsheets/build/build-strategy.md	What license is Tillandsias released under?
+near	code	0.677156	0.6519565	0.0252	methodology	methodology/provenance.yaml	What is the review process for getting a change merged?
+near	code	0.75010693	0.7274922	0.0226	methodology	methodology/multi-host-development.yaml	Which branch protection rules are configured on the GitHub repository?
+near	code	0.74152875	0.7372294	0.0043	cheatsheet	cheatsheets/runtime/container-lifecycle.md	What retry count and backoff does the git-mirror's startup retry-push loop use?
+near	code	0.713801	0.7040391	0.0098	cheatsheet	cheatsheets/web/cdp.md	Which Chrome for Testing version is pinned, and what is its SHA-256?
+near	code	0.76883906	0.7440582	0.0248	code	crates/tillandsias-control-wire/src/lib.rs	What does openspec/changes/control-wire-pty-attach/proposal.md say about chunking large PTY streams?
+near	code	0.63643354	0.6295445	0.0069	methodology	methodology/distributed-work.yaml	Which hosts are currently in the fleet roster?
+near	code	0.6428827	0.64176166	0.0011	methodology	methodology/distributed-work.yaml	Which SQL database stores the plan ledger?
+near	code	0.76245	0.7336616	0.0288	cheatsheet	cheatsheets/runtime/tray-performance-profiling.md	What analytics endpoint does the tray report usage to?
+near	code	0.75437933	0.73052293	0.0239	spec	openspec/specs/graceful-shutdown/spec.md	How many forge containers can run concurrently before the tray refuses a new one?
+near	code	0.7505636	0.71407926	0.0365	cheatsheet	cheatsheets/runtime/vsock-transport.md	What throughput does the vsock control wire achieve in practice?
+near	code	0.7041128	0.6736797	0.0304	cheatsheet	cheatsheets/runtime/container-image-tagging.md	How do I migrate an existing Tillandsias installation to a new machine?
+far	code	0.55895585	0.54813826	0.0108	cheatsheet	cheatsheets/build/nix-flake-basics.md	What is the flibber flobber?
+far	code	0.54902375	0.5412857	0.0077	code	crates/tillandsias-plan/src/fragments.rs	How many wibbles fit inside a standard snorgle?
+far	code	0.56398636	0.55708385	0.0069	code	images/default/lib-common.sh	Does the zorptangle need recalibrating after a gibbous moon?
+far	code	0.5644929	0.56141883	0.0031	cheatsheet	cheatsheets/algorithms/sorting-comparison.md	Should I whisk the quandle before or after the third blorp?
+far	code	0.51122737	0.51122737	0.0000	cheatsheet	cheatsheets/runtime/socket-container-health.md	What is the capital of Mongolia?
+far	code	0.5587768	0.55762875	0.0011	methodology	methodology/event/007-build-script-architecture-litmus-tombstone.yaml	How do I keep a sourdough starter alive if I only bake once a month?
+far	code	0.55025274	0.544487	0.0058	cheatsheet	cheatsheets/privacy/data-minimization-gdpr.md	What year did the Berlin Wall come down?
+far	code	0.5386464	0.53482795	0.0038	methodology	methodology/distributed-work.yaml	Who won the 2018 FIFA World Cup?
+far	code	0.5840619	0.5758356	0.0082	cheatsheet	cheatsheets/runtime/forge-paths-ephemeral-vs-persistent.md	How does carbon fixation differ between C4 and CAM plants?
+far	code	0.5493122	0.53340596	0.0159	methodology	methodology/provenance.yaml	What are the best stretches for chronic lower back pain?
+far	code	0.6796653	0.5422003	0.1375	cheatsheet	cheatsheets/languages/css.md	How do I vertically center a div with flexbox?
+far	code	0.6176031	0.60910666	0.0085	cheatsheet	cheatsheets/utils/psql.md	What's the right way to set up a read replica for a PostgreSQL primary?
+far	code	0.6302835	0.6254413	0.0048	code	scripts/test-subdomain-routing.sh	Write me a regular expression that validates email addresses.
+far	code	0.6411109	0.625529	0.0156	methodology	methodology/convergence.yaml	How do I train a LoRA adapter for a Stable Diffusion checkpoint?
+far	code	0.5984722	0.5962193	0.0023	methodology	methodology/proximity.yaml	What's the recommended way to serve a Django app behind gunicorn?

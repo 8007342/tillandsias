@@ -1,0 +1,579 @@
+{"band":"in","corpus":"methodology","q":"Which file is actually the source of truth for how this project works — CLAUDE.md or something else?"}
+{"band":"in","corpus":"methodology","q":"can I write a python script for the build?"}
+{"band":"in","corpus":"methodology","q":"How old can a freshness stamp get before the component counts as stale?"}
+{"band":"in","corpus":"methodology","q":"Why can't I just run `nix store gc` on the tillandsias nix store?"}
+{"band":"in","corpus":"methodology","q":"I hit a broken test while doing something unrelated. Am I obliged to file it?"}
+{"band":"in","corpus":"methodology","q":"There's a skill in .claude/skills and one in .opencode/skills — which do I edit?"}
+{"band":"in","corpus":"methodology","q":"What command starts an autonomous session, and what must I read first?"}
+{"band":"in","corpus":"methodology","q":"how many intents can I pick from the router?"}
+{"band":"in","corpus":"methodology","q":"Before I edit any source, what do I have to record?"}
+{"band":"in","corpus":"methodology","q":"Is there a hard limit on how big the methodology may grow relative to the codebase?"}
+{"band":"in","corpus":"methodology","q":"What is the version string format?"}
+{"band":"in","corpus":"methodology","q":"Which branch is allowed to change the VERSION file?"}
+{"band":"in","corpus":"methodology","q":"How does a normal user end up on a stable build instead of a broken daily?"}
+{"band":"in","corpus":"methodology","q":"Should methodology changes go on the methodology-refinements branch?"}
+{"band":"in","corpus":"methodology","q":"What's the one-sentence core principle behind all of this?"}
+{"band":"in","corpus":"methodology","q":"My podman stack is wedged. Do I repair it or blow it away?"}
+{"band":"in","corpus":"methodology","q":"Why do we prefer many tiny fast model calls over one big careful one?"}
+{"band":"in","corpus":"methodology","q":"A packet's stated implementation approach is dead but the goal still matters. Do I close it?"}
+{"band":"in","corpus":"methodology","q":"What ambiguity score does a spec need before it can go active?"}
+{"band":"in","corpus":"methodology","q":"spec id format?"}
+{"band":"in","corpus":"methodology","q":"What are the S-levels and what does S2 mean?"}
+{"band":"in","corpus":"methodology","q":"What exactly is a CentiColon measuring?"}
+{"band":"in","corpus":"methodology","q":"What arguments does the #[trace] macro take?"}
+{"band":"in","corpus":"methodology","q":"Why is there only one GitHub Actions workflow?"}
+{"band":"in","corpus":"methodology","q":"How fast does an 'instant' litmus test have to be, and what may it do?"}
+{"band":"in","corpus":"methodology","q":"What fraction of active specs must have litmus tests?"}
+{"band":"in","corpus":"methodology","q":"Can a cheatsheet cite our own repo notes as its source?"}
+{"band":"in","corpus":"methodology","q":"Is images/default/cheatsheets/ supposed to be committed, given it's gitignored?"}
+{"band":"in","corpus":"methodology","q":"Is there a cap on how often a host may push?"}
+{"band":"in","corpus":"methodology","q":"Can the recurring loop decide by itself to start treating build warnings as findings?"}
+{"band":"in","corpus":"methodology","q":"Are blocking calls allowed in the tray event loop?"}
+{"band":"in","corpus":"methodology","q":"Is the macOS branch called macos-next?"}
+{"band":"in","corpus":"methodology","q":"What do I have to do before every push to windows-next?"}
+{"band":"in","corpus":"methodology","q":"Can I ssh into the guest VM to read its journals while debugging?"}
+{"band":"in","corpus":"methodology","q":"How many branches does the remote carry?"}
+{"band":"in","corpus":"methodology","q":"How long is a work claim good for?"}
+{"band":"in","corpus":"methodology","q":"What's the difference between completed, verified and done on a packet?"}
+{"band":"in","corpus":"methodology","q":"How do I get an order number for a packet I'm filing?"}
+{"band":"in","corpus":"methodology","q":"What's the right way to change a packet's status field?"}
+{"band":"in","corpus":"methodology","q":"When am I allowed to just read plan/index.yaml instead of asking the MCP expert?"}
+{"band":"in","corpus":"methodology","q":"Where does the agent_id in a lease come from — can I compose it myself?"}
+{"band":"in","corpus":"methodology","q":"I'm running inside the forge and a tool I need isn't there. Where do I file for it?"}
+{"band":"in","corpus":"methodology","q":"How long without activity before an in-progress task shows as stale?"}
+{"band":"in","corpus":"methodology","q":"How is the expert answer_rate computed?"}
+{"band":"in","corpus":"methodology","q":"Should I stash my uncommitted work before pulling?"}
+{"band":"in","corpus":"methodology","q":"Which markdown directories count as canonical rather than intake?"}
+{"band":"in","corpus":"methodology","q":"What claim-strength labels can a methodology claim carry?"}
+{"band":"in","corpus":"methodology","q":"Do we claim Banach-style contraction convergence?"}
+{"band":"in","corpus":"methodology","q":"What statuses can an unknown event have?"}
+{"band":"in","corpus":"methodology","q":"What does the MO-FULL attestation line look like?"}
+{"band":"in","corpus":"methodology","q":"How many agents can I run in parallel on this host right now?"}
+{"band":"in","corpus":"methodology","q":"Can a forge improvement proposal ask for an extra host directory mount?"}
+{"band":"in","corpus":"methodology","q":"How do I tell whether to fix something in the forge or file it for the builder?"}
+{"band":"in","corpus":"methodology","q":"Where does the litmus framework put its mock boundary?"}
+{"band":"in","corpus":"methodology","q":"Should I work out a packet's residual centicolons by hand?"}
+{"band":"near","corpus":"methodology","q":"Which Helm chart do we use to deploy the enclave services?"}
+{"band":"near","corpus":"methodology","q":"Is there a docker-compose file for bringing the service stack up locally?"}
+{"band":"near","corpus":"methodology","q":"Do we use Ansible or any configuration-management tool to provision the dev hosts?"}
+{"band":"near","corpus":"methodology","q":"Which Terraform modules manage the GitHub repository settings and branch protection?"}
+{"band":"near","corpus":"methodology","q":"What Rust toolchain version is pinned for builds?"}
+{"band":"near","corpus":"methodology","q":"What clippy or rustfmt lint configuration do we enforce beyond -D warnings?"}
+{"band":"near","corpus":"methodology","q":"Is cargo-audit or cargo-deny run as part of any gate?"}
+{"band":"near","corpus":"methodology","q":"What line-coverage percentage must the Rust unit tests reach?"}
+{"band":"near","corpus":"methodology","q":"How many approvals does the linux-next to main PR need before it can merge?"}
+{"band":"near","corpus":"methodology","q":"Is there a CODEOWNERS file deciding who reviews methodology changes?"}
+{"band":"near","corpus":"methodology","q":"What open-source license is Tillandsias itself released under?"}
+{"band":"near","corpus":"methodology","q":"What is the actual numeric value of V_min, the minimum acceptable convergence velocity?"}
+{"band":"near","corpus":"methodology","q":"What are the w1 through w5 weights in the cheatsheet scoring function?"}
+{"band":"near","corpus":"methodology","q":"What is the byte limit for total cheatsheet size?"}
+{"band":"near","corpus":"methodology","q":"What do the priority ranks p0 through p3 actually mean, and who assigns them?"}
+{"band":"near","corpus":"methodology","q":"How should estimated_hours on a packet be estimated, and what scale is it on?"}
+{"band":"near","corpus":"methodology","q":"What exact characters are in the alphabet used for the 4-character order-token suffix?"}
+{"band":"near","corpus":"methodology","q":"Which four musl flake outputs have their crane deps closures pinned as GC roots?"}
+{"band":"near","corpus":"methodology","q":"Which host owns the crates/tillandsias-plan crate?"}
+{"band":"near","corpus":"methodology","q":"What is the naming convention for a hotfix branch?"}
+{"band":"near","corpus":"methodology","q":"How many days may a deprecated spec sit before it must be moved to obsolete?"}
+{"band":"near","corpus":"methodology","q":"What time of day does the daily merge-to-main-and-release run?"}
+{"band":"near","corpus":"methodology","q":"Which signing key or certificate is used to sign the release binaries?"}
+{"band":"near","corpus":"methodology","q":"Do the macOS release artifacts need Apple notarization, and how is that done?"}
+{"band":"near","corpus":"methodology","q":"What is the curl one-liner an end user runs to install Tillandsias?"}
+{"band":"near","corpus":"methodology","q":"Which embedding model do the on-demand RAG experts use?"}
+{"band":"near","corpus":"methodology","q":"What chunk size and overlap do the expert corpora use when indexing?"}
+{"band":"near","corpus":"methodology","q":"Which vector store backs the expert index?"}
+{"band":"near","corpus":"methodology","q":"How do I start the forge-plan MCP server by hand if it isn't running?"}
+{"band":"near","corpus":"methodology","q":"What files must an openspec/changes/<id>/ directory contain?"}
+{"band":"near","corpus":"methodology","q":"Which command archives an OpenSpec change once implementation is finished?"}
+{"band":"near","corpus":"methodology","q":"What does ./build.sh --graphs actually produce?"}
+{"band":"near","corpus":"methodology","q":"How do I register a new litmus test so scripts/run-litmus-test.sh picks it up?"}
+{"band":"near","corpus":"methodology","q":"What are all the control-wire message variants?"}
+{"band":"near","corpus":"methodology","q":"What does the ExecOneShot control-wire operation do?"}
+{"band":"near","corpus":"methodology","q":"How does the git-mirror service authenticate to GitHub?"}
+{"band":"near","corpus":"methodology","q":"How is Vault unsealed when the stack comes up?"}
+{"band":"near","corpus":"methodology","q":"What key algorithm do the per-lane SSH-CA certificates use?"}
+{"band":"near","corpus":"methodology","q":"How many packets are currently open in the ledger?"}
+{"band":"near","corpus":"methodology","q":"What is work order 759 about?"}
+{"band":"near","corpus":"methodology","q":"What is the current head commit of origin/osx-next?"}
+{"band":"near","corpus":"methodology","q":"What is the tray's startup emoji progression, step by step?"}
+{"band":"near","corpus":"methodology","q":"How many delegates are allowed at ramp stage 1?"}
+{"band":"near","corpus":"methodology","q":"What telemetry thresholds must be green before the concurrency stage can be lifted?"}
+{"band":"near","corpus":"methodology","q":"How long may a packet stay `blocked` before it must be escalated to the operator?"}
+{"band":"near","corpus":"methodology","q":"Who emits the agent heartbeat, and at what interval?"}
+{"band":"near","corpus":"methodology","q":"What is the token budget for a full in-forge e2e cycle?"}
+{"band":"near","corpus":"methodology","q":"How do I install the tillandsias-plan CLI on a fresh host?"}
+{"band":"near","corpus":"methodology","q":"What does the output of `tillandsias-plan burndown` look like?"}
+{"band":"near","corpus":"methodology","q":"How do I resolve a Cargo.lock merge conflict between two platform branches?"}
+{"band":"near","corpus":"methodology","q":"What is the minimum Windows version supported for a Tillandsias host?"}
+{"band":"near","corpus":"methodology","q":"Which macOS version is required for the Virtualization.framework guest?"}
+{"band":"far","corpus":"methodology","q":"What is the flibber flobber?"}
+{"band":"far","corpus":"methodology","q":"How many zorptangles fit inside a standard quibnark?"}
+{"band":"far","corpus":"methodology","q":"Does the wumbo-schnitzel protocol support left-handed marmalade mode?"}
+{"band":"far","corpus":"methodology","q":"Is a grimsley-blort compatible with a thrunkle socket?"}
+{"band":"far","corpus":"methodology","q":"How do I center a div horizontally and vertically in CSS?"}
+{"band":"far","corpus":"methodology","q":"What's the difference between TCP and UDP?"}
+{"band":"far","corpus":"methodology","q":"How do I set up a read replica for a Postgres database on Amazon RDS?"}
+{"band":"far","corpus":"methodology","q":"How do I fine-tune a YOLOv8 object detector on a custom image dataset?"}
+{"band":"far","corpus":"methodology","q":"What's the best way to keep a sourdough starter alive?"}
+{"band":"far","corpus":"methodology","q":"Who won the 1998 FIFA World Cup?"}
+{"band":"far","corpus":"methodology","q":"What is the capital of Mongolia?"}
+{"band":"far","corpus":"methodology","q":"What do mitochondria do in a cell?"}
+{"band":"far","corpus":"methodology","q":"Write me a haiku about rain on a tin roof."}
+{"band":"in","corpus":"cheatsheets","q":"Which Claude model does the forge use by default?"}
+{"band":"in","corpus":"cheatsheets","q":"Two agents both want to start OpenCode on 5173. What do we do?"}
+{"band":"in","corpus":"cheatsheets","q":"Can I archive an OpenSpec change while some tasks are still unchecked?"}
+{"band":"in","corpus":"cheatsheets","q":"which branch does macOS work go on?"}
+{"band":"in","corpus":"cheatsheets","q":"How long is an agent's lease on a work item good for by default?"}
+{"band":"in","corpus":"cheatsheets","q":"Besides Co-Authored-By, what trailer marks which tool and model produced a commit?"}
+{"band":"in","corpus":"cheatsheets","q":"Why didn't we just use Gitea's push mirror instead of writing our own relay?"}
+{"band":"in","corpus":"cheatsheets","q":"What are the three iron rules for writing to plan/?"}
+{"band":"in","corpus":"cheatsheets","q":"Which forge paths are RAM-backed, and what size caps do they have?"}
+{"band":"in","corpus":"cheatsheets","q":"What kinds of bind mounts is a forge container allowed to have?"}
+{"band":"in","corpus":"cheatsheets","q":"enclave service names and ports?"}
+{"band":"in","corpus":"cheatsheets","q":"The forge is missing a tool I need. What am I supposed to do about it?"}
+{"band":"in","corpus":"cheatsheets","q":"What exactly does run-forge-standalone.sh give me?"}
+{"band":"in","corpus":"cheatsheets","q":"Before Chromium opens for OpenCode Web, what should the route probes return?"}
+{"band":"in","corpus":"cheatsheets","q":"Which D-Bus interfaces does the Linux tray expose, and is GTK allowed as the backend?"}
+{"band":"in","corpus":"cheatsheets","q":"Why can't `--diagnose` on macOS report live control-wire status?"}
+{"band":"in","corpus":"cheatsheets","q":"How big does the Windows tray log get before it rolls over?"}
+{"band":"in","corpus":"cheatsheets","q":"I've got a 6 GB GPU. Which models get pre-pulled and which are lazy?"}
+{"band":"in","corpus":"cheatsheets","q":"What are the three cheatsheet tiers and where does each read its source at runtime?"}
+{"band":"in","corpus":"cheatsheets","q":"What states does a cheatsheet pass through between being written and being re-verified?"}
+{"band":"in","corpus":"cheatsheets","q":"How does the forge decide which language to greet me in?"}
+{"band":"in","corpus":"cheatsheets","q":"Where does the curl installer put the binary if ~/.local/bin isn't on my PATH?"}
+{"band":"in","corpus":"cheatsheets","q":"How fast is the enclave supposed to hand control back to the user?"}
+{"band":"in","corpus":"cheatsheets","q":"Where does Vault store the GitHub token, and how long do the per-container tokens live?"}
+{"band":"in","corpus":"cheatsheets","q":"How do I completely remove Tillandsias and its leftovers from a Linux box?"}
+{"band":"in","corpus":"cheatsheets","q":"Which directories inside the forge are read-only image layers versus writable and persisted?"}
+{"band":"in","corpus":"cheatsheets","q":"A repo has three tracked files. Which startup skill does /startup route to?"}
+{"band":"in","corpus":"cheatsheets","q":"What does the release workflow actually publish?"}
+{"band":"in","corpus":"cheatsheets","q":"Why does a binary I `cargo install`ed vanish between forge sessions?"}
+{"band":"in","corpus":"cheatsheets","q":"Can I build an Android APK in the forge?"}
+{"band":"in","corpus":"cheatsheets","q":"does rg support lookbehind?"}
+{"band":"in","corpus":"cheatsheets","q":"What's the GitHub API rate limit if I haven't run gh auth login?"}
+{"band":"in","corpus":"cheatsheets","q":"jq — difference between --arg and --argjson?"}
+{"band":"in","corpus":"cheatsheets","q":"What two top-level sections must a Tillandsias-managed README have?"}
+{"band":"in","corpus":"cheatsheets","q":"How many characters can the tray STATUS chip line be?"}
+{"band":"in","corpus":"cheatsheets","q":"Where do agents inside the forge find the list of available cheatsheets?"}
+{"band":"in","corpus":"cheatsheets","q":"Can I cite my own reasoning about the project as a cheatsheet's provenance?"}
+{"band":"in","corpus":"cheatsheets","q":"What does L2 mean in the verification-level framework?"}
+{"band":"in","corpus":"cheatsheets","q":"Which Rust items are required to carry an @trace annotation?"}
+{"band":"in","corpus":"cheatsheets","q":"Which litmus helper asserts that a pattern is NOT present in a file?"}
+{"band":"in","corpus":"cheatsheets","q":"What Node version does OpenSpec require?"}
+{"band":"in","corpus":"cheatsheets","q":"Where is the GitHub token kept on each operating system?"}
+{"band":"in","corpus":"cheatsheets","q":"Where does the git author name and email live — same place as the token?"}
+{"band":"in","corpus":"cheatsheets","q":"Is GIT_ASKPASS still part of the credential path?"}
+{"band":"in","corpus":"cheatsheets","q":"Calling bash.exe from Rust on Windows says 'No such file or directory' for a C:/... script path. Why?"}
+{"band":"in","corpus":"cheatsheets","q":"Why do the enclave DNS aliases stop resolving on Windows and macOS?"}
+{"band":"in","corpus":"cheatsheets","q":"How many items does the tray menu show at launch?"}
+{"band":"in","corpus":"cheatsheets","q":"What do the different plant shapes on the tray icon mean?"}
+{"band":"in","corpus":"cheatsheets","q":"How much disk is the whole enclave stack supposed to need?"}
+{"band":"in","corpus":"cheatsheets","q":"What are the validation rules for a project name?"}
+{"band":"in","corpus":"cheatsheets","q":"How do I regenerate the convergence dashboard?"}
+{"band":"in","corpus":"cheatsheets","q":"OpenCode's inline theme script gets blocked by CSP. What's our workaround?"}
+{"band":"in","corpus":"cheatsheets","q":"What's the canonical NO_PROXY value for the forge and inference profiles?"}
+{"band":"in","corpus":"cheatsheets","q":"Where does --init track which images already built successfully?"}
+{"band":"in","corpus":"cheatsheets","q":"Which container images are allowed to be Alpine and which have to be Fedora?"}
+{"band":"near","corpus":"cheatsheets","q":"How do I package the Tillandsias enclave as a Helm chart?"}
+{"band":"near","corpus":"cheatsheets","q":"Is there a docker-compose.yml for bringing the enclave up locally?"}
+{"band":"near","corpus":"cheatsheets","q":"Can I export the running enclave to a Kubernetes manifest with `podman generate kube`?"}
+{"band":"near","corpus":"cheatsheets","q":"Is there an Ansible playbook for provisioning a new developer host?"}
+{"band":"near","corpus":"cheatsheets","q":"Where's the Terraform module for the release infrastructure?"}
+{"band":"near","corpus":"cheatsheets","q":"How do I point Prometheus at the enclave and build a Grafana dashboard from it?"}
+{"band":"near","corpus":"cheatsheets","q":"What does the Jenkins pipeline for Tillandsias look like?"}
+{"band":"near","corpus":"cheatsheets","q":"Is emacs available inside the forge?"}
+{"band":"near","corpus":"cheatsheets","q":"How do I attach gdb or lldb to a hung tray process and get a backtrace?"}
+{"band":"near","corpus":"cheatsheets","q":"What's the rotation and retention policy for the external logs under /var/log/tillandsias/external?"}
+{"band":"near","corpus":"cheatsheets","q":"What CPU limit do forge containers run with?"}
+{"band":"near","corpus":"cheatsheets","q":"Are there keyboard shortcuts for the tray menu?"}
+{"band":"near","corpus":"cheatsheets","q":"How does Tillandsias decide which genus icon a given project gets?"}
+{"band":"near","corpus":"cheatsheets","q":"How many forge containers can run at the same time on a Linux host?"}
+{"band":"near","corpus":"cheatsheets","q":"What are the required fields of a litmus test YAML — steps, expect, phase, size?"}
+{"band":"near","corpus":"cheatsheets","q":"What does `--size instant` mean, and what other sizes can I pass to run-litmus-test.sh?"}
+{"band":"near","corpus":"cheatsheets","q":"How often does the tillandsias-github-token podman secret get rotated?"}
+{"band":"near","corpus":"cheatsheets","q":"What licence is Tillandsias itself released under?"}
+{"band":"near","corpus":"cheatsheets","q":"How many approvals does a PR need before it can be merged?"}
+{"band":"near","corpus":"cheatsheets","q":"What's the minimum supported Rust version for this workspace?"}
+{"band":"near","corpus":"cheatsheets","q":"Walk me through notarizing Tillandsias.app with Apple."}
+{"band":"near","corpus":"cheatsheets","q":"How do I back up and restore the tillandsias-mirror-<project> volume?"}
+{"band":"near","corpus":"cheatsheets","q":"How do I set which agent the tray launches by default?"}
+{"band":"near","corpus":"cheatsheets","q":"What SELinux policy module ships with the forge image?"}
+{"band":"near","corpus":"cheatsheets","q":"How many concurrent requests can the inference container handle before it queues?"}
+{"band":"near","corpus":"cheatsheets","q":"Can I turn off cheatsheet-telemetry event emission?"}
+{"band":"near","corpus":"cheatsheets","q":"Where does the Linux tray write its log file?"}
+{"band":"near","corpus":"cheatsheets","q":"What fields does an entry in plan/index.yaml have?"}
+{"band":"near","corpus":"cheatsheets","q":"What's the current Direction, and which packet should I pick up next?"}
+{"band":"near","corpus":"cheatsheets","q":"What exactly does methodology's pull_merge_cadence.pre_push_gate require?"}
+{"band":"near","corpus":"cheatsheets","q":"Show me the implementation of rewrite_origin_for_enclave_push()."}
+{"band":"near","corpus":"cheatsheets","q":"What are the acceptance criteria in openspec/specs/forge-as-only-runtime/spec.md?"}
+{"band":"near","corpus":"cheatsheets","q":"Which headings must a design.md contain for `openspec validate` to pass?"}
+{"band":"near","corpus":"cheatsheets","q":"Is there mTLS between the enclave containers?"}
+{"band":"near","corpus":"cheatsheets","q":"Does the enclave network support IPv6?"}
+{"band":"near","corpus":"cheatsheets","q":"Can I install and run Tillandsias on a machine with no internet at all?"}
+{"band":"near","corpus":"cheatsheets","q":"Can two user accounts on the same machine share one enclave?"}
+{"band":"near","corpus":"cheatsheets","q":"How do I verify the Cosign signature on a downloaded Tillandsias release?"}
+{"band":"near","corpus":"cheatsheets","q":"How do I roll back to the previous Tillandsias release if a new one breaks?"}
+{"band":"near","corpus":"cheatsheets","q":"When does the pull-on-demand cheatsheet cache get evicted?"}
+{"band":"near","corpus":"cheatsheets","q":"Is there a size cap on the per-project cache, and what cleans it up?"}
+{"band":"near","corpus":"cheatsheets","q":"What happens if creating the tillandsias-github-token podman secret fails when the git service launches?"}
+{"band":"near","corpus":"cheatsheets","q":"How do I configure the mirror to talk to a GitHub Enterprise Server instead of github.com?"}
+{"band":"near","corpus":"cheatsheets","q":"What happens when the project workspace tmpfs hits its ~1 GB cap mid-build?"}
+{"band":"near","corpus":"cheatsheets","q":"What's the procedure for adding a new item to the tray menu end to end?"}
+{"band":"near","corpus":"cheatsheets","q":"How do we bump the forge base image from Fedora 43 to Fedora 44?"}
+{"band":"near","corpus":"cheatsheets","q":"Does upgrading Tillandsias migrate the existing per-project caches, or are they rebuilt?"}
+{"band":"near","corpus":"cheatsheets","q":"What's the version-negotiation rule between the tray and the in-VM headless on the control wire?"}
+{"band":"near","corpus":"cheatsheets","q":"Which commit or release introduced the exit-code-3 CONVERGING behaviour on the Windows tray?"}
+{"band":"near","corpus":"cheatsheets","q":"What ack-latency number should page someone for the git mirror?"}
+{"band":"far","corpus":"cheatsheets","q":"What is the flibber flobber?"}
+{"band":"far","corpus":"cheatsheets","q":"How many quonts fit inside a wibbled zorptangle before it snarfles?"}
+{"band":"far","corpus":"cheatsheets","q":"Explain the difference between a grumbleflatch and a semi-grumbleflatch in plain English."}
+{"band":"far","corpus":"cheatsheets","q":"Is the moon's blorptitude increasing this quarter?"}
+{"band":"far","corpus":"cheatsheets","q":"What's a good recipe for sourdough starter if my kitchen runs cold?"}
+{"band":"far","corpus":"cheatsheets","q":"Who won the 1998 FIFA World Cup final and what was the score?"}
+{"band":"far","corpus":"cheatsheets","q":"How do I get rid of aphids on my tomato plants without pesticides?"}
+{"band":"far","corpus":"cheatsheets","q":"What's the capital of Burkina Faso?"}
+{"band":"far","corpus":"cheatsheets","q":"What are the tax implications of exercising incentive stock options in the US?"}
+{"band":"far","corpus":"cheatsheets","q":"How do I configure an Oracle RAC cluster for automatic failover?"}
+{"band":"far","corpus":"cheatsheets","q":"What's the best way to tune JVM garbage collection for a low-latency trading system?"}
+{"band":"far","corpus":"cheatsheets","q":"How do I set up a Salesforce Apex trigger that fires on record update?"}
+{"band":"far","corpus":"cheatsheets","q":"Write me a CUDA kernel for tiled matrix multiplication using shared memory."}
+{"band":"far","corpus":"cheatsheets","q":"How do I configure BGP route reflectors on a Juniper MX router?"}
+{"band":"in","corpus":"spec","q":"What does the VERSION file look like — how many parts does the version number have?"}
+{"band":"in","corpus":"spec","q":"which git tags are allowed to be force-pushed?"}
+{"band":"in","corpus":"spec","q":"Which agent CLIs have to be present inside the forge image?"}
+{"band":"in","corpus":"spec","q":"Can the forge container see my home directory?"}
+{"band":"in","corpus":"spec","q":"What values is TILLANDSIAS_AGENT_RESULT_FORMAT allowed to take?"}
+{"band":"in","corpus":"spec","q":"How is the enclave network created and which container is allowed out to the internet?"}
+{"band":"in","corpus":"spec","q":"Does the forge image ship a Nix store?"}
+{"band":"in","corpus":"spec","q":"What is the default opencode model in the bundled config, and what is small_model clamped to?"}
+{"band":"in","corpus":"spec","q":"How many tray icon states are there and what are they called?"}
+{"band":"in","corpus":"spec","q":"Where does the singleton lock file live on each OS?"}
+{"band":"in","corpus":"spec","q":"Is build-lock still a live spec?"}
+{"band":"in","corpus":"spec","q":"Where is the Vault auto-unseal key kept?"}
+{"band":"in","corpus":"spec","q":"What Vault ACL policies exist and can the forge read the GitHub token?"}
+{"band":"in","corpus":"spec","q":"Where do the bare project mirrors live inside the git service container?"}
+{"band":"in","corpus":"spec","q":"Which receive.* settings are forced on the mirror at every service start?"}
+{"band":"in","corpus":"spec","q":"vsock port for the control wire?"}
+{"band":"in","corpus":"spec","q":"Which executables can the host ask the VM to exec over the control wire?"}
+{"band":"in","corpus":"spec","q":"What does a WSL2 distro need before Tillandsias containers will run in it?"}
+{"band":"in","corpus":"spec","q":"What shell do I land in when I open the Terminal from the tray?"}
+{"band":"in","corpus":"spec","q":"What base image and web server does the web-image use, and how big can it be?"}
+{"band":"in","corpus":"spec","q":"How does an ephemeral forge get a warm nix cache without mounting the host store?"}
+{"band":"in","corpus":"spec","q":"What environment variables must NOT be present in a forge container?"}
+{"band":"in","corpus":"spec","q":"Which paths in the forge are RAM-backed tmpfs, and what are their size caps?"}
+{"band":"in","corpus":"spec","q":"What happens if the host doesn't have enough free RAM to launch a forge?"}
+{"band":"in","corpus":"spec","q":"Where does cargo put its downloads inside the forge?"}
+{"band":"in","corpus":"spec","q":"What are the two proxy ports and how do they differ?"}
+{"band":"in","corpus":"spec","q":"Which models get pulled at each inference tier?"}
+{"band":"in","corpus":"spec","q":"Where does the per-lane MCP socket live and what are its permissions?"}
+{"band":"in","corpus":"spec","q":"How fast can the same project reopen the same URL in a browser window?"}
+{"band":"in","corpus":"spec","q":"What is the OpenCode Web session cookie called and what flags does it carry?"}
+{"band":"in","corpus":"spec","q":"Is the URL project.opencode.localhost or opencode.project.localhost?"}
+{"band":"in","corpus":"spec","q":"How do I open the Observatorium for a project and what hostname does it get?"}
+{"band":"in","corpus":"spec","q":"How does the Windows tray survive an Explorer crash?"}
+{"band":"in","corpus":"spec","q":"Why isn't the tray showing up in the macOS Dock?"}
+{"band":"in","corpus":"spec","q":"How does the tray tell 'GitHub is down' apart from 'you're not logged in'?"}
+{"band":"in","corpus":"spec","q":"In what order does --init build the images, and what exit codes does it use?"}
+{"band":"in","corpus":"spec","q":"What is the Linux release artifact called and why must it be musl?"}
+{"band":"in","corpus":"spec","q":"What is GitHub Actions allowed to do for a release, and what has to run locally?"}
+{"band":"in","corpus":"spec","q":"Where does the tray write its log file on Linux?"}
+{"band":"in","corpus":"spec","q":"Which podman security flags are non-negotiable?"}
+{"band":"in","corpus":"spec","q":"Is there a confirmation before Destroy wipes an app's data?"}
+{"band":"in","corpus":"spec","q":"What are the seven per-project tools in the tray submenu?"}
+{"band":"in","corpus":"spec","q":"Does the project scanner poll the filesystem?"}
+{"band":"in","corpus":"spec","q":"What JSON does headless mode print when it starts and stops?"}
+{"band":"in","corpus":"spec","q":"Why doesn't podman prompt me to choose a registry when starting the stack?"}
+{"band":"in","corpus":"spec","q":"Is the cloud submenu logout-reset behaviour implemented on all three platforms?"}
+{"band":"in","corpus":"spec","q":"what is the ghost trace baseline file for"}
+{"band":"in","corpus":"spec","q":"What do the phase labels on litmus tests mean?"}
+{"band":"in","corpus":"spec","q":"Why is agent-cheatsheets showing zero litmus coverage?"}
+{"band":"in","corpus":"spec","q":"Why is a missing cache_version file not an error?"}
+{"band":"in","corpus":"spec","q":"Where does the bundled Chromium come from and where is it cached?"}
+{"band":"in","corpus":"spec","q":"Does a stale @trace comment break the build?"}
+{"band":"in","corpus":"spec","q":"What file does the accelerator probe write?"}
+{"band":"in","corpus":"spec","q":"Which languages is the i18n wave adding to the forge?"}
+{"band":"in","corpus":"spec","q":"what's the lobster in the tray menu"}
+{"band":"near","corpus":"spec","q":"What does cheatsheets/runtime/everything-in-forge.md actually say?"}
+{"band":"near","corpus":"spec","q":"Which Grafana dashboard should I import to visualise the convergence metrics?"}
+{"band":"near","corpus":"spec","q":"Is there an Ansible playbook for provisioning a new developer host?"}
+{"band":"near","corpus":"spec","q":"Is there a Terraform module for the release infrastructure?"}
+{"band":"near","corpus":"spec","q":"Does the project run a Jenkins job for nightly builds?"}
+{"band":"near","corpus":"spec","q":"What open-source licence is Tillandsias itself released under?"}
+{"band":"near","corpus":"spec","q":"What is the exact function signature of launch_forge_agent?"}
+{"band":"near","corpus":"spec","q":"How many domains are in images/proxy/allowlist.txt?"}
+{"band":"near","corpus":"spec","q":"What is the SHA-256 of the current published tillandsias-linux-x86_64 binary?"}
+{"band":"near","corpus":"spec","q":"How do I back up and restore the tillandsias-vault-data volume?"}
+{"band":"near","corpus":"spec","q":"Which script implements the ghost-trace baseline may-only-shrink ratchet?"}
+{"band":"near","corpus":"spec","q":"How many forge lanes can run concurrently on one host?"}
+{"band":"near","corpus":"spec","q":"What happens if the host disk fills up in the middle of an image build?"}
+{"band":"near","corpus":"spec","q":"Is there a Flatpak or Snap package of the Linux tray?"}
+{"band":"near","corpus":"spec","q":"Does Tillandsias run on FreeBSD?"}
+{"band":"near","corpus":"spec","q":"What's the retry and backoff policy when the upstream git push in relay-refs.sh fails?"}
+{"band":"near","corpus":"spec","q":"What is the timeout on the Hello/HelloAck handshake over vsock?"}
+{"band":"near","corpus":"spec","q":"What screen-reader support does the tray menu have?"}
+{"band":"near","corpus":"spec","q":"Are there keyboard shortcuts for opening the tray menu?"}
+{"band":"near","corpus":"spec","q":"Does the tray play a sound when a build finishes?"}
+{"band":"near","corpus":"spec","q":"How do I run the litmus suite against a remote host?"}
+{"band":"near","corpus":"spec","q":"How many releases have been published so far?"}
+{"band":"near","corpus":"spec","q":"How do I chain Squid to my company's outbound proxy?"}
+{"band":"near","corpus":"spec","q":"What is the complete set of OAuth scopes the GitHub login requests?"}
+{"band":"near","corpus":"spec","q":"What are the actual rotating tips shown in the forge welcome banner?"}
+{"band":"near","corpus":"spec","q":"Can a team share one Tillandsias install with LDAP or SAML sign-in?"}
+{"band":"near","corpus":"spec","q":"Does the GitHub sign-in flow support hardware security keys or TOTP?"}
+{"band":"near","corpus":"spec","q":"What are the minimum RAM and disk requirements to run the whole stack?"}
+{"band":"near","corpus":"spec","q":"What are the steps to add a brand-new leaf action to the per-project tray submenu?"}
+{"band":"near","corpus":"spec","q":"Which Rust crates does tillandsias-podman depend on?"}
+{"band":"near","corpus":"spec","q":"Which registry hosts the tillandsias-forge image?"}
+{"band":"near","corpus":"spec","q":"What is the minimum podman version required on native Linux?"}
+{"band":"near","corpus":"spec","q":"What happens to running forge containers when the laptop suspends and resumes?"}
+{"band":"near","corpus":"spec","q":"What usage telemetry is sent to Tillandsias servers, and how do I opt out?"}
+{"band":"near","corpus":"spec","q":"How do I move my mirrors and per-project caches to a new machine?"}
+{"band":"near","corpus":"spec","q":"Which model does NanoClawV2 itself run on?"}
+{"band":"near","corpus":"spec","q":"What is the YAML schema for writing a new litmus test?"}
+{"band":"near","corpus":"spec","q":"How many projects can appear in the Cloud submenu before it overflows?"}
+{"band":"near","corpus":"spec","q":"Is there an uptime or availability target for the enclave services?"}
+{"band":"near","corpus":"spec","q":"How big is the built forge image on disk?"}
+{"band":"near","corpus":"spec","q":"Which opencode release is baked into the current forge image?"}
+{"band":"near","corpus":"spec","q":"How is the tray icon changed for dark desktop themes?"}
+{"band":"far","corpus":"spec","q":"What is the flibber flobber?"}
+{"band":"far","corpus":"spec","q":"How many wobbles fit in a snarfblat before the quimbles overflow?"}
+{"band":"far","corpus":"spec","q":"Is the zorbulent frimbus compatible with a left-handed trundlewick?"}
+{"band":"far","corpus":"spec","q":"What's a good recipe for sourdough starter in a humid climate?"}
+{"band":"far","corpus":"spec","q":"Who won the 1998 FIFA World Cup final and what was the score?"}
+{"band":"far","corpus":"spec","q":"How do I get red wine out of a wool carpet?"}
+{"band":"far","corpus":"spec","q":"What's the difference between a Roth IRA and a traditional IRA?"}
+{"band":"far","corpus":"spec","q":"What key does a bass clarinet transpose to?"}
+{"band":"far","corpus":"spec","q":"How do I set up a Kafka consumer group with exactly-once semantics in Java?"}
+{"band":"far","corpus":"spec","q":"What's the best way to index a PostgreSQL jsonb column for containment queries?"}
+{"band":"far","corpus":"spec","q":"How do I write a custom Kubernetes admission webhook in Go?"}
+{"band":"far","corpus":"spec","q":"Why is my React useEffect running twice in development?"}
+{"band":"far","corpus":"spec","q":"How do I configure Nginx to serve a Django app over gunicorn with TLS?"}
+{"band":"in","corpus":"plan","q":"ledger fragment filename format?"}
+{"band":"in","corpus":"plan","q":"How do I get a work-order number that won't collide with another host's?"}
+{"band":"in","corpus":"plan","q":"What happens if I change a packet's status by re-declaring it under `packets:` in a new fragment?"}
+{"band":"in","corpus":"plan","q":"The channel is called `status:` but I need to change pickup_role. Is that allowed?"}
+{"band":"in","corpus":"plan","q":"what statuses can a packet be in"}
+{"band":"in","corpus":"plan","q":"Which branch do checkpoints go to and what should the commit subject look like?"}
+{"band":"in","corpus":"plan","q":"What exactly does a claim lease?"}
+{"band":"in","corpus":"plan","q":"Why was 0.65 the wrong refusal threshold to pick for the spec expert?"}
+{"band":"in","corpus":"plan","q":"why is the forge nix flake still on an end-of-life nixpkgs"}
+{"band":"in","corpus":"plan","q":"What hardware is on macuahuitl?"}
+{"band":"in","corpus":"plan","q":"spec-index-ensure.sh --where printed a C:\\Users path on my Fedora box. why?"}
+{"band":"in","corpus":"plan","q":"Is the mirror push 403 specific to one agent harness, one OS, or one release?"}
+{"band":"in","corpus":"plan","q":"who can read the proxy's TLS interception CA private key"}
+{"band":"in","corpus":"plan","q":"What is the correct class slug for the full in-forge meta-orchestration e2e rate limiter?"}
+{"band":"in","corpus":"plan","q":"There's python in the repo — where, and why is that a problem?"}
+{"band":"in","corpus":"plan","q":"Did we decide to adopt OpenTelemetry for loop telemetry?"}
+{"band":"in","corpus":"plan","q":"What actually changes when a component graduates from a dev toolbox to a production enclave container?"}
+{"band":"in","corpus":"plan","q":"Why is there a toolbox wrapper in build.sh at all?"}
+{"band":"in","corpus":"plan","q":"steps to notarize the mac dmg?"}
+{"band":"in","corpus":"plan","q":"OpenCode crashed in the mac forge — was that our bug?"}
+{"band":"in","corpus":"plan","q":"Does the WSL2 kernel support vsock loopback?"}
+{"band":"in","corpus":"plan","q":"run-litmus-test.sh printed PASS but zero tests executed. known issue?"}
+{"band":"in","corpus":"plan","q":"Why does the build keep trying to create a toolbox that already exists?"}
+{"band":"in","corpus":"plan","q":"I saved install-windows.ps1 and ran it, and it never downloaded anything. What is going on?"}
+{"band":"in","corpus":"plan","q":"every agent lane failed on a fresh macOS VM with a microdnf space error"}
+{"band":"in","corpus":"plan","q":"github login through Windows Terminal fails with error 0x80070002"}
+{"band":"in","corpus":"plan","q":"How does a daily build become the stable release?"}
+{"band":"in","corpus":"plan","q":"Why wasn't v0.4.260809.1 promoted to stable?"}
+{"band":"in","corpus":"plan","q":"somebody pushed straight to main — what did that break?"}
+{"band":"in","corpus":"plan","q":"Are there duplicate order numbers in the ledger, and does anything catch them?"}
+{"band":"in","corpus":"plan","q":"Why did a Windows cycle end up claiming a Linux-owned packet?"}
+{"band":"in","corpus":"plan","q":"podman ps hung for a minute and a half during CI. what causes that?"}
+{"band":"in","corpus":"plan","q":"tillandsias --init exits 126 at vault launch on Silverblue"}
+{"band":"in","corpus":"plan","q":"Can the NPU actually serve an expert model, or is that still theory?"}
+{"band":"in","corpus":"plan","q":"is the iGPU actually faster than CPU for the fat spec expert?"}
+{"band":"in","corpus":"plan","q":"Which NPU vendors have a workable Linux story?"}
+{"band":"in","corpus":"plan","q":"How much time does an hourly cycle burn before any real work happens?"}
+{"band":"in","corpus":"plan","q":"Every branch was green before pushing, so why did the merge fail nine litmus steps?"}
+{"band":"in","corpus":"plan","q":"the release runbook tried to merge PR #null"}
+{"band":"in","corpus":"plan","q":"What were the two data-loss paths found in the forge overnight on 2026-07-19?"}
+{"band":"in","corpus":"plan","q":"Why couldn't the Windows forge rewrite git URLs to the mirror?"}
+{"band":"in","corpus":"plan","q":"Should we just adopt Gitea or Forgejo instead of maintaining our own mirror?"}
+{"band":"in","corpus":"plan","q":"Does `wsl --terminate` give me a genuinely cold kernel?"}
+{"band":"in","corpus":"plan","q":"cpu or igpu for embeddings?"}
+{"band":"in","corpus":"plan","q":"Why do agents keep undoing each other's formatting?"}
+{"band":"in","corpus":"plan","q":"The WSL distro reboots every time I close my last shell. Why?"}
+{"band":"in","corpus":"plan","q":"select-work-batch says no eligible work but query shows 7 ready packets"}
+{"band":"near","corpus":"plan","q":"Where is the Podman Quadlet unit file for the tillandsias-vault container?"}
+{"band":"near","corpus":"plan","q":"How do I install the Linux tray as a Flatpak?"}
+{"band":"near","corpus":"plan","q":"Which repo do I add to get the .rpm or .deb package?"}
+{"band":"near","corpus":"plan","q":"Is there an AUR package for Arch users?"}
+{"band":"near","corpus":"plan","q":"What Docker Hub organization are the enclave images published under?"}
+{"band":"near","corpus":"plan","q":"Does the mesh use Tailscale or WireGuard between nodes?"}
+{"band":"near","corpus":"plan","q":"Do you run Dependabot or Renovate to keep Cargo.lock current?"}
+{"band":"near","corpus":"plan","q":"Is there a cargo-fuzz target for the control-wire frame parser?"}
+{"band":"near","corpus":"plan","q":"Does the test suite run under Miri?"}
+{"band":"near","corpus":"plan","q":"Where are the Criterion benchmarks, and how do I capture a flamegraph of a slow cycle?"}
+{"band":"near","corpus":"plan","q":"Is there a web dashboard where I can see the fleet's packet status?"}
+{"band":"near","corpus":"plan","q":"Which Kubernetes distribution do the five always-on Raspberry Pi nodes run?"}
+{"band":"near","corpus":"plan","q":"Is there an iOS or Android companion app for the tray?"}
+{"band":"near","corpus":"plan","q":"Where's the WiX/MSI installer project for Windows?"}
+{"band":"near","corpus":"plan","q":"Is there a Chocolatey package for the Windows tray?"}
+{"band":"near","corpus":"plan","q":"Do tray crashes get reported to Sentry or any crash-reporting service?"}
+{"band":"near","corpus":"plan","q":"What's the test coverage percentage for the workspace?"}
+{"band":"near","corpus":"plan","q":"Is there a code-search index like Sourcegraph for agents to browse the repo?"}
+{"band":"near","corpus":"plan","q":"What does the forge-offline spec actually require, clause by clause?"}
+{"band":"near","corpus":"plan","q":"Walk me through the numbered steps of the /meta-orchestration skill."}
+{"band":"near","corpus":"plan","q":"What's in cheatsheets/concurrent-git/crdt-ledger-fragments.md?"}
+{"band":"near","corpus":"plan","q":"Which litmus tests are currently bound in litmus-bindings.yaml?"}
+{"band":"near","corpus":"plan","q":"Show me the function signature and body of ensure_ca_bundle."}
+{"band":"near","corpus":"plan","q":"What in-corpus and near-miss cosine bands did the macOS host measure for spec_answer?"}
+{"band":"near","corpus":"plan","q":"What refusal threshold did the fleet finally standardize on for spec_answer?"}
+{"band":"near","corpus":"plan","q":"Which specific fragments were folded in the 101-fragment compaction on 2026-08-22?"}
+{"band":"near","corpus":"plan","q":"How long did the 661-packet archive sweep take in wall-clock seconds?"}
+{"band":"near","corpus":"plan","q":"How many bytes is plan/index.yaml after the sweep?"}
+{"band":"near","corpus":"plan","q":"What Apple Developer Team ID do we sign and notarize with?"}
+{"band":"near","corpus":"plan","q":"What's the upstream Bun issue number for the arm64 segfault we hit?"}
+{"band":"near","corpus":"plan","q":"Was the squid destructor segfault ever reported upstream, and what's the bug ID?"}
+{"band":"near","corpus":"plan","q":"Which model does the claude harness default to when a forge lane launches without --model?"}
+{"band":"near","corpus":"plan","q":"Which 17 locale bundles ship with the forge, and which 15 are unstaged on the nix path?"}
+{"band":"near","corpus":"plan","q":"Which commit introduced the em-dash into install-windows.ps1 that broke saved-file runs?"}
+{"band":"near","corpus":"plan","q":"How long does a cold full nix build of the guest binaries actually take?"}
+{"band":"near","corpus":"plan","q":"What did the five Raspberry Pi 5 nodes cost?"}
+{"band":"near","corpus":"plan","q":"What is the exact Fedora cloud image build the Pi nodes should boot?"}
+{"band":"near","corpus":"plan","q":"Is there a getting-started guide or user manual for a non-developer installing this?"}
+{"band":"near","corpus":"plan","q":"What keyboard shortcuts does the tray support?"}
+{"band":"near","corpus":"plan","q":"Is there a support email or chat channel where users report problems?"}
+{"band":"near","corpus":"plan","q":"What's the published privacy policy — what data leaves the user's machine?"}
+{"band":"near","corpus":"plan","q":"How do outside contributors submit changes — is there a CONTRIBUTING guide?"}
+{"band":"near","corpus":"plan","q":"What's the security vulnerability disclosure process for this project?"}
+{"band":"near","corpus":"plan","q":"When is v1.0 scheduled to ship?"}
+{"band":"near","corpus":"plan","q":"How many packets are in plan/archive in total right now?"}
+{"band":"near","corpus":"plan","q":"What's the p50 end-to-end wall-clock time of a complete ./build.sh --ci-full run?"}
+{"band":"near","corpus":"plan","q":"What memory limit is set on the tray process itself?"}
+{"band":"near","corpus":"plan","q":"Which Vault policy grants the git mirror its push credential, and what paths does it allow?"}
+{"band":"near","corpus":"plan","q":"What is the retention policy for entries in plan/loop_status.md and its fragment directory?"}
+{"band":"near","corpus":"plan","q":"How do I roll a user back to the previous stable release if today's daily broke their install?"}
+{"band":"near","corpus":"plan","q":"What are the exact SmartScreen reputation thresholds — how many downloads or days before the warning stops?"}
+{"band":"near","corpus":"plan","q":"Which OSI license did the operator choose for the repo?"}
+{"band":"near","corpus":"plan","q":"How many chunks does the code corpus contribute versus the spec corpus in the RAG index?"}
+{"band":"far","corpus":"plan","q":"What is the flibber flobber?"}
+{"band":"far","corpus":"plan","q":"How many wingdangles fit inside a standard snorgle before it quaxes?"}
+{"band":"far","corpus":"plan","q":"Is the zorbulent quaximeter compatible with a left-handed grommet spline?"}
+{"band":"far","corpus":"plan","q":"Who won the 2024 Formula 1 drivers' championship?"}
+{"band":"far","corpus":"plan","q":"What is the capital of Burkina Faso?"}
+{"band":"far","corpus":"plan","q":"How long should I braise a lamb shank, and at what oven temperature?"}
+{"band":"far","corpus":"plan","q":"What are the early symptoms of feline hyperthyroidism?"}
+{"band":"far","corpus":"plan","q":"Explain the difference between a sonnet and a villanelle."}
+{"band":"far","corpus":"plan","q":"Roughly how many years ago did the Chicxulub impact occur?"}
+{"band":"far","corpus":"plan","q":"What's the standard tuning for a mandolin?"}
+{"band":"far","corpus":"plan","q":"When is the personal income tax filing deadline in Portugal?"}
+{"band":"far","corpus":"plan","q":"How do I build a custom Shopify storefront theme with Liquid templates?"}
+{"band":"far","corpus":"plan","q":"What does the CSS `contain: layout` property actually do to the render tree?"}
+{"band":"far","corpus":"plan","q":"How do I write a Salesforce Apex trigger that fires after insert?"}
+{"band":"far","corpus":"plan","q":"What's the correct way to set up a sidechain compressor on a bus in Ableton Live?"}
+{"band":"in","corpus":"code","q":"What headroom factor does the pre-flight host RAM check use before it lets a forge launch?"}
+{"band":"in","corpus":"code","q":"How is the --memory ceiling for a forge container calculated?"}
+{"band":"in","corpus":"code","q":"is there an env var to bypass the single-instance lock?"}
+{"band":"in","corpus":"code","q":"How many tillandsia genera are in the pool, and do they all have their own icon artwork?"}
+{"band":"in","corpus":"code","q":"What does the image version guard do with a tag it cannot parse?"}
+{"band":"in","corpus":"code","q":"Which coding agent does a fresh install default to?"}
+{"band":"in","corpus":"code","q":"Can a container profile turn off the podman security flags for a particular container type?"}
+{"band":"in","corpus":"code","q":"How does the scanner work out what kind of project a directory is, and in what order does it check?"}
+{"band":"in","corpus":"code","q":"scanner default watch dir?"}
+{"band":"in","corpus":"code","q":"What is the OpenCode Web session cookie called and how long does the browser keep it?"}
+{"band":"in","corpus":"code","q":"What stops a session cookie from being readable in a process memory dump after the session ends?"}
+{"band":"in","corpus":"code","q":"Why does browser.open refuse to open an opencode.* URL?"}
+{"band":"in","corpus":"code","q":"What message framing does the browser MCP server use over stdio?"}
+{"band":"in","corpus":"code","q":"what's the frame format on the tray-host control socket?"}
+{"band":"in","corpus":"code","q":"What is the maximum control-wire message size, and what happens if a peer sends a bigger length prefix?"}
+{"band":"in","corpus":"code","q":"Why derive the control-channel key from the build version instead of just comparing versions in the handshake?"}
+{"band":"in","corpus":"code","q":"Which argv shapes is the guest allowed to spawn on a host PTY request?"}
+{"band":"in","corpus":"code","q":"Where do the advisory per-resource locks live, and what happens if the holder is killed?"}
+{"band":"in","corpus":"code","q":"When does the runtime refuse to create or remove containers?"}
+{"band":"in","corpus":"code","q":"Can I register an NPU device against the ollama engine slot?"}
+{"band":"in","corpus":"code","q":"How does the guest actually tell whether a PTY process is blocked waiting for input?"}
+{"band":"in","corpus":"code","q":"Which podman flags are mandatory on every Tillandsias container launch?"}
+{"band":"in","corpus":"code","q":"Is there a timeout on podman invocations, or can one hang forever?"}
+{"band":"in","corpus":"code","q":"What tmpfs size caps does a forge container get?"}
+{"band":"in","corpus":"code","q":"what's the log rotation policy?"}
+{"band":"in","corpus":"code","q":"What names does the Prometheus exporter use for the container metrics?"}
+{"band":"in","corpus":"code","q":"How is the Vault unseal key derived so the user never sees a passphrase?"}
+{"band":"in","corpus":"code","q":"How does the router sidecar answer Caddy's forward_auth, and on what port?"}
+{"band":"in","corpus":"code","q":"Why does the host-shell crate not use CARGO_PKG_VERSION for its version string?"}
+{"band":"in","corpus":"code","q":"Which tracing levels reach the Windows Event Log?"}
+{"band":"in","corpus":"code","q":"Where does the macOS tray keep the installation UUID?"}
+{"band":"in","corpus":"code","q":"What answers can the plan expert give about how my checkout sits relative to a citation's commit?"}
+{"band":"in","corpus":"code","q":"What is scripts/ensure_toolbox.sh supposed to do on a Mac or a plain mutable Fedora box?"}
+{"band":"in","corpus":"code","q":"Why does the repo ban bash 4 constructs in scripts?"}
+{"band":"in","corpus":"code","q":"How does the tracked-binary guard decide something is a binary?"}
+{"band":"in","corpus":"code","q":"Which script paths are required to be committed executable?"}
+{"band":"in","corpus":"code","q":"What is actually recorded in the gate stamp, and why did it need a scope field?"}
+{"band":"in","corpus":"code","q":"What release channels can the Linux installer pull from?"}
+{"band":"in","corpus":"code","q":"Does uninstalling remove the PATH lines the installer added to my shell rc files?"}
+{"band":"in","corpus":"code","q":"How does the fleet derive a unique name for a host?"}
+{"band":"in","corpus":"code","q":"What shape is a worker agent's lease id, and what happens if a component comes out empty?"}
+{"band":"in","corpus":"code","q":"How do I verify a downloaded Tillandsias binary is genuine?"}
+{"band":"in","corpus":"code","q":"Which base images are the container images allowed to build FROM?"}
+{"band":"in","corpus":"code","q":"Is there a faster reset than `podman system reset --force` for smoke iterations?"}
+{"band":"in","corpus":"code","q":"Why must podman-neutralize-proxy.sh be sourced rather than executed?"}
+{"band":"in","corpus":"code","q":"What does nvidia-cdi-ensure.sh print, and does it need sudo?"}
+{"band":"in","corpus":"code","q":"What are the fallback rungs for getting a usable nix, and how large can the store grow before gc?"}
+{"band":"in","corpus":"code","q":"At what disk usage does the cache manager start evicting images?"}
+{"band":"in","corpus":"code","q":"What do the litmus runner's exit codes mean, and is --diff-scope safe to trust?"}
+{"band":"in","corpus":"code","q":"Why does local-ci.sh explicitly do `set +e` after sourcing the builder wrapper?"}
+{"band":"in","corpus":"code","q":"What single line does the trace coverage tool emit, and how do I make it fail on ghosts?"}
+{"band":"in","corpus":"code","q":"What has to be true before a daily release can be promoted to stable?"}
+{"band":"in","corpus":"code","q":"How is a forge agent classified as alive or dead?"}
+{"band":"in","corpus":"code","q":"How does a host decide it is eligible to run the E2E gate?"}
+{"band":"near","corpus":"code","q":"Where are the Podman Quadlet .container unit files for the enclave services?"}
+{"band":"near","corpus":"code","q":"How many digits is the OTP code and what time step does it use?"}
+{"band":"near","corpus":"code","q":"Can the browser MCP drive Firefox instead of Chromium?"}
+{"band":"near","corpus":"code","q":"How do I ship the tracing spans to an OTLP collector?"}
+{"band":"near","corpus":"code","q":"Where are the Grafana dashboard JSON files for the container metrics?"}
+{"band":"near","corpus":"code","q":"Can Vault be configured to auto-unseal with AWS KMS instead of the derived key?"}
+{"band":"near","corpus":"code","q":"How do I take and restore a snapshot of the Vault data?"}
+{"band":"near","corpus":"code","q":"Are there property-based tests for the exec allowlist?"}
+{"band":"near","corpus":"code","q":"Which cargo-fuzz targets exist for the control-wire decoder?"}
+{"band":"near","corpus":"code","q":"How do I generate a code coverage report for the workspace?"}
+{"band":"near","corpus":"code","q":"What does the Portuguese forge help text say?"}
+{"band":"near","corpus":"code","q":"Is there a Windows on ARM (aarch64) build of the tray?"}
+{"band":"near","corpus":"code","q":"Which packages does the forge image install into the container?"}
+{"band":"near","corpus":"code","q":"Which exact capability verbs does images/vault/policies/forge.hcl grant on its path?"}
+{"band":"near","corpus":"code","q":"Which model does the inference container serve by default?"}
+{"band":"near","corpus":"code","q":"What steps does the release GitHub Actions workflow run?"}
+{"band":"near","corpus":"code","q":"What exactly does ./build.sh --ci-full do end to end?"}
+{"band":"near","corpus":"code","q":"What version is Tillandsias on right now?"}
+{"band":"near","corpus":"code","q":"What does the methodology say about merging origin/linux-next before pushing a platform branch?"}
+{"band":"near","corpus":"code","q":"What is the current Direction for the project?"}
+{"band":"near","corpus":"code","q":"How many v0.5 packets are still ready to claim?"}
+{"band":"near","corpus":"code","q":"What does spec:vsock-exec-authz actually require?"}
+{"band":"near","corpus":"code","q":"What does the cookie-auth-best-practices cheatsheet recommend?"}
+{"band":"near","corpus":"code","q":"What steps does the /meta-orchestration skill run, in order?"}
+{"band":"near","corpus":"code","q":"What does litmus:agent-identity-canonical-source-shape assert?"}
+{"band":"near","corpus":"code","q":"Which panels are in the CentiColon convergence dashboard?"}
+{"band":"near","corpus":"code","q":"Where is the register that defines the OBS-### gap ids?"}
+{"band":"near","corpus":"code","q":"Where does the tray download an update from when the update check fires?"}
+{"band":"near","corpus":"code","q":"Does the sidecar rate-limit repeated failed cookie validations?"}
+{"band":"near","corpus":"code","q":"Which Apple Developer Team ID signs the macOS DMG?"}
+{"band":"near","corpus":"code","q":"Is there a winget manifest for installing the Windows tray?"}
+{"band":"near","corpus":"code","q":"Where is the protobuf service definition for the control API?"}
+{"band":"near","corpus":"code","q":"What does the observatorium web page actually render?"}
+{"band":"near","corpus":"code","q":"How many litmus tests are in the suite?"}
+{"band":"near","corpus":"code","q":"What license is Tillandsias released under?"}
+{"band":"near","corpus":"code","q":"What is the review process for getting a change merged?"}
+{"band":"near","corpus":"code","q":"Which branch protection rules are configured on the GitHub repository?"}
+{"band":"near","corpus":"code","q":"What retry count and backoff does the git-mirror's startup retry-push loop use?"}
+{"band":"near","corpus":"code","q":"Which Chrome for Testing version is pinned, and what is its SHA-256?"}
+{"band":"near","corpus":"code","q":"What does openspec/changes/control-wire-pty-attach/proposal.md say about chunking large PTY streams?"}
+{"band":"near","corpus":"code","q":"Which hosts are currently in the fleet roster?"}
+{"band":"near","corpus":"code","q":"Which SQL database stores the plan ledger?"}
+{"band":"near","corpus":"code","q":"What analytics endpoint does the tray report usage to?"}
+{"band":"near","corpus":"code","q":"How many forge containers can run concurrently before the tray refuses a new one?"}
+{"band":"near","corpus":"code","q":"What throughput does the vsock control wire achieve in practice?"}
+{"band":"near","corpus":"code","q":"How do I migrate an existing Tillandsias installation to a new machine?"}
+{"band":"far","corpus":"code","q":"What is the flibber flobber?"}
+{"band":"far","corpus":"code","q":"How many wibbles fit inside a standard snorgle?"}
+{"band":"far","corpus":"code","q":"Does the zorptangle need recalibrating after a gibbous moon?"}
+{"band":"far","corpus":"code","q":"Should I whisk the quandle before or after the third blorp?"}
+{"band":"far","corpus":"code","q":"What is the capital of Mongolia?"}
+{"band":"far","corpus":"code","q":"How do I keep a sourdough starter alive if I only bake once a month?"}
+{"band":"far","corpus":"code","q":"What year did the Berlin Wall come down?"}
+{"band":"far","corpus":"code","q":"Who won the 2018 FIFA World Cup?"}
+{"band":"far","corpus":"code","q":"How does carbon fixation differ between C4 and CAM plants?"}
+{"band":"far","corpus":"code","q":"What are the best stretches for chronic lower back pain?"}
+{"band":"far","corpus":"code","q":"How do I vertically center a div with flexbox?"}
+{"band":"far","corpus":"code","q":"What's the right way to set up a read replica for a PostgreSQL primary?"}
+{"band":"far","corpus":"code","q":"Write me a regular expression that validates email addresses."}
+{"band":"far","corpus":"code","q":"How do I train a LoRA adapter for a Stable Diffusion checkpoint?"}
+{"band":"far","corpus":"code","q":"What's the recommended way to serve a Django app behind gunicorn?"}
