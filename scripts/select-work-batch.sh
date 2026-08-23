@@ -42,9 +42,13 @@
 #
 # GRAMMAR — a batch header, then one line per packet, then a triage line:
 #   ^batch: epic=<id|UNGROUPED> role=<r> release=<v> size=<n> budget=<n>
-#            score=<f> seed=<s> pick=<i>/<k>[ urgent=<packet_id>]$
+#            score=<f> seed=<s> pick=<i>/<k>[ urgent=<packet_id>][ harness=<packet_id>]$
 #          `urgent=` appears ONLY when the order-645 override displaced a slot
 #          with a strictly-higher-priority packet from outside the chosen epic.
+#          `harness=` appears ONLY when the order-555 forge harness-affinity
+#          pick took the batch head (TILLANDSIAS_HOST_KIND=forge with
+#          TILLANDSIAS_AGENT set and a matching [harness-validation, <agent>]
+#          packet ready).
 #   ^packet\t<order>\t<packet_id>\t<priority>$
 #   ^triage: eligible=<n> grouped=<n> ungrouped=<n> epics=<n> urgency_unscored=<n>[ caps_filtered=<n>]$
 #          `caps_filtered=` appears ONLY when host-capability filtering dropped
@@ -279,11 +283,15 @@ fi
 # TILLANDSIAS_HOST_TIER overrides the local core probe;
 # TILLANDSIAS_HOST_ACCELS (set-even-empty) overrides the accel set;
 # TILLANDSIAS_WORKSTATION names this host (agent-identity precedence).
-HOST_NAME="${TILLANDSIAS_WORKSTATION:-}"
-if [ -z "$HOST_NAME" ]; then
-    HOST_NAME="$(hostname -s 2>/dev/null || hostname 2>/dev/null || echo '')"
-fi
-HOST_NAME="$(printf '%s' "$HOST_NAME" | tr '[:upper:]' '[:lower:]')"
+# The comment above says "agent-identity precedence" and this block used to
+# implement a private, weaker approximation of it: `hostname -s || hostname`,
+# which resolves empty in every Fedora image, none of which ship a `hostname`
+# binary. An empty HOST_NAME here does not fail loudly — it just never matches
+# a row in the capability matrix, so a forge silently routes as an unknown host
+# (order 859-b2zc). Call the shared helper instead of describing it.
+# shellcheck source=scripts/agent-identity.sh
+. "$(dirname "${BASH_SOURCE[0]}")/agent-identity.sh"
+HOST_NAME="$(tillandsias_lower "$(tillandsias_agent_workstation)")"
 
 if [ -n "${TILLANDSIAS_CAP_HOSTS+x}" ]; then
     CAP_HOSTS="$TILLANDSIAS_CAP_HOSTS"
@@ -816,12 +824,58 @@ if [ -n "$top_urgent" ] && [ -n "$batch" ]; then
     fi
 fi
 
+# HARNESS AFFINITY (order 555). The routing enabler for the operator's "run
+# plain meta-orchestration in a harness and it picks its own tests" ask: a
+# forge cycle that knows which harness drives it (TILLANDSIAS_AGENT, set by
+# the launch profile — its absence in live forges is order 570's gap) MUST
+# prefer a ready packet tagged [harness-validation, <that harness>] over the
+# general backlog, so an OpenCode forge claims the OpenCode validation packet
+# instead of a random platform packet. Scoped to forges: a bare-metal host
+# runs many harnesses and proves nothing about any one of them.
+#
+# The affinity pick takes the batch HEAD — above the order-645 urgent slot —
+# because a validation forge that defers its own validation to global
+# urgencies never validates its harness; non-forge hosts never enter this
+# branch, so urgent work still preempts everywhere else. No matching ready
+# packet, or an agent name outside the tag-safe charset, leaves the batch
+# untouched (fallback, never idle). The query reuses select-rows' all-match
+# --tag semantics — the same lane the tier gate above already trusts — and is
+# DELIBERATELY UNSCOPED BY RELEASE for the tier pool's reason: the
+# harness-validation pool is small and hand-curated, and validating THIS
+# harness is valuable whenever its packet was filed.
+HARNESS_NOTE=""
+if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ] && [ -n "${TILLANDSIAS_AGENT:-}" ] && [ -n "$batch" ]; then
+    case "$TILLANDSIAS_AGENT" in
+        *[!a-z0-9-]* | '') : ;; # not a tag-shaped harness name; fall back
+        *)
+            harness_rows="$("$PLAN" select-rows --status ready --claimable-by "$ROLE" \
+                --tag harness-validation --tag "$TILLANDSIAS_AGENT" --limit 5 2>/dev/null)" || harness_rows=""
+            harness_row="$(printf '%s\n' "$harness_rows" | awk -F'\t' 'NF >= 4' \
+                | sort -t"$(printf '\t')" -k1,1n -k3,3 -k4,4 | head -1)"
+            if [ -n "$harness_row" ]; then
+                harness_pid="$(printf '%s' "$harness_row" | cut -f4)"
+                if printf '%s\n' "$batch" | cut -f4 | grep -qxF "$harness_pid"; then
+                    # Already in the chosen epic's batch: move it to the head
+                    # rather than duplicate it.
+                    batch="$({ printf '%s\n' "$harness_row"
+                               printf '%s\n' "$batch" | awk -F'\t' -v p="$harness_pid" '$4 != p'; })"
+                else
+                    batch="$({ printf '%s\n' "$harness_row"
+                               printf '%s\n' "$batch" | head -n $((BUDGET - 1)); })"
+                fi
+                HARNESS_NOTE="$harness_pid"
+            fi
+            ;;
+    esac
+fi
+
 size="$(printf '%s\n' "$batch" | grep -c .)"
 
-printf 'batch: epic=%s role=%s release=%s size=%s budget=%s score=%s seed=%s pick=%s/%s%s%s\n' \
+printf 'batch: epic=%s role=%s release=%s size=%s budget=%s score=%s seed=%s pick=%s/%s%s%s%s\n' \
     "$chosen" "$ROLE" "$release" "$size" "$BUDGET" "$chosen_score" "$SEED" "$pick" "$k" \
     "$( if [ "$HOST_TIER" = "low-end" ]; then printf ' route=tier:low-end'; elif [ "$ROUTE" != "seed" ]; then printf ' route=%s' "$ROUTE"; fi )" \
-    "$( [ -n "${URGENT_NOTE:-}" ] && printf ' urgent=%s' "$URGENT_NOTE" )"
+    "$( [ -n "${URGENT_NOTE:-}" ] && printf ' urgent=%s' "$URGENT_NOTE" )" \
+    "$( [ -n "${HARNESS_NOTE:-}" ] && printf ' harness=%s' "$HARNESS_NOTE" )"
 printf '%s\n' "$batch" | while IFS=$'\t' read -r rank epic order pid prio rel; do
     [ -n "$pid" ] || continue
     printf 'packet\t%s\t%s\t%s\n' "$order" "$pid" "$prio"

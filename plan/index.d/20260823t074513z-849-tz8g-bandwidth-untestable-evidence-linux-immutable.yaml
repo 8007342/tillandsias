@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_immutable (pirria), 2026-08-23T07:45:13Z.
+events:
+  - packet_id: inference-image-cannot-run-any-model-larger-than-0-5b
+    event:
+      type: note
+      ts: "2026-08-23T07:45:13Z"
+      agent_id: linux-pirria-opus5-20260823T053000Z
+      host: linux_immutable
+      summary: >
+        A SECOND, INDEPENDENT REASON TO WANT THIS CLEARED, and it is about
+        capacity planning rather than answer quality. No new packet filed;
+        evidence only.
+
+        This packet has been argued so far on what the fleet cannot ANSWER — a
+        bigger embedder might separate in-corpus from out-of-corpus better. The
+        0.5B ceiling also makes a HARDWARE question unanswerable, which bites
+        the scheduler rather than the expert.
+
+        Measured on pirria against esmeraldinha (859-86kr) at matched shapes: a
+        0.5B model does not saturate even ONE DDR4 channel. Decode moves
+        41 tok/s x 0.40 GB per token-pass = 16.3 GB/s here, and 29.64 x 0.40 =
+        11.8 GB/s on the single-channel N100 — 55% of that host's ~21.3 GB/s
+        ceiling. So at the only generative size the pinned image can run,
+        NEITHER low-end host is bus-limited, memory bandwidth is invisible, and
+        a dual-channel host measures only 1.38x faster than a single-channel one
+        instead of the ~2x a bandwidth model predicts.
+
+        THE CONSEQUENCE: the fleet cannot currently measure what DRAM channel
+        count buys it, on any host, because the model size where it starts to
+        matter (3-4B) is exactly the size the image refuses. esmeraldinha sees
+        phi3.5:3.8b at 6.53 tok/s x ~2.2 GB = ~14.4 GB/s, approaching its
+        ceiling — that is the size where the question becomes answerable, and it
+        runs there only because that host reaches a model this one cannot.
+        Until 849-tz8g clears, "how much host RAM bandwidth should we buy" has
+        no measurable answer, and capability rows will keep recording a channel
+        count whose effect nobody can price.
+
+        Recorded here rather than as a new packet because the remedy is
+        unchanged and already stated on this packet: a newer inference image.
+        This only adds a second constituency for it.

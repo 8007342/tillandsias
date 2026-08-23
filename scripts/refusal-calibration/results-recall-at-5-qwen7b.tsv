@@ -1,0 +1,309 @@
+band	hit_rank	verdict	pair	path	question
+near	1	UNSUPPORTED	NO/YES	scripts/gate-stamp.sh	Is cargo-audit or cargo-deny run as part of any gate?
+near	2	UNSUPPORTED	NO/YES	openspec/specs/ci-release/spec.md	Is cargo-audit or cargo-deny run as part of any gate?
+near	3	CONTRADICTION	NO/NO	methodology/event/026-rustls-musl-static-tls-strategy.yaml	Is cargo-audit or cargo-deny run as part of any gate?
+near	4	UNSUPPORTED	NO/YES	cheatsheets/runtime/forge-cache-semantics.md	Is cargo-audit or cargo-deny run as part of any gate?
+near	5	UNSUPPORTED	NO/YES	cheatsheets/runtime/forge-cache-semantics.md	Is cargo-audit or cargo-deny run as part of any gate?
+near	1	UNSUPPORTED	NO/YES	openspec/specs/spec-trace-coverage-threshold/spec.md	What line-coverage percentage must the Rust unit tests reach?
+near	2	UNSUPPORTED	NO/YES	openspec/specs/spec-traceability/spec.md	What line-coverage percentage must the Rust unit tests reach?
+near	3	CONTRADICTION	YES/YES	methodology/litmus.yaml	What line-coverage percentage must the Rust unit tests reach?
+near	4	UNSUPPORTED	NO/YES	docs/cheatsheets/cache-semantics-implementation.md	What line-coverage percentage must the Rust unit tests reach?
+near	5	UNSUPPORTED	NO/YES	cheatsheets/runtime/testing-best-practices.md	What line-coverage percentage must the Rust unit tests reach?
+near	1	UNSUPPORTED	NO/YES	openspec/specs/observability-convergence/spec.md	How many days may a deprecated spec sit before it must be moved to obsolete?
+near	2	UNSUPPORTED	NO/YES	openspec/specs/observability-convergence/spec.md	How many days may a deprecated spec sit before it must be moved to obsolete?
+near	3	UNSUPPORTED	NO/YES	openspec/specs/cheatsheet-mcp-server/spec.md	How many days may a deprecated spec sit before it must be moved to obsolete?
+near	4	UNSUPPORTED	NO/YES	openspec/specs/cross-platform/spec.md	How many days may a deprecated spec sit before it must be moved to obsolete?
+near	5	UNSUPPORTED	NO/YES	openspec/specs/download-telemetry/spec.md	How many days may a deprecated spec sit before it must be moved to obsolete?
+near	1	UNSUPPORTED	NO/YES	methodology/multi-host-development.yaml	What is the current head commit of origin/osx-next?
+near	2	UNSUPPORTED	NO/YES	cheatsheets/concurrent-git/branches.md	What is the current head commit of origin/osx-next?
+near	3	UNSUPPORTED	NO/YES	methodology/multi-host-development.yaml	What is the current head commit of origin/osx-next?
+near	4	UNSUPPORTED	NO/YES	cheatsheets/concurrent-git/branches.md	What is the current head commit of origin/osx-next?
+near	5	UNSUPPORTED	NO/YES	cheatsheets/concurrent-git/branches.md	What is the current head commit of origin/osx-next?
+near	1	UNSUPPORTED	NO/YES	methodology/in-forge-delegation.yaml	How many delegates are allowed at ramp stage 1?
+near	2	UNSUPPORTED	NO/YES	methodology/in-forge-delegation.yaml	How many delegates are allowed at ramp stage 1?
+near	3	UNSUPPORTED	NO/YES	scripts/claude-mcp.sh	How many delegates are allowed at ramp stage 1?
+near	4	UNSUPPORTED	NO/YES	scripts/test-ensure-toolbox-properties.sh	How many delegates are allowed at ramp stage 1?
+near	5	UNSUPPORTED	NO/YES	cheatsheets/runtime/enclave-proxy-patterns.md	How many delegates are allowed at ramp stage 1?
+near	1	UNSUPPORTED	NO/YES	methodology/distributed-work.yaml	How long may a packet stay `blocked` before it must be escalated to the operator?
+near	2	UNSUPPORTED	NO/YES	openspec/specs/forge-standalone/spec.md	How long may a packet stay `blocked` before it must be escalated to the operator?
+near	3	UNSUPPORTED	NO/YES	methodology/distributed-work.yaml	How long may a packet stay `blocked` before it must be escalated to the operator?
+near	4	UNSUPPORTED	NO/YES	cheatsheets/runtime/networking.md	How long may a packet stay `blocked` before it must be escalated to the operator?
+near	5	UNSUPPORTED	NO/YES	methodology/multi-host-development.yaml	How long may a packet stay `blocked` before it must be escalated to the operator?
+near	1	UNSUPPORTED	NO/YES	cheatsheets/runtime/wsl2-provisioning.md	How do I attach gdb or lldb to a hung tray process and get a backtrace?
+near	2	UNSUPPORTED	NO/YES	docs/cheatsheets/windows-setup.md	How do I attach gdb or lldb to a hung tray process and get a backtrace?
+near	3	CONTRADICTION	NO/NO	openspec/specs/gh-auth-script/spec.md	How do I attach gdb or lldb to a hung tray process and get a backtrace?
+near	4	UNSUPPORTED	NO/YES	docs/cheatsheets/cache-semantics-implementation.md	How do I attach gdb or lldb to a hung tray process and get a backtrace?
+near	5	UNSUPPORTED	NO/YES	cheatsheets/runtime/forge-cache-semantics.md	How do I attach gdb or lldb to a hung tray process and get a backtrace?
+near	1	UNSUPPORTED	NO/YES	openspec/specs/git-mirror-service/spec.md	What ack-latency number should page someone for the git mirror?
+near	2	UNSUPPORTED	NO/YES	openspec/specs/git-mirror-service/spec.md	What ack-latency number should page someone for the git mirror?
+near	3	UNSUPPORTED	NO/YES	openspec/specs/runtime-logging/spec.md	What ack-latency number should page someone for the git mirror?
+near	4	UNSUPPORTED	NO/YES	cheatsheets/concurrent-git/git-mirror-enterprise-practices.md	What ack-latency number should page someone for the git mirror?
+near	5	UNSUPPORTED	NO/YES	images/default/lib-common.sh	What ack-latency number should page someone for the git mirror?
+near	1	UNSUPPORTED	NO/YES	openspec/specs/install-progress/spec.md	What is the SHA-256 of the current published tillandsias-linux-x86_64 binary?
+near	2	UNSUPPORTED	NO/YES	openspec/specs/install-progress/spec.md	What is the SHA-256 of the current published tillandsias-linux-x86_64 binary?
+near	3	UNSUPPORTED	NO/YES	scripts/install-chromium.sh	What is the SHA-256 of the current published tillandsias-linux-x86_64 binary?
+near	4	UNSUPPORTED	NO/YES	cheatsheets/runtime/ephemeral-lifecycle.md	What is the SHA-256 of the current published tillandsias-linux-x86_64 binary?
+near	5	UNSUPPORTED	NO/YES	cheatsheets/build/build-strategy.md	What is the SHA-256 of the current published tillandsias-linux-x86_64 binary?
+near	1	UNSUPPORTED	NO/YES	openspec/specs/tray-menu/spec.md	What screen-reader support does the tray menu have?
+near	2	UNSUPPORTED	NO/YES	openspec/specs/tray-menu/spec.md	What screen-reader support does the tray menu have?
+near	3	UNSUPPORTED	NO/YES	openspec/specs/app-lifecycle/spec.md	What screen-reader support does the tray menu have?
+near	4	UNSUPPORTED	NO/YES	openspec/specs/no-terminal-flicker/spec.md	What screen-reader support does the tray menu have?
+near	5	UNSUPPORTED	NO/YES	cheatsheets/runtime/statusnotifier-tray.md	What screen-reader support does the tray menu have?
+near	1	UNSUPPORTED	NO/YES	openspec/specs/no-terminal-flicker/spec.md	Are there keyboard shortcuts for opening the tray menu?
+near	2	UNSUPPORTED	NO/YES	openspec/specs/no-terminal-flicker/spec.md	Are there keyboard shortcuts for opening the tray menu?
+near	3	UNSUPPORTED	NO/YES	cheatsheets/utils/podman-secrets.md	Are there keyboard shortcuts for opening the tray menu?
+near	4	UNSUPPORTED	NO/YES	cheatsheets/runtime/vz-framework-provisioning.md	Are there keyboard shortcuts for opening the tray menu?
+near	5	UNSUPPORTED	NO/YES	openspec/specs/tray-menu/spec.md	Are there keyboard shortcuts for opening the tray menu?
+near	1	UNSUPPORTED	NO/YES	methodology/event/012-litmus-podman-runtime-blocker.yaml	How do I run the litmus suite against a remote host?
+near	2	CONTRADICTION	YES/YES	docs/cheatsheets/litmus-stdlib-authoring.md	How do I run the litmus suite against a remote host?
+near	3	UNSUPPORTED	NO/YES	methodology/event/012-litmus-podman-runtime-blocker.yaml	How do I run the litmus suite against a remote host?
+near	4	UNSUPPORTED	NO/YES	openspec/specs/ci-release/spec.md	How do I run the litmus suite against a remote host?
+near	5	UNSUPPORTED	NO/YES	cheatsheets/runtime/cdp-security.md	How do I run the litmus suite against a remote host?
+near	1	UNSUPPORTED	NO/YES	methodology/proximity.yaml	How many releases have been published so far?
+near	2	UNSUPPORTED	NO/YES	methodology/proximity.yaml	How many releases have been published so far?
+near	3	UNSUPPORTED	NO/YES	cheatsheets/build/podman-image-management.md	How many releases have been published so far?
+near	4	UNSUPPORTED	NO/YES	crates/tillandsias-plan/src/loop_status.rs	How many releases have been published so far?
+near	5	UNSUPPORTED	NO/YES	methodology/proximity.yaml	How many releases have been published so far?
+near	1	UNSUPPORTED	NO/YES	methodology/event/029-podman-control-plane-split-brain.yaml	Which model does NanoClawV2 itself run on?
+near	2	UNSUPPORTED	NO/YES	openspec/specs/default-image/spec.md	Which model does NanoClawV2 itself run on?
+near	3	UNSUPPORTED	NO/YES	cheatsheets/build/npm.md	Which model does NanoClawV2 itself run on?
+near	4	UNSUPPORTED	NO/YES	cheatsheets/runtime/cdp-security.md	Which model does NanoClawV2 itself run on?
+near	5	UNSUPPORTED	NO/YES	methodology/litmus.yaml	Which model does NanoClawV2 itself run on?
+near	1	CONTRADICTION	NO/NO	openspec/specs/async-inference-launch/spec.md	Is there an uptime or availability target for the enclave services?
+near	2	UNSUPPORTED	NO/YES	openspec/specs/enclave-network/spec.md	Is there an uptime or availability target for the enclave services?
+near	3	UNSUPPORTED	NO/YES	openspec/specs/runtime-logging/spec.md	Is there an uptime or availability target for the enclave services?
+near	4	UNSUPPORTED	NO/YES	cheatsheets/runtime/enclave-startup-sequencing.md	Is there an uptime or availability target for the enclave services?
+near	5	UNSUPPORTED	NO/YES	crates/tillandsias-headless/src/tray/mod.rs	Is there an uptime or availability target for the enclave services?
+near	1	CONTRADICTION	NO/NO	cheatsheets/build/nix-flake-caching.md	Do you run Dependabot or Renovate to keep Cargo.lock current?
+near	2	UNSUPPORTED	NO/YES	images/default/lib-common.sh	Do you run Dependabot or Renovate to keep Cargo.lock current?
+near	3	UNSUPPORTED	NO/YES	cheatsheets/runtime/forge-cache-semantics.md	Do you run Dependabot or Renovate to keep Cargo.lock current?
+near	4	UNSUPPORTED	NO/YES	cheatsheets/runtime/image-lifecycle.md	Do you run Dependabot or Renovate to keep Cargo.lock current?
+near	5	UNSUPPORTED	NO/YES	scripts/build-image.sh	Do you run Dependabot or Renovate to keep Cargo.lock current?
+near	1	UNSUPPORTED	NO/YES	crates/tillandsias-control-wire/src/lib.rs	Is there a cargo-fuzz target for the control-wire frame parser?
+near	2	CONTRADICTION	NO/NO	cheatsheets/runtime/macos-pty-attach.md	Is there a cargo-fuzz target for the control-wire frame parser?
+near	3	UNSUPPORTED	NO/YES	crates/tillandsias-control-wire/src/transport.rs	Is there a cargo-fuzz target for the control-wire frame parser?
+near	4	UNSUPPORTED	NO/YES	crates/tillandsias-control-wire/src/lib.rs	Is there a cargo-fuzz target for the control-wire frame parser?
+near	5	CONTRADICTION	NO/NO	crates/tillandsias-control-wire/src/lib.rs	Is there a cargo-fuzz target for the control-wire frame parser?
+near	1	CONTRADICTION	NO/NO	openspec/specs/wsl-runtime/spec.md	Does the test suite run under Miri?
+near	2	UNSUPPORTED	NO/YES	cheatsheets/runtime/podman-idiomatic-patterns.md	Does the test suite run under Miri?
+near	3	UNSUPPORTED	NO/YES	docs/cheatsheets/cache-semantics-implementation.md	Does the test suite run under Miri?
+near	4	UNSUPPORTED	NO/YES	cheatsheets/test/podman-testing.md	Does the test suite run under Miri?
+near	5	UNSUPPORTED	NO/YES	cheatsheets/runtime/container-lifecycle.md	Does the test suite run under Miri?
+near	1	UNSUPPORTED	NO/YES	docs/cheatsheets/cache-semantics-implementation.md	What's the test coverage percentage for the workspace?
+near	2	UNSUPPORTED	NO/YES	docs/cheatsheets/tray-responsiveness.md	What's the test coverage percentage for the workspace?
+near	3	UNSUPPORTED	NO/YES	methodology/litmus.yaml	What's the test coverage percentage for the workspace?
+near	4	UNSUPPORTED	NO/YES	openspec/specs/observability-convergence/spec.md	What's the test coverage percentage for the workspace?
+near	5	CONTRADICTION	YES/YES	openspec/specs/observability-convergence/spec.md	What's the test coverage percentage for the workspace?
+near	1	UNSUPPORTED	NO/YES	scripts/refusal-calibration/analyze-bands.sh	What in-corpus and near-miss cosine bands did the macOS host measure for spec_answer?
+near	2	UNSUPPORTED	NO/YES	openspec/specs/observability-convergence/spec.md	What in-corpus and near-miss cosine bands did the macOS host measure for spec_answer?
+near	3	UNSUPPORTED	NO/YES	openspec/specs/tray-app/spec.md	What in-corpus and near-miss cosine bands did the macOS host measure for spec_answer?
+near	4	UNSUPPORTED	NO/YES	cheatsheets/runtime/macos-vz-guest-boot-baseline.md	What in-corpus and near-miss cosine bands did the macOS host measure for spec_answer?
+near	5	UNSUPPORTED	NO/YES	methodology/event/008-active-contract-trace-sweep.yaml	What in-corpus and near-miss cosine bands did the macOS host measure for spec_answer?
+near	1	UNSUPPORTED	NO/YES	crates/tillandsias-plan/src/loop_status.rs	Which specific fragments were folded in the 101-fragment compaction on 2026-08-22?
+near	2	UNSUPPORTED	NO/YES	methodology/event/020-tray-binary-test-discovery.yaml	Which specific fragments were folded in the 101-fragment compaction on 2026-08-22?
+near	3	UNSUPPORTED	NO/YES	crates/tillandsias-plan/src/fragments.rs	Which specific fragments were folded in the 101-fragment compaction on 2026-08-22?
+near	4	UNSUPPORTED	NO/YES	crates/tillandsias-plan/src/fragments.rs	Which specific fragments were folded in the 101-fragment compaction on 2026-08-22?
+near	5	UNSUPPORTED	NO/YES	methodology/event/021-status-icon-mapping-gap.yaml	Which specific fragments were folded in the 101-fragment compaction on 2026-08-22?
+near	1	UNSUPPORTED	NO/YES	scripts/cycle-metrics.sh	How long did the 661-packet archive sweep take in wall-clock seconds?
+near	2	UNSUPPORTED	NO/YES	scripts/local-ci.sh	How long did the 661-packet archive sweep take in wall-clock seconds?
+near	3	UNSUPPORTED	NO/YES	crates/tillandsias-logging/src/budget_enforcer.rs	How long did the 661-packet archive sweep take in wall-clock seconds?
+near	4	UNSUPPORTED	NO/YES	scripts/timing-log.sh	How long did the 661-packet archive sweep take in wall-clock seconds?
+near	5	UNSUPPORTED	NO/YES	scripts/archive-plan-packets.sh	How long did the 661-packet archive sweep take in wall-clock seconds?
+near	1	UNSUPPORTED	NO/YES	methodology/multi-host-development.yaml	How many bytes is plan/index.yaml after the sweep?
+near	2	UNSUPPORTED	NO/YES	scripts/check-archive-answerability.sh	How many bytes is plan/index.yaml after the sweep?
+near	3	UNSUPPORTED	NO/YES	scripts/check-archive-answerability.sh	How many bytes is plan/index.yaml after the sweep?
+near	4	UNSUPPORTED	NO/YES	crates/tillandsias-policy/src/main.rs	How many bytes is plan/index.yaml after the sweep?
+near	5	UNSUPPORTED	NO/YES	cheatsheets/concurrent-git/plan-discipline.md	How many bytes is plan/index.yaml after the sweep?
+near	1	UNSUPPORTED	NO/YES	scripts/test-pre-push-version-guard-sigpipe.sh	What's the upstream Bun issue number for the arm64 segfault we hit?
+near	2	UNSUPPORTED	NO/YES	images/default/lib-common.sh	What's the upstream Bun issue number for the arm64 segfault we hit?
+near	3	UNSUPPORTED	NO/YES	cheatsheets/runtime/windows-installer-prereqs.md	What's the upstream Bun issue number for the arm64 segfault we hit?
+near	4	UNSUPPORTED	NO/YES	crates/tillandsias-host-shell/src/vsock_client.rs	What's the upstream Bun issue number for the arm64 segfault we hit?
+near	5	UNSUPPORTED	NO/YES	docs/cheatsheets/opencode-csp-hash-injection.md	What's the upstream Bun issue number for the arm64 segfault we hit?
+near	1	UNSUPPORTED	NO/YES	scripts/diagnose-windows.ps1	Which commit introduced the em-dash into install-windows.ps1 that broke saved-file runs?
+near	2	UNSUPPORTED	NO/YES	cheatsheets/runtime/powershell.md	Which commit introduced the em-dash into install-windows.ps1 that broke saved-file runs?
+near	3	UNSUPPORTED	NO/YES	cheatsheets/runtime/powershell.md	Which commit introduced the em-dash into install-windows.ps1 that broke saved-file runs?
+near	4	UNSUPPORTED	NO/YES	scripts/hooks/post-commit-dashboard-refresh.sh	Which commit introduced the em-dash into install-windows.ps1 that broke saved-file runs?
+near	5	UNSUPPORTED	NO/YES	crates/tillandsias-vm-layer/src/wsl.rs	Which commit introduced the em-dash into install-windows.ps1 that broke saved-file runs?
+near	1	UNSUPPORTED	NO/YES	crates/tillandsias-logging/src/budget_enforcer.rs	What did the five Raspberry Pi 5 nodes cost?
+near	2	UNSUPPORTED	NO/YES	cheatsheets/runtime/systemd-socket-activation.md	What did the five Raspberry Pi 5 nodes cost?
+near	3	UNSUPPORTED	NO/YES	cheatsheets/runtime/cdp-security.md	What did the five Raspberry Pi 5 nodes cost?
+near	4	UNSUPPORTED	NO/YES	crates/tillandsias-logging/src/surface.rs	What did the five Raspberry Pi 5 nodes cost?
+near	5	UNSUPPORTED	NO/YES	cheatsheets/runtime/windows-sandbox.md	What did the five Raspberry Pi 5 nodes cost?
+near	1	UNSUPPORTED	NO/YES	openspec/specs/tray-host-control-socket/spec.md	Is there a support email or chat channel where users report problems?
+near	2	UNSUPPORTED	NO/YES	crates/tillandsias-windows-tray/src/notify_icon.rs	Is there a support email or chat channel where users report problems?
+near	3	UNSUPPORTED	NO/YES	methodology/agent-observability.yaml	Is there a support email or chat channel where users report problems?
+near	4	UNSUPPORTED	NO/YES	scripts/forge-validate.sh	Is there a support email or chat channel where users report problems?
+near	5	UNSUPPORTED	NO/YES	crates/tillandsias-windows-tray/src/notify_icon.rs	Is there a support email or chat channel where users report problems?
+near	1	UNSUPPORTED	NO/YES	methodology/provenance.yaml	What's the security vulnerability disclosure process for this project?
+near	2	UNSUPPORTED	NO/YES	cheatsheets/runtime/cdp-security.md	What's the security vulnerability disclosure process for this project?
+near	3	CONTRADICTION	NO/NO	cheatsheets/runtime/chromium-isolation.md	What's the security vulnerability disclosure process for this project?
+near	4	UNSUPPORTED	NO/YES	openspec/specs/chromium-safe-variant/spec.md	What's the security vulnerability disclosure process for this project?
+near	5	UNSUPPORTED	NO/YES	cheatsheets/runtime/chromium-headless.md	What's the security vulnerability disclosure process for this project?
+near	1	UNSUPPORTED	NO/YES	methodology/agent-observability.yaml	When is v1.0 scheduled to ship?
+near	2	UNSUPPORTED	NO/YES	methodology/bootstrap/router.yaml	When is v1.0 scheduled to ship?
+near	3	UNSUPPORTED	NO/YES	methodology/distributed-work.yaml	When is v1.0 scheduled to ship?
+near	4	UNSUPPORTED	NO/YES	methodology/event/index.yaml	When is v1.0 scheduled to ship?
+near	5	UNSUPPORTED	NO/YES	methodology/litmus-framework.yaml	When is v1.0 scheduled to ship?
+near	1	UNSUPPORTED	NO/YES	docs/cheatsheets/tray-litmus-timeout-constraints.md	What's the p50 end-to-end wall-clock time of a complete ./build.sh --ci-full run?
+near	2	UNSUPPORTED	NO/YES	scripts/cycle-metrics.sh	What's the p50 end-to-end wall-clock time of a complete ./build.sh --ci-full run?
+near	3	UNSUPPORTED	NO/YES	openspec/specs/dev-build/spec.md	What's the p50 end-to-end wall-clock time of a complete ./build.sh --ci-full run?
+near	4	UNSUPPORTED	NO/YES	methodology/event/014-ci-full-phase-split.yaml	What's the p50 end-to-end wall-clock time of a complete ./build.sh --ci-full run?
+near	5	UNSUPPORTED	NO/YES	methodology/agent-observability.yaml	What's the p50 end-to-end wall-clock time of a complete ./build.sh --ci-full run?
+near	1	UNSUPPORTED	NO/YES	openspec/specs/tray-concurrency/spec.md	What memory limit is set on the tray process itself?
+near	2	UNSUPPORTED	NO/YES	cheatsheets/runtime/tray-performance-profiling.md	What memory limit is set on the tray process itself?
+near	3	UNSUPPORTED	NO/YES	docs/cheatsheets/tray-state-machine.md	What memory limit is set on the tray process itself?
+near	4	UNSUPPORTED	NO/YES	cheatsheets/runtime/tray-performance-profiling.md	What memory limit is set on the tray process itself?
+near	5	UNSUPPORTED	NO/YES	docs/cheatsheets/tray-litmus-timeout-constraints.md	What memory limit is set on the tray process itself?
+near	1	UNSUPPORTED	NO/YES	cheatsheets/runtime/portable-executable-transparent-mode.md	Which cargo-fuzz targets exist for the control-wire decoder?
+near	2	UNSUPPORTED	NO/YES	methodology/event/004-signal-handling-harness-tombstone.yaml	Which cargo-fuzz targets exist for the control-wire decoder?
+near	3	UNSUPPORTED	NO/YES	cheatsheets/test/cargo-test.md	Which cargo-fuzz targets exist for the control-wire decoder?
+near	4	UNSUPPORTED	NO/YES	openspec/specs/dev-build/spec.md	Which cargo-fuzz targets exist for the control-wire decoder?
+near	5	UNSUPPORTED	NO/YES	methodology/event/004-signal-handling-harness-tombstone.yaml	Which cargo-fuzz targets exist for the control-wire decoder?
+near	1	UNSUPPORTED	NO/YES	openspec/specs/spec-trace-coverage-threshold/spec.md	How do I generate a code coverage report for the workspace?
+near	2	UNSUPPORTED	NO/YES	docs/cheatsheets/cache-semantics-implementation.md	How do I generate a code coverage report for the workspace?
+near	3	UNSUPPORTED	NO/YES	methodology/event/003-cheatsheet-signal-coverage-gap.yaml	How do I generate a code coverage report for the workspace?
+near	4	UNSUPPORTED	NO/YES	cheatsheets/build/pnpm.md	How do I generate a code coverage report for the workspace?
+near	5	UNSUPPORTED	NO/YES	openspec/specs/clickable-trace-index/spec.md	How do I generate a code coverage report for the workspace?
+in	1	CONTRADICTION	YES/YES	openspec/specs/podman-container-handle/spec.md	Which litmus tests are currently bound in litmus-bindings.yaml?
+in	2	CONTRADICTION	YES/YES	openspec/specs/podman-container-spec/spec.md	Which litmus tests are currently bound in litmus-bindings.yaml?
+in	3	SUPPORTED	YES/NO	openspec/specs/spec-traceability/spec.md	Which litmus tests are currently bound in litmus-bindings.yaml?
+in	1	CONTRADICTION	YES/YES	methodology/in-forge-delegation.yaml	What telemetry thresholds must be green before the concurrency stage can be lifted?
+in	2	UNSUPPORTED	NO/YES	openspec/specs/accel-capability-probe/spec.md	What telemetry thresholds must be green before the concurrency stage can be lifted?
+in	3	UNSUPPORTED	NO/YES	openspec/specs/observability-convergence/spec.md	What telemetry thresholds must be green before the concurrency stage can be lifted?
+in	4	UNSUPPORTED	NO/YES	openspec/specs/spec-trace-coverage-threshold/spec.md	What telemetry thresholds must be green before the concurrency stage can be lifted?
+in	5	UNSUPPORTED	NO/YES	openspec/specs/observability-convergence/spec.md	What telemetry thresholds must be green before the concurrency stage can be lifted?
+in	1	UNSUPPORTED	NO/YES	openspec/specs/tillandsias-vault/spec.md	How is Vault unsealed when the stack comes up?
+in	2	UNSUPPORTED	NO/YES	cheatsheets/utils/podman-secrets.md	How is Vault unsealed when the stack comes up?
+in	3	UNSUPPORTED	NO/YES	openspec/specs/podman-secrets-integration/spec.md	How is Vault unsealed when the stack comes up?
+in	4	CONTRADICTION	YES/YES	cheatsheets/runtime/hashicorp-vault-tillandsias.md	How is Vault unsealed when the stack comes up?
+in	5	SUPPORTED	YES/NO	cheatsheets/runtime/hashicorp-vault-tillandsias.md	How is Vault unsealed when the stack comes up?
+in	1	UNSUPPORTED	NO/YES	methodology/event/index.yaml	What statuses can an unknown event have?
+in	2	UNSUPPORTED	NO/YES	cheatsheets/runtime/socket-container-health.md	What statuses can an unknown event have?
+in	3	UNSUPPORTED	NO/YES	crates/tillandsias-podman/src/events.rs	What statuses can an unknown event have?
+in	4	UNSUPPORTED	NO/YES	crates/tillandsias-podman/src/events.rs	What statuses can an unknown event have?
+in	5	UNSUPPORTED	NO/YES	crates/tillandsias-repeat-graph/src/main.rs	What statuses can an unknown event have?
+in	1	UNSUPPORTED	NO/YES	openspec/specs/git-mirror-service/spec.md	Which Vault policy grants the git mirror its push credential, and what paths does it allow?
+in	2	UNSUPPORTED	NO/YES	docs/cheatsheets/git-mirror-lifecycle-audit.md	Which Vault policy grants the git mirror its push credential, and what paths does it allow?
+in	3	UNSUPPORTED	NO/YES	docs/cheatsheets/git-mirror-lifecycle-audit.md	Which Vault policy grants the git mirror its push credential, and what paths does it allow?
+in	4	UNSUPPORTED	NO/YES	images/git/git-credential-tillandsias.sh	Which Vault policy grants the git mirror its push credential, and what paths does it allow?
+in	5	UNSUPPORTED	NO/YES	openspec/specs/git-mirror-service/spec.md	Which Vault policy grants the git mirror its push credential, and what paths does it allow?
+in	1	UNSUPPORTED	NO/YES	images/default/lib-expert-capability.sh	Which vector store backs the expert index?
+in	2	UNSUPPORTED	NO/YES	images/default/config-overlay/mcp/forge-plan.sh	Which vector store backs the expert index?
+in	3	UNSUPPORTED	NO/YES	images/default/lib-expert-capability.sh	Which vector store backs the expert index?
+in	4	UNSUPPORTED	NO/YES	images/default/config-overlay/mcp/forge-plan.sh	Which vector store backs the expert index?
+in	5	UNSUPPORTED	NO/YES	images/inference/preload-policy.sh	Which vector store backs the expert index?
+in	1	UNSUPPORTED	NO/YES	cheatsheets/runtime/windows-installer-prereqs.md	What is the minimum Windows version supported for a Tillandsias host?
+in	2	UNSUPPORTED	NO/YES	cheatsheets/runtime/ephemeral-lifecycle.md	What is the minimum Windows version supported for a Tillandsias host?
+in	3	UNSUPPORTED	NO/YES	cheatsheets/runtime/ephemeral-lifecycle.md	What is the minimum Windows version supported for a Tillandsias host?
+in	4	CONTRADICTION	YES/YES	cheatsheets/runtime/windows-installer-prereqs.md	What is the minimum Windows version supported for a Tillandsias host?
+in	5	UNSUPPORTED	NO/YES	cheatsheets/runtime/windows-tray-diagnostics.md	What is the minimum Windows version supported for a Tillandsias host?
+in	1	CONTRADICTION	NO/NO	openspec/specs/ci-release/spec.md	What steps does the release GitHub Actions workflow run?
+in	2	CONTRADICTION	NO/NO	cheatsheets/build/build-strategy.md	What steps does the release GitHub Actions workflow run?
+in	3	CONTRADICTION	NO/NO	methodology/ci.yaml	What steps does the release GitHub Actions workflow run?
+in	4	SUPPORTED	YES/NO	cheatsheets/build/container-image-building.md	What steps does the release GitHub Actions workflow run?
+in	1	SUPPORTED	YES/NO	crates/tillandsias-windows-tray/src/eventlog.rs	Which tracing levels reach the Windows Event Log?
+in	1	UNSUPPORTED	NO/YES	openspec/specs/subdomain-routing-via-reverse-proxy/spec.md	How do I chain Squid to my company's outbound proxy?
+in	2	UNSUPPORTED	NO/YES	cheatsheets/utils/podman-secrets.md	How do I chain Squid to my company's outbound proxy?
+in	3	UNSUPPORTED	NO/YES	docs/cheatsheets/verification-levels.md	How do I chain Squid to my company's outbound proxy?
+in	4	CONTRADICTION	NO/NO	openspec/specs/proxy-container/spec.md	How do I chain Squid to my company's outbound proxy?
+in	5	UNSUPPORTED	NO/YES	openspec/specs/fix-windows-image-routing/spec.md	How do I chain Squid to my company's outbound proxy?
+in	1	CONTRADICTION	YES/YES	methodology/litmus-centicolon-wiring.yaml	Should I work out a packet's residual centicolons by hand?
+in	2	UNSUPPORTED	NO/YES	methodology/proximity.yaml	Should I work out a packet's residual centicolons by hand?
+in	3	UNSUPPORTED	NO/YES	methodology/provenance.yaml	Should I work out a packet's residual centicolons by hand?
+in	4	UNSUPPORTED	NO/YES	openspec/specs/methodology-accountability/spec.md	Should I work out a packet's residual centicolons by hand?
+in	5	UNSUPPORTED	NO/YES	methodology/proximity.yaml	Should I work out a packet's residual centicolons by hand?
+in	1	CONTRADICTION	NO/NO	docs/cheatsheets/github-credential-tools.md	What Apple Developer Team ID do we sign and notarize with?
+in	2	CONTRADICTION	NO/NO	methodology/multi-host-development.yaml	What Apple Developer Team ID do we sign and notarize with?
+in	3	CONTRADICTION	NO/NO	cheatsheets/runtime/idiomatic-vm-exec.md	What Apple Developer Team ID do we sign and notarize with?
+in	4	UNSUPPORTED	NO/YES	scripts/sign-windows-artifact.ps1	What Apple Developer Team ID do we sign and notarize with?
+in	5	CONTRADICTION	NO/NO	openspec/specs/tray-progress-and-icon-states/spec.md	What Apple Developer Team ID do we sign and notarize with?
+in	1	UNSUPPORTED	NO/YES	methodology/spec-system.yaml	spec id format?
+in	2	UNSUPPORTED	NO/YES	docs/cheatsheets/verification-levels.md	spec id format?
+in	3	UNSUPPORTED	NO/YES	methodology/event/002-user-runtime-lifecycle-refinement.yaml	spec id format?
+in	4	UNSUPPORTED	NO/YES	methodology/event/005-hot-path-blocking-policy.yaml	spec id format?
+in	5	UNSUPPORTED	NO/YES	methodology/event/027-cache-version-fresh-start-fix.yaml	spec id format?
+in	1	SUPPORTED	YES/NO	methodology/distributed-work.yaml	Where does the agent_id in a lease come from — can I compose it myself?
+in	1	UNSUPPORTED	NO/YES	methodology/litmus.yaml	How fast does an 'instant' litmus test have to be, and what may it do?
+in	2	UNSUPPORTED	NO/YES	openspec/specs/ci-release/spec.md	How fast does an 'instant' litmus test have to be, and what may it do?
+in	3	UNSUPPORTED	NO/YES	openspec/specs/clickable-trace-index/spec.md	How fast does an 'instant' litmus test have to be, and what may it do?
+in	4	UNSUPPORTED	NO/YES	openspec/specs/environment-runtime/spec.md	How fast does an 'instant' litmus test have to be, and what may it do?
+in	5	UNSUPPORTED	NO/YES	openspec/specs/filesystem-scanner/spec.md	How fast does an 'instant' litmus test have to be, and what may it do?
+in	1	UNSUPPORTED	NO/YES	cheatsheets/runtime/forge-hot-cold-split.md	What is the byte limit for total cheatsheet size?
+in	2	UNSUPPORTED	NO/YES	cheatsheets/runtime/forge-hot-cold-split.md	What is the byte limit for total cheatsheet size?
+in	3	UNSUPPORTED	NO/YES	methodology/cheatsheets.yaml	What is the byte limit for total cheatsheet size?
+in	4	UNSUPPORTED	NO/YES	methodology/cheatsheets.yaml	What is the byte limit for total cheatsheet size?
+in	5	UNSUPPORTED	NO/YES	cheatsheets/observability/cheatsheet-metrics.md	What is the byte limit for total cheatsheet size?
+in	1	UNSUPPORTED	NO/YES	openspec/specs/forge-opencode-onboarding/spec.md	Which opencode release is baked into the current forge image?
+in	2	SUPPORTED	YES/NO	openspec/specs/default-image/spec.md	Which opencode release is baked into the current forge image?
+in	1	UNSUPPORTED	NO/YES	openspec/specs/default-image/spec.md	Which packages does the forge image install into the container?
+in	2	UNSUPPORTED	NO/YES	cheatsheets/runtime/forge-standalone.md	Which packages does the forge image install into the container?
+in	3	SUPPORTED	YES/NO	cheatsheets/build/cmake.md	Which packages does the forge image install into the container?
+in	1	CONTRADICTION	YES/YES	crates/tillandsias-otp/src/lib.rs	What is the OpenCode Web session cookie called and how long does the browser keep it?
+in	2	UNSUPPORTED	NO/YES	crates/tillandsias-headless/src/main.rs	What is the OpenCode Web session cookie called and how long does the browser keep it?
+in	3	UNSUPPORTED	NO/YES	docs/cheatsheets/opencode-web.md	What is the OpenCode Web session cookie called and how long does the browser keep it?
+in	4	UNSUPPORTED	NO/YES	openspec/specs/opencode-web-session/spec.md	What is the OpenCode Web session cookie called and how long does the browser keep it?
+in	5	UNSUPPORTED	NO/YES	openspec/specs/opencode-web-session-otp/spec.md	What is the OpenCode Web session cookie called and how long does the browser keep it?
+in	1	SUPPORTED	YES/NO	openspec/specs/ci-release/spec.md	What does the release workflow actually publish?
+in	1	UNSUPPORTED	NO/YES	docs/cheatsheets/centicolon-dashboard.md	Which panels are in the CentiColon convergence dashboard?
+in	2	UNSUPPORTED	NO/YES	docs/cheatsheets/centicolon-dashboard.md	Which panels are in the CentiColon convergence dashboard?
+in	3	UNSUPPORTED	NO/YES	docs/cheatsheets/centicolon-dashboard.md	Which panels are in the CentiColon convergence dashboard?
+in	4	UNSUPPORTED	NO/YES	openspec/specs/observability-convergence/spec.md	Which panels are in the CentiColon convergence dashboard?
+in	5	UNSUPPORTED	NO/YES	methodology/proximity.yaml	Which panels are in the CentiColon convergence dashboard?
+in	1	CONTRADICTION	YES/YES	cheatsheets/utils/tillandsias-secrets-architecture.md	Where does Vault store the GitHub token, and how long do the per-container tokens live?
+in	2	UNSUPPORTED	NO/YES	cheatsheets/utils/tillandsias-secrets-architecture.md	Where does Vault store the GitHub token, and how long do the per-container tokens live?
+in	3	SUPPORTED	YES/NO	docs/cheatsheets/git-mirror-lifecycle-audit.md	Where does Vault store the GitHub token, and how long do the per-container tokens live?
+in	1	UNSUPPORTED	NO/YES	cheatsheets/runtime/container-image-tagging.md	Does Tillandsias run on FreeBSD?
+in	2	UNSUPPORTED	NO/YES	cheatsheets/runtime/vz-framework-provisioning.md	Does Tillandsias run on FreeBSD?
+in	3	UNSUPPORTED	NO/YES	cheatsheets/build/build-strategy.md	Does Tillandsias run on FreeBSD?
+in	4	UNSUPPORTED	NO/YES	cheatsheets/runtime/ephemeral-lifecycle.md	Does Tillandsias run on FreeBSD?
+in	5	UNSUPPORTED	NO/YES	cheatsheets/utils/podman-secrets.md	Does Tillandsias run on FreeBSD?
+in	1	UNSUPPORTED	NO/YES	scripts/nix-cache-service.sh	enclave service names and ports?
+in	2	UNSUPPORTED	NO/YES	openspec/specs/enclave-network/spec.md	enclave service names and ports?
+in	3	UNSUPPORTED	NO/YES	cheatsheets/architecture/enclave-service-catalog-research.md	enclave service names and ports?
+in	4	UNSUPPORTED	NO/YES	openspec/specs/forge-environment-discoverability/spec.md	enclave service names and ports?
+in	5	UNSUPPORTED	NO/YES	cheatsheets/runtime/enclave-services.md	enclave service names and ports?
+in	1	SUPPORTED	YES/NO	docs/cheatsheets/litmus-stdlib-authoring.md	How do I register a new litmus test so scripts/run-litmus-test.sh picks it up?
+in	1	UNSUPPORTED	NO/YES	openspec/specs/vsock-exec-authz/spec.md	What does the ExecOneShot control-wire operation do?
+in	2	CONTRADICTION	NO/NO	docs/cheatsheets/tray-responsiveness.md	What does the ExecOneShot control-wire operation do?
+in	3	UNSUPPORTED	NO/YES	crates/tillandsias-headless/src/vsock_server.rs	What does the ExecOneShot control-wire operation do?
+in	4	UNSUPPORTED	NO/YES	crates/tillandsias-vm-layer/src/lib.rs	What does the ExecOneShot control-wire operation do?
+in	5	UNSUPPORTED	NO/YES	crates/tillandsias-vm-layer/src/vsock_exec.rs	What does the ExecOneShot control-wire operation do?
+in	1	SUPPORTED	YES/NO	methodology/between-commits-work-discipline.yaml	Which branch do checkpoints go to and what should the commit subject look like?
+in	1	CONTRADICTION	NO/NO	openspec/specs/default-image/spec.md	What's the one-sentence core principle behind all of this?
+in	2	SUPPORTED	YES/NO	methodology/philosophy.yaml	What's the one-sentence core principle behind all of this?
+in	1	CONTRADICTION	YES/YES	openspec/specs/linux-native-portable-executable/spec.md	Where does the curl installer put the binary if ~/.local/bin isn't on my PATH?
+in	2	UNSUPPORTED	NO/YES	docs/cheatsheets/alpine-containers.md	Where does the curl installer put the binary if ~/.local/bin isn't on my PATH?
+in	3	UNSUPPORTED	NO/YES	openspec/specs/install-progress/spec.md	Where does the curl installer put the binary if ~/.local/bin isn't on my PATH?
+in	4	UNSUPPORTED	NO/YES	cheatsheets/runtime/socket-enclave-diagnostics.md	Where does the curl installer put the binary if ~/.local/bin isn't on my PATH?
+in	5	UNSUPPORTED	NO/YES	openspec/specs/dev-build/spec.md	Where does the curl installer put the binary if ~/.local/bin isn't on my PATH?
+in	1	SUPPORTED	YES/NO	openspec/specs/forge-hot-cold-split/spec.md	Which forge paths are RAM-backed, and what size caps do they have?
+in	1	CONTRADICTION	NO/NO	docs/cheatsheets/secrets-management.md	Where does the git author name and email live — same place as the token?
+in	2	SUPPORTED	YES/NO	cheatsheets/utils/git-workflows.md	Where does the git author name and email live — same place as the token?
+in	1	UNSUPPORTED	NO/YES	methodology/distributed-work.yaml	Why do agents keep undoing each other's formatting?
+in	2	UNSUPPORTED	NO/YES	methodology/provenance.yaml	Why do agents keep undoing each other's formatting?
+in	3	CONTRADICTION	NO/NO	methodology/between-commits-work-discipline.yaml	Why do agents keep undoing each other's formatting?
+in	4	SUPPORTED	YES/NO	methodology/distributed-work.yaml	Why do agents keep undoing each other's formatting?
+in	1	CONTRADICTION	YES/YES	cheatsheets/runtime/ollama-model-management.md	I've got a 6 GB GPU. Which models get pre-pulled and which are lazy?
+in	2	CONTRADICTION	YES/YES	images/inference/preload-policy.sh	I've got a 6 GB GPU. Which models get pre-pulled and which are lazy?
+in	3	CONTRADICTION	YES/YES	cheatsheets/runtime/ollama-model-management.md	I've got a 6 GB GPU. Which models get pre-pulled and which are lazy?
+in	4	SUPPORTED	YES/NO	openspec/specs/inference-container/spec.md	I've got a 6 GB GPU. Which models get pre-pulled and which are lazy?
+in	1	UNSUPPORTED	NO/YES	cheatsheets/web/cookie-auth-best-practices.md	What does the cookie-auth-best-practices cheatsheet recommend?
+in	2	UNSUPPORTED	NO/YES	openspec/specs/knowledge-source-of-truth/spec.md	What does the cookie-auth-best-practices cheatsheet recommend?
+in	3	UNSUPPORTED	NO/YES	openspec/specs/cheatsheet-tooling/spec.md	What does the cookie-auth-best-practices cheatsheet recommend?
+in	4	UNSUPPORTED	NO/YES	methodology/bootstrap/router.yaml	What does the cookie-auth-best-practices cheatsheet recommend?
+in	5	CONTRADICTION	NO/NO	openspec/specs/cheatsheet-tooling/spec.md	What does the cookie-auth-best-practices cheatsheet recommend?
+in	1	CONTRADICTION	YES/YES	crates/tillandsias-core/src/config.rs	scanner default watch dir?
+in	2	CONTRADICTION	YES/YES	crates/tillandsias-core/src/config.rs	scanner default watch dir?
+in	3	UNSUPPORTED	NO/YES	crates/tillandsias-scanner/src/watcher.rs	scanner default watch dir?
+in	4	CONTRADICTION	YES/YES	crates/tillandsias-scanner/src/watcher.rs	scanner default watch dir?
+in	5	UNSUPPORTED	NO/YES	crates/tillandsias-scanner/src/watcher.rs	scanner default watch dir?
+in	1	SUPPORTED	YES/NO	methodology/bootstrap/router.yaml	What command starts an autonomous session, and what must I read first?
+in	1	UNSUPPORTED	NO/YES	openspec/specs/inference-container/spec.md	Which model does the inference container serve by default?
+in	2	UNSUPPORTED	NO/YES	openspec/specs/inference-container/spec.md	Which model does the inference container serve by default?
+in	3	UNSUPPORTED	NO/YES	cheatsheets/runtime/hashicorp-vault-tillandsias.md	Which model does the inference container serve by default?
+in	4	UNSUPPORTED	NO/YES	openspec/specs/inference-container/spec.md	Which model does the inference container serve by default?
+in	5	CONTRADICTION	YES/YES	openspec/specs/inference-host-side-pull/spec.md	Which model does the inference container serve by default?
+in	1	SUPPORTED	YES/NO	methodology/distributed-work.yaml	What's the right way to change a packet's status field?
+in	1	UNSUPPORTED	NO/YES	crates/tillandsias-logging/src/log_entry.rs	I hit a broken test while doing something unrelated. Am I obliged to file it?
+in	2	SUPPORTED	YES/NO	methodology/litmus.yaml	I hit a broken test while doing something unrelated. Am I obliged to file it?
+in	1	SUPPORTED	YES/NO	scripts/install-windows.ps1	How does a normal user end up on a stable build instead of a broken daily?

@@ -1604,6 +1604,32 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Instrument freshness fixture passed"
 
+    # Order 859-b2zc. Host identity must resolve WITHOUT a `hostname` binary —
+    # no Fedora image this project runs ships one, so five scripts that
+    # re-derived the chain inline were blind in the forge and in both WSL
+    # distros. The forge case is the one that hid: `unavailable:` is the single
+    # verdict that asks nobody to do anything, so the capability gate never
+    # once prompted it.
+    _step "Checking capability-row host resolution (859-b2zc)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-capability-row-check.sh" 2>&1; then
+        _error "check-capability-row.sh cannot resolve a host without \`hostname\` — the forge goes silent again"
+        exit 1
+    fi
+    _info "Capability-row host-resolution fixture passed"
+
+    # Order 858-ihcb. A benchmark that measures a warm prompt cache reports a
+    # number that is wrong by 10x and looks plausible. This fixture inspects
+    # the payloads the harness's REAL call sites put on the wire, because the
+    # defect's second incarnation — a nonce counter incremented inside `$( )`,
+    # which never advances in the parent — is invisible to any test that calls
+    # the helper directly.
+    _step "Checking bench prompt uniqueness (858-ihcb)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-bench-prompt-uniqueness.sh" 2>&1; then
+        _error "bench-inference-floor.sh can reach a measured call with a reused prompt — prefill numbers would be cache hits"
+        exit 1
+    fi
+    _info "Bench prompt-uniqueness fixture passed"
+
     # PIPESTATUS, not `$?` — `cmd | tee f` returns TEE's status. The verdict is
     # the ratchet's, not cargo's: a failure not in scripts/test-known-red.txt
     # is a regression, a listed test that PASSED is a stale entry, and a listed
@@ -1934,6 +1960,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # never been written. Both empty shapes fail here — a name no test declares,
     # and a test no spec binds (execution is binding-driven, so an unbound test
     # runs in no suite and is as inert as a missing one).
+    # Order 660-ryhn. The mirror image of 721-77yu: a litmus FILE nothing
+    # binds never executes in any suite, and the suite prints PASS while the
+    # author's assertions have run zero times. 26 files were in that state
+    # when measured, security-critical ones among them. Creation-time gate:
+    # retired files are exempt, historical strays are grandfathered (ratchet
+    # list — deletions only), NEW unbound files refuse here.
+    _step "Checking every litmus file is bound, retired, or grandfathered (660-ryhn)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-bindings.sh" 2>&1; then
+        _error "a litmus file exists that no suite will ever run, or a binding names no file (660-ryhn) — see the verdict line above"
+        exit 1
+    fi
+    _info "Litmus bindings reconciliation passed"
+
     _step "Checking litmus pin claims resolve and execute (721-77yu)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-pin-claims.sh" 2>&1; then
         _error "a script claims a litmus pin that cannot execute (721-77yu) — see the verdict line above"

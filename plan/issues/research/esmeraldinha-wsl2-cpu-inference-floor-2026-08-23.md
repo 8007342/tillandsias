@@ -251,3 +251,48 @@ Named explicitly rather than left to look complete:
 3. **Prefill throughput is unmeasured on this substrate this cycle**, per D1.
    The 2026-08-17 controlled figure (88.3 tok/s CPU, 190.6 dzn) stands as the
    best available, and was taken in `tillandsias-build`, not the runtime distro.
+
+---
+
+## Prefill, now measured — the residual this document opened with is closed
+
+Filed above as residual 3: "Prefill throughput is unmeasured on this substrate
+this cycle, per D1." D1 is fixed (858-ihcb, same day, next cycle) and the
+numbers exist. `scripts/bench-inference-floor.sh` now isolates prefill with a
+unique-token-first prompt per repetition, `num_predict=1`, the cold dispatch
+discarded, and reports the median of three with its range.
+
+| `cpu-wsl2`, esmeraldinha | prefill tok/s | range | decode tok/s |
+|---|---:|---|---:|
+| `qwen2.5:0.5b` (T0) | **138.68** | 122.25-144.32 | 28.99 |
+| `phi3.5:3.8b` (T2) | **17.67** | 17.63-17.99 | 6.38 |
+
+What the harness reported for the same models before the fix: **1334.59** and
+**480.93**. A 9.6x and a 27x overstatement.
+
+**The cross-check that makes these trustworthy.** This host measured the same
+two models on **bare-metal Windows** on 2026-08-16, with a different harness on
+a different substrate: prefill 108.9 (T0) and 19.0 (T2). The corrected WSL2
+figures land within ~10% of those. The cached figures were 12x and 25x away
+from them. An independently-taken measurement the new code knew nothing about
+now agrees with it, and did not agree with what the harness said yesterday.
+
+Two consequences worth carrying forward:
+
+1. **T2's prefill disqualifier stands, and is now confirmed on WSL2.** The
+   2026-08-16 record's load-bearing finding was that `phi3.5:3.8b` cannot read
+   its own retrieved context in usable time: at 19.0 tok/s prefill, a `--k 6`
+   retrieval of ~3,000 tokens is ~158 s before the first token. At the WSL2
+   figure of 17.67 it is ~170 s. Nothing about moving into WSL2 rescues T2.
+2. **The decode/prefill split on this host is ~4.8x for T0 and ~2.8x for T2**
+   (prefill tok/s over decode tok/s). Both are prefill-favoured, which is the
+   shape that made the dzn iGPU lane worth measuring in the first place — and
+   the lane is still unprovisioned in the runtime distro, so the CPU numbers
+   above are what a scheduler gets today.
+
+The embed figures are unchanged by the fix (the defect was confined to
+`prompt_eval_duration`): **433.1 ms/chunk at 250 chars**, against 437.3
+yesterday — 1% apart across two days and two harness versions. The corpus
+projection, now fed the measured 9,909-chunk count rather than the superseded
+1,592 constant, gives **4,291.6 s = 71.5 min**, matching the 72 min projected
+by hand above.

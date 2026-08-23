@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # forge-liveness-probe.sh — Host-side forge agent liveness probe
 # Order 265: forge-agent-liveness-signals
+# freshness: auditor=linux-yoga-fable5-20260823T081315Z date=2026-08-23 verdict=refreshed scope=order-372 standing audit — still the live liveness mechanism: consumed by scripts/litmus-opencode-e2e-launch.sh, pinned by litmus:forge-liveness-probe-shape (bound), five-state grammar unchanged; no dead references found
 #
 # Polls three signals (container state, heartbeat file mtime, git HEAD)
 # and classifies the forge agent into one of five liveness states.

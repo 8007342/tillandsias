@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: bench-inference-floor-publishes-a-cached-prefill
+    field: status
+    value: implemented
+    ts: "2026-08-23T07:58:29Z"
+    host: windows
+
+events:
+  - packet_id: bench-inference-floor-publishes-a-cached-prefill
+    event:
+      type: note
+      ts: "2026-08-23T07:58:29Z"
+      host: windows
+      summary: >
+        Prefill isolated with unique-first prompts, num_predict=1, cold dispatch discarded, median of 3 reported with range; projection declines without measured constants. Corrected T0 1334.59 -> 138.68 tok/s and T2 480.93 -> 17.67, both now agreeing with this host's independent bare-metal figures. Fixture 6/6, and it fails against the pre-fix form.

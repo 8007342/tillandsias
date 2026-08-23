@@ -46,10 +46,14 @@ Measured on Intel N150 (4 ADL-N E-cores, no SMT, AVX_VNNI, dual-channel 16 GB):
 - **Prefill / embedding: ~107 tok/s** (generation prefill) and **~230 tok/s** (embedder)
 - **Decode: ~39-43 tok/s** on a 0.5B model
 
-Prefill is compute-bound; decode is memory-bandwidth-bound. This is why two hosts
-with the *same* ADL-N cores can differ ~2x on decode and not at all on prefill —
-the difference is DRAM channels, not cores. Check channel count before predicting
-decode:
+**A 0.5B model does NOT saturate even a single DDR4 channel**, so do not predict
+decode from channel count at this size. Measured 2026-08-23 against the N100
+cousin: 41 tok/s x 0.40 GB/token-pass = 16.3 GB/s here, and 29.6 x 0.40 =
+11.8 GB/s there — 55% of that host's ~21.3 GB/s ceiling. Neither is bus-limited,
+and the dual-channel host is only 1.38x faster, not the ~2x a bandwidth story
+predicts. Channel count starts to matter around 3-4B, which the pinned image
+cannot run (849-tz8g), so on this tier it is currently **untestable**. Read the
+channel count anyway — it bounds the larger models you cannot yet run:
 
 ```bash
 for d in /sys/devices/system/edac/mc/mc*/dimm*; do
@@ -117,6 +121,16 @@ governing quantity is EVIDENCE TOKENS, not sub-question count: budget approximat
 `tolerable_seconds x prefill_tok_s` across the whole fan-out. To keep one complement
 pair under 30 s here you need ~1,500 tokens per call — about k=3, not k=6.
 
+**THE ONE QUESTION THAT DECIDES THIS BUDGET**, and it is a design choice rather than
+a hardware fact. The same sub-query costs **~1.5 s** without the retrieved evidence
+in the prompt and **~40 s** with k=6 evidence prefilled — the evidence is ~96% of the
+cost. esmeraldinha independently measured ~2.3 s/sub-query on the same tier and its
+number is right for the shape it measured; the two disagree by 17x purely because one
+includes the evidence prefill and the other does not. So 853-6gz3's floor is not one
+number: it is ~1.5-2.3 s per sub-query if verification is DETERMINISTIC (citation
+checking, its Tier A), and ~40 s if the model must re-read the passage to judge it.
+On this tier that choice is the difference between a usable layer and an unusable one.
+
 ## Common pitfalls
 
 - **Reusing one prompt across reps.** ollama caches the KV prefix, so reps 2+ report
@@ -160,12 +174,30 @@ tests pass. On this host one of them does not (order 856-xvr2).
 
 **Cross-host ratios** (same corpus shape, ledger-recorded):
 
-| metric | this host | esmeraldinha (N100, single-channel) | macuahuitl (RTX A5000) |
+Measured at esmeraldinha's OWN shapes on 2026-08-23 so these are ratios, not two
+different experiments. The earlier version of this table compared against figures
+that 858-ihcb has since shown were taken over a warm prompt cache (prefill) or
+under different conditions (decode); it is corrected here.
+
+| metric (matched conditions) | this host | esmeraldinha (N100, WSL2, single-ch) | ratio |
 |---|---|---|---|
-| prefill 0.5B | 107.5 tok/s | 108.9 tok/s (**0.99x**) | — |
-| decode 0.5B | ~39 tok/s | 20.5 tok/s (**1.9x**) | — |
-| embed | 230 tok/s | 176.6 tok/s (**1.30x**) | — |
-| batch of 64 chunks | 105.0 s | — | 1.52 s (**69x**) |
+| prefill 0.5B, controlled | 107.5 tok/s | 88.3 tok/s | **1.22x** |
+| decode 0.5B | ~41 tok/s | 29.64 tok/s | **1.38x** |
+| embed, 2000-char chunk | 2215 ms | 2451.5 ms | **1.11x** |
+| embed, 250-char chunk | 312 ms | 437.3 ms | **1.40x** |
+| query embed | 238 ms | 440 ms | **1.85x** |
+| one unfold-and-verify sub-query | ~1.5 s | ~2.3 s | **1.53x** |
+| batch of 64 chunks | 105.0 s | — | vs macuahuitl 1.52 s (**69x**) |
+
+**The two ADL-N hosts are the same machine to within 1.1-1.9x on every lane.**
+There is no lane where one is qualitatively different from the other, which is the
+useful result: the tier behaves as one tier.
+
+**Fan-out is not strictly serial here.** Two concurrent sub-queries cost 0.82x of
+running them back to back (2021 ms vs 2458 ms), where esmeraldinha reports strict
+serialisation under `OLLAMA_NUM_PARALLEL=1`. So serialisation is a RUNTIME
+CONFIGURATION property, not a property of the tier. It is still nearly serial:
+two queries cost ~1.6x one, so fan-out width is close to linear in cost either way.
 
 **Engine ceiling, not hardware ceiling.** The pinned inference image ships only
 `libggml-cpu-*.so`. There is no `libggml-{cuda,hip,sycl,vulkan}.so` in it, so no GPU

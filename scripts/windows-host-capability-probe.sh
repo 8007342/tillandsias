@@ -69,13 +69,22 @@ for tool in powershell.exe jq; do
     fi
 done
 
-# Same chain as scripts/agent-identity.sh: short node name, lowercased. NOT a
-# fresh guess at how to name a machine -- the matrix fold key and the
-# attestation ledger's filename must be the same string (808-43mw).
+# THE chain from scripts/agent-identity.sh, sourced rather than restated
+# (order 859-b2zc). The matrix fold key and the attestation ledger's filename
+# must be the same string (808-43mw), and the only way to guarantee that is to
+# call the same function -- this block used to say "same chain as
+# agent-identity.sh" above a private copy of it, which is how the copies get
+# made. The copy here even worked, because Git Bash ships `hostname`; the
+# sibling copy in check-capability-row.sh did not, because no Fedora image
+# does, and it silenced the forge for as long as that gate has existed.
+# tillandsias_node_name domain-strips and lowercases with builtins.
 if [ -z "$HOST_ID" ]; then
-    _raw="$(hostname 2>/dev/null || uname -n 2>/dev/null || cat /etc/hostname 2>/dev/null || echo unknown)"
-    _raw="${_raw%%.*}"
-    HOST_ID="$(printf '%s' "$_raw" | tr '[:upper:]' '[:lower:]')"
+    _ai_dir="${BASH_SOURCE[0]%/*}"
+    [ "$_ai_dir" = "${BASH_SOURCE[0]}" ] && _ai_dir=.
+    # shellcheck source=scripts/agent-identity.sh
+    . "$_ai_dir/agent-identity.sh"
+    HOST_ID="$(tillandsias_node_name)"
+    [ -n "$HOST_ID" ] || HOST_ID=unknown
 fi
 [ -n "$TS" ] || TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 

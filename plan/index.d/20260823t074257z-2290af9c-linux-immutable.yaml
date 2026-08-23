@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: alder-lake-n-cross-os-comparison-row-silverblue-against-windows
+    field: status
+    value: implemented
+    ts: "2026-08-23T07:42:57Z"
+    host: linux_immutable
+
+events:
+  - packet_id: alder-lake-n-cross-os-comparison-row-silverblue-against-windows
+    event:
+      type: note
+      ts: "2026-08-23T07:42:57Z"
+      host: linux_immutable
+      summary: >
+        esmeraldinha published its rows and measurements (858-tnnv), unblocking this; pairing measured at matched shapes on an idle box, the dual-channel prediction corrected by its own bandwidth arithmetic, and esmeraldinha's serialisation question answered (overlapped here, so it is a runtime-config property not a tier property)

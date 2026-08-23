@@ -152,12 +152,14 @@ specs:
   - litmus:stable-channel-shape
   - litmus:smoke-release-channel-shape
   - litmus:cycle-batch-triage-shape
+  - litmus:harness-affinity-selection-shape
   - litmus:capability-routing-shape
   - litmus:pickup-role-grammar-shape
   - litmus:terminal-status-vocabulary-shape
   - litmus:local-ci-self-clean-evidence
   - litmus:installer-ascii-expansion-safety
   - litmus:litmus-expression-pinning-enforcement-shape
+  - litmus:litmus-bindings-reconciliation-shape
   - litmus:parked-blocks-visibility-shape
   - litmus:fragment-closure-evidence-gate-shape
   - litmus:fragment-status-loss-attribution-shape
@@ -377,6 +379,7 @@ specs:
   - litmus:project-answer-synthesis-refusal-typed
   - litmus:generic-index-deterministic-subset
   - litmus:mcp-usage-telemetry-shape
+  - litmus:mcp-transport-death-trace-shape
   coverage_ratio: 80
   last_verified: '2026-08-10'
 - spec_id: forge-forward-compat
@@ -607,7 +610,6 @@ specs:
   - litmus:macos-tray-import-surface
   - litmus:wire-unreachable-chip-text-symmetric
   - litmus:macos-tray-diagnose-cli-surface
-  - litmus:recipe-release-tag-symmetric
   - litmus:tray-status-text-helpers-symmetric
   - litmus:exit-code-provisioned-zero-degraded-two-symmetric
   - litmus:macos-tray-architectural-invariants
@@ -1000,7 +1002,6 @@ specs:
   litmus_tests:
   - litmus:wire-unreachable-chip-text-symmetric
   - litmus:windows-tray-diagnose-cli-surface
-  - litmus:recipe-release-tag-symmetric
   - litmus:tray-status-text-helpers-symmetric
   - litmus:exit-code-provisioned-zero-degraded-two-symmetric
   - litmus:windows-tray-architectural-invariants

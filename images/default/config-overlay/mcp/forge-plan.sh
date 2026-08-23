@@ -187,6 +187,12 @@ for _mcp_log_cand in \
     if [ -r "$_mcp_log_cand" ]; then . "$_mcp_log_cand" 2>/dev/null && break; fi
 done
 command -v mcp_log_usage >/dev/null 2>&1 || mcp_log_usage() { return 0; }
+# 757-qwqz: the same guarantee for the transport-death trace. A stale shared
+# lib must degrade these to no-ops, never abort the server under `set -eu`.
+command -v mcp_transport_guard >/dev/null 2>&1 || mcp_transport_guard() { return 0; }
+command -v mcp_tg_inflight >/dev/null 2>&1 || mcp_tg_inflight() { return 0; }
+command -v mcp_tg_done >/dev/null 2>&1 || mcp_tg_done() { return 0; }
+command -v mcp_tg_clean_shutdown >/dev/null 2>&1 || mcp_tg_clean_shutdown() { return 0; }
 
 # Dev-vs-runtime environment hook: on the bare-metal DEVELOPMENT host this
 # defaults the inference endpoints to loopback and fires the idempotent
@@ -956,6 +962,10 @@ rpc_error() {
         '{jsonrpc:"2.0", id:$id, error:{code:$code, message:$msg}}')"
 }
 
+# 757-qwqz: from here on this process IS the session transport — arm the
+# mid-session death trace (shared guard in mcp-usage-log.sh).
+mcp_transport_guard "forge-plan"
+
 # Read JSON-RPC requests from stdin, respond on stdout
 while IFS= read -r line; do
     # `|| true` on both: a malformed line is a client bug, and letting `set -e`
@@ -999,6 +1009,9 @@ TOOLS_JSON
         "tools/call")
             tool=$(echo "$line" | jq -r '.params.name')
             args=$(echo "$line" | jq -r '.params.arguments // {}')
+            # 757-qwqz: a death between here and mcp_tg_done below is a
+            # mid-request transport failure and must name the tool it took.
+            mcp_tg_inflight "$tool"
             result=""
             unknown_tool=0
             invalid_params=0
@@ -1205,6 +1218,9 @@ TOOLS_JSON
             else
                 rpc_result_text "$id_json" "$result"
             fi
+            # 757-qwqz: response is on the wire — the request is no longer
+            # in flight.
+            mcp_tg_done
             ;;
         "prompts/list")
             emit_frame "$(jq -cn --argjson id "$id_json" '{jsonrpc:"2.0", id:$id, result:{prompts:[]}}')"
@@ -1224,3 +1240,6 @@ TOOLS_JSON
             ;;
     esac
 done
+
+# 757-qwqz: stdin EOF is the one sanctioned shutdown; everything else records.
+mcp_tg_clean_shutdown
