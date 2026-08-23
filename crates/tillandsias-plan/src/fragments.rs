@@ -3538,6 +3538,148 @@ plan_index:
         assert_fold_equivalent(&index, &raw);
         let _ = std::fs::remove_dir_all(&d);
     }
+
+    // ── 846-idhn EXIT CRITERION 3 ───────────────────────────────────────────
+    //
+    // "A fragment carrying each known top-level key survives fold -> compact ->
+    // fold byte-equivalently, SO THE NEXT CHANNEL ADDED CANNOT REPEAT THIS."
+    //
+    // The defect being generalised away is 843-624y: `capabilities:` was read by
+    // the folder and written by nobody, so compaction CONSUMED those fragments
+    // and deleted them — destroying 100% of the channel. yolanda's only two rows
+    // were lost that way. Per-channel fixes do not prevent the next channel from
+    // arriving with the same hole, and 864-p2rk landed the same shape again on
+    // the same day (a cache key that failed to cover one of its own inputs).
+    //
+    // So there are two assertions here, and the second is the one that
+    // generalises: every channel round-trips, AND the set of channels under test
+    // is provably the set the folder actually reads.
+
+    /// The full observable state of a ledger: the packet document AND the
+    /// capability matrix, which lives outside `fold` on purpose.
+    fn full_state(index: &Path) -> (Vec<Value>, Vec<String>) {
+        let base_raw = std::fs::read_to_string(index).unwrap_or_default();
+        let base: Value = serde_yaml::from_str(&base_raw).unwrap_or(Value::Null);
+        let frags = load_all(index);
+
+        let merged = fold(&base, &frags);
+        let mut packets = Vec::new();
+        crate::collect_packets(&merged, &mut packets);
+
+        // The base is spliced in exactly as the production callers do it
+        // (main.rs capability-matrix, fragments.rs:1272). That duplication is
+        // itself filed as 864-v8kr; this test must mirror production, not
+        // improve on it, or it would pass against a fold no caller performs.
+        let mut cap_frags = frags;
+        if base.get("capabilities").is_some() {
+            cap_frags.insert(
+                0,
+                Fragment {
+                    name: "0000-base".to_string(),
+                    path: index.to_path_buf(),
+                    doc: base.clone(),
+                    raw: base_raw,
+                },
+            );
+        }
+        let (matrix, _) = fold_capabilities(&cap_frags);
+        let caps: Vec<String> = matrix.keys().map(|(h, l)| format!("{h}/{l}")).collect();
+
+        (packets, caps)
+    }
+
+    /// Every top-level channel a fragment may carry survives compaction.
+    #[test]
+    fn every_known_fragment_channel_survives_a_compaction_round_trip() {
+        for (channel, body) in CHANNEL_PROBES {
+            let d = scratch(&format!("chan-{channel}"));
+            let index = d.join("plan/index.yaml");
+            std::fs::write(d.join("plan/index.d/1-probe.yaml"), body).expect("write probe");
+
+            let before = full_state(&index);
+
+            // Publish the compaction the way `compact` does: the candidate
+            // becomes the base and the folded fragments are deleted.
+            let candidate = compact_text(&index)
+                .unwrap_or_else(|e| panic!("channel {channel} failed to compact: {e}"))
+                .candidate;
+            std::fs::write(&index, &candidate).expect("publish candidate");
+            for entry in std::fs::read_dir(d.join("plan/index.d")).expect("read frag dir") {
+                std::fs::remove_file(entry.expect("entry").path()).expect("delete folded fragment");
+            }
+
+            let after = full_state(&index);
+
+            assert_eq!(
+                before.0, after.0,
+                "channel `{channel}`: packet state did not survive fold -> compact -> fold"
+            );
+            assert_eq!(
+                before.1, after.1,
+                "channel `{channel}`: capability rows did not survive fold -> compact -> fold"
+            );
+            let _ = std::fs::remove_dir_all(&d);
+        }
+    }
+
+    /// THE ASSERTION THAT GENERALISES. Read this file's own source, find every
+    /// top-level key the folder pulls out of a fragment, and require it to be
+    /// covered above. Adding a channel to the folder without adding a probe
+    /// fails here — which is the only mechanism that makes the next channel
+    /// safe rather than merely making this one safe.
+    #[test]
+    fn the_set_of_fragment_channels_under_test_is_the_set_the_folder_reads() {
+        let src = include_str!("fragments.rs");
+        let mut read: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for (pat, _) in [("frag.doc.get(\"", 0), ("d.doc.get(\"", 0)] {
+            let mut rest = src;
+            while let Some(i) = rest.find(pat) {
+                rest = &rest[i + pat.len()..];
+                if let Some(j) = rest.find('"') {
+                    read.insert(rest[..j].to_string());
+                }
+            }
+        }
+        let covered: std::collections::BTreeSet<String> = CHANNEL_PROBES
+            .iter()
+            .map(|(c, _)| (*c).to_string())
+            .collect();
+        let uncovered: Vec<&String> = read.difference(&covered).collect();
+        assert!(
+            uncovered.is_empty(),
+            "the folder reads fragment channel(s) {uncovered:?} that no round-trip probe covers.\n\
+             Add a probe to CHANNEL_PROBES. This is 846-idhn exit criterion 3: a channel the\n\
+             folder reads and compaction does not write is silently destroyed (843-624y)."
+        );
+    }
+
+    /// One probe per channel. Kept as a const so the coverage assertion above
+    /// can enumerate it.
+    const CHANNEL_PROBES: &[(&str, &str)] = &[
+        (
+            "packets",
+            "packets:\n  - packet_id: zeta\n    order: 900\n    status: ready\n",
+        ),
+        (
+            "events",
+            "events:\n  - packet_id: alpha\n    event:\n      type: note\n      \
+             ts: \"2026-02-02T00:00:00Z\"\n      agent_id: probe\n      summary: channel probe\n",
+        ),
+        (
+            "status",
+            "status:\n  - packet_id: alpha\n    field: status\n    value: implemented\n    \
+             ts: \"2026-02-02T00:00:00Z\"\n    host: probe\n",
+        ),
+        (
+            "capabilities",
+            "capabilities:\n  - ts: \"2026-02-02T00:00:00Z\"\n    host: linux\n    \
+             locus: in-guest\n    document:\n      schema_version: 2\n      legacy_tier: cpu\n      \
+             devices: []\n      engines: []\n      measurements: []\n      host:\n        \
+             is_battery_present: true\n        kernel_release: 6.1.0-probe\n        \
+             host_id: probe-host\n        host_id_source: node-name\n        host_kind: linux\n      \
+             timestamp: \"2026-02-02T00:00:00Z\"\n",
+        ),
+    ];
 }
 
 #[cfg(test)]
