@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: brew-aarch64-harness-strategy
+    field: next_action
+    value: 'On a cycle running the macOS local-build e2e (/build-install-and-smoke-test-e2e, pristine aarch64 guest): verify each harness in the 2026-08-23 inventory installs via its designated channel with visible progress or one actionable failure line, no silent 127s (exit criterion 2); then close 317 citing the inventory + litmus:brew-ondemand-tools-shape Tier-2 step'
+    ts: "2026-08-23T05:56:25Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: brew-aarch64-harness-strategy
+    event:
+      type: note
+      ts: "2026-08-23T05:56:25Z"
+      host: tlatoanis-macbook-air
+      summary: >
+        carry-forward

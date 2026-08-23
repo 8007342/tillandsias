@@ -46,9 +46,14 @@ exit 0
 STUB
 chmod +x "$TMPD/target/release/tillandsias-plan"
 
-set_mtimes() { # $1 = binary date, $2 = source date
-    touch -d "$1" "$TMPD/target/release/tillandsias-plan"
-    touch -d "$2" "$TMPD/crates/tillandsias-plan/src/main.rs" \
+set_mtimes() { # $1 = binary stamp, $2 = source stamp (POSIX touch -t CCYYMMDDhhmm)
+    # POSIX `touch -t`, never `-d` (851-28b5 defect class, caught by this
+    # fixture's own gate run on the first macOS host): BSD touch's -d demands
+    # strict ISO 'YYYY-MM-DDThh:mm:SS', so '2026-01-02 00:00' failed silently
+    # under 2>/dev/null-free stderr, nothing was backdated, and both "stale"
+    # scenarios ran against FRESH mtimes — rc=0 where the contract says 2.
+    touch -t "$1" "$TMPD/target/release/tillandsias-plan"
+    touch -t "$2" "$TMPD/crates/tillandsias-plan/src/main.rs" \
                   "$TMPD/crates/tillandsias-plan" "$TMPD/Cargo.lock"
 }
 
@@ -89,20 +94,20 @@ run_case() {
 }
 
 # ── case A: binary newer than every source → fresh, no cargo consulted ──────
-set_mtimes '2026-01-02 00:00' '2026-01-01 00:00'
+set_mtimes 202601020000 202601010000
 out="$(run_case none)"
 ck "fresh binary resolves"            "rc=0" "$(printf '%s' "$out" | tail -1)"
 ck "fresh binary prints its path"     "./target/release/tillandsias-plan" \
    "$(printf '%s' "$out" | head -1)"
 
 # ── case B: source newer, rebuild fails → rc 2, silent ──────────────────────
-set_mtimes '2026-01-02 00:00' '2026-01-03 00:00'
+set_mtimes 202601020000 202601030000
 out="$(run_case fail)"
 ck "stale + failed rebuild returns 2" "rc=2" "$(printf '%s' "$out" | tail -1)"
 ck "stale + failed rebuild is silent" ""     "$(printf '%s' "$out" | head -1)"
 
 # ── case C: source newer, rebuild heals → rc 0, path printed ────────────────
-set_mtimes '2026-01-02 00:00' '2026-01-03 00:00'
+set_mtimes 202601020000 202601030000
 out="$(run_case touch)"
 ck "stale + rebuild-in-locus heals"   "rc=0" "$(printf '%s' "$out" | tail -1)"
 ck "healed binary prints its path"    "./target/release/tillandsias-plan" \
@@ -115,7 +120,7 @@ ck "no binary returns 1"              "rc=1" "$(printf '%s' "$out" | tail -1)"
 mv "$TMPD/stashed-binary" "$TMPD/target/release/tillandsias-plan"
 
 # ── case E: explicit override passes through on existence alone ─────────────
-set_mtimes '2026-01-02 00:00' '2026-01-03 00:00'   # stale by mtime, on purpose
+set_mtimes 202601020000 202601030000   # stale by mtime, on purpose
 out="$(
     cd "$TMPD" || exit 99
     unset CARGO_TARGET_DIR

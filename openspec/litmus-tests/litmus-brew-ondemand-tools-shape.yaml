@@ -82,6 +82,11 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: egress-allowlisted"
 
+  - step: "the shim owns the aarch64 Tier-2 policy in one line (order 317: behavioral fixture with per-arch and per-path negative controls plus a cmp-verified mutant arm)"
+    command: "bash scripts/test-brew-shim-tier2-warning.sh 2>&1 | tail -1"
+    timeout_ms: 60000
+    expected_behavior: "ok:brew-shim-tier2-warning-fixture:8"
+
 observability:
   traces:
     - "@trace spec:default-image"
