@@ -191,3 +191,36 @@ follow it exactly. Three mechanical reasons, in increasing order of importance:
 The operator's intent (a private lane, no per-cycle merge, orchestrator-vetted)
 is served; only the spelling changed, and the spelling was the part that
 carried the mechanism.
+
+## The workflow demonstrated its own worst failure mode within the hour
+
+Worth recording because it is the sharpest argument in either direction.
+
+An independent reviewer checking whether 863-iicc duplicated existing work
+reported that the packet **did not exist**. It was correct: the fragment was
+sitting on this lane, unlanded, so `plan_query` / `plan_answer` and every other
+host saw nothing. A packet whose entire purpose is to ask the orchestrator for
+a ruling had been filed somewhere the orchestrator cannot look — and the
+reviewer named that invisibility as "itself the most likely cause of a
+duplicate filing".
+
+That is risk 3 above, arriving in under an hour, on the first lane ever used
+here. It sharpens the rule rather than refuting the lane:
+
+> **Lanes hold work. They must not hold anything the fleet needs to SEE.**
+> Claims, packets, blockers and attestations land on the integration branch
+> directly, because their value IS their visibility. Findings, drafts,
+> measurements and code-in-progress ride the lane.
+
+Applied immediately: 863-iicc and this document were landed onto `windows-next`
+rather than left on the lane, paying the one merge the model says to pay — at
+the end of a coherent set of work, not every cycle.
+
+The general form, offered to 863-iicc's exit criterion 2: the question is not
+"may fragments ride a lane" as a file-conflict question — they cannot
+textually conflict. It is a **latency** question. A fragment whose worth is
+immediate (a claim another host must not duplicate, a packet awaiting a
+ruling) is worth less the longer it is invisible, so it should not ride. A
+fragment whose worth is durable (a measurement, a research note) loses nothing
+by landing an hour later. That is a cleaner criterion than a path allowlist,
+and it degrades gracefully when someone adds a new fragment directory.
