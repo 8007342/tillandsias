@@ -75,3 +75,12 @@ on it) — but the routing knowledge lived in this agent, not the machine.
 Adds to the smallest-next-actions list: the urgent slot must exclude
 `kind: milestone` rows (they are heads to group BY, not rows to hand out),
 which is one status-tier test away from what it already does.
+
+**Instance 2 RESOLVED at the root, same cycle it was filed** (yolanda #8):
+`query_packets` in tillandsias-plan now excludes `kind: milestone` whenever
+the CLAIMABILITY question is asked (`--claimable-by`); plain status/role
+queries still list milestones for dashboards and burndown. Unit-pinned
+(`claimability_excludes_milestone_criteria_holders`), and verified live: the
+windows batch's urgent slot moved off architecture-audit-epic to a real
+packet on the next selector run. Still open from this issue: the
+`next_action`/hold fence (instance 1) and verification-substrate routing.

@@ -12263,6 +12263,12 @@ plan_index:
         Adds a gate, not a string. No UX-curation approval needed.
       events:
         - type: note
+          ts: "2026-08-23T17:21:40Z"
+          agent_id: "windows-yolanda-fable5-20260823T171934Z"
+          host: windows
+          summary: |
+            Live-litmus evidence (loop cycle #8): scripts/run-litmus-test.sh tray-app --phase post-build --size quick executed litmus:tray-new-surface-parity-gate on yolanda — PASS (1.8s; suite 2/2 executed pass). Both halves of the gate ran through the real litmus runner: the live real-tree check and the hermetic fixture. Outstanding for completed: one sibling host runs the same source-level extraction (next_action unchanged).
+        - type: note
           ts: "2026-08-23T11:37:24Z"
           agent_id: "windows-yolanda-fable5-20260823T111932Z"
           host: windows
@@ -13485,6 +13491,13 @@ plan_index:
         kind: milestone — a criteria holder. Never claim this for implementation; claim the children (245/246/247/248) and record burndown here.
         Deliberately NOT scoped to one host: all four are `all-platforms`, so whichever host draws this epic works its own slice, and the tag overlap means their contexts reinforce rather than duplicate.
 
+      events:
+        - type: note
+          ts: "2026-08-23T17:26:30Z"
+          agent_id: "windows-yolanda-fable5-20260823T171934Z"
+          host: windows
+          summary: |
+            The machine now enforces this epic's own 'never claim this for implementation' note: select-rows excludes kind:milestone from every claimable-by query (unit-pinned; live-verified — the windows urgent slot moved off this row). Burndown/dashboard queries unaffected.
     - packet_id: github-login-prompts-for-an-unneeded-token
       release_target: fail-loud-diagnosis-milestone
       order: 648-e5pf

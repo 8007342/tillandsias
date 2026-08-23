@@ -1095,6 +1095,15 @@ fn query_packets<'a>(
             Some(r) => str_field(p, "desired_release") == Some(r),
             None => true,
         })
+        // A `kind: milestone` row is a criteria HOLDER — a head to group by,
+        // never a row to hand out (worker_agent_protocol; 647-6c3g's own
+        // notes say "never claim this for implementation"). The CLAIMABILITY
+        // question therefore excludes milestones; a plain --role/--status
+        // query still lists them (dashboards, burndown). Measured 2026-08-23
+        // (yolanda loop cycles #7-#8): the windows batch's urgent slot
+        // offered architecture-audit-epic itself, twice, and the
+        // route-to-the-children knowledge lived in the agent, not the machine.
+        .filter(|p| claimable_by.is_none() || str_field(p, "kind") != Some("milestone"))
         .filter(|p| {
             let have = str_list(p, "capability_tags");
             tags.iter().all(|t| have.contains(t))
@@ -5866,6 +5875,29 @@ mod tests {
         let absent = query_json_projection(led.resolve("p4").expect("p4 resolves"));
         assert!(absent.get("desired_release").is_some_and(|v| v.is_null()));
         assert!(absent.get("release_target").is_some_and(|v| v.is_null()));
+    }
+
+    #[test]
+    fn claimability_excludes_milestone_criteria_holders() {
+        // 647-6c3g's notes say "never claim this for implementation"; the
+        // machine query is where that rule must live. Measured 2026-08-23:
+        // the windows batch's urgent slot offered the epic row itself twice.
+        let led = Ledger::parse(
+            "plan_index:\n  steps:\n\
+             \x20 - packet_id: epic-head\n    order: 10\n    status: ready\n    kind: milestone\n    pickup_role: any\n\
+             \x20 - packet_id: child-work\n    order: 11\n    status: ready\n    kind: bug\n    pickup_role: any\n",
+            Default::default(),
+        )
+        .expect("parse");
+
+        // The claimability question: milestones are heads, not hand-outs.
+        let claimable = query_packets(&led, Some("ready"), None, Some("windows"), None, &[], 0);
+        assert_eq!(ids(claimable), vec!["child-work"]);
+
+        // A plain status query still lists the milestone (dashboards,
+        // burndown) — the exclusion is scoped to claimability alone.
+        let all_ready = query_packets(&led, Some("ready"), None, None, None, &[], 0);
+        assert_eq!(ids(all_ready), vec!["epic-head", "child-work"]);
     }
 
     #[test]
