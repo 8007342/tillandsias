@@ -2993,8 +2993,36 @@ fn main() {
                 if triples.is_empty() {
                     println!("  schedulable: none");
                 }
-                for (class, lane, engine) in triples {
+                for (class, lane, engine) in &triples {
                     println!("  schedulable: {class}/{lane}/{engine}");
+                }
+                // Order 850-bif2: a USABLE device that produced no triple is
+                // otherwise invisible here — the matrix showed a working RTX
+                // A5000 on no line at all, which read as "this host has
+                // nothing" instead of "this host has hardware no engine
+                // covers". Name it, with its uncovered lanes, so the gap is
+                // an engineering problem someone can see.
+                if let Some(devices) = entry.document["devices"].as_sequence() {
+                    for d in devices {
+                        if d["usable"].as_bool() != Some(true) {
+                            continue;
+                        }
+                        let class = d["device_class"].as_str().unwrap_or("?");
+                        let scheduled = triples.iter().any(|(c, _, _)| c == class);
+                        if scheduled {
+                            continue;
+                        }
+                        let lanes: Vec<&str> = d["lanes"]
+                            .as_sequence()
+                            .map(|ls| ls.iter().filter_map(|l| l.as_str()).collect())
+                            .unwrap_or_default();
+                        println!(
+                            "  present-unscheduled: {}/{} (usable; no engine covers lanes [{}])",
+                            class,
+                            d["name"].as_str().unwrap_or("?"),
+                            lanes.join(",")
+                        );
+                    }
                 }
                 // Measurements the matrix will not place (order 810-jeg7). An
                 // unlocated number is refused rather than shown as a plain

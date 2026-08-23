@@ -1,0 +1,132 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_immutable (yoga), 2026-08-23T02:03:25Z.
+#
+# yoga contributes its capability row — verbatim `tillandsias --capabilities`
+# output from a HEAD-built binary (bc6c619d0), run ON THE HOST with
+# TILLANDSIAS_CACHE_DIR pointed at a scratch dir so the operator's v1
+# capabilities.json cache (three real measurement rows) survives the
+# schema-mismatch rewrite load_or_probe would otherwise perform.
+#
+# WHY NOW: yoga is one of the five hosts 850-bif2 names SILENT. This row
+# closes one of them, and it is the LINUX HALF OF A NEAR-CONTROLLED A/B:
+# yolanda (the Windows twin, same AMD Krackan silicon family — Radeon
+# 840M here, 860M there, XDNA NPU both) already published rows for its
+# in-guest and windows-host loci. Differences between yoga's row and
+# yolanda's rows are attributable to OS/locus, not hardware.
+#
+# WHAT THE PROBE ACTUALLY REPORTS (recorded as observed, not as expected):
+# 850-bif2's context says accel_probe.rs has zero rocm/amdgpu references so
+# AMD GPUs "cannot be detected at all". On bare-metal Linux that is NOT what
+# happens: the generic Vulkan/DRI path detects the Radeon 840M and reports it
+# usable=true — but identified only as "Vulkan GPU" (no vendor-specific name,
+# no VRAM, no bandwidth), while legacy_tier=gpu-rocm comes from host rocminfo
+# (gfx1152), a PATH fact a toolbox/container run would flip to cpu. The
+# missing rocm/amdgpu code costs IDENTIFICATION, not presence — the
+# cannot-be-detected state is the WSL2-guest locus (yolanda in-guest:
+# present-unusable wsl2-no-dri-render-node), not Linux bare-metal.
+# The XDNA NPU is present-unusable (engine-missing; driver amdxdna,
+# fw 1.1.2.64, /dev/accel/accel0). engines=[] (no ollama/llama-server on
+# host PATH), so capability-matrix will report schedulable: none.
+#
+# Envelope line the probe printed before the JSON:
+# accel_class=workstation-gpu accel_gpu=usable accel_gpu_name=Vulkan_GPU accel_npu=present-unusable accel_npu_name=AMD_XDNA_NPU accel_reason=engine-missing accel_cpu_cores=12 accel_ram_gb=15
+#
+# Read it with: tillandsias-plan capability-matrix
+capabilities:
+  - ts: "2026-08-23T02:03:25Z"
+    host: linux_immutable
+    locus: bare-metal
+    document:
+      {
+        "schema_version": 2,
+        "legacy_tier": "gpu-rocm",
+        "devices": [
+          {
+            "device_class": "cpu",
+            "vendor": "amd",
+            "name": "AMD Ryzen AI 5 340 w/ Radeon 840M",
+            "device_node": null,
+            "fw_version": null,
+            "driver": null,
+            "usable": true,
+            "unusable_reason": null,
+            "lanes": [
+              "container",
+              "host-native"
+            ],
+            "memory_bandwidth_gbps": null,
+            "memory_bandwidth_source": "unknown",
+            "cpu_flags": [
+              "fma",
+              "avx",
+              "avx2",
+              "avx512f",
+              "avx512dq",
+              "avx512ifma",
+              "avx512cd",
+              "avx512bw",
+              "avx512vl",
+              "avx_vnni",
+              "avx512_bf16",
+              "avx512vbmi",
+              "avx512_vbmi2",
+              "avx512_vnni",
+              "avx512_bitalg",
+              "avx512_vpopcntdq",
+              "avx512_vp2intersect"
+            ],
+            "cpu_cores": {
+              "physical": 6,
+              "logical": 12
+            },
+            "system_ram_gb": 14.773334503173828
+          },
+          {
+            "device_class": "gpu",
+            "vendor": "amd",
+            "name": "Vulkan GPU",
+            "device_node": "/dev/dri/card1",
+            "fw_version": null,
+            "driver": null,
+            "usable": true,
+            "unusable_reason": null,
+            "lanes": [
+              "container",
+              "host-native"
+            ],
+            "memory_bandwidth_gbps": null,
+            "memory_bandwidth_source": "unknown",
+            "cpu_flags": null,
+            "cpu_cores": null,
+            "system_ram_gb": null
+          },
+          {
+            "device_class": "npu",
+            "vendor": "AMD XDNA",
+            "name": "AMD XDNA NPU",
+            "device_node": "/dev/accel/accel0",
+            "fw_version": "1.1.2.64",
+            "driver": "amdxdna",
+            "usable": false,
+            "unusable_reason": "engine-missing",
+            "lanes": [
+              "host-native"
+            ],
+            "memory_bandwidth_gbps": null,
+            "memory_bandwidth_source": "unknown",
+            "cpu_flags": null,
+            "cpu_cores": null,
+            "system_ram_gb": null
+          }
+        ],
+        "engines": [],
+        "measurements": [],
+        "host": {
+          "is_battery_present": true,
+          "kernel_release": "7.1.9-200.fc44.x86_64",
+          "host_id": "yoga",
+          "host_id_source": "node-name",
+          "host_kind": "linux"
+        },
+        "timestamp": "2026-08-23T02:02:34.456879797+00:00"
+      }

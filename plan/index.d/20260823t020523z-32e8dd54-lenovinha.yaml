@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: joining-host-must-publish-a-capability-row
+    event:
+      type: completed
+      ts: "2026-08-23T02:05:23Z"
+      agent_id: linux-lenovinha-claude-20260823t020523z
+      host: lenovinha
+      summary: >
+        IMPLEMENTED at 54ed95240 on the host the packet named as the right one, all four exit criteria: (EC1) publication is now asked for and falsifiable — scripts/check-capability-row.sh (ok:capability-row-reported / due:no-capability-row / unavailable:*), consulted by the skill's Start-Of-Day gate and fleet-join section; scripts/host-capability-probe.sh --fragment wraps the real probe into a ready-to-file row (bare-metal/in-guest loci; windows-host keeps its generator), and lenovinha's own first-cycle-after-implementation left a row behind (plan/index.d/20260823t015529z-850-bif2-capability-row-lenovinha.yaml). (EC2) lenovinha's row lists BOTH GPUs against real silicon: NVIDIA RTX 3070 Laptop (usable, host-native lane, cdi-spec-missing) AND AMD Cezanne (present-unusable, rocm-runtime-missing, /dev/dri/renderD128, driver amdgpu) — enumeration now walks /sys/class/drm by PCI vendor id + uevent DRIVER (the identity-probe parse, never substring prose), so an AMD card beside an NVIDIA one is no longer invisible and the old hardcoded vendor 'amd' guess is gone; amd_gpu_disposition is pure and unit-tested (rocm-runtime-missing / kfd-missing / render-node-missing; rocm-smi alone deliberately not evidence). (EC3) explained AND fixed: capability-matrix now prints present-unscheduled for usable devices with no triple — macuahuitl's row TODAY reads 'present-unscheduled: gpu/NVIDIA RTX A5000 (usable; no engine covers lanes [container,host-native])' instead of hiding it; the root cause (host-PATH-only engine probe on a fleet whose ollama lives in the tillandsias-inference image) is fixed by EngineRecord.lanes (serde-default None = every lane, all old rows keep semantics) + a container-lane ollama record when the inference image is present (bounded podman surface, 714-4r6w) + schedulable_triples honoring engine lanes. (EC4) negative control: test_cpu_only_probe_yields_a_valid_document_not_silence runs on every gating host — an accelerator-less probe still yields schema-2 with a CPU device and a non-empty host_id; the matrix distinguishes a cpu-only row from SILENT. FLEET FOLLOW-UP recorded as this packet's residual: every already-reporting host (macuahuitl, yolanda both loci) should re-run its probe with a binary carrying this order — macuahuitl's next probe gains cpu/container/ollama + gpu/container/ollama and stops reading schedulable:none.
