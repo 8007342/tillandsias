@@ -97,3 +97,124 @@ features:
     macos: "n/a"
     windows: "n/a"
     parity: "platform-specific"
+  # ── Surface-class rows (order 628-r2vk) ──────────────────────────────────
+  # The rows below claim the NON-MENU surfaces the `parity-surfaces` gate
+  # extracts from annotated declaration sites (`// parity-surface: <id>`).
+  # `surfaces:` is the machine linkage: an extracted id with no claiming row
+  # (and not in surface_baseline below) fails `tillandsias-policy
+  # parity-surfaces`. Sibling columns are `unknown` where only the declaring
+  # platform has verified — each host verifies its own column, and `unknown`
+  # on a platform-specific row is an open parity QUESTION, not a defect.
+  - capability: "Provisioning-failed notification (toast/osascript nudge beside the failure chip)"
+    class: "notification"
+    surfaces: ["notification.provisioning-failed"]
+    linux: "unknown"
+    macos: "unknown"
+    windows: "done"
+    parity: "platform-specific"
+  - capability: "Guest crash-loop notification"
+    class: "notification"
+    surfaces: ["notification.guest-crash-loop"]
+    linux: "unknown"
+    macos: "unknown"
+    windows: "unknown"
+    parity: "platform-specific"
+  - capability: "WSL feature-lifecycle toasts: one-time setup, restart needed, setup failed (Windows platform-feature flow)"
+    class: "notification"
+    surfaces: ["notification.feature-setup", "notification.feature-restart-needed", "notification.feature-setup-failed"]
+    linux: "n/a"
+    macos: "n/a"
+    windows: "done"
+    parity: "platform-specific"
+  - capability: "Workspace-connection-lost notification (keepalive terminal failure)"
+    class: "notification"
+    surfaces: ["notification.workspace-connection-lost"]
+    linux: "unknown"
+    macos: "unknown"
+    windows: "done"
+    parity: "platform-specific"
+  - capability: "Guest-reset-failed notification"
+    class: "notification"
+    surfaces: ["notification.guest-reset-failed"]
+    linux: "unknown"
+    macos: "unknown"
+    windows: "done"
+    parity: "platform-specific"
+  - capability: "Diagnostics-bundle-saved notification (names the shareable file path)"
+    class: "notification"
+    surfaces: ["notification.diagnostics-saved"]
+    linux: "unknown"
+    macos: "unknown"
+    windows: "done"
+    parity: "platform-specific"
+  - capability: "Tray icon tooltip carries version + current status"
+    class: "tooltip"
+    surfaces: ["tooltip.version-status"]
+    linux: "unknown"
+    macos: "unknown"
+    windows: "done"
+    parity: "platform-specific"
+  # Status-chip class (628-r2vk criterion 2). Windows sets chip text through
+  # a direct Win32 call (the pinned `hwnd.status(` pattern); macOS and Linux
+  # render status through the shared MenuStructure's `menu.status` row, so
+  # their cells here are `unknown` pending each host's own mapping decision.
+  - capability: "Status chip: provisioning lifecycle (ready / ready-idle-risk / failed / failed-classified)"
+    class: "status-chip"
+    surfaces: ["status-chip.ready", "status-chip.ready-idle-risk", "status-chip.provisioning-failed", "status-chip.provisioning-failed-classified"]
+    linux: "unknown"
+    macos: "unknown"
+    windows: "done"
+    parity: "platform-specific"
+  - capability: "Status chip: WSL feature lifecycle (restart-needed / setup-failed)"
+    class: "status-chip"
+    surfaces: ["status-chip.feature-restart-needed", "status-chip.feature-setup-failed"]
+    linux: "n/a"
+    macos: "n/a"
+    windows: "done"
+    parity: "platform-specific"
+  - capability: "Status chip: workspace-connection-lost (Retry armed)"
+    class: "status-chip"
+    surfaces: ["status-chip.workspace-connection-lost"]
+    linux: "unknown"
+    macos: "unknown"
+    windows: "done"
+    parity: "platform-specific"
+  - capability: "Status chip: guest-reset-failed"
+    class: "status-chip"
+    surfaces: ["status-chip.guest-reset-failed"]
+    linux: "unknown"
+    macos: "unknown"
+    windows: "done"
+    parity: "platform-specific"
+
+# ── Grandfathered menu-surface baseline (order 628-r2vk) ─────────────────────
+# The shared menu-id universe (host-shell `pub mod ids`) as of the gate's
+# introduction. These surfaces are conceptually covered by the prose rows
+# above but not yet machine-linked; retro-linking them is 628-h4nx/628-w9sm
+# territory. THE RATCHET: a NEW menu id cannot be added here — it must get a
+# claiming row — and an entry whose id no longer exists in the sources fails
+# as STALE BASELINE, so this list only shrinks.
+surface_baseline:
+  - "menu.status"
+  - "menu.local-projects"
+  - "menu.local-projects.empty"
+  - "menu.cloud-projects"
+  - "menu.cloud-projects.empty"
+  - "menu.cloud-projects.loading"
+  - "menu.cloud-projects.overflow"
+  - "menu.github-login"
+  - "menu.version"
+  - "menu.quit"
+  - "menu.reset-guest"
+  - "menu.agents"
+  - "menu.agent.claude"
+  - "menu.agent.codex"
+  - "menu.agent.opencode"
+  - "menu.agent.antigravity"
+  - "menu.observatorium"
+  - "menu.opencode-web"
+  - "menu.claude"
+  - "menu.codex"
+  - "menu.opencode"
+  - "menu.antigravity"
+  - "menu.maintenance"

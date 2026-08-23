@@ -297,6 +297,7 @@ fn show_balloon(hwnd: HWND, title: &str, message: &str, severity: BalloonSeverit
 ///
 /// Pure helper so a unit test can pin the format without touching Win32.
 /// Pinned by `compose_tooltip_includes_version_and_status`.
+// parity-surface: tooltip.version-status
 fn compose_tooltip(version: &str, status: &str) -> String {
     if status.is_empty() {
         format!("Tillandsias {version}")
@@ -2944,7 +2945,9 @@ fn spawn_guest_reset(hwnd: HWND) {
             }
             Err(err) => {
                 tracing::error!(%err, "guest wipe failed — reset aborted");
+                // parity-surface: status-chip.guest-reset-failed
                 hwnd.status("\u{1F534} Guest reset failed");
+                // parity-surface: notification.guest-reset-failed
                 hwnd.balloon(
                     "Tillandsias — guest reset failed",
                     &err,
@@ -3026,6 +3029,7 @@ fn spawn_provisioning(hwnd: HWND) {
             preflight,
             tillandsias_vm_layer::wsl::WslPlatformVerdict::WslPlatformAbsent
         ) {
+            // parity-surface: notification.feature-setup
             hwnd.balloon(
                 "Tillandsias \u{2014} one-time setup",
                 crate::wsl_lifecycle::TOAST_FEATURE_SETUP,
@@ -3035,6 +3039,7 @@ fn spawn_provisioning(hwnd: HWND) {
         match lifecycle.provision_via_recipe(progress).await {
             Ok(()) => {
                 tracing::info!("VM ready — control wire established");
+                // parity-surface: status-chip.ready
                 hwnd.status("\u{1F7E2} Ready");
                 // Parking this task holds `_keepalive` for the tray's lifetime.
                 // TEARDOWN CONTRACT (post windows-260722 runtime split): this
@@ -3061,7 +3066,9 @@ fn spawn_provisioning(hwnd: HWND) {
                             while terminal_rx.changed().await.is_ok() {
                                 let reason = terminal_rx.borrow_and_update().clone();
                                 if let Some(reason) = reason {
+                                    // parity-surface: status-chip.workspace-connection-lost
                                     hwnd.status("\u{1F534} Workspace connection lost \u{2014} Retry");
+                                    // parity-surface: notification.workspace-connection-lost
                                     hwnd.balloon(
                                         "Tillandsias \u{2014} workspace connection lost",
                                         &reason,
@@ -3191,6 +3198,7 @@ fn spawn_provisioning(hwnd: HWND) {
                     }
                     Err(err) => {
                         eprintln!("VM keepalive spawn failed: {err}");
+                        // parity-surface: status-chip.ready-idle-risk
                         hwnd.status("\u{1F7E1} Ready (VM may idle out)");
                         // No keepalive to hold; still surface one live status read.
                         refresh_vm_status(hwnd).await;
@@ -3204,7 +3212,9 @@ fn spawn_provisioning(hwnd: HWND) {
                 // over the generic classifier (operator-approved wording;
                 // tray-ux governance).
                 if err_text.contains(crate::wsl_lifecycle::PLATFORM_RESTART_REQUIRED_MARKER) {
+                    // parity-surface: status-chip.feature-restart-needed
                     hwnd.status(crate::wsl_lifecycle::CHIP_FEATURE_RESTART);
+                    // parity-surface: notification.feature-restart-needed
                     hwnd.balloon(
                         "Tillandsias \u{2014} restart needed",
                         crate::wsl_lifecycle::TOAST_FEATURE_RESTART,
@@ -3216,7 +3226,9 @@ fn spawn_provisioning(hwnd: HWND) {
                     return;
                 }
                 if err_text.contains(crate::wsl_lifecycle::PLATFORM_SETUP_FAILED_MARKER) {
+                    // parity-surface: status-chip.feature-setup-failed
                     hwnd.status(crate::wsl_lifecycle::CHIP_FEATURE_FAILED);
+                    // parity-surface: notification.feature-setup-failed
                     hwnd.balloon(
                         "Tillandsias \u{2014} setup didn't finish",
                         &err_text,
@@ -3231,6 +3243,7 @@ fn spawn_provisioning(hwnd: HWND) {
                         .ok()
                         .flatten();
                         if let Some(path) = written {
+                            // parity-surface: notification.diagnostics-saved
                             hwnd.balloon(
                                 "Tillandsias \u{2014} diagnostics saved",
                                 &format!(
@@ -3251,13 +3264,16 @@ fn spawn_provisioning(hwnd: HWND) {
                 // hosts. Unclassified failures keep the curated message
                 // (full error in the log).
                 if let Some(short) = tillandsias_vm_layer::wsl::classified_short_status(&err_text) {
+                    // parity-surface: status-chip.provisioning-failed-classified
                     hwnd.status(&format!("\u{1F534} {short}"));
+                    // parity-surface: notification.provisioning-failed
                     hwnd.balloon(
                         "Tillandsias — provisioning failed",
                         &err_text,
                         BalloonSeverity::Error,
                     );
                 } else {
+                    // parity-surface: status-chip.provisioning-failed
                     hwnd.status("\u{1F534} Provisioning failed — right-click \u{25B8} Retry");
                 }
                 // Order 648-jv69. Surface the Retry + Open log affordances the
@@ -3283,6 +3299,7 @@ fn spawn_provisioning(hwnd: HWND) {
                     .ok()
                     .flatten();
                     if let Some(path) = written {
+                        // parity-surface: notification.diagnostics-saved
                         hwnd.balloon(
                             "Tillandsias — diagnostics saved",
                             &format!(
