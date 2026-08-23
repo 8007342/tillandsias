@@ -23,7 +23,7 @@
 # (pre-sweep) 180/0, 81d2315f5 (post-sweep) 173/7, after the revert 180/0.
 #
 # NONE OF THOSE FIVE GATES RUNS `cargo test`. `grep -nE 'cargo (test|nextest)'
-# build.sh` put tests only in the `--test` dispatch, which the pre-push gate
+# build.sh` put tests only in the `--test` dispatch, which the local gate
 # does not call. The regression was found BY ACCIDENT, while taking an
 # unrelated baseline for a pending merge; without that accident it would have
 # reached every other host. So: shape gates cannot see a capability loss, and

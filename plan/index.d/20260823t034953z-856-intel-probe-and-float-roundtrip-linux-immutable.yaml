@@ -1,0 +1,133 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_immutable (pirria), 2026-08-23T03:49:53Z.
+#
+# Two defects surfaced by 855-wrr3 while establishing the low-end floor. Both
+# were found by ASKING THE HOST rather than by reading code alone: the first
+# because the published row contradicted the same binary's own tier answer,
+# the second because a test that no gate runs fails on this host's RAM size.
+packets:
+  - order: 856-fwyh
+    packet_id: intel-gpus-had-no-disposition-check-and-published-usable-true
+    desired_release: v0.6
+    title: "every Intel-iGPU host has been publishing accel_gpu=usable with no reason, because only Intel lacked a disposition check"
+    status: implemented
+    kind: defect
+    pickup_role: linux
+    priority: p2
+    capability_tags: [capabilities, accel-probe, intel, fleet, scheduling]
+    deliverable: crates/tillandsias-headless/src/accel_probe.rs
+    depends_on: []
+    estimated_hours: 2
+    context: >
+      FOUND ON pirria (Intel N150, Silverblue), 2026-08-23, while satisfying
+      855-wrr3 criterion 1. The self-serve capability path produced this row:
+
+        accel_class=workstation-gpu accel_gpu=usable
+        accel_gpu_name=Alder_Lake-N_Intel_Graphics accel_reason=-
+
+      A fanless 4-core N150 with a 24EU display iGPU — the fleet's DECLARED
+      LOWER BOUND — announced itself to the capability matrix as a WORKSTATION
+      GPU host. The same binary's "--inference-tier" answered "tier:cpu" in the
+      same second, and the engine on the same host logged initial_count=0
+      devices and total_vram="0 B". One binary, two code paths, opposite claims.
+
+      MECHANISM, read at the span and then confirmed by running it.
+      enumerate_gpus (accel_probe.rs) gives NVIDIA a CDI check and AMD
+      amd_gpu_disposition() (rocm-runtime-missing / kfd-missing /
+      render-node-missing). Intel had NEITHER, so an Intel card fell through to
+      the last-resort arm, which hardcodes usable=true, unusable_reason=None,
+      lanes=[container, host-native] for ANY vendor merely because
+      /sys/class/drm listed a card. On Alder Lake-N /dev/dri/renderD128 always
+      exists — it is the DISPLAY driver — so the arm fires on every such host.
+      This is precisely the failure 855-wrr3 was told to avoid: "a usable claim
+      the scheduler will act on and regret".
+
+      SCOPE IS NOT THIS HOST. Any host whose only GPU is Intel hits this: the
+      Alder Lake-N Windows cousin 855-wrr3 names, and any Intel-iGPU laptop
+      joining later. Rows already published by such hosts are wrong and should
+      be re-probed with a binary carrying this order — the same residual
+      850-bif2 recorded for itself.
+    exit_criteria: >
+      (1) intel_gpu_disposition() exists beside amd_gpu_disposition() and is
+      unit-tested for all three outcomes. (2) An Intel host with a render node
+      but no compute runtime reports present-unusable with a named reason and
+      accel_class=cpu-only, NOT workstation-gpu. (3) Mesa's Vulkan ICD is
+      explicitly NOT accepted as evidence of compute — it ships in the Fedora
+      Silverblue base on every Intel host and would re-admit the display
+      silicon this check exists to exclude.
+
+  - order: 856-xvr2
+    packet_id: capability-document-does-not-survive-a-serde-json-roundtrip
+    desired_release: v0.6
+    title: "accel_probe's own roundtrip test fails on this host: system_ram_gb drifts 1 ULP through serde_json, and no gate runs the test that says so"
+    status: ready
+    kind: defect
+    pickup_role: linux
+    priority: p3
+    capability_tags: [capabilities, accel-probe, serde, testing, gates]
+    deliverable: Cargo.toml
+    depends_on: []
+    estimated_hours: 1
+    context: >
+      FOUND ON pirria, 2026-08-23.
+      accel_probe::tests::test_serialization_roundtrip FAILS on this host, on an
+      UNMODIFIED tree (verified by stashing the 855-wrr3 change and re-running,
+      so it is not a side effect of that work):
+
+        left:  system_ram_gb: Some(15.349456787109375)
+        right: system_ram_gb: Some(15.349456787109377)
+
+      Every other field is identical. The document does not survive
+      serialize -> deserialize.
+
+      MECHANISM. The workspace declares serde_json = "1" (Cargo.toml:56) with no
+      feature list, and serde_json's DEFAULT float parser is fast-but-lossy —
+      exact f64 parsing requires features = ["float_roundtrip"]. So a
+      CapabilityDocument written to the ledger and read back can differ from the
+      one that was probed.
+
+      WHY NOBODY SAW IT, and this is the more useful half. It is
+      HOST-DEPENDENT: it only fires when system_ram_gb lands on a value the fast
+      parser misreads, so a host with different RAM passes. And
+      "./build.sh --check" — the gate every host runs — is
+      "cargo check --workspace" (build.sh:402), which COMPILES the test and
+      never RUNS it. A failing unit test sat green behind the gate.
+    exit_criteria: >
+      (1) serde_json carries features = ["float_roundtrip"], or system_ram_gb is
+      stored as an exactly-roundtrippable representation, and the roundtrip test
+      passes on a host with this RAM size. (2) A decision recorded on whether
+      the workspace's unit tests should run in ANY gate a joining host executes
+      — today a host can pass every local gate with a red test in-tree.
+      NOT FIXED HERE deliberately: a workspace-wide dependency feature change
+      affects every crate and every host's build, and pirria is mandated to
+      perf/characterization work, not general drain (855-wrr3 context).
+
+events:
+  - packet_id: intel-gpus-had-no-disposition-check-and-published-usable-true
+    event:
+      type: implemented
+      ts: "2026-08-23T03:49:53Z"
+      agent_id: linux-pirria-opus5-20260823T032800Z
+      host: linux_immutable
+      summary: >
+        IMPLEMENTED and verified live on the host that found it.
+        intel_gpu_disposition() now sits beside amd_gpu_disposition() with the
+        same shape, admitted only by an Intel COMPUTE runtime (Level Zero
+        libze_intel_gpu/libze_loader, or an Intel OpenCL ICD). Mesa's Vulkan ICD
+        is deliberately refused as evidence, with the reason in the doc comment:
+        it is present in the Silverblue base on every Intel host, so accepting
+        it would re-admit exactly the display silicon the check excludes.
+        enumerate_gpus gained an Intel (0x8086, i915|xe) arm ahead of the
+        last-resort arm. Two tests added and passing.
+
+        BEFORE -> AFTER on pirria, same binary, same second:
+          accel_class=workstation-gpu accel_gpu=usable          accel_reason=-
+          accel_class=cpu-only        accel_gpu=present-unusable
+              accel_reason=intel-compute-runtime-missing
+
+        ONE TRAP WORTH THE NEXT AGENT'S TIME: the corrected binary kept
+        reporting the OLD row until ~/.cache/tillandsias/capabilities.json was
+        discarded. The probe serves a CACHED document, so a probe fix is not
+        observable until the cache is dropped. That is the 855-wrr3
+        stale-instrument lesson in a second costume, and it would have made this
+        fix look like it had failed.

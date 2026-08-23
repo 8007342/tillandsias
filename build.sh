@@ -1547,6 +1547,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # "Non-VGA unclassified device" contains `vga`) are invisible on any single
     # box — they only misfire on hardware that machine does not have. The
     # fixture is hermetic for exactly that reason.
+    # set-field writes the ledger's LWW channel, and it has now emitted
+    # unparseable YAML twice from two different value shapes (832-698m's
+    # colon-space, then a multi-line block scalar indented under its own key).
+    # Both times it printed `ok:` and the pre-push gate was the only thing that
+    # noticed. A writer that reports success while corrupting an append-only
+    # record needs a fixture, not a third incident.
+    _step "Checking set-field emits valid YAML for every value shape..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-set-field-yaml-shapes.sh" 2>&1; then
+        _error "set-field can write an unparseable ledger fragment — the ledger is append-only"
+        exit 1
+    fi
+    _info "set-field YAML-shape fixture passed"
+
     _step "Checking host-identity derivation..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-derive-host-identity.sh" 2>&1; then
         _error "host identity derivation is wrong — every host's work seed depends on it"
@@ -1577,6 +1590,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Compaction coverage fixture passed"
+
+    # Order 851-cduu. The instrument gate for every ledger check in this file:
+    # a stale tillandsias-plan does not fail, it answers wrong (measured twice
+    # on 2026-08-23 — yolanda's WSL gate cache, macuahuitl's mid-cycle pull).
+    # ensure_fresh_plan_binary's point-of-use contract is what stands between
+    # those checks and a binary built for another checkout; this fixture pins
+    # the contract hermetically.
+    _step "Checking point-of-use instrument freshness (851-cduu)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-plan-binary-freshness.sh" 2>&1; then
+        _error "ensure_fresh_plan_binary broke its contract — a stale instrument could pass for HEAD"
+        exit 1
+    fi
+    _info "Instrument freshness fixture passed"
 
     # PIPESTATUS, not `$?` — `cmd | tee f` returns TEE's status. The verdict is
     # the ratchet's, not cargo's: a failure not in scripts/test-known-red.txt

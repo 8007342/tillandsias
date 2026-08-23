@@ -200,6 +200,73 @@ impl Citation {
                         self.path, self.line_start, self.line_end
                     )
                 }),
+            // METHODOLOGY KEYS ARE SYNTHESISED, NOT LITERAL, and requiring them
+            // verbatim withheld three quarters of this corpus as FABRICATED.
+            //
+            // A methodology `authority.key` is a DOTTED PATH built by walking
+            // the YAML tree — `philosophy.core_principle`, `distributed_work.
+            // order_number_assignment`. No YAML file contains that string
+            // anywhere: the document holds only the leaf, `core_principle:`,
+            // indented under its parents. Every other kind's key IS literal in
+            // its span — a spec carries its own trace annotation naming the
+            // capability, cheatsheets a heading, code a symbol — which is why
+            // this went unnoticed. (Do not write a literal example of that
+            // annotation here: the ghost-trace gate reads it as a reference to
+            // a spec that does not exist, which is how this comment first
+            // turned the build red.)
+            //
+            // MEASURED 2026-08-23 over 50 in-corpus questions through the real
+            // spec-retrieve -> spec-envelope path:
+            //     methodology   4 passed, 12 WITHHELD   (75%)
+            //     spec         11 passed,  0 withheld
+            //     cheatsheet   17 passed,  0 withheld
+            //     code          6 passed,  0 withheld
+            // The methodology corpus is this project's declared source of truth
+            // (CLAUDE.md), so the corpus most likely to be asked an
+            // authoritative question was the one answering "unsupported" — and
+            // a withheld answer is indistinguishable from a corpus that simply
+            // does not know, which is how it stayed invisible.
+            //
+            // The leaf plus its colon is the strongest token that CAN appear.
+            // It is weaker than a full-path match and deliberately so: combined
+            // with the path and the line span it still proves the span is that
+            // key's own block rather than a passing mention, and a check that
+            // cannot ever pass proves nothing at all. The stronger fix is for
+            // the indexer to record a literal key; until then this fails for
+            // the right reason instead of always.
+            CitationKind::Methodology => self
+                .authority
+                .get("key")
+                .map(|k| {
+                    // TWO PRODUCERS, TWO KEY SHAPES, and only one of them was
+                    // ever checkable.
+                    //
+                    // methodology.rs:456 stores `hit.decl` — the literal YAML
+                    // DECLARATION token, `rule:`, colon included, chosen
+                    // deliberately (its comment: "span.contains(\"rule\") would
+                    // be satisfied by almost any 10 lines of the corpus"). That
+                    // shape is already correct and must be passed through
+                    // untouched; appending a colon to it yields `rule::`, which
+                    // matches nothing.
+                    //
+                    // spec.rs builds the SAME CitationKind from index chunks
+                    // and stores the dotted YAML PATH instead —
+                    // `philosophy.core_principle` — which appears in no file,
+                    // because it is synthesised by walking the tree. Every
+                    // methodology answer served through the RAG path therefore
+                    // failed as FABRICATED.
+                    if k.ends_with(':') {
+                        k.clone()
+                    } else {
+                        format!("{}:", k.rsplit('.').next().unwrap_or(k))
+                    }
+                })
+                .ok_or_else(|| {
+                    format!(
+                        "{}:{}-{}: methodology citation carries no authority.key, so its span cannot be checked",
+                        self.path, self.line_start, self.line_end
+                    )
+                }),
             // Future kinds must declare what their span is supposed to say.
             // An undeclared key would make the citation unfalsifiable, which
             // is precisely the failure mode this module exists to prevent.

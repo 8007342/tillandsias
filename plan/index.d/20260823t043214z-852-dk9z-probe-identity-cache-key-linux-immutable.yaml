@@ -1,0 +1,70 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_immutable (pirria), 2026-08-23T04:32:14Z.
+events:
+  - packet_id: accel-capability-cache-serves-stale-document-across-probe-code-changes
+    event:
+      type: implemented
+      ts: "2026-08-23T04:32:14Z"
+      agent_id: linux-pirria-opus5-20260823T032800Z
+      host: linux_immutable
+      summary: >
+        IMPLEMENTED, and this host reproduced the bug independently before
+        taking the packet. 852-dk9z was measured on yoga after 850-bif2's AMD
+        enumeration landed. The IDENTICAL failure happened here hours ago with a
+        different vendor arm: after 856-fwyh gave Intel a disposition check, the
+        rebuilt binary kept printing accel_gpu=usable and
+        accel_class=workstation-gpu, and the fix looked like it had failed. It
+        had not — load_or_probe was serving the pre-fix document because
+        schema_version (2) and legacy_tier (cpu) both still matched. Deleting
+        ~/.cache/tillandsias/capabilities.json produced the correct row
+        instantly. Two hosts, two vendor arms, one cause: THE CACHE KEY CANNOT
+        SEE PROBE CODE.
+
+        THE FIX, and the choice inside it is the interesting part. The packet
+        offered "crate version or a dedicated probe revision constant". Crate
+        version alone would NOT have caught either incident — 850-bif2 and
+        856-fwyh both changed enumeration output without moving
+        tillandsias-headless's version — and a hand-maintained constant fails in
+        exactly the way that produced this bug: someone has to remember. So
+        build.rs now hashes src/accel_probe.rs (FNV-1a) and emits
+        TILLANDSIAS_PROBE_REVISION, with a rerun-if-changed on that file. ANY
+        edit to the probe changes the identity automatically. probe_identity()
+        is version+revision, stored on the document and compared in
+        load_or_probe. It is SERIALISED INTO PUBLISHED ROWS deliberately,
+        answering the packet's own complaint that nothing on a row said which
+        code probed it.
+
+        EC1 cache key carries probe-code identity, AND --capabilities gained
+        --fresh. EC2 pinned by
+        test_cache_from_different_probe_code_is_reprobed_not_served, which
+        covers BOTH a foreign identity and a pre-852 document with no identity
+        field at all (Option + serde default, so every legacy cache in the fleet
+        self-invalidates once rather than being served one last time). EC3
+        scripts/host-capability-probe.sh passes --fresh, so a published row is
+        fresh BY CONSTRUCTION: two consecutive generator runs returned
+        04:31:41.346917726Z and 04:31:41.431087617Z — different documents, no
+        cache. EC4 negative control kept: two cached-mode runs returned the
+        SAME timestamp, and
+        test_negative_control_unchanged_binary_still_serves_its_own_cache pins
+        it. The cache still exists for the server's hot path; this is an
+        invalidation rule, not a removal.
+
+        VERIFIED AGAINST THE REAL ARTEFACT rather than only a fixture: the
+        capabilities.json sitting on this host was written by the pre-852
+        binary and carries no probe_identity. The new binary refused it and
+        re-probed (fresh timestamp, identity stamped), which is the exact
+        sequence that silently succeeded the wrong way this morning.
+
+        ONE THING THE UNIT TESTS DID NOT CATCH, worth the next agent's time:
+        --fresh was rejected at runtime with "Unsupported option" until it was
+        added to main.rs's known_flags allowlist. Every test passed while the
+        generator was broken, because the tests call the library and the script
+        calls the BINARY. Caught only by running the script end to end — the
+        project's own "verified where it was written is not verified where it
+        runs" class, which the accel_envelope doc comment already names.
+
+        NOT ADDRESSED HERE, and named so it is not assumed fixed: the sibling
+        hazard recorded in yoga's fragment header — when a cache IS invalidated,
+        the rewrite discards the old document's measurement rows. This change
+        makes invalidation MORE frequent, so that loss now happens more often.
+        It needs its own packet.

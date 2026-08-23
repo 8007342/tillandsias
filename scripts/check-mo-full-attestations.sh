@@ -2,7 +2,7 @@
 # @trace order:614-2gqx, spec:meta-orchestration
 set -uo pipefail
 
-# check-mo-full-attestations.sh — the pre-push gate for the durable MO-FULL
+# check-mo-full-attestations.sh — the local-gate check for the durable MO-FULL
 # attestation ledger (plan/mo-full-attestations.d/, packet 651-2x5s).
 #
 # WHY THIS EXISTS. The terminal marker (614-2gqx) is emitted into a transcript

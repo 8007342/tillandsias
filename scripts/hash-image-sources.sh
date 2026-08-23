@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Portable SHA-256 (851-28b5): coreutils sha256sum on Linux/forge/WSL; stock
+# macOS before 13 ships only `shasum`. Identical "<hex>  <name>" output.
+if command -v sha256sum >/dev/null 2>&1; then
+    PORTABLE_SHA256=(sha256sum)
+else
+    PORTABLE_SHA256=(shasum -a 256)
+fi
+
 # @trace spec:user-runtime-lifecycle, spec:init-incremental-builds, spec:nix-builder
 
 [[ $# -ge 2 && $# -le 3 ]] || {
@@ -76,7 +84,7 @@ fi
 manifest=("layer-policy:squash-new")
 for file in "${file_list[@]}"; do
     rel="${file#"$root"/}"
-    path_hash="$(printf '%s' "$rel" | sha256sum | cut -d' ' -f1)"
+    path_hash="$(printf '%s' "$rel" | "${PORTABLE_SHA256[@]}" | cut -d' ' -f1)"
     if mode="$(stat -c '%a' "$file" 2>/dev/null)"; then
         :
     else
@@ -84,14 +92,14 @@ for file in "${file_list[@]}"; do
     fi
     if [[ -L "$file" ]]; then
         type=symlink
-        content_hash="$(readlink "$file" | sha256sum | cut -d' ' -f1)"
+        content_hash="$(readlink "$file" | "${PORTABLE_SHA256[@]}" | cut -d' ' -f1)"
     elif [[ -f "$file" ]]; then
         type=file
-        content_hash="$(sha256sum <"$file" | cut -d' ' -f1)"
+        content_hash="$("${PORTABLE_SHA256[@]}" <"$file" | cut -d' ' -f1)"
     else
         echo "error: unsupported tracked image source type: $rel" >&2
         exit 1
     fi
     manifest+=("${path_hash}:${type}:${mode}:${content_hash}")
 done
-printf '%s\n' "${manifest[@]}" | LC_ALL=C sort | sha256sum | cut -d' ' -f1
+printf '%s\n' "${manifest[@]}" | LC_ALL=C sort | "${PORTABLE_SHA256[@]}" | cut -d' ' -f1

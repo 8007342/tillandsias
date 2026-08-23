@@ -393,9 +393,16 @@ fleet's deliberate LOWER BOUND and take profiling and characterization work in
 their own tier, never the general queue (operator mandate 2026-08-16 for
 esmeraldinha, extended 2026-08-23 to its Silverblue cousin). A slow host in the
 general queue produces slow duplicates of work a faster host already claimed.
-Until capability-aware routing lands (847-wgy4) this distinction is carried by
-the invoking prompt, not by the selector — so if you are on such a host and
-were not told, ask before draining.
+The SELECTOR now enforces this (847-wgy4): it probes physical cores locally,
+routes a <=4-core host to `low-end`-tagged work only, refuses loudly
+(`refused:no-tier-work`) rather than falling back to the general queue, and
+subtracts that tier from everyone else's pool — a fast host running the
+floor's profiling work would measure the wrong machine. Override with
+TILLANDSIAS_HOST_TIER when the probe misreads a host. Separation between
+general hosts is ordinal: your rank in the capability-matrix roster picks
+your epic (route=rank:<r>/<n> in the batch header), so publishing your row
+(850-bif2, above) is what buys you a collision-free lane; a rowless host
+falls back to the seeded pick and R1 claiming.
 
 The criteria that gated the original rejoin, kept because they are still what
 "working" means:

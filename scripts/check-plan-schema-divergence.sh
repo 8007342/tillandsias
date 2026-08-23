@@ -37,7 +37,7 @@
 #   builder toolbox   ABSENT    present   present
 #
 # Ruby broke the forge. yq then broke the host AND the builder toolbox, where
-# `./build.sh --check` runs on every Linux cycle — the pre-push gate started
+# `./build.sh --check` runs on every Linux cycle — the local gate started
 # refusing with `blocked:index-load-failed: … yq: commande introuvable`, so a
 # green tree could not be pushed at all. Neither interpreter is universal, and
 # picking one and hoping is what produced two outages in one day.
@@ -70,7 +70,7 @@ read_seq() {
     # because psych itself requires date; macOS system ruby (2.6) does not, so
     # without the explicit require the constant is uninitialized and this
     # reader reports index-load-failed on a perfectly loadable index
-    # (762-8yna, found blocking the macOS pre-push gate 2026-08-16).
+    # (762-8yna, found blocking the macOS local gate 2026-08-16).
     ruby -ryaml -rdate -e "$_rs_rb" "$_rs_file" 2>&1
     return $?
   fi

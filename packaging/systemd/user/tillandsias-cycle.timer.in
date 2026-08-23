@@ -1,0 +1,20 @@
+# @trace order:856-s56y — rendered by scripts/install-cycle-timer.sh
+# (@TOKEN@ placeholders); do not copy this .in file into systemd directly.
+[Unit]
+Description=Tillandsias unattended cadence (every @INTERVAL@ after completion)
+
+[Timer]
+# Interval counts from the LAST CYCLE'S COMPLETION (matching ./repeat --wait,
+# whose 50-69 minute completion-to-completion gaps are the proven pattern) —
+# a cycle still running when wall-clock says "due" therefore cannot stack:
+# the next fire is not even scheduled until it finishes (856-s56y criterion 4).
+OnUnitInactiveSec=@INTERVAL@
+# Re-arm after reboot without a human (criterion 2): first fire N minutes
+# after boot, then the completion-spaced cadence above.
+OnBootSec=@BOOTDELAY@
+# A failed service run does not stop this timer; systemd timers keep firing
+# regardless of the triggered unit's last result (criterion 4, first half).
+Unit=tillandsias-cycle.service
+
+[Install]
+WantedBy=timers.target

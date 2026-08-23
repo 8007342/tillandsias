@@ -53,7 +53,7 @@ critical_path:
     timeout_ms: 20000
     expected_behavior: "ok: unpushed-claim-refused"
 
-  - step: "the gate is wired into the local pre-push gate"
+  - step: "the gate is wired into the local gate"
     command: "grep -q 'check-mo-full-attestations.sh' build.sh && echo 'ok: wired-into-build-check'"
     timeout_ms: 3000
     expected_behavior: "ok: wired-into-build-check"

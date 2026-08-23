@@ -2887,6 +2887,60 @@ fn main() {
             let frags = tillandsias_plan::fragments::load_all(&index);
             let (matrix, skipped) = tillandsias_plan::fragments::fold_capabilities(&frags);
 
+            // ORDER 847-wgy4. `--hosts` is the ROUTING projection: one line
+            // per distinct host_id, sorted (BTreeMap order), as
+            //   <host_id>\t<derived_tier>\t<accels>
+            // where accels is a comma-joined, sorted union across the host's
+            // loci of `<class>:<vendor>:<usable|unusable>` for every gpu/npu
+            // device, or `none`. The selector consumes this to (a) rank a
+            // host among the matrix's hosts for collision-free epic routing
+            // and (b) decide which accelerator tags the host can serve.
+            // Sorted, deterministic, and machine-parseable — the human view
+            // below stays the human view.
+            if args.iter().any(|a| a == "--hosts") {
+                let mut hosts: std::collections::BTreeMap<
+                    &str,
+                    (String, std::collections::BTreeSet<String>),
+                > = std::collections::BTreeMap::new();
+                for ((host_id, _locus), entry) in &matrix {
+                    let tier = entry.document["legacy_tier"].as_str().unwrap_or("unknown");
+                    let slot = hosts
+                        .entry(host_id.as_str())
+                        .or_insert_with(|| (tier.to_string(), Default::default()));
+                    // Newest-locus tier wins only when the stored one is
+                    // unknown/cpu — a machine is at least its most capable
+                    // locus.
+                    if slot.0 == "unknown" || (slot.0 == "cpu" && tier != "unknown") {
+                        slot.0 = tier.to_string();
+                    }
+                    if let Some(devices) = entry.document["devices"].as_sequence() {
+                        for d in devices {
+                            let class = d["device_class"].as_str().unwrap_or("");
+                            if class != "gpu" && class != "npu" {
+                                continue;
+                            }
+                            let vendor = d["vendor"].as_str().unwrap_or("unknown");
+                            let usable = if d["usable"].as_bool() == Some(true) {
+                                "usable"
+                            } else {
+                                "unusable"
+                            };
+                            slot.1.insert(format!("{class}:{vendor}:{usable}"));
+                        }
+                    }
+                }
+                for (host_id, (tier, accels)) in &hosts {
+                    let accel_csv = if accels.is_empty() {
+                        "none".to_string()
+                    } else {
+                        accels.iter().cloned().collect::<Vec<_>>().join(",")
+                    };
+                    println!("{host_id}\t{tier}\t{accel_csv}");
+                }
+                log_cli_usage(&subcommand, "answered", start_time.elapsed().as_millis());
+                return;
+            }
+
             // ORDER 843-624y. EMPTY IS NOT THE SAME FACT AS UNREPORTED, and
             // until now this arm could not tell them apart: it printed
             // "0 rows" and exited 0, which reads identically to a healthy
@@ -4686,14 +4740,39 @@ fn main() {
             // colon-space constantly ("Wave 2: …", "REFUTED: …", "note: …").
             // Every other emitted field here is a controlled vocabulary, which
             // is why this survived until the day free text arrived.
-            body.push_str(&format!(
-                "    value: {}\n",
-                serde_yaml::to_string(&value)
-                    .unwrap_or_else(|_| format!("{value:?}"))
-                    .trim_end()
-                    .trim_start_matches("--- ")
-                    .trim()
-            ));
+            // ...AND THE SAME LINE BROKE AGAIN ON THE NEXT SHAPE, 2026-08-23.
+            //
+            // 832-698m routed the value through serde_yaml so a `: ` in prose
+            // could not open a nested mapping. Correct, and insufficient: for a
+            // MULTI-LINE string serde_yaml emits a BLOCK SCALAR whose
+            // continuation lines are indented two spaces from the DOCUMENT
+            // ROOT, and this splices it after a key at column 4. YAML requires
+            // block-scalar content to be indented deeper than its key, so the
+            // fragment parsed as far as `value: |-` and then died with
+            // "did not find expected '-' indicator".
+            //
+            // Same failure signature as last time — `set-field` printed `ok:`
+            // and the pre-push gate is what refused — and the same root cause
+            // one shape further along: free prose is the DEFAULT for
+            // next_action, and prose that is worth reading eventually contains
+            // a newline. Re-indent every continuation line under the key.
+            let rendered = serde_yaml::to_string(&value)
+                .unwrap_or_else(|_| format!("{value:?}"))
+                .trim_end()
+                .trim_start_matches("--- ")
+                .trim()
+                .to_string();
+            let mut lines = rendered.lines();
+            let head = lines.next().unwrap_or_default().to_string();
+            let mut emitted = format!("    value: {head}\n");
+            for line in lines {
+                if line.is_empty() {
+                    emitted.push('\n');
+                } else {
+                    emitted.push_str(&format!("    {line}\n"));
+                }
+            }
+            body.push_str(&emitted);
             body.push_str(&format!("    ts: \"{ts}\"\n"));
             body.push_str(&format!("    host: {host}\n"));
             let mut event_blocks: Vec<(String, String)> = Vec::new();

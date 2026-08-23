@@ -66,6 +66,14 @@
 
 set -uo pipefail
 
+# Portable SHA-256 (851-28b5): coreutils sha256sum on Linux/forge/WSL; stock
+# macOS before 13 ships only `shasum`. Identical "<hex>  <name>" output.
+if command -v sha256sum >/dev/null 2>&1; then
+    PORTABLE_SHA256=(sha256sum)
+else
+    PORTABLE_SHA256=(shasum -a 256)
+fi
+
 ROOT="${WINDOWS_ONLY_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 GIT_DIR="$(git -C "$ROOT" rev-parse --absolute-git-dir 2>/dev/null || echo "$ROOT/.git")"
 STAMP_FILE="${WINDOWS_ONLY_STAMP:-$GIT_DIR/tillandsias-windows-only-verified}"
@@ -95,8 +103,8 @@ digest_of() {
     # Path + content, so a rename is a change too.
     while IFS= read -r f; do
         printf '%s\0' "${f#"$ROOT"/}"
-        sha256sum "$f" | cut -d' ' -f1
-    done | sha256sum | cut -d' ' -f1
+        "${PORTABLE_SHA256[@]}" "$f" | cut -d' ' -f1
+    done | "${PORTABLE_SHA256[@]}" | cut -d' ' -f1
 }
 
 # NOT `mapfile -t` (order 723-b9cn, measured on macOS 2026-08-13). `mapfile` is

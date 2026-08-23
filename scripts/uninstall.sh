@@ -256,9 +256,14 @@ if [[ "$WIPE" == true ]]; then
     # Remove cache (container images, opencode, openspec, secrets)
     rm -rf "$CACHE_DIR"
 
-    # Remove all versioned forge and web images
-    podman images --format '{{.Repository}}:{{.Tag}}' | grep '^tillandsias-forge:' | xargs -r podman rmi 2>/dev/null || true
-    podman images --format '{{.Repository}}:{{.Tag}}' | grep '^tillandsias-web:' | xargs -r podman rmi 2>/dev/null || true
+    # Remove all versioned forge and web images. The GNU-only no-run-if-empty
+    # xargs flag is gone (851-28b5): the empty case is genuinely reachable
+    # (fresh store, prior rmi), so guard on non-empty input instead — same
+    # behavior on BSD and GNU xargs. Image refs contain no whitespace.
+    imgs="$(podman images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep '^tillandsias-forge:' || true)"
+    [ -n "$imgs" ] && printf '%s\n' "$imgs" | xargs podman rmi 2>/dev/null || true
+    imgs="$(podman images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep '^tillandsias-web:' || true)"
+    [ -n "$imgs" ] && printf '%s\n' "$imgs" | xargs podman rmi 2>/dev/null || true
 
     # Remove cached nix build output
     rm -rf "$CACHE_DIR/build-output" 2>/dev/null || true
