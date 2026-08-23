@@ -1604,6 +1604,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Instrument freshness fixture passed"
 
+    # Order 628-r2vk. The NEW-surface railguard: a user-visible tray surface
+    # (menu id, notification, status chip, tooltip) cannot land without a
+    # parity-matrix claim. The hermetic fixture pins both directions; the
+    # LIVE check over the real tree is litmus:tray-new-surface-parity-gate
+    # (post-build phase). Ruby-free: the check is the Rust policy binary.
+    _step "Checking the new-surface parity railguard fixture (628-r2vk)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-tray-surface-parity-gate.sh" 2>&1; then
+        _error "the new-surface parity railguard broke — surfaces could land rowless again"
+        exit 1
+    fi
+    _info "New-surface parity railguard fixture passed"
+
     # Order 859-b2zc. Host identity must resolve WITHOUT a `hostname` binary —
     # no Fedora image this project runs ships one, so five scripts that
     # re-derived the chain inline were blind in the forge and in both WSL

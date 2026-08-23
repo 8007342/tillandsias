@@ -11685,6 +11685,12 @@ plan_index:
       notes: |
         Adds a gate, not a string. No UX-curation approval needed.
       events:
+        - type: note
+          ts: "2026-08-23T11:37:24Z"
+          agent_id: "windows-yolanda-fable5-20260823T111932Z"
+          host: windows
+          summary: |
+            Implemented on yolanda (loop cycle #5). tillandsias-policy parity-surfaces: two machine-decided inventories — the shared menu-id universe (host-shell pub mod ids, id-shaped values only, deduped) and four pinned declaration patterns (.balloon( windows, fn notify_ macos, fn compose_tooltip( windows, hwnd.status( windows — macOS/Linux chips ride the shared menu.status row) each requiring a // parity-surface: <class>.<id> annotation. A surface id must be claimed by a matrix row's surfaces: list or the shrink-only surface_baseline: (stale entry = failure). 20 sites annotated across windows/macos trays; matrix gains notification/tooltip/status-chip class rows (sibling columns unknown — each host verifies its own) + the 23-id grandfathered menu baseline. Hermetic fixture scripts/test-tray-surface-parity-gate.sh (7 cases incl. both directions + label-copy negative control) wired into ./build.sh --check; litmus:tray-new-surface-parity-gate bound under spec tray-app. All exit criteria have windows evidence: (1) fixture B/C, (2) three new row classes, (3) Rust binary ruby-free, (4) litmus + fixture, (5) failure names id/site/columns. windows-tray tests 94+9+3 green with annotations in place.
         - type: filed
           ts: "2026-08-09T08:51:57Z"
           agent_id: windows-claude-fable-metaorch-20260809t063000z

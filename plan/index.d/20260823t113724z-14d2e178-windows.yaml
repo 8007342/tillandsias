@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tray-new-surface-parity-gate
+    field: status
+    value: implemented
+    ts: "2026-08-23T11:37:24Z"
+    host: windows
+
+events:
+  - packet_id: tray-new-surface-parity-gate
+    event:
+      type: note
+      ts: "2026-08-23T11:37:24Z"
+      host: windows
+      summary: >
+        All five exit criteria carry windows-host evidence (fixture 7/7 inside this tree, both parity gates green, tray tests green). Completion wants the live litmus in a full local-ci pass plus one sibling host running the same source-level extraction — the 851-cduu verification pattern.

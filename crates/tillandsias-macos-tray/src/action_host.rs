@@ -155,6 +155,7 @@ fn apply_status_text_main_thread(
 /// Best-effort: spawn osascript detached, log any error, never
 /// block. The chip text remains the authoritative failure surface;
 /// the notification is purely a "look here" nudge.
+// parity-surface: notification.provisioning-failed
 fn notify_provisioning_failed(reason: &str) {
     // AppleScript single-quote-escape so a `'` in the reason doesn't
     // terminate the literal. Then wrap the whole call in another
@@ -190,6 +191,7 @@ fn notify_provisioning_failed(reason: &str) {
 /// the chip carries the same verdict authoritatively.
 ///
 /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+// parity-surface: notification.guest-crash-loop
 fn notify_crash_loop(reason: &str) {
     let escaped = applescript_escape_single_quoted(reason);
     let body = format!(
