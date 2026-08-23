@@ -1,0 +1,113 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-23T19:41:30Z.
+packets:
+  - order: 864-w3nx
+    packet_id: embed-failure-handler-discarded-the-servers-own-error-and-guessed-instead
+    desired_release: v0.5
+    title: "curl -f threw away the response body, so the embed handler printed a guessed cause and the guess was wrong"
+    status: completed
+    kind: defect
+    pickup_role: any
+    priority: p1
+    capability_tags: [inference, rag, diagnostics, affordances]
+    deliverable: scripts/spec-index-ensure.sh
+    depends_on: []
+    estimated_hours: 2
+    discovered_by: "a qwen3-embedding:4b index build that failed and blamed the wrong thing"
+    context: >
+      THE HANDLER ASSERTED A CAUSE IT NEVER MEASURED, WHICH IS THE CLASS IT WAS
+      WRITTEN TO PREVENT. On the embed call failing, spec-index-ensure.sh
+      printed:
+
+        blocked:spec-index:embed-endpoint-refused
+          models resident right now: qwen3-embedding:4b, qwen2.5:0.5b
+          loading another model beside these aborts on this host (849-tz8g);
+          unload them and retry before suspecting the endpoint.
+
+      Residency was NOT the cause, and that message cost a cycle. The mechanism
+      is one flag: the call was `curl -fsS`, and curl's --fail turns an HTTP 400
+      into exit 22 AND DISCARDS THE RESPONSE BODY. The body is the only place
+      the server explains itself. With it gone the handler had nothing to report,
+      so it reported a guess.
+
+      WHAT THE DISCARDED BODY ACTUALLY SAID, recovered from the container log:
+
+        [GIN] 18:42:10 | 400 | 1m42s | POST "/v1/embeddings"
+        Post "http://127.0.0.1:34227/tokenize": read tcp …: connection reset by peer
+
+      The model runner CRASHED while tokenizing. Bisected against real corpus
+      chunks (largest first, so worst case):
+
+        batch  payload   result
+           64   255 KB   400 — runner /tokenize connection reset
+           32   128 KB   200, 8051 ms
+           16    64 KB   200, 3122 ms
+            8    32 KB   200, 1547 ms
+            4    16 KB   200,  767 ms
+
+      A smaller batch fixes it. Unloading models does not. The remedy the
+      message recommended would never have worked.
+
+      AND THE FIRST ATTEMPT TO REPRODUCE IT WAS ALSO WRONG, which is worth
+      recording because it nearly closed the investigation early. Synthetic
+      batches of 64 x 4,749 repeated 'x' characters all returned 200 — a run of
+      identical characters tokenises to a few hundred tokens, not the ~1,200 the
+      same length of real prose produces. The synthetic test never stressed the
+      tokeniser it was meant to stress. Only replaying REAL chunks from
+      chunks.jsonl reproduced the 400.
+
+      THE ORIGINAL COMMENT WAS RIGHT ABOUT THE DISEASE AND THEN CAUGHT IT. It
+      said "endpoint-refused sends the reader to the proxy and the CA bundle,
+      which is the wrong half of the system" — correct — and then replaced a
+      wrong generic cause with a wrong specific one. Naming a likely cause is
+      only an improvement when the naming is falsifiable; otherwise it is a more
+      confident way to be wrong, and it is harder to doubt than "refused"
+      because it cites an order number.
+    exit_criteria: >
+      (1) The handler prints the SERVER'S OWN error body first, before any
+      hypothesis. Proven by a stub returning HTTP 400 with a body: the old
+      `-fsS` form captures an empty string, the new form captures the message.
+      (2) The residency hypothesis survives only as a hint explicitly marked
+      "HINT ONLY, not a diagnosis", conditional on the body not already
+      explaining the failure.
+      (3) The message names the batch size and payload bytes, since batch size
+      is the actual lever for this failure class.
+      (4) qwen3-embedding:4b's working batch size is recorded where a builder
+      will find it, not only in a ledger row.
+
+events:
+  - packet_id: embed-failure-handler-discarded-the-servers-own-error-and-guessed-instead
+    event:
+      type: completed
+      ts: "2026-08-23T19:41:30Z"
+      agent_id: linux-macuahuitl-opus5-20260823T193400Z
+      host: linux_mutable
+      evidence_refs:
+        - "container log: [GIN] 18:42:10 | 400 | 1m42s | POST /v1/embeddings; body names /tokenize connection reset"
+        - "bisect against real chunks: 64->400, 32/16/8/4->200 (128KB is the largest payload that survives)"
+        - "side-by-side stub proof: curl -fsS captures '' on HTTP 400; curl -sS -w %{http_code} captures the full body"
+        - "GPU throughout: peak 89-90% util, non-ollama VRAM 309 MiB against an 800 MiB threshold"
+      merge_affordance: merge-now
+      merge_reason: >
+        Any host rebuilding an index with a model whose runner is batch-sensitive
+        gets a confidently wrong remedy and will chase residency instead of batch
+        size. One script, no rebuild of anything a sibling compiles.
+      summary: >
+        Dropped `-f` so the body survives, report HTTP code + server message +
+        batch size + payload bytes first, and demoted the residency guess to an
+        explicitly-labelled hint. Also names the measured qwen3 batch ceiling
+        inline, so the reader gets the fix and not just the diagnosis.
+
+  - packet_id: spec-expert-refusal-threshold-fleet-decision
+    event:
+      type: progress
+      ts: "2026-08-23T19:41:30Z"
+      agent_id: linux-macuahuitl-opus5-20260823T193400Z
+      host: linux_mutable
+      summary: >
+        qwen3-embedding:4b at batch 64 does not merely underperform — it kills
+        its own runner mid-tokenise on the largest real chunks. Relaunched at
+        batch 32, which the bisect shows is safe, and it is embedding steadily
+        at ~84% GPU with 309 MiB of non-ollama VRAM. This is the FIRST
+        qwen3-embedding:4b index the project has ever built; until today the
+        model was believed unable to run at all (849-tz8g, refuted).
