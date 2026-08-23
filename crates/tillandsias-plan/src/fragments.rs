@@ -619,6 +619,116 @@ fn fragment_filename(utc_compact: &str, suffix: &str, host: &str, ext: &str) -> 
     )
 }
 
+/// ORDER 775-b4qz (extends 832-698m). The `value:` entry of a set-field LWW
+/// row, rendered so ANY UTF-8 sentence survives the fold: the scalar goes
+/// through serde_yaml (a `: `, `#`, leading `- ` or quote cannot escape the
+/// key), multi-line continuation lines are re-indented under the column-4 key,
+/// and a bare YAML-1.1 timestamp is quoted so the mirror's Psych 5 pre-receive
+/// gate (627-c9c2) accepts the fragment it lands in.
+pub fn lww_value_lines(value: &str) -> String {
+    let rendered = serde_yaml::to_string(value)
+        .unwrap_or_else(|_| format!("{value:?}"))
+        .trim_end()
+        .trim_start_matches("--- ")
+        .trim()
+        .to_string();
+    let mut lines = rendered.lines();
+    let head = lines.next().unwrap_or_default().to_string();
+    let mut emitted = quote_timestamp_line(&format!("    value: {head}"));
+    emitted.push('\n');
+    for line in lines {
+        if line.is_empty() {
+            emitted.push('\n');
+        } else {
+            emitted.push_str(&format!("    {line}\n"));
+        }
+    }
+    emitted
+}
+
+/// ORDER 775-b4qz. The complete body of a set-field fragment, extracted from
+/// the CLI arm so the round-trip unit tests exercise the exact bytes
+/// production writes. `event_blocks` is `(type, single-line summary)` pairs;
+/// callers strip newlines before passing summaries in.
+pub fn set_field_fragment_body(
+    pid: &str,
+    field: &str,
+    value: &str,
+    ts: &str,
+    host: &str,
+    event_blocks: &[(String, String)],
+) -> String {
+    let mut body = String::new();
+    body.push_str("# Ledger fragment — append-only, IMMUTABLE once written.\n");
+    body.push_str("# Written by: tillandsias-plan set-field (order 636-9m79).\n");
+    body.push_str("#\n");
+    body.push_str("# The LWW channel below is named `status:` for historical reasons but\n");
+    body.push_str("# corrects ANY field (642-fedr). Re-declaring the packet under\n");
+    body.push_str("# `packets:` would be a G-Set no-op and would silently do nothing.\n");
+    body.push_str("status:\n");
+    body.push_str(&format!("  - packet_id: {pid}\n"));
+    body.push_str(&format!("    field: {field}\n"));
+    body.push_str(&lww_value_lines(value));
+    body.push_str(&format!("    ts: \"{ts}\"\n"));
+    body.push_str(&format!("    host: {host}\n"));
+    if !event_blocks.is_empty() {
+        body.push_str("\nevents:\n");
+        for (etype, summary) in event_blocks {
+            body.push_str(&format!("  - packet_id: {pid}\n"));
+            body.push_str("    event:\n");
+            body.push_str(&format!("      type: {etype}\n"));
+            body.push_str(&format!("      ts: \"{ts}\"\n"));
+            body.push_str(&format!("      host: {host}\n"));
+            body.push_str(&format!("      summary: >\n        {summary}\n"));
+        }
+    }
+    body
+}
+
+/// ORDER 775-b4qz, exit criterion 2 — the write-time half of the malformed-
+/// fragment defence. Re-parse a just-written fragment with the SAME parser the
+/// fold uses ([`load_all`]'s `serde_yaml::from_str`) and confirm the LWW row
+/// it claims to carry reads back byte-identical. The defect class this closes
+/// is exit-0-on-corruption: `set-field` printed `ok:` twice on this host while
+/// writing fragments the fold silently skipped.
+pub fn verify_written_lww(path: &Path, pid: &str, field: &str, expect: &str) -> Result<(), String> {
+    let raw =
+        std::fs::read_to_string(path).map_err(|e| format!("re-read of written fragment: {e}"))?;
+    let doc: Value = serde_yaml::from_str(&raw)
+        .map_err(|e| format!("fragment does not parse with the fold's parser: {e}"))?;
+    let row = doc
+        .get("status")
+        .and_then(Value::as_sequence)
+        .and_then(|rows| {
+            rows.iter().find(|r| {
+                r.get("packet_id").and_then(Value::as_str) == Some(pid)
+                    && r.get("field").and_then(Value::as_str) == Some(field)
+            })
+        });
+    match row.and_then(|r| r.get("value")) {
+        Some(Value::String(s)) if s == expect => Ok(()),
+        Some(Value::String(s)) => Err(format!(
+            "value round-trip mismatch: wrote {expect:?}, fragment reads back {s:?}"
+        )),
+        Some(other) => Err(format!(
+            "value parsed as non-string {other:?} — the scalar escaped its key"
+        )),
+        None => Err(format!(
+            "no parseable status row for {pid}.{field} in the written fragment"
+        )),
+    }
+}
+
+/// Parse-only verification for written fragments carrying no LWW row (the
+/// note-recording no-op path): same parser as the fold, no read-back target.
+pub fn verify_written_parses(path: &Path) -> Result<(), String> {
+    let raw =
+        std::fs::read_to_string(path).map_err(|e| format!("re-read of written fragment: {e}"))?;
+    serde_yaml::from_str::<Value>(&raw)
+        .map(|_| ())
+        .map_err(|e| format!("fragment does not parse with the fold's parser: {e}"))
+}
+
 /// The compaction verdict: the merged base plus exactly which fragments it
 /// consumed.
 ///
@@ -2023,6 +2133,111 @@ packets:
 
     const HOST_A: &str = "packets:\n  - packet_id: beta\n    order: 581-aaaa\n    status: ready\n";
     const HOST_B: &str = "packets:\n  - packet_id: gamma\n    order: 581-bbbb\n    status: ready\n";
+
+    #[test]
+    fn set_field_body_round_trips_hostile_prose() {
+        // ORDER 775-b4qz exit criterion 1, exact list: a value containing
+        // ": ", "#", a leading "- ", and a double quote must re-fold
+        // byte-identical. Plus the two shapes that each broke a prior fix:
+        // multi-line prose (832-698m's follow-up) and a bare YAML-1.1
+        // timestamp (the mirror's Psych gate, 627-c9c2).
+        let cases = [
+            "Wave 2: (1) seed the row",
+            "# looks like a comment but is prose",
+            "- looks like a list item",
+            "she said \"push it\" and left",
+            "REFUTED: see notes\n\n  - indented dash # hash tail\nfinal line: done",
+            "2026-08-23T11:00:00Z",
+        ];
+        for value in cases {
+            let body = set_field_fragment_body(
+                "alpha",
+                "next_action",
+                value,
+                "2026-08-23T00:00:00Z",
+                "t",
+                &[],
+            );
+            let merged = fold(&base(), &[frag("1-t.yaml", &body)]);
+            assert_eq!(
+                field(&merged, "alpha", "next_action"),
+                value,
+                "round-trip for {value:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn set_field_body_round_trips_value_beside_events() {
+        // The --reason/--evidence channel rides in the same fragment; the row
+        // must still read back when event blocks follow it.
+        let value = "Fix the gate: quote everything";
+        let body = set_field_fragment_body(
+            "alpha",
+            "status",
+            value,
+            "2026-08-23T00:00:00Z",
+            "t",
+            &[(
+                "note".to_string(),
+                "claimed: because reasons # with tail".to_string(),
+            )],
+        );
+        let merged = fold(&base(), &[frag("1-t.yaml", &body)]);
+        assert_eq!(field(&merged, "alpha", "status"), value);
+        assert!(
+            events_of(&merged, "alpha")
+                .iter()
+                .any(|s| s.contains("because reasons"))
+        );
+    }
+
+    #[test]
+    fn verify_written_lww_accepts_good_and_refuses_corrupt() {
+        // ORDER 775-b4qz exit criterion 2: the exit-0-on-corruption shape.
+        // A good body verifies; the OLD raw interpolation (`value: Wave 2:
+        // (1) …`) must be refused by the same parser the fold uses.
+        let dir = std::env::temp_dir().join(format!(
+            "tillandsias-775-b4qz-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.subsec_nanos())
+                .unwrap_or(0)
+        ));
+        std::fs::create_dir_all(&dir).expect("tempdir");
+        let good = dir.join("good.yaml");
+        let value = "Wave 2: (1) seed the row";
+        std::fs::write(
+            &good,
+            set_field_fragment_body(
+                "alpha",
+                "next_action",
+                value,
+                "2026-08-23T00:00:00Z",
+                "t",
+                &[],
+            ),
+        )
+        .expect("write good");
+        assert_eq!(
+            verify_written_lww(&good, "alpha", "next_action", value),
+            Ok(())
+        );
+        // Wrong expectation → mismatch, not Ok.
+        assert!(verify_written_lww(&good, "alpha", "next_action", "other").is_err());
+
+        let bad = dir.join("bad.yaml");
+        std::fs::write(
+            &bad,
+            "status:\n  - packet_id: alpha\n    field: next_action\n    value: Wave 2: (1) seed\n    ts: \"2026-08-23T00:00:00Z\"\n    host: t\n",
+        )
+        .expect("write bad");
+        assert!(verify_written_lww(&bad, "alpha", "next_action", "Wave 2: (1) seed").is_err());
+        assert!(verify_written_parses(&bad).is_err());
+        assert_eq!(verify_written_parses(&good), Ok(()));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn concurrent_packet_adds_from_two_hosts_both_survive() {

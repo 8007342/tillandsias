@@ -641,6 +641,27 @@ fn writer_agent_from(flag: Option<String>, env_id: Option<String>) -> Result<Str
     )
 }
 
+/// ORDER 775-b4qz. A written fragment failed write-time verification: move it
+/// out of the fold's `*.yaml` glob (named for repair, out of the corpus) and
+/// exit non-zero. The one thing this must never do is return — exit-0 on a
+/// fragment the fold will skip is the defect class the packet closes.
+fn reject_written_fragment(path: &std::path::Path, err: &str) -> ! {
+    let rejected = path.with_extension("yaml.rejected");
+    eprintln!("error: set-field wrote a fragment that failed write-time verification: {err}");
+    if std::fs::rename(path, &rejected).is_ok() {
+        eprintln!(
+            "       nothing was recorded; the rejected bytes are at {} for repair (775-b4qz)",
+            rejected.display()
+        );
+    } else {
+        eprintln!(
+            "       could not move it aside — REMOVE OR REPAIR {} before the next fold (775-b4qz)",
+            path.display()
+        );
+    }
+    std::process::exit(1);
+}
+
 /// Resolve the `--ts` for a ledger write (order 719-kgr5).
 ///
 /// THE DEFECT THIS CLOSES. Every writer took `--ts` on trust, which made
@@ -4652,6 +4673,10 @@ fn main() {
                     eprintln!("error: write {}: {e}", path.display());
                     std::process::exit(1);
                 }
+                // 775-b4qz: never exit 0 on a fragment the fold would skip.
+                if let Err(e) = fragments::verify_written_parses(&path) {
+                    reject_written_fragment(&path, &e);
+                }
                 println!(
                     "ok: no-op — {pid}.{field} is already '{value}'; note recorded ({})",
                     path.display()
@@ -4732,69 +4757,17 @@ fn main() {
             }
             let path = dir.join(fragments::fragment_name(&compact, &suffix, &host));
 
-            let mut body = String::new();
-            body.push_str("# Ledger fragment — append-only, IMMUTABLE once written.\n");
-            body.push_str("# Written by: tillandsias-plan set-field (order 636-9m79).\n");
-            body.push_str("#\n");
-            body.push_str(
-                "# The LWW channel below is named `status:` for historical reasons but\n",
-            );
-            body.push_str("# corrects ANY field (642-fedr). Re-declaring the packet under\n");
-            body.push_str("# `packets:` would be a G-Set no-op and would silently do nothing.\n");
-            body.push_str("status:\n");
-            body.push_str(&format!("  - packet_id: {pid}\n"));
-            body.push_str(&format!("    field: {field}\n"));
-            // ORDER 832-698m. The value is EMITTED AS YAML, not interpolated.
-            //
-            // This line used to be `format!("    value: {value}\n")`. The first
-            // production write of a `next_action` — a free-prose field this
-            // project had just made load-bearing — began "Wave 2: (1) seed …".
-            // The `: ` turned the scalar into a nested mapping, the fragment
-            // became unparseable, and `set-field` printed
-            // `ok: …next_action <unset> -> Wave 2: (1) seed…` while doing it.
-            // The fold then reported `incomplete: 1126 packets from a PARTIAL
-            // corpus — 1 fragment(s) could not be read` and the pre-push gate
-            // refused, which is the only reason it was caught at all.
-            //
-            // Free text is the DEFAULT case for next_action, and prose carries
-            // colon-space constantly ("Wave 2: …", "REFUTED: …", "note: …").
-            // Every other emitted field here is a controlled vocabulary, which
-            // is why this survived until the day free text arrived.
-            // ...AND THE SAME LINE BROKE AGAIN ON THE NEXT SHAPE, 2026-08-23.
-            //
-            // 832-698m routed the value through serde_yaml so a `: ` in prose
-            // could not open a nested mapping. Correct, and insufficient: for a
-            // MULTI-LINE string serde_yaml emits a BLOCK SCALAR whose
-            // continuation lines are indented two spaces from the DOCUMENT
-            // ROOT, and this splices it after a key at column 4. YAML requires
-            // block-scalar content to be indented deeper than its key, so the
-            // fragment parsed as far as `value: |-` and then died with
-            // "did not find expected '-' indicator".
-            //
-            // Same failure signature as last time — `set-field` printed `ok:`
-            // and the pre-push gate is what refused — and the same root cause
-            // one shape further along: free prose is the DEFAULT for
-            // next_action, and prose that is worth reading eventually contains
-            // a newline. Re-indent every continuation line under the key.
-            let rendered = serde_yaml::to_string(&value)
-                .unwrap_or_else(|_| format!("{value:?}"))
-                .trim_end()
-                .trim_start_matches("--- ")
-                .trim()
-                .to_string();
-            let mut lines = rendered.lines();
-            let head = lines.next().unwrap_or_default().to_string();
-            let mut emitted = format!("    value: {head}\n");
-            for line in lines {
-                if line.is_empty() {
-                    emitted.push('\n');
-                } else {
-                    emitted.push_str(&format!("    {line}\n"));
-                }
-            }
-            body.push_str(&emitted);
-            body.push_str(&format!("    ts: \"{ts}\"\n"));
-            body.push_str(&format!("    host: {host}\n"));
+            // ORDER 832-698m → 775-b4qz. The value is EMITTED AS YAML, not
+            // interpolated — the rendering lives in fragments::lww_value_lines
+            // (via set_field_fragment_body) beside the fold it must survive,
+            // with the unit tests that pin it. Short history, because this
+            // line broke twice: raw interpolation let a "Wave 2: (1) …"
+            // next_action open a nested mapping (fragment unparseable, ok:
+            // printed anyway); the serde_yaml fix then broke on MULTI-LINE
+            // prose, whose block-scalar continuation lines serde_yaml indents
+            // from the document root, not the column-4 key. Both times the
+            // pre-push gate caught what set-field blessed — the write-time
+            // verification below is 775-b4qz closing that exit-0 gap.
             let mut event_blocks: Vec<(String, String)> = Vec::new();
             if let Some(refs) = &reopen_evidence {
                 // The mandatory record for a ladder downgrade (650-dq6u): the
@@ -4828,21 +4801,17 @@ fn main() {
             if !reason.is_empty() {
                 event_blocks.push(("note".to_string(), reason.replace('\n', " ")));
             }
-            if !event_blocks.is_empty() {
-                body.push_str("\nevents:\n");
-                for (etype, summary) in &event_blocks {
-                    body.push_str(&format!("  - packet_id: {pid}\n"));
-                    body.push_str("    event:\n");
-                    body.push_str(&format!("      type: {etype}\n"));
-                    body.push_str(&format!("      ts: \"{ts}\"\n"));
-                    body.push_str(&format!("      host: {host}\n"));
-                    body.push_str(&format!("      summary: >\n        {summary}\n"));
-                }
-            }
+            let body =
+                fragments::set_field_fragment_body(&pid, &field, &value, &ts, &host, &event_blocks);
 
             if let Err(e) = std::fs::write(&path, body) {
                 eprintln!("error: write {}: {e}", path.display());
                 std::process::exit(1);
+            }
+            // 775-b4qz: re-parse with the fold's parser and confirm the value
+            // reads back byte-identical BEFORE claiming success.
+            if let Err(e) = fragments::verify_written_lww(&path, &pid, &field, &value) {
+                reject_written_fragment(&path, &e);
             }
             println!(
                 "ok: {pid}.{field} {current} -> {value} ({})",

@@ -89,6 +89,17 @@ packet is queryable immediately — reads fold fragments in automatically.
 - **The `status:` channel is field-generic despite its name.** It corrects
   `pickup_role`, `priority`, `desired_release` — anything. Renaming it is tracked
   by 642-fedr.
+- **Never edit `plan/index.yaml` directly.** The base is a concurrency block
+  with exactly one writer: compaction (627-c9c2, canonical statement in
+  `methodology/distributed-work.yaml` → `concurrency_block`). A direct edit is
+  a write-write conflict with every concurrent host, and a commit touching the
+  base cannot pass the enclave mirror's YAML gate at all (next rule).
+- **Quote every timestamp-shaped scalar** (`ts: "2026-…Z"`, and any value that
+  starts like a date). The enclave mirror's pre-receive hook validates YAML with
+  ruby + Psych 5 safe_load (YAML 1.1): a bare timestamp builds a `Time` object
+  and the push is refused with `Psych::DisallowedClass` (627-c9c2, learned from
+  a twice-rejected forge push 2026-08-09). `tillandsias-plan`'s writers quote
+  these for you — one more reason not to hand-author.
 
 ## Compaction
 

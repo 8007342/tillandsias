@@ -266,6 +266,22 @@ critical_path:
     timeout_ms: 30000
     expected_behavior: "ok: capability filter is two-sided"
 
+  - step: "POOL FIDELITY (660-z774): dependency-blocked and foreign-leased packets never fill batch slots — two-sided"
+    # Order 660-z774. The selector once built its pool from `query`, which
+    # applies NEITHER deps-clear NOR unleased: the windows lane was handed 248
+    # alongside all three of the packets blocking it, and a leased packet could
+    # be offered to a second host, routing around the very duplication the
+    # lease exists to prevent. The pool now comes from `select-rows`
+    # (dependencies_are_clear: unresolvable ids count as blocking;
+    # inspect_lease: live leases excluded), and this pins BOTH filters from one
+    # fixture ledger. The excluded packets are all p0 on purpose — if either
+    # filter regresses they outrank everything and the step fails immediately.
+    # Two-sided: an EXPIRED lease must NOT exclude (the reaper property), and
+    # the blocked packet's own OPEN BLOCKER is claimable and must appear.
+    command: "d=$(mktemp -d); printf 'plan_index:\\n  default_status_values: [ready, completed]\\npackets:\\n  - packet_id: clean-pkt\\n    order: 920-aaaa\\n    status: ready\\n    desired_release: v0.5\\n    pickup_role: linux\\n    priority: p2\\n    release_target: pool-epic\\n  - packet_id: open-dep-pkt\\n    order: 920-dddd\\n    status: ready\\n    desired_release: v0.5\\n    pickup_role: linux\\n    priority: p1\\n    release_target: pool-epic\\n  - packet_id: dep-blocked-pkt\\n    order: 920-bbbb\\n    status: ready\\n    desired_release: v0.5\\n    pickup_role: linux\\n    priority: p0\\n    release_target: pool-epic\\n    depends_on: [920-dddd]\\n  - packet_id: ghost-dep-pkt\\n    order: 920-cccc\\n    status: ready\\n    desired_release: v0.5\\n    pickup_role: linux\\n    priority: p0\\n    release_target: pool-epic\\n    depends_on: [999-zzzz]\\n  - packet_id: leased-pkt\\n    order: 920-eeee\\n    status: ready\\n    desired_release: v0.5\\n    pickup_role: linux\\n    priority: p0\\n    release_target: pool-epic\\n  - packet_id: expired-lease-pkt\\n    order: 920-ffff\\n    status: ready\\n    desired_release: v0.5\\n    pickup_role: linux\\n    priority: p1\\n    release_target: pool-epic\\n' > \"$d/ledger.yaml\"; mkdir -p \"$d/leases/leased-pkt.lease\" \"$d/leases/expired-lease-pkt.lease\"; printf 'lease_id=other-cycle\\nhost=other-host\\nexpires_epoch=4102444800\\n' > \"$d/leases/leased-pkt.lease/holder\"; printf 'lease_id=dead-cycle\\nhost=other-host\\nexpires_epoch=1000000000\\n' > \"$d/leases/expired-lease-pkt.lease/holder\"; printf '#!/usr/bin/env bash\\nexec \"%s/target/release/tillandsias-plan\" --index \"%s/ledger.yaml\" \"$@\"\\n' \"$PWD\" \"$d\" > \"$d/plan\"; chmod +x \"$d/plan\"; out=$(TILLANDSIAS_PLAN_BIN=\"$d/plan\" TILLANDSIAS_LEDGER_LEASE_ROOT=\"$d/leases\" scripts/select-work-batch.sh linux --release v0.5 --budget 6 --seed pool-fixture 2>&1); rm -rf \"$d\"; for bad in 920-bbbb 920-cccc 920-eeee; do printf '%s' \"$out\" | grep -q \"^packet$(printf '\\t')$bad\" && { echo \"FAIL: excluded packet $bad filled a batch slot\"; exit 1; }; done; for good in 920-aaaa 920-dddd 920-ffff; do printf '%s' \"$out\" | grep -q \"^packet$(printf '\\t')$good\" || { echo \"FAIL: claimable packet $good missing — the filter over-excludes\"; exit 1; }; done; echo 'ok: pool is deps-clear and unleased, two-sided'"
+    timeout_ms: 30000
+    expected_behavior: "ok: pool is deps-clear and unleased, two-sided"
+
 observability:
   traces:
     - "@trace spec:ci-release"
