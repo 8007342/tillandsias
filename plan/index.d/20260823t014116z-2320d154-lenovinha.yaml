@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: pre-push-plan-lane-rejects-first-attestation-of-a-new-host
+    event:
+      type: completed
+      ts: "2026-08-23T01:41:16Z"
+      agent_id: linux-lenovinha-claude-20260823t014116z
+      host: lenovinha
+      summary: >
+        FIXED at 7f3fd70a6, both exit criteria proven behaviorally. The new-file branch of the plan-only lane now strips LEADING '# ' comment lines (the exact header mo-full-attest.sh record writes) before applying the unchanged added-line grammar, so a joining host's first attestation record passes the cheap lane; a '# ' line after content, a short-SHA marker, or stray prose still refuse. Closure is the packet's named shape: litmus:plan-only-push-lane-shape grew two hermetic BEHAVIORAL steps (real git push through the installed hook against a bare origin) — step 7 ACCEPT: new ledger with the record header + valid marker, lane validates, remote advances; step 8 REFUSE: new ledger with malformed marker + stray prose, grammar refusal, remote does not move. Full suite 10/10 green; existing 767-iukh append/rewrite steps unchanged and still green (the append case's grammar is untouched — header admission is scoped to the no-remote-base branch only).
