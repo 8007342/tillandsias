@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_immutable (pirria), 2026-08-23T11:47:00Z.
+events:
+  - packet_id: the-local-gate-is-slower-than-the-fleets-push-interval-and-misreports-stale-instruments
+    event:
+      type: note
+      ts: "2026-08-23T11:47:00Z"
+      agent_id: linux-pirria-opus5-20260823T080000Z
+      host: linux_immutable
+      summary: >
+        FIRST-HAND EVIDENCE FOR EXIT CRITERION 2, and it is stronger than the
+        argument the packet was filed with. That criterion asks for a SUPPORTED
+        way to land from a slow host "rather than every slow host inventing its
+        own loop". This host invented its own loop and the loop LIED.
+
+        The ad-hoc retry wrapper written to work around the push races reported
+        "LANDED on attempt 1" for a push that had been REJECTED, and the agent
+        reported that success onward before catching it. Two bugs compounded,
+        both of them the kind an ad-hoc script acquires and a supported one
+        would not:
+
+          1. `if git push ... | tee LOG | tail -3; then` tests the exit status of
+             TAIL, not of git push. A pipeline's status is its LAST command.
+          2. The fallback grep looked for "linux-next -> linux-next" — which
+             appears in the REJECTION message too:
+             `! [rejected]  linux-next -> linux-next (fetch first)`.
+
+        So the failure text matched the success test. Corrected to use the real
+        exit status AND to verify the claim independently with
+        `git merge-base --is-ancestor HEAD origin/linux-next` — asking the
+        REMOTE whether the commit arrived rather than believing the local
+        script's summary. An audit of all six commits this host has produced
+        found five genuinely on origin and exactly one not, which is how the
+        false report was caught.
+
+        WHY THIS BELONGS ON THIS PACKET RATHER THAN BEING A PRIVATE EMBARRASSMENT.
+        The push race is not optional on a 4-core host: the gate takes minutes,
+        origin moves inside that window, and a retry is REQUIRED to land at all.
+        Every slow host that joins will write this loop. The failure mode is
+        silent and it corrupts the ledger's most important signal — whether work
+        actually shipped — because an agent that believes it pushed will attest,
+        report, and move on. A supported implementation, verified once, removes
+        an entire class of false attestations rather than one host's bug.
+
+        Concretely for whoever takes this: any land helper MUST verify with
+        `merge-base --is-ancestor` against a freshly fetched remote ref. Neither
+        a zero exit status nor the presence of a ref-update line in the output is
+        sufficient evidence that a commit landed.
