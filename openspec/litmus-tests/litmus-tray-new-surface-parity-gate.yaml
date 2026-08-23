@@ -1,0 +1,40 @@
+# @trace spec:tray-app, order:628-r2vk
+name: litmus:tray-new-surface-parity-gate
+spec: tray-app
+phase: post-build
+description: >-
+  The NEW-surface railguard: a user-visible tray surface cannot land without
+  a parity-matrix claim. `tillandsias-policy parity-surfaces` extracts two
+  machine-decided inventories — the shared menu-id universe (host-shell
+  `pub mod ids`, every tray renders the shared MenuStructure) and pinned
+  non-menu declaration patterns (balloon/notify/tooltip sites, each requiring
+  a `// parity-surface: <class>.<id>` annotation) — and fails when any
+  extracted id is claimed by neither a matrix row's `surfaces:` list nor the
+  grandfathered `surface_baseline:` (which only shrinks: a stale entry is
+  itself a failure). This closes the hole `parity-matrix` cannot see: that
+  gate checks the cells that exist, so a feature landing on one platform with
+  no row at all kept every gate green (the 626-r7kq and 598-kibt M5 rows both
+  document the shape). Ruby-free by construction (order 261): the check is
+  the Rust policy binary, and Windows — the host class most likely to drift —
+  runs it natively. The hermetic fixture
+  (scripts/test-tray-surface-parity-gate.sh, wired into ./build.sh --check)
+  pins both directions: an added surface with no row FAILS naming the id and
+  the columns to fill; the same surface with a claiming row PASSES.
+severity: high
+size: quick
+
+preconditions:
+  - workspace contains openspec/tray-parity-matrix.yaml
+  - cargo is available in PATH
+
+critical_path:
+  - step: "every extracted user-visible surface is claimed by a matrix row or the baseline"
+    command: "cargo run -q -p tillandsias-policy -- parity-surfaces"
+    timeout_ms: 120000
+    success_pattern: "Tray surfaces: every user-visible surface is claimed by a matrix row or the baseline"
+    failure_pattern: "UNANNOTATED SURFACE:|MISSING ROW:|STALE BASELINE:"
+  - step: "the fixture proves both directions: unclaimed surface fails, claimed surface passes"
+    command: "bash scripts/test-tray-surface-parity-gate.sh"
+    timeout_ms: 180000
+    success_pattern: "ok:tray-surface-parity-gate:"
+    failure_pattern: "FAIL "

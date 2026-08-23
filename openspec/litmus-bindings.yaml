@@ -916,6 +916,7 @@ specs:
   - litmus:web-container-stop
   - litmus:binary-e2e-smoke
   - litmus:tray-parity-matrix-complete
+  - litmus:tray-new-surface-parity-gate
   coverage_ratio: 100
   last_verified: '2026-05-15'
 - spec_id: tray-cli-coexistence

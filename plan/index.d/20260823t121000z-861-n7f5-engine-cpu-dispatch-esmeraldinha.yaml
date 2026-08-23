@@ -1,0 +1,135 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by windows (esmeraldinha), 2026-08-23T12:10:00Z, at windows-next
+# ab6abb327.
+
+packets:
+  - order: 861-n7f5
+    packet_id: engine-candidates-must-prove-cpu-dispatch-before-they-are-benchmarked
+    desired_release: v0.6
+    title: "a ggml build without AVX2 on an AVX2 host is a misconfiguration, not a candidate — and it benchmarks as a 13x regression nobody can explain"
+    status: ready
+    kind: enhancement
+    pickup_role: any
+    priority: p3
+    capability_tags: [inference, low-end, cpu, benchmark, engines]
+    deliverable: scripts/check-engine-cpu-dispatch.sh
+    depends_on: []
+    estimated_hours: 2
+    context: >
+      Measured on esmeraldinha 2026-08-23 while closing 855-wrr3 criterion 5.
+      Fedora 44's packaged `llama-cpp` (b6153-3.fc44) is 12.8x slower on
+      prefill and 4.0x slower on decode than ollama, running the IDENTICAL
+      GGUF blob on the same four cores. Both are llama.cpp; the engine is not
+      the variable.
+
+      The variable is build-time CPU dispatch. Fedora's build reports
+      `CPU : LLAMAFILE = 1 | REPACK = 1` and NO AVX, AVX2, FMA or AVX_VNNI, on
+      a host whose published capability row lists all four. ollama ships 17
+      microarchitecture-specific ggml objects and selects at runtime — verified
+      by reading the live runner's memory map rather than inferring it, which
+      showed exactly `libggml-cpu-alderlake.so`, this host's own
+      microarchitecture.
+
+      WHY THIS IS WORTH A PACKET RATHER THAN JUST THE RESEARCH NOTE. The wrong
+      conclusion here is cheap to reach and expensive to hold: "ollama is a
+      wrapper, so the bare engine must be leaner" is a reasonable-sounding
+      simplification that would have cost a 12.8x prefill regression, and the
+      benchmark that revealed it would have been read as "this host is slow"
+      — which, on the fleet's designated floor host, is exactly the reading
+      nobody would question. The project already has a rule for this shape
+      (order 392: a GPU tier in name only is worse than no GPU tier); this is
+      the CPU-lane sibling and it has no check.
+
+      The distro package compounds it: it is a ROCm/HIP build, so it defaults
+      to `ngl 99` and prints `failed to initialize ROCm: no ROCm-capable device
+      is detected` before falling back. That line invites a GPU diagnosis when
+      the defect is on the CPU path — forcing `-ngl 0` moves the number from
+      9.71 to 9.77 t/s, which is the proof that offload was never involved.
+
+      Full evidence, with reproduction commands:
+      plan/issues/research/low-end-engine-choice-is-cpu-dispatch-not-runtime-2026-08-23.md
+    exit_criteria: >
+      (1) A script that, given an engine binary, emits one falsifiable line
+      naming the CPU features its build actually dispatches, and refuses the
+      candidate when the host advertises vector features the build does not
+      use — grammar in the house style, e.g.
+      `ok:engine-cpu-dispatch:<features>` / `refused:engine-cpu-dispatch-baseline:<missing>`.
+      (2) scripts/bench-inference-floor.sh calls it (or refuses to publish a
+      lane label) before recording a lane, so a baseline build cannot enter the
+      ledger as an engine-lane measurement at all.
+      (3) The host's advertised features come from the capability row
+      (`cpu_flags`, already published by accel_probe) rather than a second
+      inline probe — 859-b2zc is this cycle's reminder of what re-derivation
+      costs.
+      (4) A hermetic fixture with a stubbed engine reporting a baseline
+      feature set.
+
+events:
+  - packet_id: establish-the-low-end-cpu-only-inference-floor-windows
+    event:
+      type: progress
+      ts: "2026-08-23T12:10:00Z"
+      agent_id: windows-esmeraldinha-opus5-20260823T113715Z
+      host: windows
+      summary: >
+        Residual 1 CLOSED — 855-wrr3 exit criterion 5, the alternative-runtime
+        evaluation, now has an answer for the Windows side.
+
+        An alternative IS available without layering: llama-cpp b6153-3.fc44 is
+        packaged in Fedora 44. Two candidates were measured against ollama on
+        the same GGUF blob, same four threads, CPU-only, idle box:
+
+          ollama HTTP API            prefill ~125 tok/s   decode 28.99
+          ollama's llama-server bare prefill  59-91       decode 29.52
+          Fedora stock llama-cpp     prefill   9.77       decode  7.22
+
+        The headline is that "which runtime" is the wrong question. Fedora's
+        build dispatches NO AVX/AVX2/FMA/VNNI on a host that has all four,
+        while ollama ships 17 microarch ggml objects and loads
+        libggml-cpu-alderlake.so — read out of the live runner's /proc maps,
+        not inferred. 12.8x prefill and 4.0x decode, entirely from packaging.
+        Filed as 861-n7f5 so the trap gets a check rather than a note.
+
+        On the ollama LAYER itself, which is the question the criterion was
+        really asking: decode is at parity (1.8%), and wall-clock
+        time-to-first-token favours a bare llama-server by ~25% (844 vs 1131
+        ms) — driven by ollama's chat template turning a 51-token prompt into
+        80, i.e. token count rather than engine speed. Against the measured
+        ~2.3 s per unfold-and-verify sub-query that is ~0.3 s: worth having for
+        template-free workloads like 853-6gz3's, not transformative.
+
+        Deliberately NOT claimed: ollama's per-token prefill reads as 2x the
+        bare server's on the same ggml, and I could not attribute it. The bare
+        server's prefill varied ±35% across runs where ollama's varied ±0.1%,
+        the prompt lengths differ, and my one attempt to probe the cause
+        changed two variables at once. The recommendation rests on the
+        wall-clock column, which none of that touches.
+
+        RESIDUAL 2 STILL OPEN: no true cold-bootstrap number (criterion 6). It
+        needs an isolated CARGO_HOME + CARGO_TARGET_DIR so the working cache
+        survives, and it is an hour-plus of uncontended wall clock. Not started
+        this cycle.
+
+  - packet_id: establish-the-low-end-cpu-only-inference-floor
+    event:
+      type: note
+      ts: "2026-08-23T12:10:01Z"
+      agent_id: windows-esmeraldinha-opus5-20260823T113715Z
+      host: windows
+      summary: >
+        For the Silverblue half, from the Windows cousin — this one should
+        transfer directly and is worth checking BEFORE benchmarking anything
+        there.
+
+        Criterion 5 on this side did not come down to ollama vs llama.cpp. It
+        came down to whether the ggml build dispatches to the host
+        microarchitecture: Fedora's packaged llama-cpp reports no AVX2 on an
+        AVX2 host and lands 12.8x slower on prefill than ollama running the
+        same blob. Silverblue layers from the same Fedora package set, so a
+        `rpm-ostree install llama-cpp` there is likely to reproduce it exactly.
+
+        Check `llama-cli -m <blob> -ngl 0 -p hi -n 1 --no-warmup 2>&1 | grep
+        system_info` before recording any lane. A build whose CPU line reads
+        only `LLAMAFILE = 1 | REPACK = 1` is not a slow engine, it is an
+        unvectorised one, and benchmarking it produces a number that looks like
+        a hardware verdict.

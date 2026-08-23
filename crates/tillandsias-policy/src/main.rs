@@ -22,6 +22,7 @@ fn main() {
         Some("fetch-cheatsheet-source") => fetch_cheatsheet_source(&args[2..]),
         Some("validate-yaml") => validate_yaml(&args[2..]),
         Some("parity-matrix") => parity_matrix(&args[2..]),
+        Some("parity-surfaces") => parity_surfaces(&args[2..]),
         Some("plan-orders") => plan_orders(&args[2..]),
         Some("run-in-pty") => run_in_pty_cmd(&args[2..]),
         Some("--help") | Some("-h") | None => usage(),
@@ -60,6 +61,7 @@ fn usage() {
     eprintln!(
         "  tillandsias-policy parity-matrix [--matrix <path>] [--host <linux|macos|windows>]"
     );
+    eprintln!("  tillandsias-policy parity-surfaces [--matrix <path>] [--repo-root <path>]");
     eprintln!("  tillandsias-policy plan-orders [--index <path>]");
     eprintln!("  tillandsias-policy run-in-pty <command>...");
 }
@@ -500,6 +502,322 @@ fn validate_yaml(files: &[String]) {
 //
 // @trace spec:tray-app
 // ===========================================================================
+
+// ===========================================================================
+// `parity-surfaces` subcommand — the NEW-surface railguard (order 628-r2vk).
+//
+// The `parity-matrix` gate below checks THE CELLS THAT EXIST; nothing forced
+// a NEW user-visible surface to acquire a row, so a feature could land on one
+// platform with no row at all and every gate stayed green (the 626-r7kq and
+// 598-kibt M5 rows both document exactly that hole). This gate closes it with
+// two machine-decided inventories:
+//
+//   1. MENU surfaces: the shared id universe in host-shell's `pub mod ids`
+//      (crates/tillandsias-host-shell/src/menu_state.rs) — every tray renders
+//      the shared MenuStructure, so its constants ARE the menu inventory. The
+//      structural separator ("---") is excluded: it is layout, not a surface.
+//   2. NON-MENU surfaces (notifications/toasts, tooltips): pinned declaration
+//      patterns per platform source. Every pattern hit must carry a
+//      `// parity-surface: <class>.<id>` annotation on its line or the line
+//      above, and every annotated id must be claimed by a matrix row.
+//
+// A surface id is CLAIMED when it appears in some feature row's `surfaces:`
+// list or in the matrix's top-level `surface_baseline:` (the grandfather list
+// for surfaces that predate this gate — the ratchet: new ids cannot enter the
+// baseline, and a baseline entry whose surface no longer exists is itself a
+// failure, so the list can only shrink). Status-chip text renders through
+// menu ids (the `status*` family), so chips ride inventory 1; the matrix
+// still gains an explicit chip row class for per-platform status.
+//
+// Failure lines are the litmus contract:
+//   UNANNOTATED SURFACE:|MISSING ROW:|STALE BASELINE:
+// and each MISSING ROW line names the id, class, declaration site and the
+// exact columns to fill, so the fix is obvious from the failure alone.
+//
+// @trace spec:tray-app, order:628-r2vk
+// ===========================================================================
+
+const SURFACES_SUCCESS_LINE: &str =
+    "Tray surfaces: every user-visible surface is claimed by a matrix row or the baseline";
+
+const SURFACE_MENU_IDS_SOURCE: &str = "crates/tillandsias-host-shell/src/menu_state.rs";
+
+/// (class, pinned source file, pinned declaration pattern). Extraction is
+/// SOURCE-level and platform-independent: every host verifies the same
+/// inventory; only matrix status cells are per-host.
+const SURFACE_PATTERNS: [(&str, &str, &str); 4] = [
+    (
+        "notification",
+        "crates/tillandsias-windows-tray/src/notify_icon.rs",
+        ".balloon(",
+    ),
+    (
+        "notification",
+        "crates/tillandsias-macos-tray/src/action_host.rs",
+        "fn notify_",
+    ),
+    (
+        "tooltip",
+        "crates/tillandsias-windows-tray/src/notify_icon.rs",
+        "fn compose_tooltip(",
+    ),
+    // Windows-only deliberately: macOS and Linux render status text through
+    // the shared MenuStructure's `menu.status` row (inventory 1); only the
+    // Windows tray sets chip text through a direct Win32 call.
+    (
+        "status-chip",
+        "crates/tillandsias-windows-tray/src/notify_icon.rs",
+        "hwnd.status(",
+    ),
+];
+
+fn parity_surfaces(args: &[String]) {
+    let mut matrix_path = PathBuf::from("openspec/tray-parity-matrix.yaml");
+    let mut repo_root = PathBuf::from(".");
+
+    let mut idx = 0;
+    while idx < args.len() {
+        match args[idx].as_str() {
+            "--matrix" => {
+                idx += 1;
+                let Some(value) = args.get(idx) else {
+                    eprintln!("--matrix requires a path");
+                    process::exit(2);
+                };
+                matrix_path = PathBuf::from(value);
+            }
+            "--repo-root" => {
+                idx += 1;
+                let Some(value) = args.get(idx) else {
+                    eprintln!("--repo-root requires a path");
+                    process::exit(2);
+                };
+                repo_root = PathBuf::from(value);
+            }
+            other => {
+                eprintln!("usage: parity-surfaces [--matrix <path>] [--repo-root <path>]");
+                eprintln!("unexpected argument: {other}");
+                process::exit(2);
+            }
+        }
+        idx += 1;
+    }
+
+    let matrix_text = fs::read_to_string(&matrix_path).unwrap_or_else(|err| {
+        eprintln!("{}: {err}", matrix_path.display());
+        process::exit(2);
+    });
+
+    let menu_source_path = repo_root.join(SURFACE_MENU_IDS_SOURCE);
+    let menu_source = fs::read_to_string(&menu_source_path).unwrap_or_else(|err| {
+        eprintln!("{}: {err}", menu_source_path.display());
+        process::exit(2);
+    });
+    let menu_ids = extract_menu_surface_ids(&menu_source);
+
+    let mut class_hits: Vec<SurfaceHit> = Vec::new();
+    for (class, rel_path, pattern) in SURFACE_PATTERNS {
+        let path = repo_root.join(rel_path);
+        let text = fs::read_to_string(&path).unwrap_or_else(|err| {
+            eprintln!("{}: {err}", path.display());
+            process::exit(2);
+        });
+        class_hits.extend(surface_pattern_hits(&text, class, rel_path, pattern));
+    }
+
+    match parity_surfaces_check(&matrix_text, &menu_ids, &class_hits) {
+        Ok(()) => println!("{SURFACES_SUCCESS_LINE}"),
+        Err(failures) => {
+            for line in &failures {
+                println!("{line}");
+            }
+            process::exit(1);
+        }
+    }
+}
+
+/// One pinned-pattern declaration site in a tray source.
+struct SurfaceHit {
+    class: &'static str,
+    file: &'static str,
+    line: usize,
+    /// The `parity-surface:` annotation id, when the site carries one.
+    annotation: Option<String>,
+}
+
+/// Extract the shared menu-surface id universe from host-shell's
+/// `pub mod ids` block: every `pub const NAME: &str = "value";` line inside
+/// the module, excluding the structural separator value "---". Ids are
+/// namespaced `menu.<value>` in the claim space so a menu id can never
+/// collide with an annotation id from another class.
+fn extract_menu_surface_ids(source: &str) -> Vec<String> {
+    let mut ids = Vec::new();
+    let mut in_ids_mod = false;
+    let mut depth = 0usize;
+    for line in source.lines() {
+        let trimmed = line.trim();
+        if !in_ids_mod {
+            if trimmed.starts_with("pub mod ids") {
+                in_ids_mod = true;
+                depth = trimmed.matches('{').count();
+            }
+            continue;
+        }
+        depth += trimmed.matches('{').count();
+        depth = depth.saturating_sub(trimmed.matches('}').count());
+        if depth == 0 {
+            break;
+        }
+        if let Some(rest) = trimmed.strip_prefix("pub const ") {
+            // NAME: &str = "value";
+            if let Some(eq) = rest.find('=') {
+                let value = rest[eq + 1..].trim();
+                if let Some(v) = value.strip_prefix('"').and_then(|v| v.split('"').next()) {
+                    // Only id-shaped values are surfaces. The ids module also
+                    // carries UI copy constants ("v2 — terminal-only in v1");
+                    // spaces/uppercase/punctuation outside [a-z0-9.-] mark a
+                    // LABEL, not an id. "---" is the structural separator.
+                    let id_shaped = !v.is_empty()
+                        && v != "---"
+                        && v.chars().all(|c| {
+                            c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '.' | '-')
+                        });
+                    if id_shaped {
+                        let id = format!("menu.{v}");
+                        // Two constants may share a value (AGENT_* and VERB_*
+                        // both name "opencode-web"); the surface is the value.
+                        if !ids.contains(&id) {
+                            ids.push(id);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    ids
+}
+
+/// Scan one pinned source for declaration-pattern hits. A hit on a line whose
+/// trimmed form starts with `//` is ignored (comments are not declarations).
+/// The annotation may sit on the hit line itself or on the line directly
+/// above it.
+fn surface_pattern_hits(
+    text: &str,
+    class: &'static str,
+    file: &'static str,
+    pattern: &str,
+) -> Vec<SurfaceHit> {
+    let lines: Vec<&str> = text.lines().collect();
+    let mut hits = Vec::new();
+    for (i, line) in lines.iter().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("//") || !line.contains(pattern) {
+            continue;
+        }
+        let annotation = extract_surface_annotation(line).or_else(|| {
+            i.checked_sub(1)
+                .and_then(|p| extract_surface_annotation(lines[p]))
+        });
+        hits.push(SurfaceHit {
+            class,
+            file,
+            line: i + 1,
+            annotation,
+        });
+    }
+    hits
+}
+
+/// Parse `parity-surface: <id>` out of a line, if present. The id token is
+/// `[a-z0-9._-]+` — anything else ends the token.
+fn extract_surface_annotation(line: &str) -> Option<String> {
+    let idx = line.find("parity-surface:")?;
+    let rest = line[idx + "parity-surface:".len()..].trim_start();
+    let id: String = rest
+        .chars()
+        .take_while(|c| {
+            c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '.' | '_' | '-')
+        })
+        .collect();
+    if id.is_empty() { None } else { Some(id) }
+}
+
+/// Core check, kept pure for unit testing. `menu_ids` are already
+/// `menu.`-namespaced; `class_hits` are the pinned-pattern sites.
+fn parity_surfaces_check(
+    matrix_yaml: &str,
+    menu_ids: &[String],
+    class_hits: &[SurfaceHit],
+) -> Result<(), Vec<String>> {
+    let data: serde_yaml::Value = serde_yaml::from_str(matrix_yaml)
+        .map_err(|err| vec![format!("Invalid surface matrix: not parseable YAML: {err}")])?;
+
+    let mut claimed: Vec<String> = Vec::new();
+    if let Some(features) = data.get("features").and_then(|v| v.as_sequence()) {
+        for feature in features {
+            if let Some(surfaces) = feature.get("surfaces").and_then(|v| v.as_sequence()) {
+                for s in surfaces {
+                    if let Some(s) = s.as_str() {
+                        claimed.push(s.to_string());
+                    }
+                }
+            }
+        }
+    }
+    let baseline: Vec<String> = data
+        .get("surface_baseline")
+        .and_then(|v| v.as_sequence())
+        .map(|seq| {
+            seq.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let mut extracted: Vec<String> = menu_ids.to_vec();
+    let mut failures = Vec::new();
+
+    for hit in class_hits {
+        match &hit.annotation {
+            None => failures.push(format!(
+                "UNANNOTATED SURFACE: {}:{} matches the pinned {} declaration pattern — add \
+                 `// parity-surface: {}.<id>` at the site and claim the id in a matrix row",
+                hit.file, hit.line, hit.class, hit.class
+            )),
+            // The same surface may be declared at several sites (both
+            // diagnostics-saved balloons share one id); the id is the surface.
+            Some(id) if !extracted.contains(id) => extracted.push(id.clone()),
+            Some(_) => {}
+        }
+    }
+
+    for id in &extracted {
+        if claimed.iter().any(|c| c == id) || baseline.iter().any(|b| b == id) {
+            continue;
+        }
+        let class = id.split('.').next().unwrap_or("surface");
+        failures.push(format!(
+            "MISSING ROW: surface '{id}' ({class}) has no parity-matrix row — add a row with \
+             `surfaces: [\"{id}\"]` to openspec/tray-parity-matrix.yaml and fill the \
+             linux/macos/windows columns"
+        ));
+    }
+
+    for b in &baseline {
+        if !extracted.iter().any(|e| e == b) {
+            failures.push(format!(
+                "STALE BASELINE: '{b}' is in surface_baseline but no longer exists in the \
+                 sources — remove it (the baseline only shrinks)"
+            ));
+        }
+    }
+
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(failures)
+    }
+}
 
 const PARITY_PLATFORMS: [&str; 3] = ["linux", "macos", "windows"];
 const PARITY_VALID_STATUSES: [&str; 6] = ["done", "partial", "todo", "unknown", "regressed", "n/a"];
