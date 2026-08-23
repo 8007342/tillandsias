@@ -207,7 +207,7 @@ const USAGE: &str = concat!(
     "                                     is PERMANENT — never renumber it. A prefix shared by two\n",
     "                                     packets is normal. See methodology/distributed-work.yaml\n",
     "                                     -> order_id_allocation.\n",
-    "           expire-claims [--ttl-hours N] [--dry-run] [--now-epoch S] [--host H]\n",
+    "           expire-claims [--ttl-hours N] [--dry-run] [--list-live] [--now-epoch S] [--host H]\n",
     "                                     ORDER 672-bz7u. Return stranded in_progress claims to\n",
     "                                     ready: any packet whose LAST recorded event activity is\n",
     "                                     older than the TTL (default 24h) gets a status fragment\n",
@@ -4730,6 +4730,7 @@ fn main() {
             // shell-side is the brittle parsing 456 eliminated.
             let mut ttl_hours: i64 = 24;
             let mut dry_run = false;
+            let mut list_live = false;
             let mut now_epoch: Option<i64> = None;
             let mut host = resolve_writer_host();
             let mut i = 1;
@@ -4746,6 +4747,7 @@ fn main() {
                         };
                     }
                     "--dry-run" => dry_run = true,
+                    "--list-live" => list_live = true,
                     "--now-epoch" => {
                         i += 1;
                         now_epoch = match args.get(i).and_then(|s| s.parse().ok()) {
@@ -4796,6 +4798,17 @@ fn main() {
             }
             for (order, pid) in &unknown {
                 emit(&format!("unknown-age\t{order}\t{pid}\tnever-expired"));
+            }
+            // ORDER 833-fpe7. `--list-live` additionally names the claims the
+            // reaper would KEEP: owner host + claim ts, for the
+            // resumable-claim-dirt detector. Read-only regardless of
+            // --dry-run — listing must never write.
+            if list_live {
+                for (order, pid, claim_host, claim_ts, last) in &live_claims(&ledger, &cutoff) {
+                    emit(&format!(
+                        "live-claim\t{order}\t{pid}\t{claim_host}\t{claim_ts}\t{last}"
+                    ));
+                }
             }
             if !dry_run && !expired.is_empty() {
                 let compact = loop_status::iso_to_compact(&now_iso);
@@ -4881,6 +4894,92 @@ fn main() {
 /// are `(order, packet_id)`.
 type ExpiredClaim<'a> = (String, &'a str, String);
 type UnknownAgeClaim<'a> = (String, &'a str);
+
+/// ORDER 833-fpe7. The live complement of [`expire_claim_candidates`], for the
+/// resumable-claim-dirt detector: every `in_progress` packet that the reaper
+/// would NOT expire (newest event activity at or after the cutoff) AND whose
+/// claim itself is younger than the TTL, with the claiming host and claim ts.
+///
+/// OWNERSHIP COMES FROM THE CLAIM EVENT, NEVER THE NEWEST EVENT. Any host may
+/// append a note to a claimed row (freshness audits do), so "host of the
+/// newest event" is last-toucher attribution — the wrong host. The claim
+/// convention is machine-recognizable: the skill's claim recipe records a
+/// `claimed for cycle <ts>` summary via set-field --reason, so the claim
+/// event is the NEWEST event whose summary starts with that prefix. A row
+/// with no such event yields no live-claim row at all: an owner the ledger
+/// cannot name is not this host (fail closed), and the detector must refuse.
+///
+/// Rows are `(order, packet_id, claim_host, claim_ts, last_activity_ts)`.
+type LiveClaim<'a> = (String, &'a str, String, String, String);
+
+fn live_claims<'a>(ledger: &'a Ledger, cutoff_iso: &str) -> Vec<LiveClaim<'a>> {
+    let mut live: Vec<LiveClaim<'a>> = Vec::new();
+    for p in query_packets(
+        ledger,
+        Some("in_progress"),
+        None,
+        None,
+        None,
+        &[],
+        usize::MAX,
+    ) {
+        let Some(pid) = str_field(p, "packet_id") else {
+            continue;
+        };
+        let order = p
+            .get("order")
+            .map(|v| match v {
+                serde_yaml::Value::Number(n) => n.to_string(),
+                serde_yaml::Value::String(s) => s.clone(),
+                _ => "?".into(),
+            })
+            .unwrap_or_else(|| "?".into());
+        let mut last_ts: Option<&str> = None;
+        let mut claim: Option<(&str, &str)> = None; // (host, ts), newest claim event
+        if let Some(seq) = p.get("events").and_then(serde_yaml::Value::as_sequence) {
+            for ev in seq {
+                let Some(ts) = ev.get("ts").and_then(serde_yaml::Value::as_str) else {
+                    continue;
+                };
+                if ts.len() < 4 || !ts.as_bytes()[..4].iter().all(u8::is_ascii_digit) {
+                    continue;
+                }
+                if last_ts.is_none_or(|cur| ts > cur) {
+                    last_ts = Some(ts);
+                }
+                let is_claim = ev
+                    .get("summary")
+                    .and_then(serde_yaml::Value::as_str)
+                    .is_some_and(|s| s.trim_start().starts_with("claimed for cycle"));
+                if is_claim {
+                    let host = ev
+                        .get("host")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("");
+                    if !host.is_empty() && claim.is_none_or(|(_, cur)| ts > cur) {
+                        claim = Some((host, ts));
+                    }
+                }
+            }
+        }
+        let (Some(last), Some((claim_host, claim_ts))) = (last_ts, claim) else {
+            continue;
+        };
+        // Both halves of "young enough": the reaper would not expire the row,
+        // and the claim itself is inside the TTL. A stale claim kept alive by
+        // later notes is not a resume anchor.
+        if last >= cutoff_iso && claim_ts >= cutoff_iso {
+            live.push((
+                order,
+                pid,
+                claim_host.to_string(),
+                claim_ts.to_string(),
+                last.to_string(),
+            ));
+        }
+    }
+    live
+}
 
 fn expire_claim_candidates<'a>(
     ledger: &'a Ledger,
@@ -5070,6 +5169,61 @@ mod tests {
             unknown,
             vec![("3".to_string(), "ageless")],
             "no-timestamp packets are reported as unknown-age, never expired"
+        );
+    }
+
+    /// ORDER 833-fpe7. `live_claims` is what the resumable-claim-dirt detector
+    /// consults, and every clause here is a refusal it depends on: ownership
+    /// comes from the claim-convention event (never the newest event's host —
+    /// any host may note on a claimed row), a claim-less in_progress row
+    /// yields nothing, and both the activity AND the claim itself must be
+    /// inside the TTL.
+    #[test]
+    fn live_claims_name_the_claiming_host_and_fail_closed_without_one() {
+        let raw = concat!(
+            "packets:\n",
+            // Fresh claim by hostA, later note by hostB: owner stays hostA.
+            "  - packet_id: owned\n    order: 1\n    title: \"o\"\n    status: in_progress\n    desired_release: v0.5\n",
+            "    events:\n",
+            "      - type: note\n        ts: \"2026-08-10T00:00:00Z\"\n        host: hosta\n",
+            "        summary: claimed for cycle 2026-08-10T00:00Z\n",
+            "      - type: note\n        ts: \"2026-08-10T02:00:00Z\"\n        host: hostb\n",
+            "        summary: drive-by freshness note from another host\n",
+            // in_progress with events but NO claim-convention event: no row.
+            "  - packet_id: unowned\n    order: 2\n    title: \"u\"\n    status: in_progress\n    desired_release: v0.5\n",
+            "    events:\n      - type: progress\n        ts: \"2026-08-10T00:00:00Z\"\n        host: hosta\n",
+            // Claim OUTSIDE the TTL, kept 'alive' by a later note: excluded —
+            // a stale claim propped up by notes is not a resume anchor.
+            "  - packet_id: propped\n    order: 3\n    title: \"p\"\n    status: in_progress\n    desired_release: v0.5\n",
+            "    events:\n",
+            "      - type: note\n        ts: \"2026-08-01T00:00:00Z\"\n        host: hosta\n",
+            "        summary: claimed for cycle 2026-08-01T00:00Z\n",
+            "      - type: note\n        ts: \"2026-08-10T00:00:00Z\"\n        host: hosta\n",
+            "        summary: still poking at it\n",
+            // Claim event missing its host: fail closed, no row.
+            "  - packet_id: hostless\n    order: 4\n    title: \"h\"\n    status: in_progress\n    desired_release: v0.5\n",
+            "    events:\n",
+            "      - type: note\n        ts: \"2026-08-10T00:00:00Z\"\n",
+            "        summary: claimed for cycle 2026-08-10T00:00Z\n",
+            // Not in_progress at all: never listed.
+            "  - packet_id: done\n    order: 5\n    title: \"d\"\n    status: completed\n    desired_release: v0.5\n",
+            "    events:\n",
+            "      - type: note\n        ts: \"2026-08-10T00:00:00Z\"\n        host: hosta\n",
+            "        summary: claimed for cycle 2026-08-10T00:00Z\n",
+        );
+        let ledger = Ledger::parse(raw, Default::default()).expect("synthetic ledger parses");
+        let live = live_claims(&ledger, "2026-08-09T00:00:00Z");
+        assert_eq!(
+            live,
+            vec![(
+                "1".to_string(),
+                "owned",
+                "hosta".to_string(),
+                "2026-08-10T00:00:00Z".to_string(),
+                "2026-08-10T02:00:00Z".to_string(),
+            )],
+            "only the freshly-claimed row is live, owned by the CLAIMING host, \
+             with claim ts and newest-activity ts both reported"
         );
     }
 
