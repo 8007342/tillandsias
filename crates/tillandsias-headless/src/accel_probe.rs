@@ -27,6 +27,14 @@ pub struct CapabilityDocument {
     pub measurements: Vec<MeasurementRecord>,
     pub host: HostInfo,
     pub timestamp: String,
+    /// Order 852-dk9z. WHICH PROBE CODE produced this document. Absent on every
+    /// document written before that order, which is why it is Option + default:
+    /// a legacy cache reads as None, compares unequal to any real identity, and
+    /// is therefore re-probed rather than served. It is serialised into
+    /// published rows on purpose — the old complaint was that nothing on a row
+    /// said which code probed it.
+    #[serde(default)]
+    pub probe_identity: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -216,11 +224,48 @@ pub fn capabilities_cache_path() -> PathBuf {
 
 // @trace spec:accel-capability-probe
 pub fn load_or_probe(effective_tier: &str) -> CapabilityDocument {
-    let cache_file = capabilities_cache_path();
-    if let Ok(content) = fs::read_to_string(&cache_file)
+    load_or_probe_at(
+        &capabilities_cache_path(),
+        effective_tier,
+        Freshness::Cached,
+    )
+}
+
+/// Order 852-dk9z. Publication must never be able to emit a cached document.
+/// `scripts/host-capability-probe.sh` takes this path, so a published capability
+/// row is fresh BY CONSTRUCTION rather than by the operator having remembered to
+/// clear a cache directory first.
+// @trace order:852-dk9z, spec:accel-capability-probe
+pub fn probe_fresh(effective_tier: &str) -> CapabilityDocument {
+    load_or_probe_at(&capabilities_cache_path(), effective_tier, Freshness::Force)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+// @trace order:852-dk9z, spec:accel-capability-probe
+pub enum Freshness {
+    /// Serve a cache entry that matches this binary's probe identity.
+    Cached,
+    /// Probe regardless of what the cache holds (and refresh the cache).
+    Force,
+}
+
+/// The cache path is a PARAMETER so this is testable without mutating process
+/// environment — env-var tests race against every other test in the binary.
+// @trace order:852-dk9z, spec:accel-capability-probe
+pub fn load_or_probe_at(
+    cache_file: &Path,
+    effective_tier: &str,
+    freshness: Freshness,
+) -> CapabilityDocument {
+    let identity = probe_identity();
+    if freshness == Freshness::Cached
+        && let Ok(content) = fs::read_to_string(cache_file)
         && let Ok(doc) = serde_json::from_str::<CapabilityDocument>(&content)
         && doc.schema_version == SCHEMA_VERSION
         && doc.legacy_tier == effective_tier
+        // The check 852-dk9z adds. Without it a rebuilt binary republishes its
+        // predecessor's document as if it had probed.
+        && doc.probe_identity.as_deref() == Some(identity.as_str())
     {
         return doc;
     }
@@ -229,7 +274,7 @@ pub fn load_or_probe(effective_tier: &str) -> CapabilityDocument {
         let _ = fs::create_dir_all(parent);
     }
     if let Ok(json) = serde_json::to_string_pretty(&doc) {
-        let _ = fs::write(&cache_file, json);
+        let _ = fs::write(cache_file, json);
     }
     doc
 }
@@ -295,7 +340,23 @@ pub fn run_probe(effective_tier: &str) -> CapabilityDocument {
         measurements,
         host,
         timestamp,
+        probe_identity: Some(probe_identity()),
     }
+}
+
+/// Order 852-dk9z. The identity of the probe CODE, not of the host.
+///
+/// Crate version alone is insufficient and that is not hypothetical: 856-fwyh
+/// changed enumeration output on this very crate without moving its version, so
+/// a version-keyed cache would still have served the stale document. The
+/// revision half is an FNV-1a hash of src/accel_probe.rs computed in build.rs,
+/// so ANY edit here changes it and no one has to remember to bump a constant.
+pub fn probe_identity() -> String {
+    format!(
+        "{}+{}",
+        env!("CARGO_PKG_VERSION"),
+        env!("TILLANDSIAS_PROBE_REVISION")
+    )
 }
 
 // @trace spec:accel-capability-probe
@@ -1306,6 +1367,7 @@ mod tests {
         CapabilityDocument {
             schema_version: SCHEMA_VERSION,
             legacy_tier: "cpu".to_string(),
+            probe_identity: Some(probe_identity()),
             devices,
             engines: Vec::new(),
             measurements: Vec::new(),
@@ -1835,6 +1897,7 @@ mod tests {
         let measured_at = |host: &str, locus: &str| CapabilityDocument {
             schema_version: SCHEMA_VERSION,
             legacy_tier: "cpu".to_string(),
+            probe_identity: Some(probe_identity()),
             devices: Vec::new(),
             engines: Vec::new(),
             measurements: vec![MeasurementRecord {
@@ -1992,6 +2055,70 @@ mod tests {
         assert!(usable);
         assert_eq!(lanes, vec!["container", "host-native"]);
         assert_eq!(reason, None);
+    }
+
+    #[test]
+    // @trace order:852-dk9z, spec:accel-capability-probe
+    fn test_cache_from_different_probe_code_is_reprobed_not_served() {
+        // The 852-dk9z regression, measured twice for real: a rebuilt binary
+        // served its predecessor's document because schema_version and
+        // legacy_tier both still matched. Stamp a cache with a FOREIGN probe
+        // identity and it must be re-probed.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let cache = dir.path().join("capabilities.json");
+
+        let mut stale = run_probe("cpu");
+        stale.probe_identity = Some("0.0.0+deadbeefdeadbeef".to_string());
+        stale.legacy_tier = "cpu".to_string();
+        // A marker the real probe can never produce, so "served from cache" is
+        // distinguishable from "re-probed and happened to look the same".
+        stale.host.host_id = "STALE-CACHE-MARKER".to_string();
+        fs::write(&cache, serde_json::to_string_pretty(&stale).unwrap()).unwrap();
+
+        let got = load_or_probe_at(&cache, "cpu", Freshness::Cached);
+        assert_ne!(
+            got.host.host_id, "STALE-CACHE-MARKER",
+            "a document from different probe code must never be served"
+        );
+        assert_eq!(
+            got.probe_identity.as_deref(),
+            Some(probe_identity().as_str())
+        );
+
+        // And a pre-852-dk9z cache (no identity at all) is likewise refused.
+        let mut legacy = run_probe("cpu");
+        legacy.probe_identity = None;
+        legacy.host.host_id = "LEGACY-CACHE-MARKER".to_string();
+        fs::write(&cache, serde_json::to_string_pretty(&legacy).unwrap()).unwrap();
+        let got = load_or_probe_at(&cache, "cpu", Freshness::Cached);
+        assert_ne!(got.host.host_id, "LEGACY-CACHE-MARKER");
+    }
+
+    #[test]
+    // @trace order:852-dk9z, spec:accel-capability-probe
+    fn test_negative_control_unchanged_binary_still_serves_its_own_cache() {
+        // The cache must keep working for the server's hot path — this fix is
+        // an invalidation rule, not a removal.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let cache = dir.path().join("capabilities.json");
+
+        let mut mine = run_probe("cpu");
+        mine.host.host_id = "MY-OWN-CACHE".to_string();
+        assert_eq!(
+            mine.probe_identity.as_deref(),
+            Some(probe_identity().as_str())
+        );
+        fs::write(&cache, serde_json::to_string_pretty(&mine).unwrap()).unwrap();
+
+        let got = load_or_probe_at(&cache, "cpu", Freshness::Cached);
+        assert_eq!(
+            got.host.host_id, "MY-OWN-CACHE",
+            "same probe identity must still hit the cache"
+        );
+
+        // ...and Freshness::Force ignores it, which is what publication uses.
+        let got = load_or_probe_at(&cache, "cpu", Freshness::Force);
+        assert_ne!(got.host.host_id, "MY-OWN-CACHE");
     }
 
     #[test]
