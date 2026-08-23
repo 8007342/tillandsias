@@ -1237,7 +1237,26 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
             while kept.last().is_some_and(|l| l.trim().is_empty()) {
                 kept.pop();
             }
-            candidate = kept.join("\n") + "\n" + rendered.trim_end() + "\n";
+            // PREPEND, NEVER APPEND — 862-cq3x, and the reason is one line
+            // elsewhere in this function.
+            //
+            // New packets are added with `out.push(render_item(p))`, i.e. at
+            // the END of the document. The `rposition("    - ")` above only
+            // VALIDATES that the last list item is a packet item; it does not
+            // aim the insertion. That was correct for as long as the document
+            // ended with the packets list. Appending `capabilities:` after it
+            // broke exactly that invariant: the NEXT compaction pushed a
+            // `    - packet_id:` line after the capabilities mapping, and the
+            // candidate stopped parsing — "did not find expected key at line
+            // 37474 column 7". macos hit it first (862-cq3x) and called it
+            // placement; it is, though one level further out than the block's
+            // own indentation.
+            //
+            // A top-level key's ORDER is semantically irrelevant to YAML, so
+            // putting the channel first costs nothing and keeps the document
+            // ending in the packets list, which is what every other writer
+            // here assumes.
+            candidate = rendered.trim_end().to_string() + "\n" + &kept.join("\n") + "\n";
         }
     }
 

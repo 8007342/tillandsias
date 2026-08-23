@@ -1,3 +1,547 @@
+capabilities:
+  - ts: "2026-08-23T04:38:31Z"
+    host: windows
+    locus: in-guest
+    document:
+      schema_version: 2
+      legacy_tier: cpu
+      devices:
+      - device_class: cpu
+        vendor: intel
+        name: Intel(R) N100
+        device_node: null
+        fw_version: null
+        driver: null
+        usable: true
+        unusable_reason: null
+        lanes:
+        - container
+        - host-native
+        memory_bandwidth_gbps: null
+        memory_bandwidth_source: unknown
+        cpu_flags:
+        - fma
+        - avx
+        - avx2
+        - avx_vnni
+        cpu_cores:
+          physical: 4
+          logical: 4
+        system_ram_gb: 7.756450653076172
+      - device_class: gpu
+        vendor: unknown
+        name: WSL2 paravirtual GPU (/dev/dxg)
+        device_node: /dev/dxg
+        fw_version: null
+        driver: null
+        usable: false
+        unusable_reason: wsl2-no-dri-render-node
+        lanes: []
+        memory_bandwidth_gbps: null
+        memory_bandwidth_source: unknown
+        cpu_flags: null
+        cpu_cores: null
+        system_ram_gb: null
+      engines:
+      - name: ollama
+        backend: llama-server
+        supported_device_classes:
+        - cpu
+        - gpu
+      measurements: []
+      host:
+        is_battery_present: true
+        kernel_release: 6.18.33.2-microsoft-standard-WSL2
+        host_id: esmeraldinha
+        host_id_source: node-name
+        host_kind: linux
+      timestamp: "2026-08-23T04:38:07.184270456+00:00"
+  - ts: "2026-08-23T04:29:22Z"
+    host: windows
+    locus: windows-host
+    document:
+      schema_version: 2
+      legacy_tier: cpu
+      devices:
+      - device_class: gpu
+        vendor: intel
+        name: Intel(R) UHD Graphics
+        device_node: PCI\VEN_8086&DEV_46D1&SUBSYS_00000000&REV_00\3&11583659&0&10
+        fw_version: null
+        driver: 32.0.101.7088
+        usable: false
+        unusable_reason: wsl2-no-dri-render-node
+        lanes: []
+        memory_bandwidth_gbps: null
+        memory_bandwidth_source: unknown
+        cpu_flags: null
+        cpu_cores: null
+        system_ram_gb: null
+        os_status: OK
+      engines: []
+      measurements: []
+      host:
+        is_battery_present: true
+        kernel_release: 10.0.26200
+        host_id: esmeraldinha
+        host_id_source: node-name
+        host_kind: windows
+        system_ram_gb: 15.7802734375
+      timestamp: "2026-08-23T04:29:22Z"
+  - ts: "2026-08-23T01:55:29Z"
+    host: linux_immutable
+    locus: bare-metal
+    document:
+      schema_version: 2
+      legacy_tier: cpu
+      devices:
+      - device_class: cpu
+        vendor: amd
+        name: AMD Ryzen 7 5800H with Radeon Graphics
+        device_node: null
+        fw_version: null
+        driver: null
+        usable: true
+        unusable_reason: null
+        lanes:
+        - container
+        - host-native
+        memory_bandwidth_gbps: null
+        memory_bandwidth_source: unknown
+        cpu_flags:
+        - fma
+        - avx
+        - avx2
+        cpu_cores:
+          physical: 8
+          logical: 16
+        system_ram_gb: 13.48794174194336
+      - device_class: gpu
+        vendor: nvidia
+        name: NVIDIA GeForce RTX 3070 Laptop GPU
+        device_node: /dev/nvidia0
+        fw_version: null
+        driver: null
+        usable: true
+        unusable_reason: cdi-spec-missing
+        lanes:
+        - host-native
+        memory_bandwidth_gbps: null
+        memory_bandwidth_source: unknown
+        cpu_flags: null
+        cpu_cores: null
+        system_ram_gb: null
+      - device_class: gpu
+        vendor: amd
+        name: Cezanne [Radeon Vega Series / Radeon Vega Mobile Series]
+        device_node: /dev/dri/renderD128
+        fw_version: null
+        driver: amdgpu
+        usable: false
+        unusable_reason: rocm-runtime-missing
+        lanes:
+        - host-native
+        memory_bandwidth_gbps: null
+        memory_bandwidth_source: unknown
+        cpu_flags: null
+        cpu_cores: null
+        system_ram_gb: null
+      engines:
+      - name: ollama
+        backend: llama-server
+        supported_device_classes:
+        - cpu
+        - gpu
+        lanes:
+        - container
+      measurements: []
+      host:
+        is_battery_present: true
+        kernel_release: 7.1.9-200.fc44.x86_64
+        host_id: lenovinha
+        host_id_source: node-name
+        host_kind: linux
+      timestamp: "2026-08-23T01:54:14.179539013+00:00"
+  - ts: "2026-08-22T00:49:10Z"
+    host: linux_mutable
+    locus: bare-metal
+    document:
+      schema_version: 2
+      legacy_tier: gpu-cuda
+      devices:
+      - device_class: cpu
+        vendor: intel
+        name: Intel(R) Core(TM) Ultra 7 265KF
+        device_node: null
+        fw_version: null
+        driver: null
+        usable: true
+        unusable_reason: null
+        lanes:
+        - container
+        - host-native
+        memory_bandwidth_gbps: null
+        memory_bandwidth_source: unknown
+        cpu_flags:
+        - fma
+        - avx
+        - avx2
+        - avx_vnni
+        cpu_cores:
+          physical: 20
+          logical: 20
+        system_ram_gb: 62.411041259765625
+      - device_class: gpu
+        vendor: nvidia
+        name: NVIDIA RTX A5000
+        device_node: /dev/nvidia0
+        fw_version: null
+        driver: null
+        usable: true
+        unusable_reason: null
+        lanes:
+        - container
+        - host-native
+        memory_bandwidth_gbps: null
+        memory_bandwidth_source: unknown
+        cpu_flags: null
+        cpu_cores: null
+        system_ram_gb: null
+      - device_class: npu
+        vendor: Intel NPU
+        name: Intel NPU
+        device_node: /dev/accel/accel0
+        fw_version: null
+        driver: intel_vpu
+        usable: false
+        unusable_reason: engine-missing
+        lanes:
+        - host-native
+        memory_bandwidth_gbps: null
+        memory_bandwidth_source: unknown
+        cpu_flags: null
+        cpu_cores: null
+        system_ram_gb: null
+      engines: []
+      measurements: []
+      host:
+        is_battery_present: false
+        kernel_release: 7.1.8-200.fc44.x86_64
+        host_id: macuahuitl
+        host_id_source: node-name
+        host_kind: linux
+      timestamp: "2026-08-22T00:48:50.873919791+00:00"
+  - ts: "2026-08-23T03:46:07Z"
+    host: linux_immutable
+    locus: bare-metal
+    document:
+      schema_version: 2
+      legacy_tier: cpu
+      devices:
+      - device_class: cpu
+        vendor: intel
+        name: Intel(R) N150
+        device_node: null
+        fw_version: null
+        driver: null
+        usable: true
+        unusable_reason: null
+        lanes:
+        - container
+        - host-native
+        memory_bandwidth_gbps: null
+        memory_bandwidth_source: unknown
+        cpu_flags:
+        - fma
+        - avx
+        - avx2
+        - avx_vnni
+        cpu_cores:
+          physical: 4
+          logical: 4
+        system_ram_gb: 15.349456787109377
+      - device_class: gpu
+        vendor: intel
+        name: Alder Lake-N [Intel Graphics]
+        device_node: /dev/dri/renderD128
+        fw_version: null
+        driver: i915
+        usable: false
+        unusable_reason: intel-compute-runtime-missing
+        lanes:
+        - host-native
+        memory_bandwidth_gbps: null
+        memory_bandwidth_source: unknown
+        cpu_flags: null
+        cpu_cores: null
+        system_ram_gb: null
+      engines:
+      - name: ollama
+        backend: llama-server
+        supported_device_classes:
+        - cpu
+        - gpu
+        lanes:
+        - container
+      measurements: []
+      host:
+        is_battery_present: true
+        kernel_release: 7.1.9-200.fc44.x86_64
+        host_id: pirria
+        host_id_source: node-name
+        host_kind: linux
+      timestamp: "2026-08-23T03:45:52.970107464+00:00"
+  - ts: "2026-08-23T04:12:18Z"
+    host: macos
+    locus: bare-metal
+    document:
+      schema_version: 2
+      legacy_tier: metal
+      devices:
+      - device_class: cpu
+        vendor: apple
+        name: Apple Silicon CPU
+        device_node: null
+        fw_version: null
+        driver: null
+        usable: true
+        unusable_reason: null
+        lanes:
+        - container
+        - host-native
+        memory_bandwidth_gbps: null
+        memory_bandwidth_source: unknown
+        cpu_flags:
+        - neon
+        cpu_cores:
+          physical: 10
+          logical: 10
+        system_ram_gb: null
+      - device_class: gpu
+        vendor: apple
+        name: Apple Metal GPU
+        device_node: null
+        fw_version: null
+        driver: null
+        usable: true
+        unusable_reason: null
+        lanes:
+        - host-native
+        memory_bandwidth_gbps: null
+        memory_bandwidth_source: unknown
+        cpu_flags: null
+        cpu_cores: null
+        system_ram_gb: null
+      engines: []
+      measurements: []
+      host:
+        is_battery_present: false
+        kernel_release: 25.6.0
+        host_id: tlatoanis-macbook-air
+        host_id_source: node-name
+        host_kind: macos
+      timestamp: "2026-08-23T04:11:25.675197+00:00"
+  - ts: "2026-08-23T02:11:17Z"
+    host: linux_immutable
+    locus: bare-metal
+    document:
+      schema_version: 2
+      legacy_tier: gpu-rocm
+      devices:
+      - device_class: cpu
+        vendor: amd
+        name: AMD Ryzen AI 5 340 w/ Radeon 840M
+        device_node: null
+        fw_version: null
+        driver: null
+        usable: true
+        unusable_reason: null
+        lanes:
+        - container
+        - host-native
+        memory_bandwidth_gbps: null
+        memory_bandwidth_source: unknown
+        cpu_flags:
+        - fma
+        - avx
+        - avx2
+        - avx512f
+        - avx512dq
+        - avx512ifma
+        - avx512cd
+        - avx512bw
+        - avx512vl
+        - avx_vnni
+        - avx512_bf16
+        - avx512vbmi
+        - avx512_vbmi2
+        - avx512_vnni
+        - avx512_bitalg
+        - avx512_vpopcntdq
+        - avx512_vp2intersect
+        cpu_cores:
+          physical: 6
+          logical: 12
+        system_ram_gb: 14.773334503173828
+      - device_class: gpu
+        vendor: amd
+        name: Krackan [Radeon 840M / 860M Graphics]
+        device_node: /dev/dri/renderD128
+        fw_version: null
+        driver: amdgpu
+        usable: true
+        unusable_reason: null
+        lanes:
+        - container
+        - host-native
+        memory_bandwidth_gbps: null
+        memory_bandwidth_source: unknown
+        cpu_flags: null
+        cpu_cores: null
+        system_ram_gb: null
+      - device_class: npu
+        vendor: AMD XDNA
+        name: AMD XDNA NPU
+        device_node: /dev/accel/accel0
+        fw_version: 1.1.2.64
+        driver: amdxdna
+        usable: false
+        unusable_reason: engine-missing
+        lanes:
+        - host-native
+        memory_bandwidth_gbps: null
+        memory_bandwidth_source: unknown
+        cpu_flags: null
+        cpu_cores: null
+        system_ram_gb: null
+      engines:
+      - name: ollama
+        backend: llama-server
+        supported_device_classes:
+        - cpu
+        - gpu
+        lanes:
+        - container
+      measurements: []
+      host:
+        is_battery_present: true
+        kernel_release: 7.1.9-200.fc44.x86_64
+        host_id: yoga
+        host_id_source: node-name
+        host_kind: linux
+      timestamp: "2026-08-23T02:11:17.501100394+00:00"
+  - ts: "2026-08-23T01:57:59Z"
+    host: windows
+    locus: in-guest
+    document:
+      schema_version: 2
+      legacy_tier: cpu
+      devices:
+      - device_class: cpu
+        vendor: amd
+        name: AMD Ryzen AI 7 350 w/ Radeon 860M
+        device_node: null
+        fw_version: null
+        driver: null
+        usable: true
+        unusable_reason: null
+        lanes:
+        - container
+        - host-native
+        memory_bandwidth_gbps: null
+        memory_bandwidth_source: unknown
+        cpu_flags:
+        - fma
+        - avx
+        - avx2
+        - avx512f
+        - avx512dq
+        - avx512ifma
+        - avx512cd
+        - avx512bw
+        - avx512vl
+        - avx_vnni
+        - avx512_bf16
+        - avx512vbmi
+        - avx512_vbmi2
+        - avx512_vnni
+        - avx512_bitalg
+        - avx512_vpopcntdq
+        - avx512_vp2intersect
+        cpu_cores:
+          physical: 8
+          logical: 16
+        system_ram_gb: 7.339504241943359
+      - device_class: gpu
+        vendor: unknown
+        name: WSL2 paravirtual GPU (/dev/dxg)
+        device_node: /dev/dxg
+        fw_version: null
+        driver: null
+        usable: false
+        unusable_reason: wsl2-no-dri-render-node
+        lanes: []
+        memory_bandwidth_gbps: null
+        memory_bandwidth_source: unknown
+        cpu_flags: null
+        cpu_cores: null
+        system_ram_gb: null
+      engines: []
+      measurements: []
+      host:
+        is_battery_present: false
+        kernel_release: 6.18.33.2-microsoft-standard-WSL2
+        host_id: yolanda
+        host_id_source: node-name
+        host_kind: linux
+      timestamp: "2026-08-23T01:57:59.629704317+00:00"
+  - ts: "2026-08-23T01:54:56Z"
+    host: windows
+    locus: windows-host
+    document:
+      schema_version: 2
+      legacy_tier: cpu
+      devices:
+      - device_class: npu
+        vendor: amd
+        name: NPU Compute Accelerator Device
+        device_node: PCI\VEN_1022&DEV_17F0&SUBSYS_382317AA&REV_20\4&5785F6E&0&0142
+        fw_version: null
+        driver: 32.0.20102.3930
+        usable: false
+        unusable_reason: wsl2-npu-not-exposed
+        lanes: []
+        memory_bandwidth_gbps: null
+        memory_bandwidth_source: unknown
+        cpu_flags: null
+        cpu_cores: null
+        system_ram_gb: null
+        os_status: OK
+      - device_class: gpu
+        vendor: amd
+        name: AMD Radeon(TM) 860M Graphics
+        device_node: PCI\VEN_1002&DEV_1114&SUBSYS_380317AA&REV_C2\4&3247FA0A&0&0041
+        fw_version: null
+        driver: 32.0.31035.1003
+        usable: false
+        unusable_reason: wsl2-no-dri-render-node
+        lanes: []
+        memory_bandwidth_gbps: null
+        memory_bandwidth_source: unknown
+        cpu_flags: null
+        cpu_cores: null
+        system_ram_gb: null
+        os_status: OK
+      engines: []
+      measurements: []
+      host:
+        is_battery_present: true
+        kernel_release: 10.0.26200
+        host_id: yolanda
+        host_id_source: node-name
+        host_kind: windows
+        system_ram_gb: 15.161788940429688
+      timestamp: "2026-08-23T01:54:56Z"
 plan_index:
   version: v1
   root: plan/
@@ -759,7 +1303,7 @@ plan_index:
       order: 153
       desired_release: v0.5
       title: "VM Headless: persistent vsock listener + server-push event stream"
-      status: ready
+      status: obsoleted
       multi_cycle: true
       phase: verification
       progress_summary: >
@@ -888,6 +1432,11 @@ plan_index:
           host: forge
           summary: |
             Group under socket-audit-master milestone (order 625-jd5f)
+        - type: note
+          ts: "2026-08-23T11:42:41Z"
+          host: lenovinha
+          summary: |
+            deslop:ledger-residue:split-audit superseded_by=230,231 (both completed+archived; parent is pure residue; 829-dkuc criterion 2)
       exit_criteria:
         - "Connection persists after VmStatusRequest reply (SC-08) — DONE (was already true before this packet)"
         - "VmStatusPush sent to all clients on VmPhase change (SC-09, <500ms) — DONE"
@@ -1995,7 +2544,7 @@ plan_index:
       order: 246
       desired_release: v0.5
       title: "Credential & Secrets Architecture Audit"
-      status: ready
+      status: obsoleted
       kind: audit+security+design
       split_into:
         - "246a — credential-inventory-audit (inventory all credential flows: vault, github, podman secrets, agent tokens)"
@@ -2038,12 +2587,17 @@ plan_index:
           host: linux-mutable
           summary: |
             Grouped under the new architecture-audit-epic (647-6c3g). Four all-platforms audits that were each competing alone against grouped epics and losing; they are the same kind of work over overlapping subject matter, so an agent holding one has most of the context for the next.
+        - type: note
+          ts: "2026-08-23T11:42:41Z"
+          host: lenovinha
+          summary: |
+            deslop:ledger-residue:split-audit superseded_by=246a,246b,247a,247b (children filed pending; 829-dkuc criterion 2)
     - packet_id: proxy-git-mirror-configuration-audit
       release_target: architecture-audit-epic
       order: 247
       desired_release: v0.5
       title: "Proxy & Git Mirror Configuration Audit"
-      status: ready
+      status: obsoleted
       kind: audit+bug-fix
       split_into:
         - "247a — tls-certificate-chain-audit (CA generation -> podman secrets -> container trust stores)"
@@ -2083,6 +2637,11 @@ plan_index:
           host: linux-mutable
           summary: |
             Grouped under the new architecture-audit-epic (647-6c3g). Four all-platforms audits that were each competing alone against grouped epics and losing; they are the same kind of work over overlapping subject matter, so an agent holding one has most of the context for the next.
+        - type: note
+          ts: "2026-08-23T11:42:41Z"
+          host: lenovinha
+          summary: |
+            deslop:ledger-residue:split-audit superseded_by=247a,247b (children filed pending; 829-dkuc criterion 2)
     - packet_id: spec-cheatsheet-contradiction-audit
       release_target: architecture-audit-epic
       order: 248
@@ -4194,7 +4753,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "PLAN EXPERT + METHODOLOGY EXPERT rung 1 — ephemeral build on forge launch from the mounted checkout"
-      status: ready
+      status: obsoleted
       kind: implementation
       deliverable: inference expert-build pipeline + named expert endpoints
       # 393's technique decision is SIGNED (2026-07-17); only its harness
@@ -4224,6 +4783,12 @@ plan_index:
         - "stack shutdown leaves no expert artifacts (ephemerality litmus)"
 
 
+      events:
+        - type: note
+          ts: "2026-08-23T11:42:41Z"
+          host: lenovinha
+          summary: |
+            deslop:ledger-residue:split-audit superseded_by=plan-methodology-experts-rung1/expert-launch-state-and-ephemerality (four siblings completed; 394e carries the remainder; 829-dkuc criterion 2)
     - packet_id: plan-methodology-experts-rung1/expert-launch-state-and-ephemerality
       order: 394e
       parent: plan-methodology-experts-rung1
@@ -7073,7 +7638,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Impl: workload-class policy router with adaptive power/thermal signals (what's-best-for-every-scenario)"
-      status: ready
+      status: obsoleted
       phase: implementation
       progress_summary: >
         Foundation slice 484a is implementation-complete: the routing table is
@@ -7190,6 +7755,11 @@ plan_index:
             seed into 484a's table and 484d's residency child; do not reopen the
             landed foundation.
 
+        - type: note
+          ts: "2026-08-23T11:42:40Z"
+          host: lenovinha
+          summary: |
+            deslop:ledger-residue:split-audit superseded_by=484b,484c,484d,484e (484a completed+archived; children carry all remaining work; 829-dkuc criterion 2 retraction batch)
     - packet_id: inference-policy-router/failure-quarantine
       order: 484b
       parent: inference-policy-router
@@ -11640,9 +12210,10 @@ plan_index:
             lane could proceed — observed live by the operator during the
             java-lane repro of 777-i7hf.
     - packet_id: tray-new-surface-parity-gate
+      next_action: 'Any sibling host: run scripts/test-tray-surface-parity-gate.sh + tillandsias-policy parity-surfaces at HEAD (extraction is source-level, identical everywhere); flip your unknown cells in the new notification/status-chip/tooltip rows where you can verify; then completed with that evidence.'
       release_target: stable-milestone-v1
       order: 628-r2vk
-      status: ready
+      status: implemented
       desired_release: v0.5
       role: host-shell
       priority: p1
@@ -11722,11 +12293,16 @@ plan_index:
           host: forge
           summary: |
             Group under stable-milestone-v1 (order 625-jd5f)
+        - type: note
+          ts: "2026-08-23T11:37:24Z"
+          host: windows
+          summary: |
+            All five exit criteria carry windows-host evidence (fixture 7/7 inside this tree, both parity gates green, tray tests green). Completion wants the live litmus in a full local-ci pass plus one sibling host running the same source-level extraction — the 851-cduu verification pattern.
     - packet_id: tray-shared-string-resource-layer
       next_action: 'Do NOT start the string layer: both 2026-08-17 measurements (see events) refute it as written — wait for 628-w9sm (pending drift ruling) and the code->toml corpus regeneration routed via 792-77bt (completed); when w9sm rules, re-derive this packet''s exit criteria 2+3 which are mutually exclusive as written'
       release_target: stable-milestone-v1
       order: 628-c7qd
-      status: ready
+      status: pending
       desired_release: v0.5
       role: host-shell
       priority: p1
@@ -11830,6 +12406,11 @@ plan_index:
           host: tlatoanis-macbook-air
           summary: |
             carry-forward: selector re-offers an unexecutable urgent packet every cycle
+        - type: note
+          ts: "2026-08-23T11:20:39Z"
+          host: windows
+          summary: |
+            Status made to agree with the packet's own next_action ('Do NOT start ... wait for 628-w9sm ruling', from the 2026-08-17 refutation events): a row the ledger fences off must not present as ready, because status is the only field the selector reads — it ranked this row URGENT for windows two cycles running (issue optimization-selector-blind-to-next-action-628-wedge-2026-08-23). Reverts to ready in one set-field when the w9sm ruling lands and criteria 2+3 are re-derived. Sequencing itself untouched: depends_on and the pending ruling remain the owner's.
     - packet_id: tray-menu-builder-convergence
       release_target: stable-milestone-v1
       order: 628-p5tj
@@ -12121,7 +12702,7 @@ plan_index:
     - packet_id: plan-index-direct-update-concurrency-block
       release_target: stable-milestone-v1
       order: 627-c9c2
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p1
       role: methodology
@@ -12151,6 +12732,16 @@ plan_index:
           host: forge
           summary: |
             Group under stable-milestone-v1 (order 625-jd5f)
+        - type: note
+          ts: "2026-08-23T11:07:28Z"
+          host: yoga
+          summary: |
+            claimed for yoga cycle 20260823T1101Z (ledger write-integrity story)
+        - type: completed
+          ts: "2026-08-23T11:27:00Z"
+          host: yoga
+          summary: |
+            status 'completed' with evidence_refs: commit 90fc4af66 + methodology no_methodology_file_fails_to_parse_as_yaml green; concurrency_block + mirror_psych_gate in distributed-work.yaml; README rules added
     - packet_id: convergence-velocity-milestone
       order: 630-67jk
       status: ready
@@ -12701,9 +13292,10 @@ plan_index:
           summary: |
             SCOPE CORRECTION from an audit, not a fix — this host cannot compile either tray tonight (Smart App Control is blocking the native toolchain, `os error 4551`, and the macOS tray does not build here at all), so it would have been a change nothing could verify. What it can do is make the packet accurate for whoever claims it next. THE WINDOWS HALF IS ALREADY DONE. Every version surface in crates/tillandsias-windows-tray reads `WORKSPACE_VERSION` — `version_line` (notify_icon.rs:761), the tooltip composer (:253), the help text (:822) and the hvsocket Hello (hvsocket.rs:31) — with a build.rs that reads the workspace VERSION file. `CARGO_PKG_VERSION` survives there only inside a COMMENT. The packet's title says "on any platform tray"; that is no longer true, and the remaining work is macOS-only. THE MACOS HALF IS OPEN, at five sites: main.rs:88 and :122 (the `--version` line the packet was filed from), diagnose.rs:293 and :1640 (the `version` field of the diagnose JSON, which support tooling reads), and pty_vsock_bridge.rs:192. THAT LAST ONE IS NOT COSMETIC, and it is the reason this note exists. The packet frames the defect as an untruthful CLI answer. But pty_vsock_bridge.rs:192 COMPARES the guest's reported build_version against `env!("CARGO_PKG_VERSION")` and warns on mismatch — so on macOS that comparison is against the literal "0.1.0" and can never match a real guest version. The skew warning therefore fires on EVERY connection to a healthy guest, which is worse than silence: a warning that is always true is one an operator learns to scroll past, and build-version skew is exactly the signal order 648-772y needed to be legible when an older tray downgraded a newer guest's wiring and wedged the control wire. Recommended shape for the claiming host, mirroring what the Windows tray already does rather than inventing a second mechanism: give the macOS crate a build.rs that reads the workspace VERSION into a `WORKSPACE_VERSION` env, replace the five `CARGO_PKG_VERSION` uses, and pin it with a test named the same as the Windows one (`version_line_uses_workspace_version_and_commit`) so litmus:wire-unreachable-chip-text-symmetric's cross-tray pattern of identically-named pins extends to versioning too. Not reprioritised and not reclassified: that is the claiming host's call with the code in front of it. The measurement is offered so the call is made on facts rather than on a title written before the Windows half landed.
     - packet_id: build-bumps-version-then-the-hook-forbids-pushing-it
+      next_action: 'Wait for the 862-zhr2 ruling (A: untracked local counter — recommended; B: guard learns the mechanical-bump shape + LUB merges). Then implement the chosen resolution: build.sh + guard + litmus:versioning-shape re-pin + methodology/versioning.yaml reconciliation.'
       release_target: fail-loud-diagnosis-milestone
       order: 643-64bx
-      status: ready
+      status: pending
       desired_release: v0.5
       priority: p1
       title: '`./build.sh` bumps VERSION, tells you to commit it, and the pre-push hook then refuses it'
@@ -12848,6 +13440,11 @@ plan_index:
             selector stops ranking it among claimable work. Not changed here —
             re-scoping another host's packet on inference would be the same
             overreach in a different direction.
+        - type: note
+          ts: "2026-08-23T13:24:05Z"
+          host: windows
+          summary: |
+            Remaining criteria (1,3) wait on the 862-zhr2 operator ruling; a fenced-off row must not present as ready (628-c7qd precedent). Reverts to ready in one set-field naming the chosen resolution when 862-zhr2 rules.
     - packet_id: architecture-audit-epic
       order: 647-6c3g
       status: ready
@@ -13333,7 +13930,7 @@ plan_index:
     - packet_id: selector-pool-drops-deps-clear-and-unleased
       release_target: stable-milestone-v1
       order: 660-z774
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p1
       title: select-work-batch.sh builds its pool from `query`, so batches can contain dependency-blocked and leased packets
@@ -13380,6 +13977,16 @@ plan_index:
           host: forge
           summary: |
             Group under stable-milestone-v1 (order 625-jd5f)
+        - type: note
+          ts: "2026-08-23T11:07:28Z"
+          host: yoga
+          summary: |
+            claimed for yoga cycle 20260823T1101Z (ledger write-integrity story)
+        - type: completed
+          ts: "2026-08-23T11:27:00Z"
+          host: yoga
+          summary: |
+            status 'completed' with evidence_refs: commit 90fc4af66 + litmus:cycle-batch-triage-shape step 23/23 POOL FIDELITY two-sided PASS (run-litmus-test.sh ci-release pre-build instant)
     - packet_id: reclaim-stranded-claims-finds-candidates-and-reclaims-none
       order: 662-s9z5
       status: completed
@@ -17572,8 +18179,9 @@ plan_index:
           summary: |
             SWEEP OBSOLETED (order 723-qeju). PREMISE GONE — origin/main no longer tracks images/router/tillandsias-router-sidecar; removal commit 9879f7f47 is an ancestor of origin/main.
     - packet_id: sidecar-arch-hardcoded-x86-64-vs-aarch64-guest
+      next_action: 'On a cycle with the macOS guest running (or the local-build e2e): exec the staged aarch64 sidecar inside the guest''s router container and record the criterion-1 verdict (expected: execs; ENOEXEC would reopen); also observe the entrypoint guard verdict line in the router container log'
       order: 723-ji4v
-      status: ready
+      status: implemented
       desired_release: v0.5
       priority: p1
       kind: defect
@@ -17608,6 +18216,27 @@ plan_index:
         - 'If it does not: derive TARGET from the guest architecture, and make the CARGO_TARGET_<TRIPLE>_LINKER / RUSTFLAGS exports at build-sidecar.sh:103-104 target-derived rather than literally X86_64.'
         - images/router/entrypoint.sh fails loud on an unexecutable sidecar instead of degrading to a 502 after ~5s.
 
+      events:
+        - type: note
+          ts: "2026-08-23T07:42:51Z"
+          host: tlatoanis-macbook-air
+          summary: |
+            claimed for cycle 2026-08-23T07:41Z (static measurement + fix slice; in-guest exec verification to an e2e cycle)
+        - type: progress
+          ts: "2026-08-23T09:42:55Z"
+          host: tlatoanis-macbook-air
+          summary: |
+            status 'implemented' (not terminal) with evidence_refs: 96515d2c1dcbe5c3c32d3be2c463e414e5aa5290 litmus:sidecar-arch-derivation 17/17 + staged artifact ARM aarch64 on Apple Silicon + ./build.sh --check green
+        - type: note
+          ts: "2026-08-23T09:42:55Z"
+          host: tlatoanis-macbook-air
+          summary: |
+            criteria 1-3 delivered; in-guest exec verification remains
+        - type: note
+          ts: "2026-08-23T09:42:55Z"
+          host: tlatoanis-macbook-air
+          summary: |
+            carry-forward
     - packet_id: cloud-loaded-flag-latched-before-sign-in
       order: 731-m58f
       status: implemented
@@ -21702,7 +22331,7 @@ plan_index:
     - packet_id: set-field-writes-unquoted-yaml-scalars
       release_target: stable-milestone-v1
       order: 775-b4qz
-      status: ready
+      status: completed
       desired_release: v0.5
       kind: bug
       pickup_role: linux
@@ -21745,6 +22374,16 @@ plan_index:
             fragments repaired by hand pre-publish; see also the
             landed-malformed-fragment fail-loud parked-block family.
 
+        - type: note
+          ts: "2026-08-23T11:07:28Z"
+          host: yoga
+          summary: |
+            claimed for yoga cycle 20260823T1101Z (ledger write-integrity story)
+        - type: completed
+          ts: "2026-08-23T11:26:59Z"
+          host: yoga
+          summary: |
+            status 'completed' with evidence_refs: commit 90fc4af66 + cargo test -p tillandsias-plan (232 green: set_field_body_round_trips_hostile_prose, set_field_body_round_trips_value_beside_events, verify_written_lww_accepts_good_and_refuses_corrupt) + forced ./build.sh --check green
     - packet_id: chromium-installer-orphaned-with-false-integration-claims
       order: 774-cfw8
       release_target: fail-loud-diagnosis-milestone
@@ -28974,7 +29613,7 @@ plan_index:
 
     - packet_id: two-cache-roots-xdg-honouring-and-home-hardcoded
       order: 815-gdjk
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p2
       kind: bug
@@ -29079,6 +29718,21 @@ plan_index:
             the incorrect case cannot distinguish them. The fix is the same one
             every time — assert the property, not the token.
 
+        - type: note
+          ts: "2026-08-23T13:43:06Z"
+          host: lenovinha
+          summary: |
+            claimed for cycle 2026-08-23T13:43Z (loop-6)
+        - type: completed
+          ts: "2026-08-23T13:50:38Z"
+          host: lenovinha
+          summary: |
+            status 'completed' with evidence_refs: aa5892c86 cargo test -p tillandsias-core cache_root 3 passed; live XDG experiment pre+post; ./build.sh --check rc=0
+        - type: note
+          ts: "2026-08-23T13:50:38Z"
+          host: lenovinha
+          summary: |
+            one resolver, six sites routed, model-cache adoption landed
     - packet_id: bound-litmus-pins-a-specs-shape-but-never-its-enumerations
       order: 815-yace
       status: ready
@@ -30374,7 +31028,7 @@ plan_index:
             lands, and deleting them is part of the packet rather than a follow-up:
             they are the patch this replaces.
     - packet_id: periodic-deslopification-sweep
-      next_action: 'Next slice: criterion 2 — add superseded_by to plan/schema.yaml reference_fields AFTER re-verifying the one existing use (order 466) still resolves, then one retraction batch of split-parents (484,153,246,247,394,396) with ready-count and check-green assertions. Criterion 1''s detector is landed (13-row worklist, run scripts/check-dead-env-branches.sh); criterion 3''s check-deslop-due.sh exists. The sweep protocol itself (kill rule, net-negative diff, filing cap, refutation band) is the remaining big half and wants a host with sweep-budget headroom.'
+      next_action: 'Remaining: the sweep PROTOCOL itself (criteria 4+): a scheduled run gated by check-deslop-due.sh that constructs (mutation, predicted-observable) pairs per finding — criterion 1''s check-dead-env-branches.sh 13-row worklist is the natural first corpus — with the kill rule, net-negative diff, filing cap (<=5, retract >= file), and refutation band, recording examined/confirmed via check-deslop-due.sh record. Criteria 1-3 are all landed; this half is protocol design + first supervised run, and wants either sweep-budget headroom or an operator-paired session.'
       order: 829-dkuc
       status: ready
       desired_release: v0.5
@@ -30939,6 +31593,21 @@ plan_index:
           host: lenovinha
           summary: |
             carry the slice boundary forward
+        - type: note
+          ts: "2026-08-23T11:41:40Z"
+          host: lenovinha
+          summary: |
+            claimed for cycle 2026-08-23T11:41Z (loop-5; slice: criterion 2 superseded_by + retraction batch)
+        - type: note
+          ts: "2026-08-23T11:43:13Z"
+          host: lenovinha
+          summary: |
+            criterion-2 slice complete; multi_cycle claim released
+        - type: note
+          ts: "2026-08-23T11:43:13Z"
+          host: lenovinha
+          summary: |
+            carry the protocol half forward
     - packet_id: git-mirror-litmus-suite-is-red-by-default-on-windows
       order: 830-t4qp
       status: ready
@@ -33231,6 +33900,57 @@ plan_index:
           host: linux_mutable
           summary: |
             roadmap turnover: queue items 1,2,3,5 done or refuted; Tier B measured; next is top-k
+        - type: progress
+          ts: "2026-08-23T12:40:36Z"
+          agent_id: linux-macuahuitl-opus5-20260823T123400Z
+          host: linux_mutable
+          summary: |
+            THE MAC'S MERGE-CORRUPTION FINDING IS NOW A GATE, AND IT IS MY DEFECT
+            TO CARRY BECAUSE I DO THE MERGES.
+        
+            tlatoanis-macbook-air filed
+            plan/issues/enhancement/fragment-rename-detection-merge-corruption-2026-08-23.md:
+            after BOTH sides ran a concurrent compaction, git's RENAME DETECTION
+            paired two set-field-generated fragments from DIFFERENT hosts — their
+            content is ~90% identical boilerplate, one side's compaction supplied
+            the "deleted" half and the other's new fragment the "added" half — and
+            merged their bodies into one marker-laden blob under both names. Two
+            immutable fragments held conflict markers, parsed by nothing, their
+            packets invisible in every answer.
+        
+            THIS IS A COORDINATOR HAZARD SPECIFICALLY. Platform-branch merges are
+            my standing duty, nobody else has it, and I merged osx-next (5 ahead)
+            and windows-next (9 ahead) THIS CYCLE with concurrent compactions in
+            play. Checked immediately: malformed=0, zero markers, 38/38 parse. I
+            got away with it, and nothing in my process would have told me
+            otherwise.
+        
+            THE GAP WAS ALREADY WRITTEN DOWN AS AN ASSUMPTION.
+            check-fragment-status-loss.sh:125 says it plainly: "that gate is
+            DIFF-SCOPED, so a malformed fragment that arrived by merge or hand
+            edit" is outside it. check-added-fragments-parse.sh examines what the
+            outgoing diff ADDS; these files presented as RENAMES of existing paths.
+            A documented assumption became a live incident on another host.
+        
+            FIXED: scripts/check-all-fragments-intact.sh, whole overlay (110 files
+            across index.d, loop_status.d and mo-full-attestations.d), wired into
+            ./build.sh --check so it cannot be skipped.
+        
+            TWO CHECKS, AND MY FIRST DRAFT OF THE SECOND ONE WAS WRONG IN THE
+            EXACT WAY THE COMMENT CLAIMED IT WAS RIGHT. I wrote that a conflict
+            marker inside a `summary: |` block scalar parses as valid YAML and so
+            needs catching separately — then anchored the grep at column 0, where
+            an INDENTED marker never matches. Tested rather than assumed: a file
+            with markers indented inside a block scalar loads cleanly under ruby
+            YAML *and* slipped past my guard, rc=0. Allowing leading whitespace
+            fixes it; verified rc=1 on that file, rc=0 on all 110 real ones, and
+            the GATE itself red then green.
+        
+            My controls were also broken twice before they were right: `rc=$?`
+            after a pipeline reads the tail's status, not the script's, and my
+            first "valid YAML with markers" probe put the markers at column 0 where
+            they do NOT parse — so it demonstrated nothing while appearing to.
+            Both are the same failure: a control that cannot fail is not a control.
     - packet_id: macos-guest-cannot-reach-a-host-native-service
       order: 830-xsk2
       status: ready
@@ -35391,7 +36111,7 @@ plan_index:
       packet_id: capabilities-channel-has-no-base-representation
       desired_release: v0.6
       title: compaction never serialises the `capabilities:` channel, so its rows live only as fragments and can never be folded
-      status: ready
+      status: implemented
       kind: enhancement
       pickup_role: linux
       priority: p3
@@ -35416,6 +36136,115 @@ plan_index:
         - 'The generic round-trip assertion from 843-624y covers it: a fragment carrying each known top-level key survives fold -> compact -> fold byte-equivalently, so the NEXT channel added cannot repeat this.'
         - 'Negative control: remove the capabilities writer and the round-trip assertion goes red naming that channel.'
 
+      events:
+        - type: progress
+          ts: "2026-08-23T11:41:59Z"
+          agent_id: linux-macuahuitl-opus5-20260823T113400Z
+          host: linux_mutable
+          summary: |
+            THE CHANNEL HAS A BASE NOW, AND THE OVERLAY CAN DRAIN.
+        
+            Measured before: 12 of 16 fragments carried `capabilities:` and were
+            PERMANENTLY unfoldable; `compact --dry-run` would fold 3 and refuse 13.
+            The overlay could never drain below those 12, and it grew by one per
+            host per capability refresh — seven hosts across two loci each.
+        
+            After: `compact --dry-run` folds 15 and refuses 1, and the survivor is
+            an unrelated genuine orphan (an event for a packet not in the fold).
+        
+            TWO HALVES, AND SHIPPING EITHER ALONE WOULD HAVE BEEN WORSE THAN
+            NEITHER.
+        
+            (1) WRITE. compact_text now serialises the channel into the base,
+            FOLDED at write time rather than appended: it reuses fold_capabilities
+            itself, so the base stays bounded at (host_id, locus) pairs instead of
+            growing per refresh, and the base and the live matrix are produced by
+            THE SAME LWW rule. A second implementation of "which row wins" is
+            exactly how two readers come to disagree. Any existing top-level block
+            is REPLACED, never appended beside — two `capabilities:` keys is not a
+            merge, it is a document where the later silently wins.
+        
+            (2) READ. `capability-matrix` loaded only plan/index.d/, so the moment
+            a fold consumed the fragments the matrix would have gone EMPTY — the
+            precise silent-emptiness this channel exists to prevent. The base is now
+            presented as a synthetic fragment. Precedence is the ROW's own
+            (ts, host), never fragment order, so its position in the slice is
+            irrelevant and I did not have to invent a sort key.
+        
+            THE REFUSAL BECAME A REAL CHECK rather than being deleted. It was
+            unconditional — correct while no writer existed. It now asks what every
+            other channel is asked: does the CANDIDATE carry this fragment's rows?
+            Keyed on (host_id, locus) and NOT on the row verbatim, because these are
+            LWW: a fragment whose row a later probe superseded is superseded, not
+            lost, and demanding the exact row back would refuse every fragment the
+            fleet has since re-probed.
+        
+            VERIFIED END TO END on a hermetic fixture, both directions:
+              before compact  1 row (from the fragment)
+              compact         folds it, deletes it, base gains the block
+              after compact   1 row (from the base)
+            Mutation control: disabling the base read gives `0 rows, and NO KNOWN
+            HOSTS` on the same compacted fixture; restoring gives 1 row back.
+            205/205 lib, 24/24 bin, clippy -D warnings clean, forced --check green.
+        
+            NOT FOLDED ON THE LIVE LEDGER THIS CYCLE, deliberately. The capability
+            exists and dry-run confirms it; actually consuming 15 fragments is a
+            separate deliberate act, and a trial fold on a COPY refused on an
+            unrelated integrity violation (an archived `depends_on` reads as
+            unresolved when the copy carries no archived-ids set). That is worth
+            understanding before folding the real thing.
+        - type: progress
+          ts: "2026-08-23T13:42:06Z"
+          agent_id: linux-macuahuitl-opus5-20260823T133400Z
+          host: linux_mutable
+          summary: |
+            I FOLDED THE LIVE LEDGER, IT WENT RED, AND I REVERTED. Two defects in
+            the renderer I shipped last cycle, both found only by doing the thing
+            rather than dry-running it.
+        
+            The fold itself looked perfect: 41 fragments consumed, ready set
+            BYTE-IDENTICAL at 378, capability matrix unchanged at 9 rows / 7 of 7
+            hosts, `check` still reporting 538 packets with sound references. Then
+            ./build.sh --check went RED on
+            compaction_on_the_real_ledger_preserves_every_comment_and_item, and a
+            ruby probe of the new base died on `Tried to load unspecified class:
+            Time`. Reverted with git checkout — nothing committed, nothing pushed,
+            tree back to 42 fragments and green.
+        
+            (1) UNQUOTED TIMESTAMPS MADE THE BASE UNREADABLE TO RUBY. serde drops
+            quotes from a string it considers unambiguous; a bare ISO-8601 scalar
+            is not unambiguous to Psych, which infers a Time, and safe_load then
+            refuses the whole document. 18 such scalars went in, and the base is
+            read by ruby tooling in this repo — the plan archiver among it. This is
+            the KNOWN class in
+            compaction-folds-unquoted-timestamps-past-the-fragment-gate-2026-08-13.md,
+            reproduced by a new writer that had never heard of it. Every date-shaped
+            scalar in the block is now quoted.
+        
+            (2) THE RENDERER WAS NOT IDEMPOTENT. serde emits sequence items at
+            column 0 under a top-level key — `- ts:` — and my replace-existing-block
+            pass stripped only whitespace-led lines, so a SECOND fold deleted
+            `capabilities:` and orphaned every item beneath it. The sequence is now
+            indented, which makes the block uniformly whitespace-led and the strip
+            exact. Verified: fold, then fold again, base BYTE-IDENTICAL.
+        
+            WHAT THIS SAYS ABOUT DRY-RUN. `compact --dry-run` reported `would fold
+            41, 1 refused` and passed parse AND integrity — and it was right about
+            all of that. It cannot see what it does not check: nothing in the
+            integrity gate asks whether the RESULT is readable by the OTHER
+            toolchain, or whether folding twice is stable. A dry run proves the
+            thing it models; the gap was in the model.
+        
+            AND MY IDEMPOTENCE TEST WAS INCONCLUSIVE TWICE before it was real: I
+            copied plan/index.yaml and plan/index.d into scratch and the fold
+            REFUSED both times on an archived depends_on, because the copy carried
+            no plan/archive (190 entries). Both runs then reported "byte-identical"
+            and "ruby parses" about a base that had never been folded. A test whose
+            subject did not happen will happily report success.
+        
+            208/208 lib, 24/24 bin, clippy clean, forced --check green. The live
+            fold is worth redoing now that the renderer is fixed; it is deliberately
+            a separate act from the fix.
     - order: 847-wgy4
       packet_id: work-selection-cannot-separate-more-hosts-than-frontier-epics
       desired_release: v0.6
@@ -35676,6 +36505,14 @@ plan_index:
             Measured on pirria against esmeraldinha (859-86kr) at matched shapes: a 0.5B model does not saturate even ONE DDR4 channel. Decode moves 41 tok/s x 0.40 GB per token-pass = 16.3 GB/s here, and 29.64 x 0.40 = 11.8 GB/s on the single-channel N100 — 55% of that host's ~21.3 GB/s ceiling. So at the only generative size the pinned image can run, NEITHER low-end host is bus-limited, memory bandwidth is invisible, and a dual-channel host measures only 1.38x faster than a single-channel one instead of the ~2x a bandwidth model predicts.
             THE CONSEQUENCE: the fleet cannot currently measure what DRAM channel count buys it, on any host, because the model size where it starts to matter (3-4B) is exactly the size the image refuses. esmeraldinha sees phi3.5:3.8b at 6.53 tok/s x ~2.2 GB = ~14.4 GB/s, approaching its ceiling — that is the size where the question becomes answerable, and it runs there only because that host reaches a model this one cannot. Until 849-tz8g clears, "how much host RAM bandwidth should we buy" has no measurable answer, and capability rows will keep recording a channel count whose effect nobody can price.
             Recorded here rather than as a new packet because the remedy is unchanged and already stated on this packet: a newer inference image. This only adds a second constituency for it.
+        - type: note
+          ts: "2026-08-23T11:41:30Z"
+          agent_id: linux-pirria-opus5-20260823T080000Z
+          host: linux_immutable
+          summary: |
+            A THIRD CONSTITUENCY, and the sharpest one so far. The first argument for clearing this was answer quality (a bigger embedder may separate better). The second, filed here yesterday, was that the 0.5B ceiling makes memory bandwidth unmeasurable fleet-wide. The third is that it BLOCKS 853-6gz3 ON THE LOW-END TIER OUTRIGHT.
+            Measured on pirria today: the tier can afford the fan-out the expert layer needs — ~4.3 s per k=1 judge call, ~3 sub-queries inside 30 s — but the only judge the image can run, qwen2.5:0.5b, fails 853-6gz3's own complement self-check on the out-of-corpus case (answers NO to both "does this passage answer the question" and "is this passage missing the answer"). macuahuitl reached its positive Tier B result with qwen2.5:7b, a model this image cannot load at all.
+            So the expert layer's deployment claim — that it runs locally on commodity hardware — currently cannot be tested on commodity hardware, because the judge that makes it work is on the far side of this blocker. That is a stronger reason to clear 849-tz8g than either of the previous two, and it is measured rather than argued.
     - order: 850-bif2
       packet_id: joining-host-must-publish-a-capability-row
       desired_release: v0.6
@@ -36293,6 +37130,26 @@ plan_index:
         
             Committed: scripts/refusal-calibration/measure-recall-at-k.sh and
             results-recall-at-5-qwen7b.tsv.
+        - type: note
+          ts: "2026-08-23T11:41:30Z"
+          agent_id: linux-pirria-opus5-20260823T080000Z
+          host: linux_immutable
+          summary: |
+            THE LOW-END TIER CAN AFFORD THE FAN-OUT. IT CANNOT AFFORD THE JUDGE. Evidence only, no packet claimed — this layer stays with the hosts that can run it.
+            RE-COSTED AFTER THE TIER B RESULT. macuahuitl's measurement concluded "k=1 is the bottleneck — unfold the question, retrieve per sub-query, judge each, accumulate". That supersedes the k=6 budget this host filed on 855-wrr3 by changing the DESIGN, not by correcting an error. At k=1 on pirria, measured with novel text per rep on an idle box:
+        
+              k=1 judge call (~380 evidence tokens)   ~4.3 s   (91-99 tok/s prefill)
+              k=6 judge call (~2800 tokens)           ~40 s
+        
+            So a complement pair is ~8.6 s and the affordable fan-out is ~3 sub-queries in 30 s, ~7 in 60 s. That is modest but WORKABLE, and it is roughly 10x better than the k=6 shape. The earlier "not one complement pair fits an interactive answer" verdict applied to k=6 and no longer describes the design.
+            BUT LATENCY IS NOT THE BINDING CONSTRAINT HERE, and this is the finding. Ran this packet's OWN complement self-check (exit criterion 5) against the only judge this tier can run — qwen2.5:0.5b, the 849-tz8g image ceiling:
+        
+              passage that DOES answer   "answers?" YES  "missing?" NO   coherent
+              CSS passage that does NOT  "answers?" NO   "missing?" NO   CONTRADICTION
+        
+            The judge is coherent on the in-corpus passage and CONTRADICTS ITSELF on the out-of-corpus one — which is precisely the case this whole programme exists to handle (821-73es: the fat spec expert cannot refuse an out-of-corpus question). Note the direction differs from the YES/YES this packet recorded earlier; the contradiction here is NO/NO. What matters is that the pair disagrees with itself, which the mechanism detects with no ground truth — the operator's design working exactly as intended.
+            THE CONSEQUENCE FOR DEPLOYMENT. A layer whose judge is untrustworthy on out-of-corpus questions must REFUSE rather than answer, so on this tier 853-6gz3 would be self-suppressing: correct, and useless. The claim this packet rests on — that the layer "runs LOCALLY on commodity hardware" — is therefore NOT falsified by throughput on the bottom host. It is falsified, for now, by JUDGE CAPABILITY, and that is a different problem with a different fix. The fan-out arithmetic says commodity hardware can serve this design; the image ceiling says it cannot serve it with a judge worth trusting.
+            METHOD NOTE, because the first attempt produced confident nonsense. My passage offsets ran past EOF (index.yaml is 2.74 MB; the offsets reached 5.6 MB), so every "passage" was EMPTY, every prompt was identical, and ollama served them from KV cache at 1300-1768 tok/s. THE TELL WAS prompt_eval_count IDENTICAL ACROSS EVERY REP (52, 52, 52...). On this stack an unvarying token count is the signature of a fabricated measurement; check it before reading the throughput column.
     - order: 854-8p9d
       packet_id: sibling-hosts-establish-the-native-accel-baseline-wsl2-cannot-reach
       desired_release: v0.6
@@ -36417,6 +37274,14 @@ plan_index:
             The Windows cousin is measured and filed as 858-tnnv; this packet is NOT claimed and stays with the Silverblue host, per the coordinator.
             THE ONE NUMBER THE SILVERBLUE ROW SHOULD COMPARE ITSELF AGAINST, and it is not a throughput figure: on this host the expert layer's sub-queries are STRICTLY SERIAL. OLLAMA_NUM_PARALLEL=1, four cores, a single memory channel — fanning out does not overlap, it time-slices the same ~21.3 GB/s. At ~2.3 s per unfold-and-verify sub-query (1.9 s generate + 0.44 s to embed the query), the budget is: 10 s answer -> ~4 sub-queries, 30 s -> ~13, 60 s -> ~26.
             That makes 853-6gz3's floor N x 2.3 s in the fan-out width N, which is a qualitative difference from macuahuitl rather than a slower version of it: a design where fan-out is nearly free does not degrade gracefully here, it degrades linearly. Worth checking whether the Silverblue cousin's runtime serialises the same way — if it does, that is a property of the tier and not of WSL2.
+        - type: note
+          ts: "2026-08-23T12:10:01Z"
+          agent_id: windows-esmeraldinha-opus5-20260823T113715Z
+          host: windows
+          summary: |
+            For the Silverblue half, from the Windows cousin — this one should transfer directly and is worth checking BEFORE benchmarking anything there.
+            Criterion 5 on this side did not come down to ollama vs llama.cpp. It came down to whether the ggml build dispatches to the host microarchitecture: Fedora's packaged llama-cpp reports no AVX2 on an AVX2 host and lands 12.8x slower on prefill than ollama running the same blob. Silverblue layers from the same Fedora package set, so a `rpm-ostree install llama-cpp` there is likely to reproduce it exactly.
+            Check `llama-cli -m <blob> -ngl 0 -p hi -n 1 --no-warmup 2>&1 | grep system_info` before recording any lane. A build whose CPU line reads only `LLAMAFILE = 1 | REPACK = 1` is not a slow engine, it is an unvectorised one, and benchmarking it produces a number that looks like a hardware verdict.
     - order: 856-s56y
       packet_id: no-durable-scheduler-exists-on-any-host
       desired_release: v0.6
@@ -36700,6 +37565,24 @@ plan_index:
         HALF TWO — THE GATE IS SLOWER THAN THE FLEET PUSHES. ./build.sh --check on this host is 336 s cold and minutes warm whenever a touched crate must re-check. Between gate START and push, origin/linux-next moved TWICE in one session (c9caa2984 -> 649fc5534, then 649fc5534 -> a3cf9f5dd), so the pre-push hook refused with "The gate validated a different tree than the one you are pushing" and the whole cycle had to be repeated. A rebase invalidates the stamp, re-gating takes minutes, and on an active day the window never closes on the first try. This is not a correctness bug and the hook is right to refuse — but it means a slow host can spend more wall clock losing races than doing work, and it silently penalises exactly the hosts the fleet added on purpose. It was worked around here with a retry loop (rebase -> gate -> push, repeat), which is the shape a supported fix could take.
       exit_criteria: |
         (1) A stale plan binary is reported AS staleness — the gate compares the resolved binary against the sources it is checking and says so, or rebuilds it — so no agent chases a phantom defect in set-field again. (2) A supported way to land from a slow host: either the gate stamp survives a rebase that does not touch gated inputs, or build.sh grows a documented rebase-gate-push retry, rather than every slow host inventing its own loop. (3) Both are measured on a 4-core host, since neither reproduces on a fast one.
+      events:
+        - type: note
+          ts: "2026-08-23T11:47:00Z"
+          agent_id: linux-pirria-opus5-20260823T080000Z
+          host: linux_immutable
+          summary: |
+            FIRST-HAND EVIDENCE FOR EXIT CRITERION 2, and it is stronger than the argument the packet was filed with. That criterion asks for a SUPPORTED way to land from a slow host "rather than every slow host inventing its own loop". This host invented its own loop and the loop LIED.
+            The ad-hoc retry wrapper written to work around the push races reported "LANDED on attempt 1" for a push that had been REJECTED, and the agent reported that success onward before catching it. Two bugs compounded, both of them the kind an ad-hoc script acquires and a supported one would not:
+        
+              1. `if git push ... | tee LOG | tail -3; then` tests the exit status of
+                 TAIL, not of git push. A pipeline's status is its LAST command.
+              2. The fallback grep looked for "linux-next -> linux-next" — which
+                 appears in the REJECTION message too:
+                 `! [rejected]  linux-next -> linux-next (fetch first)`.
+        
+            So the failure text matched the success test. Corrected to use the real exit status AND to verify the claim independently with `git merge-base --is-ancestor HEAD origin/linux-next` — asking the REMOTE whether the commit arrived rather than believing the local script's summary. An audit of all six commits this host has produced found five genuinely on origin and exactly one not, which is how the false report was caught.
+            WHY THIS BELONGS ON THIS PACKET RATHER THAN BEING A PRIVATE EMBARRASSMENT. The push race is not optional on a 4-core host: the gate takes minutes, origin moves inside that window, and a retry is REQUIRED to land at all. Every slow host that joins will write this loop. The failure mode is silent and it corrupts the ledger's most important signal — whether work actually shipped — because an agent that believes it pushed will attest, report, and move on. A supported implementation, verified once, removes an entire class of false attestations rather than one host's bug.
+            Concretely for whoever takes this: any land helper MUST verify with `merge-base --is-ancestor` against a freshly fetched remote ref. Neither a zero exit status nor the presence of a ref-update line in the output is sufficient evidence that a commit landed.
     - order: 858-tnnv
       packet_id: establish-the-low-end-cpu-only-inference-floor-windows
       desired_release: v0.6
@@ -36739,6 +37622,22 @@ plan_index:
             CORPUS, using the corrected 9,909-chunk constant: full re-embed 72 min sequential / 67 min batched; delta-10 4.4 s; delta-40 17.5 s. Order 552's conclusion stands with a WSL2 number behind it — a synchronous commit-time re-embed cannot meet the 1-2 s budget at any realistic delta size.
             Exact commands and every caveat: plan/issues/research/esmeraldinha-wsl2-cpu-inference-floor-2026-08-23.md
 
+        - type: progress
+          ts: "2026-08-23T12:10:00Z"
+          agent_id: windows-esmeraldinha-opus5-20260823T113715Z
+          host: windows
+          summary: |
+            Residual 1 CLOSED — 855-wrr3 exit criterion 5, the alternative-runtime evaluation, now has an answer for the Windows side.
+            An alternative IS available without layering: llama-cpp b6153-3.fc44 is packaged in Fedora 44. Two candidates were measured against ollama on the same GGUF blob, same four threads, CPU-only, idle box:
+        
+              ollama HTTP API            prefill ~125 tok/s   decode 28.99
+              ollama's llama-server bare prefill  59-91       decode 29.52
+              Fedora stock llama-cpp     prefill   9.77       decode  7.22
+        
+            The headline is that "which runtime" is the wrong question. Fedora's build dispatches NO AVX/AVX2/FMA/VNNI on a host that has all four, while ollama ships 17 microarch ggml objects and loads libggml-cpu-alderlake.so — read out of the live runner's /proc maps, not inferred. 12.8x prefill and 4.0x decode, entirely from packaging. Filed as 861-n7f5 so the trap gets a check rather than a note.
+            On the ollama LAYER itself, which is the question the criterion was really asking: decode is at parity (1.8%), and wall-clock time-to-first-token favours a bare llama-server by ~25% (844 vs 1131 ms) — driven by ollama's chat template turning a 51-token prompt into 80, i.e. token count rather than engine speed. Against the measured ~2.3 s per unfold-and-verify sub-query that is ~0.3 s: worth having for template-free workloads like 853-6gz3's, not transformative.
+            Deliberately NOT claimed: ollama's per-token prefill reads as 2x the bare server's on the same ggml, and I could not attribute it. The bare server's prefill varied ±35% across runs where ollama's varied ±0.1%, the prompt lengths differ, and my one attempt to probe the cause changed two variables at once. The recommendation rests on the wall-clock column, which none of that touches.
+            RESIDUAL 2 STILL OPEN: no true cold-bootstrap number (criterion 6). It needs an isolated CARGO_HOME + CARGO_TARGET_DIR so the working cache survives, and it is an hour-plus of uncontended wall clock. Not started this cycle.
     - order: 858-ihcb
       packet_id: bench-inference-floor-publishes-a-cached-prefill
       desired_release: v0.5
@@ -36930,3 +37829,184 @@ plan_index:
                 "store --file=$GITDIR/.gh-credentials"
         
             The empty entry is load-bearing: it resets the helper list so the system-level `manager` is dropped. Without it the store is merely appended after GCM and GCM still wins. After this the guard returns `ok:gh-credentials-store` — its strongest verdict, and the one that actually implies a usable non-interactive channel.
+    - packet_id: orchestrate-enclave-argument-handling
+      order: 861-hisq
+      status: ready
+      desired_release: v0.5
+      kind: bug
+      priority: p2
+      pickup_role: linux
+      capability_tags:
+        - tooling
+        - enclave
+      title: |
+        orchestrate-enclave.sh executes on ANY argv (no usage/refusal path) and its bare invocation names the git mirror container 'tillandsias-git-.'
+      context: |
+        Observed live on yoga 2026-08-23 while repairing the post-reboot enclave.
+        (1) `scripts/orchestrate-enclave.sh --help` RAN the full orchestration —
+        regenerated the CA, restarted the proxy — and then passed `--help`
+        through as PROJECT_PATH, so the mirror step derived its container name
+        via `basename --help` and died printing basename's usage. A flag is
+        consumed as a positional path; there is no usage or refusal branch at
+        all. (2) A bare invocation defaults PROJECT_PATH to `.`
+        (`PROJECT_PATH="${1:-.}"`, PROJECT_NAME from `basename`), and
+        `basename .` is `.`, so the mirror container is created as
+        `tillandsias-git-.` and fails its health check — the default invocation
+        is broken by construction. (3) The script reads as a bring-up tool but
+        is a full lifecycle harness: its cleanup step removes the proxy, mirror
+        and inference containers on exit, which surprises anyone using it as the
+        preflight's suggested "re-run the enclave orchestration" remedy.
+      exit_criteria:
+        - |
+            An argv beginning with '-' is refused with a usage line and non-zero exit, never consumed as PROJECT_PATH.
+
+        - |
+            A bare invocation either resolves PROJECT_PATH to an absolute path before basename (so the mirror name is never 'tillandsias-git-.') or refuses with usage; a litmus-style check pins whichever shape is chosen.
+
+        - |
+            The script's teardown-on-exit behaviour is stated in its header comment, and cycle-preflight's remedy text no longer points service repair at it (or the script gains a mode that leaves services running).
+
+      events:
+        - type: filed
+          ts: "2026-08-23T11:31:00Z"
+          agent_id: linux-yoga-fable5-20260823t1101z
+          host: linux-immutable
+          summary: |
+            Filed after the post-reboot enclave repair; see the 2026-08-23
+            section appended to
+            plan/issues/vm-proxy-ca-tmpfs-restart-fragility-2026-07-06.md for
+            the full session evidence.
+
+    - order: 861-n7f5
+      packet_id: engine-candidates-must-prove-cpu-dispatch-before-they-are-benchmarked
+      desired_release: v0.6
+      title: a ggml build without AVX2 on an AVX2 host is a misconfiguration, not a candidate — and it benchmarks as a 13x regression nobody can explain
+      status: ready
+      kind: enhancement
+      pickup_role: any
+      priority: p3
+      capability_tags:
+        - inference
+        - low-end
+        - cpu
+        - benchmark
+        - engines
+      deliverable: scripts/check-engine-cpu-dispatch.sh
+      depends_on: []
+      estimated_hours: 2
+      context: |
+        Measured on esmeraldinha 2026-08-23 while closing 855-wrr3 criterion 5. Fedora 44's packaged `llama-cpp` (b6153-3.fc44) is 12.8x slower on prefill and 4.0x slower on decode than ollama, running the IDENTICAL GGUF blob on the same four cores. Both are llama.cpp; the engine is not the variable.
+        The variable is build-time CPU dispatch. Fedora's build reports `CPU : LLAMAFILE = 1 | REPACK = 1` and NO AVX, AVX2, FMA or AVX_VNNI, on a host whose published capability row lists all four. ollama ships 17 microarchitecture-specific ggml objects and selects at runtime — verified by reading the live runner's memory map rather than inferring it, which showed exactly `libggml-cpu-alderlake.so`, this host's own microarchitecture.
+        WHY THIS IS WORTH A PACKET RATHER THAN JUST THE RESEARCH NOTE. The wrong conclusion here is cheap to reach and expensive to hold: "ollama is a wrapper, so the bare engine must be leaner" is a reasonable-sounding simplification that would have cost a 12.8x prefill regression, and the benchmark that revealed it would have been read as "this host is slow" — which, on the fleet's designated floor host, is exactly the reading nobody would question. The project already has a rule for this shape (order 392: a GPU tier in name only is worse than no GPU tier); this is the CPU-lane sibling and it has no check.
+        The distro package compounds it: it is a ROCm/HIP build, so it defaults to `ngl 99` and prints `failed to initialize ROCm: no ROCm-capable device is detected` before falling back. That line invites a GPU diagnosis when the defect is on the CPU path — forcing `-ngl 0` moves the number from 9.71 to 9.77 t/s, which is the proof that offload was never involved.
+        Full evidence, with reproduction commands: plan/issues/research/low-end-engine-choice-is-cpu-dispatch-not-runtime-2026-08-23.md
+      exit_criteria: |
+        (1) A script that, given an engine binary, emits one falsifiable line naming the CPU features its build actually dispatches, and refuses the candidate when the host advertises vector features the build does not use — grammar in the house style, e.g. `ok:engine-cpu-dispatch:<features>` / `refused:engine-cpu-dispatch-baseline:<missing>`. (2) scripts/bench-inference-floor.sh calls it (or refuses to publish a lane label) before recording a lane, so a baseline build cannot enter the ledger as an engine-lane measurement at all. (3) The host's advertised features come from the capability row (`cpu_flags`, already published by accel_probe) rather than a second inline probe — 859-b2zc is this cycle's reminder of what re-derivation costs. (4) A hermetic fixture with a stubbed engine reporting a baseline feature set.
+
+    - order: 862-zhr2
+      packet_id: version-counter-flow-vs-guard-ruling
+      release_target: fail-loud-diagnosis-milestone
+      desired_release: v0.5
+      title: 'RULING NEEDED: versioning.yaml declares the Build counter flows through branches with LUB merges; the version guard forbids exactly that flow'
+      status: pending
+      kind: research
+      pickup_role: any
+      priority: p1
+      capability_tags:
+        - versioning
+        - hooks
+        - methodology
+        - decision
+      deliverable: plan/issues/decision-version-counter-tracked-vs-guard-2026-08-23.md
+      depends_on: []
+      estimated_hours: 1
+      context: |
+        The decision record at the deliverable states the contradiction once, presents two coherent resolutions with measured blast radius, and recommends A (untracked local counter; tracked VERSION moves only at release). Operator-gated under bar_raise_governance: two prior hosts measured the release-path blast radius on 643-64bx and correctly declined to guess; this row exists so the choice is one hour of operator attention over a prepared record instead of a claiming host's guess. Ruling unblocks 643-64bx criteria 1+3 (p1).
+      exit_criteria: |
+        The Tlatoani records A or B (or an amendment) on this row; 643-64bx returns to ready naming the chosen resolution; methodology/ versioning.yaml and the guard are reconciled by the implementing packet so the declared design and the enforced rule agree.
+
+    - packet_id: capabilities-base-fold-emits-a-block-the-candidate-parser-rejects
+      order: 862-cq3x
+      status: implemented
+      kind: defect
+      pickup_role: linux
+      priority: p1
+      desired_release: v0.5
+      depends_on: []
+      capability_tags:
+        - plan-ledger
+        - rust
+      tags:
+        - compaction
+        - capabilities-channel
+        - 846-idhn
+      title: |
+        Folding capability rows into the base (846-idhn) writes the top-level `capabilities:` block at a position the compaction candidate parser rejects — compaction_on_the_real_ledger_preserves_every_comment_and_item goes red on ANY ledger that has folded capability fragments, and every host is currently at compaction-eligible with capability fragments pending, so the fleet's next compaction ships a base its own tripwire calls broken.
+      deliverable: crates/tillandsias-plan/src/fragments.rs
+      context: |
+        Reproduced on macos 2026-08-23T13:41Z at HEAD 9dc8adb81, real ledger, 39 fragments: `tillandsias-plan compact` exits 0 (one warning: the known typo'd-id fragment 20260823t015724z-851-darwin-probe refuses because packet macos-onboarding-defect-sweep exists nowhere — separate, benign, permanent refusal worth its own eventual tombstone); the folded base PARSES under ruby -ryaml and `check` passes at 537 packets — but `cargo test -p tillandsias-plan --lib compaction_on_the_real_ledger` panics "compaction candidate does not parse: did not find expected key at line 37269 column 1, while parsing a block mapping". Line 37269 of the folded base is the `capabilities:` key at column 0, emitted immediately after the last packet's exit_criteria — mid-document, after plan_index content. serde_yaml's candidate parse rejects that placement; ruby tolerates it. Recovery on this host: the compaction was uncommitted, `git checkout -- plan/index.yaml plan/index.d/` restored 39 fragments and every capability row; verified green (fragments malformed=0, check ok, tripwire ok, capability-matrix reporting). NOTE ALSO: `--index <copy>` replay mode folded the base but deleted no fragment files, so replays diverge from live compaction — worth a look while in the file.
+      exit_criteria:
+        - |
+            Compaction of a ledger carrying capability fragments produces a candidate the tripwire test itself accepts: serialize the `capabilities:` base block where the candidate parser expects it (or teach exactly one parser the truth — but the tripwire's parse IS the gate's definition of well-formed).
+
+        - |
+            The tripwire runs against a fixture ledger WITH capability fragments so the class cannot land silently again (the current test only covers it when the real ledger happens to carry such fragments).
+
+        - |
+            NEGATIVE CONTROL: a ledger with zero capability fragments compacts byte-identically to today.
+
+      verifiable_closure: |
+        compaction_on_the_real_ledger_preserves_every_comment_and_item green immediately AFTER a real `tillandsias-plan compact` on a ledger with capability fragments; plus the new fixture-ledger case.
+      events:
+        - type: filed
+          ts: "2026-08-23T13:56:27Z"
+          agent_id: macos-tlatoanis-macbook-air-claude-20260823t134117z
+          host: tlatoanis-macbook-air
+          summary: |
+            Filed from the cycle that hit it; this host is deliberately NOT compacting until this closes, and other hosts should hold compaction too — the fold is eligible fleet-wide right now.
+        - type: progress
+          ts: "2026-08-23T14:37:53Z"
+          agent_id: linux-macuahuitl-opus5-20260823T143400Z
+          host: linux_mutable
+          summary: |
+            ALREADY FIXED — the Mac reproduced this at the PRE-FIX HEAD, and the
+            overlay has now drained on the real ledger.
+        
+            862-cq3x was filed from macos at HEAD 9dc8adb81. The repair landed an
+            hour later in 7bd8c9d83 (pushed as 6b0685bbe), so the two crossed. Its
+            diagnosis is exact and sharper than mine was: the failure is the
+            `capabilities:` key's PLACEMENT — column 0, mid-document — which
+            serde_yaml's candidate parse rejects and ruby tolerates. I had
+            attributed the red tripwire to unquoted timestamps and
+            non-idempotence, which were real and also had to be fixed, but the Mac
+            is right that neither is what the tripwire was complaining about.
+            Indenting the sequence fixed placement as a side effect of fixing
+            idempotence; I did not understand that at the time.
+        
+            VERIFIED THE WAY THE PACKET ASKS, on the live ledger rather than a copy:
+              fold           45 fragments consumed, 46 -> 1
+              TRIPWIRE       compaction_on_the_real_ledger_preserves_every_comment
+                             _and_item PASSES against the folded base
+              ruby           YAML.load_file parses the folded base
+              ready set      BYTE-IDENTICAL to pre-fold, 378 rows, diffed against
+                             HEAD's base rather than counted
+              matrix         9 rows, 7 of 7 hosts reporting, unchanged
+              check          539 packets, ids unique, references sound
+              full gate      TILLANDSIAS_FORCE_CHECK=1 ./build.sh --check -> 0
+        
+            THE OVERLAY HAS DRAINED FOR THE FIRST TIME. 46 fragments to 1, and the
+            survivor is the known permanent refusal the packet already names:
+            20260823t015724z-851-darwin-probe carries an event for
+            `macos-onboarding-defect-sweep`, a packet that exists nowhere. That is
+            benign and correct — the fold refuses rather than discarding the event
+            — but it will now refuse forever and be the only thing standing between
+            the overlay and zero. It deserves the tombstone the Mac suggested.
+        
+            TWO THINGS THE PACKET RAISES THAT I HAVE NOT FIXED, recorded so they
+            are not lost with the status change:
+              * `--index <copy>` replay folds the base but deletes no fragment
+                files, so replays diverge from live compaction. Confirmed here
+                twice while testing; it is why two of my own idempotence runs
+                reported success about a base that had never been folded.
+              * The permanent-refusal fragment wants a tombstone rather than an
+                eternal warning line.
