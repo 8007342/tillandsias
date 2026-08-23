@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # @trace order:601-462g, spec:ci-release
+# freshness: auditor=linux-lenovinha-fable5-20260823t173512z date=2026-08-23 verdict=refreshed scope=full file, 65 lines. Still meaningful: it is the only guard between an empty `gh pr list` and step 3 of merge-to-main-and-release merging PR #null. Still sound: fixture scripts/test-resolve-open-pr.sh 5/5 green here (no-pr-null-output, no-pr-empty-output, gh-failed, pr-resolves, trailing-newline-tolerated), and litmus:release-runbook-external-preconditions-shape pins both the executable bit and the distinct `blocked:open-pr:gh-failed:` grammar. Still complete for its scope: the `null`, empty, and gh-failure branches are the three ways the underlying command lies, and each is named separately rather than collapsed into one refusal. No change needed.
 #
 # Resolve the open linux-next -> main PR number, and REFUSE when there is none.
 #
