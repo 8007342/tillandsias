@@ -1,0 +1,142 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-23T03:36:50Z.
+#
+# THE TWO LARGEST BLOCKERS TO UNATTENDED FLEET CADENCE HAD NO ROWS. Measured
+# before filing: `query --limit 0 | grep -icE "scheduler|systemd.timer|launchd|
+# unattended.cadence|daemoniz"` -> 0, and the same for token budget / rate
+# limit / 429 / backoff -> 0. Nobody was working on them because there was
+# nothing to claim.
+packets:
+  - order: 856-s56y
+    packet_id: no-durable-scheduler-exists-on-any-host
+    desired_release: v0.6
+    title: "unattended cadence has no scheduler: ./repeat is a foreground loop that dies with its terminal and never returns after a reboot"
+    status: ready
+    kind: enhancement
+    pickup_role: any
+    priority: p1
+    capability_tags: [fleet, cadence, automation, systemd, launchd, windows]
+    deliverable: packaging/
+    depends_on: []
+    estimated_hours: 10
+    context: >
+      THE GAP, measured 2026-08-23 across every mechanism that could hold a
+      cadence: `crontab -l` -> no crontab; `systemctl --user list-timers --all`
+      -> three timers, all unrelated (a podman healthcheck, systemd-tmpfiles,
+      grub-boot-success); no *.timer or *.plist in the repo except
+      assets/macos/Info.plist (an app bundle) and packaging/systemd/user/
+      tillandsias.service, whose ExecStart is the product tray daemon and not a
+      cycle driver. The only entrypoint methodology names is `./repeat`
+      (methodology/multi-host-development.yaml:312-316), a foreground
+      `while :; sleep` loop.
+
+      THE EVIDENCE THAT THIS IS ALREADY COSTING US, rather than a theoretical
+      tidiness point: the per-cycle machinery demonstrably survives back-to-back
+      hourly runs — macuahuitl logged 14 consecutive COMPLETE attestations at
+      50-69 minute gaps overnight on 2026-08-22, yoga logged 10 on 2026-08-18 —
+      and the attestation ledger then shows per-host gaps of 1161, 1380 and
+      1976 MINUTES punctuating those clean runs. The cycle works. What fails is
+      everything around it: a closed terminal, a logout, a reboot.
+
+      SO THE OPEN QUESTION IS NOT "does an hourly cycle work". It does. It is
+      "what restarts it at 03:00 when nobody is awake".
+
+      PER-PLATFORM, because there is no portable answer and pretending
+      otherwise is how `./codex-repeat` ended up broken on macOS unnoticed
+      (GNU-only `date -d`): a systemd USER timer on Linux (with lingering
+      enabled, or it dies at logout exactly like the loop it replaces), launchd
+      on macOS, Task Scheduler on Windows. Each needs the same three
+      properties, which is what makes this one row rather than three.
+    exit_criteria: >
+      (1) A cycle fires on schedule with NO terminal open and NO user logged in,
+      demonstrated on at least one Linux host and one non-Linux host.
+      (2) It SURVIVES A REBOOT without a human re-arming it — this is the
+      property `./repeat` lacks and the one the attestation gaps are made of.
+      (3) The interval is per-host configurable, because the fleet is not
+      uniform: roughly-4-core hosts run every 4 hours by operator mandate while
+      the fast hosts run hourly or 2-hourly.
+      (4) A failing cycle does not stop the schedule, and a cycle that is still
+      running when the next fire is due does not stack a second one on top of
+      it. Overlap is worse than a missed tick: two cycles in one checkout
+      fight over the same worktree boundary.
+      (5) The scheduler's own state is observable — an operator can ask a host
+      "when did you last fire, when do you fire next, did the last one succeed"
+      without reading a transcript.
+
+  - order: 857-4kqv
+    packet_id: nothing-bounds-what-the-fleet-spends-or-backs-off-when-throttled
+    desired_release: v0.6
+    title: "no host-side token budget, no backoff on 429, and a 24h claim TTL that is never reaped automatically"
+    status: ready
+    kind: bug
+    pickup_role: any
+    priority: p1
+    capability_tags: [fleet, cadence, rate-limit, budget, claims, coordination]
+    deliverable: scripts/
+    depends_on: []
+    estimated_hours: 8
+    context: >
+      THREE FAULTS THAT ONLY BITE AT FLEET SCALE, which is why none of them
+      surfaced while one host was working and all three arrive together the
+      moment eight hosts hold a cadence.
+
+      (1) NO HOST-SIDE BUDGET. The only rate limiter in the repo
+      (scripts/forge-e2e-rate-limit.sh) is scoped to in-forge e2e, one full
+      cycle per 4h per host. Nothing bounds what a host-side meta-orchestration
+      cycle spends against the shared provider accounts. Eight hosts hourly is
+      eight full cycles per hour against a pool nobody is metering.
+
+      (2) NO BACKOFF. `./repeat` detects a 429 and then retries on the
+      IDENTICAL schedule. A throttled fleet therefore re-throttles itself at
+      the same cadence forever, and the recovery behaviour is indistinguishable
+      from the failure behaviour — which is the worst property a retry loop can
+      have, because it looks like it is trying.
+
+      (3) THE CLAIM TTL IS NEVER REAPED AUTOMATICALLY, and at 24 hours it is
+      roughly 24x coarser than the cycle it bounds. `expire-claims` exists and
+      works, but nothing runs it on a schedule: the only automatic reference is
+      a HINT STRING at scripts/check-stranded-in-progress.sh:132 telling a human
+      to run it, and scripts/reclaim-stranded-claims.sh (a 4h reaper) is named
+      only in prose at skills/advance-work-from-plan/SKILL.md:189 and
+      methodology/distributed-work.yaml:1375 — no caller anywhere. Related but
+      NOT the same as 662-s9z5, which is about that reaper finding candidates
+      and reclaiming none; this row is about nothing invoking it at all.
+
+      A host that dies mid-cycle therefore parks its claimed row for a full day,
+      invisible to every sibling, on a fleet whose cycles are hourly.
+    exit_criteria: >
+      (1) A per-host spend budget that a cycle CANNOT silently exceed, with the
+      spend reported in the cycle's own metrics rather than discovered later.
+      (2) Exponential backoff on throttling, and a NEGATIVE CONTROL proving the
+      interval actually lengthens under repeated 429s — a backoff nobody has
+      watched grow is a constant with extra code.
+      (3) Claims reaped automatically at a TTL proportional to the CYCLE, not to
+      the day. State the chosen TTL and why; if it stays 24h, say what makes a
+      cycle-length TTL wrong.
+      (4) Measured against the real fleet: with N hosts at their configured
+      intervals, what is the aggregate hourly spend and how close is it to the
+      ceiling? "Could not establish the provider quota" is an acceptable answer
+      ONLY if the row says so and names what would establish it.
+      (5) The three faults are separable in the fix: a budget that also silently
+      changes reaping behaviour is two changes wearing one commit.
+
+events:
+  - packet_id: no-durable-scheduler-exists-on-any-host
+    event:
+      type: filed
+      ts: "2026-08-23T03:36:50Z"
+      agent_id: linux-macuahuitl-opus5-20260822T144300Z
+      host: linux_mutable
+      summary: >
+        Filed because the operator asked who owns the blocking queue and the
+        answer was nobody — every candidate row was `ready` and unclaimed, and
+        these two, the largest of them, did not exist as rows at all.
+
+        THERE IS A FEEDBACK LOOP HERE WORTH NAMING. Hosts select work through
+        select-work-batch.sh, which picks among the top-3 frontier epics. None
+        of the fleet-enabling rows sits in those epics, so the selector never
+        offers them, so they stay unowned — including 847-wgy4, the row whose
+        whole subject is that the selector cannot route work to the host that
+        should do it. The defect is currently protecting itself from being
+        fixed. Until 847-wgy4 lands, these rows reach a host only by being
+        named in that host's invoking prompt.
