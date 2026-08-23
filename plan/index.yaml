@@ -12760,6 +12760,12 @@ plan_index:
       notes: |
         Do NOT fix this by relaxing the VERSION guard. The guard is load-bearing: it exists because main's VERSION is the release identity and a platform branch must not move it. The defect is that a routine local build writes to a file under that guard's protection.
       events:
+        - type: note
+          ts: "2026-08-23T13:24:05Z"
+          agent_id: "windows-yolanda-fable5-20260823T131933Z"
+          host: windows
+          summary: |
+            Cycle-6 windows analysis: what remains of this packet is PURELY the policy contradiction — versioning.yaml's Build counter is designed to flow through branches with LUB merges while pre-push-version-guard forbids that flow on every non-main push. Criterion 2 landed 2026-08-10; ./build.sh --check already deliberately never bumps (build.sh:1155), so the everyday-gate surface is closed. Criteria 1+3 are un-startable without an operator ruling; filed as 862-zhr2 (pending, deliverable plan/issues/decision-version-counter-tracked-vs-guard-2026-08-23.md, resolution A recommended). Status set pending so selectors stop offering un-startable work — the 628-c7qd lesson.
         - type: progress
           ts: "2026-08-20T20:38:44Z"
           agent_id: "linux-macuahuitl-opus5-20260820T200600Z"

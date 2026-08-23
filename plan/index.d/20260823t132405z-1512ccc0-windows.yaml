@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: build-bumps-version-then-the-hook-forbids-pushing-it
+    field: status
+    value: pending
+    ts: "2026-08-23T13:24:05Z"
+    host: windows
+
+events:
+  - packet_id: build-bumps-version-then-the-hook-forbids-pushing-it
+    event:
+      type: note
+      ts: "2026-08-23T13:24:05Z"
+      host: windows
+      summary: >
+        Remaining criteria (1,3) wait on the 862-zhr2 operator ruling; a fenced-off row must not present as ready (628-c7qd precedent). Reverts to ready in one set-field naming the chosen resolution when 862-zhr2 rules.
