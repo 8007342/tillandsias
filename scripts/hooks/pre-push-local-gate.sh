@@ -313,7 +313,16 @@ attempt_plan_only_lane() {
                     fi
                     tail -c +"$((oldsz + 1))" "$blob" > "$added"
                 else
-                    cp "$blob" "$added"
+                    # Order 848-bx2q: a NEW per-host ledger begins with the
+                    # fixed '# '-comment header mo-full-attest.sh record
+                    # writes, and the grammar below has no comment form — so a
+                    # joining host's FIRST attestation always failed here and
+                    # paid a full gate for the tool's own output (measured on
+                    # lenovinha's rejoin, 2026-08-22). Admit the header:
+                    # LEADING comment lines only, then hold every line after
+                    # it to the same grammar as an append. A '# ' line after
+                    # content still refuses.
+                    awk '!started && /^# / { next } { started=1; print }' "$blob" > "$added"
                 fi
                 if LC_ALL=C grep -qvE '^(|## [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z [A-Za-z0-9._-]+|MO-FULL: (COMPLETE|BLOCKED) [0-9a-f]{40} [A-Za-z0-9][A-Za-z0-9._/-]* [0-9a-f]{40})$' "$added"; then
                     echo "plan-only lane: validation FAILED — ${files[$i]} added lines break the attestation-ledger grammar (full gate required)" >&2
