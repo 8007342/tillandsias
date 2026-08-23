@@ -1553,6 +1553,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # Both times it printed `ok:` and the pre-push gate was the only thing that
     # noticed. A writer that reports success while corrupting an append-only
     # record needs a fixture, not a third incident.
+    # WHOLE-OVERLAY, not diff-scoped. check-added-fragments-parse.sh refuses a
+    # push that ADDS an unreadable fragment, and check-fragment-status-loss.sh
+    # already wrote the caveat down: a fragment damaged by MERGE is outside it.
+    # On 2026-08-23 git rename detection paired two hosts' set-field fragments
+    # after concurrent compactions and wrote conflict markers into both; they
+    # presented as renames, so the diff-scoped gate could not see them.
+    _step "Checking every ledger fragment is intact (whole overlay)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-all-fragments-intact.sh" 2>&1; then
+        _error "a ledger fragment is damaged — append-only files are restored, not merged"
+        exit 1
+    fi
+    _info "All fragments intact"
+
     _step "Checking set-field emits valid YAML for every value shape..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-set-field-yaml-shapes.sh" 2>&1; then
         _error "set-field can write an unparseable ledger fragment — the ledger is append-only"
