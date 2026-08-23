@@ -279,11 +279,15 @@ fi
 # TILLANDSIAS_HOST_TIER overrides the local core probe;
 # TILLANDSIAS_HOST_ACCELS (set-even-empty) overrides the accel set;
 # TILLANDSIAS_WORKSTATION names this host (agent-identity precedence).
-HOST_NAME="${TILLANDSIAS_WORKSTATION:-}"
-if [ -z "$HOST_NAME" ]; then
-    HOST_NAME="$(hostname -s 2>/dev/null || hostname 2>/dev/null || echo '')"
-fi
-HOST_NAME="$(printf '%s' "$HOST_NAME" | tr '[:upper:]' '[:lower:]')"
+# The comment above says "agent-identity precedence" and this block used to
+# implement a private, weaker approximation of it: `hostname -s || hostname`,
+# which resolves empty in every Fedora image, none of which ship a `hostname`
+# binary. An empty HOST_NAME here does not fail loudly — it just never matches
+# a row in the capability matrix, so a forge silently routes as an unknown host
+# (order 859-b2zc). Call the shared helper instead of describing it.
+# shellcheck source=scripts/agent-identity.sh
+. "$(dirname "${BASH_SOURCE[0]}")/agent-identity.sh"
+HOST_NAME="$(tillandsias_lower "$(tillandsias_agent_workstation)")"
 
 if [ -n "${TILLANDSIAS_CAP_HOSTS+x}" ]; then
     CAP_HOSTS="$TILLANDSIAS_CAP_HOSTS"

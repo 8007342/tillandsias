@@ -104,11 +104,18 @@ elif [ "$_fresh_rc" -ne 0 ]; then
     exit 2
 fi
 
-host="${TILLANDSIAS_WORKSTATION:-}"
-if [[ -z "$host" ]]; then
-    host="$(hostname -s 2>/dev/null || hostname 2>/dev/null || echo '')"
-fi
-host="$(printf '%s' "$host" | tr '[:upper:]' '[:lower:]')"
+# Host identity comes from the SHARED helper, never an inline chain
+# (order 859-b2zc). The copy that used to live here was `hostname -s ||
+# hostname`, and no Fedora image this project runs ships a `hostname` binary —
+# so inside a forge this resolved empty and the detector answered
+# `unattributable:host-unresolvable`. That is not a cosmetic verdict here: an
+# unattributable tree falls through to the dirty-start refusal, which is
+# exactly the 833-fpe7 deadlock this script was written to discharge. The
+# detector would have been inert in the environment that needs it most, and
+# silently, because `unattributable:` reads as caution rather than as breakage.
+# shellcheck source=scripts/agent-identity.sh
+. "$(dirname "${BASH_SOURCE[0]}")/agent-identity.sh"
+host="$(tillandsias_lower "$(tillandsias_agent_workstation)")"
 if [[ -z "$host" ]]; then
     echo "unattributable:host-unresolvable"
     exit 2
