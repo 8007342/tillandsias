@@ -1,0 +1,82 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-23T01:09:20Z.
+packets:
+  - order: 850-bif2
+    packet_id: joining-host-must-publish-a-capability-row
+    desired_release: v0.6
+    title: "the capability matrix is silent for 5 of 7 hosts because nothing tells a joining host to publish a row"
+    status: ready
+    kind: bug
+    pickup_role: linux
+    priority: p2
+    capability_tags: [fleet, capabilities, gpu, npu, probe, rust]
+    deliverable: crates/tillandsias-headless/src/accel_probe.rs
+    depends_on: []
+    estimated_hours: 5
+    context: >
+      THIRD of the three fleet-enabling rows (after 833-fpe7 and 848-bx2q).
+      Measured 2026-08-22:
+
+        capability-matrix: 3 row(s), 2 of 7 known host(s) reporting
+        SILENT: esmeraldinha, forge, lenovinha, tlatoanis-macbook-air, yoga
+
+      lenovinha joined, drained work, and published nothing — not because it
+      failed, but because the skill never asks. The "Joining the fleet" section
+      says nothing about capability rows, and the only GENERATOR in the repo is
+      scripts/windows-host-capability-probe.sh --fragment. On Linux the row is
+      hand-assembled around machine-generated probe output.
+
+      THIS BLOCKS 847-wgy4. Capability-aware routing is the fix for N hosts
+      colliding into K frontier epics, and it cannot route to hardware the
+      matrix cannot see. Five silent hosts is not a degraded matrix, it is an
+      absent one.
+
+      AND THE PROBE IS WRONG WHERE IT DOES RUN. macuahuitl's own row derives
+      derived_tier gpu-cuda and then reports "schedulable none" — an RTX A5000
+      that the matrix does not list as usable for anything. accel_probe.rs
+      contains ZERO rocm/amdgpu references (verified: grep returns nothing), so
+      AMD GPUs cannot be detected at all.
+
+      LENOVINHA IS THE RIGHT HOST TO FIX THIS ON, and that is the point of
+      ordering it here: it is the fleet's only AMD+NVIDIA machine, so it is the
+      one host where the dual-vendor path can be written and verified against
+      real silicon rather than inferred. Every other host would be guessing.
+      The host-identity probe added today (scripts/derive-host-identity.sh)
+      already detects both vendors correctly by reading the CLASS and VENDOR
+      fields of lspci -mm — note it does NOT substring-match the line, because
+      "VGA compatible controller" contains "ati" and "Non-VGA unclassified
+      device" contains "vga", which produced two false vendors on macuahuitl
+      before it was fixed. Reuse that parse; do not re-derive it.
+    exit_criteria: >
+      (1) A joining host publishes a capability row WITHOUT being told to —
+      i.e. the skill or the cycle does it, and a fresh host's first cycle
+      leaves a row behind.
+      (2) lenovinha's row lists BOTH its AMD and NVIDIA GPUs, with usable/
+      unusable stated and a reason for any unusable entry.
+      (3) macuahuitl's row stops reporting "schedulable none" while deriving
+      gpu-cuda, or explains in the row why a working A5000 is not schedulable.
+      (4) A negative control: a host with no accelerator still produces a valid
+      row rather than an empty or absent one — silence and "nothing here" must
+      remain distinguishable, which is the whole complaint above.
+
+events:
+  - packet_id: joining-host-must-publish-a-capability-row
+    event:
+      type: note
+      ts: "2026-08-23T01:09:20Z"
+      agent_id: linux-macuahuitl-opus5-20260822T144300Z
+      host: linux_mutable
+      summary: >
+        THIS FRAGMENT WAS FIRST WRITTEN THROUGH AN UNQUOTED HEREDOC AND THE
+        SHELL EXECUTED ITS BACKTICKS. Two spans became "command not found" and
+        a third ran lspci -mm, dumping this machine's entire PCI bus — 30-odd
+        lines of Thunderbolt, SATA and ISA bridge inventory — into the middle
+        of a packet about capability rows. Caught before push only because
+        ./build.sh --check refused the tree.
+
+        Recording it because the failure mode generalises past my typo: a
+        ledger fragment is APPEND-ONLY and IMMUTABLE once written, and writing
+        one with an unquoted heredoc makes arbitrary command output land in a
+        record nothing is supposed to rewrite. Every fragment written by a
+        shell heredoc should use a QUOTED delimiter and substitute timestamps
+        afterwards, never interpolate the document.

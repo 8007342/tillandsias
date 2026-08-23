@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: pre-push-plan-lane-rejects-first-attestation-of-a-new-host
+    field: next_action
+    value: 'SECOND of the three fleet-enabling rows, and the macOS host hits it NEXT — its packet context wrongly says tlatoanis-macbook-air already has a ledger file, but the M5 is a genuinely new host label and will pay the same unexplained refusal on its very first attestation. The outcome is benign (falls back to the full gate) but the error text misnames the cause: it says added lines break the attestation-ledger grammar when the grammar is fine and the real cause is that the file is NEW. Fix the message and the new-file branch, and add the test the packet notes has never existed — the new-file branch of the attestation lane has never been exercised by any fixture.'
+    ts: "2026-08-23T01:08:49Z"
+    host: linux_mutable
+
+events:
+  - packet_id: pre-push-plan-lane-rejects-first-attestation-of-a-new-host
+    event:
+      type: note
+      ts: "2026-08-23T01:08:49Z"
+      host: linux_mutable
+      summary: >
+        ordered second; macOS onboarding depends on it

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: dirty-start-refusal-has-no-resume-path-for-own-claimed-work
+    field: next_action
+    value: 'FLEET-BLOCKING as of 2026-08-22: the operator is about to put hosts on unattended hourly loops, and this defect is what makes that unsafe. In `./repeat` nothing clears a dirty tree between iterations, so ONE interrupted cycle wedges the host forever — every later cycle re-reads the same dirt and refuses. Attended, it costs a cycle; unattended, it costs the host. Take this FIRST of the three fleet-enabling rows. The resume path must distinguish the host OWN interrupted claimed work (resumable — it is this host, this claim, recorded in the ledger) from sibling/operator dirt (never touchable, the existing refusal is correct). Mutation-control it: a fixture where the dirty path IS the host own claimed work must RESUME, and one where it is not must still REFUSE. A fix that resumes both is worse than the wedge.'
+    ts: "2026-08-23T01:08:49Z"
+    host: linux_mutable
+
+events:
+  - packet_id: dirty-start-refusal-has-no-resume-path-for-own-claimed-work
+    event:
+      type: note
+      ts: "2026-08-23T01:08:49Z"
+      host: linux_mutable
+      summary: >
+        fleet unattended-cadence blocker; ordered first in the three-row story
