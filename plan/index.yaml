@@ -29063,6 +29063,7 @@ plan_index:
       verifiable_closure: a before/after bind latency pair from a 1-vCPU cold boot, with the clock origin named
 
     - packet_id: fat-spec-expert-cannot-refuse-an-out-of-corpus-question
+      next_action: 'THE THRESHOLD APPROACH IS DEAD — do not implement one. Measured at n=579: in-corpus and out-of-corpus bands overlap by 0.3024 globally and 0.17-0.28 in EVERY corpus; a top1-vs-top2 margin overlaps by 0.1306, worse than the raw score. Harness and data at scripts/refusal-calibration/. The replacement is 853-6gz3, the expert validation layer, which decides refusal by WHICH CHUNK WON and whether its citation verifies, not by how high it scored. Two things can close part of this row before 853-6gz3 lands: Tier A deterministic citation verification (unblocked today), and the declined-alternatives content measured on 824-6qxh, which converted 2 of 5 out-of-corpus questions into correct answers with zero in-corpus regression.'
       order: 821-73es
       status: ready
       desired_release: v0.5
@@ -29170,6 +29171,11 @@ plan_index:
           summary: |
             CRITERION 1 IS NOW COMPLETE: the score reaches the ENVELOPE, not just the retrieval output. Citation gains score: Option<f32> following the exact precedent of commit (801-g9nn) beside it -- additive, skip_serializing_if, ABSENT WHEN UNKNOWN. A deterministic expert has no similarity to report and omits the field rather than writing 1.0, which would read as a perfect match instead of 'not applicable'. Citation and Envelope drop the Eq derive to allow an f32; checked first that nothing needed it -- no HashSet/HashMap keyed on either, no trait bound requiring it -- and PartialEq keeps every assert_eq! working. build_envelope_scored is an additive sibling so the cheatsheet path and the deterministic experts keep the unscored form. with_score DROPS a value outside [-1,1] or NaN rather than storing it, the same discipline with_commit uses: a cosine cannot be 3.0, and recording one would hand a future threshold a number that is not a similarity. THREE TESTS, all asserting properties rather than shapes: the score reaches a citation and the measured value survives serialization; the UNSCORED builder omits the field entirely rather than inventing one; and every impossible score (3.0, -2.0, NaN, INFINITY) is dropped. 23 spec tests green, grade still PASS 1/1, build --check green. WHAT I DID NOT DO, deliberately: nothing refuses. Applying a threshold changes what every agent on every host can learn, so it is filed as 824-6qxh with the measurement attached rather than committed here. The packet carries the trap explicitly -- far negatives suggest 0.109 of headroom and invite a 0.65 threshold that ADMITS FOUR OF FIVE near misses; the real band is 0.693-0.720, margin 0.027 -- plus the ruled-out spread heuristic, and asks each host for its own in-corpus and NEAR-MISS bands, because the near-miss half is the part that matters and the part that is easy to skip.
 
+        - type: note
+          ts: "2026-08-23T02:22:07Z"
+          host: linux_mutable
+          summary: |
+            record that thresholds are measured dead and name the replacement
     - packet_id: windows-lane-sends-a-verbatim-argv-and-drops-its-escaping-workarounds
       order: 823-u5zf
       status: ready
@@ -31367,7 +31373,21 @@ plan_index:
         still 0 in two weeks horizon 0 has no write side and 814-iyu7 recurs
         regardless of everything else. GUARD: read 10 sampled next_action values;
         >= 7 must name a command or file:line AND a refuted move.
-      next_action: 'CAMPAIGN STATE 2026-08-22T14:49Z, single host (macuahuitl), and this is the FINAL cycle of the hourly loop. b measured 0.33 steady-state (4 rows filed / 12 closures) or 0.075 over the whole window; ready 410 (08-19) -> 386 (08-22), net -24 against a pre-campaign +26/day. Routing rule holding at 36:1 events-to-rows. DO NOT compare 0.33 to the old 1.80 — that was five hosts doing feature work, this is one host doing closure and repair. NEXT, in order: (1) 552 delta re-embed — priced at ~490s per full rebuild vs 0.6% of chunks actually changing (~325x waste); part 2 of 4 (content-hash stale detection) ALREADY WORKS; the hazard is that the embed loop is line-positional and its per-batch arity check is structurally blind to a mis-joined cache hit, so delta needs its own per-chunk identity assertion plus a negative control — written into 552 next_action, do not skip it. (2) 846-idhn p3 — the capabilities channel has no base representation, which is why three fragments can never be folded and the overlay cannot fully drain; size concern, not loss. (3) 821-73es — BLOCKED ON THE OPERATOR, needs a decision not an implementation: a single global cosine threshold cannot work (in-corpus floor 0.6818 vs near-miss ceiling 0.6889, bands OVERLAP by 0.007), so choose per-corpus thresholds or a top1-vs-top2 margin test. DONE SINCE THE LAST ROADMAP, both were listed above as open: 843-624y (compaction safety, closed) and the embed-cut chunks (now 0 chunks / 0 chars over, was 2 / 11,191). COMPACT IS NO LONGER A P0 HAZARD but read this first: as of today compact refuses unfoldable fragments (10/10) AND no longer mutates on --help or an unknown flag (23/23) — before today `compact --help` performed the compaction, which is how it was found. Use `compact --dry-run` or `fragments` to inspect. FLEET REJOIN: R1 claiming and R4 seed separation both MEASURED satisfied 2026-08-22; second Linux host first and it must pass --seed <hostname> explicitly, because the default seed is host KIND + date and two Linux boxes collide by construction. Measure b over its first three days before adding macOS.'
+      next_action: |-
+        CAMPAIGN STATE 2026-08-23T04:35Z. THE FLEET IS SIX ARMED HOSTS, not one: macuahuitl (coordinator, RTX A5000), lenovinha (Silverblue Ryzen7 dual GPU) on 847-wgy4, yoga (Silverblue Ryzen5) on 856-s56y then 857-4kqv, yolanda (Win11 Ryzen7) on 851-cduu, tlatoanis-macbook-air (M5) on 851-28b5, and the two low-end 4-core hosts (Silverblue on 855-wrr3, esmeraldinha on its Windows counterpart) in the profiling tier ONLY. Every host holds a DISTINCT row so claiming never has to arbitrate. Capability matrix 4 of 7 reporting; ready 389.
+        
+        MACUAHUITL IS THE THEORY HOST. The other hosts squeeze results out of low-end hardware; this one has 24GB of VRAM and proves whether the thing works at all. At filing it sat at 11% utilisation with 23.5GB free, which is the argument for this queue over any other.
+        
+        MY QUEUE, in order:
+        (1) 849-tz8g FIRST. It gates two programmes and only this host can test it. ollama 0.32.14 in the pinned image aborts on everything above 0.5B (mxbai, qwen3-embedding:4b, qwen2.5:3b and 7b all GGML_ASSERT; bge-m3 works single but aborts batched). Not a hardware limit: 21GB was free through every crash. Unblocks the bigger-embedder question AND Tier B of 853-6gz3.
+        (2) 853-6gz3 TIER A, which needs no model and ships regardless of (1): deterministic reference integrity, does the cited path exist, does the span resolve, does the quoted text match. Start from check-source-slice-bounds.sh rather than reinventing it. Kills fabricated and rotted citations for free.
+        (3) 824-6qxh RELABEL, my own design flaw to repair. The 579-question set labelled cross-corpus questions as near-misses, but retrieval is GLOBAL, so 187 of 243 near-misses (77%) retrieved a different corpus kind and were answered CORRECTLY while my labels scored that as failure. The questions are committed; relabelling against the global corpus is cheap and makes every band number trustworthy.
+        (4) 853-6gz3 TIER B once (1) clears: complement-paired support judgement, measured BOTH directions on the relabelled set.
+        (5) 552 delta re-embed. ~490s per full rebuild vs 0.6% of chunks changing; part 2 of 4 already works; the hazard is a line-positional embed loop whose per-batch arity check is structurally blind to a mis-joined cache hit, so it needs a per-chunk identity assertion plus a negative control.
+        
+        STANDING COORDINATOR DUTY EVERY CYCLE, not optional: merge the platform branches into linux-next. windows-next sat 6 ahead carrying the UTF-8 ruby fix until this host merged it on 2026-08-23; osx-next was 21 behind at the same moment. Unmerged platform branches are a silent fleet-wide staleness source and no other host has the duty.
+        
+        NOT MINE: 847-wgy4, 856-s56y, 857-4kqv, 851-cduu are assigned to other hosts by directed prompt. Do not claim them. If one stalls, re-direct rather than absorb.
       events:
         - type: note
           ts: "2026-08-22T23:44:01Z"
@@ -32780,6 +32800,11 @@ plan_index:
             This was the narrow one. Worth asking of any future ratchet: name the
             set it does NOT cover, because a ratchet's scope is invisible from its
             green line.
+        - type: note
+          ts: "2026-08-23T04:31:27Z"
+          host: linux_mutable
+          summary: |
+            roadmap refresh: six armed hosts; macuahuitl queue ordered; coordinator duty standing
     - packet_id: macos-guest-cannot-reach-a-host-native-service
       order: 830-xsk2
       status: ready
@@ -34920,7 +34945,7 @@ plan_index:
       packet_id: work-selection-cannot-separate-more-hosts-than-frontier-epics
       desired_release: v0.6
       title: select-work-batch picks among top-K frontier epics, so N hosts collide into K batches however unique their seeds are
-      status: ready
+      status: completed
       kind: enhancement
       pickup_role: linux
       priority: p2
@@ -34964,6 +34989,21 @@ plan_index:
           host: linux_mutable
           summary: |
             Filed as its own row rather than an event on the rejoin campaign, because it is independently schedulable and because it CORRECTS a campaign claim: I reported R4 satisfied on 2026-08-22 after measuring two seeds that returned disjoint batches. Eleven seeds return three batches, and two real hostnames — macuahuitl and yoga — return a byte-identical one. The two seeds I picked happened to land in different buckets. That is the third false pass this campaign from a test whose sample could not distinguish the hypothesis from its negation.
+        - type: note
+          ts: "2026-08-23T04:11:56Z"
+          host: lenovinha
+          summary: |
+            claimed for cycle 2026-08-23T04:11Z (operator /loop directive: capability-aware routing)
+        - type: completed
+          ts: "2026-08-23T04:35:14Z"
+          host: lenovinha
+          summary: |
+            status 'completed' with evidence_refs: 649fc5534 scripts/test-capability-routing.sh PASS 5/5; litmus:capability-routing-shape PASS; ci-release instant suite PASS incl. repaired added-fragment-parse-gate; live 4-host disjointness observed; ./build.sh --check rc=0
+        - type: note
+          ts: "2026-08-23T04:35:14Z"
+          host: lenovinha
+          summary: |
+            implemented + litmus-pinned this cycle
     - packet_id: pre-push-plan-lane-rejects-first-attestation-of-a-new-host
       order: 848-bx2q
       status: completed
@@ -35031,6 +35071,7 @@ plan_index:
       next_action: 'SECOND of the three fleet-enabling rows, and the macOS host hits it NEXT — its packet context wrongly says tlatoanis-macbook-air already has a ledger file, but the M5 is a genuinely new host label and will pay the same unexplained refusal on its very first attestation. The outcome is benign (falls back to the full gate) but the error text misnames the cause: it says added lines break the attestation-ledger grammar when the grammar is fine and the real cause is that the file is NEW. Fix the message and the new-file branch, and add the test the packet notes has never existed — the new-file branch of the attestation lane has never been exercised by any fixture.'
 
     - order: 849-tz8g
+      next_action: 'BLOCKS 853-6gz3, the expert validation layer, which is the architecture this ceiling is in the way of — not a curiosity. Tier B of that layer (does the retrieved span SUPPORT the claim?) needs a local model capable of discrimination, and qwen2.5:0.5b has none: it returns whatever the prompt leans toward, 70/70 either way. Tier A of 853-6gz3 is deterministic and ships WITHOUT this, so do not treat this row as blocking the whole layer — it blocks half of it. Smallest next action: a newer inference image, then re-measure the judge on the committed 579-question set BOTH directions (a judge that always answers one way scores 100% on half the set, which is exactly how the 0.5B failure first read as a success).'
       packet_id: inference-image-cannot-run-any-model-larger-than-0-5b
       desired_release: v0.6
       title: the pinned inference image crashes on every model above 0.5B, blocking the expert-validation layer
@@ -35068,6 +35109,12 @@ plan_index:
       exit_criteria: |
         (1) A model of at least 7B answers a support-judgement prompt without aborting, demonstrated on this host. (2) bge-m3 (or a comparable 1024-dim embedder) accepts BATCHED input, so an index rebuild stays in minutes rather than hours. (3) A negative control: the pre-upgrade image still reproduces GGML_ASSERT on the same prompt, so the fix is attributed to the upgrade rather than to a warm cache or a changed prompt. (4) The judge is re-measured on the committed 579-question set BOTH directions — in-corpus SUPPORTED rate and out-of-corpus UNSUPPORTED rate — because a judge that always answers one way scores 100% on half the set and that is exactly how the 0.5B failure first read as a success.
 
+      events:
+        - type: note
+          ts: "2026-08-23T02:22:07Z"
+          host: linux_mutable
+          summary: |
+            link the ceiling to the architecture it blocks (853-6gz3)
     - order: 850-bif2
       packet_id: joining-host-must-publish-a-capability-row
       desired_release: v0.6
@@ -35143,6 +35190,12 @@ plan_index:
           summary: |
             route the fleet refresh without a new row
 
+        - type: note
+          ts: "2026-08-23T02:00:50Z"
+          agent_id: windows-yolanda-fable5-20260823T014638Z
+          host: windows
+          summary: |
+            yolanda refreshed BOTH its capability rows at probe v0.4.260817.1 (fragments 20260823t015456z-49df4525-yolanda.yaml windows-host, 20260823t015759z-61d6612c-yolanda.yaml in-guest), and answered the coordinator's open question: the npu wsl2-npu-not-exposed and gpu wsl2-no-dri-render-node limits are WSL2-universal, NOT Intel-specific — yolanda is itself AMD (Ryzen AI 7 350, XDNA NPU VEN_1022&DEV_17F0, Radeon 860M VEN_1002); the guest PCI bus carries only Microsoft 0x1414 3D-controller paravirtual functions, no DRM driver binds (no /dev/dri for any vendor), and no PCI passthrough exists (no /dev/accel* possible). The fleet's Intel N100 is esmeraldinha, still silent; its future row confirms the Intel half. Full evidence: plan/issues/research-wsl2-accel-limits-vendor-universality-2026-08-23.md. Caveat for this packet's design: in-guest rows are DISTRO-dependent (ollama present in the 08-18 probe context, absent in tillandsias-build today, so yolanda's in-guest schedulable set dropped to none) and the host+locus fold key cannot express which guest was probed — decide the canonical guest or key the distro.
     - packet_id: macos-host-onboarding-defect-sweep
       order: 851-gpb5
       status: done
@@ -35192,7 +35245,7 @@ plan_index:
 
     - packet_id: macos-portability-residuals-after-onboarding-sweep
       order: 851-28b5
-      status: ready
+      status: done
       kind: bug
       pickup_role: any
       priority: p3
@@ -35232,11 +35285,26 @@ plan_index:
           summary: |
             Filed from the 851-gpb5 onboarding cycle as its reduction-engine residual; shaped ready for any host.
 
+        - type: note
+          ts: "2026-08-23T04:11:25Z"
+          host: tlatoanis-macbook-air
+          summary: |
+            claimed for cycle 2026-08-23T04:08Z (operator-directed residuals drain)
+        - type: completed
+          ts: "2026-08-23T04:27:17Z"
+          host: tlatoanis-macbook-air
+          summary: |
+            status 'done' with evidence_refs: 31225929b54fc6ee4df8b3867862e60da262c675 litmus:macos-portability-residuals green + ./build.sh --check green on Darwin
+        - type: note
+          ts: "2026-08-23T04:27:17Z"
+          host: tlatoanis-macbook-air
+          summary: |
+            residuals drained
     - order: 852-dk9z
       packet_id: accel-capability-cache-serves-stale-document-across-probe-code-changes
       desired_release: v0.6
       title: load_or_probe's cache key cannot see probe-code changes, so a rebuilt binary republishes its predecessor's document as a fresh probe
-      status: ready
+      status: implemented
       kind: bug
       pickup_role: linux
       priority: p2
@@ -35253,3 +35321,599 @@ plan_index:
         This is the confidently-wrong-row failure class the matrix exists to prevent (cf. the (host_id, locus) LWW lesson in the 2026-08 archive), reached through the cache rather than the fold: staleness dressed as a probe. Any probe-code change that alters document CONTENT without bumping schema_version or flipping legacy_tier is invisible to the cache key, which makes every future enumeration fix (and there will be more: the NPU arm, macOS) silently non-observable on hosts with a warm cache. Sibling hazard, recorded in yoga's first row fragment header rather than here: when the cache IS invalidated (v1 to v2), the rewrite silently discards the old cache's measurement rows.
       exit_criteria: |
         (1) The cache key includes a probe-code identity — crate version or a dedicated probe revision constant — OR the --capabilities path takes a freshness flag the generator uses; either way a rebuilt binary can no longer serve a document produced by different probe code as if it had probed. (2) A unit test pins it: a cached document stamped with an old probe identity is re-probed, not served, by a binary with a newer one. (3) scripts/host-capability-probe.sh publishes only fresh probes by construction, so a published capability row can never be a stale-cache artifact. (4) Negative control: an unchanged binary still serves its own cache (the cache continues to exist for the server's hot path).
+      events:
+        - type: implemented
+          ts: "2026-08-23T04:32:14Z"
+          agent_id: linux-pirria-opus5-20260823T032800Z
+          host: linux_immutable
+          summary: |
+            IMPLEMENTED, and this host reproduced the bug independently before taking the packet. 852-dk9z was measured on yoga after 850-bif2's AMD enumeration landed. The IDENTICAL failure happened here hours ago with a different vendor arm: after 856-fwyh gave Intel a disposition check, the rebuilt binary kept printing accel_gpu=usable and accel_class=workstation-gpu, and the fix looked like it had failed. It had not — load_or_probe was serving the pre-fix document because schema_version (2) and legacy_tier (cpu) both still matched. Deleting ~/.cache/tillandsias/capabilities.json produced the correct row instantly. Two hosts, two vendor arms, one cause: THE CACHE KEY CANNOT SEE PROBE CODE.
+            THE FIX, and the choice inside it is the interesting part. The packet offered "crate version or a dedicated probe revision constant". Crate version alone would NOT have caught either incident — 850-bif2 and 856-fwyh both changed enumeration output without moving tillandsias-headless's version — and a hand-maintained constant fails in exactly the way that produced this bug: someone has to remember. So build.rs now hashes src/accel_probe.rs (FNV-1a) and emits TILLANDSIAS_PROBE_REVISION, with a rerun-if-changed on that file. ANY edit to the probe changes the identity automatically. probe_identity() is version+revision, stored on the document and compared in load_or_probe. It is SERIALISED INTO PUBLISHED ROWS deliberately, answering the packet's own complaint that nothing on a row said which code probed it.
+            EC1 cache key carries probe-code identity, AND --capabilities gained --fresh. EC2 pinned by test_cache_from_different_probe_code_is_reprobed_not_served, which covers BOTH a foreign identity and a pre-852 document with no identity field at all (Option + serde default, so every legacy cache in the fleet self-invalidates once rather than being served one last time). EC3 scripts/host-capability-probe.sh passes --fresh, so a published row is fresh BY CONSTRUCTION: two consecutive generator runs returned 04:31:41.346917726Z and 04:31:41.431087617Z — different documents, no cache. EC4 negative control kept: two cached-mode runs returned the SAME timestamp, and test_negative_control_unchanged_binary_still_serves_its_own_cache pins it. The cache still exists for the server's hot path; this is an invalidation rule, not a removal.
+            VERIFIED AGAINST THE REAL ARTEFACT rather than only a fixture: the capabilities.json sitting on this host was written by the pre-852 binary and carries no probe_identity. The new binary refused it and re-probed (fresh timestamp, identity stamped), which is the exact sequence that silently succeeded the wrong way this morning.
+            ONE THING THE UNIT TESTS DID NOT CATCH, worth the next agent's time: --fresh was rejected at runtime with "Unsupported option" until it was added to main.rs's known_flags allowlist. Every test passed while the generator was broken, because the tests call the library and the script calls the BINARY. Caught only by running the script end to end — the project's own "verified where it was written is not verified where it runs" class, which the accel_envelope doc comment already names.
+            NOT ADDRESSED HERE, and named so it is not assumed fixed: the sibling hazard recorded in yoga's fragment header — when a cache IS invalidated, the rewrite discards the old document's measurement rows. This change makes invalidation MORE frequent, so that loss now happens more often. It needs its own packet.
+        - type: note
+          ts: "2026-08-23T04:32:48Z"
+          host: linux_immutable
+          summary: |
+            probe-code identity in the cache key (build.rs FNV-1a over accel_probe.rs) + --fresh on the publish path; all four exit criteria verified on pirria, including the negative control
+    - order: 851-cduu
+      packet_id: dual-locus-preflight-must-rebuild-every-gate-locus
+      desired_release: v0.5
+      title: cycle-preflight rebuilds the native instrument while the gate tests the WSL-cached one — a 6-day-stale destroyer passed for HEAD
+      status: implemented
+      kind: bug
+      pickup_role: windows
+      priority: p2
+      capability_tags:
+        - windows
+        - wsl2
+        - build
+        - preflight
+        - ledger
+        - probe
+      deliverable: scripts/cycle-preflight.sh
+      depends_on: []
+      estimated_hours: 3
+      context: |
+        Measured 2026-08-23 on yolanda, first ./build.sh --check after fast-forwarding windows-next 177 commits to origin/linux-next: compaction-coverage went red 6/23 because the gate runs inside WSL where plan-binary-probe (correctly, 783-jdeh) resolves CARGO_TARGET_DIR=/root/.cache/tillandsias-wsl2-target/tillandsias — a tillandsias-plan built 2026-08-16, six days behind HEAD, predating 843-624y. cycle-preflight had just reported ok:rebuilt, but it rebuilt only the native Windows ./target lane: "rebuilt" is locus-relative and nothing says so. The stale binary's compact ignores --help/--dry-run/ unknown args and deletes every fragment it LOADED; invoked once during diagnosis with the repo as cwd it deleted all 16 live plan/index.d/ fragments (restored from HEAD, zero loss, nothing pushed). Details: plan/issues/enhancement-dual-locus-preflight-stale-wsl-instrument-2026-08-23.md
+      exit_criteria: |
+        (1) After cycle-preflight on a dual-locus host, the binary plan-binary-probe resolves INSIDE the gate's WSL execution context is built from the current checkout (verifiable handshake, e.g. plan_binary_has on a subcommand introduced at that head, or a source-vintage probe). (2) A stale resolved binary produces a distinct stale-instrument verdict, never a behaviour-fixture red — 702-68zj names the conflation. (3) A hermetic fixture pins the stale-lane shape so it cannot regress silently.
+      next_action: 'On a linux host after a mid-cycle sibling pull, observe check-resumable-claim-dirt.sh: expect resumable:/ok:clean-tree from a fresh instrument or unattributable:stale-plan-binary — never plan-query-failed from staleness. That observation closes the packet.'
+      events:
+        - type: note
+          ts: "2026-08-23T04:15:47Z"
+          agent_id: windows-yolanda-fable5-20260823T040716Z
+          host: windows
+          summary: |
+            Claimed and reframed per operator directive (2026-08-23 windows loop): the fix is NOT 'rebuild the WSL lane too' — macuahuitl hit the Linux twin the same day (preflight builds the right artifact once at cycle start; a mid-cycle sibling pull left check-resumable-claim-dirt.sh answering unattributable:plan-query-failed for 11h, reopening the 833-fpe7 wedge). Per-copy refresh lanes cannot close the class: wsl-plan-expert-ensure reported wsl-ok while the gate's cache copy sat 6 days stale, because it refreshes the copy it knows about, not the copy the consumer resolves. Shipped: ensure_fresh_plan_binary in plan-binary-probe.sh — resolve, mtime-vintage-check against crates/tillandsias-plan+Cargo.lock (files only; commit times are origin-host times and would call a pre-merge binary fresh), rebuild IN THE EXECUTING LOCUS when stale (incremental no-op when fresh), rc2+silence when stale and unrefreshable, TILLANDSIAS_PLAN_BIN passthrough preserved for litmus stubs. Converted the two measured-breach consumers: archive-plan-packets.sh --check (distinct STALE refusal, never a behaviour-fixture red) and check-resumable-claim-dirt.sh (unattributable:stale-plan-binary, exit 2). Hermetic fixture scripts/test-plan-binary-freshness.sh (9 cases) wired into ./build.sh --check.
+        - type: note
+          ts: "2026-08-23T04:15:47Z"
+          host: windows
+          summary: |
+            All three exit criteria have hermetic + this-host evidence; field evidence from a Linux mid-cycle pull is the residual
+        - type: progress
+          ts: "2026-08-23T04:59:25Z"
+          agent_id: linux-macuahuitl-opus5-20260823T042300Z
+          host: linux_mutable
+          summary: |
+            COORDINATOR NOTE FOR YOLANDA — 851-cduu's fixture arrived RED on this
+            host, and the cause is the fixture rather than the guard.
+        
+            Merging windows-next into linux-next brought
+            scripts/test-plan-binary-freshness.sh, which reports 8 passed / 1 failed
+            here and takes ./build.sh --check to exit 1:
+        
+              FAIL no binary returns 1 (expected rc=1, got rc=0)
+        
+            Isolated with my own cycle's changes stashed, so it is not interaction.
+        
+            THE FIXTURE IS NON-HERMETIC, NOT THE GUARD. Case D moves the scratch
+            binary aside to assert "no binary at all -> rc=1", but
+            resolve_plan_binary's LAST candidate is `command -v tillandsias-plan`,
+            and run_case sets PATH="$TMPD/bin:$PATH" — prepending without shadowing.
+            macuahuitl keeps an installed copy at ~/.local/bin/tillandsias-plan, so
+            the resolver finds it, returns 0, and the case fails. yolanda has no
+            installed copy, which is why it was green where it was written.
+        
+            FIXED by shimming a failing `tillandsias-plan` into $TMPD/bin — a stub
+            that fails its `capabilities` probe is the shadow, since deleting from
+            $TMPD/bin cannot hide a binary living elsewhere on PATH. The relative
+            ./target candidates are checked BEFORE the PATH fallback, so the cases
+            expecting a real local binary are untouched. Now 9/9.
+        
+            MUTATION-CONTROLLED, and my first attempt at that control was vacuous:
+            a sed that did not apply reported "0 failures" and I nearly recorded the
+            gate as falsifiable on the strength of it. Re-run with the edit
+            confirmed present (grep before trusting), a fail-open in
+            ensure_fresh_plan_binary reddens exactly case D and nothing else.
+        
+            THIS IS THE FOURTH ONLY-PASSES-WHERE-IT-WAS-WRITTEN FIXTURE IN TWO DAYS:
+            my derive-host-identity fixture leaked the real uname/nvidia-smi/NPU;
+            the Mac's Darwin scenario read this box's /proc/cpuinfo; and now this.
+            The shape is always the same — a probe shimmed, and one more route to
+            the same fact left open. Worth a methodology line: a hermetic fixture
+            must shadow EVERY route the SUT can take to a host fact, and the way to
+            find the routes is to read the SUT's resolution order rather than to
+            guess at it.
+        
+            The guard itself is sound and I have left it alone.
+
+    - order: 853-6gz3
+      packet_id: expert-validation-layer-returns-verified-not-merely-verifiable
+      desired_release: v0.6
+      title: an unfold/verify/fold layer inside the expert system, so callers get VERIFIED answers through the unchanged interface
+      status: ready
+      kind: enhancement
+      pickup_role: linux
+      priority: p1
+      capability_tags:
+        - experts
+        - rag
+        - answer-envelope
+        - crdt
+        - inference
+        - verification
+      deliverable: crates/tillandsias-plan/src/answer.rs
+      depends_on: []
+      estimated_hours: 24
+      context: |
+        ORIGIN. Operator design (The Tlatoani), 2026-08-22/23. Recorded here in the operator's own framing because the framing is the contribution.
+        THE PROBLEM IT SOLVES, and it is measured rather than supposed. The fat spec expert cannot refuse an out-of-corpus question (821-73es). The obvious fix — a cosine threshold — is DEAD at realistic sample size: at n=579 the in-corpus and out-of-corpus bands overlap by 0.3024 globally and by 0.17-0.28 in EVERY corpus, and a top1-vs-top2 margin overlaps by 0.1306 (worse than the raw score). Even in-corpus floor 0.5620 versus genuine far-field ceiling 0.6911 overlaps by 0.1292. A single scalar conflates "topically near" with "actually answers"; those are different properties and no cutoff separates them. Measurements and harness at scripts/refusal-calibration/, events on 824-6qxh.
+        THE DESIGN. An agent asks ONE ordinary question. Inside the expert system, invisibly to the caller:
+        
+          1. UNFOLD the question into n adversarial, individually verifiable
+             sub-questions. Not paraphrases and NOT repetitions of the same
+             prompt — COMPLEMENTS. "Does this project support X?" also asks
+             "does it support X's alternatives?", "can it function without X?",
+             "how does X support this project?", and where X decomposes, the
+             not-X / opposite-of-X / X-alternative forms. The search-engine
+             analogy the operator gave: a media engine searching "Miley Cyrus"
+             also searches "<term> albums", "<term> songs", "<term> soundtrack",
+             then ranks what comes back.
+          2. ANSWER each sub-question through the existing RAG path, which
+             already returns evidence (file, spec, cheatsheet references).
+          3. COLLECT the results CRDT-style — a G-Set of sub-answers, merge by
+             union, no single winner elected early. This is the same accumulate-
+             then-fold shape the ledger already uses, which is why the operator
+             observed it "only matches our CRDT approach".
+          4. VERIFY every collected response against its own references.
+          5. FOLD the verified set into ONE answer for the ORIGINAL question.
+        
+        WHY THE COMPLEMENTS ARE LOAD-BEARING, not decoration. Repeating one prompt resamples the SAME bias and converges confidently on the same wrong answer — the law of large numbers gives you the expected value, and if the estimator is biased the expected value is wrong. methodology/philosophy.yaml `convergence_via_velocity` already states the condition: BOUNDED SKEW, not merely many samples. Adversarial complements are how the skew is bounded, because complementary framings fail in different directions. Consistency across them is evidence; DIVERGENCE ACROSS THEM IS THE HALLUCINATION SIGNAL, by design.
+        MEASURED, AND THIS IS THE RESULT THAT JUSTIFIES THE DESIGN. The complement pair detects a useless judge with NO ground truth and NO labelled set. Asked of qwen2.5:0.5b about a passage that genuinely answers a question AND a CSS cheatsheet that does not, both framings — "does the passage answer the question?" and "is the passage MISSING the answer?" — returned YES on both passages. A single-prompt harness sees a confident working judge; the complement pair exposes a flat contradiction. That property is what makes this deployable at runtime rather than only in a lab: it converts "is this true?", which needs labels, into "do complementary framings agree?", which needs only more queries.
+        TRANSPARENT BY CONSTRUCTION. The wrap point is `answer_question(ledger, question, source_rel) -> Envelope` (crates/tillandsias-plan/src/answer.rs:1230). Same signature, same return type, so plan_answer / spec_answer / methodology_ask and every in-forge caller change NOT AT ALL. It is middleware, not a redesign. Operator intent is explicit that the development-environment runtime uses this too, not only the forge.
+        L0 MUST BYPASS THE LAYER. `Confidence::Exact` is a deterministic ledger lookup — the answer IS the content. Fanning it out would spend inference re-deriving certainty and would let an inferential layer contradict deterministic bookkeeping. Verification applies to `Retrieved` only. This preserves the boundary the operator set earlier: deterministic bookkeeping and querying with CRDT-friendly types, inference as the sugar that explains it.
+        TWO TIERS, AND THE CHEAP ONE NEEDS NO MODEL.
+          TIER A — REFERENCE INTEGRITY. Deterministic, zero tokens: does the cited
+          path exist, does the span resolve, does the quoted text match? Kills
+          every fabricated or rotted citation before any inference runs.
+          scripts/check-source-slice-bounds.sh already performs this shape for a
+          different purpose and should be the starting point rather than a
+          reinvention. Tier A is UNBLOCKED TODAY.
+          TIER B — SUPPORT JUDGEMENT. Inferential, complement-paired: does the
+          real span actually answer the question? Runs only on citations Tier A
+          already proved real. BLOCKED on 849-tz8g.
+        
+        AFFORDANCES, NOT JUST RANKS. Operator requirement, and it changes the return type rather than decorating it. A numeric score cannot carry this: a high cosine means "more textually similar", never "more true", so the top answer is a RECOMMENDATION, not a verdict. Low-graded answers must still be RETURNED — the caller may be investigating precisely that edge case, and suppressing them removes the agency the layer exists to give. What makes the difference usable is that the WHY is machine-readable. Follow the project's existing pattern (Confidence, CitationKind): a CLOSED vocabulary with a mandatory reason.
+        
+          Intended    — the designed path
+          Compatible  — works, not idiomatic; name the idiomatic one
+          Discouraged — works, has costs; name them
+          Prohibited  — never without explicit operator permission; name the
+                        damage, the cost, and what must be discussed first
+        
+        Much of this is DERIVED, not judged. The methodology already encodes irreversibility, release authority, cloud-minute cost, the token policy and the no-force-push rule, so "Prohibited: never push --force to main" is a lookup rather than an opinion the model forms. Operator's example of the target register: "please don't try this, it would damage <x> and <y> and has financial cost on <z>, ask for exceptions for investigation but don't proceed ever without USER explicit permission after very clear discussion of consequences."
+        WHY THIS JUSTIFIES THE HARDWARE PROGRAMME. Every stage is numerical methods run LOCALLY: embedding, cosine, aggregation, small-model judgement, all parallel, all accelerator-friendly. It is the reason the fleet's CPU/NPU/GPU spread matters — tune on the high-end host, run on commodity hardware. Operator intent is that this becomes open source.
+        OPEN DECISION, OPERATOR-OWNED: what the fold does when sub-answers DISAGREE. Conservative (any unresolved contradiction -> Unsupported), majority (report consensus, drop dissent), or divergence-surfacing (report consensus AND attach the contradiction). The operator's own framing — divergence in hallucinations is proof-of-convergence by design — argues the third, since voting the disagreement away discards the signal the fan-out was built to produce. Recorded as a decision, not assumed.
+        NAMING: the layer needs one. Deferred by the operator; do not invent one in passing and let it stick by accident.
+      exit_criteria: |
+        (1) `answer_question` returns a VERIFIED envelope through an UNCHANGED signature — no caller, MCP tool, or in-forge agent edited to accommodate it. A caller diff of zero is part of the acceptance. (2) Tier A alone demonstrably rejects a fabricated citation and a rotted one (a path compaction has folded away), with a negative control proving it ACCEPTS a real one. Shippable before 849-tz8g clears. (3) `Confidence::Exact` answers bypass the layer entirely, proven by a test that fails if an L0 lookup is fanned out. (4) The affordance vocabulary is closed and every returned candidate carries a reason; a candidate with an empty reason is a hard error, not a default. Prohibited entries name damage, cost, and the permission needed. (5) The complement probe runs as a SELF-CHECK: the layer detects and reports its own judge answering YES to both a claim and its complement, rather than silently averaging a degenerate judge into a confident answer. (6) Measured on the committed 579-question set BOTH directions — in-corpus answered rate AND out-of-corpus refused rate. A layer that refuses everything scores 100% on half the set, which is exactly how the 0.5B judge first read as a success. (7) A per-call budget: n sub-questions x waves is bounded and reported, so an answer cannot silently cost an unbounded number of model calls.
+      events:
+        - type: filed
+          ts: "2026-08-23T02:20:37Z"
+          agent_id: linux-macuahuitl-opus5-20260822T144300Z
+          host: linux_mutable
+          summary: |
+            Filed at the operator's prompt, and the prompt is the finding: I had filed the blocker (849-tz8g) and the measurements (824-6qxh events) but never the design they serve. `grep -i "expert layer" plan/` returned zero. Evidence and obstacles were durable; the architecture was not — it lived in a conversation, which is the one medium guaranteed to be compacted away. Recorded in the operator's framing rather than paraphrased, because the framing (verified-not-verifiable, complements rather than repetitions, affordances rather than ranks) is the contribution.
+            Also corrects my own misreadings twice over, since they are instructive: I first read the complement idea as an instrument for grading a judge, and then as paraphrase-diversity. It is neither — it is the production request path, and the complements are adversarial rather than rephrased. Both misreadings made the design smaller than it is.
+            A spec under openspec/specs/ should follow once the fold's disagreement behaviour is decided; filing one now would pin an ambiguity the design has not resolved, and spec discipline requires ambiguity score 0.
+        - type: progress
+          ts: "2026-08-23T04:58:59Z"
+          agent_id: linux-macuahuitl-opus5-20260823T042300Z
+          host: linux_mutable
+          summary: |
+            TIER A ALREADY EXISTS — AND IT WAS WITHHOLDING 75% OF THE METHODOLOGY
+            CORPUS AS "FABRICATED".
+        
+            I filed 853-6gz3 planning to BUILD deterministic reference integrity.
+            It is already built and fully wired: emit_verified_envelope ->
+            self_verified -> answer::verify runs on all four envelope-producing
+            subcommands (answer, next, spec-envelope, methodology-ask), and on
+            violation it REPLACES the answer with an unsupported: refusal naming
+            them. Tier A of the design is done; 853-6gz3's scope shrinks to Tier B.
+        
+            SO THE QUESTION BECAME: DOES IT EVER FIRE? Measured through the real
+            spec-retrieve -> spec-envelope pipeline, 50 in-corpus questions:
+        
+                            BEFORE            AFTER
+              methodology    4 pass / 12 WITHHELD    16 pass / 0
+              spec          11 pass /  0             11 pass / 0
+              cheatsheet    17 pass /  0             17 pass / 0
+              code           6 pass /  0              6 pass / 0
+        
+            On the L0 ledger path it fires 0/100 — correct, and near-tautological
+            there, because L0 builds citations from the very tree it just read.
+        
+            THE CAUSE: TWO PRODUCERS, TWO KEY SHAPES, ONE SHARED CHECK.
+            methodology.rs:456 stores `hit.decl` — the literal YAML declaration
+            token `rule:`, colon included, chosen deliberately so a span match
+            proves the key is DECLARED there rather than merely mentioned. spec.rs
+            builds the SAME CitationKind::Methodology from index chunks and stores
+            the dotted YAML PATH instead — `philosophy.core_principle` — which
+            appears in no file, because it is synthesised by walking the tree.
+            span_key() demanded the key verbatim, so every methodology answer served
+            through RAG failed as FABRICATED. Now: pass a colon-terminated decl
+            token through unchanged, else check `<leaf>:`.
+        
+            WHY IT MATTERED AND WHY IT STAYED INVISIBLE. The methodology corpus is
+            this project's declared source of truth (CLAUDE.md), so the corpus most
+            likely to be asked an authoritative question was the one answering
+            "unsupported" — and a withheld answer is indistinguishable from a corpus
+            that genuinely does not know. It reads as 821-73es ("the expert cannot
+            refuse") when it is the opposite failure: refusing far too much, for a
+            false reason.
+        
+            CONTROLS, both directions: an honest citation returns `retrieved`; the
+            SAME key against a span that is not its block is still WITHHELD as
+            FABRICATED; a citation pointing at the wrong file is still unsupported.
+            205/205 lib, 24/24 bin, forced --check green.
+        
+            AND I WAS WRONG FOUR TIMES GETTING HERE, all the same way — grepping
+            where I should have read (752-pst5, this project's own named class).
+            In order: "verify is never called from production" (it is, through a
+            wrapper my pattern missed); "the emitter self-check does not exist" (it
+            does); "spec-envelope and methodology-ask are uncovered" (an awk
+            arm-attribution artifact — all four are covered); and "methodology keys
+            are never literal" (true only of the INDEX producer; the lexical
+            producer already did it right, and my first fix broke it by appending a
+            second colon to `rule:`). Each wrong conclusion was one `sed -n` away
+            from being caught. The measurement was right the first time; only the
+            greps were wrong.
+
+    - order: 854-8p9d
+      packet_id: sibling-hosts-establish-the-native-accel-baseline-wsl2-cannot-reach
+      desired_release: v0.6
+      title: pair each WSL2 host with its native-Linux twin so the accelerator delta is measured, dated, and re-testable
+      status: ready
+      kind: research
+      pickup_role: linux
+      priority: p2
+      capability_tags:
+        - fleet
+        - capabilities
+        - gpu
+        - npu
+        - wsl2
+        - amd
+        - cheatsheets
+      deliverable: cheatsheets/runtime/
+      depends_on: []
+      estimated_hours: 8
+      context: |
+        OPERATOR DIRECTIVE 2026-08-23: the siblings should help each other discover and explore the NPU and GPU that WSL2 hides, using the native Linux twin for experimentation — and the WSL2/Windows-virtualization cheatsheets must stay FRESH, because this is bleeding edge and a Windows or WSL update could change the answer any day.
+        WHAT IS ALREADY SETTLED, so nobody re-runs it. yolanda (Ryzen AI 7 350, Radeon 860M) proved on 2026-08-23 that the WSL2 accelerator limits are VENDOR-UNIVERSAL, not Intel-specific: the guest PCI bus carries only Microsoft 0x1414 paravirtual 3D-controller functions plus virtio, no DRM driver binds for ANY vendor (no /dev/dri at all), the lane is DirectX-only through dxgkrnl and /dev/dxg with libd3d12/libdxcore wired, and there is no PCI passthrough — so no NPU of any vendor can appear (/dev/accel* absent, amdxdna unloaded). Recorded in plan/issues/research-wsl2-accel-limits-vendor-universality-2026-08-23.md.
+        CORRECTION CARRIED FORWARD, because it invalidated the framing this packet grew out of: yolanda is NOT an Intel N100. It is the AMD machine. The fleet's actual N100 is esmeraldinha, still silent in the matrix. I asserted the wrong attribution when writing yolanda's directed prompt — it came from reading an esmeraldinha entry in loop_status and carrying the hardware across — and the A/B question I posed was therefore already answered by the rows I was quoting as the baseline.
+        WHAT IS NOT SETTLED, and is what this packet is for. Knowing WSL2 cannot reach the silicon says nothing about what the silicon CAN do. The fleet has near-identical AMD NPU+GPU hardware on both sides of the boundary:
+        
+          yolanda            Ryzen AI 7 350 / Radeon 860M   Windows 11 + WSL2
+          Silverblue Ryzen5  AMD NPU + AMD GPU              native Linux
+        
+        That is a controlled pair — same silicon class, different OS — so any capability the native twin demonstrates is a capability WSL2 is costing us, quantified rather than assumed. Establish on the native side: whether amdxdna binds and exposes /dev/accel*, whether ROCm serves the GPU for embeddings (lenovinha reports rocm-runtime-missing, so this is open across the whole AMD half of the fleet), and what an actual embedding or inference throughput number looks like on each lane. Then state the delta as a number, not an adjective.
+        FRESHNESS IS THE POINT, NOT A NICETY. A verdict like "WSL2 cannot expose an NPU" is true on a date, not forever — dxgkrnl gains features, WSL ships new kernels, amdxdna lands upstream. So the deliverable is a cheatsheet WITH PROVENANCE and a RE-TEST TRIGGER: the exact commands that produced the verdict, the kernel/WSL/driver versions they were run against, and a cheap probe any host can re-run to detect that the answer changed. A stale verdict presented as current is worse than no verdict, because it stops people looking.
+      exit_criteria: |
+        (1) A cheatsheet under cheatsheets/runtime/ covering the WSL2 accelerator boundary, carrying provenance per methodology/cheatsheets.yaml — the commands run, the versions they ran against, and the date. (2) The native-Linux baseline MEASURED on the AMD twin, not inferred: does amdxdna bind, does /dev/accel* appear, does ROCm serve the GPU, and what is the throughput delta versus the same workload on the WSL2 host. Numbers, with the command that produced them. (3) A RE-TEST PROBE any host can run in seconds that answers "has the answer changed?" — so the next Windows or WSL update is detected rather than assumed away. Wire it where a host will actually run it. (4) A NEGATIVE CONTROL on the probe: it must report "changed" when fed a host that genuinely can see the accelerator. A freshness probe that can only ever say "unchanged" is a stopped clock. (5) esmeraldinha's row, when it lands, is checked against the universality claim. If the Intel N100 half disagrees with the AMD half, the vendor-universal verdict is wrong and must be corrected rather than defended.
+      events:
+        - type: filed
+          ts: "2026-08-23T02:30:33Z"
+          agent_id: linux-macuahuitl-opus5-20260822T144300Z
+          host: linux_mutable
+          summary: |
+            Filed on operator directive, and filed as ONE row rather than one per host deliberately: the whole value is the COMPARISON, and splitting it by host would produce two half-measurements neither of which answers the question. Per new_row_only_if_independently_schedulable the pairing is a single scope with a single deliverable.
+            The near-miss worth attaching here rather than losing: during yolanda's diagnosis a SIX-DAY-STALE tillandsias-plan in the WSL lane was invoked as `compact --help` and deleted all 16 live plan/index.d/ fragments. Restored byte-identical from HEAD, nothing pushed, zero loss. The argument-safety fix that makes `--help` inert landed on 2026-08-22 — the host was simply running an artifact that predated it. So a fix is fleet-wide only when every host has rebuilt, and a destructive command that was safe on the host that fixed it can still be live elsewhere for days. The cause is filed as 851-cduu (cycle-preflight rebuilds the native Windows lane while the gate executes in WSL against a different CARGO_TARGET_DIR).
+
+    - order: 855-wrr3
+      packet_id: establish-the-low-end-cpu-only-inference-floor
+      desired_release: v0.6
+      title: measure what the fleet's weakest host can actually serve, so the expert layer has a floor instead of an assumption
+      status: implemented
+      kind: research
+      pickup_role: linux
+      priority: p2
+      capability_tags:
+        - fleet
+        - capabilities
+        - inference
+        - cpu
+        - low-end
+        - experts
+      deliverable: cheatsheets/runtime/
+      depends_on: []
+      estimated_hours: 6
+      context: |
+        OPERATOR DIRECTIVE 2026-08-23. Two low-end machines are joining: an Intel Alder Lake-N Windows 11 host and its Silverblue cousin. They are not near identical — different vendors — but have very similar capability. This row is for the SILVERBLUE one; its Windows cousin pairs with it later, the same way 854-8p9d pairs yolanda with the Ryzen5.
+        PRECEDENT, and it is an operator mandate rather than my inference: esmeraldinha (Intel N100, 4 Alder Lake-N E-cores, no SMT, single-channel DDR4 at a ~21.3 GB/s ceiling, UHD 24EU iGPU on the same bus) was declared on 2026-08-16 "the fleet's deliberate LOWER BOUND; perf packets only, no general drain" (plan/loop_status.md:3896). The Silverblue cousin inherits that mandate. It is not a throughput contributor and must not be graded as one — a 4-core host pulled into the general queue produces slow duplicates of work a fast host already claimed.
+        WHY THE FLOOR MATTERS RATHER THAN BEING A CURIOSITY. 853-6gz3's whole argument is that the expert validation layer runs LOCALLY on commodity hardware — unfold, fan out, verify, fold, all numerical methods, tuned on the high-end host and run everywhere. That claim is currently untested at the bottom. If the layer cannot serve on 4 Alder Lake-N cores, its deployment story is "runs on workstations", which is a different and much weaker product. This host is the one that can falsify it.
+        WHAT IS ALREADY KNOWN ABOUT THE INFERENCE SUBSTRATE, so time is not spent rediscovering it: the pinned image (tillandsias-inference:v0.4.260818.1, ollama 0.32.14) runs ONLY nomic-embed-text (137M) and qwen2.5:0.5b. mxbai-embed-large, qwen3-embedding:4b, qwen2.5:3b and 7b all abort with GGML_ASSERT or `llama-server terminated: signal: aborted`, and bge-m3 works single-input but aborts on batches — measured on macuahuitl with 21 GB of VRAM free, so the image is the ceiling, not the hardware (849-tz8g). On a CPU-only host the question is different and open: what does a 0.5B model actually cost per call with no GPU at all, and is a leaner server (llama.cpp directly, or another low-end-oriented runtime) materially better than ollama here?
+        THE iGPU IS PROBABLY NOT A COMPUTE DEVICE and the row should say so plainly if that is what the probe finds. An Alder Lake-N UHD part sharing a single-channel bus with the CPU is display silicon; "present-unusable" with an honest reason is a CORRECT capability row, and far more useful than a usable claim the scheduler will act on and regret. lenovinha's row already models this shape for its AMD Cezanne (rocm-runtime-missing).
+      exit_criteria: |
+        (1) The host's capability row is published and folds in `capability-matrix`, produced by the self-serve path 850-bif2 landed (host-capability-probe.sh --fragment + check-capability-row.sh) rather than hand-assembled. Silent hosts drop from 3 to 2. (2) The iGPU is adjudicated with evidence: usable or present-unusable WITH A NAMED REASON. "Unknown" is not an outcome; a probe that cannot decide is itself the finding. (3) A measured CPU-only inference floor: tokens/sec and per-call latency for the embedder and for qwen2.5:0.5b, with the exact command. Compare against macuahuitl's numbers already in the ledger (nomic 28 ms/embed, batches of 64) so the delta is a ratio, not an adjective. (4) A verdict on whether the expert layer (853-6gz3) is viable here, expressed as a per-call budget: at this host's measured latency, how many unfold-and-verify sub-queries fit in a tolerable answer time? That number is the floor 853-6gz3 must design against. (5) At least one alternative low-end runtime evaluated against ollama on the same model and prompt, or an explicit finding that none is available on Silverblue without layering. (6) A cheatsheet with provenance recording the wall-clock cost of a COLD bootstrap on this class of machine — toolbox create, image pull, first full cargo build — because that number is what tells the fleet whether a given host can hold any cadence at all, and it is measurable exactly once per host.
+      events:
+        - type: filed
+          ts: "2026-08-23T02:52:20Z"
+          agent_id: linux-macuahuitl-opus5-20260822T144300Z
+          host: linux_mutable
+          summary: |
+            Filed so the low-end host's prompt can be short and its work durable.
+            OPERATOR CONSTRAINTS recorded verbatim because they change what "healthy" looks like on this machine: 4 cores; building the whole project will take a long time and will likely break timeouts on launch; cadence around every 4 hours rather than hourly. A cycle that looks stalled here is probably just slow, and the failure mode to guard against is an operator or a timeout killing a build that was going to succeed.
+            TWO KNOBS THAT MATTER, both verified in-tree today: TILLANDSIAS_BUILD_TIMEOUT_SECS bounds each podman build and defaults to 1800s (scripts/build-image.sh:455) — likely too tight for this class of host. CYCLE_PREFLIGHT_SKIP_BUILD=1 skips the instrument rebuild (scripts/cycle-preflight.sh:80) and is TEMPTING HERE AND SHOULD BE AVOIDED: measured on macuahuitl the same day, a plan binary 11 hours stale made the entire 833-fpe7 resumable-dirt detector inert — it answered `unattributable:plan-query-failed` for every dirty tree, which falls through to the dirty-start refusal, silently restoring the very wedge 833-fpe7 had just closed. Slow is recoverable; stale is not visible.
+        - type: progress
+          ts: "2026-08-23T04:01:48Z"
+          agent_id: linux-pirria-opus5-20260823T032800Z
+          host: linux_immutable
+          summary: |
+            THE LOW-END FLOOR, MEASURED. Host pirria: Intel N150, 4 Alder Lake-N E-cores, no SMT, AVX2 + AVX_VNNI, no AVX-512; 16 GiB; Fedora Silverblue 44. Engine tillandsias-inference:v0.4.260817.1, ollama 0.32.14, which selected libggml-cpu-alderlake.so with n_threads=4 — the correct backend for this silicon, so these are TUNED numbers, not a misconfiguration.
+            TWO OF THE PACKET'S PREMISES ARE WRONG, and both matter for scheduling.
+            (1) THIS HOST IS NOT SINGLE-CHANNEL. EDAC reports MC#0_Chan#0 AND MC#0_Chan#1 populated, 4x4096 MB = 16 GiB dual-channel. esmeraldinha's single-channel DDR4-2667 does not transfer to it. The consequence separates cleanly along the compute/bandwidth line: prefill is IDENTICAL across the two hosts (107.5 vs 108.9 tok/s, 0.99x) while decode is ~1.9x (39 vs 20.5). Same cores, roughly double the bus. A fleet predicting decode from core count alone will mis-schedule this host. Honest caveat: EDAC's dimm_mem_type reads "Low-Power-DDR3-RAM", an igen6_edac misreport on ADL-N; the ACPI SSDT is named Adl_DDR4; dmidecode needs root, unavailable unattended. CHANNEL COUNT is solid, DRAM TYPE is not.
+            (2) THE iGPU IS NOT "DISPLAY SILICON", and the real reason is more actionable. It IS present-unusable, but the obstruction is the IMAGE. The pinned inference image ships ONLY CPU ggml backends (libggml-cpu-alderlake/haswell/icelake/sapphirerapids/skylakex/zen4...) and NO libggml-cuda/hip/sycl/vulkan — a search for all four returned empty. Meanwhile Mesa ANV Vulkan IS in the Silverblue base with NO layering, and the fleet has ALREADY measured this silicon class doing Vulkan compute: esmeraldinha, same UHD-on-ADL-N, OLLAMA_IGPU_ENABLE=1, 100% offload, prefill +31%/+60%, decode -17%/-20%, nomic-embed 58% WORSE (loop_status.md:3896). So the correct reason is vulkan-backend-absent-from-pinned-image — the same shape as 849-tz8g, where the image was the ceiling and the hardware was not. A second, independent gap: the inference container mounts no /dev/dri, so even a Vulkan-capable ggml would still need passthrough. Runtime corroboration: ollama logged initial_count=0 devices, total_vram="0 B", tier=T1 (RAM 15GB, VRAM 0GB).
+            THE MEASURED FLOOR. Embedder nomic-embed-text via the production call shape (POST /v1/embeddings, as spec-index-ensure.sh:427 issues it), real corpus chunks of 1200 chars = 393 tokens:
+              batch  1   1752 ms/embed   224   tok/s
+              batch  8   1598 ms/embed   232   tok/s
+              batch 32   1642 ms/embed   230   tok/s
+              batch 64   1641 ms/embed   230.8 tok/s   (105.0 s for the batch)
+            THROUGHPUT IS FLAT ACROSS BATCH SIZE. Batching buys NOTHING on CPU, independently corroborating esmeraldinha's "batching 10-in-1 saves only 14% — irreducible compute". Any plan assuming batch amortisation on a CPU host is wrong before it starts. Query-shaped embeds, which is what the expert layer actually issues: 8 tok -> 85 ms, 24 tok -> 154 ms, 107 tok -> 495 ms (~65 ms fixed per-call overhead; asymptote ~230 tok/s). qwen2.5:0.5b: prefill 107.5 tok/s at ~240 tok, decode 39-43 tok/s, cold load 1321 ms.
+            THE RATIO THE PACKET ASKED FOR. A batch of 64 chunks costs 105.0 s here against 1.52 s on macuahuitl — 69x. Per chunk, 1641 ms against 23.75 ms. Caveat kept: macuahuitl's chunk token count is not in the ledger, so that ratio is per-chunk on each host's own corpus. The esmeraldinha comparison above IS per-token (its 816k tok / 1592 chunks = 512 tok/chunk at 2.9 s/chunk = 176.6 tok/s vs 230 here = 1.30x) and is therefore the stronger of the two.
+            A FULL SPEC-INDEX REBUILD IS NOT POSSIBLE HERE. At 1641 ms/chunk: 9,910 chunks = 4.5 hours; 20,657 chunks = 9.4 hours, against ~12 min and ~490 s on macuahuitl. This host must CONSUME a prebuilt index; it can never produce one. Scheduling fact, not preference.
+            CRITERION 5 — THE LEANER RUNTIME IS NOT THE ANSWER, recorded as a negative result so nobody re-runs it hoping. llama-server driven directly — the same binary ollama itself spawns, same GGUF, same ggml build, same container, same 4 threads, so ONLY the Go scheduler and HTTP layer differ — decoded at 42.6 tok/s against ollama's 40.0. About 6.5%. Not material; no deployment decision changes. ollama's overhead is not the constraint, the CPU is.
+            CRITERION 4 — THE PER-CALL BUDGET, measured rather than extrapolated. A judge call reads retrieved evidence and emits a short verdict:
+              ~430 tok evidence    95   tok/s prefill    4.9 s
+              ~1150 tok            118  tok/s           11.0 s
+              ~2800 tok (k=6)      72.3 tok/s           ~40 s
+            PREFILL THROUGHPUT FALLS AS CONTEXT GROWS (attention is superlinear; peak is near 1000-1500 tokens), so evidence is worse than proportionally expensive. 853-6gz3's complement design needs TWO judge calls per sub-question, so at k=6 one sub-question with one wave is ~80 s, n=3 is ~4 min, n=5 is ~6.7 min. NOT ONE COMPLEMENT PAIR FITS IN AN INTERACTIVE ANSWER on this host at k=6. THE FLOOR 853-6gz3 MUST DESIGN AGAINST, stated as its criterion 7 wants it: the governing quantity is EVIDENCE TOKENS, not sub-question count. Budget is roughly tolerable_seconds x prefill_tok_s across the WHOLE fan-out. To keep one complement pair under 30 s here, each call gets ~1,500 tokens — about k=3, not k=6. The lever is evidence per sub-query; adding waves is unaffordable long before it is useful.
+            CRITERION 6 — COLD BOOTSTRAP, measurable exactly once, and the expectation was miscalibrated in the reassuring direction. From a host with NO toolbox, NO ~/.cargo, NO ~/.rustup and NO target/:
+              toolbox create (pull fedora-toolbox:44, 2.18 GB)      23 s
+              dnf toolchain + rustup + 2 musl targets (1.9 GB)      54 s
+              cargo check --workspace + all gate phases            259 s
+              ./build.sh --check TOTAL, rc=0, ALL GATES PASSED     336 s
+              cargo build --release (tillandsias + plan)           204 s
+              COLD BOOTSTRAP TO A USABLE RELEASE BINARY            540 s
+            Nine minutes, not the feared hours. The warning that the first --check "will take a very long time" was calibrated for a full build; --check is cargo check --workspace (build.sh:402) and produces NO BINARIES, which is why the release leg above had to be run separately — criteria 1 and 2 need target/release/tillandsias and --check never makes it. Both download phases are network-dependent and ran on a fast link. THE COST ON THIS CLASS OF MACHINE IS NOT BOOTSTRAP. IT IS EMBEDDING.
+            THERMALS, because a floor measured on a throttled machine is not the floor: package temp 56 C idle -> 71-72 C under sustained inference, 73-82 C during the build, average core clock steady at 2900 MHz through the entire 105 s embedding batches with no downward drift. This is the sustained all-core clock, not throttling.
+            TWO DEFECTS FOUND AND FILED: 856-fwyh (Intel had no GPU disposition check, so every Intel-iGPU host published accel_gpu=usable — FIXED and verified here) and 856-xvr2 (the capability document does not survive a serde_json roundtrip on this host, and no gate runs the test that says so — diagnosed, deliberately NOT fixed here).
+            METHOD NOTE, because two of my own measurements were wrong first and the failure modes generalise. (a) Concurrent tillandsias-plan work on the same 4 cores collapsed decode from ~28 to 2.6 tok/s — on a 4-core host the agent's OWN tooling is a competing workload, which is not true on a big host. (b) Reusing corpus offsets a previous run had already embedded made ollama serve the prefix from KV cache and report 50,000+ tok/s "prefill". Any prefill number on this stack must use NOVEL text per rep, and any number taken while the agent is also running plan queries is void.
+        - type: note
+          ts: "2026-08-23T04:40:17Z"
+          host: linux_immutable
+          summary: |
+            all six exit criteria met on pirria and pushed at c9caa2984: capability row published and visible in capability-matrix; iGPU adjudicated present-unusable with reason vulkan-backend-absent-from-pinned-image; embedder and qwen2.5-0.5b floor measured with exact commands and cross-host ratios; per-call budget measured at k=6 evidence; llama-server evaluated against ollama as a negative result; cheatsheet with provenance recording the cold bootstrap
+
+    - order: 856-s56y
+      packet_id: no-durable-scheduler-exists-on-any-host
+      desired_release: v0.6
+      title: 'unattended cadence has no scheduler: ./repeat is a foreground loop that dies with its terminal and never returns after a reboot'
+      status: ready
+      kind: enhancement
+      pickup_role: any
+      priority: p1
+      capability_tags:
+        - fleet
+        - cadence
+        - automation
+        - systemd
+        - launchd
+        - windows
+      deliverable: packaging/
+      depends_on: []
+      estimated_hours: 10
+      context: |
+        THE GAP, measured 2026-08-23 across every mechanism that could hold a cadence: `crontab -l` -> no crontab; `systemctl --user list-timers --all` -> three timers, all unrelated (a podman healthcheck, systemd-tmpfiles, grub-boot-success); no *.timer or *.plist in the repo except assets/macos/Info.plist (an app bundle) and packaging/systemd/user/ tillandsias.service, whose ExecStart is the product tray daemon and not a cycle driver. The only entrypoint methodology names is `./repeat` (methodology/multi-host-development.yaml:312-316), a foreground `while :; sleep` loop.
+        THE EVIDENCE THAT THIS IS ALREADY COSTING US, rather than a theoretical tidiness point: the per-cycle machinery demonstrably survives back-to-back hourly runs — macuahuitl logged 14 consecutive COMPLETE attestations at 50-69 minute gaps overnight on 2026-08-22, yoga logged 10 on 2026-08-18 — and the attestation ledger then shows per-host gaps of 1161, 1380 and 1976 MINUTES punctuating those clean runs. The cycle works. What fails is everything around it: a closed terminal, a logout, a reboot.
+        SO THE OPEN QUESTION IS NOT "does an hourly cycle work". It does. It is "what restarts it at 03:00 when nobody is awake".
+        PER-PLATFORM, because there is no portable answer and pretending otherwise is how `./codex-repeat` ended up broken on macOS unnoticed (GNU-only `date -d`): a systemd USER timer on Linux (with lingering enabled, or it dies at logout exactly like the loop it replaces), launchd on macOS, Task Scheduler on Windows. Each needs the same three properties, which is what makes this one row rather than three.
+      exit_criteria: |
+        (1) A cycle fires on schedule with NO terminal open and NO user logged in, demonstrated on at least one Linux host and one non-Linux host. (2) It SURVIVES A REBOOT without a human re-arming it — this is the property `./repeat` lacks and the one the attestation gaps are made of. (3) The interval is per-host configurable, because the fleet is not uniform: roughly-4-core hosts run every 4 hours by operator mandate while the fast hosts run hourly or 2-hourly. (4) A failing cycle does not stop the schedule, and a cycle that is still running when the next fire is due does not stack a second one on top of it. Overlap is worse than a missed tick: two cycles in one checkout fight over the same worktree boundary. (5) The scheduler's own state is observable — an operator can ask a host "when did you last fire, when do you fire next, did the last one succeed" without reading a transcript.
+      next_action: attach first unattended real-fire evidence from yoga then close the non-linux halves via children 858-h7ke and 858-3v74
+      events:
+        - type: filed
+          ts: "2026-08-23T03:36:50Z"
+          agent_id: linux-macuahuitl-opus5-20260822T144300Z
+          host: linux_mutable
+          summary: |
+            Filed because the operator asked who owns the blocking queue and the answer was nobody — every candidate row was `ready` and unclaimed, and these two, the largest of them, did not exist as rows at all.
+            THERE IS A FEEDBACK LOOP HERE WORTH NAMING. Hosts select work through select-work-batch.sh, which picks among the top-3 frontier epics. None of the fleet-enabling rows sits in those epics, so the selector never offers them, so they stay unowned — including 847-wgy4, the row whose whole subject is that the selector cannot route work to the host that should do it. The defect is currently protecting itself from being fixed. Until 847-wgy4 lands, these rows reach a host only by being named in that host's invoking prompt.
+        - type: progress
+          ts: "2026-08-23T04:20:00Z"
+          agent_id: linux-yoga-fable5-20260823T034500Z
+          host: linux_immutable
+          summary: |
+            LINUX HALF LANDED AND ARMED LIVE ON YOGA, per-criterion status — (1) fires with no terminal: structural (systemd user timer, enabled, WantedBy timers.target); the first unattended REAL fire is scheduled for 2026-08-23T06:12:42Z and its evidence (JSONL + attestation) is the next cycle's to attach. (2) reboot survival: timer enabled + OnBootSec re-arm + loginctl Linger=yes verified on the host — the logout-death property of ./repeat is specifically what lingering removes. (3) per-host interval: install-cycle-timer.sh --interval, yoga armed at 2h; operator mandate 4h for roughly-4-core hosts. (4) BOTH HALVES DEMONSTRATED, one hermetically and one live — a fixture (scripts/test-cycle-driver.sh, 4/4 PASS) proves failure passthrough and overlap-skip at the driver, and the install's own immediate fire hit a deliberately held lock and SKIPPED (journal + JSONL skipped=true records exist), while OnUnitInactiveSec makes wall-clock stacking structurally impossible — the interval is not even scheduled until the previous cycle completes, mirroring the ./repeat --wait spacing whose 50-69 minute gaps this packet cites as the proven pattern. (5) scripts/check-cycle-scheduler.sh answers ok:cycle-scheduler:next=..:last=..:lastrc=.. from live systemd state plus the driver's JSONL, no transcript involved. Two systemd property traps recorded in that script's comments for the next platform (show prints formatted strings despite USec names; NextElapseUSecRealtime is unset for monotonic timers while list-timers computes it). HEADLESS CREDENTIAL CAVEAT, named not solved — a boot-fired cycle has no unlocked keyring, so check-credential-channel.sh will fail loud unless the operator seeds GH_TOKEN via ~/.config/tillandsias/cycle.env (EnvironmentFile, already wired) or .git/.gh-credentials; that seeding is operator-owned. WHAT REMAINS on this row — attach the first unattended real-fire evidence, then the non-Linux halves via children 858-h7ke (macOS launchd) and 858-3v74 (Windows Task Scheduler), filed in this fragment, independently schedulable (different owned files, different pickup_role). Claim returned to ready so the row is visible; the Linux implementation is DONE — do not redo it, take the children.
+
+    - order: 857-4kqv
+      packet_id: nothing-bounds-what-the-fleet-spends-or-backs-off-when-throttled
+      desired_release: v0.6
+      title: no host-side token budget, no backoff on 429, and a 24h claim TTL that is never reaped automatically
+      status: ready
+      kind: bug
+      pickup_role: any
+      priority: p1
+      capability_tags:
+        - fleet
+        - cadence
+        - rate-limit
+        - budget
+        - claims
+        - coordination
+      deliverable: scripts/
+      depends_on: []
+      estimated_hours: 8
+      context: |
+        THREE FAULTS THAT ONLY BITE AT FLEET SCALE, which is why none of them surfaced while one host was working and all three arrive together the moment eight hosts hold a cadence.
+        (1) NO HOST-SIDE BUDGET. The only rate limiter in the repo (scripts/forge-e2e-rate-limit.sh) is scoped to in-forge e2e, one full cycle per 4h per host. Nothing bounds what a host-side meta-orchestration cycle spends against the shared provider accounts. Eight hosts hourly is eight full cycles per hour against a pool nobody is metering.
+        (2) NO BACKOFF. `./repeat` detects a 429 and then retries on the IDENTICAL schedule. A throttled fleet therefore re-throttles itself at the same cadence forever, and the recovery behaviour is indistinguishable from the failure behaviour — which is the worst property a retry loop can have, because it looks like it is trying.
+        (3) THE CLAIM TTL IS NEVER REAPED AUTOMATICALLY, and at 24 hours it is roughly 24x coarser than the cycle it bounds. `expire-claims` exists and works, but nothing runs it on a schedule: the only automatic reference is a HINT STRING at scripts/check-stranded-in-progress.sh:132 telling a human to run it, and scripts/reclaim-stranded-claims.sh (a 4h reaper) is named only in prose at skills/advance-work-from-plan/SKILL.md:189 and methodology/distributed-work.yaml:1375 — no caller anywhere. Related but NOT the same as 662-s9z5, which is about that reaper finding candidates and reclaiming none; this row is about nothing invoking it at all.
+        A host that dies mid-cycle therefore parks its claimed row for a full day, invisible to every sibling, on a fleet whose cycles are hourly.
+      exit_criteria: |
+        (1) A per-host spend budget that a cycle CANNOT silently exceed, with the spend reported in the cycle's own metrics rather than discovered later. (2) Exponential backoff on throttling, and a NEGATIVE CONTROL proving the interval actually lengthens under repeated 429s — a backoff nobody has watched grow is a constant with extra code. (3) Claims reaped automatically at a TTL proportional to the CYCLE, not to the day. State the chosen TTL and why; if it stays 24h, say what makes a cycle-length TTL wrong. (4) Measured against the real fleet: with N hosts at their configured intervals, what is the aggregate hourly spend and how close is it to the ceiling? "Could not establish the provider quota" is an acceptable answer ONLY if the row says so and names what would establish it. (5) The three faults are separable in the fix: a budget that also silently changes reaping behaviour is two changes wearing one commit.
+
+    - order: 856-fwyh
+      packet_id: intel-gpus-had-no-disposition-check-and-published-usable-true
+      desired_release: v0.6
+      title: every Intel-iGPU host has been publishing accel_gpu=usable with no reason, because only Intel lacked a disposition check
+      status: implemented
+      kind: defect
+      pickup_role: linux
+      priority: p2
+      capability_tags:
+        - capabilities
+        - accel-probe
+        - intel
+        - fleet
+        - scheduling
+      deliverable: crates/tillandsias-headless/src/accel_probe.rs
+      depends_on: []
+      estimated_hours: 2
+      context: |
+        FOUND ON pirria (Intel N150, Silverblue), 2026-08-23, while satisfying 855-wrr3 criterion 1. The self-serve capability path produced this row:
+        
+          accel_class=workstation-gpu accel_gpu=usable
+          accel_gpu_name=Alder_Lake-N_Intel_Graphics accel_reason=-
+        
+        A fanless 4-core N150 with a 24EU display iGPU — the fleet's DECLARED LOWER BOUND — announced itself to the capability matrix as a WORKSTATION GPU host. The same binary's "--inference-tier" answered "tier:cpu" in the same second, and the engine on the same host logged initial_count=0 devices and total_vram="0 B". One binary, two code paths, opposite claims.
+        MECHANISM, read at the span and then confirmed by running it. enumerate_gpus (accel_probe.rs) gives NVIDIA a CDI check and AMD amd_gpu_disposition() (rocm-runtime-missing / kfd-missing / render-node-missing). Intel had NEITHER, so an Intel card fell through to the last-resort arm, which hardcodes usable=true, unusable_reason=None, lanes=[container, host-native] for ANY vendor merely because /sys/class/drm listed a card. On Alder Lake-N /dev/dri/renderD128 always exists — it is the DISPLAY driver — so the arm fires on every such host. This is precisely the failure 855-wrr3 was told to avoid: "a usable claim the scheduler will act on and regret".
+        SCOPE IS NOT THIS HOST. Any host whose only GPU is Intel hits this: the Alder Lake-N Windows cousin 855-wrr3 names, and any Intel-iGPU laptop joining later. Rows already published by such hosts are wrong and should be re-probed with a binary carrying this order — the same residual 850-bif2 recorded for itself.
+      exit_criteria: |
+        (1) intel_gpu_disposition() exists beside amd_gpu_disposition() and is unit-tested for all three outcomes. (2) An Intel host with a render node but no compute runtime reports present-unusable with a named reason and accel_class=cpu-only, NOT workstation-gpu. (3) Mesa's Vulkan ICD is explicitly NOT accepted as evidence of compute — it ships in the Fedora Silverblue base on every Intel host and would re-admit the display silicon this check exists to exclude.
+      events:
+        - type: implemented
+          ts: "2026-08-23T03:49:53Z"
+          agent_id: linux-pirria-opus5-20260823T032800Z
+          host: linux_immutable
+          summary: |
+            IMPLEMENTED and verified live on the host that found it. intel_gpu_disposition() now sits beside amd_gpu_disposition() with the same shape, admitted only by an Intel COMPUTE runtime (Level Zero libze_intel_gpu/libze_loader, or an Intel OpenCL ICD). Mesa's Vulkan ICD is deliberately refused as evidence, with the reason in the doc comment: it is present in the Silverblue base on every Intel host, so accepting it would re-admit exactly the display silicon the check excludes. enumerate_gpus gained an Intel (0x8086, i915|xe) arm ahead of the last-resort arm. Two tests added and passing.
+            BEFORE -> AFTER on pirria, same binary, same second:
+              accel_class=workstation-gpu accel_gpu=usable          accel_reason=-
+              accel_class=cpu-only        accel_gpu=present-unusable
+                  accel_reason=intel-compute-runtime-missing
+        
+            ONE TRAP WORTH THE NEXT AGENT'S TIME: the corrected binary kept reporting the OLD row until ~/.cache/tillandsias/capabilities.json was discarded. The probe serves a CACHED document, so a probe fix is not observable until the cache is dropped. That is the 855-wrr3 stale-instrument lesson in a second costume, and it would have made this fix look like it had failed.
+
+    - order: 856-xvr2
+      packet_id: capability-document-does-not-survive-a-serde-json-roundtrip
+      desired_release: v0.6
+      title: 'accel_probe''s own roundtrip test fails on this host: system_ram_gb drifts 1 ULP through serde_json, and no gate runs the test that says so'
+      status: ready
+      kind: defect
+      pickup_role: linux
+      priority: p3
+      capability_tags:
+        - capabilities
+        - accel-probe
+        - serde
+        - testing
+        - gates
+      deliverable: Cargo.toml
+      depends_on: []
+      estimated_hours: 1
+      context: |
+        FOUND ON pirria, 2026-08-23. accel_probe::tests::test_serialization_roundtrip FAILS on this host, on an UNMODIFIED tree (verified by stashing the 855-wrr3 change and re-running, so it is not a side effect of that work):
+        
+          left:  system_ram_gb: Some(15.349456787109375)
+          right: system_ram_gb: Some(15.349456787109377)
+        
+        Every other field is identical. The document does not survive serialize -> deserialize.
+        MECHANISM. The workspace declares serde_json = "1" (Cargo.toml:56) with no feature list, and serde_json's DEFAULT float parser is fast-but-lossy — exact f64 parsing requires features = ["float_roundtrip"]. So a CapabilityDocument written to the ledger and read back can differ from the one that was probed.
+        WHY NOBODY SAW IT, and this is the more useful half. It is HOST-DEPENDENT: it only fires when system_ram_gb lands on a value the fast parser misreads, so a host with different RAM passes. And "./build.sh --check" — the gate every host runs — is "cargo check --workspace" (build.sh:402), which COMPILES the test and never RUNS it. A failing unit test sat green behind the gate.
+      exit_criteria: |
+        (1) serde_json carries features = ["float_roundtrip"], or system_ram_gb is stored as an exactly-roundtrippable representation, and the roundtrip test passes on a host with this RAM size. (2) A decision recorded on whether the workspace's unit tests should run in ANY gate a joining host executes — today a host can pass every local gate with a red test in-tree. NOT FIXED HERE deliberately: a workspace-wide dependency feature change affects every crate and every host's build, and pirria is mandated to perf/characterization work, not general drain (855-wrr3 context).
+
+    - order: 858-h7ke
+      packet_id: durable-scheduler-launchd-macos
+      desired_release: v0.6
+      title: 'macOS half of 856-s56y: a launchd agent fires the unattended cycle, survives reboot, and does not stack'
+      status: ready
+      kind: enhancement
+      pickup_role: macos
+      priority: p1
+      capability_tags:
+        - fleet
+        - cadence
+        - automation
+        - launchd
+        - macos
+      deliverable: packaging/launchd/
+      depends_on: []
+      estimated_hours: 4
+      context: |
+        Parent 856-s56y measured the gap (attestation gaps of 1161-1976 minutes where a terminal closed or a machine rebooted) and the Linux half now exists as the reference shape, landed 2026-08-23 on linux-next. REUSE IT, do not re-derive. scripts/tillandsias-cycle-driver.sh is platform-neutral on purpose — flock no-stacking, JSONL outcome log, one fresh agent session per fire via ./repeat --times 1 (whose timeout(1) fallback already handles stock macOS). What macOS needs is only the launchd wrapper around it, sibling of packaging/systemd/user/tillandsias-cycle.{service,timer}.in + scripts/install-cycle-timer.sh. launchd notes measured nowhere yet — verify on the real Mac: StartInterval counts from LOAD not completion, so either accept wall-clock cadence plus the driver's overlap-skip (sufficient — the skip is exit 0 by design), or use KeepAlive with ThrottleInterval for completion spacing. RunAtLoad + LaunchAgents handles reboot; note a LaunchAgent needs a logged-in user on stock macOS — if the Mac mini runs headless with auto-login that satisfies criterion 1's spirit, SAY SO in the row rather than silently accepting a weaker property, or use a LaunchDaemon and own the root/user boundary explicitly.
+      exit_criteria: |
+        (1) A cycle fires on schedule on the macOS host with no terminal open, demonstrated by an attestation or JSONL record from a fire nobody launched by hand. (2) Survives a reboot without a human re-arming it, stated with what was actually rebooted and observed. (3) Interval per-host configurable at install time. (4) A failing cycle does not stop the schedule, and an overlapping fire skips — reuse scripts/test-cycle-driver.sh (already passes on any POSIX host with flock) and state the launchd-level behaviour. (5) scripts/check-cycle-scheduler.sh grows a launchd arm answering the same grammar (ok:cycle-scheduler:next=..:last=..:lastrc=..) or a sibling script does; either way the operator asks one command.
+
+    - order: 858-3v74
+      packet_id: durable-scheduler-task-scheduler-windows
+      desired_release: v0.6
+      title: 'Windows half of 856-s56y: a Task Scheduler task fires the unattended cycle, survives reboot, and does not stack'
+      status: ready
+      kind: enhancement
+      pickup_role: windows
+      priority: p1
+      capability_tags:
+        - fleet
+        - cadence
+        - automation
+        - windows
+      deliverable: packaging/windows/
+      depends_on: []
+      estimated_hours: 4
+      context: |
+        Parent 856-s56y measured the gap; the Linux half (systemd user timer + scripts/tillandsias-cycle-driver.sh + scripts/install-cycle-timer.sh, landed 2026-08-23 on linux-next) is the reference shape. The driver is bash and the Windows cycle already runs through Git Bash (the credential guard's documented lane — PowerShell's bash alias is an isolated WSL session that lacks host credentials, see the skill's Windows note), so the likely shape is schtasks /create running 'C:\Program Files\Git\bin\bash.exe' scripts/tillandsias-cycle-driver.sh with ONSTART + repetition triggers, or Register-ScheduledTask from a small packaging/windows/install-cycle-task.ps1. Task Scheduler has the no-stacking property natively (MultipleInstances=IgnoreNew) — set it AND keep the driver's flock, since the flock also excludes an operator's manual ./repeat. 'Run whether user is logged on or not' plus a boot trigger covers criteria 1-2; measure what stored credentials that requires on the real host rather than guessing.
+      exit_criteria: |
+        (1) A cycle fires on schedule on the Windows host with no terminal open and no user logged in, demonstrated by an attestation or JSONL record from a fire nobody launched by hand. (2) Survives a reboot without a human re-arming it, stated with what was rebooted and observed. (3) Interval per-host configurable at install time. (4) A failing cycle does not stop the schedule; an overlapping fire is ignored or skips (MultipleInstances=IgnoreNew and/or the driver's flock) — demonstrated, not asserted. (5) The operator can ask the host when it last fired, when it fires next, and whether the last fire succeeded, in one command answering the ok:cycle-scheduler:... grammar.
+
+    - order: 859-86kr
+      packet_id: alder-lake-n-cross-os-comparison-row-silverblue-against-windows
+      desired_release: v0.6
+      title: pair the two Alder Lake-N hosts so OS cost is separable from silicon — today three variables move at once and none is isolated
+      status: blocked
+      kind: research
+      pickup_role: windows
+      priority: p3
+      capability_tags:
+        - fleet
+        - capabilities
+        - inference
+        - cpu
+        - low-end
+        - alder-lake-n
+      deliverable: cheatsheets/runtime/low-end-cpu-inference-floor.md
+      depends_on: []
+      estimated_hours: 4
+      context: |
+        855-wrr3 said the Silverblue Alder Lake-N host "pairs with its Windows cousin later, the same way 854-8p9d pairs yolanda with the Ryzen5". This is that pairing, filed with the pirria half already measured and pushed (c9caa2984).
+        WHY IT IS NOT JUST A SECOND ROW. Comparing pirria against esmeraldinha today moves THREE variables at once and isolates none of them:
+          1. silicon      N150 vs N100 (different clocks)
+          2. memory       DUAL-channel vs single-channel DDR4-2667
+          3. OS lane      native Linux vs Windows/WSL2
+        The measured split already hints which one dominates: prefill, which is compute-bound, is IDENTICAL (107.5 vs 108.9 tok/s, 0.99x), while decode, which is bandwidth-bound, is ~1.9x (39 vs 20.5). That is the memory bus talking, not the OS and not the cores. But it is an inference from two hosts that differ in three ways, and the fleet should not plan capacity on an inference when a controlled pair is available.
+        WHAT WOULD ACTUALLY SETTLE IT. The Windows Alder Lake-N cousin 855-wrr3 names runs the SAME suite pirria ran — the commands are in cheatsheets/runtime/low-end-cpu-inference-floor.md, which exists precisely so this is a re-run rather than a redesign. With its channel count read from the OS (dual vs single is the question that matters most), the pair separates OS cost from bus width.
+        BLOCKED, and the blocker is specific rather than a shrug. esmeraldinha is SILENT in the capability matrix: `capability-matrix` today reports "6 row(s), 5 of 7 known host(s) reporting — SILENT: esmeraldinha, forge, tlatoanis-macbook-air". Its numbers exist only as PROSE in plan/loop_status.md:3896, never as a row, so nothing machine-readable can be compared against them and no scheduler can see that host at all. The first action is not a benchmark, it is esmeraldinha running scripts/host-capability-probe.sh --fragment — which is now cheap and correct for it, because 856-fwyh gave Intel a disposition check and 852-dk9z stopped the cache serving stale documents. Before those two, an esmeraldinha row would have been WRONG in exactly the way pirria's first one was.
+      exit_criteria: |
+        (1) esmeraldinha publishes a capability row via the self-serve path, so the matrix stops reporting it silent. (2) Its channel count is read and recorded — the single-vs-dual question is the one the pirria data makes load-bearing. (3) The cheatsheet's command set is re-run there and the numbers land beside pirria's in the same table. (4) A stated verdict on which of the three variables dominates decode, with the arithmetic shown.
+
+    - order: 859-4jny
+      packet_id: the-local-gate-is-slower-than-the-fleets-push-interval-and-misreports-stale-instruments
+      desired_release: v0.6
+      title: on a 4-core host the pre-push gate loses push races, and when its own plan binary is stale it blames set-field instead of the staleness
+      status: ready
+      kind: defect
+      pickup_role: linux
+      priority: p3
+      capability_tags:
+        - build
+        - gates
+        - low-end
+        - developer-experience
+        - staleness
+      deliverable: build.sh
+      depends_on: []
+      estimated_hours: 3
+      context: |
+        Both halves observed on pirria (4 Alder Lake-N cores) on 2026-08-23 while landing 855-wrr3 and 852-dk9z. Neither is visible on a fast host, which is why a lower-bound host is the one that finds them.
+        HALF ONE — THE GATE MISATTRIBUTES A STALE INSTRUMENT TO A CODE BUG. After rebasing onto origin/linux-next, ./build.sh --check failed with:
+          FAIL multi-line: fragment is valid YAML (expected valid, got invalid)
+          set-field-yaml-shapes: 8 passed, 3 failed
+          [build] set-field can write an unparseable ledger fragment
+        That message names a bug in set-field. There was none. The gate executes the PREBUILT target/release/tillandsias-plan, which was 55 minutes old (built 20:36:58) relative to the fix it was being tested against (c6f8cbccc, 21:32:02) — the rebase brought NEW EXPECTATIONS and left the OLD BINARY. Rebuilding tillandsias-plan made the gate pass with no source change at all. An agent trusting the message would have gone looking for a YAML-quoting bug in code that was already correct. This is the same class 855-wrr3's own context warns about ("slow is recoverable; stale is invisible") reached from the gate side: the gate should either rebuild the binary it tests or say "your plan binary predates these sources", never report the symptom as a defect in the thing under test.
+        HALF TWO — THE GATE IS SLOWER THAN THE FLEET PUSHES. ./build.sh --check on this host is 336 s cold and minutes warm whenever a touched crate must re-check. Between gate START and push, origin/linux-next moved TWICE in one session (c9caa2984 -> 649fc5534, then 649fc5534 -> a3cf9f5dd), so the pre-push hook refused with "The gate validated a different tree than the one you are pushing" and the whole cycle had to be repeated. A rebase invalidates the stamp, re-gating takes minutes, and on an active day the window never closes on the first try. This is not a correctness bug and the hook is right to refuse — but it means a slow host can spend more wall clock losing races than doing work, and it silently penalises exactly the hosts the fleet added on purpose. It was worked around here with a retry loop (rebase -> gate -> push, repeat), which is the shape a supported fix could take.
+      exit_criteria: |
+        (1) A stale plan binary is reported AS staleness — the gate compares the resolved binary against the sources it is checking and says so, or rebuilds it — so no agent chases a phantom defect in set-field again. (2) A supported way to land from a slow host: either the gate stamp survives a rebase that does not touch gated inputs, or build.sh grows a documented rebase-gate-push retry, rather than every slow host inventing its own loop. (3) Both are measured on a 4-core host, since neither reproduces on a fast one.
