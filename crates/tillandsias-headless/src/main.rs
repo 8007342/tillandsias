@@ -377,6 +377,10 @@ fn main() {
     }
 
     let capabilities = user_args.iter().any(|a| a == "--capabilities");
+    // Order 852-dk9z: --fresh bypasses the capability cache. The row
+    // generator passes it so a published row can never be a stale-cache
+    // artifact of a previous binary.
+    let fresh_capabilities = user_args.iter().any(|a| a == "--fresh");
     let github_login = user_args.iter().any(|a| a == "--github-login");
     let with_token = user_args.iter().any(|a| a == "--with-token");
     let claude_login = user_args.iter().any(|a| a == "--claude-login");
@@ -585,6 +589,8 @@ fn main() {
         "--init",
         "--inference-tier",
         "--capabilities",
+        // Order 852-dk9z: modifier for --capabilities; bypasses the probe cache.
+        "--fresh",
         "--record-measurement",
         "--status-check",
         "--github-login",
@@ -839,7 +845,11 @@ fn main() {
         //
         // This also refreshes the capabilities.json cache, which nothing else
         // in the product wrote before the forge env call site existed.
-        let doc = accel_probe::load_or_probe(effective_inference_tier());
+        let doc = if fresh_capabilities {
+            accel_probe::probe_fresh(effective_inference_tier())
+        } else {
+            accel_probe::load_or_probe(effective_inference_tier())
+        };
         println!("{}", accel_probe::accel_envelope(&doc));
         match serde_json::to_string_pretty(&doc) {
             Ok(json) => println!("{json}"),

@@ -63,7 +63,12 @@ resolve_probe() {
 PROBE="$(resolve_probe)" || { echo "error: no runnable tillandsias binary (build or install one)" >&2; exit 2; }
 
 # --capabilities prints the one-line envelope, then the pretty JSON document.
-raw="$("$PROBE" --capabilities 2>/dev/null)" || { echo "error: $PROBE --capabilities failed" >&2; exit 1; }
+# --fresh (order 852-dk9z) makes the probe bypass its own cache, so a published
+# row is a fresh probe BY CONSTRUCTION. Without it a rebuilt binary served its
+# predecessor's document and this generator wrapped it into a row that looked
+# like the new code's output — measured on yoga (850-bif2) and again on pirria
+# (856-fwyh). Harmless against an older binary, which ignores unknown flags.
+raw="$("$PROBE" --capabilities --fresh 2>/dev/null)" || { echo "error: $PROBE --capabilities failed" >&2; exit 1; }
 doc="$(printf '%s\n' "$raw" | sed '1{/^accel_class=/d}')"
 printf '%s' "$doc" | jq -e '.schema_version == 2 and (.host.host_id | length > 0)' >/dev/null \
     || { echo "error: probe document is not a valid schema-2 capability document with a host_id" >&2; exit 1; }
