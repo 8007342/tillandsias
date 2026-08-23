@@ -29,7 +29,8 @@
 #   scripts/land-on-platform-branch.sh linux-next 4
 #
 # Exit: 0 landed (verified against origin) | 1 dirty tree | 2 rebase conflict
-#       3 gate failed | 4 attempts exhausted
+#       3 gate failed | 4 attempts exhausted | 5 auth failed
+#       6 push failed for a reason retrying cannot fix
 set -uo pipefail
 
 BRANCH="${1:-$(git rev-parse --abbrev-ref HEAD)}"
@@ -58,9 +59,32 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
     fi
 
     echo "land: attempt $attempt — push"
-    # No pipeline: the exit status must be git push's own.
-    git push origin "$BRANCH" >/dev/null 2>&1
+    # No pipeline: the exit status must be git push's own. KEEP THE OUTPUT — an
+    # earlier version discarded it, so a push that failed for a NON-RETRYABLE
+    # reason left no diagnostic and this loop retried it to exhaustion, burning a
+    # full gate run each time. Measured 2026-08-23: an expired GitHub token cost
+    # four gate cycles and reported "origin moved" for all of them.
+    _plog="${TMPDIR:-/tmp}/land-push.$$.log"
+    git push origin "$BRANCH" > "$_plog" 2>&1
     rc=$?
+    if [ "$rc" -ne 0 ]; then
+        # Retrying only helps a LOST RACE. Anything else must refuse at once and
+        # carry its remedy: an error read mid-incident should say what to do.
+        if grep -qiE "authentication failed|invalid username or token|could not read Username|Permission denied \(publickey\)" "$_plog"; then
+            echo "refused:land:auth-failed — git cannot authenticate to origin." >&2
+            sed -n '1,3p' "$_plog" >&2
+            echo "  The commit is safe locally; nothing was lost. Re-authenticate, then re-run:" >&2
+            echo "    gh auth refresh -h github.com && gh auth setup-git" >&2
+            echo "    scripts/land-on-platform-branch.sh $BRANCH" >&2
+            rm -f "$_plog"; exit 5
+        fi
+        if ! grep -qiE "non-fast-forward|fetch first|rejected|stale info" "$_plog"; then
+            echo "refused:land:push-failed — not a lost race, so retrying cannot help:" >&2
+            sed -n '1,6p' "$_plog" >&2
+            rm -f "$_plog"; exit 6
+        fi
+    fi
+    rm -f "$_plog"
 
     # The only proof that counts: ask the remote.
     git fetch -q origin "$BRANCH" 2>/dev/null
