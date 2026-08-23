@@ -672,10 +672,7 @@ fn extract_menu_surface_ids(source: &str) -> Vec<String> {
             // NAME: &str = "value";
             if let Some(eq) = rest.find('=') {
                 let value = rest[eq + 1..].trim();
-                if let Some(v) = value
-                    .strip_prefix('"')
-                    .and_then(|v| v.split('"').next())
-                {
+                if let Some(v) = value.strip_prefix('"').and_then(|v| v.split('"').next()) {
                     // Only id-shaped values are surfaces. The ids module also
                     // carries UI copy constants ("v2 — terminal-only in v1");
                     // spaces/uppercase/punctuation outside [a-z0-9.-] mark a
@@ -717,8 +714,10 @@ fn surface_pattern_hits(
         if trimmed.starts_with("//") || !line.contains(pattern) {
             continue;
         }
-        let annotation = extract_surface_annotation(line)
-            .or_else(|| i.checked_sub(1).and_then(|p| extract_surface_annotation(lines[p])));
+        let annotation = extract_surface_annotation(line).or_else(|| {
+            i.checked_sub(1)
+                .and_then(|p| extract_surface_annotation(lines[p]))
+        });
         hits.push(SurfaceHit {
             class,
             file,
@@ -736,7 +735,9 @@ fn extract_surface_annotation(line: &str) -> Option<String> {
     let rest = line[idx + "parity-surface:".len()..].trim_start();
     let id: String = rest
         .chars()
-        .take_while(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '.' | '_' | '-'))
+        .take_while(|c| {
+            c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '.' | '_' | '-')
+        })
         .collect();
     if id.is_empty() { None } else { Some(id) }
 }
@@ -811,7 +812,11 @@ fn parity_surfaces_check(
         }
     }
 
-    if failures.is_empty() { Ok(()) } else { Err(failures) }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(failures)
+    }
 }
 
 const PARITY_PLATFORMS: [&str; 3] = ["linux", "macos", "windows"];
