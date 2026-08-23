@@ -61,6 +61,15 @@ pub struct EngineRecord {
     pub name: String,
     pub backend: String,
     pub supported_device_classes: Vec<String>,
+    /// Which lanes this engine is reachable on (order 850-bif2). `None` means
+    /// every lane — the pre-existing semantics for a host-PATH binary, and the
+    /// deserialization default for every row filed before this field existed.
+    /// A containerized engine says `Some(["container"])`: the fleet's ollama
+    /// lives inside the tillandsias-inference image, which the old host-PATH
+    /// probe could not see — that blindness is how a host with a usable RTX
+    /// A5000 filed `engines: []` and the matrix read `schedulable: none`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lanes: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -438,6 +447,145 @@ fn wsl2_paravirtual_gpu(dxg_present: bool, dri_present: bool, already_found: boo
     dxg_present && !dri_present && !already_found
 }
 
+/// Order 850-bif2, the pure decision half of the AMD arm (unit-tested):
+/// given what the walker observed for an amdgpu card, decide usability,
+/// lanes, and the reason for any refusal.
+///
+/// `rocm-smi` presence alone is deliberately NOT evidence — the tier lattice
+/// already learned that on Fedora (see detect_inference_tier's caveat): the
+/// admission ticket is a ROCm runtime reporting a gfx agent. Without it the
+/// device is present-unusable, which the matrix renders distinctly from
+/// absent — that distinction is the whole point of recording it.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn amd_gpu_disposition(
+    rocm_gfx: bool,
+    kfd: bool,
+    render_node: bool,
+) -> (bool, Vec<String>, Option<String>) {
+    if !rocm_gfx {
+        return (
+            false,
+            vec!["host-native".to_string()],
+            Some("rocm-runtime-missing".to_string()),
+        );
+    }
+    if !kfd {
+        return (
+            false,
+            vec!["host-native".to_string()],
+            Some("kfd-missing".to_string()),
+        );
+    }
+    if !render_node {
+        return (false, vec![], Some("render-node-missing".to_string()));
+    }
+    (
+        true,
+        vec!["container".to_string(), "host-native".to_string()],
+        None,
+    )
+}
+
+/// Every /sys/class/drm/card<N> as (pci_address, vendor_id, driver), sorted
+/// by card number. Reads sysfs only; anything unreadable is skipped rather
+/// than guessed.
+#[cfg(target_os = "linux")]
+fn drm_cards() -> Vec<(String, String, Option<String>)> {
+    let mut cards: Vec<(String, String, Option<String>)> = Vec::new();
+    let Ok(entries) = fs::read_dir("/sys/class/drm") else {
+        return cards;
+    };
+    let mut names: Vec<String> = entries
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().to_string())
+        .filter(|n| {
+            n.strip_prefix("card")
+                .is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()))
+        })
+        .collect();
+    names.sort();
+    for name in names {
+        let dev = Path::new("/sys/class/drm").join(&name).join("device");
+        let Ok(target) = fs::canonicalize(&dev) else {
+            continue;
+        };
+        let Some(pci_addr) = target.file_name().map(|f| f.to_string_lossy().to_string()) else {
+            continue;
+        };
+        let Some(vendor_id) = fs::read_to_string(dev.join("vendor"))
+            .ok()
+            .map(|s| s.trim().to_lowercase())
+        else {
+            continue;
+        };
+        let driver = fs::read_to_string(dev.join("uevent")).ok().and_then(|u| {
+            u.lines()
+                .find_map(|l| l.strip_prefix("DRIVER=").map(|d| d.trim().to_string()))
+        });
+        cards.push((pci_addr, vendor_id, driver));
+    }
+    cards
+}
+
+/// The /dev/dri/renderD* node whose sysfs device resolves to the same PCI
+/// address, if any — the node the container run args would deliver.
+#[cfg(target_os = "linux")]
+fn drm_render_node_for(pci_addr: &str) -> Option<String> {
+    let entries = fs::read_dir("/sys/class/drm").ok()?;
+    for e in entries.flatten() {
+        let name = e.file_name().to_string_lossy().to_string();
+        if !name.starts_with("renderD") {
+            continue;
+        }
+        let dev = Path::new("/sys/class/drm").join(&name).join("device");
+        if let Ok(target) = fs::canonicalize(&dev)
+            && target.file_name().map(|f| f.to_string_lossy().to_string())
+                == Some(pci_addr.to_string())
+        {
+            let node = format!("/dev/dri/{name}");
+            if Path::new(&node).exists() {
+                return Some(node);
+            }
+        }
+    }
+    None
+}
+
+/// Marketing name for a PCI device via `lspci -mm -s <addr>`, parsing the
+/// QUOTED device field — never a substring of the whole line (the
+/// comp-ATI-ble trap). None when lspci is absent or the line is malformed.
+#[cfg(target_os = "linux")]
+fn pci_device_name_via_lspci(pci_addr: &str) -> Option<String> {
+    // lspci speaks the short form (05:00.0); sysfs the long (0000:05:00.0).
+    let short = pci_addr.strip_prefix("0000:").unwrap_or(pci_addr);
+    let out = Command::new("lspci")
+        .args(["-mm", "-s", short])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())?;
+    let line = String::from_utf8_lossy(&out.stdout);
+    // Quoted fields: [1]=class, [3]=vendor, [5]=device name.
+    let fields: Vec<&str> = line.trim().split('"').collect();
+    let name = fields.get(5)?.trim();
+    if name.is_empty() {
+        None
+    } else {
+        Some(name.to_string())
+    }
+}
+
+/// Does `rocminfo` report a gfx agent? Mirrors detect_inference_tier: the
+/// runtime answering for the silicon, not a tool merely being installed.
+#[cfg(target_os = "linux")]
+fn rocm_gfx_present() -> bool {
+    Command::new("rocminfo")
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).contains("gfx"))
+        .unwrap_or(false)
+}
+
 fn enumerate_gpus(effective_tier: &str) -> Vec<DeviceRecord> {
     let mut gpus = Vec::new();
 
@@ -508,34 +656,69 @@ fn enumerate_gpus(effective_tier: &str) -> Vec<DeviceRecord> {
             });
         }
 
-        if Path::new("/dev/dri").exists() {
-            let mut dri_name = "Vulkan / DRM GPU".to_string();
-            if let Ok(entries) = fs::read_dir("/dev/dri") {
-                for entry in entries.flatten() {
-                    let name = entry.file_name().to_string_lossy().to_string();
-                    if name.starts_with("renderD") || name.starts_with("card") {
-                        dri_name = format!("/dev/dri/{}", name);
-                        break;
-                    }
+        // Order 850-bif2: enumerate DRM cards by PCI identity. The old arm
+        // fired only when NO GPU had been found yet — an AMD iGPU beside an
+        // NVIDIA dGPU was invisible to the matrix — and hardcoded vendor
+        // "amd" for whatever it hit. /sys/class/drm/card*/device carries the
+        // real vendor id and driver, so nothing here substring-matches prose
+        // (the comp-ATI-ble trap; see scripts/derive-host-identity.sh).
+        let rocm_gfx = rocm_gfx_present();
+        let kfd = Path::new("/dev/kfd").exists();
+        for (pci_addr, vendor_id, driver) in drm_cards() {
+            let render_node = drm_render_node_for(&pci_addr);
+            match (vendor_id.as_str(), driver.as_deref()) {
+                // The nvidia-smi arm above owns NVIDIA cards; re-reporting
+                // them here would double-count the same silicon.
+                ("0x10de", _) => continue,
+                ("0x1002", Some("amdgpu")) => {
+                    let (usable, lanes, unusable_reason) =
+                        amd_gpu_disposition(rocm_gfx, kfd, render_node.is_some());
+                    gpus.push(DeviceRecord {
+                        device_class: "gpu".to_string(),
+                        vendor: "amd".to_string(),
+                        name: pci_device_name_via_lspci(&pci_addr)
+                            .unwrap_or_else(|| "AMD GPU (amdgpu)".to_string()),
+                        device_node: render_node,
+                        fw_version: None,
+                        driver: Some("amdgpu".to_string()),
+                        usable,
+                        unusable_reason,
+                        lanes,
+                        memory_bandwidth_gbps: None,
+                        memory_bandwidth_source: "unknown".to_string(),
+                        cpu_flags: None,
+                        cpu_cores: None,
+                        system_ram_gb: None,
+                    });
                 }
-            }
-            if gpus.is_empty() {
-                gpus.push(DeviceRecord {
-                    device_class: "gpu".to_string(),
-                    vendor: "amd".to_string(), // Or intel/generic drm
-                    name: "Vulkan GPU".to_string(),
-                    device_node: Some(dri_name),
-                    fw_version: None,
-                    driver: None,
-                    usable: true,
-                    unusable_reason: None,
-                    lanes: vec!["container".to_string(), "host-native".to_string()],
-                    memory_bandwidth_gbps: None,
-                    memory_bandwidth_source: "unknown".to_string(),
-                    cpu_flags: None,
-                    cpu_cores: None,
-                    system_ram_gb: None,
-                });
+                // Any other vendor keeps the old last-resort shape — but only
+                // when nothing else was found, and with the REAL vendor
+                // instead of the old hardcoded "amd".
+                (vid, _) if gpus.is_empty() => {
+                    gpus.push(DeviceRecord {
+                        device_class: "gpu".to_string(),
+                        vendor: match vid {
+                            "0x8086" => "intel".to_string(),
+                            "0x1002" => "amd".to_string(),
+                            _ => "unknown".to_string(),
+                        },
+                        name: pci_device_name_via_lspci(&pci_addr)
+                            .unwrap_or_else(|| "Vulkan GPU".to_string()),
+                        device_node: render_node
+                            .or_else(|| Some(format!("/sys/bus/pci/devices/{pci_addr}"))),
+                        fw_version: None,
+                        driver,
+                        usable: true,
+                        unusable_reason: None,
+                        lanes: vec!["container".to_string(), "host-native".to_string()],
+                        memory_bandwidth_gbps: None,
+                        memory_bandwidth_source: "unknown".to_string(),
+                        cpu_flags: None,
+                        cpu_cores: None,
+                        system_ram_gb: None,
+                    });
+                }
+                _ => {}
             }
         }
 
@@ -780,14 +963,34 @@ fn is_binary_available(binary: &str) -> bool {
     false
 }
 
-// @trace order:803-825k, spec:accel-capability-probe
+// @trace order:803-825k, order:850-bif2, spec:accel-capability-probe
 fn enumerate_engines() -> Vec<EngineRecord> {
-    enumerate_engines_with(is_binary_available)
+    enumerate_engines_with(is_binary_available, inference_image_present)
 }
 
-fn enumerate_engines_with<F>(mut binary_check: F) -> Vec<EngineRecord>
+/// Is the fleet's inference image (`localhost/tillandsias-inference`) present
+/// in the local podman store? That image ships ollama, so its presence is the
+/// container-lane engine the host-PATH scan is structurally blind to
+/// (order 850-bif2). `podman` absent or failing reads as "no image" — an
+/// engine we cannot prove is an engine we do not claim.
+fn inference_image_present() -> bool {
+    tillandsias_podman::podman_cmd_sync()
+        .args(["images", "--format", "{{.Repository}}"])
+        .output_bounded(tillandsias_podman::OperationKind::Inspect.default_budget())
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| {
+            String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .any(|l| l.trim().ends_with("/tillandsias-inference"))
+        })
+        .unwrap_or(false)
+}
+
+fn enumerate_engines_with<F, G>(mut binary_check: F, mut container_check: G) -> Vec<EngineRecord>
 where
     F: FnMut(&str) -> bool,
+    G: FnMut() -> bool,
 {
     let mut engines = Vec::new();
 
@@ -796,6 +999,7 @@ where
             name: "ollama".to_string(),
             backend: "llama-server".to_string(),
             supported_device_classes: vec!["cpu".to_string(), "gpu".to_string()],
+            lanes: None,
         });
     }
 
@@ -804,6 +1008,20 @@ where
             name: "llama-server".to_string(),
             backend: "llama.cpp".to_string(),
             supported_device_classes: vec!["cpu".to_string(), "gpu".to_string()],
+            lanes: None,
+        });
+    }
+
+    // Order 850-bif2: the containerized engine. Recorded only when the host
+    // has no host-PATH ollama already covering every lane, and scoped to the
+    // container lane — claiming host-native reach for a binary inside an
+    // image would be the same over-claim in the other direction.
+    if !engines.iter().any(|e| e.name == "ollama") && container_check() {
+        engines.push(EngineRecord {
+            name: "ollama".to_string(),
+            backend: "llama-server".to_string(),
+            supported_device_classes: vec!["cpu".to_string(), "gpu".to_string()],
+            lanes: Some(vec!["container".to_string()]),
         });
     }
 
@@ -1592,7 +1810,7 @@ mod tests {
     #[test]
     // @trace order:803-825k, spec:accel-capability-probe
     fn test_enumerate_engines_empty_when_no_engine_available() {
-        let engines = enumerate_engines_with(|_| false);
+        let engines = enumerate_engines_with(|_| false, || false);
         assert!(
             engines.is_empty(),
             "a host with no inference engine installed must not advertise any engine records"
@@ -1602,21 +1820,93 @@ mod tests {
     #[test]
     // @trace order:803-825k, spec:accel-capability-probe
     fn test_enumerate_engines_detects_ollama_and_llama_server() {
-        let only_ollama = enumerate_engines_with(|bin| bin == "ollama");
+        let only_ollama = enumerate_engines_with(|bin| bin == "ollama", || false);
         assert_eq!(only_ollama.len(), 1);
         assert_eq!(only_ollama[0].name, "ollama");
         assert_eq!(only_ollama[0].backend, "llama-server");
         assert_eq!(only_ollama[0].supported_device_classes, vec!["cpu", "gpu"]);
+        assert_eq!(
+            only_ollama[0].lanes, None,
+            "host-PATH engines cover every lane"
+        );
 
-        let only_llama = enumerate_engines_with(|bin| bin == "llama-server");
+        let only_llama = enumerate_engines_with(|bin| bin == "llama-server", || false);
         assert_eq!(only_llama.len(), 1);
         assert_eq!(only_llama[0].name, "llama-server");
         assert_eq!(only_llama[0].backend, "llama.cpp");
         assert_eq!(only_llama[0].supported_device_classes, vec!["cpu", "gpu"]);
 
-        let both = enumerate_engines_with(|bin| bin == "ollama" || bin == "llama-server");
+        let both = enumerate_engines_with(|bin| bin == "ollama" || bin == "llama-server", || false);
         assert_eq!(both.len(), 2);
         assert_eq!(both[0].name, "ollama");
         assert_eq!(both[1].name, "llama-server");
+    }
+
+    #[test]
+    // @trace order:850-bif2, spec:accel-capability-probe
+    fn test_containerized_engine_is_container_lane_only_and_never_shadows_host_ollama() {
+        // The inference image present with no host binaries: one ollama
+        // record, scoped to the container lane. This is the record whose
+        // absence made a usable RTX A5000 read "schedulable: none".
+        let containerized = enumerate_engines_with(|_| false, || true);
+        assert_eq!(containerized.len(), 1);
+        assert_eq!(containerized[0].name, "ollama");
+        assert_eq!(
+            containerized[0].lanes,
+            Some(vec!["container".to_string()]),
+            "an engine inside an image must not claim host-native reach"
+        );
+
+        // Host ollama present too: the host record (all lanes) wins and the
+        // container record is not duplicated.
+        let host_wins = enumerate_engines_with(|bin| bin == "ollama", || true);
+        assert_eq!(host_wins.len(), 1);
+        assert_eq!(host_wins[0].lanes, None);
+    }
+
+    #[test]
+    // @trace order:850-bif2, spec:accel-capability-probe
+    fn test_amd_gpu_disposition_fails_closed_without_rocm_runtime() {
+        // rocm-smi presence alone is not evidence; without a gfx agent the
+        // device is present-unusable with the reason named.
+        let (usable, lanes, reason) = amd_gpu_disposition(false, true, true);
+        assert!(!usable);
+        assert_eq!(lanes, vec!["host-native"]);
+        assert_eq!(reason.as_deref(), Some("rocm-runtime-missing"));
+
+        let (usable, _, reason) = amd_gpu_disposition(true, false, true);
+        assert!(!usable);
+        assert_eq!(reason.as_deref(), Some("kfd-missing"));
+
+        let (usable, lanes, reason) = amd_gpu_disposition(true, true, false);
+        assert!(!usable);
+        assert!(lanes.is_empty(), "no render node = no lane to reach it on");
+        assert_eq!(reason.as_deref(), Some("render-node-missing"));
+
+        let (usable, lanes, reason) = amd_gpu_disposition(true, true, true);
+        assert!(usable);
+        assert_eq!(lanes, vec!["container", "host-native"]);
+        assert_eq!(reason, None);
+    }
+
+    #[test]
+    // @trace order:850-bif2, spec:accel-capability-probe
+    // EXIT CRITERION 4 (negative control): a host with no accelerator still
+    // produces a VALID document — a CPU device and a named host — rather
+    // than an empty or absent one. Silence and "nothing here" must stay
+    // distinguishable; this runs on every host that gates a push.
+    fn test_cpu_only_probe_yields_a_valid_document_not_silence() {
+        let doc = run_probe("cpu");
+        assert_eq!(doc.schema_version, 2);
+        assert!(
+            doc.devices.iter().any(|d| d.device_class == "cpu"),
+            "even an accelerator-less host records its CPU"
+        );
+        assert!(
+            !doc.host.host_id.is_empty() && doc.host.host_id != "unknown",
+            "a row without a host_id folds to nothing in the matrix"
+        );
+        let json = serde_json::to_string(&doc).expect("document serializes");
+        assert!(json.contains("\"schema_version\":2"));
     }
 }

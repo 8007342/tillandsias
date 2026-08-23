@@ -1796,7 +1796,13 @@ pub fn schedulable_triples(document: &Value) -> Vec<(String, String, String)> {
     let Some(devices) = document.get("devices").and_then(Value::as_sequence) else {
         return out;
     };
-    let engines: Vec<(&str, Vec<&str>)> = document
+    // The optional third coordinate on an engine (order 850-bif2): which
+    // lanes it is reachable on. Absent means every lane — the semantics of
+    // every row filed before the field existed, and of host-PATH binaries. A
+    // containerized engine (the fleet's ollama inside tillandsias-inference)
+    // says ["container"], so it can never mint a host-native triple.
+    type EngineView<'a> = (&'a str, Vec<&'a str>, Option<Vec<&'a str>>);
+    let engines: Vec<EngineView> = document
         .get("engines")
         .and_then(Value::as_sequence)
         .map(|es| {
@@ -1808,7 +1814,11 @@ pub fn schedulable_triples(document: &Value) -> Vec<(String, String, String)> {
                         .and_then(Value::as_sequence)
                         .map(|cs| cs.iter().filter_map(Value::as_str).collect())
                         .unwrap_or_default();
-                    Some((name, classes))
+                    let lanes = e
+                        .get("lanes")
+                        .and_then(Value::as_sequence)
+                        .map(|ls| ls.iter().filter_map(Value::as_str).collect());
+                    Some((name, classes, lanes))
                 })
                 .collect()
         })
@@ -1825,8 +1835,9 @@ pub fn schedulable_triples(document: &Value) -> Vec<(String, String, String)> {
             continue;
         };
         for lane in lanes.iter().filter_map(Value::as_str) {
-            for (engine, classes) in &engines {
-                if classes.contains(&class) {
+            for (engine, classes, engine_lanes) in &engines {
+                let lane_ok = engine_lanes.as_ref().is_none_or(|els| els.contains(&lane));
+                if lane_ok && classes.contains(&class) {
                     out.push((class.to_string(), lane.to_string(), (*engine).to_string()));
                 }
             }
@@ -3339,6 +3350,39 @@ mod capability_matrix_tests {
         s.push_str("    backend: llama-server\n");
         s.push_str("    supported_device_classes: [cpu, gpu]\n");
         serde_yaml::from_str(&s).expect("fixture parses")
+    }
+
+    /// Order 850-bif2: an engine that declares its lanes mints triples only
+    /// on them; an engine without the field keeps the pre-existing
+    /// every-lane semantics (every row filed before the field existed).
+    #[test]
+    fn engine_lanes_scope_triples_and_absent_lanes_mean_every_lane() {
+        let mut s = String::new();
+        s.push_str("devices:\n");
+        s.push_str(
+            "  - device_class: gpu\n    usable: true\n    lanes: [container, host-native]\n",
+        );
+        s.push_str("engines:\n");
+        s.push_str("  - name: ollama\n");
+        s.push_str("    backend: llama-server\n");
+        s.push_str("    supported_device_classes: [cpu, gpu]\n");
+        s.push_str("    lanes: [container]\n");
+        let doc: Value = serde_yaml::from_str(&s).expect("fixture parses");
+        assert_eq!(
+            schedulable_triples(&doc),
+            vec![(
+                "gpu".to_string(),
+                "container".to_string(),
+                "ollama".to_string()
+            )],
+            "a container-lane engine must not mint a host-native triple"
+        );
+
+        // Same document, engine lanes ABSENT: both device lanes pair.
+        let legacy = doc_with_devices(
+            "  - device_class: gpu\n    usable: true\n    lanes: [container, host-native]\n",
+        );
+        assert_eq!(schedulable_triples(&legacy).len(), 2);
     }
 
     /// The schedulable unit is the TRIPLE, not the tier.

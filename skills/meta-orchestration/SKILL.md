@@ -299,9 +299,22 @@ On a durable bare-metal DEVELOPMENT host (not an ephemeral forge):
    `scripts/test-nix-cache-service.sh` — order 801-kqme; serves the persistent
    795-h8er store to the enclave so a disposable forge lands warm without any
    host path being mounted into it), reap defunct delegate handles
-   (`delegate-outcome.sh sweep`), and verify the
+   (`delegate-outcome.sh sweep`), verify the
    dev-environment expert containers are up + fresh (`dev_environment_experts` —
-   the same ephemeral RAG experts + commit-hook RAG retraining the forge runs).
+   the same ephemeral RAG experts + commit-hook RAG retraining the forge runs),
+   and confirm this host is visible in the capability matrix (order 850-bif2):
+   ```bash
+   scripts/check-capability-row.sh   # ok:capability-row-reported:<host> | due:no-capability-row:<host>
+   ```
+   On `due:`, publish the row THIS cycle — the matrix was silent for 5 of 7
+   hosts because nothing ever asked, and capability routing (847-wgy4) cannot
+   route to hardware it cannot see:
+   ```bash
+   bash scripts/host-capability-probe.sh --fragment \
+     > "plan/index.d/$(date -u +%Y%m%dt%H%M%Sz)-capability-row-$(hostname -s | tr 'A-Z' 'a-z').yaml"
+   ```
+   then commit it with the cycle's plan changes. Never hand-assemble a row
+   (the unquoted-heredoc incident on 850-bif2 is why the generator exists).
 3. Stamp the marker, NAMING what actually ran — the stamp is refused without
    `--steps`, because a stamp that records "something happened" without
    recording what restores the same unfalsifiability one level up:
@@ -435,6 +448,15 @@ to be DOWN on first boot (`down:forge-plan`, `degraded(not-built)`):
 same binary the MCP wrapper serves — work through it by path and record the
 outage, per `mcp_first_read_path`. And like every joining host, pass your
 hostname as `--seed` to `select-work-batch.sh`.
+
+**Publish your capability row before you drain anything** (order 850-bif2).
+`scripts/check-capability-row.sh` answers whether the matrix can see you; on
+`due:` generate and commit a row with
+`scripts/host-capability-probe.sh --fragment` (Linux/macOS/forge loci; the
+windows-host locus keeps its own generator). A joining host that drains work
+while publishing nothing is how the matrix went silent for 5 of 7 hosts —
+and capability-aware routing (847-wgy4) cannot route to hardware the matrix
+cannot see.
 
 **Expect to be offered other hosts' abandoned work.** Claims expire on a 24h
 lease, and expired rows return to the pool with their history intact — a row
