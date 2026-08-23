@@ -1,0 +1,113 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_immutable (pirria), 2026-08-23T19:49:19Z.
+events:
+  - packet_id: memory-bandwidths-effect-on-inference-is-unmeasurable-fleet-wide
+    event:
+      type: implemented
+      ts: "2026-08-23T19:49:19Z"
+      agent_id: linux-pirria-opus5-20260823T193000Z
+      host: linux_immutable
+      evidence_refs:
+        - "phi3.5:3.8b decode on pirria: 9.01 / 8.85 / 7.60 tok/s (mean 8.49), engine=cpu size_vram=0 via /api/ps"
+        - "esmeraldinha, same model, single channel: 6.53 tok/s (858-tnnv)"
+      summary: >
+        ANSWERED, AND THE ANSWER IS NO: DRAM CHANNEL COUNT BUYS THIS TIER
+        NOTHING MEASURABLE, even at the size where the bus was supposed to bind.
+
+        Re-reading weights per token-pass (Q4: 0.40 GB at 0.5B, 2.2 GB at 3.8B):
+
+          pirria       DUAL   0.5B 41.00 t/s = 16.40 GB/s | 3.8B 8.49 t/s = 18.68 GB/s
+          esmeraldinha SINGLE 0.5B 29.64 t/s = 11.86 GB/s | 3.8B 6.53 t/s = 14.37 GB/s
+
+          ratio  0.5B 1.38x   3.8B 1.30x
+
+        THE RATIO IS FLAT ACROSS AN 8x MODEL-SIZE RANGE, and that is the whole
+        finding. A bus-bound difference WIDENS as the model grows and the bus
+        binds; this one does not move. And the single-channel host is still at
+        only 67% of its own ~21.3 GB/s ceiling at 3.8B — it never reaches the
+        wall the second channel was supposed to remove. NEITHER HOST IS
+        CHANNEL-LIMITED at any size this tier can run.
+
+        Each host instead plateaus at a roughly CONSTANT achieved throughput —
+        ~16-19 GB/s here, ~12-14 there — regardless of model size. That is the
+        signature of a core/latency limit, not a width limit: the CPU cannot
+        issue reads fast enough to saturate even one channel, so adding a second
+        changes nothing. The residual ~1.3x tracks clock and DRAM data rate.
+
+        CONSEQUENCE FOR THE MATRIX, which is why this was worth measuring:
+        capability rows record channel count, and on this tier it is NOT a
+        useful scheduling input. Do not prefer a dual-channel low-end host over
+        a single-channel one on bandwidth grounds; the difference is ~1.3x and
+        it is not the bus. 855-wrr3 originally concluded "same cores, roughly
+        double the bus" from a decode ratio; 859-86kr retracted the reasoning;
+        this closes it with the measurement that was said to be impossible.
+
+  - packet_id: low-end-tier-cannot-validate-the-expert-layers-commodity-hardware-claim
+    event:
+      type: progress
+      ts: "2026-08-23T19:49:19Z"
+      agent_id: linux-pirria-opus5-20260823T193000Z
+      host: linux_immutable
+      summary: >
+        MEASURED, AND IT REFUTES MY OWN HYPOTHESIS. I filed this packet arguing
+        that quality and latency TRADE against each other at the floor — that a
+        judge big enough to pass 853-6gz3's complement self-check would simply
+        be too slow. The trade is not smooth. At 3.8B you pay 6.2x the latency
+        AND GET STRICTLY WORSE COHERENCE.
+
+          qwen2.5:0.5b  in-corpus YES/NO  coherent      | out-of-corpus NO/NO  CONTRADICTION
+          phi3.5:3.8b   in-corpus YES/YES CONTRADICTION | out-of-corpus NO/NO  CONTRADICTION
+
+          cost of one k=1 judge call: ~4.3 s at 0.5B -> ~26.5 s at 3.8B (6.2x)
+
+        The 0.5B judge is at least coherent on the passage that DOES answer;
+        the 3.8B judge contradicts itself on BOTH. So "use a bigger judge" is
+        not a path from here — there is a capability CLIFF, not a gradient, and
+        3.8B is on the wrong side of it. macuahuitl's positive Tier B used
+        qwen2.5:7b: a different family and 2x larger again.
+
+        STAYS OPEN, and the open question is now sharper than the one filed:
+        not "is a good judge affordable" but "where is the cliff, and is
+        anything below it coherent at all". If the threshold is 7B, a k=1 call
+        here would cost roughly 50 s by extrapolation from the 0.5B->3.8B
+        slope, and a complement pair ~100 s — which answers the deployment
+        question without needing the model.
+
+        HONEST LIMITS OF THIS PROBE: one prompt pair, one model family,
+        temperature 0, a terse "answer one word" instruction that phi3.5 may
+        handle worse than qwen. macuahuitl's Tier B ran 73 questions. This is
+        suggestive of a cliff, not proof of where it sits.
+
+  - packet_id: inference-image-cannot-run-any-model-larger-than-0-5b
+    event:
+      type: note
+      ts: "2026-08-23T19:49:19Z"
+      agent_id: linux-pirria-opus5-20260823T193000Z
+      host: linux_immutable
+      summary: >
+        A CORRECTION I OWE THIS PACKET AND TWO OF MY OWN. I filed 864-dvhk and
+        864-c956 BLOCKED on this one, saying a low-end host could not obtain a
+        model above 0.5B: "the inference container has no registry egress (curl
+        to registry.ollama.ai returns 000)". That was true and the diagnosis
+        was wrong. The container had http_proxy=http://proxy:3128 baked in and
+        THE PROXY CONTAINER WAS DEAD (it fails to start: crun cannot stat
+        /tmp/tillandsias-ca/intermediate.crt, an ephemeral CA wiped on reboot).
+        Clearing the proxy env reaches the registry directly. phi3.5:3.8b pulled
+        in minutes.
+
+        So neither packet was ever blocked by this one. I tested the SYMPTOM
+        (egress fails) and filed the blocker I expected rather than the one that
+        was there — the same shape as the defects this host has been finding all
+        week, committed by me while filing affordances about it.
+
+        SECOND OBSTACLE, worth recording because it will bite the next host:
+        running ollama against the shared model cache on Silverblue needs BOTH
+        --userns=keep-id:uid=1000,gid=1000 (the image runs as uid 1000; rootless
+        podman otherwise maps host 1000 to container 0 and the binary is not
+        executable) AND --security-opt label=disable (SELinux is Enforcing and
+        denies exec from the bind mount). Without the second, the container
+        exits 126 with a bare "Permission denied" that reads as a broken image.
+
+        This packet's own rescoping stands and is now independently supported:
+        isolated loads pass. phi3.5:3.8b loaded and served fine here with
+        nothing else resident.

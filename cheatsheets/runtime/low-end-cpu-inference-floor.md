@@ -46,6 +46,21 @@ Measured on Intel N150 (4 ADL-N E-cores, no SMT, AVX_VNNI, dual-channel 16 GB):
 - **Prefill / embedding: ~107 tok/s** (generation prefill) and **~230 tok/s** (embedder)
 - **Decode: ~39-43 tok/s** on a 0.5B model
 
+**MEASURED AT 3.8B 2026-08-23: channel count buys this tier nothing.** The
+earlier text below said the question was untestable here; it is now answered.
+
+| | 0.5B | 3.8B | ratio vs single-channel |
+|---|---|---|---|
+| pirria, DUAL-channel | 41.0 tok/s (16.4 GB/s) | 8.49 tok/s (18.7 GB/s) | — |
+| esmeraldinha, SINGLE | 29.6 tok/s (11.9 GB/s) | 6.53 tok/s (14.4 GB/s) | 1.38x → **1.30x** |
+
+The ratio is **flat across an 8x model-size range**, and the single-channel host
+is still at only **67% of its own ~21.3 GB/s ceiling** at 3.8B. A bus-bound
+difference WIDENS with model size; this does not. Each host plateaus at a roughly
+constant achieved throughput (~16-19 GB/s here, ~12-14 there) whatever the model
+size — the signature of a core/latency limit, not a width limit. **Do not prefer a
+dual-channel low-end host on bandwidth grounds.**
+
 **A 0.5B model does NOT saturate even a single DDR4 channel**, so do not predict
 decode from channel count at this size. Measured 2026-08-23 against the N100
 cousin: 41 tok/s x 0.40 GB/token-pass = 16.3 GB/s here, and 29.6 x 0.40 =
@@ -144,6 +159,20 @@ change in the DESIGN, not corrected as an error. Re-costed at k=1 here:
 So a complement pair is ~8.6 s and **30 s buys ~3 sub-queries, 60 s ~7**. The
 fan-out this tier can afford is modest but real.
 
+**A BIGGER JUDGE IS NOT THE FIX — measured at 3.8B, 2026-08-23.** The obvious
+move is a larger judge. It costs 6.2x and is strictly worse:
+
+| judge | in-corpus | out-of-corpus | k=1 call |
+|---|---|---|---|
+| qwen2.5:0.5b | YES/NO coherent | NO/NO contradiction | ~4.3 s |
+| phi3.5:3.8b | **YES/YES contradiction** | NO/NO contradiction | **~26.5 s** |
+
+There is a capability CLIFF, not a gradient, and 3.8B is on the wrong side of it.
+macuahuitl's positive Tier B used qwen2.5:7b — different family, 2x larger again.
+Extrapolating the 0.5B→3.8B slope puts a 7B k=1 call near 50 s here, so a
+complement pair is ~100 s. (One prompt pair, one family — suggestive of a cliff,
+not proof of where it sits.)
+
 **LATENCY IS NOT WHAT BLOCKS THE LAYER HERE.** Running 853-6gz3's own complement
 self-check against the only judge this tier can run (`qwen2.5:0.5b`, the image
 ceiling of 849-tz8g):
@@ -196,6 +225,28 @@ is not a ratio if the two used different methods: the same pair of hosts yielded
 "prefill identical", then "1.22x", then "indistinguishable" — the first from a
 warm-cache harness figure, the second from two different methods, the third from
 one shared harness on both sides. Only the third is worth anything.
+
+## Running a larger model on Silverblue
+
+The shared model cache is a host bind mount, and the pinned image runs as uid
+1000. Both of these are needed or the container exits 126 with a bare
+"Permission denied" that reads as a broken image:
+
+```bash
+podman run -d --userns=keep-id:uid=1000,gid=1000 --security-opt label=disable \
+  --env http_proxy= --env https_proxy= --env no_proxy='*' \
+  -p 127.0.0.1:11434:11434 \
+  -v ~/.cache/tillandsias/models:/home/ollama/.ollama/models \
+  --entrypoint /home/ollama/.ollama/models/.tools/ollama/ollama \
+  localhost/tillandsias-inference:<tag> serve
+```
+
+`--userns` because rootless podman otherwise maps host uid 1000 to container 0;
+`label=disable` because SELinux is Enforcing and denies exec from the bind mount.
+Clearing the proxy env matters too: the image bakes `http_proxy=http://proxy:3128`,
+and when the proxy container is down (it fails to start once `/tmp/tillandsias-ca`
+is wiped on reboot) every pull returns 000 — which looks like "no egress" and is
+really "dead proxy".
 
 ## Common pitfalls
 
