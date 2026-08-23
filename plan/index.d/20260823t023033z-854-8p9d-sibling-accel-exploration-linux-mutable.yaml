@@ -1,0 +1,108 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-23T02:30:33Z.
+packets:
+  - order: 854-8p9d
+    packet_id: sibling-hosts-establish-the-native-accel-baseline-wsl2-cannot-reach
+    desired_release: v0.6
+    title: "pair each WSL2 host with its native-Linux twin so the accelerator delta is measured, dated, and re-testable"
+    status: ready
+    kind: research
+    pickup_role: linux
+    priority: p2
+    capability_tags: [fleet, capabilities, gpu, npu, wsl2, amd, cheatsheets]
+    deliverable: cheatsheets/runtime/
+    depends_on: []
+    estimated_hours: 8
+    context: >
+      OPERATOR DIRECTIVE 2026-08-23: the siblings should help each other
+      discover and explore the NPU and GPU that WSL2 hides, using the native
+      Linux twin for experimentation — and the WSL2/Windows-virtualization
+      cheatsheets must stay FRESH, because this is bleeding edge and a Windows
+      or WSL update could change the answer any day.
+
+      WHAT IS ALREADY SETTLED, so nobody re-runs it. yolanda (Ryzen AI 7 350,
+      Radeon 860M) proved on 2026-08-23 that the WSL2 accelerator limits are
+      VENDOR-UNIVERSAL, not Intel-specific: the guest PCI bus carries only
+      Microsoft 0x1414 paravirtual 3D-controller functions plus virtio, no DRM
+      driver binds for ANY vendor (no /dev/dri at all), the lane is DirectX-only
+      through dxgkrnl and /dev/dxg with libd3d12/libdxcore wired, and there is
+      no PCI passthrough — so no NPU of any vendor can appear (/dev/accel*
+      absent, amdxdna unloaded). Recorded in
+      plan/issues/research-wsl2-accel-limits-vendor-universality-2026-08-23.md.
+
+      CORRECTION CARRIED FORWARD, because it invalidated the framing this
+      packet grew out of: yolanda is NOT an Intel N100. It is the AMD machine.
+      The fleet's actual N100 is esmeraldinha, still silent in the matrix. I
+      asserted the wrong attribution when writing yolanda's directed prompt —
+      it came from reading an esmeraldinha entry in loop_status and carrying
+      the hardware across — and the A/B question I posed was therefore already
+      answered by the rows I was quoting as the baseline.
+
+      WHAT IS NOT SETTLED, and is what this packet is for. Knowing WSL2 cannot
+      reach the silicon says nothing about what the silicon CAN do. The fleet
+      has near-identical AMD NPU+GPU hardware on both sides of the boundary:
+
+        yolanda            Ryzen AI 7 350 / Radeon 860M   Windows 11 + WSL2
+        Silverblue Ryzen5  AMD NPU + AMD GPU              native Linux
+
+      That is a controlled pair — same silicon class, different OS — so any
+      capability the native twin demonstrates is a capability WSL2 is costing
+      us, quantified rather than assumed. Establish on the native side:
+      whether amdxdna binds and exposes /dev/accel*, whether ROCm serves the
+      GPU for embeddings (lenovinha reports rocm-runtime-missing, so this is
+      open across the whole AMD half of the fleet), and what an actual
+      embedding or inference throughput number looks like on each lane. Then
+      state the delta as a number, not an adjective.
+
+      FRESHNESS IS THE POINT, NOT A NICETY. A verdict like "WSL2 cannot expose
+      an NPU" is true on a date, not forever — dxgkrnl gains features, WSL
+      ships new kernels, amdxdna lands upstream. So the deliverable is a
+      cheatsheet WITH PROVENANCE and a RE-TEST TRIGGER: the exact commands that
+      produced the verdict, the kernel/WSL/driver versions they were run
+      against, and a cheap probe any host can re-run to detect that the answer
+      changed. A stale verdict presented as current is worse than no verdict,
+      because it stops people looking.
+    exit_criteria: >
+      (1) A cheatsheet under cheatsheets/runtime/ covering the WSL2
+      accelerator boundary, carrying provenance per methodology/cheatsheets.yaml
+      — the commands run, the versions they ran against, and the date.
+      (2) The native-Linux baseline MEASURED on the AMD twin, not inferred:
+      does amdxdna bind, does /dev/accel* appear, does ROCm serve the GPU, and
+      what is the throughput delta versus the same workload on the WSL2 host.
+      Numbers, with the command that produced them.
+      (3) A RE-TEST PROBE any host can run in seconds that answers "has the
+      answer changed?" — so the next Windows or WSL update is detected rather
+      than assumed away. Wire it where a host will actually run it.
+      (4) A NEGATIVE CONTROL on the probe: it must report "changed" when fed a
+      host that genuinely can see the accelerator. A freshness probe that can
+      only ever say "unchanged" is a stopped clock.
+      (5) esmeraldinha's row, when it lands, is checked against the universality
+      claim. If the Intel N100 half disagrees with the AMD half, the
+      vendor-universal verdict is wrong and must be corrected rather than
+      defended.
+
+events:
+  - packet_id: sibling-hosts-establish-the-native-accel-baseline-wsl2-cannot-reach
+    event:
+      type: filed
+      ts: "2026-08-23T02:30:33Z"
+      agent_id: linux-macuahuitl-opus5-20260822T144300Z
+      host: linux_mutable
+      summary: >
+        Filed on operator directive, and filed as ONE row rather than one per
+        host deliberately: the whole value is the COMPARISON, and splitting it
+        by host would produce two half-measurements neither of which answers
+        the question. Per new_row_only_if_independently_schedulable the pairing
+        is a single scope with a single deliverable.
+
+        The near-miss worth attaching here rather than losing: during yolanda's
+        diagnosis a SIX-DAY-STALE tillandsias-plan in the WSL lane was invoked
+        as `compact --help` and deleted all 16 live plan/index.d/ fragments.
+        Restored byte-identical from HEAD, nothing pushed, zero loss. The
+        argument-safety fix that makes `--help` inert landed on 2026-08-22 —
+        the host was simply running an artifact that predated it. So a fix is
+        fleet-wide only when every host has rebuilt, and a destructive command
+        that was safe on the host that fixed it can still be live elsewhere for
+        days. The cause is filed as 851-cduu (cycle-preflight rebuilds the
+        native Windows lane while the gate executes in WSL against a different
+        CARGO_TARGET_DIR).

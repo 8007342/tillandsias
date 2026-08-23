@@ -30,8 +30,27 @@ _ruby() {
 
 cd "$REPO_ROOT"
 
+# CLEAN UP ON EVERY EXIT, INCLUDING THE ONES NOBODY ANTICIPATED.
+#
+# This used to repeat `rm -rf plan_tmp ...` by hand at each early return —
+# seven sites, and correct at all seven. It still leaked, because a hand-placed
+# cleanup only covers exits you thought of: on 2026-08-23 the WSL gate lane
+# crashed inside Ruby (empty LANG, US-ASCII default, 2,517 em-dashes in the
+# ledger) and died without reaching any of them, leaving a full copy of plan/
+# in the worktree. Every boundary-guarded cycle after that starts dirty, and a
+# dirty start is precisely what stops an unattended host.
+#
+# A trap covers the crash, the SIGINT, and the exit path added next year by
+# someone who never reads this comment. The manual sites below are left in
+# place deliberately: they free the copy EARLY on long paths, and running the
+# cleanup twice is harmless.
+_archiver_cleanup() {
+    rm -rf plan_tmp plan_tmp_bak scripts/archive-plan-packets-check.rb plan_tmp_*.txt
+}
+
 if [ "$1" == "--check" ]; then
     echo "Running in check mode..."
+    trap _archiver_cleanup EXIT INT TERM
     rm -rf plan_tmp plan_tmp_bak
     cp -a plan/ plan_tmp/
     
