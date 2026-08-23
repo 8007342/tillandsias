@@ -5,17 +5,17 @@
 # corrects ANY field (642-fedr). Re-declaring the packet under
 # `packets:` would be a G-Set no-op and would silently do nothing.
 status:
-  - packet_id: lww-channel-naming-obscures-field-correction
+  - packet_id: builder-toolbox-init-set-too-small-for-the-dispatch-pattern
     field: status
-    value: in_progress
-    ts: "2026-08-23T16:20:12Z"
-    host: yoga
+    value: ready
+    ts: "2026-08-23T17:49:45Z"
+    host: lenovinha
 
 events:
-  - packet_id: lww-channel-naming-obscures-field-correction
+  - packet_id: builder-toolbox-init-set-too-small-for-the-dispatch-pattern
     event:
       type: note
-      ts: "2026-08-23T16:20:12Z"
-      host: yoga
+      ts: "2026-08-23T17:49:45Z"
+      host: lenovinha
       summary: >
-        claimed for cycle 2026-08-23T1616Z (batch epic=stable-milestone-v1 seed=yoga)
+        init-set slice landed and measured; sweep residual carried in next_action

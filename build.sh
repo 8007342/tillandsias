@@ -1584,6 +1584,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "set-field YAML-shape fixture passed"
 
+    _step "Checking the promote-stable evidence gate and dry-run..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-promote-stable-evidence-gate.sh" 2>&1; then
+        _error "promote-stable's gate or its --dry-run regressed — this script flips an outward-facing release channel"
+        exit 1
+    fi
+    _info "promote-stable gate + dry-run fixture passed"
+
     _step "Checking host-identity derivation..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-derive-host-identity.sh" 2>&1; then
         _error "host identity derivation is wrong — every host's work seed depends on it"

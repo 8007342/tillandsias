@@ -5,17 +5,17 @@
 # corrects ANY field (642-fedr). Re-declaring the packet under
 # `packets:` would be a G-Set no-op and would silently do nothing.
 status:
-  - packet_id: the-local-gate-is-slower-than-the-fleets-push-interval-and-misreports-stale-instruments
+  - packet_id: promotion-script-has-no-dry-run
     field: status
     value: implemented
-    ts: "2026-08-23T17:25:42Z"
+    ts: "2026-08-23T17:55:34Z"
     host: linux_immutable
 
 events:
-  - packet_id: the-local-gate-is-slower-than-the-fleets-push-interval-and-misreports-stale-instruments
+  - packet_id: promotion-script-has-no-dry-run
     event:
       type: note
-      ts: "2026-08-23T17:25:42Z"
+      ts: "2026-08-23T17:55:34Z"
       host: linux_immutable
       summary: >
-        implemented and verified on pirria this cycle; see the event fragment for evidence and for the criteria deliberately left open
+        implemented and mutation-controlled on pirria; see the event fragment for evidence including the tripwire firing against the pre-fix script

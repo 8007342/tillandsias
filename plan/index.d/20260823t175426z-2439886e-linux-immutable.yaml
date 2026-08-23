@@ -7,15 +7,15 @@
 status:
   - packet_id: spec-expert-refusal-threshold-fleet-decision
     field: depends_on
-    value: '[inference-image-cannot-run-any-model-larger-than-0-5b]'
-    ts: "2026-08-23T17:20:04Z"
+    value: inference-image-cannot-run-any-model-larger-than-0-5b
+    ts: "2026-08-23T17:54:26Z"
     host: linux_immutable
 
 events:
   - packet_id: spec-expert-refusal-threshold-fleet-decision
     event:
       type: note
-      ts: "2026-08-23T17:20:04Z"
+      ts: "2026-08-23T17:54:26Z"
       host: linux_immutable
       summary: >
-        824-6qxh's own blocked event says the model-size question needs a newer inference image first; recording it as a machine-readable edge so blocking-counts surfaces 849-tz8g instead of the blockage living only in prose
+        testing whether a BARE scalar id resolves as an edge where a bracketed list did not; 824-6qxh's own blocked event names the image as its gate

@@ -142,7 +142,7 @@ _toolbox_exists() {
 # init so `./build.sh --check` does not fail with "Missing host build tools".
 _toolbox_initialized() {
     toolbox run --container "$TOOLBOX_NAME" \
-        bash -c 'command -v gcc && command -v musl-gcc && command -v pkg-config && command -v ruby && command -v rustup && rustup target list --installed 2>/dev/null | grep -qxF x86_64-unknown-linux-musl' \
+        bash -c 'command -v gcc && command -v musl-gcc && command -v pkg-config && command -v ruby && command -v rustup && command -v jq && command -v yq && command -v rg && command -v openssl && rustup target list --installed 2>/dev/null | grep -qxF x86_64-unknown-linux-musl' \
         &>/dev/null 2>&1
 }
 
@@ -163,12 +163,21 @@ if ! _toolbox_initialized; then
     # "failed to find tool x86_64-linux-musl-gcc" (yoga, 2026-08-23). The
     # _toolbox_initialized probe above requires it so pre-existing toolboxes
     # re-run this init and pick it up.
+    # jq/yq/ripgrep/openssl: the toolbox-first dispatch pattern
+    # (methodology multi_host_development.toolbox_first_scripts) is only valid
+    # for tools the toolbox HAS, and it had none of these — so the ~50 scripts
+    # that call bare `jq`/`rg`/`openssl` could not be converted (799-tb7q).
+    # openssl-devel above is the headers, not the CLI; the CLI ships in the base
+    # image today, but naming it here makes that a guarantee rather than an
+    # accident. Fedora's `yq` is mikefarah v4, whose `yq . <file>` is the syntax
+    # the finalization YAML-validation step names.
     toolbox run --container "$TOOLBOX_NAME" \
         sudo dnf install -y \
             gcc musl-gcc pkg-config file cmake make \
             openssl-devel systemd-devel \
             ruby perl-FindBin \
             procps-ng findutils diffutils \
+            jq yq ripgrep openssl \
         2>&1 | while IFS= read -r line; do printf '  [dnf] %s\n' "$line"; done
 
     RUSTUP_INIT="$HOME/.cache/tillandsias/rustup-init.sh"

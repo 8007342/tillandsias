@@ -1,0 +1,162 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_immutable (pirria), 2026-08-23T17:53:25Z.
+events:
+  - packet_id: promotion-script-has-no-dry-run
+    event:
+      type: implemented
+      ts: "2026-08-23T17:53:25Z"
+      agent_id: linux-pirria-opus5-20260823T180000Z
+      host: linux_immutable
+      evidence_refs:
+        - "scripts/test-promote-stable-evidence-gate.sh 11/11 hermetic, 12/12 with PROMOTE_DRYRUN_ONLINE=1"
+        - "MUTATION CONTROL: the pre-864-8tqv script run through the same tripwires FIRES it — 'MUTATION gh release edit v0.4.260817.1 --prerelease=false --latest'"
+        - "criterion 2 online: flags {isDraft:false,isPrerelease:true,tagName:v0.4.260817.1} and /releases/latest v0.4.260810.1 byte-identical across a real --dry-run"
+      summary: >
+        --dry-run added, and the test rebuilt around TRIPWIRES rather than
+        stubs — which is the part that makes the rest worth anything.
+
+        THE SCRIPT. Flags now parse in any order (the old form took --force
+        positionally as $2, so `<tag> --dry-run` bound --dry-run to FORCE and was
+        silently ignored — the pre-fix script does exactly that in the mutation
+        control below). --dry-run runs tag validation, the release-existence
+        read, and the full evidence gate, then stops on the line above the first
+        mutation and prints would-promote:<tag>. Output grammar extended rather
+        than changed: promoted:/refused: are untouched.
+
+        THE TEST INVERTED ITS GUARANTEE. It used to drive the REAL promotion
+        path and rely on permissive gh/git STUBS to absorb the mutations — a
+        passing gate really did call `gh release edit`, and only the stub kept
+        it off GitHub. Now `git` fails on ANY invocation and `gh` records write
+        verbs as violations, and every case asserts the violation log is EMPTY.
+        Before: "the stub absorbed whatever it did." After: "it did nothing,
+        and the harness would have caught it if it had."
+
+        A GATE YOU HAVE NOT SEEN GO RED IS NOT A GATE, so the suite ends by
+        running `git show HEAD:scripts/promote-stable.sh` — the version with no
+        --dry-run — through the same tripwires and REQUIRING it to trip. It
+        does. Without that case every "0 mutations" above would be unfalsifiable.
+
+        CRITERION 2 IS SATISFIED LITERALLY, not by proxy, and safely: an opt-in
+        online case (PROMOTE_DRYRUN_ONLINE=1) puts a REFUSING PASSTHROUGH gh on
+        PATH — reads exec the real binary, writes are recorded and cannot
+        execute — so the real release-existence read happens against the real
+        repo while a leaked mutation is physically impossible. The release flags
+        and the stable tag are byte-identical before and after.
+
+        TWO OF MY OWN ERRORS, both caught by the harness rather than by me, and
+        both the same shape as the defect this packet is about. (1) The first
+        online check asked gh for `isLatest`, which is NOT a field: the command
+        errored, both reads returned "", and the comparison passed VACUOUSLY.
+        Fixed to valid fields plus a guard that FAILS when the read is empty.
+        (2) The blunt `git` tripwire fired online on `git remote -v`, which real
+        gh shells out to for repo resolution — a READ. Hermetically "no git at
+        all" is right because nothing shells out; online the invariant is "no
+        git WRITES". Recorded because the next person to widen this test will
+        hit both.
+
+  - packet_id: github-make-latest-is-sticky-so-demotion-does-not-restore
+    event:
+      type: implemented
+      ts: "2026-08-23T17:53:25Z"
+      agent_id: linux-pirria-opus5-20260823T180000Z
+      host: linux_immutable
+      evidence_refs:
+        - "scripts/promote-stable.sh demote <mistaken> --to <intended>, verifying via repos/<owner>/<repo>/releases/latest"
+        - "methodology/versioning.yaml promotion.demotion corrected — it carried the same false claim as the script header"
+        - "hermetic cases: would-demote:<mistaken>:latest-would-be:<intended>; refused:missing-target when --to is omitted"
+      summary: >
+        A `demote` subcommand that names the intended release, re-marks it
+        explicitly, and then RE-READS /releases/latest to check the channel
+        actually moved — refusing with refused:demote-verify-failed:<whatever-
+        latest-actually-is> when it did not. Assuming was the whole defect.
+
+        THE FALSE CLAIM WAS IN TWO PLACES, AND ONLY ONE HAD BEEN FIXED. The
+        script header was corrected before I picked this up. methodology/
+        versioning.yaml:490 — the canonical release runbook, which is what an
+        operator reads during an incident — still said:
+
+          demotion: "gh release edit <tag> --prerelease
+                     (README URLs fall back to the previous stable)"
+
+        BOTH HALVES ARE FALSE. The command sets prerelease=true, and
+        /releases/latest goes on serving the demoted tag because make_latest is
+        sticky; nothing falls back. That entry now points at the subcommand and
+        carries a `demotion_is_not_the_inverse_of_promotion` block with the
+        three real steps and the verification read — which also discharges this
+        packet's criterion 3, since the runbook is exactly "where the release
+        runbooks can find it".
+
+        NOT EXERCISED AGAINST GITHUB, deliberately and this is a real gap: the
+        demote path's mutations are covered only by the hermetic tripwires and
+        its dry-run. Proving the sticky-field behaviour end to end means
+        promoting something in order to demote it, which is the class of action
+        864-8tqv exists to stop being casual about. The evidence that
+        make_latest is sticky is macuahuitl's live incident on 2026-08-23, not
+        a test I ran. Whoever next has a legitimate demotion to perform should
+        run it with --dry-run first and record the verify line.
+
+  - packet_id: set-field-cannot-write-a-list-valued-reference-field
+    event:
+      type: note
+      ts: "2026-08-23T17:55:34Z"
+      agent_id: linux-pirria-opus5-20260823T180000Z
+      host: linux_immutable
+      summary: >
+        SHARPER THAN AS FILED, measured while cleaning up my own debt. I filed
+        this packet saying set-field STRINGIFIES a list, which is true but is
+        not the whole defect. A BARE SCALAR id fares no better:
+
+          set-field 824-6qxh depends_on inference-image-cannot-run-any-model-larger-than-0-5b
+
+        is accepted, resolves (it produces no 'organic reference debt' warning,
+        unlike the bracketed form), and STILL FORMS NO EDGE — 'what is 824-6qxh
+        blocked on' answers unsupported, and blocked-by 849-tz8g does not list
+        it. So the correct statement is: AN LWW set-field CORRECTION TO A
+        REFERENCE FIELD NEVER BECOMES A GRAPH EDGE, in either shape. The graph
+        is built from the folded packets: definitions only.
+
+        That widens the fix beyond "accept a sequence": the LWW channel's value
+        has to reach the dependency graph, or reference fields need to be
+        refused by set-field outright with a message naming the file-a-packet
+        workaround — an accepted write that silently does not participate is
+        the worse of the two.
+
+        Also cleaned up here: my previous cycle set this field to "" while
+        reverting, which left 'depends_on carries a prose annotation ""' in the
+        gate's warning stream. The scalar above replaces it, so the warning is
+        gone and the value is at least id-shaped and honest about the intent,
+        even though no edge forms until this packet is fixed.
+
+  - packet_id: promotion-script-has-no-dry-run
+    event:
+      type: note
+      ts: "2026-08-23T17:58:06Z"
+      agent_id: linux-pirria-opus5-20260823T180000Z
+      host: linux_immutable
+      summary: >
+        THE MUTATION CONTROL WAS SELF-DEFEATING AND THE GATE CAUGHT IT, which is
+        the best possible outcome and worth recording because the trap is
+        general.
+
+        It read `git show HEAD:scripts/promote-stable.sh` — the pre-fix script —
+        and required it to trip the tripwire. That passed while the work was
+        uncommitted. THE MOMENT THE FIX WAS COMMITTED, HEAD BECAME THE FIXED
+        SCRIPT: the "pre-fix" copy no longer mutated, the wire did not fire, and
+        the suite went 10/11 on the very next gate run. A control that holds
+        only while its own fix is uncommitted is not a control, and it would
+        have been indistinguishable from a real regression to whoever hit it
+        next.
+
+        Rebuilt self-contained: take the CURRENT script and defeat ONLY its
+        guard (sed `--dry-run) DRY_RUN=1` -> `DRY_RUN=0`), so the assertion is
+        "this exact script, with its dry-run guard removed, mutates — and the
+        tripwire catches it". That stays true for every future version.
+
+        It also got its own vacuity guard, which is the lesson applied to
+        itself: if the arg-parser line ever moves, the sed matches nothing and
+        the case FAILS with "could not defeat the guard; the arg-parser line
+        moved, so this control is not testing what it claims" — rather than
+        silently exercising an unmodified script and passing. Verified in three
+        directions: guard defeated -> wire fires; guard deliberately broken
+        (DRY_RUN=9) -> 6/11 with the control reporting it could not defeat the
+        guard; correct script -> 11/11 hermetic, 12/12 online.
