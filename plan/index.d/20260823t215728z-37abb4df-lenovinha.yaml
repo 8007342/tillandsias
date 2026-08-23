@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: fourteen-ghost-traces-are-only-reported-in-files-a-commit-touches
+    field: next_action
+    value: 'STALE PREMISE, CORRECTED 2026-08-23 (lenovinha): criteria 1 and 4 are ALREADY MET and verified — trace-coverage.sh --gate is a repo-wide shrink-only ratchet wired into build.sh --check (584-2qq2), and a fabricated trace makes it exit 1 (tested, then reverted). The count is 9 today, not 14. WHAT REMAINS is criteria 2+3, the disposition, and it needs a decision rather than a sweep: ''prefer removal'' is right for the low-fanout six (fat-spec-corpus-index, forge-git-ergonomics, forge-git-identity-anonymization, forge-push-credential-channel, forge-skills-mapping, guest-crashloop-detection, litmus-runner) and I think WRONG for spec:meta-orchestration (traced from ~15 litmus tests plus methodology; the loop the fleet runs on) and spec:enclave-service-catalog (6+ real sites in headless main.rs) — for those the absence of a spec reads as a spec never written for something central, not as a concept nobody needed. Do the low-fanout six first, then decide the two. See 867-vd4z: the gate is blind to yaml and md, which is where the majority of annotations live.'
+    ts: "2026-08-23T21:57:28Z"
+    host: lenovinha
