@@ -1,0 +1,110 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-23T20:51:11Z.
+packets:
+  - order: 864-q7dm
+    packet_id: long-horizon-jobs-writing-into-the-worktree-race-the-pre-push-gate
+    desired_release: v0.5
+    title: "a background job that writes its output inside the checkout invalidates the gate stamp faster than a cycle can push"
+    status: ready
+    kind: defect
+    pickup_role: any
+    priority: p2
+    capability_tags: [ci, gates, orchestration, developer-experience]
+    deliverable: methodology/multi-host-development.yaml
+    depends_on: []
+    estimated_hours: 3
+    discovered_by: "a qwen3 band measurement that made this host unable to push its own work"
+    context: >
+      THIS HOST IS TOLD TO RUN LONG-HORIZON BACKGROUND WORK, and the pre-push
+      gate is built on the assumption that the tree holds still. Those two
+      instructions are in direct conflict and nothing says so.
+
+      Measured 2026-08-23. A band measurement was launched as a background job
+      writing its TSV to scripts/refusal-calibration/. It appends a row every
+      few seconds. `./build.sh --check` passed, stamped the tree, and the push
+      seconds later was refused:
+
+        ✗ pre-push refused: the tree changed since ./build.sh --check last passed
+          The gate validated a different tree than the one you are pushing.
+
+      The gate was right and the diagnosis it offers ("re-run it") cannot work:
+      re-running produces a fresh stamp for a tree that changes again before the
+      push completes. The cycle could not push ANY work, including work entirely
+      unrelated to the job, for as long as the job ran. A 20-minute measurement
+      makes the host unable to close a cycle for 20 minutes.
+
+      IT DOES NOT MATTER THAT THE FILE IS UNTRACKED. The stamp covers the
+      worktree state, so an untracked file appearing or growing invalidates it
+      exactly as a tracked edit would.
+
+      THE WORKAROUND THAT WORKS, and it is worth writing down because it is not
+      obvious: a running redirect holds the file by INODE, not by path. Moving
+      the in-progress output out of the checkout while the job runs is safe —
+      the job keeps appending to the moved file. Verified live: 146 rows before
+      `mv`, 159 rows after, job still running, worktree clean, push accepted.
+
+      THE REAL FIX IS THAT THE JOB SHOULD NEVER HAVE WRITTEN THERE. The
+      meta-orchestration exit contract already says every disposable artifact
+      belongs under the external $boundary_dir/tmp/, and that files created in
+      the worktree are meaningful cycle output to be committed. A long-running
+      measurement is neither: it is meaningful output that is NOT YET READY to
+      commit. The contract has no word for that state, so the natural place to
+      put it is the wrong one.
+    exit_criteria: >
+      (1) Methodology names the third category explicitly — in-progress output
+      of a long-horizon job — and says it lives outside the checkout until
+      complete, then is copied in and committed as one atomic change.
+      (2) The refusal message names this cause. "Re-run it" is actively wrong
+      advice when a background job is writing, and the reader has no way to tell
+      that case from a genuine stale stamp.
+      (3) The refusal names the paths that changed since the stamp, so the
+      reader can see at a glance whether a job of theirs is responsible.
+      (4) Prove it: with a writer appending to a worktree file, the refusal must
+      name that file. Mutation control — with the writer stopped, it must not.
+
+events:
+  - packet_id: long-horizon-jobs-writing-into-the-worktree-race-the-pre-push-gate
+    event:
+      type: filed
+      ts: "2026-08-23T20:51:11Z"
+      agent_id: linux-macuahuitl-opus5-20260823T203400Z
+      host: linux_mutable
+      summary: >
+        Filed from being unable to push this cycle's own unrelated work while a
+        band measurement appended rows inside the checkout. Unblocked by moving
+        the in-progress file to target/ mid-run, which is safe because the
+        redirect holds the inode.
+
+  - packet_id: spec-expert-refusal-threshold-fleet-decision
+    event:
+      type: progress
+      ts: "2026-08-23T20:51:11Z"
+      agent_id: linux-macuahuitl-opus5-20260823T203400Z
+      host: linux_mutable
+      evidence_refs:
+        - "target/index-rebuild/qwen3-4b-b32/timings.tsv — 1165s, batch 32, 21110 chunks, 2560-dim"
+        - "GPU: peak 100% util, peak non-ollama VRAM 309 MiB / 800 threshold, contaminated_samples=0"
+        - "scripts/refusal-calibration/apply-relabelled-561.sh --verify -> ok:relabel-verify:reproduces-baseline"
+      summary: >
+        THE FIRST qwen3-embedding:4b INDEX THIS PROJECT HAS BUILT: 21,110 chunks
+        at 2560 dimensions in 1,165s (19m25s) at batch 32, on a clean card —
+        peak 100% utilisation, zero contaminated samples. Until this morning the
+        model was believed unable to run at all (849-tz8g, refuted); this
+        afternoon it was believed to crash on batch (true at 64, fine at 32).
+
+        Band measurement against that index is RUNNING, 179/580 questions.
+
+        A COMPARABILITY TRAP WAS CAUGHT BEFORE IT PRODUCED A NUMBER. The only
+        question FILE is questions-wide-579.jsonl, which carries the DISCREDITED
+        labels (near=243, of which 86% were wrong); the baselines everyone quotes
+        are the relabelled 561 (near=33). Measuring the obvious way and comparing
+        against the stored baselines would have compared different ground truths
+        and produced a confident, meaningless delta.
+
+        scripts/refusal-calibration/apply-relabelled-561.sh now performs that
+        projection deterministically, taking the mapping from the baseline TSV
+        rather than from prose. Its --verify reproduces
+        results-relabelled-561-nomic.tsv exactly from results-wide-579-nomic.tsv
+        (kept=561, dropped=18, empty diff), and two mutations of the projection
+        both fail it. The qwen3 result will be projected through it before any
+        comparison is quoted.
