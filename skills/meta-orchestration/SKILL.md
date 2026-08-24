@@ -225,12 +225,57 @@ be committed and pushed to the correct remote branch.
 - No blocked state without a blocker, owner if known, and smallest next action.
 - Explicitly log things that make you slower (e.g., repeated steps, invalidated caches, uncoordinated scripts) into `plan/issues/`.
 
+**SALVAGE BEFORE YOU REFUSE (order 872-c9nd). This is not optional and it comes
+FIRST — before the handoff, before the blocker, before anything else.**
+
+```bash
+scripts/salvage-dirty-worktree.sh <slug>   # -> ok:salvaged:<ref>:<sha>
+```
+
+It pushes a COPY of the dirty tree — tracked modifications, deletions and
+untracked files — to `salvage/<host>/<yyyymmdd>-<slug>` on origin, and it CANNOT
+touch the worktree: it builds the commit through a temporary `GIT_INDEX_FILE`
+and plumbing (`write-tree` / `commit-tree`), never a stash, an add against the
+real index, or a checkout. Verified: worktree status and `.git/index` are
+byte-identical afterwards, and `git show <sha>:<path>` returns an untracked
+file's full content.
+
+WHY THIS RULE EXISTS, and it is the most expensive lesson in this file. On
+2026-08-23 a host wedged with 16 modified paths and one untracked litmus file
+belonging to two claimed packets. Three consecutive cycles refused the dirty
+tree, verified all 17 paths byte-identical to their boundary snapshots, and
+wrote increasingly detailed prose about the diff. On 2026-08-24T06:09Z the
+checkout was replaced by a fresh clone. Four hours of finished work are
+unrecoverable; the untracked file's name appears in no commit on any branch.
+
+**The boundary guard did its job perfectly and protected a directory that
+someone then deleted wholesale.** A guard that forbids the AGENT from touching
+the work does not forbid anything else from touching it, and a prose description
+of a diff is not a copy of it. The refusal path was a place work could sit
+indefinitely; it is now a place work passes THROUGH on its way to origin.
+
 A dirty-start preflight refusal is not a work cycle and is the sole exception
 to in-checkout blocker filing: touching `plan/` would itself violate the
 startup boundary. Report `blocked: dirty-start-worktree`, owner, the exact
-status paths, and the smallest next action in the final handoff so the clean
-host/orchestrator can file it durably. Do not create then delete a blocker file
-inside either the shared checkout or `$boundary_dir`.
+status paths, **the salvage ref and sha**, and the smallest next action in the
+final handoff so the clean host/orchestrator can file it durably. Do not create
+then delete a blocker file inside either the shared checkout or `$boundary_dir`.
+
+If the salvage itself fails, say so loudly and do NOT soften the refusal: an
+unsalvaged dirty tree is the exact state that cost four hours, and the operator
+needs to know the copy does not exist before deciding what to do with the
+directory.
+
+**AN OPERATOR LICENCE CAN GO STALE, AND A CLEAN TREE IS HOW YOU KNOW.** When a
+prompt authorises you to land dirt — order 833-fpe7's `resumable:` verdict,
+order 540's opsx merge, or an operator sentence naming specific work to review
+and land — CHECK THAT THE DIRT IS STILL THERE before acting on it. If
+`git status --porcelain --untracked-files=all` is empty, the premise of the
+licence is gone: answer **"the premise is gone"**, say what the licence expected
+to find, and stop. Do NOT reconstruct what you think it referred to and land
+that instead. This is how 872-c9nd was discovered: an operator relaunched a host
+with a verbatim unblock prompt hours after the checkout had been re-cloned, and
+the honest answer was that there was nothing left to land.
 
 If a push fails after three fetch/rebase retries, mark the active plan item
 `blocked` or `failed-retryable`, include the failed push output, and stop.
@@ -564,6 +609,15 @@ filing — not the prompt.
    Refuse the cycle and do not begin committable work. Report the dirty-start
    blocker through the final handoff as defined above. Do not commit, discard,
    restore, reset, or clean unknown startup dirt.
+
+   **Before that refusal, run `scripts/salvage-dirty-worktree.sh <slug>`**
+   (order 872-c9nd, full rationale in the Exit Contract above). Refusing
+   protects the work from YOU; it does not protect it from a fresh clone, and on
+   2026-08-24 a fresh clone is exactly what took it. The salvage cannot touch
+   the worktree — temporary index and plumbing only — so it is safe to run on
+   dirt you have just been forbidden to alter, and it must run BEFORE the two
+   detectors below: whether the dirt turns out to be `ok:opsx-only` or
+   `resumable:` changes what you may LAND, never whether a copy should exist.
 4. **Generated opsx sync merge (deterministic, order 540)**: before refusing on
    startup dirt, run the deterministic detector:
    ```bash
