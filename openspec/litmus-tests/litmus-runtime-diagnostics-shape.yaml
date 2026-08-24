@@ -1,4 +1,6 @@
 # @trace spec:runtime-diagnostics
+# freshness: auditor=linux-lenovinha-fable5-20260824t115314z date=2026-08-24 verdict=updated scope=full file, 1 step. NOT a re-stamp of a green: this litmus was reporting OK while its own assertion was FALSE. It required the literal `daemon ready` in images/git/entrypoint.sh, which a109b0b39 renamed to `daemon listening on 9418`; the grep chain has been exiting 1 ever since (measured: command_exit=1). It passed anyway because the greps carried no -q, so the first two ECHOED their matched lines, and the bare expectation `runtime-diagnostics` matched the `# @trace spec:runtime-diagnostics` line in that echo. Fixed here: quiet greps, the current log string asserted, one explicit sentinel, and the expectation set to that sentinel. Verified BOTH directions — passes on a correct tree, FAILS when the entrypoint string is mutated.
+# freshness-note: the step earns its place (it is the only guard on the git entrypoint's diagnostics wiring, and the sibling litmus-runtime-diagnostics-typed-events-shape covers a different surface), but the FALSE-PASS SHAPE is systemic, not local — 197 step commands across openspec/litmus-tests/ chain a non-quiet grep with && and end without a sentinel. Filed as 870-fv7k with both candidate fixes and the reason choosing between them is the actual work.
 name: litmus:runtime-diagnostics-shape
 spec: runtime-diagnostics
 phase: pre-build
@@ -11,10 +13,46 @@ preconditions:
   - shell utilities are available in PATH
 
 critical_path:
+  # ORDER 869-cvdc cycle, 2026-08-24. This step was GREEN while its own
+  # assertion was FALSE, for two compounding reasons — both fixed here.
+  #
+  # 1. DRIFT. It required the literal `daemon ready` in images/git/entrypoint.sh.
+  #    a109b0b39 ("git daemon starts BEFORE the startup sweep") renamed that log
+  #    to `daemon listening on 9418 (clones available; ...)`. The string has been
+  #    absent ever since, so the `&&` chain has been exiting 1 the whole time.
+  #
+  # 2. THE STEP COULD NOT FAIL. The greps had no `-q`, so the first two PRINTED
+  #    their matched lines before the third one failed — and the expectation was
+  #    the bare word `runtime-diagnostics`, which appears in the first of those
+  #    echoed lines (`# @trace spec:runtime-diagnostics`). The matcher searches
+  #    the step's OUTPUT for the expectation, found it in that incidental echo,
+  #    and reported OK on a command that had just exited 1. Measured directly:
+  #    command_exit=1, output two lines, expectation matches.
+  #
+  # So: `-q` everywhere so a passing chain prints NOTHING of its own, one
+  # explicit sentinel at the end, and the expectation is that sentinel. Now the
+  # only way to emit it is for all three assertions to hold, and a broken chain
+  # produces empty output that cannot match.
   - step: "verify the git entrypoint still exposes diagnostics wiring"
-    command: "grep -F '@trace spec:runtime-diagnostics' images/git/entrypoint.sh && grep -F 'SLOG=/strategic/service.log' images/git/entrypoint.sh && grep -F 'daemon ready' images/git/entrypoint.sh"
+    command: "grep -qF '@trace spec:runtime-diagnostics' images/git/entrypoint.sh && grep -qF 'SLOG=/strategic/service.log' images/git/entrypoint.sh && grep -qF 'daemon listening on 9418' images/git/entrypoint.sh && echo 'ok: git entrypoint diagnostics wiring intact'"
     timeout_ms: 5000
-    expected_behavior: "runtime-diagnostics"
+    expected_behavior: "ok: git entrypoint diagnostics wiring intact"
+
+  # NEGATIVE CONTROL, required by 634-39ik and demanded by the gate when I tried
+  # to land the step above without one — correctly, because a fixed step is
+  # still a source-expression pin, and the gate has no way to know I ran the
+  # mutation by hand.
+  #
+  # It is also the assertion this litmus most needed. The step above spent
+  # months green while its own chain exited 1; what was missing was never a
+  # better grep, it was any evidence that the check COULD fail. This runs the
+  # identical chain against a mutated COPY with the readiness line removed and
+  # requires the sentinel NOT to appear. Hermetic: a temp copy, never the real
+  # file, removed on the same line.
+  - step: "NEGATIVE CONTROL: with the daemon-readiness log removed, the same chain must NOT emit the sentinel"
+    command: "T=$(mktemp -d); sed 's/daemon listening on 9418/daemon listening on REMOVED/' images/git/entrypoint.sh > \"$T/e.sh\"; out=$(grep -qF '@trace spec:runtime-diagnostics' \"$T/e.sh\" && grep -qF 'SLOG=/strategic/service.log' \"$T/e.sh\" && grep -qF 'daemon listening on 9418' \"$T/e.sh\" && echo 'ok: git entrypoint diagnostics wiring intact'); rm -rf \"$T\"; case \"$out\" in *'wiring intact'*) echo 'FAIL: the check passed on a mutated entrypoint — it cannot detect drift'; exit 1;; *) echo 'ok: mutation detected, the check is falsifiable';; esac"
+    timeout_ms: 5000
+    expected_behavior: "ok: mutation detected, the check is falsifiable"
 
 observability:
   traces:

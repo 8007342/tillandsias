@@ -1,0 +1,82 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_immutable (lenovinha), 2026-08-24T12:20:00Z.
+packets:
+  - packet_id: litmus-steps-can-pass-on-the-echo-of-a-failing-grep-chain
+    order: 870-fv7k
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: a litmus step whose grep chain FAILS can still report OK, because the earlier greps echo their matches and the expectation matches that echo — 197 steps share the shape
+    deliverable: a step whose command exits non-zero cannot report OK on the strength of output the command printed on its way to failing; either the matcher accounts for the exit code where an expectation names a success sentinel, or the exposed steps are converted to quiet-grep-plus-sentinel — with the decision between those two recorded, because they have very different blast radii
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags:
+      - litmus
+      - fail-loud
+      - ci
+    estimated_hours: 5
+    context: |
+      FOUND (lenovinha, 2026-08-24) by doing a freshness audit properly rather
+      than re-stamping a green.
+
+      litmus:runtime-diagnostics-shape has ONE step, and it was reporting OK
+      while the property it asserts was FALSE. Its command was three chained
+      greps:
+
+        grep -F '@trace spec:runtime-diagnostics' images/git/entrypoint.sh &&
+        grep -F 'SLOG=/strategic/service.log'     images/git/entrypoint.sh &&
+        grep -F 'daemon ready'                    images/git/entrypoint.sh
+
+      with `expected_behavior: "runtime-diagnostics"`. `daemon ready` has not
+      existed in that file since a109b0b39 renamed the log to `daemon listening
+      on 9418`. So the chain exits 1 — MEASURED, command_exit=1.
+
+      IT PASSED ANYWAY, and the mechanism generalises. The greps carry no `-q`,
+      so the first two PRINT their matched lines before the third fails. One of
+      those lines is `# @trace spec:runtime-diagnostics`. The matcher searches
+      the step's OUTPUT for the expectation, finds `runtime-diagnostics` inside
+      that incidental echo, and reports OK. The step is structurally incapable
+      of failing as long as any earlier grep in the chain matches a line
+      containing the expectation string — which, when the expectation is a bare
+      spec name and the greps search for annotations carrying that same name, is
+      close to guaranteed.
+
+      That one is FIXED in this cycle's commit: quiet greps, an explicit
+      `ok: git entrypoint diagnostics wiring intact` sentinel, the expectation
+      set to the sentinel, and the current log string asserted. Verified in both
+      directions — passes on a correct tree, FAILS when the entrypoint string is
+      mutated, tree restored.
+
+      THE EXPOSURE IS THE REASON FOR THIS PACKET. Across
+      openspec/litmus-tests/*.yaml, 1140 step commands chain a NON-QUIET grep
+      with `&&`, and 197 of those do NOT end in an explicit `echo '...'`
+      sentinel. Those 197 are the population where a step can pass on echoed
+      content. Not all are broken — the shape only lies when the chain can fail
+      partway AND the expectation matches something an earlier grep prints — but
+      nothing currently distinguishes a step that verified its property from one
+      that matched its own noise.
+
+      TWO FIXES, AND CHOOSING BETWEEN THEM IS THE WORK, not the typing:
+
+      (a) RUNNER-SIDE: require exit 0 when the expectation names a success
+          sentinel. One place, fleet-wide effect. But run-litmus-test.sh's
+          661-nm73 comment records exactly why this is not free — the matcher
+          deliberately honours output rather than exit status for some arms,
+          because "a step may chain several greps and end on a non-zero one
+          while the match it cares about was printed", and an earlier attempt to
+          require non-empty output made ABSENCE assertions (`! grep`)
+          unpassable by construction and inverted a litmus in BOTH directions.
+          A blanket exit-0 rule risks reddening steps that are legitimately
+          green.
+
+      (b) SWEEP-SIDE: convert the 197 to quiet-grep-plus-sentinel, as this cycle
+          did for the one. Safe per step, verifiable per step, and it fixes the
+          shape rather than compensating for it — but it is 197 edits and does
+          nothing to stop the 198th being written.
+
+      A defensible answer is probably BOTH, sequenced: sweep first so the
+      runner-side rule has nothing legitimate to break, then arm the rule so the
+      shape cannot come back. Whoever takes it should measure how many of the
+      197 actually mis-pass before deciding — mutate the asserted property and
+      see which stay green, the same way this one was caught.
