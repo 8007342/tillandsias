@@ -1,0 +1,101 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-24T14:41:20Z.
+packets:
+  - order: 865-x2mf
+    packet_id: the-guard-against-pinning-live-status-had-a-test-that-pinned-live-status
+    desired_release: v0.5
+    title: "litmus:groundtruth-no-mutable-status-pin-shape cited packet 394, 394 was obsoleted, and the release gate went red"
+    status: completed
+    kind: defect
+    pickup_role: any
+    priority: p1
+    capability_tags: [litmus, testing, ci, release, plan]
+    deliverable: openspec/litmus-tests/litmus-groundtruth-no-mutable-status-pin-shape.yaml
+    depends_on: []
+    estimated_hours: 3
+    discovered_by: "865-n8vq — the release gate red, this the one failure reproducible at instant size"
+    context: >
+      680-zphp EXISTS TO STOP A GROUNDTRUTH CASE PINNING `status:` ON A PACKET
+      WHOSE STATUS CAN STILL MOVE. Its own litmus did exactly that.
+
+      The negative control pinned `status: ready` on packet 394 and required
+      check-groundtruth-mutable-status-pins.sh to REFUSE it. 394 was obsoleted
+      on 2026-08-23 (06d859499) — a TERMINAL status — so the pin became
+      legitimate, the guard correctly admitted it, and the litmus went red
+      hunting a refusal it could no longer earn. The header still asserted
+      "394 is ready (non-terminal, a trap)".
+
+      It stayed red for a day and helped block the release gate (865-n8vq).
+
+      PICKING A LONGER-LIVED PACKET WOULD ONLY POSTPONE IT. Every live packet is
+      mortal; that is the entire premise of the rule being enforced. The test
+      had to stop consulting the live ledger, which it could not do because the
+      guard `cd "$REPO_ROOT"` before resolving anything — a caller's CWD was
+      silently discarded, and the comment described this as deliberate: "status
+      is still resolved against the LIVE ledger, so the fixture cites real
+      packet ids". That sentence is the defect.
+
+      A SECOND BUG WAS SITTING UNDER THE FIRST, and it is the more dangerous
+      shape. Once the ledger became overridable, the lookup ran inside
+      `cd "$LEDGER_ROOT"` — and resolve_plan_binary returns a REPO-RELATIVE path
+      (`./target/release/tillandsias-plan`). Relative, inside that subshell, the
+      binary is simply absent: every status resolves empty, every pin is skipped
+      as "unknown packet", and the guard prints `ok:...:0 live-checked` and
+      exits 0. A guard that checks NOTHING is indistinguishable from a guard
+      that checks everything and finds nothing. I introduced that in the same
+      change, with a comment asserting the path was already absolute, which I
+      had not checked.
+
+      SO THE POSITIVE CONTROL NOW ASSERTS `1 live-checked`, NOT MERELY EXIT 0.
+      That is the difference between "the guard approved this" and "the guard
+      ran".
+    exit_criteria: >
+      (1) Both controls own their ledger via
+      TILLANDSIAS_GROUNDTRUTH_LEDGER_ROOT and cite no live packet, so nothing in
+      plan/ can move them again.
+      (2) Production behaviour is byte-identical: the real corpus still reports
+      `3 live-checked`, rc=0, with no env var set.
+      (3) The positive control asserts the CHECKED COUNT, so a guard that has
+      gone inert fails instead of passing.
+      (4) Mutation-controlled in both directions — a weakened guard AND a
+      disabled guard must both go red.
+
+events:
+  - packet_id: the-guard-against-pinning-live-status-had-a-test-that-pinned-live-status
+    event:
+      type: completed
+      ts: "2026-08-24T14:41:20Z"
+      agent_id: linux-macuahuitl-opus5-20260824T143400Z
+      host: linux_mutable
+      evidence_refs:
+        - "spec forge-environment-discoverability: 17/17, 100%, PASS (was 16/17 with this test red)"
+        - "production: ok:groundtruth-status-pins:3 live-checked rc=0, unchanged, no env var"
+        - "MUTATION A (guard admits non-terminal pins) -> 'FAIL: a non-terminal status pin was admitted'"
+        - "MUTATION B (drop the binary absolutisation, guard goes inert) -> litmus red, 16/17"
+        - "restored -> 17/17 PASS"
+      merge_affordance: merge-now
+      merge_reason: >
+        Clears one of the three checks blocking ./build.sh --ci-full and so one
+        of the reasons the trunk cannot ship. Guard behaviour on the real corpus
+        is unchanged; only the test's dependence on live data is removed.
+      summary: >
+        Both controls now supply their own two-packet ledger through
+        TILLANDSIAS_GROUNDTRUTH_LEDGER_ROOT and cite no live packet. Production
+        is untouched — the variable defaults to the repo and the real corpus
+        still reports 3 live-checked.
+
+        THE MEASUREMENT PROCESS ITSELF LIED TWICE AND BOTH ARE WORTH KEEPING.
+        First, a `grep -c 'REPO_ROOT/${_bin'` returned 0 against a file that
+        plainly contained the code — a shell-quoting failure — and I nearly
+        concluded my own fix had been silently reverted and my positive control
+        was weak. Second, the perl that was supposed to apply mutation B never
+        matched, so the litmus passed and looked like a control that could not
+        detect anything. Both were probe defects wearing the costume of a
+        finding. Re-run with a targeted sed, mutation B fires correctly.
+
+        That is the fourth probe of mine to lie in this session — after
+        `pgrep -f` matching its own command line, a `rescue`-swallowed YAML
+        load, and reading a packet field where the live value was in an event.
+        The pattern is not carelessness with any one probe; it is that an
+        ad-hoc probe written to check a result is itself unchecked, and a
+        false-negative probe is indistinguishable from good news.
