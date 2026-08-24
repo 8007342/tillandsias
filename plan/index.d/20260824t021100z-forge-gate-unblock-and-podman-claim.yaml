@@ -1,0 +1,79 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by forge (Codex), 2026-08-24T02:11:00Z.
+events:
+  - packet_id: podman-sync-wait-bounded-busy-polls-two-detached-threads
+    event:
+      type: claim
+      ts: "2026-08-24T00:54:21Z"
+      agent_id: forge-forge-tillandsias-codex-20260824t004713z
+      host: forge
+      summary: >
+        Claimed slice B: replace both 20 ms child-wait polls with a
+        cross-platform parked deadline wait; retain kill-and-reap and bounded
+        abandoned readers; add PID-gone tests and a guard fixture. Selected by
+        the architecture-audit-epic deterministic batch with seed
+        forge-unknown-none-forge-tillandsias-20260824.
+
+  - packet_id: no-yaml-reader-exists-in-every-environment-the-gates-run-in
+    event:
+      type: claim
+      ts: "2026-08-24T01:54:23Z"
+      agent_id: forge-forge-tillandsias-codex-20260824t004713z
+      host: forge
+      summary: >
+        Claimed the fresh-forge blocker slice after ./build.sh --check invoked
+        a missing Ruby through an on-demand shim and falsely reported two
+        valid fragments as damaged.
+
+  - packet_id: no-yaml-reader-exists-in-every-environment-the-gates-run-in
+    event:
+      type: progress
+      ts: "2026-08-24T02:11:00Z"
+      agent_id: forge-forge-tillandsias-codex-20260824t004713z
+      host: forge
+      summary: >
+        Migrated check-all-fragments-intact.sh from its hard-coded Ruby parser
+        to the repository-owned tillandsias-policy validate-yaml facade and
+        added a three-case fixture proving valid YAML works without Ruby while
+        malformed YAML and conflict markers fail. The standalone whole-overlay
+        guard checked 114 fragments and ./build.sh --check completed green.
+        This is one production reader from the packet's larger ten-site audit,
+        so the packet remains open.
+
+  - packet_id: capability-row-check-cannot-resolve-a-host-without-the-hostname-binary
+    event:
+      type: claim
+      ts: "2026-08-24T01:55:00Z"
+      agent_id: forge-forge-tillandsias-codex-20260824t004713z
+      host: forge
+      summary: >
+        Claimed the broken-fixture follow-up after the capability-row test
+        inherited this live forge's identity and failed five ordinary-host
+        scenarios before reaching the fallback chain under test.
+
+  - packet_id: capability-row-check-cannot-resolve-a-host-without-the-hostname-binary
+    event:
+      type: progress
+      ts: "2026-08-24T02:11:00Z"
+      agent_id: forge-forge-tillandsias-codex-20260824t004713z
+      host: forge
+      summary: >
+        Added a TILLANDSIAS_FORGE_CONTEXT fixture seam to agent-identity.sh and
+        made test-capability-row-check.sh explicitly clear inherited forge and
+        workstation identity. The capability fixture is green 9/9, the shared
+        identity fixture remains green 11/11, and the full gate is green in a
+        real forge.
+
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    event:
+      type: progress
+      ts: "2026-08-24T02:11:00Z"
+      agent_id: forge-forge-tillandsias-codex-20260824t004713z
+      host: forge
+      summary: >
+        Repaired the archiver answerability gate's fresh-forge work root. Its
+        cold Rust target exhausted the forge's 256 MiB /tmp tmpfs; the stable
+        cache now lives under the repository's ignored target/ tree. Targeted
+        evidence is 215/215 post-archive plan tests after archiving 743 packets,
+        with the ready set unchanged at 378; the complete build gate then ran
+        green in 70 seconds.

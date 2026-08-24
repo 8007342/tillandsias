@@ -136,16 +136,16 @@ tillandsias_sanitize_component() {
 # on), then bash's own $OSTYPE (set by the shell itself, so it survives
 # `env -i` and an empty PATH), then $OS, then `uname -s`.
 tillandsias_agent_platform() {
-    if [ -n "${TILLANDSIAS_HOST_KIND:-}" ]; then
-        case "$TILLANDSIAS_HOST_KIND" in
-            forge)                       printf 'forge'; return 0 ;;
-            linux*)                      printf 'linux'; return 0 ;;
-            macos*|darwin*)              printf 'macos'; return 0 ;;
-            windows*|win*|msys*|cygwin*) printf 'windows'; return 0 ;;
-            *)                           printf '%s' "$TILLANDSIAS_HOST_KIND"; return 0 ;;
-        esac
+    local forge_context
+    if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]; then
+        printf 'forge'
+        return 0
     fi
-    if [ -f "$(git rev-parse --show-toplevel 2>/dev/null || echo .)/.forge-startup-context.md" ]; then
+    # The override is a fixture seam like TILLANDSIAS_ETC_HOSTNAME below: a
+    # test running inside a real forge must be able to model a bare host without
+    # renaming the checkout's live startup marker.
+    forge_context="${TILLANDSIAS_FORGE_CONTEXT:-$(git rev-parse --show-toplevel 2>/dev/null || echo .)/.forge-startup-context.md}"
+    if [ -f "$forge_context" ]; then
         printf 'forge'
         return 0
     fi

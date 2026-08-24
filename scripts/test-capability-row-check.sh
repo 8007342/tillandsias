@@ -28,7 +28,8 @@
 #
 # HERMETIC: stub plan binary and stub hostname under mktemp; identity forced
 # through the documented env seams (TILLANDSIAS_WORKSTATION, HOSTNAME,
-# TILLANDSIAS_ETC_HOSTNAME, TILLANDSIAS_HOST_KIND). Never writes to the repo —
+# TILLANDSIAS_ETC_HOSTNAME, TILLANDSIAS_HOST_KIND,
+# TILLANDSIAS_FORGE_CONTEXT). Never writes to the repo —
 # in particular it never creates a .forge-startup-context.md marker, which
 # would dirty the worktree and trip the meta-orchestration boundary guard.
 set -uo pipefail
@@ -75,9 +76,14 @@ chmod +x "$TMPD/bin/stub-plan"
 # `hostname` first on PATH and the stub plan binary; the rest is per-case.
 run_sut() { #  run_sut <env assignments...>  -> prints "<verdict>|<exit>"
     local out rc
-    out="$(env TILLANDSIAS_HOST_KIND=linux "$@" \
+    # The outer process may itself be a forge. Each case declares its own
+    # simulated locus; inherited forge/workstation markers would otherwise
+    # divert the ordinary-host cases into the forge refusal branch before the
+    # identity fallback under test is reached.
+    out="$(env -u TILLANDSIAS_HOST_KIND -u TILLANDSIAS_WORKSTATION "$@" \
         PATH="$TMPD/bin:$PATH" \
         TILLANDSIAS_PLAN_BIN="$TMPD/bin/stub-plan" \
+        TILLANDSIAS_FORGE_CONTEXT="$TMPD/no-forge-context" \
         bash "$SUT" 2>/dev/null)"
     rc=$?
     printf '%s|%s' "$out" "$rc"
@@ -132,8 +138,9 @@ ck "forge WITH TILLANDSIAS_WORKSTATION resolves normally" \
 # 9. An unreadable instrument is reported, never guessed around. Composed the
 #    same way run_sut does — capturing stdout in $(...) first, so the verdict's
 #    trailing newline is stripped before the exit code is appended.
-_out="$(env -u TILLANDSIAS_HOST_KIND -u TILLANDSIAS_WORKSTATION -u TILLANDSIAS_ETC_HOSTNAME \
+_out="$(env -u TILLANDSIAS_HOST_KIND -u TILLANDSIAS_WORKSTATION \
         PATH="$TMPD/bin:$PATH" TILLANDSIAS_PLAN_BIN="$TMPD/bin/does-not-exist" \
+        TILLANDSIAS_FORGE_CONTEXT="$TMPD/no-forge-context" \
         HOSTNAME=knownbox bash "$SUT" 2>/dev/null)"
 _rc=$?
 ck "no runnable plan binary is reported" \
