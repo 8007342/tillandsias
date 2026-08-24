@@ -1,4 +1,6 @@
 # @trace spec:cheatsheets-license-tiered
+# freshness: auditor=linux-lenovinha-fable5-20260824t175323z date=2026-08-24 verdict=refreshed scope=full file, 1 step, EXECUTED (spec cheatsheets-license-tiered, PASS) and clean under scripts/scan-litmus-false-pass.sh. One step, and it is the RIGHT one: it RUNS the tier validator in strict mode rather than grepping for how the validator is written, so it survives a refactor and catches a behavioural regression — the opposite of the text-pin weakness recorded on several siblings this week.
+# freshness-note: this completes the pair. Its sibling litmus:cheatsheets-license-allowlist-shape (audited 2026-08-24, same verdict) is deliberately grep-only and pins the FILE STRUCTURE of cheatsheets/license-allowlist.toml so a moved file or dropped field fires pre-build, BEFORE any validator invocation; this one exercises the validator end-to-end. Neither subsumes the other and the division of labour is the reason both exist — if either is ever trimmed, check the pair rather than the file.
 name: litmus:cheatsheet-tier-discipline
 spec: cheatsheets-license-tiered
 phase: pre-build

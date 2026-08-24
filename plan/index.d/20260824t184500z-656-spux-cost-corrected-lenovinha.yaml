@@ -1,0 +1,66 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_immutable (lenovinha), 2026-08-24T18:45:00Z.
+events:
+  - packet_id: no-lane-gate-builds-the-workspace-for-other-targets
+    event:
+      type: progress
+      ts: "2026-08-24T18:45:00Z"
+      agent_id: linux-lenovinha-fable5-20260824T175323Z
+      host: linux_immutable
+      summary: |
+        I OVERSTATED THE COST OF MY OWN GATE BY TWO ORDERS OF MAGNITUDE, AND THE
+        CORRECTED NUMBER REVERSES THE DECISION I MADE ON IT.
+
+        Closing this packet two hours ago I recorded "a warm full-workspace
+        cross-check 37s", and built an argument on it: 115 MiB of mingw plus 37s
+        per gate run was too much to impose fleet-wide, so the check would SKIP
+        where the toolchain is absent and hosts could opt in. I wrote that the
+        cost was "not mine to decide".
+
+        THE RECURRING COST IS 0.3 SECONDS. Profiled directly with
+        TILLANDSIAS_GATE_PROFILE=1:
+
+          0.3s   Cross-target workspace check (656-spux)...
+
+        Whole-gate wall clock is 44s against a 38-40s baseline before the step
+        existed, which agrees. The 37s I recorded was the ONE-OFF first run
+        after `rustup target add`, when cargo compiles every dependency for the
+        new target once. Steady state it does nothing, because nothing changed.
+        I measured the cold path and reported it as the warm one.
+
+        WHY IT MATTERS RATHER THAN BEING A FOOTNOTE: the cost was the ENTIRE
+        argument for leaving this opt-in. A check that adds 0.3s to every gate
+        is a different proposition from one that adds 37s, and I had made the
+        expensive-sounding version the basis of a fleet-wide decision. An
+        overstated cost that discourages adoption of a gate which found a live
+        trunk break on its first run is not a harmless rounding error.
+
+        SO I HAVE REVERSED IT, and I am flagging the reversal rather than
+        quietly landing it. mingw64-gcc and the x86_64-pc-windows-gnu rustup
+        target are now in the tillandsias-builder init set, and
+        `_toolbox_initialized` requires both, so pre-existing toolboxes across
+        the fleet re-run init and pick them up — the same pattern the musl-gcc
+        and jq/yq/ripgrep/openssl additions used.
+
+        THE SIZE ARGUMENT ALSO SHRANK ONCE I MEASURED INSTEAD OF REACTING.
+        115 MiB reads as a lot in isolation. This toolbox already carries a
+        2.8 GB /usr and a 1.9 GB ~/.rustup — mingw is roughly 2% of an
+        environment whose entire purpose is compiling things. I had compared it
+        against the 6.3 MiB jq/yq/rg/openssl addition, which is the wrong
+        denominator: that comparison says one addition is bigger than another,
+        not whether either is big.
+
+        WHAT DOES NOT CHANGE: the script still SKIPS rather than fails when the
+        toolchain is absent, and that stays right. Not every host runs
+        ./build.sh through the builder toolbox — macOS and mutable-Linux hosts
+        build natively — so the skip path remains the honest answer for them,
+        and the verdict still names the exact missing binary. The init-set
+        change gives the capability to every host that uses the toolbox;
+        it does not turn absence into a failure anywhere.
+
+        OPERATOR: if 115 MiB per toolbox is not acceptable, reverting is one
+        line in scripts/with-tillandsias-builder.sh (drop mingw64-gcc, the
+        target from the `rustup target add` line, and the two clauses from the
+        init probe) and the gate returns to skipping. I have recorded the real
+        numbers here so that decision can be made on them rather than on my
+        first, wrong one.

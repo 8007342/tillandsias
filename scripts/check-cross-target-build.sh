@@ -35,8 +35,22 @@
 #   rustup target add x86_64-pc-windows-gnu
 #   sudo dnf install -y mingw64-gcc
 #
-# Measured on lenovinha (Silverblue, inside tillandsias-builder): target install
-# 2.8s, mingw64-gcc 33 MiB download, and a warm full-workspace cross-check 37s.
+# MEASURED on lenovinha (Silverblue, inside tillandsias-builder). The recurring
+# cost is the number that matters and it is almost nothing:
+#
+#   steady-state, inside ./build.sh --check      0.3s
+#   first run after the target is installed      ~37s  (one-off: cargo compiles
+#                                                      every dependency for the
+#                                                      new target once)
+#   rustup target add x86_64-pc-windows-gnu      2.8s
+#   mingw64-gcc                                  33 MiB down / 115 MiB installed
+#
+# The 37s figure was originally recorded here as the WARM cost, which overstated
+# the recurring price by two orders of magnitude — it was the first run after a
+# cold dependency build, not steady state. Corrected 2026-08-24 after profiling
+# the phase directly (TILLANDSIAS_GATE_PROFILE=1). It matters because the cost
+# was the whole argument for leaving this opt-in: a check that adds 0.3s to
+# every gate is a very different proposition from one that adds 37s.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
