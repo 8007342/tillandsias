@@ -86,6 +86,47 @@ refuse() {
     exit 1
 }
 
+# ── 0. Salvage refs are exempt, by definition (872-c9nd) ──────────────────────
+# A `salvage/<host>/<yyyymmdd>-<slug>` ref is a COPY of a dirty worktree pushed
+# so the work cannot be lost — it is expected to be half-edited, unbuildable,
+# and to carry a tree no gate has ever seen. Requiring a green build stamp of it
+# makes the mechanism unusable, which is exactly what happened: the ref grammar
+# has been accepted by the pre-receive gate (and deliberately exempted from its
+# YAML check) since before 872-c9nd, and nothing ever pushed one. Four hours of
+# finished work were then deleted with a fresh clone.
+#
+# Exempt ONLY when every ref in this push is a salvage ref, so a salvage cannot
+# be used to smuggle a normal branch past the gate. Nothing here can reach
+# main/linux-next: the grammar has its own namespace and the pre-receive gate
+# enforces it independently.
+#
+# THIS BLOCK MUST BE THE HOOK'S FIRST DECISION, and originally it was not.
+# Placed after release-preflight and the cheatsheet-sync guard, a salvage from
+# a dirty tree whose dirt included a cheatsheet edit was REFUSED by the sync
+# guard before this exemption was ever consulted — measured live on macuahuitl
+# 2026-08-24 (`fail:salvage:push:` with the sync guard's refusal behind it).
+# yoga's destroyed dirt contained cheatsheets/concurrent-git/
+# crdt-ledger-fragments.md, so the net would have failed the exact incident it
+# was built for. Any guard that inspects WORKTREE STATE will, on some dirty
+# tree, refuse the push that exists to preserve that dirty tree — so no such
+# guard may run before this line. Origin held ZERO salvage refs when the
+# 2026-08-24 retrospective checked; that is what "unusable safety net" looks
+# like from the outside: nothing fails, nothing is saved.
+_all_salvage=1
+_any_ref=0
+while read -r _l _ls _remote_ref _rs; do
+    [[ -z "${_remote_ref:-}" ]] && continue
+    _any_ref=1
+    case "$_remote_ref" in
+        refs/heads/salvage/*) ;;
+        *) _all_salvage=0 ;;
+    esac
+done < <(printf '%s\n' "$REFS")
+if [[ "$_any_ref" -eq 1 && "$_all_salvage" -eq 1 ]]; then
+    echo "${GRN}✓ local gate: salvage ref — exempt by design (872-c9nd); a dirty-tree copy is not expected to build${RST}" >&2
+    exit 0
+fi
+
 # ── 1. Release preflight ───────────────────────────────────────────────────────
 if [[ -f scripts/release-preflight.sh ]]; then
     verdict="$(bash scripts/release-preflight.sh 2>/dev/null | tail -1)"
@@ -559,34 +600,6 @@ enforce_stamp_scope() {
     echo "${GRN}✓ local gate: scoped stamp '$scope' covers every outgoing change class${RST}" >&2
     return 0
 }
-
-# ── 1b. Salvage refs are exempt, by definition (872-c9nd) ──────────────────────
-# A `salvage/<host>/<yyyymmdd>-<slug>` ref is a COPY of a dirty worktree pushed
-# so the work cannot be lost — it is expected to be half-edited, unbuildable,
-# and to carry a tree no gate has ever seen. Requiring a green build stamp of it
-# makes the mechanism unusable, which is exactly what happened: the ref grammar
-# has been accepted by the pre-receive gate (and deliberately exempted from its
-# YAML check) since before 872-c9nd, and nothing ever pushed one. Four hours of
-# finished work were then deleted with a fresh clone.
-#
-# Exempt ONLY when every ref in this push is a salvage ref, so a salvage cannot
-# be used to smuggle a normal branch past the gate. Nothing here can reach
-# main/linux-next: the grammar has its own namespace and the pre-receive gate
-# enforces it independently.
-_all_salvage=1
-_any_ref=0
-while read -r _l _ls _remote_ref _rs; do
-    [[ -z "${_remote_ref:-}" ]] && continue
-    _any_ref=1
-    case "$_remote_ref" in
-        refs/heads/salvage/*) ;;
-        *) _all_salvage=0 ;;
-    esac
-done < <(printf '%s\n' "$REFS")
-if [[ "$_any_ref" -eq 1 && "$_all_salvage" -eq 1 ]]; then
-    echo "${GRN}✓ local gate: salvage ref — exempt by design (872-c9nd); a dirty-tree copy is not expected to build${RST}" >&2
-    exit 0
-fi
 
 # ── 2. The local gate must have run against this exact tree ────────────────────
 if [[ -f scripts/gate-stamp.sh ]]; then

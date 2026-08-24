@@ -169,14 +169,26 @@ fan-out this tier can afford is modest but real.
 
 **Two separate results, and do not confuse them.**
 
-*On capability*: the bare two-framing complement is DEGENERATE AT EVERY SIZE —
-7B answers a literal `YES` (eval_count=2) to both "does this answer X" and "is
-this MISSING the answer to X". A 14x size increase changes nothing, so a probe on
-which 0.5B and 7B score alike is measuring the PROMPT, not the model. An earlier
-version of this sheet inferred a capability "cliff" above 3.8B from the 0.5B/3.8B
-pair; 7B refutes it and that claim is withdrawn. Since 853-6gz3's own Tier B
-caught 17 contradictions in 73 questions using this same qwen2.5:7b, the lever is
-the harness, not the parameter count.
+*On capability*: at n=10 per model THE COMPLEMENT PROBE DISCRIMINATES, AND 7B
+IS STRICTLY WORSE — qwen2.5:0.5b sound 5/10 (contradiction 4, inverted 1),
+qwen2.5:7b sound 0/10 (contradiction 9, inverted 1); measured by pirria
+2026-08-24, temperature 0, five pairs × both framings (ef0ef1a05,
+scripts/probe-complement-selfcheck.sh). The shared failure mode is specific:
+on passages that do NOT answer, both models answer "is this passage ABOUT X"
+instead of processing the negation in "is the passage MISSING the answer";
+0.5B at least gets the affirmative framing right on all five, 7B gets nothing
+right.
+
+THIS SHEET'S OWN HISTORY ON THE QUESTION, kept because the pattern is the
+lesson: cycle 5 inferred a capability "cliff" above 3.8B from one pair
+(withdrawn); a later revision declared the probe "degenerate at every size —
+measuring the prompt, not the model" from n=1 (ALSO withdrawn — at n=10 the
+sizes separate cleanly). Both wrong conclusions came from sample sizes too
+small to see the separation. The direction agrees with the fleet's other
+measurements — macuahuitl's Tier B caught 17 self-contradictions in 73
+questions with this same 7B, and 824-6qxh found bigger embedders separate
+monotonically worse — so in this system, bigger is not better; but the probe
+is an instrument, not noise.
 
 *On cost*: this is solid and independent of the probe. A 7B judge RUNS here —
 5.06 GB resident on 16 GB, 4.56 tok/s decode, `size_vram=0` — but one complement

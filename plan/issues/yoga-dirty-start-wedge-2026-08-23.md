@@ -6,7 +6,7 @@
 - Severity: high (finished work one claim-expiry away from being duplicated; merge debt growing every upstream cycle)
 - Owner: operator (Tlatoāni) — both unblock paths below are operator-gated
 - Discovered-by: yoga meta-orchestration cycles 2026-08-23T19:45Z, 21:50Z, 2026-08-24T02:00Z
-- Status: blocked
+- Status: resolved (work lost — superseded by 872-c9nd; see the closing note below)
 - Filed-from: a clean temp clone at origin/linux-next `5c57275b1`. The wedged
   checkout itself may not be touched by a refusal cycle; the first two
   refusals reported only in session handoffs, which evaporated with their
