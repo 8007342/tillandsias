@@ -1,0 +1,105 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-24T11:35:53Z.
+packets:
+  - order: 865-h4tn
+    packet_id: the-groundtruth-harness-cannot-express-a-refusal-case
+    desired_release: v0.5
+    title: "the grader writes its own answer by listing every chunk key, so no case can ever grade unsupported"
+    status: ready
+    kind: defect
+    pickup_role: any
+    priority: p1
+    capability_tags: [rag, groundtruth, testing, expert-system]
+    deliverable: crates/tillandsias-plan/src/groundtruth.rs
+    depends_on: []
+    estimated_hours: 4
+    discovered_by: "trying to satisfy 824-6qxh criterion 3 and finding the harness structurally unable to host the case"
+    context: >
+      824-6qxh CRITERION 3 REQUIRES "a refusal case in
+      openspec/litmus-tests/groundtruth/spec-rung1.yaml expecting `unsupported`,
+      so the refusal cannot silently regress". No such case can be written.
+
+      The grader does not receive an answer; it SYNTHESISES one
+      (groundtruth.rs:646, `spec::retrieval_only_answer`), and that function
+      emits one line per chunk:
+
+        - {key} [{path}:{line_start}-{line_end}]
+
+      The envelope then keeps a chunk only if `answer.contains(&c.key)`
+      (spec.rs:1079) and refuses only when none survive (spec.rs:1095). Since
+      the synthetic answer lists EVERY key by construction, every chunk always
+      survives, so the grader can never produce `unsupported` for any question
+      whatsoever.
+
+      MEASURED, not read. Asked "what is the flibber flobber protocol and how do
+      I bake sourdough", reproduced the grader's exact answer construction over
+      the real index, and the envelope graded `confidence: retrieved` — citing
+      `fn basic_recipe()` in crates/tillandsias-vm-layer/src/materialize/mod.rs
+      and a Windows smoke-test recipe, because "recipe" sits near "sourdough".
+      The expert cites a function that builds a VM image as evidence about
+      baking bread, and the harness calls that a pass.
+
+      WHY THIS IS A HARNESS DEFECT AND NOT A MODEL ONE. In production the
+      answer prose comes from a real model, which may legitimately answer
+      without echoing an identifier — that is how `unsupported` is reachable at
+      all. The harness replaces that variable with a constant chosen to always
+      satisfy the check being tested. The one behaviour the grader cannot
+      exercise is the one behaviour criterion 3 exists to pin.
+
+      THIRD REFINEMENT OF THE SAME QUESTION, recorded because the sequence is
+      the useful part and each step was filed as fact:
+        08:36Z  "the shipped path cannot refuse"        — WRONG, tested only retrieval
+        10:48Z  "unsupported is reachable, so criterion 3 is satisfiable today"
+                — first half right, SECOND HALF WRONG
+        11:35Z  reachable in production, unreachable through the grader
+      Each answer was measured; each measured the wrong stage. The lesson is
+      about where the boundary of a measurement lies, not about care.
+    exit_criteria: >
+      (1) A groundtruth case can supply its OWN answer prose, so a case can
+      present an answer that does not echo any chunk key.
+      (2) With that, a case expecting `unsupported` lands in spec-rung1.yaml and
+      passes — satisfying 824-6qxh criterion 3.
+      (3) A negative control: the same case with a key-echoing answer grades
+      `retrieved`, proving the case tests the refusal rather than a broken
+      harness.
+      (4) The case SAYS what it pins — key-containment, not semantic support —
+      so a future reader cannot mistake a green row for evidence that the
+      expert declines questions it cannot answer.
+      (5) The existing cases keep their current synthesised-answer behaviour
+      when they supply none, so nothing already-green changes meaning.
+
+events:
+  - packet_id: the-groundtruth-harness-cannot-express-a-refusal-case
+    event:
+      type: filed
+      ts: "2026-08-24T11:35:53Z"
+      agent_id: linux-macuahuitl-opus5-20260824T113400Z
+      host: linux_mutable
+      summary: >
+        Filed rather than fixed this cycle: the fix changes a schema every
+        existing case is graded against, and the investigation that found it had
+        already been wrong twice about the surrounding behaviour. Landing a
+        harness change on that footing, at the end of a cycle, is how a green
+        suite starts certifying the wrong thing.
+
+  - packet_id: spec-expert-refusal-threshold-fleet-decision
+    event:
+      type: note
+      ts: "2026-08-24T11:35:53Z"
+      agent_id: linux-macuahuitl-opus5-20260824T113400Z
+      host: linux_mutable
+      evidence_refs:
+        - "groundtruth.rs:646 — the grader synthesises the answer via spec::retrieval_only_answer"
+        - "spec.rs:1136 — that function emits `- {key} [path:start-end]` for every chunk"
+        - "spec.rs:1079/1095 — a chunk is kept iff answer.contains(key); empty citations -> unsupported"
+        - "measured: out-of-corpus question graded `retrieved`, citing fn basic_recipe() as evidence about sourdough"
+      summary: >
+        CRITERION 3 CORRECTED AGAIN, and this is the third time. It is not
+        satisfiable by adding a case: the grader synthesises an answer listing
+        every chunk key, so the key-containment check it feeds can never fail.
+        Blocked on 865-h4tn, which gives the harness a way to express an answer
+        that does not echo keys.
+
+        My 10:48Z note said criterion 3 "CAN be written today". Withdrawn.
+        Unsupported is reachable in PRODUCTION; it is unreachable through the
+        GRADER, and criterion 3 names the grader.
