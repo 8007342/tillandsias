@@ -431,6 +431,39 @@ pub fn fold_with_sources(base: &Value, fragments: &[Fragment]) -> (Value, FoldPr
                     .to_string();
                 let key = format!("{pid}\u{1}{field}");
                 let better = match lww.get(&key) {
+                    // ORDER 686-7qcm. `None` means no FRAGMENT has claimed this
+                    // field yet — it does NOT mean there is no incumbent. The
+                    // base already carries a value, and for `status` that value
+                    // may be a closure rung. Accepting the first fragment
+                    // unconditionally let a lone `implemented` entry overwrite a
+                    // base `completed` with no falsified event, which is exactly
+                    // the move the ladder exists to forbid.
+                    //
+                    // The rank check therefore runs against the BASE value in
+                    // this arm. Timestamps are deliberately empty for the
+                    // incumbent: the base has no (ts, host) to compare, and the
+                    // ladder does not need one — a higher rung wins outright,
+                    // and a lower rung needs a falsified event regardless of
+                    // clock. Equal rungs fall through to `lww()` inside
+                    // status_entry_wins, where an incoming non-empty timestamp
+                    // beats the empty incumbent, preserving the previous
+                    // behaviour for same-rung and working-state writes.
+                    None if field == "status" => {
+                        let base_status = base_value(base, pid, field);
+                        let base_status = base_status.as_ref().and_then(Value::as_str);
+                        match base_status {
+                            None => true,
+                            Some(prev) => status_entry_wins(
+                                value.as_str(),
+                                &ts,
+                                &host,
+                                fragment_falsifies(frag, pid),
+                                Some(prev),
+                                "",
+                                "",
+                            ),
+                        }
+                    }
                     None => true,
                     Some((prev_ts, prev_host, prev_val, _)) => {
                         if field == "status" {
@@ -1149,10 +1182,51 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
                 .unwrap_or("")
                 .to_string();
             let key = format!("{pid}\u{1}{field}");
+            // ORDER 686-7qcm. This block's own comment above says the wins are
+            // "recomputed exactly as `fold` resolves them". That stopped being
+            // true the day the fold became rank-aware (650-dq6u), and nothing
+            // caught the divergence because both paths agree on every case
+            // EXCEPT a rung-lowering write — the one case the ladder exists for.
+            //
+            // The consequence here is worse than in the fold, and permanent: a
+            // compaction rewrites the base and then DELETES the fragment it
+            // consumed, so a rung dropped on this path has no surviving record
+            // to re-derive it from. Reproduced on a synthetic ledger before the
+            // fix: base `completed`, one fragment writing `implemented` with no
+            // falsified event, and `compact` wrote `status: implemented` into
+            // the base and removed the fragment.
             let better = match lww.get(&key) {
+                None if field == "status" => {
+                    let base_status = base_value(&base, pid, field);
+                    let base_status = base_status.as_ref().and_then(Value::as_str);
+                    match base_status {
+                        None => true,
+                        Some(prev) => status_entry_wins(
+                            value.as_str(),
+                            &ts,
+                            &host,
+                            fragment_falsifies(frag, pid),
+                            Some(prev),
+                            "",
+                            "",
+                        ),
+                    }
+                }
                 None => true,
-                Some((prev_ts, prev_host, _)) => {
-                    (ts.as_str(), host.as_str()) > (prev_ts.as_str(), prev_host.as_str())
+                Some((prev_ts, prev_host, prev_val)) => {
+                    if field == "status" {
+                        status_entry_wins(
+                            value.as_str(),
+                            &ts,
+                            &host,
+                            fragment_falsifies(frag, pid),
+                            prev_val.as_str(),
+                            prev_ts,
+                            prev_host,
+                        )
+                    } else {
+                        (ts.as_str(), host.as_str()) > (prev_ts.as_str(), prev_host.as_str())
+                    }
                 }
             };
             if better {
@@ -4469,5 +4543,125 @@ plan_index:
         let d = scratch("badbase", "events:\n  - packet_id: an-existing-packet\n");
         std::fs::write(d.join("plan/index.yaml"), "\tnot: [valid\n").expect("write bad base");
         assert!(overlay_coverage_gaps(&d.join("plan/index.yaml")).is_empty());
+    }
+}
+
+/// ORDER 686-7qcm. The closure ladder must hold on the COMPACTION path, not
+/// only in the live fold. A rung lost here is lost permanently: compaction
+/// rewrites the base and deletes the fragment it consumed, so there is nothing
+/// left to re-derive the higher rung from.
+#[cfg(test)]
+mod closure_ladder_compaction_tests {
+    use super::*;
+
+    const BASE: &str = "\
+plan_index:
+  version: v1
+  steps:
+    - packet_id: alpha
+      order: 900-aaaa
+      status: completed
+      title: a packet already at the completed rung in the base
+";
+
+    /// A later fragment that lowers the rung, with no falsified event.
+    const DOWNGRADE: &str = "\
+status:
+  - packet_id: alpha
+    field: status
+    value: implemented
+    ts: \"2026-08-24T09:00:00Z\"
+    host: someotherhost
+";
+
+    /// The sanctioned way down: the SAME fragment records the falsification.
+    const DOWNGRADE_WITH_FALSIFIED: &str = "\
+status:
+  - packet_id: alpha
+    field: status
+    value: implemented
+    ts: \"2026-08-24T09:00:00Z\"
+    host: someotherhost
+events:
+  - packet_id: alpha
+    event:
+      type: falsified
+      ts: \"2026-08-24T09:00:00Z\"
+      agent_id: t
+      host: someotherhost
+      summary: the completed claim did not hold
+";
+
+    fn scratch(tag: &str, fragment: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("tilland-ladder-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(d.join("plan/index.d")).expect("mkdir");
+        std::fs::write(d.join("plan/index.yaml"), BASE).expect("base");
+        std::fs::write(d.join("plan/index.d/20260824t090000z-t.yaml"), fragment).expect("frag");
+        d
+    }
+
+    fn folded_status(index: &Path) -> String {
+        let raw = std::fs::read_to_string(index).expect("read base");
+        let base: Value = serde_yaml::from_str(&raw).expect("parse base");
+        let merged = fold(&base, &load_all(index));
+        let mut packets = Vec::new();
+        crate::collect_packets(&merged, &mut packets);
+        packets
+            .iter()
+            .find(|p| p.get("packet_id").and_then(Value::as_str) == Some("alpha"))
+            .and_then(|p| p.get("status"))
+            .and_then(Value::as_str)
+            .unwrap_or("<none>")
+            .to_string()
+    }
+
+    fn candidate_status(index: &Path) -> String {
+        let c = compact_text(index).expect("compaction candidate");
+        let doc: Value = serde_yaml::from_str(&c.candidate).expect("candidate parses");
+        let mut packets = Vec::new();
+        crate::collect_packets(&doc, &mut packets);
+        packets
+            .iter()
+            .find(|p| p.get("packet_id").and_then(Value::as_str) == Some("alpha"))
+            .and_then(|p| p.get("status"))
+            .and_then(Value::as_str)
+            .unwrap_or("<none>")
+            .to_string()
+    }
+
+    /// The live fold already enforces this. Kept as the reference the
+    /// compaction path must agree with — if this ever regresses, the two
+    /// assertions below stop meaning what they claim.
+    #[test]
+    fn fold_keeps_the_higher_rung_without_a_falsified_event() {
+        let d = scratch("fold-keep", DOWNGRADE);
+        assert_eq!(folded_status(&d.join("plan/index.yaml")), "completed");
+    }
+
+    /// THE DEFECT. compact_text resolved `status` by plain (ts, host) LWW while
+    /// its own comment claimed it "recomputed exactly as `fold` resolves them".
+    /// That stopped being true when the fold became rank-aware, and the
+    /// divergence is silent and permanent: the candidate replaces the base and
+    /// the fragment is deleted by name.
+    #[test]
+    fn compaction_candidate_keeps_the_higher_rung_too() {
+        let d = scratch("cand-keep", DOWNGRADE);
+        assert_eq!(
+            candidate_status(&d.join("plan/index.yaml")),
+            "completed",
+            "compaction downgraded a closure rung with no falsified event"
+        );
+    }
+
+    /// POSITIVE CONTROL. Without this, both assertions above would pass on an
+    /// implementation that simply refuses every status change — which would
+    /// break the one sanctioned way back down the ladder.
+    #[test]
+    fn a_same_fragment_falsified_event_still_permits_the_downgrade() {
+        let d = scratch("falsified", DOWNGRADE_WITH_FALSIFIED);
+        let index = d.join("plan/index.yaml");
+        assert_eq!(folded_status(&index), "implemented");
+        assert_eq!(candidate_status(&index), "implemented");
     }
 }
