@@ -1,0 +1,167 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_immutable (yoga/silverblue), 2026-08-24T18:48:23Z.
+packets:
+  - order: 871-wrmv
+    packet_id: litmus-podman-idiomatic-fails-on-any-host-without-a-staged-sidecar
+    desired_release: v0.5
+    title: "litmus:podman-idiomatic-launch-routing invokes cargo test directly and never stages the router sidecar"
+    status: ready
+    kind: defect
+    pickup_role: any
+    priority: p1
+    capability_tags: [litmus, ci, release, fail-loud]
+    deliverable: openspec/litmus-tests/litmus-podman-idiomatic-launch-routing.yaml
+    depends_on: []
+    estimated_hours: 1
+    discovered_by: "865-n8vq gate triage on yoga — a litmus failure that was environmental, not a code defect"
+    context: >
+      The single step of litmus:podman-idiomatic-launch-routing is a bare
+
+        cargo test -p tillandsias-headless --bin tillandsias \
+          tests::idiomatic_podman_launch_paths_do_not_bypass_shared_layer -- --exact
+
+      and tillandsias-headless/build.rs:139 hard-panics when
+      images/router/tillandsias-router-sidecar is absent. That file is a BUILD
+      ARTIFACT, never committed (order 710-w9kc), so a fresh clone — or any host
+      that has not run build.sh or scripts/build-image.sh since its last
+      target/ wipe — fails this litmus for a reason that has nothing to do with
+      podman launch routing.
+
+      The panic message is exemplary and diagnosed itself: "If you hit this from
+      a build script, that script is missing the staging call that build.sh and
+      scripts/build-image.sh already make." The litmus IS that script. It took
+      one 'bash scripts/build-sidecar.sh' to turn the dev-build spec from 6/7 to
+      7/7 on this host, with no source change.
+
+      This matters beyond one red test. 865-n8vq's whole point is that the trunk
+      accumulated release blockers nobody could see; a blocker that is actually
+      an unstaged artifact on the RUNNING host makes that ledger of seven
+      failures less trustworthy than it looks, because at least one of them was
+      never a trunk defect at all.
+    exit_criteria: >
+      (1) The step stages the sidecar first (scripts/build-sidecar.sh, or the
+      shared staging helper build.sh calls) so it measures what it claims to.
+      (2) A litmus step that depends on an unstaged build artifact fails with
+      the artifact's name, not a build-script panic — or the runner grows a
+      preflight that names the missing artifact once for the whole run.
+      (3) Audited: any other litmus step invoking cargo directly against
+      tillandsias-headless has the same latent dependency.
+
+  - order: 871-sr4r
+    packet_id: ensure-toolbox-include-shape-times-out-intermittently-on-an-unsaturated-host
+    desired_release: v0.5
+    title: "step 2 hit its 30s budget on a host at load1=3.08/12cpu, then passed on the next run"
+    status: ready
+    kind: defect
+    pickup_role: linux
+    priority: p2
+    capability_tags: [litmus, flake, ci]
+    deliverable: openspec/litmus-tests/litmus-ensure-toolbox-include-shape.yaml
+    depends_on: []
+    estimated_hours: 2
+    discovered_by: "865-n8vq gate triage on yoga — two consecutive dev-build runs disagreed"
+    context: >
+      litmus:ensure-toolbox-include-shape step 2 ("sourcing under set -euo
+      pipefail preserves the caller's strict options and returns 0") TIMED OUT
+      at its 30s budget on the first dev-build run of this cycle. The runner's
+      own saturation check exonerated the host in the same breath:
+
+        load1=3.08 over 12 cpus — host NOT saturated at kill time;
+        this step is genuinely too slow for its 30s budget
+
+      The very next run of the same spec, same tree, same host, passed. That is
+      an intermittent failure, which this loop's own guidance calls "a defect
+      with a schedule, not noise" — and it is the exact shape that makes a
+      seven-item release-blocker list unreliable, because a list assembled from
+      one run cannot tell a flake from a blocker.
+
+      Suspected but NOT measured: the include probes for / provisions the
+      tillandsias-builder toolbox, and this host had that container stopped at
+      the start of the cycle (see the enclave-services note below). A first run
+      that pays container startup and a second that does not would explain both
+      observations exactly. Recorded as a hypothesis, not a cause.
+    exit_criteria: >
+      (1) The step's cost is measured across a cold and a warm toolbox, and the
+      budget is set from the cold number or the cold path is removed from it.
+      (2) If the toolbox start is the cost, the step declares that dependency
+      rather than absorbing it silently into a timeout.
+
+  - order: 871-4c3u
+    packet_id: litmus-degraded-no-yq-warns-once-then-returns-a-verdict-anyway
+    desired_release: v0.5
+    title: "the runner announces that steps calling yq will fail or return empty, and then reports PASS/FAIL as if they had not"
+    status: ready
+    kind: enhancement
+    pickup_role: any
+    priority: p2
+    capability_tags: [litmus, fail-loud, forge]
+    deliverable: scripts/run-litmus-test.sh
+    depends_on: []
+    estimated_hours: 2
+    discovered_by: "865-n8vq gate triage on yoga"
+    context: >
+      Every litmus invocation on this host opened with
+
+        warn:litmus-degraded-no-yq — yq is not on PATH and could not be
+        provisioned from the tillandsias-builder toolbox. Steps whose commands
+        call yq will fail or return empty, and YAML metadata falls back to
+        grep. ... before trusting a verdict from this run.
+
+      The warning is precise and correct, and it is the ONLY thing standing
+      between a degraded run and a trusted verdict. It is one line, printed
+      before ~40 lines of output, and the run then prints a normal green
+      "Status: [PASS]" that no downstream consumer distinguishes from an
+      undegraded one. On an immutable Fedora Silverblue host yq is not on PATH
+      and will not be; the toolbox container was simply stopped after the
+      overnight reboot, and starting it removed the warning.
+
+      This is the fail-loud-diagnosis shape: a verdict that knows it is
+      unreliable should say so IN THE VERDICT, where automation reads it, not
+      in a preamble that only a human scrolling up sees.
+    exit_criteria: >
+      (1) A degraded run's terminal status line carries the degradation
+      (e.g. PASS(degraded:no-yq)) so a grep for the verdict cannot miss it.
+      (2) The runner distinguishes "no step needed yq" from "steps needed yq and
+      it was absent" — the first is not a degradation at all.
+
+events:
+  - packet_id: litmus-podman-idiomatic-fails-on-any-host-without-a-staged-sidecar
+    event: {type: filed, ts: "2026-08-24T18:48:23Z", agent_id: linux-yoga-opus5-20260824T184823Z, host: linux_immutable}
+  - packet_id: ensure-toolbox-include-shape-times-out-intermittently-on-an-unsaturated-host
+    event: {type: filed, ts: "2026-08-24T18:48:23Z", agent_id: linux-yoga-opus5-20260824T184823Z, host: linux_immutable}
+  - packet_id: litmus-degraded-no-yq-warns-once-then-returns-a-verdict-anyway
+    event: {type: filed, ts: "2026-08-24T18:48:23Z", agent_id: linux-yoga-opus5-20260824T184823Z, host: linux_immutable}
+  - packet_id: the-trunk-has-been-unreleasable-for-a-week-behind-a-gate-no-push-runs
+    event:
+      type: progress
+      ts: "2026-08-24T18:48:23Z"
+      agent_id: linux-yoga-opus5-20260824T184823Z
+      host: linux_immutable
+      evidence_refs:
+        - "litmus:cross-target-cfg-gate-check now PASSES — its 5-line lookback could not see a function-level #[cfg(unix)]"
+        - "litmus:podman-idiomatic-launch-routing was environmental (unstaged router sidecar), filed as 871-wrmv"
+        - "spec dev-build: 4/7 -> 7/7 (100%) on linux-next at a79063247"
+      summary: >
+        TWO OF THE SEVEN REMAINING BLOCKERS WERE NOT TRUNK DEFECTS.
+
+        cross-target-cfg-gate-check was a FALSE POSITIVE. Its step walked back a
+        fixed 5 lines from each libc::getuid/geteuid/fork hit looking for
+        #[cfg(unix)]. The reported violation, headless/main.rs:1278, sits inside
+        ensure_lane_process_env(), whose #[cfg(unix)] attribute is 15 lines up at
+        1263 — outside the window. The call was correctly gated the whole time
+        and the guard could not see it. Fixed by walking back to the enclosing
+        fn and checking that item's attribute block instead. Negative control
+        re-run against a copy with every #[cfg(unix)] stripped: 4 violations
+        detected, exit 1 — the guard still catches what it exists to catch.
+
+        podman-idiomatic-launch-routing was ENVIRONMENTAL: build.rs panics when
+        images/router/tillandsias-router-sidecar is unstaged, and the litmus
+        invokes cargo test directly without staging it. 'bash
+        scripts/build-sidecar.sh' cleared it with no source change (871-wrmv).
+
+        So the seven-item list at 17:44Z overstates the trunk's real debt, and
+        two more entries on it (871-sr4r, the toolbox-include flake) may be the
+        same shape. Recommend re-running the failing set on a host with a warm
+        toolbox and a staged sidecar BEFORE anyone works those packets — the
+        cheapest reduction available here is deleting blockers that were never
+        real.
