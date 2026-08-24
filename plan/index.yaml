@@ -11918,6 +11918,21 @@ plan_index:
           host: forge
           summary: |
             Group under fail-loud-diagnosis-milestone (order 625-jd5f)
+        - type: note
+          ts: "2026-08-24T19:00:39Z"
+          agent_id: linux-pirria-opus5-20260824T190000Z
+          host: linux_immutable
+          summary: |
+            A SIBLING SURFACE FOR THE SAME ROOT CAUSE, found while naming the --check/--ci-full delta for 865-n8vq. This packet scopes the LITMUS RUNNER's blanket podman probe. The same absence bites one layer up, in local-ci.sh's own check list:
+        
+              [2] podman-path-availability  podman check failed; require_podman
+                  printed the cause on stderr
+        
+            Mechanism verified on pirria today: local-ci.sh sources with-tillandsias-builder.sh (line 32), which on Silverblue re-execs the whole run inside the tillandsias-builder toolbox. `podman ps` succeeds on the host and fails inside that toolbox.
+            THE REASON IS ARCHITECTURAL AND NOT FIXABLE BY PROVISIONING. A toolbox IS a podman container, and podman cannot run inside podman — every podman container lives at the same layer and they do not nest. So the check is not asking a container for a runtime someone forgot to install; it is asking for one that cannot exist there. Any fix phrased as "add podman to the builder toolbox" is a dead end.
+            The re-exec's own comment says it is "sourced first so the ci-full container/runtime toolchain resolves inside the toolbox". The Rust toolchain does resolve there; the CONTAINER runtime provably cannot, which makes that sentence promise something the layer model forbids.
+            THE SHAPE THAT WORKS IS ALREADY IN USE: other Silverblue hosts build and run the whole architecture by orchestrating the two layers — podman work on the host, toolchain work in the toolbox, never nested. So the scoping this packet wants is not only about which litmuses declare a podman precondition; it is about which STEPS must stay outside the toolbox re-exec entirely.
+            WHY IT MATTERS BEYOND THIS CHECK: 865-n8vq is a p0 whose likeliest remedy is running --ci-full on a cadence. Every immutable host asked to do that will fail this check for an environmental reason and report a red gate it cannot clear — the "ENV-FAIL on immutable/toolbox hosts" shape this packet already describes, now blocking a release cadence rather than a single litmus. Worth widening this packet's scope to the local-ci check list, or naming the sibling explicitly so whoever fixes the runner does not leave the check behind.
     - packet_id: low-end-no-local-inference-gate
       release_target: fail-loud-diagnosis-milestone
       order: 620-ca7g
@@ -13196,6 +13211,31 @@ plan_index:
           host: yoga
           summary: |
             DO NOT RE-IMPLEMENT THIS ROW IF THE CLAIM EXPIRES — the implementation already exists, complete on yoga's disk, uncommitted. Yoga claimed this row 2026-08-23T16:20:12Z (394aa2d50), implemented it (fragments.rs, main.rs, check-fragment-status-loss.sh, plan/index.d/README.md, crdt-ledger-fragments.md, litmus-bindings.yaml, mtimes 16:26-17:17Z), and was interrupted between implement and commit. Three successive bootstrap cycles (19:45Z, 21:50Z, 2026-08-24T02:00Z) refused the dirt as unattributable because the work includes one UNTRACKED file (openspec/litmus-tests/litmus-lww-fields-channel-alias-shape.yaml) and check-resumable-claim-dirt.sh treats untracked dirt as never-claim-dirt by design. Landing needs operator disposition — the unblock paths are in plan/issues/yoga-dirty-start-wedge-2026-08-23.md. This note is also a live-activity refresh of yoga's claim. Re-implementing from scratch on another host would duplicate finished work (the 814-iyu7 shape) AND conflict with it — origin/linux-next has since touched fragments.rs, main.rs, plan/index.yaml and check-fragment-status-loss.sh (fdd403d5c, 0d576667d, ec63d18a2), so the eventual land is already a real merge.
+        - type: note
+          ts: "2026-08-24T03:34:40Z"
+          agent_id: linux-macuahuitl-opus5-20260824T023400Z
+          host: linux_mutable
+          summary: |
+            COORDINATOR ACKNOWLEDGEMENT, NOT A CLAIM. This row and 776-cm74 are yoga's, implemented on yoga's disk and uncommitted behind a dirty-start refusal. yoga's record says DO NOT RE-IMPLEMENT IF THE CLAIM EXPIRES and I am not absorbing either row — re-implementing would discard finished work and create a merge conflict with it.
+            Recording only that the coordinator has SEEN the wedge and was previously blind to it: for fourteen hours the heartbeat reported yoga SILENT while it committed every cycle. That blindness is fixed (864-t4nq). What these two rows need is an operator or a yoga-side adjudication of that worktree, not a re-claim.
+        - type: note
+          ts: "2026-08-24T05:37:57Z"
+          agent_id: linux-macuahuitl-opus5-20260824T053400Z
+          host: linux_mutable
+          reap_hold: |
+            Implemented in full on yoga's disk and unlanded behind a dirty-start refusal; reaping this returns FINISHED work to the pool and duplicates ~4h. Release when yoga lands it or the operator disposes of the worktree — see plan/issues/yoga-dirty-start-wedge-2026-08-23.md.
+          summary: |
+            Reap hold placed by the coordinator. This is not a claim and not a transfer: the row remains yoga's, its implementation remains on yoga's disk, and the unblock is still operator-gated path (a) in yoga's own wedge record.
+        - type: progress
+          ts: "2026-08-24T18:55:58Z"
+          agent_id: linux-yoga-opus5-20260824t185558z
+          host: linux_immutable
+          evidence_refs:
+          - 'git status --porcelain --untracked-files=all: empty; git stash list: empty'
+          - 'git reflog: sole pre-cycle entry is ''clone:'' at 2026-08-23 23:09:38 -0700'
+          - 'git log --all -- openspec/litmus-tests/litmus-lww-fields-channel-alias-shape.yaml: no commits'
+          summary: |
+            SUPERSEDES THE DO-NOT-RE-IMPLEMENT WARNING. The on-disk implementation this packet's prior events told other hosts to wait for no longer exists; the checkout was re-cloned on 2026-08-24T06:09Z. Re-implement from scratch. See 872-c9nd.
     - packet_id: macos-forge-bash-lane-wedges-over-exec-wire
       release_target: fail-loud-diagnosis-milestone
       order: 635-kagg
@@ -13718,7 +13758,7 @@ plan_index:
             OPERATOR RULING (The Tlatoani, 2026-08-11, interactive): completed and done are NOT collapsed — semantic distillation per CRDT philosophy. Ladder implemented<completed<verified<done (verified rung added by explicit operator choice, IEEE 1012 alignment); completed releases dependents; write-time hard gate with check advisory; tainted terminals 396 and 651-2x5s folded down honestly. Supersedes the 649-b2e4 interim union by ratifying and widening it.
     - packet_id: no-lane-gate-builds-the-workspace-for-other-targets
       order: 656-spux
-      status: ready
+      status: completed
       desired_release: v0.5
       release_target: convergence-velocity-milestone
       priority: p2
@@ -13763,6 +13803,176 @@ plan_index:
           summary: |
             Split from the Windows host's 653-7rag report. They fixed the finding; this is the reason it was findable only by a human running the wrong command.
 
+        - type: note
+          ts: "2026-08-24T15:53:40Z"
+          host: lenovinha
+          summary: |
+            claimed 2026-08-24T16:00Z: cross-target gate
+        - type: completed
+          ts: "2026-08-24T16:00:36Z"
+          host: lenovinha
+          summary: |
+            status 'completed' with evidence_refs: scripts/check-cross-target-build.sh wired into build.sh --check; ok:cross-target:x86_64-pc-windows-gnu on this host; NEGATIVE CONTROL both directions (fallback arm deleted -> fail:cross-target + E0425 configured-out, exit 1; restored -> ok:, exit 0); skip verdict verified on a host without the C toolchain; live defect found and fixed: enforce_ca_key_mode cfg(unix) with 3 unguarded callers, now has a cfg(not(unix)) no-op; full workspace cross-checks clean in 37s
+        - type: note
+          ts: "2026-08-24T16:00:36Z"
+          host: lenovinha
+          summary: |
+            cross-target gate landed; found and fixed a live break on trunk in its first run
+        - type: progress
+          ts: "2026-08-24T16:45:00Z"
+          agent_id: linux-lenovinha-fable5-20260824T155325Z
+          host: linux_immutable
+          summary: |
+            THE GATE EXISTS NOW — AND ITS FIRST RUN FOUND A LIVE BREAK ON TRUNK,
+            which is the strongest argument for the packet that I could have hoped
+            for and was not looking for.
+        
+            THE LIVE DEFECT. `cargo check -p tillandsias-headless --target
+            x86_64-pc-windows-gnu` on linux-next:
+        
+              error[E0425]: cannot find function `enforce_ca_key_mode` in this scope
+                --> crates/tillandsias-headless/src/main.rs:3409:17
+              note: found an item that was configured out
+                --> crates/tillandsias-headless/src/main.rs:3009:4
+        
+            A `#[cfg(unix)]` definition with THREE unguarded callers (:3132, :3174,
+            :3409) and no fallback arm. That is 653-7rag's shape exactly, sitting on
+            trunk, invisible to every host's gate — found in the first minute of
+            looking, which is about as good a demonstration of this packet's premise
+            as evidence gets.
+        
+            FIXED by giving the function a `#[cfg(not(unix))]` no-op counterpart
+            rather than adding cfg guards at the call sites. One place instead of
+            three: three guards would be three chances to forget the fourth, and the
+            callers genuinely do not care about the platform — they are all
+            best-effort. Not a security regression on Windows either: the key is not
+            protected by mode bits there, and that path receives it as a podman
+            secret.
+        
+            THE SCOPE QUESTION THE PACKET LEFT OPEN, answered. Its notes ask whether
+            Windows must build `tillandsias-headless` at all, since it runs in the
+            WSL guest and is injected prebuilt — and say either answer closes the
+            packet as long as the boundary stops being undocumented. I chose MAKE IT
+            BUILD EVERYWHERE. `cargo build --workspace` is, in the packet's own
+            words, the most ordinary command in a Rust repo; a contributor who runs
+            it should not hit a wall in a crate they never touched. The alternative
+            buys nothing here — the fix was 4 lines and the workspace now
+            cross-checks clean, so excluding the crate would trade a real check for
+            a documented exception.
+        
+            EXIT CRITERION 2 TURNED OUT NOT TO BE NEEDED. It offered a fallback —
+            gate cfg-arm exhaustiveness — on the premise that a full cross-check is
+            blocked by `ring` wanting a Windows C toolchain. That premise is true
+            and the blocker is removable: `mingw64-gcc` is in Fedora, and with it
+            the FULL workspace cross-checks clean in 37s warm. So the gate does the
+            real thing rather than a heuristic proxy for it, which is strictly
+            better — a cfg-exhaustiveness lint would have false positives and would
+            not have caught this defect's actual shape (an unguarded CALL, not a
+            missing arm at the definition).
+        
+            WHAT LANDED. `scripts/check-cross-target-build.sh`, wired into
+            `./build.sh --check`. One-line verdict grammar:
+            `ok:cross-target:<target>` / `fail:cross-target:<target>` (exit 1, with
+            just the error lines — a full cargo log buries the three that matter) /
+            `skip:cross-target:<reason>` (exit 0).
+        
+            SKIPPING IS NOT FAILING, and that is the design decision worth
+            challenging me on. The check needs a rustup std for the target AND a C
+            cross-toolchain, neither of which is on a stock host. I did NOT add
+            mingw64-gcc to the builder toolbox init set: it is 33 MiB down / 115 MiB
+            installed, an order of magnitude more than the jq/yq/ripgrep/openssl
+            addition (6.3 MiB, +8s) that 799-tb7q justified, and forcing it on every
+            machine in the fleet as a side effect of a lint is not mine to decide.
+            So a host without it prints `skip:cross-target:no-c-toolchain:x86_64-w64-mingw32-gcc`
+            — naming the exact binary, because the fix is one dnf install and a
+            reader should not have to reproduce the ring failure to learn that — and
+            a host with it gets a real gate. The enabling commands are in the
+            script's header.
+        
+            The honest cost of that choice: hosts that do not opt in get no
+            cross-target coverage, so this is a gate that protects the fleet only as
+            far as the fleet opts in. If the operator wants it everywhere, adding
+            mingw64-gcc to the init set is a one-line change and the script needs no
+            edit.
+        
+            VERIFIED, both directions, which is the packet's own verifiable_closure
+            ("reintroducing 653-7rag's exact defect fails a gate on a Linux host,
+            without a Windows machine in the loop"):
+              - fallback arm deleted -> `fail:cross-target:x86_64-pc-windows-gnu`,
+                exit 1, naming E0425 and "found an item that was configured out"
+              - restored -> `ok:cross-target:x86_64-pc-windows-gnu`, exit 0
+              - on the bare host, with no toolchain -> the skip verdict, exit 0
+              - full `./build.sh --check` green with the step wired in
+            Measured on lenovinha inside tillandsias-builder: `rustup target add`
+            2.8s, mingw64-gcc 33 MiB, warm full-workspace cross-check 37s.
+        
+            RESIDUAL: one target, one direction. macOS is not covered — there is no
+            free cross-toolchain for it — so a `cfg(target_os = "macos")` arm with
+            no fallback is still invisible from here. Windows is the target this
+            packet's originating defect reached, and it is the one that is cheap;
+            macOS wants its own answer and should not be smuggled in under this
+            packet's closure.
+        - type: progress
+          ts: "2026-08-24T18:45:00Z"
+          agent_id: linux-lenovinha-fable5-20260824T175323Z
+          host: linux_immutable
+          summary: |
+            I OVERSTATED THE COST OF MY OWN GATE BY TWO ORDERS OF MAGNITUDE, AND THE
+            CORRECTED NUMBER REVERSES THE DECISION I MADE ON IT.
+        
+            Closing this packet two hours ago I recorded "a warm full-workspace
+            cross-check 37s", and built an argument on it: 115 MiB of mingw plus 37s
+            per gate run was too much to impose fleet-wide, so the check would SKIP
+            where the toolchain is absent and hosts could opt in. I wrote that the
+            cost was "not mine to decide".
+        
+            THE RECURRING COST IS 0.3 SECONDS. Profiled directly with
+            TILLANDSIAS_GATE_PROFILE=1:
+        
+              0.3s   Cross-target workspace check (656-spux)...
+        
+            Whole-gate wall clock is 44s against a 38-40s baseline before the step
+            existed, which agrees. The 37s I recorded was the ONE-OFF first run
+            after `rustup target add`, when cargo compiles every dependency for the
+            new target once. Steady state it does nothing, because nothing changed.
+            I measured the cold path and reported it as the warm one.
+        
+            WHY IT MATTERS RATHER THAN BEING A FOOTNOTE: the cost was the ENTIRE
+            argument for leaving this opt-in. A check that adds 0.3s to every gate
+            is a different proposition from one that adds 37s, and I had made the
+            expensive-sounding version the basis of a fleet-wide decision. An
+            overstated cost that discourages adoption of a gate which found a live
+            trunk break on its first run is not a harmless rounding error.
+        
+            SO I HAVE REVERSED IT, and I am flagging the reversal rather than
+            quietly landing it. mingw64-gcc and the x86_64-pc-windows-gnu rustup
+            target are now in the tillandsias-builder init set, and
+            `_toolbox_initialized` requires both, so pre-existing toolboxes across
+            the fleet re-run init and pick them up — the same pattern the musl-gcc
+            and jq/yq/ripgrep/openssl additions used.
+        
+            THE SIZE ARGUMENT ALSO SHRANK ONCE I MEASURED INSTEAD OF REACTING.
+            115 MiB reads as a lot in isolation. This toolbox already carries a
+            2.8 GB /usr and a 1.9 GB ~/.rustup — mingw is roughly 2% of an
+            environment whose entire purpose is compiling things. I had compared it
+            against the 6.3 MiB jq/yq/rg/openssl addition, which is the wrong
+            denominator: that comparison says one addition is bigger than another,
+            not whether either is big.
+        
+            WHAT DOES NOT CHANGE: the script still SKIPS rather than fails when the
+            toolchain is absent, and that stays right. Not every host runs
+            ./build.sh through the builder toolbox — macOS and mutable-Linux hosts
+            build natively — so the skip path remains the honest answer for them,
+            and the verdict still names the exact missing binary. The init-set
+            change gives the capability to every host that uses the toolbox;
+            it does not turn absence into a failure anywhere.
+        
+            OPERATOR: if 115 MiB per toolbox is not acceptable, reverting is one
+            line in scripts/with-tillandsias-builder.sh (drop mingw64-gcc, the
+            target from the `rustup target add` line, and the two clauses from the
+            init probe) and the gate returns to skipping. I have recorded the real
+            numbers here so that decision can be made on them rather than on my
+            first, wrong one.
     - packet_id: fourteen-ghost-traces-are-only-reported-in-files-a-commit-touches
       next_action: 'STALE PREMISE, CORRECTED 2026-08-23 (lenovinha): criteria 1 and 4 are ALREADY MET and verified — trace-coverage.sh --gate is a repo-wide shrink-only ratchet wired into build.sh --check (584-2qq2), and a fabricated trace makes it exit 1 (tested, then reverted). The count is 9 today, not 14. WHAT REMAINS is criteria 2+3, the disposition, and it needs a decision rather than a sweep: ''prefer removal'' is right for the low-fanout six (fat-spec-corpus-index, forge-git-ergonomics, forge-git-identity-anonymization, forge-push-credential-channel, forge-skills-mapping, guest-crashloop-detection, litmus-runner) and I think WRONG for spec:meta-orchestration (traced from ~15 litmus tests plus methodology; the loop the fleet runs on) and spec:enclave-service-catalog (6+ real sites in headless main.rs) — for those the absence of a spec reads as a spec never written for something central, not as a concept nobody needed. Do the low-fanout six first, then decide the two. See 867-vd4z: the gate is blind to yaml and md, which is where the majority of annotations live.'
       order: 658-kcd5
@@ -15274,9 +15484,9 @@ plan_index:
           summary: |
             Dependency host-expert-refresh-on-commit-env-gated (685-yidq) is now verified/terminal, so this git-mirror post-receive leg is unblocked. pending -> ready.
     - packet_id: status-ladder-enforcement-wave-2
-      next_action: 'Route compact_text status selection through the same rank-aware status_entry_wins rule as the live fold. Add a regression with a completed base row plus a later implemented fragment and no falsified event: both the folded value and reparsed compaction candidate must remain completed; retain a positive control that a same-fragment falsified event permits the downgrade.'
+      next_action: 'CRITERION 1 IS DONE (lenovinha 2026-08-24) and the packet''s premise was wrong: the LIVE FOLD was broken too, not just compact_text. Both paths consulted status_entry_wins only when a previous FRAGMENT entry existed; the first fragment to claim a field hit ''None => true'' and won over the BASE unconditionally, so a lone ''implemented'' write beat a base ''completed'' with no falsified event — and compaction then deleted the fragment, making the lost rung unrecoverable. Both paths now compare against the base value through the same rule (empty incumbent ts/host on purpose: higher rung wins outright, lower needs falsified, equal rungs fall through to LWW so same-rung and working-state writes are unchanged). closure_ladder_compaction_tests 3/3 incl. a falsified positive control; suite 220+25; live ledger unchanged. REMAINING: criteria 2-4 (invisible-block report, evidence gate on post-2026-08-12 closure fragments, plan_next verification-pickup rows). check already emits parked-block: lines and closure-evidence-check exists in the pre-push plan-only lane, so parts of 2 and 3 LOOK present — but ''looks present'' is exactly how this packet came to assert the fold was already correct. Write the assertion first and watch it fail before believing any of them.'
       order: 686-7qcm
-      status: ready
+      status: completed
       desired_release: v0.5
       release_target: convergence-velocity-milestone
       priority: p2
@@ -15343,6 +15553,193 @@ plan_index:
           host: forge
           summary: |
             name the exact compaction bypass and its negative control
+        - type: note
+          ts: "2026-08-24T07:54:53Z"
+          host: lenovinha
+          summary: |
+            claimed 2026-08-24T08:00Z: rank-aware status in compact_text
+        - type: note
+          ts: "2026-08-24T08:00:50Z"
+          host: lenovinha
+          summary: |
+            criterion 1 (rank-aware merge) now genuinely met on BOTH paths; criteria 2-4 unassessed
+        - type: progress
+          ts: "2026-08-24T08:20:00Z"
+          agent_id: linux-lenovinha-fable5-20260824T075313Z
+          host: linux_immutable
+          summary: |
+            EXIT CRITERION 1 IS NOW GENUINELY MET, AND IT WAS WORSE THAN THE PACKET
+            THOUGHT. The next_action said "route compact_text status selection
+            through the same rank-aware status_entry_wins rule as the live fold" —
+            which presumes the live fold was already correct. IT WAS NOT. Both paths
+            were dropping closure rungs, for the same reason, and I found it only
+            because I wrote the packet's own regression before touching anything.
+        
+            THE DEFECT, in both places. `status_entry_wins` was consulted ONLY when
+            a previous FRAGMENT entry existed for that packet+field. The first
+            fragment to claim a field hit `None => true` and won unconditionally.
+            But `None` does not mean there is no incumbent — the BASE already
+            carries a value, and for `status` that value may be a closure rung. So a
+            lone fragment writing `implemented` over a base `completed`, with no
+            falsified event, won on both paths. That is exactly the move the ladder
+            exists to forbid, and it needed no race to trigger it: one host, one
+            fragment, no concurrency.
+        
+            COMPACTION MADE IT PERMANENT, which is why this is the serious half.
+            Reproduced on a synthetic ledger before the fix: base `completed`, one
+            fragment writing `implemented`, `compact` wrote `status: implemented`
+            into the base AND deleted the fragment it consumed. Nothing survives to
+            re-derive the higher rung — the verification record is simply gone. On
+            top of that, compact_text did not consult the rank rule at ALL; its own
+            comment claimed the wins were "recomputed exactly as `fold` resolves
+            them", which stopped being true the day the fold became rank-aware
+            (650-dq6u) and went unnoticed because the two paths agree on every case
+            EXCEPT a rung-lowering write.
+        
+            THE FIX. Both paths now compare an incoming `status` entry against the
+            BASE value when no prior fragment entry exists, through the same
+            `status_entry_wins`. The incumbent's (ts, host) are passed empty and
+            deliberately so: the base has no clock to compare, and the ladder does
+            not need one — a higher rung wins outright, a lower rung needs a
+            falsified event regardless of timestamp, and equal rungs fall through to
+            plain LWW where a real timestamp beats the empty incumbent. That last
+            detail is what preserves the previous behaviour for same-rung and
+            working-state writes rather than freezing the base.
+        
+            VERIFIED, four transition classes, on the real binary and the live
+            ledger:
+              working -> working   (ready -> in_progress): still applies — this
+                cycle's own claim on 686-7qcm folds to in_progress and is correctly
+                hidden from `ready`.
+              working -> rung      (ready -> completed): still applies — 868-p8xi
+                folds to completed.
+              rung -> lower rung, no falsified: now REFUSED on both paths (was
+                accepted on both).
+              rung -> lower rung WITH a same-fragment falsified event: still
+                permitted — the positive control, without which a fix that simply
+                froze all status writes would pass the other two assertions.
+            Tests: `closure_ladder_compaction_tests` 3/3, written FIRST and observed
+            failing 2/3 before the change. Full crate suite 220 + 25 green. Live
+            ledger unchanged at `ok: 562 packets`.
+        
+            A NOTE ON THE FRAGMENT BEING CONSUMED ANYWAY. After the fix the losing
+            fragment is still folded and deleted, and that is correct rather than an
+            oversight: `fragment_coverage_gaps` documents that a `status:` write
+            which loses LWW is designed semantics, not data loss. The packet is
+            present and the write is simply not the winner. What changed is only
+            WHICH write wins.
+        
+            WHAT I DID NOT ASSESS, deliberately: exit criteria 2-4 (the
+            invisible-block report, the evidence gate on new closure fragments, and
+            the plan_next verification-pickup surfacing). `check` does already emit
+            `parked-block:` lines and `closure-evidence-check` exists as its own
+            subcommand wired into the pre-push plan-only lane, so some of criterion
+            2 and 3 look present — but "looks present" is how the packet came to
+            assert the fold was already correct, so I am not repeating that mistake
+            on three criteria I have not exercised. They want the same treatment
+            this one got: write the assertion first, watch it fail or pass, then
+            decide.
+        - type: note
+          ts: "2026-08-24T09:53:37Z"
+          host: lenovinha
+          summary: |
+            claimed 2026-08-24T10:00Z: exercise criteria 2-4
+        - type: completed
+          ts: "2026-08-24T09:55:53Z"
+          host: lenovinha
+          summary: |
+            status 'completed' with evidence_refs: criterion 1: closure_ladder_compaction_tests 3/3, both fold and compact_text rank-aware against the base; criterion 2: check emits 8 parked-block lines with outstanding actions, status <pkt> emits blocked-on-parked rows; criterion 3: check-fragment-closure-evidence-added.sh refuses a staged evidence-less closure (exit 1) and passes clean (exit 0), wired at build.sh:1896, pinned by litmus:fragment-closure-evidence-gate-shape; criterion 4: declined — verification_required.agents[].id mixes model identities and host affinities with no role field to join on
+        - type: note
+          ts: "2026-08-24T09:55:53Z"
+          host: lenovinha
+          summary: |
+            criteria 1-3 met and exercised; criterion 4 declined with measured reason on the criterion's own terms
+        - type: progress
+          ts: "2026-08-24T10:40:00Z"
+          agent_id: linux-lenovinha-fable5-20260824T095314Z
+          host: linux_immutable
+          summary: |
+            CRITERIA 2, 3 AND 4 EXERCISED — not read. Criterion 1 landed last cycle.
+            2 and 3 are MET, 4 is DECLINED with a reason that is a measurement
+            rather than an opinion.
+        
+            CRITERION 2 (invisible-block report): MET, both halves. `check` emits 8
+            `parked-block:` lines naming the dependent, the blocker, the parked
+            status, and the outstanding action where one exists — e.g.
+            "authenticated-forge-write-transport-impl waits on
+            git-mirror-cross-project-service-identity [blocked] — Amend the unsigned
+            SSH-CA design ...". Where the blocker is `implemented` with no
+            next_action there is nothing to name, and the line correctly stops at
+            the status. The single-packet half works too: `status
+            mirror-identity-negative-matrix-litmus` prints three
+            `blocked-on-parked:` rows with their statuses.
+        
+            CRITERION 3 (evidence gate on new closures): MET — and NOT by the
+            mechanism the criterion's wording names, which is worth recording
+            because I nearly filed it as a gap. The criterion says "check
+            hard-fails". `check` does NOT: I built a synthetic ledger with a
+            post-2026-08-12 fragment writing `status: completed` and no
+            evidence-bearing event, and `check` answered `ok: 1 packets` at exit 0.
+            The enforcement is instead diff-scoped and author-side —
+            `scripts/check-fragment-closure-evidence-added.sh`, wired into
+            `build.sh:1896` and pinned by
+            litmus:fragment-closure-evidence-gate-shape. Exercised it on a real
+            staged fragment: `violation:closure-without-evidence` naming the packet
+            and the rung, exit 1; negative control on a clean tree,
+            `ok:closure-evidence:0 checked`, exit 0.
+        
+            THAT DESIGN IS BETTER THAN THE CRITERION AS WRITTEN, for the reason
+            699-dycj already established: `build.sh` runs `check` on every host, so
+            a fleet-wide hard failure turns one host's hand-authored fragment into
+            every other host's red build, on a file they did not write and may not
+            be able to fix. The diff-scoped gate stops the fragment at whoever
+            wrote it. The criterion's INTENT — a closure with no trace of what
+            justified it must not reach the ledger — is satisfied; only its named
+            mechanism differs, and deliberately.
+        
+            CRITERION 4 (plan_next surfaces verification pickups): DECLINED, and the
+            criterion explicitly permits a reasoned decline. THE JOIN KEY THE
+            FEATURE NEEDS DOES NOT EXIST.
+        
+            Measured: 50 packets sit at `implemented`; 21 carry
+            `verification_required`. The `agents[].id` values in those 21 are:
+        
+              antigravity-gemini          claude-opus-highthink
+              codex-gpt55-highthink       opencode-bigpickle
+              host-kind-linux-mutable     host-kind-windows
+              host-windows-esmeraldinha   host-windows-yolanda
+        
+            That field carries TWO DIFFERENT KINDS OF IDENTITY with nothing
+            structural to tell them apart. Four are MODEL/AGENT identities. Four are
+            HOST affinities — and even those speak two dialects, a host KIND
+            (`host-kind-linux-mutable`) and a specific MACHINE
+            (`host-windows-yolanda`). `plan_next` is called with a pickup_role
+            (`linux`/`macos`/`windows`/`any`), which is a third vocabulary again.
+            Matching "the caller's role" against that field would mean
+            pattern-matching a `host-` prefix and then guessing whether the
+            remainder is a kind or a hostname — a naming convention doing a schema's
+            job, and it would silently miss every packet verified by a model rather
+            than a machine.
+        
+            WHAT WOULD MAKE IT BUILDABLE, so this is a shaped decision and not a
+            dead end: give the verification hand-off an explicit role/kind field
+            distinct from the agent identity, or publish an agent -> role map the
+            query can join through. Either is a small schema change; neither should
+            be inferred from a prefix. Until one exists, a `verification pickup` row
+            would be a confident answer computed from a guess, which is the failure
+            mode this ledger keeps recording.
+        
+            A SECOND OBSERVATION I AM NOT ACTING ON, because it is a different
+            packet's shape: 29 of the 50 `implemented` packets carry NO
+            `verification_required` at all. For those there is no hand-off to
+            surface and no named verifier — they are simply parked one rung below
+            `completed` with nobody assigned. If anything deserves a `plan_next`
+            surface it is probably that population, not the 21, and it needs no new
+            schema to find. Noting it rather than promoting it, per the
+            Tlatoani-gated promotion rule.
+        
+            WITH 1-3 MET AND 4 DECLINED ON THE CRITERION'S OWN TERMS, this packet's
+            exit criteria are satisfied.
     - packet_id: cloud-only-tray-ux-ephemeral-checkouts
       order: 687-wrsa
       status: pending
@@ -22932,6 +23329,22 @@ plan_index:
           host: yoga
           summary: |
             DO NOT RE-IMPLEMENT THIS ROW IF THE CLAIM EXPIRES — the implementation already exists, complete on yoga's disk, uncommitted (scripts/hash-image-sources.sh + scripts/test-hash-image-sources.sh, mtimes 16:26-17:17Z on 2026-08-23), wedged behind the same dirty-start refusal as its sibling claim 642-fedr because the two claims share one worktree. Yoga claimed 2026-08-23T16:20:12Z (394aa2d50). This note is also a live-activity refresh of yoga's claim. Disposition record and unblock paths: plan/issues/yoga-dirty-start-wedge-2026-08-23.md.
+        - type: note
+          ts: "2026-08-24T05:37:57Z"
+          agent_id: linux-macuahuitl-opus5-20260824T053400Z
+          host: linux_mutable
+          reap_hold: |
+            Implemented in full on yoga's disk (scripts/hash-image-sources.sh and its test) and unlanded behind the same dirty-start refusal as its sibling claim 642-fedr, which shares the worktree. Release when yoga lands it or the operator disposes of the worktree.
+          summary: |
+            Reap hold placed by the coordinator; the row remains yoga's.
+        - type: progress
+          ts: "2026-08-24T18:55:58Z"
+          agent_id: linux-yoga-opus5-20260824t185558z
+          host: linux_immutable
+          evidence_refs:
+          - 'same re-clone: scripts/hash-image-sources.sh and its fixture are back at origin state'
+          summary: |
+            SUPERSEDES THE DO-NOT-RE-IMPLEMENT WARNING. The on-disk implementation is gone with the re-cloned checkout. Re-implement from scratch. See 872-c9nd.
     - packet_id: wsl2-gate-plan-probe-survives-interop-loss
       release_target: stable-milestone-v1
       order: 778-zydb
@@ -27175,7 +27588,7 @@ plan_index:
             MECHANISM CONFIRMED FROM THE UPSTREAM INSTALLER'S OWN SOURCE, not inferred. Fetched https://opencode.ai/install (460 lines) and read check_version(): it runs 'command -v opencode' against PATH, compares that binary's --version to the version it intends to install, and on a match prints 'Version <v> already installed' and calls exit 0. It never consults OPENCODE_INSTALL_DIR when deciding. Two consequences for curl_install_opencode (images/default/lib-common.sh:2520). First, the installer's idempotence is keyed on a DIFFERENT installation than the one it was asked to create: lib-common.sh:1550 puts $NPM_CONFIG_PREFIX/bin first on PATH, npm has already placed opencode-ai 1.18.18 there, and upstream latest is also 1.18.18, so the check matches something the harness never asked about. Second, because it exits ZERO, the guard at :2538-2542 passes its 'bash $tmp' clause and is saved only by the trailing '[ -x $bin ]' -- the install reports success while installing nothing, and refresh_ok correctly stays 0. Then opencode_validate_or_rollback runs against a path that does not exist and reports 'rolling back to last-good' where no curl-side last-good was ever recorded. So this is STRUCTURAL, not a flake: while npm provides opencode on PATH at the same version, curl_install_opencode can never succeed. THE CHOICE IS NOW EVIDENCED. Retiring it is the removal the operator's 2026-08-17 direction favours, and the capability is NOT lost: harness_probe (:2096) applies the opencode auth and render contracts to the npm binary by default, and harness_record_last_good/harness_last_good_file keep a last-good in the npm prefix, so rollback for a bad @latest survives. Alternatively it can be made to work by running the installer with a PATH that contains no other opencode, so check_version finds nothing and honours OPENCODE_INSTALL_DIR. DELIBERATELY NOT DONE HERE, and this is a judgement not an omission: either change alters WHICH binary the forge executes -- today it runs npm's -- and switching a fleet's harness provisioning unattended at 04:30 local, on the night before an operator review, is a wider blast radius than the defect. It wants the same per-host-kind treatment .mcp.json got in 793-rb9u.
 
     - packet_id: builder-toolbox-init-set-too-small-for-the-dispatch-pattern
-      next_action: 'RESCOPED 2026-08-24 (lenovinha), the sweep is now SMALLER. Init set landed 2026-08-23 (+8s). LITMUS CALLERS ARE SOLVED WITHOUT CONVERSION: run-litmus-test.sh now materialises the toolbox''s yq once into target/litmus-runtime/bin (verified before trust; deleted if it will not run; grep fallbacks unchanged otherwise), so all 121 bare yq calls in litmus steps resolve a real yq, AND the runner''s own yaml_get/get_litmus_tests_for_spec stop reading test metadata through grep approximations. The false FAIL on litmus:skills-canonical-and-mcp-first-shape STEP 6 is gone. WHAT REMAINS is the ~50 SCRIPT callers, split as before: dev-host scripts take the documented dispatch; shipped diagnostics (tray-diagnose.sh, diagnose-macos-provision.sh) run on end-user machines with no builder toolbox and need a different answer — decide that before sweeping. NOTE the extraction must run BEFORE the runtime bin joins PATH: that dir holds the runner''s podman wrapper and toolbox shells out to podman, so the reverse order fails silently.'
+      next_action: 'STATE 2026-08-24 (lenovinha). DONE: init set carries jq/yq/rg/openssl (+8s); run-litmus-test.sh materialises the toolbox yq once into target/litmus-runtime/bin BEFORE the runtime bin joins PATH (that dir holds the podman wrapper and toolbox shells out to podman, so the reverse order fails silently); and a degraded run now prints warn:litmus-degraded-no-yq once, verified to be absent when yq is present. RETRACTED: my 2026-08-23 claim that the grep fallback under-selects nine tests. Controlled runs give Total 28 / executed 26 in EVERY arm — selection is unaffected by yq; that measurement varied the runner version and yq together and blamed yq. The real harm from a missing yq is WRONG STEP ANSWERS, two confirmed: skills-canonical-and-mcp-first STEP 6 reports a present methodology rule as missing, and added-fragment-parse-gate STEP 8 returns empty. TO REPRODUCE a genuine no-yq run you need an EXECUTABLE ''toolbox'' stub that exits 1, early on PATH — deleting the shim does not work (it re-provisions) and a non-executable shadow does not work (command -v skips it). REMAINING: the ~50 SCRIPT callers, split as before — dev-host scripts take the documented dispatch; shipped diagnostics (tray-diagnose.sh, diagnose-macos-provision.sh) run where no builder toolbox exists and need a different answer, decided before sweeping.'
       order: 799-tb7q
       status: ready
       desired_release: v0.5
@@ -27461,6 +27874,146 @@ plan_index:
             STEP 3 emits one of the three alternatives its own expectation lists and
             the matcher rejects it. Verified NOT caused by this change (identical
             failure with the shim removed and yq off PATH).
+        - type: progress
+          ts: "2026-08-24T04:52:00Z"
+          agent_id: linux-lenovinha-fable5-20260824T035312Z
+          host: linux_immutable
+          summary: |
+            THE yq SHIM IS WORTH MORE THAN I CLAIMED FOR IT, and now there is a
+            number. I justified it as fixing one false FAIL and improving metadata
+            fidelity. Measured today on the ci-release suite, same host, same tree,
+            toggling only the shim:
+        
+              without yq   Total 19 (executed 17, skipped 2)
+              with yq      Total 28 (executed 26, skipped 2)
+        
+            NINE TESTS WERE NEVER SELECTED on this host. Not skipped-and-reported —
+            absent from the count, with the suite printing a confident green over
+            two thirds of itself. The grep fallback in get_litmus_tests_for_spec was
+            under-selecting by 35%. The nine: fold-incompleteness-typed-shape,
+            gate-stamp-portable-digest, macos-portability-residuals,
+            release-runbook-external-preconditions-shape, script-exec-bit-shape,
+            selector-urgency-not-inert-shape, sidecar-arch-derivation,
+            sidecar-is-a-build-graph-input, sigpipe-verdict-pipeline-shape.
+        
+            THIS IS A FLEET PROPERTY, NOT A LENOVINHA ONE. Any host without a host
+            `yq` reads its test list through that fallback: the Silverblue boxes
+            (lenovinha, yoga) certainly, and macOS unless brew has put one on PATH.
+            Those hosts have been reporting suite verdicts computed over a subset
+            nobody could see, and the subset is silent — there is no "9 not
+            selected" line anywhere in the output.
+        
+            TWO THINGS WORTH DOING THAT I DID NOT DO HERE. First, the fallback
+            should SAY it is a fallback: a suite whose test list came from grep
+            rather than yq should print that once, so a green from a degraded
+            selector is distinguishable from a green from a complete one. Right now
+            they are identical, which is the absence-reads-as-success shape again.
+            Second, someone on a host WITH yq should compare full-suite selection
+            counts against a Silverblue host to find out whether ci-release is the
+            only suite affected — I only measured this one.
+        - type: note
+          ts: "2026-08-24T05:53:47Z"
+          host: lenovinha
+          summary: |
+            claimed 2026-08-24T05:53Z: make the degraded test selector announce itself
+        - type: note
+          ts: "2026-08-24T06:02:30Z"
+          host: lenovinha
+          summary: |
+            degraded-run warning landed; nine-hidden-tests measurement retracted; script-caller sweep still open
+        - type: progress
+          ts: "2026-08-24T06:40:00Z"
+          agent_id: linux-lenovinha-fable5-20260824T055316Z
+          host: linux_immutable
+          summary: |
+            A DEGRADED LITMUS RUN NOW SAYS SO — and I am retracting the measurement
+            I used yesterday to justify this work. The second retraction in two
+            cycles, from the same root cause both times: I drew a conclusion from a
+            comparison whose control arm I had not verified.
+        
+            ── WHAT I RETRACT ──
+        
+            Yesterday I reported, on this packet and in 868-p8xi: "without yq Total
+            19 (executed 17), with yq Total 28 (executed 26) — NINE TESTS WERE NEVER
+            SELECTED on this host... the grep fallback in get_litmus_tests_for_spec
+            was under-selecting by 35%". I named the nine and called it a fleet
+            property. THAT RESULT DOES NOT REPRODUCE AND I NO LONGER BELIEVE IT.
+        
+            The 19-arm was produced by restoring scripts/run-litmus-test.sh from the
+            commit before my shim and deleting the shim — so it varied TWO things at
+            once, the runner version and yq availability, and I attributed the whole
+            difference to yq.
+        
+            Controlled runs today, one variable at a time:
+        
+              current runner, yq genuinely absent   Total 28, executed 26
+              pre-shim runner, yq present           Total 28, executed 26
+              current runner, yq present            Total 28, executed 26
+        
+            Selection is IDENTICAL at 28/26 in every arm. There is no
+            under-selection and there are no nine hidden tests. I also checked the
+            parsers head-to-head on the ci-release binding — yq and the awk fallback
+            both return the same 28 test names — and on the metadata of one of the
+            "missing" tests, where both agree phase=pre-build, size=instant. The
+            mechanism I described cannot happen.
+        
+            Making the no-yq arm honest took three attempts and is worth recording,
+            because it is why the first one was wrong: the shim RE-PROVISIONS
+            itself, so simply deleting it does nothing. A non-executable `toolbox`
+            shadow does not work either — `command -v` skips it and finds
+            /usr/bin/toolbox. What works is an EXECUTABLE stub named `toolbox` that
+            exits 1, early on PATH: the shim's guard passes, the extraction fails,
+            and the run proceeds genuinely without yq.
+        
+            ── WHAT SURVIVES, AND IT IS ENOUGH ──
+        
+            The shim's justification never depended on selection. With yq genuinely
+            absent, real steps produce WRONG ANSWERS, and today's controlled run
+            shows a second instance beyond the one I already recorded:
+        
+              litmus:skills-canonical-and-mcp-first-shape STEP 6 — reports that a
+                methodology rule is missing when it is present and correct.
+              litmus:added-fragment-parse-gate-shape STEP 8 — POSITIVE CONTROL "the
+                real ledger loads and its vocabularies agree" produces EMPTY output
+                and fails.
+        
+            Both are wrong answers rather than skips, and nothing in the output said
+            the toolchain was short a parser. That is the defect; the shim fixes it,
+            and ci-release is 26/26 green with yq present.
+        
+            ── WHAT LANDED THIS CYCLE ──
+        
+            The runner now prints, once, when yq is neither on PATH nor
+            provisionable:
+        
+              warn:litmus-degraded-no-yq — ... Steps whose commands call yq will
+              fail or return empty, and YAML metadata falls back to grep ...
+        
+            A warning, never a refusal: a host without yq must still be able to run
+            its suite. The point is only that a reader can tell which kind of green
+            they are holding. Verified both directions — the line appears in a run
+            with yq unavailable and is absent when yq is present, which is the
+            control that stops it being noise nobody reads.
+        
+            ── THE PART I WANT THE FLEET TO TAKE ──
+        
+            Twice now I have reported a controlled comparison that was not
+            controlled, and both times the tell was available for free. Yesterday it
+            was an env var I invented and never implemented — one grep would have
+            shown it appears nowhere in the script. Today it was a two-variable diff
+            described as one. The habit worth copying is not "be careful"; it is
+            CHECK THAT THE CONTROL ARM IS ACTUALLY IN THE CONTROL STATE, by
+            observing it directly, before reading anything off the comparison. I now
+            print the observed state of each arm (`yq=... toolbox=...`) rather than
+            assuming the flag or the file edit achieved it.
+        
+            Consequence for anyone reading the earlier entries: the "nine hidden
+            tests" list in yesterday's 868-p8xi event and its 799-tb7q sibling is
+            WITHDRAWN. The two freshness stamps I amended on the strength of it
+            (resolve-open-pr.sh, resolve-release-run.sh) said their litmus was not
+            running here — that claim rested on the same bad measurement and is also
+            withdrawn; litmus:release-runbook-external-preconditions-shape does run
+            here, and did.
     - packet_id: nix-toolbox-run-subcommand-is-broken-on-two-of-its-three-rungs
       order: 799-nx4r
       status: ready
@@ -31599,6 +32152,71 @@ plan_index:
               - with documented prefixes applied     NO, and it barely moves
         
             824-6qxh's decision — use the layer, not a threshold — is now backed by measurement across five independent axes rather than by argument. The layer's own numbers, for contrast: 0/33 false positives on unanswerable questions, and recall@5 double recall@1 with the near band still at 0.0%. The refusal question was never a geometry problem.
+        - type: progress
+          ts: "2026-08-24T08:36:07Z"
+          agent_id: linux-macuahuitl-opus5-20260824T073400Z
+          host: linux_mutable
+          evidence_refs:
+          - openspec/litmus-tests/groundtruth/spec-rung1.yaml — 0 occurrences of 'unsupported'
+          - answer.rs:591 — Unsupported requires empty citations; spec-retrieve is cosine top-k and always returns k
+          - 'live: an out-of-corpus question returned 3 citations at ~0.59 (a cheatsheet-licence spec, a VM materialize module, a Windows dev-build cheatsheet)'
+          - 'GPU at measurement: 0% utilisation, 665 MiB, no contamination'
+          summary: |
+            EXIT-CRITERIA AUDIT BEFORE CLOSING, and the row is NOT closable. I declared this campaign finished three cycles ago and left the packet `ready`; that was the right verdict on the QUESTION and the wrong state for the ROW, because two of its three criteria are unmet.
+            (2) MET, and comprehensively: the fleet records that a single global cosine threshold is insufficient and names what replaces it. Refuted on five axes — one global cutoff, per-corpus cutoffs, top1-top2 margin, model scale 137M->4B (monotonically worse), and correct query/passage prefixing (0.0057, twelve times smaller than the size effect it would have to reverse).
+            (1) NOT MET. It asks EACH HOST KIND to report its measured bands. Only gpu-cuda has. The low-end tier — the hosts whose hardware the whole commodity claim rests on — has not, and that is 864-dvhk, still ready and owned by the low-end tier rather than by me.
+            (3) NOT MET, AND THIS IS THE ONE THAT MATTERS. It asks that a refusal case land in groundtruth expecting `unsupported`, "so the refusal cannot silently regress". The file contains ZERO occurrences of `unsupported`, and such a case could not pass today:
+        
+              answer.rs:591 makes Unsupported reachable only via EMPTY CITATIONS.
+              spec-retrieve is cosine top-k. Top-k over a non-empty index always
+              returns k. Therefore citations are never empty and the shipped path
+              can never refuse.
+        
+            Measured rather than reasoned: "what is the flibber flobber protocol and how do I bake sourdough bread" returns three citations at ~0.59 — a cheatsheet-licensing spec, a VM materialize module, and a Windows dev-build cheatsheet. Three confident-looking sources, none of which answers it.
+            SO THE DISTINCTION THIS CAMPAIGN MUST NOT BLUR: we measured that the LAYER refuses correctly — 0/33 false positives, recall@5 double recall@1, the near band flat at 0.0% even at k=5. Every one of those numbers came from the refusal-calibration HARNESS. The PRODUCT still answers everything. Criterion 3 is not paperwork; it is the line between "we proved a mechanism works" and "the mechanism is in the path", and only the second is worth anything to a caller.
+            Criterion 3 therefore depends on 853-6gz3 wiring the layer into the answer path, which is itself waiting on the operator's fold-on-disagreement decision (conservative / majority / divergence-surfacing; macuahuitl recommends divergence-surfacing). Recorded as a dependency rather than left as a surprise for whoever next tries to close this row.
+        - type: note
+          ts: "2026-08-24T10:48:32Z"
+          agent_id: linux-macuahuitl-opus5-20260824T103400Z
+          host: linux_mutable
+          evidence_refs:
+          - crates/tillandsias-plan/src/spec.rs:1079 — `if !answer.contains(&c.key) { continue; }`
+          - crates/tillandsias-plan/src/spec.rs:1095-1097 — citations empty -> Envelope::unsupported
+          - 'live: spec-envelope returned confidence=unsupported, citations=[] on a producer-made envelope'
+          - 'control: answer set to the retrieved chunk''s own TEXT still refused, because the text does not contain the KEY'
+          summary: |
+            CORRECTION TO THIS ROW'S 2026-08-24T08:36Z NOTE. I wrote that "the shipped path CANNOT REFUSE" and that a groundtruth case expecting `unsupported` could not pass. That was OVERSTATED and I am withdrawing it.
+            `Confidence::unsupported` IS reachable on the shipped path. spec.rs builds the envelope by keeping only those retrieved chunks whose KEY appears in the answer text, and refuses outright when none survive:
+        
+              spec.rs:1079   if !answer.contains(&c.key) { continue; }
+              spec.rs:1095   if citations.is_empty() -> Envelope::unsupported(
+                               "no retrieved chunk was actually used by the answer")
+        
+            Observed live, not inferred: a producer-made envelope came back `"confidence": "unsupported", "citations": []`.
+            WHAT I GOT RIGHT AND WHAT I GOT WRONG. Right: `spec-retrieve` always returns k chunks, so retrieval never refuses — I measured that, and an out-of-corpus question really does return three citations at ~0.59. Wrong: I then concluded the ANSWER PATH cannot refuse, having examined only the retrieval stage. The envelope stage, which runs after it and which I did not test, is exactly where the refusal lives. Asserting a property of a pipeline from one of its stages is the 797-5kqe shape and I filed it as measured fact.
+            WHAT IS ACTUALLY TRUE IS MORE INTERESTING THAN EITHER CLAIM. The refusal is triggered by LITERAL KEY CONTAINMENT in the answer prose, not by whether the corpus can answer the question. Control: setting the answer to the retrieved chunk's own TEXT still refused, because the text does not contain the key. So the gate asks "did the answerer echo this identifier?", which is a proxy for "is this passage used" and no proxy at all for "does this passage support the claim". A model that echoes keys liberally earns citations for irrelevant chunks; one that answers in its own words is refused even when the corpus answers perfectly.
+            That is precisely the gap Tier B exists to close, so this does not weaken 853-6gz3 — it sharpens it. The layer is not being added where there is nothing; it replaces a lexical stand-in with a judgement.
+            CONSEQUENCE FOR CRITERION 3, also corrected: a groundtruth case expecting `unsupported` CAN be written today, because unsupported is reachable. It would pin the key-containment refusal rather than a semantic one. Worth writing on those terms and worth labelling as such, so nobody later reads a green groundtruth row as evidence that the expert declines questions it cannot answer.
+        - type: note
+          ts: "2026-08-24T11:35:53Z"
+          agent_id: linux-macuahuitl-opus5-20260824T113400Z
+          host: linux_mutable
+          evidence_refs:
+          - groundtruth.rs:646 — the grader synthesises the answer via spec::retrieval_only_answer
+          - spec.rs:1136 — that function emits `- {key} [path:start-end]` for every chunk
+          - spec.rs:1079/1095 — a chunk is kept iff answer.contains(key); empty citations -> unsupported
+          - 'measured: out-of-corpus question graded `retrieved`, citing fn basic_recipe() as evidence about sourdough'
+          summary: |
+            CRITERION 3 CORRECTED AGAIN, and this is the third time. It is not satisfiable by adding a case: the grader synthesises an answer listing every chunk key, so the key-containment check it feeds can never fail. Blocked on 865-h4tn, which gives the harness a way to express an answer that does not echo keys.
+            My 10:48Z note said criterion 3 "CAN be written today". Withdrawn. Unsupported is reachable in PRODUCTION; it is unreachable through the GRADER, and criterion 3 names the grader.
+        - type: progress
+          ts: "2026-08-24T12:38:26Z"
+          agent_id: linux-macuahuitl-opus5-20260824T123400Z
+          host: linux_mutable
+          summary: |
+            CRITERION 3 IS NOW MET, after four cycles and three wrong answers about it. A refusal case lands in spec-rung1.yaml expecting `unsupported`, it passes, and it goes red when the envelope's citation filter is weakened.
+            Remaining for this row: criterion 1, which asks EACH HOST KIND for its measured bands. Only gpu-cuda has reported; the low-end tier has not, and that is 864-dvhk — not mine. Criterion 2 has been met since the five-axis refutation.
+            So 824-6qxh is now blocked solely on a low-end-tier measurement, and no longer on anything this host can do.
     - packet_id: sub-second-litmus-budgets-become-no-timeout-at-all
       order: 827-uh6t
       status: ready
@@ -34942,6 +35560,30 @@ plan_index:
           host: forge
           summary: |
             Repaired the archiver answerability gate's fresh-forge work root. Its cold Rust target exhausted the forge's 256 MiB /tmp tmpfs; the stable cache now lives under the repository's ignored target/ tree. Targeted evidence is 215/215 post-archive plan tests after archiving 743 packets, with the ready set unchanged at 378; the complete build gate then ran green in 70 seconds.
+        - type: progress
+          ts: "2026-08-24T08:36:07Z"
+          agent_id: linux-macuahuitl-opus5-20260824T073400Z
+          host: linux_mutable
+          next_action: |
+            CAMPAIGN STATE 2026-08-24T08:36Z. This pointer had gone NINE HOURS stale with every item in it closed, and I read it stale for several cycles without refreshing it — the exit contract requires commit/push/attest and says nothing about the queue pointer, so it rots exactly the way the heartbeat was rotting before 864-t4nq. Read it with `tillandsias-plan next-action 831-ezea`, which reports its own source and timestamp (864-r9wt).
+            FLEET: macuahuitl hourly and lenovinha (~2h) are the only healthy loops; the forge lane is alive again. yoga is WEDGED, not silent — alive, committing, and refusing every cycle on dirty-start; its two rows are REAP-HELD so the reaper can no longer launder them (864-k8dp). esmeraldinha, yolanda and the macbook are dark by operator stand-down. pirria has NEVER attested despite being in the roster.
+            THE REFUSAL CAMPAIGN IS ANSWERED BUT 824-6qxh IS NOT CLOSABLE. Criterion 2 is met on five axes. Criterion 1 needs the LOW-END tier's bands (864-dvhk, not mine). Criterion 3 needs a groundtruth case expecting `unsupported`, which cannot pass because the shipped path CANNOT REFUSE: Unsupported requires empty citations and cosine top-k never returns empty. Measured live — an out-of-corpus question returns three citations at ~0.59. We proved the layer refuses; the product does not.
+            NEXT, in order: (1) 853-6gz3 — wire the layer into the answer path. It is now the
+                critical path for 824-6qxh criterion 3 as well as its own row, and
+                its one open question is the OPERATOR's: fold-on-disagreement
+                (conservative / majority / divergence-surfacing; macuahuitl
+                recommends divergence-surfacing, as the only option that does not
+                discard the signal that the corpus is ambiguous).
+            (2) 865-3xbq — a concurrent-launch smoketest must run diagnostics, not
+                work drain. Operator field report 2026-08-24: three agents launched
+                concurrently and ran for hours, but unmonitored work-drain meant
+                they picked random packets. Smoke Mode already specifies the right
+                behaviour and is reachable only by typing "smoke".
+            (3) 864-6qsv — set-field cannot write a list-valued reference field.
+            NOT MINE: 856-s56y / 857-4kqv (yoga), 860-g798 (yolanda), 864-dvhk and the low-end tier rows (pirria/esmeraldinha), 642-fedr / 776-cm74 (yoga, finished on its disk, reap-held, operator-gated).
+            STANDING COORDINATOR DUTY EVERY CYCLE: merge platform branches into linux-next; nobody else has it. Both ahead=0 at 07:34Z.
+          summary: |
+            Cycle 2026-08-24T07:34Z. Heartbeat clean. Audited 824-6qxh instead of closing it on the strength of its own headline, and found the shipped path cannot refuse at all. Refreshed this pointer after nine hours.
     - packet_id: macos-guest-cannot-reach-a-host-native-service
       order: 830-xsk2
       status: ready
@@ -38268,6 +38910,40 @@ plan_index:
             RETRIEVAL IS THE BOTTLENECK, NOT THE JUDGE. Looking past top-1 more than doubles in-corpus support detection — 11 of 40 in-corpus questions (27.5%) have a supporting passage somewhere in the top 5 that top-1 missed entirely. The previously reported 20% Tier B support rate was therefore never a judge quality number; it was recall@1 wearing a judge's label, exactly as suspected when this split was specified.
             AND WIDENING k COSTS NOTHING ON THE REFUSAL SIDE. The near band is 0.0% at k=1 and 0.0% at k=5: giving the judge five chances to claim support for a question the corpus cannot answer produced zero false positives, 33/33. That is the result that makes k>1 safe to adopt. The obvious fear — more candidates means more opportunities to hallucinate support — is measured and absent, which matches the earlier 0/33 fabrication finding rather than merely repeating it at a different k.
             WHAT IS STILL OPEN. recall@5 is 50%, so half of in-corpus questions have no supporting passage in the top 5 at all. Combined with the earlier judge@source finding (6 of 10 refusals flip to YES when judged against the recorded source file), the remaining loss sits in retrieval, not in judgement. That is what makes next_action item (2) — a bigger embedder — the right next move rather than more judge work: the judge is already outperforming what retrieval hands it.
+        - type: note
+          ts: "2026-08-23T23:46:45Z"
+          agent_id: linux-pirria-opus5-20260823T210000Z
+          host: linux_immutable
+          summary: |
+            THE COMPLEMENT DEGENERACY IS NOT A SMALL-MODEL PROBLEM. This packet's context records that qwen2.5:0.5b answered YES to both "does the passage answer the question?" and "is the passage MISSING the answer?" — the observation that motivates the complement pair as a self-check. Measured on pirria today with the identical bare framing at three sizes:
+        
+              0.5B  YES/NO on the answering passage, NO/NO on the CSS one
+              3.8B  YES/YES and NO/NO
+              7B    YES/YES and NO/NO  (raw [YES] to both, eval_count=2)
+        
+            A 14x increase in judge size does not restore complement coherence on this framing. Since this packet's own Tier B result caught 17 contradictions in 73 questions using qwen2.5:7b, the difference is the HARNESS, not the model — its prompting, its evidence selection, or its scoring. Worth pinning explicitly in the design, because "use a bigger judge" is the obvious remediation and it is measurably not the one.
+            Offered as evidence, not a claim about the layer: one prompt pair, one framing, temperature 0, num_predict 6. It says the bare framing is degenerate; it does not say the layer is.
+        - type: note
+          ts: "2026-08-24T03:43:00Z"
+          agent_id: linux-pirria-opus5-20260824T000000Z
+          host: linux_immutable
+          summary: |
+            THE COMPLEMENT PROBE AT n=10 PER MODEL, and it reverses a retraction I made yesterday. Five passage/question pairs — each with a passage that DOES answer and one that does NOT — both framings, temperature 0:
+        
+              qwen2.5:0.5b   sound 5   contradiction 4   inverted 1   (of 10)
+              qwen2.5:7b     sound 0   contradiction 9   inverted 1   (of 10)
+        
+            THE PROBE DOES DISCRIMINATE, and 7B IS STRICTLY WORSE. Not an artefact of truncation: given 40 tokens of room instead of 6, 7B still emits a bare [NO] with eval_count=2 to BOTH "does this answer X" and "is this MISSING the answer to X".
+            THE FAILURE MODE IS SPECIFIC AND SHARED. On the passages that do NOT answer, both models say NO to "is the passage MISSING the answer?" — they are not processing the negation, they are answering something like "is this passage about X". 0.5B at least gets the affirmative framing right on all five; 7B gets nothing right.
+            THIS AGREES WITH THE FLEET'S OTHER MEASUREMENT rather than contradicting it. macuahuitl's Tier B caught 17 self-contradictions in 73 questions using this same qwen2.5:7b — the complement pair working AS A DETECTOR of an unsound judge. What I measured is the same phenomenon at a higher rate. And 824-6qxh independently found bigger EMBEDDERS make separation monotonically worse (137M 0.2058 -> 567M 0.2513 -> 4B 0.2744). Two different components, two hosts, same direction: in this system, bigger is not better.
+            MY OWN TRACK RECORD ON THIS QUESTION, recorded because the pattern is the lesson:
+              cycle 5  0.5B vs 3.8B, ONE pair  -> "bigger is worse, there is a cliff"
+              cycle 6  added 7B, ONE pair      -> "no cliff; the probe cannot discriminate"
+                                                  and I RETRACTED "bigger is worse"
+              cycle 7  five pairs, n=10        -> the probe discriminates; bigger IS
+                                                  worse; the retraction was wrong
+            Three claims from an instrument I had never characterised. Each reversal came from adding samples, which cost eight minutes at 0.5B and fourteen at 7B — less than any one of the cycles spent reasoning about the one-pair result. THE FIX WAS ALWAYS n, AND I SHOULD HAVE SPENT IT FIRST.
+            WHAT THIS IS AND IS NOT. It is evidence that the bare two-framing complement is a poor judging protocol on this tier, and that scaling the judge makes it worse rather than better. It is NOT a claim about 853-6gz3's layer, which uses a harness this probe does not replicate: five pairs, one framing template, one temperature, two models from one family. The actionable read for the design is that the NEGATED framing is the weak half — if a complement is wanted, an alternative phrasing that does not rely on the model handling "MISSING" should be measured before the mechanism is judged.
     - order: 854-8p9d
       packet_id: sibling-hosts-establish-the-native-accel-baseline-wsl2-cannot-reach
       desired_release: v0.6
@@ -38745,6 +39421,16 @@ plan_index:
             instead of the "set-field can write an unparseable ledger fragment" this packet was filed about. Timeline worth keeping: the helper landed 21:16:42, my misreported failure was 21:36:12, and test-set-field-yaml-shapes.sh ADOPTED the helper at 22:27:43 — so the mechanism existed 20 minutes before the failure and that gate had not yet been wired to it.
             A SILVERBLUE NUANCE THE HELPER'S DESIGN DID NOT ANTICIPATE: its self-healing arm calls `cargo build` directly, and on an immutable host cargo is not on the host PATH — it lives in the tillandsias-builder toolbox. So on Silverblue the helper DETECTS staleness and always takes the rc=2 "could not be rebuilt in this locus" path. That is the safe direction (refuse rather than consume) and needs no fix, but any future "rebuild it for the caller" work should know the rebuild never fires here.
             CRITERION 2 (a supported land path) delivered as scripts/land-on-platform-branch.sh: fetch, rebase, gate, push, then PROVE the commit landed with `git merge-base --is-ancestor HEAD origin/<branch>` against a freshly fetched ref. It carries the two bugs the ad-hoc version had, documented in its header so the next host does not reacquire them: a `git push | tee | tail` pipeline yields TAIL's exit status, and grepping output for "<branch> -> <branch>" also matches `! [rejected]  <branch> -> <branch> (fetch first)`. Together those reported LANDED for a refused push. Neither a zero exit status nor a ref-update line is sufficient evidence; only the remote is.
+        - type: note
+          ts: "2026-08-23T23:52:00Z"
+          agent_id: linux-pirria-opus5-20260823T210000Z
+          host: linux_immutable
+          summary: |
+            THE SUPPORTED LAND PATH HAD THE DEFECT THIS PACKET IS ABOUT, and it cost real time within hours of shipping.
+            scripts/land-on-platform-branch.sh discarded git push's output (`>/dev/null 2>&1`) and treated EVERY non-zero push as a lost race. On 2026-08-23 this host's GitHub token expired mid-cycle; the push failed rc=128 "Authentication failed", and the loop rebased, ran the FULL GATE, and retried — four times, reporting "origin moved — retrying" for all of them. On a host where the gate is the expensive part that is ~20 minutes spent on a failure that no retry could ever fix, and the operator-facing message named the wrong cause.
+            Same shape as this packet's other half: a message that reports a plausible cause instead of the real one is worse than no message, because it is read during an incident and it redirects the reader.
+            FIXED: push output is kept and CLASSIFIED. Authentication failures refuse immediately with exit 5 and carry the remedy (`gh auth refresh -h github.com && gh auth setup-git`) plus the reassurance that the commit is safe locally; anything that is not a recognisable lost race refuses with exit 6 and prints the real error. Only "non-fast-forward | fetch first | rejected | stale info" retries.
+            I also made the mistake this packet warns about while fixing it: my first patch's anchor did not match (4-space indent, not 2), the file was left unmodified, and I ran the UNFIXED script anyway — burning four more gate cycles. Verify the patch applied before running the thing you patched.
     - order: 858-tnnv
       packet_id: establish-the-low-end-cpu-only-inference-floor-windows
       desired_release: v0.6
@@ -39698,7 +40384,7 @@ plan_index:
       packet_id: low-end-tier-cannot-validate-the-expert-layers-commodity-hardware-claim
       desired_release: v0.6
       title: a judge good enough to pass 853-6gz3's complement check may be too SLOW to fan out on this tier — quality and latency trade against each other at the floor
-      status: ready
+      status: implemented
       kind: research
       pickup_role: linux
       priority: p2
@@ -39749,6 +40435,37 @@ plan_index:
             The 0.5B judge is at least coherent on the passage that DOES answer; the 3.8B judge contradicts itself on BOTH. So "use a bigger judge" is not a path from here — there is a capability CLIFF, not a gradient, and 3.8B is on the wrong side of it. macuahuitl's positive Tier B used qwen2.5:7b: a different family and 2x larger again.
             STAYS OPEN, and the open question is now sharper than the one filed: not "is a good judge affordable" but "where is the cliff, and is anything below it coherent at all". If the threshold is 7B, a k=1 call here would cost roughly 50 s by extrapolation from the 0.5B->3.8B slope, and a complement pair ~100 s — which answers the deployment question without needing the model.
             HONEST LIMITS OF THIS PROBE: one prompt pair, one model family, temperature 0, a terse "answer one word" instruction that phi3.5 may handle worse than qwen. macuahuitl's Tier B ran 73 questions. This is suggestive of a cliff, not proof of where it sits.
+        - type: implemented
+          ts: "2026-08-23T23:46:45Z"
+          agent_id: linux-pirria-opus5-20260823T210000Z
+          host: linux_immutable
+          evidence_refs:
+          - 'qwen2.5:7b loaded and served on a 4-core/16GB host: size 5.06GB, size_vram=0 via /api/ps'
+          - decode 4.58/4.53/4.58 tok/s; k=1 judge call 42.8/36.7/43.4 s
+          - same two-framing probe at 0.5B, 3.8B and 7B — degenerate at all three
+          summary: |
+            CLOSED WITH A DEPLOYMENT ANSWER, AND A CORRECTION TO MY OWN PRIOR CONCLUSION. Last cycle I filed that 3.8B was WORSE than 0.5B on 853-6gz3's complement self-check and inferred a capability CLIFF somewhere above 3.8B. I pulled qwen2.5:7b — the exact judge macuahuitl's positive Tier B used — and ran the identical probe. There is no cliff.
+        
+              qwen2.5:0.5b  in-corpus YES/NO  coherent      | out NO/NO contradiction | k=1  4.3 s
+              phi3.5:3.8b   in-corpus YES/YES contradiction | out NO/NO contradiction | k=1 26.5 s
+              qwen2.5:7b    in-corpus YES/YES contradiction | out NO/NO contradiction | k=1 41.0 s
+        
+            THE PROBE DOES NOT DISCRIMINATE ACROSS 14x OF MODEL SIZE, and that is the finding about the instrument. Only the SMALLEST model is coherent on one case, which is the shape of luck rather than capability. Verified it is not a parsing artefact: raw output from 7B is literally [YES] with eval_count=2 to BOTH "does the passage answer X" and "is the passage MISSING the answer to X". So my last-cycle inference — bigger judge, worse coherence — was OVER-READ from an instrument that cannot support it. Retracted.
+            WHAT IT DOES ESTABLISH, and it is the thing 853-6gz3 needs. The bare two-framing complement is DEGENERATE AT EVERY SIZE THIS TIER CAN RUN. 853-6gz3's own context recorded exactly this for qwen2.5:0.5b; it now reproduces at 3.8B and 7B. So judge SIZE is not the lever on this probe — the prompt/protocol is. macuahuitl's Tier B caught 17 self-contradictions in 73 with the SAME model, so whatever its harness does differently is the thing that matters, not the parameter count. Anyone tempted to fix complement degeneracy by scaling the judge should read this first.
+            THE DEPLOYMENT ANSWER, which is what the packet asked for and does not depend on the probe at all:
+        
+              judge      k=1 call   complement pair   n=3 fan-out
+              0.5B          4.3 s          8.6 s          25.8 s
+              3.8B         26.5 s         53.0 s         159.0 s
+              7B           41.0 s         82.0 s         246.0 s
+        
+            A 7B judge RUNS on this tier — it loaded, served, and decoded at 4.56 tok/s with 5.06 GB resident on a 16 GB host. It is not affordable: one complement pair costs ~82 s, and 853-6gz3's design wants several sub-questions. So the expert layer's "runs locally on commodity hardware" claim holds for the MACHINE and fails for the LATENCY, at any judge size large enough to be worth trusting.
+            A SECOND-HOST CONFIRMATION OF 849-tz8g's RESCOPING, obtained for free: qwen2.5:7b loaded and served cleanly here with nothing else resident. That packet's next_action says isolated loads pass and the aborts are a concurrent-residency scheduling defect — measured on macuahuitl. It now holds on a second host, on very different hardware.
+        - type: note
+          ts: "2026-08-23T23:46:46Z"
+          host: linux_immutable
+          summary: |
+            closed with the deployment answer: a 7B judge RUNS on this tier (5.06GB resident, 4.56 tok/s) but a complement pair costs ~82s; and the bare complement probe is degenerate at 0.5B, 3.8B and 7B alike, so judge size is not the lever
     - order: 864-c956
       packet_id: memory-bandwidths-effect-on-inference-is-unmeasurable-fleet-wide
       desired_release: v0.6
@@ -40448,7 +41165,7 @@ plan_index:
             Also simplified the 846-idhn round-trip helper, which had been mirroring the caller-side splice deliberately. The preparation vanishing from that call is the readable form of this fix.
     - packet_id: sidecar-arch-litmus-expectation-uses-regex-against-a-literal-matcher
       order: 868-p8xi
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p2
       kind: bug
@@ -40504,3 +41221,1204 @@ plan_index:
         short circuit is worth a hard look on its own: an expectation that fails
         to parse becomes an unconditional pass, which is the same
         absence-reads-as-success shape this ledger keeps recording.
+      events:
+        - type: note
+          ts: "2026-08-24T03:54:27Z"
+          host: lenovinha
+          summary: |
+            claimed 2026-08-24T03:53Z: ci-release red
+        - type: completed
+          ts: "2026-08-24T04:03:09Z"
+          host: lenovinha
+          summary: |
+            status 'completed' with evidence_refs: ci-release pre-build instant 26/26 PASS (was 25/1 FAIL); negative control: wrong-arch artifact still fails; alternation diagnostic verified by re-introducing and restoring; only alternation-style expectation in the suite
+        - type: note
+          ts: "2026-08-24T04:03:09Z"
+          host: lenovinha
+          summary: |
+            expectation rewritten to the literal the matcher supports; ci-release 26/26 green; diagnostic added for the next author
+        - type: progress
+          ts: "2026-08-24T04:50:00Z"
+          agent_id: linux-lenovinha-fable5-20260824T035312Z
+          host: linux_immutable
+          summary: |
+            FIXED — ci-release is green again, 26/26. And I have to retract the
+            central claim I filed this packet with yesterday.
+        
+            THE FIX. `expected_behavior` was written as a regex alternation,
+            `ok: (not-staged-here|unjudged-machine|staged-arch-matches)`, and
+            expectations are matched as a LITERAL SUBSTRING —
+            behavior_matches_output's fallback is `grep -Fqi`. So the parenthesised
+            string was searched for verbatim, never found, and the step could not
+            pass on ANY of its three legitimate outcomes. It is now `ok:`, which is
+            the assertion the step actually makes: its three success branches all
+            print `ok: <reason>` and its one failure branch prints `FAIL: staged
+            sidecar is <type> on a <machine> host`. The three-way discrimination
+            lives in the command, where it belongs.
+        
+            I CHANGED THE EXPECTATION, NOT THE MATCHER, and measured before
+            choosing: this was the ONLY alternation-style expectation in the entire
+            litmus suite. Teaching the matcher to treat expectations as regexes
+            would silently reinterpret every existing expectation containing an
+            incidental metacharacter — a far wider blast radius than the single
+            authoring mistake it would fix.
+        
+            NEGATIVE CONTROL RUN, not assumed: simulated a wrong-arch artifact; the
+            step emits `FAIL: staged sidecar is very short file (no magic) on a
+            x86_64 host`, which does not contain `ok:`, so the step still fails on
+            the case it exists to catch. The expectation kept its discriminating
+            power.
+        
+            DURABLE HALF: when a step fails AND its expectation contains `(a|b)`,
+            the runner now prints a note saying expectations are literal substrings
+            and to rewrite as the longest shared literal. It lives only in the
+            already-failing path, so it costs a green run nothing and cannot false-
+            positive. Verified by re-introducing the alternation and watching the
+            note fire, then restoring.
+        
+            ── RETRACTION, and it is the more important half ──
+        
+            I FILED THIS PACKET SAYING "NOT CAUSED BY THE yq SHIM LANDED IN THIS
+            SAME CYCLE — I checked". THAT CHECK WAS INVALID AND THE CONCLUSION WAS
+            WRONG. I ran the suite with `TILLANDSIAS_LITMUS_NO_YQ_SHIM=1`, a flag I
+            invented in the moment and never implemented, so the runner ignored it,
+            re-provisioned the shim, and my "without yq" arm ran WITH yq. Two arms of
+            the same condition, reported as a controlled comparison. The failure
+            being identical in both is exactly what that bug predicts.
+        
+            THE REAL EXPERIMENT, run today by restoring both files from the commit
+            before the shim landed and deleting the shim:
+        
+              pre-shim   Total 19 (executed 17, skipped 2)  PASS 17  FAIL 0
+              post-shim  Total 28 (executed 26, skipped 2)  PASS 26  FAIL 0
+        
+            THE SHIM DID NOT BREAK ci-release. IT REVEALED NINE TESTS THAT HAD NEVER
+            RUN ON THIS HOST — `sidecar-arch-derivation` was not merely passing
+            before, it was not EXECUTED. The grep fallback in
+            get_litmus_tests_for_spec was under-selecting by 35% and reporting a
+            confident green over two thirds of the suite. The nine:
+        
+              fold-incompleteness-typed-shape        gate-stamp-portable-digest
+              macos-portability-residuals            release-runbook-external-preconditions-shape
+              script-exec-bit-shape                  selector-urgency-not-inert-shape
+              sidecar-arch-derivation                sidecar-is-a-build-graph-input
+              sigpipe-verdict-pipeline-shape
+        
+            THIS ALSO INVALIDATES TWO OF MY OWN FRESHNESS STAMPS. On 2026-08-23 I
+            audited resolve-open-pr.sh and resolve-release-run.sh and wrote in both
+            that `litmus:release-runbook-external-preconditions-shape` pins them.
+            That litmus is in the list above: it was not running on this host when I
+            wrote either stamp. The fixture results I quoted (5/5 and 6/6) were real
+            — I executed those directly — but the claim that a litmus was standing
+            guard was not something I had verified. It is true NOW, which is the only
+            reason the stamps are not being amended.
+        
+            THE LESSON I WANT ON THE RECORD, because I have now made a version of it
+            twice in three cycles: a control arm you did not verify is not a control.
+            I invented an env var, watched the run behave the same, and read that
+            sameness as evidence for my hypothesis when it was evidence the flag did
+            nothing. The cheap check — does this flag appear anywhere in the script? —
+            would have taken one grep.
+    - order: 864-t4nq
+      packet_id: the-coordinator-cannot-tell-a-dead-host-from-one-that-is-failing-every-cycle
+      desired_release: v0.5
+      title: attestation age alone reports a wedged host as silent, so the healthiest response to being stuck looks identical to being switched off
+      status: completed
+      kind: defect
+      pickup_role: any
+      priority: p1
+      capability_tags:
+        - fleet
+        - coordination
+        - observability
+        - methodology
+      deliverable: scripts/fleet-heartbeat.sh
+      depends_on: []
+      estimated_hours: 2
+      discovered_by: yoga being reported SILENT for fourteen hours while committing every cycle
+      context: |
+        THE COORDINATOR'S HEARTBEAT NAMES TWO STATES AND THERE ARE THREE. It reported attestation age and flagged anything past ~6h as SILENT. 856-s56y's framing — "a silent host is usually a dead terminal, not a finished one" — is right about the pair it names, and both of those want the same response: go restart it. The third state wants the opposite.
+        MEASURED 2026-08-24, and the numbers are the whole argument:
+        
+          yoga, last attestation   2026-08-23T12:11:53Z   14h22m ago
+          yoga, last commit        2026-08-24T02:07:03Z      27m ago
+        
+        yoga claimed 642-fedr and 776-cm74 at 16:20Z, implemented BOTH completely on disk, was interrupted before committing, and then refused three successive bootstrap cycles (19:45Z, 21:50Z, 02:00Z) on the dirty-start guard. It is alive, looping, and correct: a dirty-start refusal is explicitly NOT a work cycle and must not attest. It even pushed a durable record of its own wedge — twenty-seven minutes before the coordinator's report called it silent.
+        SO THE HEALTHIEST POSSIBLE RESPONSE TO BEING WEDGED EMITS THE SAME SIGNAL AS BEING SWITCHED OFF. A host that refuses cleanly, files a record, and keeps its worktree untouched is indistinguishable from a dead terminal, and the difference decides what to do:
+        
+          dead    -> restart it
+          WEDGED  -> adjudicate its worktree; a restart changes nothing and the
+                     next cycle refuses identically
+        
+        Ten of yoga's hours passed with the coordinator reporting "silent" each time and being wrong each time. Nobody looked, because "silent" during an operator stand-down is the expected reading — and that is the trap: the stand-down made the wrong classification plausible.
+        THE FIX NEEDS NO NEW BOOKKEEPING. Commits already carry the host as author on every lane, so "attested long ago BUT committed recently" is computable today. It is the absence of the question, not the absence of data, that hid this.
+      exit_criteria: |
+        (1) The report distinguishes healthy / WEDGED / dead / never-attested and says which of the two failing states needs a worktree adjudication rather than a restart. (2) A host that has NEVER attested appears at all — it has no file, so an attestation-directory scan cannot see it. The roster comes from the capability matrix. (3) Mutation control: blind the commit probe and the wedged host must collapse back to SILENT, proving the new signal is what separates them.
+      events:
+        - type: completed
+          ts: "2026-08-24T03:34:40Z"
+          agent_id: linux-macuahuitl-opus5-20260824T023400Z
+          host: linux_mutable
+          evidence_refs:
+          - scripts/fleet-heartbeat.sh — ok:fleet-heartbeat:<healthy>/<wedged>/<dead>/<never>
+          - 'live: yoga ''attested 15h22m ago BUT COMMITTED 1h27m ago <-- WEDGED'', verdict 3/1/3/1'
+          - 'MUTATION: blind the commit probe -> yoga collapses to ''SILENT, no commits either'', verdict 3/0/4/1'
+          - 'yoga''s own record: plan/issues/yoga-dirty-start-wedge-2026-08-23.md (filed by yoga, 02:07Z)'
+          merge_affordance: merge-now
+          merge_reason: |
+            Every host that coordinates or reads fleet state inherits the same blind spot, and it is currently mis-reporting a live host. One new script; no existing behaviour changes.
+          summary: |
+            scripts/fleet-heartbeat.sh replaces the inline attestation-age loop and adds the state that was missing. The roster comes from the capability matrix rather than the attestation directory, so a host that has NEVER attested is visible instead of absent — pirria has been invisible to that scan since it joined.
+            Verified on the live fleet, and the mutation is the proof that the new signal does the work: with the commit probe blinded, yoga reads "SILENT, no commits either (likely a dead terminal)" and the verdict is 3/0/4/1; with it restored, "WEDGED, alive and failing" and 3/1/3/1.
+
+    - order: 864-r9wt
+      packet_id: the-coordinators-own-queue-could-not-be-read-back-by-the-instrument
+      desired_release: v0.5
+      title: next_action is written as events but read as a packet field, so every cycle that read it got an arbitrarily old queue
+      status: completed
+      kind: defect
+      pickup_role: any
+      priority: p1
+      capability_tags:
+        - plan
+        - crdt
+        - ledger
+        - orchestration
+        - developer-experience
+      deliverable: crates/tillandsias-plan/src/main.rs
+      depends_on: []
+      estimated_hours: 2
+      discovered_by: this host acting on a twenty-hour-stale queue whose three items were all closed
+      context: |
+        THE QUEUE EVERY CYCLE READS WAS UNREADABLE BY THE INSTRUMENT. The coordinator's ordered work list lives in 831-ezea's `next_action`, and the cycle prompt says to read it FIRST, before deriving anything. There was no command that returns it.
+        It is written as EVENTS, and it has to be: `packets:` is a G-Set, so re-declaring a packet does not change its fields — the rule 864-hv2n's gate exists to enforce. Each cycle therefore appends an event carrying a fresh `next_action`, while the packet-level field keeps whatever value the row was created with.
+        SO READING THE FIELD RETURNS AN ARBITRARILY OLD ANSWER THAT LOOKS CURRENT. Measured 2026-08-24: this host read the packet field, got the 08:34Z queue — whose three items (Tier B top-k, the bigger embedder, 846-idhn) had all been closed in the intervening twenty hours — and began planning against it. The live value was an event at 22:35Z saying the campaign was finished.
+        THE HAND-ROLLED READER FAILED TWICE OVER, and the second way is the one worth recording: in the BASE the events are NESTED UNDER THE PACKET, not at the document's top level, so a loop over `doc["events"]` finds nothing at all and silently falls back to the field. That is the obvious loop to write. Anyone who writes it gets a stale answer with no error.
+        THIS IS THE THIRD AD-HOC PROBE TO LIE IN ONE SESSION — `pgrep -f` matching its own command line, a YAML reader whose `rescue` swallowed the parse of the one file that mattered, and now this. The pattern is not carelessness about any one probe; it is that the ledger is queried by re-implementing readers instead of asking the instrument, exactly as CLAUDE.md's "ask, don't read" warns. The fix is not a better ad-hoc reader.
+      exit_criteria: |
+        (1) `tillandsias-plan next-action <id|order>` returns the EFFECTIVE value: the newest of the packet field and any event carrying one, ISO-8601 lexicographic order. (2) It names its SOURCE on stderr, so an answer that came from the untimestamped packet field is visible as such rather than passing for current. (3) An unresolved reference exits non-zero rather than printing nothing. (4) Mutation control: blind the event scan and the command must return the stale field value — reproducing the exact defect on demand.
+      events:
+        - type: completed
+          ts: "2026-08-24T04:39:41Z"
+          agent_id: linux-macuahuitl-opus5-20260824T043400Z
+          host: linux_mutable
+          evidence_refs:
+          - crates/tillandsias-plan/src/main.rs — `next-action` subcommand
+          - 'live: next-action 831-ezea -> ''source: event @ 2026-08-23T22:35:05Z'' (the real queue)'
+          - 'MUTATION: blind the event scan -> ''source: packet field (no timestamp)'' and the 08:34Z text returns'
+          - unresolved reference -> rc=1
+          - cargo test -p tillandsias-plan 217+24 green; ./build.sh --check rc=0
+          merge_affordance: merge-now
+          merge_reason: |
+            Every host that reads a next_action to decide its cycle is exposed to the same stale answer, and the failure is silent — no error, just an old queue that reads as current. One subcommand; nothing else changes.
+          summary: |
+            Added `next-action <id|order>`, which folds base and fragments, then takes the newest of the packet field and every event carrying one. The packet field has no timestamp and is therefore treated as the ORIGINAL value and never wins a tie — which is exactly right, since it is the one value guaranteed never to have been updated.
+            The `source:` line is the affordance that matters. An answer drawn from the untimestamped field now says so, so the stale case is visible instead of indistinguishable from a fresh one.
+            MUTATION CONTROL REPRODUCES THE DEFECT ON DEMAND: with the event scan blinded, the command returns "source: packet field (no timestamp — the packet's original value)" followed by the 08:34Z text — the precise wrong answer this host acted on an hour earlier.
+
+    - order: 864-k8dp
+      packet_id: expire-claims-cannot-see-a-do-not-reap-declaration
+      desired_release: v0.5
+      title: the reaper decides on elapsed time alone, so finished-but-unlanded work is returned to the pool and duplicated
+      status: completed
+      kind: defect
+      pickup_role: any
+      priority: p0
+      capability_tags:
+        - plan
+        - crdt
+        - ledger
+        - claims
+        - fleet
+      deliverable: crates/tillandsias-plan/src/main.rs
+      depends_on: []
+      estimated_hours: 3
+      discovered_by: 'yoga''s wedge: four hours of finished work protected only by prose the reaper never reads'
+      context: |
+        `expire-claims` decides on ONE fact — time since the packet's last event — and cannot distinguish a STALLED claim from a claim whose work is FINISHED and merely unlanded. Returning the second to the pool does not free work, it DUPLICATES it. 833-fpe7 named the shape: expire-claims launders finished work into lost work.
+        LIVE, NOT HYPOTHETICAL. yoga claimed 642-fedr and 776-cm74 at 2026-08-23T16:20:12Z, implemented BOTH completely (16 modified + 1 untracked path), and was interrupted before committing. It is wedged behind a dirty-start refusal it cannot clear itself — three cycles refused identically, correctly, leaving the tree byte-identical each time. The only thing standing between four hours of finished work and a duplicate implementation was the phrase DO NOT RE-IMPLEMENT, written in an event SUMMARY. `expire_claim_candidates` reads timestamps. It has never read a summary.
+        Verified by advancing the clock: at --now-epoch past the TTL both rows appear as `expire-candidate`, which is the reaper doing exactly what it was built to do to work that is already done.
+        A SECOND DEFECT FOUND WHILE MEASURING THE FIRST, and it is the reason the deadline was not what I told the operator. The TTL runs from the newest event on the packet with NO FILTER ON WHO WROTE IT. 641-e2qa criterion 2 says "a claim that produces no event within its cycle" — produces, by the CLAIMANT. Any host's event refreshes any host's lease. Measured: my own coordinator note at 03:34Z, whose entire content was "I am NOT absorbing this row", extended yoga's claim by twenty-one hours. So the reaper is defeated for any actively-discussed row, and the protection yoga's work currently enjoys is an ACCIDENT of that same bug.
+        WHICH DICTATES THE ORDER OF REPAIR, and this is the part worth writing down. Tightening the TTL to the claimant's own events is the correct fix — and doing it FIRST would strip the accidental protection off yoga's finished work and expire it at 16:20Z today. The interlock has to exist before the tightening is safe. Filed separately as 864-m2vc so the sequencing is explicit rather than remembered.
+      exit_criteria: |
+        (1) An event may carry `reap_hold: <reason>`; the newest such event wins and the reaper skips that packet. (2) `reap_hold: false` RELEASES an earlier hold. In an append-only ledger a hold that cannot be lifted without rewriting history is a permanent block, so the release must be expressible as a later event. (3) A hold with an empty reason does not hold — the 863-7mhg rule: a hold with no named reason is an indefinite block wearing a temporary label. (4) Holds are REPORTED (`held-claim`) and counted in the summary, never silent. A claim the reaper declined to take is as interesting as one it took. (5) Proven against the live wedge: with the clock advanced past the TTL, yoga's two rows move from `expire-candidate` to `held-claim`.
+      events:
+        - type: completed
+          ts: "2026-08-24T05:37:57Z"
+          agent_id: linux-macuahuitl-opus5-20260824T053400Z
+          host: linux_mutable
+          evidence_refs:
+          - crates/tillandsias-plan/src/main.rs — reap_hold scan in expire_claim_candidates, held-claim output, held= in the summary
+          - 'baseline at --now-epoch 2026-08-26: both yoga rows reported expire-candidate, summary expired=3 held=0'
+          - 'with holds filed: both reported held-claim (see the same command in the closing note)'
+          merge_affordance: merge-now
+          merge_reason: |
+            Four hours of a sibling's finished work is one TTL from being duplicated, and the reaper runs on every host's heartbeat. Nothing already-green changes behaviour; the only new outcome is a refusal.
+          summary: |
+            `reap_hold: <reason>` on an event now stops the reaper, newest event wins, `false` releases, an empty reason does not hold, and every hold is reported as `held-claim` and counted in the summary.
+
+    - order: 864-m2vc
+      packet_id: claim-ttl-counts-any-hosts-event-not-the-claimants
+      desired_release: v0.5
+      title: any host's event refreshes any host's lease, so the reaper is defeated for any actively-discussed row
+      status: completed
+      kind: defect
+      pickup_role: any
+      priority: p2
+      capability_tags:
+        - plan
+        - crdt
+        - ledger
+        - claims
+      deliverable: crates/tillandsias-plan/src/main.rs
+      depends_on:
+        - expire-claims-cannot-see-a-do-not-reap-declaration
+      estimated_hours: 3
+      context: |
+        `expire_claim_candidates` takes the newest `ts` across ALL events on the packet, with no filter on the event's `host` or `agent_id`. 641-e2qa criterion 2 is written as "a claim that PRODUCES no event within its cycle" — produced by the claimant. The implementation counts everyone.
+        MEASURED 2026-08-24: a coordinator note filed by linux_mutable, whose entire content was a statement that it was NOT working on the row, extended yoga's claim on 642-fedr by twenty-one hours. A row that several hosts discuss can therefore never be reaped, however dead its claim.
+        SEQUENCING IS THE WHOLE POINT OF FILING THIS SEPARATELY. This tightening is correct and it is DANGEROUS TO LAND FIRST: yoga's finished work is currently protected only by this bug, and fixing it before the 864-k8dp reap-hold interlock is in use would expire that work the same day. Land the hold, confirm the wedged rows are held, THEN tighten.
+      exit_criteria: |
+        (1) The TTL is computed from events attributable to the CLAIMING host, so a sibling's note cannot refresh a lease it does not own. (2) The reap-hold interlock (864-k8dp) is in place and the currently wedged rows are verified held BEFORE this lands. (3) A packet whose only recent events are from other hosts expires, with the verdict naming that the claimant itself has been silent.
+      events:
+        - type: filed
+          ts: "2026-08-24T05:37:57Z"
+          agent_id: linux-macuahuitl-opus5-20260824T053400Z
+          host: linux_mutable
+          summary: |
+            Filed with its dependency pointing at the interlock deliberately: this fix is correct and unsafe to land first, because the work it would expose is currently protected only by the bug it removes.
+        - type: completed
+          ts: "2026-08-24T06:39:30Z"
+          agent_id: linux-macuahuitl-opus5-20260824T063400Z
+          host: linux_mutable
+          evidence_refs:
+          - crates/tillandsias-plan/src/main.rs — claim attribution in expire_claim_candidates
+          - 'test a_siblings_note_no_longer_refreshes_someone_elses_lease (bins target): propped EXPIRES, active SURVIVES, unattributed keeps the any-host rule'
+          - 'MUTATION: force claim_host to None -> ''propped'' stops expiring, ''got []'' — the attribution is what does the work'
+          - 'SAFETY, checked before and after every edit: yoga''s two wedged rows remain held=2, expired=0'
+          - cargo test -p tillandsias-plan 217 lib + 25 bins green; ./build.sh --check rc=0
+          merge_affordance: merge-when-idle
+          merge_reason: |
+            The reaper is now correct where it was previously inert, but nothing a sibling runs today changes outcome — every currently-claimed row either has an active claimant or is explicitly held. Worth having before the next long claim, not urgent this hour.
+          summary: |
+            THE TTL NOW MEASURES THE CLAIMANT RATHER THAN THE ROOM. 641-e2qa criterion 2 says "a claim that PRODUCES no event within its cycle" — produced by the claimant. The implementation counted every event on the packet regardless of author, so any host's note refreshed any host's lease and the reaper was defeated for any row several hosts discussed.
+            The claimant is identified exactly as live_claims already does it: the newest event whose summary opens "claimed for cycle". Only that host's events advance the clock.
+            WHEN THE CLAIM CANNOT BE ATTRIBUTED THE OLD RULE STILL APPLIES, and the verdict says which rule it used — `claimant:<host>` or `claimant:unattributed(any-host-rule)`. Silently reaping harder on rows whose provenance is unreadable would expire work for a reason nobody could see, which is the same failure as reaping finished work: not the wrong answer so much as an answer with no visible basis.
+            THE ORDERING MATTERED AND WAS CHECKED, not assumed. This tightening removes the accident that was protecting yoga's finished work — my own note extending its lease by twenty-one hours. It was only safe to land because 864-k8dp's reap-hold went in first; yoga's two rows were verified held=2 before the change, after the change, and after every subsequent edit including the fmt pass.
+            ONE PRE-EXISTING TEST MOVED, and it moved in shape rather than substance: expire_claims_partitions_stale_fresh_and_unknown_age asserts the exact expired tuple, whose third element now carries the attribution rule. The same packet expires and the same one is unknown-age. Its expectation was updated to state the new contract explicitly rather than to be made to pass — the fixture has no claim event, so `unattributed(any-host-rule)` is the correct and documented outcome.
+
+    - order: 865-3xbq
+      packet_id: multi-agent-launch-smoke-must-run-diagnostics-not-work-drain
+      desired_release: v0.5
+      title: a smoketest of concurrent agent launch currently drains real packets, so the cheapest possible check costs real work
+      status: ready
+      kind: enhancement
+      pickup_role: any
+      priority: p1
+      capability_tags:
+        - forge
+        - e2e
+        - orchestration
+        - multi-agent
+        - diagnostics
+      deliverable: .claude/skills/meta-orchestration/SKILL.md
+      depends_on: []
+      estimated_hours: 5
+      discovered_by: 'operator smoketest 2026-08-24: three agents launched concurrently on yoga, unmonitored, picking random packets'
+      context: |
+        OPERATOR DESIGN, 2026-08-24, from a live smoketest at an AI gathering. The thing being tested was CONCURRENT LAUNCH — opencode, codex and antigravity started at the same time on yoga Silverblue against a locally installed build. That part worked: all three came up and ran for hours on slow wifi without crashing.
+        BUT THE ONLY MODE THEY HAD WAS WORK DRAIN. Unmonitored, they "probably picked random packets", and whatever they did is lost. The operator's framing is the fix: such a run should "exercise the forge and run some form of orchestration in DIAGNOSTICS MODE rather than work drain".
+        THE PRIMITIVE ALREADY EXISTS AND IS NOT REACHED. Smoke Mode is specified in the meta-orchestration skill — verify-only, no claims, no ledger writes, no releases, a few minutes of budget, and a machine-grepped `MO-SMOKE: PASS|FAIL` verdict. It is triggered by the word `smoke` in the invoking prompt. A human launching three agents by hand to see whether they start does not think to type it, and gets a full drain instead. The default is wrong for the commonest reason anyone launches several agents at once, which is to find out whether launching several agents at once works.
+        WHAT MAKES THIS MORE THAN A DOCS FIX: the run that matters is MULTI-AGENT, and Smoke Mode is written for one agent. Three concurrent smokes need to not collide — on the smoke lock, on the forge, on the inference endpoint (849-tz8g residency is exactly this shape), and on the ledger. A diagnostics run that deadlocks three ways is not a diagnostic.
+        PAIRS WITH THE CRASH THAT COST US ITS LOGS. The first antigravity session "ran for a few seconds before crashing" and no logs persist, so the one failure with real signal is unreproducible. The operator's proposed reproduction path is this packet's acceptance scenario: reintroduce daily builds, run smoke-e2e-curl installs, and have opencode/codex/antigravity each exercise the forge in diagnostics mode. A crash inside THAT lane leaves a log, because the lane owns the log.
+      exit_criteria: |
+        (1) A multi-agent diagnostics launch exists that CANNOT drain work: no claims, no packet selection, no ledger writes, terminating in the existing `MO-SMOKE:` grammar per agent. (2) Three agents launched concurrently on one host complete without colliding on the smoke lock, the forge, the inference endpoint, or the ledger — and the run reports which of those it actually exercised rather than asserting it. (3) The agent's FIRST SECONDS are logged to a durable path before any skill work begins. The failure that motivated this died in a few seconds and left nothing; a diagnostics lane whose own crash is undiagnosable is the defect it is meant to catch. (4) Wired to the daily-build / smoke-e2e-curl-install lane, so the check runs on a cadence rather than when someone remembers. (5) Reaching it must not require remembering a magic word. A launch that names several agents, or a launch flagged as a smoketest, defaults to diagnostics; work drain is the opt-in for that shape.
+      events:
+        - type: filed
+          ts: "2026-08-24T05:42:17Z"
+          agent_id: linux-macuahuitl-opus5-20260824T053400Z
+          host: linux_mutable
+          summary: |
+            Filed from the operator's field report. Recorded as measured fact, since the positive half is easy to lose next to the crash: THREE AGENTS LAUNCHED CONCURRENTLY AND RAN FOR HOURS on a locally installed build over slow wifi without crashing. Concurrent launch is not the fragile part.
+            Two secondary observations from the same report, kept here rather than split out until someone confirms them:
+            (a) The sessions were "probably blocked trying to push to main". If so that is scripts/hooks/pre-push-main-branch-affordance.sh doing its job — it refuses locally and names the remedy instead of letting the push travel to GitHub and come back as a bare rejection. Worth confirming against a transcript, because the alternative reading is the order-531 forge-seeding trap (a host parked on main pins every forge launched after it), and those want different fixes.
+            (b) Nothing from those sessions reached the remote, and yoga produced no artifact in the window. Consistent with the dirty-start refusal yoga has been hitting since 16:20Z — which exits cleanly with a tidy report and therefore LOOKS like a successful run. That reading is unproven from here: this host cannot see yoga's disk.
+
+    - order: 864-w7rc
+      packet_id: a-wedged-host-decays-to-looking-dead-once-it-stops-narrating-its-wedge
+      desired_release: v0.5
+      title: the WEDGED signal keys on commit recency, so a host that said it was blocked reads as a dead terminal six hours later
+      status: completed
+      kind: defect
+      pickup_role: any
+      priority: p2
+      capability_tags:
+        - fleet
+        - coordination
+        - observability
+      deliverable: scripts/fleet-heartbeat.sh
+      depends_on:
+        - the-coordinator-cannot-tell-a-dead-host-from-one-that-is-failing-every-cycle
+      estimated_hours: 2
+      discovered_by: yoga reading WEDGED one cycle and 'likely a dead terminal' the next, while nothing about yoga changed
+      context: |
+        864-t4nq SPLIT DEAD FROM WEDGED USING A DECAYING SIGNAL, and the decay is the bug. WEDGED was inferred from "no attestation BUT recent commits", which holds only while the wedged host keeps committing. A host stops committing once it has nothing NEW to say about being stuck — which is the correct behaviour, not a fault — so after the six-hour window it reverts to reading as a dead terminal.
+        MEASURED ACROSS TWO CONSECUTIVE CYCLES, with nothing about yoga changing between them:
+        
+          08:34Z  yoga  attested 19h22m ago BUT COMMITTED 5h27m ago  <-- WEDGED
+          09:34Z  yoga  21h22m  <-- SILENT, no commits either (likely a dead terminal)
+        
+        Meanwhile the ledger still knew: yoga's own plan/issues/yoga-dirty-start-wedge-2026-08-23.md carries `Status: blocked`, and both its rows remain in_progress and reap-held. The classifier lost information the repository still had, because it was reading a clock instead of a record.
+        THE SCRIPT WAS ALREADY GIVING THE RIGHT ADVICE AND NOT TAKING IT. It printed "Check plan/issues/ for a record it filed about itself before assuming it is idle" — gated on `wedged > 0`. So the hint disappeared at exactly the moment the host stopped looking wedged, which is the moment the hint was needed. Automating advice the tool already gives is cheaper than expecting every reader to follow it at the one time it is absent.
+        DURABLE BEATS RECENT. A host's own filed blocker is a standing statement about its state; commit recency is a proxy that expires. Where both are available the statement wins.
+      exit_criteria: |
+        (1) A host with an open blocker record it filed about itself reads as BLOCKED and the report NAMES the record, rather than reading as a likely dead terminal. (2) The remedy line appears for blocked as well as wedged hosts — it was previously gated on wedged alone, so it vanished precisely when the classification decayed. (3) Mutation control: blind the blocker probe and the host must fall back to "likely a dead terminal", proving the record is what does the work. (4) Widening the verdict grammar is checked for consumers before landing, not after.
+      events:
+        - type: completed
+          ts: "2026-08-24T09:36:36Z"
+          agent_id: linux-macuahuitl-opus5-20260824T093400Z
+          host: linux_mutable
+          evidence_refs:
+          - 'two consecutive cycles: yoga WEDGED at 08:34Z, ''likely a dead terminal'' at 09:34Z, nothing about yoga changed'
+          - 'live after the fix: yoga -> ''BLOCKED (it said so): plan/issues/yoga-dirty-start-wedge-2026-08-23.md'', verdict 2/0/1/4/1'
+          - 'MUTATION: blind the blocker probe -> yoga falls back to ''likely a dead terminal'', verdict 2/0/0/5/1'
+          - grammar widened 4->5 fields; grepped for consumers first — none outside the script's own header, which was updated
+          merge_affordance: merge-when-idle
+          merge_reason: |
+            Improves what the coordinator can see; changes nothing a sibling builds or runs. Worth having before the next host wedges, not this hour.
+          summary: |
+            A host with an open `Status: blocked` record it filed about itself now reads BLOCKED and the report names the file, so silence that has already been EXPLAINED stops being reported as suspicious.
+            The verdict grammar widened to healthy/wedged/blocked/dead/never. That is a breaking change to a falsifiable line, so consumers were grepped for BEFORE landing rather than discovered after — there were none, and the script's own header was the only place still documenting the four-field shape. It now documents five, with the reason.
+            Left deliberately unchanged: the six-hour WEDGED window. A host that is actively committing while unable to attest is a different and more urgent condition than one that has settled into a declared block, and collapsing the two would lose the distinction 864-t4nq was filed to create.
+
+    - packet_id: enclave-service-health-fixture-failed-once-and-i-destroyed-the-evidence
+      order: 869-cvdc
+      status: ready
+      desired_release: v0.5
+      priority: p3
+      kind: bug
+      title: scripts/test-enclave-service-health.sh reported 11 passed 1 failed once, then 12/0 and 6/6 — the failing scenario is unknown because the fixture only names passes
+      deliverable: the fixture names the scenario it FAILED, not only the ones it passed, so a single intermittent failure is attributable without a reproduction; then the intermittent itself is diagnosed or shown to be a fixture artifact
+      pickup_role: any
+      release_target: fail-loud-diagnosis-milestone
+      capability_tags:
+        - fixtures
+        - flaky
+        - fail-loud
+        - enclave
+      estimated_hours: 2
+      context: |
+        OBSERVED (lenovinha, 2026-08-24T10:2xZ). Running
+        scripts/test-enclave-service-health.sh while investigating an unrelated
+        litmus, the last line read:
+        
+          enclave-service-health: 11 passed, 1 failed
+        
+        The very next invocation, same tree, same host, seconds later:
+        
+          enclave-service-health: 12 passed, 0 failed
+        
+        and six consecutive runs afterwards were all clean. The fixture exits 0 in
+        both cases, which is a second small defect: a run with a failure should
+        not report success to its caller.
+        
+        I CANNOT SAY WHICH SCENARIO FAILED, AND THAT IS THE ACTIONABLE PART. The
+        fixture prints one `ok: <scenario>` line per PASS and prints nothing
+        identifying a failure — only the trailing count changes. So a failing run
+        is indistinguishable from a passing one except by arithmetic, and the
+        moment I re-ran to look closer, the evidence was gone.
+        
+        That is precisely the trap the meta-orchestration skill warns about under
+        "When the Gate Fails, Read check-logs.jsonl FIRST": re-running to get a
+        better look is what destroys the evidence. I walked into it. There was no
+        check-logs.jsonl to fall back on either — that file is written by
+        scripts/local-ci.sh runs, not by a direct fixture invocation — and
+        /tmp/tillandsias-timing.jsonl records only step duration and exit code,
+        not scenario outcomes.
+        
+        SO THE FIRST FIX IS OBSERVABILITY, NOT THE RACE: make the fixture name the
+        failing scenario on stderr and exit non-zero. Until it does, the next
+        person to see 11/1 will be exactly where I am — knowing something is
+        intermittent and having no way to say what.
+        
+        A PLAUSIBLE CULPRIT, offered as a lead and NOT as a diagnosis (I did not
+        confirm it and it should not be treated as confirmed): several scenarios
+        shell out to `podman ps` against the live host, and this host's enclave
+        set genuinely changes underfoot — the proxy is down and has been
+        restarted by cycles during this session. A fixture that reads live podman
+        state is not hermetic, and its result can depend on what the host is doing
+        at that second. Whoever takes this should check whether the scenarios are
+        isolated from live state before hunting a race inside the script.
+
+    - order: 865-h4tn
+      packet_id: the-groundtruth-harness-cannot-express-a-refusal-case
+      desired_release: v0.5
+      title: the grader writes its own answer by listing every chunk key, so no case can ever grade unsupported
+      status: completed
+      kind: defect
+      pickup_role: any
+      priority: p1
+      capability_tags:
+        - rag
+        - groundtruth
+        - testing
+        - expert-system
+      deliverable: crates/tillandsias-plan/src/groundtruth.rs
+      depends_on: []
+      estimated_hours: 4
+      discovered_by: trying to satisfy 824-6qxh criterion 3 and finding the harness structurally unable to host the case
+      context: |
+        824-6qxh CRITERION 3 REQUIRES "a refusal case in openspec/litmus-tests/groundtruth/spec-rung1.yaml expecting `unsupported`, so the refusal cannot silently regress". No such case can be written.
+        The grader does not receive an answer; it SYNTHESISES one (groundtruth.rs:646, `spec::retrieval_only_answer`), and that function emits one line per chunk:
+        
+          - {key} [{path}:{line_start}-{line_end}]
+        
+        The envelope then keeps a chunk only if `answer.contains(&c.key)` (spec.rs:1079) and refuses only when none survive (spec.rs:1095). Since the synthetic answer lists EVERY key by construction, every chunk always survives, so the grader can never produce `unsupported` for any question whatsoever.
+        MEASURED, not read. Asked "what is the flibber flobber protocol and how do I bake sourdough", reproduced the grader's exact answer construction over the real index, and the envelope graded `confidence: retrieved` — citing `fn basic_recipe()` in crates/tillandsias-vm-layer/src/materialize/mod.rs and a Windows smoke-test recipe, because "recipe" sits near "sourdough". The expert cites a function that builds a VM image as evidence about baking bread, and the harness calls that a pass.
+        WHY THIS IS A HARNESS DEFECT AND NOT A MODEL ONE. In production the answer prose comes from a real model, which may legitimately answer without echoing an identifier — that is how `unsupported` is reachable at all. The harness replaces that variable with a constant chosen to always satisfy the check being tested. The one behaviour the grader cannot exercise is the one behaviour criterion 3 exists to pin.
+        THIRD REFINEMENT OF THE SAME QUESTION, recorded because the sequence is the useful part and each step was filed as fact:
+          08:36Z  "the shipped path cannot refuse"        — WRONG, tested only retrieval
+          10:48Z  "unsupported is reachable, so criterion 3 is satisfiable today"
+                  — first half right, SECOND HALF WRONG
+          11:35Z  reachable in production, unreachable through the grader
+        Each answer was measured; each measured the wrong stage. The lesson is about where the boundary of a measurement lies, not about care.
+      exit_criteria: |
+        (1) A groundtruth case can supply its OWN answer prose, so a case can present an answer that does not echo any chunk key. (2) With that, a case expecting `unsupported` lands in spec-rung1.yaml and passes — satisfying 824-6qxh criterion 3. (3) A negative control: the same case with a key-echoing answer grades `retrieved`, proving the case tests the refusal rather than a broken harness. (4) The case SAYS what it pins — key-containment, not semantic support — so a future reader cannot mistake a green row for evidence that the expert declines questions it cannot answer. (5) The existing cases keep their current synthesised-answer behaviour when they supply none, so nothing already-green changes meaning.
+      events:
+        - type: filed
+          ts: "2026-08-24T11:35:53Z"
+          agent_id: linux-macuahuitl-opus5-20260824T113400Z
+          host: linux_mutable
+          summary: |
+            Filed rather than fixed this cycle: the fix changes a schema every existing case is graded against, and the investigation that found it had already been wrong twice about the surrounding behaviour. Landing a harness change on that footing, at the end of a cycle, is how a green suite starts certifying the wrong thing.
+        - type: completed
+          ts: "2026-08-24T12:38:26Z"
+          agent_id: linux-macuahuitl-opus5-20260824T123400Z
+          host: linux_mutable
+          evidence_refs:
+          - crates/tillandsias-plan/src/groundtruth.rs — optional per-case `answer`, defaulting to the synthesised retrieval-only prose
+          - openspec/litmus-tests/groundtruth/spec-rung1.yaml — spec-refuses-when-the-answer-uses-no-retrieved-chunk + its negative control
+          - openspec/litmus-tests/groundtruth/query-vectors/out-of-corpus-refusal.json — 768-dim nomic, GPU 1% / 664 MiB at capture
+          - 'grade: 5/5 pass (3 pre-existing unchanged)'
+          - MUTATION 1 (ignore case.answer) -> refusal case FAILS, 4/5
+          - MUTATION 2 (envelope cites whatever was retrieved) -> refusal case FAILS, 4/5
+          - restored -> 5/5
+          merge_affordance: merge-now
+          merge_reason: |
+            The refusal had no regression test on any host and the suite could not host one. Any host weakening the envelope's citation filter would have gone green. Test-and-harness only; no product behaviour changes.
+          summary: |
+            THE SUITE CAN NOW EXPRESS A REFUSAL, AND ONE IS PINNED.
+            A case may supply its own `answer`. Omitted, the grader synthesises the retrieval-only prose exactly as before — which is what kept every existing case green and unchanged. Supplied, the case controls the one input the envelope's citation filter reads.
+            That filter is the entire refusal: a chunk is kept only if the answer contains its key (spec.rs:1079), and an empty citation set becomes `unsupported` (spec.rs:1095). The synthesised prose lists every key by construction, so before this the check could never fail and no case could ever grade `unsupported` — whatever it asked.
+            TWO CASES, SHARING A QUESTION AND A VECTOR, DIFFERING ONLY IN PROSE. The refusal case supplies an answer citing nothing and expects `unsupported` with zero citations. The negative control supplies no answer, so the grader's key-listing prose must still produce citations — without it, a harness that refused EVERYTHING would score green on the refusal case and look correct.
+            MUTATION-CONTROLLED IN BOTH DIRECTIONS, and the second is the one the criterion actually names:
+              ignore case.answer                     -> refusal case FAILS (4/5)
+              envelope cites whatever was retrieved  -> refusal case FAILS (4/5)
+              restored                               -> 5/5
+            The second mutation is the literal regression 824-6qxh criterion 3 was written against: "if that check is ever weakened to cite whatever was retrieved". Nothing else in the suite notices it.
+            WHAT THE GREEN ROW DOES NOT MEAN, stated in the file itself so it cannot be misread later: it pins KEY CONTAINMENT, not semantic support. The same question still retrieves three chunks at ~0.59, and before this landed the grader cited `fn basic_recipe()` in the VM layer as evidence about baking sourdough and called it a pass. Semantic refusal is 853-6gz3's Tier B and remains untested.
+
+    - packet_id: litmus-steps-can-pass-on-the-echo-of-a-failing-grep-chain
+      order: 870-fv7k
+      status: completed
+      desired_release: v0.5
+      priority: p2
+      kind: bug
+      title: a litmus step whose grep chain FAILS can still report OK, because the earlier greps echo their matches and the expectation matches that echo — 197 steps share the shape
+      deliverable: a step whose command exits non-zero cannot report OK on the strength of output the command printed on its way to failing; either the matcher accounts for the exit code where an expectation names a success sentinel, or the exposed steps are converted to quiet-grep-plus-sentinel — with the decision between those two recorded, because they have very different blast radii
+      pickup_role: any
+      release_target: fail-loud-diagnosis-milestone
+      capability_tags:
+        - litmus
+        - fail-loud
+        - ci
+      estimated_hours: 5
+      context: |
+        FOUND (lenovinha, 2026-08-24) by doing a freshness audit properly rather
+        than re-stamping a green.
+        
+        litmus:runtime-diagnostics-shape has ONE step, and it was reporting OK
+        while the property it asserts was FALSE. Its command was three chained
+        greps:
+        
+          grep -F '@trace spec:runtime-diagnostics' images/git/entrypoint.sh &&
+          grep -F 'SLOG=/strategic/service.log'     images/git/entrypoint.sh &&
+          grep -F 'daemon ready'                    images/git/entrypoint.sh
+        
+        with `expected_behavior: "runtime-diagnostics"`. `daemon ready` has not
+        existed in that file since a109b0b39 renamed the log to `daemon listening
+        on 9418`. So the chain exits 1 — MEASURED, command_exit=1.
+        
+        IT PASSED ANYWAY, and the mechanism generalises. The greps carry no `-q`,
+        so the first two PRINT their matched lines before the third fails. One of
+        those lines is `# @trace spec:runtime-diagnostics`. The matcher searches
+        the step's OUTPUT for the expectation, finds `runtime-diagnostics` inside
+        that incidental echo, and reports OK. The step is structurally incapable
+        of failing as long as any earlier grep in the chain matches a line
+        containing the expectation string — which, when the expectation is a bare
+        spec name and the greps search for annotations carrying that same name, is
+        close to guaranteed.
+        
+        That one is FIXED in this cycle's commit: quiet greps, an explicit
+        `ok: git entrypoint diagnostics wiring intact` sentinel, the expectation
+        set to the sentinel, and the current log string asserted. Verified in both
+        directions — passes on a correct tree, FAILS when the entrypoint string is
+        mutated, tree restored.
+        
+        THE EXPOSURE IS THE REASON FOR THIS PACKET. Across
+        openspec/litmus-tests/*.yaml, 1140 step commands chain a NON-QUIET grep
+        with `&&`, and 197 of those do NOT end in an explicit `echo '...'`
+        sentinel. Those 197 are the population where a step can pass on echoed
+        content. Not all are broken — the shape only lies when the chain can fail
+        partway AND the expectation matches something an earlier grep prints — but
+        nothing currently distinguishes a step that verified its property from one
+        that matched its own noise.
+        
+        TWO FIXES, AND CHOOSING BETWEEN THEM IS THE WORK, not the typing:
+        
+        (a) RUNNER-SIDE: require exit 0 when the expectation names a success
+            sentinel. One place, fleet-wide effect. But run-litmus-test.sh's
+            661-nm73 comment records exactly why this is not free — the matcher
+            deliberately honours output rather than exit status for some arms,
+            because "a step may chain several greps and end on a non-zero one
+            while the match it cares about was printed", and an earlier attempt to
+            require non-empty output made ABSENCE assertions (`! grep`)
+            unpassable by construction and inverted a litmus in BOTH directions.
+            A blanket exit-0 rule risks reddening steps that are legitimately
+            green.
+        
+        (b) SWEEP-SIDE: convert the 197 to quiet-grep-plus-sentinel, as this cycle
+            did for the one. Safe per step, verifiable per step, and it fixes the
+            shape rather than compensating for it — but it is 197 edits and does
+            nothing to stop the 198th being written.
+        
+        A defensible answer is probably BOTH, sequenced: sweep first so the
+        runner-side rule has nothing legitimate to break, then arm the rule so the
+        shape cannot come back. Whoever takes it should measure how many of the
+        197 actually mis-pass before deciding — mutate the asserted property and
+        see which stay green, the same way this one was caught.
+      events:
+        - type: note
+          ts: "2026-08-24T13:53:25Z"
+          host: lenovinha
+          summary: |
+            claimed 2026-08-24T14:00Z: measure which of the 197 actually mis-pass
+        - type: completed
+          ts: "2026-08-24T14:07:46Z"
+          host: lenovinha
+          summary: |
+            status 'completed' with evidence_refs: scan of 2026 expectation-carrying steps: 887 safely runnable, 856 exit0, 28 honest fails, 1 mis-pass (methodology-accountability step 4, src-tauri nonexistent -> grep rc=2 matched on its own echoed output); fixed with a count floor + sentinel + negative control, both steps green through run-litmus-test.sh; 2 further scan hits confirmed as harness artifacts via the real runner; scripts/scan-litmus-false-pass.sh committed read-only and advisory with its two limits documented
+        - type: note
+          ts: "2026-08-24T14:07:46Z"
+          host: lenovinha
+          summary: |
+            measured: live exposure was 1 of 886, fixed; detector committed; sweep and runner-rule both rejected on evidence
+        - type: progress
+          ts: "2026-08-24T14:30:00Z"
+          agent_id: linux-lenovinha-fable5-20260824T135317Z
+          host: linux_immutable
+          summary: |
+            MEASURED, AND THE ANSWER CHANGES THE PACKET'S RECOMMENDATION. I filed
+            this yesterday with "197 steps share the shape" and two candidate fixes.
+            197 was a STRUCTURAL count — commands chaining a non-quiet grep with `&&`
+            and no sentinel. It says how many steps COULD lie, not how many DO.
+        
+            The live exposure is ONE.
+        
+            HOW I MEASURED IT, without mutating anything. A step lies right now when
+            its command exits non-zero AND the expectation still matches the output
+            the command printed on its way to failing. That is directly observable:
+            run the command, keep the exit code and the output, and ask whether the
+            matcher would accept it. No mutation, no guessing which property to
+            break.
+        
+              total steps carrying an expectation      2026
+              safe to execute read-only                 887
+              exit 0                                    856
+              exit non-zero, correctly reported FAIL     28
+              exit non-zero, WOULD REPORT OK              1   <- the whole exposure
+        
+            THE ONE: litmus:methodology-accountability-shape step 4. It grepped
+            `methodology openspec docs cheatsheets scripts src-tauri crates images`
+            — and `src-tauri` DOES NOT EXIST in this tree, so grep exited 2 (an
+            ERROR, not "no matches") on every run since. It reported OK anyway,
+            because the grep had no `-q`, printed the 69 matches it found in the
+            directories that do exist, and the expectation was the bare string
+            `methodology-accountability`, which appears in every one of those lines.
+            The step matched its own output while erroring.
+        
+            Two silent consequences: a directory could vanish from that list and
+            nothing would notice (one already had), and the trace surface could
+            collapse to a single file while the step stayed green.
+        
+            FIXED in this commit. The nonexistent path is gone, the assertion is a
+            FLOOR on the file count (currently 44, floor 10) rather than the text
+            being echoed, and a sentinel is the only thing that can satisfy the
+            expectation. A negative control runs the same floor test over an empty
+            temp tree and requires the refusal — 634-39ik demanded it, and it is the
+            assertion this step most needed, since what it lacked was never a better
+            grep but any evidence it could fail. Both steps green through the real
+            runner; the command now exits 0.
+        
+            TWO SCAN HITS WERE MY OWN HARNESS, and I checked rather than reporting
+            them. The stdlib portability steps 6 and 8 call `mf_literal_count` /
+            `mf_regex_count`, functions the real runner provides by sourcing
+            LITMUS_STDLIB; my scanner does not source it, so they errored under the
+            scan and pass legitimately in the runner. Confirmed by running them
+            through `run-litmus-test.sh`. Reporting "3 mis-passes" would have been
+            the same mistake I made twice earlier this week — reading a number off a
+            harness I had not verified.
+        
+            WHAT THIS MEANS FOR THE FIX, and I now think the packet's own framing was
+            wrong. With 1 of 886 actually lying, a RUNNER-SIDE exit-code rule is a
+            bad trade: it touches every step in the corpus and risks the inversion
+            661-nm73 already recorded, to catch a population of one. A 197-step
+            SWEEP is also poor value — it is 197 edits against one live defect, and
+            the shape is not itself a bug, it is a fragility. The proportionate
+            answer is the third option neither of us listed yesterday: KEEP THE
+            DETECTOR AND FIX INSTANCES AS THEY APPEAR.
+        
+            So the scanner is committed as `scripts/scan-litmus-false-pass.sh`,
+            read-only, advisory, gating nothing, with both of its limits stated in
+            its own header: it sees fewer than half the steps (1141 skipped as not
+            provably read-only — a refusal to run podman resets and installers to
+            find out, not a claim they are clean), and it approximates only the
+            matcher's final fallback, so every hit needs confirming against the real
+            runner. A number that says what it did not look at is worth more than a
+            bigger number that does not.
+        
+            RESIDUAL, honestly: the 1141 unscanned steps could hide more. Making
+            them scannable means sandboxing, which is a real piece of work and a
+            different packet's shape if anyone wants it.
+
+    - order: 865-n8vq
+      packet_id: the-trunk-has-been-unreleasable-for-a-week-behind-a-gate-no-push-runs
+      desired_release: v0.5
+      title: 833 commits accumulated unreleased because --check runs on every push and --ci-full only at release time
+      status: ready
+      kind: defect
+      pickup_role: any
+      priority: p0
+      capability_tags:
+        - ci
+        - release
+        - gates
+        - fleet
+      deliverable: build.sh
+      depends_on: []
+      estimated_hours: 6
+      discovered_by: attempting the release the operator authorised and finding the gate red
+      context: |
+        NO RELEASE IN SEVEN DAYS. The last daily is v0.4.260817.1 (2026-08-17), `/releases/latest` still serves v0.4.260810.1 — two weeks old — and origin/linux-next is 833 COMMITS AHEAD OF MAIN.
+        Every precondition the release skill checks is green: clean linux-next, no local-only commits, tray-parity gaps 0, `ok:release-preflight`, and the repaired evidence gate now answers `would-promote:v0.4.260817.1`. The release stops at `./build.sh --ci-full`, which exits 1 with three failing checks.
+        THE STRUCTURAL POINT, WHICH IS BIGGER THAN THE THREE FAILURES. `--check` runs on EVERY push and is what the pre-push hook enforces. `--ci-full` runs at RELEASE TIME and nowhere else. They are different gates, so the trunk can accumulate --ci-full failures indefinitely while every individual push is honestly green. Nobody is at fault for any one commit; the fleet has been pushing correctly into a branch that has not been releasable for a week, and nothing said so. A gate that only runs when you try to ship tells you it is broken at the worst possible moment.
+        THE THREE FAILURES, each checked for whether this host caused it:
+        (1) guard-activation — orphans `check-cycle-scheduler.sh` and
+            `check-dead-env-branches.sh`: shipped but invoked by nothing.
+            population=67 active=65 orphan=2. NOT this host's; neither is a guard
+            macuahuitl added.
+        
+        (2) markdown-distillation — five noncanonical files outside the
+            inventory: AGENTS.md, GEMINI.md, .github/copilot-instructions.md,
+            images/default/startup-context-addendum.md, and
+            scripts/refusal-calibration/README.md. The last is one macuahuitl has
+            edited heavily, but it has been outside the inventory since it was
+            created in 85dc1649b — noncanonical from birth, not made so by the
+            edits.
+        
+        (3) litmus-pre-build — 8 of 324 executed fail (97% pass). Reproduced at
+            instant size: litmus:groundtruth-no-mutable-status-pin-shape, and its
+            failure is worth the whole packet.
+        
+        THE STATUS-PIN LITMUS PINS A STATUS. Its negative control builds a fixture pinning `status: ready` on packet 394 and requires check-groundtruth-mutable-status-pins.sh to REFUSE it. 394 is now `obsoleted` — terminal — so pinning its status is legitimate, the guard correctly admits it, and the litmus fails looking for a refusal it can no longer earn. Its own header still asserts "394 is ready (non-terminal, a trap)". It went terminal in 06d859499.
+        So the test written to enforce 680-zphp — never pin status on a live packet — pins status on a live packet, and broke exactly as 680-zphp predicts. That is not irony worth enjoying; it is the strongest possible evidence that the rule needs a mechanism rather than a convention.
+        I did NOT attempt the release. The gate is the trunk's only verification since push CI was removed (2026-08-03), and forcing past it to ship 833 unreviewed-by-CI commits would be the worst possible use of the operator's standing "a couple of releases a day without my approval".
+      exit_criteria: |
+        (1) A release-blocking condition is visible BEFORE release time. Either --ci-full runs on a cadence with its verdict recorded where the fleet reads it, or the delta between --check and --ci-full is named so a host knows what its green push did not cover. (2) The three current failures are cleared or explicitly waived with a recorded reason, and `./build.sh --ci-full` exits 0 on linux-next. (3) litmus:groundtruth-no-mutable-status-pin-shape stops depending on a live packet's status — the trap it exists to prevent. (4) Measured afterwards: a release actually cuts.
+      events:
+        - type: filed
+          ts: "2026-08-24T13:51:43Z"
+          agent_id: linux-macuahuitl-opus5-20260824T133400Z
+          host: linux_mutable
+          evidence_refs:
+          - origin/linux-next 833 commits ahead of origin/main; last daily v0.4.260817.1 (7 days); /releases/latest = v0.4.260810.1 (14 days)
+          - 'green: clean tree, parity gaps 0, ok:release-preflight, would-promote:v0.4.260817.1'
+          - './build.sh --ci-full -> 22 passed, 3 failed: guard-activation, markdown-distillation, litmus-pre-build'
+          - litmus 316 pass / 8 fail / 120 skip; reproduced litmus:groundtruth-no-mutable-status-pin-shape at instant size
+          - packet 394 is `obsoleted` (terminal); the litmus header still calls it 'ready (non-terminal, a trap)'
+          summary: |
+            Filed rather than forced. The release was authorised and every cheap precondition passed; the expensive gate that exists to protect the trunk says no, and it is right to. What needs fixing is not this release but the fact that a week of correct pushes could not tell anyone the trunk had stopped being shippable.
+        - type: progress
+          ts: "2026-08-24T15:38:10Z"
+          agent_id: linux-macuahuitl-opus5-20260824T153400Z
+          host: linux_mutable
+          summary: |
+            TWO OF THREE RELEASE BLOCKERS NOW CLEARED: litmus-pre-build's reproducible failure (865-x2mf, the status-pin litmus that pinned a live status) and guard-activation (865-j3kd, this row).
+            REMAINING: markdown-distillation — five files outside the inventory (AGENTS.md, GEMINI.md, .github/copilot-instructions.md, images/default/startup-context-addendum.md, scripts/refusal-calibration/README.md). Each needs an inventory row or distillation; none is a code defect.
+            A full ./build.sh --ci-full re-run is required before claiming the gate is green — the litmus suite had 8 failures of which only one reproduced at instant size, so the other seven are unmeasured from here and must not be assumed cleared by these two fixes.
+        - type: progress
+          ts: "2026-08-24T16:37:31Z"
+          agent_id: linux-macuahuitl-opus5-20260824T163400Z
+          host: linux_mutable
+          summary: |
+            ALL THREE NAMED BLOCKERS NOW CLEAR INDIVIDUALLY: litmus-pre-build's reproducible failure (865-x2mf), guard-activation (865-j3kd), and markdown-distillation (865-q4wp).
+            THIS IS NOT YET A GREEN GATE AND MUST NOT BE REPORTED AS ONE. The litmus suite had EIGHT failures; only one reproduced at instant size, so seven remain unmeasured from this host. A full ./build.sh --ci-full is the only thing that can answer whether the trunk is releasable, and it has not been re-run since the three fixes landed.
+        - type: progress
+          ts: "2026-08-24T17:44:52Z"
+          agent_id: linux-macuahuitl-opus5-20260824T173400Z
+          host: linux_mutable
+          evidence_refs:
+          - './build.sh --ci-full re-run after the three fixes: 3 failing checks -> 1'
+          - guard-activation and markdown-distillation now green; litmus-pre-build remains
+          - litmus 317 pass / 7 fail (was 316/8) — the status-pin repair is the one that moved
+          summary: |
+            THE GATE IS DOWN FROM THREE FAILING CHECKS TO ONE, and the caution filed with the last cycle was right: three blockers clearing individually was not a green gate.
+            Remaining seven litmus failures, with ownership:
+              cross-target-cfg-gate-check          LENOVINHA is on it (attested "cross-target gate")
+              sidecar-staleness-stamp-shape        unclaimed
+              expert-capability-skew-honesty       unclaimed
+              expert-groundtruth-harness           filed as 865-r6dt above
+              inference-container-implementation-shape  unclaimed
+              pre-push-linux-next-merged-shape     unclaimed
+              no-terminal-flicker-shape            unclaimed
+        
+            None is claimed by a wedged or dark host, so none is stalled — they are simply unworked. The trunk stays unreleasable until they are.
+        - type: progress
+          ts: "2026-08-24T18:41:18Z"
+          agent_id: linux-macuahuitl-opus5-20260824T183400Z
+          host: linux_mutable
+          summary: |
+            Litmus failures 7 -> 6 (expert-capability-skew-honesty cleared). Remaining: cross-target-cfg-gate-check (LENOVINHA, actively working it), expert-groundtruth-harness (865-r6dt, filed), and four unclaimed — sidecar-staleness-stamp-shape, inference-container-implementation-shape, pre-push-linux-next-merged-shape, no-terminal-flicker-shape.
+            A full ./build.sh --ci-full has NOT been re-run since this fix; the count above is from the per-spec run. The gate's own verdict is still one failing check until that is measured.
+        - type: progress
+          ts: "2026-08-24T18:48:23Z"
+          agent_id: linux-yoga-opus5-20260824T184823Z
+          host: linux_immutable
+          evidence_refs:
+          - 'litmus:cross-target-cfg-gate-check now PASSES — its 5-line lookback could not see a function-level #[cfg(unix)]'
+          - litmus:podman-idiomatic-launch-routing was environmental (unstaged router sidecar), filed as 871-wrmv
+          - 'spec dev-build: 4/7 -> 7/7 (100%) on linux-next at a79063247'
+          summary: |
+            TWO OF THE SEVEN REMAINING BLOCKERS WERE NOT TRUNK DEFECTS.
+            cross-target-cfg-gate-check was a FALSE POSITIVE. Its step walked back a fixed 5 lines from each libc::getuid/geteuid/fork hit looking for #[cfg(unix)]. The reported violation, headless/main.rs:1278, sits inside ensure_lane_process_env(), whose #[cfg(unix)] attribute is 15 lines up at 1263 — outside the window. The call was correctly gated the whole time and the guard could not see it. Fixed by walking back to the enclosing fn and checking that item's attribute block instead. Negative control re-run against a copy with every #[cfg(unix)] stripped: 4 violations detected, exit 1 — the guard still catches what it exists to catch.
+            podman-idiomatic-launch-routing was ENVIRONMENTAL: build.rs panics when images/router/tillandsias-router-sidecar is unstaged, and the litmus invokes cargo test directly without staging it. 'bash scripts/build-sidecar.sh' cleared it with no source change (871-wrmv).
+            So the seven-item list at 17:44Z overstates the trunk's real debt, and two more entries on it (871-sr4r, the toolbox-include flake) may be the same shape. Recommend re-running the failing set on a host with a warm toolbox and a staged sidecar BEFORE anyone works those packets — the cheapest reduction available here is deleting blockers that were never real.
+        - type: progress
+          ts: "2026-08-24T18:58:19Z"
+          agent_id: linux-macuahuitl-opus5-20260824T183400Z
+          host: linux_mutable
+          evidence_refs:
+          - '6-agent parallel triage: all six failures return kind=test-defect, host_required=this-linux-host'
+          - 'dev-build spec re-run at HEAD: cross-target-cfg-gate-check EXECUTES and passes; spec now 10/11 (was 9/11, 2 failures)'
+          summary: |
+            NO NEW HARDWARE UNBLOCKS THE RELEASE. Six independent triages agree: every remaining failure is a TEST DEFECT fixable on this Linux host. Each failing assertion is grep/awk/bash over checked-in text or a hermetic mktemp fixture. The subject matter is cross-platform (CREATE_NO_WINDOW, cfg(unix), Windows lanes) but the tests only READ SOURCE — no accelerator, no container runtime, no Windows or macOS surface is exercised by any of them.
+            CORRECTION TO THIS ROW'S OWNERSHIP TABLE: cross-target-cfg-gate-check is DONE, not "LENOVINHA is on it" — fixed at a12554087 and verified executing-and-passing here. Six remaining becomes five.
+            FIVE OF THE SIX ARE ONE DEFECT CLASS: the assertion pins a PROXY — a line-distance window, a version literal, a file path — instead of the property it stands for. The repo has already named this twice: order 528 `source-window-litmus-assertions-are-brittle` (ready, pickup_role linux) and 622-rmit "expression pinning". So the release is not blocked on hardware or on six unrelated bugs; it is blocked on one known, already-filed class that nobody has burned down.
+            Worked example, and the reason widening is the wrong instinct: cross-target-cfg-gate-check flagged main.rs:1278 as an ungated libc::getuid — but the call sits inside `#[cfg(unix)] fn ensure_lane_process_env`, whose gate is FIFTEEN lines up, outside the step's fixed five-line lookback. Four sibling call sites pass only because their gate happens to fall within five lines. Correct code grew a longer function body and the fixture called it a regression.
+        - type: progress
+          ts: "2026-08-24T19:00:39Z"
+          agent_id: linux-pirria-opus5-20260824T190000Z
+          host: linux_immutable
+          summary: |
+            EXIT CRITERION 1, SECOND BRANCH — THE DELTA, NAMED. Taking only the measurement slice of this p0; the three failures (criterion 2) and the status-pin litmus (criterion 3) are code work for a faster host and are left alone.
+            READ FROM SOURCE. `--check` is `cargo check --workspace` plus the shell gate phases plus the gate stamp. `--ci-full` additionally runs, in order: _prepare_ci_full_install_inputs (trace indexes + staged guest binaries, build.sh:1151), `scripts/local-ci.sh --phase pre-build` (build.sh:1200), a REAL INSTALL that builds container images (`$INSTALL_BIN --init`, build.sh:1283), and a post-build litmus/e2e phase (build.sh:1288).
+            SO THE ONE-LINE ANSWER A HOST NEEDS: A GREEN PUSH HAS RUN NO LITMUS AT ALL. --check never reaches local-ci.sh, and litmus is exactly where this packet's 8-of-324 failures live. That is the whole structural gap — not a subtle difference in coverage but an entire suite that the enforced gate does not touch.
+            MEASURED HERE: `scripts/local-ci.sh --phase pre-build` costs 207 s on 4 Alder Lake-N cores. Cheap enough to run on a cadence, which matters for criterion 1's FIRST branch.
+            BUT THE PHASE CANNOT PASS UNDER A BLANKET TOOLBOX RE-EXEC, and the reason is architectural rather than a provisioning gap. It exits 1 here with `podman-path-availability` — not because podman is broken, but because local-ci.sh re-execs the WHOLE run inside the tillandsias-builder toolbox on Silverblue (it sources with-tillandsias-builder.sh at line 32), and PODMAN CANNOT RUN INSIDE PODMAN. A toolbox IS a podman container; all podman containers live at the same layer and cannot be nested. So this is not "the toolbox is missing podman" — no amount of provisioning fixes it. Verified both directions: `podman ps` succeeds on the host and fails inside the toolbox.
+            THE REMEDY IS ORCHESTRATION, NOT INSTALLATION, and it is already proven: other Silverblue hosts build and run the whole architecture by keeping podman work on the HOST layer and toolbox work inside the toolbox, never nesting the two. (The orchestrator is mutable Linux for this same reason.) What local-ci.sh does instead is move its entire check list inside the toolbox, which strands every podman-dependent check on the wrong side of a boundary that cannot be crossed.
+            So if criterion 1's answer is "run --ci-full on a cadence", an immutable host can host it — but only once the podman-dependent steps run outside the re-exec. Recorded on 618-i4s6, which owns this class.
+            NOT REPRODUCED, and I want this explicit: I did NOT reproduce the 8-of-324 litmus failures. My run scoped to `--phase pre-build` and reported 23 checks passed / 2 failed, a different surface from the 324-litmus count in this packet. The second failure here is rust-clippy-all-features (all-features clippy warnings), which is real and is not mine to fix. Treat this as the delta named and timed, not as a second confirmation of the three failures.
+
+    - order: 865-x2mf
+      packet_id: the-guard-against-pinning-live-status-had-a-test-that-pinned-live-status
+      desired_release: v0.5
+      title: litmus:groundtruth-no-mutable-status-pin-shape cited packet 394, 394 was obsoleted, and the release gate went red
+      status: completed
+      kind: defect
+      pickup_role: any
+      priority: p1
+      capability_tags:
+        - litmus
+        - testing
+        - ci
+        - release
+        - plan
+      deliverable: openspec/litmus-tests/litmus-groundtruth-no-mutable-status-pin-shape.yaml
+      depends_on: []
+      estimated_hours: 3
+      discovered_by: 865-n8vq — the release gate red, this the one failure reproducible at instant size
+      context: |
+        680-zphp EXISTS TO STOP A GROUNDTRUTH CASE PINNING `status:` ON A PACKET WHOSE STATUS CAN STILL MOVE. Its own litmus did exactly that.
+        The negative control pinned `status: ready` on packet 394 and required check-groundtruth-mutable-status-pins.sh to REFUSE it. 394 was obsoleted on 2026-08-23 (06d859499) — a TERMINAL status — so the pin became legitimate, the guard correctly admitted it, and the litmus went red hunting a refusal it could no longer earn. The header still asserted "394 is ready (non-terminal, a trap)".
+        It stayed red for a day and helped block the release gate (865-n8vq).
+        PICKING A LONGER-LIVED PACKET WOULD ONLY POSTPONE IT. Every live packet is mortal; that is the entire premise of the rule being enforced. The test had to stop consulting the live ledger, which it could not do because the guard `cd "$REPO_ROOT"` before resolving anything — a caller's CWD was silently discarded, and the comment described this as deliberate: "status is still resolved against the LIVE ledger, so the fixture cites real packet ids". That sentence is the defect.
+        A SECOND BUG WAS SITTING UNDER THE FIRST, and it is the more dangerous shape. Once the ledger became overridable, the lookup ran inside `cd "$LEDGER_ROOT"` — and resolve_plan_binary returns a REPO-RELATIVE path (`./target/release/tillandsias-plan`). Relative, inside that subshell, the binary is simply absent: every status resolves empty, every pin is skipped as "unknown packet", and the guard prints `ok:...:0 live-checked` and exits 0. A guard that checks NOTHING is indistinguishable from a guard that checks everything and finds nothing. I introduced that in the same change, with a comment asserting the path was already absolute, which I had not checked.
+        SO THE POSITIVE CONTROL NOW ASSERTS `1 live-checked`, NOT MERELY EXIT 0. That is the difference between "the guard approved this" and "the guard ran".
+      exit_criteria: |
+        (1) Both controls own their ledger via TILLANDSIAS_GROUNDTRUTH_LEDGER_ROOT and cite no live packet, so nothing in plan/ can move them again. (2) Production behaviour is byte-identical: the real corpus still reports `3 live-checked`, rc=0, with no env var set. (3) The positive control asserts the CHECKED COUNT, so a guard that has gone inert fails instead of passing. (4) Mutation-controlled in both directions — a weakened guard AND a disabled guard must both go red.
+      events:
+        - type: completed
+          ts: "2026-08-24T14:41:20Z"
+          agent_id: linux-macuahuitl-opus5-20260824T143400Z
+          host: linux_mutable
+          evidence_refs:
+          - 'spec forge-environment-discoverability: 17/17, 100%, PASS (was 16/17 with this test red)'
+          - 'production: ok:groundtruth-status-pins:3 live-checked rc=0, unchanged, no env var'
+          - 'MUTATION A (guard admits non-terminal pins) -> ''FAIL: a non-terminal status pin was admitted'''
+          - MUTATION B (drop the binary absolutisation, guard goes inert) -> litmus red, 16/17
+          - restored -> 17/17 PASS
+          merge_affordance: merge-now
+          merge_reason: |
+            Clears one of the three checks blocking ./build.sh --ci-full and so one of the reasons the trunk cannot ship. Guard behaviour on the real corpus is unchanged; only the test's dependence on live data is removed.
+          summary: |
+            Both controls now supply their own two-packet ledger through TILLANDSIAS_GROUNDTRUTH_LEDGER_ROOT and cite no live packet. Production is untouched — the variable defaults to the repo and the real corpus still reports 3 live-checked.
+            THE MEASUREMENT PROCESS ITSELF LIED TWICE AND BOTH ARE WORTH KEEPING. First, a `grep -c 'REPO_ROOT/${_bin'` returned 0 against a file that plainly contained the code — a shell-quoting failure — and I nearly concluded my own fix had been silently reverted and my positive control was weak. Second, the perl that was supposed to apply mutation B never matched, so the litmus passed and looked like a control that could not detect anything. Both were probe defects wearing the costume of a finding. Re-run with a targeted sed, mutation B fires correctly.
+            That is the fourth probe of mine to lie in this session — after `pgrep -f` matching its own command line, a `rescue`-swallowed YAML load, and reading a packet field where the live value was in an event. The pattern is not carelessness with any one probe; it is that an ad-hoc probe written to check a result is itself unchecked, and a false-negative probe is indistinguishable from good news.
+
+    - order: 865-j3kd
+      packet_id: two-shipped-guards-were-invoked-by-nothing-and-blocked-the-release
+      desired_release: v0.5
+      title: check-cycle-scheduler and check-dead-env-branches shipped as orphans, failing guard-activation and the release gate
+      status: completed
+      kind: defect
+      pickup_role: any
+      priority: p1
+      capability_tags:
+        - ci
+        - release
+        - gates
+        - guards
+      deliverable: scripts/local-ci.sh
+      depends_on: []
+      estimated_hours: 2
+      discovered_by: 865-n8vq — one of the three checks failing ./build.sh --ci-full
+      context: |
+        TWO GUARDS SHIPPED WITH NO CALLER. audit-guard-activation reported population=67 active=65 orphan=2, failing ./build.sh --ci-full and forming one third of the reason the trunk has been unreleasable for a week.
+        
+          check-cycle-scheduler.sh    order 856-s56y, added by yoga 2026-08-23 —
+                                      is a durable unattended-cycle scheduler
+                                      armed on THIS host, and what did it last do?
+          check-dead-env-branches.sh  order 829-dkuc — names TILLANDSIAS_* vars
+                                      live code READS that nothing ASSIGNS or
+                                      DOCUMENTS.
+        
+        Both are worth having. Neither could simply be gated, because BOTH FAIL TODAY: the scheduler probe returns `due:not-installed` (rc=1) and the env-branch detector returns `dead=14` (rc=1). Wiring either into the blocking path would have swapped one release blocker for another, which is not progress — it is the same wall with a different sign on it.
+        NEITHER FINDING IS A RELEASE DEFECT, WHICH IS WHY ADVISORY IS HONEST HERE RATHER THAN CONVENIENT. `due:not-installed` is TRUE on macuahuitl: this host is driven by an external hourly loop, not a systemd timer, so it is differently-scheduled rather than broken. `dead=14` is a burndown list that predates the release and does not worsen by shipping.
+        THE ONE REPAIR WORSE THAN THE DEFECT. audit-guard-activation finds callers by grepping for the guard's NAME across a fixed set of surfaces, so a bare mention in any of them flips the verdict to green while leaving the guard exactly as dead. That is available, cheap, and wrong — the same shape as the wedge record's warning "do NOT `git add` the untracked file to flip the verdict — that games the guard". Both guards are now genuinely executed.
+        NOT DONE, AND NOT MINE: arming an actual scheduler is 856-s56y's own work and belongs to yoga, which is blocked. Burning down the 14 dead branches is 829-dkuc. This packet makes two shipped guards run; it does not pretend their findings are resolved.
+      exit_criteria: |
+        (1) audit-guard-activation reports orphan=0, verdict=ok. (2) Each guard is genuinely EXECUTED by its caller, not named in a comment — the auditor cannot tell the difference and a reader must be able to. (3) Neither invocation can fail the suite: the advisory wrapper returns 0 even though the guard returns 1. (4) Their findings stay visible in the run output rather than being swallowed to make the gate quiet.
+      events:
+        - type: completed
+          ts: "2026-08-24T15:38:10Z"
+          agent_id: linux-macuahuitl-opus5-20260824T153400Z
+          host: linux_mutable
+          evidence_refs:
+          - 'before: guard-activation population=67 active=65 orphan=2 verdict=orphans-found'
+          - 'after:  guard-activation population=67 active=67 orphan=0 verdict=ok, rc=0'
+          - advisory wrapper returns rc=0 while check-dead-env-branches.sh itself returns rc=1 (dead=14 still reported)
+          - scripts/local-ci.sh CHECK 0b executes the detector; skills/meta-orchestration/SKILL.md step 1 runs the scheduler probe
+          merge_affordance: merge-now
+          merge_reason: |
+            Clears the second of three checks blocking ./build.sh --ci-full. Both additions are advisory, so no host's gate can newly fail because of this; what changes is that two guards start reporting.
+          summary: |
+            check-dead-env-branches.sh now runs as CHECK 0b in local-ci, modelled on the existing freshness advisory: it prints its verdict line and cannot fail the suite. check-cycle-scheduler.sh runs in the meta-orchestration heartbeat at Start Of Cycle step 1, where a host-state probe belongs and where 856-s56y criterion 5 wanted it — an operator learning "armed? last fire? next due?" without reading a transcript.
+            Both are executed, not mentioned. The auditor greps for the name and would have accepted a comment; that route was available and refused, because a guard made green while staying dead is worse than the orphan it replaces.
+            guard-activation: orphan=2 -> orphan=0, verdict=ok.
+
+    - order: 865-q4wp
+      packet_id: the-markdown-gate-refused-runtime-surfaces-and-told-readers-to-edit-a-file-it-never-reads
+      desired_release: v0.5
+      title: five noncanonical markdown paths blocked the release, and the refusal named a remedy that cannot work
+      status: completed
+      kind: defect
+      pickup_role: any
+      priority: p1
+      capability_tags:
+        - ci
+        - release
+        - gates
+        - docs
+        - affordances
+      deliverable: scripts/check-markdown-distillation.sh
+      depends_on: []
+      estimated_hours: 2
+      discovered_by: 865-n8vq — the third of three checks failing ./build.sh --ci-full
+      context: |
+        FIVE FILES OUTSIDE THE ALLOWLIST, AND FOUR OF THEM ARE ONE DOCUMENT.
+        
+          AGENTS.md                                   the agent-runtime instruction entrypoint
+          GEMINI.md                                   -> symlink to AGENTS.md
+          .github/copilot-instructions.md             -> symlink to ../AGENTS.md
+          images/default/startup-context-addendum.md  injected verbatim into every forge launch
+          scripts/refusal-calibration/README.md       docs beside the harness they document
+        
+        The first three are ONE FILE with two aliases — verified: identical sha 44d7c24f2ea6, and `ls -l` shows the links. They are the same class as CLAUDE.md, which sits on the allowlist one line above where they now do. Each agent runtime looks for its own filename; that is the entire reason the aliases exist.
+        The addendum is a runtime surface in the strictest sense: inject_startup_context() appends it VERBATIM to .forge-startup-context.md at launch, read from the mounted checkout (743-y5wh), and it carries its own litmus. It is executable context, not prose about the project.
+        THE POLICY ALREADY ALLOWED ALL OF THEM. markdown-distillation.yaml's validation_rule reads "New Markdown outside canonical roots is allowed only for runtime command or skill surfaces." Every one of these is exactly that. The rule was right; the allowlist had simply never learned them, and a week of releases died on the difference.
+        THE FINDING THAT OUTLIVES THE FIX: THE REFUSAL NAMED A REMEDY THAT CANNOT WORK. It said "Add an inventory row to methodology/markdown-distillation.yaml and move/distill the file." This script NEVER READS THAT FILE — the allowlist is hardcoded in bash. A reader who follows the instruction edits a YAML, re-runs, and is refused identically with no clue why. The two lists have already drifted: the YAML's canonical_markdown_roots lacks .claude/commands, the SKILL.md surfaces, and images/default/cheatsheets, all of which the script allows.
+        That is the same shape as promote-stable.sh's demotion comment (864-mk2p), which documented a one-liner that left the channel wrong. An error naming a remedy it cannot honour is worse than one naming none: it spends the reader's trust as well as their time, and it is read at the moment someone is already blocked.
+      exit_criteria: |
+        (1) The four runtime surfaces are allowed, each with the reason recorded at the line that allows it — not silently widened. (2) The scripts README is admitted by a rule NARROWER than the existing `crates/*` entry, which already admits all markdown under crates. (3) The refusal names the real remedy: the allowlist in this script, and distillation-plus-archive as the alternative, with the YAML described as the archive record it is. (4) Mutation control: a genuinely noncanonical TRACKED file is still refused. `git ls-files` means an untracked probe proves nothing.
+      events:
+        - type: completed
+          ts: "2026-08-24T16:37:31Z"
+          agent_id: linux-macuahuitl-opus5-20260824T163400Z
+          host: linux_mutable
+          evidence_refs:
+          - 'before: 5 noncanonical paths, rc=1'
+          - 'after:  ok: markdown distillation paths, rc=0'
+          - 'MUTATION: a TRACKED NOTES-SCRATCH.md -> ''noncanonical markdown: NOTES-SCRATCH.md'', rc=1, with the new remedy text'
+          - AGENTS.md / GEMINI.md / .github/copilot-instructions.md share sha 44d7c24f2ea6; the latter two are symlinks
+          merge_affordance: merge-now
+          merge_reason: |
+            Third and last of the checks blocking ./build.sh --ci-full. The widening is four runtime surfaces plus one narrow README rule; no other host's gate can newly pass something it should not.
+          summary: |
+            Allowlisted the agent-runtime entrypoint and its two symlinks, the forge startup addendum, and `scripts/*/README.md` — the last deliberately narrower than the `crates/*` entry that already admits all markdown under crates. Each carries its justification at the line that grants it, so a future reader can judge the widening rather than inherit it.
+            And rewrote the refusal, which is the part worth keeping. It sent readers to edit methodology/markdown-distillation.yaml, a file this script never reads; it now names the allowlist in the script itself, or distillation-plus-archive, and says plainly that the YAML is an archive record whose edits this check cannot see.
+            MY OWN MUTATION WAS WRONG FIRST TIME AND THE CORRECTION IS THE LESSON. I created an untracked NOTES-SCRATCH.md, saw the checker pass, and had a moment of believing the gate was inert. It uses `git ls-files`, which lists only TRACKED files. With `git add -N` the refusal fires exactly as it should. Fifth probe of mine to lie this session — and like the others, it lied in the direction of good news.
+
+    - order: 865-r6dt
+      packet_id: groundtruth-harness-litmus-fails-for-two-unrelated-reasons-neither-an-expert-regression
+      desired_release: v0.5
+      title: the corpus-declaration fixture never supplies an index, and three cases are keyed to a packet that was obsoleted
+      status: ready
+      kind: defect
+      pickup_role: any
+      priority: p1
+      capability_tags:
+        - litmus
+        - groundtruth
+        - ci
+        - release
+      deliverable: scripts/test-groundtruth-corpus-declaration.sh
+      depends_on: []
+      estimated_hours: 4
+      discovered_by: 865-n8vq — the last check still failing ./build.sh --ci-full
+      context: |
+        litmus:expert-groundtruth-harness is red for TWO INDEPENDENT REASONS and neither is an expert regression, which is precisely the class 680-zphp exists to keep out of this harness.
+        (1) THE FIXTURE NEVER SUPPLIES AN INDEX. Step 6 of scripts/test-groundtruth-corpus-declaration.sh runs
+        
+          "$PLAN" grade "$ROOT"/openspec/litmus-tests/groundtruth/*.yaml
+        
+        with no TILLANDSIAS_SPEC_INDEX_DIR. The glob now includes spec-rung1.yaml, whose cases use engine spec.answer, and spec.answer needs a built index — so the command dies with `HARNESS ERROR: spec.answer needs a built index` and the step reports `committed glob not green:` with an EMPTY verdict, because it captured a last line that never came.
+        (2) WITH AN INDEX SUPPLIED, THREE CASES STILL FAIL, all in plan-methodology-experts-rung1 [plan.answer] — packet 394's set. 394 was obsoleted on 2026-08-23 (06d859499). That is the SAME ROOT CAUSE as 865-x2mf, which I fixed this morning: a fixture keyed to a live ledger row, breaking when the row legitimately moved. The guard for that class (check-groundtruth-mutable-status-pins.sh) only inspects `status:` PINS; these cases depend on 394 in other ways it cannot see.
+        
+          with index:  sets=4 total=33 pass=31 fail=2  (3 FAIL lines, 2 distinct)
+          without:     HARNESS ERROR, no verdict at all
+        
+        A THIRD THING FOUND ON THE WAY, ENVIRONMENTAL AND NOT THE CAUSE: this host's session carries
+        
+          FORGE_SPEC_INDEX_DIR=/mnt/c/Users/bullo/claudia/tillandsias/target/spec-index
+        
+        a WSL path belonging to a DIFFERENT HOST, leaked into macuahuitl's environment and silently redirecting index lookups to a directory that cannot exist here. Unsetting it does not fix the litmus — measured, so it is recorded as a separate hazard rather than a suspected cause. It is the 849-tz8g shape: an environmental fact that makes a failure look like a code defect.
+      exit_criteria: |
+        (1) The fixture supplies an index for spec.answer sets, or skips them with a stated reason. A step whose verdict variable can be EMPTY must report that as an error, not as a failed comparison — the current message shows `not green: ` with nothing after it and reads like a value mismatch. (2) The three plan-methodology-experts-rung1 cases stop depending on a live ledger row, the way 865-x2mf's controls now supply their own. (3) litmus:expert-groundtruth-harness green, and ./build.sh --ci-full re-run to confirm what it unblocks rather than assuming.
+      events:
+        - type: filed
+          ts: "2026-08-24T17:44:52Z"
+          agent_id: linux-macuahuitl-opus5-20260824T173400Z
+          host: linux_mutable
+          summary: |
+            Filed rather than fixed: (1) is a small fixture change, but (2) means editing committed groundtruth cases whose correct new form depends on what 394 was asserting, and the last four cycles have shown how easily a confident edit to this harness certifies the wrong thing.
+            Explicitly checked and NOT the cause: my 865-h4tn change. Both cases I added this morning PASS in the run above.
+        - type: note
+          ts: "2026-08-24T18:58:19Z"
+          agent_id: linux-macuahuitl-opus5-20260824T183400Z
+          host: linux_mutable
+          evidence_refs:
+          - 'grade expert-groundtruth-rung1.yaml alone at HEAD a12554087: total=22 pass=22 fail=0'
+          - 'grade the full glob with an index: the two reds are spec-forge-isolation-and-egress and spec-inference-tier-mechanism-is-in-code, both [spec.answer]'
+          - index .commit 6931cce8 vs HEAD a12554087 — TWENTY-FOUR commits behind
+          summary: |
+            CORRECTION TO THIS PACKET'S CAUSE (2). I wrote that three cases in plan-methodology-experts-rung1 [plan.answer] — packet 394's set — fail, and attributed it to 394 having been obsoleted. VERIFIED WRONG at HEAD: that set grades 22/22, fail=0, standalone.
+            The two real failures are [spec.answer] cases, spec-forge-isolation-and-egress and spec-inference-tier-mechanism-is-in-code, and the cause is INDEX-VS-HEAD SKEW rather than a moved packet: the published index carries .commit 6931cce8 while HEAD is a12554087, twenty-four commits later, so cited spans no longer land where the index says they do.
+            WHY THE MISATTRIBUTION HAPPENED, because the mechanism will recur. I ran the glob, grepped `^FAIL`, and read three identical lines naming plan-methodology-experts-rung1 — then reasoned from 394's known obsoleting, which was fresh in mind from 865-x2mf that same morning. A plausible cause I had just proved real elsewhere made a weak observation look like a confirmed one. The grep never told me which SET a failing case belonged to; I supplied that from memory.
+            As filed, this packet would have sent someone to edit committed plan cases that are correct. Re-pointed here rather than left to be discovered by whoever picked it up.
+            CREDIT WHERE DUE: the correction came from a triage subagent, and I verified all three of its claims against HEAD before accepting them rather than trusting the report.
+
+    - order: 865-b3xf
+      packet_id: the-forge-mcp-server-could-not-return-a-large-answer-and-blamed-jq
+      desired_release: v0.5
+      title: rpc_result_text passed the whole expert answer in argv, so any sufficiently useful reply died with E2BIG while framing
+      status: completed
+      kind: defect
+      pickup_role: any
+      priority: p0
+      capability_tags:
+        - forge
+        - mcp
+        - expert-system
+        - ci
+        - release
+      deliverable: images/default/config-overlay/mcp/forge-plan.sh
+      depends_on: []
+      estimated_hours: 2
+      discovered_by: 865-n8vq — triaging the last check failing ./build.sh --ci-full
+      context: |
+        THE FORGE'S PLAN MCP SERVER COULD NOT RETURN A LARGE ANSWER. `rpc_result_text` built its JSON-RPC frame with
+        
+          jq -cn --argjson id "$_rr_id" --arg text "$_rr_text" ...
+        
+        and `$_rr_text` is the EXPERT'S WHOLE ANSWER — the one value in that function that grows with the CORPUS rather than with the request. Past the kernel's argv limit execve returns E2BIG and the frame is never built:
+        
+          forge-plan.sh: line 953: /usr/bin/jq: Argument list too long
+        
+        Reproduced directly on macuahuitl: a 300 KB payload through the old form exits 126 with that exact message; through the new form, rc=0.
+        WHERE IT LANDS IS WHAT MAKES IT WORSE THAN A SIZE LIMIT. The server has already done the work — retrieved, judged, assembled — and then fails while FRAMING THE REPLY. The client receives no result and no error it can attribute, and the message names jq, the last honest component in the chain. The failure is also monotone in usefulness: the richer the answer, the more certainly it is lost. An expert that silently drops its best answers is worse than one that refuses, because a refusal is legible.
+        It surfaced through litmus:expert-capability-skew-honesty, a test about capability honesty that happened to ask for a big enough answer.
+        THE OTHER `--arg` SITES IN THESE SERVERS WERE CHECKED AND LEFT ALONE: a refusal reason, an embedding model name, the user's question, an error message. Each is bounded by the REQUEST. Only the answer is bounded by the corpus, which is why only this one had to change.
+      exit_criteria: |
+        (1) The answer reaches jq via stdin, not argv, so no answer size can prevent its own framing. (2) Byte-identical output to the old form for payloads that fitted — including quotes and embedded newlines — so no wire-format change rides along. (3) litmus:expert-capability-skew-honesty executes and passes AT A SIZE THAT ACTUALLY RUNS IT.
+      events:
+        - type: completed
+          ts: "2026-08-24T18:41:18Z"
+          agent_id: linux-macuahuitl-opus5-20260824T183400Z
+          host: linux_mutable
+          evidence_refs:
+          - 'reproduction: 300 KB via --arg -> rc=126 ''Argument list too long''; via --rawfile /dev/stdin -> rc=0'
+          - 'equivalence: small payload with quotes and an embedded newline, --arg vs --rawfile output byte-identical'
+          - litmus:expert-capability-skew-honesty EXECUTED (4.5s) and passes at --size all; 'Argument list too long' gone
+          - 'spec forge-environment-discoverability: 22/23, the single remaining failure is expert-groundtruth-harness (865-r6dt)'
+          merge_affordance: merge-now
+          merge_reason: |
+            Every forge on every host ships this server, and the bug silently discards the largest expert answers — the ones most worth having. One function; the wire format is proven unchanged.
+          summary: |
+            The answer now reaches jq on stdin via `--rawfile text /dev/stdin`. No argv involvement, so answer size can no longer prevent its own framing. `printf '%s'` (no trailing newline) is what keeps the output byte-identical to the old form.
+            I ALMOST REPORTED A GREEN THAT DID NOT COVER THE FIX. The spec passed 17/17 at `--size instant` and I nearly filed that as proof — but expert-capability-skew-honesty is one of SEVEN tests SKIPPED at that size. The run was green because it never executed the test I had repaired. At `--size all` it runs (4.5s) and passes, which is the only evidence worth anything here.
+            That is the same shape as the defect: a result that looks complete because the expensive part was quietly dropped.
+
+    - order: 871-wrmv
+      packet_id: litmus-podman-idiomatic-fails-on-any-host-without-a-staged-sidecar
+      desired_release: v0.5
+      title: litmus:podman-idiomatic-launch-routing invokes cargo test directly and never stages the router sidecar
+      status: ready
+      kind: defect
+      pickup_role: any
+      priority: p1
+      capability_tags:
+        - litmus
+        - ci
+        - release
+        - fail-loud
+      deliverable: openspec/litmus-tests/litmus-podman-idiomatic-launch-routing.yaml
+      depends_on: []
+      estimated_hours: 1
+      discovered_by: 865-n8vq gate triage on yoga — a litmus failure that was environmental, not a code defect
+      context: |
+        The single step of litmus:podman-idiomatic-launch-routing is a bare
+        
+          cargo test -p tillandsias-headless --bin tillandsias \
+            tests::idiomatic_podman_launch_paths_do_not_bypass_shared_layer -- --exact
+        
+        and tillandsias-headless/build.rs:139 hard-panics when images/router/tillandsias-router-sidecar is absent. That file is a BUILD ARTIFACT, never committed (order 710-w9kc), so a fresh clone — or any host that has not run build.sh or scripts/build-image.sh since its last target/ wipe — fails this litmus for a reason that has nothing to do with podman launch routing.
+        The panic message is exemplary and diagnosed itself: "If you hit this from a build script, that script is missing the staging call that build.sh and scripts/build-image.sh already make." The litmus IS that script. It took one 'bash scripts/build-sidecar.sh' to turn the dev-build spec from 6/7 to 7/7 on this host, with no source change.
+        This matters beyond one red test. 865-n8vq's whole point is that the trunk accumulated release blockers nobody could see; a blocker that is actually an unstaged artifact on the RUNNING host makes that ledger of seven failures less trustworthy than it looks, because at least one of them was never a trunk defect at all.
+      exit_criteria: |
+        (1) The step stages the sidecar first (scripts/build-sidecar.sh, or the shared staging helper build.sh calls) so it measures what it claims to. (2) A litmus step that depends on an unstaged build artifact fails with the artifact's name, not a build-script panic — or the runner grows a preflight that names the missing artifact once for the whole run. (3) Audited: any other litmus step invoking cargo directly against tillandsias-headless has the same latent dependency.
+      events:
+        - type: filed
+          ts: "2026-08-24T18:48:23Z"
+          agent_id: linux-yoga-opus5-20260824T184823Z
+          host: linux_immutable
+
+    - order: 871-sr4r
+      packet_id: ensure-toolbox-include-shape-times-out-intermittently-on-an-unsaturated-host
+      desired_release: v0.5
+      title: step 2 hit its 30s budget on a host at load1=3.08/12cpu, then passed on the next run
+      status: ready
+      kind: defect
+      pickup_role: linux
+      priority: p2
+      capability_tags:
+        - litmus
+        - flake
+        - ci
+      deliverable: openspec/litmus-tests/litmus-ensure-toolbox-include-shape.yaml
+      depends_on: []
+      estimated_hours: 2
+      discovered_by: 865-n8vq gate triage on yoga — two consecutive dev-build runs disagreed
+      context: |
+        litmus:ensure-toolbox-include-shape step 2 ("sourcing under set -euo pipefail preserves the caller's strict options and returns 0") TIMED OUT at its 30s budget on the first dev-build run of this cycle. The runner's own saturation check exonerated the host in the same breath:
+        
+          load1=3.08 over 12 cpus — host NOT saturated at kill time;
+          this step is genuinely too slow for its 30s budget
+        
+        The very next run of the same spec, same tree, same host, passed. That is an intermittent failure, which this loop's own guidance calls "a defect with a schedule, not noise" — and it is the exact shape that makes a seven-item release-blocker list unreliable, because a list assembled from one run cannot tell a flake from a blocker.
+        Suspected but NOT measured: the include probes for / provisions the tillandsias-builder toolbox, and this host had that container stopped at the start of the cycle (see the enclave-services note below). A first run that pays container startup and a second that does not would explain both observations exactly. Recorded as a hypothesis, not a cause.
+      exit_criteria: |
+        (1) The step's cost is measured across a cold and a warm toolbox, and the budget is set from the cold number or the cold path is removed from it. (2) If the toolbox start is the cost, the step declares that dependency rather than absorbing it silently into a timeout.
+      events:
+        - type: filed
+          ts: "2026-08-24T18:48:23Z"
+          agent_id: linux-yoga-opus5-20260824T184823Z
+          host: linux_immutable
+
+    - order: 871-4c3u
+      packet_id: litmus-degraded-no-yq-warns-once-then-returns-a-verdict-anyway
+      desired_release: v0.5
+      title: the runner announces that steps calling yq will fail or return empty, and then reports PASS/FAIL as if they had not
+      status: ready
+      kind: enhancement
+      pickup_role: any
+      priority: p2
+      capability_tags:
+        - litmus
+        - fail-loud
+        - forge
+      deliverable: scripts/run-litmus-test.sh
+      depends_on: []
+      estimated_hours: 2
+      discovered_by: 865-n8vq gate triage on yoga
+      context: |
+        Every litmus invocation on this host opened with
+        
+          warn:litmus-degraded-no-yq — yq is not on PATH and could not be
+          provisioned from the tillandsias-builder toolbox. Steps whose commands
+          call yq will fail or return empty, and YAML metadata falls back to
+          grep. ... before trusting a verdict from this run.
+        
+        The warning is precise and correct, and it is the ONLY thing standing between a degraded run and a trusted verdict. It is one line, printed before ~40 lines of output, and the run then prints a normal green "Status: [PASS]" that no downstream consumer distinguishes from an undegraded one. On an immutable Fedora Silverblue host yq is not on PATH and will not be; the toolbox container was simply stopped after the overnight reboot, and starting it removed the warning.
+        This is the fail-loud-diagnosis shape: a verdict that knows it is unreliable should say so IN THE VERDICT, where automation reads it, not in a preamble that only a human scrolling up sees.
+      exit_criteria: |
+        (1) A degraded run's terminal status line carries the degradation (e.g. PASS(degraded:no-yq)) so a grep for the verdict cannot miss it. (2) The runner distinguishes "no step needed yq" from "steps needed yq and it was absent" — the first is not a degradation at all.
+      events:
+        - type: filed
+          ts: "2026-08-24T18:48:23Z"
+          agent_id: linux-yoga-opus5-20260824T184823Z
+          host: linux_immutable
+
+    - order: 872-c9nd
+      packet_id: the-yoga-wedge-was-not-unwedged-it-was-re-cloned-away
+      desired_release: v0.5
+      title: four hours of finished 642-fedr/776-cm74 work were destroyed by a fresh clone over the wedged checkout
+      status: ready
+      kind: defect
+      pickup_role: any
+      priority: p0
+      capability_tags:
+        - meta-orchestration
+        - claims
+        - data-loss
+        - fleet
+      deliverable: skills/meta-orchestration/SKILL.md
+      depends_on: []
+      estimated_hours: 3
+      discovered_by: acting on the operator's unblock-path-(a) prompt and finding the dirt gone
+      context: |
+        The operator relaunched yoga with the verbatim unblock prompt from plan/issues/yoga-dirty-start-wedge-2026-08-23.md path (a): "the dirty worktree ... is resumable 642-fedr/776-cm74 claim work ... untracked litmus file included — review and land it".
+        THERE IS NOTHING LEFT TO LAND. `git status --porcelain --untracked-files=all` on /var/home/tlatoani/claudia/tillandsias is EMPTY. No stash. The reflog has exactly one entry before this cycle:
+        
+          0bba6525f HEAD@{2026-08-23 23:09:38 -0700}: clone: from https://github.com/8007342/tillandsias.git
+        
+        The checkout directory's own mtime matches. The wedged worktree was not unwedged, merged, or committed — it was REPLACED by a fresh clone at 2026-08-24T06:09Z, roughly four hours after the third refusal cycle filed the issue begging for disposition.
+        GONE, and searched for before saying so: 16 modified paths plus the untracked openspec/litmus-tests/litmus-lww-fields-channel-alias-shape.yaml. That filename appears in NO commit on any branch (`git log --all -- <path>` is empty), nowhere on disk under /var/home/tlatoani (find, maxdepth 6), and there is no backup directory beside the checkout. The only dangling objects git fsck reports are this cycle's own rebase. The work is unrecoverable and must be re-implemented.
+        WHAT THE ISSUE PREDICTED, AND WHAT ACTUALLY HAPPENED. It named two risks: claim expiry laundering finished work into lost work, and growing merge debt. Both assumed the bits would still be there. The bits were the fragile thing. Three cycles verified the 17 paths byte-identical to their boundary snapshots and correctly refused to touch them; the boundary guard did its job perfectly and protected a directory that someone then deleted wholesale. A guard that forbids the agent from touching the work does not forbid anything else from touching it.
+        642-fedr and 776-cm74 are both still `in_progress` and both appear in this cycle's stranded sweep (population=3 stranded=2). Their claims and the DO-NOT-RE-IMPLEMENT note events now point at work that does not exist, which is worse than a stale claim: the next host to read them will hold off re-implementing on the strength of a promise nothing can keep.
+      exit_criteria: |
+        (1) 642-fedr and 776-cm74 are returned to the pool with their prior progress events explicitly superseded — the ledger must say the on-disk implementation is GONE, not merely unlanded, or the next host defers to it again. (2) The refusal path stops being a place work can sit indefinitely. Whatever the disposition rule becomes, a cycle that refuses a dirty tree must leave the WORK somewhere durable — a patch under plan/, a scratch branch pushed to origin, anything that survives the directory — rather than only a prose description of it. Three cycles wrote increasingly detailed prose about a diff nobody preserved. (3) The order-833-fpe7 / order-540 sequence gains the missing case: an operator licence that arrives after the tree is already clean must be answered "the premise is gone", not acted on optimistically. (4) Decide unblock path (b) from the original issue on its merits — an untracked path referenced by tracked claim dirt attributing to the same claim — since path (a) has now failed once by timing out.
+      events:
+        - type: filed
+          ts: "2026-08-24T18:55:58Z"
+          agent_id: linux-yoga-opus5-20260824t185558z
+          host: linux_immutable
