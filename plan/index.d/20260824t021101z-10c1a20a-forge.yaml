@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: no-yaml-reader-exists-in-every-environment-the-gates-run-in
+    field: next_action
+    value: Run rg -n '\bruby\b|\byq\b' scripts and migrate each remaining production YAML read to scripts/tillandsias-policy validate-yaml; then record forge, bare-host, and builder-toolbox evidence before closing.
+    ts: "2026-08-24T02:11:01Z"
+    host: forge
+
+events:
+  - packet_id: no-yaml-reader-exists-in-every-environment-the-gates-run-in
+    event:
+      type: note
+      ts: "2026-08-24T02:11:01Z"
+      host: forge
+      summary: >
+        carry forward the remaining cross-locus audit after the fragment-integrity slice

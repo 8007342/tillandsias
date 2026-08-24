@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: capability-row-check-cannot-resolve-a-host-without-the-hostname-binary
+    field: next_action
+    value: Run scripts/check-capability-row.sh in a freshly rebuilt forge with a stable TILLANDSIAS_WORKSTATION, record the durable capability row, and close only after that forge proof is joined to the existing WSL evidence.
+    ts: "2026-08-24T02:11:02Z"
+    host: forge
+
+events:
+  - packet_id: capability-row-check-cannot-resolve-a-host-without-the-hostname-binary
+    event:
+      type: note
+      ts: "2026-08-24T02:11:02Z"
+      host: forge
+      summary: >
+        carry forward the remaining stable-forge identity proof after making the fixture hermetic

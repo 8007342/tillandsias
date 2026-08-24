@@ -1577,6 +1577,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "All fragments intact"
 
+    _step "Checking the whole-overlay fragment guard's negative controls..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-all-fragments-intact.sh" 2>&1; then
+        _error "the fragment-integrity guard cannot distinguish valid YAML, parse damage, and conflict markers"
+        exit 1
+    fi
+    _info "Fragment-integrity fixture passed"
+
     _step "Checking set-field emits valid YAML for every value shape..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-set-field-yaml-shapes.sh" 2>&1; then
         _error "set-field can write an unparseable ledger fragment — the ledger is append-only"
