@@ -87,3 +87,28 @@ flip the verdict — that games the guard.
 No worktree path touched, no merge into the wedged checkout, no `git add` of
 the untracked file, no claim released. The wedged checkout is byte-identical
 to its 2026-08-23T19:45Z state (boundary-guard verified each cycle).
+
+## RESOLUTION 2026-08-24T18:56Z — the work was destroyed, not landed (872-c9nd)
+
+The operator relaunched yoga with unblock path (a)'s verbatim prompt. Acting on
+it found nothing to act on: `git status --porcelain --untracked-files=all` is
+empty, `git stash list` is empty, and the reflog's sole entry before that
+cycle is
+
+    0bba6525f HEAD@{2026-08-23 23:09:38 -0700}: clone: from https://github.com/8007342/tillandsias.git
+
+The checkout directory's mtime agrees. The wedged worktree was replaced by a
+fresh clone at 2026-08-24T06:09Z — about four hours after this file was written.
+
+Searched before concluding: `openspec/litmus-tests/litmus-lww-fields-channel-alias-shape.yaml`
+appears in no commit on any branch, nowhere under /var/home/tlatoani, and there
+is no backup beside the checkout. `git fsck` reports only this cycle's own
+rebase objects. The 16 modified paths are back at origin state. **The work is
+unrecoverable; 642-fedr and 776-cm74 must be re-implemented from scratch.**
+
+Status: this issue is closed as **work lost**. The refusal cycles were correct
+and the boundary guard verified the paths byte-identical every time — it
+protected a directory that something else then deleted wholesale. The gap it
+exposes is that a refusal preserved a *description* of the diff across three
+increasingly detailed cycles and never preserved the diff. Carried forward as
+872-c9nd, along with the still-open merits of unblock path (b).

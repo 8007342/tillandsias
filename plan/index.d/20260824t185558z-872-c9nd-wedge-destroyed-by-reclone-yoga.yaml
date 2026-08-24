@@ -1,0 +1,103 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_immutable (yoga/silverblue), 2026-08-24T18:55:58Z.
+packets:
+  - order: 872-c9nd
+    packet_id: the-yoga-wedge-was-not-unwedged-it-was-re-cloned-away
+    desired_release: v0.5
+    title: "four hours of finished 642-fedr/776-cm74 work were destroyed by a fresh clone over the wedged checkout"
+    status: ready
+    kind: defect
+    pickup_role: any
+    priority: p0
+    capability_tags: [meta-orchestration, claims, data-loss, fleet]
+    deliverable: skills/meta-orchestration/SKILL.md
+    depends_on: []
+    estimated_hours: 3
+    discovered_by: "acting on the operator's unblock-path-(a) prompt and finding the dirt gone"
+    context: >
+      The operator relaunched yoga with the verbatim unblock prompt from
+      plan/issues/yoga-dirty-start-wedge-2026-08-23.md path (a):
+      "the dirty worktree ... is resumable 642-fedr/776-cm74 claim work ...
+      untracked litmus file included — review and land it".
+
+      THERE IS NOTHING LEFT TO LAND. `git status --porcelain --untracked-files=all`
+      on /var/home/tlatoani/claudia/tillandsias is EMPTY. No stash. The reflog
+      has exactly one entry before this cycle:
+
+        0bba6525f HEAD@{2026-08-23 23:09:38 -0700}: clone: from https://github.com/8007342/tillandsias.git
+
+      The checkout directory's own mtime matches. The wedged worktree was not
+      unwedged, merged, or committed — it was REPLACED by a fresh clone at
+      2026-08-24T06:09Z, roughly four hours after the third refusal cycle filed
+      the issue begging for disposition.
+
+      GONE, and searched for before saying so: 16 modified paths plus the
+      untracked openspec/litmus-tests/litmus-lww-fields-channel-alias-shape.yaml.
+      That filename appears in NO commit on any branch
+      (`git log --all -- <path>` is empty), nowhere on disk under
+      /var/home/tlatoani (find, maxdepth 6), and there is no backup directory
+      beside the checkout. The only dangling objects git fsck reports are this
+      cycle's own rebase. The work is unrecoverable and must be re-implemented.
+
+      WHAT THE ISSUE PREDICTED, AND WHAT ACTUALLY HAPPENED. It named two risks:
+      claim expiry laundering finished work into lost work, and growing merge
+      debt. Both assumed the bits would still be there. The bits were the
+      fragile thing. Three cycles verified the 17 paths byte-identical to their
+      boundary snapshots and correctly refused to touch them; the boundary guard
+      did its job perfectly and protected a directory that someone then deleted
+      wholesale. A guard that forbids the agent from touching the work does not
+      forbid anything else from touching it.
+
+      642-fedr and 776-cm74 are both still `in_progress` and both appear in
+      this cycle's stranded sweep (population=3 stranded=2). Their claims and
+      the DO-NOT-RE-IMPLEMENT note events now point at work that does not exist,
+      which is worse than a stale claim: the next host to read them will hold
+      off re-implementing on the strength of a promise nothing can keep.
+    exit_criteria: >
+      (1) 642-fedr and 776-cm74 are returned to the pool with their prior
+      progress events explicitly superseded — the ledger must say the on-disk
+      implementation is GONE, not merely unlanded, or the next host defers to it
+      again.
+      (2) The refusal path stops being a place work can sit indefinitely.
+      Whatever the disposition rule becomes, a cycle that refuses a dirty tree
+      must leave the WORK somewhere durable — a patch under plan/, a scratch
+      branch pushed to origin, anything that survives the directory — rather
+      than only a prose description of it. Three cycles wrote increasingly
+      detailed prose about a diff nobody preserved.
+      (3) The order-833-fpe7 / order-540 sequence gains the missing case: an
+      operator licence that arrives after the tree is already clean must be
+      answered "the premise is gone", not acted on optimistically.
+      (4) Decide unblock path (b) from the original issue on its merits — an
+      untracked path referenced by tracked claim dirt attributing to the same
+      claim — since path (a) has now failed once by timing out.
+
+events:
+  - packet_id: the-yoga-wedge-was-not-unwedged-it-was-re-cloned-away
+    event: {type: filed, ts: "2026-08-24T18:55:58Z", agent_id: linux-yoga-opus5-20260824t185558z, host: linux_immutable}
+  - packet_id: lww-channel-naming-obscures-field-correction
+    event:
+      type: progress
+      ts: "2026-08-24T18:55:58Z"
+      agent_id: linux-yoga-opus5-20260824t185558z
+      host: linux_immutable
+      evidence_refs:
+        - "git status --porcelain --untracked-files=all: empty; git stash list: empty"
+        - "git reflog: sole pre-cycle entry is 'clone:' at 2026-08-23 23:09:38 -0700"
+        - "git log --all -- openspec/litmus-tests/litmus-lww-fields-channel-alias-shape.yaml: no commits"
+      summary: >
+        SUPERSEDES THE DO-NOT-RE-IMPLEMENT WARNING. The on-disk implementation
+        this packet's prior events told other hosts to wait for no longer
+        exists; the checkout was re-cloned on 2026-08-24T06:09Z. Re-implement
+        from scratch. See 872-c9nd.
+  - packet_id: hash-image-sources-git-normalized
+    event:
+      type: progress
+      ts: "2026-08-24T18:55:58Z"
+      agent_id: linux-yoga-opus5-20260824t185558z
+      host: linux_immutable
+      evidence_refs:
+        - "same re-clone: scripts/hash-image-sources.sh and its fixture are back at origin state"
+      summary: >
+        SUPERSEDES THE DO-NOT-RE-IMPLEMENT WARNING. The on-disk implementation
+        is gone with the re-cloned checkout. Re-implement from scratch.
+        See 872-c9nd.
