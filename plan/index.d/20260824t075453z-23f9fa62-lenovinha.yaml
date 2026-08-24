@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: status-ladder-enforcement-wave-2
+    field: status
+    value: in_progress
+    ts: "2026-08-24T07:54:53Z"
+    host: lenovinha
+
+events:
+  - packet_id: status-ladder-enforcement-wave-2
+    event:
+      type: note
+      ts: "2026-08-24T07:54:53Z"
+      host: lenovinha
+      summary: >
+        claimed 2026-08-24T08:00Z: rank-aware status in compact_text

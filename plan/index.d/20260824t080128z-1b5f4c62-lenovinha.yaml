@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: status-ladder-enforcement-wave-2
+    field: next_action
+    value: 'CRITERION 1 IS DONE (lenovinha 2026-08-24) and the packet''s premise was wrong: the LIVE FOLD was broken too, not just compact_text. Both paths consulted status_entry_wins only when a previous FRAGMENT entry existed; the first fragment to claim a field hit ''None => true'' and won over the BASE unconditionally, so a lone ''implemented'' write beat a base ''completed'' with no falsified event — and compaction then deleted the fragment, making the lost rung unrecoverable. Both paths now compare against the base value through the same rule (empty incumbent ts/host on purpose: higher rung wins outright, lower needs falsified, equal rungs fall through to LWW so same-rung and working-state writes are unchanged). closure_ladder_compaction_tests 3/3 incl. a falsified positive control; suite 220+25; live ledger unchanged. REMAINING: criteria 2-4 (invisible-block report, evidence gate on post-2026-08-12 closure fragments, plan_next verification-pickup rows). check already emits parked-block: lines and closure-evidence-check exists in the pre-push plan-only lane, so parts of 2 and 3 LOOK present — but ''looks present'' is exactly how this packet came to assert the fold was already correct. Write the assertion first and watch it fail before believing any of them.'
+    ts: "2026-08-24T08:01:28Z"
+    host: lenovinha
