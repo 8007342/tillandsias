@@ -1,0 +1,16 @@
+events:
+  - packet_id: the-trunk-has-been-unreleasable-for-a-week-behind-a-gate-no-push-runs
+    event:
+      type: note
+      ts: "2026-08-24T19:33:00Z"
+      agent_id: linux-yoga-opus5-20260824T193300Z
+      host: linux_immutable
+      summary: |
+        CLAIMED by yoga for the 2026-08-24T19:22Z cycle. Scope taken: the four unclaimed litmus test-defect blockers named at 18:41Z/18:58Z — sidecar-staleness-stamp-shape, inference-container-implementation-shape, pre-push-linux-next-merged-shape, no-terminal-flicker-shape — plus re-measurement of the failing set on this host (warm toolbox, staged sidecar) per the 18:48Z recommendation that the cheapest reduction is deleting blockers that were never real. The expert-groundtruth-harness item stays with its own packet 865-r6dt; cross-target-cfg-gate-check is done and untouched.
+
+status:
+  - packet_id: the-trunk-has-been-unreleasable-for-a-week-behind-a-gate-no-push-runs
+    field: status
+    value: in_progress
+    ts: "2026-08-24T19:33:00Z"
+    host: yoga
