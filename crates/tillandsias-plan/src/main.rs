@@ -4985,7 +4985,7 @@ fn main() {
             });
             let cutoff = answer::epoch_to_iso8601(now - ttl_hours * 3600);
             let now_iso = answer::epoch_to_iso8601(now);
-            let (expired, unknown) = expire_claim_candidates(&ledger, &cutoff);
+            let (expired, unknown, held) = expire_claim_candidates(&ledger, &cutoff);
             let label = if dry_run {
                 "expire-candidate"
             } else {
@@ -4996,6 +4996,11 @@ fn main() {
             }
             for (order, pid) in &unknown {
                 emit(&format!("unknown-age\t{order}\t{pid}\tnever-expired"));
+            }
+            // 864-k8dp: a hold is REPORTED, never silent. A claim the reaper
+            // declined to take is exactly as interesting as one it took.
+            for (order, pid, reason) in &held {
+                emit(&format!("held-claim\t{order}\t{pid}\t{reason}"));
             }
             // ORDER 833-fpe7. `--list-live` additionally names the claims the
             // reaper would KEEP: owner host + claim ts, for the
@@ -5064,8 +5069,9 @@ fn main() {
             )
             .len();
             emit(&format!(
-                "summary: in_progress={total} expired={} unknown_age={} ttl_hours={ttl_hours} mode={}",
+                "summary: in_progress={total} expired={} held={} unknown_age={} ttl_hours={ttl_hours} mode={}",
                 expired.len(),
+                held.len(),
                 unknown.len(),
                 if dry_run { "dry-run" } else { "write" }
             ));
@@ -5092,6 +5098,7 @@ fn main() {
 /// are `(order, packet_id)`.
 type ExpiredClaim<'a> = (String, &'a str, String);
 type UnknownAgeClaim<'a> = (String, &'a str);
+type HeldClaim<'a> = (String, &'a str, String);
 
 /// ORDER 833-fpe7. The live complement of [`expire_claim_candidates`], for the
 /// resumable-claim-dirt detector: every `in_progress` packet that the reaper
@@ -5182,9 +5189,14 @@ fn live_claims<'a>(ledger: &'a Ledger, cutoff_iso: &str) -> Vec<LiveClaim<'a>> {
 fn expire_claim_candidates<'a>(
     ledger: &'a Ledger,
     cutoff_iso: &str,
-) -> (Vec<ExpiredClaim<'a>>, Vec<UnknownAgeClaim<'a>>) {
+) -> (
+    Vec<ExpiredClaim<'a>>,
+    Vec<UnknownAgeClaim<'a>>,
+    Vec<HeldClaim<'a>>,
+) {
     let mut expired: Vec<(String, &str, String)> = Vec::new();
     let mut unknown: Vec<(String, &str)> = Vec::new();
+    let mut held: Vec<(String, &str, String)> = Vec::new();
     for p in query_packets(
         ledger,
         Some("in_progress"),
@@ -5219,13 +5231,64 @@ fn expire_claim_candidates<'a>(
                 }
             }
         }
+        // ORDER 864-k8dp — A REAP HOLD THE REAPER CAN ACTUALLY SEE.
+        //
+        // The reaper decides on ONE fact: time since the last event. It cannot
+        // tell a stalled claim from a claim whose work is FINISHED and merely
+        // unlanded, and returning the second to the pool does not free work, it
+        // duplicates it — 833-fpe7's "expire-claims launders finished work into
+        // lost work".
+        //
+        // That is live right now. yoga implemented 642-fedr and 776-cm74 in
+        // full, was interrupted before committing, and is wedged behind a
+        // dirty-start refusal it cannot clear itself. The only thing standing
+        // between four hours of finished work and a duplicate implementation
+        // was the phrase DO NOT RE-IMPLEMENT written in an event SUMMARY — free
+        // text this function never reads.
+        //
+        // `reap_hold` is that declaration in a form the reaper can honour: the
+        // newest event carrying it wins, `false` releases, and the reason is
+        // mandatory because a hold with no reason is an indefinite block
+        // wearing a temporary label (the 863-7mhg rule, applied here).
+        let mut hold: Option<(String, String)> = None; // (ts, reason)
+        if let Some(seq) = p.get("events").and_then(serde_yaml::Value::as_sequence) {
+            for ev in seq {
+                let Some(raw) = ev.get("reap_hold") else {
+                    continue;
+                };
+                let Some(ts) = ev.get("ts").and_then(serde_yaml::Value::as_str) else {
+                    continue;
+                };
+                if hold.as_ref().is_some_and(|(cur, _)| ts <= cur.as_str()) {
+                    continue;
+                }
+                match raw {
+                    // `reap_hold: false` is an explicit RELEASE, not a missing
+                    // field — it must be able to override an earlier hold, or a
+                    // hold could never be lifted without rewriting history in an
+                    // append-only ledger.
+                    serde_yaml::Value::Bool(false) => hold = Some((ts.to_string(), String::new())),
+                    serde_yaml::Value::String(reason) if !reason.trim().is_empty() => {
+                        hold = Some((ts.to_string(), reason.trim().to_string()))
+                    }
+                    _ => {}
+                }
+            }
+        }
+        if let Some((_, reason)) = &hold
+            && !reason.is_empty()
+        {
+            held.push((order, pid, reason.clone()));
+            continue;
+        }
+
         match last_ts {
             Some(ts) if ts.as_str() < cutoff_iso => expired.push((order, pid, ts)),
             Some(_) => {}
             None => unknown.push((order, pid)),
         }
     }
-    (expired, unknown)
+    (expired, unknown, held)
 }
 
 #[cfg(test)]
@@ -5357,7 +5420,7 @@ mod tests {
             "    events:\n      - type: completed\n        ts: \"2026-08-01T00:00:00Z\"\n",
         );
         let ledger = Ledger::parse(raw, Default::default()).expect("synthetic ledger parses");
-        let (expired, unknown) = expire_claim_candidates(&ledger, "2026-08-09T00:00:00Z");
+        let (expired, unknown, _held) = expire_claim_candidates(&ledger, "2026-08-09T00:00:00Z");
         assert_eq!(
             expired,
             vec![("1".to_string(), "stale", "2026-08-01T00:00:00Z".to_string())],
