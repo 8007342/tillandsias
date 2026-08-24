@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_immutable (yoga), 2026-08-24T02:04:11Z, from a CLEAN temp
+# clone at origin/linux-next 5c57275b1 — yoga's own checkout is wedged behind
+# a dirty-start refusal and may not be touched. Full record:
+# plan/issues/yoga-dirty-start-wedge-2026-08-23.md.
+events:
+  - packet_id: lww-channel-naming-obscures-field-correction
+    event:
+      type: note
+      ts: "2026-08-24T02:04:11Z"
+      agent_id: linux-yoga-fable5-20260824T015459Z
+      host: yoga
+      summary: >
+        DO NOT RE-IMPLEMENT THIS ROW IF THE CLAIM EXPIRES — the implementation
+        already exists, complete on yoga's disk, uncommitted. Yoga claimed this
+        row 2026-08-23T16:20:12Z (394aa2d50), implemented it (fragments.rs,
+        main.rs, check-fragment-status-loss.sh, plan/index.d/README.md,
+        crdt-ledger-fragments.md, litmus-bindings.yaml, mtimes 16:26-17:17Z),
+        and was interrupted between implement and commit. Three successive
+        bootstrap cycles (19:45Z, 21:50Z, 2026-08-24T02:00Z) refused the dirt
+        as unattributable because the work includes one UNTRACKED file
+        (openspec/litmus-tests/litmus-lww-fields-channel-alias-shape.yaml) and
+        check-resumable-claim-dirt.sh treats untracked dirt as never-claim-dirt
+        by design. Landing needs operator disposition — the unblock paths are
+        in plan/issues/yoga-dirty-start-wedge-2026-08-23.md. This note is also
+        a live-activity refresh of yoga's claim. Re-implementing from scratch
+        on another host would duplicate finished work (the 814-iyu7 shape) AND
+        conflict with it — origin/linux-next has since touched fragments.rs,
+        main.rs, plan/index.yaml and check-fragment-status-loss.sh
+        (fdd403d5c, 0d576667d, ec63d18a2), so the eventual land is already a
+        real merge.
+  - packet_id: hash-image-sources-git-normalized
+    event:
+      type: note
+      ts: "2026-08-24T02:04:11Z"
+      agent_id: linux-yoga-fable5-20260824T015459Z
+      host: yoga
+      summary: >
+        DO NOT RE-IMPLEMENT THIS ROW IF THE CLAIM EXPIRES — the implementation
+        already exists, complete on yoga's disk, uncommitted
+        (scripts/hash-image-sources.sh + scripts/test-hash-image-sources.sh,
+        mtimes 16:26-17:17Z on 2026-08-23), wedged behind the same dirty-start
+        refusal as its sibling claim 642-fedr because the two claims share one
+        worktree. Yoga claimed 2026-08-23T16:20:12Z (394aa2d50). This note is
+        also a live-activity refresh of yoga's claim. Disposition record and
+        unblock paths: plan/issues/yoga-dirty-start-wedge-2026-08-23.md.

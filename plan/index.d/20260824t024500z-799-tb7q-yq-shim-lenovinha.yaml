@@ -1,0 +1,124 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_immutable (lenovinha), 2026-08-24T02:45:00Z.
+packets:
+  - packet_id: sidecar-arch-litmus-expectation-uses-regex-against-a-literal-matcher
+    order: 868-p8xi
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: litmus:sidecar-arch-derivation STEP 3 is RED on linux-next — its output is one of the alternatives its own expectation lists, and the matcher rejects it anyway
+    deliverable: the ci-release suite is green again, either because the expectation is written in a form behavior_matches_output actually supports or because the matcher supports the alternation syntax the expectation already uses; plus whichever of the two is chosen is stated where the next author of an expectation will read it
+    pickup_role: any
+    release_target: convergence-velocity-milestone
+    capability_tags:
+      - litmus
+      - ci-release
+      - fail-loud
+    estimated_hours: 2
+    context: |
+      OBSERVED (lenovinha, 2026-08-24) while running the ci-release suite for an
+      unrelated reason. `scripts/run-litmus-test.sh ci-release --phase pre-build
+      --size instant` reports PASS: 25, FAIL: 1, Total 28 (executed 26).
+
+        [STEP 3/3] LIVE: any staged sidecar on this host matches this host's machine
+          expected=ok: (not-staged-here|unjudged-machine|staged-arch-matches)
+          output=ok: staged-arch-matches
+
+      THE OUTPUT IS ONE OF THE THREE ALTERNATIVES THE EXPECTATION LISTS. The
+      step did the right thing and said so: this host has a staged sidecar at
+      images/router/tillandsias-router-sidecar, `file` reports ELF x86-64 on an
+      x86_64 host, and the step correctly printed `ok: staged-arch-matches`. The
+      expectation is plainly meant as a regex alternation
+      (openspec/litmus-tests/litmus-sidecar-arch-derivation.yaml:44); the
+      matcher, `behavior_matches_output` in scripts/run-litmus-test.sh, does not
+      treat it as one. So the step cannot pass on ANY of its three legitimate
+      outcomes.
+
+      NOT CAUSED BY THE yq SHIM LANDED IN THIS SAME CYCLE — I checked, because
+      it was the obvious suspect. Ran the suite with the shim removed and yq
+      absent from PATH: identical result, 26 executed, same single failure. The
+      shim also does not change selection (26 executed both ways).
+
+      WHAT I COULD NOT EXPLAIN, recorded as unknown rather than guessed: this
+      suite passed on this host on 2026-08-23 (cycle 3, same command). The
+      matcher has an empty-expectation short circuit — `[[ -z "$expected_lc" ]]
+      && return 0`, run-litmus-test.sh:735 — so a step whose expectation parses
+      as EMPTY always passes, and that is the most likely way this was green
+      before. But `expected_behavior` is parsed by a bash regex over the raw
+      line (:1105-1107), not by yq, so I have no mechanism for why it would
+      parse empty then and non-empty now, and I am not going to invent one. The
+      other candidate is that the sidecar became staged in between (it is an
+      ignored build artifact, mtime 2026-08-23 10:37) — but `ok: not-staged-here`
+      would not match the literal expectation either, so that alone does not
+      explain a green.
+
+      Whoever takes this should start by settling that question, because "the
+      expectation only ever passed while it was being ignored" and "something
+      recently changed how it is parsed" want different fixes. The empty-string
+      short circuit is worth a hard look on its own: an expectation that fails
+      to parse becomes an unconditional pass, which is the same
+      absence-reads-as-success shape this ledger keeps recording.
+events:
+  - packet_id: builder-toolbox-init-set-too-small-for-the-dispatch-pattern
+    event:
+      type: progress
+      ts: "2026-08-24T02:45:00Z"
+      agent_id: linux-lenovinha-fable5-20260824T015308Z
+      host: linux_immutable
+      summary: |
+        THE LYING LITMUS IS FIXED, AND THE FIX IS ONE CHANGE RATHER THAN 121.
+
+        Last cycle I recorded that litmus:skills-canonical-and-mcp-first-shape
+        STEP 6 reports FAIL on this host because its command is a bare `yq` that
+        does not exist here, while the methodology it asks about is present and
+        correct. The obvious remedy was to convert callers to the documented
+        dispatch pattern — but there are 121 bare yq/jq/rg calls across ~30
+        litmus files, and editing them one at a time is both large and endless,
+        since the next author writes the 122nd.
+
+        A SECOND DEFECT MADE THE CHOICE FOR ME, and it is the more serious of
+        the two. scripts/run-litmus-test.sh's own `yaml_get` and
+        `get_litmus_tests_for_spec` guard on `command -v yq` and fall back to
+        grep approximations whose comment says "not perfect but functional".
+        Those parse phase, size, host_kind, inputs and the per-spec test list.
+        So a host without yq was reading its own test METADATA through an
+        approximation. Fixing 121 call sites would not have touched that.
+
+        WHAT LANDED. The runner materialises the toolbox's yq ONCE into
+        target/litmus-runtime/bin — the directory it already generates its
+        `podman` wrapper into and already prepends to PATH. One extraction, then
+        native speed: a `toolbox run` round trip measures ~0.29s here and the
+        runner calls yq once per metadata field per file, which on a full suite
+        is minutes of pure overhead. It is verified before it is trusted (the
+        binary is dynamically linked, so a copy is only valid if the host can
+        run it; a copy that will not answer `--version` is deleted and the
+        existing grep fallbacks apply unchanged). Strictly additive: it can
+        raise fidelity, never lower it. Hosts that ship yq are untouched.
+
+        ORDERING IS LOAD BEARING, learned the confusing way. My first version
+        put the extraction AFTER the runtime bin joined PATH. The block was
+        reached — I instrumented it and saw `yq=none toolbox=/usr/bin/toolbox` —
+        and still produced nothing, because that directory contains the runner's
+        `podman` WRAPPER, `toolbox` shells out to podman, and the wrapper is not
+        a podman. The tool the extraction needed had been replaced two lines
+        earlier. The extraction now runs before the PATH export, and the comment
+        says why so the next person does not "tidy" it back.
+
+        VERIFIED COLD: deleted the shim, ran the suite, the shim re-provisioned
+        (13,934,432 bytes, `yq v4.53.3`) and
+        litmus:skills-canonical-and-mcp-first-shape STEP 6 went FAIL -> OK, suite
+        PASS. target/ is gitignored, so the tree stays clean.
+
+        THE SWEEP RESIDUAL IS NOW SMALLER AND SHOULD BE RESCOPED. The litmus
+        callers no longer need converting one by one — they resolve a real yq
+        through the runner. What remains is the ~50 SCRIPT callers, and the
+        earlier split still holds: dev-host scripts can take the dispatch,
+        shipped diagnostics (tray-diagnose.sh, diagnose-macos-provision.sh) run
+        where no builder toolbox exists and need a different answer.
+
+        FILED 868-p8xi along the way: the ci-release suite is currently RED on
+        linux-next for an unrelated reason — litmus:sidecar-arch-derivation
+        STEP 3 emits one of the three alternatives its own expectation lists and
+        the matcher rejects it. Verified NOT caused by this change (identical
+        failure with the shim removed and yq off PATH).
