@@ -203,6 +203,22 @@ if ! command -v yq &>/dev/null && command -v toolbox &>/dev/null; then
     fi
 fi
 
+# ── Say so when yq is still missing (order 799-tb7q) ────────────────────────
+# A run without yq is DEGRADED and used to be indistinguishable from a clean
+# one. Measured on this host: with yq absent,
+# litmus:added-fragment-parse-gate-shape STEP 8 produces EMPTY output and fails,
+# and litmus:skills-canonical-and-mcp-first-shape STEP 6 reports that a
+# methodology rule is missing when it is present and correct. Those are wrong
+# answers, not skips, and nothing in the output said the toolchain was short a
+# parser.
+#
+# A warning, never a refusal: a host without yq must still be able to run its
+# suite, and the metadata fallbacks are real fallbacks. The point is only that
+# the reader can tell which kind of green they are holding.
+if ! command -v yq &>/dev/null && [[ ! -x "$LITMUS_RUNTIME_DIR/bin/yq" ]]; then
+    printf 'warn:litmus-degraded-no-yq — yq is not on PATH and could not be provisioned from the tillandsias-builder toolbox. Steps whose commands call yq will fail or return empty, and YAML metadata falls back to grep. Install yq on the host, or create the toolbox (see scripts/with-tillandsias-builder.sh), before trusting a verdict from this run.\n' >&2
+fi
+
 # Now the runtime bin joins PATH — after the extraction above, and carrying the
 # shim it may just have written, so both this runner's own yaml_get and every
 # litmus step command resolve the same real yq.
