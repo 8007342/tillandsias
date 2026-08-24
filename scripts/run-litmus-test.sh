@@ -1266,6 +1266,23 @@ run_litmus_test_file() {
             printf ' %b[FAIL]%b\n' "${RED}" "${NC}" >&2
             printf '%s\n' "         expected=${step_expected}" >&2
             printf '%s\n' "         output=${step_output}" >&2
+            # ORDER 868-p8xi. An expectation written as a regex alternation is
+            # searched for VERBATIM — behavior_matches_output's fallback is
+            # `grep -Fqi` — so it can never match and the step fails on every
+            # one of its own legitimate outcomes. That is what happened to
+            # litmus:sidecar-arch-derivation STEP 3, which printed
+            # `ok: staged-arch-matches` against an expectation that listed
+            # exactly that string among three alternatives, and still failed.
+            #
+            # Named only HERE, in the already-failing path, so it costs a green
+            # run nothing and cannot produce a false positive. The alternative —
+            # teaching the matcher to interpret expectations as regexes — would
+            # silently reinterpret every existing expectation that happens to
+            # contain a metacharacter, which is a far wider blast radius than
+            # the one authoring mistake it would fix.
+            if [[ "$step_expected" =~ \([^\)]*\|[^\)]*\) ]]; then
+                printf '%s\n' "         note: this expectation contains (a|b) alternation, but expectations are matched as a LITERAL SUBSTRING, not a regex — rewrite it as the longest literal all accepted outputs share (868-p8xi)" >&2
+            fi
             return 1
         fi
 

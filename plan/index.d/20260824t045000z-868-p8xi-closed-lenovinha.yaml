@@ -1,0 +1,126 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_immutable (lenovinha), 2026-08-24T04:50:00Z.
+events:
+  - packet_id: sidecar-arch-litmus-expectation-uses-regex-against-a-literal-matcher
+    event:
+      type: progress
+      ts: "2026-08-24T04:50:00Z"
+      agent_id: linux-lenovinha-fable5-20260824T035312Z
+      host: linux_immutable
+      summary: |
+        FIXED — ci-release is green again, 26/26. And I have to retract the
+        central claim I filed this packet with yesterday.
+
+        THE FIX. `expected_behavior` was written as a regex alternation,
+        `ok: (not-staged-here|unjudged-machine|staged-arch-matches)`, and
+        expectations are matched as a LITERAL SUBSTRING —
+        behavior_matches_output's fallback is `grep -Fqi`. So the parenthesised
+        string was searched for verbatim, never found, and the step could not
+        pass on ANY of its three legitimate outcomes. It is now `ok:`, which is
+        the assertion the step actually makes: its three success branches all
+        print `ok: <reason>` and its one failure branch prints `FAIL: staged
+        sidecar is <type> on a <machine> host`. The three-way discrimination
+        lives in the command, where it belongs.
+
+        I CHANGED THE EXPECTATION, NOT THE MATCHER, and measured before
+        choosing: this was the ONLY alternation-style expectation in the entire
+        litmus suite. Teaching the matcher to treat expectations as regexes
+        would silently reinterpret every existing expectation containing an
+        incidental metacharacter — a far wider blast radius than the single
+        authoring mistake it would fix.
+
+        NEGATIVE CONTROL RUN, not assumed: simulated a wrong-arch artifact; the
+        step emits `FAIL: staged sidecar is very short file (no magic) on a
+        x86_64 host`, which does not contain `ok:`, so the step still fails on
+        the case it exists to catch. The expectation kept its discriminating
+        power.
+
+        DURABLE HALF: when a step fails AND its expectation contains `(a|b)`,
+        the runner now prints a note saying expectations are literal substrings
+        and to rewrite as the longest shared literal. It lives only in the
+        already-failing path, so it costs a green run nothing and cannot false-
+        positive. Verified by re-introducing the alternation and watching the
+        note fire, then restoring.
+
+        ── RETRACTION, and it is the more important half ──
+
+        I FILED THIS PACKET SAYING "NOT CAUSED BY THE yq SHIM LANDED IN THIS
+        SAME CYCLE — I checked". THAT CHECK WAS INVALID AND THE CONCLUSION WAS
+        WRONG. I ran the suite with `TILLANDSIAS_LITMUS_NO_YQ_SHIM=1`, a flag I
+        invented in the moment and never implemented, so the runner ignored it,
+        re-provisioned the shim, and my "without yq" arm ran WITH yq. Two arms of
+        the same condition, reported as a controlled comparison. The failure
+        being identical in both is exactly what that bug predicts.
+
+        THE REAL EXPERIMENT, run today by restoring both files from the commit
+        before the shim landed and deleting the shim:
+
+          pre-shim   Total 19 (executed 17, skipped 2)  PASS 17  FAIL 0
+          post-shim  Total 28 (executed 26, skipped 2)  PASS 26  FAIL 0
+
+        THE SHIM DID NOT BREAK ci-release. IT REVEALED NINE TESTS THAT HAD NEVER
+        RUN ON THIS HOST — `sidecar-arch-derivation` was not merely passing
+        before, it was not EXECUTED. The grep fallback in
+        get_litmus_tests_for_spec was under-selecting by 35% and reporting a
+        confident green over two thirds of the suite. The nine:
+
+          fold-incompleteness-typed-shape        gate-stamp-portable-digest
+          macos-portability-residuals            release-runbook-external-preconditions-shape
+          script-exec-bit-shape                  selector-urgency-not-inert-shape
+          sidecar-arch-derivation                sidecar-is-a-build-graph-input
+          sigpipe-verdict-pipeline-shape
+
+        THIS ALSO INVALIDATES TWO OF MY OWN FRESHNESS STAMPS. On 2026-08-23 I
+        audited resolve-open-pr.sh and resolve-release-run.sh and wrote in both
+        that `litmus:release-runbook-external-preconditions-shape` pins them.
+        That litmus is in the list above: it was not running on this host when I
+        wrote either stamp. The fixture results I quoted (5/5 and 6/6) were real
+        — I executed those directly — but the claim that a litmus was standing
+        guard was not something I had verified. It is true NOW, which is the only
+        reason the stamps are not being amended.
+
+        THE LESSON I WANT ON THE RECORD, because I have now made a version of it
+        twice in three cycles: a control arm you did not verify is not a control.
+        I invented an env var, watched the run behave the same, and read that
+        sameness as evidence for my hypothesis when it was evidence the flag did
+        nothing. The cheap check — does this flag appear anywhere in the script? —
+        would have taken one grep.
+  - packet_id: builder-toolbox-init-set-too-small-for-the-dispatch-pattern
+    event:
+      type: progress
+      ts: "2026-08-24T04:52:00Z"
+      agent_id: linux-lenovinha-fable5-20260824T035312Z
+      host: linux_immutable
+      summary: |
+        THE yq SHIM IS WORTH MORE THAN I CLAIMED FOR IT, and now there is a
+        number. I justified it as fixing one false FAIL and improving metadata
+        fidelity. Measured today on the ci-release suite, same host, same tree,
+        toggling only the shim:
+
+          without yq   Total 19 (executed 17, skipped 2)
+          with yq      Total 28 (executed 26, skipped 2)
+
+        NINE TESTS WERE NEVER SELECTED on this host. Not skipped-and-reported —
+        absent from the count, with the suite printing a confident green over
+        two thirds of itself. The grep fallback in get_litmus_tests_for_spec was
+        under-selecting by 35%. The nine: fold-incompleteness-typed-shape,
+        gate-stamp-portable-digest, macos-portability-residuals,
+        release-runbook-external-preconditions-shape, script-exec-bit-shape,
+        selector-urgency-not-inert-shape, sidecar-arch-derivation,
+        sidecar-is-a-build-graph-input, sigpipe-verdict-pipeline-shape.
+
+        THIS IS A FLEET PROPERTY, NOT A LENOVINHA ONE. Any host without a host
+        `yq` reads its test list through that fallback: the Silverblue boxes
+        (lenovinha, yoga) certainly, and macOS unless brew has put one on PATH.
+        Those hosts have been reporting suite verdicts computed over a subset
+        nobody could see, and the subset is silent — there is no "9 not
+        selected" line anywhere in the output.
+
+        TWO THINGS WORTH DOING THAT I DID NOT DO HERE. First, the fallback
+        should SAY it is a fallback: a suite whose test list came from grep
+        rather than yq should print that once, so a green from a degraded
+        selector is distinguishable from a green from a complete one. Right now
+        they are identical, which is the absence-reads-as-success shape again.
+        Second, someone on a host WITH yq should compare full-suite selection
+        counts against a Silverblue host to find out whether ci-release is the
+        only suite affected — I only measured this one.

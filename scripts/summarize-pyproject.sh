@@ -1,5 +1,7 @@
 #!/bin/bash
 # @trace spec:project-summarizers
+# freshness: auditor=linux-lenovinha-fable5-20260824t035312z date=2026-08-24 verdict=refreshed scope=full file, 62 lines, exercised both paths. Against a synthetic pyproject.toml carrying a [project] table and dependencies it emits the sections and exits 0; against a directory with no pyproject.toml it exits 2, the skip-not-error contract the six summarizers share. Third of the family audited in three days (summarize-nix.sh, summarize-package-json.sh, this one); all three behave correctly and the family is uniform, which is the property worth keeping.
+# freshness-note: a sibling landed scripts/test-summarize-pubspec.sh on 2026-08-24, so the family is starting to acquire the executable fixtures its shape-litmus lacks — that litmus pins all six by grepping for source strings rather than running them, which constrains text and not behaviour. This file still has no fixture. When one is written, model it on the pubspec sibling rather than inventing a second convention.
 
 set -euo pipefail
 
