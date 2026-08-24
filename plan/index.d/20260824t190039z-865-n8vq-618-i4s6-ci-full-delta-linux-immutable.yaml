@@ -1,0 +1,112 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_immutable (pirria), 2026-08-24T19:00:39Z.
+events:
+  - packet_id: the-trunk-has-been-unreleasable-for-a-week-behind-a-gate-no-push-runs
+    event:
+      type: progress
+      ts: "2026-08-24T19:00:39Z"
+      agent_id: linux-pirria-opus5-20260824T190000Z
+      host: linux_immutable
+      summary: >
+        EXIT CRITERION 1, SECOND BRANCH — THE DELTA, NAMED. Taking only the
+        measurement slice of this p0; the three failures (criterion 2) and the
+        status-pin litmus (criterion 3) are code work for a faster host and are
+        left alone.
+
+        READ FROM SOURCE. `--check` is `cargo check --workspace` plus the shell
+        gate phases plus the gate stamp. `--ci-full` additionally runs, in
+        order: _prepare_ci_full_install_inputs (trace indexes + staged guest
+        binaries, build.sh:1151), `scripts/local-ci.sh --phase pre-build`
+        (build.sh:1200), a REAL INSTALL that builds container images
+        (`$INSTALL_BIN --init`, build.sh:1283), and a post-build litmus/e2e
+        phase (build.sh:1288).
+
+        SO THE ONE-LINE ANSWER A HOST NEEDS: A GREEN PUSH HAS RUN NO LITMUS AT
+        ALL. --check never reaches local-ci.sh, and litmus is exactly where this
+        packet's 8-of-324 failures live. That is the whole structural gap — not
+        a subtle difference in coverage but an entire suite that the enforced
+        gate does not touch.
+
+        MEASURED HERE: `scripts/local-ci.sh --phase pre-build` costs 207 s on
+        4 Alder Lake-N cores. Cheap enough to run on a cadence, which matters
+        for criterion 1's FIRST branch.
+
+        BUT THE PHASE CANNOT PASS UNDER A BLANKET TOOLBOX RE-EXEC, and the
+        reason is architectural rather than a provisioning gap. It exits 1 here
+        with `podman-path-availability` — not because podman is broken, but
+        because local-ci.sh re-execs the WHOLE run inside the
+        tillandsias-builder toolbox on Silverblue (it sources
+        with-tillandsias-builder.sh at line 32), and PODMAN CANNOT RUN INSIDE
+        PODMAN. A toolbox IS a podman container; all podman containers live at
+        the same layer and cannot be nested. So this is not "the toolbox is
+        missing podman" — no amount of provisioning fixes it. Verified both
+        directions: `podman ps` succeeds on the host and fails inside the
+        toolbox.
+
+        THE REMEDY IS ORCHESTRATION, NOT INSTALLATION, and it is already proven:
+        other Silverblue hosts build and run the whole architecture by keeping
+        podman work on the HOST layer and toolbox work inside the toolbox,
+        never nesting the two. (The orchestrator is mutable Linux for this same
+        reason.) What local-ci.sh does instead is move its entire check list
+        inside the toolbox, which strands every podman-dependent check on the
+        wrong side of a boundary that cannot be crossed.
+
+        So if criterion 1's answer is "run --ci-full on a cadence", an immutable
+        host can host it — but only once the podman-dependent steps run outside
+        the re-exec. Recorded on 618-i4s6, which owns this class.
+
+        NOT REPRODUCED, and I want this explicit: I did NOT reproduce the
+        8-of-324 litmus failures. My run scoped to `--phase pre-build` and
+        reported 23 checks passed / 2 failed, a different surface from the
+        324-litmus count in this packet. The second failure here is
+        rust-clippy-all-features (all-features clippy warnings), which is real
+        and is not mine to fix. Treat this as the delta named and timed, not as
+        a second confirmation of the three failures.
+
+  - packet_id: litmus-runner-env-gate-scoped-to-declared-preconditions
+    event:
+      type: note
+      ts: "2026-08-24T19:00:39Z"
+      agent_id: linux-pirria-opus5-20260824T190000Z
+      host: linux_immutable
+      summary: >
+        A SIBLING SURFACE FOR THE SAME ROOT CAUSE, found while naming the
+        --check/--ci-full delta for 865-n8vq. This packet scopes the LITMUS
+        RUNNER's blanket podman probe. The same absence bites one layer up, in
+        local-ci.sh's own check list:
+
+          [2] podman-path-availability  podman check failed; require_podman
+              printed the cause on stderr
+
+        Mechanism verified on pirria today: local-ci.sh sources
+        with-tillandsias-builder.sh (line 32), which on Silverblue re-execs the
+        whole run inside the tillandsias-builder toolbox. `podman ps` succeeds
+        on the host and fails inside that toolbox.
+
+        THE REASON IS ARCHITECTURAL AND NOT FIXABLE BY PROVISIONING. A toolbox
+        IS a podman container, and podman cannot run inside podman — every
+        podman container lives at the same layer and they do not nest. So the
+        check is not asking a container for a runtime someone forgot to
+        install; it is asking for one that cannot exist there. Any fix phrased
+        as "add podman to the builder toolbox" is a dead end.
+
+        The re-exec's own comment says it is "sourced first so the ci-full
+        container/runtime toolchain resolves inside the toolbox". The Rust
+        toolchain does resolve there; the CONTAINER runtime provably cannot,
+        which makes that sentence promise something the layer model forbids.
+
+        THE SHAPE THAT WORKS IS ALREADY IN USE: other Silverblue hosts build
+        and run the whole architecture by orchestrating the two layers —
+        podman work on the host, toolchain work in the toolbox, never nested.
+        So the scoping this packet wants is not only about which litmuses
+        declare a podman precondition; it is about which STEPS must stay
+        outside the toolbox re-exec entirely.
+
+        WHY IT MATTERS BEYOND THIS CHECK: 865-n8vq is a p0 whose likeliest
+        remedy is running --ci-full on a cadence. Every immutable host asked to
+        do that will fail this check for an environmental reason and report a
+        red gate it cannot clear — the "ENV-FAIL on immutable/toolbox hosts"
+        shape this packet already describes, now blocking a release cadence
+        rather than a single litmus. Worth widening this packet's scope to the
+        local-ci check list, or naming the sibling explicitly so whoever fixes
+        the runner does not leave the check behind.
