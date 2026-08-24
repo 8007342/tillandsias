@@ -80,6 +80,51 @@ last_commit_epoch() {
     esac
 }
 
+# DECLARED identity, because git authorship is INCIDENTAL and one host already
+# falls through it (order 872-k4pv).
+#
+# last_commit_epoch matches `git log --author=<roster name>`, which is a
+# substring search over author name AND email. Measured 2026-08-24 across the
+# roster:
+#
+#   pirria       16 commits   author "Laptopirria"  — matches by luck, the
+#                                                     roster name is a substring
+#   macuahuitl 1029 commits   author "Tlatoani"     — matches only via the email
+#   yoga        232 commits   author "Tlatoāni"     — same
+#   yolanda       0 commits   nothing matched at all
+#
+# So the WEDGED signal — "no attestation BUT recent commits" — is unreachable
+# for yolanda: it can only ever be reported dead, which is precisely the
+# confusion 864-t4nq was built to end. The probe worked for four hosts by
+# coincidence of naming and silently failed for the fifth.
+#
+# A host's ledger events carry `agent_id: <kind>-<host>-<model>-<stamp>`, which
+# is DECLARED by the host about itself rather than inherited from whatever
+# `git config user.name` happens to say. That is the identity to trust.
+last_declared_epoch() {
+    local host="$1" newest="" f ts
+    for f in plan/index.d/*.yaml; do
+        [ -f "$f" ] || continue
+        grep -qE "agent_id:[[:space:]]*[a-z_]+-${host}-" "$f" 2>/dev/null || continue
+        ts="$(grep -oE '^[[:space:]]*ts:[[:space:]]*"?20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z' "$f" 2>/dev/null \
+              | grep -oE '20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z' | sort | tail -1)"
+        [ -n "$ts" ] || continue
+        if [ -z "$newest" ] || [ "$ts" \> "$newest" ]; then newest="$ts"; fi
+    done
+    [ -n "$newest" ] || { echo 0; return; }
+    iso_to_epoch "$newest"
+}
+
+# The host was active if EITHER signal says so. Keeping the git probe rather
+# than replacing it: it sees work that never reached a ledger fragment, which
+# the declared probe cannot.
+last_activity_epoch() {
+    local a b
+    a="$(last_commit_epoch "$1")"
+    b="$(last_declared_epoch "$1")"
+    [ "$a" -ge "$b" ] && echo "$a" || echo "$b"
+}
+
 last_attest_epoch() {
     local f="$1" ts
     ts="$(grep -oE '^## 20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z' "$f" 2>/dev/null \
@@ -147,14 +192,14 @@ for host in $roster; do
     f="$ATTEST_DIR/$host.md"
     a_epoch=0
     [ -f "$f" ] && a_epoch="$(last_attest_epoch "$f")"
-    c_epoch="$(last_commit_epoch "$host")"
+    c_epoch="$(last_activity_epoch "$host")"
 
     a_age=$(( NOW - a_epoch )); [ "$a_epoch" -eq 0 ] && a_age=-1
     c_age=$(( NOW - c_epoch )); [ "$c_epoch" -eq 0 ] && c_age=-1
 
     if [ "$a_epoch" -eq 0 ]; then
         if [ "$c_epoch" -ne 0 ] && [ "$c_age" -lt $(( SILENT_MINS * 60 )) ]; then
-            printf '%-24s NEVER ATTESTED but committed %s ago  <-- ALIVE, NOT ATTESTING\n' \
+            printf '%-24s NEVER ATTESTED but active %s ago  <-- ALIVE, NOT ATTESTING\n' \
                 "$host" "$(human "$c_age")"
         else
             printf '%-24s NEVER ATTESTED, no recent commits\n' "$host"
@@ -196,7 +241,7 @@ for host in $roster; do
          && [ "$c_age" -lt $(( SILENT_MINS * 60 )) ]; then
         # THE STATE THE OLD REPORT COULD NOT SEE. It is pushing work and cannot
         # attest — a dirty-start refusal, a failing gate, a push it cannot land.
-        printf '%-24s attested %s ago BUT COMMITTED %s ago  <-- WEDGED, alive and failing\n' \
+        printf '%-24s attested %s ago BUT ACTIVE %s ago  <-- WEDGED, alive and failing\n' \
             "$host" "$(human "$a_age")" "$(human "$c_age")"
         wedged=$(( wedged + 1 ))
     elif rec="$(open_blocker_for "$host")"; then
@@ -206,7 +251,7 @@ for host in $roster; do
             "$host" "$(human "$a_age")" "$rec"
         blocked=$(( blocked + 1 ))
     else
-        printf '%-24s %s  <-- SILENT, no commits either (likely a dead terminal)\n' \
+        printf '%-24s %s  <-- SILENT, no activity either (likely a dead terminal)\n' \
             "$host" "$(human "$a_age")"
         dead=$(( dead + 1 ))
     fi
