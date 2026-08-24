@@ -216,6 +216,11 @@ const USAGE: &str = concat!(
     "                                     with NO parseable activity timestamp is reported as\n",
     "                                     unknown-age and NEVER expired (fail conservative).\n",
     "           status <id|order>         one packet's status line\n",
+    "           next-action <id|order>    the EFFECTIVE next_action — newest of the\n",
+    "                                     packet field and any event carrying one. Reading\n",
+    "                                     the field alone returns a stale queue, because\n",
+    "                                     `packets:` is a G-Set and cycles append events\n",
+    "                                     rather than re-declaring the packet (864-r9wt).\n",
     "           blocked-by <id|order>     packets directly blocked by X\n",
     "           dependencies-of <id|order> X's direct unsatisfied depends_on prerequisites\n",
     "           blocked-closure <id|order> everything transitively downstream of X\n",
@@ -3979,6 +3984,74 @@ fn main() {
                 None => {
                     eprintln!("error: {}", unresolved_reason(&ledger, reference));
                     std::process::exit(1);
+                }
+            }
+        }
+        // ORDER 864-r9wt. The EFFECTIVE next_action, which until now could not
+        // be read back at all.
+        //
+        // Every coordinator cycle writes its queue into `next_action` — but it
+        // writes it as an EVENT, because `packets:` is a G-Set and re-declaring
+        // a packet does not change its fields. So the packet-level
+        // `next_action` keeps whatever it was created with while the live queue
+        // accumulates in events beneath it, and reading the field returns an
+        // arbitrarily old answer that LOOKS current.
+        //
+        // Measured 2026-08-24: this host read the packet field and acted on a
+        // twenty-hour-stale queue whose three items were all closed. The
+        // hand-rolled reader that did it also missed the events entirely,
+        // because in the base they are NESTED under the packet rather than at
+        // the document's top level — the same shape trips anyone who writes the
+        // obvious loop. Three ad-hoc probes lied in one session; the fix is not
+        // a better ad-hoc probe, it is for the instrument to answer.
+        "next-action" => {
+            let Some(reference) = args.get(1) else {
+                usage()
+            };
+            let Some(p) = ledger.resolve(reference) else {
+                eprintln!("error: {}", unresolved_reason(&ledger, reference));
+                std::process::exit(1);
+            };
+
+            // A field with no timestamp is the packet's ORIGINAL value and
+            // therefore the oldest candidate — never a tie-breaker winner.
+            let mut best_ts = String::new();
+            let mut best: Option<&str> = None;
+            let mut source = "packet field";
+
+            if let Some(v) = p.get("next_action").and_then(serde_yaml::Value::as_str) {
+                best = Some(v);
+            }
+            if let Some(evs) = p.get("events").and_then(serde_yaml::Value::as_sequence) {
+                for e in evs {
+                    let Some(na) = e.get("next_action").and_then(serde_yaml::Value::as_str) else {
+                        continue;
+                    };
+                    // ISO-8601 UTC sorts lexicographically, which is why the
+                    // ledger writes it that way.
+                    let ts = e
+                        .get("ts")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("");
+                    if best.is_none() || ts > best_ts.as_str() {
+                        best_ts = ts.to_string();
+                        best = Some(na);
+                        source = "event";
+                    }
+                }
+            }
+
+            match best {
+                Some(text) => {
+                    if best_ts.is_empty() {
+                        eprintln!("source: {source} (no timestamp — the packet's original value)");
+                    } else {
+                        eprintln!("source: {source} @ {best_ts}");
+                    }
+                    println!("{}", text.trim_end());
+                }
+                None => {
+                    println!("none:next-action:{reference}");
                 }
             }
         }
