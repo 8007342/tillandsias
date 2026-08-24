@@ -152,6 +152,60 @@ unset TILLANDSIAS_PODMAN_BIN
 PATH="\$new_path" exec "$PROJECT_ROOT/scripts/tillandsias-podman" raw "\${args[@]}"
 EOF
 chmod 755 "$LITMUS_RUNTIME_DIR/bin/podman"
+
+# ── yq for hosts that do not ship one (order 799-tb7q) ──────────────────────
+# TWO REAL DEFECTS, one cause. On an immutable host (Silverblue/Kinoite) there
+# is no host `yq`; it lives only in the tillandsias-builder toolbox.
+#
+#   1. 121 litmus STEP COMMANDS across ~30 files call `yq` directly. Measured
+#      2026-08-23 on lenovinha: litmus:skills-canonical-and-mcp-first-shape
+#      STEP 6 ("the MCP-first read rule is declared in methodology") reports
+#      FAIL. The rule is present and correct — the same command run inside the
+#      toolbox prints `ok: rule declared`. The step collapses "key absent" and
+#      "command not found" into one verdict, so the failure is dressed as a
+#      statement about methodology. A test that lies is worse than no test.
+#   2. THIS RUNNER'S OWN yaml_get / get_litmus_tests_for_spec fall back to
+#      grep-based approximations whose comment admits "not perfect but
+#      functional". Those decide phase, size, host_kind, inputs and WHICH TESTS
+#      RUN. So a host without yq silently selects a different test set than a
+#      host with one, and nothing reports the difference.
+#
+# Materialised ONCE into the runtime bin rather than dispatched per call: a
+# `toolbox run` round trip measures ~0.29s here, and this runner invokes yq
+# once per metadata field per file — on a full suite that is minutes of pure
+# overhead. Copying the toolbox's binary costs one call and then runs native.
+#
+# VERIFIED BEFORE IT IS TRUSTED. The binary is dynamically linked (glibc,
+# libresolv), so a copy is only valid when the host can actually run it. If the
+# extracted file does not answer `--version`, it is removed and the existing
+# grep fallbacks apply exactly as before — this is strictly additive and can
+# only improve fidelity, never reduce it.
+#
+# THIS MUST RUN BEFORE the runtime bin joins PATH, and that ordering is load
+# bearing rather than stylistic. That directory holds this runner's `podman`
+# WRAPPER; `toolbox` shells out to podman, so with the wrapper ahead of the real
+# binary the extraction fails silently and the shim is never written. Measured
+# the confusing way: the block was reached with `yq=none toolbox=/usr/bin/toolbox`
+# and still produced nothing, because the tool it needed had been replaced two
+# lines earlier.
+if ! command -v yq &>/dev/null && command -v toolbox &>/dev/null; then
+    _yq_shim="$LITMUS_RUNTIME_DIR/bin/yq"
+    if [[ ! -x "$_yq_shim" ]]; then
+        if toolbox run --container tillandsias-builder cat /usr/bin/yq \
+             >"$_yq_shim" 2>/dev/null && [[ -s "$_yq_shim" ]]; then
+            chmod 755 "$_yq_shim"
+            if ! "$_yq_shim" --version &>/dev/null; then
+                rm -f "$_yq_shim"
+            fi
+        else
+            rm -f "$_yq_shim"
+        fi
+    fi
+fi
+
+# Now the runtime bin joins PATH — after the extraction above, and carrying the
+# shim it may just have written, so both this runner's own yaml_get and every
+# litmus step command resolve the same real yq.
 export PATH="$LITMUS_RUNTIME_DIR/bin:$PATH"
 export TILLANDSIAS_NO_SINGLETON=1
 export LITMUS_PODMAN_CALLS_FILE="${LITMUS_PODMAN_CALLS_FILE:-$PROJECT_ROOT/target/litmus-podman/calls.log}"
