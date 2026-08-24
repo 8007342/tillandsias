@@ -1,0 +1,60 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-24T10:48:32Z.
+events:
+  - packet_id: spec-expert-refusal-threshold-fleet-decision
+    event:
+      type: note
+      ts: "2026-08-24T10:48:32Z"
+      agent_id: linux-macuahuitl-opus5-20260824T103400Z
+      host: linux_mutable
+      evidence_refs:
+        - "crates/tillandsias-plan/src/spec.rs:1079 — `if !answer.contains(&c.key) { continue; }`"
+        - "crates/tillandsias-plan/src/spec.rs:1095-1097 — citations empty -> Envelope::unsupported"
+        - "live: spec-envelope returned confidence=unsupported, citations=[] on a producer-made envelope"
+        - "control: answer set to the retrieved chunk's own TEXT still refused, because the text does not contain the KEY"
+      summary: >
+        CORRECTION TO THIS ROW'S 2026-08-24T08:36Z NOTE. I wrote that "the
+        shipped path CANNOT REFUSE" and that a groundtruth case expecting
+        `unsupported` could not pass. That was OVERSTATED and I am withdrawing
+        it.
+
+        `Confidence::unsupported` IS reachable on the shipped path. spec.rs
+        builds the envelope by keeping only those retrieved chunks whose KEY
+        appears in the answer text, and refuses outright when none survive:
+
+          spec.rs:1079   if !answer.contains(&c.key) { continue; }
+          spec.rs:1095   if citations.is_empty() -> Envelope::unsupported(
+                           "no retrieved chunk was actually used by the answer")
+
+        Observed live, not inferred: a producer-made envelope came back
+        `"confidence": "unsupported", "citations": []`.
+
+        WHAT I GOT RIGHT AND WHAT I GOT WRONG. Right: `spec-retrieve` always
+        returns k chunks, so retrieval never refuses — I measured that, and an
+        out-of-corpus question really does return three citations at ~0.59.
+        Wrong: I then concluded the ANSWER PATH cannot refuse, having examined
+        only the retrieval stage. The envelope stage, which runs after it and
+        which I did not test, is exactly where the refusal lives. Asserting a
+        property of a pipeline from one of its stages is the 797-5kqe shape and
+        I filed it as measured fact.
+
+        WHAT IS ACTUALLY TRUE IS MORE INTERESTING THAN EITHER CLAIM. The
+        refusal is triggered by LITERAL KEY CONTAINMENT in the answer prose, not
+        by whether the corpus can answer the question. Control: setting the
+        answer to the retrieved chunk's own TEXT still refused, because the text
+        does not contain the key. So the gate asks "did the answerer echo this
+        identifier?", which is a proxy for "is this passage used" and no proxy
+        at all for "does this passage support the claim". A model that echoes
+        keys liberally earns citations for irrelevant chunks; one that answers
+        in its own words is refused even when the corpus answers perfectly.
+
+        That is precisely the gap Tier B exists to close, so this does not
+        weaken 853-6gz3 — it sharpens it. The layer is not being added where
+        there is nothing; it replaces a lexical stand-in with a judgement.
+
+        CONSEQUENCE FOR CRITERION 3, also corrected: a groundtruth case
+        expecting `unsupported` CAN be written today, because unsupported is
+        reachable. It would pin the key-containment refusal rather than a
+        semantic one. Worth writing on those terms and worth labelling as such,
+        so nobody later reads a green groundtruth row as evidence that the
+        expert declines questions it cannot answer.
