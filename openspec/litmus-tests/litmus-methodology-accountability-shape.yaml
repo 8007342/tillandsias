@@ -38,9 +38,38 @@ critical_path:
     # deterministic host-context red for a discoverability check that has no
     # latency requirement. See
     # plan/issues/research-windows-methodology-accountability-litmus-red-2026-08-13.md.
-    command: "grep -rnIE '@trace spec:methodology-accountability' methodology openspec docs cheatsheets scripts src-tauri crates images"
+    # ORDER 870-fv7k, 2026-08-24. This step was the ONE live instance of the
+    # false-pass shape found by scanning all 887 safely-runnable litmus steps.
+    #
+    # It listed `src-tauri`, which DOES NOT EXIST in this tree. grep therefore
+    # exited 2 — an error, not "no matches" — on every run. It reported OK
+    # anyway: the grep had no -q, so it printed the 69 matches it DID find in
+    # the directories that exist, and the expectation was the bare string
+    # `methodology-accountability`, which appears in every one of those lines.
+    # The step matched its own output while erroring.
+    #
+    # Two consequences, both silent: a directory could be deleted from this list
+    # and nothing would notice, and the trace surface could collapse to a single
+    # file while the step stayed green.
+    #
+    # Now: the nonexistent path is gone, the count is asserted against a floor
+    # rather than the text being echoed, and the sentinel is the only thing that
+    # can satisfy the expectation. `grep -c` over multiple files prints per-file
+    # counts, so the total is summed with awk; `|| true` keeps a zero-match grep
+    # from killing the pipeline before the floor is checked, which is what makes
+    # the negative control below reachable.
+    command: "n=$(grep -rlIE '@trace spec:methodology-accountability' methodology openspec docs cheatsheets scripts crates images 2>/dev/null | wc -l || true); [ \"${n:-0}\" -ge 10 ] && echo \"ok: methodology-accountability discoverable in ${n} files\" || { echo \"FAIL: only ${n:-0} files carry the trace\"; exit 1; }"
     timeout_ms: 60000
-    expected_behavior: "methodology-accountability"
+    expected_behavior: "ok: methodology-accountability discoverable in"
+
+  # NEGATIVE CONTROL (634-39ik). The step above spent its life green while
+  # erroring; what it lacked was any evidence it could fail. This runs the same
+  # floor test against a directory that genuinely carries no such trace, and
+  # requires the refusal.
+  - step: "NEGATIVE CONTROL: the same floor test over a tree with no such trace must FAIL, not pass on echoed matches"
+    command: "T=$(mktemp -d); printf 'nothing here\\n' > \"$T/a.txt\"; n=$(grep -rlIE '@trace spec:methodology-accountability' \"$T\" 2>/dev/null | wc -l || true); rm -rf \"$T\"; if [ \"${n:-0}\" -ge 10 ]; then echo 'FAIL: floor satisfied by a tree with no traces'; exit 1; else echo 'ok: empty tree refused, the floor is falsifiable'; fi"
+    timeout_ms: 10000
+    expected_behavior: "ok: empty tree refused, the floor is falsifiable"
 
 observability:
   traces:
