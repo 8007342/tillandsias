@@ -874,6 +874,42 @@ else
 fi
 
 # ============================================================================
+# CHECK 0b: DEAD ENV BRANCHES advisory (order 829-dkuc, wired 865-j3kd)
+# ============================================================================
+# Advisory ONLY, and the distinction matters. check-dead-env-branches.sh names
+# TILLANDSIAS_* variables that live code READS and nothing ASSIGNS or DOCUMENTS
+# — a branch guarded by a variable nothing sets is unreachable code wearing a
+# feature flag's costume. It currently reports dead=14, which is a BURNDOWN
+# LIST, not a release defect: those branches have been unreachable for as long
+# as they have existed and shipping is not made worse by one more day of them.
+#
+# WHY IT IS WIRED HERE AT ALL. The guard shipped invoked by nothing, so
+# audit-guard-activation reported it an orphan and ./build.sh --ci-full failed
+# — one of three checks that made the trunk unreleasable for a week (865-n8vq).
+# The fix for an orphaned guard is to INVOKE it, not to mention it: the auditor
+# greps for the name, so a comment would have flipped the verdict while leaving
+# the guard exactly as dead. Gaming a guard is the one repair worse than the
+# defect.
+#
+# Gating it would trade one release blocker for another, which is why this is
+# advisory until 829-dkuc burns the list down.
+if [[ -x "scripts/check-dead-env-branches.sh" ]]; then
+    log_section "DEAD ENV BRANCH advisory (non-gating)"
+    _dead_report="$(scripts/check-dead-env-branches.sh 2>/dev/null || true)"
+    _dead_verdict="$(printf '%s\n' "$_dead_report" | grep -E '^dead-env-branches:' | tail -1)"
+    if [[ -n "$_dead_verdict" ]]; then
+        log_info "${_dead_verdict}"
+        log_info "Advisory: a variable nothing sets makes its branch unreachable (829-dkuc). Burndown, not a gate."
+    else
+        log_info "dead-env-branch detector produced no verdict line (treated as advisory-clean)."
+    fi
+    archive_check_log "dead-env-branches-advisory" "pass" /dev/null
+else
+    log_skip "dead-env-branch detector not found (advisory step skipped)"
+    archive_check_log "dead-env-branches-advisory" "skipped"
+fi
+
+# ============================================================================
 # CHECK 1: Spec-cheatsheet binding validation
 # ============================================================================
 

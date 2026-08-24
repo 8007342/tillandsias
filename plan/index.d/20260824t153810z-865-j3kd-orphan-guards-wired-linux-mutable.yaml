@@ -1,0 +1,114 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-24T15:38:10Z.
+packets:
+  - order: 865-j3kd
+    packet_id: two-shipped-guards-were-invoked-by-nothing-and-blocked-the-release
+    desired_release: v0.5
+    title: "check-cycle-scheduler and check-dead-env-branches shipped as orphans, failing guard-activation and the release gate"
+    status: completed
+    kind: defect
+    pickup_role: any
+    priority: p1
+    capability_tags: [ci, release, gates, guards]
+    deliverable: scripts/local-ci.sh
+    depends_on: []
+    estimated_hours: 2
+    discovered_by: "865-n8vq — one of the three checks failing ./build.sh --ci-full"
+    context: >
+      TWO GUARDS SHIPPED WITH NO CALLER. audit-guard-activation reported
+      population=67 active=65 orphan=2, failing ./build.sh --ci-full and forming
+      one third of the reason the trunk has been unreleasable for a week.
+
+        check-cycle-scheduler.sh    order 856-s56y, added by yoga 2026-08-23 —
+                                    is a durable unattended-cycle scheduler
+                                    armed on THIS host, and what did it last do?
+        check-dead-env-branches.sh  order 829-dkuc — names TILLANDSIAS_* vars
+                                    live code READS that nothing ASSIGNS or
+                                    DOCUMENTS.
+
+      Both are worth having. Neither could simply be gated, because BOTH FAIL
+      TODAY: the scheduler probe returns `due:not-installed` (rc=1) and the
+      env-branch detector returns `dead=14` (rc=1). Wiring either into the
+      blocking path would have swapped one release blocker for another, which
+      is not progress — it is the same wall with a different sign on it.
+
+      NEITHER FINDING IS A RELEASE DEFECT, WHICH IS WHY ADVISORY IS HONEST HERE
+      RATHER THAN CONVENIENT. `due:not-installed` is TRUE on macuahuitl: this
+      host is driven by an external hourly loop, not a systemd timer, so it is
+      differently-scheduled rather than broken. `dead=14` is a burndown list
+      that predates the release and does not worsen by shipping.
+
+      THE ONE REPAIR WORSE THAN THE DEFECT. audit-guard-activation finds callers
+      by grepping for the guard's NAME across a fixed set of surfaces, so a bare
+      mention in any of them flips the verdict to green while leaving the guard
+      exactly as dead. That is available, cheap, and wrong — the same shape as
+      the wedge record's warning "do NOT `git add` the untracked file to flip
+      the verdict — that games the guard". Both guards are now genuinely
+      executed.
+
+      NOT DONE, AND NOT MINE: arming an actual scheduler is 856-s56y's own work
+      and belongs to yoga, which is blocked. Burning down the 14 dead branches
+      is 829-dkuc. This packet makes two shipped guards run; it does not pretend
+      their findings are resolved.
+    exit_criteria: >
+      (1) audit-guard-activation reports orphan=0, verdict=ok.
+      (2) Each guard is genuinely EXECUTED by its caller, not named in a comment
+      — the auditor cannot tell the difference and a reader must be able to.
+      (3) Neither invocation can fail the suite: the advisory wrapper returns 0
+      even though the guard returns 1.
+      (4) Their findings stay visible in the run output rather than being
+      swallowed to make the gate quiet.
+
+events:
+  - packet_id: two-shipped-guards-were-invoked-by-nothing-and-blocked-the-release
+    event:
+      type: completed
+      ts: "2026-08-24T15:38:10Z"
+      agent_id: linux-macuahuitl-opus5-20260824T153400Z
+      host: linux_mutable
+      evidence_refs:
+        - "before: guard-activation population=67 active=65 orphan=2 verdict=orphans-found"
+        - "after:  guard-activation population=67 active=67 orphan=0 verdict=ok, rc=0"
+        - "advisory wrapper returns rc=0 while check-dead-env-branches.sh itself returns rc=1 (dead=14 still reported)"
+        - "scripts/local-ci.sh CHECK 0b executes the detector; skills/meta-orchestration/SKILL.md step 1 runs the scheduler probe"
+      merge_affordance: merge-now
+      merge_reason: >
+        Clears the second of three checks blocking ./build.sh --ci-full. Both
+        additions are advisory, so no host's gate can newly fail because of
+        this; what changes is that two guards start reporting.
+      summary: >
+        check-dead-env-branches.sh now runs as CHECK 0b in local-ci, modelled on
+        the existing freshness advisory: it prints its verdict line and cannot
+        fail the suite. check-cycle-scheduler.sh runs in the meta-orchestration
+        heartbeat at Start Of Cycle step 1, where a host-state probe belongs and
+        where 856-s56y criterion 5 wanted it — an operator learning "armed? last
+        fire? next due?" without reading a transcript.
+
+        Both are executed, not mentioned. The auditor greps for the name and
+        would have accepted a comment; that route was available and refused,
+        because a guard made green while staying dead is worse than the orphan
+        it replaces.
+
+        guard-activation: orphan=2 -> orphan=0, verdict=ok.
+
+  - packet_id: the-trunk-has-been-unreleasable-for-a-week-behind-a-gate-no-push-runs
+    event:
+      type: progress
+      ts: "2026-08-24T15:38:10Z"
+      agent_id: linux-macuahuitl-opus5-20260824T153400Z
+      host: linux_mutable
+      summary: >
+        TWO OF THREE RELEASE BLOCKERS NOW CLEARED: litmus-pre-build's
+        reproducible failure (865-x2mf, the status-pin litmus that pinned a live
+        status) and guard-activation (865-j3kd, this row).
+
+        REMAINING: markdown-distillation — five files outside the inventory
+        (AGENTS.md, GEMINI.md, .github/copilot-instructions.md,
+        images/default/startup-context-addendum.md,
+        scripts/refusal-calibration/README.md). Each needs an inventory row or
+        distillation; none is a code defect.
+
+        A full ./build.sh --ci-full re-run is required before claiming the gate
+        is green — the litmus suite had 8 failures of which only one reproduced
+        at instant size, so the other seven are unmeasured from here and must
+        not be assumed cleared by these two fixes.

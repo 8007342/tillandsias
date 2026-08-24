@@ -524,6 +524,29 @@ filing — not the prompt.
    reserved for `blocked:preflight:*`); continue the cycle.
 
 1. Record UTC time, host kind, current branch, worktree path, and sibling heads.
+   Report this host's scheduler posture in the same breath — it is one line and
+   it answers the question an operator otherwise has to read a transcript for:
+
+   ```bash
+   scripts/check-cycle-scheduler.sh   # armed? last fire? next due?
+   ```
+
+   ADVISORY, NEVER A GATE (order 856-s56y exit criterion 5, wired 865-j3kd).
+   `due:not-installed` is a true and acceptable answer: macuahuitl is driven by
+   an external hourly loop rather than a systemd timer, and a host with no
+   durable timer is differently-scheduled, not broken. What the line buys is
+   that "no scheduler is armed here" becomes a stated fact rather than something
+   nobody discovers until a host has been quietly not-cycling for a day — which
+   is the 856-s56y failure, and the same shape as a wedged host reading as
+   silent (864-t4nq).
+
+   It is wired here because the guard shipped invoked by nothing and
+   audit-guard-activation therefore failed `./build.sh --ci-full`, one of three
+   checks that left the trunk unreleasable for a week (865-n8vq). The auditor
+   greps for the guard's NAME, so a mention would have cleared the verdict while
+   leaving the guard as dead as it was; an orphaned guard is fixed by invoking
+   it. Arming an actual scheduler is 856-s56y's own work and remains yoga's.
+
 2. `git fetch origin --prune`, then run the Credential Channel Guard and the
    Committable Branch Guard below before any committable work. Run the MCP
    Expert Health Probe here too — it is advisory and never blocks, but it must
