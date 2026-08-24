@@ -248,7 +248,20 @@ probe_ready() {
         "$(endpoint_host)/nix-cache-info" 2>/dev/null | grep -q '^StoreDir: /nix/store'
 }
 
-do_ensure() {
+# do_prepare — everything do_ensure needs BEFORE the container can launch:
+# skip/blocked preconditions, signing keypair, TLS leaf, CA bundle, harmonia
+# resolution + GC pin, and harmonia.toml. Factored out for order 801-vm4p so
+# the TRAY can own the launch: ensure_nix_cache_running (main.rs) calls
+# `prepare` for the host-side artifacts, then runs the container itself from
+# build_nix_cache_run_args, so the service gets the same supervision,
+# scope-management and teardown as vault/proxy/router. ONE prep implementation
+# serves both paths — do_ensure below calls this too.
+#
+# On success, sets PREPARED_ENTRYPOINT (the logical /nix/store path of
+# harmonia-cache) for the caller. The `prepare` subcommand emits it in its
+# verdict line, which is how the Rust side learns a path only nix can resolve.
+do_prepare() {
+    PREPARED_ENTRYPOINT=""
     have_nix || { echo "skip:nix-cache:no-nix"; return 0; }
     store_present || { echo "skip:nix-cache:no-store"; return 0; }
     enclave_exists || { echo "blocked:nix-cache:no-enclave"; return 1; }
@@ -263,12 +276,28 @@ do_ensure() {
     pin_harmonia "$logical" || { echo "blocked:nix-cache:no-harmonia"; return 1; }
     [ -x "$CHROOT_STORE${logical}/bin/harmonia-cache" ] || { echo "blocked:nix-cache:no-harmonia"; return 1; }
 
+    write_harmonia_conf
+    PREPARED_ENTRYPOINT="${logical}/bin/harmonia-cache"
+    return 0
+}
+
+do_ensure() {
+    local _prep_out
+    _prep_out="$(do_prepare)" || { printf '%s\n' "$_prep_out"; return 1; }
+    case "$_prep_out" in
+        skip:*) printf '%s\n' "$_prep_out"; return 0 ;;
+    esac
+    # do_prepare ran in a subshell above, so re-derive the entrypoint the same
+    # way it did; resolve_harmonia is idempotent and the pin already exists.
+    local logical
+    logical="$(_logical "$(resolve_harmonia)")"
+
     if container_running && probe_ready; then
         echo "ok:nix-cache:already-running:endpoint=$(endpoint_enclave):pinned=$(pinned_count)"
         return 0
     fi
 
-    write_harmonia_conf
+    # harmonia.toml already written by do_prepare above.
     _podman rm -f "$CONTAINER_NAME" >/dev/null 2>&1
 
     # label=disable: the store is a shared 6.5 GiB host directory. `:Z` would
@@ -325,6 +354,20 @@ case "$cmd" in
     ensure)
         do_ensure
         exit $?
+        ;;
+    prepare)
+        # ORDER 801-vm4p — host-side prep WITHOUT the container launch, for the
+        # tray. ensure_nix_cache_running (main.rs) calls this, then launches the
+        # container itself from build_nix_cache_run_args so the graph owns the
+        # lifecycle. The entrypoint is in the verdict because the harmonia
+        # logical store path is the one launch input only nix can resolve.
+        _pv="$(do_prepare)" || { printf '%s\n' "$_pv"; exit 1; }
+        case "$_pv" in
+            skip:*) printf '%s\n' "$_pv"; exit 0 ;;
+        esac
+        # do_prepare ran in a subshell; re-derive the entrypoint it computed.
+        _logical_ep="$(_logical "$(resolve_harmonia)")/bin/harmonia-cache"
+        echo "ok:nix-cache-prepare:entrypoint=${_logical_ep}"
         ;;
     status)
         if ! container_exists; then

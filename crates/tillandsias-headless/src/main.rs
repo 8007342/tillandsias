@@ -5055,6 +5055,177 @@ async fn ensure_router_running(
     Ok(())
 }
 
+// ── nix cache (order 801-vm4p) ───────────────────────────────────────────────
+//
+// 801-kqme delivered the enclave nix binary cache as scripts/nix-cache-service.sh
+// — a real container (harmonia serving the persistent chroot store over TLS with
+// ed25519 content signing) that WORKED but was invisible to the tray: no
+// Service node, no scope row, no supervision, started only by the daily
+// maintenance lane. This pair gives it the same lifecycle as vault/proxy/router.
+//
+// THE SPLIT, and why it is not a reimplementation: the script keeps everything
+// only the host+nix can do — signing keypair, TLS leaf from the stack CA,
+// harmonia resolution out of the served store with a GC pin, harmonia.toml —
+// behind a `prepare` subcommand that performs NO launch. The tray then runs the
+// container itself from the args below, so the dependency graph owns the
+// process: bring-up, teardown, scopes and (later) liveness all see it. One prep
+// implementation serves both the script's standalone `ensure` and this path.
+//
+// The one launch input Rust cannot derive is harmonia's LOGICAL store path
+// (the container entrypoint); `prepare` emits it in its verdict line:
+//   ok:nix-cache-prepare:entrypoint=/nix/store/<hash>-harmonia-<v>/bin/harmonia-cache
+
+/// Container-launch args for the nix cache. MUST stay flag-for-flag equal to
+/// the `_podman run` in scripts/nix-cache-service.sh `do_ensure` — that script
+/// remains independently runnable, and two launch paths that drift produce a
+/// cache whose behaviour depends on who started it. Pinned by
+/// `nix_cache_run_args_match_the_service_contract` below.
+fn build_nix_cache_run_args(entrypoint: &str, image: &str, host_port: u16) -> Vec<String> {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let chroot_store = std::env::var("TILLANDSIAS_NIX_CHROOT_STORE")
+        .unwrap_or_else(|_| format!("{home}/.local/share/tillandsias/nix-store"));
+    let state_dir = std::env::var("TILLANDSIAS_NIX_CACHE_STATE")
+        .unwrap_or_else(|_| format!("{home}/.local/share/tillandsias/nix-cache"));
+    vec![
+        "--detach".into(),
+        "--name".into(),
+        "tillandsias-nix-cache".into(),
+        "--network".into(),
+        ENCLAVE_NET.into(),
+        "--network-alias".into(),
+        "nix-cache".into(),
+        "--hostname".into(),
+        "nix-cache".into(),
+        "--cap-drop=ALL".into(),
+        "--security-opt=no-new-privileges".into(),
+        // label=disable, NOT :Z — the store is a shared multi-GiB host
+        // directory; relabelling it would disrupt every other consumer
+        // (the script records the same reasoning at its launch site).
+        "--security-opt".into(),
+        "label=disable".into(),
+        "--pids-limit=256".into(),
+        "--read-only".into(),
+        "--tmpfs".into(),
+        "/tmp:rw,nosuid,nodev,size=64m".into(),
+        "-p".into(),
+        format!("127.0.0.1:{host_port}:5000"),
+        "-v".into(),
+        format!("{chroot_store}/nix:/nix:ro"),
+        "-v".into(),
+        format!("{state_dir}/cache-priv.key:/run/nix-cache/cache-priv.key:ro"),
+        "-v".into(),
+        format!("{state_dir}/nix-cache.crt:/run/nix-cache/nix-cache.crt:ro"),
+        "-v".into(),
+        format!("{state_dir}/nix-cache.key:/run/nix-cache/nix-cache.key:ro"),
+        "-v".into(),
+        format!("{state_dir}/harmonia.toml:/run/nix-cache/harmonia.toml:ro"),
+        "-e".into(),
+        "CONFIG_FILE=/run/nix-cache/harmonia.toml".into(),
+        "--entrypoint".into(),
+        entrypoint.to_string(),
+        image.to_string(),
+    ]
+}
+
+/// Ensure the nix cache is running, as a graph-satisfiable prerequisite.
+///
+/// SKIP IS SUCCESS. On a host without nix, a store, or the prep script, the
+/// cache is not degraded — it is inapplicable, and this returns Ok so the
+/// ForgeLaunch edge never turns nix into a launch requirement (the exact
+/// posture cycle-preflight takes for inference: a report, never a gate).
+pub(crate) fn ensure_nix_cache_running(debug: bool) -> Result<(), String> {
+    // The drain gate and the R4-race lock — their ABSENCE was two of the four
+    // defects 801-vm4p names ("no runtime_phase drain gate", unsupervised
+    // lifecycle). Same order as ensure_proxy_running: refuse before waiting on
+    // the lock, so a drain-time caller fails fast instead of queuing behind a
+    // mutation it may not make.
+    if !runtime_phase::container_mutations_allowed() {
+        return Err(runtime_phase::refusal("ensure tillandsias-nix-cache"));
+    }
+    let _cache_lock =
+        resource_lock::acquire("nix-cache", std::time::Duration::from_secs(300), debug)?;
+
+    if crate::vault_bootstrap::container_running("tillandsias-nix-cache") {
+        if debug {
+            eprintln!("[tillandsias] nix cache already running");
+        }
+        return Ok(());
+    }
+
+    // Host-side prep lives in the script (see the module comment). Resolved
+    // relative to the checkout: this is a dev-tier service, and an installed
+    // end-user binary with no checkout correctly lands in the skip below.
+    let script = std::path::Path::new("scripts/nix-cache-service.sh");
+    if !script.exists() {
+        if debug {
+            eprintln!("[tillandsias] nix cache skip: no prep script (not a dev checkout)");
+        }
+        return Ok(());
+    }
+    let prep = Command::new("bash")
+        .arg(script)
+        .arg("prepare")
+        .output()
+        .map_err(|e| format!("nix-cache prepare failed to spawn: {e}"))?;
+    let verdict = String::from_utf8_lossy(&prep.stdout);
+    let verdict = verdict.trim().lines().last().unwrap_or("").to_string();
+    if verdict.starts_with("skip:") {
+        if debug {
+            eprintln!("[tillandsias] nix cache {verdict}");
+        }
+        return Ok(());
+    }
+    let Some(entrypoint) = verdict
+        .strip_prefix("ok:nix-cache-prepare:entrypoint=")
+        .map(str::to_string)
+    else {
+        // Prep failed. The cache is an accelerator, not a requirement: report
+        // and continue rather than turning a cold cache into a failed launch.
+        eprintln!(
+            "[tillandsias] Warning: nix cache prepare did not succeed ({}); continuing without the cache",
+            if verdict.is_empty() {
+                "<no verdict>"
+            } else {
+                &verdict
+            }
+        );
+        return Ok(());
+    };
+
+    let host_port: u16 = std::env::var("TILLANDSIAS_NIX_CACHE_HOST_PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(5111);
+    let image = std::env::var("TILLANDSIAS_NIX_CACHE_BASE_IMAGE")
+        .unwrap_or_else(|_| "registry.fedoraproject.org/fedora-minimal:44".to_string());
+
+    // Bounded podman only (714-4r6w): an unbounded sync call can wait forever
+    // inside a launch path, which is worse here than anywhere — the cache is an
+    // ACCELERATOR, and an accelerator that can hang the launch is a net brake.
+    let budget = tillandsias_podman::OperationKind::Container.default_budget();
+    let _ = podman_cmd_sync()
+        .args(["rm", "--ignore", "-f", "tillandsias-nix-cache"])
+        .output_bounded(budget);
+    let mut run_args: Vec<String> = vec!["run".into()];
+    run_args.extend(build_nix_cache_run_args(&entrypoint, &image, host_port));
+    let out = podman_cmd_sync()
+        .args(run_args.iter().map(String::as_str).collect::<Vec<_>>())
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
+        .map_err(|e| format!("nix-cache podman run failed: {e}"))?;
+    if !out.status.success() {
+        // Same posture as prep failure: warn, never wedge the launch.
+        eprintln!(
+            "[tillandsias] Warning: nix cache failed to start: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
+        return Ok(());
+    }
+    if debug {
+        eprintln!("[tillandsias] nix cache started (harmonia at {entrypoint})");
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct RouterRoute {
     /// `<service>.<project>` without the `.localhost` suffix.
@@ -5791,6 +5962,9 @@ const SHARED_STACK_SCOPES: &[(&str, SharedStackScope)] = &[
     ("tillandsias-vault", SharedStackScope::Core),
     ("tillandsias-proxy", SharedStackScope::Core),
     ("tillandsias-router", SharedStackScope::Core),
+    // ORDER 801-vm4p: the nix cache serves EVERY project from one persistent
+    // store, so it is Core (shared, refcounted with the stack), not LaneScoped.
+    ("tillandsias-nix-cache", SharedStackScope::Core),
     ("tillandsias-inference", SharedStackScope::LaneScoped),
 ];
 
@@ -15756,6 +15930,71 @@ mod tests {
         assert!(
             seen,
             "a user-level ~/.config/cdi/nvidia.yaml must be honored"
+        );
+    }
+
+    #[test]
+    fn nix_cache_run_args_match_the_service_contract() {
+        // ORDER 801-vm4p. Two launch paths exist for the nix cache — the
+        // standalone script's `do_ensure` and this binary's ensure — and this
+        // test is what keeps them from drifting: it pins the flag set,
+        // security posture, mounts and positional grammar of the Rust side to
+        // the contract the script established (801-kqme).
+        let args = build_nix_cache_run_args(
+            "/nix/store/abc-harmonia-3.2.0/bin/harmonia-cache",
+            "registry.fedoraproject.org/fedora-minimal:44",
+            5111,
+        );
+
+        // podman grammar: image LAST, entrypoint immediately before it, and
+        // nothing flag-shaped after the image (the order-524 defect class).
+        assert_eq!(
+            args.last().map(String::as_str),
+            Some("registry.fedoraproject.org/fedora-minimal:44")
+        );
+        let ep = args
+            .iter()
+            .position(|a| a == "--entrypoint")
+            .expect("--entrypoint present");
+        assert_eq!(
+            args[ep + 1],
+            "/nix/store/abc-harmonia-3.2.0/bin/harmonia-cache"
+        );
+        assert_eq!(
+            ep + 2,
+            args.len() - 1,
+            "entrypoint pair sits right before the image"
+        );
+
+        // Security posture, flag-for-flag with the script's launch: any
+        // loosening here is a cache whose behaviour depends on who started it.
+        for required in [
+            "--cap-drop=ALL",
+            "--security-opt=no-new-privileges",
+            "--read-only",
+            "--pids-limit=256",
+        ] {
+            assert!(args.iter().any(|a| a == required), "missing {required}");
+        }
+        // label=disable arrives as a pair; :Z would relabel the shared store.
+        assert!(
+            args.windows(2)
+                .any(|w| w[0] == "--security-opt" && w[1] == "label=disable"),
+            "label=disable pair missing"
+        );
+        assert!(
+            !args.iter().any(|a| a.contains(":Z")),
+            "the shared store must never be relabelled"
+        );
+
+        // The store is read-only inside the container, the publish is loopback
+        // only, and the enclave alias is what agents resolve.
+        assert!(args.iter().any(|a| a.ends_with("/nix:/nix:ro")));
+        assert!(args.iter().any(|a| a == "127.0.0.1:5111:5000"));
+        assert!(
+            args.windows(2)
+                .any(|w| w[0] == "--network-alias" && w[1] == "nix-cache"),
+            "enclave alias missing"
         );
     }
 

@@ -1,0 +1,65 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-24T22:32:00Z.
+status:
+  - packet_id: nix-cache-service-into-the-tray-container-lifecycle
+    field: status
+    value: implemented
+    ts: "2026-08-24T22:32:00Z"
+    host: linux_mutable
+
+events:
+  - packet_id: nix-cache-service-into-the-tray-container-lifecycle
+    event:
+      type: progress
+      ts: "2026-08-24T22:32:00Z"
+      agent_id: linux-macuahuitl-opus5-20260824T220000Z
+      host: linux_mutable
+      evidence_refs:
+        - "container_deps.rs — Service::NixCache, name(), DEPS row [EnclaveNetwork, CaBundle], ForgeLaunch edge, satisfy arm, ALL widened to 8; 23 graph tests green"
+        - "main.rs — build_nix_cache_run_args + ensure_nix_cache_running (drain gate, 300s resource lock, bounded podman per 714-4r6w), SHARED_STACK_SCOPES Core row"
+        - "scripts/nix-cache-service.sh — do_prepare factored out of do_ensure; new `prepare` subcommand emits ok:nix-cache-prepare:entrypoint=<logical>"
+        - "live: `prepare` -> entrypoint=/nix/store/5m8bxkc3…-harmonia-3.2.0/bin/harmonia-cache; `ensure` -> ok:nix-cache:started, pinned=2, status running"
+        - "parity test nix_cache_run_args_match_the_service_contract; MUTATIONS: drop --read-only -> red; flag after image (order-524 class) -> red"
+        - "the 714-4r6w gate itself went RED on my first draft's raw Command::new(podman) and was fixed by routing through podman_cmd_sync().output_bounded"
+      merge_affordance: merge-when-idle
+      merge_reason: >
+        New service node in the launch graph; behaviour on hosts without nix is
+        an explicit skip, so nothing an existing host runs changes until it has
+        a store. Worth having before siblings resume from fresh checkouts.
+      summary: >
+        THE NIX CACHE IS IN THE TRAY'S CONTAINER GRAPH. Service::NixCache rides
+        the ForgeLaunch dependency edge, so every forge bring-up ensures it —
+        the operator's "transparent to the development runtime", 2026-08-24 —
+        and SHARED_STACK_SCOPES lists it Core, so teardown/refcount finally
+        know the container exists. The sequencing hold the packet filed itself
+        under is gone: 801-x1nx (nix in the forge image) is completed, so the
+        consumer exists.
+
+        THE SPLIT, not a reimplementation: the script keeps everything only the
+        host+nix can do (signing keypair, TLS leaf from the stack CA, harmonia
+        resolution with GC pin, harmonia.toml) behind a new launch-free
+        `prepare` subcommand; the tray launches the container itself from
+        build_nix_cache_run_args. One prep implementation serves both the
+        standalone script path and the graph path. The harmonia LOGICAL store
+        path — the one launch input Rust cannot derive — travels in prepare's
+        verdict line.
+
+        SKIP IS SUCCESS, deliberately: no nix, no store, or no checkout script
+        all return Ok, so the ForgeLaunch edge never turns nix into a launch
+        requirement, and prep/start failures WARN rather than wedge — an
+        accelerator that can hang the launch is a net brake.
+
+        LEFT AS RESIDUE, honestly: (1) parity between the script's `_podman
+        run` and build_nix_cache_run_args is enforced only by the Rust-side
+        pinned test plus comments at both sites — a two-sided extraction check
+        would be stronger; (2) end-to-end graph bring-up (ensure_forge_launch
+        satisfying NixCache on a live forge launch) is untested until the next
+        forge launch on this host; (3) no LivenessProbe entry yet — the packet's
+        self-healing criterion — which is the natural next slice and needs the
+        probe table's shape studied first. Status implemented, not completed,
+        for exactly these.
+
+        Held to the packet's own map throughout (router as template), and the
+        gate contributed one catch of its own: my first draft used raw
+        Command::new("podman") and 714-4r6w's guard refused the tree until the
+        calls were bounded.

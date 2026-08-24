@@ -38,6 +38,11 @@ pub enum Service {
     /// The `tillandsias-git` container used by `--github-login` and
     /// `--list-cloud-projects` (reads/writes Vault, egresses via Proxy).
     GitLogin,
+    /// The enclave nix binary cache (harmonia serving the persistent chroot
+    /// store over TLS, order 801-kqme). Dev-tier and OPTIONAL: hosts without
+    /// nix or a store satisfy it as a skip, so it can sit in the launch graph
+    /// without making nix a launch requirement (order 801-vm4p).
+    NixCache,
     /// The forge launch target: ensures proxy, networks, CA bundle, and git
     /// mirror prerequisites before starting the per-project forge containers.
     ForgeLaunch,
@@ -53,6 +58,7 @@ impl Service {
             Service::Vault => "tillandsias-vault",
             Service::Proxy => "tillandsias-proxy",
             Service::GitLogin => "tillandsias-git-login",
+            Service::NixCache => "tillandsias-nix-cache",
             Service::ForgeLaunch => "tillandsias-forge-launch",
         }
     }
@@ -82,6 +88,13 @@ const DEPS: &[(Service, &[Service])] = &[
         &[Service::Vault, Service::Proxy, Service::CaBundle],
     ),
     (
+        // The cache needs only the enclave network and the stack CA (its TLS
+        // leaf is minted from it by the prepare step). Everything else is
+        // host-side prep the script owns.
+        Service::NixCache,
+        &[Service::EnclaveNetwork, Service::CaBundle],
+    ),
+    (
         Service::ForgeLaunch,
         &[
             Service::EnclaveNetwork,
@@ -94,6 +107,13 @@ const DEPS: &[(Service, &[Service])] = &[
             // a fresh boot refuses the lane with "Vault container is not
             // running" (live: macOS one-shot --opencode, 2026-07-16).
             Service::Vault,
+            // ORDER 801-vm4p: the nix cache rides the forge-launch graph so it
+            // is ensured wherever a forge comes up — "transparent to the
+            // development runtime" (operator, 2026-08-24). Its ensure SKIPS
+            // (Ok) on hosts without nix or a store, so this edge adds no new
+            // launch requirement anywhere; the forge consumes it since
+            // 801-x1nx landed nix in the forge image.
+            Service::NixCache,
         ],
     ),
 ];
@@ -316,6 +336,7 @@ impl Satisfier for RealSatisfier {
                 }
             }
             Service::Proxy => crate::ensure_proxy_running(self.debug),
+            Service::NixCache => crate::ensure_nix_cache_running(self.debug),
             Service::GitLogin => Err(format!(
                 "{} is a launch target, not a satisfiable prerequisite",
                 service.name()
@@ -455,12 +476,13 @@ impl LivenessProbe {
 mod tests {
     use super::*;
 
-    const ALL: [Service; 7] = [
+    const ALL: [Service; 8] = [
         Service::EnclaveNetwork,
         Service::EgressNetwork,
         Service::CaBundle,
         Service::Vault,
         Service::Proxy,
+        Service::NixCache,
         Service::GitLogin,
         Service::ForgeLaunch,
     ];
