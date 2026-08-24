@@ -887,55 +887,6 @@ impl SyncPodmanCommand {
         )
     }
 
-    fn wait_child_bounded(
-        mut child: std::process::Child,
-        budget: std::time::Duration,
-        redacted_args: &[String],
-    ) -> std::io::Result<std::process::ExitStatus> {
-        let pid = child.id();
-        let (tx, rx) = std::sync::mpsc::sync_channel(1);
-
-        let waiter = std::thread::spawn(move || {
-            let res = child.wait();
-            let _ = tx.send(res);
-        });
-
-        match rx.recv_timeout(budget) {
-            Ok(Ok(status)) => {
-                let _ = waiter.join();
-                Ok(status)
-            }
-            Ok(Err(err)) => {
-                let _ = waiter.join();
-                Err(err)
-            }
-            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                // Kill the child via raw PID so the waiter thread's blocking
-                // child.wait() unblocks immediately and reaps the child.
-                kill_raw_pid(pid);
-                let _ = waiter.join();
-                let cmd_suffix = if redacted_args.is_empty() {
-                    String::new()
-                } else {
-                    format!(": podman {}", redacted_args.join(" "))
-                };
-                let message = format!(
-                    "podman sync operation exceeded its {}s budget and was killed{}",
-                    budget.as_secs(),
-                    cmd_suffix
-                );
-                log_podman_failure("sync", "timeout", &message);
-                Err(std::io::Error::new(std::io::ErrorKind::TimedOut, message))
-            }
-            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                let _ = waiter.join();
-                Err(std::io::Error::other(
-                    "podman sync wait thread disconnected unexpectedly",
-                ))
-            }
-        }
-    }
-
     fn wait_bounded(
         mut child: std::process::Child,
         budget: std::time::Duration,
@@ -946,11 +897,15 @@ impl SyncPodmanCommand {
         let stdout_reader = std::thread::spawn(move || read_capped(stdout_pipe));
         let stderr_reader = std::thread::spawn(move || read_capped(stderr_pipe));
 
-        // Order 795-hzpg (slice B): parked deadline wait replaces busy-polling.
-        // On timeout, the child is killed + reaped by wait_child_bounded, and the
-        // reader threads are abandoned rather than joined (order 714-4r6w grandchild-pipe
-        // lesson; now bounded-cost because capped at MAX_CAPTURED_OUTPUT_BYTES).
-        let status = Self::wait_child_bounded(child, budget, redacted_args)?;
+        // Do NOT join the reader threads when wait_for_exit returns TimedOut.
+        // Killing the child does not close a pipe a GRANDCHILD still holds — a
+        // `sh -c` wrapper dies while the `sleep` it spawned keeps the write end
+        // open — so the readers may never see EOF. Joining them would trade the
+        // hang this method exists to prevent for an identical one two frames up
+        // the stack; the first version of this code did exactly that and hung
+        // its own test. They are abandoned instead: each owns nothing but a
+        // bounded-cost pipe drain, and the caller returns now.
+        let status = wait_for_exit(&mut child, budget, Some(redacted_args))?;
 
         let (stdout, stdout_dropped) = stdout_reader.join().unwrap_or_default();
         let (stderr, stderr_dropped) = stderr_reader.join().unwrap_or_default();
@@ -979,9 +934,56 @@ impl SyncPodmanCommand {
         &mut self,
         budget: std::time::Duration,
     ) -> std::io::Result<std::process::ExitStatus> {
-        let child = self.inner.spawn()?;
-        Self::wait_child_bounded(child, budget, &self.redacted_args())
+        let mut child = self.inner.spawn()?;
+        wait_for_exit(&mut child, budget, None)
     }
+}
+
+/// Park until `child` exits or the deadline expires, then kill and reap it.
+///
+/// `wait-timeout` uses the platform's child-wait primitive instead of waking a
+/// thread every 20 ms. Its Unix implementation coordinates through a global
+/// SIGCHLD handler, while Tokio may also observe SIGCHLD for async children.
+/// That shared-handler tradeoff is deliberate; revisit it if either library's
+/// chaining behavior changes or Tillandsias adds an exclusive handler.
+fn wait_for_exit(
+    child: &mut std::process::Child,
+    budget: std::time::Duration,
+    redacted_args: Option<&[String]>,
+) -> std::io::Result<std::process::ExitStatus> {
+    use wait_timeout::ChildExt as _;
+
+    if let Some(status) = child.wait_timeout(budget)? {
+        return Ok(status);
+    }
+
+    let kill_error = child.kill().err();
+    let reap_error = child.wait().err();
+    let cleanup_detail = match (kill_error, reap_error) {
+        (None, None) => String::new(),
+        (Some(kill), None) => {
+            format!(" (kill reported {kill}; child was nevertheless reaped)")
+        }
+        (None, Some(reap)) => format!(" (child reap failed: {reap})"),
+        (Some(kill), Some(reap)) => {
+            format!(" (kill failed: {kill}; child reap failed: {reap})")
+        }
+    };
+    let message = match redacted_args {
+        Some(args) => format!(
+            "podman sync operation exceeded its {}s budget; termination was requested{}: podman {}",
+            budget.as_secs(),
+            cleanup_detail,
+            args.join(" ")
+        ),
+        None => format!(
+            "podman sync operation exceeded its {}s budget; termination was requested{}",
+            budget.as_secs(),
+            cleanup_detail
+        ),
+    };
+    log_podman_failure("sync", "timeout", &message);
+    Err(std::io::Error::new(std::io::ErrorKind::TimedOut, message))
 }
 
 /// Cap on captured child stdout/stderr, per stream (order 795-hzpg, slice A).
@@ -1021,40 +1023,6 @@ fn read_capped<R: std::io::Read>(pipe: Option<R>) -> (Vec<u8>, u64) {
     }
     (buf, dropped)
 }
-
-/// Send a kill signal to a child PID on timeout so the waiter thread's
-/// `child.wait()` unblocks and reaps the child immediately.
-#[cfg(unix)]
-fn kill_raw_pid(pid: u32) {
-    unsafe {
-        libc::kill(pid as libc::pid_t, libc::SIGKILL);
-    }
-}
-
-#[cfg(windows)]
-fn kill_raw_pid(pid: u32) {
-    #[link(name = "kernel32")]
-    extern "system" {
-        fn OpenProcess(
-            desired_access: u32,
-            inherit_handle: i32,
-            process_id: u32,
-        ) -> *mut std::ffi::c_void;
-        fn TerminateProcess(process_handle: *mut std::ffi::c_void, exit_code: u32) -> i32;
-        fn CloseHandle(object_handle: *mut std::ffi::c_void) -> i32;
-    }
-    const PROCESS_TERMINATE: u32 = 0x0001;
-    unsafe {
-        let handle = OpenProcess(PROCESS_TERMINATE, 0, pid);
-        if !handle.is_null() {
-            let _ = TerminateProcess(handle, 1);
-            let _ = CloseHandle(handle);
-        }
-    }
-}
-
-#[cfg(not(any(unix, windows)))]
-fn kill_raw_pid(_pid: u32) {}
 
 /// Same as [`podman_cmd`] but for synchronous use. Returns a
 /// [`SyncPodmanCommand`], which has no unbounded run method (order 714-4r6w).
@@ -1144,6 +1112,64 @@ sleep 600
         );
     }
 
+    /// Order 795-hzpg slice B: the output-capturing path must not merely return
+    /// on time; the exact child it timed out must already be killed and reaped.
+    #[cfg(unix)]
+    #[test]
+    fn wait_bounded_timeout_kills_the_exact_output_child_pid() {
+        let (_guard, dir) = stub_podman(
+            "#!/bin/sh
+printf '%s\\n' \"$$\" > \"$TILLANDSIAS_TEST_CHILD_PID_FILE\"
+exec sleep 600
+",
+        );
+        let pid_file = dir.join("output-child.pid");
+        let started = std::time::Instant::now();
+        let err = podman_cmd_sync()
+            .env("TILLANDSIAS_TEST_CHILD_PID_FILE", &pid_file)
+            .output_bounded(std::time::Duration::from_secs(1))
+            .expect_err("the hanging output child must time out");
+        let elapsed = started.elapsed();
+        let pid = read_recorded_pid(&pid_file);
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert_eq!(err.kind(), std::io::ErrorKind::TimedOut);
+        assert!(
+            elapsed < std::time::Duration::from_secs(5),
+            "bounded output timeout took {elapsed:?}"
+        );
+        assert_pid_is_gone(pid);
+    }
+
+    /// The inherited-output caller uses the same parked wait and carries the
+    /// same kill-and-reap guarantee as `output_bounded`.
+    #[cfg(unix)]
+    #[test]
+    fn status_bounded_timeout_kills_the_exact_child_pid() {
+        let (_guard, dir) = stub_podman(
+            "#!/bin/sh
+printf '%s\\n' \"$$\" > \"$TILLANDSIAS_TEST_CHILD_PID_FILE\"
+exec sleep 600
+",
+        );
+        let pid_file = dir.join("status-child.pid");
+        let started = std::time::Instant::now();
+        let err = podman_cmd_sync()
+            .env("TILLANDSIAS_TEST_CHILD_PID_FILE", &pid_file)
+            .status_bounded(std::time::Duration::from_secs(1))
+            .expect_err("the hanging status child must time out");
+        let elapsed = started.elapsed();
+        let pid = read_recorded_pid(&pid_file);
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert_eq!(err.kind(), std::io::ErrorKind::TimedOut);
+        assert!(
+            elapsed < std::time::Duration::from_secs(5),
+            "bounded status timeout took {elapsed:?}"
+        );
+        assert_pid_is_gone(pid);
+    }
+
     /// Negative control: the same transport and budget must still SUCCEED for a
     /// prompt command, so the test above cannot pass by always failing.
     #[cfg(unix)]
@@ -1224,6 +1250,29 @@ while [ $i -lt 2000 ]; do echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; i=$((
         std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).expect("chmod");
         unsafe { std::env::set_var("TILLANDSIAS_PODMAN_BIN", &stub) };
         ((lock, Restore), dir)
+    }
+
+    #[cfg(unix)]
+    fn read_recorded_pid(path: &std::path::Path) -> u32 {
+        std::fs::read_to_string(path)
+            .unwrap_or_else(|e| panic!("read recorded child pid {}: {e}", path.display()))
+            .trim()
+            .parse()
+            .unwrap_or_else(|e| panic!("parse recorded child pid {}: {e}", path.display()))
+    }
+
+    #[cfg(unix)]
+    fn assert_pid_is_gone(pid: u32) {
+        let rc = unsafe { libc::kill(pid as libc::pid_t, 0) };
+        if rc == 0 {
+            panic!("timed-out child PID {pid} still exists after bounded wait returned");
+        }
+        let err = std::io::Error::last_os_error();
+        assert_eq!(
+            err.raw_os_error(),
+            Some(libc::ESRCH),
+            "checking timed-out child PID {pid} failed for a reason other than nonexistence: {err}"
+        );
     }
 
     fn args_of(cmd: &std::process::Command) -> Vec<String> {
@@ -1708,59 +1757,5 @@ while [ $i -lt 2000 ]; do echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; i=$((
         let (buf, dropped) = read_capped(Some(std::io::Cursor::new(one_over)));
         assert_eq!(buf.len(), MAX_CAPTURED_OUTPUT_BYTES);
         assert_eq!(dropped, 1, "one byte over the cap drops exactly one byte");
-    }
-
-    /// Order 795-hzpg slice B / exit criterion 4: a child that ignores its
-    /// deadline is actually killed and reaped — proven by asserting the pid
-    /// is gone after the timeout returns.
-    #[cfg(unix)]
-    #[test]
-    fn wait_bounded_hanging_child_is_killed_and_reaped_after_timeout() {
-        let mut cmd = std::process::Command::new("sh");
-        cmd.args(["-c", "sleep 300"])
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped());
-        let child = cmd.spawn().expect("spawn sh");
-        let pid = child.id() as libc::pid_t;
-
-        let err = SyncPodmanCommand::wait_bounded(
-            child,
-            std::time::Duration::from_millis(50),
-            &["<test-hanging>".to_string()],
-        )
-        .expect_err("must time out");
-
-        assert_eq!(err.kind(), std::io::ErrorKind::TimedOut);
-
-        // Assert the pid is gone (killed and reaped).
-        // kill(pid, 0) returns -1 with ESRCH when the process does not exist.
-        let res = unsafe { libc::kill(pid, 0) };
-        assert_eq!(
-            res, -1,
-            "child pid {pid} must no longer exist after timeout kill"
-        );
-        let errno = std::io::Error::last_os_error().raw_os_error();
-        assert_eq!(
-            errno,
-            Some(libc::ESRCH),
-            "kill(pid, 0) must return ESRCH (process does not exist)"
-        );
-    }
-
-    /// Order 795-hzpg slice B: status_bounded also kills and reaps a hanging child.
-    #[cfg(unix)]
-    #[test]
-    fn status_bounded_hanging_child_is_killed_and_reaped_after_timeout() {
-        let mut sync_cmd = SyncPodmanCommand {
-            inner: {
-                let mut cmd = std::process::Command::new("sh");
-                cmd.args(["-c", "sleep 300"]);
-                cmd
-            },
-        };
-        let err = sync_cmd
-            .status_bounded(std::time::Duration::from_millis(50))
-            .expect_err("must time out");
-        assert_eq!(err.kind(), std::io::ErrorKind::TimedOut);
     }
 }
