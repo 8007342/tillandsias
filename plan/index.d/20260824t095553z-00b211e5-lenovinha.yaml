@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: status-ladder-enforcement-wave-2
+    field: status
+    value: completed
+    ts: "2026-08-24T09:55:53Z"
+    host: lenovinha
+
+events:
+  - packet_id: status-ladder-enforcement-wave-2
+    event:
+      type: completed
+      ts: "2026-08-24T09:55:53Z"
+      host: lenovinha
+      summary: >
+        status 'completed' with evidence_refs: criterion 1: closure_ladder_compaction_tests 3/3, both fold and compact_text rank-aware against the base; criterion 2: check emits 8 parked-block lines with outstanding actions, status <pkt> emits blocked-on-parked rows; criterion 3: check-fragment-closure-evidence-added.sh refuses a staged evidence-less closure (exit 1) and passes clean (exit 0), wired at build.sh:1896, pinned by litmus:fragment-closure-evidence-gate-shape; criterion 4: declined — verification_required.agents[].id mixes model identities and host affinities with no role field to join on
+  - packet_id: status-ladder-enforcement-wave-2
+    event:
+      type: note
+      ts: "2026-08-24T09:55:53Z"
+      host: lenovinha
+      summary: >
+        criteria 1-3 met and exercised; criterion 4 declined with measured reason on the criterion's own terms
