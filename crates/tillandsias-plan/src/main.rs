@@ -5217,6 +5217,49 @@ fn expire_claim_candidates<'a>(
                 _ => "?".into(),
             })
             .unwrap_or_else(|| "?".into());
+        // ORDER 864-m2vc — THE TTL MUST MEASURE THE CLAIMANT, NOT THE ROOM.
+        //
+        // 641-e2qa criterion 2 is "a claim that PRODUCES no event within its
+        // cycle" — produced by the claimant. This scanned every event on the
+        // packet regardless of author, so ANY host's note refreshed ANY host's
+        // lease and the reaper was defeated for any actively-discussed row.
+        //
+        // Measured 2026-08-24: a coordinator note written by linux_mutable,
+        // whose entire content was a statement that it was NOT working on the
+        // row, extended yoga's claim on 642-fedr by twenty-one hours.
+        //
+        // The claimant is identified the way live_claims already does it — the
+        // newest event whose summary opens "claimed for cycle". When that
+        // cannot be determined the OLD any-host rule still applies, because
+        // silently making the reaper more aggressive on rows whose claim
+        // provenance is unreadable would expire work for a reason nobody could
+        // see. The verdict says which rule it used instead of leaving the
+        // reader to guess.
+        let mut claim_host: Option<&str> = None;
+        let mut claim_ts: Option<&str> = None;
+        if let Some(seq) = p.get("events").and_then(serde_yaml::Value::as_sequence) {
+            for ev in seq {
+                let Some(ts) = ev.get("ts").and_then(serde_yaml::Value::as_str) else {
+                    continue;
+                };
+                let is_claim = ev
+                    .get("summary")
+                    .and_then(serde_yaml::Value::as_str)
+                    .is_some_and(|s| s.trim_start().starts_with("claimed for cycle"));
+                if !is_claim {
+                    continue;
+                }
+                let host = ev
+                    .get("host")
+                    .and_then(serde_yaml::Value::as_str)
+                    .unwrap_or("");
+                if !host.is_empty() && claim_ts.is_none_or(|cur| ts > cur) {
+                    claim_host = Some(host);
+                    claim_ts = Some(ts);
+                }
+            }
+        }
+
         let mut last_ts: Option<String> = None;
         if let Some(seq) = p.get("events").and_then(serde_yaml::Value::as_sequence) {
             for ev in seq {
@@ -5225,6 +5268,16 @@ fn expire_claim_candidates<'a>(
                 };
                 if ts.len() < 4 || !ts.as_bytes()[..4].iter().all(u8::is_ascii_digit) {
                     continue;
+                }
+                // Attributable claim -> only the claimant's own events count.
+                if let Some(owner) = claim_host {
+                    let evh = ev
+                        .get("host")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("");
+                    if evh != owner {
+                        continue;
+                    }
                 }
                 if last_ts.as_deref().is_none_or(|cur| ts > cur) {
                     last_ts = Some(ts.to_string());
@@ -5283,7 +5336,18 @@ fn expire_claim_candidates<'a>(
         }
 
         match last_ts {
-            Some(ts) if ts.as_str() < cutoff_iso => expired.push((order, pid, ts)),
+            Some(ts) if ts.as_str() < cutoff_iso => {
+                // Name the rule in the verdict. "Nothing happened here" and
+                // "the CLAIMANT did nothing here, whatever else was said" are
+                // different facts, and reaping on the second is the whole point
+                // of 864-m2vc — so a reader must be able to tell which one this
+                // row was reaped on.
+                let attributed = match claim_host {
+                    Some(h) => format!("{ts}\tclaimant:{h}"),
+                    None => format!("{ts}\tclaimant:unattributed(any-host-rule)"),
+                };
+                expired.push((order, pid, attributed));
+            }
             Some(_) => {}
             None => unknown.push((order, pid)),
         }
@@ -5421,15 +5485,92 @@ mod tests {
         );
         let ledger = Ledger::parse(raw, Default::default()).expect("synthetic ledger parses");
         let (expired, unknown, _held) = expire_claim_candidates(&ledger, "2026-08-09T00:00:00Z");
+        // 864-m2vc changed the SHAPE of the third element, not the
+        // partitioning: it now carries the attribution rule the reap was
+        // decided under. None of these fixtures has a claim-convention event,
+        // so all of them fall to the any-host rule and must SAY so — a reap
+        // whose rule is invisible is the thing that packet exists to end.
         assert_eq!(
             expired,
-            vec![("1".to_string(), "stale", "2026-08-01T00:00:00Z".to_string())],
+            vec![(
+                "1".to_string(),
+                "stale",
+                "2026-08-01T00:00:00Z\tclaimant:unattributed(any-host-rule)".to_string()
+            )],
             "only the stale in_progress claim expires; the fresh one's newest event is inside the TTL"
         );
         assert_eq!(
             unknown,
             vec![("3".to_string(), "ageless")],
             "no-timestamp packets are reported as unknown-age, never expired"
+        );
+    }
+
+    /// ORDER 864-m2vc. The TTL measures the CLAIMANT, not the room.
+    ///
+    /// The defect: `expire_claim_candidates` took the newest event on the
+    /// packet regardless of author, so any host's note refreshed any host's
+    /// lease. Measured on the live ledger — a coordinator note by
+    /// linux_mutable, whose content was "I am NOT absorbing this row",
+    /// extended yoga's claim by twenty-one hours. A row several hosts discuss
+    /// could never be reaped however dead its claim.
+    ///
+    /// `propped` is the assertion that matters: hostA claimed it and went
+    /// quiet, hostB has been chatting about it ever since. Under the old rule
+    /// hostB's note kept it alive forever; it must now expire, and the verdict
+    /// must say the claimant is hostA so the reader can see WHY.
+    #[test]
+    fn a_siblings_note_no_longer_refreshes_someone_elses_lease() {
+        let raw = concat!(
+            "packets:\n",
+            // hostA claimed and went silent; hostB keeps talking. EXPIRES.
+            "  - packet_id: propped\n    order: 1\n    title: \"p\"\n    status: in_progress\n    desired_release: v0.5\n",
+            "    events:\n",
+            "      - type: note\n        ts: \"2026-08-01T00:00:00Z\"\n        host: hosta\n",
+            "        summary: claimed for cycle 2026-08-01T00:00Z\n",
+            "      - type: note\n        ts: \"2026-08-20T00:00:00Z\"\n        host: hostb\n",
+            "        summary: drive-by note from a host that does not own this\n",
+            // hostA claimed and IS still working. SURVIVES.
+            "  - packet_id: active\n    order: 2\n    title: \"a\"\n    status: in_progress\n    desired_release: v0.5\n",
+            "    events:\n",
+            "      - type: note\n        ts: \"2026-08-01T00:00:00Z\"\n        host: hosta\n",
+            "        summary: claimed for cycle 2026-08-01T00:00Z\n",
+            "      - type: progress\n        ts: \"2026-08-20T00:00:00Z\"\n        host: hosta\n",
+            "        summary: the claimant itself is still going\n",
+            // No claim event at all: the old any-host rule still applies, and
+            // the verdict must SAY so rather than silently reaping harder.
+            "  - packet_id: unattributed\n    order: 3\n    title: \"u\"\n    status: in_progress\n    desired_release: v0.5\n",
+            "    events:\n",
+            "      - type: note\n        ts: \"2026-08-20T00:00:00Z\"\n        host: hostb\n",
+            "        summary: nobody ever claimed this properly\n",
+        );
+        let ledger = Ledger::parse(raw, Default::default()).expect("synthetic ledger parses");
+        let (expired, _unknown, _held) = expire_claim_candidates(&ledger, "2026-08-10T00:00:00Z");
+        let ids: Vec<&str> = expired.iter().map(|(_, pid, _)| *pid).collect();
+
+        assert!(
+            ids.contains(&"propped"),
+            "a claim whose OWNER went silent must expire even though a sibling \
+             kept noting on it; got {ids:?}"
+        );
+        assert!(
+            !ids.contains(&"active"),
+            "a claim whose owner is still producing events must NOT expire; got {ids:?}"
+        );
+        assert!(
+            !ids.contains(&"unattributed"),
+            "with no claim event the any-host rule still applies, so a recent \
+             sibling note keeps it alive; got {ids:?}"
+        );
+
+        let propped = expired
+            .iter()
+            .find(|(_, pid, _)| *pid == "propped")
+            .unwrap();
+        assert!(
+            propped.2.contains("claimant:hosta"),
+            "the verdict must name the claimant it measured, got {:?}",
+            propped.2
         );
     }
 
