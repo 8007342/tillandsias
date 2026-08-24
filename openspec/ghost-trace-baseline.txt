@@ -12,3 +12,28 @@ forge-skills-mapping
 guest-crashloop-detection
 litmus-runner
 meta-orchestration
+# 2026-08-23 SCOPE WIDENING (867-vd4z), lenovinha. The six below are not new
+# ghosts and nothing regressed: the gate simply could not see them. It scanned
+# six file types and never *.yaml, where 979 of the repository's ~4,200 trace
+# annotations live — so its coverage number was computed over the minority, and
+# openspec/litmus-tests/*.yaml, the corpus where litmus tests bind themselves to
+# specs, was entirely ungated.
+#
+# THE BASELINE GROWS EXACTLY ONCE HERE, for the same reason it was created in
+# the first place: turning a newly-visible population into a hard failure on the
+# day it first becomes visible breaks the build for everyone on work they did not
+# do. The may-only-shrink direction is preserved for the NEW, wider scope from
+# this commit forward — a ghost introduced in yaml tomorrow fails the gate.
+#
+# Each was verified to have no spec directory AND no in-flight change directory,
+# and each is traced from real litmus tests, which is what makes them worth
+# fixing rather than deleting: a litmus test bound to a spec that does not exist
+# is asserting coverage of nothing. cross-platform-compilation is traced by
+# litmus-cross-target-cfg-gate-check.yaml — the very check 656-spux is about —
+# and ephemeral-guarantee is traced from three separate litmus tests.
+browser-isolation-telemetry
+control-socket
+cross-platform-compilation
+enclave-network-isolation
+ephemeral-guarantee
+fail-loud-diagnosis

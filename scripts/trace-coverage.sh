@@ -71,11 +71,59 @@ esac
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 2
 
+# ── YAML: anchored annotations only (order 867-vd4z) ────────────────────────
+# YAML carried 979 `@trace spec:` occurrences and NONE of them were gated, so
+# the coverage number below was computed over roughly 1,876 of the repository's
+# ~4,200 annotations. openspec/litmus-tests/*.yaml is where litmus tests bind
+# themselves to specs, which makes it exactly the corpus the convergence
+# argument leans on — and the corpus nothing checked.
+#
+# WHY YAML NEEDS ITS OWN PATTERN AND CANNOT JOIN THE --include LIST ABOVE. In
+# source, the annotation marker occurs in comments that ARE annotations. In YAML
+# it occurs in two DIFFERENT roles: real annotations (a leading `#` comment, or
+# a quoted evidence list item) and PROSE inside block scalars that DISCUSSES
+# annotations. The unanchored scan cannot tell them apart, and the prose does
+# not even yield well-formed ids. Three real examples from this tree, with the
+# marker deliberately spelled with a space so that documenting the defect does
+# not commit it (see below):
+#
+#   "@ trace spec:chromium-{debug,safe}-variant" -> token "chromium-"
+#   a reference line-wrapped mid-id in a description -> token "github-credential-"
+#   a parenthetical "(e.g. @ trace spec:f00, spec:enclave-network)" -> token "f00"
+#
+# So the rule is POSITIONAL, not a path allowlist: an annotation begins its
+# line (after optional indentation) as a comment or a quoted list item. Anything
+# mid-line is prose. Measured on this tree: unanchored yields 21 ids with no
+# spec directory, of which 11 are prose artifacts; anchored yields 10, all real.
+#
+# AND THE SAME TRAP EXISTS IN THIS FILE. The first draft of this comment quoted
+# its examples literally, in a `.sh` the scan already covers — inventing five
+# brand-new ghost traces out of documentation and turning the gate red on the
+# commit that fixed the gate. Prose about annotations is not an annotation, in
+# every language: never write the literal marker here.
+#
+# `plan/` is excluded because the ledger is DATA, not annotated source: packet
+# descriptions quote example ids as illustrations, including the deliberately
+# nonexistent ones other packets require as negative controls. Gating on those
+# would make the ledger's own prose fail
+# the build.
+_yaml_entries="$(
+    grep -rnE '^[[:space:]]*(#|-[[:space:]]*")[[:space:]]*@trace[[:space:]]+spec:' \
+        --include="*.yaml" \
+        --include="*.yml" \
+        --exclude-dir='.claude' \
+        --exclude-dir='.git' \
+        --exclude-dir='plan' \
+        --exclude-dir='target' \
+        --exclude-dir='target-musl' \
+        . 2>/dev/null || true
+)"
+
 # ── Scan: every @trace spec: token, with its file and line ──────────────────
 # Same include/exclude set as the generator this replaces, so coverage numbers
 # are comparable across the transition.
 entries="$(
-    grep -rn "@trace" \
+    { grep -rn "@trace" \
         --include="*.rs" \
         --include="*.sh" \
         --include="*.toml" \
@@ -86,7 +134,8 @@ entries="$(
         --exclude-dir='.git' \
         --exclude-dir='target' \
         --exclude-dir='target-musl' \
-        . 2>/dev/null \
+        . 2>/dev/null || true
+      printf '%s\n' "$_yaml_entries"; } \
     | grep "spec:" \
     | awk '
         # ONE pass. This was a shell `while read` that spawned a grep, a sed

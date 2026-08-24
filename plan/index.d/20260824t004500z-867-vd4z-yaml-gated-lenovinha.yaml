@@ -1,0 +1,132 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_immutable (lenovinha), 2026-08-24T00:45:00Z.
+events:
+  - packet_id: ghost-trace-gate-is-blind-to-yaml-and-markdown-annotations
+    event:
+      type: progress
+      ts: "2026-08-24T00:45:00Z"
+      agent_id: linux-lenovinha-fable5-20260823T235308Z
+      host: linux_immutable
+      summary: |
+        THE YAML HALF IS LANDED, GATED AND FIXTURED. The markdown half is not,
+        and the packet stays open for it.
+
+        WHAT CHANGED. scripts/trace-coverage.sh now scans *.yaml/*.yml with an
+        ANCHORED pattern, in addition to the six file types it already read.
+        Measured before/after on this tree:
+
+          before  specs=184 traced=175 ghost=9  annotations=2841 files=543
+          after   specs=191 traced=176 ghost=15 annotations=3759 files=934
+
+        924 annotations and 391 files entered the gate. The six new ghosts are
+        NOT a regression — nothing changed in the tree, the gate simply could
+        not see them.
+
+        THE RULE IS POSITIONAL, NOT A PATH ALLOWLIST, and my previous cycle's
+        filing had this wrong. I wrote that the yaml noise was "negative-control
+        fixtures". It is mostly not. It is PROSE THAT DISCUSSES ANNOTATIONS,
+        inside description blocks and comments: a brace shorthand naming two
+        specs at once yields the token "chromium-", a reference line-wrapped
+        mid-id yields "github-credential-", a parenthetical example yields
+        "foo". Those are not fixtures and not ids; they are fragments of English
+        sentences. So the rule is that an annotation BEGINS ITS LINE, after
+        optional indentation, as a comment or a quoted list item. Unanchored
+        scanning yields 21 ids with no spec directory, 11 of them prose
+        artifacts; anchored yields 10, all well-formed. `plan/` is excluded
+        because the ledger is data whose packet prose quotes example ids
+        deliberately — including the negative controls other packets demand.
+
+        I COMMITTED THE EXACT DEFECT I WAS FIXING, TWICE, AND BOTH ARE NOW
+        GUARDED IN COMMENTS. First: the explanatory comment I wrote inside
+        trace-coverage.sh quoted its examples literally, in a `.sh` the scan
+        already covers — inventing five brand-new ghost traces out of
+        documentation and turning the gate red on the commit that fixed the
+        gate (ghost went 15 -> 20). Second: the fixture script's printf strings
+        did the same, and the fixture failed the thing it exists to test. Both
+        fixed by never writing the literal marker: the comment spells it with a
+        space, the fixture assembles it at runtime from two string halves. The
+        general lesson is in both files now — prose ABOUT an annotation is not
+        an annotation, in every language, and a scanner cannot tell them apart.
+
+        THE BASELINE GROWS EXACTLY ONCE, 9 -> 15, with the reason recorded in
+        openspec/ghost-trace-baseline.txt. Same argument that created it: making
+        a newly-visible population a hard failure the day it becomes visible
+        breaks the build for everyone on work they did not do. The
+        may-only-shrink direction is preserved for the NEW wider scope, so a
+        ghost introduced in yaml tomorrow fails the gate.
+
+        THE SIX ARE WORTH FIXING RATHER THAN DELETING, which is why they went
+        to the baseline and not to a sweep. Each has no spec directory AND no
+        in-flight change, and each is traced from real litmus tests — a litmus
+        test bound to a nonexistent spec is asserting coverage of nothing.
+        Notably `cross-platform-compilation` is traced by
+        litmus-cross-target-cfg-gate-check.yaml, which is the very check
+        656-spux is about, and `ephemeral-guarantee` is traced from three
+        separate litmus tests. `fail-loud-diagnosis` shares its name with a
+        live epic.
+
+        VERIFIED BEHAVIOURALLY, not by grepping the script — the weakness I
+        recorded in resolve-smoke-release.sh's freshness stamp last cycle, not
+        repeated here. New fixture scripts/test-ghost-trace-yaml-anchoring.sh,
+        5/5 green: anchored comment caught (exit 1), anchored quoted evidence
+        item caught (exit 1), unanchored prose mention ignored (exit 0),
+        block-scalar prose ignored (exit 0), and a NEGATIVE CONTROL that a clean
+        tree restores a green gate — without which scenarios 3 and 4 could be
+        passing because the gate was broken open. It also refuses to run at all
+        if the gate is already red, since it could not then attribute its own
+        result. Wired into litmus:spec-traceability-shape, which passes (6.2s).
+        `./build.sh --check` green with the stamp recorded.
+
+        RESIDUAL, and it needs a decision rather than a repeat of this work:
+        MARKDOWN. 1347 annotations, 219 distinct spec ids, still ungated. It is
+        not the same problem — md is documentation, where a trace may be an
+        illustration in a tutorial rather than a binding, and cheatsheets
+        legitimately show example annotations to teach the convention. The
+        anchoring heuristic will not separate those, because in md the
+        annotation and the example look identical. Someone has to decide
+        whether an md trace is a BINDING at all before it can be gated; if it
+        is not, the honest fix is to declare md out of scope in the script,
+        which is the other branch this packet's deliverable already allows.
+  - packet_id: builder-toolbox-init-set-too-small-for-the-dispatch-pattern
+    event:
+      type: progress
+      ts: "2026-08-24T00:52:00Z"
+      agent_id: linux-lenovinha-fable5-20260823T235308Z
+      host: linux_immutable
+      summary: |
+        THIS PACKET NOW HAS A LITMUS TEST FAILING FALSELY BECAUSE OF IT, on
+        this host, today. That is a harder consequence than the packet
+        currently claims and it should be read as raising its priority.
+
+        FOUND while running an unrelated suite. `litmus:skills-canonical-and-mcp-first-shape`
+        STEP 6 — "the MCP-first read rule is declared in methodology, not only
+        in a skill" — reports FAIL on lenovinha. Its command is a bare `yq`:
+
+          yq -e '.distributed_work.mcp_first_read_path.rule' methodology/distributed-work.yaml
+          yq -e '.distributed_work.mcp_first_read_path.filesystem_fallback.verification' ...
+
+        `yq` is not on this host's PATH. It IS in the tillandsias-builder
+        toolbox, since this packet's init-set change landed 2026-08-23. Running
+        the IDENTICAL command inside the toolbox prints `ok: rule declared`.
+
+        SO THE METHODOLOGY IS FINE AND THE TEST IS WRONG. The rule the step asks
+        about is present and correctly structured; the step reports its absence.
+        A reader who trusts the verdict goes looking for a missing methodology
+        declaration that is not missing — and the failure is indistinguishable
+        from the real thing, because `yq -e` exits non-zero for "key absent" and
+        the shell exits non-zero for "command not found", and the step collapses
+        both into one FAIL.
+
+        WHY THE INIT-SET FIX ALONE DOES NOT REACH THIS. Litmus steps run on the
+        HOST, not inside the toolbox, so growing the toolbox's package set gives
+        them nothing until the CALLER takes the documented dispatch. This is the
+        second such caller I have hit in three cycles — the pre-push plan-only
+        lane was the first (it degrades gracefully and says so, which is why it
+        is not a defect). This one does not degrade; it lies.
+
+        FOR THE SWEEP'S DEV-HOST GROUP, and it argues for ordering litmus
+        commands FIRST: a bare-tool call inside a litmus step is worse than one
+        inside a script, because its failure is dressed as a verdict about the
+        thing under test. Any Silverblue or immutable host running the full
+        suite is currently getting this false negative, and would have been
+        since the step was written.
