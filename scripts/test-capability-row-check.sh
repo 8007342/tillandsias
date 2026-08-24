@@ -75,7 +75,7 @@ chmod +x "$TMPD/bin/stub-plan"
 # `hostname` first on PATH and the stub plan binary; the rest is per-case.
 run_sut() { #  run_sut <env assignments...>  -> prints "<verdict>|<exit>"
     local out rc
-    out="$(env "$@" \
+    out="$(env TILLANDSIAS_HOST_KIND=linux "$@" \
         PATH="$TMPD/bin:$PATH" \
         TILLANDSIAS_PLAN_BIN="$TMPD/bin/stub-plan" \
         bash "$SUT" 2>/dev/null)"
@@ -132,7 +132,8 @@ ck "forge WITH TILLANDSIAS_WORKSTATION resolves normally" \
 # 9. An unreadable instrument is reported, never guessed around. Composed the
 #    same way run_sut does — capturing stdout in $(...) first, so the verdict's
 #    trailing newline is stripped before the exit code is appended.
-_out="$(env PATH="$TMPD/bin:$PATH" TILLANDSIAS_PLAN_BIN="$TMPD/bin/does-not-exist" \
+_out="$(env -u TILLANDSIAS_HOST_KIND -u TILLANDSIAS_WORKSTATION -u TILLANDSIAS_ETC_HOSTNAME \
+        PATH="$TMPD/bin:$PATH" TILLANDSIAS_PLAN_BIN="$TMPD/bin/does-not-exist" \
         HOSTNAME=knownbox bash "$SUT" 2>/dev/null)"
 _rc=$?
 ck "no runnable plan binary is reported" \

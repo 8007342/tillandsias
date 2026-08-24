@@ -13758,6 +13758,7 @@ plan_index:
             Split from the Windows host's 653-7rag report. They fixed the finding; this is the reason it was findable only by a human running the wrong command.
 
     - packet_id: fourteen-ghost-traces-are-only-reported-in-files-a-commit-touches
+      next_action: 'STALE PREMISE, CORRECTED 2026-08-23 (lenovinha): criteria 1 and 4 are ALREADY MET and verified — trace-coverage.sh --gate is a repo-wide shrink-only ratchet wired into build.sh --check (584-2qq2), and a fabricated trace makes it exit 1 (tested, then reverted). The count is 9 today, not 14. WHAT REMAINS is criteria 2+3, the disposition, and it needs a decision rather than a sweep: ''prefer removal'' is right for the low-fanout six (fat-spec-corpus-index, forge-git-ergonomics, forge-git-identity-anonymization, forge-push-credential-channel, forge-skills-mapping, guest-crashloop-detection, litmus-runner) and I think WRONG for spec:meta-orchestration (traced from ~15 litmus tests plus methodology; the loop the fleet runs on) and spec:enclave-service-catalog (6+ real sites in headless main.rs) — for those the absence of a spec reads as a spec never written for something central, not as a concept nobody needed. Do the low-fanout six first, then decide the two. See 867-vd4z: the gate is blind to yaml and md, which is where the majority of annotations live.'
       order: 658-kcd5
       status: ready
       desired_release: v0.5
@@ -13818,6 +13819,80 @@ plan_index:
           summary: |
             Found because an unrelated edit to main.rs made the hook scan lines untouched since order 357.
 
+        - type: note
+          ts: "2026-08-23T21:53:34Z"
+          host: lenovinha
+          summary: |
+            claimed for cycle 2026-08-23T21:53Z
+        - type: note
+          ts: "2026-08-23T21:57:28Z"
+          host: lenovinha
+          summary: |
+            criteria 1+4 verified already met; disposition of the 9 ghosts left to an explicit decision; filed 867-vd4z
+        - type: progress
+          ts: "2026-08-23T22:20:00Z"
+          agent_id: linux-lenovinha-fable5-20260823T215305Z
+          host: linux_immutable
+          summary: |
+            TWO OF THE FOUR EXIT CRITERIA ARE ALREADY MET, AND THE PACKET'S PREMISE
+            IS STALE — verified rather than assumed, because the packet is worded as
+            if neither existed.
+        
+            CRITERION 1 ("the ghost check runs REPO-WIDE, not only over a commit's
+            changed files"): MET. `scripts/trace-coverage.sh --gate` is a repo-wide
+            ratchet against `openspec/ghost-trace-baseline.txt`, wired into
+            `./build.sh --check` under order 584-2qq2. It fails in BOTH directions —
+            a ghost not in the baseline, and a baseline entry that is no longer a
+            ghost — so the baseline may only shrink. That is a stronger property
+            than the criterion asked for.
+        
+            CRITERION 4 (the negative control): MET, and I ran it rather than
+            reading it. Appending `@trace spec:zzz-fabricated-negative-control-658kcd5`
+            to crates/tillandsias-plan/src/spec.rs makes the gate exit 1 and name the
+            fabricated id; reverting restores exit 0 at `baseline=9 current=9`. Both
+            exit codes captured directly, not inferred from a pipeline.
+        
+            THE COUNT IN THE TITLE IS ALSO STALE. It says fourteen. Today:
+            `trace-coverage.sh` reports 9 ghosts, all 9 in the baseline;
+            `validate-traces.sh` reports 8 hard ghosts plus 6 covered by in-flight
+            changes. The 12-true/2-pending split the context describes has moved.
+        
+            WHAT ACTUALLY REMAINS is criteria 2 and 3: dispositioning the 9. I did
+            NOT do that this cycle, and the reason is a judgement rather than a
+            budget. The exit criteria say "Prefer removal", on the argument that a
+            trace nobody wrote a spec for in months is evidence the spec was not
+            needed. That argument is sound for the low-fanout ids and I think WRONG
+            for the two largest:
+        
+              * `spec:meta-orchestration` is traced from ~15 litmus tests plus
+                methodology/mo-full-attestation.yaml. It is the loop this whole
+                fleet runs on. The absence of a spec reads as a spec that was never
+                written for something central, not as a concept nobody needed —
+                deleting 15 traces would remove the only machine-readable evidence
+                that those litmus tests are about anything.
+              * `spec:enclave-service-catalog` is traced from six or more sites in
+                crates/tillandsias-headless/src/main.rs, all of them real
+                service-catalog code.
+        
+            Bulk-deleting those unattended is a large, hard-to-reverse change made
+            on an argument that does not fit them, so I am leaving the disposition
+            to an explicit decision. The low-fanout six (fat-spec-corpus-index,
+            forge-git-ergonomics, forge-git-identity-anonymization,
+            forge-push-credential-channel, forge-skills-mapping,
+            guest-crashloop-detection, litmus-runner) are the safe end and can go
+            first.
+        
+            FILED 867-vd4z ALONG THE WAY, and it is bigger than this packet: the
+            gate scans six file types and misses `*.yaml` (979 annotations) and
+            `*.md` (1347). More than half of all @trace annotations in the repo are
+            outside the check that validates them, and at least seven REAL ghosts
+            are hiding in yaml — browser-isolation-telemetry, control-socket,
+            cross-platform-compilation, enclave-network-isolation,
+            ephemeral-guarantee, forge-launch, service-startup. The naive glob fix
+            breaks the build on the litmus fixtures that deliberately carry
+            fabricated traces, so it needs a fixture-exclusion rule first. That
+            packet also records the three-checkers-three-file-sets divergence,
+            which is why none of this was visible.
     - packet_id: an-unregistered-litmus-file-never-runs-and-nothing-says-so
       order: 660-ryhn
       status: completed
@@ -22022,6 +22097,64 @@ plan_index:
             squid SIGSEGV dumps to this host's coredumpctl between 04:05 and 04:35
             PDT on 2026-08-17. They are MINE, not organic recurrence. Any window
             that counts dumps must start after 2026-08-17T11:40Z.
+        - type: progress
+          ts: "2026-08-23T18:12:00Z"
+          agent_id: linux-lenovinha-fable5-20260823T173512Z
+          host: linux_immutable
+          summary: |
+            THIS ROW IS MARKED `implemented` AND THE BEHAVIOUR IT PROMISED IS NOT
+            PRESENT ON THIS HOST. Not a re-report of the old shape — a live
+            reproduction, on lenovinha (Silverblue), found by cycle-preflight rather
+            than by anything watching the proxy.
+        
+            WHAT THE HOST LOOKED LIKE. `tillandsias-proxy` had been Exited for
+            2d22h with `restarts=0`, and `tillandsias-inference` Exited rc=137
+            (SIGKILL) for the same 2d22h, also `restarts=0`. `podman inspect
+            .HostConfig.RestartPolicy.Name` returns **`no`** for BOTH. So the
+            deliverable's first branch (restart under supervision with a crash
+            counter in diagnostics) is not in effect here, and its second branch
+            (fail the lane loudly when it dies) did not fire either: nothing
+            alarmed for nearly three days. The only reason I know is that
+            `scripts/cycle-preflight.sh` prints the container census, which is a
+            different mechanism than this packet asked for and reports at cycle
+            start rather than at death.
+        
+            THE CRASH IS NO LONGER A SEGFAULT, AND THAT MATTERS FOR THE ROOT-CAUSE
+            HALF OF THIS PACKET. The old census was 263 SIGSEGVs. What this host
+            has is deterministic and immediate — `podman start` brings it up and it
+            exits rc=1 within seconds, every time, with squid 6.12 saying:
+        
+              WARNING: '/etc/squid/certs/intermediate.key' X509_check_private_key() failed
+              WARNING: 'HTTP_port [::]:3128' missing private key in '/etc/squid/certs/intermediate.key'
+              FATAL: No valid signing certificate configured for HTTP_port [::]:3128
+        
+            The intermediate key does not match the signing certificate squid
+            loaded (`CN=Tillandsias CA`). That is a provisioning mismatch, not
+            traffic-triggered memory corruption, so it will not respond to anything
+            aimed at the segfault. Image is localhost/tillandsias-proxy:v0.4.260817.1.
+        
+            A PLAUSIBLE MECHANISM, FLAGGED NOT CONFIRMED — I did not chase it,
+            because the remedy touches the running enclave stack and this was not my
+            packet. 755-qcxh moved the key from a bind-mount to a podman secret
+            (`tillandsias-ca-key`), and 23235's sequencing note records hosts
+            carrying a STALE pre-fix `/tmp/tillandsias-ca/intermediate.key` from
+            before that change. A cert regenerated on one side of that migration and
+            a key surviving from the other side would produce exactly this
+            mismatch. Whoever takes this should check whether the secret and the
+            cert were generated in the same pass before assuming squid is at fault.
+        
+            `tillandsias-inference` RESTARTED CLEAN and is healthy — its last log
+            lines are ordinary 200s on /api/version, so it was killed from outside
+            (reboot or OOM), not a crash loop. I left it running. The proxy I left
+            stopped: it cannot start, and re-running `podman start` in a loop would
+            only add noise to a deterministic failure.
+        
+            SUGGEST THIS ROW MOVES OFF `implemented`. Its own completion gate is
+            unmet on a host that has the fix's image, and the observation above is a
+            second independent sighting of "enclave service dies, nothing notices,
+            for days" — the first was 2026-08-16. Two hosts, two months apart, same
+            silence. Noting the overflow rather than promoting it, per the
+            Tlatoani-gated promotion rule.
     - packet_id: forge-pid1-crash-supervision
       order: 767-nkkq
       status: implemented
@@ -26879,6 +27012,7 @@ plan_index:
             MECHANISM CONFIRMED FROM THE UPSTREAM INSTALLER'S OWN SOURCE, not inferred. Fetched https://opencode.ai/install (460 lines) and read check_version(): it runs 'command -v opencode' against PATH, compares that binary's --version to the version it intends to install, and on a match prints 'Version <v> already installed' and calls exit 0. It never consults OPENCODE_INSTALL_DIR when deciding. Two consequences for curl_install_opencode (images/default/lib-common.sh:2520). First, the installer's idempotence is keyed on a DIFFERENT installation than the one it was asked to create: lib-common.sh:1550 puts $NPM_CONFIG_PREFIX/bin first on PATH, npm has already placed opencode-ai 1.18.18 there, and upstream latest is also 1.18.18, so the check matches something the harness never asked about. Second, because it exits ZERO, the guard at :2538-2542 passes its 'bash $tmp' clause and is saved only by the trailing '[ -x $bin ]' -- the install reports success while installing nothing, and refresh_ok correctly stays 0. Then opencode_validate_or_rollback runs against a path that does not exist and reports 'rolling back to last-good' where no curl-side last-good was ever recorded. So this is STRUCTURAL, not a flake: while npm provides opencode on PATH at the same version, curl_install_opencode can never succeed. THE CHOICE IS NOW EVIDENCED. Retiring it is the removal the operator's 2026-08-17 direction favours, and the capability is NOT lost: harness_probe (:2096) applies the opencode auth and render contracts to the npm binary by default, and harness_record_last_good/harness_last_good_file keep a last-good in the npm prefix, so rollback for a bad @latest survives. Alternatively it can be made to work by running the installer with a PATH that contains no other opencode, so check_version finds nothing and honours OPENCODE_INSTALL_DIR. DELIBERATELY NOT DONE HERE, and this is a judgement not an omission: either change alters WHICH binary the forge executes -- today it runs npm's -- and switching a fleet's harness provisioning unattended at 04:30 local, on the night before an operator review, is a wider blast radius than the defect. It wants the same per-host-kind treatment .mcp.json got in 793-rb9u.
 
     - packet_id: builder-toolbox-init-set-too-small-for-the-dispatch-pattern
+      next_action: 'INIT-SET SLICE IS DONE (lenovinha 2026-08-23, +8s init cost, jq/yq/rg/openssl verified in-toolbox). What remains is the SWEEP, and it needs one decision made first: NOT EVERY NAMED CALLER CAN TAKE THE TOOLBOX FALLBACK. tray-diagnose.sh and diagnose-macos-provision.sh run on end-user machines with no tillandsias-builder toolbox, where the documented fallback degrades from a clear host-install instruction to a confusing toolbox error. Split the ~50 callers into DEV-HOST scripts (take the fallback) and SHIPPED-DIAGNOSTIC scripts (need a different answer), then sweep the first group only. The two nix capability probes judging by host binary alone are independent of that decision and can go first.'
       order: 799-tb7q
       status: ready
       desired_release: v0.5
@@ -26946,6 +27080,154 @@ plan_index:
         after; if it is material, split the init into a base set and an on-demand
         set rather than paying it on every fresh host.
 
+      events:
+        - type: note
+          ts: "2026-08-23T17:37:02Z"
+          host: lenovinha
+          summary: |
+            claimed for cycle 2026-08-23T17:35Z
+        - type: note
+          ts: "2026-08-23T17:49:45Z"
+          host: lenovinha
+          summary: |
+            init-set slice landed and measured; sweep residual carried in next_action
+        - type: progress
+          ts: "2026-08-23T18:05:00Z"
+          agent_id: linux-lenovinha-fable5-20260823T173512Z
+          host: linux_immutable
+          summary: |
+            FIRST SLICE CLOSED AND MEASURED — the init set now carries the four
+            tools, so the ~50-script sweep is unblocked. Done on the host that
+            actually pays this cost: lenovinha is Silverblue, so every ./build.sh
+            here re-execs through with-tillandsias-builder.sh.
+        
+            WHAT CHANGED (scripts/with-tillandsias-builder.sh):
+            (1) the dnf init set gained `jq yq ripgrep openssl`;
+            (2) `_toolbox_initialized` now requires all four, so PRE-EXISTING
+                toolboxes across the fleet re-run init and pick them up rather than
+                staying silently short. That is the same pattern the musl-gcc
+                comment (yoga, 2026-08-23) established directly above it, and
+                without it the change would only ever reach freshly-created
+                toolboxes.
+        
+            MEASURED, not inferred — the deliverable asked for first-run init cost
+            before and after. Availability probed in the live toolbox before
+            editing: jq 1.8.1, ripgrep 15.2.0, openssl 3.5.7, yq 4.53.3 all present
+            in Fedora 44 repos. Install of the four: 6.3 MiB downloaded, ADDED
+            INIT COST 8 SECONDS wall-clock. For scale, this host's first forced
+            `--check` on a fresh checkout is ~132s (the yoga figure, 850-bif2), so
+            the init set grows by ~6%.
+        
+            yq IS mikefarah v4 (`yq (https://github.com/mikefarah/yq/) version
+            v4.53.3`), verified by running it — this matters because Fedora has
+            shipped the kislyuk python wrapper under the same binary name and the
+            two take different syntax. v4 is the one whose `yq . <file>` matches
+            what the skill's finalization YAML-validation step names, so the
+            toolbox fallback and the host path now agree.
+        
+            VERIFIED: all four resolve inside the toolbox, and the extended
+            `_toolbox_initialized` probe exits 0 against this host's toolbox, so
+            init is idempotent and will not re-run in a loop.
+        
+            openssl was ALREADY on PATH in the base image — I added it anyway and
+            the comment says why: the dispatch pattern needs a guarantee, and an
+            inherited base-image binary is an accident that a future image bump can
+            withdraw without any signal.
+        
+            RESIDUAL, deliberately not taken in this cycle: the ~50 bare-jq / rg /
+            openssl callers still assume the host has the tool, and the two nix
+            capability probes still judge by host binary alone. Those are now
+            POSSIBLE for the first time — the precondition was the blocker — but
+            converting 50 scripts unattended is a much wider blast radius than
+            growing an init set, and two of the named callers (tray-diagnose.sh,
+            diagnose-macos-provision.sh) run on END-USER machines where no
+            tillandsias-builder toolbox exists at all, so they cannot take the
+            documented fallback unchanged. That distinction wants deciding before
+            the sweep, not during it.
+        - type: progress
+          ts: "2026-08-23T18:06:00Z"
+          agent_id: linux-lenovinha-fable5-20260823T173512Z
+          host: linux_immutable
+          summary: |-
+            INIT-SET SLICE IS DONE (lenovinha 2026-08-23, +8s init cost, all four
+            tools verified in-toolbox). What remains is the SWEEP, and it needs one
+            decision made first, which is why it did not just continue:
+        
+            NOT EVERY NAMED CALLER CAN TAKE THE TOOLBOX FALLBACK. tray-diagnose.sh
+            and diagnose-macos-provision.sh run on end-user machines that have no
+            tillandsias-builder toolbox — the documented
+            `command -v <tool> || toolbox run --container tillandsias-builder <tool>`
+            pattern degrades there from "hard-fail with a host-install instruction"
+            to "hard-fail with a confusing toolbox error", which is worse, not
+            better. Split the ~50 callers into DEV-HOST scripts (take the fallback)
+            and SHIPPED-DIAGNOSTIC scripts (need a different answer — either vendor
+            the parsing, or keep a clear host-install message), then sweep the first
+            group only.
+        
+            The two nix CAPABILITY probes judging by host binary alone are
+            independent of that decision and can go first.
+        - type: note
+          ts: "2026-08-23T20:16:00Z"
+          agent_id: linux-lenovinha-fable5-20260823T195304Z
+          host: linux_immutable
+          summary: |
+            A LIVE INSTANCE OF THIS PACKET'S OWN PROBLEM, from the pre-push hook
+            rather than from the ~50 scripts the sweep enumerated. Pushing this
+            cycle's claim, the plan-only lane printed:
+        
+              note: yq absent — YAML parse of plan/index.d/<fragment>.yaml delegated
+              to tillandsias-plan check, which folds every fragment
+        
+            So the hook is a bare-`yq` caller on the HOST, and on this Silverblue
+            box the host has no yq — only the builder toolbox does, and only since
+            this packet's init-set change landed. The hook degrades gracefully
+            (delegating to `tillandsias-plan check`, which is a genuinely better
+            validator), so this is not a defect in the hook. Recording it because it
+            is a concrete, already-degraded caller for the sweep's DEV-HOST group,
+            and because it shows the init-set change alone does not reach callers
+            that run on the host side of the toolbox boundary — they still have to
+            take the dispatch pattern explicitly.
+        - type: progress
+          ts: "2026-08-24T00:52:00Z"
+          agent_id: linux-lenovinha-fable5-20260823T235308Z
+          host: linux_immutable
+          summary: |
+            THIS PACKET NOW HAS A LITMUS TEST FAILING FALSELY BECAUSE OF IT, on
+            this host, today. That is a harder consequence than the packet
+            currently claims and it should be read as raising its priority.
+        
+            FOUND while running an unrelated suite. `litmus:skills-canonical-and-mcp-first-shape`
+            STEP 6 — "the MCP-first read rule is declared in methodology, not only
+            in a skill" — reports FAIL on lenovinha. Its command is a bare `yq`:
+        
+              yq -e '.distributed_work.mcp_first_read_path.rule' methodology/distributed-work.yaml
+              yq -e '.distributed_work.mcp_first_read_path.filesystem_fallback.verification' ...
+        
+            `yq` is not on this host's PATH. It IS in the tillandsias-builder
+            toolbox, since this packet's init-set change landed 2026-08-23. Running
+            the IDENTICAL command inside the toolbox prints `ok: rule declared`.
+        
+            SO THE METHODOLOGY IS FINE AND THE TEST IS WRONG. The rule the step asks
+            about is present and correctly structured; the step reports its absence.
+            A reader who trusts the verdict goes looking for a missing methodology
+            declaration that is not missing — and the failure is indistinguishable
+            from the real thing, because `yq -e` exits non-zero for "key absent" and
+            the shell exits non-zero for "command not found", and the step collapses
+            both into one FAIL.
+        
+            WHY THE INIT-SET FIX ALONE DOES NOT REACH THIS. Litmus steps run on the
+            HOST, not inside the toolbox, so growing the toolbox's package set gives
+            them nothing until the CALLER takes the documented dispatch. This is the
+            second such caller I have hit in three cycles — the pre-push plan-only
+            lane was the first (it degrades gracefully and says so, which is why it
+            is not a defect). This one does not degrade; it lies.
+        
+            FOR THE SWEEP'S DEV-HOST GROUP, and it argues for ordering litmus
+            commands FIRST: a bare-tool call inside a litmus step is worse than one
+            inside a script, because its failure is dressed as a verdict about the
+            thing under test. Any Silverblue or immutable host running the full
+            suite is currently getting this false negative, and would have been
+            since the step was written.
     - packet_id: nix-toolbox-run-subcommand-is-broken-on-two-of-its-three-rungs
       order: 799-nx4r
       status: ready
@@ -30509,7 +30791,7 @@ plan_index:
         Both are about a fix landing somewhere the running system does not look.
 
     - packet_id: spec-expert-refusal-threshold-fleet-decision
-      depends_on: ''
+      depends_on: inference-image-cannot-run-any-model-larger-than-0-5b
       order: 824-6qxh
       status: ready
       desired_release: v0.5
@@ -30975,6 +31257,97 @@ plan_index:
           host: linux_immutable
           summary: |
             reverting my own bad write: set-field renders every value as a YAML SCALAR (lww_value_lines -> serde_yaml::to_string(&str)), so a list-valued reference field becomes the prose string '[...]' and forms no edge — it only adds to the organic reference debt this ledger already warns about. The blockage is instead recorded as packets that declare depends_on at FILING time, which is the mechanism that works.
+        - type: note
+          ts: "2026-08-23T17:54:26Z"
+          host: linux_immutable
+          summary: |
+            testing whether a BARE scalar id resolves as an edge where a bracketed list did not; 824-6qxh's own blocked event names the image as its gate
+        - type: progress
+          ts: "2026-08-23T18:39:29Z"
+          agent_id: linux-macuahuitl-opus5-20260823T183400Z
+          host: linux_mutable
+          evidence_refs:
+          - target/index-rebuild/bge-m3-run2/timings.tsv — 313s, batch 64, 21102 chunks, 1024-dim, arity exact
+          - 'GPU: peak 83% util, peak non-ollama VRAM 309 MiB against an 800 MiB threshold, contaminated_samples=0'
+          - scripts/refusal-calibration/rebuild-index-with-embedder.sh
+          summary: |
+            A FULL bge-m3 INDEX TAKES 313 SECONDS, NOT 2.4 HOURS. The README estimated ~2.4h at TILLANDSIAS_SPEC_INDEX_BATCH=1 because batching was believed impossible; batching works, and the whole 21,102-chunk index rebuilds in 5m13s on a quiet card. The estimate was wrong by roughly 28x. Measured with 0 contaminated samples — peak non-ollama VRAM 309 MiB (gnome desktop chrome) against an 800 MiB threshold.
+            I ALSO NEARLY REDID FINISHED WORK, and the near-miss is the more useful record. next_action item (2) reads "rebuild the index with bge-m3 OR qwen3-embedding:4b and re-derive the bands". The bge-m3 half was already answered at 03:54 today by this host (d7f2821fd): same 561 questions, full index per model, band overlap nomic 0.2058 -> bge-m3 0.2513, margin overlap 0.1104 -> 0.1222. A BIGGER EMBEDDER MAKES SEPARATION WORSE. Re-deriving it cost a cycle's GPU time and produced no new band data.
+            What the re-run DID establish that the 03:54 measurement did not: the timing above, and an end-to-end proof of the serialiser. So the open half of item (2) is qwen3-embedding:4b alone — 4.0B params, 2560-dim, never built. Launched 18:36Z, running at 7,055 MiB and ~79% util.
+            THE CAVEAT FROM 03:54 STILL STANDS AND NOW APPLIES TO qwen3 TOO: neither index used model-specific query/passage prefixes. That refutes "a bigger embedder rescues the threshold"; it does NOT establish that these models are weak. Any qwen3 result inherits the same limitation and must be reported with it.
+        - type: progress
+          ts: "2026-08-23T19:41:30Z"
+          agent_id: linux-macuahuitl-opus5-20260823T193400Z
+          host: linux_mutable
+          summary: |
+            qwen3-embedding:4b at batch 64 does not merely underperform — it kills its own runner mid-tokenise on the largest real chunks. Relaunched at batch 32, which the bisect shows is safe, and it is embedding steadily at ~84% GPU with 309 MiB of non-ollama VRAM. This is the FIRST qwen3-embedding:4b index the project has ever built; until today the model was believed unable to run at all (849-tz8g, refuted).
+        - type: progress
+          ts: "2026-08-23T20:51:11Z"
+          agent_id: linux-macuahuitl-opus5-20260823T203400Z
+          host: linux_mutable
+          evidence_refs:
+          - target/index-rebuild/qwen3-4b-b32/timings.tsv — 1165s, batch 32, 21110 chunks, 2560-dim
+          - 'GPU: peak 100% util, peak non-ollama VRAM 309 MiB / 800 threshold, contaminated_samples=0'
+          - scripts/refusal-calibration/apply-relabelled-561.sh --verify -> ok:relabel-verify:reproduces-baseline
+          summary: |
+            THE FIRST qwen3-embedding:4b INDEX THIS PROJECT HAS BUILT: 21,110 chunks at 2560 dimensions in 1,165s (19m25s) at batch 32, on a clean card — peak 100% utilisation, zero contaminated samples. Until this morning the model was believed unable to run at all (849-tz8g, refuted); this afternoon it was believed to crash on batch (true at 64, fine at 32).
+            Band measurement against that index is RUNNING, 179/580 questions.
+            A COMPARABILITY TRAP WAS CAUGHT BEFORE IT PRODUCED A NUMBER. The only question FILE is questions-wide-579.jsonl, which carries the DISCREDITED labels (near=243, of which 86% were wrong); the baselines everyone quotes are the relabelled 561 (near=33). Measuring the obvious way and comparing against the stored baselines would have compared different ground truths and produced a confident, meaningless delta.
+            scripts/refusal-calibration/apply-relabelled-561.sh now performs that projection deterministically, taking the mapping from the baseline TSV rather than from prose. Its --verify reproduces results-relabelled-561-nomic.tsv exactly from results-wide-579-nomic.tsv (kept=561, dropped=18, empty diff), and two mutations of the projection both fail it. The qwen3 result will be projected through it before any comparison is quoted.
+        - type: progress
+          ts: "2026-08-23T21:35:09Z"
+          agent_id: linux-macuahuitl-opus5-20260823T213400Z
+          host: linux_mutable
+          evidence_refs:
+          - scripts/refusal-calibration/results-relabelled-561-qwen3-4b.tsv (projected via apply-relabelled-561.sh, ok:relabelled:579:561:18)
+          - 'band composition verified identical across all three: near=33 far=70 in=458'
+          - 'index build: 21,110 chunks 2560-dim in 1165s at batch 32; band measurement 579 questions in 1098s'
+          - 'GPU across both: peak 100% (build) / 71% (measure), non-ollama VRAM 309 MiB against an 800 MiB threshold, contaminated_samples=0'
+          summary: |
+            THE BIGGER-EMBEDDER QUESTION IS ANSWERED, AND THE ANSWER IS MONOTONIC. Same 561 relabelled questions, same ground truth, a full index rebuilt per model, quiet card each time:
+        
+              model                params  dims   band overlap   margin overlap
+              nomic-embed-text     137M     768   0.2058         0.1104
+              bge-m3               567M    1024   0.2513         0.1222
+              qwen3-embedding:4b   4.0B    2560   0.2744         0.1163
+        
+            A 29x INCREASE IN PARAMETERS AND 3.3x IN DIMENSIONS MAKES SEPARATION WORSE, not better, and does so monotonically. Not one corpus separates under any model: qwen3 overlaps spec by 0.2090, methodology by 0.1886, plan by 0.2517 — and plan, the largest corpus, degrades most (0.1545 under nomic to 0.2517 under qwen3). The margin hypothesis is flat-dead rather than monotonic, hovering at 0.11-0.12 everywhere.
+            WHY THIS IS THE EXPECTED SHAPE, stated so the result is not read as a surprise about model quality: cosine similarity measures topical proximity. A better embedder measures topical proximity BETTER. "Does this passage answer the question" is not a topical-proximity question, so sharpening the instrument sharpens the wrong axis — and a near-miss, which is by construction topically adjacent, gets scored MORE confidently as the embedder improves. That is exactly a rising near-ceiling, which is what the numbers show.
+            THIS CLOSES THE THRESHOLD HYPOTHESIS AT EVERY GRANULARITY TESTED: global, per-corpus, raw score, top1-top2 margin, and now across three model scales spanning 137M to 4B. The expert layer's answer is not a cutoff; it is the Tier A/Tier B judgement already measured at 0/33 false positives with recall@5 double recall@1.
+            THE CAVEAT SHIPS WITH THE RESULT AND IS NOT SMALL. No index used model-specific query/passage prefixes, and both bge-m3 and qwen3-embedding are trained to expect them. What is refuted is "a bigger embedder rescues the threshold". What is NOT established is that these models are weak, or that a correctly-prompted bigger embedder would behave the same way. Anyone quoting the monotonic trend as evidence about model quality is over-reading it.
+        - type: progress
+          ts: "2026-08-23T21:44:03Z"
+          agent_id: linux-macuahuitl-opus5-20260823T213400Z
+          host: linux_mutable
+          summary: |
+            The prefix experiment is RUNNING as a background job, this time with a guard: stage 2 refuses to measure unless stage 1's log says reused=0, so a fake index can never again be measured as a real one. Writing outside the checkout per 864-q7dm.
+            Also recorded for whoever reads the three filed embedder comparisons: NONE of them used prefixes, and nomic — the model that scored best — is the one whose documentation is most insistent that they are required. The monotonic "bigger is worse" trend stands as a refutation of "a bigger embedder rescues the threshold" and remains silent on how these models behave used correctly.
+        - type: progress
+          ts: "2026-08-23T22:35:05Z"
+          agent_id: linux-macuahuitl-opus5-20260823T223400Z
+          host: linux_mutable
+          evidence_refs:
+          - 'scripts/refusal-calibration/results-relabelled-561-nomic-prefixed.tsv (index prefix=[search_document: ], queries prefixed search_query: )'
+          - 'stage-1 guard: build refused to be measured unless its log said reused=0 — it said reused=0 embed=21126 of 21126'
+          - 'band composition identical to every baseline: near=33 far=70 in=458'
+          - 'GPU: peak 74% util, peak non-ollama VRAM 386 MiB against an 800 MiB threshold, contaminated_samples=0'
+          summary: |
+            THE PREFIX CAVEAT IS CLOSED, AND EVERY PRIOR CONCLUSION SURVIVES IT.
+            nomic-embed-text, the model whose documentation is most insistent that "search_document: " / "search_query: " are required, and the model that scored BEST in the size comparison — measured both ways on the same 561 relabelled questions:
+        
+              nomic, no prefixes    band overlap 0.2058   margin 0.1104
+              nomic, WITH prefixes  band overlap 0.2001   margin 0.0998
+        
+            Using the model correctly improves band overlap by 0.0057 — under 3% relative — and the bands remain massively inseparable. Both ends moved together rather than apart: in-floor 0.5620 -> 0.5950, near-ceiling 0.7677 -> 0.7951. The prefix shifts the whole distribution up and barely narrows the gap, which is what a convention that helps the model interpret its INPUT would be expected to do; it does not change what the score is measuring.
+            WHY THIS SETTLES IT FOR THE OTHER TWO MODELS WITHOUT 40 MORE MINUTES OF GPU, stated as an argument so it can be disputed rather than assumed: the effect of correct prefixing on nomic is 0.0057. The gap the caveat would have to explain away is the monotone size trend, nomic 0.2058 -> qwen3 0.2744, which is 0.0686 — TWELVE TIMES larger. A correction an order of magnitude smaller than the effect cannot reverse its sign. Anyone who disagrees can run it: the harness now supports prefixes on both halves and the cache key finally respects them (864-p2rk).
+            SO THE THRESHOLD HYPOTHESIS IS DEAD AT EVERY GRANULARITY THIS CAMPAIGN CAN TEST:
+              - one global cutoff                    NO (overlap 0.20-0.27)
+              - per-corpus cutoffs                   NO (every corpus overlaps)
+              - top1-minus-top2 margin               NO (0.10-0.12 everywhere)
+              - across model scale, 137M to 4B       NO, and monotonically worse
+              - with documented prefixes applied     NO, and it barely moves
+        
+            824-6qxh's decision — use the layer, not a threshold — is now backed by measurement across five independent axes rather than by argument. The layer's own numbers, for contrast: 0/33 false positives on unanswerable questions, and recall@5 double recall@1 with the near band still at 0.0%. The refusal question was never a geometry problem.
     - packet_id: sub-second-litmus-budgets-become-no-timeout-at-all
       order: 827-uh6t
       status: ready
@@ -34182,6 +34555,122 @@ plan_index:
             unrun for the same structural reason BigPickle is unrun, that both live
             outside `./build.sh --check` and every host's routine cycle runs only
             --check. Work, not an operator call.
+        - type: progress
+          ts: "2026-08-23T17:38:44Z"
+          agent_id: linux-macuahuitl-opus5-20260823T173400Z
+          host: linux_mutable
+          next_action: |
+            CAMPAIGN STATE 2026-08-23T17:38Z. FLEET STOOD DOWN BY THE OPERATOR: only lenovinha (2h cadence) and pirria remain awake; macuahuitl continues hourly. Re-arming the rest is an operator action, so do not read silence from esmeraldinha, yoga, yolanda or the macbook as a stall.
+            ITEM (1) IS DONE — Tier B over top-k measured. recall@1 22.5% -> recall@5 50.0% in-corpus (+27.5pp, 11/40 rescued), near band 0.0% at BOTH k — widening k is free on the refusal side, 33/33. Retrieval, not the judge, is the bottleneck; the old "20% support" figure was recall@1 mislabelled.
+            NEXT, in order: (1) ITEM (2) IS NOW THE HEAD AND IT IS UNBLOCKED: rebuild the index with bge-m3 or qwen3-embedding:4b and re-derive the bands. Serialise the model loads — concurrent runner residency is the real 849-tz8g defect, NOT a size ceiling. Record GPU utilisation and VRAM with every timing. (2) 846-idhn capabilities channel base representation, now that seven hosts publish rows. (3) The stale tail of scripts/refusal-calibration/README.md still says "Model size is blocked" and lists mxbai/qwen3/bge-m3 as aborting. That section was REFUTED by 849-tz8g and is now the most misleading page in the corpus on this subject — a low-end host reading it would conclude the ceiling is size when it is residency.
+            STANDING COORDINATOR DUTY EVERY CYCLE: merge platform branches into linux-next; nobody else has it. Both were ahead=0 at 17:35Z.
+            FLEET GAP, UNOWNED: pirria is in the capability roster and filing work (agent linux-pirria-opus5-20260823T170000Z, 17:00Z) but has NEVER written an MO-FULL attestation. check-mo-full-attestations.sh reports this INSIDE a green ok: line at rc=0, so the fleet's attestation coverage can be incomplete while the gate reads as passing.
+            NOT MINE: 856-s56y (yoga), 857-4kqv (yoga), 860-g798 (yolanda), and the low-end tier rows on pirria/esmeraldinha including the 864-dvhk / 864-c956 / 864-6qsv image-ceiling chain pirria filed at 17:22Z.
+          summary: |
+            Cycle 2026-08-23T17:34Z. Heartbeat: platform branches ahead=0 (nothing to merge); expire-claims in_progress=3 expired=0; all durable hosts attested within 6h before the operator stood the fleet down. Queue item (1) closed with a measurement; item (2) promoted to head.
+        - type: progress
+          ts: "2026-08-23T18:39:29Z"
+          agent_id: linux-macuahuitl-opus5-20260823T183400Z
+          host: linux_mutable
+          next_action: |
+            CAMPAIGN STATE 2026-08-23T18:39Z. FLEET DELIBERATELY STOOD DOWN by the operator: only macuahuitl (hourly) and lenovinha (~4h) loop; pirria is being armed to a 4h loop; yoga rejoins tonight. esmeraldinha (6h03m), yoga (6h23m) and the ephemeral forge (95h) read as SILENT >6h and are NOT stalls — do not chase them.
+            ITEM (2) IS HALF DONE AND THE OTHER HALF IS RUNNING. - bge-m3: ANSWERED at 03:54 (d7f2821fd). Band overlap nomic 0.2058 ->
+              bge-m3 0.2513; bigger is WORSE. Do not re-measure it; I did today and
+              it bought nothing but a timing.
+            - bge-m3 timing, new: full 21,102-chunk index in 313s, not the ~2.4h
+              the README estimated. Batching works.
+            - qwen3-embedding:4b (4.0B, 2560-dim): LAUNCHED 18:36Z as a background
+              job, first build ever attempted. Read
+              target/index-rebuild/qwen3-4b/.state — NOT pgrep, which self-matches.
+        
+            NEXT, in order: (1) When qwen3-4b lands, re-derive the bands against the SAME 561
+                relabelled questions and compare to nomic 0.2058 / bge-m3 0.2513.
+                If overlap grows again the trend is monotonic and the threshold
+                hypothesis is dead at every model size, which closes 824-6qxh.
+            (2) THE PREFIX CAVEAT is now the biggest hole in this whole comparison.
+                No index has used model-specific query/passage prefixes, and both
+                bge-m3 and qwen3 expect them. Everything measured so far refutes
+                "a bigger embedder rescues the threshold" but says nothing about
+                those models used correctly. Worth its own packet before anyone
+                concludes bigger embedders are useless here.
+            (3) 846-idhn capabilities channel base representation.
+            STANDING COORDINATOR DUTY EVERY CYCLE: merge platform branches into linux-next; nobody else has it. Both ahead=0 at 18:35Z.
+            FLEET GAP, NOW BEING CLOSED: pirria is in the roster and filing work but has NEVER attested. check-mo-full-attestations.sh reports this inside a GREEN ok: line at rc=0, so coverage can be incomplete while the gate passes. Operator is arming pirria to a 4h loop with the exit contract.
+            NOT MINE: 856-s56y (yoga), 857-4kqv (yoga), 860-g798 (yolanda), and the low-end tier rows on pirria/esmeraldinha.
+          summary: |
+            Cycle 2026-08-23T18:34Z. Heartbeat: platform branches ahead=0; expire-claims in_progress=3 expired=0; three hosts >6h silent, all explained by the operator's stand-down. Landed a bge-m3 timing, caught a near-duplicate of finished work, fixed two instrument defects.
+        - type: progress
+          ts: "2026-08-23T21:35:09Z"
+          agent_id: linux-macuahuitl-opus5-20260823T213400Z
+          host: linux_mutable
+          next_action: |
+            CAMPAIGN STATE 2026-08-23T21:35Z. FLEET STOOD DOWN by the operator: macuahuitl hourly and lenovinha (~2-4h) are the only loops; pirria is being armed to 4h; yoga rejoins tonight. esmeraldinha 9h, yoga 9h, yolanda 6h and the ephemeral forge 98h read SILENT and are NOT stalls.
+            ITEM (2) IS DONE. The bigger-embedder question is answered and the answer is monotonic — 137M/0.2058 -> 567M/0.2513 -> 4B/0.2744. Bigger embedders make band separation WORSE at every scale, in every corpus, on both the raw score and the top1-top2 margin. Do not re-measure this; three points on a monotone curve is enough.
+            THE THRESHOLD HYPOTHESIS IS NOW CLOSED at every granularity tested: global, per-corpus, raw, margin, and across 137M-4B. 824-6qxh's decision is "use the layer, not a threshold", and it is now backed by measurement rather than by argument.
+            NEXT, in order: (1) THE PREFIX CAVEAT is the last thing standing between this campaign
+                and a defensible conclusion. No index has used model-specific
+                query/passage prefixes; bge-m3 and qwen3-embedding both expect
+                them. Everything measured refutes "a bigger embedder rescues the
+                threshold" and says NOTHING about those models used correctly. This
+                deserves its own packet: re-run bge-m3 WITH its documented prefixes
+                and see whether the monotone trend survives. If it does, the
+                conclusion is safe fleet-wide. If it does not, three filed results
+                need their caveats promoted to corrections.
+            (2) 846-idhn capabilities channel base representation, seven hosts now
+                publish rows.
+            (3) 864-q7dm — background jobs writing inside the checkout block the
+                host from pushing anything. Filed this cycle, worked around by
+                moving the in-progress file out mid-run (a redirect holds the
+                inode, so this is safe and verified).
+        
+            STANDING COORDINATOR DUTY EVERY CYCLE: merge platform branches into linux-next; nobody else has it. Both ahead=0 at 21:34Z.
+            TOOLING NOW AVAILABLE that did not exist this morning: - scripts/refusal-calibration/rebuild-index-with-embedder.sh — serialises
+              model loads, REFUSES on a dirty card, samples GPU throughout, writes a
+              .state file. Any embedder comparison should go through it.
+            - scripts/refusal-calibration/apply-relabelled-561.sh — projects a
+              wide-579 measurement onto the corrected ground truth. USE IT: the only
+              question FILE carries the discredited labels (near=243, 86% wrong) and
+              comparing against the quoted baselines without projecting is a
+              confident meaningless delta.
+            - qwen3-embedding:4b needs TILLANDSIAS_SPEC_INDEX_BATCH=32; at 64 its
+              runner dies mid-tokenise on the largest real chunks.
+        
+            NOT MINE: 856-s56y (yoga), 857-4kqv (yoga), 860-g798 (yolanda), and the low-end tier rows on pirria/esmeraldinha.
+          summary: |
+            Cycle 2026-08-23T21:34Z. Heartbeat: platform branches ahead=0; in_progress=3 expired=0; four hosts silent, all the operator's stand-down. Closed the bigger-embedder question with a third data point and promoted the prefix caveat to the head of the queue.
+        - type: progress
+          ts: "2026-08-23T22:35:05Z"
+          agent_id: linux-macuahuitl-opus5-20260823T223400Z
+          host: linux_mutable
+          next_action: |
+            CAMPAIGN STATE 2026-08-23T22:35Z. FLEET STOOD DOWN: macuahuitl hourly and lenovinha (~2h) are the only loops. esmeraldinha 10h, yoga 10h, yolanda 7h, macbook 6h, forge 99h read SILENT and are NOT stalls. pirria never attested; operator is arming it to 4h. yoga rejoins tonight.
+            THE REFUSAL-THRESHOLD CAMPAIGN IS FINISHED. Do not open it again without a new axis. Thresholds are refuted on five: one global cutoff, per-corpus cutoffs, top1-top2 margin, model scale 137M->4B (monotonically worse), and correct query/passage prefixing (moves the number by 0.0057, twelve times smaller than the size effect it would have to reverse). 824-6qxh's answer is "use the layer, not a threshold", now measured rather than argued.
+            NEXT, in order — this queue is now OFF the refusal campaign: (1) 846-idhn capabilities channel base representation. Seven hosts
+                publish rows; this is the last piece of the routing story and it is
+                plain work, not research.
+            (2) 864-q7dm — background jobs writing inside the checkout block the
+                host from pushing anything at all. Filed with a proven workaround
+                (move the file mid-run; a redirect holds the inode). The packet is
+                to make the refusal NAME the changed paths, because "re-run it" is
+                actively wrong advice in this case.
+            (3) 853-6gz3 Tier B remains the live expert-layer thread, and its open
+                operator decision is fold-on-disagreement (conservative / majority /
+                divergence-surfacing; macuahuitl recommends divergence-surfacing).
+        
+            TOOLING BUILT TODAY, use it rather than rebuilding it: - rebuild-index-with-embedder.sh — serialises loads, REFUSES on a dirty
+              card, samples GPU throughout, writes .state. qwen3-embedding:4b needs
+              batch 32; at 64 its runner dies mid-tokenise.
+            - apply-relabelled-561.sh — projects a wide-579 run onto the corrected
+              ground truth. MANDATORY before quoting any comparison: the only
+              question FILE carries the discredited labels (near=243, 86% wrong).
+            - TILLANDSIAS_EMBED_DOC_PREFIX / _QUERY_PREFIX now exist and the cache
+              key respects them. Before 864-p2rk a "prefixed" build silently reused
+              unprefixed vectors and its identity assertion agreed.
+        
+            STANDING COORDINATOR DUTY EVERY CYCLE: merge platform branches into linux-next; nobody else has it. Both ahead=0 at 22:34Z.
+            NOT MINE: 856-s56y (yoga), 857-4kqv (yoga), 860-g798 (yolanda), low-end tier rows on pirria/esmeraldinha.
+          summary: |
+            Cycle 2026-08-23T22:34Z. Heartbeat clean. Closed the prefix caveat and with it the whole refusal-threshold campaign; queue moves to 846-idhn.
     - packet_id: macos-guest-cannot-reach-a-host-native-service
       order: 830-xsk2
       status: ready
@@ -36342,7 +36831,7 @@ plan_index:
       packet_id: capabilities-channel-has-no-base-representation
       desired_release: v0.6
       title: compaction never serialises the `capabilities:` channel, so its rows live only as fragments and can never be folded
-      status: implemented
+      status: completed
       kind: enhancement
       pickup_role: linux
       priority: p3
@@ -36476,6 +36965,43 @@ plan_index:
             208/208 lib, 24/24 bin, clippy clean, forced --check green. The live
             fold is worth redoing now that the renderer is fixed; it is deliberately
             a separate act from the fix.
+        - type: progress
+          ts: "2026-08-23T22:39:08Z"
+          agent_id: linux-macuahuitl-opus5-20260823T223400Z
+          host: linux_mutable
+          summary: |
+            EXIT-CRITERIA AUDIT, because `implemented` is a claim and this packet's criteria are unusually specific. Two of four are met; it is NOT closable and I am not closing it.
+            EC1 — a capabilities fragment is CONSUMED rather than refused, and the matrix is unchanged afterwards: MET in the sense that compaction no longer refuses (`compact --dry-run` reports 24 fragments, 0 refused) and `capability-matrix` reports 7 hosts against 9 base rows. Caveat recorded honestly: the overlay holds no capabilities-carrying fragment right now, so "0 refused" is not a positive observation of the capabilities path specifically — it is the absence of a refusal with nothing to refuse.
+            EC2 — fold_capabilities reads the base so a folded row is indistinguishable to EVERY caller: MET BEHAVIOURALLY, NOT STRUCTURALLY. The function reads only fragments; both production callers splice the base in as a synthetic "0000-base" Fragment. Filed as 864-v8kr.
+            EC3 — a generic round-trip assertion covering EVERY known top-level key, "so the NEXT channel added cannot repeat this": NOT MET. There is no such test. The round-trip tests in fragments.rs (set_field_body_round_trips_*) cover set-field value escaping, not channel survival across fold -> compact -> fold. The four channels the folder knows are packets, events, status and capabilities; nothing asserts the set is closed or that each survives.
+            EC4 — negative control, remove the capabilities writer and the assertion goes red naming that channel: NOT MET, and cannot be until EC3 exists.
+            EC3 IS THE VALUABLE HALF AND IT IS THE MISSING HALF. EC1 and EC2 fix this channel; EC3 is the one that generalises, and it is precisely the criterion that would have caught 864-p2rk's cousin earlier today — a key that fails to cover an input to the operation it keys.
+        - type: completed
+          ts: "2026-08-23T23:39:01Z"
+          agent_id: linux-macuahuitl-opus5-20260823T233400Z
+          host: linux_mutable
+          evidence_refs:
+          - crates/tillandsias-plan/src/fragments.rs — every_known_fragment_channel_survives_a_compaction_round_trip
+          - crates/tillandsias-plan/src/fragments.rs — the_set_of_fragment_channels_under_test_is_the_set_the_folder_reads
+          - 'MUTATION: drop the capabilities probe -> coverage test fails naming ["capabilities"]'
+          - 'MUTATION: suppress the capabilities writer -> round-trip fails, left [probe-host/in-guest] right []'
+          - 'cargo test -p tillandsias-plan: full suite green; ./build.sh --check rc=0'
+          merge_affordance: merge-when-idle
+          merge_reason: |
+            Test-only addition to a crate every host builds. Nothing is broken without it and nothing a sibling runs today changes behaviour, but the next host to add a ledger channel wants this gate present before they write the code rather than after.
+          summary: |
+            EC3 AND EC4 NOW EXIST; yesterday's audit found them missing entirely and called EC3 "the valuable half".
+            EC3 is two assertions rather than one, because a per-channel test would have been the same shape as the defect. First, each known channel round trips: a fragment carrying it is folded, compacted, PUBLISHED (candidate becomes the base, folded fragments deleted, exactly as `compact` does) and folded again, and both the packet document and the capability matrix must be unchanged. Second — and this is the one that generalises — the test reads its own source with include_str!, extracts every top-level key the folder pulls out of a fragment, and requires each to have a probe. Adding a channel to the folder without adding a probe fails the build.
+            That second assertion is what makes the NEXT channel safe rather than this one. 843-624y destroyed 100% of the capabilities channel because the folder read a key compaction never wrote; 864-p2rk landed the same shape hours ago on a cache key that omitted one of its own inputs. A list of channels somebody must remember to extend is exactly what both of those already were.
+            EC4 verified in both directions, since a test that has never gone red is not a gate:
+              - remove the capabilities probe -> the coverage assertion fails and
+                NAMES ["capabilities"], citing 843-624y
+              - suppress the capabilities writer -> the round trip fails with
+                left ["probe-host/in-guest"], right [] — the original data loss,
+                reproduced on demand
+        
+            CLOSING WITH ONE RESIDUE CARRIED FORWARD, NOT SWEPT UP. EC2 asks that `fold_capabilities` read the base "so a folded row is indistinguishable from a fragment row to EVERY caller". It is satisfied behaviourally — both production callers splice the base in as a synthetic "0000-base" Fragment and `capability-matrix` reports all 7 hosts — but structurally the function still takes only fragments, and a third caller would get an empty matrix with no error. That is filed as 864-v8kr with its own exit criteria. The round-trip test above deliberately MIRRORS the caller-side splice rather than improving on it, so it tests the fold production actually performs.
+            This packet was itself the residue split off 843-624y. Splitting the remaining structural nit rather than holding the whole row open is the same call, made for the same reason.
     - order: 847-wgy4
       packet_id: work-selection-cannot-separate-more-hosts-than-frontier-epics
       desired_release: v0.6
@@ -36753,6 +37279,15 @@ plan_index:
           host: linux_immutable
           summary: |
             restoring the rescoped next_action I overwrote a minute ago; my replacement asserted an image CEILING, which this text explicitly says is the wrong framing — isolated loads pass and the defect is concurrent residency
+        - type: note
+          ts: "2026-08-23T19:49:19Z"
+          agent_id: linux-pirria-opus5-20260823T193000Z
+          host: linux_immutable
+          summary: |
+            A CORRECTION I OWE THIS PACKET AND TWO OF MY OWN. I filed 864-dvhk and 864-c956 BLOCKED on this one, saying a low-end host could not obtain a model above 0.5B: "the inference container has no registry egress (curl to registry.ollama.ai returns 000)". That was true and the diagnosis was wrong. The container had http_proxy=http://proxy:3128 baked in and THE PROXY CONTAINER WAS DEAD (it fails to start: crun cannot stat /tmp/tillandsias-ca/intermediate.crt, an ephemeral CA wiped on reboot). Clearing the proxy env reaches the registry directly. phi3.5:3.8b pulled in minutes.
+            So neither packet was ever blocked by this one. I tested the SYMPTOM (egress fails) and filed the blocker I expected rather than the one that was there — the same shape as the defects this host has been finding all week, committed by me while filing affordances about it.
+            SECOND OBSTACLE, worth recording because it will bite the next host: running ollama against the shared model cache on Silverblue needs BOTH --userns=keep-id:uid=1000,gid=1000 (the image runs as uid 1000; rootless podman otherwise maps host 1000 to container 0 and the binary is not executable) AND --security-opt label=disable (SELinux is Enforcing and denies exec from the bind mount). Without the second, the container exits 126 with a bare "Permission denied" that reads as a broken image.
+            This packet's own rescoping stands and is now independently supported: isolated loads pass. phi3.5:3.8b loaded and served fine here with nothing else resident.
     - order: 850-bif2
       packet_id: joining-host-must-publish-a-capability-row
       desired_release: v0.6
@@ -37445,6 +37980,23 @@ plan_index:
             The judge is coherent on the in-corpus passage and CONTRADICTS ITSELF on the out-of-corpus one — which is precisely the case this whole programme exists to handle (821-73es: the fat spec expert cannot refuse an out-of-corpus question). Note the direction differs from the YES/YES this packet recorded earlier; the contradiction here is NO/NO. What matters is that the pair disagrees with itself, which the mechanism detects with no ground truth — the operator's design working exactly as intended.
             THE CONSEQUENCE FOR DEPLOYMENT. A layer whose judge is untrustworthy on out-of-corpus questions must REFUSE rather than answer, so on this tier 853-6gz3 would be self-suppressing: correct, and useless. The claim this packet rests on — that the layer "runs LOCALLY on commodity hardware" — is therefore NOT falsified by throughput on the bottom host. It is falsified, for now, by JUDGE CAPABILITY, and that is a different problem with a different fix. The fan-out arithmetic says commodity hardware can serve this design; the image ceiling says it cannot serve it with a judge worth trusting.
             METHOD NOTE, because the first attempt produced confident nonsense. My passage offsets ran past EOF (index.yaml is 2.74 MB; the offsets reached 5.6 MB), so every "passage" was EMPTY, every prompt was identical, and ollama served them from KV cache at 1300-1768 tok/s. THE TELL WAS prompt_eval_count IDENTICAL ACROSS EVERY REP (52, 52, 52...). On this stack an unvarying token count is the signature of a fabricated measurement; check it before reading the throughput column.
+        - type: progress
+          ts: "2026-08-23T17:38:44Z"
+          agent_id: linux-macuahuitl-opus5-20260823T173400Z
+          host: linux_mutable
+          evidence_refs:
+          - scripts/refusal-calibration/results-recall-at-5-qwen7b.tsv (309 rows, 73 questions, k=5, judge qwen2.5:7b)
+          - 'GPU AT MEASUREMENT: 1% utilisation, 2910 MiB / 24564 MiB, no game or Steam process; the two resident llama-server runners account for 2260 MiB'
+          summary: |
+            TIER B OVER TOP-K, which was next_action item (1). The two error sources are now measured SEPARATELY and they are not the same size.
+        
+              band          n   recall@1   recall@5      lift
+              in           40      22.5%      50.0%   +27.5 pp
+              near         33       0.0%       0.0%     0.0 pp
+        
+            RETRIEVAL IS THE BOTTLENECK, NOT THE JUDGE. Looking past top-1 more than doubles in-corpus support detection — 11 of 40 in-corpus questions (27.5%) have a supporting passage somewhere in the top 5 that top-1 missed entirely. The previously reported 20% Tier B support rate was therefore never a judge quality number; it was recall@1 wearing a judge's label, exactly as suspected when this split was specified.
+            AND WIDENING k COSTS NOTHING ON THE REFUSAL SIDE. The near band is 0.0% at k=1 and 0.0% at k=5: giving the judge five chances to claim support for a question the corpus cannot answer produced zero false positives, 33/33. That is the result that makes k>1 safe to adopt. The obvious fear — more candidates means more opportunities to hallucinate support — is measured and absent, which matches the earlier 0/33 fabrication finding rather than merely repeating it at a different k.
+            WHAT IS STILL OPEN. recall@5 is 50%, so half of in-corpus questions have no supporting passage in the top 5 at all. Combined with the earlier judge@source finding (6 of 10 refusals flip to YES when judged against the recorded source file), the remaining loss sits in retrieval, not in judgement. That is what makes next_action item (2) — a bigger embedder — the right next move rather than more judge work: the judge is already outperforming what retrieval hands it.
     - order: 854-8p9d
       packet_id: sibling-hosts-establish-the-native-accel-baseline-wsl2-cannot-reach
       desired_release: v0.6
@@ -38685,7 +39237,7 @@ plan_index:
       packet_id: promotion-script-has-no-dry-run
       desired_release: v0.5
       title: promote-stable.sh performs an outward-facing channel flip with no way to ask whether it would
-      status: ready
+      status: implemented
       kind: enhancement
       pickup_role: any
       priority: p1
@@ -38712,11 +39264,40 @@ plan_index:
           summary: |
             Filed from a self-inflicted incident while verifying 864-r3wq: piping the promotion script to `head -4` both PROMOTED (no dry-run exists) and then SIGPIPE-killed it mid-run, splitting the release channel from the stable git tag. Reverted in full. The missing affordance is the cause, not the pipe.
 
+        - type: implemented
+          ts: "2026-08-23T17:53:25Z"
+          agent_id: linux-pirria-opus5-20260823T180000Z
+          host: linux_immutable
+          evidence_refs:
+          - scripts/test-promote-stable-evidence-gate.sh 11/11 hermetic, 12/12 with PROMOTE_DRYRUN_ONLINE=1
+          - 'MUTATION CONTROL: the pre-864-8tqv script run through the same tripwires FIRES it — ''MUTATION gh release edit v0.4.260817.1 --prerelease=false --latest'''
+          - 'criterion 2 online: flags {isDraft:false,isPrerelease:true,tagName:v0.4.260817.1} and /releases/latest v0.4.260810.1 byte-identical across a real --dry-run'
+          summary: |
+            --dry-run added, and the test rebuilt around TRIPWIRES rather than stubs — which is the part that makes the rest worth anything.
+            THE SCRIPT. Flags now parse in any order (the old form took --force positionally as $2, so `<tag> --dry-run` bound --dry-run to FORCE and was silently ignored — the pre-fix script does exactly that in the mutation control below). --dry-run runs tag validation, the release-existence read, and the full evidence gate, then stops on the line above the first mutation and prints would-promote:<tag>. Output grammar extended rather than changed: promoted:/refused: are untouched.
+            THE TEST INVERTED ITS GUARANTEE. It used to drive the REAL promotion path and rely on permissive gh/git STUBS to absorb the mutations — a passing gate really did call `gh release edit`, and only the stub kept it off GitHub. Now `git` fails on ANY invocation and `gh` records write verbs as violations, and every case asserts the violation log is EMPTY. Before: "the stub absorbed whatever it did." After: "it did nothing, and the harness would have caught it if it had."
+            A GATE YOU HAVE NOT SEEN GO RED IS NOT A GATE, so the suite ends by running `git show HEAD:scripts/promote-stable.sh` — the version with no --dry-run — through the same tripwires and REQUIRING it to trip. It does. Without that case every "0 mutations" above would be unfalsifiable.
+            CRITERION 2 IS SATISFIED LITERALLY, not by proxy, and safely: an opt-in online case (PROMOTE_DRYRUN_ONLINE=1) puts a REFUSING PASSTHROUGH gh on PATH — reads exec the real binary, writes are recorded and cannot execute — so the real release-existence read happens against the real repo while a leaked mutation is physically impossible. The release flags and the stable tag are byte-identical before and after.
+            TWO OF MY OWN ERRORS, both caught by the harness rather than by me, and both the same shape as the defect this packet is about. (1) The first online check asked gh for `isLatest`, which is NOT a field: the command errored, both reads returned "", and the comparison passed VACUOUSLY. Fixed to valid fields plus a guard that FAILS when the read is empty. (2) The blunt `git` tripwire fired online on `git remote -v`, which real gh shells out to for repo resolution — a READ. Hermetically "no git at all" is right because nothing shells out; online the invariant is "no git WRITES". Recorded because the next person to widen this test will hit both.
+        - type: note
+          ts: "2026-08-23T17:58:06Z"
+          agent_id: linux-pirria-opus5-20260823T180000Z
+          host: linux_immutable
+          summary: |
+            THE MUTATION CONTROL WAS SELF-DEFEATING AND THE GATE CAUGHT IT, which is the best possible outcome and worth recording because the trap is general.
+            It read `git show HEAD:scripts/promote-stable.sh` — the pre-fix script — and required it to trip the tripwire. That passed while the work was uncommitted. THE MOMENT THE FIX WAS COMMITTED, HEAD BECAME THE FIXED SCRIPT: the "pre-fix" copy no longer mutated, the wire did not fire, and the suite went 10/11 on the very next gate run. A control that holds only while its own fix is uncommitted is not a control, and it would have been indistinguishable from a real regression to whoever hit it next.
+            Rebuilt self-contained: take the CURRENT script and defeat ONLY its guard (sed `--dry-run) DRY_RUN=1` -> `DRY_RUN=0`), so the assertion is "this exact script, with its dry-run guard removed, mutates — and the tripwire catches it". That stays true for every future version.
+            It also got its own vacuity guard, which is the lesson applied to itself: if the arg-parser line ever moves, the sed matches nothing and the case FAILS with "could not defeat the guard; the arg-parser line moved, so this control is not testing what it claims" — rather than silently exercising an unmodified script and passing. Verified in three directions: guard defeated -> wire fires; guard deliberately broken (DRY_RUN=9) -> 6/11 with the control reporting it could not defeat the guard; correct script -> 11/11 hermetic, 12/12 online.
+        - type: note
+          ts: "2026-08-23T17:55:34Z"
+          host: linux_immutable
+          summary: |
+            implemented and mutation-controlled on pirria; see the event fragment for evidence including the tripwire firing against the pre-fix script
     - order: 864-mk2p
       packet_id: github-make-latest-is-sticky-so-demotion-does-not-restore
       desired_release: v0.5
       title: the documented way to undo a promotion does not undo it — make_latest is sticky
-      status: ready
+      status: implemented
       kind: defect
       pickup_role: any
       priority: p1
@@ -38750,6 +39331,28 @@ plan_index:
           summary: |
             Measured during the same revert: `gh release edit <tag> --prerelease`, the remediation the script's own header recommends, set prerelease=true and left /releases/latest pointing at the demoted release. Required an explicit make_latest=true PATCH on the intended release to restore.
 
+        - type: implemented
+          ts: "2026-08-23T17:53:25Z"
+          agent_id: linux-pirria-opus5-20260823T180000Z
+          host: linux_immutable
+          evidence_refs:
+          - scripts/promote-stable.sh demote <mistaken> --to <intended>, verifying via repos/<owner>/<repo>/releases/latest
+          - methodology/versioning.yaml promotion.demotion corrected — it carried the same false claim as the script header
+          - 'hermetic cases: would-demote:<mistaken>:latest-would-be:<intended>; refused:missing-target when --to is omitted'
+          summary: |
+            A `demote` subcommand that names the intended release, re-marks it explicitly, and then RE-READS /releases/latest to check the channel actually moved — refusing with refused:demote-verify-failed:<whatever- latest-actually-is> when it did not. Assuming was the whole defect.
+            THE FALSE CLAIM WAS IN TWO PLACES, AND ONLY ONE HAD BEEN FIXED. The script header was corrected before I picked this up. methodology/ versioning.yaml:490 — the canonical release runbook, which is what an operator reads during an incident — still said:
+        
+              demotion: "gh release edit <tag> --prerelease
+                         (README URLs fall back to the previous stable)"
+        
+            BOTH HALVES ARE FALSE. The command sets prerelease=true, and /releases/latest goes on serving the demoted tag because make_latest is sticky; nothing falls back. That entry now points at the subcommand and carries a `demotion_is_not_the_inverse_of_promotion` block with the three real steps and the verification read — which also discharges this packet's criterion 3, since the runbook is exactly "where the release runbooks can find it".
+            NOT EXERCISED AGAINST GITHUB, deliberately and this is a real gap: the demote path's mutations are covered only by the hermetic tripwires and its dry-run. Proving the sticky-field behaviour end to end means promoting something in order to demote it, which is the class of action 864-8tqv exists to stop being casual about. The evidence that make_latest is sticky is macuahuitl's live incident on 2026-08-23, not a test I ran. Whoever next has a legitimate demotion to perform should run it with --dry-run first and record the verify line.
+        - type: note
+          ts: "2026-08-23T17:55:34Z"
+          host: linux_immutable
+          summary: |
+            implemented and mutation-controlled on pirria; see the event fragment for evidence including the tripwire firing against the pre-fix script
     - order: 864-hv2n
       packet_id: status-loss-gate-was-blind-to-packets-and-leaked-state-between-files
       desired_release: v0.5
@@ -38842,11 +39445,26 @@ plan_index:
           summary: |
             fleet convention: a packet with an unmet depends_on stays ready and lets the EDGE express the blockage (precedent: spec-cheatsheet-contradiction-audit, event-push-architecture). blocking-counts counts only READY dependents, so status:blocked hid the very affordance this packet exists to create
 
+        - type: progress
+          ts: "2026-08-23T19:49:19Z"
+          agent_id: linux-pirria-opus5-20260823T193000Z
+          host: linux_immutable
+          summary: |
+            MEASURED, AND IT REFUTES MY OWN HYPOTHESIS. I filed this packet arguing that quality and latency TRADE against each other at the floor — that a judge big enough to pass 853-6gz3's complement self-check would simply be too slow. The trade is not smooth. At 3.8B you pay 6.2x the latency AND GET STRICTLY WORSE COHERENCE.
+        
+              qwen2.5:0.5b  in-corpus YES/NO  coherent      | out-of-corpus NO/NO  CONTRADICTION
+              phi3.5:3.8b   in-corpus YES/YES CONTRADICTION | out-of-corpus NO/NO  CONTRADICTION
+        
+              cost of one k=1 judge call: ~4.3 s at 0.5B -> ~26.5 s at 3.8B (6.2x)
+        
+            The 0.5B judge is at least coherent on the passage that DOES answer; the 3.8B judge contradicts itself on BOTH. So "use a bigger judge" is not a path from here — there is a capability CLIFF, not a gradient, and 3.8B is on the wrong side of it. macuahuitl's positive Tier B used qwen2.5:7b: a different family and 2x larger again.
+            STAYS OPEN, and the open question is now sharper than the one filed: not "is a good judge affordable" but "where is the cliff, and is anything below it coherent at all". If the threshold is 7B, a k=1 call here would cost roughly 50 s by extrapolation from the 0.5B->3.8B slope, and a complement pair ~100 s — which answers the deployment question without needing the model.
+            HONEST LIMITS OF THIS PROBE: one prompt pair, one model family, temperature 0, a terse "answer one word" instruction that phi3.5 may handle worse than qwen. macuahuitl's Tier B ran 73 questions. This is suggestive of a cliff, not proof of where it sits.
     - order: 864-c956
       packet_id: memory-bandwidths-effect-on-inference-is-unmeasurable-fleet-wide
       desired_release: v0.6
       title: DRAM channel count cannot be priced from a 0.5B model, and the low-end hosts hold no larger one to measure with
-      status: ready
+      status: implemented
       kind: research
       pickup_role: linux
       priority: p3
@@ -38875,6 +39493,30 @@ plan_index:
           summary: |
             fleet convention: a packet with an unmet depends_on stays ready and lets the EDGE express the blockage (precedent: spec-cheatsheet-contradiction-audit, event-push-architecture). blocking-counts counts only READY dependents, so status:blocked hid the very affordance this packet exists to create
 
+        - type: note
+          ts: "2026-08-23T19:49:19Z"
+          host: linux_immutable
+          summary: |
+            measured at 3.8B: the ratio is flat across an 8x model-size range and the single-channel host never reaches its own ceiling, so neither host is channel-limited and channel count is not a scheduling input on this tier
+        - type: implemented
+          ts: "2026-08-23T19:49:19Z"
+          agent_id: linux-pirria-opus5-20260823T193000Z
+          host: linux_immutable
+          evidence_refs:
+          - 'phi3.5:3.8b decode on pirria: 9.01 / 8.85 / 7.60 tok/s (mean 8.49), engine=cpu size_vram=0 via /api/ps'
+          - 'esmeraldinha, same model, single channel: 6.53 tok/s (858-tnnv)'
+          summary: |
+            ANSWERED, AND THE ANSWER IS NO: DRAM CHANNEL COUNT BUYS THIS TIER NOTHING MEASURABLE, even at the size where the bus was supposed to bind.
+            Re-reading weights per token-pass (Q4: 0.40 GB at 0.5B, 2.2 GB at 3.8B):
+        
+              pirria       DUAL   0.5B 41.00 t/s = 16.40 GB/s | 3.8B 8.49 t/s = 18.68 GB/s
+              esmeraldinha SINGLE 0.5B 29.64 t/s = 11.86 GB/s | 3.8B 6.53 t/s = 14.37 GB/s
+        
+              ratio  0.5B 1.38x   3.8B 1.30x
+        
+            THE RATIO IS FLAT ACROSS AN 8x MODEL-SIZE RANGE, and that is the whole finding. A bus-bound difference WIDENS as the model grows and the bus binds; this one does not move. And the single-channel host is still at only 67% of its own ~21.3 GB/s ceiling at 3.8B — it never reaches the wall the second channel was supposed to remove. NEITHER HOST IS CHANNEL-LIMITED at any size this tier can run.
+            Each host instead plateaus at a roughly CONSTANT achieved throughput — ~16-19 GB/s here, ~12-14 there — regardless of model size. That is the signature of a core/latency limit, not a width limit: the CPU cannot issue reads fast enough to saturate even one channel, so adding a second changes nothing. The residual ~1.3x tracks clock and DRAM data rate.
+            CONSEQUENCE FOR THE MATRIX, which is why this was worth measuring: capability rows record channel count, and on this tier it is NOT a useful scheduling input. Do not prefer a dual-channel low-end host over a single-channel one on bandwidth grounds; the difference is ~1.3x and it is not the bus. 855-wrr3 originally concluded "same cores, roughly double the bus" from a decode ratio; 859-86kr retracted the reasoning; this closes it with the measurement that was said to be impossible.
     - order: 864-6qsv
       packet_id: set-field-cannot-write-a-list-valued-reference-field
       desired_release: v0.6
@@ -38900,3 +39542,596 @@ plan_index:
         WHY THIS IS NOT COSMETIC. The ledger already warns about exactly this shape — `warning (organic reference debt): <pkt>: split_into carries a prose annotation '...'` — on split_into, another list-valued reference field. The debt is organic because the tool that writes these fields can only write prose. Every agent that discovers a dependency AFTER filing either hand-edits the folded ledger, files a new packet to carry the edge (what this cycle did), or writes prose no selector reads — and the third is the cheapest, which is why blockage keeps living in event summaries.
       exit_criteria: |
         (1) set-field can write a YAML sequence to a reference field, verified by a round-trip test that the value re-reads as a resolvable edge and not as a scalar. (2) blocking-counts reflects an edge added this way. (3) A pass over the existing `organic reference debt` warnings decides which are genuine edges that should be converted and which are deliberately prose.
+      events:
+        - type: note
+          ts: "2026-08-23T17:55:34Z"
+          agent_id: linux-pirria-opus5-20260823T180000Z
+          host: linux_immutable
+          summary: |
+            SHARPER THAN AS FILED, measured while cleaning up my own debt. I filed this packet saying set-field STRINGIFIES a list, which is true but is not the whole defect. A BARE SCALAR id fares no better:
+        
+              set-field 824-6qxh depends_on inference-image-cannot-run-any-model-larger-than-0-5b
+        
+            is accepted, resolves (it produces no 'organic reference debt' warning, unlike the bracketed form), and STILL FORMS NO EDGE — 'what is 824-6qxh blocked on' answers unsupported, and blocked-by 849-tz8g does not list it. So the correct statement is: AN LWW set-field CORRECTION TO A REFERENCE FIELD NEVER BECOMES A GRAPH EDGE, in either shape. The graph is built from the folded packets: definitions only.
+            That widens the fix beyond "accept a sequence": the LWW channel's value has to reach the dependency graph, or reference fields need to be refused by set-field outright with a message naming the file-a-packet workaround — an accepted write that silently does not participate is the worse of the two.
+            Also cleaned up here: my previous cycle set this field to "" while reverting, which left 'depends_on carries a prose annotation ""' in the gate's warning stream. The scalar above replaces it, so the warning is gone and the value is at least id-shaped and honest about the intent, even though no edge forms until this packet is fixed.
+    - packet_id: meta-orchestration-compaction-zero-removed-lines-invariant-is-false
+      order: 865-ng6r
+      status: ready
+      desired_release: v0.5
+      priority: p3
+      kind: bug
+      title: the meta-orchestration skill states compaction produces "zero removed lines" — false since field-setting fragments exist, and it costs every agent an investigation
+      deliverable: the skill's Ledger-compaction section states the ACTUAL invariant (base bytes are never re-serialized; removed lines are last-write-wins field supersessions and are expected), so a non-zero removed-line count stops reading as evidence of data loss
+      pickup_role: any
+      release_target: convergence-velocity-milestone
+      capability_tags:
+        - methodology
+        - ledger
+        - documentation
+      estimated_hours: 1
+      context: |
+        OBSERVED (lenovinha, 2026-08-23T17:45Z), on a routine eligible compaction:
+        29 fragments folded, diff was +888/-17. The skill says:
+        
+          "the `plan/index.yaml` diff was 1021 added lines and **zero removed
+           lines**. That zero is the property to protect"
+        
+        So a non-zero removal count reads as exactly the corruption the paragraph
+        warns about, and I stopped the cycle to investigate it. The investigation
+        cost several minutes and four tool calls before it resolved to NOTHING
+        WRONG: the 17 removed lines were 5x `status: ready` and one multi-line
+        `next_action` on order 849-tz8g, every one of them REPLACED by a newer
+        value that a `set-field` fragment carried. That is last-write-wins field
+        application working correctly. 25 `status:` lines were added in the same
+        diff.
+        
+        The 849-tz8g case is the clearest: the superseding next_action opens
+        "RESCOPED (unchanged, restored after I clobbered it)" — a sibling host had
+        already overwritten and restored that field, so the fold was propagating a
+        correction, not destroying one.
+        
+        WHY THE PROSE IS WRONG RATHER THAN THE CODE. The zero was a real
+        measurement, taken on 2026-08-03 (order 582-4wdi, commit 81e12b65) when
+        the fold only ever APPENDED new packets and events. Fragments that SET AN
+        EXISTING FIELD came later; the moment they did, a correct fold must remove
+        the superseded line. The invariant was never updated, so it now describes
+        a fold that can no longer exist.
+        
+        THE PROPERTY WORTH PROTECTING IS STILL REAL, and the fix must keep it —
+        it is just not "zero removed lines". It is that the fold is TEXT-LEVEL and
+        never round-trips the YAML: comments survive, the four-space item prefix
+        `append-event` locates by survives, and no line is removed EXCEPT one
+        whose field a fragment explicitly reassigned. Both halves were true here
+        (120 comment lines preserved, 549 packets, integrity `ok:`).
+        
+        This is the reduction-engine "log things that make you slower" case: the
+        doc turned a healthy routine step into a stop-and-investigate, and it will
+        do so for every host that compacts, every time, until it is corrected.
+
+    - packet_id: fragment-fold-silently-ignores-unrecognized-entry-keys
+      order: 866-pvsx
+      status: completed
+      desired_release: v0.5
+      priority: p2
+      kind: bug
+      title: an `events:` entry carrying an unrecognized key is silently dropped by the fold and every gate still reports ok — the write appears to succeed and does nothing
+      deliverable: an entry under `events:` whose payload key is neither `event:` nor a recognized directive is NAMED on stdout by `tillandsias-plan check` (the way `fragment-misplaced-definitions` names misplaced definitions), so a no-op ledger write cannot present as a successful one
+      pickup_role: any
+      release_target: convergence-velocity-milestone
+      capability_tags:
+        - ledger
+        - fail-loud
+        - validation
+      estimated_hours: 3
+      context: |
+        OBSERVED (lenovinha, 2026-08-23T18:05Z), by making the mistake. To
+        release a claim and carry a residual forward I hand-wrote a fragment
+        entry:
+        
+          - packet_id: builder-toolbox-init-set-too-small-for-the-dispatch-pattern
+            set_field:
+              status: ready
+              next_action: |- ...
+        
+        `set_field:` is not a key the fold recognizes — the sanctioned path is the
+        `set-field` SUBCOMMAND, which writes its own fragment in the real shape.
+        Every gate accepted it: `yq` parsed it, `closure-evidence-check` said
+        `ok:closure-evidence:0 checked`, `fragment-misplaced-definitions` said
+        nothing, and `tillandsias-plan check` said `ok: 550 packets, ids unique,
+        live references sound`. The packet count even ROSE by one, because the
+        `packets:` half of the same fragment folded correctly — so the fragment
+        looked actively successful.
+        
+        It was not. `expire-claims --list-live` still showed 799-tb7q claimed by
+        this host. The status change and the next_action had gone nowhere. I only
+        caught it because I ran the claim listing to confirm, which nothing
+        required me to do.
+        
+        WHY THIS IS THE 812-d45t SHAPE, ONE STEP OUT. That order added
+        `fragment-misplaced-definitions` for a packet written under the wrong KEY
+        (`events:` instead of `packets:`) — the same failure mode, caught for one
+        specific mistake. The general case is untouched: any unrecognized payload
+        key under `events:` is skipped in silence. The existing check is a
+        denylist of one known error where an allowlist of known-good keys is what
+        the situation calls for.
+        
+        WHY IT MATTERS MORE THAN A TYPO USUALLY WOULD. Fragments are IMMUTABLE
+        once committed, and the fleet writes them concurrently from five hosts. A
+        silently-dropped directive is therefore permanent: nothing will re-apply
+        it, and the only evidence it was ever attempted is a committed file that
+        every tool reports as fine. The failure mode is a host that believes it
+        released a claim and did not — which strands the packet from BOTH `ready`
+        queries and burndown for 24h until the reaper runs. That is exactly
+        641-e2qa, reachable by an honest mistake rather than by an abandoned
+        cycle.
+      events:
+        - type: note
+          ts: "2026-08-23T19:53:55Z"
+          host: lenovinha
+          summary: |
+            claimed for cycle 2026-08-23T19:53Z
+        - type: completed
+          ts: "2026-08-23T19:59:56Z"
+          host: lenovinha
+          summary: |
+            status 'completed' with evidence_refs: overlay_coverage_gap_tests 5/5; cargo test -p tillandsias-plan 213+24 pass; 4 scenarios A-D verified on the reproduction; live check ok: 552 packets unchanged
+        - type: note
+          ts: "2026-08-23T19:59:56Z"
+          host: lenovinha
+          summary: |
+            check now names dropped entries; overlay_coverage_gap_tests 5/5, crate suite 213+24, live ledger unchanged at ok:552
+        - type: progress
+          ts: "2026-08-23T20:15:00Z"
+          agent_id: linux-lenovinha-fable5-20260823T195304Z
+          host: linux_immutable
+          summary: |
+            I FILED THIS PACKET YESTERDAY WITH THE WRONG CAUSE, AND THE CORRECTION
+            IS MORE USEFUL THAN THE FIX. I wrote that the fold "silently ignores
+            unrecognized entry keys" and that the general case was "untouched" —
+            that detection was the missing piece. It was not. `fragment_coverage_gaps`
+            (fragments.rs) has caught this exact shape all along: an `events:` entry
+            with no `event:` block is already flagged, with no requirement that it
+            carry definition fields.
+        
+            WHAT IS ACTUALLY BROKEN IS WHERE THAT ANSWER GOES. The guard runs at
+            exactly two call sites, both inside compaction (`compact` and
+            `compact_text`), and what it does with a gap is REFUSE TO DELETE the
+            fragment. That protects the bytes on disk and says nothing to the person
+            who wrote them. Worse, it only runs when a compaction runs, and
+            compaction runs when the fragment COUNT makes it eligible — so a dropped
+            entry in a small overlay is reported to nobody, indefinitely. My own
+            fragment was never compacted; I ran `check`, and `check` never asked.
+        
+            So this was a REPORTING-CHANNEL gap, not a detection gap, and I had
+            invented the cause to fit the symptom — 797-5kqe, the same shape this
+            ledger keeps recording. The evidence was available before I filed:
+            the guard is 300 lines from the fold I read.
+        
+            THE FIX, and it is small because the detection already existed:
+            `fragments::overlay_coverage_gaps(index)` runs the SAME pass at READ
+            time over the current overlay, and `check` emits one
+            `dropped-entry: <path>: <reason>` line per gap. Reported, never refused
+            fleet-wide — the 699-dycj argument applies unchanged: build.sh runs
+            `check` on every host, so a refusal would turn one host's typo into
+            every other host's red build on a file they did not write.
+            `--strict-fragments` arms the refusal for callers that cannot tolerate a
+            partial write, exiting 3 (EXIT_FOLD_INCOMPLETE), distinct from 1.
+        
+            A DROPPED ENTRY NOW LANDS THE VERDICT WHERE AN UNREADABLE FILE DOES:
+            `ok:` becomes `incomplete:`. Announcing a sound ledger when filed work
+            is absent from it is the precise lie 796-4ydb was filed against, and an
+            unusable entry makes the corpus partial for the same reason an
+            unparseable file does. The two causes stay NAMED separately in the
+            verdict, because one is repaired by fixing a parse error and the other
+            by rewriting an entry, and a reader who confuses them repairs the wrong
+            thing.
+        
+            I ALSO SPLIT THE DIAGNOSIS, which is the part I would keep if I could
+            keep only one thing. Both mistakes reach the same line and they are
+            repaired differently:
+              * definition fields present -> "a packet DEFINITION under the wrong
+                key (812-d45t); move it under `packets:`", listing which fields.
+              * otherwise -> "unrecognized key(s) <names> — the fold has no handler
+                for it and skips it in silence, so this write did NOT land
+                (866-pvsx); use the `set-field` subcommand rather than hand-writing
+                the entry", naming the offending key.
+            Reporting my `set_field:` typo as 812-d45t would have sent me hunting
+            for a lost packet definition that never existed. The first message a
+            defect gives you decides where you look next.
+        
+            VERIFIED, four scenarios plus a negative control, on the reproduction of
+            the original defect:
+              A. `set_field:` entry  -> named, cites 866-pvsx, does NOT cite
+                 812-d45t, verdict `incomplete:`, exit 0
+              B. misplaced definition -> named, cites 812-d45t and says where to
+                 move it, does NOT cite 866-pvsx
+              C. same corpus with `--strict-fragments` -> exit 3
+              D. well-formed event -> `ok: 1 packets ...`, silent
+            Hermetic tests: `overlay_coverage_gap_tests` 5/5 (the four above plus an
+            unparseable base, which must yield no gaps rather than panic — `check`
+            has its own louder answer for that and this pass must not change how an
+            unreadable ledger fails). Full crate suite 213 + 24 green.
+        
+            NO FALSE POSITIVES ON THE LIVE CORPUS: `tillandsias-plan check` against
+            the real ledger reports `ok: 552 packets, ids unique, live references
+            sound (8 parked-block edges)` — unchanged. That mattered more than the
+            unit tests: a read-time guard that fires on the existing 13-fragment
+            overlay would be switched off within a day.
+
+    - order: 864-w3nx
+      packet_id: embed-failure-handler-discarded-the-servers-own-error-and-guessed-instead
+      desired_release: v0.5
+      title: curl -f threw away the response body, so the embed handler printed a guessed cause and the guess was wrong
+      status: completed
+      kind: defect
+      pickup_role: any
+      priority: p1
+      capability_tags:
+        - inference
+        - rag
+        - diagnostics
+        - affordances
+      deliverable: scripts/spec-index-ensure.sh
+      depends_on: []
+      estimated_hours: 2
+      discovered_by: a qwen3-embedding:4b index build that failed and blamed the wrong thing
+      context: |
+        THE HANDLER ASSERTED A CAUSE IT NEVER MEASURED, WHICH IS THE CLASS IT WAS WRITTEN TO PREVENT. On the embed call failing, spec-index-ensure.sh printed:
+        
+          blocked:spec-index:embed-endpoint-refused
+            models resident right now: qwen3-embedding:4b, qwen2.5:0.5b
+            loading another model beside these aborts on this host (849-tz8g);
+            unload them and retry before suspecting the endpoint.
+        
+        Residency was NOT the cause, and that message cost a cycle. The mechanism is one flag: the call was `curl -fsS`, and curl's --fail turns an HTTP 400 into exit 22 AND DISCARDS THE RESPONSE BODY. The body is the only place the server explains itself. With it gone the handler had nothing to report, so it reported a guess.
+        WHAT THE DISCARDED BODY ACTUALLY SAID, recovered from the container log:
+        
+          [GIN] 18:42:10 | 400 | 1m42s | POST "/v1/embeddings"
+          Post "http://127.0.0.1:34227/tokenize": read tcp …: connection reset by peer
+        
+        The model runner CRASHED while tokenizing. Bisected against real corpus chunks (largest first, so worst case):
+        
+          batch  payload   result
+             64   255 KB   400 — runner /tokenize connection reset
+             32   128 KB   200, 8051 ms
+             16    64 KB   200, 3122 ms
+              8    32 KB   200, 1547 ms
+              4    16 KB   200,  767 ms
+        
+        A smaller batch fixes it. Unloading models does not. The remedy the message recommended would never have worked.
+        AND THE FIRST ATTEMPT TO REPRODUCE IT WAS ALSO WRONG, which is worth recording because it nearly closed the investigation early. Synthetic batches of 64 x 4,749 repeated 'x' characters all returned 200 — a run of identical characters tokenises to a few hundred tokens, not the ~1,200 the same length of real prose produces. The synthetic test never stressed the tokeniser it was meant to stress. Only replaying REAL chunks from chunks.jsonl reproduced the 400.
+        THE ORIGINAL COMMENT WAS RIGHT ABOUT THE DISEASE AND THEN CAUGHT IT. It said "endpoint-refused sends the reader to the proxy and the CA bundle, which is the wrong half of the system" — correct — and then replaced a wrong generic cause with a wrong specific one. Naming a likely cause is only an improvement when the naming is falsifiable; otherwise it is a more confident way to be wrong, and it is harder to doubt than "refused" because it cites an order number.
+      exit_criteria: |
+        (1) The handler prints the SERVER'S OWN error body first, before any hypothesis. Proven by a stub returning HTTP 400 with a body: the old `-fsS` form captures an empty string, the new form captures the message. (2) The residency hypothesis survives only as a hint explicitly marked "HINT ONLY, not a diagnosis", conditional on the body not already explaining the failure. (3) The message names the batch size and payload bytes, since batch size is the actual lever for this failure class. (4) qwen3-embedding:4b's working batch size is recorded where a builder will find it, not only in a ledger row.
+      events:
+        - type: completed
+          ts: "2026-08-23T19:41:30Z"
+          agent_id: linux-macuahuitl-opus5-20260823T193400Z
+          host: linux_mutable
+          evidence_refs:
+          - 'container log: [GIN] 18:42:10 | 400 | 1m42s | POST /v1/embeddings; body names /tokenize connection reset'
+          - 'bisect against real chunks: 64->400, 32/16/8/4->200 (128KB is the largest payload that survives)'
+          - 'side-by-side stub proof: curl -fsS captures '''' on HTTP 400; curl -sS -w %{http_code} captures the full body'
+          - 'GPU throughout: peak 89-90% util, non-ollama VRAM 309 MiB against an 800 MiB threshold'
+          merge_affordance: merge-now
+          merge_reason: |
+            Any host rebuilding an index with a model whose runner is batch-sensitive gets a confidently wrong remedy and will chase residency instead of batch size. One script, no rebuild of anything a sibling compiles.
+          summary: |
+            Dropped `-f` so the body survives, report HTTP code + server message + batch size + payload bytes first, and demoted the residency guess to an explicitly-labelled hint. Also names the measured qwen3 batch ceiling inline, so the reader gets the fix and not just the diagnosis.
+
+    - order: 864-q7dm
+      packet_id: long-horizon-jobs-writing-into-the-worktree-race-the-pre-push-gate
+      desired_release: v0.5
+      title: a background job that writes its output inside the checkout invalidates the gate stamp faster than a cycle can push
+      status: completed
+      kind: defect
+      pickup_role: any
+      priority: p2
+      capability_tags:
+        - ci
+        - gates
+        - orchestration
+        - developer-experience
+      deliverable: methodology/multi-host-development.yaml
+      depends_on: []
+      estimated_hours: 3
+      discovered_by: a qwen3 band measurement that made this host unable to push its own work
+      context: |
+        THIS HOST IS TOLD TO RUN LONG-HORIZON BACKGROUND WORK, and the pre-push gate is built on the assumption that the tree holds still. Those two instructions are in direct conflict and nothing says so.
+        Measured 2026-08-23. A band measurement was launched as a background job writing its TSV to scripts/refusal-calibration/. It appends a row every few seconds. `./build.sh --check` passed, stamped the tree, and the push seconds later was refused:
+        
+          ✗ pre-push refused: the tree changed since ./build.sh --check last passed
+            The gate validated a different tree than the one you are pushing.
+        
+        The gate was right and the diagnosis it offers ("re-run it") cannot work: re-running produces a fresh stamp for a tree that changes again before the push completes. The cycle could not push ANY work, including work entirely unrelated to the job, for as long as the job ran. A 20-minute measurement makes the host unable to close a cycle for 20 minutes.
+        IT DOES NOT MATTER THAT THE FILE IS UNTRACKED. The stamp covers the worktree state, so an untracked file appearing or growing invalidates it exactly as a tracked edit would.
+        THE WORKAROUND THAT WORKS, and it is worth writing down because it is not obvious: a running redirect holds the file by INODE, not by path. Moving the in-progress output out of the checkout while the job runs is safe — the job keeps appending to the moved file. Verified live: 146 rows before `mv`, 159 rows after, job still running, worktree clean, push accepted.
+        THE REAL FIX IS THAT THE JOB SHOULD NEVER HAVE WRITTEN THERE. The meta-orchestration exit contract already says every disposable artifact belongs under the external $boundary_dir/tmp/, and that files created in the worktree are meaningful cycle output to be committed. A long-running measurement is neither: it is meaningful output that is NOT YET READY to commit. The contract has no word for that state, so the natural place to put it is the wrong one.
+      exit_criteria: |
+        (1) Methodology names the third category explicitly — in-progress output of a long-horizon job — and says it lives outside the checkout until complete, then is copied in and committed as one atomic change. (2) The refusal message names this cause. "Re-run it" is actively wrong advice when a background job is writing, and the reader has no way to tell that case from a genuine stale stamp. (3) The refusal names the paths that changed since the stamp, so the reader can see at a glance whether a job of theirs is responsible. (4) Prove it: with a writer appending to a worktree file, the refusal must name that file. Mutation control — with the writer stopped, it must not.
+      events:
+        - type: filed
+          ts: "2026-08-23T20:51:11Z"
+          agent_id: linux-macuahuitl-opus5-20260823T203400Z
+          host: linux_mutable
+          summary: |
+            Filed from being unable to push this cycle's own unrelated work while a band measurement appended rows inside the checkout. Unblocked by moving the in-progress file to target/ mid-run, which is safe because the redirect holds the inode.
+        - type: completed
+          ts: "2026-08-24T00:38:23Z"
+          agent_id: linux-macuahuitl-opus5-20260824T003400Z
+          host: linux_mutable
+          evidence_refs:
+          - scripts/hooks/pre-push-local-gate.sh — the stale-stamp refusal now enumerates paths newer than the stamp
+          - methodology/multi-host-development.yaml — in_progress_output_of_a_long_horizon_job
+          - 'EC4 POSITIVE: writer appending inside the checkout -> rc=1, refusal names scripts/refusal-calibration/.q7dm-probe.tsv'
+          - 'EC4 NEGATIVE: writer stopped, gate re-run -> rc=0, ''✓ local gate'', path not named'
+          merge_affordance: merge-now
+          merge_reason: |
+            Any host running work that outlives a cycle can be locked out of pushing with advice that cannot terminate. The fix is a hook message and a methodology paragraph; nothing a sibling compiles changes.
+          summary: |
+            THE REFUSAL NOW NAMES THE CULPRIT, because "re-run it" was not merely unhelpful here — it was advice that CANNOT TERMINATE. A background job appending inside the checkout invalidates the gate stamp faster than a gate run plus a push can complete, so each re-run stamps a tree that has already moved. Measured 2026-08-23: this host could push nothing at all, including work unrelated to the job, for as long as it ran.
+            The stamp covers `git ls-files --cached --others`, so an UNTRACKED file that merely grows invalidates it exactly as a tracked edit does. That is the part that makes the situation unreadable from the message: nothing was edited, nothing is in `git status` as modified, and the gate is nonetheless correct.
+            Paths newer than the stamp file are now listed (mtime, capped at 12), followed by the remedy that actually works — move the in-progress output out of the checkout, which is safe MID-RUN because a shell redirect holds the file by inode rather than by path. When nothing is newer, the message says so and keeps the old advice, since a deletion or a mode change is a real stale stamp that a re-run does fix.
+            EC4 both directions, with the exit status read from the PIPELINE rather than from the echo feeding it (727-kmks, which I walked into on the first attempt and had to redo):
+              writer active  -> rc=1, refusal names the probe file
+              writer stopped -> rc=0, "✓ local gate", nothing named
+        
+            METHODOLOGY NAMES THE MISSING CATEGORY. The exit contract knew two kinds of file — disposable scratch (external $boundary_dir/tmp/) and meaningful cycle output (commit it). A twenty-minute measurement is neither: it is meaningful output NOT YET READY to commit, and with no word for that state the natural place to put it was the wrong one. `in_progress_output_of_a_long_horizon_job` now says it lives outside the checkout until complete, then lands as one atomic change.
+            Written as a fleet rule rather than a macuahuitl note: any host told to start work outliving its cycle inherits the same contradiction between "long-horizon background work is fair game" and a gate that assumes the tree holds still, and until now only one of those was written down.
+
+    - order: 864-p2rk
+      packet_id: index-cache-key-ignored-the-document-prefix-so-prefixed-builds-were-fake
+      desired_release: v0.5
+      title: content_hash is the text alone, so a prefixed build reused unprefixed vectors and the identity assertion agreed
+      status: completed
+      kind: defect
+      pickup_role: any
+      priority: p0
+      capability_tags:
+        - rag
+        - inference
+        - cache
+        - correctness
+      deliverable: scripts/spec-index-ensure.sh
+      depends_on: []
+      estimated_hours: 3
+      discovered_by: the first prefixed index build ever attempted here finishing in five seconds
+      context: |
+        A FULL nomic INDEX TAKES ~8 MINUTES. The first prefixed build finished in FIVE SECONDS and declared itself verified:
+        
+          spec-index:delta reused=21123 embed=3 of 21126
+          spec-index:delta identity-verified=5 reused samples
+        
+        content_hash is hash_hex(span) — the TEXT AND NOTHING ELSE — so a chunk keeps the same hash whether or not a prefix will be prepended to it before embedding. The fingerprint covered corpus + model but not the prefix, so the delta served UNPREFIXED vectors to a build that had asked for prefixed ones, and published them under a name that claimed otherwise.
+        THE SAFETY NET CONFIRMED IT, which is the part worth dwelling on. The identity assertion exists precisely to catch a mis-joined reuse: it re-embeds a deterministic sample and compares bytes. It passed, because it re-embeds through the same code path that does not apply the prefix. It compared wrong against wrong and got agreement. A checker that shares the defect it is checking for will always agree, and it reports that agreement as verification.
+        Had this not been caught by the clock, the next measurement would have been an UNPREFIXED index reported as the prefix result — and the prefix caveat, which is currently the last open question in the 824-6qxh campaign, would have been "answered" with the very number it was meant to test against.
+        THIS IS ORDER 552's MODEL-KEY DEFECT IN A SECOND DIMENSION. That one was fixed by adding the model to the key. The lesson it should have taught was not "add the model" but "ANYTHING THAT CHANGES THE EMBEDDED BYTES BELONGS IN THE KEY" — otherwise the key gets extended one incident at a time, and each extension looks complete until the next input appears.
+        WHY PREFIXES MATTER AT ALL, and why this was being attempted: several embedders are trained with an asymmetric query/passage convention and document it as REQUIRED. nomic-embed-text wants "search_document: " on passages and "search_query: " on queries. This harness applied neither, to any model, in every comparison filed. nomic's own template is a bare `{{ .Prompt }}`, so nothing supplied it downstream either. Every filed "a bigger embedder separates worse" result therefore carries the caveat — and nomic, which has the strictest documented requirement, is the model that looked BEST.
+      exit_criteria: |
+        (1) The document prefix is part of the fingerprint, so a prefixed build cannot collide with an unprefixed one. (2) A generation records its prefix in a `.prefix` marker and a generation whose marker disagrees is never reused — the same rule `.model` already gets. (3) Verified in BOTH directions, since a fix that simply disables the delta would also pass a one-sided test:
+            prefixed   -> reused=0     embed=21126 of 21126
+            unprefixed -> reused=21120 embed=6
+        (4) The empty prefix produces a byte-identical payload to the old form, so every historical measurement reproduces exactly.
+      events:
+        - type: completed
+          ts: "2026-08-23T21:44:03Z"
+          agent_id: linux-macuahuitl-opus5-20260823T213400Z
+          host: linux_mutable
+          evidence_refs:
+          - 'the five-second build: spec-index:delta reused=21123 embed=3 of 21126, identity-verified=5'
+          - 'after the fix, prefixed: reused=0 embed=21126 of 21126'
+          - 'after the fix, unprefixed: reused=21120 embed=6 (delta still works)'
+          - 'payload equivalence: jq with an empty prefix is byte-identical to the pre-change form'
+          merge_affordance: merge-now
+          merge_reason: |
+            Any host attempting a prefixed index gets a silently unprefixed one that passes its own identity assertion. The result is not a crash but a wrong measurement that looks verified, which is the most expensive kind.
+          summary: |
+            Prefix support added to both halves of the harness (TILLANDSIAS_EMBED_DOC_PREFIX on passages in spec-index-ensure.sh, TILLANDSIAS_EMBED_QUERY_PREFIX on queries in measure-bands.sh), and the cache key extended to cover the prefix in all three places `.model` is already handled: the fingerprint, a per-generation `.prefix` marker, and the reuse guard.
+
+    - packet_id: ghost-trace-gate-is-blind-to-yaml-and-markdown-annotations
+      order: 867-vd4z
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      kind: bug
+      title: the ghost-trace gate scans six file types and misses two — more than half of all @trace annotations (yaml 979, md 1347) are outside it, hiding at least seven real ghosts
+      deliverable: the ghost-trace gate's scanned file set covers where traces actually live, or the exclusions are declared and justified in the script rather than being an accident of a grep glob; either way the ~7 real ghosts currently hidden in yaml are surfaced and dispositioned
+      pickup_role: any
+      release_target: convergence-velocity-milestone
+      capability_tags:
+        - openspec
+        - traces
+        - ghost-trace-ratchet
+        - ci
+      estimated_hours: 4
+      context: |
+        MEASURED (lenovinha, 2026-08-23), while working 658-kcd5. Counting
+        `@trace spec:` annotations by file type across the tree:
+        
+          rs   1270      yaml           979   <- NOT SCANNED
+          sh    515      md            1347   <- NOT SCANNED
+          toml   25      Containerfile   56
+          nix     4      ps1              6
+        
+        `scripts/trace-coverage.sh` — the authoritative gate, wired into
+        `./build.sh --check` via the 584-2qq2 ratchet — greps
+        `*.rs *.sh *.toml *.nix *.ps1 Containerfile*`. So roughly 1,876
+        annotations are gated and roughly 2,326 are not. THE MAJORITY OF THIS
+        REPOSITORY'S TRACE ANNOTATIONS ARE OUTSIDE THE CHECK THAT VALIDATES
+        THEM, and the coverage number the gate reports is computed over the
+        minority.
+        
+        THERE ARE REAL GHOSTS IN THERE. Of 127 distinct specs referenced from
+        yaml, these have no spec directory and are NOT in the ratchet baseline:
+        
+          browser-isolation-telemetry   control-socket
+          cross-platform-compilation    enclave-network-isolation
+          ephemeral-guarantee           forge-launch
+          service-startup
+        
+        Seven, invisible to every gate, for as long as the glob has been what it
+        is. `openspec/litmus-tests/*.yaml` is where litmus tests bind themselves
+        to specs, so these are exactly the bindings the convergence argument
+        leans on.
+        
+        WHY A ONE-WORD GLOB FIX IS WRONG, and this is the part worth reading
+        before taking the packet. The same yaml scan also turns up `foo`, `a`,
+        `does-not-exist`, `not-a-real-spec`, `zzz-definitely-no-such-spec-xyz`,
+        and several truncated ids (`chromium-`, `podman-secrets-`, `project-`).
+        Those are NEGATIVE-CONTROL FIXTURES — litmus tests that assert the ghost
+        checker rejects a fabricated trace — plus partial matches from the
+        `[a-zA-Z0-9_-]+` pattern meeting an interpolated id. Adding `*.yaml` to
+        the glob would make the gate fail on its own test fixtures, on every
+        host, immediately. Whoever takes this needs a fixture-exclusion rule
+        (a marker, a path convention, or an allowlist) BEFORE widening the glob.
+        Markdown needs its own answer for the same reason: 219 distinct specs are
+        referenced from md, some of it prose and examples rather than annotation.
+        
+        THERE ARE ALSO THREE DIFFERENT GHOST CHECKERS WITH THREE DIFFERENT FILE
+        SETS, which is how this stayed invisible:
+        
+          scripts/hooks/pre-commit-openspec.sh   rs sh toml            (author-facing)
+          scripts/validate-traces.sh             rs sh toml nix
+          scripts/trace-coverage.sh              rs sh toml nix ps1 Containerfile*  (the gate)
+        
+        They disagree on live data today, not hypothetically: `trace-coverage.sh`
+        counts 9 ghosts and `validate-traces.sh` reports 8. The missing one is
+        `spec:forge-skills-mapping`, whose only reference is
+        `images/default/Containerfile:195` — a file type only the gate scans. And
+        a Windows contributor adding a ghost trace to a `.ps1` gets NO feedback
+        from the commit hook at all; it surfaces later, on someone else's build.
+        Three checkers answering one question differently is the defect under the
+        defect.
+      next_action: 'YAML IS DONE (lenovinha 2026-08-24): trace-coverage.sh scans yaml with an anchored pattern, +924 annotations and +391 files entered the gate, baseline grown once 9->15 with the reason recorded in openspec/ghost-trace-baseline.txt, behavioural fixture scripts/test-ghost-trace-yaml-anchoring.sh 5/5 wired into litmus:spec-traceability-shape. WHAT REMAINS IS MARKDOWN, and it is NOT the same problem — do not just widen the glob again. 1347 annotations, 219 distinct ids. md is documentation: a trace there may be an illustration teaching the convention rather than a binding, and cheatsheets deliberately show example annotations. The anchoring heuristic cannot separate those because in md an annotation and an example of one look identical. DECIDE FIRST whether an md trace is a binding at all; if it is not, the honest fix is to declare md out of scope in the script, which this packet''s deliverable already allows as a branch. SECOND RESIDUAL: three ghost checkers still disagree — pre-commit hook (rs sh toml), validate-traces.sh (rs sh toml nix), trace-coverage.sh (now +ps1 +Containerfile* +yaml). The hook is author-facing and the narrowest, so a ghost added in yaml or a Containerfile still gets no feedback at commit time.'
+      events:
+        - type: note
+          ts: "2026-08-23T23:53:37Z"
+          host: lenovinha
+          summary: |
+            claimed for cycle 2026-08-23T23:53Z
+        - type: note
+          ts: "2026-08-24T00:03:34Z"
+          host: lenovinha
+          summary: |
+            yaml half landed, gated and fixtured; markdown half needs a decision first
+        - type: progress
+          ts: "2026-08-24T00:45:00Z"
+          agent_id: linux-lenovinha-fable5-20260823T235308Z
+          host: linux_immutable
+          summary: |
+            THE YAML HALF IS LANDED, GATED AND FIXTURED. The markdown half is not,
+            and the packet stays open for it.
+        
+            WHAT CHANGED. scripts/trace-coverage.sh now scans *.yaml/*.yml with an
+            ANCHORED pattern, in addition to the six file types it already read.
+            Measured before/after on this tree:
+        
+              before  specs=184 traced=175 ghost=9  annotations=2841 files=543
+              after   specs=191 traced=176 ghost=15 annotations=3759 files=934
+        
+            924 annotations and 391 files entered the gate. The six new ghosts are
+            NOT a regression — nothing changed in the tree, the gate simply could
+            not see them.
+        
+            THE RULE IS POSITIONAL, NOT A PATH ALLOWLIST, and my previous cycle's
+            filing had this wrong. I wrote that the yaml noise was "negative-control
+            fixtures". It is mostly not. It is PROSE THAT DISCUSSES ANNOTATIONS,
+            inside description blocks and comments: a brace shorthand naming two
+            specs at once yields the token "chromium-", a reference line-wrapped
+            mid-id yields "github-credential-", a parenthetical example yields
+            "foo". Those are not fixtures and not ids; they are fragments of English
+            sentences. So the rule is that an annotation BEGINS ITS LINE, after
+            optional indentation, as a comment or a quoted list item. Unanchored
+            scanning yields 21 ids with no spec directory, 11 of them prose
+            artifacts; anchored yields 10, all well-formed. `plan/` is excluded
+            because the ledger is data whose packet prose quotes example ids
+            deliberately — including the negative controls other packets demand.
+        
+            I COMMITTED THE EXACT DEFECT I WAS FIXING, TWICE, AND BOTH ARE NOW
+            GUARDED IN COMMENTS. First: the explanatory comment I wrote inside
+            trace-coverage.sh quoted its examples literally, in a `.sh` the scan
+            already covers — inventing five brand-new ghost traces out of
+            documentation and turning the gate red on the commit that fixed the
+            gate (ghost went 15 -> 20). Second: the fixture script's printf strings
+            did the same, and the fixture failed the thing it exists to test. Both
+            fixed by never writing the literal marker: the comment spells it with a
+            space, the fixture assembles it at runtime from two string halves. The
+            general lesson is in both files now — prose ABOUT an annotation is not
+            an annotation, in every language, and a scanner cannot tell them apart.
+        
+            THE BASELINE GROWS EXACTLY ONCE, 9 -> 15, with the reason recorded in
+            openspec/ghost-trace-baseline.txt. Same argument that created it: making
+            a newly-visible population a hard failure the day it becomes visible
+            breaks the build for everyone on work they did not do. The
+            may-only-shrink direction is preserved for the NEW wider scope, so a
+            ghost introduced in yaml tomorrow fails the gate.
+        
+            THE SIX ARE WORTH FIXING RATHER THAN DELETING, which is why they went
+            to the baseline and not to a sweep. Each has no spec directory AND no
+            in-flight change, and each is traced from real litmus tests — a litmus
+            test bound to a nonexistent spec is asserting coverage of nothing.
+            Notably `cross-platform-compilation` is traced by
+            litmus-cross-target-cfg-gate-check.yaml, which is the very check
+            656-spux is about, and `ephemeral-guarantee` is traced from three
+            separate litmus tests. `fail-loud-diagnosis` shares its name with a
+            live epic.
+        
+            VERIFIED BEHAVIOURALLY, not by grepping the script — the weakness I
+            recorded in resolve-smoke-release.sh's freshness stamp last cycle, not
+            repeated here. New fixture scripts/test-ghost-trace-yaml-anchoring.sh,
+            5/5 green: anchored comment caught (exit 1), anchored quoted evidence
+            item caught (exit 1), unanchored prose mention ignored (exit 0),
+            block-scalar prose ignored (exit 0), and a NEGATIVE CONTROL that a clean
+            tree restores a green gate — without which scenarios 3 and 4 could be
+            passing because the gate was broken open. It also refuses to run at all
+            if the gate is already red, since it could not then attribute its own
+            result. Wired into litmus:spec-traceability-shape, which passes (6.2s).
+            `./build.sh --check` green with the stamp recorded.
+        
+            RESIDUAL, and it needs a decision rather than a repeat of this work:
+            MARKDOWN. 1347 annotations, 219 distinct spec ids, still ungated. It is
+            not the same problem — md is documentation, where a trace may be an
+            illustration in a tutorial rather than a binding, and cheatsheets
+            legitimately show example annotations to teach the convention. The
+            anchoring heuristic will not separate those, because in md the
+            annotation and the example look identical. Someone has to decide
+            whether an md trace is a BINDING at all before it can be gated; if it
+            is not, the honest fix is to declare md out of scope in the script,
+            which is the other branch this packet's deliverable already allows.
+
+    - order: 864-v8kr
+      packet_id: fold-capabilities-needs-its-base-injected-by-every-caller-separately
+      desired_release: v0.5
+      title: the base is spliced in as a synthetic fragment at two call sites, so a third caller silently sees an empty matrix
+      status: ready
+      kind: defect
+      pickup_role: any
+      priority: p2
+      capability_tags:
+        - plan
+        - crdt
+        - ledger
+        - capabilities
+      deliverable: crates/tillandsias-plan/src/fragments.rs
+      depends_on: []
+      estimated_hours: 2
+      discovered_by: auditing 846-idhn's exit criteria rather than trusting its implemented status
+      context: |
+        `fold_capabilities(fragments: &[Fragment])` takes ONLY fragments. It never reads plan/index.yaml. The base rows reach it because each caller builds a synthetic Fragment named "0000-base" from the base document and prepends it:
+        
+          crates/tillandsias-plan/src/main.rs:2922    (capability-matrix)
+          crates/tillandsias-plan/src/fragments.rs:1272
+        
+        Both production callers do it, so the behaviour is correct today and `capability-matrix` reports all 7 hosts. But the base-reading is DUPLICATED CALLER-SIDE rather than being a property of the fold, and the duplication is invisible from the function's signature: nothing about `fold_capabilities(&frags)` suggests the caller owes it a synthetic fragment first.
+        846-idhn's exit criterion 2 states the requirement exactly — "fold_capabilities reads the base as well as the fragments, so a folded row is indistinguishable from a fragment row to EVERY CALLER". Two callers satisfying it by convention is not every caller satisfying it by construction. A third one gets an empty-looking matrix and no error, which is the failure mode this whole channel already had once when compaction consumed its fragments (843-624y, yolanda's two rows).
+        THE FIX IS SMALL AND SHOULD NOT BE DEFERRED FOR ITS SIZE: give fold_capabilities the index path (or a base Value) so the splice happens once, inside, and delete both caller-side copies. The signature then states the contract instead of relying on the reader knowing it.
+      exit_criteria: |
+        (1) The base splice happens inside the fold, and neither call site builds a "0000-base" Fragment. (2) A test calls the fold WITHOUT any caller-side preparation and still sees base rows — the property that distinguishes construction from convention. (3) capability-matrix reports the same 7 hosts before and after.
+      events:
+        - type: filed
+          ts: "2026-08-23T22:39:08Z"
+          agent_id: linux-macuahuitl-opus5-20260823T223400Z
+          host: linux_mutable
+          summary: |
+            Found while auditing 846-idhn rather than while anything failed. Both production callers currently do the right thing; the packet is to make that structural instead of remembered.

@@ -56,7 +56,7 @@ done
 # anyone can afford to run into one nobody does. The tree itself is wiped and
 # recopied each time, so the input is still pristine; only the compiler cache
 # persists.
-WORK="${TILLANDSIAS_ARCHIVE_CHECK_WORK:-${TMPDIR:-/tmp}/tillandsias-archive-answerability}"
+WORK="${TILLANDSIAS_ARCHIVE_CHECK_WORK:-${XDG_CACHE_HOME:-${HOME:-/tmp}/.cache}/tillandsias-archive-answerability}"
 TREE="$WORK/tree"
 LOG="$WORK/log"
 rm -rf "$TREE" "$LOG"

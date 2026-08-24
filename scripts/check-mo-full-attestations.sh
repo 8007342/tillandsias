@@ -276,10 +276,18 @@ verify_file() { # verify_file <path>
                 if [ "$f" = "$own_file" ]; then
                     if ! git cat-file -e "$local_sha^{commit}" 2>/dev/null; then
                         refuse "$f" "LOCAL_SHA $local_sha is not a real commit in this repo — fabricated or tampered (line $ln): $marker"
-                    elif ! git show-ref --verify --quiet "refs/heads/$branch" 2>/dev/null; then
-                        refuse "$f" "marker claims branch '$branch' with no local ref — this host records only its own branches, so this is tampered or lost history (line $ln): $marker"
-                    elif ! git merge-base --is-ancestor "$local_sha" "refs/heads/$branch" 2>/dev/null; then
-                        refuse "$f" "LOCAL_SHA $local_sha is not reachable from refs/heads/$branch — recorded marker was never a durable ancestor (line $ln): $marker"
+                    else
+                        branch_ref=""
+                        if git show-ref --verify --quiet "refs/heads/$branch" 2>/dev/null; then
+                            branch_ref="refs/heads/$branch"
+                        elif git show-ref --verify --quiet "refs/remotes/origin/$branch" 2>/dev/null; then
+                            branch_ref="refs/remotes/origin/$branch"
+                        fi
+                        if [ -z "$branch_ref" ]; then
+                            refuse "$f" "marker claims branch '$branch' with no local or remote tracking ref — this host records only its own branches, so this is tampered or lost history (line $ln): $marker"
+                        elif ! git merge-base --is-ancestor "$local_sha" "$branch_ref" 2>/dev/null; then
+                            refuse "$f" "LOCAL_SHA $local_sha is not reachable from $branch_ref — recorded marker was never a durable ancestor (line $ln): $marker"
+                        fi
                     fi
                 fi
                 ;;

@@ -84,4 +84,21 @@ esac
 rm "$WORK/crates/tillandsias-podman/src/bad_capture.rs"
 echo "ok: case 5 — unbounded child-pipe capture refused"
 
-echo "PASS: podman sync budgets (5/5)"
+# --- case 6 (NEGATIVE CONTROL): a thread::sleep in tillandsias-podman is refused ---
+# Order 795-hzpg slice B.
+cat > "$WORK/crates/tillandsias-podman/src/bad_poll.rs" <<'RS'
+fn poll() {
+    std::thread::sleep(std::time::Duration::from_millis(20));
+}
+RS
+out="$(cd "$WORK" && PODMAN_SYNC_SEARCH_ROOT=crates bash "$GATE" 2>/dev/null)"
+rc=$?
+[ "$rc" -ne 0 ] || fail "case 6: thread::sleep in tillandsias-podman must be refused"
+case "$out" in
+    violation:sleep-poll:1) ;;
+    *) fail "case 6: expected violation:sleep-poll:1, got '$out'" ;;
+esac
+rm "$WORK/crates/tillandsias-podman/src/bad_poll.rs"
+echo "ok: case 6 — sleep poll in tillandsias-podman refused"
+
+echo "PASS: podman sync budgets (6/6)"

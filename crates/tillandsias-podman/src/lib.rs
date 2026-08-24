@@ -887,6 +887,55 @@ impl SyncPodmanCommand {
         )
     }
 
+    fn wait_child_bounded(
+        mut child: std::process::Child,
+        budget: std::time::Duration,
+        redacted_args: &[String],
+    ) -> std::io::Result<std::process::ExitStatus> {
+        let pid = child.id();
+        let (tx, rx) = std::sync::mpsc::sync_channel(1);
+
+        let waiter = std::thread::spawn(move || {
+            let res = child.wait();
+            let _ = tx.send(res);
+        });
+
+        match rx.recv_timeout(budget) {
+            Ok(Ok(status)) => {
+                let _ = waiter.join();
+                Ok(status)
+            }
+            Ok(Err(err)) => {
+                let _ = waiter.join();
+                Err(err)
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                // Kill the child via raw PID so the waiter thread's blocking
+                // child.wait() unblocks immediately and reaps the child.
+                kill_raw_pid(pid);
+                let _ = waiter.join();
+                let cmd_suffix = if redacted_args.is_empty() {
+                    String::new()
+                } else {
+                    format!(": podman {}", redacted_args.join(" "))
+                };
+                let message = format!(
+                    "podman sync operation exceeded its {}s budget and was killed{}",
+                    budget.as_secs(),
+                    cmd_suffix
+                );
+                log_podman_failure("sync", "timeout", &message);
+                Err(std::io::Error::new(std::io::ErrorKind::TimedOut, message))
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                let _ = waiter.join();
+                Err(std::io::Error::other(
+                    "podman sync wait thread disconnected unexpectedly",
+                ))
+            }
+        }
+    }
+
     fn wait_bounded(
         mut child: std::process::Child,
         budget: std::time::Duration,
@@ -897,36 +946,11 @@ impl SyncPodmanCommand {
         let stdout_reader = std::thread::spawn(move || read_capped(stdout_pipe));
         let stderr_reader = std::thread::spawn(move || read_capped(stderr_pipe));
 
-        let started = std::time::Instant::now();
-        let status = loop {
-            match child.try_wait()? {
-                Some(status) => break status,
-                None => {
-                    if started.elapsed() >= budget {
-                        let _ = child.kill();
-                        let _ = child.wait();
-                        // Do NOT join the reader threads here. Killing the child
-                        // does not close a pipe a GRANDCHILD still holds — a
-                        // `sh -c` wrapper dies while the `sleep` it spawned keeps
-                        // the write end open — so the readers may never see EOF.
-                        // Joining them would trade the hang this method exists to
-                        // prevent for an identical one two frames up the stack;
-                        // the first version of this code did exactly that and
-                        // hung its own test. They are abandoned instead: each
-                        // owns nothing but a pipe read, and the caller — which is
-                        // the thing that must not block — returns now.
-                        let message = format!(
-                            "podman sync operation exceeded its {}s budget and was killed: podman {}",
-                            budget.as_secs(),
-                            redacted_args.join(" ")
-                        );
-                        log_podman_failure("sync", "timeout", &message);
-                        return Err(std::io::Error::new(std::io::ErrorKind::TimedOut, message));
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(20));
-                }
-            }
-        };
+        // Order 795-hzpg (slice B): parked deadline wait replaces busy-polling.
+        // On timeout, the child is killed + reaped by wait_child_bounded, and the
+        // reader threads are abandoned rather than joined (order 714-4r6w grandchild-pipe
+        // lesson; now bounded-cost because capped at MAX_CAPTURED_OUTPUT_BYTES).
+        let status = Self::wait_child_bounded(child, budget, redacted_args)?;
 
         let (stdout, stdout_dropped) = stdout_reader.join().unwrap_or_default();
         let (stderr, stderr_dropped) = stderr_reader.join().unwrap_or_default();
@@ -955,26 +979,8 @@ impl SyncPodmanCommand {
         &mut self,
         budget: std::time::Duration,
     ) -> std::io::Result<std::process::ExitStatus> {
-        let mut child = self.inner.spawn()?;
-        let started = std::time::Instant::now();
-        loop {
-            match child.try_wait()? {
-                Some(status) => return Ok(status),
-                None => {
-                    if started.elapsed() >= budget {
-                        let _ = child.kill();
-                        let _ = child.wait();
-                        let message = format!(
-                            "podman sync operation exceeded its {}s budget and was killed",
-                            budget.as_secs()
-                        );
-                        log_podman_failure("sync", "timeout", &message);
-                        return Err(std::io::Error::new(std::io::ErrorKind::TimedOut, message));
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(20));
-                }
-            }
-        }
+        let child = self.inner.spawn()?;
+        Self::wait_child_bounded(child, budget, &self.redacted_args())
     }
 }
 
@@ -1015,6 +1021,40 @@ fn read_capped<R: std::io::Read>(pipe: Option<R>) -> (Vec<u8>, u64) {
     }
     (buf, dropped)
 }
+
+/// Send a kill signal to a child PID on timeout so the waiter thread's
+/// `child.wait()` unblocks and reaps the child immediately.
+#[cfg(unix)]
+fn kill_raw_pid(pid: u32) {
+    unsafe {
+        libc::kill(pid as libc::pid_t, libc::SIGKILL);
+    }
+}
+
+#[cfg(windows)]
+fn kill_raw_pid(pid: u32) {
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn OpenProcess(
+            desired_access: u32,
+            inherit_handle: i32,
+            process_id: u32,
+        ) -> *mut std::ffi::c_void;
+        fn TerminateProcess(process_handle: *mut std::ffi::c_void, exit_code: u32) -> i32;
+        fn CloseHandle(object_handle: *mut std::ffi::c_void) -> i32;
+    }
+    const PROCESS_TERMINATE: u32 = 0x0001;
+    unsafe {
+        let handle = OpenProcess(PROCESS_TERMINATE, 0, pid);
+        if !handle.is_null() {
+            let _ = TerminateProcess(handle, 1);
+            let _ = CloseHandle(handle);
+        }
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
+fn kill_raw_pid(_pid: u32) {}
 
 /// Same as [`podman_cmd`] but for synchronous use. Returns a
 /// [`SyncPodmanCommand`], which has no unbounded run method (order 714-4r6w).
@@ -1668,5 +1708,59 @@ while [ $i -lt 2000 ]; do echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; i=$((
         let (buf, dropped) = read_capped(Some(std::io::Cursor::new(one_over)));
         assert_eq!(buf.len(), MAX_CAPTURED_OUTPUT_BYTES);
         assert_eq!(dropped, 1, "one byte over the cap drops exactly one byte");
+    }
+
+    /// Order 795-hzpg slice B / exit criterion 4: a child that ignores its
+    /// deadline is actually killed and reaped — proven by asserting the pid
+    /// is gone after the timeout returns.
+    #[cfg(unix)]
+    #[test]
+    fn wait_bounded_hanging_child_is_killed_and_reaped_after_timeout() {
+        let mut cmd = std::process::Command::new("sh");
+        cmd.args(["-c", "sleep 300"])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        let child = cmd.spawn().expect("spawn sh");
+        let pid = child.id() as libc::pid_t;
+
+        let err = SyncPodmanCommand::wait_bounded(
+            child,
+            std::time::Duration::from_millis(50),
+            &["<test-hanging>".to_string()],
+        )
+        .expect_err("must time out");
+
+        assert_eq!(err.kind(), std::io::ErrorKind::TimedOut);
+
+        // Assert the pid is gone (killed and reaped).
+        // kill(pid, 0) returns -1 with ESRCH when the process does not exist.
+        let res = unsafe { libc::kill(pid, 0) };
+        assert_eq!(
+            res, -1,
+            "child pid {pid} must no longer exist after timeout kill"
+        );
+        let errno = std::io::Error::last_os_error().raw_os_error();
+        assert_eq!(
+            errno,
+            Some(libc::ESRCH),
+            "kill(pid, 0) must return ESRCH (process does not exist)"
+        );
+    }
+
+    /// Order 795-hzpg slice B: status_bounded also kills and reaps a hanging child.
+    #[cfg(unix)]
+    #[test]
+    fn status_bounded_hanging_child_is_killed_and_reaped_after_timeout() {
+        let mut sync_cmd = SyncPodmanCommand {
+            inner: {
+                let mut cmd = std::process::Command::new("sh");
+                cmd.args(["-c", "sleep 300"]);
+                cmd
+            },
+        };
+        let err = sync_cmd
+            .status_bounded(std::time::Duration::from_millis(50))
+            .expect_err("must time out");
+        assert_eq!(err.kind(), std::io::ErrorKind::TimedOut);
     }
 }
