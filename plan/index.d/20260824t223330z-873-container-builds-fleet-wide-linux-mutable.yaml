@@ -1,0 +1,84 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-24T22:33:30Z.
+packets:
+  - order: 873-b1nx
+    packet_id: every-platform-builds-through-a-container-backed-by-the-nix-cache
+    desired_release: v0.6
+    kind: enhancement
+    status: ready
+    pickup_role: any
+    priority: p2
+    capability_tags: [nix, cache, containers, build, fleet, windows, macos]
+    deliverable: "a design decision under openspec/ plus a working linux prototype: builds run inside a container whose toolchain closure comes from the enclave nix cache, host-transparently"
+    depends_on: [nix-cache-service-into-the-tray-container-lifecycle]
+    estimated_hours: 12
+    discovered_by: "operator direction 2026-08-24"
+    context: >
+      OPERATOR DIRECTION, 2026-08-24, verbatim intent: "the container with the
+      nix cache service would accelerate everyone, then making them transparent
+      to the DEVELOPMENT RUNTIME like these boxes … in Windows there were some
+      popups from IO extensive apps meant to be run inside WSL2, so likely even
+      windows and osx could build through a container with a nix cache."
+
+      THE PIECES THAT ALREADY EXIST, so this is assembly rather than invention:
+        * the enclave nix cache serves the persistent store over TLS with
+          signed narinfo (801-kqme), and as of 801-vm4p it is in the tray's
+          container graph, ensured at every forge launch;
+        * the forge image carries nix (801-x1nx completed);
+        * Windows already runs its heavy IO inside WSL2 by necessity — the
+          operator's popup observation is the platform itself saying that
+          host-filesystem builds are the wrong lane there (the with-wsl2-builder
+          CARGO_TARGET_DIR relocation exists for exactly this);
+        * macOS drives a single Virtualization.framework Linux VM — a Linux
+          container lane in all but name.
+
+      THE SHAPE: a build container on the enclave network whose toolchain
+      closure is substituted from https://nix-cache:5000 instead of the public
+      cache or a cold local store. The same container image works on all three
+      platforms because all three already have a Linux container runtime in the
+      dev stack (podman / WSL2 / the VFR guest). "Transparent to the
+      development runtime" means build.sh (or the tray) selects the container
+      lane the way with-wsl2-builder already selects the distro-native target
+      dir — the developer types the same command everywhere.
+
+      WHY IT ACCELERATES EVERYONE: today each host pays its own cold toolchain
+      and dependency closure. With the cache as substituter, one host's build
+      warms every host's next one, and a fresh checkout (the fleet's new normal
+      after 2026-08-24) stops meaning a cold build.
+
+      HONEST UNKNOWNS, measured before believed:
+        (1) cross-platform substitution only helps where the closure is
+            platform-independent or the builder is the Linux container on every
+            platform — the latter is the design bet and needs one measured
+            end-to-end build per platform;
+        (2) IO through VM boundaries (WSL2 9p, VFR virtio) can eat the cache
+            win — the with-wsl2-builder history says keep the store and target
+            INSIDE the guest;
+        (3) the 8GB-RAM Silverblue box is the consumer-grade floor: if the
+            container lane cannot link tillandsias-headless there, the lane
+            needs a remote-build story, not just a cache.
+    exit_criteria: >
+      (1) A design note under openspec/ recording the lane selection mechanism
+      and the per-platform substrate (podman / WSL2 / VFR guest), with the
+      unknowns above as measured answers, not assumptions.
+      (2) A Linux prototype: a clean container with no host toolchain builds a
+      tillandsias crate with the enclave cache as its only substituter, and the
+      wall-clock is recorded cold vs cache-warm alongside GPU/load state.
+      (3) The lane is OPT-IN behind an env var first; build.sh behaviour is
+      byte-identical when it is unset.
+      (4) A measured statement of the WSL2 and macOS paths — even if the
+      statement is "deferred, here is the cost" — so the cross-platform half is
+      a decision rather than a hope.
+
+events:
+  - packet_id: every-platform-builds-through-a-container-backed-by-the-nix-cache
+    event:
+      type: filed
+      ts: "2026-08-24T22:33:30Z"
+      agent_id: linux-macuahuitl-opus5-20260824T220000Z
+      host: linux_mutable
+      summary: >
+        Filed from the operator's direction while acting as sole host, with
+        801-vm4p (the cache in the container graph) landed the same cycle as
+        its foundation. v0.6 and p2 on purpose: the v0.5 release path must not
+        grow a dependency on a build-lane redesign.
