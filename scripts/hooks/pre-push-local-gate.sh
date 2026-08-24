@@ -593,10 +593,57 @@ if [[ -f scripts/gate-stamp.sh ]]; then
                        "Run it once, then push:" \
                        "  ./build.sh --check"
             else
-                refuse "the tree changed since ./build.sh --check last passed" \
-                       "The gate validated a different tree than the one you are pushing." \
-                       "Re-run it:" \
-                       "  ./build.sh --check"
+                # ORDER 864-q7dm — NAME WHAT CHANGED, because "re-run it" is
+                # sometimes ACTIVELY WRONG ADVICE.
+                #
+                # This host is told to run long-horizon background work, and
+                # the stamp assumes the tree holds still. Those instructions
+                # conflict. Measured 2026-08-23: a band measurement appending a
+                # TSV inside the checkout made every push fail here, and the
+                # re-run the message recommends stamps a tree that changes
+                # again before the push completes — so the advice cannot
+                # terminate. The cycle could not push ANY work, including work
+                # entirely unrelated to the job, for as long as the job ran.
+                #
+                # Untracked does not exempt a path: the stamp covers
+                # `ls-files --cached --others`, so a file APPEARING or GROWING
+                # invalidates it exactly as a tracked edit does.
+                #
+                # Naming the paths turns a puzzle into a decision. mtime
+                # against the stamp file is the cheap signal — it needs no
+                # per-path digests and it points straight at a live writer.
+                _gs="$(git rev-parse --absolute-git-dir 2>/dev/null)/tillandsias-gate-stamp"
+                _changed=""
+                if [[ -f "$_gs" ]]; then
+                    _changed="$(git ls-files -z --cached --others --exclude-standard 2>/dev/null \
+                        | xargs -0 -r -I{} sh -c '[ -f "{}" ] && [ "{}" -nt "'"$_gs"'" ] && printf "%s\n" "{}"' 2>/dev/null \
+                        | head -12)"
+                fi
+                if [[ -n "$_changed" ]]; then
+                    _n="$(printf '%s\n' "$_changed" | wc -l | tr -d ' ')"
+                    refuse "the tree changed since ./build.sh --check last passed" \
+                           "The gate validated a different tree than the one you are pushing." \
+                           "" \
+                           "CHANGED SINCE THE GATE RAN (${_n} path(s), newest-first by mtime):" \
+                           "$(printf '  %s\n' $_changed)" \
+                           "" \
+                           "IF ONE OF THOSE IS A BACKGROUND JOB STILL WRITING, re-running the" \
+                           "gate will not help — it stamps a tree that changes again before the" \
+                           "push lands (864-q7dm). Move the in-progress output OUT of the" \
+                           "checkout instead; a running redirect holds the file by inode, so" \
+                           "\`mv\` is safe mid-run and the job keeps appending:" \
+                           "  mv <path> target/   # target/ is gitignored" \
+                           "" \
+                           "Otherwise the change is yours and the gate is right:" \
+                           "  ./build.sh --check"
+                else
+                    refuse "the tree changed since ./build.sh --check last passed" \
+                           "The gate validated a different tree than the one you are pushing." \
+                           "(No path is newer than the stamp — the change is a deletion, a mode" \
+                           "change, or a same-mtime rewrite.)" \
+                           "Re-run it:" \
+                           "  ./build.sh --check"
+                fi
             fi
             ;;
         *)

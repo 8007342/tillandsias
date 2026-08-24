@@ -1,0 +1,65 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-24T00:38:23Z.
+status:
+  - packet_id: long-horizon-jobs-writing-into-the-worktree-race-the-pre-push-gate
+    field: status
+    value: completed
+    ts: "2026-08-24T00:38:23Z"
+    host: linux_mutable
+
+events:
+  - packet_id: long-horizon-jobs-writing-into-the-worktree-race-the-pre-push-gate
+    event:
+      type: completed
+      ts: "2026-08-24T00:38:23Z"
+      agent_id: linux-macuahuitl-opus5-20260824T003400Z
+      host: linux_mutable
+      evidence_refs:
+        - "scripts/hooks/pre-push-local-gate.sh — the stale-stamp refusal now enumerates paths newer than the stamp"
+        - "methodology/multi-host-development.yaml — in_progress_output_of_a_long_horizon_job"
+        - "EC4 POSITIVE: writer appending inside the checkout -> rc=1, refusal names scripts/refusal-calibration/.q7dm-probe.tsv"
+        - "EC4 NEGATIVE: writer stopped, gate re-run -> rc=0, '✓ local gate', path not named"
+      merge_affordance: merge-now
+      merge_reason: >
+        Any host running work that outlives a cycle can be locked out of pushing
+        with advice that cannot terminate. The fix is a hook message and a
+        methodology paragraph; nothing a sibling compiles changes.
+      summary: >
+        THE REFUSAL NOW NAMES THE CULPRIT, because "re-run it" was not merely
+        unhelpful here — it was advice that CANNOT TERMINATE. A background job
+        appending inside the checkout invalidates the gate stamp faster than a
+        gate run plus a push can complete, so each re-run stamps a tree that has
+        already moved. Measured 2026-08-23: this host could push nothing at all,
+        including work unrelated to the job, for as long as it ran.
+
+        The stamp covers `git ls-files --cached --others`, so an UNTRACKED file
+        that merely grows invalidates it exactly as a tracked edit does. That is
+        the part that makes the situation unreadable from the message: nothing
+        was edited, nothing is in `git status` as modified, and the gate is
+        nonetheless correct.
+
+        Paths newer than the stamp file are now listed (mtime, capped at 12),
+        followed by the remedy that actually works — move the in-progress output
+        out of the checkout, which is safe MID-RUN because a shell redirect
+        holds the file by inode rather than by path. When nothing is newer, the
+        message says so and keeps the old advice, since a deletion or a mode
+        change is a real stale stamp that a re-run does fix.
+
+        EC4 both directions, with the exit status read from the PIPELINE rather
+        than from the echo feeding it (727-kmks, which I walked into on the
+        first attempt and had to redo):
+          writer active  -> rc=1, refusal names the probe file
+          writer stopped -> rc=0, "✓ local gate", nothing named
+
+        METHODOLOGY NAMES THE MISSING CATEGORY. The exit contract knew two kinds
+        of file — disposable scratch (external $boundary_dir/tmp/) and
+        meaningful cycle output (commit it). A twenty-minute measurement is
+        neither: it is meaningful output NOT YET READY to commit, and with no
+        word for that state the natural place to put it was the wrong one.
+        `in_progress_output_of_a_long_horizon_job` now says it lives outside the
+        checkout until complete, then lands as one atomic change.
+
+        Written as a fleet rule rather than a macuahuitl note: any host told to
+        start work outliving its cycle inherits the same contradiction between
+        "long-horizon background work is fair game" and a gate that assumes the
+        tree holds still, and until now only one of those was written down.
