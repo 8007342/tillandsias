@@ -597,6 +597,41 @@ filing — not the prompt.
    Expert Health Probe here too — it is advisory and never blocks, but it must
    run BEFORE the cycle's first expert read, or an outage during that read has
    no recorded baseline to be visible against.
+2b. **Acquire the checkout lock — EVERY lane, before the boundary snapshot**
+   (order 873-zcim):
+
+   ```bash
+   TILLANDSIAS_CYCLE_HOLDER_PID=$PPID scripts/cycle-checkout-lock.sh acquire \
+       --lane <how-this-cycle-was-launched> --source "<prompt source, one line>"
+   ```
+
+   The no-stacking lock used to be taken only by the driver lane
+   (tillandsias-cycle-driver.sh), so a cycle launched by an operator prompt, a
+   /loop cron, or a cloud schedule acquired nothing and STACKED on a running
+   driver in the same worktree — measured on yoga 2026-08-24, 21 minutes into
+   a driver cycle, duplicating its claims. The lock guarded the driver lane;
+   the thing two agents contend for is the CHECKOUT.
+
+   On `skip:overlap-lock-held:<holder>` DO NOT PROCEED: the verdict names who
+   holds the checkout (lane, pid, start, source). Report it as the cycle's
+   final output and exit — this is the designed outcome, not a failure, and
+   the refusal is recorded durably OUTSIDE the checkout in
+   `~/.cache/tillandsias/overlap-refusals.jsonl`, so a refused-for-overlap
+   cycle is distinguishable in the record from a cycle that ran and found
+   nothing (873-zcim criterion 3). Do not retry in a loop; the next scheduled
+   fire retries on its own clock.
+
+   `TILLANDSIAS_CYCLE_HOLDER_PID=$PPID` must be evaluated in YOUR shell — it
+   anchors liveness to the agent-harness process that spans the whole cycle.
+   The script's own default is one shell too deep and dies with the tool call.
+
+   DECIDED (873-zcim criterion 4): a second agent NEVER works in a locked
+   checkout. The sanctioned path for concurrent work on one host is a separate
+   git worktree or a clean temp clone — the technique yoga used to file its
+   wedge record and 873-zcim itself while another cycle held its checkout.
+   Release at Finalization (step 9b) with
+   `TILLANDSIAS_CYCLE_HOLDER_PID=$PPID scripts/cycle-checkout-lock.sh release`.
+
 3. Snapshot the startup boundary before classifying or changing any path:
    ```bash
    boundary_dir="$(mktemp -d "${TMPDIR:-/tmp}/meta-orchestration-boundary.XXXXXX")"
@@ -1652,3 +1687,14 @@ Before exit:
    that finalization steps 1-8 all passed; the outer launcher rejects exit
    zero without it. See "Full-Mode Terminal Attestation" above for the grammar
    and invariants.
+
+9b. Release the checkout lock (order 873-zcim) — AFTER the terminal marker is
+   derived, as the cycle's last mutation:
+   ```bash
+   TILLANDSIAS_CYCLE_HOLDER_PID=$PPID scripts/cycle-checkout-lock.sh release
+   ```
+   The stale-reclaim bound (dead holder, or 3h) covers a cycle that dies
+   before reaching this line, so a crashed cycle cannot silence the cadence —
+   but do not lean on it: an explicitly released lock frees the checkout NOW,
+   a reclaimed one frees it up to three hours later, and on a 30-minute
+   cadence that is six skipped fires.

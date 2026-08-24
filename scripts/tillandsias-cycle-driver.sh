@@ -78,6 +78,30 @@ if command -v flock >/dev/null 2>&1; then
         echo "skip:overlap-lock-held"
         exit 0
     fi
+    # ORDER 873-zcim — CROSS-ARM CHECK. Prompt-launched cycles (an operator
+    # sentence, a /loop cron, a cloud schedule) cannot hold a flock: they span
+    # many short-lived shells with no fd that survives between them. They hold
+    # the mkdir dir via scripts/cycle-checkout-lock.sh instead. Winning the
+    # flock therefore proves only that no OTHER DRIVER runs; a prompt-lane
+    # cycle in this same checkout is invisible to fd 9 — which is exactly how
+    # a /loop fire stacked on a running driver on yoga, 2026-08-24, holding
+    # claims the driver then duplicated. Check the dir, liveness-aware, with
+    # the same staleness bound as the dir arm below.
+    LOCKD="$LOCK.d"
+    if [ -d "$LOCKD" ]; then
+        _xa_pid="$(cat "$LOCKD/pid" 2>/dev/null || true)"
+        _xa_born="$(cat "$LOCKD/epoch" 2>/dev/null || echo 0)"
+        case "$_xa_born" in *[!0-9]*|"") _xa_born=0 ;; esac
+        _xa_age=$(( $(date +%s) - _xa_born ))
+        if [ -n "$_xa_pid" ] && kill -0 "$_xa_pid" 2>/dev/null && [ "$_xa_age" -le 10800 ]; then
+            record 0 true
+            echo "skip:overlap-lock-held"
+            exit 0
+        fi
+        # Stale prompt-lane lock (dead holder / beyond bound): reclaim it so a
+        # crashed /loop cannot silence the cadence forever.
+        rm -rf "$LOCKD" 2>/dev/null || true
+    fi
 else
     LOCKD="$LOCK.d"
     if ! mkdir "$LOCKD" 2>/dev/null; then

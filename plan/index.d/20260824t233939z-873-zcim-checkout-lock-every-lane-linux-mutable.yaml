@@ -1,0 +1,72 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-24T23:39:39Z.
+status:
+  - packet_id: the-no-stacking-lock-guards-the-driver-lane-not-the-checkout
+    field: status
+    value: completed
+    ts: "2026-08-24T23:39:39Z"
+    host: linux_mutable
+
+events:
+  - packet_id: the-no-stacking-lock-guards-the-driver-lane-not-the-checkout
+    event:
+      type: completed
+      ts: "2026-08-24T23:39:39Z"
+      agent_id: linux-macuahuitl-opus5-20260824T233400Z
+      host: linux_mutable
+      evidence_refs:
+        - "scripts/cycle-checkout-lock.sh — acquire/release/status, mkdir arm, holder metadata (lane/pid/epoch/source), external refusal JSONL"
+        - "scripts/tillandsias-cycle-driver.sh — flock arm now ALSO checks the prompt-lane dir, liveness-aware, stale-reclaiming"
+        - "skills/meta-orchestration/SKILL.md — Start Of Cycle 2b acquire before the boundary snapshot, Finalization 9b release, criterion-4 decision recorded"
+        - "scripts/test-cycle-checkout-lock.sh — 10/10: lifecycle, foreign-release refusal, stale reclaim, CROSS-ARM BOTH DIRECTIONS, external refusal record"
+        - "MUTATION: revert the driver's cross-arm check -> driver fires through a held lock (ok:cycle-fired), the yoga incident exactly; test red, restored green"
+        - "driver's own suite 8/8 unchanged; this very cycle is running WITH the lock held (acquired 23:36Z, holder=claude pid 1617515)"
+      merge_affordance: merge-now
+      merge_reason: >
+        THE RESUME GATE. The operator restarts siblings from fresh checkouts;
+        every timer, /loop and prompt lane must contend for the checkout
+        correctly from their first fire, or the 872-c9nd shape recurs on day
+        one. Nothing already-running changes behaviour except gaining refusals
+        it should always have had.
+      summary: >
+        THE LOCK NOW GUARDS THE CHECKOUT, NOT THE LANE. Every exit criterion
+        measured:
+
+        (1) Every lane acquires at Start Of Cycle, before the boundary
+        snapshot. Prompt lanes cannot use flock — a skill cycle is a chain of
+        short-lived shells with no fd spanning it — so they take a mkdir lock
+        anchored to the agent-harness pid, which lives for the whole session.
+        This very cycle is running under it.
+
+        (2) The holder is NAMED: lane, pid, start epoch, prompt source, all in
+        the refusal line. "skip:overlap-lock-held:lane=hourly-prompt
+        pid=1617515 …" instead of "something is running".
+
+        (3) A refused-for-overlap cycle writes one JSONL line OUTSIDE the
+        contended checkout (~/.cache/tillandsias/overlap-refusals.jsonl) —
+        refusing by mutating the thing being refused would be the hazard
+        itself. Distinguishable from an idle cycle, sweepable by the
+        coordinator.
+
+        (4) DECIDED: a second agent never works in a locked checkout; the
+        sanctioned concurrent path is a separate worktree or clean temp clone
+        — yoga's own technique, now the rule.
+
+        CROSS-ARM VISIBILITY is the part that makes it real: the prompt lane
+        probes the driver's flock and yields; the driver, after winning its
+        flock, now checks the prompt-lane dir and skips. Reverting that one
+        driver check reproduces the yoga incident verbatim in the fixture —
+        the driver fires straight through a held lock — and the test catches
+        it.
+
+        ONE TRAP FOUND BY DOGFOODING: the script's default holder pid was one
+        shell too deep (the tool-call wrapper, dead within seconds — measured:
+        first acquire's holder was stale-reclaimable one call later). Callers
+        pass TILLANDSIAS_CYCLE_HOLDER_PID=$PPID from their OWN shell; the
+        skill text and the script header both carry the warning.
+
+        Residue, honest: the lock's staleness bound (3h) means a SIGKILLed
+        prompt cycle can silence the cadence for up to six 30-minute fires
+        before reclaim; the release step at Finalization is what keeps that
+        theoretical. And overlap-refusals.jsonl has no consumer yet — same
+        shape as 874-w2gc's salvage sweep, and it should ride that packet.
