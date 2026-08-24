@@ -1,6 +1,7 @@
 # @trace spec:meta-orchestration
 # @trace order:737-zcj5
 # @trace order:770-f6u4
+# freshness: auditor=linux-yoga-opus5-20260824T193300Z date=2026-08-24 verdict=updated scope=STEP 18 budget 20s -> 120s after measuring 14.1s per cycle-metrics call x3 on an idle 12-core host (structurally unreacheable, not flaky); full 20-step suite green on linux-next
 #
 # Pins the executable MCP expert health probe (order 737-zcj5). `mcp_first_read_path`
 # has always said "fall back and keep going, THEN RECORD IT" — but named no
@@ -183,7 +184,12 @@ critical_path:
     # leave it exactly `health=ok` with no outage line (the negative control that
     # stops the new state from firing every cycle and being ignored).
     command: "d=$(mktemp -d); printf '{\"ts\":\"t\",\"server\":\"forge-plan\",\"state\":\"up\",\"host\":\"h\"}\\n{\"ts\":\"t\",\"server\":\"project-info\",\"state\":\"up\",\"host\":\"h\"}\\n' > $d/h.jsonl; printf 'ts=x epoch=%s claim=unexposed tools=none agent=fx\\n' \"$(date -u +%s)\" > $d/s; a=$(TILLANDSIAS_EXPERT_HEALTH_LOG=$d/h.jsonl TILLANDSIAS_MCP_SURFACE_STAMP=$d/s scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep -c 'health=ok-unexposed'); printf 'ts=x epoch=%s claim=exposed tools=all agent=fx\\n' \"$(date -u +%s)\" > $d/s; b=$(TILLANDSIAS_EXPERT_HEALTH_LOG=$d/h.jsonl TILLANDSIAS_MCP_SURFACE_STAMP=$d/s scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^mcp:' | grep -c 'health=ok '); c=$(TILLANDSIAS_EXPERT_HEALTH_LOG=$d/h.jsonl TILLANDSIAS_MCP_SURFACE_STAMP=$d/s scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep -c '^mcp_outage:'); rm -rf $d; if [ \"$a\" -ge 2 ] && [ \"$b\" = 1 ] && [ \"$c\" = 0 ]; then echo 'ok: unexposed-is-its-own-state'; else echo \"observed unexposed_lines=$a exposed_ok=$b exposed_outage=$c\"; echo 'fail: healthy-but-unexposed must be distinct from healthy'; fi"
-    timeout_ms: 20000
+    # Three cycle-metrics invocations at a measured ~14s each on an
+    # idle 12-core host = ~42s of real work; the original 20s budget
+    # was structurally unreacheable, not flaky (measured yoga
+    # 2026-08-24). Sized to 120s — the property is output shape, not
+    # speed.
+    timeout_ms: 120000
     expected_behavior: "ok: unexposed-is-its-own-state"
 
   - step: "a STALE surface attestation cannot label this cycle (an earlier cycle's marker is not evidence)"

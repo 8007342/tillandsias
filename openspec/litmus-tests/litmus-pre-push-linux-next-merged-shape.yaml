@@ -1,5 +1,6 @@
 # @trace spec:meta-orchestration
 # @trace order:851-gpb5
+# freshness: auditor=linux-yoga-opus5-20260824T193300Z date=2026-08-24 verdict=updated scope=STEP 3 version literal v5 -> versioned-marker shape (installer is v6); regex negative controls 3/3 (v6 matches, absent fails, future v9 matches) and suite green on linux-next
 #
 # Pins the executable half of methodology's pre-push gate
 # (pull_merge_cadence.pre_push_gate): non-linux-next platform branches MUST
@@ -40,8 +41,14 @@ critical_path:
     timeout_ms: 60000
     expected_behavior: "ok:pre-push-linux-next-merged-fixture:12"
 
-  - step: "the installed-hook composition includes the merge gate (installer generates v5 with three guards)"
-    command: "grep -q 'tillandsias-pre-push-v5' scripts/install-hooks.sh && grep -q 'pre-push-linux-next-merged.sh' scripts/install-hooks.sh && echo 'ok: composed'"
+  - step: "the installed-hook composition includes the merge gate (installer generates a versioned hook with the merge gate composed)"
+    # The property is COMPOSITION — the installer's generated hook
+    # carries the merge gate under its current versioned marker.
+    # Pinning a specific version literal (v5) guaranteed this check
+    # broke on every legitimate installer bump (it is v6 since the
+    # main-branch affordance landed); pin the versioned-marker SHAPE
+    # instead, per order 622-rmit (expression pinning).
+    command: "grep -qE 'tillandsias-pre-push-v[0-9]+' scripts/install-hooks.sh && grep -q 'pre-push-linux-next-merged.sh' scripts/install-hooks.sh && echo 'ok: composed'"
     timeout_ms: 5000
     expected_behavior: "ok: composed"
 
