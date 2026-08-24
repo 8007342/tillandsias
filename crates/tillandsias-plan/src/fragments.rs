@@ -1265,18 +1265,12 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
     // Precedence is the ROW's own (ts, host), never fragment order, so the
     // synthetic base fragment below can sit anywhere in the slice.
     {
+        // 864-v8kr: the base splice lives in fold_capabilities_with_base now.
+        // The base here is the CANDIDATE being written, not the file on disk —
+        // folding against disk would drop every row this compaction is about
+        // to publish.
         let base_doc: Value = serde_yaml::from_str(&candidate).unwrap_or(Value::Null);
-        let mut all: Vec<Fragment> = Vec::new();
-        if base_doc.get("capabilities").is_some() {
-            all.push(Fragment {
-                name: "0000-base".to_string(),
-                path: PathBuf::from("plan/index.yaml"),
-                doc: base_doc,
-                raw: String::new(),
-            });
-        }
-        all.extend(fragments.iter().cloned());
-        let (matrix, _skipped) = fold_capabilities(&all);
+        let (matrix, _skipped) = fold_capabilities_with_base(&base_doc, &fragments);
         if !matrix.is_empty() {
             let rows: Vec<Value> = matrix
                 .values()
@@ -1937,6 +1931,50 @@ pub struct SkippedCapabilityRow {
 /// Separate from [`fold`] deliberately: a capability row is not a packet, and
 /// merging it into the packet document would put hardware state in a ledger
 /// whose every other entry is work.
+/// Fold the capability channel over a BASE plus its fragments — the form every
+/// production caller wants, and the one they should use.
+///
+/// ORDER 864-v8kr. [`fold_capabilities`] takes only fragments, so the base rows
+/// reach it only if the caller first builds a synthetic `"0000-base"` Fragment.
+/// Both production callers did that correctly, in two separate hand-written
+/// copies, and nothing in the bare signature told a third caller it owed them.
+/// A caller that forgot would get an EMPTY matrix and no error — which is
+/// precisely the silent-emptiness the channel already suffered once (843-624y
+/// destroyed 100% of it, losing yolanda's only two rows).
+///
+/// The base arrives as a `Value` rather than a path because the two callers
+/// disagree about where it lives: `capability-matrix` reads plan/index.yaml
+/// from disk, while compaction must fold against the CANDIDATE it is about to
+/// write, which is not on disk yet. A path parameter would have served one and
+/// silently mis-served the other.
+///
+/// Precedence is the row's own `(ts, host)`, never fragment order, so the
+/// synthetic base may sit anywhere in the slice.
+pub fn fold_capabilities_with_base(
+    base: &Value,
+    fragments: &[Fragment],
+) -> (
+    std::collections::BTreeMap<(String, String), CapabilityEntry>,
+    Vec<SkippedCapabilityRow>,
+) {
+    let mut all: Vec<Fragment> = Vec::new();
+    if base.get("capabilities").is_some() {
+        all.push(Fragment {
+            name: "0000-base".to_string(),
+            path: PathBuf::from("plan/index.yaml"),
+            doc: base.clone(),
+            raw: String::new(),
+        });
+    }
+    all.extend(fragments.iter().cloned());
+    fold_capabilities(&all)
+}
+
+/// Fold the capability channel over fragments ALONE.
+///
+/// Prefer [`fold_capabilities_with_base`] unless you genuinely have no base —
+/// this one cannot see rows already folded into plan/index.yaml, and its
+/// emptiness is indistinguishable from "no host has ever published" (864-v8kr).
 pub fn fold_capabilities(
     fragments: &[Fragment],
 ) -> (
@@ -3566,23 +3604,12 @@ plan_index:
         let mut packets = Vec::new();
         crate::collect_packets(&merged, &mut packets);
 
-        // The base is spliced in exactly as the production callers do it
-        // (main.rs capability-matrix, fragments.rs:1272). That duplication is
-        // itself filed as 864-v8kr; this test must mirror production, not
-        // improve on it, or it would pass against a fold no caller performs.
-        let mut cap_frags = frags;
-        if base.get("capabilities").is_some() {
-            cap_frags.insert(
-                0,
-                Fragment {
-                    name: "0000-base".to_string(),
-                    path: index.to_path_buf(),
-                    doc: base.clone(),
-                    raw: base_raw,
-                },
-            );
-        }
-        let (matrix, _) = fold_capabilities(&cap_frags);
+        // 864-v8kr CLOSED THIS. This helper used to hand-build a synthetic
+        // "0000-base" Fragment, mirroring two production copies of the same
+        // code. The splice now lives inside the fold, so the base is simply
+        // passed — and the disappearance of the preparation from THIS call is
+        // the readable form of the fix.
+        let (matrix, _) = fold_capabilities_with_base(&base, &frags);
         let caps: Vec<String> = matrix.keys().map(|(h, l)| format!("{h}/{l}")).collect();
 
         (packets, caps)
@@ -3742,6 +3769,76 @@ mod capability_matrix_tests {
         assert_eq!(m.len(), 2, "one row per host_id");
         assert!(m.contains_key(&("yoga".to_string(), "in-guest".to_string())));
         assert!(m.contains_key(&("yolanda".to_string(), "in-guest".to_string())));
+    }
+
+    // ── 864-v8kr ────────────────────────────────────────────────────────────
+    //
+    // The base must reach the fold BY CONSTRUCTION, not because each caller
+    // remembered to splice it. Two production callers did remember, in two
+    // hand-written copies, and nothing in `fold_capabilities(&frags)` told a
+    // third that it owed them — it would have returned an empty matrix and no
+    // error, the same silent emptiness that lost yolanda's only two rows when
+    // compaction consumed the channel (843-624y).
+    //
+    // The distinguishing test is therefore NOT "does the matrix contain the
+    // base row" — the old code passed that too, at its prepared call sites. It
+    // is "does a caller that prepares NOTHING still see the base row".
+
+    /// A caller that does no preparation whatsoever still sees base rows.
+    #[test]
+    fn the_base_reaches_the_fold_without_any_caller_side_preparation() {
+        let base: Value = serde_yaml::from_str(&row(
+            "base-only-host",
+            "2026-08-18T10:00:00Z",
+            "linux",
+            "cpu",
+        ))
+        .expect("base parses");
+
+        // No synthetic Fragment, no insert, no load_all — the whole point.
+        let (m, _skipped) = fold_capabilities_with_base(&base, &[]);
+
+        assert!(
+            m.contains_key(&("base-only-host".to_string(), "in-guest".to_string())),
+            "a base row must be visible to a caller that prepared nothing; got {:?}",
+            m.keys().collect::<Vec<_>>()
+        );
+    }
+
+    /// And the base still LOSES to a newer fragment row, so moving the splice
+    /// inside did not quietly change precedence. Precedence is the row's own
+    /// (ts, host); a base that won by virtue of being the base would be a
+    /// different bug wearing this fix's clothes.
+    #[test]
+    fn an_interior_base_splice_does_not_change_lww_precedence() {
+        let base: Value =
+            serde_yaml::from_str(&row("dual", "2026-08-18T10:00:00Z", "linux", "cpu"))
+                .expect("base parses");
+        let newer = frag(
+            "newer.yaml",
+            &row("dual", "2026-08-19T10:00:00Z", "linux", "gpu-cuda"),
+        );
+        let (m, _) = fold_capabilities_with_base(&base, &[newer]);
+        assert_eq!(
+            m[&("dual".to_string(), "in-guest".to_string())].document["legacy_tier"],
+            Value::String("gpu-cuda".into()),
+            "the newer fragment row must win over the base row"
+        );
+
+        // ...and symmetrically, an OLDER fragment must not beat a newer base.
+        let base_new: Value =
+            serde_yaml::from_str(&row("dual", "2026-08-20T10:00:00Z", "linux", "gpu-rocm"))
+                .expect("base parses");
+        let older = frag(
+            "older.yaml",
+            &row("dual", "2026-08-19T10:00:00Z", "linux", "cpu"),
+        );
+        let (m2, _) = fold_capabilities_with_base(&base_new, &[older]);
+        assert_eq!(
+            m2[&("dual".to_string(), "in-guest".to_string())].document["legacy_tier"],
+            Value::String("gpu-rocm".into()),
+            "the newer base row must win over an older fragment row"
+        );
     }
 
     /// Two WSL2 guests share a kernel release exactly. They must NOT collapse.

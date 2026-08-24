@@ -2911,22 +2911,16 @@ fn main() {
             // exact silent-emptiness this channel exists to avoid. The base is
             // presented as a synthetic fragment; precedence is the row's own
             // (ts, host), so its position in the slice does not matter.
-            let mut frags = tillandsias_plan::fragments::load_all(&index);
-            if let Ok(raw) = std::fs::read_to_string(&index)
-                && let Ok(doc) = serde_yaml::from_str::<serde_yaml::Value>(&raw)
-                && doc.get("capabilities").is_some()
-            {
-                frags.insert(
-                    0,
-                    tillandsias_plan::fragments::Fragment {
-                        name: "0000-base".to_string(),
-                        path: index.clone(),
-                        doc,
-                        raw,
-                    },
-                );
-            }
-            let (matrix, skipped) = tillandsias_plan::fragments::fold_capabilities(&frags);
+            // 864-v8kr: the base splice lives inside the fold now, so this
+            // reads the base and hands it over rather than hand-rolling a
+            // synthetic fragment that a third caller would not know to build.
+            let frags = tillandsias_plan::fragments::load_all(&index);
+            let base_doc: serde_yaml::Value = std::fs::read_to_string(&index)
+                .ok()
+                .and_then(|raw| serde_yaml::from_str(&raw).ok())
+                .unwrap_or(serde_yaml::Value::Null);
+            let (matrix, skipped) =
+                tillandsias_plan::fragments::fold_capabilities_with_base(&base_doc, &frags);
 
             // ORDER 847-wgy4. `--hosts` is the ROUTING projection: one line
             // per distinct host_id, sorted (BTreeMap order), as

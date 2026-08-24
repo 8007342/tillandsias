@@ -1,0 +1,65 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-24T01:38:38Z.
+status:
+  - packet_id: fold-capabilities-needs-its-base-injected-by-every-caller-separately
+    field: status
+    value: completed
+    ts: "2026-08-24T01:38:38Z"
+    host: linux_mutable
+
+events:
+  - packet_id: fold-capabilities-needs-its-base-injected-by-every-caller-separately
+    event:
+      type: completed
+      ts: "2026-08-24T01:38:38Z"
+      agent_id: linux-macuahuitl-opus5-20260824T013400Z
+      host: linux_mutable
+      evidence_refs:
+        - "crates/tillandsias-plan/src/fragments.rs — fold_capabilities_with_base(base, fragments)"
+        - "EC1: the only remaining construction of a 0000-base Fragment is inside that function; both call sites pass a base instead"
+        - "EC2: the_base_reaches_the_fold_without_any_caller_side_preparation — fold_capabilities_with_base(&base, &[]) sees the row"
+        - "EC2b: an_interior_base_splice_does_not_change_lww_precedence — newer fragment beats base AND newer base beats older fragment"
+        - "EC3: capability-matrix --hosts byte-identical before and after, 7 hosts"
+        - "MUTATION: disable the interior splice -> EC2 test fails 'got []' AND the 846-idhn round-trip fails on the capabilities channel"
+        - "cargo test -p tillandsias-plan 217+24 green; ./build.sh --check rc=0"
+      merge_affordance: merge-when-idle
+      merge_reason: >
+        A crate every host builds, but the behaviour is unchanged — the matrix
+        is byte-identical. What changes is that a future caller cannot get it
+        wrong. Worth having before someone writes that caller, not urgent today.
+      summary: >
+        THE SPLICE MOVED INSIDE THE FOLD. `fold_capabilities` took only
+        fragments, so base rows reached it only if the caller first hand-built a
+        synthetic "0000-base" Fragment. Both production callers did — in two
+        separate copies — and nothing in the signature told a third caller it
+        owed them. A caller that forgot would have got an EMPTY matrix and no
+        error, which is the same silent emptiness that lost yolanda's only two
+        rows when compaction consumed this channel (843-624y).
+
+        THE BASE IS PASSED AS A `Value`, NOT A PATH, and that detail is the
+        reason a naive fix would have been wrong. The two callers disagree about
+        where the base lives: `capability-matrix` reads plan/index.yaml from
+        disk, while compaction must fold against the CANDIDATE it is about to
+        write, which is not on disk yet. A path parameter would have served the
+        first and silently mis-served the second — folding the old file and
+        dropping every row the compaction was publishing.
+
+        THE TEST THAT DISTINGUISHES CONSTRUCTION FROM CONVENTION is not "does
+        the matrix contain the base row" — the old code passed that too, at its
+        two prepared call sites. It is "does a caller that prepares NOTHING see
+        the base row": fold_capabilities_with_base(&base, &[]). With the
+        interior splice disabled that assertion reports `got []`.
+
+        PRECEDENCE WAS CHECKED IN BOTH DIRECTIONS, because a base that won by
+        virtue of being the base would be a different bug wearing this fix's
+        clothes. A newer fragment still beats the base, and a newer base still
+        beats an older fragment; precedence remains the row's own (ts, host).
+
+        `fold_capabilities` survives for the genuinely base-less case and now
+        carries a docstring saying its emptiness is indistinguishable from "no
+        host has ever published" — so the next reader is warned rather than
+        trusted to know.
+
+        Also simplified the 846-idhn round-trip helper, which had been mirroring
+        the caller-side splice deliberately. The preparation vanishing from that
+        call is the readable form of this fix.
