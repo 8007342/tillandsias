@@ -153,6 +153,33 @@ pub struct Case {
     /// A model change re-embeds the set; it does not rewrite it.
     #[serde(default)]
     pub query_vec: Option<String>,
+    /// The ANSWER PROSE to build the envelope from, when the case needs to
+    /// control it. Omitted by default, which keeps the grader synthesising one
+    /// exactly as before.
+    ///
+    /// ORDER 865-h4tn — WITHOUT THIS THE SUITE CANNOT EXPRESS A REFUSAL.
+    /// `spec::build_envelope` keeps a chunk only if the answer CONTAINS that
+    /// chunk's key (spec.rs:1079) and refuses only when none survive
+    /// (spec.rs:1095). The synthesised answer, `spec::retrieval_only_answer`,
+    /// emits one `- {key} [path:start-end]` line per chunk — so it contains
+    /// EVERY key by construction, every chunk always survives, and no case can
+    /// ever grade `unsupported`, whatever it asks.
+    ///
+    /// Measured before this field existed: "what is the flibber flobber
+    /// protocol and how do I bake sourdough", run through the grader's own
+    /// answer construction over the real index, graded `retrieved` — citing
+    /// `fn basic_recipe()` in the VM layer and a Windows smoke-test recipe,
+    /// because "recipe" sits near "sourdough". The expert offered a function
+    /// that builds a VM image as evidence about baking bread and the harness
+    /// called it a pass.
+    ///
+    /// In production the prose comes from a real model, which may legitimately
+    /// answer without echoing an identifier — that is how `unsupported` is
+    /// reachable at all. Substituting a constant chosen to always satisfy the
+    /// check under test made the one behaviour the suite most needed to pin the
+    /// one behaviour it could not exercise.
+    #[serde(default)]
+    pub answer: Option<String>,
     pub expect: Expect,
 }
 
@@ -643,7 +670,14 @@ impl Harness {
                 // citation set, not the prose (this packet's own criterion).
                 let plain: Vec<crate::spec::Chunk> =
                     picked.iter().map(|p| p.chunk.clone()).collect();
-                let answer = crate::spec::retrieval_only_answer(&plain);
+                // 865-h4tn: a case may supply its OWN prose. The synthesised
+                // fallback lists every chunk key, which is what makes the
+                // retrieval-only floor deterministic — and also what made
+                // `unsupported` unreachable for every case in the suite.
+                let answer = match case.answer.as_deref() {
+                    Some(a) => a.to_string(),
+                    None => crate::spec::retrieval_only_answer(&plain),
+                };
                 Ok(crate::spec::build_envelope_scored(&answer, &picked, &root))
             }
             "cheatsheet.ask" => {
