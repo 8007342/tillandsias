@@ -29,7 +29,11 @@
 # way with the coordinator reporting "silent" each time and being wrong.
 #
 # Output: one line per host, plus a falsifiable last line:
-#   ok:fleet-heartbeat:<healthy>/<wedged>/<dead>/<never>
+#   ok:fleet-heartbeat:<healthy>/<wedged>/<blocked>/<dead>/<never>
+#
+# `blocked` joined the grammar in 864-w7rc. Widening a falsifiable verdict line
+# is a breaking change for anything parsing it; checked first — nothing does,
+# and this header was the only place still claiming the old four-field shape.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -109,7 +113,36 @@ $h"
 done
 roster="$(printf '%s\n' "$roster" | grep -v '^$' | sort -u)"
 
-healthy=0; wedged=0; dead=0; never=0
+# An OPEN BLOCKER THE HOST FILED ABOUT ITSELF, which is durable state rather
+# than a decaying signal.
+#
+# The wedged/dead split below keys on commit recency, and that decays: a wedged
+# host stops committing once it has nothing NEW to say about being wedged, so
+# after six hours it reads "likely a dead terminal" again. Measured 2026-08-24 —
+# yoga filed plan/issues/yoga-dirty-start-wedge-2026-08-23.md carrying
+# `Status: blocked`, still holds two in_progress reap-held rows, and by the next
+# cycle this report was calling it dead. The classifier lost information the
+# ledger still had.
+#
+# So consult the record. This script already TELLS the reader to "check
+# plan/issues/ for a record it filed about itself" — and printed that hint only
+# when something was already classified wedged, i.e. it vanished exactly when it
+# became necessary. Automating the advice it was giving is the fix.
+open_blocker_for() {
+    local host="$1" f
+    for f in plan/issues/*"$host"*.md; do
+        [ -f "$f" ] || continue
+        # A blocker is open until its own record says otherwise. `Status:` is the
+        # field these records already carry; anything not blocked is ignored.
+        if grep -qiE '^- Status:[[:space:]]*blocked' "$f" 2>/dev/null; then
+            printf '%s\n' "$f"
+            return 0
+        fi
+    done
+    return 1
+}
+
+healthy=0; wedged=0; dead=0; never=0; blocked=0
 for host in $roster; do
     f="$ATTEST_DIR/$host.md"
     a_epoch=0
@@ -140,6 +173,12 @@ for host in $roster; do
         printf '%-24s attested %s ago BUT COMMITTED %s ago  <-- WEDGED, alive and failing\n' \
             "$host" "$(human "$a_age")" "$(human "$c_age")"
         wedged=$(( wedged + 1 ))
+    elif rec="$(open_blocker_for "$host")"; then
+        # Durable beats recent. The host said it was blocked and nothing has
+        # said otherwise, so silence is EXPLAINED rather than suspicious.
+        printf '%-24s %s  <-- BLOCKED (it said so): %s\n' \
+            "$host" "$(human "$a_age")" "$rec"
+        blocked=$(( blocked + 1 ))
     else
         printf '%-24s %s  <-- SILENT, no commits either (likely a dead terminal)\n' \
             "$host" "$(human "$a_age")"
@@ -147,8 +186,8 @@ for host in $roster; do
     fi
 done
 
-if [ "$wedged" -gt 0 ]; then
-    echo "  A WEDGED host needs its WORKTREE adjudicated, not a restart. Check" >&2
-    echo "  plan/issues/ for a record it filed about itself before assuming it is idle." >&2
+if [ "$wedged" -gt 0 ] || [ "$blocked" -gt 0 ]; then
+    echo "  A WEDGED or BLOCKED host needs its WORKTREE adjudicated, not a restart." >&2
+    echo "  Read the record it filed about itself; it usually names the unblock path." >&2
 fi
-echo "ok:fleet-heartbeat:${healthy}/${wedged}/${dead}/${never}"
+echo "ok:fleet-heartbeat:${healthy}/${wedged}/${blocked}/${dead}/${never}"
