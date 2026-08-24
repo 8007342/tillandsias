@@ -1,0 +1,99 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_immutable (lenovinha), 2026-08-24T16:45:00Z.
+events:
+  - packet_id: no-lane-gate-builds-the-workspace-for-other-targets
+    event:
+      type: progress
+      ts: "2026-08-24T16:45:00Z"
+      agent_id: linux-lenovinha-fable5-20260824T155325Z
+      host: linux_immutable
+      summary: |
+        THE GATE EXISTS NOW — AND ITS FIRST RUN FOUND A LIVE BREAK ON TRUNK,
+        which is the strongest argument for the packet that I could have hoped
+        for and was not looking for.
+
+        THE LIVE DEFECT. `cargo check -p tillandsias-headless --target
+        x86_64-pc-windows-gnu` on linux-next:
+
+          error[E0425]: cannot find function `enforce_ca_key_mode` in this scope
+            --> crates/tillandsias-headless/src/main.rs:3409:17
+          note: found an item that was configured out
+            --> crates/tillandsias-headless/src/main.rs:3009:4
+
+        A `#[cfg(unix)]` definition with THREE unguarded callers (:3132, :3174,
+        :3409) and no fallback arm. That is 653-7rag's shape exactly, sitting on
+        trunk, invisible to every host's gate — found in the first minute of
+        looking, which is about as good a demonstration of this packet's premise
+        as evidence gets.
+
+        FIXED by giving the function a `#[cfg(not(unix))]` no-op counterpart
+        rather than adding cfg guards at the call sites. One place instead of
+        three: three guards would be three chances to forget the fourth, and the
+        callers genuinely do not care about the platform — they are all
+        best-effort. Not a security regression on Windows either: the key is not
+        protected by mode bits there, and that path receives it as a podman
+        secret.
+
+        THE SCOPE QUESTION THE PACKET LEFT OPEN, answered. Its notes ask whether
+        Windows must build `tillandsias-headless` at all, since it runs in the
+        WSL guest and is injected prebuilt — and say either answer closes the
+        packet as long as the boundary stops being undocumented. I chose MAKE IT
+        BUILD EVERYWHERE. `cargo build --workspace` is, in the packet's own
+        words, the most ordinary command in a Rust repo; a contributor who runs
+        it should not hit a wall in a crate they never touched. The alternative
+        buys nothing here — the fix was 4 lines and the workspace now
+        cross-checks clean, so excluding the crate would trade a real check for
+        a documented exception.
+
+        EXIT CRITERION 2 TURNED OUT NOT TO BE NEEDED. It offered a fallback —
+        gate cfg-arm exhaustiveness — on the premise that a full cross-check is
+        blocked by `ring` wanting a Windows C toolchain. That premise is true
+        and the blocker is removable: `mingw64-gcc` is in Fedora, and with it
+        the FULL workspace cross-checks clean in 37s warm. So the gate does the
+        real thing rather than a heuristic proxy for it, which is strictly
+        better — a cfg-exhaustiveness lint would have false positives and would
+        not have caught this defect's actual shape (an unguarded CALL, not a
+        missing arm at the definition).
+
+        WHAT LANDED. `scripts/check-cross-target-build.sh`, wired into
+        `./build.sh --check`. One-line verdict grammar:
+        `ok:cross-target:<target>` / `fail:cross-target:<target>` (exit 1, with
+        just the error lines — a full cargo log buries the three that matter) /
+        `skip:cross-target:<reason>` (exit 0).
+
+        SKIPPING IS NOT FAILING, and that is the design decision worth
+        challenging me on. The check needs a rustup std for the target AND a C
+        cross-toolchain, neither of which is on a stock host. I did NOT add
+        mingw64-gcc to the builder toolbox init set: it is 33 MiB down / 115 MiB
+        installed, an order of magnitude more than the jq/yq/ripgrep/openssl
+        addition (6.3 MiB, +8s) that 799-tb7q justified, and forcing it on every
+        machine in the fleet as a side effect of a lint is not mine to decide.
+        So a host without it prints `skip:cross-target:no-c-toolchain:x86_64-w64-mingw32-gcc`
+        — naming the exact binary, because the fix is one dnf install and a
+        reader should not have to reproduce the ring failure to learn that — and
+        a host with it gets a real gate. The enabling commands are in the
+        script's header.
+
+        The honest cost of that choice: hosts that do not opt in get no
+        cross-target coverage, so this is a gate that protects the fleet only as
+        far as the fleet opts in. If the operator wants it everywhere, adding
+        mingw64-gcc to the init set is a one-line change and the script needs no
+        edit.
+
+        VERIFIED, both directions, which is the packet's own verifiable_closure
+        ("reintroducing 653-7rag's exact defect fails a gate on a Linux host,
+        without a Windows machine in the loop"):
+          - fallback arm deleted -> `fail:cross-target:x86_64-pc-windows-gnu`,
+            exit 1, naming E0425 and "found an item that was configured out"
+          - restored -> `ok:cross-target:x86_64-pc-windows-gnu`, exit 0
+          - on the bare host, with no toolchain -> the skip verdict, exit 0
+          - full `./build.sh --check` green with the step wired in
+        Measured on lenovinha inside tillandsias-builder: `rustup target add`
+        2.8s, mingw64-gcc 33 MiB, warm full-workspace cross-check 37s.
+
+        RESIDUAL: one target, one direction. macOS is not covered — there is no
+        free cross-toolchain for it — so a `cfg(target_os = "macos")` arm with
+        no fallback is still invisible from here. Windows is the target this
+        packet's originating defect reached, and it is the one that is cheap;
+        macOS wants its own answer and should not be smuggled in under this
+        packet's closure.

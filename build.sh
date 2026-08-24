@@ -1899,6 +1899,23 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Closure-evidence enforcement passed"
 
+    # ORDER 656-spux. Every host compiles for itself and nothing else, so
+    # cfg-gated code is verified by exactly the platform that cannot exercise
+    # the other arms. This builds the workspace for ONE non-host target on hosts
+    # that can. It SKIPS (exit 0, one line saying why) where the rustup std or
+    # the C cross-toolchain is absent — 115 MiB of mingw is not something to
+    # force onto every machine as a side effect of a lint, and a check that
+    # reddens a host for lacking an optional toolchain would be turned off.
+    #
+    # Its first run found a live break on linux-next: a `#[cfg(unix)]`
+    # definition with three unguarded callers and no fallback arm, invisible to
+    # every host's gate. Same shape as 653-7rag.
+    _step "Cross-target workspace check (656-spux)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-cross-target-build.sh" 2>&1; then
+        _error "the workspace does not compile for a non-host target (656-spux) — a cfg arm is missing a fallback"
+        exit 1
+    fi
+
     # Order 614-2gqx / 651-2x5s. The durable MO-FULL attestation ledger
     # (plan/mo-full-attestations.d/) must never carry a tampered, fabricated,
     # or unreachable marker — the terminal marker is only as strong as the

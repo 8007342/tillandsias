@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: no-lane-gate-builds-the-workspace-for-other-targets
+    field: status
+    value: completed
+    ts: "2026-08-24T16:00:36Z"
+    host: lenovinha
+
+events:
+  - packet_id: no-lane-gate-builds-the-workspace-for-other-targets
+    event:
+      type: completed
+      ts: "2026-08-24T16:00:36Z"
+      host: lenovinha
+      summary: >
+        status 'completed' with evidence_refs: scripts/check-cross-target-build.sh wired into build.sh --check; ok:cross-target:x86_64-pc-windows-gnu on this host; NEGATIVE CONTROL both directions (fallback arm deleted -> fail:cross-target + E0425 configured-out, exit 1; restored -> ok:, exit 0); skip verdict verified on a host without the C toolchain; live defect found and fixed: enforce_ca_key_mode cfg(unix) with 3 unguarded callers, now has a cfg(not(unix)) no-op; full workspace cross-checks clean in 37s
+  - packet_id: no-lane-gate-builds-the-workspace-for-other-targets
+    event:
+      type: note
+      ts: "2026-08-24T16:00:36Z"
+      host: lenovinha
+      summary: >
+        cross-target gate landed; found and fixed a live break on trunk in its first run

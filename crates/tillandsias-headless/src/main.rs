@@ -3011,6 +3011,29 @@ fn enforce_ca_key_mode(key: &Path) -> std::io::Result<()> {
     std::fs::set_permissions(key, std::fs::Permissions::from_mode(0o600))
 }
 
+/// ORDER 656-spux. Windows has no POSIX mode bits, so there is nothing for this
+/// to tighten — but its ABSENCE was a compile error, not a no-op: three callers
+/// (:3132, :3174, :3409) invoke it unguarded, and on a non-unix target the name
+/// simply did not exist. `cargo check -p tillandsias-headless --target
+/// x86_64-pc-windows-gnu` failed with E0425 "found an item that was configured
+/// out", on linux-next, invisible to every host's gate.
+///
+/// That is 653-7rag's shape exactly: a cfg-gated definition with no fallback
+/// arm, introduced and reviewed on a platform that cannot see the other side.
+/// The fallback lives HERE, in one place, rather than as a cfg at each call
+/// site — three guards would be three chances to forget the fourth, and the
+/// callers genuinely do not care which platform they are on. They are all
+/// best-effort (`let _ =`, or a mapped error on a path that already tolerates
+/// an absent key).
+///
+/// This is deliberately NOT a security regression on Windows: the key is not
+/// protected by mode bits there in the first place, and the enclave's Windows
+/// path receives it as a podman secret rather than through this file.
+#[cfg(not(unix))]
+fn enforce_ca_key_mode(_key: &Path) -> std::io::Result<()> {
+    Ok(())
+}
+
 fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     // @trace spec:secret-rotation, spec:reverse-proxy-internal
     let certs_dir = PathBuf::from(CA_DIR);
