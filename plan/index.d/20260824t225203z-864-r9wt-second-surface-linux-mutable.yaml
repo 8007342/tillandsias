@@ -1,0 +1,85 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-24T22:52:03Z.
+events:
+  - packet_id: the-coordinators-own-queue-could-not-be-read-back-by-the-instrument
+    event:
+      type: progress
+      ts: "2026-08-24T22:52:03Z"
+      agent_id: linux-macuahuitl-opus5-20260824T223500Z
+      host: linux_mutable
+      evidence_refs:
+        - "answer.rs — pub effective_next_action(p) -> Option<(String, Option<ts>)>; next_action_snippet now routes through it"
+        - "main.rs next-action arm refactored onto the same helper; live output byte-identical (source: event @ 2026-08-24T08:36:07Z)"
+        - "test next_snippet_prefers_the_newest_event_over_the_stale_field; MUTATION: blind the event scan -> returns the STALE birth value, red"
+        - "found by the fleet retrospective audit (answer.rs:1605), verified live before fixing"
+      summary: >
+        864-r9wt'S FIX HAD A SECOND, HIGHER-TRAFFIC SURFACE AND MISSED IT. The
+        `next-action` subcommand learned to take the newest event — but
+        `plan_next`, the SELECTOR every host reads to pull work, rendered its
+        per-row "next:" snippet from the raw packet field at answer.rs:1605.
+        Same G-Set mechanics, same consequence: the one value guaranteed never
+        to have been updated, served as if current, to every host, on the
+        primary work-pull path.
+
+        Fixed by extraction rather than by a second copy: `effective_next_action`
+        lives in answer.rs, the snippet routes through it, and the subcommand's
+        inline implementation is DELETED in favour of the same helper — two
+        copies of "newest event wins" is exactly how one of them stayed wrong
+        for four days.
+
+        Found by the 2026-08-24 fleet retrospective (instructions auditor), and
+        verified live against the ledger before any edit, per this session's
+        standing rule that audit claims get checked, not trusted.
+
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    event:
+      type: progress
+      ts: "2026-08-24T22:52:03Z"
+      agent_id: linux-macuahuitl-opus5-20260824T223500Z
+      host: linux_mutable
+      next_action: >
+        CAMPAIGN STATE 2026-08-24T22:52Z. SOLE HOST by operator stand-down;
+        siblings resume later FROM FRESH CHECKOUTS. Cadence may drop to ~30m.
+
+        LANDED THIS ARC: 801-vm4p (nix cache in the tray's container graph,
+        ensured at every forge launch; implemented, residue named in its event);
+        873-b1nx filed (container builds backed by the cache, all platforms,
+        v0.6); plan_next stale-snippet defect fixed (this fragment).
+
+        RETROSPECTIVE (4 of 6 audit reports in; synthesis pending):
+        - yoga followed instructions CORRECTLY at every step; the 06:09Z
+          re-clone matches NO in-repo automation — an outside actor, most
+          plausibly manual re-provisioning. lenovinha's salvage-before-refuse
+          closes the class, with residue: ref collision, no test, no
+          coordinator sweep of salvage refs.
+        - pirria's work is sound and ALL PUSHED; its missing attestations are a
+          MODE gap — one 36-hour interactive session that never contained the
+          Finalization block. Not a broken cycle: never a cycle. ONE DATA
+          DEFECT: the low-end-inference cheatsheet still asserts the withdrawn
+          "probe cannot discriminate" claim (pirria reversed it at n=10).
+        - identity: one canonical source on paper (agent-identity.sh), nothing
+          enforces it where identity becomes DURABLE DATA; a write-time
+          grammar/roster refusal in the ledger writers would have caught nearly
+          the whole incident class.
+        - instructions: known tensions mostly filed; the two DAY-ONE RESUME
+          RISKS are 873-zcim (every-lane checkout lock, unimplemented) and
+          860-g798 (fresh-clone credential false-green).
+
+        RESUME GATE, for whoever restarts the fleet: land 873-zcim BEFORE
+        timers and loops restart on fresh checkouts, and treat 860-g798 as the
+        first thing a resumed host will hit.
+
+        NEXT, in order:
+        (1) Read the completed retrospective synthesis; act on its top changes.
+        (2) The cheatsheet data defect above — small, but a lying cheatsheet
+            poisons every RAG answer that retrieves it.
+        (3) Write-time identity enforcement in the ledger writers (file as a
+            packet from the identity audit's recommendation).
+        (4) 801-vm4p residue: LivenessProbe entry for the nix cache.
+
+        STANDING COORDINATOR DUTY unchanged; platform branches ahead=0 at
+        22:35Z.
+      summary: >
+        Cycle 2026-08-24T22:35Z (sole host). Fixed the selector's stale
+        next_action snippet found by the retrospective; recorded the four audit
+        headlines and the two resume-gating risks.

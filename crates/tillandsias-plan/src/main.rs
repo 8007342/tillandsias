@@ -4013,41 +4013,18 @@ fn main() {
                 std::process::exit(1);
             };
 
-            // A field with no timestamp is the packet's ORIGINAL value and
-            // therefore the oldest candidate — never a tie-breaker winner.
-            let mut best_ts = String::new();
-            let mut best: Option<&str> = None;
-            let mut source = "packet field";
-
-            if let Some(v) = p.get("next_action").and_then(serde_yaml::Value::as_str) {
-                best = Some(v);
-            }
-            if let Some(evs) = p.get("events").and_then(serde_yaml::Value::as_sequence) {
-                for e in evs {
-                    let Some(na) = e.get("next_action").and_then(serde_yaml::Value::as_str) else {
-                        continue;
-                    };
-                    // ISO-8601 UTC sorts lexicographically, which is why the
-                    // ledger writes it that way.
-                    let ts = e
-                        .get("ts")
-                        .and_then(serde_yaml::Value::as_str)
-                        .unwrap_or("");
-                    if best.is_none() || ts > best_ts.as_str() {
-                        best_ts = ts.to_string();
-                        best = Some(na);
-                        source = "event";
-                    }
+            // ONE implementation of "newest event wins", shared with
+            // plan_next's per-row snippet. This arm had its own inline copy
+            // until the 2026-08-24 retrospective found the snippet still
+            // reading the raw field — two copies of the rule is exactly how
+            // one of them stays wrong.
+            match tillandsias_plan::answer::effective_next_action(p) {
+                Some((text, Some(ts))) => {
+                    eprintln!("source: event @ {ts}");
+                    println!("{}", text.trim_end());
                 }
-            }
-
-            match best {
-                Some(text) => {
-                    if best_ts.is_empty() {
-                        eprintln!("source: {source} (no timestamp — the packet's original value)");
-                    } else {
-                        eprintln!("source: {source} @ {best_ts}");
-                    }
+                Some((text, None)) => {
+                    eprintln!("source: packet field (no timestamp — the packet's original value)");
                     println!("{}", text.trim_end());
                 }
                 None => {
