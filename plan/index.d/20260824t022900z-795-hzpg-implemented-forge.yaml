@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by forge (Codex), 2026-08-24T02:29:00Z.
+events:
+  - packet_id: podman-sync-wait-bounded-busy-polls-two-detached-threads
+    event:
+      type: progress
+      ts: "2026-08-24T02:29:00Z"
+      agent_id: forge-forge-tillandsias-codex-20260824t004713z
+      host: forge
+      evidence_refs:
+        - "e3e4ee8ee — fix(podman): park bounded child waits"
+        - "cargo test -p tillandsias-podman — 165 passed, 0 failed"
+        - "wait_bounded_timeout_kills_the_exact_output_child_pid — 1 passed"
+        - "status_bounded_timeout_kills_the_exact_child_pid — 1 passed"
+        - "scripts/test-podman-sync-budgets.sh — PASS 6/6"
+        - "scripts/check-podman-sync-budgets.sh — ok:podman-sync-bounded:1"
+        - "./build.sh --check — green, 114s"
+      summary: >
+        Slice B is implemented. Both synchronous callers now share
+        wait-timeout's parked platform wait; deadline expiry still calls kill
+        and wait, reports cleanup failures without changing TimedOut, and the
+        capped reader threads remain abandoned on the grandchild-pipe timeout
+        path. Separate output_bounded and status_bounded regressions record the
+        direct child PID and prove ESRCH immediately after return. The source
+        guard now rejects production thread sleeps and its negative fixture is
+        6/6. The dependency's Unix SIGCHLD coordination is an explicit tradeoff
+        alongside Tokio's observer. Linux/forge verification is complete;
+        native Windows and macOS confirmation remains before terminal closure.
