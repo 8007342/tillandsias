@@ -1,0 +1,87 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_immutable (yoga/silverblue) FROM A CLEAN TEMP CLONE at
+# origin/linux-next 56af7c8a9, 2026-08-24T19:44:43Z. The shared checkout was NOT touched:
+# another meta-orchestration cycle holds its lock right now.
+packets:
+  - order: 873-zcim
+    packet_id: the-no-stacking-lock-guards-the-driver-lane-not-the-checkout
+    desired_release: v0.5
+    title: "a prompt-launched meta-orchestration cycle takes no lock, so it stacks on top of a running driver cycle in the same worktree"
+    status: ready
+    kind: defect
+    pickup_role: any
+    priority: p0
+    capability_tags: [meta-orchestration, concurrency, fleet, data-loss]
+    deliverable: skills/meta-orchestration/SKILL.md
+    depends_on: []
+    estimated_hours: 4
+    discovered_by: "a 4-hourly /loop cron firing on yoga 21 minutes into a driver cycle already running in the same checkout"
+    context: >
+      A meta-orchestration cycle was asked to start on yoga at
+      2026-08-24T19:43Z. Start-of-cycle found HEAD at a commit this session
+      never made — 70499b10d "claim(865-n8vq): yoga — four unclaimed litmus
+      test-defect blockers (fix fragment shape)" — and the reflog showed a
+      merge plus two commits landing between 12:28 and 12:32 local, after the
+      previous cycle's attestation at 11:57.
+
+      `ps` explains it. scripts/tillandsias-cycle-driver.sh (pid 512314,
+      started 12:22:13, 21 minutes in) is running `./repeat --timeout 90m`
+      with an opencode agent on the prompt "Use the ./skills/meta-orchestration
+      skill" IN THIS SAME WORKING DIRECTORY. It is mid-cycle and holds claims
+      on 865-n8vq and four litmus test-defect blockers.
+
+      THE LOCK EXISTS AND IS HELD. `flock -n .git/tillandsias-cycle.lock`
+      fails; the file is dated 12:22. The driver's own header is explicit that
+      this lock is meant to cover "an operator's ./repeat holding the same
+      lock" too. The mechanism is sound and 856-s56y already hardened it with a
+      POSIX mkdir arm for hosts without flock(1).
+
+      THE GAP IS WHO TAKES IT. Only the driver lane acquires the lock. A cycle
+      started any other way — an operator prompt, a Claude Code /loop cron, a
+      cloud schedule, a human typing the sentence — acquires nothing and is
+      invisible to the driver, which cannot refuse a stacker it cannot see.
+      The lock prevents the driver from stacking on ITSELF; it does not protect
+      the CHECKOUT, which is the thing two agents actually contend for.
+
+      WHAT STACKING COSTS, CONCRETELY, none of it hypothetical here:
+        - `git add` of a targeted path picks up the other agent's in-flight
+          edit to that same path.
+        - ./build.sh --check stamps a tree the other agent mutates before the
+          push lands; the pre-push gate then refuses "the tree changed since
+          the gate last passed" (already observed on this host) and each
+          re-run races again.
+        - Both cycles claim from the same batch and duplicate work: this
+          session drained 865-n8vq an hour ago and the running cycle has now
+          claimed it.
+        - Worst case is the 872-c9nd shape from four hours earlier on this very
+          host, where one process's disposal of a worktree destroyed another's
+          finished, uncommitted work.
+
+      THIS CYCLE REFUSED rather than demonstrate the failure. No file in
+      /var/home/tlatoani/claudia/tillandsias was read for mutation, no commit,
+      no push, no claim, no gate run there. This packet was filed from a clean
+      temp clone at origin/linux-next and pushed from there — the technique
+      plan/issues/yoga-dirty-start-wedge-2026-08-23.md used for the same reason.
+
+      NOTE ON RECURRENCE: the /loop that fired this cycle is scheduled every 4
+      hours and the driver runs on its own clock with a 90m cap. These will
+      collide again on their own, without anyone doing anything wrong.
+    exit_criteria: >
+      (1) The skill acquires the checkout lock at Start Of Cycle, in EVERY lane,
+      before the boundary snapshot — not only when launched through the driver.
+      A cycle that cannot take it reports a falsifiable
+      `skip:overlap-lock-held` and exits 0, the verdict the driver already
+      defines, rather than proceeding unlocked.
+      (2) The lock names its holder (pid, lane, start time, prompt source) so a
+      refusing cycle can say WHO holds it instead of "something is running".
+      (3) A refused-for-overlap cycle is distinguishable in the ledger from a
+      cycle that ran and found nothing to do. Both currently look like silence.
+      (4) Decided explicitly: whether a second agent on one checkout should ever
+      be allowed, or whether the second one should run in its own worktree
+      (git worktree / temp clone) instead of being refused outright. Refusal is
+      the safe default; it is not obviously the right long-run answer, since it
+      makes the cadence lossy the moment two schedules overlap.
+
+events:
+  - packet_id: the-no-stacking-lock-guards-the-driver-lane-not-the-checkout
+    event: {type: filed, ts: "2026-08-24T19:44:43Z", agent_id: linux-yoga-opus5-20260824t194443z, host: linux_immutable}

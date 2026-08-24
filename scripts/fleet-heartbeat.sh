@@ -142,7 +142,7 @@ open_blocker_for() {
     return 1
 }
 
-healthy=0; wedged=0; dead=0; never=0; blocked=0
+healthy=0; wedged=0; dead=0; never=0; blocked=0; stale_record=0
 for host in $roster; do
     f="$ATTEST_DIR/$host.md"
     a_epoch=0
@@ -164,7 +164,33 @@ for host in $roster; do
     fi
 
     if [ "$a_age" -le $(( SILENT_MINS * 60 )) ]; then
-        printf '%-24s %s\n' "$host" "$(human "$a_age")"
+        # ATTESTING IS NOT THE SAME AS UNBLOCKED (order 872-c9nd, 2026-08-24).
+        #
+        # 864-t4nq taught this report to see WEDGED; 864-w7rc taught it to keep
+        # saying BLOCKED after the commits stop. Both assumed a wedge ends when
+        # someone RESOLVES it. yoga's ended when its wedged checkout was
+        # REPLACED BY A FRESH CLONE, destroying four hours of finished,
+        # uncommitted 642-fedr/776-cm74 work. The host then attested normally
+        # from the clean clone and this report called it healthy — while its own
+        # filed record still read `Status: blocked` and the work it described
+        # was gone.
+        #
+        # The signal could not tell "unwedged" from "wedge deleted", because
+        # both look like a host that started attesting again.
+        #
+        # So a host that IS attesting is not reclassified — it really is
+        # cycling, and calling it blocked would be its own kind of lie — but an
+        # open blocker it filed about ITSELF is surfaced beside it. Exactly one
+        # of two things is then true, and both want someone's attention: the
+        # record is stale and should be closed, or the block outlived the
+        # symptom that made it visible.
+        if rec="$(open_blocker_for "$host")"; then
+            printf '%-24s %s  <-- attesting, but its own blocker is still OPEN: %s\n' \
+                "$host" "$(human "$a_age")" "$rec"
+            stale_record=$(( stale_record + 1 ))
+        else
+            printf '%-24s %s\n' "$host" "$(human "$a_age")"
+        fi
         healthy=$(( healthy + 1 ))
     elif [ "$c_epoch" -ne 0 ] && [ "$c_age" -lt "$a_age" ] \
          && [ "$c_age" -lt $(( SILENT_MINS * 60 )) ]; then
@@ -186,6 +212,11 @@ for host in $roster; do
     fi
 done
 
+if [ "$stale_record" -gt 0 ]; then
+    echo "  A host can ATTEST and still be blocked: its record outlives the symptom." >&2
+    echo "  Either close the record or say why the block persists — 872-c9nd is the case" >&2
+    echo "  where a wedge 'ended' by the work being destroyed, and the host looked fine." >&2
+fi
 if [ "$wedged" -gt 0 ] || [ "$blocked" -gt 0 ]; then
     echo "  A WEDGED or BLOCKED host needs its WORKTREE adjudicated, not a restart." >&2
     echo "  Read the record it filed about itself; it usually names the unblock path." >&2

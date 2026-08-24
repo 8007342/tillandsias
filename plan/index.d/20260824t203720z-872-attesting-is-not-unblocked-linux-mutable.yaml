@@ -1,0 +1,91 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-24T20:37:20Z.
+packets:
+  - order: 872-h5wq
+    packet_id: the-heartbeat-could-not-tell-unwedged-from-wedge-deleted
+    desired_release: v0.5
+    title: "a host that attests again reads healthy even when its own blocker record is still open and its work was destroyed"
+    status: completed
+    kind: defect
+    pickup_role: any
+    priority: p2
+    capability_tags: [fleet, coordination, observability]
+    depends_on: []
+    deliverable: scripts/fleet-heartbeat.sh
+    estimated_hours: 1
+    discovered_by: "872-c9nd — reporting yoga healthy on the same cycle its four hours of work were confirmed destroyed"
+    context: >
+      THIRD ITERATION OF ONE BLIND SPOT, and each fix assumed something the next
+      failure disproved.
+
+        864-t4nq  taught the report to see WEDGED, from commit recency.
+        864-w7rc  taught it to keep saying BLOCKED after the commits stop, by
+                  reading the host's own filed record.
+
+      Both assumed a wedge ends when someone RESOLVES it. yoga's ended when the
+      wedged checkout was REPLACED BY A FRESH CLONE (872-c9nd), destroying four
+      hours of finished 642-fedr/776-cm74 work. The host then attested normally
+      from the clean clone, and this report called it `healthy` on the very
+      cycle the destruction was confirmed — while its own record still read
+      `Status: blocked`.
+
+      The signal could not distinguish "unwedged" from "wedge deleted", because
+      both present as a host that started attesting again. Recovery and erasure
+      look identical from outside.
+
+      WHAT IT DOES NOT DO, deliberately: a host that IS attesting is not
+      reclassified as blocked. yoga really is cycling and doing work; calling it
+      blocked would be its own kind of lie, and would earn the same distrust the
+      earlier false SILENT did. The open record is SURFACED BESIDE the healthy
+      line instead. Exactly one of two things is then true and both want
+      attention: the record is stale and should be closed, or the block outlived
+      the symptom that made it visible.
+
+      THE VERDICT GRAMMAR IS DELIBERATELY UNCHANGED at five fields. I widened it
+      four-to-five one day ago (864-w7rc) and wrote there that widening a
+      falsifiable line is a breaking change for anything parsing it. Doing it
+      again the next day would be churn, so the count lives in a stderr remedy
+      block and the per-host line carries the annotation.
+    exit_criteria: >
+      (1) A host that is attesting AND has an open blocker record it filed about
+      itself is annotated with the record's path, not silently called healthy.
+      (2) It is NOT reclassified as blocked — it is attesting, and the report
+      must not contradict that.
+      (3) The verdict grammar stays at five fields.
+      (4) Mutation control: close the record and the annotation must disappear.
+
+events:
+  - packet_id: the-heartbeat-could-not-tell-unwedged-from-wedge-deleted
+    event:
+      type: completed
+      ts: "2026-08-24T20:37:20Z"
+      agent_id: linux-macuahuitl-opus5-20260824T203400Z
+      host: linux_mutable
+      evidence_refs:
+        - "live: yoga 1h39m <-- attesting, but its own blocker is still OPEN: plan/issues/yoga-dirty-start-wedge-2026-08-23.md"
+        - "MUTATION: set that record to `Status: resolved` -> annotation gone; restored -> annotation returns"
+        - "verdict grammar verified still 5 fields; ./build.sh --check rc=0"
+      merge_affordance: merge-when-idle
+      merge_reason: >
+        Improves the coordinator's view only; no host's gate or build changes.
+        Worth having before the next host recovers by replacement rather than
+        by repair.
+      summary: >
+        A host that attests while carrying its own open blocker is now
+        annotated with the record's path, and a stderr note explains the two
+        readings. Mutation-controlled: closing the record removes the
+        annotation, restoring it brings it back.
+
+        TWO OF MY OWN TOOLS MISFIRED WHILE BUILDING THIS, both silently.
+        A `sed` meant to add the counter never matched, because the init line
+        lists the fields in a different order than I assumed — the script then
+        died on an unbound variable AFTER printing a correct-looking report. And
+        a `perl -0pi -e` replacement interpolated `$stale_record`, `$wedged` and
+        `$blocked` as PERL variables, writing `[ "" -gt 0 ]` into three shell
+        conditionals; the result still printed every host line and a plausible
+        verdict, with the errors buried between them.
+
+        Both were caught only because I read the whole output rather than the
+        last line. That is the sixth and seventh probe failure of this session,
+        and the pattern has not changed: each produced something that looked
+        like a working result.
