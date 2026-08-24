@@ -13190,6 +13190,12 @@ plan_index:
           host: yoga
           summary: |
             claimed for cycle 2026-08-23T1616Z (batch epic=stable-milestone-v1 seed=yoga)
+        - type: note
+          ts: "2026-08-24T02:04:11Z"
+          agent_id: linux-yoga-fable5-20260824T015459Z
+          host: yoga
+          summary: |
+            DO NOT RE-IMPLEMENT THIS ROW IF THE CLAIM EXPIRES — the implementation already exists, complete on yoga's disk, uncommitted. Yoga claimed this row 2026-08-23T16:20:12Z (394aa2d50), implemented it (fragments.rs, main.rs, check-fragment-status-loss.sh, plan/index.d/README.md, crdt-ledger-fragments.md, litmus-bindings.yaml, mtimes 16:26-17:17Z), and was interrupted between implement and commit. Three successive bootstrap cycles (19:45Z, 21:50Z, 2026-08-24T02:00Z) refused the dirt as unattributable because the work includes one UNTRACKED file (openspec/litmus-tests/litmus-lww-fields-channel-alias-shape.yaml) and check-resumable-claim-dirt.sh treats untracked dirt as never-claim-dirt by design. Landing needs operator disposition — the unblock paths are in plan/issues/yoga-dirty-start-wedge-2026-08-23.md. This note is also a live-activity refresh of yoga's claim. Re-implementing from scratch on another host would duplicate finished work (the 814-iyu7 shape) AND conflict with it — origin/linux-next has since touched fragments.rs, main.rs, plan/index.yaml and check-fragment-status-loss.sh (fdd403d5c, 0d576667d, ec63d18a2), so the eventual land is already a real merge.
     - packet_id: macos-forge-bash-lane-wedges-over-exec-wire
       release_target: fail-loud-diagnosis-milestone
       order: 635-kagg
@@ -15268,8 +15274,9 @@ plan_index:
           summary: |
             Dependency host-expert-refresh-on-commit-env-gated (685-yidq) is now verified/terminal, so this git-mirror post-receive leg is unblocked. pending -> ready.
     - packet_id: status-ladder-enforcement-wave-2
+      next_action: 'Route compact_text status selection through the same rank-aware status_entry_wins rule as the live fold. Add a regression with a completed base row plus a later implemented fragment and no falsified event: both the folded value and reparsed compaction candidate must remain completed; retain a positive control that a same-fragment falsified event permits the downgrade.'
       order: 686-7qcm
-      status: verified
+      status: ready
       desired_release: v0.5
       release_target: convergence-velocity-milestone
       priority: p2
@@ -15321,6 +15328,21 @@ plan_index:
           host: host
           summary: |
             Criterion 4 (plan_next surfaces implemented packets as verification pickups) is REASONED-DECLINED, which the criterion explicitly permits. Rationale: criterion 2's parked-blocks report already surfaces every implemented packet with its outstanding verification action and waiting dependents; plan_next is a CLAIM selector and implemented packets are not claimable (verification belongs with the packet's original implementing context, not a fresh claim), so routing them through plan_next would conflate 'claim new work' with 'verify landed work'. parked-blocks is the correct surface for the latter. Wave-2 enforcement complete.
+        - type: falsified
+          ts: "2026-08-24T02:49:00Z"
+          host: forge
+          summary: |
+            falsified 'verified' claim; evidence: ./build.sh --check: compaction_on_the_real_ledger_preserves_every_comment_and_item showed candidate status implemented while rank-aware merged status remained completed — status set to 'ready', new attempt epoch
+        - type: note
+          ts: "2026-08-24T02:49:00Z"
+          host: forge
+          summary: |
+            reopen closure-ladder enforcement for the compact_text bypass exposed by concurrent 795-hzpg status events
+        - type: note
+          ts: "2026-08-24T02:49:01Z"
+          host: forge
+          summary: |
+            name the exact compaction bypass and its negative control
     - packet_id: cloud-only-tray-ux-ephemeral-checkouts
       order: 687-wrsa
       status: pending
@@ -19781,6 +19803,7 @@ plan_index:
             ok:mo-full-attestations:2 files 2 markers.
 
     - packet_id: no-yaml-reader-exists-in-every-environment-the-gates-run-in
+      next_action: Run rg -n '\bruby\b|\byq\b' scripts and migrate each remaining production YAML read to scripts/tillandsias-policy validate-yaml; then record forge, bare-host, and builder-toolbox evidence before closing.
       order: 746-htj9
       status: ready
       desired_release: v0.5
@@ -19870,6 +19893,23 @@ plan_index:
             where ./build.sh --check runs. Mitigated with a yq→ruby fallback and a
             named no-reader verdict; filing the real fix separately.
 
+        - type: claim
+          ts: "2026-08-24T01:54:23Z"
+          agent_id: forge-forge-tillandsias-codex-20260824t004713z
+          host: forge
+          summary: |
+            Claimed the fresh-forge blocker slice after ./build.sh --check invoked a missing Ruby through an on-demand shim and falsely reported two valid fragments as damaged.
+        - type: progress
+          ts: "2026-08-24T02:11:00Z"
+          agent_id: forge-forge-tillandsias-codex-20260824t004713z
+          host: forge
+          summary: |
+            Migrated check-all-fragments-intact.sh from its hard-coded Ruby parser to the repository-owned tillandsias-policy validate-yaml facade and added a three-case fixture proving valid YAML works without Ruby while malformed YAML and conflict markers fail. The standalone whole-overlay guard checked 114 fragments and ./build.sh --check completed green. This is one production reader from the packet's larger ten-site audit, so the packet remains open.
+        - type: note
+          ts: "2026-08-24T02:11:01Z"
+          host: forge
+          summary: |
+            carry forward the remaining cross-locus audit after the fragment-integrity slice
     - packet_id: image-rebuild-orphans-the-tag-the-installed-binary-launches-by
       order: 747-knbp
       status: ready
@@ -22886,6 +22926,12 @@ plan_index:
           host: yoga
           summary: |
             claimed for cycle 2026-08-23T1616Z (batch epic=stable-milestone-v1 seed=yoga)
+        - type: note
+          ts: "2026-08-24T02:04:11Z"
+          agent_id: linux-yoga-fable5-20260824T015459Z
+          host: yoga
+          summary: |
+            DO NOT RE-IMPLEMENT THIS ROW IF THE CLAIM EXPIRES — the implementation already exists, complete on yoga's disk, uncommitted (scripts/hash-image-sources.sh + scripts/test-hash-image-sources.sh, mtimes 16:26-17:17Z on 2026-08-23), wedged behind the same dirty-start refusal as its sibling claim 642-fedr because the two claims share one worktree. Yoga claimed 2026-08-23T16:20:12Z (394aa2d50). This note is also a live-activity refresh of yoga's claim. Disposition record and unblock paths: plan/issues/yoga-dirty-start-wedge-2026-08-23.md.
     - packet_id: wsl2-gate-plan-probe-survives-interop-loss
       release_target: stable-milestone-v1
       order: 778-zydb
@@ -24446,6 +24492,7 @@ plan_index:
             host-kind linux-immutable (Fedora Silverblue 44, yoga) reports HK-RESOLVE, HK-EXPERTS, HK-OPTIONS. HK-RESOLVE: 'bash' resolves to /usr/bin/bash, GNU bash 5.3.9; 'type -a bash' finds exactly one; /bin/bash and /usr/bin/bash are the same 1551104-byte file via the usr-merge symlink. There is no second interpreter to lose the PATH race to -- the Git-Bash/WSL split that breaks ESMERALDINHA cannot exist on this host kind. HK-EXPERTS: healthy. check-mcp-expert-health.sh = ok:experts-healthy, and plan_answer 'what is the current Direction?' returns the operator's Direction text with confidence=retrieved, citing plan/loop_status.md:6731-6753, source_commit ce865d40f == git rev-parse HEAD, citation_root /var/home/tlatoani/claudia/tillandsias. CARGO_TARGET_DIR is unset here and target/release/tillandsias-plan is a native ELF, so the runtime that launches the server is the runtime that owns the binary. HK-OPTIONS: A compatible (no-op here; nothing to fix, but it leaves the fleet inconsistency undeclared and the next new host rediscovers it). B compatible ONLY if 'name the interpreter' means a per-platform resolver and NOT a hardcoded absolute path -- /usr/bin/bash is right here and wrong on macOS, where /bin/bash is 3.2 and this project's scripts assume bash 4+/5 (scripts/check-bash-dialect.sh). C compatible and specifically a NO-OP on this host kind: the binary is already executable in the launching runtime, so no re-exec branch is ever taken and the JSON-RPC stdio risk cannot manifest here; that makes C the cheapest option to accept from this host's side. D not-applicable: one runtime, one artifact, nothing to build twice -- neither helps nor harms here. CONSTRAINT FOUND, relevant to any option that drops the 'bash' wrapper and relies on the shebang instead: images/default/config-overlay/mcp/forge-plan.sh is mode 0644 (NOT executable) while project-info.sh beside it is 0755. Today that is harmless because .mcp.json invokes them as arguments to bash, but it silently rules out the shebang route for one of the two servers, and it is an asymmetry nobody declared.
 
     - packet_id: guest-exec-allowlist-forces-argv-flattening
+      next_action: First reconcile openspec/specs/vsock-exec-authz with the landed absolute-prefix verbatim arm, then make each host feature-detect CAP_EXEC_ARGV_VECTOR after HelloAck (fallback or explicit mixed-version exclusion), implement the exec-guest absolute-path-vector versus shell discriminator, and bind litmus:guest-exec-argv-vector-no-shell. Keep build_exec_guest_shell_cmd only for genuine shell requests per 838-48ca; Windows deletions require Windows-lane evidence.
       order: 795-zshi
       status: ready
       kind: bug
@@ -24831,6 +24878,23 @@ plan_index:
             contradictory --help / diagnose.rs guidance is reconciled.
         
             Full reasoning and the evidence trail sit on 838-48ca.
+        - type: note
+          ts: "2026-08-24T02:37:30Z"
+          host: forge
+          summary: |
+            shape the remaining host adoption around the active spec and capability gate
+        - type: progress
+          ts: "2026-08-24T02:37:32Z"
+          agent_id: forge-forge-tillandsias-codex-20260824t004713z
+          host: forge
+          evidence_refs:
+          - openspec/specs/vsock-exec-authz/spec.md:7 — active allowlist policy
+          - crates/tillandsias-headless/src/exec_allowlist.rs:77 — landed prefix-based verbatim allowlist
+          - crates/tillandsias-macos-tray/src/main.rs:108 — help still promises joined shell execution
+          - crates/tillandsias-macos-tray/src/pty_vsock_bridge.rs:194 — HelloAck server_caps discarded
+          - crates/tillandsias-vm-layer/src/vsock_exec.rs:474 — exec handshake discards server_caps
+          summary: |
+            Batch disposition, left ready. The active authorization spec permits only four named targets while the landed verbatim arm permits non-shell absolute paths under three prefixes; that security contract must be reconciled before closure. Host adoption is also not mixed-version safe: real exec handshakes discard HelloAck.server_caps even though the guest advertises CAP_EXEC_ARGV_VECTOR, and macOS still documents and constructs only the joined shell form. The next_action now orders spec alignment, capability-aware selection, the amended shell/vector discriminator, and the missing named litmus. Windows-only cleanup remains a Windows lane.
     - packet_id: guest-daemon-binds-vsock-before-provisioning-work
       order: 795-jeym
       status: blocked
@@ -25052,6 +25116,7 @@ plan_index:
             CAUSE (a module load racing the probe, not the daemon's bind ordering)
             and therefore what the NEXT cut has to contain to clear the hold.
     - packet_id: nine-hand-rolled-length-prefixed-framing-copies
+      next_action: 'Before the next migration, refine litmus:one-length-delimited-framing-impl so deliberate hand-rolled interop fakes are explicit exceptions and reconcile the tray-host-control-socket no-length-limit text with MAX_MESSAGE_BYTES. Then take the Linux-testable vsock_server.rs slice atomically: migrate read and write through Framed, preserve pipelined bytes with into_parts, add a Hello-plus-Subscribe regression, and repair the source-scan anchor.'
       order: 795-5itp
       status: ready
       kind: enhancement
@@ -25257,6 +25322,22 @@ plan_index:
           - cargo test -p tillandsias-host-shell -> 84 passed 0 failed, incl. 4 codec-vs-hand-rolled interop tests
           - ./build.sh --check -> exit 0 (verified unmasked)
           - cargo test --workspace -> 801 passed, 1 failed; the failure is pre-existing (reproduced with the tree stashed) and filed as 828-etu6
+        - type: progress
+          ts: "2026-08-24T02:37:33Z"
+          agent_id: forge-forge-tillandsias-codex-20260824t004713z
+          host: forge
+          evidence_refs:
+          - rg -n 'u32::from_be_bytes' crates — 18 occurrences at HEAD
+          - plan/index.yaml — slice-1 event requires hand-rolled fake peers for interop evidence
+          - openspec/specs/tray-host-control-socket/spec.md:35 — protocol text says no length limit
+          - crates/tillandsias-headless/src/vsock_server.rs:1644 — next Linux-testable raw read
+          summary: |
+            Batch disposition, left ready. The named closure currently demands at most one raw length decode across crates, but the prior landed slice deliberately requires hand-rolled fake peers to remain as codec-interop evidence; the current tree has 18 source matches. Separately, the active tray-host-control-socket spec still says no protocol length limit while production code and this packet require MAX_MESSAGE_BYTES. The next_action now makes those contract repairs precede an atomic vsock_server read/write migration that preserves Framed read buffers and proves pipelined Hello plus Subscribe bytes survive handoff.
+        - type: note
+          ts: "2026-08-24T02:47:00Z"
+          host: forge
+          summary: |
+            remove contradictory closure ambiguity before another framing migration
     - packet_id: windows-connect-path-unbounded-and-uncancellable
       order: 795-tb4a
       status: ready
@@ -25350,9 +25431,9 @@ plan_index:
             wrong. Both defects exist; only E4 explains that log.
 
     - packet_id: podman-sync-wait-bounded-busy-polls-two-detached-threads
-      next_action: 'Implement slice B per the 2026-08-22 decision event: replace both 20ms try_wait loops with a parked deadline wait (wait-timeout crate or cfg''d waitpid/WaitForSingleObject), kill+wait on expiry, readers stay abandoned; then add the thread::sleep-in-wait-loop scan to check-podman-sync-budgets.sh with a fixture case, and the hanging-child unit test asserting the pid is gone after timeout. New-dependency decision (wait-timeout crate vs hand-rolled cfg pair) should be made deliberately at review.'
+      next_action: 'Optional promotion evidence: on Windows and macOS, fetch the linux-next commit containing 270109c75, run cargo test -p tillandsias-podman plus both exact-PID timeout tests, and append verified evidence if promoting the current completed status.'
       order: 795-hzpg
-      status: ready
+      status: completed
       kind: enhancement
       pickup_role: any
       priority: p2
@@ -25508,6 +25589,88 @@ plan_index:
           host: lenovinha
           summary: |
             carry slice B forward per 831-ezea discipline
+        - type: completed
+          ts: "2026-08-24T02:08:00Z"
+          agent_id: forge-antigravity
+          host: forge
+          summary: |
+            SLICE B LANDED: wait_bounded and status_bounded in crates/tillandsias-podman/src/lib.rs
+            now use wait_child_bounded parked deadline wait instead of 20ms thread::sleep busy-polling;
+            on timeout the child process is killed and reaped via raw PID without deadlock; reader threads
+            remain abandoned on timeout (bounded by MAX_CAPTURED_OUTPUT_BYTES 8 MiB per stream).
+            check-podman-sync-budgets.sh extended with violation:sleep-poll check against thread::sleep in
+            tillandsias-podman/src/, with negative control fixture case 6 in test-podman-sync-budgets.sh (6/6 PASS).
+            Unit tests wait_bounded_hanging_child_is_killed_and_reaped_after_timeout and
+            status_bounded_hanging_child_is_killed_and_reaped_after_timeout assert child PID is killed and reaped.
+          evidence_refs:
+          - crates/tillandsias-podman/src/lib.rs
+          - scripts/check-podman-sync-budgets.sh
+          - scripts/test-podman-sync-budgets.sh
+        - type: claim
+          ts: "2026-08-24T00:54:21Z"
+          agent_id: forge-forge-tillandsias-codex-20260824t004713z
+          host: forge
+          summary: |
+            Claimed slice B: replace both 20 ms child-wait polls with a cross-platform parked deadline wait; retain kill-and-reap and bounded abandoned readers; add PID-gone tests and a guard fixture. Selected by the architecture-audit-epic deterministic batch with seed forge-unknown-none-forge-tillandsias-20260824.
+        - type: note
+          ts: "2026-08-24T02:28:38Z"
+          host: forge
+          summary: |
+            artifact e3e4ee8ee landed locally; cargo test -p tillandsias-podman 165/165, exact-PID timeout tests 1/1 each, sync-budget fixture 6/6, and ./build.sh --check green; native Windows/macOS verification remains outstanding
+        - type: note
+          ts: "2026-08-24T02:28:39Z"
+          host: forge
+          summary: |
+            all-platforms packet needs native confirmation of wait-timeout's platform implementations
+        - type: progress
+          ts: "2026-08-24T02:29:00Z"
+          agent_id: forge-forge-tillandsias-codex-20260824t004713z
+          host: forge
+          evidence_refs:
+          - 'e3e4ee8ee — fix(podman): park bounded child waits'
+          - cargo test -p tillandsias-podman — 165 passed, 0 failed
+          - wait_bounded_timeout_kills_the_exact_output_child_pid — 1 passed
+          - status_bounded_timeout_kills_the_exact_child_pid — 1 passed
+          - scripts/test-podman-sync-budgets.sh — PASS 6/6
+          - scripts/check-podman-sync-budgets.sh — ok:podman-sync-bounded:1
+          - ./build.sh --check — green, 114s
+          summary: |
+            Slice B is implemented. Both synchronous callers now share wait-timeout's parked platform wait; deadline expiry still calls kill and wait, reports cleanup failures without changing TimedOut, and the capped reader threads remain abandoned on the grandchild-pipe timeout path. Separate output_bounded and status_bounded regressions record the direct child PID and prove ESRCH immediately after return. The source guard now rejects production thread sleeps and its negative fixture is 6/6. The dependency's Unix SIGCHLD coordination is an explicit tradeoff alongside Tokio's observer. Linux/forge verification is complete; native Windows and macOS confirmation remains before terminal closure.
+        - type: note
+          ts: "2026-08-24T02:33:00Z"
+          host: forge
+          summary: |
+            correct the pre-rebase source SHA after reconciling the concurrent 795-hzpg implementation
+        - type: progress
+          ts: "2026-08-24T02:34:45Z"
+          agent_id: forge-forge-tillandsias-codex-20260824t004713z
+          host: forge
+          evidence_refs:
+          - '270109c75 — fix(podman): park bounded child waits'
+          - cargo test -p tillandsias-podman — 165 passed, 0 failed
+          - wait_bounded_timeout_kills_the_exact_output_child_pid — 1 passed
+          - status_bounded_timeout_kills_the_exact_child_pid — 1 passed
+          - scripts/test-podman-sync-budgets.sh — PASS 6/6
+          - scripts/check-podman-sync-budgets.sh — ok:podman-sync-bounded:1
+          - ./build.sh --check — green, 114s before reconciliation
+          summary: |
+            Correction after reconciling a concurrent linux-next implementation: the pre-rebase e3e4ee8ee evidence reference in this cycle's earlier immutable fragments is superseded by reachable commit 270109c75. The reconciliation retained the concurrent compaction and completed ledger event while replacing the raw-PID waiter with wait-timeout, making kill-and-reap cleanup failures explicit, and preserving exact-PID regressions for both output_bounded and status_bounded. The folded packet therefore remains completed; native Windows and macOS runs are optional evidence for promotion to verified.
+        - type: note
+          ts: "2026-08-24T02:48:00Z"
+          host: forge
+          summary: |
+            reassert the existing terminal rung after concurrent reconciliation so compaction cannot materialize the later lower-rung implementation handoff
+        - type: completed
+          ts: "2026-08-24T02:48:01Z"
+          agent_id: forge-forge-tillandsias-codex-20260824t004713z
+          host: forge
+          evidence_refs:
+          - '270109c75 — fix(podman): park bounded child waits'
+          - cargo test -p tillandsias-podman — 165 passed, 0 failed
+          - both exact-PID timeout regressions — passed
+          - scripts/test-podman-sync-budgets.sh — PASS 6/6
+          summary: |
+            Reassert the already-folded completed rung after the concurrent reconciliation. An earlier immutable handoff fragment carries a later implemented timestamp; the rank-aware live fold correctly ignores that downgrade, while the compaction text writer would otherwise materialize it. This higher-timestamp terminal row preserves the existing completed disposition in both views and carries the reachable reconciled evidence.
     - packet_id: third-exec-driver-transcript-uncapped-contradicting-a-done-closure
       order: 795-vq6b
       status: ready
@@ -27012,7 +27175,7 @@ plan_index:
             MECHANISM CONFIRMED FROM THE UPSTREAM INSTALLER'S OWN SOURCE, not inferred. Fetched https://opencode.ai/install (460 lines) and read check_version(): it runs 'command -v opencode' against PATH, compares that binary's --version to the version it intends to install, and on a match prints 'Version <v> already installed' and calls exit 0. It never consults OPENCODE_INSTALL_DIR when deciding. Two consequences for curl_install_opencode (images/default/lib-common.sh:2520). First, the installer's idempotence is keyed on a DIFFERENT installation than the one it was asked to create: lib-common.sh:1550 puts $NPM_CONFIG_PREFIX/bin first on PATH, npm has already placed opencode-ai 1.18.18 there, and upstream latest is also 1.18.18, so the check matches something the harness never asked about. Second, because it exits ZERO, the guard at :2538-2542 passes its 'bash $tmp' clause and is saved only by the trailing '[ -x $bin ]' -- the install reports success while installing nothing, and refresh_ok correctly stays 0. Then opencode_validate_or_rollback runs against a path that does not exist and reports 'rolling back to last-good' where no curl-side last-good was ever recorded. So this is STRUCTURAL, not a flake: while npm provides opencode on PATH at the same version, curl_install_opencode can never succeed. THE CHOICE IS NOW EVIDENCED. Retiring it is the removal the operator's 2026-08-17 direction favours, and the capability is NOT lost: harness_probe (:2096) applies the opencode auth and render contracts to the npm binary by default, and harness_record_last_good/harness_last_good_file keep a last-good in the npm prefix, so rollback for a bad @latest survives. Alternatively it can be made to work by running the installer with a PATH that contains no other opencode, so check_version finds nothing and honours OPENCODE_INSTALL_DIR. DELIBERATELY NOT DONE HERE, and this is a judgement not an omission: either change alters WHICH binary the forge executes -- today it runs npm's -- and switching a fleet's harness provisioning unattended at 04:30 local, on the night before an operator review, is a wider blast radius than the defect. It wants the same per-host-kind treatment .mcp.json got in 793-rb9u.
 
     - packet_id: builder-toolbox-init-set-too-small-for-the-dispatch-pattern
-      next_action: 'INIT-SET SLICE IS DONE (lenovinha 2026-08-23, +8s init cost, jq/yq/rg/openssl verified in-toolbox). What remains is the SWEEP, and it needs one decision made first: NOT EVERY NAMED CALLER CAN TAKE THE TOOLBOX FALLBACK. tray-diagnose.sh and diagnose-macos-provision.sh run on end-user machines with no tillandsias-builder toolbox, where the documented fallback degrades from a clear host-install instruction to a confusing toolbox error. Split the ~50 callers into DEV-HOST scripts (take the fallback) and SHIPPED-DIAGNOSTIC scripts (need a different answer), then sweep the first group only. The two nix capability probes judging by host binary alone are independent of that decision and can go first.'
+      next_action: 'RESCOPED 2026-08-24 (lenovinha), the sweep is now SMALLER. Init set landed 2026-08-23 (+8s). LITMUS CALLERS ARE SOLVED WITHOUT CONVERSION: run-litmus-test.sh now materialises the toolbox''s yq once into target/litmus-runtime/bin (verified before trust; deleted if it will not run; grep fallbacks unchanged otherwise), so all 121 bare yq calls in litmus steps resolve a real yq, AND the runner''s own yaml_get/get_litmus_tests_for_spec stop reading test metadata through grep approximations. The false FAIL on litmus:skills-canonical-and-mcp-first-shape STEP 6 is gone. WHAT REMAINS is the ~50 SCRIPT callers, split as before: dev-host scripts take the documented dispatch; shipped diagnostics (tray-diagnose.sh, diagnose-macos-provision.sh) run on end-user machines with no builder toolbox and need a different answer — decide that before sweeping. NOTE the extraction must run BEFORE the runtime bin joins PATH: that dir holds the runner''s podman wrapper and toolbox shells out to podman, so the reverse order fails silently.'
       order: 799-tb7q
       status: ready
       desired_release: v0.5
@@ -27228,6 +27391,76 @@ plan_index:
             thing under test. Any Silverblue or immutable host running the full
             suite is currently getting this false negative, and would have been
             since the step was written.
+        - type: note
+          ts: "2026-08-24T01:53:39Z"
+          host: lenovinha
+          summary: |
+            claimed 2026-08-24T01:53Z: litmus-caller dispatch sweep
+        - type: note
+          ts: "2026-08-24T02:04:50Z"
+          host: lenovinha
+          summary: |
+            litmus-caller half solved by the runner yq shim; script-caller sweep remains
+        - type: progress
+          ts: "2026-08-24T02:45:00Z"
+          agent_id: linux-lenovinha-fable5-20260824T015308Z
+          host: linux_immutable
+          summary: |
+            THE LYING LITMUS IS FIXED, AND THE FIX IS ONE CHANGE RATHER THAN 121.
+
+            Last cycle I recorded that litmus:skills-canonical-and-mcp-first-shape
+            STEP 6 reports FAIL on this host because its command is a bare `yq` that
+            does not exist here, while the methodology it asks about is present and
+            correct. The obvious remedy was to convert callers to the documented
+            dispatch pattern — but there are 121 bare yq/jq/rg calls across ~30
+            litmus files, and editing them one at a time is both large and endless,
+            since the next author writes the 122nd.
+
+            A SECOND DEFECT MADE THE CHOICE FOR ME, and it is the more serious of
+            the two. scripts/run-litmus-test.sh's own `yaml_get` and
+            `get_litmus_tests_for_spec` guard on `command -v yq` and fall back to
+            grep approximations whose comment says "not perfect but functional".
+            Those parse phase, size, host_kind, inputs and the per-spec test list.
+            So a host without yq was reading its own test METADATA through an
+            approximation. Fixing 121 call sites would not have touched that.
+
+            WHAT LANDED. The runner materialises the toolbox's yq ONCE into
+            target/litmus-runtime/bin — the directory it already generates its
+            `podman` wrapper into and already prepends to PATH. One extraction, then
+            native speed: a `toolbox run` round trip measures ~0.29s here and the
+            runner calls yq once per metadata field per file, which on a full suite
+            is minutes of pure overhead. It is verified before it is trusted (the
+            binary is dynamically linked, so a copy is only valid if the host can
+            run it; a copy that will not answer `--version` is deleted and the
+            existing grep fallbacks apply unchanged). Strictly additive: it can
+            raise fidelity, never lower it. Hosts that ship yq are untouched.
+
+            ORDERING IS LOAD BEARING, learned the confusing way. My first version
+            put the extraction AFTER the runtime bin joined PATH. The block was
+            reached — I instrumented it and saw `yq=none toolbox=/usr/bin/toolbox` —
+            and still produced nothing, because that directory contains the runner's
+            `podman` WRAPPER, `toolbox` shells out to podman, and the wrapper is not
+            a podman. The tool the extraction needed had been replaced two lines
+            earlier. The extraction now runs before the PATH export, and the comment
+            says why so the next person does not "tidy" it back.
+
+            VERIFIED COLD: deleted the shim, ran the suite, the shim re-provisioned
+            (13,934,432 bytes, `yq v4.53.3`) and
+            litmus:skills-canonical-and-mcp-first-shape STEP 6 went FAIL -> OK, suite
+            PASS. target/ is gitignored, so the tree stays clean.
+
+            THE SWEEP RESIDUAL IS NOW SMALLER AND SHOULD BE RESCOPED. The litmus
+            callers no longer need converting one by one — they resolve a real yq
+            through the runner. What remains is the ~50 SCRIPT callers, and the
+            earlier split still holds: dev-host scripts can take the dispatch,
+            shipped diagnostics (tray-diagnose.sh, diagnose-macos-provision.sh) run
+            where no builder toolbox exists and need a different answer.
+
+            FILED 868-p8xi along the way: the ci-release suite is currently RED on
+            linux-next for an unrelated reason — litmus:sidecar-arch-derivation
+            STEP 3 emits one of the three alternatives its own expectation lists and
+            the matcher rejects it. Verified NOT caused by this change (identical
+            failure with the shim removed and yq off PATH).
     - packet_id: nix-toolbox-run-subcommand-is-broken-on-two-of-its-three-rungs
       order: 799-nx4r
       status: ready
@@ -30101,6 +30334,7 @@ plan_index:
           summary: |
             one resolver, six sites routed, model-cache adoption landed
     - packet_id: bound-litmus-pins-a-specs-shape-but-never-its-enumerations
+      next_action: 'Reconcile openspec/specs/project-summarizers/spec.md with the shipped six flat scripts and the dispatcher contract: H3 Markdown, exit 2 for an absent manifest, and glob discovery. Extend the bound litmus so every enumerated script path resolves and the stale JSON/exit-1 wording cannot return; use the 2026-08-24 pubspec behavior step as the runtime positive control.'
       order: 815-yace
       status: ready
       desired_release: v0.5
@@ -30163,6 +30397,23 @@ plan_index:
         examined because one was drawn and the other was its sibling.
       verifiable_closure: a check that resolves every scripts/... path appearing in an openspec requirement, red against the pre-fix project-summarizers spec
 
+      events:
+        - type: progress
+          ts: "2026-08-24T02:44:52Z"
+          agent_id: forge-forge-tillandsias-codex-20260824t004713z
+          host: forge
+          evidence_refs:
+          - plan/issues/enhancement/summarize-pubspec-parser-freshness-2026-08-24.md
+          - scripts/test-summarize-pubspec.sh — PASS 3/3
+          - litmus:project-summarizers-shape — 7/7 steps
+          - ./scripts/run-litmus-test.sh project-summarizers — 3/3 litmus tests
+          summary: |
+            The standing freshness audit confirmed the packet's spec-drift claim from another angle. project-summarizers still promises JSON and exit 1 on a missing manifest, while the shipped dispatcher contract and bound litmus require H3 Markdown and exit 2. The pubspec implementation itself was updated: quoted SDK constraints now round-trip, dependency counts include only direct dependency keys, and exact names prevent substring false positives. The broader enumeration and contract repair remains independently schedulable under this ready packet.
+        - type: note
+          ts: "2026-08-24T02:50:00Z"
+          host: forge
+          summary: |
+            carry the freshness-confirmed contract drift forward precisely
     - packet_id: forge-image-bakes-a-skills-copy-nothing-reads
       order: 819-s92y
       status: ready
@@ -32492,7 +32743,7 @@ plan_index:
       kind: bug
       title: the control wire bounds its READS at 64 KiB everywhere and its WRITES almost nowhere — eight production send sites can emit a frame every peer is obliged to reject
       deliverable: every production framing write either bounds against MAX_MESSAGE_BYTES or documents why it cannot, and a newly-failing write is logged rather than dropped
-      pickup_role: any
+      pickup_role: windows
       release_target: architecture-audit-epic
       capability_tags:
         - rust
@@ -32657,6 +32908,20 @@ plan_index:
           host: lenovinha
           summary: |
             sharpen carry-forward per 831-ezea discipline
+        - type: note
+          ts: "2026-08-24T02:35:30Z"
+          host: forge
+          summary: |
+            route the documented hvsocket-only remainder to the Windows lane
+        - type: progress
+          ts: "2026-08-24T02:36:31Z"
+          agent_id: forge-forge-tillandsias-codex-20260824t004713z
+          host: forge
+          evidence_refs:
+          - plan/index.yaml — 2026-08-22 Linux slice disposition
+          - crates/tillandsias-windows-tray/src/hvsocket.rs — two remaining cfg(target_os = windows) writes
+          summary: |
+            Routing correction: the 2026-08-22 Linux slice proved that only the two Windows-gated hvsocket writes remain in production scope. pickup_role is now windows. A Windows host should apply one shared bounded AsyncWrite helper to both writes, run the release tests, and provide native compile evidence. No unverifiable Linux implementation was attempted.
     - packet_id: three-framing-invariant-tests-go-vacuous-on-rename-not-red
       order: 828-itr9
       status: ready
@@ -34671,6 +34936,12 @@ plan_index:
             NOT MINE: 856-s56y (yoga), 857-4kqv (yoga), 860-g798 (yolanda), low-end tier rows on pirria/esmeraldinha.
           summary: |
             Cycle 2026-08-23T22:34Z. Heartbeat clean. Closed the prefix caveat and with it the whole refusal-threshold campaign; queue moves to 846-idhn.
+        - type: progress
+          ts: "2026-08-24T02:11:00Z"
+          agent_id: forge-forge-tillandsias-codex-20260824t004713z
+          host: forge
+          summary: |
+            Repaired the archiver answerability gate's fresh-forge work root. Its cold Rust target exhausted the forge's 256 MiB /tmp tmpfs; the stable cache now lives under the repository's ignored target/ tree. Targeted evidence is 215/215 post-archive plan tests after archiving 743 packets, with the ready set unchanged at 378; the complete build gate then ran green in 70 seconds.
     - packet_id: macos-guest-cannot-reach-a-host-native-service
       order: 830-xsk2
       status: ready
@@ -38594,6 +38865,7 @@ plan_index:
             THE HARNESS WAS NOT EXECUTABLE, and its own usage block says to run it by path. `scripts/bench-inference-floor.sh` was git mode 100644, so a host following the documented invocation gets rc=126 "Permission denied" — which reads as a broken host rather than a broken mode. The same held for scripts/bench-semantic-budget.sh, whose usage block also documents path invocation. Both moved to 100755 here.
             WHY 731-d89b's GATE DID NOT CATCH IT, which is the part worth keeping. That gate refuses "a script that callers RUN by path but git tracks as non-executable" — it finds CALL SITES in the tree. The only in-tree caller of this harness is scripts/test-bench-prompt-uniqueness.sh:85, which invokes `bash "$SUT"` and therefore needs no exec bit. The only path-invocation is inside the script's OWN usage comment, which no call site scan can see. So a script can document an invocation that has never worked, and every gate stays green. The irony 731-d89b was written about — a permission error read as a verdict — reproduces one layer up, in the gate meant to prevent it. Peer evidence that 100755 is the intended shape: host-capability-probe.sh and check-capability-row.sh are both already executable.
     - order: 859-b2zc
+      next_action: Run scripts/check-capability-row.sh in a freshly rebuilt forge with a stable TILLANDSIAS_WORKSTATION, record the durable capability row, and close only after that forge proof is joined to the existing WSL evidence.
       packet_id: capability-row-check-cannot-resolve-a-host-without-the-hostname-binary
       desired_release: v0.5
       title: the self-serve capability gate answers unavailable:host-unresolvable in every Fedora image, so it has never asked the forge to publish a row
@@ -38679,6 +38951,23 @@ plan_index:
             THE HALF THAT IS NOT A WIDER CHAIN. Repairing the fallback alone would have turned the forge from silent into NOISY: run-forge-project.sh passes no --hostname and no entrypoint exports TILLANDSIAS_WORKSTATION, so HOSTNAME, /etc/hostname and uname -n all report the container id (measured under podman: d872da8c03df). The forge would have begun answering `due:` under a name that changes every launch, adding a matrix row per container. check-capability-row.sh now detects that case via the canonical platform test and returns `unavailable:forge-identity-ephemeral` with the remedy named, instead of publishing.
             FIXTURE: scripts/test-capability-row-check.sh, 9/9, hermetic. `hostname` is made unusable via a failing stub on PATH — absence and failure are indistinguishable to every call site, and a stub is portable where emptying PATH would strip the coreutils the script needs. Covers both forge branches, the lowercase fold key, domain stripping, and the launch-provided override.
             LEFT ALONE DELIBERATELY: scripts/derive-host-identity.sh has its own host_token() with the COMPLETE chain (hostname -s, uname -n, /etc/hostname), so it is not broken, and it slugifies for a different purpose (a compound roster token, not a bare node name). Consolidating it would churn host seeds for no correctness gain. Noted as a consolidation candidate, not touched.
+        - type: claim
+          ts: "2026-08-24T01:55:00Z"
+          agent_id: forge-forge-tillandsias-codex-20260824t004713z
+          host: forge
+          summary: |
+            Claimed the broken-fixture follow-up after the capability-row test inherited this live forge's identity and failed five ordinary-host scenarios before reaching the fallback chain under test.
+        - type: progress
+          ts: "2026-08-24T02:11:00Z"
+          agent_id: forge-forge-tillandsias-codex-20260824t004713z
+          host: forge
+          summary: |
+            Added a TILLANDSIAS_FORGE_CONTEXT fixture seam to agent-identity.sh and made test-capability-row-check.sh explicitly clear inherited forge and workstation identity. The capability fixture is green 9/9, the shared identity fixture remains green 11/11, and the full gate is green in a real forge.
+        - type: note
+          ts: "2026-08-24T02:11:02Z"
+          host: forge
+          summary: |
+            carry forward the remaining stable-forge identity proof after making the fixture hermetic
     - order: 860-g798
       packet_id: credential-guard-passes-green-while-git-push-blocks-on-an-interactive-helper
       desired_release: v0.5
@@ -40104,7 +40393,7 @@ plan_index:
       packet_id: fold-capabilities-needs-its-base-injected-by-every-caller-separately
       desired_release: v0.5
       title: the base is spliced in as a synthetic fragment at two call sites, so a third caller silently sees an empty matrix
-      status: ready
+      status: completed
       kind: defect
       pickup_role: any
       priority: p2
@@ -40135,3 +40424,83 @@ plan_index:
           host: linux_mutable
           summary: |
             Found while auditing 846-idhn rather than while anything failed. Both production callers currently do the right thing; the packet is to make that structural instead of remembered.
+        - type: completed
+          ts: "2026-08-24T01:38:38Z"
+          agent_id: linux-macuahuitl-opus5-20260824T013400Z
+          host: linux_mutable
+          evidence_refs:
+          - crates/tillandsias-plan/src/fragments.rs — fold_capabilities_with_base(base, fragments)
+          - 'EC1: the only remaining construction of a 0000-base Fragment is inside that function; both call sites pass a base instead'
+          - 'EC2: the_base_reaches_the_fold_without_any_caller_side_preparation — fold_capabilities_with_base(&base, &[]) sees the row'
+          - 'EC2b: an_interior_base_splice_does_not_change_lww_precedence — newer fragment beats base AND newer base beats older fragment'
+          - 'EC3: capability-matrix --hosts byte-identical before and after, 7 hosts'
+          - 'MUTATION: disable the interior splice -> EC2 test fails ''got []'' AND the 846-idhn round-trip fails on the capabilities channel'
+          - cargo test -p tillandsias-plan 217+24 green; ./build.sh --check rc=0
+          merge_affordance: merge-when-idle
+          merge_reason: |
+            A crate every host builds, but the behaviour is unchanged — the matrix is byte-identical. What changes is that a future caller cannot get it wrong. Worth having before someone writes that caller, not urgent today.
+          summary: |
+            THE SPLICE MOVED INSIDE THE FOLD. `fold_capabilities` took only fragments, so base rows reached it only if the caller first hand-built a synthetic "0000-base" Fragment. Both production callers did — in two separate copies — and nothing in the signature told a third caller it owed them. A caller that forgot would have got an EMPTY matrix and no error, which is the same silent emptiness that lost yolanda's only two rows when compaction consumed this channel (843-624y).
+            THE BASE IS PASSED AS A `Value`, NOT A PATH, and that detail is the reason a naive fix would have been wrong. The two callers disagree about where the base lives: `capability-matrix` reads plan/index.yaml from disk, while compaction must fold against the CANDIDATE it is about to write, which is not on disk yet. A path parameter would have served the first and silently mis-served the second — folding the old file and dropping every row the compaction was publishing.
+            THE TEST THAT DISTINGUISHES CONSTRUCTION FROM CONVENTION is not "does the matrix contain the base row" — the old code passed that too, at its two prepared call sites. It is "does a caller that prepares NOTHING see the base row": fold_capabilities_with_base(&base, &[]). With the interior splice disabled that assertion reports `got []`.
+            PRECEDENCE WAS CHECKED IN BOTH DIRECTIONS, because a base that won by virtue of being the base would be a different bug wearing this fix's clothes. A newer fragment still beats the base, and a newer base still beats an older fragment; precedence remains the row's own (ts, host).
+            `fold_capabilities` survives for the genuinely base-less case and now carries a docstring saying its emptiness is indistinguishable from "no host has ever published" — so the next reader is warned rather than trusted to know.
+            Also simplified the 846-idhn round-trip helper, which had been mirroring the caller-side splice deliberately. The preparation vanishing from that call is the readable form of this fix.
+    - packet_id: sidecar-arch-litmus-expectation-uses-regex-against-a-literal-matcher
+      order: 868-p8xi
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      kind: bug
+      title: litmus:sidecar-arch-derivation STEP 3 is RED on linux-next — its output is one of the alternatives its own expectation lists, and the matcher rejects it anyway
+      deliverable: the ci-release suite is green again, either because the expectation is written in a form behavior_matches_output actually supports or because the matcher supports the alternation syntax the expectation already uses; plus whichever of the two is chosen is stated where the next author of an expectation will read it
+      pickup_role: any
+      release_target: convergence-velocity-milestone
+      capability_tags:
+        - litmus
+        - ci-release
+        - fail-loud
+      estimated_hours: 2
+      context: |
+        OBSERVED (lenovinha, 2026-08-24) while running the ci-release suite for an
+        unrelated reason. `scripts/run-litmus-test.sh ci-release --phase pre-build
+        --size instant` reports PASS: 25, FAIL: 1, Total 28 (executed 26).
+
+          [STEP 3/3] LIVE: any staged sidecar on this host matches this host's machine
+            expected=ok: (not-staged-here|unjudged-machine|staged-arch-matches)
+            output=ok: staged-arch-matches
+
+        THE OUTPUT IS ONE OF THE THREE ALTERNATIVES THE EXPECTATION LISTS. The
+        step did the right thing and said so: this host has a staged sidecar at
+        images/router/tillandsias-router-sidecar, `file` reports ELF x86-64 on an
+        x86_64 host, and the step correctly printed `ok: staged-arch-matches`. The
+        expectation is plainly meant as a regex alternation
+        (openspec/litmus-tests/litmus-sidecar-arch-derivation.yaml:44); the
+        matcher, `behavior_matches_output` in scripts/run-litmus-test.sh, does not
+        treat it as one. So the step cannot pass on ANY of its three legitimate
+        outcomes.
+
+        NOT CAUSED BY THE yq SHIM LANDED IN THIS SAME CYCLE — I checked, because
+        it was the obvious suspect. Ran the suite with the shim removed and yq
+        absent from PATH: identical result, 26 executed, same single failure. The
+        shim also does not change selection (26 executed both ways).
+
+        WHAT I COULD NOT EXPLAIN, recorded as unknown rather than guessed: this
+        suite passed on this host on 2026-08-23 (cycle 3, same command). The
+        matcher has an empty-expectation short circuit — `[[ -z "$expected_lc" ]]
+        && return 0`, run-litmus-test.sh:735 — so a step whose expectation parses
+        as EMPTY always passes, and that is the most likely way this was green
+        before. But `expected_behavior` is parsed by a bash regex over the raw
+        line (:1105-1107), not by yq, so I have no mechanism for why it would
+        parse empty then and non-empty now, and I am not going to invent one. The
+        other candidate is that the sidecar became staged in between (it is an
+        ignored build artifact, mtime 2026-08-23 10:37) — but `ok: not-staged-here`
+        would not match the literal expectation either, so that alone does not
+        explain a green.
+
+        Whoever takes this should start by settling that question, because "the
+        expectation only ever passed while it was being ignored" and "something
+        recently changed how it is parsed" want different fixes. The empty-string
+        short circuit is worth a hard look on its own: an expectation that fails
+        to parse becomes an unconditional pass, which is the same
+        absence-reads-as-success shape this ledger keeps recording.
