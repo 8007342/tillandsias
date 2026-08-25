@@ -25745,6 +25745,26 @@ plan_index:
         an over-long-frame refusal test at each migrated call site. The scan is
         the load-bearing half; the refusal tests are the negative control.
       events:
+        - type: progress
+          ts: "2026-08-25T03:48:54Z"
+          agent_id: "linux-yoga-opus5-20260825t034854z"
+          host: yoga
+          summary: |
+            CONTRACT REPAIRS LANDED — the two the next_action ordered BEFORE the next migration. The code slice is deliberately not started; the reason is measured below, not a shrug.
+
+            REPAIR 1, the spec contradiction (openspec/specs/tray-host-control-socket/spec.md). Clause 3 of "Wire Format and Framing" read "No length limit enforced at protocol level (backpressure managed by OS socket buffers)". That has been false for as long as the code has existed: read_control_envelope (tillandsias-headless/src/tray/mod.rs) refuses any prefix over MAX_MESSAGE_BYTES with InvalidData "control frame too large", and since 828-r2ek write_control_envelope refuses the outbound direction too. The clause now states the ceiling, names the constant and its home, and says what each direction does on violation — including that NO reply is sent, which is the part a peer author needs and could not have learned from either the old text or the code.
+
+            WHY THAT CONTRADICTION WAS LOAD-BEARING rather than untidy, and why the next_action put it first: this spec is what a reader consults before touching the framing. It told them a bound they would find in the code was not part of the protocol. A migration that trusted it would have constructed LengthDelimitedCodec without max_frame_length — which defaults to 8 MiB, 128x looser than every reader here enforces — and shipped green, because until slice 1 the bound had no test anywhere. The correction is recorded IN the spec with the date and order, so the next reader sees the retraction rather than silently inheriting a cleaner-looking lie.
+
+            REPAIR 2, the closure contradiction, resolved as a definition rather than a file. The named closure litmus:one-length-delimited-framing-impl demands at most ONE u32::from_be_bytes in crates/, while slice 1 deliberately KEEPS hand-rolled fake peers so the migrated Framed client is proven against something that frames independently — remove those and the interop evidence evaporates. Both are right; the closure as worded cannot express it. REFINED DEFINITION, for whoever writes the litmus: the scan asserts at most one raw length decode among PRODUCTION framing sites, and takes an explicit exception list of test-only interop fakes, each entry carrying the reason it must stay hand-rolled. The exception list is itself the assertion — an entry added without a reason, or pointing at a non-test path, fails the scan. A blanket `#[cfg(test)]` exemption would NOT do: tests/vsock_listener_e2e.rs frames identically and is exactly the kind of site that should migrate.
+
+            MEASURED AT HEAD, so the next claimant does not re-derive it: 18 raw decodes across 10 files (transport.rs is the shared codec; vsock_client.rs is migrated and its remaining match is the hand-rolled fake peer).
+
+            THE vsock_server.rs SLICE — NOT STARTED, and the design is recorded because deriving it was most of the work. The hazard slice 1 warned about is real here and is worse than "read the Hello with Framed then drop it": serve_ready_stream reads the Hello by hand from the whole stream, writes the HelloAck, and then calls tokio::io::split(stream) to hand independent halves onward — the read half into a spawned task, the write half to 17 write_envelope_with_shutdown call sites. Framed OWNS the buffer, so a Framed built for the handshake and dropped to reclaim the stream discards any pipelined bytes silently, permanently desyncing the interactive PTY path, and only when the peer pipelines.
+
+            The shape that works is NOT Framed::into_parts here — it is Framed::new(stream, control_frame_codec()) followed by the SINK/STREAM split (futures StreamExt::split on the Framed itself), never tokio::io::split on the raw stream. That keeps one owner of the read buffer across the handshake-to-loop boundary, which is the property being protected. Consequence, and the reason this is a full slice rather than a tail-of-cycle edit: write_half stops being an AsyncWrite and becomes a Sink<Bytes>, so all 17 call sites plus write_envelope_with_shutdown's tokio::select! shutdown arm change together. It is atomic by construction — migrating the read without the write leaves two owners of one stream.
+
+            Left in_progress -> ready with the claim released. The next host takes the vsock_server slice with the design above and a Hello-plus-Subscribe pipelining regression as its first test, written to FAIL against the naive tokio::io::split shape.
         - type: filed
           ts: "2026-08-17T07:10:08Z"
           agent_id: windows-opus5-subtractive-20260817
