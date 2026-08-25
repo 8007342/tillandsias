@@ -19080,6 +19080,13 @@ plan_index:
 
         - 'OPEN — WINDOWS: notify_icon::apply_github_login carries the identical `state == GithubLoginState::LoggedOut` condition and therefore the identical defect. This is not a parity gap, it is a shared bug; the macOS crate cannot fix it. Filed for the windows host as 731-qth3.'
 
+      events:
+        - type: note
+          ts: "2026-08-25T20:34:59Z"
+          agent_id: "windows-yolanda-claude-20260825t203420z"
+          host: yolanda
+          summary: |
+            The OPEN WINDOWS half of this packet's third exit criterion is closed: 731-qth3 landed the identical fix in crates/tillandsias-windows-tray/src/notify_icon.rs (apply_login_state resets on a transition into LoggedIn as well as LoggedOut), with the same production-ordering test and the same hand-falsification. Commit cb60d411ad0eba09d8867cc9811ec0c1f9a4dfc4 on windows-next.
     - packet_id: windows-cloud-loaded-flag-latched-before-sign-in
       order: 731-qth3
       status: ready
@@ -19120,6 +19127,13 @@ plan_index:
         - Reset cloud_projects_loaded + cloud_projects on a transition into LoggedIn as well as LoggedOut.
         - A test reproducing the ordering, hand-falsified against the current condition.
 
+      events:
+        - type: completed
+          ts: "2026-08-25T20:34:27Z"
+          agent_id: "windows-yolanda-claude-20260825t203420z"
+          host: yolanda
+          summary: |
+            apply_login_state now resets cloud_projects_loaded + cloud_projects on a transition into LoggedIn as well as LoggedOut, mirroring the macOS 731-m58f fix. The mutation was factored out of the global MENU_STATE into apply_login_state/apply_cloud_projects_state so the ordering is unit-testable. Test cloud_reply_received_while_logged_out_does_not_survive_the_next_sign_in reproduces the PRODUCTION ordering (LoggedOut -> empty cloud reply -> sign-in) and asserts the first post-login render is the loading row; hand-falsified against the restored LoggedOut-only condition, which fails with 'the first post-login render must be the loading row, not (no repos)'. Negative control a_repeated_login_state_does_not_discard_the_cloud_list pins that a repeat of the same state is not a transition. cargo test -p tillandsias-windows-tray on yolanda: 96+9+3 passed, 0 failed; windows-only sources stamped ok:windows-sources-verified:4.
     - packet_id: macos-tray-tests-run-in-no-gate
       order: 731-vaqx
       status: implemented
