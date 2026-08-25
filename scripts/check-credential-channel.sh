@@ -32,6 +32,16 @@ fi
 #                                  proves nothing about git's helper chain; a
 #                                  fresh clone resolves to the interactive Git
 #                                  Credential Manager and hangs forever)
+#   ok:gh-keyring-push-verified-hook-refused  the push probe was refused by
+#                                  THIS CHECKOUT'S OWN pre-push hook (a gate
+#                                  stamp gone stale behind a fetch, a claim
+#                                  fragment, or the previous cycle's
+#                                  attestation commit), and the credential
+#                                  authenticated with the hook out of the way.
+#                                  NOT a credential fault, so NOT blocked:* —
+#                                  the skill hard-stops on those, and the tree
+#                                  is validated at Finalization, not here
+#                                  (order 876-exg2)
 #   blocked:interactive-credential-helper  gh has a token but git's configured
 #                                  helper is interactive-only; remedy printed
 #   blocked:gh-cli-only            gh has a token, the push probe failed, no
@@ -276,6 +286,57 @@ credential_channel_verdict() {
        timeout 45 $_probe_cmd >/dev/null 2>&1; then
       echo "ok:gh-keyring-push-verified"
       return 0
+    fi
+    # ORDER 876-exg2. THE PROBE RUNS OUR OWN PRE-PUSH HOOK, AND THAT HOOK
+    # REFUSES FOR REASONS THAT HAVE NOTHING TO DO WITH CREDENTIALS.
+    #
+    # 860-g798 was right to stop trusting `gh auth status` and start proving an
+    # authenticated push. What it did not account for is that `git push` — even
+    # `--dry-run` — executes the local pre-push chain first, and
+    # pre-push-local-gate.sh refuses whenever the worktree has changed since
+    # `./build.sh --check` last stamped it. Every one of these leaves the tree
+    # in that state, and all of them are NORMAL:
+    #
+    #   - a fetch/fast-forward, which is what Start-Of-Cycle does immediately
+    #     BEFORE running this guard (skill step 2);
+    #   - the previous cycle's own Finalization step 9, which commits
+    #     plan/mo-full-attestations.d/<host>.md through the hook's plan-only
+    #     lane and therefore never refreshes the stamp;
+    #   - minting a claim fragment, which the skill mandates before any work.
+    #
+    # So the guard reported `blocked:gh-cli-only` — "seed the repo-local store"
+    # — on a host whose credential was fine, and the skill hard-stops the cycle
+    # on any `blocked:*`. Measured on pirria 2026-08-25 on two consecutive
+    # cycles (clean tree, HEAD == origin, the stale path being the attestation
+    # file the previous cycle was REQUIRED to write), and independently on yoga
+    # ten minutes before the first of those. The printed remedy could not have
+    # helped in any of these cases.
+    #
+    # THE FIX IS TO ASK THE QUESTION THIS GUARD IS ACTUALLY ASKING. "Can this
+    # credential authenticate to the remote" is answered by a probe with the
+    # local hook out of the way; "would this tree pass the gate" is a DIFFERENT
+    # question, asked and enforced at Finalization step 4, and it must stay
+    # asked there. A guard that conflates them fails the cycle for the wrong
+    # reason and names a remedy that does not apply.
+    #
+    # The retry runs ONLY on the failure path, so the healthy case costs
+    # nothing and the true positive 860-g798 caught is untouched: an
+    # interactive-helper hang fails BOTH probes and still reaches the verdicts
+    # below.
+    if [ -z "${TILLANDSIAS_CRED_PROBE_CMD:-}" ]; then
+      if GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never GIT_ASKPASS=/bin/false \
+         timeout 45 git push --dry-run --no-verify origin HEAD >/dev/null 2>&1; then
+        # The credential authenticated. The refusal was ours.
+        echo "  note: the push probe was refused by this checkout's own pre-push" >&2
+        echo "  hook, not by the remote — the credential authenticated fine with" >&2
+        echo "  the hook out of the way. Usually a gate stamp gone stale behind a" >&2
+        echo "  fetch, a claim fragment, or the previous cycle's attestation" >&2
+        echo "  commit. This is NOT a credential fault and must not stop the" >&2
+        echo "  cycle; the tree is validated at Finalization by:" >&2
+        echo "    TILLANDSIAS_SKIP_VERSION_BUMP=1 ./build.sh --check" >&2
+        echo "ok:gh-keyring-push-verified-hook-refused"
+        return 0
+      fi
     fi
     # The push cannot authenticate non-interactively. Name the interactive
     # helper if one is configured — the failure must be legible the FIRST

@@ -100,6 +100,86 @@ case "$out" in
     *) bad "mutation reconstruction unexpected: $out" ;;
 esac
 
+# ── 6. ORDER 876-exg2: OUR OWN PRE-PUSH HOOK REFUSING IS NOT A CREDENTIAL ───
+# FAULT. Fully hermetic: a local bare remote (no network, no credential of any
+# kind) and a pre-push hook that always refuses. The default probe therefore
+# fails for a reason that has nothing to do with authentication, exactly as it
+# does on a real host whose gate stamp went stale behind a fetch, a claim
+# fragment, or the previous cycle's mandated attestation commit.
+#
+# These arms deliberately do NOT set TILLANDSIAS_CRED_PROBE_CMD — the seam the
+# arms above use bypasses the retry, and the whole defect lives on the default
+# path.
+run_guard_default() {
+    ( cd "$1" && \
+      env -u GH_TOKEN -u GITHUB_TOKEN -u TILLANDSIAS_CRED_PROBE_CMD \
+          PATH="$W/bin:$PATH" bash "$GUARD" 2>"$1/.stderr" )
+}
+
+with_remote() { # with_remote <name> <hook-body> ; echoes the repo path
+    local d="$W/hookrepo-$1" bare="$W/bare-$1.git"
+    git init -q --bare "$bare"
+    git init -q -b main "$d"
+    git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m x
+    git -C "$d" remote add origin "$bare"
+    git -C "$d" push -q origin main 2>/dev/null
+    git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m y
+    printf '#!/usr/bin/env bash\n%s\n' "$2" > "$d/.git/hooks/pre-push"
+    chmod +x "$d/.git/hooks/pre-push"
+    printf '%s' "$d"
+}
+
+D="$(with_remote refuse 'echo "✗ pre-push refused: the tree changed since ./build.sh --check last passed" >&2; exit 1')"
+out="$(run_guard_default "$D")"; rc=$?
+case "$out" in
+    ok:gh-keyring-push-verified-hook-refused)
+        ok "hook refusal -> ok:...-hook-refused, NOT blocked:* (rc=$rc)" ;;
+    blocked:*)
+        bad "REGRESSION: our own hook refusing still reads as a credential fault: $out" ;;
+    *) bad "hook-refusal shape returned: $out (rc=$rc)" ;;
+esac
+[ "$rc" -eq 0 ] || bad "a hook refusal must exit 0 — the skill hard-stops on non-zero"
+grep -q 'build.sh --check' "$D/.stderr" \
+    && ok "the note names ./build.sh --check, not credential seeding" \
+    || bad "note must name the gate, not the credential remedy"
+grep -q 'credential-store --file' "$D/.stderr" \
+    && bad "the note must NOT print the credential-seeding remedy" \
+    || ok "no misleading credential remedy printed"
+
+# ── 7. NEGATIVE CONTROL — the true positive 860-g798 caught must survive. ───
+# When the push cannot authenticate at ALL, --no-verify does not rescue it and
+# the verdict must still be blocked. Here the remote path does not exist, so
+# both probes fail for a real transport/auth reason.
+D="$(with_remote broken 'exit 0')"
+git -C "$D" remote set-url origin "$W/does-not-exist.git"
+out="$(run_guard_default "$D")"; rc=$?
+case "$out" in
+    blocked:*) ok "an unreachable remote is still blocked:* (rc=$rc) — the retry rescues nothing real" ;;
+    *) bad "unreachable-remote shape returned: $out (rc=$rc) — the true positive was weakened" ;;
+esac
+[ "$rc" -ne 0 ] || bad "a genuinely broken channel must exit non-zero"
+
+# ── 8. MUTATION CONTROL for this fix: the PRE-876-exg2 guard must fail arm 6. ─
+# Strip the retry block and assert the old script calls the hook refusal a
+# credential fault — proving arm 6 has teeth rather than passing by luck.
+PRE="$W/pre-876-guard.sh"
+awk '/# ORDER 876-exg2\./{skip=1} skip && /^    _helpers=/{skip=0} skip{next} {print}' \
+    "$GUARD" > "$PRE"
+D="$(with_remote mutation 'echo refused >&2; exit 1')"
+out="$( cd "$D" && env -u GH_TOKEN -u GITHUB_TOKEN -u TILLANDSIAS_CRED_PROBE_CMD \
+        PATH="$W/bin:$PATH" bash "$PRE" 2>/dev/null )"
+case "$out" in
+    blocked:gh-cli-only)
+        ok "MUTATION: the pre-fix guard calls our own hook a credential fault — arm 6 has teeth" ;;
+    *) bad "mutation reconstruction unexpected: $out" ;;
+esac
+
+# ── 9. Grammar: every verdict this suite produced is a single pinned token. ──
+grammar='^(ok:[a-z0-9-]+|blocked:[a-z0-9-]+|missing:no-credential-channel)$'
+printf '%s\n' "ok:gh-keyring-push-verified-hook-refused" | grep -qE "$grammar" \
+    && ok "the new verdict matches the pinned grammar (no second colon)" \
+    || bad "the new verdict breaks litmus:credential-channel-check-shape"
+
 if [ "$fail" -eq 0 ]; then
     echo "ok:credential-channel-fixture:all"
     exit 0

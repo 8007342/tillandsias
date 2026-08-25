@@ -78,6 +78,38 @@ cd "$ROOT" || { echo "blocked:preflight:root:cannot-cd"; exit 1; }
 
 plan_verdict="skipped"
 if [ "${CYCLE_PREFLIGHT_SKIP_BUILD:-0}" != "1" ]; then
+    # ORDER 876-irn7. A rustup toolchain that is not on the NON-INTERACTIVE
+    # PATH is not an absent toolchain, and this is the one verdict that stops
+    # the cycle outright — the skill's own words: "selecting work with an
+    # unverified instrument is the one failure the loop cannot reason its way
+    # out of, because the tool it would reason WITH is the stale thing."
+    #
+    # Measured on pirria 2026-08-25, the first tool call of its first cycle:
+    # `blocked:preflight:plan:cargo-absent` on a host carrying cargo 1.98.0 and
+    # rustc 1.98.0. rustup writes its PATH edit into ~/.bashrc, which a
+    # non-login non-interactive bash never sources — and EVERY agent tool call
+    # is exactly that kind of shell. Exporting $HOME/.cargo/bin by hand and
+    # changing nothing else produced `ok:cycle-preflight:...` immediately.
+    #
+    # Left alone, an unattended host answers `blocked:` on every fire forever
+    # while a human reading the transcript goes looking for a toolchain that is
+    # already installed. So resolve through the standard install locations
+    # before declaring absence — CARGO_HOME first, since a host that set it
+    # meant it — and put the resolved directory on PATH for the rest of the
+    # script, so the `cargo build` below and every later caller see it too.
+    #
+    # THE GENUINELY-ABSENT CASE KEEPS ITS VERDICT AND ITS TERMINAL FORCE. This
+    # narrows a false positive; it must not weaken the true one.
+    if ! command -v cargo >/dev/null 2>&1; then
+        for _cargo_dir in "${CARGO_HOME:-}/bin" "$HOME/.cargo/bin"; do
+            case "$_cargo_dir" in /bin) continue ;; esac
+            if [ -x "$_cargo_dir/cargo" ]; then
+                PATH="$_cargo_dir:$PATH"
+                export PATH
+                break
+            fi
+        done
+    fi
     if ! command -v cargo >/dev/null 2>&1; then
         # Name the fault. A cycle that cannot rebuild its instrument should say
         # so rather than proceed on whatever binary happens to be lying around.
