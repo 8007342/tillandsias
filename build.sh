@@ -1769,6 +1769,27 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Carry-forward advisory reported"
 
+    # ORDER 751-i9mb. The closure-event pass applied to the BASE ledger, where
+    # compaction puts every fragment's events. The sibling gate above scans
+    # plan/index.d only, so the moment a ledger is compacted its closure events
+    # move out of that gate's reach — packet 532 sat claimable with its exit
+    # criterion already green while --check printed
+    # ok:no-fragment-status-loss:16 checked.
+    #
+    # ADVISORY, on the same terms as the carry-forward line above and for the
+    # same reason: a terminal event beside a non-terminal status is a QUESTION
+    # for a cycle, not a fact to apply. Auto-promoting a status from an event is
+    # how a false completion becomes permanent, and 532 was only closable
+    # because its litmus was re-run and passed. The `if !` guards that the
+    # advisory can RUN — a broken checkout is a build break; a ledger finding is
+    # not.
+    _step "Checking the base ledger for completions the fold hides (751-i9mb, advisory)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-base-ledger-status-loss.sh" 2>&1; then
+        _error "the base-ledger status-loss advisory could not run — that is a broken checkout, not a clean ledger"
+        exit 1
+    fi
+    _info "Base-ledger status-loss advisory reported"
+
     # Order 810-k8jy. Which file classes under a corpus root the RAG indexer
     # indexes, declines, or has never been told about. ADVISORY like the
     # carry-forward line above, and for the same reason: a new file class in the

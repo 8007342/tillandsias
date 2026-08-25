@@ -2487,21 +2487,107 @@ fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
                 }
                 false
             };
-            let mut ids: Vec<String> = Vec::new();
-            // Inline: packets: [{packet_id, events: [{type: completed, ...}]}]
-            if let Some(pkts) = doc.get("packets").and_then(serde_yaml::Value::as_sequence) {
-                for p in pkts {
-                    let Some(pid) = p.get("packet_id").and_then(serde_yaml::Value::as_str) else {
-                        continue;
-                    };
-                    let declares = p
-                        .get("events")
-                        .and_then(serde_yaml::Value::as_sequence)
-                        .is_some_and(|evs| evs.iter().any(declares_terminal));
-                    if declares {
-                        ids.push(pid.to_string());
+            // ORDER 751-i9mb. Packets do not only live at `doc["packets"]`.
+            // Compaction folds every fragment INTO plan/index.yaml, where they
+            // live at `plan_index.steps[]` — so this subcommand, pointed at the
+            // base ledger, parsed all 3.4MB and printed NOTHING with exit 0.
+            // Empty-and-zero is indistinguishable from "declares no terminal
+            // events", so a checker built on that answer reports clean on a
+            // ledger it never examined: this guard's OWN failure class
+            // (785-sqe6, 787-f7dh), and the mechanical reason packet 532 sat
+            // claimable with its exit criterion already green while
+            // `./build.sh --check` printed ok:no-fragment-status-loss.
+            //
+            // The walk stops descending at any mapping carrying `packet_id` —
+            // the same rule the fold itself uses — so it is shape-independent
+            // by construction and a future ledger layout cannot silently
+            // re-blind it. Fragments (top-level `packets:`) and the base
+            // (`plan_index.steps[]`) both fall out of the one rule.
+            fn collect_packet_nodes(v: &serde_yaml::Value, out: &mut Vec<serde_yaml::Value>) {
+                if v.get("packet_id").is_some() {
+                    out.push(v.clone());
+                    return;
+                }
+                if let Some(map) = v.as_mapping() {
+                    for (_k, val) in map {
+                        collect_packet_nodes(val, out);
+                    }
+                } else if let Some(seq) = v.as_sequence() {
+                    for item in seq {
+                        collect_packet_nodes(item, out);
                     }
                 }
+            }
+
+            // ORDER 751-i9mb. `--live` additionally applies the WITHDRAWAL rule:
+            // a closure that a later `falsified` event retracted is not a live
+            // declaration. Opt-in, so the existing gate's syntactic question —
+            // "does this events block DECLARE a terminal event?" — is unchanged
+            // and its callers keep their exact semantics. The advisory base pass
+            // asks the different, semantic question, and the packet requires the
+            // negative control: "a packet ... whose closure was later falsified"
+            // must NOT be flagged.
+            //
+            // Timestamps are ISO-8601 Zulu, which orders correctly under plain
+            // lexicographic comparison; an event with no ts sorts as empty and
+            // therefore never wins against a stamped one.
+            let live_only = args.iter().any(|a| a == "--live");
+            let event_ts = |e: &serde_yaml::Value| -> String {
+                e.get("ts")
+                    .and_then(serde_yaml::Value::as_str)
+                    .or_else(|| e.get("event").and_then(|i| i.get("ts")?.as_str()))
+                    .unwrap_or("")
+                    .to_string()
+            };
+            let declares_falsified = |event: &serde_yaml::Value| -> bool {
+                if event.get("type").and_then(serde_yaml::Value::as_str) == Some("falsified") {
+                    return true;
+                }
+                if let Some(inner) = event.get("event")
+                    && (inner.as_str() == Some("falsified")
+                        || inner.get("type").and_then(serde_yaml::Value::as_str)
+                            == Some("falsified"))
+                {
+                    return true;
+                }
+                false
+            };
+
+            let mut ids: Vec<String> = Vec::new();
+            // Inline: a node carrying packet_id and events: [{type: completed}],
+            // at ANY depth.
+            let mut packet_nodes: Vec<serde_yaml::Value> = Vec::new();
+            collect_packet_nodes(&doc, &mut packet_nodes);
+            for p in &packet_nodes {
+                let Some(pid) = p.get("packet_id").and_then(serde_yaml::Value::as_str) else {
+                    continue;
+                };
+                let Some(evs) = p.get("events").and_then(serde_yaml::Value::as_sequence) else {
+                    continue;
+                };
+                if !evs.iter().any(declares_terminal) {
+                    continue;
+                }
+                if live_only {
+                    let newest_closure = evs
+                        .iter()
+                        .filter(|e| declares_terminal(e))
+                        .map(event_ts)
+                        .max()
+                        .unwrap_or_default();
+                    let newest_withdrawal = evs
+                        .iter()
+                        .filter(|e| declares_falsified(e))
+                        .map(event_ts)
+                        .max()
+                        .unwrap_or_default();
+                    // A withdrawal only counts when it POSTDATES the closure it
+                    // retracts; a later re-closure wins again.
+                    if !newest_withdrawal.is_empty() && newest_withdrawal > newest_closure {
+                        continue;
+                    }
+                }
+                ids.push(pid.to_string());
             }
             // Top-level: events: [{packet_id, event: {type: completed, ...}}]
             if let Some(evs) = doc.get("events").and_then(serde_yaml::Value::as_sequence) {
