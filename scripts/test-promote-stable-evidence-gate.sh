@@ -357,12 +357,16 @@ else
     fail=$((fail + 1))
 fi
 
-# 20. 889-bx99: the accept path NAMES the evidence it relied on. A PASS proves
-#     the run completed, not that its preconditions held — macbook found the
-#     macOS smoke's destruction step silently matching nothing on a
-#     case-sensitive volume while reporting a clean room. The gate does not
-#     verify preconditions (a different, larger packet), but it must not be
-#     anonymous about what it trusted.
+# 20. The accept path NAMES the evidence it relied on. A PASS proves the run
+#     completed, not that its preconditions held — a smoke that silently skips
+#     its destruction step still reports a clean room. The gate does not verify
+#     preconditions (a different, larger packet), but it must not be anonymous
+#     about what it trusted.
+#
+#     This case once asserted the output cited 889-bx99. That packet was
+#     FALSIFIED and withdrawn, so the assertion was removed rather than
+#     re-pointed at a substitute: pinning a citation the gate does not need
+#     would make a future correction fail this test for no reason.
 fresh_root
 seed_all_platforms "$VER"
 : > "$VIOLATIONS"
@@ -372,7 +376,13 @@ _named=1
 for _p in linux macos windows; do
     grep -qE "^  ${_p}[[:space:]]+plan/issues/.*${_p}" "$WORK/named.err" || _named=0
 done
-grep -q '889-bx99' "$WORK/named.err" || _named=0
+grep -q 'preconditions held' "$WORK/named.err" || _named=0
+# NEGATIVE CONTROL: the gate's OUTPUT must not cite the retracted packet.
+# Scoped to the output, not the source: the script's comments legitimately
+# explain WHY 889-bx99 is not cited, and that explanation is what stops someone
+# re-adding it. A control that forbade the word outright would delete its own
+# reason for existing.
+grep -q '889-bx99' "$WORK/named.err" && _named=0
 if [ "$_named" = 1 ]; then
     printf 'ok   %-52s -> all three named + caveat\n' "accept path names the evidence per platform"
     pass=$((pass + 1))

@@ -277,32 +277,40 @@ _ev_missing="${_ev_missing#,}"
 _has_evidence=1
 [ -n "$_ev_missing" ] && _has_evidence=0
 
-# NAME THE EVIDENCE (order 889-bx99, coordinator request 2026-08-25).
+# NAME THE EVIDENCE (coordinator request 2026-08-25).
 #
-# A PASS report proves the run COMPLETED. It does not, by itself, prove the run's
-# preconditions held. 889-bx99 is the live example: the macOS smoke's destruction
-# step targeted `~/Library/Application Support/tillandsias` (lowercase) while the
-# app writes `Tillandsias` — on a case-SENSITIVE volume that rm matches nothing,
-# exits 0, and the smoke proceeds against a pre-existing multi-GiB image while
-# reporting a clean-room result. A false PASS on a precondition, on the very path
-# this gate consumes as evidence.
+# A PASS report proves the run COMPLETED. It does not, by itself, prove the
+# run's preconditions held — a smoke that silently skips its destruction step
+# still reports a clean-room result, because the report describes what the
+# script did, not what the script established.
 #
-# This gate deliberately does NOT try to verify clean-room preconditions — that is
-# a much larger packet, and a gate that half-verifies them would be worse than one
+# NO CITATION HERE, DELIBERATELY. This originally cited 889-bx99, a macOS
+# case-sensitivity defect. THAT PACKET WAS FALSIFIED AND WITHDRAWN on
+# 2026-08-25: it was "verified" by typing a capital path on a case-INSENSITIVE
+# volume and watching it resolve, which cannot fail and therefore measured
+# nothing. Independently re-checked before this comment was rewritten — there is
+# no `Application Support/Tillandsias` anywhere in the tree; every site is
+# lowercase (status_item.rs:367, diagnose.rs:71, diagnose-macos-enclave.sh:43,
+# and the rest). The general caveat above stands on its own; a release gate must
+# not cite a retracted finding as if it were evidence, which is the same
+# category error as the junk-matching this gate was fixed for.
+#
+# This gate deliberately does NOT verify clean-room preconditions — that is a
+# much larger packet, and a gate that half-verifies them would be worse than one
 # that honestly does not. What it CAN do for free is stop being anonymous: print
 # exactly which report is carrying each platform, so the operator can check them
 # against whatever they know that the gate does not.
 #
-# Correlating evidence dates against known precondition defects was considered and
-# REJECTED as the wrong shape: it needs a hand-maintained registry of defect
-# windows per platform, and a registry nobody updates would go quiet exactly when
-# it mattered — reading as "no known defects" when it means "nobody wrote one
-# down". Naming the evidence rots in no direction.
+# Correlating evidence dates against known precondition defects was considered
+# and REJECTED (coordinator concurred, and dropped the suggestion): it needs a
+# hand-maintained registry of defect windows per platform, and a registry nobody
+# updates goes quiet exactly when it matters — reading as "no known defects"
+# when it means "nobody wrote one down". That is the failure shape this gate was
+# just fixed for. Naming the evidence rots in no direction.
 if [ "$_has_evidence" -eq 1 ]; then
     echo "Evidence satisfying this promotion (verify these are the runs you mean):" >&2
     printf '%s\n' "$_ev_src" | sed '/^$/d' >&2
-    echo "  NOTE: a PASS proves the run completed, not that its preconditions held" >&2
-    echo "  (see 889-bx99 for a precondition that failed silently while reporting PASS)." >&2
+    echo "  NOTE: a PASS proves the run completed, not that its preconditions held." >&2
 fi
 
 if [ -n "$_ev_disclaimed" ] && [ "$_has_evidence" -eq 1 ]; then
