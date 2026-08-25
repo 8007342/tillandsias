@@ -1,0 +1,82 @@
+packets:
+  - packet_id: litmus-escaped-quotes-diverge-on-yq-absent-hosts
+    order: 875-v7hv
+    status: ready
+    kind: bug
+    priority: p2
+    pickup_role: any
+    desired_release: v0.5
+    release_target: architecture-audit-epic
+    depends_on: []
+    estimated_hours: 2
+    capability_tags:
+      - litmus
+      - ci-gates
+      - fail-loud
+    tags:
+      - litmus-runner
+      - yq-skew
+      - v0.5
+    title: |
+      A litmus step whose `command` or `expected_behavior` carries an escaped double quote passes on a host with yq and fails on a host without it — the runner's grep fallback hands the backslashes to the shell.
+    deliverable: |
+      An executable gate that refuses a litmus file carrying `\"` in a
+      `command` or `expected_behavior` scalar, with a negative control, so the
+      divergence cannot be reintroduced.
+    context: |
+      MEASURED on yoga (Silverblue, no yq outside the builder toolbox)
+      2026-08-25, while binding `vsock-exec-authz` under 837-et6t.
+
+      `litmus:pty-open-argv-allowlisted` carried two steps of the form
+
+          command: "grep -F 'out.push((\"no_proxy\".to_string(), ...));' <file>"
+          expected_behavior: "out.push((\"no_proxy\".to_string(), ...));"
+
+      On the first run both steps FAILED, and the runner's own diff showed why:
+
+          expected=out.push((\"no_proxy\".to_string(), crate::enclave_no_proxy()));
+          output=        out.push(("no_proxy".to_string(), crate::enclave_no_proxy()));
+
+      The backslashes survived into the comparison. `run-litmus-test.sh` falls
+      back to grep-based YAML extraction when yq is absent, and that fallback
+      does not unescape a double-quoted YAML scalar. With yq present the same
+      file passes. The runner's own header already warns that the fallback
+      "decides phase, size, host_kind, inputs and WHICH TESTS RUN" so a host
+      without yq "silently selects a different test set" — this is the same
+      defect one layer down, inside a single step's comparison, and it is worse
+      because the step reports a CONTENT mismatch rather than a parse problem,
+      sending the reader to diff two strings that are in fact identical.
+
+      WHY IT WENT UNSEEN FOR MONTHS: the file was on the 660-ryhn ratchet list
+      (openspec/litmus-tests/unbound-grandfathered.txt), so no suite ever
+      selected it. A grandfathered assertion is unfalsifiable by construction,
+      and two of this one's four steps had ALSO been pinning expressions that
+      moved to exec_allowlist.rs on 2026-08-17. Both faults surfaced in the
+      same minute the spec was finally bound.
+
+      The repair landed with 837-et6t rewrote those steps as quote-free
+      regexes, which survive both parse paths. That fixes ONE file. The gate is
+      what stops the next one.
+    exit_criteria:
+      - |
+          An executable check scans every openspec/litmus-tests/*.yaml for a
+          backslash-escaped double quote inside a `command` or
+          `expected_behavior` scalar and refuses it, printing a falsifiable
+          one-line verdict.
+      - |
+          NEGATIVE CONTROL: the check is run against a hermetic fixture file
+          that DOES carry `\"` and is proven to refuse it; and a POSITIVE
+          control proving it accepts a quote-free file, so a check that
+          refuses everything cannot pass.
+      - |
+          The check is invoked by ./build.sh --check (or an existing gate
+          phase), not merely written — an orphaned guard is the 865-n8vq shape
+          and the audit-guard-activation auditor greps for invocation.
+    verifiable_closure: |
+      The new check is wired into the gate and its negative control fails when
+      the refusal is removed.
+    notes: |
+      Consider whether the broader fix is to make the runner REFUSE to run at
+      all without yq, rather than silently degrading to a different parse. The
+      runner already materialises a yq shim from the builder toolbox on hosts
+      that have toolbox; the remaining fallback path is what produces skew.

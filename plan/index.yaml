@@ -25010,6 +25010,20 @@ plan_index:
         deleting the five workarounds leaves two code paths for the same thing,
         which is how this subsystem got here.
       events:
+        - type: progress
+          ts: "2026-08-25T01:00:07Z"
+          agent_id: "linux-yoga-opus5-20260825t0047z"
+          host: yoga
+          summary: |
+            NEXT_ACTION ITEM 1 DISCHARGED: openspec/specs/vsock-exec-authz is reconciled with the landed absolute-prefix verbatim arm. It had described ONE arm — a four-name allowlist and a project-name rule — while the tree has carried two since 2026-08-17. The spec now states, as policy rather than as commentary: the pure unconditionally-compiled decision function (clause 1, with the order-254 reason it must be testable off the feature-gated path); the name-based arm's exact shapes including the nested podman sub-command check (clauses 2-3); the verbatim arm's four restrictions — absolute path under a known prefix, no `/..`, never a shell or `env` as argv[0], and arguments NEVER inspected or re-escaped (clause 4); capability advertisement and the host MUST to feature-detect on HelloAck.server_caps rather than compare versions (clause 5); and the rule 838-48ca's sibling CAP_PROXY_CA_KEY_HEAL illustrates — a capability names the BEHAVIOUR a caller depends on, never a neighbouring one that shipped nearby (clause 6). Rejection now covers both arms and requires the refusals be pinned by tests that fail when the refusal is removed.
+
+            CLAUSE 5 SETTLES THE lenovinha RESIDUAL OF 2026-08-22 WITHOUT SILENTLY PICKING A SIDE. That note observed launch_spec emits the verbatim vector unconditionally while the capability's own doc says hosts MUST feature-detect. The spec now forbids the ONE behaviour that is indefensible either way — sending the vector anyway — and admits exactly two discharges: fall back to the flattened shape, or REFUSE with a diagnosis naming the missing capability and what the guest did advertise. It records refusal as preferred where no flattened form is already maintained, because adding a flattening path solely as a fallback leaves two code paths for one request, which is this packet's own stated warning turned on the remedy.
+
+            WHY THE CODE HALF WAS NOT ATTEMPTED FROM THIS HOST, stated so the next claimant does not re-derive it. The lane that actually crosses the guest allowlist is macOS: action_host.rs calls PtySession::open, which sends PtyOpen over the control wire. The Windows tray does NOT — launch_open_shell_terminal hands the argv to `wsl.exe -d <distro> --`, so the guest exec allowlist and HelloAck are not in that path at all, and the residual as written over-scopes to "the two tray callers". Worse for a Linux host: the macOS bridge's PtySession takes a ChannelPtyTransport that carries no server_caps, so discharging clause 5 there is real plumbing inside a crate that compiles to a cfg-gated stub on Linux — I could not have verified one line of it. Adding a caps-aware constructor here without a caller would have produced exactly the orphaned guard that 865-n8vq's audit-guard-activation exists to catch.
+
+            STILL OPEN on this packet, unchanged and now precisely scoped: the feature-detect discharge in the macOS lane (macos pickup_role, needs macOS-lane evidence), and the `--exec-guest` absolute-path-vector versus shell discriminator that 838-48ca's decision calls for — macos-tray main.rs:198 still calls build_exec_guest_shell_cmd unconditionally, so the KEEP decision landed as prose and the branch it scopes the join to does not exist yet.
+
+            CLOSED THIS CYCLE by child 837-et6t: the named verifiable closure litmus:guest-exec-argv-vector-no-shell now exists, is bound, and is green 9/9, with the source-scan leg and both its controls. See that packet's completion event for the two dead assertions and the unbound spec it uncovered.
         - type: note
           ts: "2026-08-22T23:53:18Z"
           agent_id: "linux-lenovinha-claude-20260822t235318z"
@@ -36869,6 +36883,25 @@ plan_index:
         reintroduced. Otherwise this gate will be refused at the pre-push gate,
         as one was on this host 2026-08-19.
 
+      events:
+        - type: completed
+          ts: "2026-08-25T00:59:39Z"
+          agent_id: "linux-yoga-opus5-20260825t0047z"
+          host: yoga
+          summary: |
+            CLOSED. The parent's named verifiable closure now EXISTS, RUNS, and is BOUND — it was three separate absences, not one.
+
+            WRITTEN: openspec/litmus-tests/litmus-guest-exec-argv-vector-no-shell.yaml, 9 steps, 9/9 green. Three legs matching the parent's own definition: HOST (launch_spec composes one token per argument, project name its own element, hostile name refused loudly — with the positive control proving legitimate names still launch, so a validator that refuses everything cannot pass); GUEST (the verbatim arm admits absolute non-shell programs under spec vsock-exec-authz section 4, refuses shells/relative paths/traversal, and grants nothing the /bin/bash -lc arm did not); SOURCE SCAN (scripts/check-exec-argv-vector-workarounds.sh).
+
+            THE SCAN LEG, and its 634-39ik compliance, which the packet explicitly demanded: it asserts the ABSENCE of `fn argv_survives_wt_reparse` and `fn wt_safe_title` — a property that stays true however the code is rewritten — never how today's source is spelled. It scans DEFINITIONS, not mentions, deliberately: the comments recording why those workarounds went away are the institutional memory this packet exists to protect, and a scan that reddened on a code comment would be deleted by the first person who read one. Both controls live in the litmus: a hermetic tree defining the symbol turns the scan red, a hermetic tree merely naming it in a comment stays green.
+
+            `build_exec_guest_shell_cmd` is deliberately NOT scanned. Order 838-48ca decided on the record to KEEP it (a `--exec-guest 'a | b'` pipeline cannot be expressed as a vector) and amended the parent's exit criterion 2 to match; scanning for its absence would make this gate enforce a decision the fleet reversed.
+
+            TWO DEFECTS FOUND IN THE MINUTE THE SPEC WAS FINALLY BOUND, both invisible until then. (1) `vsock-exec-authz` carried NO entry in openspec/litmus-bindings.yaml at all — the spec guarding the exec wire's authorization boundary was bound to zero litmus tests, and litmus:pty-open-argv-allowlisted sat on the 660-ryhn ratchet list, never selected by any suite. (2) Two of that file's four steps grepped pty_handler.rs for `let is_allowed = match argv[0].as_str()` and for the project-name character test; both moved into exec_allowlist.rs on 2026-08-17 when 795-zshi's first slice extracted the decision. Those assertions had been false for eight days and could not fail, because nothing ran them. A grandfathered assertion is unfalsifiable by construction.
+
+            REPAIRED IN THE SAME CHANGE: the allowlist legs of litmus:pty-open-argv-allowlisted are now bound to the unit tests rather than to source text (the decision is pure, so behaviour can be asserted directly), the spec has a bindings entry naming both tests, and litmus:pty-open-argv-allowlisted is DELETED from unbound-grandfathered.txt — the only legitimate edit to that file, per its own header. Suite result: 2/2 tests, 15/15 steps, PASS.
+
+            A THIRD DEFECT surfaced on the first run and is filed as 875-v7hv rather than absorbed: the two proxy-exemption steps carried an escaped double quote in their command and expected_behavior, and this runner's grep fallback (yq absent on Silverblue outside the builder toolbox) does not unescape a double-quoted YAML scalar — it handed the backslashes to the comparison, which then reported a content mismatch between two identical strings. Rewritten here as quote-free regexes that survive both parse paths; the GATE that stops the next one is 875-v7hv's work.
     - packet_id: gate-phase-timings-are-meaningless-under-self-inflicted-contention
       order: 839-veey
       status: ready

@@ -1153,6 +1153,13 @@ specs:
   - litmus:vm-launch-graceful-failure-shape
   coverage_ratio: 20
   last_verified: '2026-07-18'
+- spec_id: vsock-exec-authz
+  status: active
+  litmus_tests:
+  - litmus:pty-open-argv-allowlisted
+  - litmus:guest-exec-argv-vector-no-shell
+  coverage_ratio: 100
+  last_verified: '2026-08-25'
 - spec_id: vsock-transport
   status: active
   litmus_tests:
