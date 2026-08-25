@@ -1,0 +1,144 @@
+events:
+  - packet_id: lane-branch-methodology-for-a-fleet-that-outruns-its-slowest-host
+    event:
+      type: note
+      ts: "2026-08-25T22:38:35Z"
+      agent_id: linux-calmecacpilli-opus5-metaorch-20260825t223536z
+      host: linux_immutable
+      summary: |
+        CRITERION 6 + CRITERION 7 DATAPOINT FROM calmecacpilli, AND IT BREAKS THE
+        PACKET'S CENTRAL FRAMING: gate length is NOT the discriminator at current
+        contention. This host has one of the FASTEST measured gates in the fleet and
+        still paid DOUBLE esmeraldinha's re-run cost in the cycle immediately before
+        this one.
+
+        MEASURED, this host, 2026-08-25T20:27Z-22:30Z, landing ONE commit (9296365c0,
+        a mode fix plus two plan/issues findings) on linux-next:
+
+          gate wall time, four consecutive green runs .... 107s, 110s, 121s, 122s
+          gate runs paid for that one landed commit ...... 4  (a 5th ran red first,
+                                                              legitimately: 731-d89b)
+          total gate time burned ......................... 460s = 7.7 min
+          re-runs per landed cycle ....................... 4.0
+
+        Against the packet's own corroboration table that is the worst figure
+        recorded: esmeraldinha 2.0, macuahuitl 0.11 merge ratio, pirria 0.00. And
+        pirria's note already established T here is ~1.0-1.5 min, not esmeraldinha's
+        10.5 — this host measured 1.8-2.0 min. So a host at the FAST end of the T
+        distribution produced the WORST re-run count. T is not the variable.
+
+        CONTENTION IN THIS WINDOW, which is hotter than the regime the packet models:
+
+          59 commits to origin/linux-next in the 3h window ... 19.7/h, mean gap 3.05 min
+          (the packet's "live regime" figure was 11.9/h, mean gap 5.0 min)
+          4 distinct author identities in the window
+
+        With mean gap 3.05 min and T = 2.0 min, P(beaten) is high for ANY host, and
+        the packet's inspection-paradox point applies with full force: this host
+        gated immediately after fetching, four times, and lost four times.
+
+        WHAT THE VARIABLE ACTUALLY IS: whether the commit qualifies for the pre-push
+        plan-only lane. That lane (scripts/hooks/pre-push-local-gate.sh, the
+        `plan_only_lane` scoping block) accepts a push whose outgoing diff adds only
+        NEW files under plan/index.d/, plan/loop_status.d/ and
+        plan/mo-full-attestations.d/, validates them, and skips the build stamp
+        entirely. Qualify and you pay ~0s and win the race; miss and you pay the full
+        gate and re-enter the lottery on every rebase, because a rebase onto a sibling
+        push invalidates the stamp and forces the gate again. That is the actual
+        feedback loop, and it is why the cost is not merely additive: each loss COSTS
+        a gate AND buys another ticket.
+
+        THE PART THAT MAKES THIS STRUCTURAL RATHER THAN BAD LUCK. This host's commit
+        missed the lane because it carried two `plan/issues/*.md` files. The
+        meta-orchestration Reduction Engine MANDATES that capture: "An unfiled finding
+        is a lost finding and a contract violation", and Finalization step 1 refuses
+        exit until every observation of the cycle is filed under plan/issues/. So the
+        loop's own non-negotiable capture step forces every finding-bearing cycle onto
+        the full gate, by construction, on every host, every cycle. The lane covers
+        the ledger overlays that the loop writes and excludes the prose captures that
+        the loop is REQUIRED to write.
+
+        The verbatim refusal this host received, which is correct behaviour and is
+        exactly the gap:
+
+          plan-only lane: not applicable — 'plan/issues/cycle-preflight-cargo-absent-
+          false-positive-2026-08-25.md' is outside plan/index.d/, plan/loop_status.d/,
+          and plan/mo-full-attestations.d/ (full gate required)
+
+        NOT A SEPARATE FINDING, deliberately: criterion 7 already owns "the cheapest
+        intervention is a shorter gate, evaluate it before widening branch policy",
+        and this is the concrete instance of it. Shaped into 889-twhe rather than
+        implemented here, because widening what may bypass the trunk's only gate is a
+        ruling, not a unilateral hook edit — the same reason this packet exists.
+
+        ONE CORRECTION TO pirria's CRITERION 7 NOTE, which asked whoever picks this up
+        to fix "why the plan-only lane intermittently cannot see its own stdin". That
+        is already fixed and is no longer a lever: order 877-mynm landed the decode
+        (scripts/hooks/pre-push-local-gate.sh, the empty-REFS early-exit above
+        `refuse()`). An empty ref list means git decided to send nothing, so the hook
+        now exits 0 with "nothing to gate; if you expected a push, fetch and rebase"
+        instead of charging a full gate for a push that cannot happen. pirria's
+        observation was right and its remedy has shipped; the remaining lane gap is
+        the SCOPE one above, not an stdin one.
+packets:
+  - packet_id: plan-only-lane-excludes-the-captures-the-loop-must-write
+    order: 889-twhe
+    status: ready
+    kind: enhancement
+    pickup_role: linux
+    priority: p2
+    desired_release: v0.6
+    depends_on:
+      - lane-branch-methodology-for-a-fleet-that-outruns-its-slowest-host
+    multi_cycle: false
+    capability_tags:
+      - hooks
+      - gate
+      - multi-host
+      - coordinator
+    deliverable: scripts/hooks/pre-push-local-gate.sh + scripts/check-issue-citation-convention.sh
+    estimated_hours: 2
+    title: |
+      The pre-push plan-only lane accepts the ledger fragments the loop writes and refuses the plan/issues captures the loop is REQUIRED to write, so every finding-bearing cycle pays the full gate and re-enters the push lottery.
+    context: |
+      Shaped from the calmecacpilli criterion-6/7 datapoint on 863-iicc (same
+      fragment as this packet). Measured there: a 1.8-2.0 min gate — among the
+      fleet's fastest — paid 4.0 gate re-runs for one landed commit against a
+      3.05 min mean inter-push gap, worse than esmeraldinha's 10.5 min gate at
+      2.0. The discriminator was lane eligibility, not gate length.
+
+      THE ASYMMETRY. The lane's allowlist is plan/index.d/, plan/loop_status.d/
+      and plan/mo-full-attestations.d/ — all append-only, host+timestamp-named,
+      textually unconflictable. plan/issues/*.md has every one of those
+      properties and is not on the list. Meanwhile the Reduction Engine makes
+      writing plan/issues a NON-NEGOTIABLE exit condition, so the excluded path
+      is the one the loop must take.
+
+      WHY THIS IS NOT "JUST ADD IT TO THE ALLOWLIST". plan/issues is not
+      gate-free: exactly one check reads newly-added issue files —
+      check_issue_citation_convention (order 881-29me), the diff-scoped
+      convention ratchet asserting new citations name symbols rather than
+      source lines. That is precisely the shape the lane ALREADY handles for
+      fragments, which it validates with yq/tillandsias-plan before accepting.
+      So the extension is symmetric with what exists, not a new kind of trust.
+
+      SCOPE DISCIPLINE THIS PACKET MUST KEEP. Widening what bypasses the
+      trunk's only remaining gate is the decision here, and it must stay
+      NARROWER than "any plan/issues change": NEW files only (status A in the
+      outgoing diff), never modifications — same immutability rule the lane
+      applies to fragments, and for the same reason. A modified issue file can
+      carry anything; a new one is a capture. If the ruling on 863-iicc denies
+      the widening, that is a valid outcome and this packet closes as
+      won't-fix with the reason recorded.
+    exit_criteria: |
+      (1) A decision, recorded on 863-iicc or in methodology/multi-host-development.yaml, on whether NEW plan/issues/*.md files may ride the plan-only lane. A denial closes this packet; record the reason. (2) If granted: the lane accepts an outgoing diff whose every path is a NEW file under the existing three directories OR under plan/issues/, and runs scripts/check-issue-citation-convention.sh against the plan/issues paths before accepting — mirroring the fragment validation already in the lane. A MODIFIED plan/issues file must still fall through to the full gate. (3) A hermetic fixture in the style of scripts/test-pre-push-empty-ref-list.sh proving all four cases: new-issue-only accepted; new-issue plus a code path refused; MODIFIED issue refused; new issue whose citation names a source line refused by the convention check rather than silently accepted. (4) Re-measure re-runs-per-landed-cycle on this host after the change and record it on 863-iicc, so criterion 7 gets a before/after rather than an argument. The before number is 4.0.
+    events:
+      - type: filed
+        ts: "2026-08-25T22:38:35Z"
+        agent_id: linux-calmecacpilli-opus5-metaorch-20260825t223536z
+        host: linux_immutable
+        summary: |
+          Filed from the cycle that measured it, in a fragment that is itself the
+          demonstration: this file qualifies for the lane, so it lands without paying
+          the gate, while the two plan/issues captures of the previous cycle did not
+          and cost 460 seconds of gate across four losses.
