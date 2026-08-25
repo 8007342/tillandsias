@@ -1,0 +1,77 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-25T17:39:35Z.
+packets:
+  - packet_id: nix-cache-resets-enclave-peer-connections-while-host-publish-serves
+    order: 883-ncrs
+    status: ready
+    desired_release: v0.6
+    priority: p2
+    kind: bug
+    pickup_role: linux
+    capability_tags:
+      - podman
+      - enclave
+      - networking
+      - nix
+      - cache
+    estimated_hours: 3
+    title: >
+      Enclave siblings get TCP-level connection resets from the nix-cache
+      container (alias resolves, vault on the same network serves peers fine)
+      while the host publish and the in-container loopback both serve.
+    context: |
+      MEASURED on macuahuitl 2026-08-25T17:3xZ while prototyping the
+      873-b1nx builder container:
+        * sibling container -> https://nix-cache:5000  = curl 000 (RST),
+          plain http the same, so TCP-level not TLS-level;
+        * DNS fine: nix-cache resolves to the container's bridge IP;
+        * control: the SAME probe container gets vault:200 from
+          https://tillandsias-vault:8200 on the SAME network — network,
+          DNS, and probe method all exonerated;
+        * host publish serves: curl https://127.0.0.1:5111/nix-cache-info
+          verifies with the state-dir CA bundle;
+        * in-container self-probe serves: podman exec + curl
+          https://127.0.0.1:5000 = 200, so harmonia is up and TLS-terminating;
+        * full stop + re-ensure via scripts/nix-cache-service.sh did NOT fix;
+        * vault also publishes a host port (8200->127.0.0.1:8201), so the
+          port-publish-plus-pasta theory is dead.
+      Run-arg deltas versus vault worth suspecting first: --read-only,
+      --tmpfs /tmp, --pids-limit=256, --cap-drop=ALL, label=disable, and the
+      entrypoint served OUT of the RO chroot-store mount. Also plausible: a
+      harmonia/actix acceptor quirk vs the bridge, or nftables state
+      specific to this container's repeated 880-tdwn-era restarts surviving
+      even a container recreate (network-scoped rules are not recreated with
+      the container).
+      IMPACT: 801-kqme's "proven reachable by DNS from an enclave container"
+      no longer holds on this host, which blocks the 873-b1nx builder
+      container (its whole point is in-enclave substitution) and means a
+      FORGE consuming the cache would silently degrade to cold builds.
+    exit_criteria: |
+      (1) The RST's mechanism is identified with evidence (tcpdump/nft
+      inspection or a minimal delta bisection of the run args), not
+      inferred. (2) An enclave sibling fetches nix-cache-info over TLS with
+      the CA bundle — the 801-kqme reachability claim re-proven and pinned
+      by a litmus that runs a REAL sibling probe. (3) The 873-b1nx builder
+      prototype re-run in-container completes its cache-first build.
+
+status:
+  - packet_id: nix-cache-resets-enclave-peer-connections-while-host-publish-serves
+    field: status
+    value: ready
+    ts: "2026-08-25T17:39:35Z"
+    host: linux_mutable
+
+events:
+  - packet_id: nix-cache-resets-enclave-peer-connections-while-host-publish-serves
+    event:
+      type: filed
+      ts: "2026-08-25T17:39:35Z"
+      agent_id: linux-macuahuitl-opus5-20260825t173935z
+      host: linux_mutable
+      summary: >
+        Filed from the 873-b1nx builder-container prototype run with the
+        five-way discrimination (sibling RST / DNS good / vault control good
+        / host publish good / self-probe good) already measured, so the next
+        cycle starts at the mechanism, not the symptom. Left ready — the
+        builder image and its baked substituter config landed with the
+        prototype and are correct regardless of this bug.

@@ -43672,6 +43672,12 @@ plan_index:
         (1) A design note under openspec/ recording the lane selection mechanism and the per-platform substrate (podman / WSL2 / VFR guest), with the unknowns above as measured answers, not assumptions. (2) A Linux prototype: a clean container with no host toolchain builds a tillandsias crate with the enclave cache as its only substituter, and the wall-clock is recorded cold vs cache-warm alongside GPU/load state. (3) The lane is OPT-IN behind an env var first; build.sh behaviour is byte-identical when it is unset. (4) A measured statement of the WSL2 and macOS paths — even if the statement is "deferred, here is the cost" — so the cross-platform half is a decision rather than a hope.
       events:
         - type: progress
+          ts: "2026-08-25T17:40:11Z"
+          agent_id: "linux-macuahuitl-opus5-20260825t174011z"
+          host: macuahuitl
+          summary: |
+            BUILDER-CONTAINER SLICE: image landed, run blocked on a NEW isolated network bug (filed 883-ncrs). images/builder/{Containerfile,nix.conf} — fedora-minimal + nix 2.34.8 + git, the enclave substituter FIRST with upstream fallback (degrade-to-cold), trusted keys baked, ssl-cert-file as a SETTING per the measured Fedora-nix pitfall, CA bundle mounted RO at runtime, /nix on the tillandsias-builder-nix named volume. Build requires --http-proxy=false (the global proxy env points at the enclave alias which does not resolve on the default network) and runs need --security-opt label=disable for the RO checkout bind (same reasoning as the cache's store mount). The in-container cache-first build then failed at the substituter: enclave siblings get TCP RSTs from the cache container specifically — five-way discriminated (DNS good, vault control 200, host publish good, in-container self-probe 200, recreate no-fix) and filed as 883-ncrs with the run-arg delta suspects listed. The 96s host-side warm-build number stands; the builder slice resumes the moment 883-ncrs closes.
+        - type: progress
           ts: "2026-08-25T14:37:45Z"
           agent_id: "linux-macuahuitl-opus5-20260825t143745z"
           host: macuahuitl

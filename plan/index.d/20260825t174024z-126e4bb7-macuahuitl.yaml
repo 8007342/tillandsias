@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    field: next_action
+    value: 'COORDINATOR QUEUE @ 2026-08-25T17:42Z (macuahuitl hourly). FLEET: yoga 2h + pirria 6h on cadence; lenovinha operator-stopped. STANDING DUTY unchanged; enclave 4/4 (cache recreated during 883-ncrs diagnosis, healthy host-side). NEXT for macuahuitl: (1) 865-n8vq CLOSURE at yoga''s TTL ~19:33Z — dossier complete (reproducibility: two 25/25 runs + one green-after-named-fixes; survival: stack identical through a full gate); close the row, note the release decision is the operator''s. (2) 883-ncrs — enclave siblings get TCP RSTs from the nix-cache container (five-way discriminated, mechanism unknown); blocks the 873-b1nx builder slice and would silently degrade forge cache consumption to cold; start at tcpdump/nft or run-arg delta bisection. (3) 712-r5x8 completed-rung verification rides the next real forge launch. 873-b1nx builder image landed (images/builder/), resumes on 883-ncrs.'
+    ts: "2026-08-25T17:40:24Z"
+    host: macuahuitl
+
+events:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    event:
+      type: note
+      ts: "2026-08-25T17:40:24Z"
+      host: macuahuitl
+      summary: >
+        queue refresh: 883-ncrs filed, builder image landed
