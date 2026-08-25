@@ -504,8 +504,35 @@ if [ -n "$GRADE_BIN" ]; then
     if [ -n "$gr" ]; then
         gp="$(printf '%s' "$gr" | sed -n 's/.*pass=\([0-9]*\).*/\1/p')"
         gt="$(printf '%s' "$gr" | sed -n 's/.*total=\([0-9]*\).*/\1/p')"
+        # ORDER 888-miiy. `total` now includes cases the host could not GRADE
+        # (no embedding endpoint -> spec.answer skipped). Two things follow, and
+        # getting either wrong is worse than the bug this replaced:
+        #
+        #   RATE IS OVER GRADED CASES, NOT TOTAL. pass/total on an endpoint-less
+        #   host reads 28/33 = 84% and looks exactly like a 16-point accuracy
+        #   REGRESSION, when nothing regressed and five cases simply did not run.
+        #   A metric that moves when nothing changed is one people learn to
+        #   ignore.
+        #
+        #   SKIPPED IS REPORTED, ALWAYS. This line is what every handoff pastes
+        #   and what a release reads, so it is where "the expert tier was not
+        #   exercised here" has to become visible. Silence would make an
+        #   ungraded tier indistinguishable from a passing one — the exact
+        #   failure this milestone exists to kill.
+        gs="$(printf '%s' "$gr" | sed -n 's/.*skipped=\([0-9]*\).*/\1/p')"
+        [ -n "$gs" ] || gs=0
+        gse="$(printf '%s' "$gr" | sed -n 's/.*skipped_engines=\([^ ]*\).*/\1/p')"
         if [ -n "$gp" ] && [ -n "$gt" ] && [ "$gt" -gt 0 ]; then
-            accuracy_line="expert_accuracy: pass=${gp} total=${gt} rate=$(( gp * 100 / gt ))% source=${gsrc}"
+            graded=$(( gt - gs ))
+            if [ "$graded" -gt 0 ]; then
+                accuracy_line="expert_accuracy: pass=${gp} graded=${graded} total=${gt} rate=$(( gp * 100 / graded ))% source=${gsrc}"
+            else
+                # Nothing was graded at all. Never render that as a rate.
+                accuracy_line="expert_accuracy: pass=0 graded=0 total=${gt} rate=n/a source=${gsrc}"
+            fi
+            if [ "$gs" -gt 0 ]; then
+                accuracy_line="${accuracy_line} skipped=${gs}${gse:+ skipped_engines=${gse}} NOT-EXERCISED-ON-THIS-HOST"
+            fi
         fi
     fi
 fi

@@ -562,7 +562,9 @@ fn resolve_spec_index_dir() -> Result<String, String> {
         ("xdg-cache", xdg_root),
     ];
     resolve_spec_index_from(&dirs, &roots).ok_or_else(|| {
-        "spec.answer needs a built index: no rung of the resolution ladder (TILLANDSIAS_SPEC_INDEX_DIR, FORGE_SPEC_INDEX_DIR, FORGE_SPEC_INDEX_ROOT, the podman volume, XDG cache) names a directory containing vectors.jsonl — scripts/spec-index-ensure.sh builds and publishes one (801-a2by)"
+        // 888-miiy: ABSENT index is a host capability gap -> the case is
+        // SKIPPED and named. A STALE index (below) stays a hard error.
+        format!("{ENGINE_UNAVAILABLE}spec.answer needs a built index: no rung of the resolution ladder (TILLANDSIAS_SPEC_INDEX_DIR, FORGE_SPEC_INDEX_DIR, FORGE_SPEC_INDEX_ROOT, the podman volume, XDG cache) names a directory containing vectors.jsonl — scripts/spec-index-ensure.sh builds and publishes one (801-a2by)")
             .to_string()
     })
 }
@@ -620,6 +622,34 @@ pub struct Harness {
     cheatsheets: Option<Vec<crate::spec::Chunk>>,
     spec_vectors: Option<Vec<Vec<f32>>>,
     spec_chunks: Option<Vec<crate::spec::Chunk>>,
+}
+
+/// ORDER 888-miiy. Marks an engine error as a HOST CAPABILITY GAP rather than
+/// a defect — the one distinction that decides whether a case is SKIPPED or the
+/// whole run is a HARNESS ERROR.
+///
+/// The line this exists for: `spec.answer` needs a built embedding index, and a
+/// host with no embedding endpoint has none. That is a fact about the HOST, not
+/// about the code or the query set, and it aborted the entire glob invocation —
+/// so on 2026-08-25 the release coordinator's `./build.sh --ci-full` went red on
+/// one step out of 2007 for having no ollama running.
+///
+/// WHAT MUST *NOT* CARRY THIS PREFIX, and it is the whole safety argument: a
+/// STALE index (vectors not aligned with chunks), a missing declared corpus, an
+/// unknown engine, a case with no `query_vec`, unreadable data. Every one of
+/// those is a real defect that a skip would hide, and every one keeps returning
+/// a bare `Err` that still aborts with rc=2. "The index is wrong" and "this host
+/// has no index" look similar and mean opposite things.
+pub const ENGINE_UNAVAILABLE: &str = "engine-unavailable: ";
+
+/// True when an engine error is a host capability gap (see [`ENGINE_UNAVAILABLE`]).
+///
+/// A function rather than a scattered `starts_with` so there is exactly one
+/// place that decides, and so the sentinel cannot drift out of sync with its
+/// readers.
+#[must_use]
+pub fn is_engine_unavailable(msg: &str) -> bool {
+    msg.starts_with(ENGINE_UNAVAILABLE)
 }
 
 impl Harness {
