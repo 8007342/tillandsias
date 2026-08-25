@@ -1636,14 +1636,7 @@ fn apply_github_login(logged_in: bool, handle: Option<String>) {
         if menu.login != state {
             transition = Some((login_state_label(&menu.login), login_state_label(&state)));
         }
-        if menu.login != state && state == GithubLoginState::LoggedOut {
-            // Fresh logout: the next login must re-fetch cloud projects, so
-            // its submenu shows "(loading repos…)" rather than a stale
-            // "(no repos)" / repo list from the previous session.
-            menu.cloud_projects_loaded = false;
-            menu.cloud_projects = Vec::new();
-        }
-        menu.login = state;
+        apply_login_state(menu, state);
     }
     // Sign-in state gates the ENTIRE project body, and until now every
     // observation of it landed at DEBUG — so a release tray's log could not
@@ -1673,6 +1666,54 @@ fn login_state_label(state: &GithubLoginState) -> &'static str {
     }
 }
 
+/// Record a confirmed cloud-projects answer on `menu`, returning whether this
+/// was the FIRST confirmed answer (the moment the submenu stops showing
+/// "(loading repos…)"). Factored out of the global `MENU_STATE` so the
+/// latch it sets can be exercised alongside [`apply_login_state`].
+fn apply_cloud_projects_state(menu: &mut MenuState, mapped: Vec<ProjectEntry>) -> bool {
+    // Before this observation the submenu was still showing
+    // "(loading repos…)"; this is the moment the list becomes real.
+    let first_answer = !menu.cloud_projects_loaded;
+    menu.cloud_projects = mapped;
+    // A confirmed answer (even an empty one) flips the cloud submenu
+    // from "(loading repos…)" to real entries / "(no repos)".
+    menu.cloud_projects_loaded = true;
+    first_answer
+}
+
+/// Apply a confirmed GitHub login state to `menu`, resetting the cloud-projects
+/// verdict when the state actually changed. Factored out of the global
+/// `MENU_STATE` so the ordering rule is unit-testable.
+///
+/// A login TRANSITION invalidates the previous session's cloud verdict, in BOTH
+/// directions.
+///
+/// Logout is the obvious half: the next login must re-fetch cloud projects, so
+/// its submenu shows "(loading repos…)" rather than a stale "(no repos)" / repo
+/// list from the previous session.
+///
+/// LOGIN IS THE HALF THAT WAS MISSING (731-qth3, sibling of the macOS
+/// 731-m58f). A cloud reply that lands while logged out — the push listener
+/// primes a `CloudRefreshRequest` before any login answer exists — latches
+/// `cloud_projects_loaded` on an empty list. Resetting only on `LoggedOut` left
+/// that latch in place across sign-in, so the first post-login render claimed
+/// "(no repos)" to a user who has repositories: exactly the falsehood the flag
+/// exists to prevent.
+///
+/// @trace order:731-qth3
+fn apply_login_state(menu: &mut MenuState, state: GithubLoginState) {
+    if menu.login != state
+        && matches!(
+            state,
+            GithubLoginState::LoggedOut | GithubLoginState::LoggedIn { .. }
+        )
+    {
+        menu.cloud_projects_loaded = false;
+        menu.cloud_projects = Vec::new();
+    }
+    menu.login = state;
+}
+
 /// Apply a live cloud-projects observation — from a `CloudRefreshReply` poll
 /// or an unrequested `CloudProjectsPush` frame (order 154 slice 2; full
 /// replacement list per the wire doc) — to the shared
@@ -1683,13 +1724,7 @@ fn apply_cloud_projects(projects: &[tillandsias_control_wire::CloudProjectEntry]
     let mut first_answer = false;
     if let Ok(mut guard) = MENU_STATE.lock() {
         let state = guard.get_or_insert_with(MenuState::initial);
-        // Before this observation the submenu was still showing
-        // "(loading repos…)"; this is the moment the list becomes real.
-        first_answer = !state.cloud_projects_loaded;
-        state.cloud_projects = mapped;
-        // A confirmed answer (even an empty one) flips the cloud submenu
-        // from "(loading repos…)" to real entries / "(no repos)".
-        state.cloud_projects_loaded = true;
+        first_answer = apply_cloud_projects_state(state, mapped);
     }
     // Companion to the sign-in transition above: the pair of INFO lines is
     // what lets a field log time the startup handoff end to end. First
@@ -3903,6 +3938,79 @@ fn apply_menu_action_state(state: &mut MenuState, action: &MenuAction) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 731-qth3, the windows half of the macOS 731-m58f defect. This is the
+    /// PRODUCTION ordering — LoggedOut, then an empty cloud reply, then
+    /// sign-in — not the returning-user ordering that starts from LoggedIn,
+    /// where the bug is invisible.
+    ///
+    /// Hand-falsified: restore the `state == GithubLoginState::LoggedOut`
+    /// condition in `apply_login_state` and the final assertion fails with
+    /// `cloud_projects_loaded == true`, i.e. the submenu's first visible
+    /// render claims "(no repos)" to a user who has repositories.
+    #[test]
+    fn cloud_reply_received_while_logged_out_does_not_survive_the_next_sign_in() {
+        let mut menu = MenuState::initial();
+
+        // 1. A confirmed logged-out observation.
+        apply_login_state(&mut menu, GithubLoginState::LoggedOut);
+        assert!(
+            !menu.cloud_projects_loaded,
+            "no cloud answer has been received yet"
+        );
+
+        // 2. The push listener's unconditional CloudRefreshRequest answers
+        //    while there is no token: an empty list, which latches the flag.
+        assert!(apply_cloud_projects_state(&mut menu, Vec::new()));
+        assert!(
+            menu.cloud_projects_loaded,
+            "an empty answer is still a confirmed answer while logged out"
+        );
+
+        // 3. The user signs in. The previous session's verdict must not
+        //    survive the transition.
+        apply_login_state(
+            &mut menu,
+            GithubLoginState::LoggedIn {
+                handle: "octocat".into(),
+            },
+        );
+        assert!(
+            !menu.cloud_projects_loaded,
+            "the first post-login render must be the loading row, not (no repos)"
+        );
+        assert!(
+            menu.cloud_projects.is_empty(),
+            "the logged-out list is not this session's list"
+        );
+    }
+
+    /// The negative control for the reset above: a repeat of the SAME
+    /// confirmed state is not a transition and must not discard a live list.
+    #[test]
+    fn a_repeated_login_state_does_not_discard_the_cloud_list() {
+        let mut menu = MenuState::initial();
+        let signed_in = GithubLoginState::LoggedIn {
+            handle: "octocat".into(),
+        };
+        apply_login_state(&mut menu, signed_in.clone());
+        apply_cloud_projects_state(
+            &mut menu,
+            vec![ProjectEntry {
+                name: "hello-world".into(),
+                path: "octocat/hello-world".into(),
+                ready: false,
+            }],
+        );
+
+        apply_login_state(&mut menu, signed_in);
+
+        assert!(
+            menu.cloud_projects_loaded,
+            "no transition occurred, so the confirmed answer still stands"
+        );
+        assert_eq!(menu.cloud_projects.len(), 1, "the list must survive");
+    }
 
     /// Order 154 (SC-11): the timer may be dropped only in the state where a
     /// wake would find every fallback gate closed. The three false cases are
