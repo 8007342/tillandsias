@@ -73,6 +73,8 @@ const DISPATCH_ARMS: &[&str] = &[
     "closure-evidence-check",
     "compact",
     "corpus-coverage",
+    "declared-closures",
+    "declared-closures-check",
     "dependencies-of",
     "expire-claims",
     "plan-events",
@@ -156,6 +158,14 @@ const USAGE: &str = concat!(
     "           closure-evidence-check <fragment.yaml>\n",
     "                                     exit 1 if the fragment sets a closure rung\n",
     "                                     (completed/verified/done) with no evidence event (686-7qcm)\n",
+    "           declared-closures [--] | declared-closures-check <fragment.yaml>\n",
+    "                                     ORDER 885-92iu. A `verifiable_closure` that NAMES a\n",
+    "                                     litmus test must name one that exists AND that some\n",
+    "                                     spec binds — execution is binding-driven, so an unbound\n",
+    "                                     test runs in no suite and is as inert as a missing one.\n",
+    "                                     Bare form REPORTS over the folded ledger (exit 0, there\n",
+    "                                     is standing debt); `-check` GATES one fragment (exit 1),\n",
+    "                                     so new debt is refused when it is FILED.\n",
     "           fragment-misplaced-definitions <fragment.yaml>\n",
     "                                     ORDER 812-d45t. Print the packet_ids of `events:`\n",
     "                                     entries that carry DEFINITION fields but no `event:` —\n",
@@ -4220,6 +4230,207 @@ fn main() {
                     "  A closure (completed/verified/done) must carry an event with evidence_refs (or type completed/verified/falsified). Use set-field --evidence, or add the event (686-7qcm)."
                 );
                 std::process::exit(1);
+            }
+        }
+        "declared-closures" | "declared-closures-check" => {
+            // ORDER 885-92iu. A packet's `verifiable_closure` may NAME a litmus
+            // test — `NAMED: litmus:<x>` — and until this landed, nothing checked
+            // that `litmus:<x>` resolved to anything runnable.
+            //
+            // Order 721-77yu had already established the defect and its two
+            // shapes for SHELL SCRIPTS ("Pinned by litmus:<x>" header claims):
+            // `unresolvable` (no test declares that name) and `unbound` (the file
+            // exists but no spec lists it in openspec/litmus-bindings.yaml, and
+            // execution is binding-driven, so it runs in no suite). What that
+            // checker never looked at is the LEDGER, where the same claim carries
+            // more weight: methodology/convergence.yaml makes the verifiable
+            // closure the thing distinguishing a reduction from a restatement.
+            //
+            // Measured at HEAD 2026-08-25: 795-5itp declared
+            // `litmus:one-length-delimited-framing-impl` on 2026-08-17 and the
+            // string existed in exactly one place in the repository — that field —
+            // for eight days, while three slices landed against it and the gate
+            // stayed green, truthfully.
+            //
+            // TWO MODES, and the split is deliberate:
+            //   `declared-closures`                  full-ledger REPORT, exit 0
+            //   `declared-closures-check <frag.yaml>` single-fragment GATE, exit 1
+            //
+            // The report never fails a build. There is standing debt (15 names
+            // with no file, 3 with a file no spec binds), and a gate that reds
+            // the trunk on day one gets switched off — the same argument that
+            // made 795-5itp's own closure a ratchet rather than an assertion.
+            // The GATE refuses NEW debt at the door, fragment-scoped exactly as
+            // closure-evidence-check is, so a closure is validated when it is
+            // FILED rather than after the next compaction.
+            let root = root_for(&index);
+            let litmus_dir = root.join("openspec/litmus-tests");
+            let bindings = root.join("openspec/litmus-bindings.yaml");
+
+            // The names that exist, and the names some spec actually binds.
+            let mut existing: Vec<String> = Vec::new();
+            if let Ok(rd) = std::fs::read_dir(&litmus_dir) {
+                for e in rd.flatten() {
+                    let p = e.path();
+                    if p.extension().and_then(|s| s.to_str()) != Some("yaml") {
+                        continue;
+                    }
+                    if let Ok(text) = std::fs::read_to_string(&p) {
+                        for l in text.lines() {
+                            if let Some(rest) = l.strip_prefix("name: litmus:") {
+                                existing.push(rest.trim().to_string());
+                            }
+                        }
+                    }
+                }
+            }
+            let bound: Vec<String> = std::fs::read_to_string(&bindings)
+                .unwrap_or_default()
+                .lines()
+                .filter_map(|l| {
+                    let t = l.trim_start();
+                    t.strip_prefix("- litmus:").map(|r| r.trim().to_string())
+                })
+                .collect();
+
+            // Extract the litmus tokens a closure DECLARES. Field-scoped, not a
+            // grep of the file: some `litmus:<x>` tokens elsewhere in the ledger
+            // are spec ladder shorthands or prose, and matching those would
+            // produce a number nobody trusts and get the check switched off.
+            let declared_tokens = |closure: &str| -> Vec<String> {
+                let mut out: Vec<String> = Vec::new();
+                for (i, _) in closure.match_indices("litmus:") {
+                    let rest = &closure[i + "litmus:".len()..];
+                    let end = rest
+                        .find(|c: char| !(c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'))
+                        .unwrap_or(rest.len());
+                    let tok = &rest[..end];
+                    // A token ending on a hyphen is prose wrapped mid-name
+                    // (721-77yu's `wrapped` rule); a real claim never does.
+                    if tok.is_empty() || tok.ends_with('-') {
+                        continue;
+                    }
+                    if !out.iter().any(|t| t == tok) {
+                        out.push(tok.to_string());
+                    }
+                }
+                out
+            };
+
+            // (packet label, token, verdict)
+            let mut checked = 0u32;
+            let mut missing: Vec<(String, String)> = Vec::new();
+            let mut unbound: Vec<(String, String)> = Vec::new();
+
+            let mut judge = |label: &str, closure: &str| {
+                for tok in declared_tokens(closure) {
+                    checked += 1;
+                    if !existing.contains(&tok) {
+                        missing.push((label.to_string(), tok));
+                    } else if !bound.is_empty() && !bound.contains(&tok) {
+                        unbound.push((label.to_string(), tok));
+                    }
+                }
+            };
+
+            let gate = subcommand == "declared-closures-check";
+            if gate {
+                let Some(path) = args.get(1) else {
+                    eprintln!("usage: tillandsias-plan declared-closures-check <fragment.yaml>");
+                    std::process::exit(2);
+                };
+                let raw = match std::fs::read_to_string(path) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        eprintln!("error: read {path}: {e}");
+                        std::process::exit(2);
+                    }
+                };
+                let doc: serde_yaml::Value = match serde_yaml::from_str(&raw) {
+                    Ok(d) => d,
+                    // A parse failure is the sibling gate's job
+                    // (added-fragments-parse); a pass-through here, not a
+                    // violation this check invented.
+                    Err(_) => {
+                        println!(
+                            "ok:declared-closures:0 checked (unparseable — see added-fragments-parse)"
+                        );
+                        return;
+                    }
+                };
+                if let Some(pkts) = doc.get("packets").and_then(serde_yaml::Value::as_sequence) {
+                    for p in pkts {
+                        let label = p
+                            .get("order")
+                            .and_then(serde_yaml::Value::as_str)
+                            .or_else(|| p.get("packet_id").and_then(serde_yaml::Value::as_str))
+                            .unwrap_or("<unnamed>")
+                            .to_string();
+                        if let Some(c) = p
+                            .get("verifiable_closure")
+                            .and_then(serde_yaml::Value::as_str)
+                        {
+                            judge(&label, c);
+                        }
+                    }
+                }
+                // A set-field fragment may reassign the closure text too.
+                if let Some(us) = doc.get("status").and_then(serde_yaml::Value::as_sequence) {
+                    for u in us {
+                        if u.get("field").and_then(serde_yaml::Value::as_str)
+                            == Some("verifiable_closure")
+                        {
+                            let label = u
+                                .get("packet_id")
+                                .and_then(serde_yaml::Value::as_str)
+                                .unwrap_or("<unnamed>")
+                                .to_string();
+                            if let Some(c) = u.get("value").and_then(serde_yaml::Value::as_str) {
+                                judge(&label, c);
+                            }
+                        }
+                    }
+                }
+            } else {
+                for p in &ledger.packets {
+                    let label = p
+                        .get("order")
+                        .and_then(serde_yaml::Value::as_str)
+                        .or_else(|| p.get("packet_id").and_then(serde_yaml::Value::as_str))
+                        .unwrap_or("<unnamed>")
+                        .to_string();
+                    if let Some(c) = p
+                        .get("verifiable_closure")
+                        .and_then(serde_yaml::Value::as_str)
+                    {
+                        judge(&label, c);
+                    }
+                }
+            }
+
+            for (label, tok) in &missing {
+                eprintln!(
+                    "declared-closure-unresolvable: {label} declares litmus:{tok} — no litmus test declares that name."
+                );
+            }
+            for (label, tok) in &unbound {
+                eprintln!(
+                    "declared-closure-unbound: {label} declares litmus:{tok} — the test file exists but no spec binds it in openspec/litmus-bindings.yaml, so it executes in no suite."
+                );
+            }
+
+            if !missing.is_empty() {
+                println!("violation:declared-closure-unresolvable:{}", missing.len());
+                if gate {
+                    std::process::exit(1);
+                }
+            } else if !unbound.is_empty() {
+                println!("violation:declared-closure-unbound:{}", unbound.len());
+                if gate {
+                    std::process::exit(1);
+                }
+            } else {
+                println!("ok:declared-closures:{checked} checked");
             }
         }
         "status" => {

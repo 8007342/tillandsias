@@ -57,6 +57,32 @@ existing="$(grep -h '^name: litmus:' "$LITMUS_DIR"/*.yaml 2>/dev/null | sed 's/^
 bound=""
 [ -f "$BINDINGS" ] && bound="$(grep -oE '^[[:space:]]*-[[:space:]]+litmus:[a-z0-9-]+' "$BINDINGS" 2>/dev/null | sed 's/.*litmus://' | sort -u)"
 
+# THE CORPUS IS SELECTED BY FILENAME (order 885-92iu, 2026-08-25).
+#
+# This was `grep -rnE ... "$SCAN_DIR" | grep -E '\.(sh|c)[:]'`, and the second
+# grep filters the FIRST GREP'S OUTPUT LINES, not filenames. Any line whose
+# CONTENT mentions a `.sh:` path was therefore scanned as if it were shell
+# source. Measured: `TILLANDSIAS_PIN_SCAN_DIR=plan` returned
+# `ok:litmus-pin-claims:24 checked` against a tree where `find plan -name
+# '*.sh'` returns ZERO files — all 24 were archived prose in plan/archive/
+# that happens to quote a script path.
+#
+# So the checker's corpus was accidental: its count was inflated by prose, and
+# pointing it at a new directory silently scanned nothing while still printing
+# a confident number. That is worse than scanning nothing loudly, and it had to
+# be fixed BEFORE the ledger surface was added on top of it (885-92iu
+# criterion 1 is ordered first for exactly this reason).
+#
+# `find` selects by name; the per-file grep then reads only files that are
+# actually shell or C source.
+scan_corpus() {
+    find "$SCAN_DIR" -type f \( -name '*.sh' -o -name '*.c' \) 2>/dev/null \
+    | LC_ALL=C sort \
+    | while IFS= read -r f; do
+        grep -nE 'litmus:[a-z0-9-]+' "$f" 2>/dev/null | sed "s|^|$f:|"
+      done
+}
+
 checked=0
 unresolvable=0
 unbound=0
@@ -138,7 +164,7 @@ while IFS= read -r hit; do
         fi
     done
 done <<EOF
-$(grep -rnE 'litmus:[a-z0-9-]+' "$SCAN_DIR" 2>/dev/null | grep -E '\.(sh|c)[:]' || true)
+$(scan_corpus)
 EOF
 
 [ "$wrapped" -gt 0 ] && echo "  note: $wrapped line-wrapped token(s) skipped (not claims)" >&2
