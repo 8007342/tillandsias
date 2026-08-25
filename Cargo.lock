@@ -3140,6 +3140,7 @@ dependencies = [
  "tillandsias-secure-channel",
  "tillandsias-vault-client",
  "tokio",
+ "tokio-util",
  "tokio-vsock",
  "toml 0.8.2",
  "tracing",
@@ -3264,6 +3265,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "tillandsias-podman",
 ]
 
 [[package]]
@@ -3280,6 +3282,7 @@ dependencies = [
  "tillandsias-core",
  "tokio",
  "tracing",
+ "wait-timeout",
 ]
 
 [[package]]
@@ -3962,6 +3965,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fb067e4cbd1ff067d1df46c9194b5de0e98efd2810bbc95c5d5e5f25a3231150"
 dependencies = [
  "cc",
+ "libc",
+]
+
+[[package]]
+name = "wait-timeout"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09ac3b126d3914f9849036f826e054cbabdc8519970b8998ddaf3b5bd3c65f11"
+dependencies = [
  "libc",
 ]
 

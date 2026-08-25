@@ -98,19 +98,53 @@ non-choice is indistinguishable from an oversight, to a reader and to a
 retriever alike. `CORPUS_DECLINED` in `spec.rs` already applies this principle
 to corpus boundaries — this extends it to technology choices.
 
-## Model size is blocked, not answered
+## Model size is NOT the ceiling — concurrent residency is (849-tz8g, corrected)
 
-The pinned inference image (`tillandsias-inference:v0.4.260818.1`, ollama
-0.32.14) cannot run the larger embedders:
+**This section previously claimed the inference image "cannot run the larger
+embedders" and tabulated mxbai-embed-large, qwen3-embedding:4b and batched
+bge-m3 as aborting. That was wrong, and I filed the packet that was wrong.**
+The aborts were real but the cause was misattributed: every one of those loads
+happened while another model was already resident. There is no size ceiling.
 
 | model | params | result |
 | --- | --- | --- |
 | nomic-embed-text | 137M | works, 768-dim, 28 ms/embed, batches of 64 |
-| mxbai-embed-large | 334M | `llama-server … signal: aborted (core dumped)` |
-| qwen3-embedding:4b | 4.0B | same abort; loads into 6.4 GB VRAM and sits there |
-| bge-m3 | 567M | works single (1024-dim) but ABORTS on batch input |
+| mxbai-embed-large | 334M | works |
+| bge-m3 | 567M | works, including batched |
+| qwen3-embedding:4b | 4.0B | works, 2560-dim |
+| qwen2.5:7b | 7B | works (judge model for Tier B) |
 
-`bge-m3` single-embed measured 1943 ms while `qwen3-embedding:4b` was resident,
-417 ms after evicting it — still 15x nomic, so a full index is ~2.4 h at
-`TILLANDSIAS_SPEC_INDEX_BATCH=1` instead of ~8 min. Testing whether a bigger
-embedder separates the bands better needs a newer inference image first.
+The real defect is **concurrent runner residency**: with ~7,910 MiB resident
+across two models, loading a third dies with `GGML_ASSERT` while sixteen
+gigabytes are still free. The failure names memory and is not about memory,
+which is why it read as a size limit for as long as it did.
+
+**Workaround, proven:** serialise the loads and unload between models.
+`measure-recall-at-k.sh` demonstrates it rather than describing it — phase 1
+embeds and unloads, phase 2 judges.
+
+Why this correction is loud rather than a quiet edit: a low-end host reading
+the old table would conclude its hardware was the limit and stop, when the
+actual constraint is a scheduling discipline that costs nothing to adopt. An
+inference benchmark filed without concurrent VRAM and utilisation alongside it
+is unfalsifiable for exactly this reason — record both, every time.
+
+## Separating retrieval recall from judge quality (2026-08-23)
+
+Tier B at k=1 reported 20% in-corpus support and that number conflated two
+things. Measured separately over `results-recall-at-5-qwen7b.tsv`
+(73 questions, judge `qwen2.5:7b`, GPU at 1% / 2910 MiB — quiet):
+
+| band | n | recall@1 | recall@5 | lift |
+| --- | --- | --- | --- | --- |
+| in | 40 | 22.5% | 50.0% | +27.5 pp |
+| near | 33 | 0.0% | 0.0% | 0.0 |
+
+Looking past top-1 **doubles** in-corpus support detection — 11 of 40 questions
+have a supporting passage in the top 5 that top-1 missed. And the refusal side
+does not degrade: five chances to claim support for an unanswerable question
+still produced **zero** false positives, 33/33. Widening k is free.
+
+So the judge was never the weak component; `recall@1` was wearing its label.
+recall@5 at 50% means the remaining loss is retrieval, which is what makes a
+bigger embedder the next move rather than more judge work.

@@ -30,8 +30,8 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok: all top-level use std::os::unix imports are cfg(unix)-gated"
 
-  - step: "no bare libc::getuid/geteuid/fork calls in headless/main.rs without nearby cfg(unix)"
-    command: "VIOLATIONS=0; while IFS= read -r line; do lineno=$(echo \"$line\" | cut -d: -f1); start=$((lineno - 5)); [ \"$start\" -lt 1 ] && start=1; window=$(sed -n \"${start},${lineno}p\" crates/tillandsias-headless/src/main.rs 2>/dev/null || true); if ! echo \"$window\" | grep -qF '#[cfg(unix)]'; then echo \"FAIL: line $lineno has bare libc unix call without cfg(unix): $line\"; VIOLATIONS=$((VIOLATIONS + 1)); fi; done < <(grep -nE 'libc::(getuid|geteuid|fork)\\b' crates/tillandsias-headless/src/main.rs 2>/dev/null | grep -v '//' || true); if [ \"$VIOLATIONS\" -gt 0 ]; then exit 1; fi; echo 'ok: all libc::getuid/geteuid/fork calls are inside cfg(unix) blocks'"
+  - step: "no bare libc::getuid/geteuid/fork calls in headless/main.rs outside a cfg(unix) item"
+    command: "F=crates/tillandsias-headless/src/main.rs; VIOLATIONS=0; while IFS= read -r line; do lineno=$(echo \"$line\" | cut -d: -f1); fnline=$(awk -v n=\"$lineno\" 'NR<=n && /^[[:space:]]*(pub[[:space:]]+)?(async[[:space:]]+)?(unsafe[[:space:]]+)?fn[[:space:]]/ {l=NR} END{print l+0}' \"$F\"); [ \"$fnline\" -lt 1 ] && fnline=$lineno; start=$((fnline - 12)); [ \"$start\" -lt 1 ] && start=1; window=$(sed -n \"${start},${lineno}p\" \"$F\" 2>/dev/null || true); if ! echo \"$window\" | grep -qF '#[cfg(unix)]'; then echo \"FAIL: line $lineno has bare libc unix call without cfg(unix): $line\"; VIOLATIONS=$((VIOLATIONS + 1)); fi; done < <(grep -nE 'libc::(getuid|geteuid|fork)\\b' \"$F\" 2>/dev/null | grep -v '//' || true); if [ \"$VIOLATIONS\" -gt 0 ]; then exit 1; fi; echo 'ok: all libc::getuid/geteuid/fork calls are inside cfg(unix) blocks'"
     timeout_ms: 5000
     expected_behavior: "ok: all libc::getuid/geteuid/fork calls are inside cfg(unix) blocks"
 

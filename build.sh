@@ -1577,12 +1577,26 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "All fragments intact"
 
+    _step "Checking the whole-overlay fragment guard's negative controls..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-all-fragments-intact.sh" 2>&1; then
+        _error "the fragment-integrity guard cannot distinguish valid YAML, parse damage, and conflict markers"
+        exit 1
+    fi
+    _info "Fragment-integrity fixture passed"
+
     _step "Checking set-field emits valid YAML for every value shape..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-set-field-yaml-shapes.sh" 2>&1; then
         _error "set-field can write an unparseable ledger fragment — the ledger is append-only"
         exit 1
     fi
     _info "set-field YAML-shape fixture passed"
+
+    _step "Checking the promote-stable evidence gate and dry-run..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-promote-stable-evidence-gate.sh" 2>&1; then
+        _error "promote-stable's gate or its --dry-run regressed — this script flips an outward-facing release channel"
+        exit 1
+    fi
+    _info "promote-stable gate + dry-run fixture passed"
 
     _step "Checking host-identity derivation..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-derive-host-identity.sh" 2>&1; then
@@ -1885,6 +1899,23 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Closure-evidence enforcement passed"
 
+    # ORDER 656-spux. Every host compiles for itself and nothing else, so
+    # cfg-gated code is verified by exactly the platform that cannot exercise
+    # the other arms. This builds the workspace for ONE non-host target on hosts
+    # that can. It SKIPS (exit 0, one line saying why) where the rustup std or
+    # the C cross-toolchain is absent — 115 MiB of mingw is not something to
+    # force onto every machine as a side effect of a lint, and a check that
+    # reddens a host for lacking an optional toolchain would be turned off.
+    #
+    # Its first run found a live break on linux-next: a `#[cfg(unix)]`
+    # definition with three unguarded callers and no fallback arm, invisible to
+    # every host's gate. Same shape as 653-7rag.
+    _step "Cross-target workspace check (656-spux)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-cross-target-build.sh" 2>&1; then
+        _error "the workspace does not compile for a non-host target (656-spux) — a cfg arm is missing a fallback"
+        exit 1
+    fi
+
     # Order 614-2gqx / 651-2x5s. The durable MO-FULL attestation ledger
     # (plan/mo-full-attestations.d/) must never carry a tampered, fabricated,
     # or unreachable marker — the terminal marker is only as strong as the
@@ -2008,6 +2039,58 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Litmus bindings reconciliation passed"
+
+    # Order 875-v7hv. The runner parses step fields with bash regexes, which
+    # capture the RAW bytes of a double-quoted YAML scalar, so a `\"` arrives
+    # as backslash-quote and must be unescaped by hand. That unescaping was
+    # applied to `command:` alone; `expected_behavior:`, `success_pattern:` and
+    # `failure_pattern:` got none, so a step whose command emits a quote could
+    # never match its own declared expectation. The dangerous half is
+    # `failure_pattern`: one carrying `\"` silently never fires, and a step
+    # that should have gone red reports green. Same family as the two gates
+    # above — all three ask whether an assertion can still fail.
+    _step "Checking litmus step scalars are unescaped consistently (875-v7hv)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-scalar-unescape.sh" 2>&1; then
+        _error "a litmus step field bypasses yaml_unescape_dq (875-v7hv) — see the verdict line above"
+        exit 1
+    fi
+    _info "Litmus scalar-unescape check passed"
+
+    # Order 881-29me. A `plan/issues/` audit cites its evidence and nothing
+    # checked those citations still resolved. Measured in one document: every
+    # factual claim re-verified TRUE while every `file:line` citation
+    # supporting it pointed at unrelated code — total drift, not an offset,
+    # because the cited file had passed 22,000 lines. A reader following one
+    # lands in plausible-looking neighbouring code and can "verify" a claim
+    # against something unrelated.
+    #
+    # A convention ratchet, NOT a resolver, and deliberately so: checking that
+    # the cited file has that many lines would PASS all six drifted citations.
+    # Diff-scoped, because 1,282 citations already exist across 487 files and a
+    # fleet-wide refusal would flip every host red at once (699-dycj).
+    _step "Checking new plan/issues citations name symbols, not lines (881-29me)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-issue-citation-convention.sh" 2>&1; then
+        _error "a newly added plan/issues citation names a source LINE (881-29me) — see the verdict line above"
+        exit 1
+    fi
+    _info "Issue-citation convention check passed"
+
+    # Order 251 criterion LM-04. `plan/long-running.md` is declared a filtered
+    # view of the ledger's active multi_cycle packets and nothing enforced it.
+    # It drifted in July (caught by a human verifier, repaired by hand, bought
+    # six weeks) and again by 2026-08-25, when it was right about 7 of 31
+    # packets: 11 rows, four naming obsoleted packets, twenty live ones absent.
+    # A 23%-accurate sub-queue steers agents toward dead work.
+    #
+    # Checks MEMBERSHIP, not rendering: which orders appear is derivable and is
+    # what rotted; the phase / blocked-on / verification columns are editorial
+    # and fabricating them would make the view more convincing and no more true.
+    _step "Checking plan/long-running.md matches the live multi_cycle set (251 LM-04)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-long-running-view.sh" 2>&1; then
+        _error "the long-running view disagrees with the ledger (251 LM-04) — see the verdict line above"
+        exit 1
+    fi
+    _info "Long-running view agreement check passed"
 
     _step "Checking litmus pin claims resolve and execute (721-77yu)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-pin-claims.sh" 2>&1; then

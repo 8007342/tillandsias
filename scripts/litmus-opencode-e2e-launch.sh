@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace spec:meta-orchestration, spec:forge-push-credential-channel
+# @trace spec:meta-orchestration, spec:git-mirror-service
 # litmus-opencode-e2e-launch.sh — STEP 3 of litmus:opencode-prompt-e2e-shape.
 #
 # Owns the full-vs-smoke decision (operator directive 2026-07-11: full

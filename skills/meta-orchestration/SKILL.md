@@ -225,12 +225,57 @@ be committed and pushed to the correct remote branch.
 - No blocked state without a blocker, owner if known, and smallest next action.
 - Explicitly log things that make you slower (e.g., repeated steps, invalidated caches, uncoordinated scripts) into `plan/issues/`.
 
+**SALVAGE BEFORE YOU REFUSE (order 872-c9nd). This is not optional and it comes
+FIRST — before the handoff, before the blocker, before anything else.**
+
+```bash
+scripts/salvage-dirty-worktree.sh <slug>   # -> ok:salvaged:<ref>:<sha>
+```
+
+It pushes a COPY of the dirty tree — tracked modifications, deletions and
+untracked files — to `salvage/<host>/<yyyymmdd>-<slug>` on origin, and it CANNOT
+touch the worktree: it builds the commit through a temporary `GIT_INDEX_FILE`
+and plumbing (`write-tree` / `commit-tree`), never a stash, an add against the
+real index, or a checkout. Verified: worktree status and `.git/index` are
+byte-identical afterwards, and `git show <sha>:<path>` returns an untracked
+file's full content.
+
+WHY THIS RULE EXISTS, and it is the most expensive lesson in this file. On
+2026-08-23 a host wedged with 16 modified paths and one untracked litmus file
+belonging to two claimed packets. Three consecutive cycles refused the dirty
+tree, verified all 17 paths byte-identical to their boundary snapshots, and
+wrote increasingly detailed prose about the diff. On 2026-08-24T06:09Z the
+checkout was replaced by a fresh clone. Four hours of finished work are
+unrecoverable; the untracked file's name appears in no commit on any branch.
+
+**The boundary guard did its job perfectly and protected a directory that
+someone then deleted wholesale.** A guard that forbids the AGENT from touching
+the work does not forbid anything else from touching it, and a prose description
+of a diff is not a copy of it. The refusal path was a place work could sit
+indefinitely; it is now a place work passes THROUGH on its way to origin.
+
 A dirty-start preflight refusal is not a work cycle and is the sole exception
 to in-checkout blocker filing: touching `plan/` would itself violate the
 startup boundary. Report `blocked: dirty-start-worktree`, owner, the exact
-status paths, and the smallest next action in the final handoff so the clean
-host/orchestrator can file it durably. Do not create then delete a blocker file
-inside either the shared checkout or `$boundary_dir`.
+status paths, **the salvage ref and sha**, and the smallest next action in the
+final handoff so the clean host/orchestrator can file it durably. Do not create
+then delete a blocker file inside either the shared checkout or `$boundary_dir`.
+
+If the salvage itself fails, say so loudly and do NOT soften the refusal: an
+unsalvaged dirty tree is the exact state that cost four hours, and the operator
+needs to know the copy does not exist before deciding what to do with the
+directory.
+
+**AN OPERATOR LICENCE CAN GO STALE, AND A CLEAN TREE IS HOW YOU KNOW.** When a
+prompt authorises you to land dirt — order 833-fpe7's `resumable:` verdict,
+order 540's opsx merge, or an operator sentence naming specific work to review
+and land — CHECK THAT THE DIRT IS STILL THERE before acting on it. If
+`git status --porcelain --untracked-files=all` is empty, the premise of the
+licence is gone: answer **"the premise is gone"**, say what the licence expected
+to find, and stop. Do NOT reconstruct what you think it referred to and land
+that instead. This is how 872-c9nd was discovered: an operator relaunched a host
+with a verbatim unblock prompt hours after the checkout had been re-cloned, and
+the honest answer was that there was nothing left to land.
 
 If a push fails after three fetch/rebase retries, mark the active plan item
 `blocked` or `failed-retryable`, include the failed push output, and stop.
@@ -524,11 +569,69 @@ filing — not the prompt.
    reserved for `blocked:preflight:*`); continue the cycle.
 
 1. Record UTC time, host kind, current branch, worktree path, and sibling heads.
+   Report this host's scheduler posture in the same breath — it is one line and
+   it answers the question an operator otherwise has to read a transcript for:
+
+   ```bash
+   scripts/check-cycle-scheduler.sh   # armed? last fire? next due?
+   ```
+
+   ADVISORY, NEVER A GATE (order 856-s56y exit criterion 5, wired 865-j3kd).
+   `due:not-installed` is a true and acceptable answer: macuahuitl is driven by
+   an external hourly loop rather than a systemd timer, and a host with no
+   durable timer is differently-scheduled, not broken. What the line buys is
+   that "no scheduler is armed here" becomes a stated fact rather than something
+   nobody discovers until a host has been quietly not-cycling for a day — which
+   is the 856-s56y failure, and the same shape as a wedged host reading as
+   silent (864-t4nq).
+
+   It is wired here because the guard shipped invoked by nothing and
+   audit-guard-activation therefore failed `./build.sh --ci-full`, one of three
+   checks that left the trunk unreleasable for a week (865-n8vq). The auditor
+   greps for the guard's NAME, so a mention would have cleared the verdict while
+   leaving the guard as dead as it was; an orphaned guard is fixed by invoking
+   it. Arming an actual scheduler is 856-s56y's own work and remains yoga's.
+
 2. `git fetch origin --prune`, then run the Credential Channel Guard and the
    Committable Branch Guard below before any committable work. Run the MCP
    Expert Health Probe here too — it is advisory and never blocks, but it must
    run BEFORE the cycle's first expert read, or an outage during that read has
    no recorded baseline to be visible against.
+2b. **Acquire the checkout lock — EVERY lane, before the boundary snapshot**
+   (order 873-zcim):
+
+   ```bash
+   TILLANDSIAS_CYCLE_HOLDER_PID=$PPID scripts/cycle-checkout-lock.sh acquire \
+       --lane <how-this-cycle-was-launched> --source "<prompt source, one line>"
+   ```
+
+   The no-stacking lock used to be taken only by the driver lane
+   (tillandsias-cycle-driver.sh), so a cycle launched by an operator prompt, a
+   /loop cron, or a cloud schedule acquired nothing and STACKED on a running
+   driver in the same worktree — measured on yoga 2026-08-24, 21 minutes into
+   a driver cycle, duplicating its claims. The lock guarded the driver lane;
+   the thing two agents contend for is the CHECKOUT.
+
+   On `skip:overlap-lock-held:<holder>` DO NOT PROCEED: the verdict names who
+   holds the checkout (lane, pid, start, source). Report it as the cycle's
+   final output and exit — this is the designed outcome, not a failure, and
+   the refusal is recorded durably OUTSIDE the checkout in
+   `~/.cache/tillandsias/overlap-refusals.jsonl`, so a refused-for-overlap
+   cycle is distinguishable in the record from a cycle that ran and found
+   nothing (873-zcim criterion 3). Do not retry in a loop; the next scheduled
+   fire retries on its own clock.
+
+   `TILLANDSIAS_CYCLE_HOLDER_PID=$PPID` must be evaluated in YOUR shell — it
+   anchors liveness to the agent-harness process that spans the whole cycle.
+   The script's own default is one shell too deep and dies with the tool call.
+
+   DECIDED (873-zcim criterion 4): a second agent NEVER works in a locked
+   checkout. The sanctioned path for concurrent work on one host is a separate
+   git worktree or a clean temp clone — the technique yoga used to file its
+   wedge record and 873-zcim itself while another cycle held its checkout.
+   Release at Finalization (step 9b) with
+   `TILLANDSIAS_CYCLE_HOLDER_PID=$PPID scripts/cycle-checkout-lock.sh release`.
+
 3. Snapshot the startup boundary before classifying or changing any path:
    ```bash
    boundary_dir="$(mktemp -d "${TMPDIR:-/tmp}/meta-orchestration-boundary.XXXXXX")"
@@ -541,6 +644,15 @@ filing — not the prompt.
    Refuse the cycle and do not begin committable work. Report the dirty-start
    blocker through the final handoff as defined above. Do not commit, discard,
    restore, reset, or clean unknown startup dirt.
+
+   **Before that refusal, run `scripts/salvage-dirty-worktree.sh <slug>`**
+   (order 872-c9nd, full rationale in the Exit Contract above). Refusing
+   protects the work from YOU; it does not protect it from a fresh clone, and on
+   2026-08-24 a fresh clone is exactly what took it. The salvage cannot touch
+   the worktree — temporary index and plumbing only — so it is safe to run on
+   dirt you have just been forbidden to alter, and it must run BEFORE the two
+   detectors below: whether the dirt turns out to be `ok:opsx-only` or
+   `resumable:` changes what you may LAND, never whether a copy should exist.
 4. **Generated opsx sync merge (deterministic, order 540)**: before refusing on
    startup dirt, run the deterministic detector:
    ```bash
@@ -594,7 +706,25 @@ filing — not the prompt.
 ## Credential Channel Guard
 
 Run immediately after `git fetch` and before any worker drain or committable
-work. In SMOKE mode it is a REPORT, not a gate — a smoke run
+work.
+
+**Close the interactive escape hatches around EVERY push** (order 860-g798,
+exit criterion 3):
+
+```bash
+export GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never
+```
+
+A credential problem must fail FAST AND LOUDLY, not hang. Measured on
+esmeraldinha: the guard reported green (`gh auth status` held a token), the
+cycle entered committable work, and the first push sat >10 minutes behind Git
+Credential Manager's interactive prompt — a hang with no output, presenting as
+a slow build on the host least able to afford the misdiagnosis. With the
+prompts closed the same failure surfaces in seconds as an auth error the guard
+now names (`blocked:interactive-credential-helper`, remedy printed). The guard
+itself verifies the PUSH path since 860-g798 — `ok:gh-keyring-push-verified`
+means a bounded non-interactive dry-run push actually authenticated, not
+merely that a token exists somewhere. In SMOKE mode it is a REPORT, not a gate — a smoke run
 performs no committable work, so a stale push credential cannot harm it (order
 818-cgpn; see Smoke Mode Runbook rule 3a). The Cowork scheduled-task runtime can inherit dangling session sockets
 (`DBUS_SESSION_BUS_ADDRESS`, `SSH_AUTH_SOCK` pointing into a non-existent
@@ -859,10 +989,31 @@ Two rules, both easy to get wrong:
 - **Compaction is TEXT-LEVEL and never re-serializes the base.** It ran on the
   real ledger for the first time on 2026-08-03 (order 582-4wdi, commit 81e12b65):
   28 fragments folded, 120 comment lines preserved exactly, 535 packets
-  preserved, and the `plan/index.yaml` diff was 1021 added lines and **zero
-  removed lines**. That zero is the property to protect — existing base bytes are
-  untouched by construction, so the inline operator decisions and the four-space
-  item prefix `append-event` locates by cannot be lost by a fold.
+  preserved, and the `plan/index.yaml` diff was 1021 added lines and zero removed
+  lines. **Do not read that zero as the invariant** — it was a true measurement of
+  a fold that could only APPEND, taken before `set-field` fragments existed, and
+  it has been unreachable since. A fragment that reassigns a field must remove the
+  superseded line; a fold carrying nine status transitions removes nine `status:`
+  lines and that is the fold working.
+
+  THE PROPERTY TO PROTECT, stated so a healthy compaction cannot fail it: no line
+  is removed EXCEPT one whose field a fragment explicitly reassigned. Comment
+  lines, packet count (minus none, plus the new ones), and the four-space item
+  prefix `append-event` locates by all survive unchanged. Check THOSE, in one
+  command, rather than eyeballing the removal count:
+
+  ```bash
+  git diff --numstat plan/index.yaml                  # removals are expected
+  git diff plan/index.yaml | grep '^-' | grep -v '^---' \
+    | sed 's/^-[[:space:]]*//' | cut -d: -f1 | sort | uniq -c   # ONLY field keys?
+  ```
+
+  MEASURED TWICE, on two hosts, each of which stopped its cycle to investigate:
+  lenovinha 2026-08-23 (+888/-17 — five `status`, one multi-line `next_action`)
+  and yoga 2026-08-25 (+556/-12 — nine `status`, two `next_action`, one
+  `next_action_ts`; 37 comments and all 526 packet prefixes intact). Both folds
+  were correct. The prose is what cost the time, which is why it is corrected
+  here rather than merely noted (865-ng6r).
 
   It refused for months before that, correctly: a `serde_yaml` round-trip drops
   comments and re-indents items to column 0, after which `append-event` silently
@@ -1575,3 +1726,49 @@ Before exit:
    that finalization steps 1-8 all passed; the outer launcher rejects exit
    zero without it. See "Full-Mode Terminal Attestation" above for the grammar
    and invariants.
+
+9b. Release the checkout lock (order 873-zcim) — AFTER the terminal marker is
+   derived, as the cycle's last mutation:
+   ```bash
+   TILLANDSIAS_CYCLE_HOLDER_PID=$PPID scripts/cycle-checkout-lock.sh release
+   ```
+   The stale-reclaim bound (dead holder, or 3h) covers a cycle that dies
+   before reaching this line, so a crashed cycle cannot silence the cadence —
+   but do not lean on it: an explicitly released lock frees the checkout NOW,
+   a reclaimed one frees it up to three hours later, and on a 30-minute
+   cadence that is six skipped fires.
+
+9c. Reclaim the build cache when it is genuinely due (order 709-in2f,
+   methodology `build_cache_hygiene`) — LAST, after the lock is released, so a
+   full rebuild's cost is paid in the idle gap rather than inside the cycle:
+
+   ```bash
+   scripts/check-build-cache-sweep.sh   # exit 0 = NOT due; skip the body
+   ```
+
+   **Read the exit polarity before wiring anything to it.** It exits **0 when
+   the sweep is NOT due**, the same convention as `check-deslop-due.sh` and
+   `check-daily-maintenance.sh`: the actionable state is the non-zero one, so a
+   healthy steady state stays quiet under `set -e`. Branch on the verdict token
+   (`build-cache-sweep-not-due` / `build-cache-sweep`), which a copy-paste
+   cannot invert.
+
+   Due when `target/` exceeds 40 GiB, OR the marker is older than 14 days, OR
+   the marker is absent/unreadable. On `due:`, run `cargo clean` (plus
+   `scripts/nix-toolbox.sh gc` where nix is present — never a bare
+   `nix store gc`, which would delete the whole persistent cache rather than
+   prune it), then stamp what actually ran:
+
+   ```bash
+   scripts/check-build-cache-sweep.sh stamp --host <host> \
+       --action 'cargo-clean:<result>,nix-gc:<result>'
+   ```
+
+   `--action` is REQUIRED, for the same reason `check-daily-maintenance.sh`
+   requires `--steps`: a stamp recording that "something happened" without
+   recording what moves the unfalsifiability up a level instead of removing it.
+   Record `skipped-absent` / `deferred-<reason>` honestly.
+
+   BEST-EFFORT, NEVER A GATE: a failed sweep must not fail the cycle, and the
+   sweep must not run before the work. Ephemeral forges read `skip:forge-exempt`
+   and never sweep — their `target/` dies with the container.

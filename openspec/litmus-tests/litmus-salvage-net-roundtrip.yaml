@@ -1,0 +1,78 @@
+# @trace order:874-w2gc
+#
+# Order 874-w2gc (depends on 872-c9nd / 874-s8vf). The salvage net pushes a
+# dirty worktree's content to refs/heads/salvage/* BEFORE a cycle refusal, so
+# the work a boundary guard protects cannot then be deleted by a fresh clone
+# (the 2026-08-24 incident: four hours of finished work unrecoverable). The
+# net's first live push was itself refused by a worktree-state guard that ran
+# before the exemption — so this litmus pins the round-trip AND the ordering
+# property, not just the happy path:
+#
+#   - push + round-trip against a fixture remote (modified and untracked
+#     content both recovered byte-exact, worktree untouched);
+#   - two same-day salvages both land (the second used to die
+#     non-fast-forward);
+#   - deleting a salvage ref is refused without the explicit override, while
+#     rescue pushes stay exempt;
+#   - THE ORDERING PIN: from a tree the cheatsheet-sync guard demonstrably
+#     refuses (counterfactual asserted in the same fixture), a salvage-only
+#     push still exits 0 — possible only while the exemption is the hook's
+#     FIRST decision. Reorder the exemption below any worktree-state guard
+#     and this goes red.
+#   - the sweep files an unseen ref as a ledger event exactly once (rescued
+#     work becomes visible and claimable without human action).
+#
+# All scenarios are hermetic (scratch repos, local bare origin, stub plan
+# writer) and live in scripts/test-salvage-net.sh; each step below runs one
+# scenario so a failure names its subject.
+name: litmus:salvage-net-roundtrip
+spec: meta-orchestration
+phase: pre-build
+description: >
+  Pin the 872-c9nd/874-s8vf/874-w2gc salvage net end to end: dirty-tree
+  content pushes to refs/heads/salvage/* and round-trips byte-exact without
+  mutating the worktree; same-day salvages collide by name, not by failure;
+  deletion of a salvage ref is refused without TILLANDSIAS_SALVAGE_DELETE_OK=1
+  while rescues stay exempt; the pre-push exemption remains the hook's first
+  decision (red if reordered below a worktree-state guard); and
+  sweep-salvage-refs.sh files unseen refs as ledger events idempotently.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/salvage-dirty-worktree.sh
+  - workspace contains scripts/sweep-salvage-refs.sh
+  - workspace contains scripts/hooks/pre-push-local-gate.sh
+  - workspace contains scripts/test-salvage-net.sh
+  - shell utilities (git, bash, mktemp) are available in PATH
+
+critical_path:
+  - step: "fixture parses and is executable"
+    command: "bash -n scripts/test-salvage-net.sh && test -x scripts/test-salvage-net.sh && echo 'ok: fixture-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: fixture-parses"
+
+  - step: "push + round-trip: dirty content lands on the fixture remote and is recovered byte-exact, worktree untouched"
+    command: "bash scripts/test-salvage-net.sh roundtrip | tail -1"
+    timeout_ms: 30000
+    expected_behavior: "ok:salvage-net-fixture:all"
+
+  - step: "same-day collision: two salvages from one host both land under distinct refs"
+    command: "bash scripts/test-salvage-net.sh collision | tail -1"
+    timeout_ms: 30000
+    expected_behavior: "ok:salvage-net-fixture:all"
+
+  - step: "deletion protection: salvage-ref deletion refused without the override, permitted with it, rescues still exempt"
+    command: "bash scripts/test-salvage-net.sh deletion | tail -1"
+    timeout_ms: 30000
+    expected_behavior: "ok:salvage-net-fixture:all"
+
+  - step: "ordering: the exemption preempts a worktree-state guard that provably refuses the same tree (red if reordered)"
+    command: "bash scripts/test-salvage-net.sh ordering | tail -1"
+    timeout_ms: 30000
+    expected_behavior: "ok:salvage-net-fixture:all"
+
+  - step: "sweep: an unseen salvage ref becomes a ledger event exactly once; report mode never writes"
+    command: "bash scripts/test-salvage-net.sh sweep | tail -1"
+    timeout_ms: 30000
+    expected_behavior: "ok:salvage-net-fixture:all"

@@ -1,7 +1,7 @@
 # ORDER 551 — ground truth for the FAT SPEC EXPERT (spec.answer).
 #
 # @trace order:551
-# @trace spec:fat-spec-corpus-index
+# @trace order:547
 #
 # Written to the format expert-groundtruth-rung1.yaml anticipated for exactly
 # this: register the engine in groundtruth.rs (ENGINES + Harness::run), drop a
@@ -119,3 +119,52 @@ cases:
             - "wipes Podman state"
       citations_exclude:
         - path: plan/index.yaml
+
+  # ── ORDER 865-h4tn / 824-6qxh criterion 3 ─────────────────────────────────
+  #
+  # The refusal, pinned. These two cases share a query and a vector and differ
+  # ONLY in the answer prose, which is the whole point: the envelope keeps a
+  # chunk when the answer contains that chunk's key (spec.rs:1079) and refuses
+  # when none survive (spec.rs:1095).
+  #
+  # WHAT THIS DOES AND DOES NOT CERTIFY. It pins KEY CONTAINMENT, not semantic
+  # support. A green row here does NOT mean the expert declines questions the
+  # corpus cannot answer — the retrieval stage happily returns three chunks at
+  # ~0.59 for this very question, and before 865-h4tn the grader's synthesised
+  # answer listed every one of their keys and graded it `retrieved`, citing
+  # `fn basic_recipe()` in the VM layer as evidence about baking bread. Semantic
+  # refusal is 853-6gz3's Tier B and is not tested here.
+  - id: spec-refuses-when-the-answer-uses-no-retrieved-chunk
+    engine: spec.answer
+    query: what is the flibber flobber protocol and how do I bake sourdough bread
+    query_vec: openspec/litmus-tests/groundtruth/query-vectors/out-of-corpus-refusal.json
+    answer: >
+      I cannot answer this from the indexed corpus. Nothing retrieved bears on
+      the question, so there is no span to cite.
+    why: >
+      824-6qxh criterion 3 — a refusal must not silently regress. Retrieval
+      cannot refuse (cosine top-k always returns k), so the ONLY thing standing
+      between a caller and a confident irrelevant citation is the envelope
+      dropping chunks the answer never used. If that check is ever weakened to
+      "cite whatever was retrieved", this case goes red and nothing else in the
+      suite would.
+    expect:
+      confidence: unsupported
+      max_citations: 0
+      answer_excludes:
+        - "basic_recipe"
+
+  - id: spec-still-cites-when-the-answer-does-use-a-chunk
+    engine: spec.answer
+    query: what is the flibber flobber protocol and how do I bake sourdough bread
+    query_vec: openspec/litmus-tests/groundtruth/query-vectors/out-of-corpus-refusal.json
+    why: >
+      NEGATIVE CONTROL for the case above, and it is not optional: without it a
+      harness that refused EVERYTHING would score green on the refusal case and
+      look correct. Same question, same vector, no `answer` — so the grader
+      synthesises its retrieval-only prose, which lists every chunk key and must
+      therefore still produce citations. Refusing here would mean the envelope
+      had stopped citing rather than started refusing.
+    expect:
+      confidence: retrieved
+      min_citations: 1

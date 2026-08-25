@@ -111,7 +111,8 @@ CACHE="$HOME/.cache/tillandsias"
 export PATH="$CACHE/openspec/bin:$HOME/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 
 # ── Standard environment variable setup ─────────────────────
-# @trace spec:forge-git-ergonomics
+# (Ghost trace to the never-written forge-git-ergonomics spec removed, 877 —
+# this block is generic environment setup, not a git contract.)
 # Set locale if not already set, to avoid locale-sensitive tool warnings.
 export LANG="${LANG:-en_US.UTF-8}"
 
@@ -515,7 +516,14 @@ probe_mirror_reachable() {
     local start now elapsed=0 lsout lsrc last_class="unknown"
     start="$(date +%s 2>/dev/null || echo 0)"
     while :; do
-        lsout="$(git ls-remote "$url" 2>&1)"; lsrc=$?
+        # LC_ALL=C on THIS invocation only (773-f5ma). The classifier below greps
+        # git's stderr for English phrases; on a French-locale host git emits
+        # `fatal : impossible de rechercher ... (Nom ou service inconnu)`, the
+        # grep never matches, and a DOA alias silently degrades to the slow
+        # seed-tolerant path instead of fast-failing with its remedy. Scoped to
+        # the command whose stderr is parsed, never exported: the forge's own
+        # locale is the operator's and must not be rewritten by a probe.
+        lsout="$(LC_ALL=C git ls-remote "$url" 2>&1)"; lsrc=$?
         if [[ $lsrc -eq 0 && -n "$lsout" ]]; then
             return 0                       # resolvable AND serving refs
         fi

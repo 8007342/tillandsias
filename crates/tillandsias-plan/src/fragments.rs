@@ -431,6 +431,39 @@ pub fn fold_with_sources(base: &Value, fragments: &[Fragment]) -> (Value, FoldPr
                     .to_string();
                 let key = format!("{pid}\u{1}{field}");
                 let better = match lww.get(&key) {
+                    // ORDER 686-7qcm. `None` means no FRAGMENT has claimed this
+                    // field yet — it does NOT mean there is no incumbent. The
+                    // base already carries a value, and for `status` that value
+                    // may be a closure rung. Accepting the first fragment
+                    // unconditionally let a lone `implemented` entry overwrite a
+                    // base `completed` with no falsified event, which is exactly
+                    // the move the ladder exists to forbid.
+                    //
+                    // The rank check therefore runs against the BASE value in
+                    // this arm. Timestamps are deliberately empty for the
+                    // incumbent: the base has no (ts, host) to compare, and the
+                    // ladder does not need one — a higher rung wins outright,
+                    // and a lower rung needs a falsified event regardless of
+                    // clock. Equal rungs fall through to `lww()` inside
+                    // status_entry_wins, where an incoming non-empty timestamp
+                    // beats the empty incumbent, preserving the previous
+                    // behaviour for same-rung and working-state writes.
+                    None if field == "status" => {
+                        let base_status = base_value(base, pid, field);
+                        let base_status = base_status.as_ref().and_then(Value::as_str);
+                        match base_status {
+                            None => true,
+                            Some(prev) => status_entry_wins(
+                                value.as_str(),
+                                &ts,
+                                &host,
+                                fragment_falsifies(frag, pid),
+                                Some(prev),
+                                "",
+                                "",
+                            ),
+                        }
+                    }
                     None => true,
                     Some((prev_ts, prev_host, prev_val, _)) => {
                         if field == "status" {
@@ -482,12 +515,25 @@ fn apply_to_packets(
                     .unwrap_or("")
                     .to_string();
 
-                for (key, (_, _, value, _)) in lww {
+                for (key, (ts, _, value, _)) in lww {
                     let mut parts = key.split('\u{1}');
                     if parts.next() == Some(id.as_str())
                         && let Some(field) = parts.next()
                     {
                         m.insert(Value::String(field.to_string()), value.clone());
+                        // ORDER 877-lwts. next_action is the ONE field with a
+                        // competing event channel, and "newest wins" must hold
+                        // ACROSS channels. Without the ts riding along, the
+                        // folded field reads as the untimestamped original and
+                        // loses to any event, however stale — measured live
+                        // 2026-08-25: two coordinator queue refreshes were
+                        // invisible behind a 2h43m-older event.
+                        if field == "next_action" && !ts.is_empty() {
+                            m.insert(
+                                Value::String("next_action_ts".to_string()),
+                                Value::String(ts.clone()),
+                            );
+                        }
                     }
                 }
 
@@ -814,9 +860,47 @@ fn fragment_coverage_gaps(result: &Value, frag: &Fragment) -> Vec<String> {
             // `continue`s past it in silence. Order 801-kqme lost three whole
             // follow-up packets exactly this way.
             let Some(event) = entry.get("event") else {
-                gaps.push(format!(
-                    "an `events:` entry for `{pid}` with no `event:` block — a packet DEFINITION under the wrong key (812-d45t); the fold skips it"
-                ));
+                // TWO DIFFERENT MISTAKES REACH THIS LINE and they are repaired
+                // differently, so they are named differently (866-pvsx). A
+                // DEFINITION here is a packet written under the wrong key: move
+                // it to `packets:`. Anything else is a directive the fold has no
+                // handler for — usually a hand-written guess at a key the
+                // set-field subcommand would have emitted correctly — and the
+                // repair is to rewrite the entry, not relocate it.
+                //
+                // Reporting both as 812-d45t was itself misleading: it sent me
+                // looking for a lost packet definition when what I had written
+                // was a bogus `set_field:` key.
+                let definition_fields: Vec<&str> = ["order", "title", "kind", "deliverable"]
+                    .into_iter()
+                    .filter(|k| entry.get(*k).is_some())
+                    .collect();
+                if definition_fields.is_empty() {
+                    let mut unknown: Vec<String> = entry
+                        .as_mapping()
+                        .map(|m| {
+                            m.keys()
+                                .filter_map(Value::as_str)
+                                .filter(|k| *k != "packet_id")
+                                .map(str::to_string)
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    unknown.sort_unstable();
+                    let named = if unknown.is_empty() {
+                        "no payload key at all".to_string()
+                    } else {
+                        format!("unrecognized key(s) {}", unknown.join(", "))
+                    };
+                    gaps.push(format!(
+                        "an `events:` entry for `{pid}` with no `event:` block and {named} — the fold has no handler for it and skips it in silence, so this write did NOT land (866-pvsx); use the `set-field` subcommand rather than hand-writing the entry"
+                    ));
+                } else {
+                    gaps.push(format!(
+                        "an `events:` entry for `{pid}` with no `event:` block but definition field(s) {} — a packet DEFINITION under the wrong key (812-d45t); move it under `packets:`",
+                        definition_fields.join(", ")
+                    ));
+                }
                 continue;
             };
             if !events.contains(&event_identity(pid, event)) {
@@ -902,6 +986,60 @@ fn fragment_coverage_gaps(result: &Value, frag: &Fragment) -> Vec<String> {
     }
 
     gaps
+}
+
+/// ORDER 866-pvsx. The same coverage question [`compact`] asks, asked at READ
+/// time instead of at garbage-collection time, for every fragment currently in
+/// the overlay.
+///
+/// WHY THIS EXISTS WHEN `fragment_coverage_gaps` ALREADY DID. The detection was
+/// never the missing piece — I filed 866-pvsx believing the fold had no idea
+/// these entries existed, and that was wrong. `fragment_coverage_gaps` catches
+/// this shape precisely. What it does with the answer is refuse to DELETE the
+/// fragment, which protects the bytes on disk and tells the author nothing. It
+/// only runs when a compaction runs, and compaction runs when the fragment
+/// COUNT makes it eligible — so a dropped entry stays unreported for as long as
+/// the overlay stays small, which is indefinitely.
+///
+/// MEASURED, by making the mistake (lenovinha, 2026-08-23). I hand-wrote a
+/// `set_field:` key into an events entry to release a claim. The fold does not
+/// know that key, so it skipped the entry; `yq` parsed the file, the
+/// closure-evidence and misplaced-definition passes were both silent — the
+/// latter correctly, since it requires definition fields and mine carried none
+/// — and `check` reported `ok: 550 packets, ids unique, live references
+/// sound`. The packet count even ROSE, because the `packets:` half of the same
+/// fragment folded perfectly. Every signal available to me said the write had
+/// landed. The claim was still open, and I found that only because I happened
+/// to re-list live claims afterwards.
+///
+/// The consequence is not cosmetic: fragments are immutable and five hosts
+/// write them concurrently, so nothing will ever re-apply the dropped
+/// directive. A host that believes it released a claim and did not strands that
+/// packet from both `ready` queries and burndown until the 24h reaper runs —
+/// 641-e2qa, reached by an honest typo rather than by an abandoned cycle.
+///
+/// Returns one entry per fragment that has gaps, in load order, so a caller can
+/// name the file AND the specific entry. Empty for a clean overlay, so the
+/// common case costs a caller nothing.
+/// A base that does not parse yields NO gaps rather than a panic: `check` has
+/// its own, louder answer for that, and this pass must never be the thing that
+/// makes an unreadable ledger fail differently.
+pub fn overlay_coverage_gaps(index: &Path) -> Vec<(PathBuf, Vec<String>)> {
+    let Ok(raw) = std::fs::read_to_string(index) else {
+        return Vec::new();
+    };
+    let Ok(base) = serde_yaml::from_str::<Value>(&raw) else {
+        return Vec::new();
+    };
+    let fragments = load_all(index);
+    let merged = fold(&base, &fragments);
+    fragments
+        .iter()
+        .filter_map(|f| {
+            let gaps = fragment_coverage_gaps(&merged, f);
+            (!gaps.is_empty()).then(|| (f.path.clone(), gaps))
+        })
+        .collect()
 }
 
 /// Fold every fragment into the base and report what was consumed.
@@ -1057,10 +1195,51 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
                 .unwrap_or("")
                 .to_string();
             let key = format!("{pid}\u{1}{field}");
+            // ORDER 686-7qcm. This block's own comment above says the wins are
+            // "recomputed exactly as `fold` resolves them". That stopped being
+            // true the day the fold became rank-aware (650-dq6u), and nothing
+            // caught the divergence because both paths agree on every case
+            // EXCEPT a rung-lowering write — the one case the ladder exists for.
+            //
+            // The consequence here is worse than in the fold, and permanent: a
+            // compaction rewrites the base and then DELETES the fragment it
+            // consumed, so a rung dropped on this path has no surviving record
+            // to re-derive it from. Reproduced on a synthetic ledger before the
+            // fix: base `completed`, one fragment writing `implemented` with no
+            // falsified event, and `compact` wrote `status: implemented` into
+            // the base and removed the fragment.
             let better = match lww.get(&key) {
+                None if field == "status" => {
+                    let base_status = base_value(&base, pid, field);
+                    let base_status = base_status.as_ref().and_then(Value::as_str);
+                    match base_status {
+                        None => true,
+                        Some(prev) => status_entry_wins(
+                            value.as_str(),
+                            &ts,
+                            &host,
+                            fragment_falsifies(frag, pid),
+                            Some(prev),
+                            "",
+                            "",
+                        ),
+                    }
+                }
                 None => true,
-                Some((prev_ts, prev_host, _)) => {
-                    (ts.as_str(), host.as_str()) > (prev_ts.as_str(), prev_host.as_str())
+                Some((prev_ts, prev_host, prev_val)) => {
+                    if field == "status" {
+                        status_entry_wins(
+                            value.as_str(),
+                            &ts,
+                            &host,
+                            fragment_falsifies(frag, pid),
+                            prev_val.as_str(),
+                            prev_ts,
+                            prev_host,
+                        )
+                    } else {
+                        (ts.as_str(), host.as_str()) > (prev_ts.as_str(), prev_host.as_str())
+                    }
                 }
             };
             if better {
@@ -1068,7 +1247,7 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
             }
         }
     }
-    let lww_wins: Vec<(String, String, Value)> = lww
+    let lww_wins: Vec<(String, String, Value, String)> = lww
         .into_iter()
         .filter(|(key, (_, _, value))| {
             let mut parts = key.split('\u{1}');
@@ -1087,12 +1266,13 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
                 && base_packets.contains(pid)
                 && base_value(&base, pid, field) != Some(value.clone())
         })
-        .map(|(key, (_, _, value))| {
+        .map(|(key, (ts, _, value))| {
             let mut parts = key.split('\u{1}');
             (
                 parts.next().unwrap().to_string(),
                 parts.next().unwrap().to_string(),
                 value,
+                ts,
             )
         })
         .collect();
@@ -1149,8 +1329,21 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
     }
 
     let mut lines: Vec<String> = candidate.lines().map(String::from).collect();
-    for (pid, field, value) in &lww_wins {
+    for (pid, field, value, ts) in &lww_wins {
         apply_lww(&mut lines, pid, field, value)?;
+        // ORDER 877-lwts: the fold materializes `next_action_ts` beside a
+        // set-field next_action win so it competes on clock terms with the
+        // event channel. Compaction must persist that sibling into the base
+        // text, or the first compaction silently re-loses the field to any
+        // stale event — the exact incident, one hop later.
+        if field == "next_action" && !ts.is_empty() {
+            apply_lww(
+                &mut lines,
+                pid,
+                "next_action_ts",
+                &Value::String(ts.clone()),
+            )?;
+        }
     }
     candidate = lines.join("\n") + "\n";
 
@@ -1173,18 +1366,12 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
     // Precedence is the ROW's own (ts, host), never fragment order, so the
     // synthetic base fragment below can sit anywhere in the slice.
     {
+        // 864-v8kr: the base splice lives in fold_capabilities_with_base now.
+        // The base here is the CANDIDATE being written, not the file on disk —
+        // folding against disk would drop every row this compaction is about
+        // to publish.
         let base_doc: Value = serde_yaml::from_str(&candidate).unwrap_or(Value::Null);
-        let mut all: Vec<Fragment> = Vec::new();
-        if base_doc.get("capabilities").is_some() {
-            all.push(Fragment {
-                name: "0000-base".to_string(),
-                path: PathBuf::from("plan/index.yaml"),
-                doc: base_doc,
-                raw: String::new(),
-            });
-        }
-        all.extend(fragments.iter().cloned());
-        let (matrix, _skipped) = fold_capabilities(&all);
+        let (matrix, _skipped) = fold_capabilities_with_base(&base_doc, &fragments);
         if !matrix.is_empty() {
             let rows: Vec<Value> = matrix
                 .values()
@@ -1845,6 +2032,50 @@ pub struct SkippedCapabilityRow {
 /// Separate from [`fold`] deliberately: a capability row is not a packet, and
 /// merging it into the packet document would put hardware state in a ledger
 /// whose every other entry is work.
+/// Fold the capability channel over a BASE plus its fragments — the form every
+/// production caller wants, and the one they should use.
+///
+/// ORDER 864-v8kr. [`fold_capabilities`] takes only fragments, so the base rows
+/// reach it only if the caller first builds a synthetic `"0000-base"` Fragment.
+/// Both production callers did that correctly, in two separate hand-written
+/// copies, and nothing in the bare signature told a third caller it owed them.
+/// A caller that forgot would get an EMPTY matrix and no error — which is
+/// precisely the silent-emptiness the channel already suffered once (843-624y
+/// destroyed 100% of it, losing yolanda's only two rows).
+///
+/// The base arrives as a `Value` rather than a path because the two callers
+/// disagree about where it lives: `capability-matrix` reads plan/index.yaml
+/// from disk, while compaction must fold against the CANDIDATE it is about to
+/// write, which is not on disk yet. A path parameter would have served one and
+/// silently mis-served the other.
+///
+/// Precedence is the row's own `(ts, host)`, never fragment order, so the
+/// synthetic base may sit anywhere in the slice.
+pub fn fold_capabilities_with_base(
+    base: &Value,
+    fragments: &[Fragment],
+) -> (
+    std::collections::BTreeMap<(String, String), CapabilityEntry>,
+    Vec<SkippedCapabilityRow>,
+) {
+    let mut all: Vec<Fragment> = Vec::new();
+    if base.get("capabilities").is_some() {
+        all.push(Fragment {
+            name: "0000-base".to_string(),
+            path: PathBuf::from("plan/index.yaml"),
+            doc: base.clone(),
+            raw: String::new(),
+        });
+    }
+    all.extend(fragments.iter().cloned());
+    fold_capabilities(&all)
+}
+
+/// Fold the capability channel over fragments ALONE.
+///
+/// Prefer [`fold_capabilities_with_base`] unless you genuinely have no base —
+/// this one cannot see rows already folded into plan/index.yaml, and its
+/// emptiness is indistinguishable from "no host has ever published" (864-v8kr).
 pub fn fold_capabilities(
     fragments: &[Fragment],
 ) -> (
@@ -2191,6 +2422,86 @@ packets:
 
     const HOST_A: &str = "packets:\n  - packet_id: beta\n    order: 581-aaaa\n    status: ready\n";
     const HOST_B: &str = "packets:\n  - packet_id: gamma\n    order: 581-bbbb\n    status: ready\n";
+
+    #[test]
+    fn lww_next_action_newer_than_the_last_event_wins_the_effective_read() {
+        // ORDER 877-lwts, the 2026-08-25 incident replayed: the coordinator
+        // queue lives in 831-ezea's next_action, updated by `set-field` (LWW
+        // channel). Two consecutive queue refreshes were silently invisible —
+        // `next-action` kept answering with a next_action EVENT from hours
+        // earlier, because the fold applied the LWW VALUE but dropped its
+        // TIMESTAMP, and effective_next_action treats a ts-less field as the
+        // "untimestamped original" that loses to any event. Newest must win
+        // ACROSS CHANNELS, so the fold now carries the ts through as
+        // `next_action_ts`.
+        let base: Value = serde_yaml::from_str(
+            "packets:\n\
+             \x20   - packet_id: alpha\n\
+             \x20     order: 100\n\
+             \x20     status: in_progress\n\
+             \x20     next_action: original queue\n\
+             \x20     events:\n\
+             \x20       - type: progress\n\
+             \x20         ts: \"2026-08-25T01:00:59Z\"\n\
+             \x20         agent_id: origin\n\
+             \x20         next_action: stale event queue\n\
+             \x20         summary: old\n",
+        )
+        .expect("base parses");
+        let f = frag(
+            "f1",
+            "status:\n\
+             \x20 - packet_id: alpha\n\
+             \x20   field: next_action\n\
+             \x20   value: fresh LWW queue\n\
+             \x20   ts: \"2026-08-25T03:44:34Z\"\n\
+             \x20   host: macuahuitl\n",
+        );
+        let folded = fold(&base, &[f]);
+        let mut ps = Vec::new();
+        crate::collect_packets(&folded, &mut ps);
+        let p = ps.first().expect("alpha present");
+        let (text, ts) = crate::answer::effective_next_action(p).expect("has a next_action");
+        assert_eq!(
+            text, "fresh LWW queue",
+            "a newer set-field write must not be shadowed by an older event"
+        );
+        assert_eq!(ts.as_deref(), Some("2026-08-25T03:44:34Z"));
+    }
+
+    #[test]
+    fn next_action_event_newer_than_the_lww_write_still_wins() {
+        // The inverse control: the fix must not simply prefer the field —
+        // an event AFTER the set-field write is the newer instruction.
+        let base: Value = serde_yaml::from_str(
+            "packets:\n\
+             \x20   - packet_id: alpha\n\
+             \x20     order: 100\n\
+             \x20     status: in_progress\n\
+             \x20     events:\n\
+             \x20       - type: progress\n\
+             \x20         ts: \"2026-08-25T05:00:00Z\"\n\
+             \x20         agent_id: origin\n\
+             \x20         next_action: even fresher event queue\n\
+             \x20         summary: new\n",
+        )
+        .expect("base parses");
+        let f = frag(
+            "f1",
+            "status:\n\
+             \x20 - packet_id: alpha\n\
+             \x20   field: next_action\n\
+             \x20   value: older LWW queue\n\
+             \x20   ts: \"2026-08-25T03:44:34Z\"\n\
+             \x20   host: macuahuitl\n",
+        );
+        let folded = fold(&base, &[f]);
+        let mut ps = Vec::new();
+        crate::collect_packets(&folded, &mut ps);
+        let p = ps.first().expect("alpha present");
+        let (text, _) = crate::answer::effective_next_action(p).expect("has a next_action");
+        assert_eq!(text, "even fresher event queue");
+    }
 
     #[test]
     fn set_field_body_round_trips_hostile_prose() {
@@ -3446,6 +3757,137 @@ plan_index:
         assert_fold_equivalent(&index, &raw);
         let _ = std::fs::remove_dir_all(&d);
     }
+
+    // ── 846-idhn EXIT CRITERION 3 ───────────────────────────────────────────
+    //
+    // "A fragment carrying each known top-level key survives fold -> compact ->
+    // fold byte-equivalently, SO THE NEXT CHANNEL ADDED CANNOT REPEAT THIS."
+    //
+    // The defect being generalised away is 843-624y: `capabilities:` was read by
+    // the folder and written by nobody, so compaction CONSUMED those fragments
+    // and deleted them — destroying 100% of the channel. yolanda's only two rows
+    // were lost that way. Per-channel fixes do not prevent the next channel from
+    // arriving with the same hole, and 864-p2rk landed the same shape again on
+    // the same day (a cache key that failed to cover one of its own inputs).
+    //
+    // So there are two assertions here, and the second is the one that
+    // generalises: every channel round-trips, AND the set of channels under test
+    // is provably the set the folder actually reads.
+
+    /// The full observable state of a ledger: the packet document AND the
+    /// capability matrix, which lives outside `fold` on purpose.
+    fn full_state(index: &Path) -> (Vec<Value>, Vec<String>) {
+        let base_raw = std::fs::read_to_string(index).unwrap_or_default();
+        let base: Value = serde_yaml::from_str(&base_raw).unwrap_or(Value::Null);
+        let frags = load_all(index);
+
+        let merged = fold(&base, &frags);
+        let mut packets = Vec::new();
+        crate::collect_packets(&merged, &mut packets);
+
+        // 864-v8kr CLOSED THIS. This helper used to hand-build a synthetic
+        // "0000-base" Fragment, mirroring two production copies of the same
+        // code. The splice now lives inside the fold, so the base is simply
+        // passed — and the disappearance of the preparation from THIS call is
+        // the readable form of the fix.
+        let (matrix, _) = fold_capabilities_with_base(&base, &frags);
+        let caps: Vec<String> = matrix.keys().map(|(h, l)| format!("{h}/{l}")).collect();
+
+        (packets, caps)
+    }
+
+    /// Every top-level channel a fragment may carry survives compaction.
+    #[test]
+    fn every_known_fragment_channel_survives_a_compaction_round_trip() {
+        for (channel, body) in CHANNEL_PROBES {
+            let d = scratch(&format!("chan-{channel}"));
+            let index = d.join("plan/index.yaml");
+            std::fs::write(d.join("plan/index.d/1-probe.yaml"), body).expect("write probe");
+
+            let before = full_state(&index);
+
+            // Publish the compaction the way `compact` does: the candidate
+            // becomes the base and the folded fragments are deleted.
+            let candidate = compact_text(&index)
+                .unwrap_or_else(|e| panic!("channel {channel} failed to compact: {e}"))
+                .candidate;
+            std::fs::write(&index, &candidate).expect("publish candidate");
+            for entry in std::fs::read_dir(d.join("plan/index.d")).expect("read frag dir") {
+                std::fs::remove_file(entry.expect("entry").path()).expect("delete folded fragment");
+            }
+
+            let after = full_state(&index);
+
+            assert_eq!(
+                before.0, after.0,
+                "channel `{channel}`: packet state did not survive fold -> compact -> fold"
+            );
+            assert_eq!(
+                before.1, after.1,
+                "channel `{channel}`: capability rows did not survive fold -> compact -> fold"
+            );
+            let _ = std::fs::remove_dir_all(&d);
+        }
+    }
+
+    /// THE ASSERTION THAT GENERALISES. Read this file's own source, find every
+    /// top-level key the folder pulls out of a fragment, and require it to be
+    /// covered above. Adding a channel to the folder without adding a probe
+    /// fails here — which is the only mechanism that makes the next channel
+    /// safe rather than merely making this one safe.
+    #[test]
+    fn the_set_of_fragment_channels_under_test_is_the_set_the_folder_reads() {
+        let src = include_str!("fragments.rs");
+        let mut read: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for (pat, _) in [("frag.doc.get(\"", 0), ("d.doc.get(\"", 0)] {
+            let mut rest = src;
+            while let Some(i) = rest.find(pat) {
+                rest = &rest[i + pat.len()..];
+                if let Some(j) = rest.find('"') {
+                    read.insert(rest[..j].to_string());
+                }
+            }
+        }
+        let covered: std::collections::BTreeSet<String> = CHANNEL_PROBES
+            .iter()
+            .map(|(c, _)| (*c).to_string())
+            .collect();
+        let uncovered: Vec<&String> = read.difference(&covered).collect();
+        assert!(
+            uncovered.is_empty(),
+            "the folder reads fragment channel(s) {uncovered:?} that no round-trip probe covers.\n\
+             Add a probe to CHANNEL_PROBES. This is 846-idhn exit criterion 3: a channel the\n\
+             folder reads and compaction does not write is silently destroyed (843-624y)."
+        );
+    }
+
+    /// One probe per channel. Kept as a const so the coverage assertion above
+    /// can enumerate it.
+    const CHANNEL_PROBES: &[(&str, &str)] = &[
+        (
+            "packets",
+            "packets:\n  - packet_id: zeta\n    order: 900\n    status: ready\n",
+        ),
+        (
+            "events",
+            "events:\n  - packet_id: alpha\n    event:\n      type: note\n      \
+             ts: \"2026-02-02T00:00:00Z\"\n      agent_id: probe\n      summary: channel probe\n",
+        ),
+        (
+            "status",
+            "status:\n  - packet_id: alpha\n    field: status\n    value: implemented\n    \
+             ts: \"2026-02-02T00:00:00Z\"\n    host: probe\n",
+        ),
+        (
+            "capabilities",
+            "capabilities:\n  - ts: \"2026-02-02T00:00:00Z\"\n    host: linux\n    \
+             locus: in-guest\n    document:\n      schema_version: 2\n      legacy_tier: cpu\n      \
+             devices: []\n      engines: []\n      measurements: []\n      host:\n        \
+             is_battery_present: true\n        kernel_release: 6.1.0-probe\n        \
+             host_id: probe-host\n        host_id_source: node-name\n        host_kind: linux\n      \
+             timestamp: \"2026-02-02T00:00:00Z\"\n",
+        ),
+    ];
 }
 
 #[cfg(test)]
@@ -3508,6 +3950,76 @@ mod capability_matrix_tests {
         assert_eq!(m.len(), 2, "one row per host_id");
         assert!(m.contains_key(&("yoga".to_string(), "in-guest".to_string())));
         assert!(m.contains_key(&("yolanda".to_string(), "in-guest".to_string())));
+    }
+
+    // ── 864-v8kr ────────────────────────────────────────────────────────────
+    //
+    // The base must reach the fold BY CONSTRUCTION, not because each caller
+    // remembered to splice it. Two production callers did remember, in two
+    // hand-written copies, and nothing in `fold_capabilities(&frags)` told a
+    // third that it owed them — it would have returned an empty matrix and no
+    // error, the same silent emptiness that lost yolanda's only two rows when
+    // compaction consumed the channel (843-624y).
+    //
+    // The distinguishing test is therefore NOT "does the matrix contain the
+    // base row" — the old code passed that too, at its prepared call sites. It
+    // is "does a caller that prepares NOTHING still see the base row".
+
+    /// A caller that does no preparation whatsoever still sees base rows.
+    #[test]
+    fn the_base_reaches_the_fold_without_any_caller_side_preparation() {
+        let base: Value = serde_yaml::from_str(&row(
+            "base-only-host",
+            "2026-08-18T10:00:00Z",
+            "linux",
+            "cpu",
+        ))
+        .expect("base parses");
+
+        // No synthetic Fragment, no insert, no load_all — the whole point.
+        let (m, _skipped) = fold_capabilities_with_base(&base, &[]);
+
+        assert!(
+            m.contains_key(&("base-only-host".to_string(), "in-guest".to_string())),
+            "a base row must be visible to a caller that prepared nothing; got {:?}",
+            m.keys().collect::<Vec<_>>()
+        );
+    }
+
+    /// And the base still LOSES to a newer fragment row, so moving the splice
+    /// inside did not quietly change precedence. Precedence is the row's own
+    /// (ts, host); a base that won by virtue of being the base would be a
+    /// different bug wearing this fix's clothes.
+    #[test]
+    fn an_interior_base_splice_does_not_change_lww_precedence() {
+        let base: Value =
+            serde_yaml::from_str(&row("dual", "2026-08-18T10:00:00Z", "linux", "cpu"))
+                .expect("base parses");
+        let newer = frag(
+            "newer.yaml",
+            &row("dual", "2026-08-19T10:00:00Z", "linux", "gpu-cuda"),
+        );
+        let (m, _) = fold_capabilities_with_base(&base, &[newer]);
+        assert_eq!(
+            m[&("dual".to_string(), "in-guest".to_string())].document["legacy_tier"],
+            Value::String("gpu-cuda".into()),
+            "the newer fragment row must win over the base row"
+        );
+
+        // ...and symmetrically, an OLDER fragment must not beat a newer base.
+        let base_new: Value =
+            serde_yaml::from_str(&row("dual", "2026-08-20T10:00:00Z", "linux", "gpu-rocm"))
+                .expect("base parses");
+        let older = frag(
+            "older.yaml",
+            &row("dual", "2026-08-19T10:00:00Z", "linux", "cpu"),
+        );
+        let (m2, _) = fold_capabilities_with_base(&base_new, &[older]);
+        assert_eq!(
+            m2[&("dual".to_string(), "in-guest".to_string())].document["legacy_tier"],
+            Value::String("gpu-rocm".into()),
+            "the newer base row must win over an older fragment row"
+        );
     }
 
     /// Two WSL2 guests share a kernel release exactly. They must NOT collapse.
@@ -4025,4 +4537,238 @@ fn quote_datelike_scalar(line: &str) -> String {
         return line.to_string();
     }
     format!("{key}\"{value}\"")
+}
+
+/// ORDER 866-pvsx. The read-time coverage report: an entry the fold cannot use
+/// must be NAMED, and the two ways an `events:` entry goes unusable must be
+/// told apart, because they are repaired differently.
+#[cfg(test)]
+mod overlay_coverage_gap_tests {
+    use super::*;
+
+    const BASE: &str = "\
+plan_index:
+  version: v1
+  steps:
+    - packet_id: an-existing-packet
+      order: 001-aaaa
+      status: ready
+      title: a packet that already exists in the base
+";
+
+    fn scratch(tag: &str, fragment: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("tilland-ocg-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(d.join("plan/index.d")).expect("mkdir");
+        std::fs::write(d.join("plan/index.yaml"), BASE).expect("write base");
+        std::fs::write(d.join("plan/index.d/20260823t200000z-t.yaml"), fragment)
+            .expect("write frag");
+        d
+    }
+
+    fn gaps_for(tag: &str, fragment: &str) -> Vec<String> {
+        let d = scratch(tag, fragment);
+        overlay_coverage_gaps(&d.join("plan/index.yaml"))
+            .into_iter()
+            .flat_map(|(_, g)| g)
+            .collect()
+    }
+
+    /// THE DEFECT THAT MOTIVATED THE ORDER, reproduced exactly: a hand-written
+    /// directive key the fold has no handler for. Before this pass, every gate
+    /// reported success and the write did not land.
+    #[test]
+    fn unrecognized_directive_key_is_named_with_the_key() {
+        let gaps = gaps_for(
+            "unknown-key",
+            "events:\n  - packet_id: an-existing-packet\n    set_field:\n      status: ready\n",
+        );
+        assert_eq!(gaps.len(), 1, "expected exactly one gap, got {gaps:?}");
+        assert!(
+            gaps[0].contains("set_field"),
+            "must name the offending key: {gaps:?}"
+        );
+        assert!(
+            gaps[0].contains("866-pvsx"),
+            "must cite its own order: {gaps:?}"
+        );
+        assert!(
+            !gaps[0].contains("812-d45t"),
+            "must NOT be reported as a misplaced definition — that sends the reader \
+             looking for a lost packet: {gaps:?}"
+        );
+    }
+
+    /// The sibling shape keeps its own, different diagnosis: this one really is
+    /// a packet definition under the wrong key and the repair is to relocate it.
+    #[test]
+    fn misplaced_definition_keeps_the_812_diagnosis() {
+        let gaps = gaps_for(
+            "misplaced-def",
+            "events:\n  - packet_id: a-brand-new-packet\n    order: 002-bbbb\n    title: t\n    kind: bug\n",
+        );
+        assert_eq!(gaps.len(), 1, "expected exactly one gap, got {gaps:?}");
+        assert!(gaps[0].contains("812-d45t"), "{gaps:?}");
+        assert!(
+            gaps[0].contains("packets:"),
+            "must say where to move it: {gaps:?}"
+        );
+        assert!(!gaps[0].contains("866-pvsx"), "{gaps:?}");
+    }
+
+    /// An entry with a packet_id and nothing else is still a dropped write, and
+    /// must not fall through the key-naming branch into an empty list.
+    #[test]
+    fn entry_with_no_payload_at_all_is_still_reported() {
+        let gaps = gaps_for("bare", "events:\n  - packet_id: an-existing-packet\n");
+        assert_eq!(gaps.len(), 1, "{gaps:?}");
+        assert!(gaps[0].contains("no payload key at all"), "{gaps:?}");
+    }
+
+    /// THE NEGATIVE CONTROL. A well-formed event reports nothing — without this
+    /// the pass could be firing on everything and the tests above would still
+    /// pass, which is the failure mode a guard this noisy would be switched off
+    /// for within a day.
+    #[test]
+    fn a_well_formed_event_reports_nothing() {
+        let gaps = gaps_for(
+            "clean",
+            "events:\n  - packet_id: an-existing-packet\n    event:\n      type: progress\n      \
+             ts: \"2026-08-23T20:00:00Z\"\n      agent_id: t\n      host: linux\n      summary: s\n",
+        );
+        assert!(
+            gaps.is_empty(),
+            "clean overlay must be silent, got {gaps:?}"
+        );
+    }
+
+    /// An unreadable base yields no gaps rather than a panic — `check` has its
+    /// own louder answer for that, and this pass must never change how an
+    /// unreadable ledger fails.
+    #[test]
+    fn unparseable_base_yields_no_gaps_instead_of_panicking() {
+        let d = scratch("badbase", "events:\n  - packet_id: an-existing-packet\n");
+        std::fs::write(d.join("plan/index.yaml"), "\tnot: [valid\n").expect("write bad base");
+        assert!(overlay_coverage_gaps(&d.join("plan/index.yaml")).is_empty());
+    }
+}
+
+/// ORDER 686-7qcm. The closure ladder must hold on the COMPACTION path, not
+/// only in the live fold. A rung lost here is lost permanently: compaction
+/// rewrites the base and deletes the fragment it consumed, so there is nothing
+/// left to re-derive the higher rung from.
+#[cfg(test)]
+mod closure_ladder_compaction_tests {
+    use super::*;
+
+    const BASE: &str = "\
+plan_index:
+  version: v1
+  steps:
+    - packet_id: alpha
+      order: 900-aaaa
+      status: completed
+      title: a packet already at the completed rung in the base
+";
+
+    /// A later fragment that lowers the rung, with no falsified event.
+    const DOWNGRADE: &str = "\
+status:
+  - packet_id: alpha
+    field: status
+    value: implemented
+    ts: \"2026-08-24T09:00:00Z\"
+    host: someotherhost
+";
+
+    /// The sanctioned way down: the SAME fragment records the falsification.
+    const DOWNGRADE_WITH_FALSIFIED: &str = "\
+status:
+  - packet_id: alpha
+    field: status
+    value: implemented
+    ts: \"2026-08-24T09:00:00Z\"
+    host: someotherhost
+events:
+  - packet_id: alpha
+    event:
+      type: falsified
+      ts: \"2026-08-24T09:00:00Z\"
+      agent_id: t
+      host: someotherhost
+      summary: the completed claim did not hold
+";
+
+    fn scratch(tag: &str, fragment: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("tilland-ladder-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(d.join("plan/index.d")).expect("mkdir");
+        std::fs::write(d.join("plan/index.yaml"), BASE).expect("base");
+        std::fs::write(d.join("plan/index.d/20260824t090000z-t.yaml"), fragment).expect("frag");
+        d
+    }
+
+    fn folded_status(index: &Path) -> String {
+        let raw = std::fs::read_to_string(index).expect("read base");
+        let base: Value = serde_yaml::from_str(&raw).expect("parse base");
+        let merged = fold(&base, &load_all(index));
+        let mut packets = Vec::new();
+        crate::collect_packets(&merged, &mut packets);
+        packets
+            .iter()
+            .find(|p| p.get("packet_id").and_then(Value::as_str) == Some("alpha"))
+            .and_then(|p| p.get("status"))
+            .and_then(Value::as_str)
+            .unwrap_or("<none>")
+            .to_string()
+    }
+
+    fn candidate_status(index: &Path) -> String {
+        let c = compact_text(index).expect("compaction candidate");
+        let doc: Value = serde_yaml::from_str(&c.candidate).expect("candidate parses");
+        let mut packets = Vec::new();
+        crate::collect_packets(&doc, &mut packets);
+        packets
+            .iter()
+            .find(|p| p.get("packet_id").and_then(Value::as_str) == Some("alpha"))
+            .and_then(|p| p.get("status"))
+            .and_then(Value::as_str)
+            .unwrap_or("<none>")
+            .to_string()
+    }
+
+    /// The live fold already enforces this. Kept as the reference the
+    /// compaction path must agree with — if this ever regresses, the two
+    /// assertions below stop meaning what they claim.
+    #[test]
+    fn fold_keeps_the_higher_rung_without_a_falsified_event() {
+        let d = scratch("fold-keep", DOWNGRADE);
+        assert_eq!(folded_status(&d.join("plan/index.yaml")), "completed");
+    }
+
+    /// THE DEFECT. compact_text resolved `status` by plain (ts, host) LWW while
+    /// its own comment claimed it "recomputed exactly as `fold` resolves them".
+    /// That stopped being true when the fold became rank-aware, and the
+    /// divergence is silent and permanent: the candidate replaces the base and
+    /// the fragment is deleted by name.
+    #[test]
+    fn compaction_candidate_keeps_the_higher_rung_too() {
+        let d = scratch("cand-keep", DOWNGRADE);
+        assert_eq!(
+            candidate_status(&d.join("plan/index.yaml")),
+            "completed",
+            "compaction downgraded a closure rung with no falsified event"
+        );
+    }
+
+    /// POSITIVE CONTROL. Without this, both assertions above would pass on an
+    /// implementation that simply refuses every status change — which would
+    /// break the one sanctioned way back down the ladder.
+    #[test]
+    fn a_same_fragment_falsified_event_still_permits_the_downgrade() {
+        let d = scratch("falsified", DOWNGRADE_WITH_FALSIFIED);
+        let index = d.join("plan/index.yaml");
+        assert_eq!(folded_status(&index), "implemented");
+        assert_eq!(candidate_status(&index), "implemented");
+    }
 }

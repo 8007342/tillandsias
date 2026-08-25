@@ -47,7 +47,12 @@ while IFS= read -r line; do
     # Embed. A failure here must NOT silently become a zero score — an
     # unembeddable question that scores 0.0 would land in the refuse band and
     # look like a success.
-    body="$(jq -nc --arg m "$MODEL" --arg i "$q" '{model:$m,input:$i}')"
+    # QUERY PREFIX (864-p2rk) — the counterpart to TILLANDSIAS_EMBED_DOC_PREFIX
+    # in spec-index-ensure.sh. Must match the convention the index was BUILT
+    # with, or query and passage land in different halves of an asymmetric
+    # space and every score is meaningless. Empty by default, reproducing every
+    # historical measurement exactly.
+    body="$(jq -nc --arg m "$MODEL" --arg i "${TILLANDSIAS_EMBED_QUERY_PREFIX:-}$q" '{model:$m,input:$i}')"
     resp="$(curl -sS --fail-with-body -X POST "$ENDPOINT/v1/embeddings" \
         -H 'content-type: application/json' -d "$body" 2>&1)"
     rc=$?

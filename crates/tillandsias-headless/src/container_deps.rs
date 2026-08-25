@@ -38,6 +38,11 @@ pub enum Service {
     /// The `tillandsias-git` container used by `--github-login` and
     /// `--list-cloud-projects` (reads/writes Vault, egresses via Proxy).
     GitLogin,
+    /// The enclave nix binary cache (harmonia serving the persistent chroot
+    /// store over TLS, order 801-kqme). Dev-tier and OPTIONAL: hosts without
+    /// nix or a store satisfy it as a skip, so it can sit in the launch graph
+    /// without making nix a launch requirement (order 801-vm4p).
+    NixCache,
     /// The forge launch target: ensures proxy, networks, CA bundle, and git
     /// mirror prerequisites before starting the per-project forge containers.
     ForgeLaunch,
@@ -53,6 +58,7 @@ impl Service {
             Service::Vault => "tillandsias-vault",
             Service::Proxy => "tillandsias-proxy",
             Service::GitLogin => "tillandsias-git-login",
+            Service::NixCache => "tillandsias-nix-cache",
             Service::ForgeLaunch => "tillandsias-forge-launch",
         }
     }
@@ -82,6 +88,13 @@ const DEPS: &[(Service, &[Service])] = &[
         &[Service::Vault, Service::Proxy, Service::CaBundle],
     ),
     (
+        // The cache needs only the enclave network and the stack CA (its TLS
+        // leaf is minted from it by the prepare step). Everything else is
+        // host-side prep the script owns.
+        Service::NixCache,
+        &[Service::EnclaveNetwork, Service::CaBundle],
+    ),
+    (
         Service::ForgeLaunch,
         &[
             Service::EnclaveNetwork,
@@ -94,6 +107,13 @@ const DEPS: &[(Service, &[Service])] = &[
             // a fresh boot refuses the lane with "Vault container is not
             // running" (live: macOS one-shot --opencode, 2026-07-16).
             Service::Vault,
+            // ORDER 801-vm4p: the nix cache rides the forge-launch graph so it
+            // is ensured wherever a forge comes up — "transparent to the
+            // development runtime" (operator, 2026-08-24). Its ensure SKIPS
+            // (Ok) on hosts without nix or a store, so this edge adds no new
+            // launch requirement anywhere; the forge consumes it since
+            // 801-x1nx landed nix in the forge image.
+            Service::NixCache,
         ],
     ),
 ];
@@ -316,6 +336,7 @@ impl Satisfier for RealSatisfier {
                 }
             }
             Service::Proxy => crate::ensure_proxy_running(self.debug),
+            Service::NixCache => crate::ensure_nix_cache_running(self.debug),
             Service::GitLogin => Err(format!(
                 "{} is a launch target, not a satisfiable prerequisite",
                 service.name()
@@ -364,6 +385,36 @@ pub fn death_verdict(service_name: &str, state: &str, exit_code: i64, deaths: u3
     format!(
         "fail:managed-service-death:service={service_name}:state={state}:exit={exit_code}:deaths={deaths}:action=re-ensure"
     )
+}
+
+/// How the liveness probe should treat the nix cache this tick (801-vm4p).
+///
+/// The cache's "skip is success" launch semantics must carry into
+/// supervision: on a host where the cache is inapplicable (no nix, no store,
+/// not a dev checkout) NO container was ever created, and an absent container
+/// must not count as a death — re-ensuring it every heartbeat would re-decide
+/// applicability forever and spam the death verdict for a service that was
+/// never supposed to run. An EXITED container, by contrast, is a real death
+/// of a service this tray launched, and gets the full 767-es4w treatment.
+#[derive(Debug, PartialEq, Eq)]
+pub enum NixCacheSupervision {
+    /// No container exists — inapplicable or consciously torn down. Not a
+    /// death; take no action.
+    Absent,
+    /// The container is running; record it healthy.
+    Running,
+    /// The container exists and is not running: a real death (state, exit).
+    Dead(String, i64),
+}
+
+/// Pure classification for the nix-cache supervision entry, split from the
+/// podman probes so the absent/dead distinction is unit-testable.
+pub fn classify_nix_cache(exit_state: Option<(String, i64)>, running: bool) -> NixCacheSupervision {
+    match exit_state {
+        None => NixCacheSupervision::Absent,
+        Some(_) if running => NixCacheSupervision::Running,
+        Some((state, code)) => NixCacheSupervision::Dead(state, code),
+    }
 }
 
 /// Periodic liveness probe for container-backed managed services.
@@ -447,6 +498,31 @@ impl LivenessProbe {
             }
         }
 
+        // NixCache (801-vm4p residue): supervised like vault/proxy, but only
+        // when a container EXISTS — see classify_nix_cache for why absent is
+        // not dead. The re-ensure goes through the same satisfier, so the
+        // drain gate and resource lock inside ensure_nix_cache_running still
+        // apply.
+        let cache = Service::NixCache;
+        match classify_nix_cache(
+            crate::vault_bootstrap::container_exit_state(cache.name()),
+            crate::vault_bootstrap::container_running(cache.name()),
+        ) {
+            NixCacheSupervision::Absent => {}
+            NixCacheSupervision::Running => result.running.push(cache),
+            NixCacheSupervision::Dead(state, exit_code) => {
+                let deaths = self.bump_death(cache);
+                let verdict = death_verdict(cache.name(), &state, exit_code, deaths);
+                println!("{verdict}");
+                eprintln!("{verdict}");
+                satisfier
+                    .satisfy(cache)
+                    .map_err(|e| format!("liveness: failed to re-ensure {}: {e}", cache.name()))?;
+                result.re_ensured.push(cache);
+                result.deaths.push((cache, deaths));
+            }
+        }
+
         Ok(result)
     }
 }
@@ -455,12 +531,13 @@ impl LivenessProbe {
 mod tests {
     use super::*;
 
-    const ALL: [Service; 7] = [
+    const ALL: [Service; 8] = [
         Service::EnclaveNetwork,
         Service::EgressNetwork,
         Service::CaBundle,
         Service::Vault,
         Service::Proxy,
+        Service::NixCache,
         Service::GitLogin,
         Service::ForgeLaunch,
     ];
@@ -833,6 +910,44 @@ mod tests {
             .expect("vault counted");
         assert_eq!(proxy.1, 3);
         assert_eq!(vault.1, 1);
+    }
+
+    /// ORDER 801-vm4p. The nix cache's "skip is success" launch semantics
+    /// carry into supervision: an ABSENT container is inapplicability, never
+    /// a death. Without this distinction the probe would emit a
+    /// fail:managed-service-death verdict every heartbeat on every host that
+    /// (correctly) never launched a cache, and re-ensure would re-decide
+    /// applicability forever.
+    #[test]
+    fn nix_cache_absent_is_not_a_death() {
+        assert_eq!(
+            classify_nix_cache(None, false),
+            NixCacheSupervision::Absent,
+            "no container = inapplicable-or-torn-down; the probe must take no action"
+        );
+        // MUTATION CONTROL, the direction that matters: collapsing Absent
+        // into Dead (treating "inspect failed" as "exited") is precisely the
+        // bug this classifier exists to prevent — assert the discrimination.
+        assert_ne!(
+            classify_nix_cache(None, false),
+            NixCacheSupervision::Dead("unknown".into(), -1)
+        );
+    }
+
+    /// The other two arms: a live container is Running; an existing,
+    /// non-running container is a REAL death carrying its exit state, exactly
+    /// like vault/proxy (767-es4w treatment).
+    #[test]
+    fn nix_cache_existing_container_states_classify() {
+        assert_eq!(
+            classify_nix_cache(Some(("running".into(), 0)), true),
+            NixCacheSupervision::Running
+        );
+        assert_eq!(
+            classify_nix_cache(Some(("exited".into(), 139)), false),
+            NixCacheSupervision::Dead("exited".into(), 139),
+            "an exited cache this tray launched is a death, with the exit code preserved"
+        );
     }
 
     /// A service that never died must never appear in the counts — otherwise

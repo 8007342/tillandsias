@@ -18,7 +18,6 @@ litmus:drain-vs-self-heal
 litmus:cross-platform-terminal-attach
 litmus:macos-tray-menu-renders
 litmus:mount-cleanup
-litmus:pty-open-argv-allowlisted
 litmus:publish-local-e2e
 litmus:tray-host-control-socket-unix-shape
 litmus:vm-provisioning-idempotent

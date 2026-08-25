@@ -20,13 +20,14 @@
 #   3. an unbounded `read_to_end` on a child pipe in tillandsias-podman src
 #      (order 795-hzpg slice A) — capture must go through the capped reader in
 #      `SyncPodmanCommand::wait_bounded`, whose truncation is reported, never
-#      silent. (The packet's other scan — `thread::sleep` inside a wait loop —
-#      lands with slice B, when the 20ms poll is replaced by a parked deadline
-#      wait; adding it now would be red against code slice A deliberately
-#      leaves in place.)
+#      silent;
+#   4. an executable `thread::sleep` in tillandsias-podman production source
+#      (order 795-hzpg slice B). The crate has no legitimate production sleeps:
+#      its only two were fixed-cadence child-wait polls. Bounded waits park in
+#      the operating system instead.
 #
 # Prints exactly one line matching
-# `^(ok:podman-sync-bounded|violation:(direct-command|escape-hatch-grew|unbounded-capture)):[0-9]+$`
+# `^(ok:podman-sync-bounded|violation:(direct-command|escape-hatch-grew|unbounded-capture|sleep-poll)):[0-9]+$`
 # and exits 0 only on ok.
 
 set -uo pipefail
@@ -90,6 +91,25 @@ capture=$(find_unbounded_capture | wc -l | tr -d ' ')
 if [ "$capture" -ne 0 ]; then
     echo "violation:unbounded-capture:$capture"
     find_unbounded_capture >&2
+    exit 1
+fi
+
+# 4) A sleeping production thread in the podman crate (795-hzpg B).
+#
+# Product source only. External tests and documentation may name or exercise a
+# sleep without weakening the no-poll production invariant.
+find_sleep_poll() {
+    grep -rn --include=*.rs \
+        -E '(^|[^[:alnum:]_])(std::)?thread::sleep[[:space:]]*\(' \
+        "$SEARCH_ROOT" 2>/dev/null \
+        | grep 'tillandsias-podman/src/' \
+        | grep -vE ':[0-9]+:[[:space:]]*(//|/\*|\*)' \
+        | grep -v 'source.contains'
+}
+sleep_poll=$(find_sleep_poll | wc -l | tr -d ' ')
+if [ "$sleep_poll" -ne 0 ]; then
+    echo "violation:sleep-poll:$sleep_poll"
+    find_sleep_poll >&2
     exit 1
 fi
 

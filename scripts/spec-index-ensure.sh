@@ -313,8 +313,32 @@ n_chunks="$(wc -l < "$work/chunks.jsonl" | tr -d '[:space:]')"
 # IDEMPOTENCE. The fingerprint covers the chunk corpus AND the model, because
 # re-embedding the same text with a different model produces a different vector
 # space, and mixing two spaces in one file yields confident nonsense.
+#
+# ...AND THE DOCUMENT PREFIX, for exactly the same reason (864-p2rk). Prefixing
+# a passage with "search_document: " changes what is embedded, so it changes
+# the space — but `content_hash` is hash_hex(span), the TEXT AND NOTHING ELSE,
+# so the chunk keeps its hash and the delta happily reuses UNPREFIXED vectors
+# for a build that asked for prefixed ones.
+#
+# Measured 2026-08-23, on the first prefixed build ever attempted here:
+#   spec-index:delta reused=21123 embed=3 of 21126
+#   spec-index:delta identity-verified=5 reused samples
+# A full nomic index takes ~8 minutes; that one finished in FIVE SECONDS and
+# declared itself verified. The identity assertion did not catch it because it
+# re-embeds the sample through the same unprefixed path, so it compared wrong
+# against wrong and agreed.
+#
+# This is the model-key defect of order 552 recurring in a second dimension.
+# The lesson it should have taught was not "add the model to the key" but
+# "anything that changes the embedded BYTES belongs in the key", so the key now
+# covers every input to the embedding call rather than being extended one
+# incident at a time.
 fingerprint="$(
-    { "${PORTABLE_SHA256[@]}" < "$work/chunks.jsonl"; printf '%s\n' "$EMBED_MODEL"; } | "${PORTABLE_SHA256[@]}" | cut -d' ' -f1
+    {
+        "${PORTABLE_SHA256[@]}" < "$work/chunks.jsonl"
+        printf '%s\n' "$EMBED_MODEL"
+        printf '%s\n' "${TILLANDSIAS_EMBED_DOC_PREFIX:-}"
+    } | "${PORTABLE_SHA256[@]}" | cut -d' ' -f1
 )"
 INDEX_DIR="$INDEX_ROOT/$fingerprint"
 
@@ -473,6 +497,9 @@ if [ "$DELTA" = "1" ]; then
         # one full rebuild per model, once, and self-heals thereafter.
         [ -f "${gen%/}/.model" ] || continue
         [ "$(cat "${gen%/}/.model" 2>/dev/null)" = "$EMBED_MODEL" ] || continue
+        # 864-p2rk: same rule for the document prefix. A generation with no .prefix
+        # marker predates prefixes and is only reusable by an unprefixed build.
+        [ "$(cat "${gen%/}/.prefix" 2>/dev/null)" = "${TILLANDSIAS_EMBED_DOC_PREFIX:-}" ] || continue
         # Without that equality this paste would mint a hash->vector map that
         # is wrong from its first line.
         paste -d '\t' \
@@ -510,25 +537,59 @@ fi
 for part in "$work"/b/part-*; do
     [ -e "$part" ] || break
     want="$(wc -l < "$part" | tr -d '[:space:]')"
-    jq -sc --arg m "$EMBED_MODEL" '{model:$m, input:.}' "$part" > "$work/payload.json" || {
+    # DOCUMENT PREFIX (864-p2rk). Several embedders are trained with an
+    # asymmetric query/passage convention and are documented as REQUIRING it —
+    # nomic-embed-text wants "search_document: " on passages and
+    # "search_query: " on queries. This harness applied neither, to any model,
+    # in every comparison filed so far. nomic's own template is a bare
+    # `{{ .Prompt }}`, so nothing supplies it downstream either. Empty by
+    # default, which reproduces every historical measurement exactly.
+    jq -sc --arg m "$EMBED_MODEL" --arg p "${TILLANDSIAS_EMBED_DOC_PREFIX:-}" \
+        '{model:$m, input:[.[] | $p + .]}' "$part" > "$work/payload.json" || {
         echo "blocked:spec-index:payload-failed"; exit 1; }
-    if ! curl -fsS --max-time 300 "$EMBED_EP/embeddings" \
-            -H 'Content-Type: application/json' \
-            -d @"$work/payload.json" > "$work/resp.json" 2>/dev/null; then
-        # NAME THE LIKELY CAUSE INSTEAD OF BLAMING THE NETWORK. An abort while
-        # another model is resident is 849-tz8g, not an unreachable endpoint:
-        # measured 2026-08-23, a nomic rebuild refused here purely because a
-        # bge-m3 build minutes earlier had left its model loaded, and unloading
-        # made the identical command succeed. "endpoint-refused" sends the
-        # reader to the proxy and the CA bundle, which is the wrong half of the
-        # system entirely.
+    # `-f` IS THE BUG THIS BLOCK KEEPS RE-LEARNING, so it is gone. curl's --fail
+    # makes an HTTP 400 an exit-22 failure AND DISCARDS THE RESPONSE BODY — the
+    # body being the only place the server says what was actually wrong. This
+    # handler then printed a guess in its place, and the guess was wrong.
+    #
+    # Measured 2026-08-23, and the diagnostic misled its own author for a full
+    # cycle. A qwen3-embedding:4b build died here and this block reported
+    # "models resident right now: qwen3-embedding:4b, qwen2.5:0.5b / loading
+    # another model beside these aborts (849-tz8g)". Residency was NOT the
+    # cause. The discarded body said:
+    #     Post "http://127.0.0.1:NNNNN/tokenize": read tcp …: connection reset
+    # — the model runner had CRASHED while tokenizing, on a batch of 64 real
+    # chunks totalling 255 KB. Bisected: batch 32 (128 KB) succeeds, 64 fails.
+    # A smaller batch fixes it; unloading models does not.
+    #
+    # So the original comment was right that "endpoint-refused" sends the reader
+    # to the proxy and the CA bundle, and then made the same mistake one level
+    # down: it replaced a wrong generic cause with a wrong specific one. An
+    # error may only assert what it measured (797-5kqe). Print the server's own
+    # words FIRST, and offer residency only as a hint clearly marked as a hint.
+    _http="$(curl -sS --max-time 300 -o "$work/resp.json" -w '%{http_code}' \
+            "$EMBED_EP/embeddings" -H 'Content-Type: application/json' \
+            -d @"$work/payload.json" 2>"$work/curl.err")"
+    _curl_rc=$?
+    if [ "$_curl_rc" -ne 0 ] || [ "${_http:-000}" -ge 400 ] 2>/dev/null; then
+        echo "blocked:spec-index:embed-endpoint-refused"
+        echo "  HTTP ${_http:-<none>} from ${EMBED_EP}/embeddings on a batch of ${want:-?} chunk(s)" >&2
+        if [ -s "$work/resp.json" ]; then
+            echo "  THE SERVER SAID: $(head -c 400 "$work/resp.json")" >&2
+        elif [ -s "$work/curl.err" ]; then
+            echo "  curl said: $(head -c 200 "$work/curl.err")" >&2
+        else
+            echo "  (no response body and no curl error — a genuinely silent refusal)" >&2
+        fi
+        echo "  PAYLOAD: $(wc -c < "$work/payload.json" | tr -d ' ') bytes." >&2
+        echo "  IF THE BODY MENTIONS /tokenize OR A RESET CONNECTION the runner crashed" >&2
+        echo "  on batch size, not on residency: retry with a smaller" >&2
+        echo "  TILLANDSIAS_SPEC_INDEX_BATCH (qwen3-embedding:4b needs 32, not 64)." >&2
         _resident="$(curl -fsS --max-time 5 "${EMBED_EP%/v1}/api/ps" 2>/dev/null \
             | jq -r '[.models[]?.name] | join(", ")' 2>/dev/null)"
-        echo "blocked:spec-index:embed-endpoint-refused"
         if [ -n "$_resident" ] && [ "$_resident" != "$EMBED_MODEL" ]; then
-            echo "  models resident right now: ${_resident}" >&2
-            echo "  loading another model beside these aborts on this host (849-tz8g);" >&2
-            echo "  unload them and retry before suspecting the endpoint." >&2
+            echo "  HINT ONLY, not a diagnosis: other models are resident (${_resident})." >&2
+            echo "  If the body above does NOT explain the failure, 849-tz8g may apply." >&2
         fi
         exit 1
     fi
@@ -618,6 +679,7 @@ printf '%s\n' "$fingerprint" > "$stage/.fingerprint"
 # loop: a generation is reusable only by a build using the SAME model, because
 # content_hash covers the text and not the model that embedded it.
 printf %s\\n "$EMBED_MODEL" > "$stage/.model"
+printf %s\\n "${TILLANDSIAS_EMBED_DOC_PREFIX:-}" > "$stage/.prefix"
 # ORDER 801-g9nn — THE FRAME THIS ENTRY DESCRIBES.
 #
 # The fingerprint proves an entry describes corpus X. It says nothing about
@@ -647,7 +709,7 @@ fi
 # read-only mount, so a 0600 entry would be a permission refusal that looks
 # exactly like a missing index.
 chmod 0755 "$stage" 2>/dev/null || true
-chmod 0644 "$stage/chunks.jsonl" "$stage/vectors.jsonl" "$stage/.fingerprint" "$stage/.model" 2>/dev/null || true
+chmod 0644 "$stage/chunks.jsonl" "$stage/vectors.jsonl" "$stage/.fingerprint" "$stage/.model" "$stage/.prefix" 2>/dev/null || true
 if [ -d "$INDEX_DIR" ]; then
     # Lost a race we hold the lock against, or a partial entry survived. Never
     # `mv` onto an existing directory: that NESTS the staging dir inside it.

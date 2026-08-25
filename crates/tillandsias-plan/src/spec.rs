@@ -1,4 +1,6 @@
-// @trace spec:fat-spec-corpus-index
+// @trace order:547
+// (formerly spec:fat-spec-corpus-index — a ghost name no spec file ever
+// carried; order 547 below is the owning provenance, re-pointed by 877)
 //! Order 547 — network-free RAG index over the whole-spec corpus.
 //!
 //! One engine, split at the network boundary (per the order-544/548 design):

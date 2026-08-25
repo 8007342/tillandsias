@@ -1,4 +1,6 @@
 # @trace spec:runtime-diagnostics-stream
+# freshness: auditor=linux-lenovinha-fable5-20260824t075313z date=2026-08-24 verdict=refreshed scope=full file, 6 steps, EXECUTED — `run-litmus-test.sh runtime-diagnostics-stream --phase pre-build --size instant` is 100% (5/5). Still meaningful for the reason its own header gives: the four typed formatters it pins are STAGED behind #[allow(dead_code)] awaiting the gap-2/gap-3 phase-2 live wiring, so nothing else exercises them and they could drift silently before the first caller arrives. That is precisely the case a shape litmus is for.
+# freshness-note: this is a pin on STAGED code, so its value has an expiry — once the live-runtime wiring lands, the formatters gain real callers and this litmus becomes the weaker of two guards. At that point re-audit rather than assume: either it earns its keep against the live path or it is superseded by whatever tests the wiring brings, and the discard-over-repair bias applies. Do not simply re-stamp it forward on the strength of a green.
 # Typed-event formatter wire-shape pinning.
 #
 # spec:runtime-diagnostics-stream mandates four typed event lines beyond

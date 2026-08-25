@@ -660,12 +660,21 @@ specs:
   - litmus:smoke-lock-fd-isolation-shape
   - litmus:meta-orchestration-dirty-tree-safety
   - litmus:meta-orchestration-opsx-sync-merge
+  - litmus:build-cache-sweep-trigger
+  - litmus:issue-citation-convention
+  - litmus:long-running-view-agreement
   - litmus:resumable-claim-dirt-shape
   - litmus:mcp-expert-health-probe-shape
   - litmus:forge-findings-persistence-shape
   - litmus:mo-full-attestation-ledger-shape
   - litmus:startup-context-addendum-shape
   - litmus:pre-push-linux-next-merged-shape
+  - litmus:salvage-net-roundtrip
+  - litmus:cycle-checkout-lock-shape
+  # 740-k8ef: DERIVED from the spec's requirement count, no longer asserted.
+  # Was 80 while "one checkout, one cycle" had only a script suite; the
+  # litmus:cycle-checkout-lock-shape binding runs that suite from the
+  # registry, so all 5 requirements are litmus-covered.
   coverage_ratio: 100
   last_verified: '2026-07-14'
 - spec_id: logging-levels
@@ -1030,7 +1039,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:service-catalog-allowlist-shape
-  coverage_ratio: 100
+  # 740-k8ef: derived — 1 of the spec's 3 requirements (the allowlist) is
+  # litmus-covered; fixed-name join and public-route auth defaults are not.
+  coverage_ratio: 33
   last_verified: '2026-07-15'
 - spec_id: zen-default-with-ollama-analysis-pool
   status: active
@@ -1153,11 +1164,19 @@ specs:
   - litmus:vm-launch-graceful-failure-shape
   coverage_ratio: 20
   last_verified: '2026-07-18'
+- spec_id: vsock-exec-authz
+  status: active
+  litmus_tests:
+  - litmus:pty-open-argv-allowlisted
+  - litmus:guest-exec-argv-vector-no-shell
+  coverage_ratio: 100
+  last_verified: '2026-08-25'
 - spec_id: vsock-transport
   status: active
   litmus_tests:
   - litmus:vsock-handshake
   - litmus:vsock-exec-heartbeat
   - litmus:vsock-unauthenticated-peer-rejected
+  - litmus:one-length-delimited-framing-impl
   coverage_ratio: 100
   last_verified: '2026-07-14'

@@ -277,6 +277,41 @@ multi_host_development:
       A side branch idle beyond the lane deadlines in sweep_role below is
       treated the same way as any other stale lane.
 
+    in_progress_output_of_a_long_horizon_job: >
+      A LONG-RUNNING JOB'S PARTIAL OUTPUT LIVES OUTSIDE THE CHECKOUT UNTIL IT
+      IS COMPLETE, then is copied in and committed as one atomic change.
+
+      WHY THIS NEEDED SAYING (order 864-q7dm, macuahuitl 2026-08-23). The
+      meta-orchestration exit contract recognises exactly two kinds of file: a
+      DISPOSABLE artifact, which belongs under the external $boundary_dir/tmp/,
+      and MEANINGFUL CYCLE OUTPUT, which must be committed and pushed. A
+      measurement that will run for twenty minutes across several cycles is
+      neither. It is meaningful output that is NOT YET READY to commit, and
+      because the contract has no word for that state, the natural place to put
+      it is inside the checkout — which is the wrong one.
+
+      THE COST IS NOT UNTIDINESS, IT IS A HOST THAT CANNOT PUSH. The pre-push
+      gate stamp covers `git ls-files --cached --others`, so an untracked file
+      that merely GROWS invalidates it exactly as a tracked edit would. A job
+      appending a row every few seconds therefore makes every push fail with
+      "the tree changed since ./build.sh --check last passed" — correct, and
+      unfixable by the re-run that message used to recommend, because the
+      re-run stamps a tree that changes again before the push completes. The
+      cycle could push NOTHING, including work with no relation to the job, for
+      as long as it ran.
+
+      THE ESCAPE HATCH, for a job already running: a shell redirect holds its
+      file by INODE, not by path, so `mv` out of the checkout is safe mid-run
+      and the job keeps appending to the moved file. Verified live: 146 rows
+      before the move, 159 after, job still running, worktree clean, push
+      accepted.
+
+      This is a fleet rule and not a macuahuitl rule. Any host told to start
+      work that outlives its cycle inherits the same conflict between "run
+      long-horizon background work" and "the gate assumes the tree holds
+      still", and only one of those two instructions is written down where the
+      other can see it.
+
     sweep_role: >
       Lane/salvage backstop (enumerate, sweep-merge, packet, escalate,
       archive+delete) binds to the coordinate-multihost-work ROLE — any host

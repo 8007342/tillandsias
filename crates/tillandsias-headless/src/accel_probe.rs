@@ -1360,6 +1360,35 @@ fn slug(raw: &str) -> String {
 mod tests {
     use super::*;
 
+    /// ORDER 880-tdwn: pin the podman seam to /bin/false for a test's
+    /// lifetime, under a module lock, restoring the prior value on drop.
+    /// `run_probe` reaches `inference_image_present()` → real podman
+    /// resolution; /bin/false makes that read a deterministic "no image"
+    /// (the function's own documented degraded answer) instead of a
+    /// live-daemon read — or, under the CI tripwire, a panic. Every test
+    /// that walks run_probe MUST hold this guard.
+    fn podman_seam() -> PodmanSeamGuard {
+        static SEAM_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let lock = SEAM_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let prev = std::env::var_os("TILLANDSIAS_PODMAN_BIN");
+        unsafe { std::env::set_var("TILLANDSIAS_PODMAN_BIN", "/bin/false") };
+        PodmanSeamGuard { _lock: lock, prev }
+    }
+    struct PodmanSeamGuard {
+        _lock: std::sync::MutexGuard<'static, ()>,
+        prev: Option<std::ffi::OsString>,
+    }
+    impl Drop for PodmanSeamGuard {
+        fn drop(&mut self) {
+            unsafe {
+                match self.prev.take() {
+                    Some(v) => std::env::set_var("TILLANDSIAS_PODMAN_BIN", v),
+                    None => std::env::remove_var("TILLANDSIAS_PODMAN_BIN"),
+                }
+            }
+        }
+    }
+
     /// Build a document with exactly the devices a case needs.
     fn doc_with(devices: Vec<DeviceRecord>) -> CapabilityDocument {
         CapabilityDocument {
@@ -1623,6 +1652,7 @@ mod tests {
     #[test]
     // @trace spec:accel-capability-probe
     fn test_probe_produces_valid_document() {
+        let _seam = podman_seam();
         let doc = run_probe("gpu-cuda");
         assert_eq!(doc.schema_version, SCHEMA_VERSION);
         assert_eq!(doc.legacy_tier, "gpu-cuda");
@@ -1639,6 +1669,7 @@ mod tests {
     #[test]
     // @trace spec:accel-capability-probe
     fn test_serialization_roundtrip() {
+        let _seam = podman_seam();
         let doc = run_probe("cpu");
         let json = serde_json::to_string_pretty(&doc).expect("serialize");
         let deserialized: CapabilityDocument = serde_json::from_str(&json).expect("deserialize");
@@ -2058,6 +2089,7 @@ mod tests {
     #[test]
     // @trace order:852-dk9z, spec:accel-capability-probe
     fn test_cache_from_different_probe_code_is_reprobed_not_served() {
+        let _seam = podman_seam();
         // The 852-dk9z regression, measured twice for real: a rebuilt binary
         // served its predecessor's document because schema_version and
         // legacy_tier both still matched. Stamp a cache with a FOREIGN probe
@@ -2095,6 +2127,7 @@ mod tests {
     #[test]
     // @trace order:852-dk9z, spec:accel-capability-probe
     fn test_negative_control_unchanged_binary_still_serves_its_own_cache() {
+        let _seam = podman_seam();
         // The cache must keep working for the server's hot path — this fix is
         // an invalidation rule, not a removal.
         let dir = tempfile::tempdir().expect("tempdir");
@@ -2150,6 +2183,7 @@ mod tests {
     // than an empty or absent one. Silence and "nothing here" must stay
     // distinguishable; this runs on every host that gates a push.
     fn test_cpu_only_probe_yields_a_valid_document_not_silence() {
+        let _seam = podman_seam();
         let doc = run_probe("cpu");
         assert_eq!(doc.schema_version, 2);
         assert!(

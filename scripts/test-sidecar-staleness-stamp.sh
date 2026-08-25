@@ -62,11 +62,23 @@ cat > "$SANDBOX/bin/cargo" <<'STUB'
 #!/usr/bin/env bash
 echo "build" >> "$CARGO_INVOCATION_COUNTER"
 payload="${STUB_CARGO_PAYLOAD:-default}"
+# The stub ELF must carry a REAL e_machine for the host: 723-ji4v made the
+# script refuse wrong-arch artifacts at staging via `file -b`, and the old
+# magic-only header (no machine bytes) reads as arch-less — so every stage
+# was refused, no stamp was written, and all seven skip/stage scenarios went
+# red while the counter kept climbing. The header below is the minimal
+# 64-bit LSB executable `file` names by architecture (e_machine 0x3E x86-64
+# / 0xB7 aarch64).
+case "$(uname -m)" in
+    arm64|aarch64) _em='\267' ;;
+    *)             _em='\076' ;;
+esac
 for out in \
     "${CARGO_TARGET_DIR}/release/tillandsias-router-sidecar" \
-    "${CARGO_TARGET_DIR}/x86_64-unknown-linux-musl/release/tillandsias-router-sidecar"; do
+    "${CARGO_TARGET_DIR}/x86_64-unknown-linux-musl/release/tillandsias-router-sidecar" \
+    "${CARGO_TARGET_DIR}/aarch64-unknown-linux-musl/release/tillandsias-router-sidecar"; do
     mkdir -p "$(dirname "$out")"
-    printf '\177ELF\002\001\001\000stub-sidecar-%s\n' "$payload" > "$out"
+    printf '\177ELF\002\001\001\000\000\000\000\000\000\000\000\000\002\000'"$_em"'\000\001\000\000\000stub-sidecar-%s\n' "$payload" > "$out"
 done
 exit 0
 STUB

@@ -1,4 +1,5 @@
 # @trace spec:no-terminal-flicker
+# freshness: auditor=linux-yoga-opus5-20260824T193300Z date=2026-08-24 verdict=updated scope=Req-1 Windows suppression pins re-pointed at the 795-jjw3 definition site (tillandsias-core::wsl) + podman re-export; negative controls 4/4 (value mutation, re-export removal, originals pass) and suite green on linux-next
 #
 # Drift-protection for the cross-platform no-terminal-flicker
 # surfaces: the Windows `CREATE_NO_WINDOW` constant + helpers in
@@ -36,13 +37,18 @@ preconditions:
   - shell utilities (grep) are available in PATH
 
 critical_path:
-  - step: "Req 1 Windows: CREATE_NO_WINDOW = 0x0800_0000 constant pinned"
+  - step: "Req 1 Windows: CREATE_NO_WINDOW = 0x0800_0000 constant pinned at its definition site and re-exported by the podman crate"
     # Spec § "Windows background process suppression" mandates the
     # 0x08000000 flag value (per MSDN process-creation-flags table).
     # The constant centralises the literal; pinning catches a
     # regression to a different bit pattern that would silently
     # break suppression.
-    command: "grep -F 'pub const CREATE_NO_WINDOW: u32 = 0x0800_0000;' crates/tillandsias-podman/src/lib.rs"
+    # Order 795-jjw3 moved the WSL constants + helpers into
+    # tillandsias-core::wsl; tillandsias-podman re-exports them, so
+    # pin BOTH the definition site and the podman-crate surface —
+    # the property is the flag value plus its public availability
+    # where callers import it, not which file holds the bytes.
+    command: "grep -F 'pub const CREATE_NO_WINDOW: u32 = 0x0800_0000;' crates/tillandsias-core/src/wsl.rs && grep -F 'pub use tillandsias_core::wsl::CREATE_NO_WINDOW;' crates/tillandsias-podman/src/lib.rs"
     timeout_ms: 3000
     expected_behavior: "0x0800_0000"
 
@@ -51,7 +57,10 @@ critical_path:
     # #[cfg(windows)] guard. Each takes a mutable Command reference
     # and returns the same — fluent chain API. A regression to a
     # different return type would break callers.
-    command: "grep -F 'pub fn no_window_async(cmd: &mut tokio::process::Command) -> &mut tokio::process::Command' crates/tillandsias-podman/src/lib.rs && grep -F 'pub fn no_window_sync(cmd: &mut std::process::Command) -> &mut std::process::Command' crates/tillandsias-podman/src/lib.rs"
+    # Signatures are pinned at their definition site
+    # (tillandsias-core::wsl since 795-jjw3), not wherever they were
+    # first written.
+    command: "grep -F 'pub fn no_window_async(cmd: &mut tokio::process::Command) -> &mut tokio::process::Command' crates/tillandsias-core/src/wsl.rs && grep -F 'pub fn no_window_sync(cmd: &mut std::process::Command) -> &mut std::process::Command' crates/tillandsias-core/src/wsl.rs"
     timeout_ms: 3000
     expected_behavior: "no_window_sync"
 
@@ -115,9 +124,11 @@ rollback:
   on_failure: >
     A `spec:no-terminal-flicker` surface drifted. Restore
     `pub const CREATE_NO_WINDOW: u32 = 0x0800_0000;` in
-    tillandsias-podman/src/lib.rs; the `no_window_async` +
+    tillandsias-core/src/wsl.rs together with the podman crate's
+    re-export (`pub use tillandsias_core::wsl::CREATE_NO_WINDOW;`);
+    the `no_window_async` +
     `no_window_sync` helper signatures with their fluent chain
-    return types; `@trace spec:no-terminal-flicker` on tray/mod.rs;
+    return types (tillandsias-core::wsl); `@trace spec:no-terminal-flicker` on tray/mod.rs;
     the `TrayStatusStage` enum with >=8 of its 11 variants
     (PreLaunch / NetworkUp / ProxyStarting / GitStarting /
     InferenceStarting / ForgeStarting / RouterStarting / AllReady /

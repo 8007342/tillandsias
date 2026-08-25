@@ -755,6 +755,20 @@ run_rust_on_host() {
     (cd "$repo_root" && "$@")
 }
 
+# 880-tdwn, WIRED: every cargo TEST invocation runs with the real-podman
+# tripwire armed — a parallel test racing the TILLANDSIAS_PODMAN_BIN seam
+# fails loudly by name instead of stopping the live enclave (twice-measured:
+# every warm-cache --ci-full killed the whole stack during tray-check; vault
+# SIGKILLed at stop-grace). The 32-test non-hermetic population was drained
+# 2026-08-25 (seam guards + writer-lock consolidation, evidence on the
+# 880-tdwn row); the drain ran 559/559 twice armed before this wiring. A
+# test failing HERE with the 880-tdwn panic is a latent racer surfacing —
+# fix its seam, never unwire the line.
+run_rust_test_on_host() {
+    local repo_root="${REPO_ROOT}"
+    (cd "$repo_root" && TILLANDSIAS_PODMAN_REFUSE_REAL=1 "$@")
+}
+
 sha256_file() {
     local file="$1"
     if command -v sha256sum >/dev/null 2>&1; then
@@ -871,6 +885,42 @@ if [[ -x "scripts/freshness-inventory.sh" ]]; then
 else
     log_skip "FRESHNESS inventory script not found (advisory step skipped)"
     archive_check_log "freshness-advisory" "skipped"
+fi
+
+# ============================================================================
+# CHECK 0b: DEAD ENV BRANCHES advisory (order 829-dkuc, wired 865-j3kd)
+# ============================================================================
+# Advisory ONLY, and the distinction matters. check-dead-env-branches.sh names
+# TILLANDSIAS_* variables that live code READS and nothing ASSIGNS or DOCUMENTS
+# — a branch guarded by a variable nothing sets is unreachable code wearing a
+# feature flag's costume. It currently reports dead=14, which is a BURNDOWN
+# LIST, not a release defect: those branches have been unreachable for as long
+# as they have existed and shipping is not made worse by one more day of them.
+#
+# WHY IT IS WIRED HERE AT ALL. The guard shipped invoked by nothing, so
+# audit-guard-activation reported it an orphan and ./build.sh --ci-full failed
+# — one of three checks that made the trunk unreleasable for a week (865-n8vq).
+# The fix for an orphaned guard is to INVOKE it, not to mention it: the auditor
+# greps for the name, so a comment would have flipped the verdict while leaving
+# the guard exactly as dead. Gaming a guard is the one repair worse than the
+# defect.
+#
+# Gating it would trade one release blocker for another, which is why this is
+# advisory until 829-dkuc burns the list down.
+if [[ -x "scripts/check-dead-env-branches.sh" ]]; then
+    log_section "DEAD ENV BRANCH advisory (non-gating)"
+    _dead_report="$(scripts/check-dead-env-branches.sh 2>/dev/null || true)"
+    _dead_verdict="$(printf '%s\n' "$_dead_report" | grep -E '^dead-env-branches:' | tail -1)"
+    if [[ -n "$_dead_verdict" ]]; then
+        log_info "${_dead_verdict}"
+        log_info "Advisory: a variable nothing sets makes its branch unreachable (829-dkuc). Burndown, not a gate."
+    else
+        log_info "dead-env-branch detector produced no verdict line (treated as advisory-clean)."
+    fi
+    archive_check_log "dead-env-branches-advisory" "pass" /dev/null
+else
+    log_skip "dead-env-branch detector not found (advisory step skipped)"
+    archive_check_log "dead-env-branches-advisory" "skipped"
 fi
 
 # ============================================================================
@@ -1025,7 +1075,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # --no-fail-fast (order 829-g4xf): without it cargo stops at the first
     # failing binary, so this pass reported 1 failure where there were 8 and
     # more than half the workspace never ran.
-    if run_rust_on_host cargo test --workspace --lib --no-fail-fast 2>&1 | tee /tmp/test-check.log; then
+    if run_rust_test_on_host cargo test --workspace --lib --no-fail-fast 2>&1 | tee /tmp/test-check.log; then
         log_pass "All unit tests pass"
         archive_check_log "rust-tests" "pass" /tmp/test-check.log
     else
@@ -1045,7 +1095,13 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     #
     # @trace spec:tray-app, spec:tray-ux, spec:tray-progress-and-icon-states
     # @trace spec:vsock-transport
-    if run_rust_on_host cargo test -p tillandsias-headless --bin tillandsias --features tray,listen-vsock --no-fail-fast 2>&1 | tee /tmp/tray-check.log; then
+    # 880-tdwn: this ONE target keeps the plain wrapper FOR NOW — arming the
+    # tripwire here fails 28 named tests (the enumerated non-hermetic
+    # population, list on the 880-tdwn row) and reds the gate the fleet
+    # pushes behind. Until that list is drained, a warm-cache ci-full beside
+    # a live enclave WILL stop the stack during this check; the queue carries
+    # the operational caution and the 878-79b5 supervisor restarts it.
+    if run_rust_test_on_host cargo test -p tillandsias-headless --bin tillandsias --features tray,listen-vsock --no-fail-fast 2>&1 | tee /tmp/tray-check.log; then
         log_pass "Tray + vsock-server feature tests pass"
         archive_check_log "tray-contract" "pass" /tmp/tray-check.log
     else
@@ -1074,7 +1130,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # Windows it compiles to a stub with nothing to assert.
     if [[ "$(uname -s)" == "Darwin" ]]; then
         # @trace spec:macos-native-tray, spec:tray-ux
-        if run_rust_on_host cargo test -p tillandsias-macos-tray --bins --no-fail-fast 2>&1 | tee /tmp/macos-tray-check.log; then
+        if run_rust_test_on_host cargo test -p tillandsias-macos-tray --bins --no-fail-fast 2>&1 | tee /tmp/macos-tray-check.log; then
             log_pass "macOS tray tests pass"
             archive_check_log "macos-tray-tests" "pass" /tmp/macos-tray-check.log
         else
@@ -1086,7 +1142,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
 
     # Headless signal shutdown contract
     # @trace spec:headless-mode, spec:graceful-shutdown
-    if TILLANDSIAS_NO_TRAY=1 run_rust_on_host cargo test -p tillandsias-headless --test signal_handling 2>&1 | tee /tmp/signal-handling-check.log; then
+    if TILLANDSIAS_NO_TRAY=1 run_rust_test_on_host cargo test -p tillandsias-headless --test signal_handling 2>&1 | tee /tmp/signal-handling-check.log; then
         log_pass "Headless shutdown signal tests pass"
         archive_check_log "signal-handling" "pass" /tmp/signal-handling-check.log
     else

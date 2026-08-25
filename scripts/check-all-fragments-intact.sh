@@ -31,7 +31,21 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT"
+SCAN_ROOT="${TILLANDSIAS_FRAGMENT_SCAN_ROOT:-$ROOT}"
+cd "$SCAN_ROOT"
+
+# One repository-owned reader in every locus. Ruby is absent in a fresh forge
+# and is represented there by an on-demand Homebrew shim. Calling that shim
+# once per fragment spent tens of minutes installing Ruby; early invocations
+# then failed and valid fragments were falsely reported as damaged. The policy
+# facade resolves the binary built earlier by `./build.sh --check` and can build
+# it for standalone use (order 746-htj9).
+POLICY="$ROOT/scripts/tillandsias-policy"
+if [ ! -x "$POLICY" ]; then
+    echo "blocked:all-fragments-intact:no-yaml-validator"
+    echo "  missing repository validator facade: $POLICY" >&2
+    exit 2
+fi
 
 FRAG_DIRS="plan/index.d plan/loop_status.d plan/mo-full-attestations.d"
 
@@ -64,7 +78,7 @@ for d in $FRAG_DIRS; do
         # their own gates cover shape, and the marker test above covers both.
         case "$f" in
             *.yaml)
-                if ! ruby -ryaml -e 'YAML.load_file(ARGV[0])' "$f" >/dev/null 2>&1; then
+                if ! "$POLICY" validate-yaml "$f" >/dev/null 2>&1; then
                     echo "  damaged: $f — does not parse as YAML" >&2
                     damaged=$((damaged + 1))
                 fi

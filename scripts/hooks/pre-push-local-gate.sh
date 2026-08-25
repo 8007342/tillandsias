@@ -71,9 +71,49 @@ if [[ ! -t 0 ]]; then
     REFS="$(cat 2>/dev/null || true)"
 fi
 
+
+
 RED=$'\033[0;31m'; YLW=$'\033[0;33m'; GRN=$'\033[0;32m'; RST=$'\033[0m'
 [[ -t 2 ]] || { RED=""; YLW=""; GRN=""; RST=""; }
 
+
+# ── ORDER 877-mynm: AN EMPTY REF LIST MEANS GIT IS PUSHING NOTHING ──────────
+#
+# This guard used to fall through to the full gate whenever stdin carried no
+# refs, printing "plan-only lane: not applicable — no ref list on stdin" and
+# then, on a stale stamp, refusing with "the tree changed since ./build.sh
+# --check last passed". Both lines are true and the conclusion was wrong,
+# because nobody had decoded what an empty list MEANS.
+#
+# MEASURED, hermetically, against a scratch repo with a bare remote (the
+# fixture is scripts/test-pre-push-empty-ref-list.sh):
+#
+#   fast-forward push .................... 125 bytes, one ref
+#   git push --dry-run origin HEAD ....... 108 bytes, one ref
+#   already up to date ................... 0 bytes
+#   non-fast-forward, remote-tracking ref
+#     CURRENT (git already knows) ........ 0 bytes
+#   non-fast-forward, remote-tracking ref
+#     STALE (git does not know yet) ...... 125 bytes, then the REMOTE rejects
+#
+# The list is empty exactly when git has already decided to send nothing. Git
+# still runs the hook — it always does — but there is no ref to gate. So the
+# expensive path was being paid for a push that cannot happen, and the reader
+# was sent to `./build.sh --check` when the actual remedy was `git pull
+# --rebase`. Measured on pirria at ~90s per wasted gate, recurring by
+# construction: the claim-before-work discipline races other hosts, and losing
+# that race is precisely how the remote-tracking ref ends up current-and-ahead.
+#
+# THIS IS NOT A LICENCE TO ACCEPT AN UNSCOPED PUSH (877-mynm criterion 3).
+# "No refs" and "refs I could not scope" are different facts. When a ref IS
+# outgoing and its range cannot be determined, every refusal below stands
+# exactly as written; the plan-only lane still falls back to the full gate, and
+# the full gate still refuses a stale stamp. What changes is only the case where
+# there is nothing to gate at all.
+if [[ -z "${REFS//[[:space:]]/}" ]]; then
+    echo "${GRN}✓ local gate: no refs on stdin — git is pushing nothing (already up to date, or a non-fast-forward it has already declined). Nothing to gate; if you expected a push, fetch and rebase.${RST}" >&2
+    exit 0
+fi
 refuse() {
     echo "" >&2
     echo "${RED}✗ pre-push refused: $1${RST}" >&2
@@ -85,6 +125,67 @@ refuse() {
     echo "" >&2
     exit 1
 }
+
+# ── 0. Salvage refs are exempt, by definition (872-c9nd) ──────────────────────
+# A `salvage/<host>/<yyyymmdd>-<slug>` ref is a COPY of a dirty worktree pushed
+# so the work cannot be lost — it is expected to be half-edited, unbuildable,
+# and to carry a tree no gate has ever seen. Requiring a green build stamp of it
+# makes the mechanism unusable, which is exactly what happened: the ref grammar
+# has been accepted by the pre-receive gate (and deliberately exempted from its
+# YAML check) since before 872-c9nd, and nothing ever pushed one. Four hours of
+# finished work were then deleted with a fresh clone.
+#
+# Exempt ONLY when every ref in this push is a salvage ref, so a salvage cannot
+# be used to smuggle a normal branch past the gate. Nothing here can reach
+# main/linux-next: the grammar has its own namespace and the pre-receive gate
+# enforces it independently.
+#
+# THIS BLOCK MUST BE THE HOOK'S FIRST DECISION, and originally it was not.
+# Placed after release-preflight and the cheatsheet-sync guard, a salvage from
+# a dirty tree whose dirt included a cheatsheet edit was REFUSED by the sync
+# guard before this exemption was ever consulted — measured live on macuahuitl
+# 2026-08-24 (`fail:salvage:push:` with the sync guard's refusal behind it).
+# yoga's destroyed dirt contained cheatsheets/concurrent-git/
+# crdt-ledger-fragments.md, so the net would have failed the exact incident it
+# was built for. Any guard that inspects WORKTREE STATE will, on some dirty
+# tree, refuse the push that exists to preserve that dirty tree — so no such
+# guard may run before this line. Origin held ZERO salvage refs when the
+# 2026-08-24 retrospective checked; that is what "unusable safety net" looks
+# like from the outside: nothing fails, nothing is saved.
+_all_salvage=1
+_any_ref=0
+_salvage_delete=""
+while read -r _l _ls _remote_ref _rs; do
+    [[ -z "${_remote_ref:-}" ]] && continue
+    _any_ref=1
+    case "$_remote_ref" in
+        refs/heads/salvage/*)
+            # DELETION PROTECTION (874-w2gc). The exemption used to wave
+            # deletions through with the same enthusiasm as rescues: during
+            # 874-s8vf's bring-up a salvage ref was deleted with one command
+            # and nothing so much as asked. A salvage ref is by definition the
+            # ONLY copy of work that existed nowhere else — fine to reap for a
+            # test artifact, terrifying for a real rescue, and the hook cannot
+            # tell them apart. So deletion requires the explicit override; the
+            # decision and its reasoning are recorded on 874-w2gc's ledger row.
+            if [[ "$_ls" =~ ^0+$ ]]; then
+                _salvage_delete="$_remote_ref"
+            fi
+            ;;
+        *) _all_salvage=0 ;;
+    esac
+done < <(printf '%s\n' "$REFS")
+if [[ "$_any_ref" -eq 1 && "$_all_salvage" -eq 1 ]]; then
+    if [[ -n "$_salvage_delete" && "${TILLANDSIAS_SALVAGE_DELETE_OK:-0}" != "1" ]]; then
+        refuse "deleting salvage ref $_salvage_delete — a salvage ref may be the ONLY copy of rescued work (874-w2gc)" \
+               "Confirm the rescued content is merged or consciously abandoned (check the" \
+               "ledger event scripts/sweep-salvage-refs.sh filed for it), then re-run with:" \
+               "  TILLANDSIAS_SALVAGE_DELETE_OK=1 git push ..." \
+               "Mixed pushes: delete salvage refs in their own push, separate from rescues."
+    fi
+    echo "${GRN}✓ local gate: salvage ref — exempt by design (872-c9nd); a dirty-tree copy is not expected to build${RST}" >&2
+    exit 0
+fi
 
 # ── 1. Release preflight ───────────────────────────────────────────────────────
 if [[ -f scripts/release-preflight.sh ]]; then
@@ -593,10 +694,57 @@ if [[ -f scripts/gate-stamp.sh ]]; then
                        "Run it once, then push:" \
                        "  ./build.sh --check"
             else
-                refuse "the tree changed since ./build.sh --check last passed" \
-                       "The gate validated a different tree than the one you are pushing." \
-                       "Re-run it:" \
-                       "  ./build.sh --check"
+                # ORDER 864-q7dm — NAME WHAT CHANGED, because "re-run it" is
+                # sometimes ACTIVELY WRONG ADVICE.
+                #
+                # This host is told to run long-horizon background work, and
+                # the stamp assumes the tree holds still. Those instructions
+                # conflict. Measured 2026-08-23: a band measurement appending a
+                # TSV inside the checkout made every push fail here, and the
+                # re-run the message recommends stamps a tree that changes
+                # again before the push completes — so the advice cannot
+                # terminate. The cycle could not push ANY work, including work
+                # entirely unrelated to the job, for as long as the job ran.
+                #
+                # Untracked does not exempt a path: the stamp covers
+                # `ls-files --cached --others`, so a file APPEARING or GROWING
+                # invalidates it exactly as a tracked edit does.
+                #
+                # Naming the paths turns a puzzle into a decision. mtime
+                # against the stamp file is the cheap signal — it needs no
+                # per-path digests and it points straight at a live writer.
+                _gs="$(git rev-parse --absolute-git-dir 2>/dev/null)/tillandsias-gate-stamp"
+                _changed=""
+                if [[ -f "$_gs" ]]; then
+                    _changed="$(git ls-files -z --cached --others --exclude-standard 2>/dev/null \
+                        | xargs -0 -r -I{} sh -c '[ -f "{}" ] && [ "{}" -nt "'"$_gs"'" ] && printf "%s\n" "{}"' 2>/dev/null \
+                        | head -12)"
+                fi
+                if [[ -n "$_changed" ]]; then
+                    _n="$(printf '%s\n' "$_changed" | wc -l | tr -d ' ')"
+                    refuse "the tree changed since ./build.sh --check last passed" \
+                           "The gate validated a different tree than the one you are pushing." \
+                           "" \
+                           "CHANGED SINCE THE GATE RAN (${_n} path(s), newest-first by mtime):" \
+                           "$(printf '  %s\n' $_changed)" \
+                           "" \
+                           "IF ONE OF THOSE IS A BACKGROUND JOB STILL WRITING, re-running the" \
+                           "gate will not help — it stamps a tree that changes again before the" \
+                           "push lands (864-q7dm). Move the in-progress output OUT of the" \
+                           "checkout instead; a running redirect holds the file by inode, so" \
+                           "\`mv\` is safe mid-run and the job keeps appending:" \
+                           "  mv <path> target/   # target/ is gitignored" \
+                           "" \
+                           "Otherwise the change is yours and the gate is right:" \
+                           "  ./build.sh --check"
+                else
+                    refuse "the tree changed since ./build.sh --check last passed" \
+                           "The gate validated a different tree than the one you are pushing." \
+                           "(No path is newer than the stamp — the change is a deletion, a mode" \
+                           "change, or a same-mtime rewrite.)" \
+                           "Re-run it:" \
+                           "  ./build.sh --check"
+                fi
             fi
             ;;
         *)

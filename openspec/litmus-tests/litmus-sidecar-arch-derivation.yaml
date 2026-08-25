@@ -41,7 +41,19 @@ critical_path:
   - step: "LIVE: any staged sidecar on this host matches this host's machine (a wrong-arch artifact is exactly the shipped defect)"
     command: "b=images/router/tillandsias-router-sidecar; if [ ! -f \"$b\" ]; then echo 'ok: not-staged-here'; else m=$(uname -m); case \"$m\" in x86_64|amd64) pat='x86-64';; arm64|aarch64) pat='aarch64';; *) pat='';; esac; if [ -z \"$pat\" ]; then echo 'ok: unjudged-machine'; elif file \"$b\" | grep -Eqi \"$pat\"; then echo 'ok: staged-arch-matches'; else echo \"FAIL: staged sidecar is $(file -b \"$b\") on a $m host\"; fi; fi"
     timeout_ms: 10000
-    expected_behavior: "ok: (not-staged-here|unjudged-machine|staged-arch-matches)"
+    # ORDER 868-p8xi. This read `ok: (not-staged-here|unjudged-machine|staged-arch-matches)`
+    # and could not pass on ANY of its three legitimate outcomes. Expectations
+    # are matched as a LITERAL SUBSTRING — behavior_matches_output's fallback is
+    # `grep -Fqi` — so the parenthesised alternation was searched for verbatim
+    # and never found. It was the only alternation-style expectation in the
+    # whole suite, which is why nothing else was affected and why the matcher is
+    # not the thing being changed here.
+    #
+    # `ok:` is the assertion the step actually makes: its three success branches
+    # all print `ok: <reason>` and its one failure branch prints `FAIL: staged
+    # sidecar is <type> on a <machine> host`. The discrimination lives in the
+    # command, where it belongs; the expectation only has to tell the two apart.
+    expected_behavior: "ok:"
 
 evidence:
   artifact: "scripts/build-sidecar.sh + images/router/entrypoint.sh + scripts/test-sidecar-arch-derivation.sh"

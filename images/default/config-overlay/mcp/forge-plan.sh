@@ -950,7 +950,28 @@ emit_frame() {
 rpc_result_text() {
     _rr_id="$1"
     _rr_text="$2"
-    emit_frame "$(jq -cn --argjson id "$_rr_id" --arg text "$_rr_text" \
+    # THE ANSWER GOES IN ON STDIN, NOT IN ARGV. Order 865-b3xf.
+    #
+    # This was `--arg text "$_rr_text"`, and $_rr_text is the EXPERT'S WHOLE
+    # ANSWER — the one value here that grows with the corpus rather than with
+    # the request. Past the kernel's argv limit, execve returns E2BIG and the
+    # frame is never built:
+    #
+    #   images/default/config-overlay/mcp/forge-plan.sh: line 953:
+    #   /usr/bin/jq: Argument list too long
+    #
+    # Reproduced at 300 KB on macuahuitl (rc=126). What makes it worse than a
+    # size limit is WHERE it lands: the server has already done the work and
+    # fails while framing the reply, so the client sees no result and no error
+    # it can attribute — and the message names jq, which is the last honest
+    # component in the chain. The bigger and more useful the answer, the more
+    # certainly it is lost. litmus:expert-capability-skew-honesty caught it.
+    #
+    # `--rawfile text /dev/stdin` reads the whole payload as a string with no
+    # argv involvement. Verified byte-identical to the old form on small
+    # payloads containing quotes and embedded newlines; `printf '%s'` (no
+    # trailing newline) is what keeps them equal.
+    emit_frame "$(printf '%s' "$_rr_text" | jq -cn --argjson id "$_rr_id" --rawfile text /dev/stdin \
         '{jsonrpc:"2.0", id:$id, result:{content:[{type:"text", text:$text}]}}')"
 }
 

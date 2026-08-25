@@ -75,6 +75,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "corpus-coverage",
     "dependencies-of",
     "expire-claims",
+    "plan-events",
     "fragment-event-packets",
     "fragment-misplaced-definitions",
     "fragment-terminal-events",
@@ -207,6 +208,15 @@ const USAGE: &str = concat!(
     "                                     is PERMANENT — never renumber it. A prefix shared by two\n",
     "                                     packets is normal. See methodology/distributed-work.yaml\n",
     "                                     -> order_id_allocation.\n",
+    "           plan-events <packet_id|order>\n",
+    "                                     ORDER 882-vqe4. Print a packet's FOLDED events —\n",
+    "                                     base PLUS fragment overlay — one per line as\n",
+    "                                     <type>\\t<ts>. Exists because callers were counting\n",
+    "                                     activity by grepping plan/index.d/ alone, which goes\n",
+    "                                     blind the moment compaction folds a fragment into\n",
+    "                                     the base. Exit 1 only for an unresolvable id; an\n",
+    "                                     existing packet with no events prints nothing and\n",
+    "                                     exits 0, which is what a stranded claim looks like.\n",
     "           expire-claims [--ttl-hours N] [--dry-run] [--list-live] [--now-epoch S] [--host H]\n",
     "                                     ORDER 672-bz7u. Return stranded in_progress claims to\n",
     "                                     ready: any packet whose LAST recorded event activity is\n",
@@ -216,6 +226,11 @@ const USAGE: &str = concat!(
     "                                     with NO parseable activity timestamp is reported as\n",
     "                                     unknown-age and NEVER expired (fail conservative).\n",
     "           status <id|order>         one packet's status line\n",
+    "           next-action <id|order>    the EFFECTIVE next_action — newest of the\n",
+    "                                     packet field and any event carrying one. Reading\n",
+    "                                     the field alone returns a stale queue, because\n",
+    "                                     `packets:` is a G-Set and cycles append events\n",
+    "                                     rather than re-declaring the packet (864-r9wt).\n",
     "           blocked-by <id|order>     packets directly blocked by X\n",
     "           dependencies-of <id|order> X's direct unsatisfied depends_on prerequisites\n",
     "           blocked-closure <id|order> everything transitively downstream of X\n",
@@ -594,12 +609,55 @@ fn resolve_writer_host() -> String {
     writer_host_from(std::env::var("TILLANDSIAS_HOST_KIND").ok())
 }
 
+/// ORDER 874-idnt — the `host:` label alphabet, enforced at write time.
+///
+/// The ledger's `host:` field had come to mix THREE vocabularies — node names
+/// (`yoga`), host kinds (`linux_mutable`), and git-author display names
+/// (`Laptopirria`) — and 864-m2vc's claim-TTL attribution compares these by
+/// EXACT EQUALITY, so the mixing silently defeats it. Full unification onto
+/// one vocabulary is a fleet decision this function does not make; what it
+/// refuses is the class that can never be right: anything outside
+/// `^[a-z0-9_-]+$`. That blocks display names, uppercase, spaces, and unicode
+/// — every observed pollutant — while accepting both surviving vocabularies
+/// until the unification lands.
+fn host_label_is_acceptable(host: &str) -> bool {
+    !host.is_empty()
+        && host
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-')
+}
+
+/// An explicitly flagged `--host` is stated intent, so a malformed one is
+/// REFUSED rather than silently replaced the way the env fallback path
+/// corrects itself — the caller asked for a specific label and must learn it
+/// was wrong, not have a different label recorded under them (874-idnt).
+fn require_acceptable_host(host: String) -> String {
+    if host_label_is_acceptable(&host) {
+        return host;
+    }
+    eprintln!(
+        "error: --host {host:?} is not a valid ledger host label — [a-z0-9_-]+ only \
+         (874-idnt). Use the node name (e.g. macuahuitl) or a documented host kind \
+         (e.g. linux_mutable); git-author display names are exactly the pollution \
+         this refuses (872-k4pv)."
+    );
+    std::process::exit(2);
+}
+
 /// Pure core of [`resolve_writer_host`], unit-testable without env races.
 fn writer_host_from(kind: Option<String>) -> String {
     if let Some(kind) = kind
         && !kind.is_empty()
     {
-        return kind;
+        if host_label_is_acceptable(&kind) {
+            return kind;
+        }
+        // A malformed TILLANDSIAS_HOST_KIND (an author name, mixed case) must
+        // not become durable ledger data; the OS constant is always canonical.
+        eprintln!(
+            "warning: TILLANDSIAS_HOST_KIND {kind:?} is not a valid host label \
+             ([a-z0-9_-]+ only, 874-idnt) — falling back to the platform constant"
+        );
     }
     std::env::consts::OS.to_string()
 }
@@ -622,23 +680,68 @@ fn resolve_writer_agent(flag: Option<String>) -> String {
 }
 
 /// Pure core of [`resolve_writer_agent`], unit-testable without env races.
+/// ORDER 874-idnt — the canonical agent-id GRAMMAR, enforced where identity
+/// becomes DURABLE DATA.
+///
+/// scripts/agent-identity.sh (order 756-hn3a, litmus-pinned) is the one
+/// canonical source: `<platform>-<workstation>-<backend>-<utc-timestamp>`,
+/// each component sanitized to `[a-z0-9-]`, the timestamp LOWERCASE
+/// (`20260815t162555z`). Nothing enforced that at the ledger choke point, and
+/// the 2026-08-24 fleet retrospective found EVERY hand-written agent_id of the
+/// preceding 48 hours violating it — uppercase `T`/`Z` timestamps, including
+/// the coordinator's own. A contract with one canonical source and zero
+/// enforcement is a convention, and conventions lost every incident this week.
+///
+/// The check is structural, not a roster lookup: ≥4 dash-separated components
+/// in the sanitized alphabet, ending in the canonical timestamp shape. It
+/// accepts every id the helper can emit and refuses every hand-composed
+/// improvisation the retrospective catalogued.
+fn agent_id_is_canonical(id: &str) -> bool {
+    let comps: Vec<&str> = id.split('-').collect();
+    if comps.len() < 4 {
+        return false;
+    }
+    if !id
+        .bytes()
+        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+    {
+        return false;
+    }
+    if comps.iter().any(|c| c.is_empty()) {
+        return false;
+    }
+    // Timestamp: 8 digits, 't', 6 digits, 'z' — the printf '%(...)T' shape
+    // agent-identity.sh emits, lowercased by its sanitize pass.
+    let ts = comps[comps.len() - 1].as_bytes();
+    ts.len() == 16
+        && ts[..8].iter().all(u8::is_ascii_digit)
+        && ts[8] == b't'
+        && ts[9..15].iter().all(u8::is_ascii_digit)
+        && ts[15] == b'z'
+}
+
 fn writer_agent_from(flag: Option<String>, env_id: Option<String>) -> Result<String, String> {
     let usable = |s: &String| {
         let t = s.trim();
         !t.is_empty() && t != "unknown"
     };
-    if let Some(agent) = flag.filter(usable) {
-        return Ok(agent);
+    let candidate = flag.filter(usable).or_else(|| env_id.filter(usable));
+    match candidate {
+        Some(agent) if agent_id_is_canonical(&agent) => Ok(agent),
+        Some(agent) => Err(format!(
+            "error: agent_id {agent:?} is not canonical — the contract is \
+             <platform>-<workstation>-<backend>-<utc-timestamp>, sanitized to [a-z0-9-] with a \
+             LOWERCASE timestamp (e.g. linux-macuahuitl-opus5-20260825t013400z). Derive it: \
+             scripts/agent-identity.sh id <backend> (order 756-hn3a; enforcement 874-idnt — \
+             every hand-written id in the 2026-08-24 retrospective violated this)."
+        )),
+        None => Err(
+            "error: ledger event has no --agent and TILLANDSIAS_AGENT_ID is unset — refusing to \
+             record agent_id 'unknown'. Derive the id from scripts/agent-identity.sh (order \
+             756-hn3a) and pass --agent, or export TILLANDSIAS_AGENT_ID."
+                .to_string(),
+        ),
     }
-    if let Some(agent) = env_id.filter(usable) {
-        return Ok(agent);
-    }
-    Err(
-        "error: ledger event has no --agent and TILLANDSIAS_AGENT_ID is unset — refusing to \
-         record agent_id 'unknown'. Derive the id from scripts/agent-identity.sh (order \
-         756-hn3a) and pass --agent, or export TILLANDSIAS_AGENT_ID."
-            .to_string(),
-    )
 }
 
 /// ORDER 775-b4qz. A written fragment failed write-time verification: move it
@@ -1686,6 +1789,7 @@ fn run_loop_status(args: &[String], base: &Path) {
                 .position(|a| a == "--host")
                 .and_then(|i| args.get(i + 1))
                 .cloned()
+                .map(require_acceptable_host)
                 .unwrap_or_else(resolve_writer_host);
             let suffix = args
                 .iter()
@@ -2920,22 +3024,16 @@ fn main() {
             // exact silent-emptiness this channel exists to avoid. The base is
             // presented as a synthetic fragment; precedence is the row's own
             // (ts, host), so its position in the slice does not matter.
-            let mut frags = tillandsias_plan::fragments::load_all(&index);
-            if let Ok(raw) = std::fs::read_to_string(&index)
-                && let Ok(doc) = serde_yaml::from_str::<serde_yaml::Value>(&raw)
-                && doc.get("capabilities").is_some()
-            {
-                frags.insert(
-                    0,
-                    tillandsias_plan::fragments::Fragment {
-                        name: "0000-base".to_string(),
-                        path: index.clone(),
-                        doc,
-                        raw,
-                    },
-                );
-            }
-            let (matrix, skipped) = tillandsias_plan::fragments::fold_capabilities(&frags);
+            // 864-v8kr: the base splice lives inside the fold now, so this
+            // reads the base and hands it over rather than hand-rolling a
+            // synthetic fragment that a third caller would not know to build.
+            let frags = tillandsias_plan::fragments::load_all(&index);
+            let base_doc: serde_yaml::Value = std::fs::read_to_string(&index)
+                .ok()
+                .and_then(|raw| serde_yaml::from_str(&raw).ok())
+                .unwrap_or(serde_yaml::Value::Null);
+            let (matrix, skipped) =
+                tillandsias_plan::fragments::fold_capabilities_with_base(&base_doc, &frags);
 
             // ORDER 847-wgy4. `--hosts` is the ROUTING projection: one line
             // per distinct host_id, sorted (BTreeMap order), as
@@ -2986,6 +3084,76 @@ fn main() {
                         accels.iter().cloned().collect::<Vec<_>>().join(",")
                     };
                     println!("{host_id}\t{tier}\t{accel_csv}");
+                }
+                log_cli_usage(&subcommand, "answered", start_time.elapsed().as_millis());
+                return;
+            }
+
+            // ORDER 861-n7f5. `--cpu-flags` is the ENGINE-DISPATCH projection:
+            // one line per distinct host_id, sorted, as
+            //   <host_id>\t<flags-csv>
+            // where flags is the sorted union, across the host's loci, of
+            // `cpu_flags` on every cpu-class device, or `none` when the host
+            // published a row that carries none.
+            //
+            // WHY THIS EXISTS RATHER THAN A SECOND INLINE PROBE. 861-n7f5's
+            // check must refuse an engine build that ignores vector features
+            // the HOST advertises, and criterion 3 requires the host's half of
+            // that comparison come from the published capability row — the
+            // accel_probe document already carries `cpu_flags` — never from a
+            // fresh `/proc/cpuinfo` read inside the checking script. 859-b2zc
+            // is the standing reminder of what re-derivation costs: three
+            // scripts re-implemented one probe and all three got it wrong the
+            // same way. The matrix is the single source; this arm is its
+            // machine-readable face.
+            //
+            // A host absent from the matrix prints NOTHING rather than an
+            // empty-flag line: absent and "reported no flags" are different
+            // facts and the caller must be able to tell them apart (843-624y).
+            if args.iter().any(|a| a == "--cpu-flags") {
+                let mut hosts: std::collections::BTreeMap<
+                    &str,
+                    std::collections::BTreeSet<String>,
+                > = std::collections::BTreeMap::new();
+                for ((host_id, _locus), entry) in &matrix {
+                    let slot = hosts.entry(host_id.as_str()).or_default();
+                    if let Some(devices) = entry.document["devices"].as_sequence() {
+                        for d in devices {
+                            if d["device_class"].as_str() != Some("cpu") {
+                                continue;
+                            }
+                            if let Some(flags) = d["cpu_flags"].as_sequence() {
+                                for f in flags {
+                                    if let Some(s) = f.as_str() {
+                                        let s = s.trim().to_ascii_lowercase();
+                                        if !s.is_empty() {
+                                            slot.insert(s);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                let want = args
+                    .iter()
+                    .position(|a| a == "--cpu-flags")
+                    .and_then(|i| args.get(i + 1))
+                    .filter(|a| !a.starts_with("--"))
+                    .map(|a| a.to_ascii_lowercase());
+                for (host_id, flags) in &hosts {
+                    if want
+                        .as_ref()
+                        .is_some_and(|w| host_id.to_ascii_lowercase() != *w)
+                    {
+                        continue;
+                    }
+                    let csv = if flags.is_empty() {
+                        "none".to_string()
+                    } else {
+                        flags.iter().cloned().collect::<Vec<_>>().join(",")
+                    };
+                    println!("{host_id}\t{csv}");
                 }
                 log_cli_usage(&subcommand, "answered", start_time.elapsed().as_millis());
                 return;
@@ -3527,6 +3695,28 @@ fn main() {
                 // condition — one word for one thing across the CLI.
                 emit(&format!("malformed: {}", bad.display()));
             }
+
+            // ORDER 866-pvsx. A fragment ENTRY the fold cannot use is a
+            // different loss from a fragment FILE it cannot parse, and until
+            // now only the second one was reported here. The first was detected
+            // — `fragment_coverage_gaps` has caught this shape all along — but
+            // only inside `compact`, where the verdict is used to refuse
+            // DELETING the fragment. That protects the bytes and tells the
+            // author nothing, and it only happens when the fragment count makes
+            // compaction eligible. A dropped entry in a small overlay is
+            // therefore reported to nobody, indefinitely.
+            //
+            // Reported, never refused, for exactly the 699-dycj reason spelled
+            // out below for `malformed:`: `build.sh` runs this on every host, so
+            // a refusal would turn one host's typo into every other host's red
+            // build on a file they did not write. `--strict-fragments` arms the
+            // refusal for callers that cannot tolerate a partial write.
+            let dropped = tillandsias_plan::fragments::overlay_coverage_gaps(&index);
+            for (path, gaps) in &dropped {
+                for gap in gaps {
+                    emit(&format!("dropped-entry: {}: {gap}", path.display()));
+                }
+            }
             if !report.violations.is_empty() && !skipped.is_empty() {
                 // WHY THIS CAVEAT IS NOT DECORATION: a `depends_on` whose
                 // target is DEFINED in the unreadable fragment reports here as
@@ -3545,7 +3735,15 @@ fn main() {
                 }
                 std::process::exit(1);
             }
-            if skipped.is_empty() {
+            // ORDER 866-pvsx. An unusable ENTRY makes the corpus partial for
+            // the same reason an unreadable FILE does — filed work is absent
+            // from every answer derived from this ledger — so it lands the
+            // verdict in the same place. The two causes stay named separately:
+            // one is repaired by fixing a parse error, the other by rewriting an
+            // entry the fold cannot use, and a reader who confuses them repairs
+            // the wrong thing.
+            let dropped_entries: usize = dropped.iter().map(|(_, g)| g.len()).sum();
+            if skipped.is_empty() && dropped_entries == 0 {
                 // `emit`, not `println!`: this line is routinely piped
                 // (litmus:parked-blocks-visibility-shape does `check | grep -q`),
                 // and `println!` PANICS with exit 101 when the reader closes
@@ -3563,21 +3761,26 @@ fn main() {
                 // was never read is the precise lie this order was filed
                 // against — the checks that follow the colon are all true, and
                 // they were run over less than the plan.
+                let cause = match (skipped.len(), dropped_entries) {
+                    (0, d) => format!(
+                        "{d} fragment entr{} the fold could not use",
+                        if d == 1 { "y" } else { "ies" }
+                    ),
+                    (s, 0) => format!("{s} fragment(s) could not be read"),
+                    (s, d) => format!(
+                        "{s} fragment(s) could not be read and {d} entr{} the fold could not use",
+                        if d == 1 { "y" } else { "ies" }
+                    ),
+                };
                 emit(&format!(
-                    "incomplete: {} packets from a PARTIAL corpus — {} fragment(s) could not be \
-                     read; ids unique and live references sound across what WAS read \
-                     ({} parked-block edge{})",
+                    "incomplete: {} packets from a PARTIAL corpus — {cause}; ids unique and live \
+                     references sound across what WAS read ({} parked-block edge{})",
                     ledger.packets.len(),
-                    skipped.len(),
                     parked.len(),
                     if parked.len() == 1 { "" } else { "s" }
                 ));
                 if strict_fragments {
-                    eprintln!(
-                        "refusing (--strict-fragments): the fold skipped {} unreadable \
-                         fragment(s); this ledger is incomplete",
-                        skipped.len()
-                    );
+                    eprintln!("refusing (--strict-fragments): {cause}; this ledger is incomplete");
                     // DISTINCT EXIT CODE, so a caller can tell "incomplete
                     // corpus" from "unsound ledger" WITHOUT parsing prose. The
                     // pre-push plan-only lane used to grep this binary's stderr
@@ -3959,6 +4162,62 @@ fn main() {
                 None => {
                     eprintln!("error: {}", unresolved_reason(&ledger, reference));
                     std::process::exit(1);
+                }
+            }
+        }
+        // ORDER 864-r9wt. The EFFECTIVE next_action, which until now could not
+        // be read back at all.
+        //
+        // Every coordinator cycle writes its queue into `next_action` — but it
+        // writes it as an EVENT, because `packets:` is a G-Set and re-declaring
+        // a packet does not change its fields. So the packet-level
+        // `next_action` keeps whatever it was created with while the live queue
+        // accumulates in events beneath it, and reading the field returns an
+        // arbitrarily old answer that LOOKS current.
+        //
+        // Measured 2026-08-24: this host read the packet field and acted on a
+        // twenty-hour-stale queue whose three items were all closed. The
+        // hand-rolled reader that did it also missed the events entirely,
+        // because in the base they are NESTED under the packet rather than at
+        // the document's top level — the same shape trips anyone who writes the
+        // obvious loop. Three ad-hoc probes lied in one session; the fix is not
+        // a better ad-hoc probe, it is for the instrument to answer.
+        "next-action" => {
+            let Some(reference) = args.get(1) else {
+                usage()
+            };
+            let Some(p) = ledger.resolve(reference) else {
+                eprintln!("error: {}", unresolved_reason(&ledger, reference));
+                std::process::exit(1);
+            };
+
+            // ONE implementation of "newest event wins", shared with
+            // plan_next's per-row snippet. This arm had its own inline copy
+            // until the 2026-08-24 retrospective found the snippet still
+            // reading the raw field — two copies of the rule is exactly how
+            // one of them stays wrong.
+            match tillandsias_plan::answer::effective_next_action(p) {
+                Some((text, Some(ts))) => {
+                    // 877-lwts: name the channel that actually won. A set-field
+                    // win carries its ts in next_action_ts; an event win does not
+                    // match it.
+                    let via_field = p
+                        .get("next_action_ts")
+                        .and_then(serde_yaml::Value::as_str)
+                        .is_some_and(|fts| fts == ts);
+                    if via_field {
+                        eprintln!("source: set-field (LWW) @ {ts}");
+                    } else {
+                        eprintln!("source: event @ {ts}");
+                    }
+                    println!("{}", text.trim_end());
+                }
+                Some((text, None)) => {
+                    eprintln!("source: packet field (no timestamp — the packet's original value)");
+                    println!("{}", text.trim_end());
+                }
+                None => {
+                    println!("none:next-action:{reference}");
                 }
             }
         }
@@ -4451,6 +4710,7 @@ fn main() {
             let agent = resolve_writer_agent(agent);
             let host = host
                 .filter(|h| !h.trim().is_empty())
+                .map(require_acceptable_host)
                 .unwrap_or_else(resolve_writer_host);
             let block = edit::event_block(etype, &ts, &agent, &host, summary);
             let raw = match std::fs::read_to_string(&index) {
@@ -4648,7 +4908,9 @@ fn main() {
                     args.iter().any(|a| a == "--backfill"),
                     "set-field",
                 );
-                let host = flagged("--host").unwrap_or_else(resolve_writer_host);
+                let host = flagged("--host")
+                    .map(require_acceptable_host)
+                    .unwrap_or_else(resolve_writer_host);
                 let compact = loop_status::iso_to_compact(&ts);
                 let suffix = format!(
                     "{:08x}",
@@ -4748,7 +5010,9 @@ fn main() {
                 args.iter().any(|a| a == "--backfill"),
                 "set-field",
             );
-            let host = flagged("--host").unwrap_or_else(resolve_writer_host);
+            let host = flagged("--host")
+                .map(require_acceptable_host)
+                .unwrap_or_else(resolve_writer_host);
             let reason = flagged("--reason").unwrap_or_default();
 
             let compact = loop_status::iso_to_compact(&ts);
@@ -4827,6 +5091,64 @@ fn main() {
                 path.display()
             );
         }
+        "plan-events" => {
+            // ORDER 882-vqe4. Print a packet's FOLDED events — base plus
+            // fragment overlay — one per line, `<type>\t<ts>`, oldest first as
+            // stored.
+            //
+            // WHY A SUBCOMMAND RATHER THAN A GREP AT THE CALLER.
+            // check-stranded-in-progress.sh counted a packet's activity by
+            // grepping packet_id across the fragment overlay files, which sees only
+            // the fragment overlay. Compaction folds fragments into the base as
+            // routine garbage collection, and after a fold that grep returns
+            // zero for a packet whose whole history is intact. Measured on the
+            // live ledger 2026-08-25: 865-n8vq carried 35 progress events in
+            // the base and the detector saw 0, so it reported a p0 the
+            // coordinator had touched 106 minutes earlier as STRANDED.
+            //
+            // The durable fix is not a second grep with a wider window — that
+            // is the same defect one storage location later. It is to ask the
+            // thing that already folds correctly for every other reader. This
+            // is the 704-zcgi shape: a hand-rolled re-derivation of a fold is
+            // the defect, and fixing the instance without removing the copy
+            // leaves the next caller to make it again.
+            //
+            // Exit 0 with output when the packet has events; exit 0 with NO
+            // output when it exists and has none — an existing packet with no
+            // activity is a real and meaningful answer, and it is precisely
+            // what a genuinely stranded claim looks like. Exit 1 only when the
+            // packet_id resolves to nothing, so a caller cannot silently read a
+            // typo as "no activity".
+            let want = match args.get(1) {
+                Some(p) if !p.starts_with("--") => p.clone(),
+                _ => {
+                    eprintln!("usage: tillandsias-plan plan-events <packet_id|order>");
+                    std::process::exit(2);
+                }
+            };
+            let pkt = ledger.packets.iter().find(|p| {
+                str_field(p, "packet_id") == Some(want.as_str())
+                    || str_field(p, "order") == Some(want.as_str())
+            });
+            let Some(pkt) = pkt else {
+                eprintln!("error: no packet matches '{want}'");
+                std::process::exit(1);
+            };
+            if let Some(seq) = pkt.get("events").and_then(serde_yaml::Value::as_sequence) {
+                for ev in seq {
+                    let ty = ev
+                        .get("type")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("unknown");
+                    let ts = ev
+                        .get("ts")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("-");
+                    println!("{ty}\t{ts}");
+                }
+            }
+            log_cli_usage(&subcommand, "answered", start_time.elapsed().as_millis());
+        }
         "expire-claims" => {
             // ORDER 672-bz7u — 641-e2qa criterion 2: a claim that produces no
             // event within its cycle must return the packet to ready
@@ -4866,7 +5188,7 @@ fn main() {
                     "--host" => {
                         i += 1;
                         match args.get(i) {
-                            Some(h) => host = h.clone(),
+                            Some(h) => host = require_acceptable_host(h.clone()),
                             None => {
                                 eprintln!("error: --host needs a value");
                                 std::process::exit(2);
@@ -4892,7 +5214,7 @@ fn main() {
             });
             let cutoff = answer::epoch_to_iso8601(now - ttl_hours * 3600);
             let now_iso = answer::epoch_to_iso8601(now);
-            let (expired, unknown) = expire_claim_candidates(&ledger, &cutoff);
+            let (expired, unknown, held) = expire_claim_candidates(&ledger, &cutoff);
             let label = if dry_run {
                 "expire-candidate"
             } else {
@@ -4903,6 +5225,11 @@ fn main() {
             }
             for (order, pid) in &unknown {
                 emit(&format!("unknown-age\t{order}\t{pid}\tnever-expired"));
+            }
+            // 864-k8dp: a hold is REPORTED, never silent. A claim the reaper
+            // declined to take is exactly as interesting as one it took.
+            for (order, pid, reason) in &held {
+                emit(&format!("held-claim\t{order}\t{pid}\t{reason}"));
             }
             // ORDER 833-fpe7. `--list-live` additionally names the claims the
             // reaper would KEEP: owner host + claim ts, for the
@@ -4971,8 +5298,9 @@ fn main() {
             )
             .len();
             emit(&format!(
-                "summary: in_progress={total} expired={} unknown_age={} ttl_hours={ttl_hours} mode={}",
+                "summary: in_progress={total} expired={} held={} unknown_age={} ttl_hours={ttl_hours} mode={}",
                 expired.len(),
+                held.len(),
                 unknown.len(),
                 if dry_run { "dry-run" } else { "write" }
             ));
@@ -4999,6 +5327,7 @@ fn main() {
 /// are `(order, packet_id)`.
 type ExpiredClaim<'a> = (String, &'a str, String);
 type UnknownAgeClaim<'a> = (String, &'a str);
+type HeldClaim<'a> = (String, &'a str, String);
 
 /// ORDER 833-fpe7. The live complement of [`expire_claim_candidates`], for the
 /// resumable-claim-dirt detector: every `in_progress` packet that the reaper
@@ -5089,9 +5418,14 @@ fn live_claims<'a>(ledger: &'a Ledger, cutoff_iso: &str) -> Vec<LiveClaim<'a>> {
 fn expire_claim_candidates<'a>(
     ledger: &'a Ledger,
     cutoff_iso: &str,
-) -> (Vec<ExpiredClaim<'a>>, Vec<UnknownAgeClaim<'a>>) {
+) -> (
+    Vec<ExpiredClaim<'a>>,
+    Vec<UnknownAgeClaim<'a>>,
+    Vec<HeldClaim<'a>>,
+) {
     let mut expired: Vec<(String, &str, String)> = Vec::new();
     let mut unknown: Vec<(String, &str)> = Vec::new();
+    let mut held: Vec<(String, &str, String)> = Vec::new();
     for p in query_packets(
         ledger,
         Some("in_progress"),
@@ -5112,6 +5446,49 @@ fn expire_claim_candidates<'a>(
                 _ => "?".into(),
             })
             .unwrap_or_else(|| "?".into());
+        // ORDER 864-m2vc — THE TTL MUST MEASURE THE CLAIMANT, NOT THE ROOM.
+        //
+        // 641-e2qa criterion 2 is "a claim that PRODUCES no event within its
+        // cycle" — produced by the claimant. This scanned every event on the
+        // packet regardless of author, so ANY host's note refreshed ANY host's
+        // lease and the reaper was defeated for any actively-discussed row.
+        //
+        // Measured 2026-08-24: a coordinator note written by linux_mutable,
+        // whose entire content was a statement that it was NOT working on the
+        // row, extended yoga's claim on 642-fedr by twenty-one hours.
+        //
+        // The claimant is identified the way live_claims already does it — the
+        // newest event whose summary opens "claimed for cycle". When that
+        // cannot be determined the OLD any-host rule still applies, because
+        // silently making the reaper more aggressive on rows whose claim
+        // provenance is unreadable would expire work for a reason nobody could
+        // see. The verdict says which rule it used instead of leaving the
+        // reader to guess.
+        let mut claim_host: Option<&str> = None;
+        let mut claim_ts: Option<&str> = None;
+        if let Some(seq) = p.get("events").and_then(serde_yaml::Value::as_sequence) {
+            for ev in seq {
+                let Some(ts) = ev.get("ts").and_then(serde_yaml::Value::as_str) else {
+                    continue;
+                };
+                let is_claim = ev
+                    .get("summary")
+                    .and_then(serde_yaml::Value::as_str)
+                    .is_some_and(|s| s.trim_start().starts_with("claimed for cycle"));
+                if !is_claim {
+                    continue;
+                }
+                let host = ev
+                    .get("host")
+                    .and_then(serde_yaml::Value::as_str)
+                    .unwrap_or("");
+                if !host.is_empty() && claim_ts.is_none_or(|cur| ts > cur) {
+                    claim_host = Some(host);
+                    claim_ts = Some(ts);
+                }
+            }
+        }
+
         let mut last_ts: Option<String> = None;
         if let Some(seq) = p.get("events").and_then(serde_yaml::Value::as_sequence) {
             for ev in seq {
@@ -5121,18 +5498,90 @@ fn expire_claim_candidates<'a>(
                 if ts.len() < 4 || !ts.as_bytes()[..4].iter().all(u8::is_ascii_digit) {
                     continue;
                 }
+                // Attributable claim -> only the claimant's own events count.
+                if let Some(owner) = claim_host {
+                    let evh = ev
+                        .get("host")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("");
+                    if evh != owner {
+                        continue;
+                    }
+                }
                 if last_ts.as_deref().is_none_or(|cur| ts > cur) {
                     last_ts = Some(ts.to_string());
                 }
             }
         }
+        // ORDER 864-k8dp — A REAP HOLD THE REAPER CAN ACTUALLY SEE.
+        //
+        // The reaper decides on ONE fact: time since the last event. It cannot
+        // tell a stalled claim from a claim whose work is FINISHED and merely
+        // unlanded, and returning the second to the pool does not free work, it
+        // duplicates it — 833-fpe7's "expire-claims launders finished work into
+        // lost work".
+        //
+        // That is live right now. yoga implemented 642-fedr and 776-cm74 in
+        // full, was interrupted before committing, and is wedged behind a
+        // dirty-start refusal it cannot clear itself. The only thing standing
+        // between four hours of finished work and a duplicate implementation
+        // was the phrase DO NOT RE-IMPLEMENT written in an event SUMMARY — free
+        // text this function never reads.
+        //
+        // `reap_hold` is that declaration in a form the reaper can honour: the
+        // newest event carrying it wins, `false` releases, and the reason is
+        // mandatory because a hold with no reason is an indefinite block
+        // wearing a temporary label (the 863-7mhg rule, applied here).
+        let mut hold: Option<(String, String)> = None; // (ts, reason)
+        if let Some(seq) = p.get("events").and_then(serde_yaml::Value::as_sequence) {
+            for ev in seq {
+                let Some(raw) = ev.get("reap_hold") else {
+                    continue;
+                };
+                let Some(ts) = ev.get("ts").and_then(serde_yaml::Value::as_str) else {
+                    continue;
+                };
+                if hold.as_ref().is_some_and(|(cur, _)| ts <= cur.as_str()) {
+                    continue;
+                }
+                match raw {
+                    // `reap_hold: false` is an explicit RELEASE, not a missing
+                    // field — it must be able to override an earlier hold, or a
+                    // hold could never be lifted without rewriting history in an
+                    // append-only ledger.
+                    serde_yaml::Value::Bool(false) => hold = Some((ts.to_string(), String::new())),
+                    serde_yaml::Value::String(reason) if !reason.trim().is_empty() => {
+                        hold = Some((ts.to_string(), reason.trim().to_string()))
+                    }
+                    _ => {}
+                }
+            }
+        }
+        if let Some((_, reason)) = &hold
+            && !reason.is_empty()
+        {
+            held.push((order, pid, reason.clone()));
+            continue;
+        }
+
         match last_ts {
-            Some(ts) if ts.as_str() < cutoff_iso => expired.push((order, pid, ts)),
+            Some(ts) if ts.as_str() < cutoff_iso => {
+                // Name the rule in the verdict. "Nothing happened here" and
+                // "the CLAIMANT did nothing here, whatever else was said" are
+                // different facts, and reaping on the second is the whole point
+                // of 864-m2vc — so a reader must be able to tell which one this
+                // row was reaped on.
+                let attributed = match claim_host {
+                    Some(h) => format!("{ts}\tclaimant:{h}"),
+                    None => format!("{ts}\tclaimant:unattributed(any-host-rule)"),
+                };
+                expired.push((order, pid, attributed));
+            }
             Some(_) => {}
             None => unknown.push((order, pid)),
         }
     }
-    (expired, unknown)
+    (expired, unknown, held)
 }
 
 #[cfg(test)]
@@ -5173,8 +5622,12 @@ mod tests {
     #[test]
     fn writer_agent_refuses_absence_and_the_literal_unknown() {
         assert_eq!(
-            writer_agent_from(Some("flag-id".into()), Some("env-id".into())).unwrap(),
-            "flag-id",
+            writer_agent_from(
+                Some("linux-macuahuitl-opus5-20260825t013400z".into()),
+                Some("linux-macuahuitl-codex-20260825t013401z".into())
+            )
+            .unwrap(),
+            "linux-macuahuitl-opus5-20260825t013400z",
             "an explicit --agent wins over the environment"
         );
         assert_eq!(
@@ -5198,6 +5651,100 @@ mod tests {
         assert!(
             writer_agent_from(Some("   ".into()), Some(String::new())).is_err(),
             "whitespace and empty values are absence"
+        );
+    }
+
+    /// ORDER 874-idnt. The 2026-08-24 retrospective found every hand-written
+    /// agent_id of 48 hours violating the 756-hn3a grammar — the contract had
+    /// one canonical source (scripts/agent-identity.sh) and zero enforcement.
+    /// The ledger writer is the choke point where identity becomes durable
+    /// data, so the grammar is enforced HERE.
+    #[test]
+    fn writer_agent_refuses_noncanonical_ids_874_idnt() {
+        // Everything agent-identity.sh can emit passes.
+        for id in [
+            "linux-macuahuitl-opus5-20260825t013400z",
+            "forge-forge-tillandsias-codex-20260815t162555z",
+            "windows-yolanda-fable5-20260816t124617z",
+        ] {
+            assert!(
+                writer_agent_from(Some(id.into()), None).is_ok(),
+                "canonical id {id:?} must be accepted"
+            );
+        }
+        // The catalogued improvisations refuse, each for its own defect.
+        for (id, defect) in [
+            (
+                "linux-macuahuitl-opus5-20260825T013400Z",
+                "uppercase T/Z timestamp — the retrospective's dominant shape",
+            ),
+            ("flag-id", "too few components, no timestamp"),
+            (
+                "Laptopirria",
+                "a git-author display name is not an agent id",
+            ),
+            ("linux-macuahuitl-opus5", "no timestamp component at all"),
+            (
+                "linux--macuahuitl-opus5-20260825t013400z",
+                "empty component — sanitize collapses runs, so this was never emitted",
+            ),
+            (
+                "linux-macuahuitl-opus5-2026-08-25t013400z",
+                "a dashed date is not the compact timestamp shape",
+            ),
+        ] {
+            let err = writer_agent_from(Some(id.into()), None)
+                .expect_err(&format!("{id:?} must refuse: {defect}"));
+            assert!(
+                err.contains("agent-identity.sh"),
+                "the refusal must name the canonical source as the remedy; got: {err}"
+            );
+        }
+        // The flag does NOT shadow a valid environment id with garbage accepted:
+        // a malformed flag refuses outright rather than falling through, because
+        // an explicit flag is stated intent (same rule as --host).
+        assert!(
+            writer_agent_from(
+                Some("BAD-ID".into()),
+                Some("linux-macuahuitl-opus5-20260825t013400z".into())
+            )
+            .is_err(),
+            "a malformed explicit --agent refuses; it does not silently fall back"
+        );
+    }
+
+    /// ORDER 874-idnt. The `host:` field mixed three vocabularies (node names,
+    /// kind labels, git-author display names) and 864-m2vc's attribution
+    /// compares them by exact equality. The alphabet check refuses the class
+    /// that can never be right while accepting both surviving vocabularies.
+    #[test]
+    fn host_label_alphabet_874_idnt() {
+        for host in [
+            "macuahuitl",
+            "yoga",
+            "linux_mutable",
+            "forge",
+            "fixturehost",
+        ] {
+            assert!(
+                host_label_is_acceptable(host),
+                "{host:?} is a legitimate ledger host label"
+            );
+        }
+        for host in ["Laptopirria", "Tlatoāni", "linux mutable", "", "MACUAHUITL"] {
+            assert!(
+                !host_label_is_acceptable(host),
+                "{host:?} must be refused as a host label"
+            );
+        }
+        // A malformed TILLANDSIAS_HOST_KIND self-corrects to the platform
+        // constant instead of becoming durable data (env is ambient, not
+        // stated intent — unlike --host, which refuses via
+        // require_acceptable_host).
+        assert_eq!(
+            writer_host_from(Some("Laptopirria".into())),
+            std::env::consts::OS,
+            "a display-name TILLANDSIAS_HOST_KIND must not reach the ledger"
         );
     }
 
@@ -5264,16 +5811,93 @@ mod tests {
             "    events:\n      - type: completed\n        ts: \"2026-08-01T00:00:00Z\"\n",
         );
         let ledger = Ledger::parse(raw, Default::default()).expect("synthetic ledger parses");
-        let (expired, unknown) = expire_claim_candidates(&ledger, "2026-08-09T00:00:00Z");
+        let (expired, unknown, _held) = expire_claim_candidates(&ledger, "2026-08-09T00:00:00Z");
+        // 864-m2vc changed the SHAPE of the third element, not the
+        // partitioning: it now carries the attribution rule the reap was
+        // decided under. None of these fixtures has a claim-convention event,
+        // so all of them fall to the any-host rule and must SAY so — a reap
+        // whose rule is invisible is the thing that packet exists to end.
         assert_eq!(
             expired,
-            vec![("1".to_string(), "stale", "2026-08-01T00:00:00Z".to_string())],
+            vec![(
+                "1".to_string(),
+                "stale",
+                "2026-08-01T00:00:00Z\tclaimant:unattributed(any-host-rule)".to_string()
+            )],
             "only the stale in_progress claim expires; the fresh one's newest event is inside the TTL"
         );
         assert_eq!(
             unknown,
             vec![("3".to_string(), "ageless")],
             "no-timestamp packets are reported as unknown-age, never expired"
+        );
+    }
+
+    /// ORDER 864-m2vc. The TTL measures the CLAIMANT, not the room.
+    ///
+    /// The defect: `expire_claim_candidates` took the newest event on the
+    /// packet regardless of author, so any host's note refreshed any host's
+    /// lease. Measured on the live ledger — a coordinator note by
+    /// linux_mutable, whose content was "I am NOT absorbing this row",
+    /// extended yoga's claim by twenty-one hours. A row several hosts discuss
+    /// could never be reaped however dead its claim.
+    ///
+    /// `propped` is the assertion that matters: hostA claimed it and went
+    /// quiet, hostB has been chatting about it ever since. Under the old rule
+    /// hostB's note kept it alive forever; it must now expire, and the verdict
+    /// must say the claimant is hostA so the reader can see WHY.
+    #[test]
+    fn a_siblings_note_no_longer_refreshes_someone_elses_lease() {
+        let raw = concat!(
+            "packets:\n",
+            // hostA claimed and went silent; hostB keeps talking. EXPIRES.
+            "  - packet_id: propped\n    order: 1\n    title: \"p\"\n    status: in_progress\n    desired_release: v0.5\n",
+            "    events:\n",
+            "      - type: note\n        ts: \"2026-08-01T00:00:00Z\"\n        host: hosta\n",
+            "        summary: claimed for cycle 2026-08-01T00:00Z\n",
+            "      - type: note\n        ts: \"2026-08-20T00:00:00Z\"\n        host: hostb\n",
+            "        summary: drive-by note from a host that does not own this\n",
+            // hostA claimed and IS still working. SURVIVES.
+            "  - packet_id: active\n    order: 2\n    title: \"a\"\n    status: in_progress\n    desired_release: v0.5\n",
+            "    events:\n",
+            "      - type: note\n        ts: \"2026-08-01T00:00:00Z\"\n        host: hosta\n",
+            "        summary: claimed for cycle 2026-08-01T00:00Z\n",
+            "      - type: progress\n        ts: \"2026-08-20T00:00:00Z\"\n        host: hosta\n",
+            "        summary: the claimant itself is still going\n",
+            // No claim event at all: the old any-host rule still applies, and
+            // the verdict must SAY so rather than silently reaping harder.
+            "  - packet_id: unattributed\n    order: 3\n    title: \"u\"\n    status: in_progress\n    desired_release: v0.5\n",
+            "    events:\n",
+            "      - type: note\n        ts: \"2026-08-20T00:00:00Z\"\n        host: hostb\n",
+            "        summary: nobody ever claimed this properly\n",
+        );
+        let ledger = Ledger::parse(raw, Default::default()).expect("synthetic ledger parses");
+        let (expired, _unknown, _held) = expire_claim_candidates(&ledger, "2026-08-10T00:00:00Z");
+        let ids: Vec<&str> = expired.iter().map(|(_, pid, _)| *pid).collect();
+
+        assert!(
+            ids.contains(&"propped"),
+            "a claim whose OWNER went silent must expire even though a sibling \
+             kept noting on it; got {ids:?}"
+        );
+        assert!(
+            !ids.contains(&"active"),
+            "a claim whose owner is still producing events must NOT expire; got {ids:?}"
+        );
+        assert!(
+            !ids.contains(&"unattributed"),
+            "with no claim event the any-host rule still applies, so a recent \
+             sibling note keeps it alive; got {ids:?}"
+        );
+
+        let propped = expired
+            .iter()
+            .find(|(_, pid, _)| *pid == "propped")
+            .unwrap();
+        assert!(
+            propped.2.contains("claimant:hosta"),
+            "the verdict must name the claimant it measured, got {:?}",
+            propped.2
         );
     }
 

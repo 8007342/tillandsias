@@ -36,8 +36,18 @@ Messages sent over the socket SHALL use postcard binary serialization (no JSON) 
 
 1. Each message is a postcard-encoded Rust struct
 2. Framing: 4-byte big-endian length prefix followed by the postcard-encoded message body
-3. No length limit enforced at protocol level (backpressure managed by OS socket buffers)
+3. A single frame SHALL NOT exceed `MAX_MESSAGE_BYTES` (65,536), the one frame-size ceiling the control wire has (`crates/tillandsias-control-wire/src/lib.rs`). Both directions enforce it: a reader whose length prefix exceeds the ceiling closes the connection with a local `io::ErrorKind::InvalidData` and sends NO reply, and a writer refuses to emit an oversize frame rather than letting the peer kill the connection at the far end (order 828-r2ek). Backpressure below that ceiling is managed by OS socket buffers.
 4. Readers MUST handle EOF gracefully (container or client disconnects)
+
+CORRECTED 2026-08-25 (order 795-5itp). Clause 3 previously read "No length limit
+enforced at protocol level (backpressure managed by OS socket buffers)". That was
+false for as long as the code has existed — `read_control_envelope`
+(`crates/tillandsias-headless/src/tray/mod.rs`) has always refused a prefix over
+`MAX_MESSAGE_BYTES`. The contradiction is load-bearing rather than cosmetic: this
+spec is what a reader consults before touching the framing, and it told them a
+bound they would find in the code was not part of the protocol. A migration onto
+`LengthDelimitedCodec` that trusted this text would have left `max_frame_length`
+defaulted at 8 MiB and silently widened every reader here 128x.
 
 #### Scenario: Client sends a message to tray
 - **WHEN** a container process writes a postcard-framed message to the socket

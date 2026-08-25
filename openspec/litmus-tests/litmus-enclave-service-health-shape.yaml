@@ -86,6 +86,20 @@ critical_path:
     # the end-user surface (--diagnostics inside the enclave); neither is
     # deleted, and the shared grammar is pinned HERE so the surfaces cannot
     # drift apart by accretion — which is how they were born.
-    command: "grep -q 'fail:enclave-service-dead:service={name}:state={state}:rc={exit_code}:signal={signal}' crates/tillandsias-headless/src/main.rs && grep -q 'fail:enclave-service-dead:service=' scripts/check-enclave-service-health.sh && grep -q 'note:enclave-service-stopped' crates/tillandsias-headless/src/main.rs && grep -q 'note:enclave-service-stopped' scripts/check-enclave-service-health.sh && echo 'ok: one vocabulary, both surfaces'"
+    # ORDER 686-7qcm cycle, 2026-08-24: the script clause used to demand the
+    # ASSEMBLED literal `fail:enclave-service-dead:service=`. f4f08709e
+    # ("converge the host reporter onto yoga's grammar") correctly split that
+    # into `_class="fail:enclave-service-dead"` plus a `:service=${name}:...`
+    # concatenation, so the contiguous string stopped existing in the source and
+    # this step went red while the BEHAVIOUR was unchanged — cycle-preflight
+    # emits the full vocabulary on every run, and the behavioural fixture
+    # scripts/test-enclave-service-health.sh covers the assembled output.
+    #
+    # A text pin broken by a correct refactor. The step now pins the VOCABULARY
+    # TOKEN in both surfaces, which is what "one vocabulary, both surfaces"
+    # actually claims, and leaves how each surface assembles its line to the
+    # fixture. The Rust side keeps its full format-string form because there the
+    # literal genuinely is contiguous.
+    command: "grep -q 'fail:enclave-service-dead:service={name}:state={state}:rc={exit_code}:signal={signal}' crates/tillandsias-headless/src/main.rs && grep -q 'fail:enclave-service-dead' scripts/check-enclave-service-health.sh && grep -q 'note:enclave-service-stopped' crates/tillandsias-headless/src/main.rs && grep -q 'note:enclave-service-stopped' scripts/check-enclave-service-health.sh && echo 'ok: one vocabulary, both surfaces'"
     timeout_ms: 3000
     expected_behavior: "ok: one vocabulary, both surfaces"

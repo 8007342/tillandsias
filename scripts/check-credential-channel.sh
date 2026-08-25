@@ -5,8 +5,12 @@ set -uo pipefail
 if grep -qi "microsoft" /proc/version 2>/dev/null && pwd | grep -q '^/mnt/[c-z]/'; then
   echo "[check-credential-channel] WARNING: Running in WSL but directory is on Windows host. Host credentials may be unavailable. On Windows, use Git Bash instead." >&2
 fi
-# @trace spec:meta-orchestration
-# check-credential-channel.sh: executable Credential Channel Guard (plan order 61).
+# @trace order:61, order:756-2jnj, order:860-g798
+# check-credential-channel.sh: executable Credential Channel Guard (plan order 61;
+# forge upstream-auth consumption 756-2jnj; push-verified gh arm 860-g798).
+# The former `spec:meta-orchestration` trace here was a ghost — no such spec
+# file exists — flagged by the 874 retrospective and re-pointed to the orders
+# that actually own this guard's behavior.
 #
 # Makes the meta-orchestration start-of-cycle Credential Channel Guard a
 # verifiable check that returns a pass/fail exit code, instead of advisory prose
@@ -26,7 +30,27 @@ fi
 #   ok:gh-credentials-store        repo-local store helper file present + non-empty
 #   ok:gh-token-env                GH_TOKEN set
 #   ok:github-token-env            GITHUB_TOKEN set
-#   ok:gh-keyring                  `gh auth status` green
+#   ok:gh-keyring-push-verified    `gh auth status` green AND a bounded
+#                                  non-interactive `git push --dry-run`
+#                                  authenticated (860-g798: gh holding a token
+#                                  proves nothing about git's helper chain; a
+#                                  fresh clone resolves to the interactive Git
+#                                  Credential Manager and hangs forever)
+#   ok:gh-keyring-push-verified-hook-refused  the push probe was refused by
+#                                  THIS CHECKOUT'S OWN pre-push hook (a gate
+#                                  stamp gone stale behind a fetch, a claim
+#                                  fragment, or the previous cycle's
+#                                  attestation commit), and the credential
+#                                  authenticated with the hook out of the way.
+#                                  NOT a credential fault, so NOT blocked:* —
+#                                  the skill hard-stops on those, and the tree
+#                                  is validated at Finalization, not here
+#                                  (order 876-exg2)
+#   blocked:interactive-credential-helper  gh has a token but git's configured
+#                                  helper is interactive-only; remedy printed
+#   blocked:gh-cli-only            gh has a token, the push probe failed, no
+#                                  interactive helper explains it — seed the
+#                                  repo-local store before committable work
 #   ok:forge-git-mirror            TILLANDSIAS_HOST_KIND=forge AND the mirror is
 #                                  reachable AND the mirror's published upstream
 #                                  write-authorization verdict is FRESH and
@@ -243,8 +267,105 @@ credential_channel_verdict() {
   if [ "${TILLANDSIAS_CRED_SKIP_GH:-0}" != "1" ] \
      && command -v gh >/dev/null 2>&1 \
      && gh auth status >/dev/null 2>&1; then
-    echo "ok:gh-keyring"
-    return 0
+    # ORDER 860-g798 — `gh auth status` PROVES THE WRONG THING. It proves the
+    # gh CLI holds a token; it says nothing about whether GIT can use it. On a
+    # fresh clone git's credential.helper resolves to the system default —
+    # often Git Credential Manager, which authenticates by opening an
+    # INTERACTIVE PROMPT. Measured on esmeraldinha 2026-08-23: this arm
+    # returned ok, the cycle proceeded into committable work, and the first
+    # push hung >10 minutes on a prompt no unattended session can answer. The
+    # guard's own docstring names this exact category error for reads
+    # ("public-repo reads are anonymous — verify write capability
+    # explicitly"); this arm made it one level up: a token that exists
+    # somewhere is not a channel git can use.
+    #
+    # So prove the actual thing: an authenticated PUSH negotiation, dry-run
+    # (contacts the remote, authenticates, updates nothing), with every
+    # interactive escape hatch closed and a hard time bound. .gh-credentials
+    # does not survive a re-clone while gh auth stays green globally, so EVERY
+    # fresh checkout enters through this arm — the fleet restart from fresh
+    # checkouts is exactly when it must not lie.
+    _probe_cmd="${TILLANDSIAS_CRED_PROBE_CMD:-git push --dry-run origin HEAD}"
+    if GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never GIT_ASKPASS=/bin/false \
+       timeout 45 $_probe_cmd >/dev/null 2>&1; then
+      echo "ok:gh-keyring-push-verified"
+      return 0
+    fi
+    # ORDER 876-exg2. THE PROBE RUNS OUR OWN PRE-PUSH HOOK, AND THAT HOOK
+    # REFUSES FOR REASONS THAT HAVE NOTHING TO DO WITH CREDENTIALS.
+    #
+    # 860-g798 was right to stop trusting `gh auth status` and start proving an
+    # authenticated push. What it did not account for is that `git push` — even
+    # `--dry-run` — executes the local pre-push chain first, and
+    # pre-push-local-gate.sh refuses whenever the worktree has changed since
+    # `./build.sh --check` last stamped it. Every one of these leaves the tree
+    # in that state, and all of them are NORMAL:
+    #
+    #   - a fetch/fast-forward, which is what Start-Of-Cycle does immediately
+    #     BEFORE running this guard (skill step 2);
+    #   - the previous cycle's own Finalization step 9, which commits
+    #     plan/mo-full-attestations.d/<host>.md through the hook's plan-only
+    #     lane and therefore never refreshes the stamp;
+    #   - minting a claim fragment, which the skill mandates before any work.
+    #
+    # So the guard reported `blocked:gh-cli-only` — "seed the repo-local store"
+    # — on a host whose credential was fine, and the skill hard-stops the cycle
+    # on any `blocked:*`. Measured on pirria 2026-08-25 on two consecutive
+    # cycles (clean tree, HEAD == origin, the stale path being the attestation
+    # file the previous cycle was REQUIRED to write), and independently on yoga
+    # ten minutes before the first of those. The printed remedy could not have
+    # helped in any of these cases.
+    #
+    # THE FIX IS TO ASK THE QUESTION THIS GUARD IS ACTUALLY ASKING. "Can this
+    # credential authenticate to the remote" is answered by a probe with the
+    # local hook out of the way; "would this tree pass the gate" is a DIFFERENT
+    # question, asked and enforced at Finalization step 4, and it must stay
+    # asked there. A guard that conflates them fails the cycle for the wrong
+    # reason and names a remedy that does not apply.
+    #
+    # The retry runs ONLY on the failure path, so the healthy case costs
+    # nothing and the true positive 860-g798 caught is untouched: an
+    # interactive-helper hang fails BOTH probes and still reaches the verdicts
+    # below.
+    if [ -z "${TILLANDSIAS_CRED_PROBE_CMD:-}" ]; then
+      if GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never GIT_ASKPASS=/bin/false \
+         timeout 45 git push --dry-run --no-verify origin HEAD >/dev/null 2>&1; then
+        # The credential authenticated. The refusal was ours.
+        echo "  note: the push probe was refused by this checkout's own pre-push" >&2
+        echo "  hook, not by the remote — the credential authenticated fine with" >&2
+        echo "  the hook out of the way. Usually a gate stamp gone stale behind a" >&2
+        echo "  fetch, a claim fragment, or the previous cycle's attestation" >&2
+        echo "  commit. This is NOT a credential fault and must not stop the" >&2
+        echo "  cycle; the tree is validated at Finalization by:" >&2
+        echo "    TILLANDSIAS_SKIP_VERSION_BUMP=1 ./build.sh --check" >&2
+        echo "ok:gh-keyring-push-verified-hook-refused"
+        return 0
+      fi
+    fi
+    # The push cannot authenticate non-interactively. Name the interactive
+    # helper if one is configured — the failure must be legible the FIRST
+    # time, not on the second diagnosis pass (exit criterion 2).
+    _helpers="$(git config --get-all credential.helper 2>/dev/null | tr '\n' ',' | sed 's/,$//')"
+    case ",$_helpers," in
+      *,manager,*|*,manager-core,*|*"\\Git Credential Manager"*)
+        echo "blocked:interactive-credential-helper:${_helpers:-unknown}" >&2
+        echo "  gh holds a token but git's helper chain is interactive-only — an" >&2
+        echo "  unattended push hangs forever on a prompt. REMEDY (measured 18s" >&2
+        echo "  on esmeraldinha after a 10-minute hang):" >&2
+        echo "    gh auth token | git credential-store --file \"\$(git rev-parse --git-dir)/.gh-credentials\" store  # seed repo-local" >&2
+        echo "    git config --local --replace-all credential.helper ''         # empty entry DROPS the system manager" >&2
+        echo "    git config --local --add credential.helper \"store --file=\$(git rev-parse --git-dir)/.gh-credentials\"" >&2
+        echo "blocked:interactive-credential-helper"
+        return 1
+        ;;
+    esac
+    # gh has a token, git cannot push with it, and no interactive helper
+    # explains it: a distinct verdict the cycle must RESOLVE before any
+    # committable work, never a bare ok (exit criterion 1).
+    echo "  gh auth is green but a bounded non-interactive push probe failed" >&2
+    echo "  (${_probe_cmd}). Seed the repo-local store before committable work." >&2
+    echo "blocked:gh-cli-only"
+    return 1
   fi
   if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]; then
     # The forge uses a transparent git mirror service for authenticated pushes.

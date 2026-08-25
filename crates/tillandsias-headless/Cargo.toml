@@ -25,6 +25,11 @@ tillandsias-otp = { path = "../tillandsias-otp" }
 tillandsias-podman = { path = "../tillandsias-podman" }
 tokio = { workspace = true }
 bytes = { workspace = true }
+# Order 795-5itp: `Framed` for the control wire, built from the ONE shared
+# codec constructor (tillandsias_control_wire::transport::control_frame_codec)
+# rather than a builder configured here — max_frame_length must never be
+# defaulted, and a second construction site is where it would drift.
+tokio-util = { workspace = true }
 hyper = { version = "1", features = ["full"] }
 futures = "0.3"
 signal-hook = "0.3"

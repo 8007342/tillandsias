@@ -25,7 +25,9 @@
 # is why it is wired into archive-plan-packets.sh --check rather than left as a
 # thing to remember. The FIRST run on a host pays a cold cargo build (~90s);
 # $WORK/target is deliberately kept between runs so that is paid once per boot
-# rather than once per invocation.
+# rather than once per invocation. The default lives under the repository's
+# ignored target/ tree, not /tmp: forge /tmp is a 256 MiB tmpfs and a cold Rust
+# target alone exceeds it.
 #
 # Exit codes are three-valued, like `plan grade`:
 #   0 — the sweep ran and the post-archive suite is green;
@@ -56,7 +58,7 @@ done
 # anyone can afford to run into one nobody does. The tree itself is wiped and
 # recopied each time, so the input is still pristine; only the compiler cache
 # persists.
-WORK="${TILLANDSIAS_ARCHIVE_CHECK_WORK:-${TMPDIR:-/tmp}/tillandsias-archive-answerability}"
+WORK="${TILLANDSIAS_ARCHIVE_CHECK_WORK:-$REPO_ROOT/target/archive-answerability}"
 TREE="$WORK/tree"
 LOG="$WORK/log"
 rm -rf "$TREE" "$LOG"

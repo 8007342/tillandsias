@@ -1,0 +1,93 @@
+# freshness: auditor=linux-yoga-20260825t0047z date=2026-08-25 verdict=updated scope=created — order 795-zshi named this test as its verifiable closure and it had never been written; 837-et6t is the packet that writes it
+name: litmus:guest-exec-argv-vector-no-shell
+spec: vsock-exec-authz
+description: >
+  The closure gate order 795-zshi named for itself: prove the exec wire carries
+  a VERBATIM ARGV VECTOR end to end, with no shell and no quoting layer, and
+  prove the escaping workarounds that flattening forced cannot come back.
+
+  Three legs, because the defect had three halves:
+
+  (1) HOST — `launch_spec` composes a project launch as one token per argument
+  (`/usr/local/bin/tillandsias-headless --cloud <project> --<agent>`), the
+  project name is its own argv element, and a hostile name is REFUSED loudly
+  rather than sanitized. Refusal is an acceptable outcome per the parent's exit
+  criterion 4; silently splitting is not.
+
+  (2) GUEST — the allowlist admits that vector only under spec §4's
+  restrictions (absolute path under a known prefix, no `/..`, never a shell as
+  argv[0]) and grants nothing the pre-existing `/bin/bash -lc <string>` arm did
+  not already grant.
+
+  (3) SOURCE SCAN — this is the leg that makes the packet a REDUCTION rather
+  than an addition. `argv_survives_wt_reparse` and `wt_safe_title` existed only
+  to survive the flattening; the gate goes red if either is defined again.
+  `build_exec_guest_shell_cmd` is deliberately NOT scanned: order 838-48ca
+  decided on the record to keep it, scoped to genuine shell requests, and
+  amended the parent's exit criterion 2 to match.
+
+  634-39ik compliance: the scan asserts the ABSENCE of named symbols — true
+  however the code is rewritten — and carries its own negative control below,
+  run against a hermetic tree that does define one.
+severity: critical
+size: quick
+phase: pre-build
+
+preconditions:
+  - workspace contains crates/tillandsias-host-shell/src/pty/mod.rs
+  - workspace contains crates/tillandsias-headless/src/exec_allowlist.rs
+  - workspace contains scripts/check-exec-argv-vector-workarounds.sh
+  - a cargo toolchain is available
+
+critical_path:
+  - step: "HOST: a project click composes a verbatim argv vector, no shell, project as its own token"
+    command: "cargo test -p tillandsias-host-shell pty::tests::launch_spec_routes_project_clicks_through_orchestrated_launch -- --exact"
+    expected_behavior: "test result: ok"
+    timeout_ms: 240000
+
+  - step: "HOST NEGATIVE CONTROL: a hostile project name is refused loudly, never flattened"
+    command: "cargo test -p tillandsias-host-shell pty::tests::launch_spec_refuses_hostile_project_names -- --exact"
+    expected_behavior: "test result: ok"
+    timeout_ms: 240000
+
+  - step: "HOST POSITIVE CONTROL: legitimate names still launch, and reach the guest byte-identical"
+    # Without this the refusal above could be satisfied by a validator that
+    # refuses everything.
+    command: "cargo test -p tillandsias-host-shell pty::tests::launch_spec_still_accepts_legitimate_project_names -- --exact"
+    expected_behavior: "test result: ok"
+    timeout_ms: 240000
+
+  - step: "GUEST: the verbatim arm admits absolute non-shell programs (spec vsock-exec-authz §4)"
+    command: "cargo test -p tillandsias-headless exec_allowlist::exec_allowlist_tests::verbatim_argv_arm_accepts_absolute_non_shell_programs -- --exact"
+    expected_behavior: "test result: ok"
+    timeout_ms: 240000
+
+  - step: "GUEST NEGATIVE CONTROL: shells, relative paths and traversal are refused"
+    command: "cargo test -p tillandsias-headless exec_allowlist::exec_allowlist_tests::verbatim_argv_arm_refuses_shells_relative_paths_and_traversal -- --exact"
+    expected_behavior: "test result: ok"
+    timeout_ms: 240000
+
+  - step: "GUEST: the verbatim arm grants no authority the bash arm did not already grant"
+    command: "cargo test -p tillandsias-headless exec_allowlist::exec_allowlist_tests::verbatim_arm_grants_nothing_the_bash_arm_did_not -- --exact"
+    expected_behavior: "test result: ok"
+    timeout_ms: 240000
+
+  - step: "SOURCE SCAN: the retired escaping workarounds are not defined anywhere"
+    command: "scripts/check-exec-argv-vector-workarounds.sh crates | grep -qE '^ok:exec-argv-workarounds-absent:[0-9]+ checked$' && echo 'ok: workarounds absent'"
+    expected_behavior: "ok: workarounds absent"
+    timeout_ms: 30000
+
+  - step: "SCAN NEGATIVE CONTROL: reintroducing a workaround DEFINITION turns the scan red"
+    # Hermetic throwaway tree. Without this the scan leg would pass on any tree
+    # where the grep simply never matches — including a broken grep.
+    command: "d=$(mktemp -d); mkdir -p \"$d/src\"; printf 'fn argv_survives_wt_reparse(a: &str) -> bool { true }\\n' > \"$d/src/x.rs\"; out=$(scripts/check-exec-argv-vector-workarounds.sh \"$d\" 2>/dev/null); rc=$?; rm -rf \"$d\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -qE '^violation:exec-argv-workaround-reintroduced:[0-9]+$' && echo 'ok: reintroduction refused'"
+    expected_behavior: "ok: reintroduction refused"
+    timeout_ms: 30000
+
+  - step: "SCAN POSITIVE CONTROL: a comment NAMING a retired workaround is not a reintroduction"
+    # The comments recording why these went away are the institutional memory
+    # this packet exists to protect. A scan that reddened on a mention would be
+    # deleted by the first person who read a code comment.
+    command: "d=$(mktemp -d); mkdir -p \"$d/src\"; printf '// argv_survives_wt_reparse was deleted by 795-zshi; do not bring it back\\n' > \"$d/src/x.rs\"; out=$(scripts/check-exec-argv-vector-workarounds.sh \"$d\" 2>/dev/null); rc=$?; rm -rf \"$d\"; [ \"$rc\" -eq 0 ] && printf '%s' \"$out\" | grep -qE '^ok:exec-argv-workarounds-absent:[0-9]+ checked$' && echo 'ok: mention tolerated'"
+    expected_behavior: "ok: mention tolerated"
+    timeout_ms: 30000

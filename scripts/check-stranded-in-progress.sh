@@ -102,15 +102,46 @@ total=0
 # A packet is STRANDED when its most recent recorded activity is the claim
 # itself — no progress event since. That is the signature of an interrupted
 # cycle: something took it, wrote nothing, and never came back.
+#
+# ORDER 882-vqe4. COUNT THE FOLDED EVENTS, NOT THE FRAGMENT OVERLAY. This loop
+# used to count with `grep -rh "packet_id: <pid>" plan/index.d/*.yaml`, which
+# sees a packet's history only until compaction folds it into plan/index.yaml.
+# Compaction is routine garbage collection the cycle is told to run, so the
+# detector's window was "since the last fold" — and the longer a packet is
+# worked, the more likely its evidence has been folded and the more confidently
+# this reported it abandoned.
+#
+# MEASURED on the live ledger 2026-08-25T13:47Z:
+#
+#   packet     events this loop saw   events that existed
+#   865-n8vq            0                    35
+#   831-ezea            0                     1
+#
+# 865-n8vq is a p0 the COORDINATOR had pushed progress into 106 minutes
+# earlier. Calling it stranded inverts the whole point of 641-e2qa: the signal
+# that exists to surface NEGLECTED work pointed at the work being attended to
+# hardest, and diluted the genuine strandings in the same list.
+#
+# `tillandsias-plan plan-events <pid>` folds base and overlay the way every
+# other reader already does. A second grep against plan/index.yaml would be the
+# same defect one storage location later (704-zcgi: the copy has to go, not
+# just the instance). When the binary is unavailable the loop DECLINES to
+# classify rather than guessing from half the ledger — an unreadable history is
+# not an absent one.
 stranded=0
 out=""
 if [ -n "$rows" ]; then
     while IFS=$'\t' read -r order role pid; do
         [ -n "$pid" ] || continue
-        # Count progress-ish events recorded for this packet anywhere in the
-        # fragments. `filed` and `claim` do not count as activity.
-        events=$(grep -rh -A3 "packet_id: ${pid}\$" plan/index.d/*.yaml 2>/dev/null \
-            | grep -cE 'event: (progress|completed|blocked)|type: (progress|completed|blocked)' || true)
+        if [ -z "$PLAN" ]; then
+            # No folder available: report the population and refuse the verdict.
+            echo "summary: unavailable:no-runnable-plan-binary"
+            exit 2
+        fi
+        # `filed` and `claim` do not count as activity; `progress`, `completed`
+        # and `blocked` do. plan-events exits 1 only for an unresolvable id.
+        events=$("$PLAN" plan-events "$pid" 2>/dev/null \
+            | grep -cE '^(progress|completed|blocked)	' || true)
         if [ "${events:-0}" -eq 0 ]; then
             out="${out}stranded	${order}	${role}	${pid}"$'\n'
             stranded=$((stranded + 1))

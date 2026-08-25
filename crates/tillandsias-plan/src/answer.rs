@@ -1601,9 +1601,68 @@ fn next_ranking_key(ledger: &Ledger, p: &serde_yaml::Value) -> (u8, u8, u64, Str
     )
 }
 
+/// The EFFECTIVE `next_action`: the newest of the packet field and any event
+/// carrying one.
+///
+/// ORDER 864-r9wt FIXED THIS FOR THE `next-action` SUBCOMMAND AND MISSED THIS
+/// CALLER — found by the 2026-08-24 fleet retrospective, and this caller is the
+/// higher-traffic one. `packets:` is a G-Set, so cycles update `next_action`
+/// by APPENDING EVENTS; the packet-level field keeps whatever the row was born
+/// with. `plan_next` is the selector — the primary work-pull surface every
+/// host reads — and its per-row "next:" snippet was serving that original
+/// value, arbitrarily stale, while the live queue sat in events beneath it.
+/// The coordinator itself acted on a twenty-hour-stale queue this way before
+/// the subcommand existed; every OTHER host kept getting the stale text after.
+///
+/// The packet field is untimestamped and therefore the OLDEST candidate — it
+/// never wins a tie, being the one value guaranteed never to have been updated.
+pub fn effective_next_action(p: &serde_yaml::Value) -> Option<(String, Option<String>)> {
+    let mut best: Option<String> = crate::str_field(p, "next_action").map(str::to_string);
+    // ORDER 877-lwts: when the field arrived through the set-field LWW
+    // channel, the fold records its timestamp as `next_action_ts`, and the
+    // field competes on equal clock terms with the event channel. A packet
+    // whose field is the hand-authored original still has no ts and yields to
+    // any event, as before.
+    let mut best_ts = if best.is_some() {
+        crate::str_field(p, "next_action_ts")
+            .unwrap_or("")
+            .to_string()
+    } else {
+        String::new()
+    };
+    if let Some(evs) = p.get("events").and_then(serde_yaml::Value::as_sequence) {
+        for e in evs {
+            let Some(na) = e.get("next_action").and_then(serde_yaml::Value::as_str) else {
+                continue;
+            };
+            // ISO-8601 UTC sorts lexicographically; the ledger writes it so.
+            let ts = e
+                .get("ts")
+                .and_then(serde_yaml::Value::as_str)
+                .unwrap_or("");
+            if best.is_none() || ts > best_ts.as_str() {
+                best_ts = ts.to_string();
+                best = Some(na.to_string());
+            }
+        }
+    }
+    best.map(|v| {
+        (
+            v,
+            if best_ts.is_empty() {
+                None
+            } else {
+                Some(best_ts)
+            },
+        )
+    })
+}
+
 /// One-line, bounded rendering of the packet's own next step.
 fn next_action_snippet(p: &serde_yaml::Value) -> String {
-    let raw = crate::str_field(p, "next_action")
+    let effective = effective_next_action(p).map(|(v, _)| v);
+    let raw = effective
+        .as_deref()
         .or_else(|| crate::str_field(p, "handoff_note"))
         .or_else(|| crate::str_field(p, "outcome"))
         .or_else(|| crate::str_field(p, "title"))
@@ -2029,6 +2088,51 @@ mod tests {
 
     fn live_ledger() -> Ledger {
         Ledger::load(&repo_root().join("plan/index.yaml")).expect("live plan/index.yaml loads")
+    }
+
+    /// 864-r9wt's second half, found by the 2026-08-24 retrospective: the
+    /// `next-action` subcommand learned to take the newest EVENT, but
+    /// `plan_next`'s per-row snippet — the selector, the surface every host
+    /// reads — kept serving the packet FIELD, which is the value guaranteed
+    /// never to have been updated. Pin the snippet to the effective value.
+    #[test]
+    fn next_snippet_prefers_the_newest_event_over_the_stale_field() {
+        let p: serde_yaml::Value = serde_yaml::from_str(
+            r#"
+packet_id: q
+next_action: "STALE original queue from birth"
+events:
+  - type: progress
+    ts: "2026-08-01T00:00:00Z"
+    next_action: "older event"
+  - type: progress
+    ts: "2026-08-24T00:00:00Z"
+    next_action: "the live queue"
+  - type: note
+    ts: "2026-08-25T00:00:00Z"
+"#,
+        )
+        .expect("packet parses");
+        assert_eq!(
+            effective_next_action(&p).map(|(v, _)| v).as_deref(),
+            Some("the live queue")
+        );
+        assert!(
+            next_action_snippet(&p).contains("the live queue"),
+            "the selector snippet must carry the effective value"
+        );
+        assert!(
+            !next_action_snippet(&p).contains("STALE"),
+            "the birth value must not survive an event update"
+        );
+
+        // No events carrying next_action -> the field is genuinely current.
+        let bare: serde_yaml::Value =
+            serde_yaml::from_str("packet_id: r\nnext_action: only value\n").unwrap();
+        assert_eq!(
+            effective_next_action(&bare).map(|(v, _)| v).as_deref(),
+            Some("only value")
+        );
     }
 
     fn fresh() -> Freshness {

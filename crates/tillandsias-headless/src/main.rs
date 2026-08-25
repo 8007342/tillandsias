@@ -3011,6 +3011,29 @@ fn enforce_ca_key_mode(key: &Path) -> std::io::Result<()> {
     std::fs::set_permissions(key, std::fs::Permissions::from_mode(0o600))
 }
 
+/// ORDER 656-spux. Windows has no POSIX mode bits, so there is nothing for this
+/// to tighten — but its ABSENCE was a compile error, not a no-op: three callers
+/// (:3132, :3174, :3409) invoke it unguarded, and on a non-unix target the name
+/// simply did not exist. `cargo check -p tillandsias-headless --target
+/// x86_64-pc-windows-gnu` failed with E0425 "found an item that was configured
+/// out", on linux-next, invisible to every host's gate.
+///
+/// That is 653-7rag's shape exactly: a cfg-gated definition with no fallback
+/// arm, introduced and reviewed on a platform that cannot see the other side.
+/// The fallback lives HERE, in one place, rather than as a cfg at each call
+/// site — three guards would be three chances to forget the fourth, and the
+/// callers genuinely do not care which platform they are on. They are all
+/// best-effort (`let _ =`, or a mapped error on a path that already tolerates
+/// an absent key).
+///
+/// This is deliberately NOT a security regression on Windows: the key is not
+/// protected by mode bits there in the first place, and the enclave's Windows
+/// path receives it as a podman secret rather than through this file.
+#[cfg(not(unix))]
+fn enforce_ca_key_mode(_key: &Path) -> std::io::Result<()> {
+    Ok(())
+}
+
 fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     // @trace spec:secret-rotation, spec:reverse-proxy-internal
     let certs_dir = PathBuf::from(CA_DIR);
@@ -5032,6 +5055,177 @@ async fn ensure_router_running(
     Ok(())
 }
 
+// ── nix cache (order 801-vm4p) ───────────────────────────────────────────────
+//
+// 801-kqme delivered the enclave nix binary cache as scripts/nix-cache-service.sh
+// — a real container (harmonia serving the persistent chroot store over TLS with
+// ed25519 content signing) that WORKED but was invisible to the tray: no
+// Service node, no scope row, no supervision, started only by the daily
+// maintenance lane. This pair gives it the same lifecycle as vault/proxy/router.
+//
+// THE SPLIT, and why it is not a reimplementation: the script keeps everything
+// only the host+nix can do — signing keypair, TLS leaf from the stack CA,
+// harmonia resolution out of the served store with a GC pin, harmonia.toml —
+// behind a `prepare` subcommand that performs NO launch. The tray then runs the
+// container itself from the args below, so the dependency graph owns the
+// process: bring-up, teardown, scopes and (later) liveness all see it. One prep
+// implementation serves both the script's standalone `ensure` and this path.
+//
+// The one launch input Rust cannot derive is harmonia's LOGICAL store path
+// (the container entrypoint); `prepare` emits it in its verdict line:
+//   ok:nix-cache-prepare:entrypoint=/nix/store/<hash>-harmonia-<v>/bin/harmonia-cache
+
+/// Container-launch args for the nix cache. MUST stay flag-for-flag equal to
+/// the `_podman run` in scripts/nix-cache-service.sh `do_ensure` — that script
+/// remains independently runnable, and two launch paths that drift produce a
+/// cache whose behaviour depends on who started it. Pinned by
+/// `nix_cache_run_args_match_the_service_contract` below.
+fn build_nix_cache_run_args(entrypoint: &str, image: &str, host_port: u16) -> Vec<String> {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let chroot_store = std::env::var("TILLANDSIAS_NIX_CHROOT_STORE")
+        .unwrap_or_else(|_| format!("{home}/.local/share/tillandsias/nix-store"));
+    let state_dir = std::env::var("TILLANDSIAS_NIX_CACHE_STATE")
+        .unwrap_or_else(|_| format!("{home}/.local/share/tillandsias/nix-cache"));
+    vec![
+        "--detach".into(),
+        "--name".into(),
+        "tillandsias-nix-cache".into(),
+        "--network".into(),
+        ENCLAVE_NET.into(),
+        "--network-alias".into(),
+        "nix-cache".into(),
+        "--hostname".into(),
+        "nix-cache".into(),
+        "--cap-drop=ALL".into(),
+        "--security-opt=no-new-privileges".into(),
+        // label=disable, NOT :Z — the store is a shared multi-GiB host
+        // directory; relabelling it would disrupt every other consumer
+        // (the script records the same reasoning at its launch site).
+        "--security-opt".into(),
+        "label=disable".into(),
+        "--pids-limit=256".into(),
+        "--read-only".into(),
+        "--tmpfs".into(),
+        "/tmp:rw,nosuid,nodev,size=64m".into(),
+        "-p".into(),
+        format!("127.0.0.1:{host_port}:5000"),
+        "-v".into(),
+        format!("{chroot_store}/nix:/nix:ro"),
+        "-v".into(),
+        format!("{state_dir}/cache-priv.key:/run/nix-cache/cache-priv.key:ro"),
+        "-v".into(),
+        format!("{state_dir}/nix-cache.crt:/run/nix-cache/nix-cache.crt:ro"),
+        "-v".into(),
+        format!("{state_dir}/nix-cache.key:/run/nix-cache/nix-cache.key:ro"),
+        "-v".into(),
+        format!("{state_dir}/harmonia.toml:/run/nix-cache/harmonia.toml:ro"),
+        "-e".into(),
+        "CONFIG_FILE=/run/nix-cache/harmonia.toml".into(),
+        "--entrypoint".into(),
+        entrypoint.to_string(),
+        image.to_string(),
+    ]
+}
+
+/// Ensure the nix cache is running, as a graph-satisfiable prerequisite.
+///
+/// SKIP IS SUCCESS. On a host without nix, a store, or the prep script, the
+/// cache is not degraded — it is inapplicable, and this returns Ok so the
+/// ForgeLaunch edge never turns nix into a launch requirement (the exact
+/// posture cycle-preflight takes for inference: a report, never a gate).
+pub(crate) fn ensure_nix_cache_running(debug: bool) -> Result<(), String> {
+    // The drain gate and the R4-race lock — their ABSENCE was two of the four
+    // defects 801-vm4p names ("no runtime_phase drain gate", unsupervised
+    // lifecycle). Same order as ensure_proxy_running: refuse before waiting on
+    // the lock, so a drain-time caller fails fast instead of queuing behind a
+    // mutation it may not make.
+    if !runtime_phase::container_mutations_allowed() {
+        return Err(runtime_phase::refusal("ensure tillandsias-nix-cache"));
+    }
+    let _cache_lock =
+        resource_lock::acquire("nix-cache", std::time::Duration::from_secs(300), debug)?;
+
+    if crate::vault_bootstrap::container_running("tillandsias-nix-cache") {
+        if debug {
+            eprintln!("[tillandsias] nix cache already running");
+        }
+        return Ok(());
+    }
+
+    // Host-side prep lives in the script (see the module comment). Resolved
+    // relative to the checkout: this is a dev-tier service, and an installed
+    // end-user binary with no checkout correctly lands in the skip below.
+    let script = std::path::Path::new("scripts/nix-cache-service.sh");
+    if !script.exists() {
+        if debug {
+            eprintln!("[tillandsias] nix cache skip: no prep script (not a dev checkout)");
+        }
+        return Ok(());
+    }
+    let prep = Command::new("bash")
+        .arg(script)
+        .arg("prepare")
+        .output()
+        .map_err(|e| format!("nix-cache prepare failed to spawn: {e}"))?;
+    let verdict = String::from_utf8_lossy(&prep.stdout);
+    let verdict = verdict.trim().lines().last().unwrap_or("").to_string();
+    if verdict.starts_with("skip:") {
+        if debug {
+            eprintln!("[tillandsias] nix cache {verdict}");
+        }
+        return Ok(());
+    }
+    let Some(entrypoint) = verdict
+        .strip_prefix("ok:nix-cache-prepare:entrypoint=")
+        .map(str::to_string)
+    else {
+        // Prep failed. The cache is an accelerator, not a requirement: report
+        // and continue rather than turning a cold cache into a failed launch.
+        eprintln!(
+            "[tillandsias] Warning: nix cache prepare did not succeed ({}); continuing without the cache",
+            if verdict.is_empty() {
+                "<no verdict>"
+            } else {
+                &verdict
+            }
+        );
+        return Ok(());
+    };
+
+    let host_port: u16 = std::env::var("TILLANDSIAS_NIX_CACHE_HOST_PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(5111);
+    let image = std::env::var("TILLANDSIAS_NIX_CACHE_BASE_IMAGE")
+        .unwrap_or_else(|_| "registry.fedoraproject.org/fedora-minimal:44".to_string());
+
+    // Bounded podman only (714-4r6w): an unbounded sync call can wait forever
+    // inside a launch path, which is worse here than anywhere — the cache is an
+    // ACCELERATOR, and an accelerator that can hang the launch is a net brake.
+    let budget = tillandsias_podman::OperationKind::Container.default_budget();
+    let _ = podman_cmd_sync()
+        .args(["rm", "--ignore", "-f", "tillandsias-nix-cache"])
+        .output_bounded(budget);
+    let mut run_args: Vec<String> = vec!["run".into()];
+    run_args.extend(build_nix_cache_run_args(&entrypoint, &image, host_port));
+    let out = podman_cmd_sync()
+        .args(run_args.iter().map(String::as_str).collect::<Vec<_>>())
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
+        .map_err(|e| format!("nix-cache podman run failed: {e}"))?;
+    if !out.status.success() {
+        // Same posture as prep failure: warn, never wedge the launch.
+        eprintln!(
+            "[tillandsias] Warning: nix cache failed to start: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
+        return Ok(());
+    }
+    if debug {
+        eprintln!("[tillandsias] nix cache started (harmonia at {entrypoint})");
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct RouterRoute {
     /// `<service>.<project>` without the `.localhost` suffix.
@@ -5768,6 +5962,9 @@ const SHARED_STACK_SCOPES: &[(&str, SharedStackScope)] = &[
     ("tillandsias-vault", SharedStackScope::Core),
     ("tillandsias-proxy", SharedStackScope::Core),
     ("tillandsias-router", SharedStackScope::Core),
+    // ORDER 801-vm4p: the nix cache serves EVERY project from one persistent
+    // store, so it is Core (shared, refcounted with the stack), not LaneScoped.
+    ("tillandsias-nix-cache", SharedStackScope::Core),
     ("tillandsias-inference", SharedStackScope::LaneScoped),
 ];
 
@@ -13907,6 +14104,15 @@ fn maybe_spawn_vsock_listener(
             // 60s timeout is a backstop for a lagged/dropped receiver, not
             // the mechanism.
             let mut phase_rx = liveness_state.subscribe_vm_status();
+            // ONE probe for the task's whole life (801-vm4p rider). This used
+            // to construct `LivenessProbe::new(false)` inside every tick's
+            // spawn_blocking closure, which reset the 767-es4w cumulative
+            // death counts to zero each check — a flapping service could
+            // never show `deaths=` above 1, defeating the exact "rising
+            // number, not identical lines" property that order added. The
+            // probe is moved into the blocking task and handed back with the
+            // result so one instance spans every tick.
+            let mut probe = container_deps::LivenessProbe::new(false);
             loop {
                 // Only probe during Ready phase — containers aren't expected
                 // to be up during Starting/Draining/Stopping.
@@ -13921,11 +14127,24 @@ fn maybe_spawn_vsock_listener(
                 // RealSatisfier::satisfy are blocking); keep it off the
                 // async workers so a slow podman never stalls the vsock
                 // listener sharing this runtime.
-                let check = tokio::task::spawn_blocking(|| {
-                    container_deps::LivenessProbe::new(false).run_check()
+                let check = match tokio::task::spawn_blocking(move || {
+                    let result = probe.run_check();
+                    (probe, result)
                 })
                 .await
-                .unwrap_or_else(|join_err| Err(format!("liveness task panicked: {join_err}")));
+                {
+                    Ok((returned_probe, result)) => {
+                        probe = returned_probe;
+                        result
+                    }
+                    Err(join_err) => {
+                        // The probe (and its death counts) died with the
+                        // panicked task; start fresh rather than crash the
+                        // supervisor loop.
+                        probe = container_deps::LivenessProbe::new(false);
+                        Err(format!("liveness task panicked: {join_err}"))
+                    }
+                };
                 match check {
                     Ok(result) => {
                         if !result.all_running() {
@@ -15587,6 +15806,48 @@ mod tests {
     /// secondary failures that bury the defect which caused them.
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+    /// ORDER 880-tdwn: pin the podman seam to /bin/false for a test's
+    /// lifetime, on its own dedicated mutex, restoring on drop. The forge
+    /// arg-builder family reaches `vault_bootstrap::container_running` (via
+    /// `read_provider_api_key`), which resolves podman — bare resolution in a
+    /// parallel test run is the race that stopped the live enclave. /bin/false
+    /// makes the vault probe a deterministic "not running" (the no-vault
+    /// builder path these hermetic tests mean to exercise anyway).
+    ///
+    /// LOCK ORDER: seam-users take this guard FIRST, before env_lock/
+    /// env_guard, consistently — a consistent order cannot deadlock.
+    /// EVERY writer of TILLANDSIAS_PODMAN_BIN in this tests mod serializes on
+    /// THIS mutex, taken before env_lock/env_guard — the fake-podman tests
+    /// hold it via `podman_seam_lock()` while their TestEnvRestore manages
+    /// the value. A writer outside the lock reintroduces the mid-test
+    /// var-drop this exists to end.
+    static PODMAN_SEAM_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn podman_seam_lock() -> std::sync::MutexGuard<'static, ()> {
+        PODMAN_SEAM_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    fn podman_false_seam() -> PodmanFalseSeam {
+        let lock = podman_seam_lock();
+        let prev = std::env::var_os("TILLANDSIAS_PODMAN_BIN");
+        unsafe { std::env::set_var("TILLANDSIAS_PODMAN_BIN", "/bin/false") };
+        PodmanFalseSeam { _lock: lock, prev }
+    }
+    struct PodmanFalseSeam {
+        _lock: std::sync::MutexGuard<'static, ()>,
+        prev: Option<std::ffi::OsString>,
+    }
+    impl Drop for PodmanFalseSeam {
+        fn drop(&mut self) {
+            unsafe {
+                match self.prev.take() {
+                    Some(v) => std::env::set_var("TILLANDSIAS_PODMAN_BIN", v),
+                    None => std::env::remove_var("TILLANDSIAS_PODMAN_BIN"),
+                }
+            }
+        }
+    }
+
     fn env_guard() -> std::sync::MutexGuard<'static, ()> {
         ENV_LOCK
             .lock()
@@ -15733,6 +15994,164 @@ mod tests {
         assert!(
             seen,
             "a user-level ~/.config/cdi/nvidia.yaml must be honored"
+        );
+    }
+
+    #[test]
+    fn nix_cache_run_args_match_the_service_contract() {
+        // ORDER 801-vm4p. Two launch paths exist for the nix cache — the
+        // standalone script's `do_ensure` and this binary's ensure — and this
+        // test is what keeps them from drifting: it pins the flag set,
+        // security posture, mounts and positional grammar of the Rust side to
+        // the contract the script established (801-kqme).
+        let args = build_nix_cache_run_args(
+            "/nix/store/abc-harmonia-3.2.0/bin/harmonia-cache",
+            "registry.fedoraproject.org/fedora-minimal:44",
+            5111,
+        );
+
+        // podman grammar: image LAST, entrypoint immediately before it, and
+        // nothing flag-shaped after the image (the order-524 defect class).
+        assert_eq!(
+            args.last().map(String::as_str),
+            Some("registry.fedoraproject.org/fedora-minimal:44")
+        );
+        let ep = args
+            .iter()
+            .position(|a| a == "--entrypoint")
+            .expect("--entrypoint present");
+        assert_eq!(
+            args[ep + 1],
+            "/nix/store/abc-harmonia-3.2.0/bin/harmonia-cache"
+        );
+        assert_eq!(
+            ep + 2,
+            args.len() - 1,
+            "entrypoint pair sits right before the image"
+        );
+
+        // Security posture, flag-for-flag with the script's launch: any
+        // loosening here is a cache whose behaviour depends on who started it.
+        for required in [
+            "--cap-drop=ALL",
+            "--security-opt=no-new-privileges",
+            "--read-only",
+            "--pids-limit=256",
+        ] {
+            assert!(args.iter().any(|a| a == required), "missing {required}");
+        }
+        // label=disable arrives as a pair; :Z would relabel the shared store.
+        assert!(
+            args.windows(2)
+                .any(|w| w[0] == "--security-opt" && w[1] == "label=disable"),
+            "label=disable pair missing"
+        );
+        assert!(
+            !args.iter().any(|a| a.contains(":Z")),
+            "the shared store must never be relabelled"
+        );
+
+        // The store is read-only inside the container, the publish is loopback
+        // only, and the enclave alias is what agents resolve.
+        assert!(args.iter().any(|a| a.ends_with("/nix:/nix:ro")));
+        assert!(args.iter().any(|a| a == "127.0.0.1:5111:5000"));
+        assert!(
+            args.windows(2)
+                .any(|w| w[0] == "--network-alias" && w[1] == "nix-cache"),
+            "enclave alias missing"
+        );
+    }
+
+    /// ORDER 801-vm4p, the residue the test above cannot cover: it pins the
+    /// RUST side to the contract, so a script-side edit drifts silently — the
+    /// exact one-sided-guard shape 873-zcim was (the driver held a lock the
+    /// prompt lanes could not see). This test reads the script's actual
+    /// `_podman run` block, expands its variables to the same values the Rust
+    /// builder uses, and asserts token-for-token vector equality in BOTH
+    /// directions. Either side drifting — flag added, dropped, reordered,
+    /// mount changed — goes red here.
+    #[test]
+    fn nix_cache_launch_args_parity_is_two_sided() {
+        let script_path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../scripts/nix-cache-service.sh"
+        );
+        let script = std::fs::read_to_string(script_path).expect("script readable");
+
+        // Extract the continuation block starting at `_podman run`.
+        let mut in_block = false;
+        let mut joined = String::new();
+        for line in script.lines() {
+            if line.trim_start().starts_with("_podman run") {
+                in_block = true;
+            }
+            if in_block {
+                let t = line.trim();
+                if let Some(body) = t.strip_suffix('\\') {
+                    joined.push_str(body);
+                    joined.push(' ');
+                } else {
+                    joined.push_str(t);
+                    break;
+                }
+            }
+        }
+        assert!(!joined.is_empty(), "found the script's _podman run block");
+
+        let entrypoint = "/nix/store/abc-harmonia-3.2.0/bin/harmonia-cache";
+        let image = "registry.fedoraproject.org/fedora-minimal:44";
+        // Same fallback derivation the Rust builder performs.
+        let home = std::env::var("HOME").unwrap_or_default();
+        let chroot_store = std::env::var("TILLANDSIAS_NIX_CHROOT_STORE")
+            .unwrap_or_else(|_| format!("{home}/.local/share/tillandsias/nix-store"));
+        let state_dir = std::env::var("TILLANDSIAS_NIX_CACHE_STATE")
+            .unwrap_or_else(|_| format!("{home}/.local/share/tillandsias/nix-cache"));
+
+        // The script's variable table (defaults at its lines 92-108). No
+        // name here is a prefix of another, so plain textual substitution is
+        // unambiguous.
+        let vars: [(&str, String); 10] = [
+            ("CONTAINER_NAME", "tillandsias-nix-cache".into()),
+            ("SERVICE_ALIAS", "nix-cache".into()),
+            ("ENCLAVE_NET", ENCLAVE_NET.into()),
+            ("CHROOT_STORE", chroot_store),
+            ("SECRET_KEY", format!("{state_dir}/cache-priv.key")),
+            ("HARMONIA_CONF", format!("{state_dir}/harmonia.toml")),
+            ("BASE_IMAGE", image.into()),
+            ("HOST_PORT", "5111".into()),
+            ("IN_PORT", "5000".into()),
+            ("logical", "/nix/store/abc-harmonia-3.2.0".into()),
+        ];
+        let tls: [(&str, String); 2] = [
+            ("TLS_CRT", format!("{state_dir}/nix-cache.crt")),
+            ("TLS_KEY", format!("{state_dir}/nix-cache.key")),
+        ];
+
+        let mut script_args: Vec<String> = Vec::new();
+        for raw in joined.split_whitespace() {
+            // The block's trailing shell plumbing is not launch grammar.
+            if raw.starts_with(">/dev/null") || raw == "2>&1" || raw == "||" {
+                break;
+            }
+            if raw == "_podman" || raw == "run" {
+                continue;
+            }
+            let mut tok = raw.trim_matches('"').to_string();
+            if tok == "-d" {
+                tok = "--detach".into();
+            }
+            for (name, value) in tls.iter().chain(vars.iter()) {
+                tok = tok
+                    .replace(&format!("${{{name}}}"), value)
+                    .replace(&format!("${name}"), value);
+            }
+            script_args.push(tok);
+        }
+
+        let rust_args = build_nix_cache_run_args(entrypoint, image, 5111);
+        assert_eq!(
+            script_args, rust_args,
+            "script do_ensure and Rust ensure must launch flag-for-flag identically"
         );
     }
 
@@ -16407,13 +16826,14 @@ mod tests {
         // Enumerated by value (not transcribed by name) so `Service::name()`
         // supplies the container names; the count guard fails loudly if a new
         // Service variant is declared and this list is not extended.
-        const DECLARED: [container_deps::Service; 7] = [
+        const DECLARED: [container_deps::Service; 8] = [
             container_deps::Service::EnclaveNetwork,
             container_deps::Service::EgressNetwork,
             container_deps::Service::CaBundle,
             container_deps::Service::Vault,
             container_deps::Service::Proxy,
             container_deps::Service::GitLogin,
+            container_deps::Service::NixCache,
             container_deps::Service::ForgeLaunch,
         ];
         let enum_at = liveness_src
@@ -16437,11 +16857,25 @@ mod tests {
              agreement still covers every node"
         );
 
-        let re_ensured: Vec<&'static str> = DECLARED
+        let mut re_ensured: Vec<&'static str> = DECLARED
             .into_iter()
             .filter(|service| steady_state.contains(&format!("Service::{service:?}")))
             .map(|service| service.name())
             .collect();
+        // The nix cache (801-vm4p) is supervised OUTSIDE the unconditional
+        // array — its skip-is-success semantics need the absent/dead split of
+        // `classify_nix_cache`, so it has its own conditional entry in
+        // run_check. Read structurally like the array: the classifier call
+        // must sit inside run_check, or the cache has silently fallen out of
+        // supervision.
+        let classify_at = liveness_src[run_check_at..tests_at]
+            .find("classify_nix_cache(")
+            .expect("run_check must carry the 801-vm4p conditional nix-cache supervision entry");
+        assert!(
+            run_check_at + classify_at > set_at,
+            "the nix-cache entry follows the unconditional steady-state set"
+        );
+        re_ensured.push(container_deps::Service::NixCache.name());
         assert!(
             !re_ensured.is_empty(),
             "the liveness supervisor must keep at least one container running"
@@ -16564,6 +16998,7 @@ mod tests {
           {"Names":["tillandsias-vault"],"State":"running"},
           {"Names":["tillandsias-proxy"],"State":"running"},
           {"Names":["tillandsias-router"],"State":"running"},
+          {"Names":["tillandsias-nix-cache"],"State":"running"},
           {"Names":["tillandsias-inference"],"State":"running"},
           {"Names":["tillandsias-fixture-forge"],"State":"exited"}
         ]"#;
@@ -16571,6 +17006,7 @@ mod tests {
             "tillandsias-vault",
             "tillandsias-proxy",
             "tillandsias-router",
+            "tillandsias-nix-cache",
             "tillandsias-inference",
         ];
 
@@ -17650,6 +18086,7 @@ mod tests {
     /// container and creates a fresh one.
     #[test]
     fn forge_agent_run_args_use_replace_for_idempotent_relaunch() {
+        let _pseam = podman_false_seam();
         for mode in [
             ForgeAgentMode::Maintenance,
             ForgeAgentMode::OpenCode,
@@ -17714,6 +18151,7 @@ mod tests {
 
     #[test]
     fn launch_forge_agent_does_not_mount_user_home() {
+        let _pseam = podman_false_seam();
         // Walk every arg and reject anything that smells like a host-side
         // home mount. The only `/home/forge` references must be in the
         // *target* side of the workspace bind mount or in env values.
@@ -17802,6 +18240,7 @@ mod tests {
 
     #[test]
     fn forge_credential_quarantine_mounts_present() {
+        let _pseam = podman_false_seam();
         // Verify the credential quarantine tmpfs overlays (order 170/224) are
         // present in the forge agent mount args. These mask host credential
         // surfaces when the source mount overlaps the host checkout.
@@ -17886,6 +18325,7 @@ mod tests {
 
     #[test]
     fn forge_agent_mounts_persistent_tool_cache_named_volume() {
+        let _pseam = podman_false_seam();
         // Order 179: FIRST_RUN tool installs ($CARGO_HOME/$NPM_CONFIG_PREFIX, which
         // lib-common points at /home/forge/.cache/tillandsias-project) must survive
         // the forge's --rm. A per-project podman NAMED volume backs that path.
@@ -17908,6 +18348,7 @@ mod tests {
 
     #[test]
     fn forge_agent_mounts_durable_spec_index_volume_read_only() {
+        let _pseam = podman_false_seam();
         // Order 801-a2by. The spec RAG index is the DURABLE tier: a named
         // volume, sibling to tillandsias-mirror-<project>, so a relaunched
         // forge lands on a fingerprint HIT instead of re-paying the measured
@@ -19877,6 +20318,7 @@ mod tests {
 
     #[test]
     fn delegated_result_format_propagates_to_both_prompted_builders_only() {
+        let _pseam = podman_false_seam();
         let _env = env_lock();
         let restore = TestEnvRestore::capture(&[
             "TILLANDSIAS_AGENT_RESULT_FORMAT",
@@ -20347,6 +20789,7 @@ mod tests {
     fn delegated_result_fake_podman_covers_fresh_status_and_exact_timeout_reap() {
         use std::os::unix::fs::PermissionsExt;
 
+        let _pseam_lock = podman_seam_lock();
         let _env = env_lock();
         let restore = TestEnvRestore::capture(&[
             "TILLANDSIAS_PODMAN_BIN",
@@ -20872,6 +21315,7 @@ esac
 
     #[test]
     fn forge_agent_run_argv_exports_project_selection() {
+        let _pseam = podman_false_seam();
         let argv = build_forge_agent_run_argv(
             &PathBuf::from("/tmp/project"),
             "alpha",
@@ -20891,6 +21335,7 @@ esac
 
     #[test]
     fn forge_mounts_scoped_vault_lease_for_every_credentialed_mode() {
+        let _pseam = podman_false_seam();
         // 2026-07-15: the scoped vault-token lease was Codex-only, so
         // Claude/Antigravity lanes had no token and their OAuth restore died
         // "no Vault token" → fatal launch. Now EVERY credentialed mode
@@ -21041,6 +21486,7 @@ esac
     /// exact environment that Podman places inside the container.
     #[test]
     fn forge_launch_args_export_exact_harness_identity() {
+        let _pseam = podman_false_seam();
         let project = PathBuf::from("/tmp/project");
         let certs = PathBuf::from("/tmp/ca");
 
@@ -21091,6 +21537,7 @@ esac
 
     #[test]
     fn forge_agent_run_args_export_debug_when_requested() {
+        let _pseam = podman_false_seam();
         let args = build_forge_agent_run_args(
             &PathBuf::from("/tmp/project"),
             "alpha",
@@ -21665,6 +22112,7 @@ esac
 
     #[test]
     fn forge_repo_gitdir_quarantines_local_config_and_preserves_shared_state_mounts() {
+        let _pseam = podman_false_seam();
         let _env = env_guard();
         let _guard = env_lock();
         // Order 437: the gitdir facade/quarantine is the OPT-IN host-mount
@@ -22101,6 +22549,7 @@ esac
 
     #[test]
     fn source_built_init_and_status_check_smoke_uses_fake_podman() {
+        let _pseam_lock = podman_seam_lock();
         let _guard = env_lock();
 
         let root = find_checkout_root().expect("repo root");

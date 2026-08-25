@@ -1,4 +1,6 @@
 # @trace spec:cheatsheets-license-tiered
+# freshness: auditor=linux-lenovinha-fable5-20260824t055316z date=2026-08-24 verdict=refreshed scope=full file, 6 steps, EXECUTED not merely read — `run-litmus-test.sh cheatsheets-license-tiered --phase pre-build --size instant` is 100% (2/2). Still meaningful and still correctly scoped: it is deliberately grep-only and pins the FILE STRUCTURE of cheatsheets/license-allowlist.toml, while its sibling litmus:cheatsheet-tier-discipline runs the validator itself. A refactor that moves the file or drops a required field therefore fires pre-build, before any validator invocation — that division of labour is the reason both exist and it still holds.
+# freshness-note on invocation, for the next auditor: this file is selected by its SPEC id (cheatsheets-license-tiered), not by its own name. `run-litmus-test.sh cheatsheets-license-allowlist ...` returns "no litmus tests matched filter", which reads as absence rather than as a wrong filter. Nothing is broken; the name-vs-spec distinction is just easy to trip over from a freshness report, which prints the FILE path.
 #
 # Drift protection for the `cheatsheets/license-allowlist.toml` CRDT
 # classifier that the cheatsheets-license-tiered spec mandates as the
