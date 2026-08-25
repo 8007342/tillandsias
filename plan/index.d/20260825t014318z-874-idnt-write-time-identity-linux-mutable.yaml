@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-25T01:43:18Z.
+status:
+  - packet_id: ledger-writers-refuse-noncanonical-identity-at-write-time
+    field: status
+    value: completed
+    ts: "2026-08-25T01:43:18Z"
+    host: linux_mutable
+
+events:
+  - packet_id: ledger-writers-refuse-noncanonical-identity-at-write-time
+    event:
+      type: completed
+      ts: "2026-08-25T01:43:18Z"
+      agent_id: linux-macuahuitl-opus5-20260825t014318z
+      host: linux_mutable
+      evidence_refs:
+        - "crates/tillandsias-plan/src/main.rs agent_id_is_canonical() — grammar from scripts/agent-identity.sh (756-hn3a): >=4 dash components in [a-z0-9-], trailing LOWERCASE compact timestamp; wired into writer_agent_from so both --agent and TILLANDSIAS_AGENT_ID are checked, refusal names agent-identity.sh as the remedy"
+        - "host_label_is_acceptable() + require_acceptable_host() — explicit --host refuses outside [a-z0-9_-]+ at ALL five flag sites (loop-status-append, append-event, set-field note + field paths, expire-claims); a malformed TILLANDSIAS_HOST_KIND self-corrects to the platform constant with a warning instead of becoming durable data"
+        - "cargo test -p tillandsias-plan --bins: 27/27; MUTATION both ways — bypassing the agent grammar reddens writer_agent_refuses_noncanonical_ids_874_idnt (26/1), bypassing the host alphabet reddens host_label_alphabet_874_idnt (26/1)"
+        - "live wiring probe on a scratch index: uppercase-T/Z id refused rc=2 writing NOTHING; --host Laptopirria refused rc=2 (append-event, set-field, expire-claims); canonical identity passes rc=0"
+        - "scripts/fleet-heartbeat.sh — the ~line-101 comment documented the deviant <kind>-<host>-<model>-<stamp> shape; now names the canonical grammar + why the match class stays a superset (historic kind-label fragments must still register as declarations); last_declared_epoch regex anchored to the agent_id key at line start; heartbeat verdict unchanged 4/0/0/4/0 after the change"
+        - "scripts/test-ledger-ts-guard.sh fixture id updated to canonical shape (the old bare label is now refused — the fixture caught the enforcement working); ts-guard 9/9, set-field-yaml-shapes 14/14, reclaim-stranded-claims 3/3"
+        - "TILLANDSIAS_SKIP_VERSION_BUMP=1 TILLANDSIAS_FORCE_CHECK=1 ./build.sh --check green"
+      merge_affordance: merge-now
+      merge_reason: >
+        Both re-armed siblings write ledger identity every cycle; until this is
+        on origin, every one of those writes can reseed the mixed vocabularies
+        the retrospective catalogued.
+      summary: >
+        IDENTITY IS NOW ENFORCED WHERE IT BECOMES DURABLE. The canonical
+        grammar had one source (scripts/agent-identity.sh, 756-hn3a,
+        litmus-pinned) and zero enforcement, and the retrospective found every
+        hand-written agent_id of the preceding 48 hours violating it —
+        uppercase-T/Z timestamps, including the coordinator's own; the host:
+        field meanwhile mixed node names, kind labels, and git-author display
+        names that 864-m2vc's exact-equality attribution silently trips over.
+
+        The choke point is the tillandsias-plan writer: agent ids must now
+        parse as the agent-identity.sh shape (structural check — at least four
+        sanitized components ending in the compact lowercase timestamp), and
+        host labels must fit [a-z0-9_-]+. An explicit flag REFUSES with a
+        remedy naming the canonical source (stated intent must not be
+        silently rewritten); ambient environment values self-correct loudly.
+        The refusal exits before any byte is written. Deliberately NOT
+        enforced: host-vocabulary unification (node name vs kind label) —
+        both survive until that fleet decision is its own packet; the check
+        blocks only the class that can never be right.
+
+        This fragment's own identity was derived by the enforced path — the
+        first coordinator filing whose agent_id the binary itself vouches for.

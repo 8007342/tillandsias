@@ -599,12 +599,55 @@ fn resolve_writer_host() -> String {
     writer_host_from(std::env::var("TILLANDSIAS_HOST_KIND").ok())
 }
 
+/// ORDER 874-idnt — the `host:` label alphabet, enforced at write time.
+///
+/// The ledger's `host:` field had come to mix THREE vocabularies — node names
+/// (`yoga`), host kinds (`linux_mutable`), and git-author display names
+/// (`Laptopirria`) — and 864-m2vc's claim-TTL attribution compares these by
+/// EXACT EQUALITY, so the mixing silently defeats it. Full unification onto
+/// one vocabulary is a fleet decision this function does not make; what it
+/// refuses is the class that can never be right: anything outside
+/// `^[a-z0-9_-]+$`. That blocks display names, uppercase, spaces, and unicode
+/// — every observed pollutant — while accepting both surviving vocabularies
+/// until the unification lands.
+fn host_label_is_acceptable(host: &str) -> bool {
+    !host.is_empty()
+        && host
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-')
+}
+
+/// An explicitly flagged `--host` is stated intent, so a malformed one is
+/// REFUSED rather than silently replaced the way the env fallback path
+/// corrects itself — the caller asked for a specific label and must learn it
+/// was wrong, not have a different label recorded under them (874-idnt).
+fn require_acceptable_host(host: String) -> String {
+    if host_label_is_acceptable(&host) {
+        return host;
+    }
+    eprintln!(
+        "error: --host {host:?} is not a valid ledger host label — [a-z0-9_-]+ only \
+         (874-idnt). Use the node name (e.g. macuahuitl) or a documented host kind \
+         (e.g. linux_mutable); git-author display names are exactly the pollution \
+         this refuses (872-k4pv)."
+    );
+    std::process::exit(2);
+}
+
 /// Pure core of [`resolve_writer_host`], unit-testable without env races.
 fn writer_host_from(kind: Option<String>) -> String {
     if let Some(kind) = kind
         && !kind.is_empty()
     {
-        return kind;
+        if host_label_is_acceptable(&kind) {
+            return kind;
+        }
+        // A malformed TILLANDSIAS_HOST_KIND (an author name, mixed case) must
+        // not become durable ledger data; the OS constant is always canonical.
+        eprintln!(
+            "warning: TILLANDSIAS_HOST_KIND {kind:?} is not a valid host label \
+             ([a-z0-9_-]+ only, 874-idnt) — falling back to the platform constant"
+        );
     }
     std::env::consts::OS.to_string()
 }
@@ -627,23 +670,68 @@ fn resolve_writer_agent(flag: Option<String>) -> String {
 }
 
 /// Pure core of [`resolve_writer_agent`], unit-testable without env races.
+/// ORDER 874-idnt — the canonical agent-id GRAMMAR, enforced where identity
+/// becomes DURABLE DATA.
+///
+/// scripts/agent-identity.sh (order 756-hn3a, litmus-pinned) is the one
+/// canonical source: `<platform>-<workstation>-<backend>-<utc-timestamp>`,
+/// each component sanitized to `[a-z0-9-]`, the timestamp LOWERCASE
+/// (`20260815t162555z`). Nothing enforced that at the ledger choke point, and
+/// the 2026-08-24 fleet retrospective found EVERY hand-written agent_id of the
+/// preceding 48 hours violating it — uppercase `T`/`Z` timestamps, including
+/// the coordinator's own. A contract with one canonical source and zero
+/// enforcement is a convention, and conventions lost every incident this week.
+///
+/// The check is structural, not a roster lookup: ≥4 dash-separated components
+/// in the sanitized alphabet, ending in the canonical timestamp shape. It
+/// accepts every id the helper can emit and refuses every hand-composed
+/// improvisation the retrospective catalogued.
+fn agent_id_is_canonical(id: &str) -> bool {
+    let comps: Vec<&str> = id.split('-').collect();
+    if comps.len() < 4 {
+        return false;
+    }
+    if !id
+        .bytes()
+        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+    {
+        return false;
+    }
+    if comps.iter().any(|c| c.is_empty()) {
+        return false;
+    }
+    // Timestamp: 8 digits, 't', 6 digits, 'z' — the printf '%(...)T' shape
+    // agent-identity.sh emits, lowercased by its sanitize pass.
+    let ts = comps[comps.len() - 1].as_bytes();
+    ts.len() == 16
+        && ts[..8].iter().all(u8::is_ascii_digit)
+        && ts[8] == b't'
+        && ts[9..15].iter().all(u8::is_ascii_digit)
+        && ts[15] == b'z'
+}
+
 fn writer_agent_from(flag: Option<String>, env_id: Option<String>) -> Result<String, String> {
     let usable = |s: &String| {
         let t = s.trim();
         !t.is_empty() && t != "unknown"
     };
-    if let Some(agent) = flag.filter(usable) {
-        return Ok(agent);
+    let candidate = flag.filter(usable).or_else(|| env_id.filter(usable));
+    match candidate {
+        Some(agent) if agent_id_is_canonical(&agent) => Ok(agent),
+        Some(agent) => Err(format!(
+            "error: agent_id {agent:?} is not canonical — the contract is \
+             <platform>-<workstation>-<backend>-<utc-timestamp>, sanitized to [a-z0-9-] with a \
+             LOWERCASE timestamp (e.g. linux-macuahuitl-opus5-20260825t013400z). Derive it: \
+             scripts/agent-identity.sh id <backend> (order 756-hn3a; enforcement 874-idnt — \
+             every hand-written id in the 2026-08-24 retrospective violated this)."
+        )),
+        None => Err(
+            "error: ledger event has no --agent and TILLANDSIAS_AGENT_ID is unset — refusing to \
+             record agent_id 'unknown'. Derive the id from scripts/agent-identity.sh (order \
+             756-hn3a) and pass --agent, or export TILLANDSIAS_AGENT_ID."
+                .to_string(),
+        ),
     }
-    if let Some(agent) = env_id.filter(usable) {
-        return Ok(agent);
-    }
-    Err(
-        "error: ledger event has no --agent and TILLANDSIAS_AGENT_ID is unset — refusing to \
-         record agent_id 'unknown'. Derive the id from scripts/agent-identity.sh (order \
-         756-hn3a) and pass --agent, or export TILLANDSIAS_AGENT_ID."
-            .to_string(),
-    )
 }
 
 /// ORDER 775-b4qz. A written fragment failed write-time verification: move it
@@ -1682,6 +1770,7 @@ fn run_loop_status(args: &[String], base: &Path) {
                 .position(|a| a == "--host")
                 .and_then(|i| args.get(i + 1))
                 .cloned()
+                .map(require_acceptable_host)
                 .unwrap_or_else(resolve_writer_host);
             let suffix = args
                 .iter()
@@ -4591,6 +4680,7 @@ fn main() {
             let agent = resolve_writer_agent(agent);
             let host = host
                 .filter(|h| !h.trim().is_empty())
+                .map(require_acceptable_host)
                 .unwrap_or_else(resolve_writer_host);
             let block = edit::event_block(etype, &ts, &agent, &host, summary);
             let raw = match std::fs::read_to_string(&index) {
@@ -4788,7 +4878,9 @@ fn main() {
                     args.iter().any(|a| a == "--backfill"),
                     "set-field",
                 );
-                let host = flagged("--host").unwrap_or_else(resolve_writer_host);
+                let host = flagged("--host")
+                    .map(require_acceptable_host)
+                    .unwrap_or_else(resolve_writer_host);
                 let compact = loop_status::iso_to_compact(&ts);
                 let suffix = format!(
                     "{:08x}",
@@ -4888,7 +4980,9 @@ fn main() {
                 args.iter().any(|a| a == "--backfill"),
                 "set-field",
             );
-            let host = flagged("--host").unwrap_or_else(resolve_writer_host);
+            let host = flagged("--host")
+                .map(require_acceptable_host)
+                .unwrap_or_else(resolve_writer_host);
             let reason = flagged("--reason").unwrap_or_default();
 
             let compact = loop_status::iso_to_compact(&ts);
@@ -5006,7 +5100,7 @@ fn main() {
                     "--host" => {
                         i += 1;
                         match args.get(i) {
-                            Some(h) => host = h.clone(),
+                            Some(h) => host = require_acceptable_host(h.clone()),
                             None => {
                                 eprintln!("error: --host needs a value");
                                 std::process::exit(2);
@@ -5440,8 +5534,12 @@ mod tests {
     #[test]
     fn writer_agent_refuses_absence_and_the_literal_unknown() {
         assert_eq!(
-            writer_agent_from(Some("flag-id".into()), Some("env-id".into())).unwrap(),
-            "flag-id",
+            writer_agent_from(
+                Some("linux-macuahuitl-opus5-20260825t013400z".into()),
+                Some("linux-macuahuitl-codex-20260825t013401z".into())
+            )
+            .unwrap(),
+            "linux-macuahuitl-opus5-20260825t013400z",
             "an explicit --agent wins over the environment"
         );
         assert_eq!(
@@ -5465,6 +5563,100 @@ mod tests {
         assert!(
             writer_agent_from(Some("   ".into()), Some(String::new())).is_err(),
             "whitespace and empty values are absence"
+        );
+    }
+
+    /// ORDER 874-idnt. The 2026-08-24 retrospective found every hand-written
+    /// agent_id of 48 hours violating the 756-hn3a grammar — the contract had
+    /// one canonical source (scripts/agent-identity.sh) and zero enforcement.
+    /// The ledger writer is the choke point where identity becomes durable
+    /// data, so the grammar is enforced HERE.
+    #[test]
+    fn writer_agent_refuses_noncanonical_ids_874_idnt() {
+        // Everything agent-identity.sh can emit passes.
+        for id in [
+            "linux-macuahuitl-opus5-20260825t013400z",
+            "forge-forge-tillandsias-codex-20260815t162555z",
+            "windows-yolanda-fable5-20260816t124617z",
+        ] {
+            assert!(
+                writer_agent_from(Some(id.into()), None).is_ok(),
+                "canonical id {id:?} must be accepted"
+            );
+        }
+        // The catalogued improvisations refuse, each for its own defect.
+        for (id, defect) in [
+            (
+                "linux-macuahuitl-opus5-20260825T013400Z",
+                "uppercase T/Z timestamp — the retrospective's dominant shape",
+            ),
+            ("flag-id", "too few components, no timestamp"),
+            (
+                "Laptopirria",
+                "a git-author display name is not an agent id",
+            ),
+            ("linux-macuahuitl-opus5", "no timestamp component at all"),
+            (
+                "linux--macuahuitl-opus5-20260825t013400z",
+                "empty component — sanitize collapses runs, so this was never emitted",
+            ),
+            (
+                "linux-macuahuitl-opus5-2026-08-25t013400z",
+                "a dashed date is not the compact timestamp shape",
+            ),
+        ] {
+            let err = writer_agent_from(Some(id.into()), None)
+                .expect_err(&format!("{id:?} must refuse: {defect}"));
+            assert!(
+                err.contains("agent-identity.sh"),
+                "the refusal must name the canonical source as the remedy; got: {err}"
+            );
+        }
+        // The flag does NOT shadow a valid environment id with garbage accepted:
+        // a malformed flag refuses outright rather than falling through, because
+        // an explicit flag is stated intent (same rule as --host).
+        assert!(
+            writer_agent_from(
+                Some("BAD-ID".into()),
+                Some("linux-macuahuitl-opus5-20260825t013400z".into())
+            )
+            .is_err(),
+            "a malformed explicit --agent refuses; it does not silently fall back"
+        );
+    }
+
+    /// ORDER 874-idnt. The `host:` field mixed three vocabularies (node names,
+    /// kind labels, git-author display names) and 864-m2vc's attribution
+    /// compares them by exact equality. The alphabet check refuses the class
+    /// that can never be right while accepting both surviving vocabularies.
+    #[test]
+    fn host_label_alphabet_874_idnt() {
+        for host in [
+            "macuahuitl",
+            "yoga",
+            "linux_mutable",
+            "forge",
+            "fixturehost",
+        ] {
+            assert!(
+                host_label_is_acceptable(host),
+                "{host:?} is a legitimate ledger host label"
+            );
+        }
+        for host in ["Laptopirria", "Tlatoāni", "linux mutable", "", "MACUAHUITL"] {
+            assert!(
+                !host_label_is_acceptable(host),
+                "{host:?} must be refused as a host label"
+            );
+        }
+        // A malformed TILLANDSIAS_HOST_KIND self-corrects to the platform
+        // constant instead of becoming durable data (env is ambient, not
+        // stated intent — unlike --host, which refuses via
+        // require_acceptable_host).
+        assert_eq!(
+            writer_host_from(Some("Laptopirria".into())),
+            std::env::consts::OS,
+            "a display-name TILLANDSIAS_HOST_KIND must not reach the ledger"
         );
     }
 

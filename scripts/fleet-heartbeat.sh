@@ -98,14 +98,24 @@ last_commit_epoch() {
 # confusion 864-t4nq was built to end. The probe worked for four hosts by
 # coincidence of naming and silently failed for the fifth.
 #
-# A host's ledger events carry `agent_id: <kind>-<host>-<model>-<stamp>`, which
-# is DECLARED by the host about itself rather than inherited from whatever
-# `git config user.name` happens to say. That is the identity to trust.
+# A host's ledger events carry a DECLARED identity rather than whatever
+# `git config user.name` happens to say. That is the identity to trust. The
+# canonical grammar (scripts/agent-identity.sh, order 756-hn3a; enforced at
+# write time by 874-idnt) is `<platform>-<workstation>-<backend>-<timestamp>`
+# — the WORKSTATION is the second component, so the probe matches
+# `-<host>-` after exactly one leading component. This comment used to
+# document the shape as `<kind>-<host>-<model>-<stamp>`, codifying a deviant
+# vocabulary the 2026-08-24 retrospective caught; the component CLASS below
+# stays `[a-z0-9_]+` (a superset of the canonical `[a-z0-9]+`) so historic
+# fragments whose first component was a kind label like `linux_mutable`
+# still register as declarations — liveness must not forget the past to
+# enforce the future. The match is anchored to the key at line start so an
+# `agent_id:` mention inside prose can never count as a declaration.
 last_declared_epoch() {
     local host="$1" newest="" f ts
     for f in plan/index.d/*.yaml; do
         [ -f "$f" ] || continue
-        grep -qE "agent_id:[[:space:]]*[a-z_]+-${host}-" "$f" 2>/dev/null || continue
+        grep -qE "^[[:space:]]*agent_id:[[:space:]]*[a-z0-9_]+-${host}-" "$f" 2>/dev/null || continue
         ts="$(grep -oE '^[[:space:]]*ts:[[:space:]]*"?20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z' "$f" 2>/dev/null \
               | grep -oE '20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z' | sort | tail -1)"
         [ -n "$ts" ] || continue

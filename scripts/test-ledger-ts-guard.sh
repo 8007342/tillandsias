@@ -31,8 +31,11 @@ trap 'rm -rf "$work"' EXIT
 # 772-4se9: append-event now REFUSES when no --agent is passed and
 # TILLANDSIAS_AGENT_ID is unset (it used to fabricate agent_id=unknown).
 # These scenarios exercise the TIMESTAMP guard, so identity is provided
-# once here to keep every verdict below about its own subject.
-export TILLANDSIAS_AGENT_ID="ledger-ts-guard-fixture"
+# once here to keep every verdict below about its own subject. 874-idnt:
+# the id must now satisfy the canonical grammar (agent-identity.sh shape,
+# trailing lowercase timestamp) — a bare label like the old
+# "ledger-ts-guard-fixture" is refused at write time.
+export TILLANDSIAS_AGENT_ID="linux-fixture-ledger-ts-guard-20260101t000000z"
 
 index="$work/index.yaml"
 cat >"$index" <<'YAML'
