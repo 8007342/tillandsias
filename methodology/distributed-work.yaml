@@ -1368,6 +1368,109 @@ distributed_work:
         Stalling a cycle because MCP is down. "'Tis broken? keep goin'" — fall
         back, note it, continue.
 
+  cross_host_relay_provenance:
+    purpose: >
+      A relay carries its provenance, and a relay is NEVER corroboration. Every
+      finding forwarded between hosts is tagged with its evidence state —
+      MEASURED (by whom, on which host, with what command), REPORTED (told to
+      me, not verified), or INFERRED (reasoning, no measurement) — and a host
+      that verified something itself says so and says how.
+    authority: >
+      Coordinator ruling, macuahuitl, 2026-08-25, on a defect in the
+      COORDINATOR's own role named by yoga. Adopted the same night it was
+      identified.
+    the_problem: >
+      Direct host-to-host messaging makes a coordinator an AMPLIFIER. A finding
+      forwarded by the coordinator reads as corroboration when it is only
+      transmission, because it arrives carrying the coordinator's implicit
+      weight. The receiving host then reasonably weights it above the same
+      sentence from its author.
+    the_evidence: >
+      MEASURED on 2026-08-25, the first night the fleet had lateral messaging.
+      FOUR premises were endorsed by multiple hosts and then falsified by
+      whichever host finally measured them: the coordinator's claim that the
+      sanctioned build-cache sweep had destroyed the convergence history
+      (retracted — could not show any history ever existed); yoga's committed
+      capability row advertising gpu/container/ollama against a live probe
+      reporting engines:[] (which MISROUTED the authoritative release gate);
+      the warm-toolbox velocity lever (falsified at +5% container overhead
+      against a 131.9s one-time construction cost); and a macOS filesystem
+      case-sensitivity defect (retracted — the probe's outcome was fixed before
+      it ran). In every case the ENDORSEMENT CHAIN WAS LONGER THAN THE EVIDENCE
+      CHAIN, and the coordinator amplified at least twice.
+    the_sharper_half: >
+      N ENDORSEMENTS ARE NOT N EVIDENCE. Three hosts agreed the warm-toolbox
+      premise was worth a packet. That agreement was not weak evidence, it was
+      ZERO evidence: all three were reasoning from ONE host's single number, so
+      there was one measurement wearing three hats. Aggregated agreement feels
+      like corroboration and is the most common way a fleet convinces itself of
+      something nobody checked. This is a reasoning bug rather than a discipline,
+      which is why it is stated ahead of the tagging.
+    what_this_must_not_cost: >
+      The transmission is not the defect — it is most of a coordinator's value.
+      On the same night, relaying carried a reframing, a lane discovery, a
+      whole-tree measurement and a 9.7x ratio between hosts that would otherwise
+      have had none of them. THE DEFECT IS SPECIFICALLY THE UNTAGGED RELAY.
+      Tagging costs one word per finding; relaying less costs the pairing. So:
+      tag everything, relay MORE, and let the tags carry the weight. Ten
+      REPORTED-tagged findings beat three personally verified ones.
+    anti_patterns:
+      - >
+        Forwarding a finding without naming who measured it, so the receiver
+        cannot tell verification from transmission.
+      - >
+        Counting agreement as evidence. Ask how many MEASUREMENTS are under the
+        agreement, not how many hosts hold it.
+      - >
+        Relaying less to avoid the amplifier problem. The fix is the tag, not
+        the silence.
+
+  every_gate_number_states_cold_or_warm:
+    purpose: >
+      A gate duration quoted anywhere — a packet, a handoff, a cross-host
+      message — MUST state whether it was COLD or WARM. An unlabelled gate
+      number is not interpretable.
+    authority: >
+      Proposed by pirria 2026-08-25 after retracting its own trend claim;
+      adopted by the coordinator the same night. Same family as
+      cross_host_relay_provenance above.
+    the_problem: >
+      This gate has at least TWO memoisation layers and neither announces which
+      one you got: the whole-gate memo (765-tkq2) that returns ok:gate-fresh in
+      ~0.4s on an unchanged tree, and per-phase caches beneath it. So two runs
+      of "the same gate" on "the same tree" can differ by orders of magnitude
+      for reasons that have nothing to do with the tree.
+    the_evidence: >
+      MEASURED on pirria 2026-08-25, on ONE tree, 2.5 minutes apart:
+        23:24:18Z  total 140198 ms   fragment-event phase  40151 ms
+        23:26:53Z  total  63147 ms   fragment-event phase    814 ms
+      49x on that phase. The 140s run was the first gate after fast-forwarding
+      71 commits — maximally cold by construction — and was compared against
+      another cold number and reported as a GROWTH TREND, with a recommendation
+      to scope an intervention at the phase that had grown. The phase is 0.8s
+      warm. Retracted by its own author within the hour.
+      THREE HOSTS WERE FOOLED BY A COLD/WARM CONFUSION IN ONE EVENING: yoga's
+      131.9s cold-toolbox number (which survived two reframings before being
+      falsified at +5%), macbook's build_check_ms_avg mixing memoised and forced
+      runs, and pirria's trend above. That is not three mistakes; it is one
+      missing label.
+    the_rule: >
+      State it or the number does not travel. "28.6s" is not a measurement;
+      "28.6s, forced, n=15, range 13.4-40.4s" is. Prefer FORCED runs
+      (TILLANDSIAS_FORCE_CHECK=1) for any cross-host comparison, and say n and
+      spread — a mean over a mixed population encodes how many no-op runs a host
+      happened to do rather than how fast it is.
+    anti_patterns:
+      - >
+        Comparing two cold numbers and calling the difference a trend. A
+        first-gate-after-a-large-fast-forward is maximally cold by construction.
+      - >
+        Quoting a mean over memoised and forced runs together. It measures
+        neither.
+      - >
+        Reporting a ratio whose two sides have different n. State both, or state
+        that one is a single observation.
+
   ledger_write_path:
     purpose: >
       One command changes a packet field. Hand-authoring the LWW channel is the

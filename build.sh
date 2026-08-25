@@ -1591,6 +1591,24 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "set-field YAML-shape fixture passed"
 
+    # ORDER 877-mynm's fixture, wired 2026-08-25. It shipped INVOKED BY NOTHING:
+    # named only in a comment inside the hook it guards and in plan prose, so
+    # `grep -Rl` saw the name and nothing ever ran the file. A negative control
+    # nobody executes cannot protect the hole it names (calmecacpilli).
+    #
+    # scripts/audit-guard-activation.sh did not catch it for two reasons, both
+    # worth knowing: its population is the 76 `check-*` guards, so `test-*`
+    # fixtures are not audited at all; and its own source (line ~74) records that
+    # it decides activation by `grep -Rl <basename>`, which cannot tell an
+    # invocation from a mention. 6.2s, and it guards the plan-only fast lane —
+    # the path a widening is about to make busier (889-twhe).
+    _step "Checking the pre-push empty-ref-list fixture (877-mynm)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-pre-push-empty-ref-list.sh" 2>&1; then
+        _error "the empty-ref-list lane fixture regressed — the plan-only fast lane's acceptance path is unproven"
+        exit 1
+    fi
+    _info "pre-push empty-ref-list fixture passed"
+
     _step "Checking the promote-stable evidence gate and dry-run..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-promote-stable-evidence-gate.sh" 2>&1; then
         _error "promote-stable's gate or its --dry-run regressed — this script flips an outward-facing release channel"
