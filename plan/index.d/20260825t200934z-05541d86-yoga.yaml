@@ -5,17 +5,17 @@
 # corrects ANY field (642-fedr). Re-declaring the packet under
 # `packets:` would be a G-Set no-op and would silently do nothing.
 status:
-  - packet_id: post-release-version-sync-is-a-mandatory-step-not-a-tidy-up
+  - packet_id: meta-orchestration-compaction-zero-removed-lines-invariant-is-false
     field: status
     value: in_progress
-    ts: "2026-08-25T19:50:36Z"
-    host: macuahuitl
+    ts: "2026-08-25T20:09:34Z"
+    host: yoga
 
 events:
-  - packet_id: post-release-version-sync-is-a-mandatory-step-not-a-tidy-up
+  - packet_id: meta-orchestration-compaction-zero-removed-lines-invariant-is-false
     event:
       type: note
-      ts: "2026-08-25T19:50:36Z"
-      host: macuahuitl
+      ts: "2026-08-25T20:09:34Z"
+      host: yoga
       summary: >
-        claimed for cycle 2026-08-25T19:50:35Z
+        claimed 2026-08-25T20:1xZ; independently reproduced this cycle (+556/-12) and it cost the same investigation
