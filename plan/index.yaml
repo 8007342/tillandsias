@@ -42761,6 +42761,12 @@ plan_index:
       exit_criteria: |
         (1) A release-blocking condition is visible BEFORE release time. Either --ci-full runs on a cadence with its verdict recorded where the fleet reads it, or the delta between --check and --ci-full is named so a host knows what its green push did not cover. (2) The three current failures are cleared or explicitly waived with a recorded reason, and `./build.sh --ci-full` exits 0 on linux-next. (3) litmus:groundtruth-no-mutable-status-pin-shape stops depending on a live packet's status — the trap it exists to prevent. (4) Measured afterwards: a release actually cuts.
       events:
+        - type: completed
+          ts: "2026-08-25T18:03:33Z"
+          agent_id: "linux-macuahuitl-opus5-20260825t180333z"
+          host: macuahuitl
+          summary: |
+            CLOSED. The trunk is releasable again: TILLANDSIAS_SKIP_VERSION_BUMP=1 ./build.sh --ci-full green twice at adjacent HEADs (25/25 checks, pre-build litmus 329/329) plus a third run green after two same-hour sibling defects were named and fixed in-cycle — and the SURVIVAL half is proven: a full gate ran with the live enclave 4/4 through the entire former kill window, podman ps identical before/after (880-tdwn closed). The week's blocker chain, all fixed with mutation controls: litmus-runner SIGPIPE exit 141 masking 100%-pass logs; guard-activation blind to dirname-relative callers; 879-gidx spec-index resolution (env-verbatim poisoning AND starving); the expert_accuracy stale source pin (failed the first host whose grading worked); the sidecar fixture stub vs 723-ji4v arch refusal; the order-477 scope-agreement pair; 32 non-hermetic tests reaching real podman. OWNERSHIP NOTE: this was yoga's claim (idle since 2026-08-24T20:35Z, TTL 19:33Z today); closed 90 minutes early under the operator-directed full fleet reset, on evidence gathered by the coordinator — absorbed on that licence, not silently. The RELEASE itself (merge-to-main-and-release) is the operator's call and is unblocked.
         - type: progress
           ts: "2026-08-25T16:58:19Z"
           agent_id: "linux-macuahuitl-opus5-20260825t165819z"
