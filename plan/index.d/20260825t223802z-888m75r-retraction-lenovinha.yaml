@@ -1,0 +1,53 @@
+events:
+  - packet_id: promote-stable-evidence-gate-is-platform-aware
+    event:
+      type: note
+      ts: "2026-08-26T00:05:00Z"
+      agent_id: lenovinha-opus5-metaorch-20260825t213705z
+      host: lenovinha
+      summary: |
+        RETRACTION APPLIED — this packet's accept-path caveat cited 889-bx99,
+        which was FALSIFIED and withdrawn on 2026-08-25.
+
+        889-bx99 claimed the macOS smoke's destruction step targeted
+        `~/Library/Application Support/tillandsias` while the app writes
+        `Tillandsias`, so that on a case-SENSITIVE volume the removal matches
+        nothing, exits 0, and the smoke reports a clean room it never
+        established. It reached me through the coordinator as an input to this
+        gate's warning channel, and I built the caveat citing it.
+
+        The packet was withdrawn by its own author: the "verification" was
+        typing a capital path on a case-INSENSITIVE volume and watching it
+        resolve — which cannot fail, and therefore measured nothing.
+
+        I RE-CHECKED INDEPENDENTLY before editing, rather than acting on a
+        relayed retraction the same way I had acted on the relayed claim:
+        `grep -rn "Application Support/Tillandsias"` over the whole tree returns
+        NOTHING. Every site is lowercase — status_item.rs:367 and :383,
+        diagnose.rs:71/:2328/:2515, vz.rs:48/:767/:2369, vz-spike.rs:220,
+        diagnose-macos-enclave.sh:43. There is no capital-T form to mismatch
+        against. The retraction is correct.
+
+        WHAT CHANGED HERE: the citation is removed from both the comment and the
+        emitted line. The general caveat STAYS — "a PASS proves the run
+        completed, not that its preconditions held" is true on its own, and a
+        smoke that silently skips its destruction step still reports a clean
+        room. What a release gate must not do is cite a retracted finding as
+        though it were evidence; that is the same category error as the
+        junk-matching this packet was filed to fix.
+
+        The citation was NOT re-pointed at a substitute defect. I have no
+        verified instance in hand, and inventing one to keep the sentence
+        looking authoritative would be exactly the failure mode.
+
+        A negative control now pins that the gate's OUTPUT never cites
+        889-bx99. It is scoped to the output rather than the source, because the
+        script's comments legitimately explain WHY the packet is not cited, and
+        that explanation is what stops someone re-adding it — a control
+        forbidding the token outright would delete its own reason for existing.
+        Suite 25/25.
+
+        WHAT SURVIVES FROM THE EPISODE, on its own merits and unrelated to any
+        case question: macbook independently hardened the macOS destruction step
+        to assert absence AFTER removal. Asserting the post-condition is right
+        whether or not a path ever mismatched.

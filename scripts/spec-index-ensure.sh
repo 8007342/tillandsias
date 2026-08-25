@@ -572,8 +572,57 @@ for part in "$work"/b/part-*; do
             -d @"$work/payload.json" 2>"$work/curl.err")"
     _curl_rc=$?
     if [ "$_curl_rc" -ne 0 ] || [ "${_http:-000}" -ge 400 ] 2>/dev/null; then
-        echo "blocked:spec-index:embed-endpoint-refused"
+        # ORDER 811-28eh — NAME THE RIGHT SUBJECT.
+        #
+        # This block emitted `embed-endpoint-refused` for every failure mode,
+        # including the one where NOTHING IS LISTENING. "Refused" asserts that a
+        # server answered and declined; when curl exits 7 nothing answered at
+        # all, and there may be no server on the host in the first place.
+        #
+        # MEASURED 2026-08-25 on macuahuitl, during a release cut: the verdict
+        # read `embed-endpoint-refused` with `curl: (7) Failed to connect ...
+        # Could not connect to server` underneath it. The host had no ollama, no
+        # inference image and an empty podman store — there was nothing to
+        # refuse. The reader (me) spent the first minutes looking for a
+        # misconfigured endpoint instead of an absent one, which is exactly the
+        # cost this packet describes: the verdict names the wrong subject.
+        #
+        # The DIED case is this packet's own headline symptom and deserves its
+        # own token: the container serves 200s at ~250ms each and then vanishes
+        # with exit 2, so the caller sees a connection torn down MID-STREAM
+        # after earlier batches succeeded. That is a different fact from "never
+        # reachable" and it points at a different investigation.
+        #
+        # An error may only assert what it measured (797-5kqe) — so the token is
+        # derived from curl's own exit code and the HTTP status, never guessed.
+        case "$_curl_rc" in
+            7)  _subject="embed-endpoint-absent" ;;      # nothing listening
+            28) _subject="embed-endpoint-timeout" ;;     # listening, never answered
+            52|56)
+                # Connection died with no/partial reply. If earlier batches
+                # succeeded this is a mid-workload death, not an absence.
+                if [ "${_embed_batches_ok:-0}" -gt 0 ]; then
+                    _subject="embed-endpoint-died-mid-request"
+                else
+                    _subject="embed-endpoint-unreachable"
+                fi
+                ;;
+            0)  _subject="embed-endpoint-refused" ;;     # it ANSWERED, with >=400
+            *)  _subject="embed-endpoint-unreachable" ;;
+        esac
+        echo "blocked:spec-index:${_subject}"
+        if [ "$_subject" = "embed-endpoint-absent" ]; then
+            echo "  NOTHING IS LISTENING on ${EMBED_EP} — this is an absent endpoint," >&2
+            echo "  not a refusal. Check that an embedding service is running at all" >&2
+            echo "  before looking for a misconfiguration (order 811-28eh)." >&2
+        elif [ "$_subject" = "embed-endpoint-died-mid-request" ]; then
+            echo "  THE ENDPOINT DIED MID-WORKLOAD: ${_embed_batches_ok:-0} batch(es) had already" >&2
+            echo "  succeeded before the connection was torn down. That is order 811-28eh's" >&2
+            echo "  signature — serving 200s, then gone. Check the container's exit code and" >&2
+            echo "  note that podman may label the corpse (healthy) (798-tk7b)." >&2
+        fi
         echo "  HTTP ${_http:-<none>} from ${EMBED_EP}/embeddings on a batch of ${want:-?} chunk(s)" >&2
+        echo "  curl exit ${_curl_rc}" >&2
         if [ -s "$work/resp.json" ]; then
             echo "  THE SERVER SAID: $(head -c 400 "$work/resp.json")" >&2
         elif [ -s "$work/curl.err" ]; then
@@ -606,6 +655,11 @@ for part in "$work"/b/part-*; do
         exit 1
     fi
     cat "$work/batch-vecs.jsonl" >> "$work/new-vecs.jsonl"
+    # ORDER 811-28eh. Counts batches the endpoint actually COMPLETED, so a later
+    # torn-down connection can be reported as a mid-workload death rather than
+    # as an unreachable endpoint. This is the one fact that separates "it served
+    # and then died" — this packet's whole symptom — from "it was never there".
+    _embed_batches_ok=$(( ${_embed_batches_ok:-0} + 1 ))
 done
 
 # ── ASSEMBLE IN CHUNK ORDER ─────────────────────────────────────────────────

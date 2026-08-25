@@ -171,29 +171,168 @@ VERSION_RE="$(printf '%s' "$VERSION_NO_V" | sed 's/\./\\./g')"
 # (b) contain a line asserting PASS for THIS EXACT version. The only change is
 # that (a) may be satisfied by the file's name rather than by the same line as
 # the verdict.
-_has_evidence=0
-if grep -rIlE "(e2e|smoke).*(PASS|pass).*${VERSION_RE}|${VERSION_RE}.*(e2e|smoke).*(PASS|pass)" \
-        "$REPO_ROOT/plan/" >/dev/null 2>&1; then
-    _has_evidence=1
-else
-    while IFS= read -r _f; do
-        [ -n "$_f" ] || continue
-        if grep -qE "(PASS|pass).*${VERSION_RE}|${VERSION_RE}.*(PASS|pass)" "$_f" 2>/dev/null; then
-            _has_evidence=1
-            break
-        fi
-    done <<EOF
-$(find "$REPO_ROOT/plan" -type f -iname "*e2e*${VERSION_NO_V}*" -o -type f -iname "*smoke*${VERSION_NO_V}*" 2>/dev/null)
+# ── PLATFORM-AWARE EVIDENCE (order 888-p3kt) ─────────────────────────────────
+#
+# TWO DEFECTS, both measured on 2026-08-25 against the live ledger.
+#
+# (1) PLATFORM-BLIND. The gate asked only "does SOME file under plan/ assert a
+#     PASS for this version". Tillandsias ships three platforms and the
+#     operator's acceptance criterion is that each one passed; one platform's
+#     PASS satisfied the gate for all three. A release could be promoted on
+#     Windows evidence alone with linux and macos never run.
+#
+# (2) IT WAS PASSING ON JUNK. For v0.4.260817.1 the two files that satisfied
+#     branch 1 were plan/index.yaml — whose packet body DESCRIBES this gate's
+#     own past defect, so the words "smoke", "PASS" and the version co-occur
+#     while describing a bug — and a freshness-audit line in a loop_status
+#     entry. The REAL report was reachable only through the filename fallback,
+#     which never ran because branch 1 had already matched. The verdict was
+#     accidentally right; the mechanism was not.
+#
+# LEDGERS ARE NOT REPORTS. The fix for (2) is to stop reading bookkeeping
+# surfaces as evidence at all. plan/index.yaml, plan/index.d/, the loop-status
+# ledgers, the attestation ledger and plan/archive/ are places where a version
+# string and the word PASS co-occur constantly and mean nothing about a test
+# run. Evidence lives in a REPORT — which is what /smoke-curl-install-and-test-e2e
+# actually writes, and what a human would point at.
+#
+# PLATFORM DETECTION IS SCOPED, NOT WHOLE-FILE — and this is the subtle part.
+# The genuine Windows report for v0.4.260817.1 contains the sentence "that lane
+# is Linux/Podman per the skill's §0.1". A whole-file grep for "linux" marks it
+# as linux evidence too, which reproduces defect (2) one level down: incidental
+# co-occurrence, now deciding platform coverage instead of existence. So the
+# platform is read ONLY from the filename and the file's first heading line —
+# both of which are authored as identity, not prose. Verified against all four
+# real reports in the ledger.
+_ev_required="${TILLANDSIAS_REQUIRED_PLATFORMS:-linux macos windows}"
+_ev_found=""
+_ev_disclaimed=""
+_ev_src=""
+
+# Ledger surfaces: never evidence, however the words fall on a line.
+_ev_is_ledger() {
+    case "${1#"$REPO_ROOT/"}" in
+        plan/index.yaml|plan/index.d/*|\
+        plan/loop_status.md|plan/loop_status.d/*|\
+        plan/mo-full-attestations.d/*|plan/archive/*) return 0 ;;
+    esac
+    return 1
+}
+
+# Platform tokens from the filename + the first heading line ONLY.
+_ev_platforms_of() {
+    local _f="$1" _hay _p=""
+    _hay="$(basename "$_f")
+$(grep -m1 -E '^#' "$_f" 2>/dev/null || true)"
+    _hay="$(printf '%s' "$_hay" | tr 'A-Z' 'a-z')"
+    case "$_hay" in *linux*|*silverblue*)          _p="$_p linux" ;; esac
+    case "$_hay" in *macos*|*darwin*|*osx*|*mac\ os*) _p="$_p macos" ;; esac
+    case "$_hay" in *windows*|*wsl*)               _p="$_p windows" ;; esac
+    printf '%s' "$_p"
+}
+
+_ev_note_file() {
+    local _f="$1" _p
+    _p="$(_ev_platforms_of "$_f")"
+    [ -n "$_p" ] || return 0
+    _ev_found="$_ev_found$_p"
+    for _q in $_p; do _ev_src="$_ev_src
+  $_q	${_f#"$REPO_ROOT/"}"; done
+    # A report may assert PASS while explicitly disclaiming promotion clearance
+    # ("run-scoped; does NOT clear promotion"). The matcher still counts it —
+    # reading intent out of prose is a rule that rots — but the operator must
+    # SEE it, so it is surfaced loudly below rather than silently absorbed.
+    if grep -qiE 'does not clear promotion|run-scoped' "$_f" 2>/dev/null; then
+        _ev_disclaimed="$_ev_disclaimed ${_f#"$REPO_ROOT/"}"
+    fi
+}
+
+# ONE RULE, not two. A file counts as evidence iff it (a) NAMES itself as an
+# e2e/smoke/findings report, (b) asserts PASS for THIS EXACT version, and (c)
+# has a detectable platform. The verdict line need not repeat "e2e"/"smoke" —
+# that was the 2026-08-23 false-negative and it stays fixed.
+#
+# THE SECOND PASS THIS REPLACES WAS THE BUG. It accepted ANY file under plan/
+# with "e2e|smoke" + "PASS" + the version on one line, which is how a packet
+# body describing this gate's own defect became evidence. Worse, measured on
+# plan/issues/windows-next-work-queue-2026-07.md: that pass accepted a line
+# reading "run PASS end-to-end ... but promotion verdict for the tag UNCHANGED
+# (morning FAIL)". A line that says the promotion verdict is FAIL was counting
+# as promotion evidence. Requiring report identity makes the second pass a
+# strict subset of this one, so there is now only one rule to reason about.
+while IFS= read -r _f; do
+    [ -n "$_f" ] || continue
+    _ev_is_ledger "$_f" && continue
+    grep -qE "(PASS|pass).*${VERSION_RE}|${VERSION_RE}.*(PASS|pass)" "$_f" 2>/dev/null || continue
+    _ev_note_file "$_f"
+done <<EOF
+$(find "$REPO_ROOT/plan" -type f \( -iname "*e2e*" -o -iname "*smoke*" -o -iname "*findings*" \) 2>/dev/null)
 EOF
+
+_ev_missing=""
+for _p in $_ev_required; do
+    case " $_ev_found " in *" $_p "*) ;; *) _ev_missing="$_ev_missing,$_p" ;; esac
+done
+_ev_missing="${_ev_missing#,}"
+_has_evidence=1
+[ -n "$_ev_missing" ] && _has_evidence=0
+
+# NAME THE EVIDENCE (coordinator request 2026-08-25).
+#
+# A PASS report proves the run COMPLETED. It does not, by itself, prove the
+# run's preconditions held — a smoke that silently skips its destruction step
+# still reports a clean-room result, because the report describes what the
+# script did, not what the script established.
+#
+# NO CITATION HERE, DELIBERATELY. This originally cited 889-bx99, a macOS
+# case-sensitivity defect. THAT PACKET WAS FALSIFIED AND WITHDRAWN on
+# 2026-08-25: it was "verified" by typing a capital path on a case-INSENSITIVE
+# volume and watching it resolve, which cannot fail and therefore measured
+# nothing. Independently re-checked before this comment was rewritten — there is
+# no `Application Support/Tillandsias` anywhere in the tree; every site is
+# lowercase (status_item.rs:367, diagnose.rs:71, diagnose-macos-enclave.sh:43,
+# and the rest). The general caveat above stands on its own; a release gate must
+# not cite a retracted finding as if it were evidence, which is the same
+# category error as the junk-matching this gate was fixed for.
+#
+# This gate deliberately does NOT verify clean-room preconditions — that is a
+# much larger packet, and a gate that half-verifies them would be worse than one
+# that honestly does not. What it CAN do for free is stop being anonymous: print
+# exactly which report is carrying each platform, so the operator can check them
+# against whatever they know that the gate does not.
+#
+# Correlating evidence dates against known precondition defects was considered
+# and REJECTED (coordinator concurred, and dropped the suggestion): it needs a
+# hand-maintained registry of defect windows per platform, and a registry nobody
+# updates goes quiet exactly when it matters — reading as "no known defects"
+# when it means "nobody wrote one down". That is the failure shape this gate was
+# just fixed for. Naming the evidence rots in no direction.
+if [ "$_has_evidence" -eq 1 ]; then
+    echo "Evidence satisfying this promotion (verify these are the runs you mean):" >&2
+    printf '%s\n' "$_ev_src" | sed '/^$/d' >&2
+    echo "  NOTE: a PASS proves the run completed, not that its preconditions held." >&2
+fi
+
+if [ -n "$_ev_disclaimed" ] && [ "$_has_evidence" -eq 1 ]; then
+    echo "WARNING: evidence accepted, but a report asserts PASS while disclaiming" >&2
+    echo "  promotion clearance (\"run-scoped\" / \"does not clear promotion\"):" >&2
+    for _f in $_ev_disclaimed; do echo "    $_f" >&2; done
+    echo "  The gate counts it — reading intent from prose is a rule that rots —" >&2
+    echo "  but YOU are being told, because its author did not mean it to clear a" >&2
+    echo "  promotion. Confirm before proceeding." >&2
 fi
 if [ "$_has_evidence" -eq 0 ]; then
     if [ "$FORCE" = "--force" ]; then
-        echo "WARNING: promoting $TAG WITHOUT e2e PASS evidence in plan/ (--force)." >&2
+        echo "WARNING: promoting $TAG WITHOUT complete per-platform e2e PASS evidence (--force)." >&2
+        echo "  missing platform(s): ${_ev_missing}" >&2
         echo "Record the override as a cycle entry via 'tillandsias-plan loop-status-append' (who/when/why; never rewrite plan/loop_status.md in place)." >&2
     else
-        echo "No e2e PASS evidence for $VERSION_NO_V found under plan/." >&2
-        echo "Run /smoke-curl-install-and-test-e2e first, or pass --force (operator override)." >&2
-        echo "refused:no-evidence:$TAG"
+        echo "Incomplete e2e PASS evidence for $VERSION_NO_V under plan/." >&2
+        echo "  required platforms: ${_ev_required// /,}" >&2
+        echo "  have:               ${_ev_found:-<none>}" >&2
+        echo "  MISSING:            ${_ev_missing}" >&2
+        echo "Run /smoke-curl-install-and-test-e2e on the missing platform(s), or pass --force (operator override)." >&2
+        echo "refused:no-evidence:$TAG:missing=${_ev_missing}"
         exit 1
     fi
 fi

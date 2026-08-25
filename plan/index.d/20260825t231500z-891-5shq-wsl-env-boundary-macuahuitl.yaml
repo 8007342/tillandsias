@@ -1,0 +1,96 @@
+packets:
+  - packet_id: the-wsl-dispatch-drops-every-tillandsias-control-flag-at-the-boundary
+    order: 891-5shq
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    release_target: fail-loud-diagnosis-milestone
+    title: |
+      TILLANDSIAS_FORCE_CHECK and every sibling flag are silently inert across the WSL dispatch — the identical defect the toolbox dispatch fixed and documented, never applied to the second boundary
+    deliverable: |
+      the WSL dispatch re-exports the TILLANDSIAS_* namespace the way the toolbox
+      dispatch does, so a documented escape hatch is not silently dead on Windows
+    pickup_role: windows
+    owner_host: any
+    depends_on: []
+    capability_tags:
+      - windows
+      - wsl
+      - build-gate
+      - fail-loud
+      - developer-experience
+    estimated_hours: 2
+    context: |
+      FOUND 2026-08-25 by yolanda while deadlocked on a release-night push, and
+      verified from the tree by the coordinator rather than accepted on report.
+
+      THE ASYMMETRY, both sides read at HEAD:
+
+        scripts/with-tillandsias-builder.sh:232-235
+          re-exports the whole TILLANDSIAS_* namespace across the toolbox
+          boundary, and its comment states exactly why:
+            "TILLANDSIAS_* control flag silently died at this boundary: on
+             Silverblue, TILLANDSIAS_FORCE_CHECK=1 could not bypass the gate memo
+             ... TILLANDSIAS_SKIP_VERSION_BUMP=1 could not stop the version bump."
+
+        scripts/with-wsl2-builder.sh:231
+          _ENV_PREFIX="export TILLANDSIAS_SKIP_WSL2=1; . /root/.cargo/env ...;"
+          — one flag, hardcoded, and nothing else crosses.
+
+      So the defect was found, diagnosed, fixed and WRITTEN DOWN on one dispatch
+      boundary, and the second dispatch boundary in the same repo never received
+      the fix. On Windows, `TILLANDSIAS_FORCE_CHECK=1 ./build.sh --check` runs the
+      gate with the flag unset inside WSL: the memo is consulted, `ok:gate-fresh`
+      is printed, and the operator believes they forced a re-run they did not.
+
+      WHY IT IS p1 RATHER THAN A PAPERCUT: the meta-orchestration skill documents
+      `TILLANDSIAS_FORCE_CHECK=1` as THE way to make a green mean something
+      ("a green you did not force proves only that the tree has not changed since
+      some earlier green"). On Windows that instruction is silently false. An
+      escape hatch that does not report its own absence is worse than no escape
+      hatch, because the reader believes the escape happened.
+
+      DISCOVERED UNDER LOAD: yolanda hit it while deadlocked by 887-bz88's
+      gate-stamp change, where FORCE_CHECK was the documented way out and turned
+      out to be inert. The deadlock is a separate defect; this one is what removed
+      the remedy. Recorded separately because it is independently true and will
+      outlive that deadlock's fix.
+
+      `WSLENV` is the mechanism for passing variables across the WSL boundary and
+      is the likely shape of the fix, but the toolbox implementation should be
+      read first — it already solved the namespace-forwarding problem once, and
+      a second bespoke solution is how the two boundaries diverged in the first
+      place.
+    outcome: |
+      A TILLANDSIAS_* control flag has the same effect on Windows as it does on
+      Silverblue and on a bare host, or says out loud that it cannot.
+    exit_criteria:
+      - '`TILLANDSIAS_FORCE_CHECK=1 ./build.sh --check` on a Windows host demonstrably re-runs the gate rather than reporting ok:gate-fresh — shown by a forced run after an unforced one, not argued.'
+      - 'TILLANDSIAS_SKIP_VERSION_BUMP is verified across the same boundary, since it is the other flag the toolbox comment names and the one whose silent failure rewrites six files.'
+      - 'NEGATIVE CONTROL: a flag that is NOT set on the host must not appear set inside WSL — a namespace forward must not manufacture values.'
+      - 'The two dispatches share the forwarding logic, or a check proves they agree — a third boundary must not be able to diverge silently the way this one did.'
+    verifiable_closure: |
+      On Windows, a forced gate re-runs; on Silverblue it still re-runs; and an
+      unset flag is unset on both sides.
+    notes: |
+      Do not fix this by hardcoding a second flag into _ENV_PREFIX. That is what
+      made the current state look intentional — one flag crosses, so the boundary
+      appears handled. Forward the namespace, or fail loudly for the ones that
+      cannot cross.
+
+      Related: 887-bz88's gate-stamp change is what made this visible on release
+      night (the drvfs exec-bit divergence that deadlocked the Windows push lane),
+      but the two defects are independent and this one should not be closed by
+      fixing that one.
+    events:
+      - type: filed
+        ts: "2026-08-25T23:15:00Z"
+        agent_id: linux-macuahuitl-fable5-20260825t224835z
+        host: macuahuitl
+        summary: |
+          Filed by the coordinator after yolanda reported the documented escape
+          hatch was inert on Windows during a release-night deadlock. Verified
+          against both dispatch scripts at HEAD before filing: the toolbox
+          re-exports the namespace and says why, the WSL dispatch forwards a
+          single hardcoded flag. Same defect, second boundary, never carried over.

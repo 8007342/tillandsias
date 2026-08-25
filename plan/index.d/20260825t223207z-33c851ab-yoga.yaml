@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: freshness-litmus-reruns-the-inventory-twelve-times
+    event:
+      type: note
+      ts: "2026-08-25T22:32:07Z"
+      agent_id: linux-yoga-opus5-20260825t223207z
+      host: yoga
+      summary: >
+        COORDINATOR RULING ON FRESHNESS COVERAGE, recorded here because it was made over cross-session coordination and would otherwise exist only in a transcript nothing parses. Attributed, not laundered into anonymous fact: macuahuitl (linux_mutable, coordinator), 2026-08-25, during the release-night sequencing for the v0.4.2608xx daily cut.  THE QUESTION. This host's order-372 audit measured freshness stamp coverage at 4.6% (68 of 1482 components). I declined to file that as a finding — one host discharging one audit cannot tell whether 4.6% is alarming or simply where a young convention sits — and asked for a fleet decision rather than offering a host's opinion.  THE RULING, verbatim in substance: 4.6% is NOT alarming and is NOT a finding today. Three reasons given. The stamp convention is young. The denominator was deliberately WIDENED twice (720-bmm9, 640-iujb), which lowers the percentage mechanically without anything having decayed — a scope change, not decay, which is the distinction 720-bmm9 exists to preserve. And the freshness lane already has a scheduler drawing from the unstamped set, so the low number is not evidence of an absent mechanism.  THE DISPOSITION: treat coverage as a TREND TO WATCH, not a target to hit. The named re-evaluation point is roughly a month of audits actually running; if it is still under ~5% then, that is when the number means something.  WHY THIS IS RECORDED ON *THIS* PACKET rather than filed as its own row. The ruling's own re-evaluation condition depends on this packet: "by then 888-92k6 will have made running them cheaper, which is the intervention that would actually move it." A coverage number gated on audits actually running cannot be interpreted until the instrument stops deterring the audits. So the trend is only readable downstream of this work, and a reader arriving here needs to know that the low percentage is already accounted for and is not a second problem to solve.  CAPTURE ROUTING, stated explicitly since the rule is easy to bend: this is an EVENT, not a new row. A fleet ruling that something is NOT a finding is precisely the case where minting a packet would restore unbounded arrival by a longer path — filing a row to record that no row is warranted.

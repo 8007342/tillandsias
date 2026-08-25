@@ -153,15 +153,107 @@ else
     bad "no announcement: $(cat "$err2")"
 fi
 
-# --- 6. the REAL committed sets: the glob invocation is fully green -------
-out="$("$PLAN" grade "$ROOT"/openspec/litmus-tests/groundtruth/*.yaml 2>/dev/null | tail -1)"
-case "$out" in
-    *"fail=0"*) ok "the committed groundtruth glob grades fail=0 ($out)" ;;
-    *) bad "committed glob not green: $out" ;;
-esac
+# --- 6. the REAL committed sets: the glob invocation is green OR loudly skipped
+# ORDER 888-miiy. This step used to require only `fail=0`, and on a host with no
+# embedding endpoint the whole invocation died with
+# `HARNESS ERROR: spec.answer needs a built index` — no result line at all, so
+# `$out` was EMPTY and the step reported "committed glob not green:" with a blank
+# verdict. That is the one red out of 2007 that blocked a release cut on
+# 2026-08-25, on a host whose only sin was having no ollama running.
+#
+# The set that drags the index requirement in is spec-rung1.yaml. Its own author
+# wrote, when adding it: "NOT wired into the default grade set or build --check:
+# the engine needs a built index, and a host without one would get a harness
+# ERROR rather than a skip -- making it default would turn a missing host
+# artifact into a red build fleet-wide. The gate's own committed-set test names
+# one file rather than globbing, so this set cannot affect it." Order 786-kjke
+# then added THIS globbing step — correctly, it tests real glob behaviour — and
+# swept the set in, which is precisely the condition that warning described.
+#
+# THE FIX IS NOT "STOP FAILING". A capability gap that merely stopped failing
+# would leave the expert-grading tier unexercised on every endpoint-less host
+# with nothing saying so — an unexamined thing reported as clean, which is
+# strictly worse than the wrong red, because the wrong red at least told the
+# truth that something was off. So the assertion is `fail=0` AND that every skip
+# is ACCOUNTED FOR: named engines in the summary and a SKIP line per case.
+full="$("$PLAN" grade "$ROOT"/openspec/litmus-tests/groundtruth/*.yaml 2>/dev/null)"
+out="$(printf '%s' "$full" | grep '^groundtruth-result:' | tail -1)"
+if [ -z "$out" ]; then
+    bad "the glob produced NO result line at all (the 888-miiy symptom): $(printf '%s' "$full" | tail -1)"
+elif ! printf '%s' "$out" | grep -q 'fail=0'; then
+    bad "committed glob not green: $out"
+elif printf '%s' "$out" | grep -q 'skipped=0'; then
+    ok "the committed groundtruth glob grades fail=0 with nothing skipped ($out)"
+else
+    # Skips are allowed, but never invisible.
+    if printf '%s' "$out" | grep -q 'skipped_engines=' \
+       && printf '%s' "$full" | grep -q '^SKIP  .*NOT GRADED on this host'; then
+        ok "glob is fail=0 and every skip is named ($out)"
+    else
+        bad "the glob skipped cases WITHOUT accounting for them — a silent green: $out"
+    fi
+fi
+
+# --- 7. an ABSENT index SKIPS loudly; it is neither a red nor a silent pass ---
+# The positive statement of the fix. Cases that cannot run are skipped, named,
+# counted, and the denominator still includes them so a skip cannot quietly
+# shrink the bar.
+sp="$("$PLAN" grade --root "$ROOT" "$ROOT/openspec/litmus-tests/groundtruth/spec-rung1.yaml" 2>/dev/null)"
+sp_rc=0
+TILLANDSIAS_SPEC_INDEX_DIR="" "$PLAN" grade --root "$ROOT" \
+    "$ROOT/openspec/litmus-tests/groundtruth/spec-rung1.yaml" >/dev/null 2>&1 || sp_rc=$?
+sp_line="$(printf '%s' "$sp" | grep '^groundtruth-result:' | tail -1)"
+sp_total="$(printf '%s' "$sp_line" | sed -n 's/.*total=\([0-9]*\).*/\1/p')"
+sp_skip="$(printf '%s' "$sp_line" | sed -n 's/.*skipped=\([0-9]*\).*/\1/p')"
+if [ "${sp_skip:-0}" -gt 0 ] \
+   && printf '%s' "$sp_line" | grep -q 'skipped_engines=spec.answer' \
+   && printf '%s' "$sp" | grep -q '^SKIP  .*\[spec.answer\]' \
+   && [ "${sp_total:-0}" -eq "${sp_skip:-0}" ] \
+   && [ "$sp_rc" -eq 0 ]; then
+    ok "an absent index SKIPS loudly, counted in the denominator (rc=0, $sp_line)"
+elif [ "${sp_skip:-0}" -eq 0 ]; then
+    ok "this host HAS an index — spec.answer graded rather than skipped ($sp_line)"
+else
+    bad "absent-index skip is not properly accounted: rc=$sp_rc line=$sp_line"
+fi
+
+# --- 8. NEGATIVE CONTROL: a STALE index is a HARNESS ERROR, never a skip ------
+# The whole safety argument for the skip lives here. "This host has no index"
+# and "this host's index is wrong" look similar and mean opposite things: the
+# first is a capability gap, the second is a defect that a skip would hide.
+stale="$(mktemp -d)"; mkdir -p "$stale/idx"; printf '[0.1,0.2]\n' > "$stale/idx/vectors.jsonl"
+st_rc=0
+TILLANDSIAS_SPEC_INDEX_DIR="$stale/idx" "$PLAN" grade --root "$ROOT" \
+    "$ROOT/openspec/litmus-tests/groundtruth/spec-rung1.yaml" \
+    >"$stale/out" 2>"$stale/err" || st_rc=$?
+rm -rf "$stale"
+if [ "$st_rc" -eq 2 ]; then
+    ok "a STALE index is still a HARNESS ERROR (rc=2), never skipped"
+else
+    bad "a stale index did not hard-error: rc=$st_rc — the skip is swallowing a real defect"
+fi
+
+# --- 9. NEGATIVE CONTROL: skipping must not make a WRONG answer green ---------
+# The fail-open test. Everything above is worthless if the skip path can also
+# absorb a genuinely wrong graded answer; a stricter-looking gate that stopped
+# failing would be the exact regression this fixture is meant to prevent.
+wrong="$(mktemp -d)"
+sed 's/LWW-Register/NONEXISTENT-REGISTER-FABRICATION/' \
+    "$ROOT/openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml" > "$wrong/w.yaml"
+w_rc=0
+"$PLAN" grade --root "$ROOT" "$wrong/w.yaml" \
+    "$ROOT/openspec/litmus-tests/groundtruth/spec-rung1.yaml" >"$wrong/out" 2>/dev/null || w_rc=$?
+w_line="$(grep '^groundtruth-result:' "$wrong/out" | tail -1)"
+if [ "$w_rc" -eq 1 ] && printf '%s' "$w_line" | grep -qv 'fail=0' \
+   && grep -q '^FAIL  cheatsheet-crdt-primitives' "$wrong/out"; then
+    ok "a WRONG answer is still RED even alongside skipped cases (rc=1, $w_line)"
+else
+    bad "FAIL-OPEN: a wrong answer went green alongside skips: rc=$w_rc line=$w_line"
+fi
+rm -rf "$wrong"
 
 if [ "$fail" -eq 0 ]; then
-    echo "ok:groundtruth-corpus-declaration-fixture:6"
+    echo "ok:groundtruth-corpus-declaration-fixture:9"
     exit 0
 fi
 echo "fail: groundtruth-corpus-declaration scenarios failed" >&2
