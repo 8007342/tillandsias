@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-mode-only-regression-reached-the-trunk-past-the-only-gate
+    field: status
+    value: completed
+    ts: "2026-08-25T21:59:34Z"
+    host: lenovinha
+
+events:
+  - packet_id: a-mode-only-regression-reached-the-trunk-past-the-only-gate
+    event:
+      type: completed
+      ts: "2026-08-25T21:59:34Z"
+      host: lenovinha
+      summary: >
+        status 'completed' with evidence_refs: b0d2b2b70c21fdf6ff82a5f5bb058a0c3ee72952 litmus:mode-only-regression-gate 4/4 + scripts/test-mode-only-regression-887-bz88.sh 9/9 + ci-release pre-build litmus 28/28; e2e on scratch clone: pre-fix ACCEPTED, post-fix REFUSED, plan-only lane control still green
+  - packet_id: a-mode-only-regression-reached-the-trunk-past-the-only-gate
+    event:
+      type: note
+      ts: "2026-08-25T21:59:34Z"
+      host: lenovinha
+      summary: >
+        mechanism identified (two blind spots composed), both closed, closure verified e2e

@@ -53,16 +53,44 @@ fi
 
 violations=0
 
-# ── Candidates: tracked 100644, with a shebang ───────────────────────────────
+# ── Candidates: non-executable in the INDEX **or** the WORKTREE, with a shebang ─
 # The shebang test was `head -c2 "$path" | grep -q '#!'` — two processes for
 # each of 260 tracked files. Bash reads the first line without spawning.
+#
+# ORDER 887-bz88 — READING ONLY THE INDEX MADE THIS GUARD MISS THE REGRESSION IT
+# EXISTS FOR. `git ls-files -s` reports the INDEX, and meta-orchestration runs
+# the gate at Finalization step 4 while `git add` is step 5. A script rewritten
+# through a temp file (`mv` drops the exec bit) is therefore still 100755 in the
+# index when this check runs: it passes, the tree gets stamped, and the mode
+# regression is staged AFTERWARDS. That is exactly how scripts/check-credential-
+# channel.sh reached origin/linux-next as 100644 on 2026-08-25 — the credential
+# guard itself, which every host invokes by path before any committable work.
+#
+# So consider a candidate non-executable if EITHER view says so. The worktree
+# arm is what makes the failure land at gate time, before staging, which is the
+# only point at which the agent still has cheap feedback. The index arm stays
+# because it is the one that survives a clone: it is what makes a pristine
+# checkout of a red trunk report red.
+#
+# `core.filemode=false` hosts (Windows/MSYS) have no meaningful worktree bit —
+# git itself ignores it there, so a regression cannot originate from such a host.
+# Consult the worktree only where git is honouring the bit, or every Windows
+# checkout reports every script as a violation.
+filemode_honoured=1
+case "$(git config --get core.filemode 2>/dev/null)" in
+    false|False|FALSE) filemode_honoured=0 ;;
+esac
 candidates=()
 while IFS= read -r entry; do
     [ -n "$entry" ] || continue
     mode="${entry%% *}"
     path="${entry##*$'\t'}"
-    [ "$mode" = "100644" ] || continue
     [ -f "$path" ] || continue
+    if [ "$mode" != "100644" ]; then
+        # Executable in the index — only the worktree can still condemn it.
+        [ "$filemode_honoured" = 1 ] || continue
+        [ -x "$path" ] && continue
+    fi
     IFS= read -r first_line < "$path" 2>/dev/null || continue
     case "$first_line" in '#!'*) ;; *) continue ;; esac
     candidates+=("$path")
@@ -118,9 +146,22 @@ if [ "${#candidates[@]}" -gt 0 ]; then
         [ -n "$path" ] || continue
         violations=$((violations + 1))
         {
-            echo "REFUSED: $path is invoked by path but tracked as mode 100644 —"
-            echo "         on a POSIX host that invocation is a permission error, not a verdict."
-            echo "         Fix: git update-index --chmod=+x $path"
+            # Name the remedy for the view that is actually wrong (887-bz88).
+            # A worktree-only regression is the pre-staging shape this guard was
+            # extended to catch, and `git update-index` would NOT fix it — it
+            # would stage the broken mode. Printing one remedy for both cases is
+            # how a fail-loud verdict sends the reader to the wrong fix.
+            if [ "$(git ls-files -s -- "$path" 2>/dev/null | cut -d' ' -f1)" = "100644" ]; then
+                echo "REFUSED: $path is invoked by path but tracked as mode 100644 —"
+                echo "         on a POSIX host that invocation is a permission error, not a verdict."
+                echo "         Fix: git update-index --chmod=+x $path"
+            else
+                echo "REFUSED: $path is invoked by path but is NOT EXECUTABLE in the worktree —"
+                echo "         on a POSIX host that invocation is a permission error, not a verdict."
+                echo "         The index still says 100755, so this would become a mode-only"
+                echo "         regression the moment you stage it (order 887-bz88)."
+                echo "         Fix: chmod +x $path"
+            fi
             printf '   caller: %s\n' "$(printf '%s' "$hit" | cut -c1-140)"
         } >&2
     done < <(awk -f "$REPO_ROOT/scripts/lib/exec-bits-filter.awk" \

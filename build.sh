@@ -1920,6 +1920,36 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Closure-evidence enforcement passed"
 
+    # Order 885-92iu. Refuse a NEWLY FILED packet whose `verifiable_closure`
+    # NAMES a litmus test that cannot run — one no test declares, or one no
+    # spec binds (execution is binding-driven, so an unbound test runs in no
+    # suite and is as inert as a missing one). 721-77yu already caught this
+    # shape in shell scripts; the ledger, where the claim carries more weight,
+    # was never scanned. 795-5itp declared a closure on 2026-08-17 that existed
+    # in exactly one place in the repository — that field — for eight days,
+    # while three slices landed against it and this gate stayed green.
+    # Diff-scoped: standing debt is REPORTED by `tillandsias-plan
+    # declared-closures` (exit 0), never redded here.
+    _step "Checking that added fragments' declared closures resolve (885-92iu)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-declared-closures-added.sh" 2>&1; then
+        _error "this change files a packet whose verifiable_closure names a litmus test that does not exist or that no spec binds (885-92iu)"
+        exit 1
+    fi
+    _info "Declared-closure resolution check passed"
+
+    # ADVISORY, never a gate (885-92iu). The gate above refuses NEW debt; this
+    # names the STANDING debt, every run, so it cannot go quiet the way
+    # 795-5itp's closure did for eight days. Reporting on demand is not
+    # reporting: a number nobody is shown is a number nobody acts on.
+    if _plan_bin="$(TILLANDSIAS_PLAN_BIN="${TILLANDSIAS_PLAN_BIN:-}" bash -c '. scripts/plan-binary-probe.sh; resolve_plan_binary')" \
+       && [ -n "$_plan_bin" ] \
+       && "$_plan_bin" capabilities 2>/dev/null | grep -qx declared-closures; then
+        _closure_debt="$("$_plan_bin" declared-closures 2>/dev/null || true)"
+        case "$_closure_debt" in
+            violation:*) _warn "standing declared-closure debt: $_closure_debt (see 'tillandsias-plan declared-closures'; not a gate)" ;;
+        esac
+    fi
+
     # ORDER 656-spux. Every host compiles for itself and nothing else, so
     # cfg-gated code is verified by exactly the platform that cannot exercise
     # the other arms. This builds the workspace for ONE non-host target on hosts

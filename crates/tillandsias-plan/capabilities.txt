@@ -30,6 +30,8 @@ check
 closure-evidence-check
 compact
 corpus-coverage
+declared-closures
+declared-closures-check
 dependencies-of
 expire-claims
 # does not remove the capability — it makes the expert UNDER-report itself, and
