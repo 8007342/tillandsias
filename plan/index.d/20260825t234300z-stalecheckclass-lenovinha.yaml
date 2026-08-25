@@ -1,0 +1,74 @@
+packets:
+  - packet_id: gate-checks-whose-result-outlives-what-they-checked
+    order: 893-f77c
+    release_target: fail-loud-diagnosis-milestone
+    status: ready
+    desired_release: v0.6
+    role: tooling
+    priority: p2
+    kind: research
+    title: |
+      Which gate checks have results that can go stale between check and use, and which of those surface the failure only at the most expensive moment?
+    deliverable: plan/issues/ research writeup + a list of instances with their staleness windows
+    depends_on:
+      - credential-guard-verdict-has-a-shelf-life
+    pickup_role: any
+    owner_host: any
+    capability_tags:
+      - research
+      - fail-loud
+      - build-gate
+    estimated_hours: 4
+    problem: |
+      TWO INSTANCES OF ONE CLASS were fixed within hours of each other on
+      2026-08-25 without either being recognised as a class until the second:
+
+        887-bz88  the gate STAMP said the tree was validated; the tree had
+                  changed. Surfaced at push, after a full gate run.
+        892-aw9p  the credential guard said the channel was usable; the token
+                  had since expired. Surfaced at push, after a 142-276s gate.
+
+      Both are "a check whose RESULT OUTLIVES THE THING IT CHECKED". In neither
+      case was the measurement wrong — each verdict was true when issued. What
+      was missing was any account of how long it stayed true.
+
+      Both also failed LATE AND EXPENSIVELY, which is probably not a
+      coincidence: a check whose result is consumed far from where it was
+      produced has the widest staleness window, and distance from production to
+      consumption is also what makes the sunk cost large. If that relationship
+      holds, it is predictive — it says where to look for the next instance
+      rather than waiting to be bitten by it.
+    why_it_matters: |
+      Each instance was found by a host getting wedged, at the moment of
+      greatest sunk cost, and cost hours. Enumerating the class turns "wait to be
+      bitten" into "look where the window is widest". This is the reduction
+      engine's own job applied to the gate itself.
+    exit_criteria:
+      - |
+          An enumeration of gate checks whose verdict is consumed at a materially later point than it is produced, each with its staleness window (how long between check and use) and what invalidates it.
+      - |
+          For each, a statement of where the failure currently surfaces and what the sunk cost is at that point — the two known instances both surface at push, after the gate.
+      - |
+          A recommendation per instance: re-verify at point of use, shorten the window, or accept it with the reason stated. "Accept" is a legitimate answer and must be available, or the audit will manufacture work.
+      - |
+          NEGATIVE CONTROL: at least one check examined and found NOT to be in the class, with the reason — otherwise the taxonomy is unfalsifiable and every check gets classified.
+    notes: |
+      Deliberately scoped as RESEARCH, not a fix. The two known instances are
+      already fixed; this is about whether there is a third, and the honest
+      output may be "no, these two were it". That is a complete result.
+
+      Do not let this block instance fixes. 892-aw9p was landed on its own
+      precisely so a five-line repair was not held hostage to a taxonomy
+      (calmecacpilli's request, coordinator endorsed); the same rule applies to
+      whatever this finds.
+    events:
+      - type: filed
+        ts: "2026-08-26T00:10:00Z"
+        agent_id: lenovinha-opus5-metaorch-20260825t233723z
+        host: lenovinha
+        summary: |
+          Named by calmecacpilli and sharpened by macuahuitl while handing over
+          892-aw9p. Filed as a separate packet at both their request so the cheap
+          instance fix could land immediately. I fixed the stamp instance earlier
+          the same night without noticing it was an instance of anything — which
+          is itself the argument for enumerating rather than waiting.

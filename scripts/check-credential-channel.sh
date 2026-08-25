@@ -499,7 +499,88 @@ credential_channel_verdict() {
   return 1
 }
 
+# ORDER 892-aw9p — A CORRECT VERDICT HAS A SHELF LIFE.
+#
+# This guard runs ONCE, at Start-Of-Cycle, before any committable work. It
+# cannot see a credential that dies afterwards. MEASURED on calmecacpilli
+# 2026-08-25: the guard returned ok:gh-keyring-push-verified, two pushes
+# succeeded on that credential, and ~50 minutes later the third failed with
+# `remote: Invalid username or token`. `gh auth status` then said "The token in
+# keyring is invalid."
+#
+# Nothing the guard MEASURED was wrong — the verdict was true when issued. The
+# defect is that its result is consumed far from where it was produced, and
+# nothing tracks the gap. The failure therefore surfaces at the most expensive
+# possible moment: after the implementation, after a 142-276s local gate, and
+# with the Non-Negotiable Exit Contract forbidding an exit that leaves the work
+# unpushed. The host is wedged, not merely delayed.
+#
+# This is structurally the stale-gate-stamp problem (887-bz88): a check whose
+# result outlives the thing it checked. The CLASS is filed separately; this is
+# the cheap instance, landed on its own so a five-line fix is not held hostage
+# to a taxonomy (calmecacpilli's request, coordinator endorsed).
+#
+# THE STAMP IS WRITTEN ONLY ON A PASS, and only records that a pass happened.
+# It exists so `reverify` can tell "this credential DIED" apart from "this host
+# never had one" — two conditions with the same repair cost but very different
+# diagnoses, and the guard previously reported both as
+# missing:no-credential-channel.
+_ccc_stamp_path() {
+    printf '%s/tillandsias-credential-verified' "$(git rev-parse --git-dir 2>/dev/null || echo .)"
+}
+
+_ccc_record_pass() {
+    local f; f="$(_ccc_stamp_path)"
+    [ -n "$f" ] || return 0
+    printf '%s %s\n' "$(date -u +%s)" "$1" > "$f" 2>/dev/null || true
+}
+
+case "${1:-}" in
+  reverify)
+    # RE-PROBE BEFORE THE EXPENSIVE STEP. The skill calls this at Finalization
+    # immediately BEFORE `./build.sh --check`, so a dead credential costs the
+    # gate's wall-clock rather than being discovered after it.
+    #
+    # NOT called per push: the healthy path must not pay a network round trip
+    # for every git operation. A guard slow enough to notice is a guard that
+    # gets bypassed, and a bypassed guard protects nothing — so this runs once,
+    # at the one point where the remaining cost is still worth saving.
+    verdict="$(credential_channel_verdict)" && rc=0 || rc=$?
+    if [ "$rc" -eq 0 ]; then
+      _ccc_record_pass "$verdict"
+      echo "$verdict"
+      exit 0
+    fi
+    _stamp="$(_ccc_stamp_path)"
+    if [ -s "$_stamp" ]; then
+      _then="$(cut -d' ' -f1 < "$_stamp" 2>/dev/null)"
+      _was="$(cut -d' ' -f2 < "$_stamp" 2>/dev/null)"
+      case "$_then" in
+        ''|*[!0-9]*) _age="unknown" ;;
+        *) _age="$(( $(date -u +%s) - _then ))s" ;;
+      esac
+      echo "[check-credential-channel] THE CREDENTIAL DIED DURING THIS CYCLE." >&2
+      echo "  It verified ${_age} ago (${_was:-ok}) and does not verify now." >&2
+      echo "  This is NOT an absent channel and NOT a ref-state refusal (886-qmdz):" >&2
+      echo "  it worked, and then stopped. A keyring token expiring mid-cycle is the" >&2
+      echo "  measured shape (calmecacpilli, 2026-08-25, ~50 minutes in)." >&2
+      echo "  REMEDY: refresh the token, then re-run this guard:" >&2
+      echo "    gh auth refresh        # or: gh auth login" >&2
+      echo "    gh auth token | git credential-store --file \"\$(git rev-parse --git-dir)/.gh-credentials\" store" >&2
+      echo "  DO NOT discard the cycle's work to get unstuck. If the credential" >&2
+      echo "  cannot be repaired now, preserve it first (order 872-c9nd):" >&2
+      echo "    scripts/salvage-dirty-worktree.sh <slug>" >&2
+      echo "  and report blocked with the salvage ref rather than exiting clean." >&2
+      echo "blocked:credential-expired-mid-cycle"
+      exit 1
+    fi
+    echo "$verdict"
+    exit "$rc"
+    ;;
+esac
+
 # Standalone mode: print the single verdict line and exit with its pass/fail code.
 verdict="$(credential_channel_verdict)" && rc=0 || rc=$?
+[ "$rc" -eq 0 ] && _ccc_record_pass "$verdict"
 echo "$verdict"
 exit "$rc"
