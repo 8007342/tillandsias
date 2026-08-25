@@ -71,9 +71,49 @@ if [[ ! -t 0 ]]; then
     REFS="$(cat 2>/dev/null || true)"
 fi
 
+
+
 RED=$'\033[0;31m'; YLW=$'\033[0;33m'; GRN=$'\033[0;32m'; RST=$'\033[0m'
 [[ -t 2 ]] || { RED=""; YLW=""; GRN=""; RST=""; }
 
+
+# ── ORDER 877-mynm: AN EMPTY REF LIST MEANS GIT IS PUSHING NOTHING ──────────
+#
+# This guard used to fall through to the full gate whenever stdin carried no
+# refs, printing "plan-only lane: not applicable — no ref list on stdin" and
+# then, on a stale stamp, refusing with "the tree changed since ./build.sh
+# --check last passed". Both lines are true and the conclusion was wrong,
+# because nobody had decoded what an empty list MEANS.
+#
+# MEASURED, hermetically, against a scratch repo with a bare remote (the
+# fixture is scripts/test-pre-push-empty-ref-list.sh):
+#
+#   fast-forward push .................... 125 bytes, one ref
+#   git push --dry-run origin HEAD ....... 108 bytes, one ref
+#   already up to date ................... 0 bytes
+#   non-fast-forward, remote-tracking ref
+#     CURRENT (git already knows) ........ 0 bytes
+#   non-fast-forward, remote-tracking ref
+#     STALE (git does not know yet) ...... 125 bytes, then the REMOTE rejects
+#
+# The list is empty exactly when git has already decided to send nothing. Git
+# still runs the hook — it always does — but there is no ref to gate. So the
+# expensive path was being paid for a push that cannot happen, and the reader
+# was sent to `./build.sh --check` when the actual remedy was `git pull
+# --rebase`. Measured on pirria at ~90s per wasted gate, recurring by
+# construction: the claim-before-work discipline races other hosts, and losing
+# that race is precisely how the remote-tracking ref ends up current-and-ahead.
+#
+# THIS IS NOT A LICENCE TO ACCEPT AN UNSCOPED PUSH (877-mynm criterion 3).
+# "No refs" and "refs I could not scope" are different facts. When a ref IS
+# outgoing and its range cannot be determined, every refusal below stands
+# exactly as written; the plan-only lane still falls back to the full gate, and
+# the full gate still refuses a stale stamp. What changes is only the case where
+# there is nothing to gate at all.
+if [[ -z "${REFS//[[:space:]]/}" ]]; then
+    echo "${GRN}✓ local gate: no refs on stdin — git is pushing nothing (already up to date, or a non-fast-forward it has already declined). Nothing to gate; if you expected a push, fetch and rebase.${RST}" >&2
+    exit 0
+fi
 refuse() {
     echo "" >&2
     echo "${RED}✗ pre-push refused: $1${RST}" >&2

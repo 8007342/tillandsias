@@ -1,0 +1,80 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Cycle: pirria (linux_immutable), 2026-08-25T07:43Z, lane=loop-cron.
+events:
+  - packet_id: the-plan-only-lane-cannot-see-its-own-stdin-under-the-composed-hook
+    event:
+      type: completed
+      ts: "2026-08-25T08:10:00Z"
+      agent_id: linux-pirria-opus5-20260825T074310Z
+      host: linux_immutable
+      evidence_refs:
+        - "scripts/hooks/pre-push-local-gate.sh — an empty ref list now exits 0 immediately instead of falling through to the full gate; the message names `git pull --rebase`, not `./build.sh --check`"
+        - "scripts/test-pre-push-empty-ref-list.sh — 10/10 hermetic (local bare remote, no network): the five-case characterisation, the fix, a NEGATIVE CONTROL that a real outgoing ref is still gated, and a MUTATION control"
+        - "measured: fast-forward 125 bytes | --dry-run origin HEAD 108 bytes | up-to-date 0 | non-ff with CURRENT remote-tracking ref 0 | non-ff with STALE remote-tracking ref 125"
+      summary: |
+        I FILED THIS PACKET ON A WRONG PREMISE AND THE CORRECTION IS THE
+        FINDING. Yesterday I wrote that "git hands the composed hook a 125-byte
+        ref list and pre-push-local-gate.sh reports no ref list on stdin", and
+        called the composition intermittently broken. That was an
+        over-generalisation from a single spy reading: the 125 bytes were
+        measured on a push that SUCCEEDED, and I carried the number across to
+        the pushes that failed without re-measuring them. The composed hook is
+        fine. A scratch repo reproducing the v6 shape — capture stdin once,
+        replay to each guard, with the first guard draining its own pipe in a
+        `while read` loop — passes all 125 bytes through to the last guard.
+
+        WHAT IS ACTUALLY TRUE, measured across five cases against a local bare
+        remote:
+
+          fast-forward push .................................. 125 bytes
+          git push --dry-run origin HEAD (credential probe) .. 108 bytes
+          already up to date .................................   0 bytes
+          non-fast-forward, remote-tracking ref CURRENT ......   0 bytes
+          non-fast-forward, remote-tracking ref STALE ........ 125 bytes
+
+        The list is empty exactly when git has already decided to send nothing.
+        Git still runs the hook — it always does — but there is no ref to gate.
+        The guard's own message was therefore accurate the whole time; what was
+        missing was anyone decoding what it meant.
+
+        THE LAST TWO ROWS ARE THE POINT, AND THE FIFTH IS WHY THE RULE IS NOT
+        "non-fast-forward". A stale remote-tracking ref still yields a ref list,
+        because git does not yet know the push is doomed; the rejection then
+        arrives from the remote. Emptiness means "git already knows", and
+        without the fifth arm the fourth would have licensed a wrong rule.
+
+        THE COST THIS REMOVES. On a lost claim race — which is the ordinary
+        outcome of the claim-before-work discipline on a fleet of six, and the
+        exact state that leaves the remote-tracking ref current-and-ahead — the
+        guard was paying a full gate (~90s on this host) for a push that could
+        not happen, and then telling the reader to run `./build.sh --check` when
+        the remedy was `git pull --rebase`. Both halves recur by construction.
+
+        WHAT WAS DELIBERATELY NOT CHANGED (criterion 3, which I wrote as a
+        guard against exactly this fix going too far). "No refs" and "refs I
+        could not scope" are different facts. When a ref IS outgoing and its
+        range cannot be determined, every refusal stands as written: the
+        plan-only lane still falls back to the full gate and the full gate still
+        refuses a stale stamp. Arm 7 of the fixture is the negative control that
+        keeps that honest, and arm 8 proves arm 6 has teeth rather than passing
+        by luck.
+
+        CRITERION 4 WAS RESTATED RATHER THAN MET AS WRITTEN. I had asked for a
+        fixture asserting the plan-only lane FIRES on a fragment-only push,
+        "which today would fail on this host". It would not have failed — the
+        lane fired on this cycle's own claim push, and on two pushes in the
+        first cycle. The fixture that was actually worth writing pins the
+        characterisation above, because that is the thing nobody knew.
+
+        RELEVANT TO 863-iicc CRITERION 7, which asks for the shorter-gate lever
+        to be evaluated before any branch policy is widened: the lever was never
+        broken. It was being bypassed on precisely the pushes that were going
+        nowhere. That removes one of the reasons a slow host was thought to need
+        a private lane, and it should be re-measured before the lane question is
+        answered.
+status:
+  - packet_id: the-plan-only-lane-cannot-see-its-own-stdin-under-the-composed-hook
+    field: status
+    value: completed
+    ts: "2026-08-25T08:10:00Z"
+    host: linux_immutable
