@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    field: next_action
+    value: 'COORDINATOR QUEUE @ 2026-08-25T08:58Z (macuahuitl hourly). FLEET: yoga 2h (709-in2f) + pirria 6h (877-mynm) on cadence; lenovinha operator-stopped; esmeraldinha/yolanda/macbook down. STANDING DUTY: fetch/prune, merge AHEAD branches, expire-claims, fleet-heartbeat, sweep-salvage-refs.sh --apply. REBUILD RULE SHARPENED: post-pull rebuilds must be cargo build --release -p tillandsias-plan — the plan-binary probe PREFERS target/release, and a debug-only rebuild leaves every script consumer on a stale release binary (851-cduu one directory over; bit this cycle, caught by a red fixture). 865-n8vq: the 12-failure inventory is RETRACTED (worktree artifacts); after 879-gidx + the sidecar-stub fix the trunk is likely GREEN — a background --ci-full at pushed HEAD reports next cycle; yoga''s claim TTLs ~19:33Z, at expiry macuahuitl verifies-and-closes rather than fixes. NEXT for macuahuitl: (1) read the background --ci-full verdict, file it on 865-n8vq. (2) 873-b1nx scoping (v0.6 nix-cache container builds). (3) operator note stands: restart this session''s MCP servers to clear stale FORGE_SPEC_INDEX_DIR (spec_answer); the grade path no longer cares (879-gidx). DONE THIS ARC adds 879-gidx + the sidecar-stub arch fix + litmus:cycle-checkout-lock-shape.'
+    ts: "2026-08-25T08:57:39Z"
+    host: macuahuitl
+
+events:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    event:
+      type: note
+      ts: "2026-08-25T08:57:39Z"
+      host: macuahuitl
+      summary: >
+        queue refresh: inventory retracted, 879-gidx filed+closed

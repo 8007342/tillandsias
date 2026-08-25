@@ -1,0 +1,84 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-25T08:56:44Z.
+packets:
+  - packet_id: grade-harness-resolves-the-spec-index-by-env-or-not-at-all
+    order: 879-gidx
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    pickup_role: linux
+    capability_tags:
+      - plan
+      - rag
+      - ci-gates
+      - fail-loud
+    estimated_hours: 2
+    title: >
+      spec.answer grading resolved its index from two env vars verbatim — a
+      stale override poisoned it and an empty environment starved it, and both
+      shapes were misfiled as "index-vs-HEAD skew" (865-r6dt).
+    deliverable: >
+      groundtruth.rs resolves the spec index through the canonical 801-a2by
+      ladder with VALIDATED rungs (vectors.jsonl must exist): explicit dir,
+      forge dir, forge root, podman volume, XDG — stale overrides skip with a
+      stderr note instead of poisoning, and clean hosts find the published
+      durable entry with no ambient env at all.
+    context: |
+      MEASURED on macuahuitl 2026-08-25 while re-inventorying 865-n8vq: the
+      last failing --ci-full check (litmus:expert-groundtruth-harness, step
+      29/30) died with "read /mnt/c/Users/.../vectors.jsonl: No such file" —
+      a Windows WSL path on a Linux host, from FORGE_SPEC_INDEX_DIR in an
+      8-day-old session's environment (the same stale override 801-a2by's
+      launcher diagnostic already names, in a THIRD consumer). With the
+      override removed the harness failed the OTHER way: "set
+      TILLANDSIAS_SPEC_INDEX_DIR" — nothing ambient named the index although
+      spec-index-ensure.sh had published 21340 chunks to the podman volume.
+      One resolver honoring env verbatim produced both failure shapes on
+      different hosts, and the ledger attributed them to index staleness.
+    exit_criteria: |
+      (1) A stale exact-dir override heals to the durable tier with a stderr
+      note (incident replay, unit-tested on the pure core). (2) A valid
+      explicit dir still outranks every root rung (the forge's read-only
+      mount keeps priority). (3) NEGATIVE CONTROL: with every rung unusable
+      the needs-a-built-index refusal is still reached. (4) The committed
+      groundtruth glob grades fail=0 on this host BOTH with the poisoned env
+      present and with it absent.
+
+status:
+  - packet_id: grade-harness-resolves-the-spec-index-by-env-or-not-at-all
+    field: status
+    value: completed
+    ts: "2026-08-25T08:56:44Z"
+    host: linux_mutable
+
+events:
+  - packet_id: grade-harness-resolves-the-spec-index-by-env-or-not-at-all
+    event:
+      type: completed
+      ts: "2026-08-25T08:56:44Z"
+      agent_id: linux-macuahuitl-opus5-20260825t085644z
+      host: linux_mutable
+      evidence_refs:
+        - "crates/tillandsias-plan/src/groundtruth.rs resolve_spec_index_dir/resolve_spec_index_from — the validated 801-a2by ladder; stale rungs announce and skip; podman rung bounded and fail-soft with the TILLANDSIAS_SPEC_INDEX_NO_PODMAN seam"
+        - "unit tests on the pure core: stale_spec_index_override_heals_to_the_durable_tier (the /mnt/c incident replay), valid_exact_dir_outranks_the_roots, no_usable_rung_resolves_nothing; lib 226/226"
+        - "LIVE both ways on this host: grade of the committed glob = sets=4 total=33 pass=33 fail=0 WITH the poisoned FORGE_SPEC_INDEX_DIR still exported (heal note on stderr) and with it removed"
+        - "scripts/test-groundtruth-corpus-declaration.sh 6/6 after rebuilding RELEASE — the fixture resolves via plan-binary-probe which prefers target/release, and a debug-only rebuild left scenario 6 red on a stale release binary: the 851-cduu class one directory over; coordinator rebuild habit corrected to --release in the queue"
+        - "RIDER (dev-build): test-sidecar-staleness-stamp.sh's stub cargo now emits an arch-correct minimal ELF header — 723-ji4v's wrong-arch staging refusal rejected the magic-only stub, sending all seven skip/stage scenarios red while the build counter climbed; fixture 11/11, dev-build litmus PASS (the red was measured live pre-fix)"
+      merge_affordance: merge-now
+      merge_reason: >
+        This was the LAST failing --ci-full check; every host's release gate
+        and the 865-n8vq closure sit behind it.
+      summary: >
+        ONE RESOLVER HONORING ENV VERBATIM PRODUCED BOTH FAILURE SHAPES THE
+        LEDGER CALLED INDEX SKEW. The grade harness read two env vars and
+        gave up: a long-lived session's stale Windows-path override poisoned
+        it here, and a clean host with no ambient env starved it there —
+        while the durable tier (801-a2by) had a published, fresh, 21340-chunk
+        index the whole time. The harness now walks the same ladder the shell
+        canon defines, validating each rung by the artifact it needs
+        (vectors.jsonl), announcing skipped stale overrides the way the MCP
+        launcher already does, and failing closed only when NO rung serves.
+        The committed groundtruth corpus grades 33/33 on this host with the
+        poison present or absent — the environment can no longer decide
+        whether the gate tells the truth.

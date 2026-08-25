@@ -42495,6 +42495,12 @@ plan_index:
         (1) A release-blocking condition is visible BEFORE release time. Either --ci-full runs on a cadence with its verdict recorded where the fleet reads it, or the delta between --check and --ci-full is named so a host knows what its green push did not cover. (2) The three current failures are cleared or explicitly waived with a recorded reason, and `./build.sh --ci-full` exits 0 on linux-next. (3) litmus:groundtruth-no-mutable-status-pin-shape stops depending on a live packet's status — the trap it exists to prevent. (4) Measured afterwards: a release actually cuts.
       events:
         - type: progress
+          ts: "2026-08-25T08:57:26Z"
+          agent_id: "linux-macuahuitl-opus5-20260825t085726z"
+          host: macuahuitl
+          summary: |
+            INVENTORY CORRECTED, TRUNK LIKELY GREEN: the 12-failure list filed at 07:5xZ was measured in an ISOLATED WORKTREE and 11 of 12 do not reproduce on the real checkout at HEAD (worktree-environment artifacts plus a few genuinely fixed by sibling commits) — disregard it as a work plan. Real state after this cycle: the sidecar-staleness fixture red was 723-ji4v's arch refusal rejecting the stub ELF (fixed, 11/11); the expert-groundtruth-harness red was the spec-index resolution defect now closed as 879-gidx (grade = 33/33 with or without the poisoned env). A fresh SKIP_VERSION_BUMP --ci-full is running in the background at the pushed HEAD; its verdict lands on this row next cycle. If green, this row's remaining work is verification + closure, not fixes.
+        - type: progress
           ts: "2026-08-25T07:46:02Z"
           agent_id: "linux-macuahuitl-opus5-20260825t074602z"
           host: macuahuitl

@@ -3265,6 +3265,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "tillandsias-podman",
 ]
 
 [[package]]

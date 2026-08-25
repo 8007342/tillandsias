@@ -462,6 +462,111 @@ fn citation_matches(
     Ok(())
 }
 
+/// ORDER 879-gidx. Resolve the spec index the way the canonical shell ladder
+/// does (801-a2by: explicit dir, forge dir, forge root, podman volume, XDG),
+/// VALIDATING every rung — a rung is taken only if its `vectors.jsonl`
+/// exists. This is what lets a stale override HEAL instead of poison:
+/// macuahuitl's --ci-full failed its last check for a week because a
+/// long-lived session exported FORGE_SPEC_INDEX_DIR=/mnt/c/Users/... (a
+/// Windows WSL path) and this reader honoured it verbatim; on clean hosts the
+/// same check failed the other way, because NOTHING ambient named the index
+/// even though scripts/spec-index-ensure.sh had published it to the durable
+/// tier. Both shapes were filed against the harness as "index-vs-HEAD skew"
+/// (865-r6dt) — the skew was resolution, not staleness.
+///
+/// Skipped stale rungs are ANNOUNCED on stderr, mirroring the launcher's
+/// 801-a2by diagnostic, so the next reader debugs the override, not the index.
+fn spec_index_rung_usable(dir: &str) -> bool {
+    !dir.trim().is_empty() && Path::new(dir).join("vectors.jsonl").is_file()
+}
+
+/// Pure core: the ladder over already-fetched candidate values, so tests need
+/// no env mutation. `roots` are entry-POINTER roots (root/current names the
+/// entry); `dirs` are exact serving directories.
+fn resolve_spec_index_from(
+    dirs: &[(&str, Option<String>)],
+    roots: &[(&str, Option<String>)],
+) -> Option<String> {
+    for (name, val) in dirs {
+        if let Some(d) = val {
+            if spec_index_rung_usable(d) {
+                return Some(d.clone());
+            }
+            eprintln!(
+                "note: {name}={d} names no usable index (no vectors.jsonl) — stale override skipped, trying the durable tier (879-gidx)"
+            );
+        }
+    }
+    for (_name, val) in roots {
+        if let Some(root) = val {
+            let fp = std::fs::read_to_string(Path::new(root).join("current"))
+                .unwrap_or_default()
+                .trim()
+                .to_string();
+            if !fp.is_empty() {
+                let entry = format!("{root}/{fp}");
+                if spec_index_rung_usable(&entry) {
+                    return Some(entry);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn resolve_spec_index_dir() -> Result<String, String> {
+    let dirs = [
+        (
+            "TILLANDSIAS_SPEC_INDEX_DIR",
+            std::env::var("TILLANDSIAS_SPEC_INDEX_DIR").ok(),
+        ),
+        (
+            "FORGE_SPEC_INDEX_DIR",
+            std::env::var("FORGE_SPEC_INDEX_DIR").ok(),
+        ),
+    ];
+    let xdg_root = std::env::var("XDG_CACHE_HOME")
+        .ok()
+        .filter(|v| !v.is_empty())
+        .or_else(|| std::env::var("HOME").ok().map(|h| format!("{h}/.cache")))
+        .map(|c| format!("{c}/tillandsias/spec-index"));
+    // Rung 3 of the shell ladder: the shared podman named volume. Bounded and
+    // fail-soft — a hiccup degrades to XDG, never to an error (801-a2by).
+    let podman_root = if std::env::var("TILLANDSIAS_SPEC_INDEX_NO_PODMAN")
+        .ok()
+        .as_deref()
+        == Some("1")
+    {
+        None
+    } else {
+        tillandsias_podman::podman_cmd_sync()
+            .args([
+                "volume",
+                "inspect",
+                "-f",
+                "{{.Mountpoint}}",
+                "tillandsias-spec-index-tillandsias",
+            ])
+            .output_bounded(tillandsias_podman::OperationKind::Inspect.default_budget())
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .filter(|s| !s.is_empty())
+    };
+    let roots = [
+        (
+            "FORGE_SPEC_INDEX_ROOT",
+            std::env::var("FORGE_SPEC_INDEX_ROOT").ok(),
+        ),
+        ("podman-volume", podman_root),
+        ("xdg-cache", xdg_root),
+    ];
+    resolve_spec_index_from(&dirs, &roots).ok_or_else(|| {
+        "spec.answer needs a built index: no rung of the resolution ladder (TILLANDSIAS_SPEC_INDEX_DIR, FORGE_SPEC_INDEX_DIR, FORGE_SPEC_INDEX_ROOT, the podman volume, XDG cache) names a directory containing vectors.jsonl — scripts/spec-index-ensure.sh builds and publishes one (801-a2by)"
+            .to_string()
+    })
+}
+
 fn read_lines<'a>(root: &Path, rel: &str, cache: &'a mut SpanCache) -> Option<&'a Vec<String>> {
     if !cache.contains_key(rel) {
         let loaded = std::fs::read_to_string(root.join(rel))
@@ -564,12 +669,7 @@ impl Harness {
     /// wrongly, which is the one failure mode a grader must never certify.
     fn spec_index(&mut self) -> Result<(&[crate::spec::Chunk], &[Vec<f32>]), String> {
         if self.spec_vectors.is_none() {
-            let dir = std::env::var("TILLANDSIAS_SPEC_INDEX_DIR")
-                .or_else(|_| std::env::var("FORGE_SPEC_INDEX_DIR"))
-                .map_err(|_| {
-                    "spec.answer needs a built index: set TILLANDSIAS_SPEC_INDEX_DIR to a                      directory containing vectors.jsonl (scripts/spec-index-ensure.sh builds one)"
-                        .to_string()
-                })?;
+            let dir = resolve_spec_index_dir()?;
             let path = PathBuf::from(&dir).join("vectors.jsonl");
             let text = std::fs::read_to_string(&path)
                 .map_err(|e| format!("read {}: {e}", path.display()))?;
@@ -1114,5 +1214,79 @@ citations_include:
             !red.is_empty(),
             "a future corpus must also be FALSIFIABLE with no change to the grader"
         );
+    }
+
+    /// ORDER 879-gidx. The macuahuitl incident replayed: a stale exact-dir
+    /// override (a Windows path on a Linux host) must be SKIPPED, and the
+    /// durable tier's published entry taken instead — the override healing
+    /// rather than poisoning is the entire fix.
+    #[test]
+    fn stale_spec_index_override_heals_to_the_durable_tier() {
+        let tmp = std::env::temp_dir().join(format!("gidx-heal-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let entry = tmp.join("root/abc123");
+        std::fs::create_dir_all(&entry).unwrap();
+        std::fs::write(entry.join("vectors.jsonl"), "[0.1]\n").unwrap();
+        std::fs::write(tmp.join("root/current"), "abc123\n").unwrap();
+
+        let got = resolve_spec_index_from(
+            &[(
+                "FORGE_SPEC_INDEX_DIR",
+                Some("/mnt/c/Users/nobody/tillandsias/target/spec-index".into()),
+            )],
+            &[(
+                "xdg-cache",
+                Some(tmp.join("root").to_string_lossy().into_owned()),
+            )],
+        );
+        assert_eq!(
+            got.as_deref(),
+            Some(tmp.join("root/abc123").to_string_lossy().as_ref()),
+            "the stale override must be skipped and the published entry resolved"
+        );
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// A VALID exact dir still wins over every root rung — the forge's
+    /// injected read-only mount must keep its priority.
+    #[test]
+    fn valid_exact_dir_outranks_the_roots() {
+        let tmp = std::env::temp_dir().join(format!("gidx-exact-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let exact = tmp.join("exact");
+        std::fs::create_dir_all(&exact).unwrap();
+        std::fs::write(exact.join("vectors.jsonl"), "[0.1]\n").unwrap();
+        let decoy = tmp.join("root/zzz");
+        std::fs::create_dir_all(&decoy).unwrap();
+        std::fs::write(decoy.join("vectors.jsonl"), "[0.2]\n").unwrap();
+        std::fs::write(tmp.join("root/current"), "zzz\n").unwrap();
+
+        let got = resolve_spec_index_from(
+            &[(
+                "TILLANDSIAS_SPEC_INDEX_DIR",
+                Some(exact.to_string_lossy().into_owned()),
+            )],
+            &[(
+                "xdg-cache",
+                Some(tmp.join("root").to_string_lossy().into_owned()),
+            )],
+        );
+        assert_eq!(got.as_deref(), Some(exact.to_string_lossy().as_ref()));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// NEGATIVE CONTROL: with every rung empty or unusable the resolver
+    /// returns None — the caller's needs-a-built-index refusal must still be
+    /// reachable, or a missing index would grade as a mysterious read error.
+    #[test]
+    fn no_usable_rung_resolves_nothing() {
+        assert_eq!(
+            resolve_spec_index_from(
+                &[("FORGE_SPEC_INDEX_DIR", Some("/nonexistent/dir".into()))],
+                &[("xdg-cache", Some("/also/nonexistent".into()))],
+            ),
+            None
+        );
+        assert_eq!(resolve_spec_index_from(&[], &[]), None);
     }
 }
