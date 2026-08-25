@@ -75,6 +75,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "corpus-coverage",
     "dependencies-of",
     "expire-claims",
+    "plan-events",
     "fragment-event-packets",
     "fragment-misplaced-definitions",
     "fragment-terminal-events",
@@ -207,6 +208,15 @@ const USAGE: &str = concat!(
     "                                     is PERMANENT — never renumber it. A prefix shared by two\n",
     "                                     packets is normal. See methodology/distributed-work.yaml\n",
     "                                     -> order_id_allocation.\n",
+    "           plan-events <packet_id|order>\n",
+    "                                     ORDER 882-vqe4. Print a packet's FOLDED events —\n",
+    "                                     base PLUS fragment overlay — one per line as\n",
+    "                                     <type>\\t<ts>. Exists because callers were counting\n",
+    "                                     activity by grepping plan/index.d/ alone, which goes\n",
+    "                                     blind the moment compaction folds a fragment into\n",
+    "                                     the base. Exit 1 only for an unresolvable id; an\n",
+    "                                     existing packet with no events prints nothing and\n",
+    "                                     exits 0, which is what a stranded claim looks like.\n",
     "           expire-claims [--ttl-hours N] [--dry-run] [--list-live] [--now-epoch S] [--host H]\n",
     "                                     ORDER 672-bz7u. Return stranded in_progress claims to\n",
     "                                     ready: any packet whose LAST recorded event activity is\n",
@@ -5071,6 +5081,64 @@ fn main() {
                 "ok: {pid}.{field} {current} -> {value} ({})",
                 path.display()
             );
+        }
+        "plan-events" => {
+            // ORDER 882-vqe4. Print a packet's FOLDED events — base plus
+            // fragment overlay — one per line, `<type>\t<ts>`, oldest first as
+            // stored.
+            //
+            // WHY A SUBCOMMAND RATHER THAN A GREP AT THE CALLER.
+            // check-stranded-in-progress.sh counted a packet's activity with
+            // `grep -rh "packet_id: <pid>" plan/index.d/*.yaml`, which sees only
+            // the fragment overlay. Compaction folds fragments into the base as
+            // routine garbage collection, and after a fold that grep returns
+            // zero for a packet whose whole history is intact. Measured on the
+            // live ledger 2026-08-25: 865-n8vq carried 35 progress events in
+            // the base and the detector saw 0, so it reported a p0 the
+            // coordinator had touched 106 minutes earlier as STRANDED.
+            //
+            // The durable fix is not a second grep with a wider window — that
+            // is the same defect one storage location later. It is to ask the
+            // thing that already folds correctly for every other reader. This
+            // is the 704-zcgi shape: a hand-rolled re-derivation of a fold is
+            // the defect, and fixing the instance without removing the copy
+            // leaves the next caller to make it again.
+            //
+            // Exit 0 with output when the packet has events; exit 0 with NO
+            // output when it exists and has none — an existing packet with no
+            // activity is a real and meaningful answer, and it is precisely
+            // what a genuinely stranded claim looks like. Exit 1 only when the
+            // packet_id resolves to nothing, so a caller cannot silently read a
+            // typo as "no activity".
+            let want = match args.get(1) {
+                Some(p) if !p.starts_with("--") => p.clone(),
+                _ => {
+                    eprintln!("usage: tillandsias-plan plan-events <packet_id|order>");
+                    std::process::exit(2);
+                }
+            };
+            let pkt = ledger.packets.iter().find(|p| {
+                str_field(p, "packet_id") == Some(want.as_str())
+                    || str_field(p, "order") == Some(want.as_str())
+            });
+            let Some(pkt) = pkt else {
+                eprintln!("error: no packet matches '{want}'");
+                std::process::exit(1);
+            };
+            if let Some(seq) = pkt.get("events").and_then(serde_yaml::Value::as_sequence) {
+                for ev in seq {
+                    let ty = ev
+                        .get("type")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("unknown");
+                    let ts = ev
+                        .get("ts")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("-");
+                    println!("{ty}\t{ts}");
+                }
+            }
+            log_cli_usage(&subcommand, "answered", start_time.elapsed().as_millis());
         }
         "expire-claims" => {
             // ORDER 672-bz7u — 641-e2qa criterion 2: a claim that produces no

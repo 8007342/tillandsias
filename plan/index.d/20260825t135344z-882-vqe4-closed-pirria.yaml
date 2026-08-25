@@ -1,0 +1,68 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Cycle: pirria (linux_immutable), 2026-08-25T13:43Z, lane=loop-cron.
+events:
+  - packet_id: the-stranded-claim-detector-is-blind-to-every-event-compaction-has-folded
+    event:
+      type: completed
+      ts: "2026-08-25T14:10:00Z"
+      agent_id: linux-pirria-opus5-20260825T134309Z
+      host: linux_immutable
+      evidence_refs:
+        - "tillandsias-plan plan-events <packet_id|order> — new: prints a packet's FOLDED events (base PLUS overlay) as <type>\\t<ts>; exit 1 only for an unresolvable id, empty-and-0 for a real packet with no activity"
+        - "scripts/check-stranded-in-progress.sh — classifies from plan-events instead of grepping plan/index.d/; with no folder available it reports summary: unavailable:no-runnable-plan-binary and exits 2 rather than guessing from half the ledger"
+        - "scripts/test-check-stranded-in-progress.sh — 6/6 hermetic (scratch ledger, no repo state): base-evented, frag-evented, TRUE POSITIVE, summary shape, COMPACTION INVARIANCE, MUTATION control"
+        - "LIVE: 865-n8vq and 831-ezea no longer report stranded; the list now names only packets claimed with no activity yet"
+      summary: |
+        THE GUARD AGAINST INVISIBLE WORK WAS MADE BLIND BY ROUTINE GARBAGE
+        COLLECTION. The detector counted a packet's activity with a grep over
+        plan/index.d/*.yaml. Compaction folds fragments into plan/index.yaml,
+        so its window was "since the last fold" — and the longer a packet is
+        worked, the more likely its evidence has been folded and the more
+        confidently it was called abandoned.
+
+        Measured on the live ledger at 7247c2a94:
+
+          packet     events the detector saw   events that existed
+          865-n8vq            0                       35
+          831-ezea            0                        1
+
+        865-n8vq is a p0 the COORDINATOR had pushed progress into four times
+        that day, most recently 106 minutes before the detector called it
+        stranded. 641-e2qa built this check because an in_progress packet is
+        invisible in BOTH directions; reporting the best-tended packet in the
+        ledger as neglected inverts it and dilutes the genuine strandings in
+        the same list. The skill's instruction to watch whether "the count is
+        rising cycle over cycle" was unusable while the count tracked
+        compaction age rather than neglect.
+
+        IT HAD ALREADY COST A FALSE ALARM — this host's own 07:43Z loop-status
+        entry escalated 865-n8vq on this evidence, about work in flight that
+        morning. That is why it was worth a packet rather than a note: a wrong
+        signal that reads as authoritative gets acted on.
+
+        FIXED BY ASKING THE THING THAT ALREADY FOLDS. A second grep against
+        plan/index.yaml would have been the same defect one storage location
+        later, so the fold moved into the binary as `plan-events` — the
+        704-zcgi rule that the copy has to go, not just the instance. That the
+        subcommand did not exist was itself the finding the skill's
+        "if the loop needs it repeatedly, that is a missing tool" predicts.
+
+        THE TRUE POSITIVE IS PINNED, NOT JUST THE FALSE ONE. Arm 3 asserts that
+        a claim with no events anywhere still reports stranded; without it this
+        fix could have "succeeded" by deleting the feature. Arm 5 pins the
+        property that was actually violated — run, compact, run again, verdicts
+        identical. Arm 6 reproduces the pre-fix blindness so arm 1 cannot pass
+        by luck.
+
+        A GUARD IN THE GATE CAUGHT ME MID-FIX, and it is worth recording as a
+        win for the gate rather than a stumble of mine: adding a dispatch arm
+        without a usage entry failed `every_dispatch_arm_is_documented_in_usage`
+        with "a subcommand nobody can discover might as well not exist". That is
+        exactly the orphaned-capability shape 865-n8vq's guard-activation
+        failure is about, enforced one level down and working.
+status:
+  - packet_id: the-stranded-claim-detector-is-blind-to-every-event-compaction-has-folded
+    field: status
+    value: completed
+    ts: "2026-08-25T14:10:00Z"
+    host: linux_immutable
