@@ -21673,6 +21673,26 @@ plan_index:
         - 'scripts/check-script-exec-bits inventory includes bare-path scripts/<name>.sh invocations inside openspec/litmus-tests/*.yaml command: fields; a fixture with a 100644 bare-path litmus script turns the check red (negative control).'
 
       events:
+        - type: completed
+          ts: "2026-08-25T21:13:25Z"
+          agent_id: "linux-macuahuitl-fable5-20260825t211325z"
+          host: macuahuitl
+          summary: |
+            HALF A LANDED — packet closed. Half B was 7278a1787 last cycle; this is the other half.
+
+            WHAT SHIPPED: skills/coordinate-multihost-work/SKILL.md 'Integration And Runtime Executor' gains a litmus pass on the MERGED UNION, inserted between the sibling merge (step 2) and ./build.sh --ci-full (now step 4). Uses scripts/run-litmus-test.sh, which already has everything needed — no new script. ORDERING IS THE DELIVERABLE, not the invocation: a post-merge check placed after the expensive gate tells the coordinator nothing it has not already paid for, which is why the pin asserts precedence arithmetically rather than just presence.
+
+            BOTH CAVEATS ARE PINNED, because dropping either turns an informative pass into a FALSE SUBSTITUTE for the release gate: --diff-scope fails CLOSED (unannotated test, unresolvable base, clean tree, or a full-run anchor older than 24h each escalate to a FULL run, so the scoped form is not reliably the cheap form), and a run that SKIPPED anything blocks build.sh from writing a gate stamp.
+
+            PIN: new litmus:post-merge-litmus-pass-shape, 4/4 PASS, bound to spec ci-release. Four steps: the skill really invokes the runner (the 'wiring is real, not prose' form litmus:committable-branch-guard-shape uses); the invocation PRECEDES --ci-full by line-number arithmetic (case-match, no pipeline verdict, so 792-ksr8 cannot bite); both caveats present; and the runner actually IMPLEMENTS the flags the skill names — a skill naming a flag the runner lacks is the order-531 shape, truthful-looking instructions against the wrong artifact.
+
+            MUTATION-PROVEN, both discriminating steps: removing the fails-CLOSED caveat reddens step 3 (verified live, then restored); the ordering comparison inverts correctly on synthetic line numbers. I checked this deliberately after nearly shipping a vacuous control on half B last cycle.
+
+            FIRST REAL RUN, this cycle, and it IS the evidence: merged origin/windows-next (7 commits, yolanda) and origin/osx-next (5 commits, tlatoanis-macbook-air) into linux-next, then ran the pass on the union — 268/268 PASS, 100% pass rate, 100% coverage across 99 specs, 0 FAIL. No skew this time. The value is that the union was checked BEFORE the release path rather than inside it, which is the whole packet.
+
+            RESOLVED WHILE HERE: skills/multihost-orchestration is a 16-line pointer to the canonical skill, not a divergent copy — one file to edit, not two. That was an open question on the scouting.
+
+            THE BINDINGS GATE EARNED ITS KEEP: the new litmus file's name: field initially lacked the 'litmus:' prefix, and check-litmus-bindings.sh refused it as violation:unbound-litmus — exactly the 'an executable assertion NOTHING has ever run' case it exists for (660-ryhn). Caught before push, by the gate rather than by me.
         - type: progress
           ts: "2026-08-25T20:52:45Z"
           agent_id: "linux-macuahuitl-fable5-20260825t195813z"
