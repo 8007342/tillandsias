@@ -1,0 +1,90 @@
+packets:
+  - packet_id: daily-maintenance-body-runs-before-the-startup-boundary-exists
+    order: 888-3d6x
+    status: ready
+    kind: bug
+    pickup_role: any
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    depends_on: []
+    deliverable: |
+      The meta-orchestration skill orders the Start-Of-Day maintenance body
+      BEFORE Start-Of-Cycle's boundary snapshot, so any work the maintenance
+      body itself produces predates the boundary and costs the cycle its
+      MO-FULL marker. Either the snapshot moves ahead of the daily gate, or the
+      daily section states the constraint and names the re-snapshot discharge.
+    capability_tags:
+      - methodology
+      - tooling
+      - meta-orchestration
+    tags:
+      - skill-ordering
+      - attestation
+      - boundary-guard
+      - v0.5
+    title: |
+      The Start-Of-Day maintenance body runs BEFORE the startup boundary is snapshotted, so a defect the body finds cannot be landed without forfeiting the cycle's MO-FULL marker.
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-08-25T21:43Z, live, at the cost of
+      one cycle's marker.
+
+      The skill's section order is: "Start Of Day / Post-Restart Gate (run
+      FIRST, once per day)", and only then "Start Of Cycle", whose step 3 takes
+      the boundary snapshot. That ordering is deliberate and defensible on its
+      own terms — the daily gate is idempotent and cheap, and running it first
+      is what makes a restart get its maintenance.
+
+      But the daily body is not inert. It RUNS the gates it maintains, and a
+      gate can fail. This cycle's body ran `check-build-cache-sweep.sh`, which
+      reported `bytes=0` for a 14 GiB target/ — a dead size trigger on macOS
+      (886-yizb). Fixing it meant editing three files. All of that happened
+      before Start Of Cycle step 3 existed to record anything.
+
+      The snapshot then recorded this cycle's OWN four work paths as "startup
+      dirt". At Finalization the guard correctly answered `error: worktree
+      differs from startup boundary`, and `mo-full-attest.sh record` correctly
+      refused: `MO-FULL: FAIL no verified startup boundary for this cycle`.
+      Both tools behaved exactly as designed. The work was committed and pushed
+      (cd31ecb3d); only the attestation was forfeit.
+
+      THE TRAP IS THAT BOTH READINGS ARE FAITHFUL. An agent that runs the daily
+      body first is following the skill. An agent that fixes what the body
+      finds is following the reduction-engine capture rule. The two combine
+      into an unattestable cycle with no rule broken, which is why this is a
+      skill defect and not an agent error to be more careful about next time.
+    exit_criteria:
+      - |
+          A cycle whose daily-maintenance body produces committable work can
+          still attest. Whichever discharge is chosen, the skill states it
+          explicitly at the point of the hazard rather than leaving the reader
+          to infer it from two distant sections.
+      - |
+          The candidate discharges, so the next claimant does not re-derive
+          them: (a) move the boundary snapshot ahead of the Start-Of-Day gate,
+          which is the smallest change and makes the boundary cover everything
+          a cycle does; (b) keep the order and have the daily section direct a
+          `re-snapshot` after any body-produced edit, the discharge orders 540
+          and 833-fpe7 already sanction for their own dirt classes; (c) declare
+          maintenance-body findings out of scope for the same cycle and require
+          filing them for the next, which is the only option that LOSES work
+          and is recorded here to be rejected explicitly rather than silently.
+      - |
+          Whatever lands is pinned by a fixture proving a cycle that edits a
+          file during the maintenance body still produces a verifiable
+          boundary — the failure this packet records must be reproducible and
+          then absent.
+    verifiable_closure: |
+      NAMED: extend `litmus:meta-orchestration-worktree-boundary` (or the
+      meta-orchestration suite's boundary fixture) with a case that snapshots,
+      edits a tracked file the way a maintenance-body fix would, applies the
+      chosen discharge, and asserts `verify` returns ok AND
+      `mo-full-attest.sh self` prints a marker. It must FAIL when the discharge
+      is removed — otherwise it pins the happy path only, which is the same
+      shape as the threshold-with-zero-threshold test that let 886-yizb hide.
+    notes: |
+      Related by mechanism, not by cause: 725-bu54 (do not remove the boundary
+      dir at Finalization, because an operator-driven loop has no single exit)
+      is the other way this project has lost a marker to boundary lifecycle
+      rather than to bad work. Both are about WHEN the boundary exists relative
+      to the work, and a fix here should read 725-bu54 first.
