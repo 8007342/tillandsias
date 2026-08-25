@@ -31050,6 +31050,29 @@ plan_index:
         need it, which is an argument for the shared mechanism 798-tk7b asks for
         rather than a third bespoke supervisor.
 
+      events:
+        - type: progress
+          ts: "2026-08-25T22:48:35Z"
+          agent_id: "linux-macuahuitl-fable5-20260825t224835z"
+          host: macuahuitl
+          summary: |
+            DIAGNOSIS SLICE LANDED (3807164f4). The packet's SECOND deliverable branch — 'a death is a loud typed verdict' — not the first (the exit(2) cause is untouched and remains not-reproducible-on-demand).
+
+            WHAT THIS FIXES, and it is the packet's own words: 'today the only symptom a caller sees is blocked:spec-index:embed-endpoint-refused, which names the wrong subject.' It named the wrong subject for EVERY failure mode, including the one where nothing is listening at all. 'Refused' asserts that a server answered and declined.
+
+            MEASURED LIVE 2026-08-25 during an operator-directed release cut, which is how it surfaced: this host has no ollama, no inference image and an empty podman store, and the verdict read embed-endpoint-refused with 'curl: (7) Failed to connect ... Could not connect to server' underneath it. There was nothing to refuse. The first minutes of a BLOCKED RELEASE went to hunting a misconfigured endpoint instead of an absent one — the exact cost this packet predicted, paid.
+
+            THE CLASSIFICATION IS NOW DERIVED, NEVER GUESSED (797-5kqe): curl 7 -> embed-endpoint-absent; curl 28 -> embed-endpoint-timeout; curl 52/56 -> embed-endpoint-died-mid-request when batches already succeeded, else embed-endpoint-unreachable; HTTP >=400 -> embed-endpoint-refused, which now means only what it says.
+
+            THE died-mid-request ARM IS THIS PACKET'S HEADLINE SYMPTOM given a name. The container serves 200s at ~250ms and then vanishes with exit 2, so the caller meets a connection torn down mid-stream AFTER earlier batches succeeded. A completed-batch counter is the one fact separating that from 'never reachable' — without it both collapse to unreachable and the signature is invisible in the verdict. The message points at the exit code and at 798-tk7b, since podman labels the corpse (healthy) — fourth sighting.
+
+            EVIDENCE CAPTURE WAS ALREADY FIXED and I did not redo it: the 2026-08-23 change captures %{http_code}, resp.json and curl.err, and prints the server's own words first. That half of the packet's secondary defect is closed; what remained was the SUBJECT of the verdict, not its detail.
+
+            FIXTURE 4/4, hermetic by necessity — a test for this must not require the endpoint whose absence it characterises. Case 1 is the live 2026-08-25 case; case 2 is the negative control that keeps the distinction real (a server answering 400 must still read refused, else 'absent' is a rename of every failure); cases 3-4 pin that every arm exists and keys on a measured signal. MUTATION-PROVEN: reverting the curl-7 arm to refused reproduces tonight's misleading verdict and turns case 1 red.
+
+            A FIXTURE BUG WORTH RECORDING, because the next author will reach for the same form: my first attempt served the canned 400 with a one-shot 'printf | nc -l', and my own readiness probe consumed that single connection — so the script under test met a CLOSED PORT, correctly said absent, and the fixture reported a false FAIL against a correct implementation. It was measuring its own listener's death. Same class as the three artifact-read-as-evidence errors the fleet hit tonight, and it was caught by asking what would have falsified the result. Fixed with a persistent listener; the trap is kept as a comment.
+
+            RESIDUAL: the exit(2) cause itself. The packet is right that it is not reproducible on demand — I did not attempt it, since this host cannot currently run the container at all. Whoever takes that half now gets a verdict that tells them which failure they are looking at.
     - packet_id: unsigned-tray-build-cannot-boot-a-vm-and-does-not-say-why
       order: 811-j9fc
       status: ready
