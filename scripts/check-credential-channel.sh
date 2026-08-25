@@ -26,7 +26,17 @@ fi
 #   ok:gh-credentials-store        repo-local store helper file present + non-empty
 #   ok:gh-token-env                GH_TOKEN set
 #   ok:github-token-env            GITHUB_TOKEN set
-#   ok:gh-keyring                  `gh auth status` green
+#   ok:gh-keyring-push-verified    `gh auth status` green AND a bounded
+#                                  non-interactive `git push --dry-run`
+#                                  authenticated (860-g798: gh holding a token
+#                                  proves nothing about git's helper chain; a
+#                                  fresh clone resolves to the interactive Git
+#                                  Credential Manager and hangs forever)
+#   blocked:interactive-credential-helper  gh has a token but git's configured
+#                                  helper is interactive-only; remedy printed
+#   blocked:gh-cli-only            gh has a token, the push probe failed, no
+#                                  interactive helper explains it — seed the
+#                                  repo-local store before committable work
 #   ok:forge-git-mirror            TILLANDSIAS_HOST_KIND=forge AND the mirror is
 #                                  reachable AND the mirror's published upstream
 #                                  write-authorization verdict is FRESH and
@@ -243,8 +253,54 @@ credential_channel_verdict() {
   if [ "${TILLANDSIAS_CRED_SKIP_GH:-0}" != "1" ] \
      && command -v gh >/dev/null 2>&1 \
      && gh auth status >/dev/null 2>&1; then
-    echo "ok:gh-keyring"
-    return 0
+    # ORDER 860-g798 — `gh auth status` PROVES THE WRONG THING. It proves the
+    # gh CLI holds a token; it says nothing about whether GIT can use it. On a
+    # fresh clone git's credential.helper resolves to the system default —
+    # often Git Credential Manager, which authenticates by opening an
+    # INTERACTIVE PROMPT. Measured on esmeraldinha 2026-08-23: this arm
+    # returned ok, the cycle proceeded into committable work, and the first
+    # push hung >10 minutes on a prompt no unattended session can answer. The
+    # guard's own docstring names this exact category error for reads
+    # ("public-repo reads are anonymous — verify write capability
+    # explicitly"); this arm made it one level up: a token that exists
+    # somewhere is not a channel git can use.
+    #
+    # So prove the actual thing: an authenticated PUSH negotiation, dry-run
+    # (contacts the remote, authenticates, updates nothing), with every
+    # interactive escape hatch closed and a hard time bound. .gh-credentials
+    # does not survive a re-clone while gh auth stays green globally, so EVERY
+    # fresh checkout enters through this arm — the fleet restart from fresh
+    # checkouts is exactly when it must not lie.
+    _probe_cmd="${TILLANDSIAS_CRED_PROBE_CMD:-git push --dry-run origin HEAD}"
+    if GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never GIT_ASKPASS=/bin/false \
+       timeout 45 $_probe_cmd >/dev/null 2>&1; then
+      echo "ok:gh-keyring-push-verified"
+      return 0
+    fi
+    # The push cannot authenticate non-interactively. Name the interactive
+    # helper if one is configured — the failure must be legible the FIRST
+    # time, not on the second diagnosis pass (exit criterion 2).
+    _helpers="$(git config --get-all credential.helper 2>/dev/null | tr '\n' ',' | sed 's/,$//')"
+    case ",$_helpers," in
+      *,manager,*|*,manager-core,*|*"\\Git Credential Manager"*)
+        echo "blocked:interactive-credential-helper:${_helpers:-unknown}" >&2
+        echo "  gh holds a token but git's helper chain is interactive-only — an" >&2
+        echo "  unattended push hangs forever on a prompt. REMEDY (measured 18s" >&2
+        echo "  on esmeraldinha after a 10-minute hang):" >&2
+        echo "    gh auth token | git credential-store --file \"\$(git rev-parse --git-dir)/.gh-credentials\" store  # seed repo-local" >&2
+        echo "    git config --local --replace-all credential.helper ''         # empty entry DROPS the system manager" >&2
+        echo "    git config --local --add credential.helper \"store --file=\$(git rev-parse --git-dir)/.gh-credentials\"" >&2
+        echo "blocked:interactive-credential-helper"
+        return 1
+        ;;
+    esac
+    # gh has a token, git cannot push with it, and no interactive helper
+    # explains it: a distinct verdict the cycle must RESOLVE before any
+    # committable work, never a bare ok (exit criterion 1).
+    echo "  gh auth is green but a bounded non-interactive push probe failed" >&2
+    echo "  (${_probe_cmd}). Seed the repo-local store before committable work." >&2
+    echo "blocked:gh-cli-only"
+    return 1
   fi
   if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]; then
     # The forge uses a transparent git mirror service for authenticated pushes.

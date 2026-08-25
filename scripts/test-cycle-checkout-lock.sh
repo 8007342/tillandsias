@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace spec:meta-orchestration
+# @trace order:873-zcim
 # test-cycle-checkout-lock.sh — pin the 873-zcim checkout lock, BOTH ARMS.
 #
 # The incident: only the driver lane took the no-stacking lock, so a /loop

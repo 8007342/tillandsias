@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace spec:meta-orchestration
+# @trace order:873-zcim
 # cycle-checkout-lock.sh — the CHECKOUT lock, acquirable from EVERY lane.
 #
 # ORDER 873-zcim. The no-stacking lock existed and was held — by the driver

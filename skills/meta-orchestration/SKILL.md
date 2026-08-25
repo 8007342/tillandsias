@@ -706,7 +706,25 @@ filing — not the prompt.
 ## Credential Channel Guard
 
 Run immediately after `git fetch` and before any worker drain or committable
-work. In SMOKE mode it is a REPORT, not a gate — a smoke run
+work.
+
+**Close the interactive escape hatches around EVERY push** (order 860-g798,
+exit criterion 3):
+
+```bash
+export GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never
+```
+
+A credential problem must fail FAST AND LOUDLY, not hang. Measured on
+esmeraldinha: the guard reported green (`gh auth status` held a token), the
+cycle entered committable work, and the first push sat >10 minutes behind Git
+Credential Manager's interactive prompt — a hang with no output, presenting as
+a slow build on the host least able to afford the misdiagnosis. With the
+prompts closed the same failure surfaces in seconds as an auth error the guard
+now names (`blocked:interactive-credential-helper`, remedy printed). The guard
+itself verifies the PUSH path since 860-g798 — `ok:gh-keyring-push-verified`
+means a bounded non-interactive dry-run push actually authenticated, not
+merely that a token exists somewhere. In SMOKE mode it is a REPORT, not a gate — a smoke run
 performs no committable work, so a stale push credential cannot harm it (order
 818-cgpn; see Smoke Mode Runbook rule 3a). The Cowork scheduled-task runtime can inherit dangling session sockets
 (`DBUS_SESSION_BUS_ADDRESS`, `SSH_AUTH_SOCK` pointing into a non-existent
