@@ -1,0 +1,105 @@
+packets:
+  - packet_id: cycle-preflight-notes-a-stopped-enclave-service-and-never-acts
+    order: 878-79b5
+    status: ready
+    kind: bug
+    priority: p2
+    pickup_role: any
+    desired_release: v0.5
+    depends_on: []
+    estimated_hours: 3
+    capability_tags:
+      - enclave
+      - podman
+      - fail-loud
+      - meta-orchestration
+    tags:
+      - cycle-preflight
+      - enclave-lifecycle
+      - v0.5
+    title: |
+      `cycle-preflight.sh` detects a cleanly-stopped enclave service and prints a REMEDY FOR A HUMAN, so an unattended loop re-notes the same dead service every cycle forever and never fixes it.
+    deliverable: |
+      cycle-preflight either re-ensures a cleanly-stopped managed service on a
+      host with no tray running, or states on the record that it deliberately
+      will not and why — with the verdict distinguishing "down and nobody will
+      fix it" from "down and being fixed".
+    context: |
+      MEASURED on yoga across FOUR consecutive unattended cycles,
+      2026-08-25T00:47Z / 01:43Z / 03:43Z / 05:43Z. Every one of them opened
+      with:
+
+        note:enclave-service-stopped:service=tillandsias-proxy:state=exited:
+        rc=0:...:age=4h5m -> 9h
+        REMEDY: 'podman logs <service>' ... then 'podman start <service>'
+
+      and every one of them dutifully wrote the observation into its handoff and
+      moved on. The service had been down for nine hours. It took one
+      `podman start` to fix, it came up healthy in 8 seconds, stayed up, and the
+      preflight then read `services-ok`.
+
+      WHY NOTHING FIXED IT, which is the actual defect and not the proxy's
+      fault. The re-ensure path exists and is good: `LivenessProbe`
+      (crates/tillandsias-headless/src/container_deps.rs, order 782-dpby) emits
+      `fail:managed-service-death:...:action=re-ensure` with a cumulative
+      counter. But it runs INSIDE the tray/headless process. On a bare
+      development host with no tray running — which is the normal state of every
+      unattended cycling host in this fleet — nothing runs it, so nothing
+      re-ensures anything. The only component that looks at the enclave on such
+      a host is `cycle-preflight.sh`, and it is a REPORTER by design.
+
+      SO THE HOST WITH THE MOST CYCLES HAS THE LEAST SUPERVISION. Vault,
+      dev-inference, nix and builder were all Up beside the stopped proxy: this
+      was a partial enclave, not a deliberate teardown.
+
+      WHY THIS IS NOT "just restart it in the skill". The ledger already
+      settled the hard half and this packet must not relitigate it: squid
+      SIGABRTs on ordered shutdown (a global-destructor bug, reproduced in 5s
+      with zero requests, NOT fixed by the 6.12 bump and NOT our config —
+      782-9jfg), so `squid-supervisor.sh` normalises a teardown-time crash to
+      rc=0 precisely so a stopped container is distinguishable from a dead one.
+      `Exited (0) ... (healthy)` here is CORRECT, DESIGNED output. A naive
+      auto-restart in the preflight would therefore restart the proxy every time
+      a human deliberately stops it, which is the exact behaviour the supervisor
+      was built to avoid.
+
+      The discrimination the supervisor makes in-container (did I forward the
+      stop?) is unavailable from outside it. That is the real design question
+      this packet has to answer, and it is why the honest second branch —
+      declare that preflight will not act, and make the verdict say so — is an
+      acceptable outcome.
+    exit_criteria:
+      - |
+          A cleanly-stopped managed enclave service on a host with no tray
+          running is either re-ensured automatically, or is reported with a
+          verdict token that distinguishes "nothing will fix this" from
+          "something is fixing this" — so a reader can tell an actionable state
+          from a transient one without reading prose.
+      - |
+          If the chosen answer is to re-ensure: the action is bounded and
+          counted the way the existing supervisors are (a cumulative counter, a
+          cap, and a machine-grepable `severity:event:key=value` line), and a
+          deliberate operator stop is NOT fought. If the chosen answer is to
+          refuse: the reasoning is recorded on this row and the verdict names
+          the refusal.
+      - |
+          NEGATIVE CONTROL: a service the operator has just stopped on purpose
+          does not get restarted by whatever lands, proven by a test rather
+          than by inspection.
+      - |
+          The four-cycle repeat is what makes this a defect rather than a
+          preference: a note that fires every cycle and changes nothing trains
+          its reader to skip it. Whatever lands must stop firing once the
+          condition is either fixed or accepted.
+    verifiable_closure: |
+      A fixture brings up a managed service, stops it cleanly, runs the
+      preflight, and asserts the chosen behaviour — restart-and-count, or a
+      refusal verdict distinct from the acting one. The negative control (an
+      operator stop is not fought) is the load-bearing half.
+    notes: |
+      Sibling context, not duplicates: 782-dpby owns the in-tray LivenessProbe
+      re-ensure; 767-nkkq owns the never-silent-restart rule; the enclave
+      service reporter's KNOWN LIMITATION event already records that a host-side
+      view has no teardown context and "a report that cries wolf at every
+      shutdown trains its reader to ignore it". This row is that limitation
+      arriving from the other direction — a report that never cries at all.
