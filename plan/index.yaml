@@ -25492,6 +25492,30 @@ plan_index:
         which is how this subsystem got here.
       events:
         - type: progress
+          ts: "2026-08-25T20:09:17Z"
+          agent_id: "macos-tlatoanis-macbook-air-opus5-20260825t200917z"
+          host: tlatoanis-macbook-air
+          summary: |
+            MACOS-LANE SLICE LANDED — the two items the 2026-08-25 yoga event left precisely scoped, both of which needed macOS-lane evidence to attempt.
+
+            1. THE DISCRIMINATOR (next_action item 3). macos-tray main.rs no longer flattens unconditionally: classify_exec_guest() chooses the arm, and `--exec-guest` takes the verbatim-argv vector when argv[0] is an ABSOLUTE path carrying no shell metacharacter, and the flattened `/bin/bash -lc <string>` arm otherwise. build_exec_guest_shell_cmd is KEPT and runs FIRST on both arms, per 838-48ca — so 773-fx3u's empty-argv and shell-wrapper refusals still fire and the new arm is not a bypass (pinned).
+
+            THE ARM IS DECIDED BY argv[0] ALONE, and that is the design decision worth recording, because the obvious alternative is wrong. My first draft also scanned the ARGUMENTS for metacharacters to decide the arm, and its own test caught it: `--exec-guest /usr/bin/tillandsias "a'b"` was routed to the SHELL arm — i.e. this packet's own exit criterion 4 failed, because a host-side parser was inspecting user data again. Inspecting an argument to pick the wire shape reinstates exactly the defect class this packet exists to delete. spec:vsock-exec-authz clause 4 says the guest never inspects arguments; that is only true end-to-end if the host honours it too. Pinned by arguments_never_steer_the_arm over a'b / "a b" / a$(id)b / a;b / a|b — each must arrive byte-identical as ONE element. A caller wanting a pipeline quotes it as one string, whose first word then carries whitespace and takes the shell arm (pinned as the negative control).
+
+            2. THE FEATURE-DETECT MUST (next_action item 2, and the lenovinha 2026-08-22 residual). vsock_exec's streaming exec handshake DESTRUCTURED server_caps away — the concrete site behind "real exec handshakes discard HelloAck.server_caps". It now reads them, and exec_over_stream_with_input_streaming_requiring() refuses before PtyOpen when the guest lacks the named capability. macos-tray passes Some(CAP_EXEC_ARGV_VECTOR) on the verbatim arm and None on the shell arm, which every guest has always admitted.
+
+            REFUSAL, NOT FALLBACK, and the reason is this packet's own warning turned on the remedy: re-flattening a request the caller expressed as a vector IS the quoting rewrite we are deleting, and a flattening fallback would leave two code paths for one request. spec:vsock-exec-authz clause 5 admits exactly this discharge. The message names the missing capability AND what the guest did advertise ("nothing" when empty, pinned) — the thing a bare "exec allowlist violation" cannot tell you.
+
+            The gate that matters is WHEN it fires: a_guest_without_the_cap_is_refused_before_the_request_is_sent asserts the peer never reads a PtyOpen frame at all, because a refusal issued after the send has gated nothing. Its negative control (a_guest_with_the_cap_proceeds_to_the_request) fails if the gate is deleted outright.
+
+            Additive and mixed-version safe: exec_over_stream_with_input_streaming keeps its signature and passes None, so the Linux and Windows callers of this shared_logic module are untouched.
+
+            ALSO FIXED, because it had become a lie: --help still documented "Words are JOINED and run via /bin/bash -lc" as the only behaviour.
+
+            VERIFIED on macOS (Darwin 25.6, tlatoanis-macbook-air): 6/6 macos-tray exec-guest tests, 35/35 vm-layer vsock_exec tests, litmus:guest-exec-argv-vector-no-shell + litmus:pty-open-argv-allowlisted 2/2 PASS, ./build.sh --check green under TILLANDSIAS_FORCE_CHECK=1.
+
+            STILL OPEN, unchanged and deliberately NOT attempted here: deleting argv_survives_wt_reparse and wt_safe_title (Windows lane — next_action requires Windows-lane evidence), and the macOS tray PREAMBLE workarounds, which are not argv flattening but guest housekeeping (podman rm, CA-key chmod) that must move guest-side before the preambles can stop being shell scripts, as the 2026-08-22 slice-3 event already recorded.
+        - type: progress
           ts: "2026-08-25T01:00:07Z"
           agent_id: "linux-yoga-opus5-20260825t0047z"
           host: yoga

@@ -104,8 +104,11 @@ fn main() {
              in-VM vault) and reprovision from scratch. Destructive by design;\n                  \
              you'll re-authenticate once\n    \
              --exec-guest <cmd...>  Boot the VM, run a command in the guest over\n                  \
-             the control wire, print its output + exit, then stop. Words are\n                  \
-             JOINED and run via `/bin/bash -lc`; quote pipelines as ONE string\n                  \
+             the control wire, print its output + exit, then stop. An ABSOLUTE\n                  \
+             argv[0] is sent as a verbatim argv vector with no shell in the\n                  \
+             chain, so arguments keep their exact bytes (--exec-guest\n                  \
+             /bin/echo \"a b\"). Anything else is treated as a shell command and\n                  \
+             run via `/bin/bash -lc`; quote pipelines as ONE string\n                  \
              (--exec-guest 'a | b') and never add your own bash/sh wrapper\n    \
              --github-login  Boot the VM and log in to GitHub in the guest;\n                  \
              prompts for your git name, email, and PAT (token hidden)\n    \
@@ -185,25 +188,35 @@ fn main() {
     // plan/issues/optimization-macos-vz-idiomatic-exec-layer-2026-06-21.md.
     if let Some(idx) = args.iter().position(|a| a == "--exec-guest") {
         require_no_live_tray("--exec-guest");
-        // Join remaining args into a shell command string so the user can write
-        // --exec-guest "ls -la" or --exec-guest tillandsias --debug --init
-        // without needing to pre-split argv themselves. The join is
-        // LOAD-BEARING: the guest's PtyOpen allowlist (pty_handler.rs, order
-        // 141) only admits `/bin/bash -lc <string>` shapes, so verbatim argv
-        // pass-through is not an option — which makes a caller-supplied shell
-        // wrapper (`--exec-guest bash -lc '…'`) always a quoting bug: the
-        // inner quoting is gone by the time the words are re-joined, and the
-        // result counterfeits transport failures convincingly (773-fx3u cost
-        // three loop cycles to a phantom p1). Refuse it loudly instead.
-        let shell_cmd = match build_exec_guest_shell_cmd(&args[idx + 1..]) {
-            Ok(cmd) => cmd,
+        // 795-zshi: the guest allowlist now has TWO arms, so this call site
+        // DISCRIMINATES instead of flattening everything. An absolute argv[0]
+        // with no shell metacharacters anywhere is sent as a verbatim argv
+        // VECTOR (no shell in the chain, no quoting layer to get wrong);
+        // anything else is a genuine shell request and keeps the flattened
+        // `/bin/bash -lc <string>` shape that 838-48ca decided to KEEP.
+        //
+        // The flattening comment this replaces was true when written and is now
+        // false: verbatim argv pass-through IS an option, and saying otherwise
+        // is what kept every caller on the quoting path.
+        let request = match classify_exec_guest(&args[idx + 1..]) {
+            Ok(req) => req,
             Err(msg) => {
                 eprintln!("{msg}");
                 std::process::exit(2);
             }
         };
-        let guest_argv = vec!["/bin/bash".to_string(), "-lc".to_string(), shell_cmd];
-        std::process::exit(diagnose::exec_guest_main(guest_argv));
+        let (guest_argv, required_cap) = match request {
+            // Feature-detected on HelloAck.server_caps, never on a wire
+            // version: an older guest lacking the verbatim arm gets a refusal
+            // naming the missing capability, not a silent re-flattening.
+            ExecGuestRequest::Verbatim(argv) => {
+                (argv, Some(tillandsias_control_wire::CAP_EXEC_ARGV_VECTOR))
+            }
+            ExecGuestRequest::Shell(cmd) => {
+                (vec!["/bin/bash".to_string(), "-lc".to_string(), cmd], None)
+            }
+        };
+        std::process::exit(diagnose::exec_guest_main(guest_argv, required_cap));
     }
     // Shared GuestTransport conformance fixtures (order 128) against the live
     // VZ backend (order 126 exit criterion 3). Boots the provisioned VM, runs
@@ -320,6 +333,163 @@ fn build_exec_guest_shell_cmd(words: &[String]) -> Result<String, String> {
         ));
     }
     Ok(words.join(" "))
+}
+
+/// What shape a `--exec-guest` request should take on the wire (795-zshi).
+///
+/// The guest allowlist admits two arms, so the host must CHOOSE one rather than
+/// flattening unconditionally — the unconditional flatten is what forced every
+/// escaping workaround this packet deletes.
+#[derive(Debug, PartialEq, Eq)]
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+enum ExecGuestRequest {
+    /// argv[0] is an absolute path and no word carries a shell metacharacter:
+    /// send the words verbatim as an argv vector. No shell is in the chain, so
+    /// no quoting rule can be got wrong and hostile words travel as DATA.
+    /// Requires the guest to advertise `CAP_EXEC_ARGV_VECTOR`.
+    Verbatim(Vec<String>),
+    /// A genuine shell request — a relative command name, or any word carrying
+    /// a metacharacter (`ls -la | wc -l`). Keeps the flattened
+    /// `/bin/bash -lc <string>` arm, per 838-48ca's KEEP decision.
+    Shell(String),
+}
+
+/// Shell metacharacters whose presence means the caller wrote a shell command,
+/// not a program plus arguments. Deliberately generous: misrouting a shell
+/// request to the verbatim arm would deliver `|` to a program as a literal
+/// argument and silently change what the user asked for, which is the same
+/// class of quiet rewrite as the flattening itself.
+const EXEC_GUEST_SHELL_METACHARS: &[char] = &[
+    ' ', '\t', '\n', '|', '&', ';', '<', '>', '(', ')', '$', '`', '"', '\'', '\\', '*', '?', '[',
+    ']', '{', '}', '~', '#', '!',
+];
+
+/// Decide which arm a `--exec-guest` word list takes.
+///
+/// Pure logic with no macOS dependency — deliberately NOT target-gated, for the
+/// same reason `build_exec_guest_shell_cmd` is not: its pins must compile and
+/// run on every host, or a non-macOS `--all-targets` build stops guarding it
+/// (the 2026-08-16 breakage).
+///
+/// @trace spec:vsock-exec-authz, order:795-zshi
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn classify_exec_guest(words: &[String]) -> Result<ExecGuestRequest, String> {
+    // Runs FIRST so the empty-argv and shell-wrapper refusals keep firing
+    // unchanged on both arms — the verbatim arm must not become a way to
+    // smuggle `--exec-guest bash -lc '…'` past 773-fx3u's refusal.
+    let shell_cmd = build_exec_guest_shell_cmd(words)?;
+    // THE ARM IS DECIDED BY argv[0] ALONE, and the later words are never
+    // inspected. That is not an oversight to tighten later: inspecting an
+    // ARGUMENT to choose the wire shape would put a host-side parser back in
+    // front of user data, which is the defect class this packet deletes. On the
+    // verbatim arm arguments reach execve as elements, so no parser sees them
+    // and no quoting rule can be got wrong — `openspec/specs/vsock-exec-authz`
+    // clause 4 states this as policy for the guest, and it is only true
+    // end-to-end if the host honours it too.
+    //
+    // A caller who wants a pipeline writes it the way this CLI has always
+    // documented — as ONE quoted string — whose first word then carries
+    // whitespace and takes the shell arm below.
+    let first = words[0].as_str();
+    if !first.starts_with('/') || first.contains(EXEC_GUEST_SHELL_METACHARS) {
+        return Ok(ExecGuestRequest::Shell(shell_cmd));
+    }
+    // The guest refuses a `..` component (a path can start with a good prefix
+    // and still end at a shell). Refuse it HERE too, with a message that says
+    // what to do — a host-side refusal that names the fix beats a remote
+    // `exec allowlist violation` that does not.
+    if first.split('/').any(|c| c == "..") {
+        return Err(format!(
+            "Error: --exec-guest argv[0] `{first}` contains a `..` component; the guest's \
+             verbatim-argv allowlist refuses traversal because a path may start under an \
+             allowed prefix and still resolve to a shell. Pass the resolved absolute path."
+        ));
+    }
+    Ok(ExecGuestRequest::Verbatim(words.to_vec()))
+}
+
+#[cfg(test)]
+mod exec_guest_classify_tests {
+    use super::{ExecGuestRequest, classify_exec_guest};
+
+    fn w(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    /// The discriminator 795-zshi's next_action names: an absolute argv[0] with
+    /// clean words takes the verbatim arm, and — the point of the whole packet —
+    /// a hostile argument arrives as ONE element, byte-identical, rather than
+    /// being split by a shell it never reaches.
+    #[test]
+    fn absolute_clean_argv_goes_verbatim() {
+        assert_eq!(
+            classify_exec_guest(&w(&["/bin/echo", "HELLO"])).unwrap(),
+            ExecGuestRequest::Verbatim(w(&["/bin/echo", "HELLO"]))
+        );
+        let hostile = classify_exec_guest(&w(&["/usr/bin/tillandsias", "a'b"])).unwrap();
+        match hostile {
+            ExecGuestRequest::Verbatim(argv) => assert_eq!(argv[1], "a'b"),
+            other => panic!("hostile argument must travel as data, got {other:?}"),
+        }
+    }
+
+    /// NEGATIVE CONTROL for the arm choice: everything that is genuinely a
+    /// shell request must STAY on the flattened arm. A relative command name
+    /// resolves through PATH (environment the caller also controls), and a
+    /// first word carrying whitespace or a metacharacter is a pipeline the
+    /// caller quoted as one string — the documented way to ask for a shell.
+    #[test]
+    fn shell_shapes_stay_on_the_shell_arm() {
+        for words in [
+            w(&["uname", "-a"]),           // relative name
+            w(&["/bin/ls -la | wc -l"]),   // one quoted pipeline
+            w(&["/bin/echo $HOME"]),       // caller wants expansion
+            w(&["/bin/echo hi > /tmp/x"]), // caller wants redirection
+        ] {
+            assert!(
+                matches!(
+                    classify_exec_guest(&words).unwrap(),
+                    ExecGuestRequest::Shell(_)
+                ),
+                "{words:?} must take the shell arm"
+            );
+        }
+    }
+
+    /// The arm is chosen from argv[0] ALONE — an ARGUMENT never steers it.
+    /// This is the pin that stops someone "hardening" the classifier by
+    /// scanning arguments for metacharacters: doing so would put a host-side
+    /// parser back in front of user data and split `a'b` across a shell it is
+    /// never supposed to reach, which is precisely 795-zshi's defect class.
+    #[test]
+    fn arguments_never_steer_the_arm() {
+        for hostile in ["a'b", "a b", "a$(id)b", "a;b", "a|b"] {
+            match classify_exec_guest(&w(&["/usr/bin/tillandsias", hostile])).unwrap() {
+                ExecGuestRequest::Verbatim(argv) => {
+                    assert_eq!(argv.len(), 2);
+                    assert_eq!(argv[1], hostile, "must be byte-identical, as ONE element");
+                }
+                other => panic!("`{hostile}` must travel as data, got {other:?}"),
+            }
+        }
+    }
+
+    /// Traversal is refused on the verbatim arm rather than sent for the guest
+    /// to reject: `/usr/bin/../../bin/bash` starts under an allowed prefix and
+    /// ends at a shell.
+    #[test]
+    fn traversal_is_refused_with_the_reason() {
+        let err = classify_exec_guest(&w(&["/usr/bin/../../bin/bash"])).unwrap_err();
+        assert!(err.contains(".."), "message must name the cause: {err}");
+    }
+
+    /// The 773-fx3u refusals still fire — the new arm is not a bypass.
+    #[test]
+    fn wrapper_and_empty_refusals_survive_the_new_arm() {
+        assert!(classify_exec_guest(&w(&[])).is_err());
+        assert!(classify_exec_guest(&w(&["/bin/bash", "-lc", "id"])).is_err());
+        assert!(classify_exec_guest(&w(&["/usr/bin/env", "id"])).is_err());
+    }
 }
 
 #[cfg(test)]

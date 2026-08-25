@@ -729,7 +729,14 @@ fn read_piped_stdin_bounded(timeout: std::time::Duration) -> Vec<u8> {
 /// NSApp-on-main + worker model).
 ///
 /// @trace plan/issues/optimization-macos-vz-idiomatic-exec-layer-2026-06-21.md
-pub fn exec_guest_main(argv: Vec<String>) -> i32 {
+///
+/// `required_cap` is the capability the chosen argv SHAPE depends on (795-zshi):
+/// `Some(CAP_EXEC_ARGV_VECTOR)` for a verbatim argv vector, `None` for the
+/// flattened `/bin/bash -lc <string>` shape, which every guest has always
+/// admitted. It is checked against `HelloAck.server_caps`, never against a wire
+/// version — a version says what a peer IS, a capability says what it can DO,
+/// and this fleet routinely runs a tray newer than the guest image beside it.
+pub fn exec_guest_main(argv: Vec<String>, required_cap: Option<&'static str>) -> i32 {
     use tillandsias_vm_layer::VmRuntime;
 
     if argv.is_empty() {
@@ -806,17 +813,32 @@ pub fn exec_guest_main(argv: Vec<String>) -> i32 {
         let result = {
             use std::io::Write;
             let stdout = std::io::stdout();
-            tillandsias_vm_layer::vsock_exec::exec_over_stream_with_input_streaming(
-                stream,
-                &argv_ref,
-                &stdin_bytes,
-                |chunk| {
-                    let mut out = stdout.lock();
-                    let _ = out.write_all(chunk);
-                    let _ = out.flush();
-                },
-            )
-            .await
+            let on_chunk = |chunk: &[u8]| {
+                let mut out = stdout.lock();
+                let _ = out.write_all(chunk);
+                let _ = out.flush();
+            };
+            match required_cap {
+                Some(cap) => {
+                    tillandsias_vm_layer::vsock_exec::exec_over_stream_with_input_streaming_requiring(
+                        stream,
+                        &argv_ref,
+                        &stdin_bytes,
+                        cap,
+                        on_chunk,
+                    )
+                    .await
+                }
+                None => {
+                    tillandsias_vm_layer::vsock_exec::exec_over_stream_with_input_streaming(
+                        stream,
+                        &argv_ref,
+                        &stdin_bytes,
+                        on_chunk,
+                    )
+                    .await
+                }
+            }
         };
         let _ = vz.stop(Duration::from_secs(10)).await;
 

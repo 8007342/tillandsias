@@ -576,16 +576,80 @@ where
         stream,
         argv,
         input,
+        None,
         &mut on_output,
         exec_idle_timeout()?,
     )
     .await
 }
 
+/// Like [`exec_over_stream_with_input_streaming`], but REFUSES to send `argv`
+/// unless the guest advertised `required_cap` in `HelloAck.server_caps`.
+///
+/// 795-zshi: `CAP_EXEC_ARGV_VECTOR`'s own doc says hosts MUST feature-detect on
+/// the ack rather than compare wire versions, and every real exec handshake in
+/// this module destructured `server_caps` away — so a host that adopted the
+/// verbatim-argv arm would send it to an old guest and collect a bare
+/// `exec allowlist violation` with nothing naming the cause.
+///
+/// The refusal is deliberately LOUD and names both the missing capability and
+/// what the guest DID advertise. There is no silent fallback to the flattened
+/// `/bin/bash -lc <string>` shape: re-flattening a request the caller expressed
+/// as a vector is exactly the quoting rewrite this packet exists to delete, and
+/// `openspec/specs/vsock-exec-authz` clause 5 records refusal as preferred
+/// wherever no flattened form is already maintained for that request.
+///
+/// @trace spec:vsock-exec-authz, order:795-zshi
+pub async fn exec_over_stream_with_input_streaming_requiring<S, F>(
+    stream: S,
+    argv: &[&str],
+    input: &[u8],
+    required_cap: &str,
+    mut on_output: F,
+) -> Result<ExecOutput, String>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+    F: FnMut(&[u8]),
+{
+    exec_over_stream_with_input_streaming_timeout(
+        stream,
+        argv,
+        input,
+        Some(required_cap),
+        &mut on_output,
+        exec_idle_timeout()?,
+    )
+    .await
+}
+
+/// The refusal text a capability-gated exec produces when the guest did not
+/// advertise the capability the caller's argv shape depends on.
+///
+/// Pure string logic, unconditionally compiled so its pins run on every host:
+/// the message is the whole value of the gate (a bare "allowlist violation"
+/// from the guest is what this replaces), so it is asserted, not eyeballed.
+///
+/// @trace order:795-zshi
+pub fn missing_cap_message(required_cap: &str, server_caps: &[String]) -> String {
+    let advertised = if server_caps.is_empty() {
+        "nothing".to_string()
+    } else {
+        server_caps.join(", ")
+    };
+    format!(
+        "vsock_exec: the guest does not advertise `{required_cap}`, which this argv shape \
+         requires; it advertised: {advertised}. Refusing rather than re-flattening the \
+         request into `/bin/bash -lc <string>` — that rewrite loses the caller's word \
+         boundaries, which is the defect class 795-zshi exists to delete. Update the guest \
+         image (or express the command as a shell string if you meant one)."
+    )
+}
+
 async fn exec_over_stream_with_input_streaming_timeout<S, F>(
     mut stream: S,
     argv: &[&str],
     input: &[u8],
+    required_cap: Option<&str>,
     on_output: &mut F,
     idle_timeout: std::time::Duration,
 ) -> Result<ExecOutput, String>
@@ -618,11 +682,22 @@ where
     .await?;
     let ack = read_setup_envelope(&mut stream, exec_idle_timeout()?, "the Hello handshake").await?;
     match ack.body {
-        ControlMessage::HelloAck { wire_version, .. } => {
+        // `server_caps` is READ here, not destructured away (795-zshi): the
+        // capability check has to happen between the ack and the PtyOpen, which
+        // is the only window in which the host still knows what the guest can do
+        // and has not yet sent a shape the guest may refuse.
+        ControlMessage::HelloAck {
+            wire_version,
+            server_caps,
+            ..
+        } => {
             if wire_version != WIRE_VERSION {
                 return Err(format!(
                     "vsock_exec: wire_version mismatch (peer {wire_version}, self {WIRE_VERSION})"
                 ));
+            }
+            if let Some(cap) = required_cap.filter(|c| !server_caps.iter().any(|s| s == c)) {
+                return Err(missing_cap_message(cap, &server_caps));
             }
         }
         other => {
@@ -2319,6 +2394,7 @@ mod tests {
                 client,
                 &["/bin/false"],
                 b"",
+                None,
                 &mut |_: &[u8]| {},
                 std::time::Duration::from_secs(30),
             ),
@@ -2749,6 +2825,7 @@ mod tests {
             client,
             &["/bin/sh", "-c", "slow build"],
             &[],
+            None,
             &mut |bytes: &[u8]| output.extend_from_slice(bytes),
             std::time::Duration::from_millis(35),
         )
@@ -2788,6 +2865,7 @@ mod tests {
             client,
             &["/bin/sh", "-c", "silent build"],
             &[],
+            None,
             &mut |_| {},
             std::time::Duration::from_millis(25),
         )
@@ -3156,5 +3234,115 @@ mod tests {
         assert_eq!(out.exit.code, 0);
         assert!(callback_called.load(std::sync::atomic::Ordering::SeqCst));
         guest_task.await.unwrap();
+    }
+
+    /// Drive the capability-gated exec against a peer that advertises
+    /// `server_caps`, and report whether a `PtyOpen` was ever read off the
+    /// wire. That last fact is the one worth measuring (795-zshi): a gate that
+    /// merely returns an error AFTER sending the request has not gated
+    /// anything — the guest already saw a shape it cannot serve.
+    async fn gated_exec_against_caps(caps: Vec<String>) -> (Result<ExecOutput, String>, bool) {
+        let (client, mut guest) = tokio::io::duplex(8192);
+        let saw_pty_open = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let flag = saw_pty_open.clone();
+        let guest_task = tokio::spawn(async move {
+            let _ = read_envelope(&mut guest).await.unwrap(); // Hello
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 1,
+                    body: ControlMessage::HelloAck {
+                        wire_version: WIRE_VERSION,
+                        server_caps: caps,
+                        build_version: None,
+                    },
+                },
+            )
+            .await
+            .unwrap();
+            // A gated-off host hangs up here, so this read fails rather than
+            // yielding a frame — which is exactly the assertion.
+            if let Ok(env) = read_envelope(&mut guest).await
+                && matches!(env.body, ControlMessage::PtyOpen { .. })
+            {
+                flag.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 2,
+                    body: ControlMessage::PtyClose {
+                        session_id: 1,
+                        exit: PtyExit {
+                            code: 0,
+                            signal: None,
+                        },
+                    },
+                },
+            )
+            .await
+            .ok();
+        });
+        let result = exec_over_stream_with_input_streaming_requiring(
+            client,
+            &["/usr/bin/tillandsias", "a'b"],
+            b"",
+            tillandsias_control_wire::CAP_EXEC_ARGV_VECTOR,
+            |_| {},
+        )
+        .await;
+        let _ = guest_task.await;
+        let sent = saw_pty_open.load(std::sync::atomic::Ordering::SeqCst);
+        (result, sent)
+    }
+
+    /// 795-zshi: a guest WITHOUT the capability gets a refusal that names the
+    /// missing capability and what it did advertise — and never sees the
+    /// PtyOpen at all.
+    #[tokio::test]
+    async fn a_guest_without_the_cap_is_refused_before_the_request_is_sent() {
+        let (result, sent_pty_open) =
+            gated_exec_against_caps(vec![CAP_PTY_HEARTBEAT_V1.to_string()]).await;
+        let err = result.expect_err("an old guest must not receive the verbatim shape");
+        assert!(
+            err.contains(tillandsias_control_wire::CAP_EXEC_ARGV_VECTOR),
+            "the refusal must name the MISSING capability: {err}"
+        );
+        assert!(
+            err.contains(CAP_PTY_HEARTBEAT_V1),
+            "and what the guest DID advertise, so the reader can tell an old \
+             guest from a broken handshake: {err}"
+        );
+        assert!(
+            !sent_pty_open,
+            "the gate must fire BEFORE PtyOpen — a refusal after the send has \
+             gated nothing"
+        );
+    }
+
+    /// NEGATIVE CONTROL: with the capability advertised, the same call proceeds
+    /// and the guest receives the request. Without this, deleting the gate
+    /// entirely would still pass the test above.
+    #[tokio::test]
+    async fn a_guest_with_the_cap_proceeds_to_the_request() {
+        let (result, sent_pty_open) = gated_exec_against_caps(vec![
+            tillandsias_control_wire::CAP_EXEC_ARGV_VECTOR.to_string(),
+        ])
+        .await;
+        assert!(
+            result.is_ok(),
+            "a capable guest must not be refused: {result:?}"
+        );
+        assert!(sent_pty_open, "the request must actually reach the guest");
+    }
+
+    /// An empty `server_caps` must read as "advertised nothing", not as an
+    /// empty gap in the sentence. The message IS the value of this gate.
+    #[test]
+    fn the_refusal_names_an_empty_advertisement_explicitly() {
+        let msg = missing_cap_message(tillandsias_control_wire::CAP_EXEC_ARGV_VECTOR, &[]);
+        assert!(msg.contains("nothing"), "{msg}");
     }
 }
