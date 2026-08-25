@@ -45804,6 +45804,35 @@ plan_index:
         itself create, so it cannot close on a name that does not exist —
         which is the defect.
       events:
+        - type: verified
+          ts: "2026-08-25T21:54:15Z"
+          agent_id: "linux-yoga-opus5-20260825t215415z"
+          host: yoga
+          summary: |
+            IMPLEMENTED AND CLOSED, both criteria, in the order the packet demanded.
+
+            CRITERION 1 FIRST — the corpus selector, and it mattered. check-litmus-pin-claims.sh selected its corpus with `grep -rnE ... "$SCAN_DIR" | grep -E '\.(sh|c)[:]'`, where the second grep filters the FIRST GREP'S OUTPUT LINES rather than filenames. It now selects with `find -name`. Measured before and after, both directions: `TILLANDSIAS_PIN_SCAN_DIR=plan` went from `ok:litmus-pin-claims:24 checked` (against a tree with ZERO shell scripts — all 24 were archived prose quoting a `.sh:` path) to `ok:litmus-pin-claims:0 checked`, while the real `scripts/` corpus stayed at exactly 71. Both halves are pinned, because a selector fix that quietly empties the corpus it was written for is the same defect wearing the opposite sign.
+
+            CRITERION 2 — `tillandsias-plan declared-closures` (full-ledger REPORT, exit 0) and `declared-closures-check <fragment.yaml>` (single-fragment GATE, exit 1), wired into ./build.sh via scripts/check-declared-closures-added.sh, diff-scoped exactly as check-fragment-closure-evidence-added.sh is. Reuses 721-77yu's unresolvable/unbound vocabulary rather than inventing a second one.
+
+            THE REPORT/GATE SPLIT IS THE LOAD-BEARING DESIGN DECISION. There is standing debt, and a gate that reds the trunk on day one gets switched off — the same argument that made 795-5itp's closure a ratchet. So the GATE refuses NEW debt at the door, fragment-scoped so a closure is validated when it is FILED rather than after the next compaction (criterion 4), and the REPORT names the standing debt without failing anything.
+
+            AND THE REPORT IS NOW REPORTED, NOT MERELY REPORTABLE. ./build.sh --check prints `standing declared-closure debt: violation:declared-closure-unresolvable:5` as a warning on every run. A number available on demand is a number nobody looks at, which is exactly how 795-5itp's closure stayed empty for eight days.
+
+            MY OWN MEASUREMENT WAS WRONG BY 9, AND THE FIX IS THE POINT. Filing this packet I reported 15 file-missing names from `grep -o "litmus:[a-z0-9-]*" plan/index.yaml`. Field-scoped extraction over `verifiable_closure` ONLY reports 6. The other 9 were spec ladder shorthands and prose mentions elsewhere in the ledger — precisely what the packet's context warned would "produce a number nobody trusts and get the check switched off". The grep number would have been a 60% false-positive rate on a check meant to police honesty about verification.
+
+            CRITERION 3, all six dispositioned by examination, not by assertion:
+              885-92iu (litmus:declared-closure-resolves) — BUILT this cycle, 9/9 PASS in 1.4s, bound under spec-traceability. The packet declared a closure that did not exist, so `declared-closures` reported the packet fixing the defect AS an instance of the defect until the test landed. That was deliberate.
+              795-jeym (litmus:guest-vsock-bound-before-provisioning) — real intended boundary, packet blocked
+              795-tb4a (litmus:windows-connect-is-bounded-and-exits) — real, ready
+              795-vq6b (litmus:exec-transcript-capped-in-every-driver) — real, ready
+              795-imz3 (litmus:if-not-pipeline-guard-shape) — real, ready (claimed by macuahuitl this cycle; NOT touched)
+              795-bmbq (litmus:opencode-forge-lane-interactive-tty) — real, ready
+            None of the five is an extractor false positive; every one names a genuine decision boundary matching its own packet's subject. So the disposition is: they are each their OWN packet's exit criterion, not this one's, and building them here would be doing five packets' work under a sixth packet's name. What changed is that they can no longer close silently — a closure that cannot run is now printed on every build.
+
+            CRITERION 4 satisfied by construction: the gate reads fragments directly, and the report goes through the folded ledger.
+
+            THREE PROJECT GUARDS CAUGHT ME WHILE I WORKED, all correctly, and it is worth recording that the guard net works on a change that is itself building a guard: 583-dv9n (dispatch arm absent from capabilities.txt — the MCP wrapper could not have routed to it), the capabilities sort-order test, and check-plan-binary-probe-usage (my litmus steps ran tillandsias-plan from a hardcoded target/ path, which breaks on a Windows checkout where the runnable artifact is .exe). All three fixed; the litmus now resolves the binary through scripts/plan-binary-probe.sh and skips honestly when none is built.
         - type: filed
           ts: "2026-08-25T20:07:25Z"
           agent_id: linux-yoga-opus5-20260825t200725z
