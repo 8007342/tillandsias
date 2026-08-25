@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: collaborative-work-scheduling-research
+    field: next_action
+    value: Criterion 2, the prior-art survey with provenance, is not started. Before proposing mechanisms, read the six-entry failure-mode inventory in plan/issues/collaborative-work-scheduling-design-record-2026-08-25.md — it already forecloses several of this packet's own candidate mechanisms on measurement (F5 refutes better seeding; three of six modes are already mechanised). Add entries for thrashing mediation and milestone-burndown surfacing, which are named in the outcome and have no citable evidence yet.
+    ts: "2026-08-25T17:48:41Z"
+    host: yoga
+
+events:
+  - packet_id: collaborative-work-scheduling-research
+    event:
+      type: progress
+      ts: "2026-08-25T17:48:41Z"
+      host: yoga
+      summary: >
+        status 'Criterion 2, the prior-art survey with provenance, is not started. Before proposing mechanisms, read the six-entry failure-mode inventory in plan/issues/collaborative-work-scheduling-design-record-2026-08-25.md — it already forecloses several of this packet's own candidate mechanisms on measurement (F5 refutes better seeding; three of six modes are already mechanised). Add entries for thrashing mediation and milestone-burndown surfacing, which are named in the outcome and have no citable evidence yet.' (not terminal) with evidence_refs: plan/issues/collaborative-work-scheduling-design-record-2026-08-25.md
