@@ -515,12 +515,25 @@ fn apply_to_packets(
                     .unwrap_or("")
                     .to_string();
 
-                for (key, (_, _, value, _)) in lww {
+                for (key, (ts, _, value, _)) in lww {
                     let mut parts = key.split('\u{1}');
                     if parts.next() == Some(id.as_str())
                         && let Some(field) = parts.next()
                     {
                         m.insert(Value::String(field.to_string()), value.clone());
+                        // ORDER 877-lwts. next_action is the ONE field with a
+                        // competing event channel, and "newest wins" must hold
+                        // ACROSS channels. Without the ts riding along, the
+                        // folded field reads as the untimestamped original and
+                        // loses to any event, however stale — measured live
+                        // 2026-08-25: two coordinator queue refreshes were
+                        // invisible behind a 2h43m-older event.
+                        if field == "next_action" && !ts.is_empty() {
+                            m.insert(
+                                Value::String("next_action_ts".to_string()),
+                                Value::String(ts.clone()),
+                            );
+                        }
                     }
                 }
 
@@ -1234,7 +1247,7 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
             }
         }
     }
-    let lww_wins: Vec<(String, String, Value)> = lww
+    let lww_wins: Vec<(String, String, Value, String)> = lww
         .into_iter()
         .filter(|(key, (_, _, value))| {
             let mut parts = key.split('\u{1}');
@@ -1253,12 +1266,13 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
                 && base_packets.contains(pid)
                 && base_value(&base, pid, field) != Some(value.clone())
         })
-        .map(|(key, (_, _, value))| {
+        .map(|(key, (ts, _, value))| {
             let mut parts = key.split('\u{1}');
             (
                 parts.next().unwrap().to_string(),
                 parts.next().unwrap().to_string(),
                 value,
+                ts,
             )
         })
         .collect();
@@ -1315,8 +1329,21 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
     }
 
     let mut lines: Vec<String> = candidate.lines().map(String::from).collect();
-    for (pid, field, value) in &lww_wins {
+    for (pid, field, value, ts) in &lww_wins {
         apply_lww(&mut lines, pid, field, value)?;
+        // ORDER 877-lwts: the fold materializes `next_action_ts` beside a
+        // set-field next_action win so it competes on clock terms with the
+        // event channel. Compaction must persist that sibling into the base
+        // text, or the first compaction silently re-loses the field to any
+        // stale event — the exact incident, one hop later.
+        if field == "next_action" && !ts.is_empty() {
+            apply_lww(
+                &mut lines,
+                pid,
+                "next_action_ts",
+                &Value::String(ts.clone()),
+            )?;
+        }
     }
     candidate = lines.join("\n") + "\n";
 
@@ -2395,6 +2422,86 @@ packets:
 
     const HOST_A: &str = "packets:\n  - packet_id: beta\n    order: 581-aaaa\n    status: ready\n";
     const HOST_B: &str = "packets:\n  - packet_id: gamma\n    order: 581-bbbb\n    status: ready\n";
+
+    #[test]
+    fn lww_next_action_newer_than_the_last_event_wins_the_effective_read() {
+        // ORDER 877-lwts, the 2026-08-25 incident replayed: the coordinator
+        // queue lives in 831-ezea's next_action, updated by `set-field` (LWW
+        // channel). Two consecutive queue refreshes were silently invisible —
+        // `next-action` kept answering with a next_action EVENT from hours
+        // earlier, because the fold applied the LWW VALUE but dropped its
+        // TIMESTAMP, and effective_next_action treats a ts-less field as the
+        // "untimestamped original" that loses to any event. Newest must win
+        // ACROSS CHANNELS, so the fold now carries the ts through as
+        // `next_action_ts`.
+        let base: Value = serde_yaml::from_str(
+            "packets:\n\
+             \x20   - packet_id: alpha\n\
+             \x20     order: 100\n\
+             \x20     status: in_progress\n\
+             \x20     next_action: original queue\n\
+             \x20     events:\n\
+             \x20       - type: progress\n\
+             \x20         ts: \"2026-08-25T01:00:59Z\"\n\
+             \x20         agent_id: origin\n\
+             \x20         next_action: stale event queue\n\
+             \x20         summary: old\n",
+        )
+        .expect("base parses");
+        let f = frag(
+            "f1",
+            "status:\n\
+             \x20 - packet_id: alpha\n\
+             \x20   field: next_action\n\
+             \x20   value: fresh LWW queue\n\
+             \x20   ts: \"2026-08-25T03:44:34Z\"\n\
+             \x20   host: macuahuitl\n",
+        );
+        let folded = fold(&base, &[f]);
+        let mut ps = Vec::new();
+        crate::collect_packets(&folded, &mut ps);
+        let p = ps.first().expect("alpha present");
+        let (text, ts) = crate::answer::effective_next_action(p).expect("has a next_action");
+        assert_eq!(
+            text, "fresh LWW queue",
+            "a newer set-field write must not be shadowed by an older event"
+        );
+        assert_eq!(ts.as_deref(), Some("2026-08-25T03:44:34Z"));
+    }
+
+    #[test]
+    fn next_action_event_newer_than_the_lww_write_still_wins() {
+        // The inverse control: the fix must not simply prefer the field —
+        // an event AFTER the set-field write is the newer instruction.
+        let base: Value = serde_yaml::from_str(
+            "packets:\n\
+             \x20   - packet_id: alpha\n\
+             \x20     order: 100\n\
+             \x20     status: in_progress\n\
+             \x20     events:\n\
+             \x20       - type: progress\n\
+             \x20         ts: \"2026-08-25T05:00:00Z\"\n\
+             \x20         agent_id: origin\n\
+             \x20         next_action: even fresher event queue\n\
+             \x20         summary: new\n",
+        )
+        .expect("base parses");
+        let f = frag(
+            "f1",
+            "status:\n\
+             \x20 - packet_id: alpha\n\
+             \x20   field: next_action\n\
+             \x20   value: older LWW queue\n\
+             \x20   ts: \"2026-08-25T03:44:34Z\"\n\
+             \x20   host: macuahuitl\n",
+        );
+        let folded = fold(&base, &[f]);
+        let mut ps = Vec::new();
+        crate::collect_packets(&folded, &mut ps);
+        let p = ps.first().expect("alpha present");
+        let (text, _) = crate::answer::effective_next_action(p).expect("has a next_action");
+        assert_eq!(text, "even fresher event queue");
+    }
 
     #[test]
     fn set_field_body_round_trips_hostile_prose() {

@@ -1618,7 +1618,18 @@ fn next_ranking_key(ledger: &Ledger, p: &serde_yaml::Value) -> (u8, u8, u64, Str
 /// never wins a tie, being the one value guaranteed never to have been updated.
 pub fn effective_next_action(p: &serde_yaml::Value) -> Option<(String, Option<String>)> {
     let mut best: Option<String> = crate::str_field(p, "next_action").map(str::to_string);
-    let mut best_ts = String::new();
+    // ORDER 877-lwts: when the field arrived through the set-field LWW
+    // channel, the fold records its timestamp as `next_action_ts`, and the
+    // field competes on equal clock terms with the event channel. A packet
+    // whose field is the hand-authored original still has no ts and yields to
+    // any event, as before.
+    let mut best_ts = if best.is_some() {
+        crate::str_field(p, "next_action_ts")
+            .unwrap_or("")
+            .to_string()
+    } else {
+        String::new()
+    };
     if let Some(evs) = p.get("events").and_then(serde_yaml::Value::as_sequence) {
         for e in evs {
             let Some(na) = e.get("next_action").and_then(serde_yaml::Value::as_str) else {

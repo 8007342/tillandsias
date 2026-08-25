@@ -1,0 +1,84 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-25T04:38:40Z.
+packets:
+  - packet_id: set-field-next-action-loses-to-any-older-event
+    order: 877-lwts
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    pickup_role: linux
+    capability_tags:
+      - plan
+      - crdt
+      - coordination
+      - fail-loud
+    estimated_hours: 2
+    title: >
+      A set-field next_action write is invisible behind ANY next_action event,
+      however stale — the fold drops the LWW timestamp, so the field reads as
+      the untimestamped original and loses the cross-channel race forever.
+    deliverable: >
+      The fold materializes next_action_ts beside a set-field next_action win;
+      effective_next_action seeds its clock from it; compaction persists the
+      sibling into the base text so the fix survives folds; the next-action
+      subcommand names the winning channel.
+    context: |
+      MEASURED LIVE 2026-08-25T04:35Z on the coordinator's own queue. 831-ezea's
+      next_action is the fleet's ordered work queue, refreshed each cycle via
+      `tillandsias-plan set-field ... next_action` (the LWW channel). Two
+      consecutive refreshes (02:45Z, 03:44Z) were silently invisible:
+      `next-action 831-ezea` kept answering with a next_action EVENT from
+      01:00:59Z. Root cause: apply_to_packets inserted the winning LWW VALUE
+      but dropped its (ts, host); effective_next_action then treated the field
+      as the hand-authored "untimestamped original" that yields to any event.
+      Every host reading the queue during that window worked from a stale
+      assignment. The two write paths (event with next_action payload;
+      set-field LWW) each worked; the READ merged them with one channel blind.
+    exit_criteria: |
+      (1) A set-field next_action newer than the last next_action event wins
+      the effective read (incident replay, red on unfixed code). (2) An event
+      newer than the set-field write still wins (inverse control). (3) The
+      compaction text round-trip preserves the winner — the two
+      fold-equivalence tests caught the half-fix that materialized the ts in
+      the Value domain only, and now pass with the text-domain sibling.
+      (4) The subcommand's source line names the winning channel.
+
+status:
+  - packet_id: set-field-next-action-loses-to-any-older-event
+    field: status
+    value: completed
+    ts: "2026-08-25T04:38:40Z"
+    host: linux_mutable
+
+events:
+  - packet_id: set-field-next-action-loses-to-any-older-event
+    event:
+      type: completed
+      ts: "2026-08-25T04:38:40Z"
+      agent_id: linux-macuahuitl-opus5-20260825t043840z
+      host: linux_mutable
+      evidence_refs:
+        - "crates/tillandsias-plan/src/fragments.rs apply_to_packets — a next_action LWW win now carries next_action_ts onto the packet; compact_text applies the same sibling as a text edit so the base persists it (the round-trip tests demanded this: the Value-domain half-fix alone broke fold-equivalence, which is the renderer's guarantee working as designed)"
+        - "crates/tillandsias-plan/src/answer.rs effective_next_action — seeds best_ts from next_action_ts; events still win when genuinely newer"
+        - "TRUE RED-GREEN: lww_next_action_newer_than_the_last_event_wins_the_effective_read failed on unfixed code with the incident's exact shape (stale event queue over fresh LWW queue); inverse control next_action_event_newer_than_the_lww_write_still_wins green; lib suite 223/223"
+        - "LIVE: next-action 831-ezea now returns the 03:45Z coordinator queue with source: set-field (LWW) @ 2026-08-25T03:44:34Z — previously answered with the 01:00:59Z event"
+      merge_affordance: merge-now
+      merge_reason: >
+        Every sibling's cycle-preflight rebuilds tillandsias-plan from origin;
+        until this lands, every host reading the coordinator queue gets an
+        assignment hours stale — the coordination channel itself is lying.
+      summary: >
+        THE COORDINATOR QUEUE WAS LYING TO THE FLEET AND THE FIX IS
+        CROSS-CHANNEL CLOCKS. next_action is the one packet field fed by two
+        write paths: events carrying a next_action payload, and set-field's
+        LWW channel. The fold applied the LWW value but discarded its
+        timestamp, so the read-side rule — newest wins, untimestamped field
+        loses ties — could never let a set-field write beat an event, however
+        much newer. Two coordinator queue refreshes vanished behind a
+        2h43m-older event, measured on this host's own protocol. The fold now
+        materializes next_action_ts beside the winning value, compaction
+        persists it into the base text (the fold-equivalence tests refused
+        the Value-domain-only half-fix — exactly what they are for), the
+        reader seeds its clock from it, and the subcommand names the channel
+        that won so the next diagnosis starts from truth.

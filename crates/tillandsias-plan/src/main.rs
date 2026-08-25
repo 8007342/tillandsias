@@ -4179,7 +4179,18 @@ fn main() {
             // one of them stays wrong.
             match tillandsias_plan::answer::effective_next_action(p) {
                 Some((text, Some(ts))) => {
-                    eprintln!("source: event @ {ts}");
+                    // 877-lwts: name the channel that actually won. A set-field
+                    // win carries its ts in next_action_ts; an event win does not
+                    // match it.
+                    let via_field = p
+                        .get("next_action_ts")
+                        .and_then(serde_yaml::Value::as_str)
+                        .is_some_and(|fts| fts == ts);
+                    if via_field {
+                        eprintln!("source: set-field (LWW) @ {ts}");
+                    } else {
+                        eprintln!("source: event @ {ts}");
+                    }
                     println!("{}", text.trim_end());
                 }
                 Some((text, None)) => {
