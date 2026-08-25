@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: a-ci-full-run-takes-down-the-live-enclave-stack
+    event:
+      type: progress
+      ts: "2026-08-25T11:51:08Z"
+      agent_id: linux-macuahuitl-opus5-20260825t115108z
+      host: macuahuitl
+      summary: >
+        DRAIN COMPLETE AND WIRED; A SECOND MECHANISM SURFACED AND STAYS OPEN. All 32 non-hermetic tests fixed suite-by-suite (accel_probe seam guard to /bin/false; remote_projects seam pointed at their PATH mock instead of forcing a PATH scan; transport pair through stub_podman; signal pair spawn the production child with the tripwire scoped OUT; the 11 forge arg-builder tests hold a dedicated seam mutex; ALL writers of TILLANDSIAS_PODMAN_BIN in the tests mod serialize on that one mutex taken before env_lock/env_guard). Featured target 559/559 twice armed; all four local-ci test lines wired through run_rust_test_on_host — a racer now fails loudly by name (latent trio: tray::cloud x2, spawn_terminal_and_reap — surfaced once, order-dependent). OPEN: the 11:38:40Z whole-stack death happened while only armed single-test probes ran, and podman events show DIED WITH NO STOP EVENTS — the processes were SIGTERMed directly, bypassing the podman API entirely, so mechanism #2 is NOT the env race: candidates are systemd-level cgroup/oomd sweeps (zram 8G/8G full; no readable oomd journal) or an unidentified actor. Containers verify as properly delegated libpod scopes, so shell-scope reaping is ruled out. Status stays implemented; completion needs a stack-up ci-full survival proof plus mechanism #2 named.

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    field: next_action
+    value: 'COORDINATOR QUEUE @ 2026-08-25T11:52Z (macuahuitl hourly). FLEET: yoga 2h (claimed 245 linux revision slice) + pirria 6h on cadence; lenovinha operator-stopped. STANDING DUTY unchanged; enclave 4/4 restarted. 880-tdwn: 32-test drain COMPLETE, tripwire WIRED in all four local-ci test lines (559/559 twice armed) — status implemented; mechanism #2 OPEN: containers die with NO podman stop events (direct SIGTERM to properly-delegated libpod scopes; zram 8G/8G full, oomd journal unreadable; NOT the env race, NOT shell-scope reaping — both ruled out with evidence on the row). NEXT: (1) mechanism #2: run a stack-up wired ci-full watching journalctl -f + podman events -f side-by-side; if oomd, the fix is a MemoryMin/ManagedOOMPreference drop-in for libpod scopes or zram relief. (2) 865-n8vq closure at yoga''s TTL (~19:33Z) — the wired gate''s tray-contract now passes armed. (3) 873-b1nx prototype. CAUTION SOFTENED: the env-race killer is structurally guarded; the remaining killer strikes ~1-2min into HEAVY runs (link-phase pressure correlation), so keep the 878-79b5 supervisor trusted to re-heal and read flapping verdicts as 880-tdwn EC4.'
+    ts: "2026-08-25T11:51:24Z"
+    host: macuahuitl
+
+events:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    event:
+      type: note
+      ts: "2026-08-25T11:51:24Z"
+      host: macuahuitl
+      summary: >
+        queue refresh after the 880-tdwn drain
