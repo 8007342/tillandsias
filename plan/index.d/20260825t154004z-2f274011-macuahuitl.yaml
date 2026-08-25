@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    field: next_action
+    value: 'COORDINATOR QUEUE @ 2026-08-25T15:55Z (macuahuitl hourly). FLEET: yoga 2h + pirria 6h on cadence; lenovinha operator-stopped. STANDING DUTY unchanged; enclave 4/4. NEXT for macuahuitl: (1) 865-n8vq closure at yoga''s TTL ~19:33Z — one stack-up ci-full as reproducibility+survival proof, then close; release decision is the operator''s. (2) 712-r5x8 is implemented (embed_endpoint discoverability in expert_capability, litmus-pinned) — its completed rung needs one real forge launch showing spec_answer confidence=retrieved in-forge; whoever launches the next forge should check the startup context''s expert_capability line and the spec_answer answer, then file. (3) 873-b1nx slices remain pickup-able (builder container; build.sh lane wiring; WSL2/VFR measurements for windows/macos hosts). (4) idle: 722-uern needs the mirror-identity live matrix (multi-hour, claim only with a full cycle free).'
+    ts: "2026-08-25T15:40:04Z"
+    host: macuahuitl
+
+events:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    event:
+      type: note
+      ts: "2026-08-25T15:40:04Z"
+      host: macuahuitl
+      summary: >
+        queue refresh after 712-r5x8 implemented

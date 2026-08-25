@@ -17667,6 +17667,12 @@ plan_index:
         - a fresh forge either provisions the spec RAG embedding endpoint so spec_answer returns a cited span for a covered cheatsheet question, OR the unsupported state is documented + discoverable (expert_capability advertises the missing endpoint) so an agent knows why
         - an as-wired check proves an in-forge spec_answer returns confidence=retrieved/exact (not unsupported) for a committed-cheatsheet question, or the discoverable-degradation is asserted
       events:
+        - type: progress
+          ts: "2026-08-25T15:39:51Z"
+          agent_id: "linux-macuahuitl-opus5-20260825t153951z"
+          host: macuahuitl
+          summary: |
+            DISCOVERABLE-DEGRADATION ARM LANDED (exit criteria arm-1 second branch + arm-2 assertion): expert_capability's line now carries embed_endpoint=unset|unreachable|reachable — unset IS the fresh-forge finding made visible (the launch never wired TILLANDSIAS_EMBED_ENDPOINT), unreachable means wired-but-dead (probe bounded 3s via GET <ep>/models so a dead endpoint cannot stall a capability call), reachable means spec_answer's embedding half will serve. Appended additively per the same substring-safety rule as spec_index (existing litmus pins unaffected, family PASS 17/17). All three states proven live on this host (the dev endpoint legitimately reads reachable; env -u proves unset; port 9 proves unreachable). New litmus step in litmus-expert-capability-skew-honesty asserts unset+unreachable arms; MUTATION: forcing the unset arm to lie 'reachable' reds the step (seen live, restored green — and the verification grep itself initially self-matched 'FAIL: 0', caught per 601-462g before believing it). REMAINING for completed: an in-forge spec_answer returning confidence=retrieved on a covered cheatsheet question at the next real forge launch — the provisioning half (549/552 wiring) is untouched by this arm.
         - type: filed
           ts: "2026-08-13T01:54:33Z"
           agent_id: linux-mutable-session-20260812

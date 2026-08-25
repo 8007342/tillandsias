@@ -283,6 +283,16 @@ critical_path:
     timeout_ms: 60000
     expected_behavior: "ok: probe-fail-soft"
 
+  - step: "712-r5x8: the embed-endpoint degradation is DISCOVERABLE — unset advertises unset, a dead endpoint advertises unreachable, and neither can stall the probe"
+    # The 2026-08-13 in-forge finding: spec_answer refused correctly in a
+    # fresh forge (embedding endpoint unprovisioned) but nothing SAID so, and
+    # the delegate debugged the expert instead of the endpoint. The field is
+    # the fix; this step is what keeps it truthful. Port 9 (discard) refuses
+    # fast, so the unreachable arm also proves the probe's bound is real.
+    command: "a=$(env -u TILLANDSIAS_EMBED_ENDPOINT bash -c 'set -euo pipefail; . images/default/lib-expert-capability.sh; tillandsias_expert_capability \"\" \"\"; printf %s \"$TILLANDSIAS_EXPERT_CAPABILITY_LINE\"'); b=$(TILLANDSIAS_EMBED_ENDPOINT=http://127.0.0.1:9 bash -c 'set -euo pipefail; . images/default/lib-expert-capability.sh; tillandsias_expert_capability \"\" \"\"; printf %s \"$TILLANDSIAS_EXPERT_CAPABILITY_LINE\"'); case $a in *'embed_endpoint=unset') :;; *) echo \"unset arm: $a\"; exit 1;; esac; case $b in *'embed_endpoint=unreachable') :;; *) echo \"unreachable arm: $b\"; exit 1;; esac; echo 'ok: embed-endpoint-discoverable'"
+    timeout_ms: 30000
+    expected_behavior: "ok: embed-endpoint-discoverable"
+
   - step: "NO-PYTHON: the capability probe is POSIX shell + awk only"
     # Comments are stripped before the check: the file's own header says it uses
     # no python, and a guard that cannot tell a PROHIBITION from a VIOLATION is

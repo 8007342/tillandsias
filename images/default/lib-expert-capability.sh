@@ -352,13 +352,41 @@ _tillandsias_expert_spec_index_state() {
     fi
 }
 
+# _tillandsias_expert_embed_state — ORDER 712-r5x8.
+#
+# The 2026-08-13 in-forge finding: spec_answer refused (correctly,
+# confidence=unsupported) in a fresh forge because the embedding endpoint is
+# not provisioned at launch — but NOTHING advertised that, so the delegate
+# debugged the expert instead of the endpoint. This field makes the
+# degradation DISCOVERABLE: `unset` means the launch never wired
+# TILLANDSIAS_EMBED_ENDPOINT (the fresh-forge gap itself); `unreachable`
+# means it is wired but not answering (probe bounded at 3s so a dead
+# endpoint cannot stall a capability call); `reachable` means spec_answer's
+# embedding half will actually serve. GET <ep>/models is the cheap
+# OpenAI-shape liveness probe the /v1 base guarantees.
+_tillandsias_expert_embed_state() {
+    _tec_ep="${TILLANDSIAS_EMBED_ENDPOINT:-}"
+    if [ -z "$_tec_ep" ]; then
+        printf 'unset\n'
+        return 0
+    fi
+    if command -v curl >/dev/null 2>&1 \
+        && curl -fsS -m 3 -o /dev/null "$_tec_ep/models" 2>/dev/null; then
+        printf 'reachable\n'
+    else
+        printf 'unreachable\n'
+    fi
+}
+
 _tillandsias_expert_capability_emit() {
     TILLANDSIAS_EXPERT_CAP_SPEC_INDEX="$(_tillandsias_expert_spec_index_state)"
-    # spec_index is APPENDED, never inserted: the existing five fields are
-    # matched by substring in litmus:capability-manifest-guard and
-    # litmus:expert-capability-skew-honesty, so growing the line at the end is
-    # additive for every current reader.
-    TILLANDSIAS_EXPERT_CAPABILITY_LINE="expert_capability: now=${TILLANDSIAS_EXPERT_CAP_NOW} after_relaunch=${TILLANDSIAS_EXPERT_CAP_AFTER} skew=${TILLANDSIAS_EXPERT_CAP_SKEW} blocked_capabilities=${TILLANDSIAS_EXPERT_CAP_BLOCKED} lost_on_relaunch=${TILLANDSIAS_EXPERT_CAP_LOST} spec_index=${TILLANDSIAS_EXPERT_CAP_SPEC_INDEX}"
+    TILLANDSIAS_EXPERT_CAP_EMBED="$(_tillandsias_expert_embed_state)"
+    # spec_index and embed_endpoint are APPENDED, never inserted: the
+    # existing fields are matched by substring in
+    # litmus:capability-manifest-guard and
+    # litmus:expert-capability-skew-honesty, so growing the line at the end
+    # is additive for every current reader.
+    TILLANDSIAS_EXPERT_CAPABILITY_LINE="expert_capability: now=${TILLANDSIAS_EXPERT_CAP_NOW} after_relaunch=${TILLANDSIAS_EXPERT_CAP_AFTER} skew=${TILLANDSIAS_EXPERT_CAP_SKEW} blocked_capabilities=${TILLANDSIAS_EXPERT_CAP_BLOCKED} lost_on_relaunch=${TILLANDSIAS_EXPERT_CAP_LOST} spec_index=${TILLANDSIAS_EXPERT_CAP_SPEC_INDEX} embed_endpoint=${TILLANDSIAS_EXPERT_CAP_EMBED}"
 }
 
 # tillandsias_expert_capability_advice — the one-sentence action for the verdict.
