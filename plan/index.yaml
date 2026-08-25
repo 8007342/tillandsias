@@ -17321,7 +17321,7 @@ plan_index:
 
     - packet_id: build-cache-sweep-on-durable-hosts
       order: 709-in2f
-      status: ready
+      status: done
       desired_release: v0.6
       release_target: convergence-velocity-milestone
       priority: p3
@@ -17377,6 +17377,21 @@ plan_index:
           host: linux_mutable
           summary: Filed from the operator's cargo-clean directive + the git-hygiene audit (target/ 63G). Durable-host cycle-end reclaim, size/staleness-gated.
 
+        - type: note
+          ts: "2026-08-25T07:44:12Z"
+          host: yoga
+          summary: |
+            claimed for cycle 2026-08-25T07:43Z (start-of-day lane)
+        - type: completed
+          ts: "2026-08-25T07:52:56Z"
+          host: yoga
+          summary: |
+            status 'done' with evidence_refs: scripts/check-build-cache-sweep.sh + litmus:build-cache-sweep-trigger 8/8, bound; meta-orchestration instant 20/20; methodology.yaml false implementation claim corrected; skill Finalization step 9c
+        - type: note
+          ts: "2026-08-25T07:52:56Z"
+          host: yoga
+          summary: |
+            sweep implemented, pinned and wired
     - packet_id: fragment-host-suffix-may-not-match-writing-host
       order: 711-83k8
       status: obsoleted
@@ -19939,7 +19954,7 @@ plan_index:
 
     - packet_id: meta-orchestration-spec-is-a-ghost-with-a-100-percent-coverage-claim
       order: 740-k8ef
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p1
       release_target: fail-loud-diagnosis-milestone
@@ -20044,6 +20059,25 @@ plan_index:
           summary: |
             CONFIRMED SYSTEMIC — the packet's own open question ('check whether other spec ids have the same shape before fixing only this one') is now answered: they do. Touching images/default/lib-common.sh in an unrelated commit made the pre-commit hook check that file, and it reported 8 further ghost traces across THREE more nonexistent spec ids: spec:windows-wsl-runtime (lines 102, 194, 675, 753, 2152), spec:forge-git-ergonomics (114), spec:forge-git-identity-anonymization (327, 345). So meta-orchestration is not a lone gap — at least four spec ids are traced by real code and backed by no spec. This moves the fix away from 'write the meta-orchestration spec' and toward 'make litmus-bindings derive its ids from what exists, and make the ghost-trace check run over the whole tree rather than only newly-added files'. The hook only inspects files a commit touches, which is why four ids hid for months: the traces are old and the files are rarely edited.
 
+        - type: completed
+          ts: "2026-08-25T05:45:04Z"
+          agent_id: linux-macuahuitl-opus5-20260825t054504z
+          host: linux_mutable
+          evidence_refs:
+          - 'openspec/specs/meta-orchestration/spec.md — DISTILLED (five falsifiable requirements: self-proving exit, inviolable boundary, one-checkout-one-cycle, guards-before-work fail loud, mode verdict grammar), each scenario naming its pinning litmus; ~100 lines against the 52KB runbook, which stays the single operational source'
+          - 'the packet''s own systemic audit confirmed and DRAINED: openspec/specs/{enclave-service-catalog,guest-crashloop-detection,forge-git-identity-anonymization}/spec.md also written (registry-asserted or 7-site-traced); fat-spec-corpus-index -> order:547, litmus-runner -> spec:litmus-framework, forge-push-credential-channel -> spec:git-mirror-service, forge-git-ergonomics trace removed (locale setup is not a git contract)'
+          - 'EC2 by scratch file, not inspection: a NEWLY git-added file carrying @trace spec:meta-orchestration passes pre-commit-openspec.sh (rc=0, zero flags)'
+          - 'EC4 negative control both checkers: the same staged scratch file with spec:not-a-real-spec is flagged by the hook; an injected ghost turns validate-traces 0 errors -> 1 (validate-traces overall: 8 errors -> 0)'
+          - 'EC5 derived, not asserted: litmus-bindings coverage_ratio meta-orchestration 100 -> 80 (4/5 requirements litmus-covered; the checkout lock is pinned by scripts/test-cycle-checkout-lock.sh with no litmus binding yet), enclave-service-catalog 100 -> 33, each with the derivation recorded inline'
+          - 'EC3 at the retrieval layer: post-commit index rebuild (9910 -> 21340 chunks), question embedded via the local endpoint, tillandsias-plan spec-retrieve returns the new spec as hit #2 with the Citation span (path+lines). Full MCP spec_answer synthesis is BLOCKED ON THIS SESSION by a misconfigured server (see below), not by the corpus'
+          - '584-2qq2 ratchet seen RED live: the gate refused the stamp until the eight fixed names were pruned from openspec/ghost-trace-baseline.txt in the fixing commit (03c63fc9e) — the may-only-shrink direction enforced its own bookkeeping'
+          merge_affordance: merge-now
+          merge_reason: |
+            Eight ghost names were the entire hard-error population of validate-traces; every host's commits now gate against a clean baseline that can only shrink.
+          summary: |
+            FOUR SPECS EXIST NOW, FOUR GHOSTS ARE GONE, AND THE COVERAGE NUMBERS ARE DERIVED. The registry asserted meta-orchestration at coverage 100 for a file that did not exist; the packet's open question ("is this systemic?") was already answered yes in its own event stream, so the closure drained the whole class in one pass: specs written where the registry or a multi-site trace asserted them, re-points where the trace was decoration, and the ratchet baseline pruned in the same commit under the gate's own RED refusal.
+            DISCOVERED EN ROUTE, needs an owner: this session's forge-plan MCP server resolves the spec index at /mnt/c/Users/bullo/... — a WINDOWS WSL path, on macuahuitl (linux). spec_answer therefore returns confidence=unsupported here regardless of index state, while the CLI retrieval over the podman-volume index works. The server config this session inherited was written by or for a Windows host. check-spec-index-resolution-agreement.sh passes (the SCRIPT carriers agree); the MCP server binary's root does not ride that agreement — that is the gap. Sibling watch: pirria/yoga sessions should check their spec_answer freshness.source_commit for the same symptom.
+            Residual, tracked not hidden: spec:windows-wsl-runtime sites warn as in-flight (openspec/changes/windows-wsl-runtime/ exists — legitimate); forge-skills-mapping remains the baseline's one surviving ghost; the six yaml-scope baseline names from 867-vd4z are untouched; the checkout-lock requirement deserves a litmus binding to lift meta-orchestration's derived 80 back to 100 honestly.
     - packet_id: in-forge-findings-die-with-the-container
       order: 741-3y48
       status: implemented
@@ -22972,7 +23006,7 @@ plan_index:
     - packet_id: probe-mirror-reachable-grep-is-locale-blind
       release_target: fail-loud-diagnosis-milestone
       order: 773-f5ma
-      status: ready
+      status: done
       desired_release: v0.5
       kind: bug
       pickup_role: linux
@@ -23033,6 +23067,21 @@ plan_index:
             French-locale hosts because the reachability probe's error grep is
             English-only.
 
+        - type: note
+          ts: "2026-08-25T02:04:35Z"
+          host: yoga
+          summary: |
+            claimed for cycle 2026-08-25T01:43Z
+        - type: completed
+          ts: "2026-08-25T02:06:29Z"
+          host: yoga
+          summary: |
+            status 'done' with evidence_refs: litmus:forge-clone-reachability-probe-shape 5/5 with a new fr_FR locale control; git-mirror-service instant 20/20 (was 19/20); hand-falsified both directions
+        - type: note
+          ts: "2026-08-25T02:06:29Z"
+          host: yoga
+          summary: |
+            LC_ALL=C scoped to the parsed invocation
     - packet_id: macos-attach-retest-on-healthy-substrate
       release_target: socket-audit-master
       order: 774-b529
@@ -25976,6 +26025,26 @@ plan_index:
           host: forge
           summary: |
             remove contradictory closure ambiguity before another framing migration
+        - type: note
+          ts: "2026-08-25T03:45:23Z"
+          host: yoga
+          summary: |
+            claimed for cycle 2026-08-25T03:43Z
+        - type: note
+          ts: "2026-08-25T03:48:55Z"
+          host: yoga
+          summary: |
+            cycle-scoped claim released: contract repairs landed, vsock_server slice designed and left for a full cycle
+        - type: note
+          ts: "2026-08-25T05:46:26Z"
+          host: yoga
+          summary: |
+            claimed for cycle 2026-08-25T05:43Z (vsock_server slice)
+        - type: note
+          ts: "2026-08-25T05:56:13Z"
+          host: yoga
+          summary: |
+            cycle-scoped claim released: vsock_server slice landed, three sites remain
     - packet_id: windows-connect-path-unbounded-and-uncancellable
       order: 795-tb4a
       status: ready
@@ -30546,7 +30615,7 @@ plan_index:
 
     - packet_id: nix-cache-service-into-the-tray-container-lifecycle
       order: 801-vm4p
-      status: implemented
+      status: completed
       desired_release: v0.5
       priority: p3
       kind: enhancement
@@ -30610,6 +30679,25 @@ plan_index:
             SKIP IS SUCCESS, deliberately: no nix, no store, or no checkout script all return Ok, so the ForgeLaunch edge never turns nix into a launch requirement, and prep/start failures WARN rather than wedge — an accelerator that can hang the launch is a net brake.
             LEFT AS RESIDUE, honestly: (1) parity between the script's `_podman run` and build_nix_cache_run_args is enforced only by the Rust-side pinned test plus comments at both sites — a two-sided extraction check would be stronger; (2) end-to-end graph bring-up (ensure_forge_launch satisfying NixCache on a live forge launch) is untested until the next forge launch on this host; (3) no LivenessProbe entry yet — the packet's self-healing criterion — which is the natural next slice and needs the probe table's shape studied first. Status implemented, not completed, for exactly these.
             Held to the packet's own map throughout (router as template), and the gate contributed one catch of its own: my first draft used raw Command::new("podman") and 714-4r6w's guard refused the tree until the calls were bounded.
+        - type: completed
+          ts: "2026-08-25T03:43:56Z"
+          agent_id: linux-macuahuitl-opus5-20260825t034356z
+          host: linux_mutable
+          evidence_refs:
+          - 'container_deps.rs — LivenessProbe now supervises Service::NixCache via classify_nix_cache: ABSENT container = inapplicable (skip-is-success carries into supervision, no death verdict, no re-ensure loop); EXITED = real death with the full 767-es4w treatment (verdict, cumulative count, re-ensure through the satisfier so the drain gate + resource lock apply)'
+          - 'MUTATION both ways: collapsing Absent into Dead reddens nix_cache_absent_is_not_a_death; removing the supervision entry from run_check reddens the order-477 scope-agreement test via its new structural read (proven live with a compile-safe source mutation, restored green)'
+          - 'main.rs — nix_cache_launch_args_parity_is_two_sided: reads the SCRIPT''s actual _podman run block, expands its variable table, asserts token-for-token vector equality with build_nix_cache_run_args; script-side drift (--memory flag injected) went RED, restored green — the one-sided pin could not see that direction'
+          - 'RIDER FIX (767-es4w contract violation): the daemon''s liveness loop constructed LivenessProbe::new per tick inside spawn_blocking, resetting cumulative death counts to 1 every check — a flapping service could never show a rising number; one probe now spans the task via move-and-return'
+          - 'PRE-EXISTING --ci-full DEBT FIXED: teardown_and_liveness_agree_on_shared_container_scope and post_last_lane_steady_state_needs_no_liveness_recreate failed at clean HEAD (verified via stash) — the Service enum grew to 8 with NixCache but DECLARED stayed 7 and the post-last-lane fixture predated the Core row; both extended, cargo test -p tillandsias-headless --bins 420/420'
+          - 'LIVE on this host: tillandsias-nix-cache Up 5 hours; scripts/nix-cache-service.sh ensure -> ok:nix-cache:already-running:endpoint=https://nix-cache:5000:pinned=2'
+          - 'ghost trace re-pointed (queue item): scripts/check-credential-channel.sh header @trace spec:meta-orchestration (no such spec) -> order:61, order:756-2jnj, order:860-g798; guard + its 6/6 fixture re-run green'
+          merge_affordance: merge-now
+          merge_reason: |
+            Fixes two tests that fail --ci-full at HEAD (865-n8vq's territory) and closes the last unsupervised-service gap before the next forge launch.
+          summary: |
+            THE NIX CACHE NOW HAS THE SAME LIFECYCLE AS VAULT/PROXY/ROUTER — the deliverable's exact sentence, now true in all four consequences the packet catalogued: supervised (LivenessProbe entry, this filing), scope-managed (Core row, prior), drain-gated (prior), and launched by the graph (ForgeLaunch edge, prior). The supervision entry carries the launch semantics into monitoring: skip-is-success means absent is inapplicable and must never fire a death verdict, while an exited container this tray launched gets the loud 767-es4w treatment. Parity between the standalone script and the tray launch is now pinned from BOTH sides, so the two launch paths cannot drift in either direction.
+            HONEST RESIDUE, named: the ForgeLaunch-edge live bring-up (tray ensures the cache during a real forge launch) has not run with this binary — the standalone ensure exercises flag-identical launch behavior (that identity is what the two-sided parity test proves), and the running daemon predates this build. The next forge launch on this host closes it observationally; any cache death there now self-heals and logs fail:managed-service-death with a rising count.
+            Found en route and fixed as riders: the liveness loop was resetting 767-es4w's cumulative death counts every tick (probe rebuilt per check), and two order-477 scope-agreement tests had been failing at HEAD since NixCache entered the Service enum — pre-existing --ci-full debt relevant to 865-n8vq, verified pre-existing via stash before claiming the fix.
     - packet_id: harmonia-baked-into-an-image-versus-taken-from-the-served-store
       order: 801-7tqe
       status: ready
@@ -33892,6 +33980,7 @@ plan_index:
              makes every future failure in this crate harder to read.
 
     - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+      next_action_ts: "2026-08-25T08:57:39Z"
       order: 831-ezea
       status: in_progress
       desired_release: v0.5
@@ -34019,26 +34108,7 @@ plan_index:
         still 0 in two weeks horizon 0 has no write side and 814-iyu7 recurs
         regardless of everything else. GUARD: read 10 sampled next_action values;
         >= 7 must name a command or file:line AND a refuted move.
-      next_action: |-
-        CAMPAIGN STATE 2026-08-23T08:34Z. SEVEN HOSTS, all attesting within ~2h except the ephemeral forge. The two gates on unattended hourly were 851-cduu (CLOSED on three-host evidence) and 856-s56y (no scheduler, still OPEN, owned by yoga). Capability routing landed: 847-wgy4 routes by ORDINAL RANK in the capability-matrix roster, so row-holding non-low-end hosts get disjoint epics by construction rather than by hash luck.
-        
-        MY QUEUE HAS TURNED OVER. Items (1) 849-tz8g, (2) 853-6gz3 Tier A, (3) the 824-6qxh relabel and (5) 552 delta are all done or refuted; do not re-derive the old ordering from a stale prompt.
-        
-        WHAT IS TRUE NOW:
-        - 849-tz8g WAS WRONG AND I FILED IT. There is no inference ceiling: qwen2.5:7b, mxbai-embed-large, bge-m3 batched and qwen3-embedding:4b (2560-dim) all run. The real defect is CONCURRENT RUNNER RESIDENCY — with 7,910 MiB resident across two models, loading a third aborts with GGML_ASSERT while SIXTEEN GIGABYTES are free. Rescoped p2. Workaround is proven: serialise loads, unload between models.
-        - 853-6gz3 TIER A already existed and is fully wired; the win was fixing a span_key bug that withheld 75% of the methodology corpus as FABRICATED.
-        - 853-6gz3 TIER B measured: complement pairing catches 23% self-contradiction (17/73) with NO ground truth — the operator mechanism works. The apparent 20% in-corpus support rate was RETRIEVAL RECALL, not judge quality: 6 of 10 refused in-corpus questions flip to YES when judged against the recorded source file instead of the retrieved chunk.
-        - 552 delta re-embed shipped: 19.5x on a quiet GPU (117s -> 6s), joined by content hash, with an identity assertion whose negative control fires on a two-line swap that leaves arity intact.
-        - 824-6qxh: 86% of my near-miss labels were wrong (243 -> 33 true). Bands re-derived: overlap 0.3024 -> 0.2058. Thresholds still dead; per-corpus n is now too thin to quote.
-        
-        NEXT, in order:
-        (1) TIER B OVER TOP-K, not top-1, scoring judge quality and retrieval recall SEPARATELY. k=1 is the measured bottleneck and a top-1 miss is indistinguishable from an unanswerable question — which is the confusion this programme exists to remove.
-        (2) The bigger-embedder question for 824-6qxh, now genuinely unblocked: rebuild the index with bge-m3 or qwen3-embedding:4b (both batch fine) and re-derive the bands. Serialise the model loads.
-        (3) 846-idhn, capabilities channel base representation, now that six hosts publish rows.
-        
-        STANDING COORDINATOR DUTY EVERY CYCLE: merge platform branches into linux-next; nobody else has it. Both were ahead within the hour on two consecutive ticks.
-        
-        NOT MINE: 856-s56y (yoga), 857-4kqv (yoga), 860-g798 (yolanda), and the low-end tier rows on pirria/esmeraldinha. If one stalls, re-direct rather than absorb.
+      next_action: 'COORDINATOR QUEUE @ 2026-08-25T08:58Z (macuahuitl hourly). FLEET: yoga 2h (709-in2f) + pirria 6h (877-mynm) on cadence; lenovinha operator-stopped; esmeraldinha/yolanda/macbook down. STANDING DUTY: fetch/prune, merge AHEAD branches, expire-claims, fleet-heartbeat, sweep-salvage-refs.sh --apply. REBUILD RULE SHARPENED: post-pull rebuilds must be cargo build --release -p tillandsias-plan — the plan-binary probe PREFERS target/release, and a debug-only rebuild leaves every script consumer on a stale release binary (851-cduu one directory over; bit this cycle, caught by a red fixture). 865-n8vq: the 12-failure inventory is RETRACTED (worktree artifacts); after 879-gidx + the sidecar-stub fix the trunk is likely GREEN — a background --ci-full at pushed HEAD reports next cycle; yoga''s claim TTLs ~19:33Z, at expiry macuahuitl verifies-and-closes rather than fixes. NEXT for macuahuitl: (1) read the background --ci-full verdict, file it on 865-n8vq. (2) 873-b1nx scoping (v0.6 nix-cache container builds). (3) operator note stands: restart this session''s MCP servers to clear stale FORGE_SPEC_INDEX_DIR (spec_answer); the grade path no longer cares (879-gidx). DONE THIS ARC adds 879-gidx + the sidecar-stub arch fix + litmus:cycle-checkout-lock-shape.'
       events:
         - type: note
           ts: "2026-08-22T23:44:01Z"
@@ -35899,6 +35969,36 @@ plan_index:
             STANDING COORDINATOR DUTY unchanged; platform branches ahead=0 at 00:34Z.
           summary: |
             Operator re-armed yoga (2h) and pirria (6h) on plain prompts with fast-forward-first; recorded the watch list for their first cycles and promoted 874-idnt to time-sensitive.
+        - type: note
+          ts: "2026-08-25T02:45:18Z"
+          host: macuahuitl
+          summary: |
+            coordinator queue refresh after 874-w2gc closure
+        - type: note
+          ts: "2026-08-25T03:44:34Z"
+          host: macuahuitl
+          summary: |
+            queue refresh after 801-vm4p closure
+        - type: note
+          ts: "2026-08-25T05:45:46Z"
+          host: macuahuitl
+          summary: |
+            queue refresh after 740-k8ef closure
+        - type: note
+          ts: "2026-08-25T06:40:39Z"
+          host: macuahuitl
+          summary: |
+            queue refresh after 878-79b5 closure
+        - type: note
+          ts: "2026-08-25T07:39:17Z"
+          host: macuahuitl
+          summary: |
+            queue refresh: coverage lift filed, MCP finding resolved as stale-session
+        - type: note
+          ts: "2026-08-25T08:57:39Z"
+          host: macuahuitl
+          summary: |
+            queue refresh: inventory retracted, 879-gidx filed+closed
     - packet_id: macos-guest-cannot-reach-a-host-native-service
       order: 830-xsk2
       status: ready
@@ -43467,7 +43567,7 @@ plan_index:
       packet_id: salvage-refs-need-retention-sweep-and-a-consumer
       desired_release: v0.5
       kind: enhancement
-      status: ready
+      status: completed
       pickup_role: any
       priority: p1
       capability_tags:
@@ -43484,11 +43584,35 @@ plan_index:
       exit_criteria: |
         (1) A salvaged ref appears in the ledger within one coordinator cycle without human action. (2) Two salvages same host/day both land. (3) The deletion-protection decision is recorded with its reasoning. (4) A litmus pins push+round-trip against a fixture remote and goes red if the exemption is reordered below a worktree-state guard.
 
+      events:
+        - type: note
+          ts: "2026-08-25T02:35:54Z"
+          host: macuahuitl
+          summary: |
+            874-w2gc claim: salvage sweep/retention/consumer, macuahuitl hourly cycle
+        - type: completed
+          ts: "2026-08-25T02:44:37Z"
+          agent_id: linux-macuahuitl-opus5-20260825t024437z
+          host: linux_mutable
+          evidence_refs:
+          - 'scripts/sweep-salvage-refs.sh — coordinator sweep: ls-remote salvage/*, dedup against the folded+unfolded ledger, --apply files one progress event per UNSEEN ref on 874-s8vf''s packet through tillandsias-plan (so every sweep write passes 874-idnt identity validation); report mode never writes'
+          - 'the sweep is ALSO the overlap-refusals.jsonl consumer (873-zcim residue): reports total/new-since-cursor/newest, --apply advances the cursor; live run surfaced 9 lines, ALL fixture artifacts from 873-zcim''s own bring-up — which exposed that test-cycle-checkout-lock.sh polluted the real feed; fixed (scratch TILLANDSIAS_CYCLE_STATE_DIR exported), suite 10/10, real jsonl unchanged after a run'
+          - 'scripts/salvage-dirty-worktree.sh — same-day collision fix: remote-probe then uniquify with UTC hhmmss (EC2); TILLANDSIAS_SALVAGE_ROOT test seam; ghost spec:meta-orchestration trace re-pointed to order:872-c9nd'
+          - 'scripts/hooks/pre-push-local-gate.sh — DELETION PROTECTION inside the exemption: local-sha-zeros on a salvage ref refuses unless TILLANDSIAS_SALVAGE_DELETE_OK=1; rescue pushes stay exempt (negative control)'
+          - 'scripts/test-salvage-net.sh — 16/16 hermetic: round-trip byte-exact incl. untracked, worktree untouched, both same-day refs land under distinct names, deletion refused/override honored/rescue exempt, ORDERING pin with in-fixture counterfactual (the cheatsheet guard provably refuses the same tree a salvage-only push escapes), sweep files-once/idempotent/report-only'
+          - 'openspec/litmus-tests/litmus-salvage-net-roundtrip.yaml + litmus-bindings.yaml registration (spec meta-orchestration); scripts/run-litmus-test.sh meta-orchestration --phase pre-build --size instant: 18/18 PASS including the new binding'
+          - 'LIVE lifecycle on origin: the one standing salvage ref (macuahuitl/20260824-dirty-start) verified fully absorbed into linux-next (all three salvaged paths byte-identical to HEAD), deletion FIRST refused by the new guard (seen RED in production, remedy printed), then consciously deleted under the override; origin now holds zero salvage refs, all accounted for; disposition event filed on 874-s8vf''s row'
+          merge_affordance: merge-now
+          merge_reason: |
+            Any sibling can wedge and salvage at any hour; until this is on origin a second same-day salvage still dies non-fast-forward and a deletion still goes unquestioned.
+          summary: |
+            THE SALVAGE NET NOW HAS A CONSUMER, AND ITS REFS HAVE RIGHTS. Exit criterion by criterion: (1) sweep-salvage-refs.sh turns unseen salvage/* refs into ledger events on the salvage packet in one coordinator pass, no human action — proven in the hermetic fixture and wired into the standing coordinator duty (831-ezea next_action); the live sweep correctly filed NOTHING because the only real ref was already named in 874-s8vf's closure (dedup working on first contact). (2) Same-day collisions resolve by name (UTC time suffix after a remote probe), both refs land. (3) RETENTION DECISION, recorded with reasoning: salvage refs are kept until their content is confirmed merged or consciously abandoned; deletion requires TILLANDSIAS_SALVAGE_DELETE_OK=1 past the pre-push guard; NO time-based auto-reaping — the refs are tiny, their content was by definition unrecoverable from anywhere else, and expiry would reintroduce the silent loss the net exists to end. Server-side protection for refs/heads/salvage/* (GitHub rule) is recommended to the operator but needs repo-admin action; the local guard covers every fleet push path today. (4) litmus:salvage-net-roundtrip pins push+round-trip against a fixture remote and goes red if the exemption is reordered below any worktree-state guard — the ordering scenario asserts the counterfactual in the same fixture, so a pass can never be vacuous.
+            Rode along: the 873-zcim residue (overlap-refusals consumer) closes with this row; the consumer's first live read found its own test suite polluting the feed, which is now fixed and is exactly the kind of thing a consumer exists to catch.
     - order: 874-idnt
       packet_id: ledger-writers-refuse-noncanonical-identity-at-write-time
       desired_release: v0.5
       kind: enhancement
-      status: ready
+      status: completed
       pickup_role: linux
       priority: p1
       capability_tags:
@@ -43504,9 +43628,29 @@ plan_index:
       exit_criteria: |
         (1) A ledger write carrying a malformed agent_id or an off-roster host: is refused with a remedy naming the canonical source. (2) Every existing writer path goes through the validation (set-field, append-event, expire-claims' fragment writer). (3) The heartbeat's documented grammar matches agent-identity.sh. (4) Mutation: a fabricated host label is refused; a canonical one passes.
 
+      events:
+        - type: completed
+          ts: "2026-08-25T01:43:18Z"
+          agent_id: linux-macuahuitl-opus5-20260825t014318z
+          host: linux_mutable
+          evidence_refs:
+          - 'crates/tillandsias-plan/src/main.rs agent_id_is_canonical() — grammar from scripts/agent-identity.sh (756-hn3a): >=4 dash components in [a-z0-9-], trailing LOWERCASE compact timestamp; wired into writer_agent_from so both --agent and TILLANDSIAS_AGENT_ID are checked, refusal names agent-identity.sh as the remedy'
+          - host_label_is_acceptable() + require_acceptable_host() — explicit --host refuses outside [a-z0-9_-]+ at ALL five flag sites (loop-status-append, append-event, set-field note + field paths, expire-claims); a malformed TILLANDSIAS_HOST_KIND self-corrects to the platform constant with a warning instead of becoming durable data
+          - 'cargo test -p tillandsias-plan --bins: 27/27; MUTATION both ways — bypassing the agent grammar reddens writer_agent_refuses_noncanonical_ids_874_idnt (26/1), bypassing the host alphabet reddens host_label_alphabet_874_idnt (26/1)'
+          - 'live wiring probe on a scratch index: uppercase-T/Z id refused rc=2 writing NOTHING; --host Laptopirria refused rc=2 (append-event, set-field, expire-claims); canonical identity passes rc=0'
+          - scripts/fleet-heartbeat.sh — the ~line-101 comment documented the deviant <kind>-<host>-<model>-<stamp> shape; now names the canonical grammar + why the match class stays a superset (historic kind-label fragments must still register as declarations); last_declared_epoch regex anchored to the agent_id key at line start; heartbeat verdict unchanged 4/0/0/4/0 after the change
+          - scripts/test-ledger-ts-guard.sh fixture id updated to canonical shape (the old bare label is now refused — the fixture caught the enforcement working); ts-guard 9/9, set-field-yaml-shapes 14/14, reclaim-stranded-claims 3/3
+          - TILLANDSIAS_SKIP_VERSION_BUMP=1 TILLANDSIAS_FORCE_CHECK=1 ./build.sh --check green
+          merge_affordance: merge-now
+          merge_reason: |
+            Both re-armed siblings write ledger identity every cycle; until this is on origin, every one of those writes can reseed the mixed vocabularies the retrospective catalogued.
+          summary: |
+            IDENTITY IS NOW ENFORCED WHERE IT BECOMES DURABLE. The canonical grammar had one source (scripts/agent-identity.sh, 756-hn3a, litmus-pinned) and zero enforcement, and the retrospective found every hand-written agent_id of the preceding 48 hours violating it — uppercase-T/Z timestamps, including the coordinator's own; the host: field meanwhile mixed node names, kind labels, and git-author display names that 864-m2vc's exact-equality attribution silently trips over.
+            The choke point is the tillandsias-plan writer: agent ids must now parse as the agent-identity.sh shape (structural check — at least four sanitized components ending in the compact lowercase timestamp), and host labels must fit [a-z0-9_-]+. An explicit flag REFUSES with a remedy naming the canonical source (stated intent must not be silently rewritten); ambient environment values self-correct loudly. The refusal exits before any byte is written. Deliberately NOT enforced: host-vocabulary unification (node name vs kind label) — both survive until that fleet decision is its own packet; the check blocks only the class that can never be right.
+            This fragment's own identity was derived by the enforced path — the first coordinator filing whose agent_id the binary itself vouches for.
     - packet_id: litmus-escaped-quotes-diverge-on-yq-absent-hosts
       order: 875-v7hv
-      status: ready
+      status: done
       kind: bug
       priority: p2
       pickup_role: any
@@ -43612,11 +43756,26 @@ plan_index:
             EXIT CRITERIA, reconciled against what was actually built: criteria 1 and 2 asked for a scanner that refuses `\"` in a litmus file, with controls. Superseded by the measurement above — 234 legitimate files use that construct, and banning a valid YAML escape is not the reduction; making the parser consume it correctly is. Criterion 3 (invoked by the gate, not merely written) is met literally.
 
             SEPARATELY OBSERVED, filed as a note rather than absorbed: `litmus:forge-clone-reachability-probe-shape` STEP 1 fails on this host ("unresolvable alias did not fast-fail"). It fails IDENTICALLY under the pre-change runner from HEAD, so it is pre-existing and unrelated to this work — recorded here so the next reader of a 258/259 suite result knows which one it is and that it was not introduced by 875-v7hv.
+        - type: note
+          ts: "2026-08-25T01:44:22Z"
+          host: yoga
+          summary: |
+            claimed for cycle 2026-08-25T01:43Z
+        - type: completed
+          ts: "2026-08-25T02:03:45Z"
+          host: yoga
+          summary: |
+            status 'done' with evidence_refs: scripts/test-litmus-scalar-unescape.sh 12/12, wired into build.sh --check; hand-falsified; instant pre-build suite 258/259 identical to pre-change baseline
+        - type: note
+          ts: "2026-08-25T02:03:45Z"
+          host: yoga
+          summary: |
+            parser asymmetry fixed and pinned
     - order: 876-exg2
       packet_id: credential-guard-reads-a-hook-refusal-as-an-absent-credential
       desired_release: v0.6
       title: check-credential-channel.sh calls a stale-gate pre-push refusal "blocked:gh-cli-only" — and the skill treats that as a hard cycle-fail, so every host fails its first cycle after a fast-forward
-      status: ready
+      status: completed
       kind: enhancement
       pickup_role: any
       priority: p2
@@ -43698,11 +43857,62 @@ plan_index:
         (4) Verified by a cycle that fast-forwards and then runs the guard BEFORE
         any `./build.sh --check`, which is the exact sequence the skill mandates.
 
+      events:
+        - type: note
+          ts: "2026-08-25T01:45:26Z"
+          host: pirria
+          summary: |
+            claimed for cycle 2026-08-25T01:43Z
+        - type: completed
+          ts: "2026-08-25T02:05:00Z"
+          agent_id: linux-pirria-opus5-20260825T014308Z
+          host: linux_immutable
+          evidence_refs:
+          - scripts/check-credential-channel.sh — on probe failure, ONLY on the default path, one bounded retry with `git push --dry-run --no-verify origin HEAD`; success there means the credential authenticated and the refusal was ours
+          - new verdict ok:gh-keyring-push-verified-hook-refused — a single pinned token, no second colon, so litmus:credential-channel-check-shape's grammar is untouched
+          - 'scripts/test-check-credential-channel.sh — 12/12, up from 6/6: hook-refusal arm, note-names-the-gate arm, no-misleading-credential-remedy arm, NEGATIVE CONTROL (unreachable remote still blocked:*), MUTATION control (the pre-876 guard calls the hook refusal a credential fault), grammar arm'
+          - 'LIVE on the exact tree that blocked this cycle: ok:gh-keyring-push-verified-hook-refused, rc=0'
+          summary: |
+            THE GUARD NOW ASKS THE QUESTION IT IS ACTUALLY ASKING. `git push`, even
+            `--dry-run`, runs the local pre-push chain before it contacts anything,
+            and pre-push-local-gate.sh refuses whenever the worktree changed since
+            `./build.sh --check` last stamped it. So this guard was answering "would
+            this tree pass the gate" while reporting the answer as "is there a
+            credential", and the skill hard-stops the cycle on any `blocked:*`.
+        
+            EVERY PATH INTO THAT STATE IS NORMAL, WHICH IS WHY IT WAS NOT RARE:
+            a fetch/fast-forward — which Start-Of-Cycle performs IMMEDIATELY BEFORE
+            running this guard, skill step 2; the previous cycle's own Finalization
+            step 9, which commits plan/mo-full-attestations.d/<host>.md through the
+            plan-only lane and therefore never refreshes the stamp; and minting a
+            claim fragment, which the skill mandates before any work. Measured here
+            on two consecutive cycles — the second on a CLEAN tree at HEAD ==
+            origin, where the single stale path was the attestation file the
+            previous cycle was REQUIRED to write. That is a closed loop: the exit
+            contract of cycle N guarantees the false block of cycle N+1, on every
+            host, forever. yoga hit the identical verdict ten minutes before the
+            first observation.
+        
+            The remedy the guard printed — seed .git/.gh-credentials — could not
+            have helped in any of these cases, which is the part that costs a human
+            their afternoon rather than merely a cycle.
+        
+            WHAT WAS DELIBERATELY NOT WEAKENED. 860-g798's true positive is the
+            reason this probe exists: on a fresh clone git's helper resolves to the
+            interactive Git Credential Manager and the first push hangs >10 minutes
+            on a prompt no unattended session can answer. That failure fails BOTH
+            probes and still reaches blocked:interactive-credential-helper with its
+            remedy intact. The retry runs only on the failure path, so the healthy
+            case costs nothing, and it is skipped entirely when
+            TILLANDSIAS_CRED_PROBE_CMD is set so the existing fixture seam keeps
+            exercising the blocked arms. The negative-control arm (unreachable
+            remote -> still blocked:*) exists to keep that honest, and the mutation
+            arm proves the new arm has teeth rather than passing by luck.
     - order: 876-irn7
       packet_id: cycle-preflight-declares-cargo-absent-on-a-host-that-has-cargo
       desired_release: v0.6
       title: a rustup toolchain that is not on the non-interactive PATH reads as blocked:preflight:plan:cargo-absent — the one verdict that stops the cycle before it can fix itself
-      status: ready
+      status: completed
       kind: enhancement
       pickup_role: any
       priority: p3
@@ -43760,3 +43970,454 @@ plan_index:
         never reads the host PATH — so the surface is the host-side callers.
         (4) Verified on a host where rustup is installed and ~/.cargo/bin is absent
         from a non-interactive shell's PATH. pirria reproduces it as it stands.
+      events:
+        - type: note
+          ts: "2026-08-25T01:45:26Z"
+          host: pirria
+          summary: |
+            claimed for cycle 2026-08-25T01:43Z
+        - type: completed
+          ts: "2026-08-25T02:06:00Z"
+          agent_id: linux-pirria-opus5-20260825T014308Z
+          host: linux_immutable
+          evidence_refs:
+          - scripts/cycle-preflight.sh — resolves cargo through $CARGO_HOME/bin then $HOME/.cargo/bin before declaring absence, and exports the resolved dir so the cargo build below and every later caller see it
+          - 'the unset-CARGO_HOME guard: "${CARGO_HOME:-}/bin" expands to /bin, which is skipped explicitly rather than silently accepted as a CARGO_HOME hit'
+          - 'scripts/test-cycle-preflight-cargo-resolution.sh — 6/6 hermetic, no compilation: shipped-code arm, rustup arm, CARGO_HOME arm, TRUE-POSITIVE arm, /bin arm, MUTATION arm'
+          - 'LIVE on this host: PATH=/usr/bin:/bin, CARGO_HOME unset -> ok:cycle-preflight:rebuilt+expert-refreshed+services-down3 (it answered blocked:preflight:plan:cargo-absent before)'
+          summary: |
+            A RUSTUP TOOLCHAIN THAT IS NOT ON THE NON-INTERACTIVE PATH IS NOT AN
+            ABSENT TOOLCHAIN. rustup writes its PATH edit into ~/.bashrc, which a
+            non-login non-interactive bash never sources — and every agent tool call
+            is exactly that kind of shell. pirria carried cargo 1.98.0 and rustc
+            1.98.0 and the first tool call of its first cycle answered
+            `blocked:preflight:plan:cargo-absent`.
+        
+            THIS IS THE TERMINAL VERDICT, WHICH IS THE WHOLE REASON IT WAS WORTH
+            FIXING RATHER THAN WORKING AROUND. The skill's rule for it is that the
+            cycle must not start at all — "the one failure the loop cannot reason
+            its way out of, because the tool it would reason WITH is the stale
+            thing." A false positive there does not degrade a cycle, it deletes it:
+            an unattended host answers blocked on every fire forever while a human
+            reading the transcript goes looking for a toolchain already installed.
+        
+            THE TRUE POSITIVE KEEPS ITS VERDICT AND ITS FORCE. A genuinely missing
+            cargo still emits the same line and still exits 1; the fixture's third
+            arm asserts exactly that, and the mutation arm reproduces the pre-fix
+            behaviour to prove the first arm is not passing by luck. Scope, said
+            plainly: ./build.sh is untouched, because on immutable Linux it re-execs
+            into the tillandsias-builder toolbox and never reads the host PATH — the
+            surface this changes is the host-side callers, per criterion 3.
+    - order: 877-mynm
+      packet_id: the-plan-only-lane-cannot-see-its-own-stdin-under-the-composed-hook
+      desired_release: v0.6
+      title: git hands the composed pre-push hook a 125-byte ref list and pre-push-local-gate.sh reports "no ref list on stdin" — the one lever 863-iicc criterion 7 asks for is intermittently dead
+      status: completed
+      kind: research
+      pickup_role: linux
+      priority: p2
+      capability_tags:
+        - hooks
+        - git
+        - low-end
+        - multi-host
+      deliverable: scripts/hooks/pre-push-local-gate.sh
+      depends_on: []
+      estimated_hours: 3
+      context: |
+        MEASURED ON pirria 2026-08-25T01:50Z. The pre-push chain has a plan-only
+        lane that accepts a push without the build stamp when every outgoing path
+        is a new plan fragment. It needs git's ref list to scope the outgoing
+        diff, and it reports this when it cannot get one:
+        
+          plan-only lane: not applicable — no ref list on stdin to scope the
+            outgoing diff (full gate required)
+        
+        THREE FACTS, EACH MEASURED RATHER THAN INFERRED.
+        
+        (1) GIT SUPPLIES THE REF LIST. The installed hook was temporarily replaced
+        with a script that does nothing but read stdin and print what it got, on a
+        real `git push origin linux-next`:
+        
+          SPY: stdin-is-tty=no
+          SPY: refs=[refs/heads/linux-next 4fd5d9dbc2e53afc1e98b9c5726181d3e6dabb63
+                     refs/heads/linux-next 48ed3fc0f37d667130328e42833d6dddb75df485]
+          SPY: bytes=125
+        
+        Well-formed, non-empty, exactly the four fields the guards parse. The real
+        hook was restored immediately and verified byte-identical by md5sum.
+        
+        (2) PIPED DIRECTLY, THE GUARD READS IT. Same repo, same commit, the same
+        ref line fed by hand:
+        
+          printf '%s\n' "$R" | bash scripts/hooks/pre-push-local-gate.sh origin <url>
+          -> plan-only lane: not applicable — 'crates/tillandsias-plan/src/main.rs'
+             is outside plan/index.d/, plan/loop_status.d/, and
+             plan/mo-full-attestations.d/ (full gate required)
+        
+        A path-scoped answer, which is only reachable after the ref list was read
+        and the diff computed.
+        
+        (3) UNDER THE COMPOSED HOOK, ON THE SAME PUSH, IT REPORTS NO REFS. The
+        installed `.git/hooks/pre-push` is tillandsias-pre-push-v6, whose own
+        docstring says stdin "IS CAPTURED ONCE AND REPLAYED" and which does
+        exactly that — `REFS="$(cat)"` then `printf '%s\n' "$REFS" | bash <guard>`
+        four times. The composition looks correct on inspection, which is why this
+        is filed as research rather than as a one-line fix.
+        
+        WHY IT MATTERS BEYOND THE COSMETICS. 863-iicc criterion 7 concludes that
+        the cheapest intervention for a host whose gate outruns the fleet's
+        inter-push gap is a SHORTER GATE, especially for plan-only cycles, and it
+        asks whoever picks it up to evaluate that lever before widening any branch
+        policy. The lever is already written — and it does not reliably fire. On
+        pirria in cycle 1 it fired twice and failed to fire twice; in cycle 2 it
+        failed on every real push while working when piped by hand. Each miss
+        costs a full gate (~90s here) for a push whose entire content is one
+        append-only fragment, and the claim-before-work discipline makes that cost
+        recur by construction. A conclusion drawn about criterion 7 while this is
+        unresolved would be measuring the wrong thing.
+        
+        CANDIDATES, NAMED AS CANDIDATES AND NOT AS A DIAGNOSIS. The `[[ ! -t 0 ]]`
+        test in pre-push-local-gate.sh:70 gating its `REFS="$(cat)"`; the
+        interaction between the composed hook's four separate `printf | bash`
+        pipelines and a guard that exits before draining its own pipe;
+        `pre-push-main-branch-affordance.sh:39` and the other guards that consume
+        stdin in a `while read` loop. Whoever takes this should instrument the
+        guard itself rather than the hook — the spy above already proves the hook
+        is not where the refs are lost.
+        
+        DO NOT "FIX" THIS BY WIDENING THE LANE. If the lane cannot prove which
+        paths are outgoing, refusing to the full gate is the CORRECT failure and
+        must stay the failure. The defect is that it cannot see a ref list git
+        demonstrably handed it, not that it is too strict about the consequence.
+      exit_criteria: |
+        (1) A reproduction that shows, from inside pre-push-local-gate.sh under
+        the REAL composed hook, whether REFS is empty and at what point it became
+        empty — instrumented in the guard, not the hook, since the hook's input is
+        already proven non-empty.
+        (2) The cause named, and either fixed or recorded as a constraint of the
+        composition with the guard adapted to it. If the answer is that a guard
+        may not rely on stdin, the plan-only lane must obtain the outgoing range
+        another way (e.g. `git rev-list @{upstream}..HEAD`) rather than being left
+        to fail open into the full gate.
+        (3) The lane's refusal-to-full-gate behaviour is UNCHANGED when the range
+        genuinely cannot be determined. This packet must not become a licence to
+        accept an unscoped push without the build stamp.
+        (4) A hermetic fixture: a scratch repo with a local bare remote, the real
+        composed hook installed, a fragment-only outgoing diff, and an assertion
+        that the lane FIRES. Today that fixture would fail on this host.
+        (5) Measured on a host that reproduces it. pirria does, on every real push
+        observed in two consecutive cycles.
+      events:
+        - type: note
+          ts: "2026-08-25T07:44:28Z"
+          host: pirria
+          summary: |
+            claimed for cycle 2026-08-25T07:43Z
+        - type: completed
+          ts: "2026-08-25T08:10:00Z"
+          agent_id: linux-pirria-opus5-20260825T074310Z
+          host: linux_immutable
+          evidence_refs:
+          - scripts/hooks/pre-push-local-gate.sh — an empty ref list now exits 0 immediately instead of falling through to the full gate; the message names `git pull --rebase`, not `./build.sh --check`
+          - 'scripts/test-pre-push-empty-ref-list.sh — 10/10 hermetic (local bare remote, no network): the five-case characterisation, the fix, a NEGATIVE CONTROL that a real outgoing ref is still gated, and a MUTATION control'
+          - 'measured: fast-forward 125 bytes | --dry-run origin HEAD 108 bytes | up-to-date 0 | non-ff with CURRENT remote-tracking ref 0 | non-ff with STALE remote-tracking ref 125'
+          summary: |
+            I FILED THIS PACKET ON A WRONG PREMISE AND THE CORRECTION IS THE
+            FINDING. Yesterday I wrote that "git hands the composed hook a 125-byte
+            ref list and pre-push-local-gate.sh reports no ref list on stdin", and
+            called the composition intermittently broken. That was an
+            over-generalisation from a single spy reading: the 125 bytes were
+            measured on a push that SUCCEEDED, and I carried the number across to
+            the pushes that failed without re-measuring them. The composed hook is
+            fine. A scratch repo reproducing the v6 shape — capture stdin once,
+            replay to each guard, with the first guard draining its own pipe in a
+            `while read` loop — passes all 125 bytes through to the last guard.
+        
+            WHAT IS ACTUALLY TRUE, measured across five cases against a local bare
+            remote:
+        
+              fast-forward push .................................. 125 bytes
+              git push --dry-run origin HEAD (credential probe) .. 108 bytes
+              already up to date .................................   0 bytes
+              non-fast-forward, remote-tracking ref CURRENT ......   0 bytes
+              non-fast-forward, remote-tracking ref STALE ........ 125 bytes
+        
+            The list is empty exactly when git has already decided to send nothing.
+            Git still runs the hook — it always does — but there is no ref to gate.
+            The guard's own message was therefore accurate the whole time; what was
+            missing was anyone decoding what it meant.
+        
+            THE LAST TWO ROWS ARE THE POINT, AND THE FIFTH IS WHY THE RULE IS NOT
+            "non-fast-forward". A stale remote-tracking ref still yields a ref list,
+            because git does not yet know the push is doomed; the rejection then
+            arrives from the remote. Emptiness means "git already knows", and
+            without the fifth arm the fourth would have licensed a wrong rule.
+        
+            THE COST THIS REMOVES. On a lost claim race — which is the ordinary
+            outcome of the claim-before-work discipline on a fleet of six, and the
+            exact state that leaves the remote-tracking ref current-and-ahead — the
+            guard was paying a full gate (~90s on this host) for a push that could
+            not happen, and then telling the reader to run `./build.sh --check` when
+            the remedy was `git pull --rebase`. Both halves recur by construction.
+        
+            WHAT WAS DELIBERATELY NOT CHANGED (criterion 3, which I wrote as a
+            guard against exactly this fix going too far). "No refs" and "refs I
+            could not scope" are different facts. When a ref IS outgoing and its
+            range cannot be determined, every refusal stands as written: the
+            plan-only lane still falls back to the full gate and the full gate still
+            refuses a stale stamp. Arm 7 of the fixture is the negative control that
+            keeps that honest, and arm 8 proves arm 6 has teeth rather than passing
+            by luck.
+        
+            CRITERION 4 WAS RESTATED RATHER THAN MET AS WRITTEN. I had asked for a
+            fixture asserting the plan-only lane FIRES on a fragment-only push,
+            "which today would fail on this host". It would not have failed — the
+            lane fired on this cycle's own claim push, and on two pushes in the
+            first cycle. The fixture that was actually worth writing pins the
+            characterisation above, because that is the thing nobody knew.
+        
+            RELEVANT TO 863-iicc CRITERION 7, which asks for the shorter-gate lever
+            to be evaluated before any branch policy is widened: the lever was never
+            broken. It was being bypassed on precisely the pushes that were going
+            nowhere. That removes one of the reasons a slow host was thought to need
+            a private lane, and it should be re-measured before the lane question is
+            answered.
+
+    - packet_id: set-field-next-action-loses-to-any-older-event
+      order: 877-lwts
+      status: completed
+      desired_release: v0.5
+      priority: p1
+      kind: bug
+      pickup_role: linux
+      capability_tags:
+        - plan
+        - crdt
+        - coordination
+        - fail-loud
+      estimated_hours: 2
+      title: |
+        A set-field next_action write is invisible behind ANY next_action event, however stale — the fold drops the LWW timestamp, so the field reads as the untimestamped original and loses the cross-channel race forever.
+      deliverable: |
+        The fold materializes next_action_ts beside a set-field next_action win; effective_next_action seeds its clock from it; compaction persists the sibling into the base text so the fix survives folds; the next-action subcommand names the winning channel.
+      context: |
+        MEASURED LIVE 2026-08-25T04:35Z on the coordinator's own queue. 831-ezea's
+        next_action is the fleet's ordered work queue, refreshed each cycle via
+        `tillandsias-plan set-field ... next_action` (the LWW channel). Two
+        consecutive refreshes (02:45Z, 03:44Z) were silently invisible:
+        `next-action 831-ezea` kept answering with a next_action EVENT from
+        01:00:59Z. Root cause: apply_to_packets inserted the winning LWW VALUE
+        but dropped its (ts, host); effective_next_action then treated the field
+        as the hand-authored "untimestamped original" that yields to any event.
+        Every host reading the queue during that window worked from a stale
+        assignment. The two write paths (event with next_action payload;
+        set-field LWW) each worked; the READ merged them with one channel blind.
+      exit_criteria: |
+        (1) A set-field next_action newer than the last next_action event wins
+        the effective read (incident replay, red on unfixed code). (2) An event
+        newer than the set-field write still wins (inverse control). (3) The
+        compaction text round-trip preserves the winner — the two
+        fold-equivalence tests caught the half-fix that materialized the ts in
+        the Value domain only, and now pass with the text-domain sibling.
+        (4) The subcommand's source line names the winning channel.
+      events:
+        - type: completed
+          ts: "2026-08-25T04:38:40Z"
+          agent_id: linux-macuahuitl-opus5-20260825t043840z
+          host: linux_mutable
+          evidence_refs:
+          - 'crates/tillandsias-plan/src/fragments.rs apply_to_packets — a next_action LWW win now carries next_action_ts onto the packet; compact_text applies the same sibling as a text edit so the base persists it (the round-trip tests demanded this: the Value-domain half-fix alone broke fold-equivalence, which is the renderer''s guarantee working as designed)'
+          - crates/tillandsias-plan/src/answer.rs effective_next_action — seeds best_ts from next_action_ts; events still win when genuinely newer
+          - 'TRUE RED-GREEN: lww_next_action_newer_than_the_last_event_wins_the_effective_read failed on unfixed code with the incident''s exact shape (stale event queue over fresh LWW queue); inverse control next_action_event_newer_than_the_lww_write_still_wins green; lib suite 223/223'
+          - 'LIVE: next-action 831-ezea now returns the 03:45Z coordinator queue with source: set-field (LWW) @ 2026-08-25T03:44:34Z — previously answered with the 01:00:59Z event'
+          merge_affordance: merge-now
+          merge_reason: |
+            Every sibling's cycle-preflight rebuilds tillandsias-plan from origin; until this lands, every host reading the coordinator queue gets an assignment hours stale — the coordination channel itself is lying.
+          summary: |
+            THE COORDINATOR QUEUE WAS LYING TO THE FLEET AND THE FIX IS CROSS-CHANNEL CLOCKS. next_action is the one packet field fed by two write paths: events carrying a next_action payload, and set-field's LWW channel. The fold applied the LWW value but discarded its timestamp, so the read-side rule — newest wins, untimestamped field loses ties — could never let a set-field write beat an event, however much newer. Two coordinator queue refreshes vanished behind a 2h43m-older event, measured on this host's own protocol. The fold now materializes next_action_ts beside the winning value, compaction persists it into the base text (the fold-equivalence tests refused the Value-domain-only half-fix — exactly what they are for), the reader seeds its clock from it, and the subcommand names the channel that won so the next diagnosis starts from truth.
+
+    - packet_id: cycle-preflight-notes-a-stopped-enclave-service-and-never-acts
+      order: 878-79b5
+      status: completed
+      kind: bug
+      priority: p2
+      pickup_role: any
+      desired_release: v0.5
+      depends_on: []
+      estimated_hours: 3
+      capability_tags:
+        - enclave
+        - podman
+        - fail-loud
+        - meta-orchestration
+      tags:
+        - cycle-preflight
+        - enclave-lifecycle
+        - v0.5
+      title: |
+        `cycle-preflight.sh` detects a cleanly-stopped enclave service and prints a REMEDY FOR A HUMAN, so an unattended loop re-notes the same dead service every cycle forever and never fixes it.
+      deliverable: |
+        cycle-preflight either re-ensures a cleanly-stopped managed service on a
+        host with no tray running, or states on the record that it deliberately
+        will not and why — with the verdict distinguishing "down and nobody will
+        fix it" from "down and being fixed".
+      context: |
+        MEASURED on yoga across FOUR consecutive unattended cycles,
+        2026-08-25T00:47Z / 01:43Z / 03:43Z / 05:43Z. Every one of them opened
+        with:
+        
+          note:enclave-service-stopped:service=tillandsias-proxy:state=exited:
+          rc=0:...:age=4h5m -> 9h
+          REMEDY: 'podman logs <service>' ... then 'podman start <service>'
+        
+        and every one of them dutifully wrote the observation into its handoff and
+        moved on. The service had been down for nine hours. It took one
+        `podman start` to fix, it came up healthy in 8 seconds, stayed up, and the
+        preflight then read `services-ok`.
+        
+        WHY NOTHING FIXED IT, which is the actual defect and not the proxy's
+        fault. The re-ensure path exists and is good: `LivenessProbe`
+        (crates/tillandsias-headless/src/container_deps.rs, order 782-dpby) emits
+        `fail:managed-service-death:...:action=re-ensure` with a cumulative
+        counter. But it runs INSIDE the tray/headless process. On a bare
+        development host with no tray running — which is the normal state of every
+        unattended cycling host in this fleet — nothing runs it, so nothing
+        re-ensures anything. The only component that looks at the enclave on such
+        a host is `cycle-preflight.sh`, and it is a REPORTER by design.
+        
+        SO THE HOST WITH THE MOST CYCLES HAS THE LEAST SUPERVISION. Vault,
+        dev-inference, nix and builder were all Up beside the stopped proxy: this
+        was a partial enclave, not a deliberate teardown.
+        
+        WHY THIS IS NOT "just restart it in the skill". The ledger already
+        settled the hard half and this packet must not relitigate it: squid
+        SIGABRTs on ordered shutdown (a global-destructor bug, reproduced in 5s
+        with zero requests, NOT fixed by the 6.12 bump and NOT our config —
+        782-9jfg), so `squid-supervisor.sh` normalises a teardown-time crash to
+        rc=0 precisely so a stopped container is distinguishable from a dead one.
+        `Exited (0) ... (healthy)` here is CORRECT, DESIGNED output. A naive
+        auto-restart in the preflight would therefore restart the proxy every time
+        a human deliberately stops it, which is the exact behaviour the supervisor
+        was built to avoid.
+        
+        The discrimination the supervisor makes in-container (did I forward the
+        stop?) is unavailable from outside it. That is the real design question
+        this packet has to answer, and it is why the honest second branch —
+        declare that preflight will not act, and make the verdict say so — is an
+        acceptable outcome.
+      exit_criteria:
+        - |
+            A cleanly-stopped managed enclave service on a host with no tray
+            running is either re-ensured automatically, or is reported with a
+            verdict token that distinguishes "nothing will fix this" from
+            "something is fixing this" — so a reader can tell an actionable state
+            from a transient one without reading prose.
+
+        - |
+            If the chosen answer is to re-ensure: the action is bounded and
+            counted the way the existing supervisors are (a cumulative counter, a
+            cap, and a machine-grepable `severity:event:key=value` line), and a
+            deliberate operator stop is NOT fought. If the chosen answer is to
+            refuse: the reasoning is recorded on this row and the verdict names
+            the refusal.
+
+        - |
+            NEGATIVE CONTROL: a service the operator has just stopped on purpose
+            does not get restarted by whatever lands, proven by a test rather
+            than by inspection.
+
+        - |
+            The four-cycle repeat is what makes this a defect rather than a
+            preference: a note that fires every cycle and changes nothing trains
+            its reader to skip it. Whatever lands must stop firing once the
+            condition is either fixed or accepted.
+
+      verifiable_closure: |
+        A fixture brings up a managed service, stops it cleanly, runs the
+        preflight, and asserts the chosen behaviour — restart-and-count, or a
+        refusal verdict distinct from the acting one. The negative control (an
+        operator stop is not fought) is the load-bearing half.
+      notes: |
+        Sibling context, not duplicates: 782-dpby owns the in-tray LivenessProbe
+        re-ensure; 767-nkkq owns the never-silent-restart rule; the enclave
+        service reporter's KNOWN LIMITATION event already records that a host-side
+        view has no teardown context and "a report that cries wolf at every
+        shutdown trains its reader to ignore it". This row is that limitation
+        arriving from the other direction — a report that never cries at all.
+      events:
+        - type: note
+          ts: "2026-08-25T06:35:25Z"
+          host: macuahuitl
+          summary: |
+            878-79b5 claim: preflight acts on stopped enclave services, macuahuitl hourly
+        - type: completed
+          ts: "2026-08-25T06:40:03Z"
+          agent_id: linux-macuahuitl-opus5-20260825t064003z
+          host: linux_mutable
+          evidence_refs:
+          - 'scripts/check-enclave-service-health.sh --act (opt-in; default reporter contract byte-inert, scenario 18) — the acting ladder: hold marker > stack-down > grace window (1800s default) > windowed restart cap (3/24h) > podman start; classes note:enclave-service-held / note:enclave-service-unattended:reason=stack-down / note:enclave-service-grace / fail:enclave-service-flapping:action=operator / fix:enclave-service-restarted:action=started / fail:enclave-service-start-failed:action=operator — ''being fixed'' and ''nothing will fix this'' are now distinct tokens (EC1)'
+          - 'bounded and counted like the sibling supervisors (EC2): $STATE_DIR/service-restarts-<name> holds ''epoch count'', window-reset, cap verdict stops the fighting; stdout summary grammar unchanged (the reading), actions are stderr records in the shared severity:event:key=value grammar'
+          - 'scripts/test-enclave-service-health.sh 19/19 — six new scenarios + NEGATIVE CONTROL proven by test not inspection (EC3): a fresh operator stop yields grace + an EMPTY stub start-log; hold marker and stack-down also refuse; MUTATION: deleting the grace guard makes the mutant fight the fresh stop (first sed span left a bare `continue` and was itself caught as vacuous — the control controlled the control)'
+          - scripts/cycle-preflight.sh passes --act with the reasoning inline; litmus:enclave-service-health-shape PASS; bash-3.2 dialect clean
+          - 'LIVE ON FIRST CONTACT (EC4): this host''s own services-down2 — tillandsias-vault Exited(137) 4d10h stale-healthy and tillandsias-proxy Exited(0) 4d10h — both restarted (fix: lines, counters=1), Up (healthy) 14s later, reporter silent on the next read, and cycle-preflight printed services-ok for the first time in this session''s history'
+          merge_affordance: merge-now
+          merge_reason: |
+            yoga measured the defect across four consecutive cycles and is still cycling; every unattended host inherits the fix (and the never-fight-an-operator guarantees) on its next fast-forward.
+          summary: |
+            THE HOST WITH THE MOST CYCLES NOW HAS SUPERVISION, AND IT DOES NOT FIGHT HUMANS. The re-ensure path existed only inside the tray process (782-dpby), which unattended cycling hosts do not run — so the one component that looked at the enclave was a reporter, and a stopped proxy stayed a note for nine hours on yoga and four DAYS here. The acting arm gives the unattended caller a decision ladder built from what is visible outside the container: an operator hold marker and a whole-stack teardown are never touched, a fresh stop gets a grace window (the supervisor's did-I-forward-the-stop discrimination is unavailable host-side, so recency stands in for intent), and a restart that is not helping goes quiet at a windowed cap with an action=operator verdict instead of being retried forever. Every criterion including the ledger-settled squid teardown semantics (782-9jfg: Exited(0) is DESIGNED output) is respected — a clean stop is acted on only when it is old, the enclave is partial, and nobody said hold.
+            The four-cycle-repeat criterion closed itself live: the very first --act run on this host fixed its own two four-day corpses and the note that had fired every cycle all session stopped firing.
+
+    - packet_id: grade-harness-resolves-the-spec-index-by-env-or-not-at-all
+      order: 879-gidx
+      status: completed
+      desired_release: v0.5
+      priority: p1
+      kind: bug
+      pickup_role: linux
+      capability_tags:
+        - plan
+        - rag
+        - ci-gates
+        - fail-loud
+      estimated_hours: 2
+      title: |
+        spec.answer grading resolved its index from two env vars verbatim — a stale override poisoned it and an empty environment starved it, and both shapes were misfiled as "index-vs-HEAD skew" (865-r6dt).
+      deliverable: |
+        groundtruth.rs resolves the spec index through the canonical 801-a2by ladder with VALIDATED rungs (vectors.jsonl must exist): explicit dir, forge dir, forge root, podman volume, XDG — stale overrides skip with a stderr note instead of poisoning, and clean hosts find the published durable entry with no ambient env at all.
+      context: |
+        MEASURED on macuahuitl 2026-08-25 while re-inventorying 865-n8vq: the
+        last failing --ci-full check (litmus:expert-groundtruth-harness, step
+        29/30) died with "read /mnt/c/Users/.../vectors.jsonl: No such file" —
+        a Windows WSL path on a Linux host, from FORGE_SPEC_INDEX_DIR in an
+        8-day-old session's environment (the same stale override 801-a2by's
+        launcher diagnostic already names, in a THIRD consumer). With the
+        override removed the harness failed the OTHER way: "set
+        TILLANDSIAS_SPEC_INDEX_DIR" — nothing ambient named the index although
+        spec-index-ensure.sh had published 21340 chunks to the podman volume.
+        One resolver honoring env verbatim produced both failure shapes on
+        different hosts, and the ledger attributed them to index staleness.
+      exit_criteria: |
+        (1) A stale exact-dir override heals to the durable tier with a stderr
+        note (incident replay, unit-tested on the pure core). (2) A valid
+        explicit dir still outranks every root rung (the forge's read-only
+        mount keeps priority). (3) NEGATIVE CONTROL: with every rung unusable
+        the needs-a-built-index refusal is still reached. (4) The committed
+        groundtruth glob grades fail=0 on this host BOTH with the poisoned env
+        present and with it absent.
+      events:
+        - type: completed
+          ts: "2026-08-25T08:56:44Z"
+          agent_id: linux-macuahuitl-opus5-20260825t085644z
+          host: linux_mutable
+          evidence_refs:
+          - crates/tillandsias-plan/src/groundtruth.rs resolve_spec_index_dir/resolve_spec_index_from — the validated 801-a2by ladder; stale rungs announce and skip; podman rung bounded and fail-soft with the TILLANDSIAS_SPEC_INDEX_NO_PODMAN seam
+          - 'unit tests on the pure core: stale_spec_index_override_heals_to_the_durable_tier (the /mnt/c incident replay), valid_exact_dir_outranks_the_roots, no_usable_rung_resolves_nothing; lib 226/226'
+          - 'LIVE both ways on this host: grade of the committed glob = sets=4 total=33 pass=33 fail=0 WITH the poisoned FORGE_SPEC_INDEX_DIR still exported (heal note on stderr) and with it removed'
+          - 'scripts/test-groundtruth-corpus-declaration.sh 6/6 after rebuilding RELEASE — the fixture resolves via plan-binary-probe which prefers target/release, and a debug-only rebuild left scenario 6 red on a stale release binary: the 851-cduu class one directory over; coordinator rebuild habit corrected to --release in the queue'
+          - 'RIDER (dev-build): test-sidecar-staleness-stamp.sh''s stub cargo now emits an arch-correct minimal ELF header — 723-ji4v''s wrong-arch staging refusal rejected the magic-only stub, sending all seven skip/stage scenarios red while the build counter climbed; fixture 11/11, dev-build litmus PASS (the red was measured live pre-fix)'
+          merge_affordance: merge-now
+          merge_reason: |
+            This was the LAST failing --ci-full check; every host's release gate and the 865-n8vq closure sit behind it.
+          summary: |
+            ONE RESOLVER HONORING ENV VERBATIM PRODUCED BOTH FAILURE SHAPES THE LEDGER CALLED INDEX SKEW. The grade harness read two env vars and gave up: a long-lived session's stale Windows-path override poisoned it here, and a clean host with no ambient env starved it there — while the durable tier (801-a2by) had a published, fresh, 21340-chunk index the whole time. The harness now walks the same ladder the shell canon defines, validating each rung by the artifact it needs (vectors.jsonl), announcing skipped stale overrides the way the MCP launcher already does, and failing closed only when NO rung serves. The committed groundtruth corpus grades 33/33 on this host with the poison present or absent — the environment can no longer decide whether the gate tells the truth.
