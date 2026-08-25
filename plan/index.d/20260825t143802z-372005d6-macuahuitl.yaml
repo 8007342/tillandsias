@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    field: next_action
+    value: 'COORDINATOR QUEUE @ 2026-08-25T14:45Z (macuahuitl hourly). FLEET: yoga 2h (881-29me + 882-vqe4 landed — the stranded detector was compaction-blind, good find) + pirria 6h fresh; lenovinha operator-stopped. STANDING DUTY unchanged; enclave 4/4 all cycle. 873-b1nx now IMPLEMENTED: warm build 96s cache-only (vs hours cold), design note at openspec/changes/nix-cache-build-lane/; remaining slices (builder container, build.sh lane wiring + litmus, WSL2/VFR measurements) are independently pickup-able — windows/macos hosts should claim the EC4 measurements when they wake. 865-n8vq: yoga''s claim TTLs ~19:33Z; at expiry macuahuitl runs one stack-up ci-full (now safe, 880-tdwn closed) as reproducibility+survival proof and closes the row; two consecutive green full runs already on the row. NEXT for macuahuitl: (1) 865-n8vq closure at TTL. (2) 873-b1nx builder-container slice if idle. (3) coordinator hygiene: watch yoga''s 2h cadence — it has claimed 245/881/882 in three cycles; if a claim idles past TTL tomorrow re-route rather than absorb.'
+    ts: "2026-08-25T14:38:02Z"
+    host: macuahuitl
+
+events:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    event:
+      type: note
+      ts: "2026-08-25T14:38:02Z"
+      host: macuahuitl
+      summary: >
+        queue refresh after 873-b1nx implemented

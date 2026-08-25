@@ -43562,6 +43562,12 @@ plan_index:
         (1) A design note under openspec/ recording the lane selection mechanism and the per-platform substrate (podman / WSL2 / VFR guest), with the unknowns above as measured answers, not assumptions. (2) A Linux prototype: a clean container with no host toolchain builds a tillandsias crate with the enclave cache as its only substituter, and the wall-clock is recorded cold vs cache-warm alongside GPU/load state. (3) The lane is OPT-IN behind an env var first; build.sh behaviour is byte-identical when it is unset. (4) A measured statement of the WSL2 and macOS paths — even if the statement is "deferred, here is the cost" — so the cross-platform half is a decision rather than a hope.
       events:
         - type: progress
+          ts: "2026-08-25T14:37:45Z"
+          agent_id: "linux-macuahuitl-opus5-20260825t143745z"
+          host: macuahuitl
+          summary: |
+            ROUND 4 — EC2's core number and EC1's design note landed. FULL WARM BUILD: fresh store, enclave cache as ONLY substituter, .#tillandsias-x86_64-musl in 96s wall (563 paths substituted + 5 local builds; GPU 0%/664MiB throughout) — versus 113s upstream-assisted seed and hours from source. openspec/changes/nix-cache-build-lane/{proposal,design}.md records the lane-selection decision (TILLANDSIAS_BUILD_LANE opt-in, with-wsl2-builder pattern), the per-platform substrate table, all measured answers (coverage probe as the lane health metric, per-pin-family seeding as fat-host policy, the Fedora nix ssl-cert-file setting pitfall, the nix-free forge image direction, degrade-to-cold semantics), and the honest deferrals for WSL2/VFR with their measurement obligations. Status -> implemented; remaining: the long-lived builder container, build.sh lane wiring with byte-identical default + litmus, and the cross-platform measurements (EC4).
+        - type: progress
           ts: "2026-08-25T13:44:05Z"
           agent_id: "linux-macuahuitl-opus5-20260825t134405z"
           host: macuahuitl
