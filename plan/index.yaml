@@ -26270,6 +26270,42 @@ plan_index:
         the load-bearing half; the refusal tests are the negative control.
       events:
         - type: progress
+          ts: "2026-08-25T23:51:47Z"
+          agent_id: "linux-yoga-opus5-20260825t235147z"
+          host: yoga
+          summary: |
+            SLICE 5 IS A REDUCTION, NOT A MIGRATION, AND THE PACKET'S HEADLINE IS OVERSTATED.
+
+            I claimed this to migrate the Linux-testable sites. I read them first, and five of the six cannot migrate for reasons this packet has ALREADY accepted for other sites. The remaining one is a genuine target and is not a cycle-sized change. So the honest output of the cycle is the classification, not a diff.
+
+            WHAT THE SIX LINUX-TESTABLE "PENDING" SITES ACTUALLY ARE, each read rather than inferred from the scan:
+
+              control-wire/transport.rs:246   TEST PEER  — inside #[cfg(test)] at :206
+              host-shell/provisioning.rs:170  TEST PEER  — inside #[cfg(test)] at :154
+              host-shell/vsock_client.rs:639  TEST PEER  — #[cfg(test)] at :402
+              host-shell/vsock_client.rs:667  TEST PEER  — #[cfg(all(test,unix))] at :656
+              headless/main.rs:11925          PRODUCTION, but BLOCKING
+              vm-layer/vsock_exec.rs:354      PRODUCTION, async — THE ONE REAL TARGET
+
+            The four test peers are independent hand-rolled decoders whose VALUE IS BEING INDEPENDENT. Migrating them onto the codec under test makes the interop claim a tautology — the exact reasoning already recorded here for vsock_server.rs and tray/mod.rs, arrived at again from four more sites.
+
+            main.rs:11925 is `stream.read_exact(&mut len_buf).map_err(...)` with NO `.await`. It is the std UnixStream CLIENT side of the tray control socket, so it is the same blocking-stream keep already recorded for tray/mod.rs:590 — seen from the other end of the same socket. Framed requires tokio AsyncRead+AsyncWrite; this is not a swap, it is moving the tray control socket onto a runtime, which this packet has already declined once.
+
+            SO THE PACKET'S TITLE COUNTS THINGS THAT ARE NOT THE SAME KIND OF THING. "Nine hand-rolled copies of u32-BE length ‖ postcard framing" counts test peers and blocking-stream reads alongside genuine async production sites. After reading all 18 decode sites in the tree, the LINUX PRODUCTION MIGRATION SURFACE IS ONE FUNCTION. Not nine, not thirteen. Baseline updated: 13 pending -> 8 pending, of which 7 are behind the macOS and Windows lanes.
+
+            Criterion 1's "at most ONE raw decode in crates/" therefore reads very differently than when it was written. On the Linux lane it is nearly satisfied already — and it was never going to be satisfiable as literally written, because the deliberate interop fakes are load-bearing and the blocking sockets are not migratable without a runtime change nobody wants.
+
+            THE ONE REAL TARGET, and why I did not take it in this cycle rather than why I could not:
+              crates/tillandsias-vm-layer/src/vsock_exec.rs:349 — `async fn read_envelope<R: AsyncRead + Unpin>(r: &mut R)`.
+              - 41 call sites, and they SHARE ONE STREAM (`&mut guest` reused across successive reads).
+              - A per-call `Framed`/`FramedRead` may read ahead and drop pipelined bytes when it is dropped. That is a silent data-loss bug on the exec control path, not a compile error.
+              - `tokio-util` is not currently a dependency of tillandsias-vm-layer.
+              The correct shape is the one the vsock_server slice used — into_parts to preserve the buffer, or callers restructured to own the Framed. That is a real refactor with a correctness hazard, and starting it late in a cycle to produce a diff would be the worst available choice.
+
+            WHAT MADE THIS CHEAP, worth recording because it is the ratchet paying for itself: the baseline file turned "which sites remain" from a re-derivation into a lookup, and the classification now lives IN the baseline next to each row, so the next host does not repeat the reading. Slice 4 built the instrument; this is the first slice to use it.
+
+            CLAIM RELEASED to ready. 8 pending rows remain: 1 Linux (the vsock_exec refactor), 5 macOS, 2 Windows.
+        - type: progress
           ts: "2026-08-25T20:03:38Z"
           agent_id: "linux-yoga-opus5-20260825t200338z"
           host: yoga
