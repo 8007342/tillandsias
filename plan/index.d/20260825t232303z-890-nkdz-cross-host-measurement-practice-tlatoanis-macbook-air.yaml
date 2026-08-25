@@ -1,0 +1,118 @@
+packets:
+  - packet_id: cross-host-measurement-practice-lives-only-in-transcripts
+    order: 890-nkdz
+    status: ready
+    kind: enhancement
+    pickup_role: any
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    depends_on: []
+    deliverable: |
+      Three ratified fleet measurement rules and one probe protocol land in
+      methodology (candidate home: methodology/verification.yaml or a new
+      measurement-practice block), with the two mechanical ones enforced by a
+      check rather than restated as prose.
+    capability_tags:
+      - methodology
+      - measurement
+      - fleet
+    tags:
+      - measurement-practice
+      - prose-not-mechanism
+      - v0.5
+    title: |
+      Four measurement rules were ratified as fleet practice on 2026-08-25 and exist ONLY in session transcripts — the precise shape this project has already been bitten by three times.
+    context: |
+      On 2026-08-25 the fleet coordinator ratified four things as fleet
+      practice, arising from a cross-host performance characterisation this
+      host was asked to own. Every one of them currently lives in a
+      cross-session message and nowhere else. When these sessions end they are
+      gone, and the next host to measure anything will re-derive them or,
+      more likely, not.
+
+      THAT IS NOT A HYPOTHETICAL RISK, IT IS THIS PROJECT'S SIGNATURE FAILURE.
+      801-qasc: the daily-maintenance marker lived only as prose, so "did
+      today's gate run" had no answer for four days. 660-ryhn: an unbound
+      litmus. 709-in2f: methodology.yaml claimed "Implemented + litmus-pinned
+      by <packet>" while that packet sat `ready` with no script, no marker and
+      no litmus — and the skill text now says outright that the false claim is
+      plausibly WHY nobody wrote one. Ratified-in-a-transcript is the same
+      class one level further out: it reads as settled and is not written down.
+
+      THE FOUR RULES, as ratified:
+
+      1. FORCED-ONLY for cross-host gate timings. Since 765-tkq2 an unchanged
+         tree returns `ok:gate-fresh` in ~0.4s, so a `build_check_ms_avg` over
+         a MIX of memoised and forced runs encodes how many no-op runs a host
+         happened to do, not how fast it is. Any cross-host comparison must be
+         `TILLANDSIAS_FORCE_CHECK=1` runs only, and a host quoting a mixed mean
+         must say so. (This host's own 39171 ms was such a mean and was
+         withdrawn.)
+
+      2. DO NOT SUBSTITUTE YOUR OWN TIMER. Use `/usr/bin/time -p` (POSIX,
+         present on every lane). Earned: I nearly shipped `date +%s%N`. `%N` is
+         GNU-only by reputation, and my `/bin/date` IS BSD — it rejects
+         `--version` — yet expanded `%N` correctly on Darwin 25. So an idiom
+         verified on my own host would have produced PLAUSIBLE GARBAGE on a
+         lane where it genuinely is unsupported, on exactly the lane the
+         exercise was trying to characterise. Worse than a hard failure.
+
+      3. WITHIN-HOST DELTAS BEAT ACROSS-HOST COMPARISONS for attribution. The
+         original design compared two "matched" hosts; they differ by CPU
+         generation AND distro, so any gap is unattributable. Measuring a host
+         AGAINST ITSELF across the one variable of interest (WSL2 native-ext4
+         vs /mnt/c; Silverblue toolbox vs host-native) holds hardware, kernel,
+         distro and toolchain constant by construction.
+
+      4. NO CROSS-HOST PERFORMANCE CLAIM WITHOUT A STATED FALSIFIER, committed
+         BEFORE the numbers arrive — including the result that would mean the
+         experiment does not show what it was designed to show.
+
+      AND THE REVIEW RULE ADOPTED ALONGSIDE THEM, from 886-yizb:
+      *A threshold test that sets the threshold to zero is testing `>=`. Any
+      gate that measures and then compares needs one leg where the MEASUREMENT
+      ITSELF is the assertion.*
+
+      THE PROBE PROTOCOL v1, which should live beside them:
+        warm twice with `cargo check --workspace --all-targets`, discard; then
+        `/usr/bin/time -p sh -c 'i=0; while [ $i -lt 20 ]; do cargo check
+        --workspace --all-targets >/dev/null 2>&1; i=$((i+1)); done'`
+        Report real/user/sys, real/20 as ms-per-no-op, `git ls-files | wc -l`,
+        the checkout's filesystem, RAM, physical cores, and whether the
+        toolchain is host-native or crossed. Near-pure filesystem stat traffic
+        — the Darwin leg measured user 2.05s vs sys 1.09s over 20 no-ops,
+        confirming it is stat-bound rather than compute-bound, which is what
+        makes it discriminating.
+    exit_criteria:
+      - |
+          Rules 1-4 and the threshold review rule are written in methodology
+          with their earning evidence, not as bare imperatives — each one here
+          cost a real error and the error is what makes it stick.
+      - |
+          The two MECHANICAL rules are enforced, not restated. Rule 1 is
+          checkable: `cycle-metrics.sh` already knows whether a run was forced,
+          so a mixed `build_check_ms_avg` should be LABELLED as mixed at the
+          point of emission rather than trusted to a reader. Rule 2 is
+          checkable by check-bash-dialect.sh, which already refuses GNU-date
+          and (since 886-yizb) GNU-du forms.
+      - |
+          Rules 3 and 4 are judgment and stay prose — but they are recorded as
+          judgment rather than dressed as mechanism. A rule that cannot be
+          enforced should say so, or it becomes the next 709-in2f.
+    verifiable_closure: |
+      NAMED: `litmus:cycle-metrics-answer-rate-shape` (bound, spec meta-orchestration)
+      gains a leg asserting that a `build_check_ms_avg` derived from any
+      memoised run is emitted with an explicit mixed/forced label, and that the
+      label is absent only when every contributing run was forced. Must be RED
+      before the emission change and green after — a leg that passes either way
+      would be this packet's own threshold-with-zero-threshold mistake.
+    notes: |
+      Filed by the host that owns the protocol, deliberately BEFORE the other
+      two legs report. If it waits for the conclusion it will be written as
+      part of a results write-up, and results write-ups are exactly the
+      documents nobody consults when they next need to measure something.
+
+      The coordinator ratified these; this packet does not re-open them. What
+      it asserts is only that ratification without a durable home is
+      indistinguishable, six weeks out, from never having agreed at all.
