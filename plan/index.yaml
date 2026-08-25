@@ -2458,6 +2458,35 @@ plan_index:
         - "Spec/Cheatsheet patch list published with specific file:line references"
       events:
         - type: progress
+          ts: "2026-08-25T11:47:34Z"
+          agent_id: "linux-yoga-opus5-20260825t114734z"
+          host: yoga
+          summary: |
+            LINUX REVISION SLICE (cycle-scoped claim on a multi_cycle packet; phase stays `review`, NOT closed). W5 handed the non-Windows items to "a linux host with podman"; this is that host taking §1 and §1.1.
+
+            THE FINDING IS NOT WHAT I EXPECTED. Every factual claim in the §1.1 CONTAINER matrix re-verified TRUE against the tree at 23671a86e — the enclave-only mirror, the retired shared alias, the per-project identity, the proxy-env application, the browser hardening, the egress-first ensure order. Nothing had drifted. What HAD drifted was every `file:line` citation supporting them.
+
+            MEASURED, by resolving each cited span rather than trusting it:
+              * `main.rs:1136-1145` (cited for ENCLAVE_ONLY_NET) is a `format_age_secs` branch; the const is near 1597.
+              * `main.rs:2973-2975` (cited for git_mirror_service_identity) is an "ensure tillandsias-egress network" refusal; the fn is near 3997.
+              * `main.rs:2553-2554` (cited for `--hostname proxy`) is a bare `return Vec::new()`; `build_proxy_run_args` is near 3345.
+              * `main.rs:2052` (ensure_enclave_network) -> near 2801.
+              * `main.rs:9656-9666` / `:10103-10190` / `:18863-18877` (browser) -> `build_project_browser_spec` near 11751, the SYS_CHROOT assertion near 22357.
+
+            THE DRIFT IS TOTAL, NOT AN OFFSET, and that is what makes it dangerous. `main.rs` has grown past 22,000 lines. A reader following one of these does not hit an obviously dead link — they land in plausible-looking neighbouring code and can "verify" a claim against something unrelated. A confidently wrong citation is worse than an absent one.
+
+            REPAIRED §1/§1.1 by anchoring on SYMBOL NAMES (`main.rs` `build_git_run_args`) instead of line numbers. A symbol survives every edit that does not rename it, and a rename is a real event worth noticing; a line number is invalidated by any insertion above it. That is order 797-8dzt's lesson — source slices bounded by symbols, not offsets — applied to prose. Doc-wide the line-citation count drops 90 -> 80; §1/§1.1 now has none into main.rs.
+
+            ALSO REMOVED: the `plan/index.yaml:967-979,...` citation for the secure control wire, replaced with the ORDER numbers. Line numbers into the ledger are guaranteed to rot because compaction rewrites that file by design — it folded 32 fragments into it twice this week alone, on this host. Orders are the stable identity there, and are what the ledger itself tells everyone to cite.
+
+            ON RuntimeLane, the other W5 item: §1 ALREADY handles it correctly and needed no revision. It carries a parenthetical calling RuntimeLane an orthogonal Linux session-ownership axis rather than a fifth runtime kind — which is right: `current_runtime_lane()` classifies by env markers (TILLANDSIAS_PODMAN_REMOTE_URL / TILLANDSIAS_ROOT -> headless-service-account; the five TILLANDSIAS_PODMAN_* wrapper vars -> dev-test; else desktop-user-session) and is about WHO OWNS the podman substrate, not about network topology. W5's pointer said §1 "should be re-expressed in its terms"; having read both, I think that would make the taxonomy worse by mixing two axes. Recording the disagreement rather than silently not doing it. (Its citation `lib.rs:105-143` is also stale — the enum is at 76 and the classifier at 97 — and that is fixed.)
+
+            FILED 881-29me for the systemic version: nothing in the tree checks that a `plan/issues/` citation still resolves. The project already gates this exact question for tests (797-8dzt source-slice bounds) and for litmus pins (721-77yu) — both ask "can this assertion still fail?" — but never asks it of an audit's evidence, which is where the findings we most want to survive are kept. That packet carries a warning that the naive gate is worse than nothing: a checker that only confirms the file has that many lines would PASS all six drifted citations above.
+
+            NOT DONE, named rather than left implicit: 80 line-number citations remain across §2-§7 and 20 files. Untouched deliberately — a bulk rewrite without re-verifying each claim would replace wrong-but-honest citations with confident-looking ones, which is the same trade that produced this state. Also worth the ratifiers' attention: NA-05's exit criterion literally requires "specific file:line references", so the criterion itself is what generated the rot; it probably should say file:symbol.
+
+            STILL OPEN on this packet, unchanged: the three named verification agents' verified-by events (NA-01..NA-06), and the macOS-lane revision items. Claim released to `ready` per the multi_cycle rule.
+        - type: progress
           ts: "2026-08-23T15:24:20Z"
           agent_id: "windows-yolanda-fable5-20260823T151934Z"
           host: windows

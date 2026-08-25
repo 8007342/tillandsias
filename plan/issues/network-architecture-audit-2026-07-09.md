@@ -111,7 +111,7 @@ There are exactly four runtime kinds. A process can tell which one it is in:
 `TILLANDSIAS_HOST_KIND=forge` marks CONTAINER(forge); `/run/WSL` marks
 GUEST(WSL2); `/run/ostree-booted` marks HOST(immutable); otherwise HOST.
 (The `RuntimeLane` taxonomy — desktop-user-session / headless-service-account /
-dev-test, `crates/tillandsias-podman/src/lib.rs:105-143` — is an orthogonal
+dev-test, `crates/tillandsias-podman/src/lib.rs` `RuntimeLane` / `current_runtime_lane` — is an orthogonal
 Linux session-ownership axis that pre-dates this draft, not a fifth kind.
 Known gap, true at draft time too: the recipe has no marker for the macOS VZ
 guest, which classifies as HOST.)
@@ -121,7 +121,7 @@ guest, which classifies as HOST.)
 | HOST (Linux bare, mutable) | dev workstation | host netns | direct | systemd-resolved (+ enclave drop-in mapping `vault` → enclave gateway, root only: `main.rs` `ensure_enclave_host_dns`, `ENCLAVE_RESOLVED_CONF`) | none (host tools go direct) | full rootless podman; owns all networks/containers below |
 | HOST (Silverblue, immutable) | operator laptop | host netns | direct | systemd-resolved | none | host podman for runtime; compile happens in the toolbox builder (order 239, `scripts/with-tillandsias-builder.sh`) |
 | GUEST (WSL2 Fedora / macOS VZ Fedora) | VM owned by the tray | VM NAT netns; control plane over vsock (VZ `guest_cid`, `vm-layer/src/vz.rs`) / hvsock (`transport_windows.rs`, `wsl.rs`) | via VM NAT | WSL: mirrored resolv.conf handling in `ensure_enclave_host_dns`; VZ: VM DHCP | none at guest level; in-guest containers use the same enclave model below | tillandsias-headless runs INSIDE the guest and owns a full in-guest podman substrate (same enclave/egress model, one level down) |
-| CONTAINER (enclave services + forge) | podman on HOST or GUEST | see §1.1 matrix | only via squid or dual-home | aardvark-dns resolves network aliases (`vault`, `inference`, `router`; `proxy` via container hostname — `--hostname proxy`, no explicit alias, `main.rs:2553-2554`; the shared `tillandsias-git` alias was RETIRED by order 659-8faj, commit bb334952 — two projects gave one name two A records with non-deterministic routing — replaced by per-project `git-<project>` from `git_mirror_service_identity`, `main.rs:2973-2975`, delivered to clients via `TILLANDSIAS_GIT_SERVICE`) | forge + login get the canonical 6 proxy env vars + `NODE_USE_ENV_PROXY=1` (`main.rs` `proxy_env_args`/`apply_proxy_env`) | none — containers must NOT reach the podman socket (the authn exception is no longer order 137, which was superseded: the operator chose the full encrypted, version-bound control channel — designed order 140, implemented order 141; slices 1-3 landed, 4 and 6 remain, and a 2026-07-28 adversarial check refuted "already satisfied" — secure control wire is default-off; `plan/index.yaml:967-979,1050-1055,1002-1010`) |
+| CONTAINER (enclave services + forge) | podman on HOST or GUEST | see §1.1 matrix | only via squid or dual-home | aardvark-dns resolves network aliases (`vault`, `inference`, `router`; `proxy` via container hostname — `--hostname proxy`, no explicit alias, `main.rs` `build_proxy_run_args`; the shared `tillandsias-git` alias was RETIRED by order 659-8faj, commit bb334952 — two projects gave one name two A records with non-deterministic routing — replaced by per-project `git-<project>` from `main.rs` `git_mirror_service_identity`, delivered to clients via `TILLANDSIAS_GIT_SERVICE`) | forge + login get the canonical 6 proxy env vars + `NODE_USE_ENV_PROXY=1` (`main.rs` `proxy_env_args`/`apply_proxy_env`) | none — containers must NOT reach the podman socket (the authn exception is no longer order 137, which was superseded: the operator chose the full encrypted, version-bound control channel — designed order 140, implemented order 141; slices 1-3 landed, 4 and 6 remain, and a 2026-07-28 adversarial check refuted "already satisfied" — secure control wire is default-off; orders 137 / 140 / 141 in the ledger — cited by ORDER, never by `plan/index.yaml` line, because compaction rewrites that file's line numbers by design) |
 | COMPILE/BUILD | `podman build` + cargo | podman default build network (pasta/slirp NAT) — NOT the enclave | direct NAT with `--dns 8.8.8.8` hardcoded (`main.rs` `ensure_image_exists`) | forced Google DNS | NONE for podman image builds — every Rust build path forces `--http-proxy=false` (`client.rs:708-721`). But "builds bypass squid entirely" is over-broad: host-side cargo egress in the dev flow routes through a dev-cache squid (stock `docker.io/library/squid:6.1`, not the tillandsias-proxy image) published on `127.0.0.1:3129` when active (`build.sh:355-411`; `openspec/specs/dev-build/spec.md:165-183`). The narrower claim survives: the tillandsias-proxy container's own PERMISSIVE :3129 has zero runtime callers — no hits in `crates/` or `scripts/`, spec marks it "Reserved for future use" (`openspec/specs/proxy-container/spec.md:101`) | n/a (is podman) |
 
 ### 1.1 CONTAINER network matrix (source-verified)
@@ -129,20 +129,20 @@ guest, which classifies as HOST.)
 | Container | Networks | Alias | Effective egress path | Source |
 |---|---|---|---|---|
 | tillandsias-proxy (squid 6, dual-port SSL-bump) | enclave + egress | `proxy` | direct NAT (egress leg) | `main.rs` `build_proxy_run_args` (`ENCLAVE_EGRESS_NETS`) |
-| tillandsias-git-\<project\> (mirror) | **enclave ONLY** (`ENCLAVE_ONLY_NET`, `main.rs:1136-1145,3016-3024` — order 606-9wqd, commit 0a972411 removed the egress leg: it granted unscoped internet, see `plan/issues/git-mirror-egress-spec-divergence-audit-2026-08-10.md`) | `git-<project>` (per-project, `git_mirror_service_identity` `main.rs:2973-2975`; the shared `tillandsias-git` alias is retired — "do not reintroduce a shared alias", order 659-8faj, `main.rs:3006-3014`) | proxy env applied (`main.rs:3049`) so HTTPS forwards tunnel through squid; NO NAT fallback remains; the must-succeed upstream relay to GitHub runs in PRE-receive (`tillandsias-relay-refs`, `images/git/pre-receive-hook.sh:480`, `relay-refs.sh:161-173`) with the token vault-fetched at push time via a git credential helper, never in argv (`images/git/git-credential-tillandsias.sh:47`); post-receive is bookkeeping only (`images/git/post-receive-hook.sh:5-8`) | `main.rs` `build_git_run_args`, `images/git/` |
+| tillandsias-git-\<project\> (mirror) | **enclave ONLY** (`ENCLAVE_ONLY_NET`, `main.rs` `build_git_run_args` — order 606-9wqd, commit 0a972411 removed the egress leg: it granted unscoped internet, see `plan/issues/git-mirror-egress-spec-divergence-audit-2026-08-10.md`) | `git-<project>` (per-project, `main.rs` `git_mirror_service_identity`; the shared `tillandsias-git` alias is retired — "do not reintroduce a shared alias", order 659-8faj, the "do not reintroduce a shared alias" comment in `main.rs` `build_git_run_args`) | proxy env applied (`main.rs` `build_git_run_args` via `proxy_env_args`) so HTTPS forwards tunnel through squid; NO NAT fallback remains; the must-succeed upstream relay to GitHub runs in PRE-receive (`tillandsias-relay-refs`, `images/git/pre-receive-hook.sh:480`, `relay-refs.sh:161-173`) with the token vault-fetched at push time via a git credential helper, never in argv (`images/git/git-credential-tillandsias.sh:47`); post-receive is bookkeeping only (`images/git/post-receive-hook.sh:5-8`) | `main.rs` `build_git_run_args`, `images/git/` |
 | tillandsias-vault | enclave only | `vault` | none; peers reach it via `https://vault:8200` and NO_PROXY exempts it | `vault_bootstrap.rs` launch args; `ENCLAVE_NO_PROXY_BASE` |
 | tillandsias-inference (ollama) | enclave only | `inference` | squid :3128 via proxy env (`.ollama.ai`/`.ollama.com` are plain allowlist entries, spliced end-to-end — squid now bumps ONLY `release-assets.githubusercontent.com`; `images/proxy/allowlist.txt:134-135`, `squid.conf:64-80`) | `main.rs` `build_inference_run_args` |
 | tillandsias-router (reverse proxy) | enclave only + publish `127.0.0.1:<port>→8080` | `router` | none outbound; inbound from host browser via loopback publish | `main.rs` `build_router_run_args` |
 | forge-\<project\> (+ per-agent modes) | enclave only | `forge-<project>` | squid :3128 via proxy env only | `main.rs` `build_forge_agent_run_args` |
 | observatorium web | enclave only | — | none (read-only static server) | `main.rs` `build_observatorium_web_args` |
-| project browser (chromium) | podman default rootless netns (pasta) — hardened 2026-08-08, commit 63784ddb, order 615-x3b8: no `.network("host")`, no `SYS_CHROOT`; read-only rootfs, `--cap-drop=ALL` with no `--cap-add` at all, no-new-privileges, `--userns=keep-id`, tmpfs HOME/config/cache | — | egress via default rootless NAT; trusts tillandsias CA (`intermediate.crt` bind-mount, `SSL_CERT_FILE`/`TILLANDSIAS_CA_BUNDLE`); reaches router via `http://<service>.<project>.localhost:<host_port>` against the router's `127.0.0.1:<host_port>:8080` publish (`main.rs:9656-9666`) | `main.rs:10103-10190` `build_project_browser_spec`; regression test asserts absence of `--cap-add`/`SYS_CHROOT`/`host` (`main.rs:18863-18877`) |
+| project browser (chromium) | podman default rootless netns (pasta) — hardened 2026-08-08, commit 63784ddb, order 615-x3b8: no `.network("host")`, no `SYS_CHROOT`; read-only rootfs, `--cap-drop=ALL` with no `--cap-add` at all, no-new-privileges, `--userns=keep-id`, tmpfs HOME/config/cache | — | egress via default rootless NAT; trusts tillandsias CA (`intermediate.crt` bind-mount, `SSL_CERT_FILE`/`TILLANDSIAS_CA_BUNDLE`); reaches router via `http://<service>.<project>.localhost:<host_port>` against the router's `127.0.0.1:<host_port>:8080` publish (`main.rs` `build_project_browser_spec`, router-publish URL construction) | `main.rs` `build_project_browser_spec`; regression test asserts absence of `--cap-add`/`SYS_CHROOT`/`host` (the `SYS_CHROOT` / `--cap-add` / `host` absence assertions in `main.rs`'s browser-spec tests) |
 | github-login helper (ephemeral) | enclave + egress | — | proxy env applied AND dual-homed (env wins for gh; dual-home covers env-ignoring tools) | `main.rs` `run_provider_login` + regression test `github_login_helper_dual_homes_onto_managed_egress_network` |
 
 Networks: `tillandsias-enclave` = `--internal` bridge, default subnet
 `10.0.42.0/24` (`TILLANDSIAS_ENCLAVE_SUBNET` overrides); `tillandsias-egress` =
 managed NAT bridge (exists because podman's rootless default net is absent
 after `podman system reset`). `ensure_enclave_network` always ensures egress
-first (`main.rs:2052`). Runtime reproduction on two independent hosts
+first (`main.rs` `ensure_enclave_network`, egress branch). Runtime reproduction on two independent hosts
 (2026-08-10 egress-divergence audit) confirmed the enclave's `internal: true`
 is airtight ("reaches nothing") while the egress leg granted arbitrary
 unscoped outbound (reached example.com/pypi.org) — measured before the mirror's
@@ -414,3 +414,53 @@ current; no correction.
 
 Cross-reference per the epic's rule: W2's failure-mode citation IS 606-9wqd
 territory seen from the Windows side; cited, not re-derived.
+
+## L1. Citation drift measured and repaired in §1/§1.1 — 2026-08-25, yoga (linux slice)
+
+W5 handed the non-Windows revision items to "a linux host with podman". Taking
+§1 and §1.1, the finding is not that a fact had changed — every claim in the
+CONTAINER matrix re-verified true — but that **every `file:line` citation
+supporting them pointed at unrelated code.**
+
+MEASURED at `linux-next` 23671a86e, by resolving each cited span:
+
+| Cited in the draft | What is actually there now | The real anchor |
+|---|---|---|
+| `main.rs:1136-1145` (ENCLAVE_ONLY_NET) | a `format_age_secs` branch | `const ENCLAVE_ONLY_NET` (~1597), used by `build_git_run_args` |
+| `main.rs:2973-2975` (git_mirror_service_identity) | an `ensure tillandsias-egress network` refusal | `fn git_mirror_service_identity` (~3997) |
+| `main.rs:2553-2554` (`--hostname proxy`) | an unrelated early `return Vec::new()` | `fn build_proxy_run_args` (~3345) |
+| `main.rs:2052` (ensure_enclave_network) | — | `fn ensure_enclave_network` (~2801) |
+| `main.rs:9656-9666`, `:10103-10190`, `:18863-18877` (browser) | — | `fn build_project_browser_spec` (~11751); the `SYS_CHROOT` assertion is ~22357 |
+
+The drift is TOTAL, not a small offset: `main.rs` has grown past 22,000 lines
+and these citations are weeks old. A reader following one of them does not
+merely waste time — they land in plausible-looking neighbouring code and may
+"verify" a claim against something unrelated, which is worse than an obviously
+dead link.
+
+REPAIRED by anchoring §1/§1.1 on SYMBOL NAMES (`main.rs` `build_git_run_args`)
+rather than line numbers. A symbol survives every edit that does not rename it,
+and a rename is a real event worth noticing; a line number is invalidated by
+any insertion above it. This is order 797-8dzt's lesson — source slices bounded
+by symbol names, not offsets — applied to prose. Doc-wide the line-number
+citation count drops 90 → 80; §1/§1.1 now has none into `main.rs`.
+
+Also removed: the `plan/index.yaml:967-979,...` citation for the secure
+control wire. Line numbers into the ledger are guaranteed to rot, because
+compaction rewrites that file by design (it folded 32 fragments into it twice
+this week alone). Orders are the stable identity there and are what the ledger
+itself tells you to cite.
+
+NOT REPAIRED, and named so the next host can pick it up: 80 line-number
+citations remain across §2-§7 and 20 distinct files. They were not touched
+because this slice's mandate was §1/§1.1, and because a bulk rewrite without
+re-verifying each claim would replace wrong-but-honest citations with
+confident-looking ones — the same trade this document already made once.
+NA-05's exit criterion asks for a patch list with "specific file:line
+references", which is exactly the requirement that produced this rot; whoever
+drives ratification should decide whether that criterion should say "specific
+file:symbol references" instead.
+
+Filed alongside: the systemic version of this — nothing in the tree checks that
+a `plan/issues/` citation still resolves, so an audit's evidence rots silently
+while the document keeps reading as verified.
