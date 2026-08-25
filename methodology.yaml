@@ -439,8 +439,17 @@ on_demand_experts:
       the marker. END of
       cycle, not beginning, so the reclaim happens after the cycle's work and
       the cost (a fuller next-build) is paid during the idle gap. Ephemeral
-      forges are EXEMPT — their target/ dies with the container. Implemented +
-      litmus-pinned by the ledger packet build-cache-sweep-on-durable-hosts.
+      forges are EXEMPT — their target/ dies with the container.
+      Implemented by scripts/check-build-cache-sweep.sh (verdict grammar
+      ok:build-cache-sweep-not-due / due:build-cache-sweep / skip:forge-exempt,
+      exit 0 when NOT due) and pinned by litmus:build-cache-sweep-trigger.
+      CORRECTED 2026-08-25 (order 709-in2f): this rule previously ended
+      "Implemented + litmus-pinned by the ledger packet
+      build-cache-sweep-on-durable-hosts" while that packet sat `ready` — no
+      script, no marker and no litmus existed. A policy that names its own
+      implementation reads as settled, so the false claim is plausibly WHY
+      nobody wrote one; same shape as an unbound litmus (660-ryhn) or the
+      daily-maintenance marker that lived only as prose (801-qasc).
     nix_store_policy:
       authority: "The Tlatoāni, 2026-08-17 (operator question) — implemented by order 795-h8er"
       rule: >

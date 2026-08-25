@@ -17343,6 +17343,34 @@ plan_index:
         - a durable-host cycle-end sweep runs cargo clean (+ nix gc if present) ONLY when target/ >40GiB or the sweep marker is >14d old, stamps the marker, and is a no-op otherwise; ephemeral forges never sweep
         - 'a litmus proves the trigger logic: under-threshold + fresh-marker -> no-op; over-threshold OR stale-marker -> sweep-eligible; the check is best-effort (never fails the cycle)'
       events:
+        - type: completed
+          ts: "2026-08-25T07:52:56Z"
+          agent_id: "linux-yoga-opus5-20260825t075256z"
+          host: yoga
+          summary: |
+            CLOSED, and the reason it sat here for thirteen days is the finding.
+
+            methodology.yaml's `build_cache_hygiene` rule — an operator directive of 2026-08-12 — ended with the sentence "Implemented + litmus-pinned by the ledger packet build-cache-sweep-on-durable-hosts". That is this packet. It was `ready`. There was no script, no marker, no litmus, and nothing anywhere in the tree read or wrote `.last-build-cache-sweep`. The canonical policy document asserted its own implementation into existence.
+
+            THAT IS PLAUSIBLY WHY NOBODY WROTE ONE. A rule that names its implementation reads as settled; anyone checking whether the sweep existed would have read that sentence and stopped. Same shape as a litmus bound to no spec (660-ryhn) and as the daily-maintenance marker that lived only as prose for four days (801-qasc) — an unobservable mechanism is indistinguishable from an absent one, and here the prose actively argued it was present. Corrected in methodology.yaml with the date, the order, and what was actually false, so the retraction is visible rather than silently overwritten.
+
+            WHAT LANDED. scripts/check-build-cache-sweep.sh, verdict grammar
+            `ok:build-cache-sweep-not-due:bytes=N:gib=N:marker=D:reason=R` /
+            `due:build-cache-sweep:...` / `skip:forge-exempt` / `blocked:*`, one line on stdout and nothing else. Trigger is methodology's, restated in one place each so the two cannot drift silently: target/ >= 40 GiB, OR marker older than 14 days, OR marker absent/unreadable.
+
+            EXIT POLARITY follows check-deslop-due.sh and check-daily-maintenance.sh: exit 0 when NOT due, so the healthy steady state stays quiet under `set -e` and the actionable state is the non-zero one. The header says so before anything else, because that convention has already been got backwards by a copy-paste once.
+
+            AN ABSENT OR UNREADABLE MARKER IS DUE, NEVER A PASS — 801-qasc's lesson applied directly. But the two are reported DIFFERENTLY (`reason=no-marker` vs `reason=unreadable-marker`), which I only added after testing: my first version called a corrupt marker "no-marker", which is a verdict that sends the reader hunting for a file sitting right there.
+
+            `stamp` REFUSES without `--action`, for the same reason check-daily-maintenance.sh requires `--steps`: a stamp recording that "something happened" moves the unfalsifiability up one level rather than removing it. The litmus asserts the refusal AND that nothing was written.
+
+            CAUGHT BY A SIBLING GATE, WORTH RECORDING. My first draft used `date -d "$mdate" +%s` to age the marker. `check-bash-dialect.sh` (761-g36m) refused the build: BSD `date` SUCCEEDS on `-d` with garbage output, so an exit-code guard cannot catch it and the failure would have been silent on macOS only — exactly the 803-bqte shape, where a GNU `sed \b` made three markers write-only on Macs while every self-test passed on Linux. Replaced with the days-from-civil awk converter lifted from check-deslop-due.sh. A guard I did not know existed stopped me shipping a cross-platform outage into a file whose whole purpose is being trustworthy about time.
+
+            PINNED by litmus:build-cache-sweep-trigger (8/8), bound to spec meta-orchestration; meta-orchestration instant suite 20/20. Both directions asserted, because a gate that always fires and a gate that never fires are equally useless and only one is loud: not-due when small and fresh; due by size even with a fresh marker; due by age even when small; due and correctly NAMED on a corrupt marker; forge exempt; actionless stamp refused; and a round trip proving a stamp flips the verdict — without which the refusals could be satisfied by a stamp that writes nothing readable.
+
+            WIRED into the skill's Finalization as step 9c, AFTER the lock release, because methodology is specific that the reclaim happens at cycle END so the fuller next build is paid in the idle gap. Best-effort, never a gate.
+
+            ON THIS HOST RIGHT NOW: target/ is 15 GiB against a 40 GiB threshold, so the trigger is `due` only because no marker has ever existed. `cargo clean` here would discard a healthy 15 GiB cache to satisfy a bookkeeping absence, which is the opposite of the rule's intent (the sweep must be RARE). Stamped with `cargo-clean:skipped-under-threshold-15gib` — an honest record of what ran, which is what makes the next check meaningful.
         - type: filed
           ts: "2026-08-12T20:15:00Z"
           agent_id: linux-mutable-session-20260812

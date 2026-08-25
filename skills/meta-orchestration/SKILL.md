@@ -1716,3 +1716,38 @@ Before exit:
    but do not lean on it: an explicitly released lock frees the checkout NOW,
    a reclaimed one frees it up to three hours later, and on a 30-minute
    cadence that is six skipped fires.
+
+9c. Reclaim the build cache when it is genuinely due (order 709-in2f,
+   methodology `build_cache_hygiene`) — LAST, after the lock is released, so a
+   full rebuild's cost is paid in the idle gap rather than inside the cycle:
+
+   ```bash
+   scripts/check-build-cache-sweep.sh   # exit 0 = NOT due; skip the body
+   ```
+
+   **Read the exit polarity before wiring anything to it.** It exits **0 when
+   the sweep is NOT due**, the same convention as `check-deslop-due.sh` and
+   `check-daily-maintenance.sh`: the actionable state is the non-zero one, so a
+   healthy steady state stays quiet under `set -e`. Branch on the verdict token
+   (`build-cache-sweep-not-due` / `build-cache-sweep`), which a copy-paste
+   cannot invert.
+
+   Due when `target/` exceeds 40 GiB, OR the marker is older than 14 days, OR
+   the marker is absent/unreadable. On `due:`, run `cargo clean` (plus
+   `scripts/nix-toolbox.sh gc` where nix is present — never a bare
+   `nix store gc`, which would delete the whole persistent cache rather than
+   prune it), then stamp what actually ran:
+
+   ```bash
+   scripts/check-build-cache-sweep.sh stamp --host <host> \
+       --action 'cargo-clean:<result>,nix-gc:<result>'
+   ```
+
+   `--action` is REQUIRED, for the same reason `check-daily-maintenance.sh`
+   requires `--steps`: a stamp recording that "something happened" without
+   recording what moves the unfalsifiability up a level instead of removing it.
+   Record `skipped-absent` / `deferred-<reason>` honestly.
+
+   BEST-EFFORT, NEVER A GATE: a failed sweep must not fail the cycle, and the
+   sweep must not run before the work. Ephemeral forges read `skip:forge-exempt`
+   and never sweep — their `target/` dies with the container.

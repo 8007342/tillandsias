@@ -1,0 +1,71 @@
+# freshness: auditor=linux-yoga-20260825t0743z date=2026-08-25 verdict=updated scope=created — methodology.yaml's build_cache_hygiene rule ended "Implemented + litmus-pinned by the ledger packet build-cache-sweep-on-durable-hosts" while that packet (709-in2f) sat `ready` with no script, no marker and no litmus; this file makes the claim true
+name: litmus:build-cache-sweep-trigger
+spec: meta-orchestration
+phase: pre-build
+size: instant
+severity: medium
+description: >
+  Pin the trigger logic of the durable-host build-cache sweep (order 709-in2f,
+  methodology.yaml `build_cache_hygiene`). A full `cargo clean` forces a full
+  rebuild next cycle, so the sweep must be RARE — which makes the trigger, not
+  the sweeping, the thing worth pinning. Both directions are asserted, because
+  a gate that always fires and a gate that never fires are equally useless and
+  only one of them is loud.
+
+  Every case runs against a hermetic throwaway directory through the script's
+  own environment seams, so nothing here depends on how large this checkout's
+  target/ happens to be today.
+
+preconditions:
+  - workspace contains scripts/check-build-cache-sweep.sh
+
+critical_path:
+  - step: "Req: the gate exists, is executable, and emits its pinned verdict grammar"
+    command: "test -x scripts/check-build-cache-sweep.sh && scripts/check-build-cache-sweep.sh | grep -qE '^(ok:build-cache-sweep-not-due|due:build-cache-sweep):bytes=[0-9]+:gib=[0-9]+:marker=[^:]+:reason=[a-z0-9-]+$' && echo 'ok: grammar pinned'"
+    expected_behavior: "ok: grammar pinned"
+    timeout_ms: 30000
+
+  - step: "NOT DUE: under the size threshold with a fresh marker is a no-op (exit 0)"
+    # The steady state. If this ever goes red the fleet starts paying a full
+    # rebuild every cycle, which is the failure the rarity rule exists to stop.
+    command: "d=$(mktemp -d); mkdir -p \"$d/t\" \"$d/c\"; head -c 1000 /dev/zero > \"$d/t/x\"; printf 'date=%s utc=x host=t action=cargo-clean:done\\n' \"$(date +%Y-%m-%d)\" > \"$d/c/m\"; out=$(TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/m\" scripts/check-build-cache-sweep.sh); rc=$?; rm -rf \"$d\"; [ \"$rc\" -eq 0 ] && printf '%s' \"$out\" | grep -q '^ok:build-cache-sweep-not-due:' && echo 'ok: fresh and small is a no-op'"
+    expected_behavior: "ok: fresh and small is a no-op"
+    timeout_ms: 30000
+
+  - step: "DUE by SIZE: over the threshold fires even when the marker is fresh"
+    command: "d=$(mktemp -d); mkdir -p \"$d/t\" \"$d/c\"; head -c 1000 /dev/zero > \"$d/t/x\"; printf 'date=%s utc=x host=t action=cargo-clean:done\\n' \"$(date +%Y-%m-%d)\" > \"$d/c/m\"; out=$(TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/m\" TILLANDSIAS_BUILD_CACHE_MAX_GIB=0 scripts/check-build-cache-sweep.sh); rc=$?; rm -rf \"$d\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -q ':reason=over-size$' && echo 'ok: size wins over a fresh marker'"
+    expected_behavior: "ok: size wins over a fresh marker"
+    timeout_ms: 30000
+
+  - step: "DUE by AGE: a marker older than the window fires even when the cache is small"
+    command: "d=$(mktemp -d); mkdir -p \"$d/t\" \"$d/c\"; head -c 1000 /dev/zero > \"$d/t/x\"; printf 'date=%s utc=x host=t action=cargo-clean:done\\n' \"$(date -d '30 days ago' +%Y-%m-%d)\" > \"$d/c/m\"; out=$(TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/m\" scripts/check-build-cache-sweep.sh); rc=$?; rm -rf \"$d\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -qE ':reason=stale-[0-9]+d$' && echo 'ok: staleness fires on its own'"
+    expected_behavior: "ok: staleness fires on its own"
+    timeout_ms: 30000
+
+  - step: "A CORRUPT marker is DUE and says so — never a pass, and never blamed on absence"
+    # The 801-qasc lesson applied here: an unreadable marker is indistinguishable
+    # from a never-swept host, so it must fire. The reason must still name what
+    # was found, or the reader goes looking for a file that is right there.
+    command: "d=$(mktemp -d); mkdir -p \"$d/t\" \"$d/c\"; head -c 1000 /dev/zero > \"$d/t/x\"; printf 'garbage\\n' > \"$d/c/m\"; out=$(TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/m\" scripts/check-build-cache-sweep.sh); rc=$?; rm -rf \"$d\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -q ':marker=unreadable:reason=unreadable-marker$' && echo 'ok: corrupt marker is due and named'"
+    expected_behavior: "ok: corrupt marker is due and named"
+    timeout_ms: 30000
+
+  - step: "An EPHEMERAL FORGE never sweeps — its target/ dies with the container"
+    command: "out=$(TILLANDSIAS_HOST_KIND=forge scripts/check-build-cache-sweep.sh); rc=$?; [ \"$rc\" -eq 0 ] && [ \"$out\" = 'skip:forge-exempt' ] && echo 'ok: forge exempt'"
+    expected_behavior: "ok: forge exempt"
+    timeout_ms: 15000
+
+  - step: "STAMP REFUSES without --action: a stamp that records no action is unfalsifiable"
+    # Same rule as check-daily-maintenance.sh's --steps. A marker saying
+    # "something happened" moves the unobservability up one level instead of
+    # removing it.
+    command: "d=$(mktemp -d); TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/m\" scripts/check-build-cache-sweep.sh stamp --host t >/dev/null 2>&1; rc=$?; present=no; [ -f \"$d/m\" ] && present=yes; rm -rf \"$d\"; [ \"$rc\" -eq 2 ] && [ \"$present\" = no ] && echo 'ok: actionless stamp refused and wrote nothing'"
+    expected_behavior: "ok: actionless stamp refused and wrote nothing"
+    timeout_ms: 15000
+
+  - step: "ROUND TRIP: a stamped marker flips the verdict to not-due"
+    # Without this the refusals above could be satisfied by a stamp that never
+    # writes anything a later check can read.
+    command: "d=$(mktemp -d); mkdir -p \"$d/t\"; head -c 1000 /dev/zero > \"$d/t/x\"; TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/m\" scripts/check-build-cache-sweep.sh stamp --host t --action 'cargo-clean:done' >/dev/null; out=$(TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/m\" scripts/check-build-cache-sweep.sh); rc=$?; rm -rf \"$d\"; [ \"$rc\" -eq 0 ] && printf '%s' \"$out\" | grep -q '^ok:build-cache-sweep-not-due:' && echo 'ok: stamp round-trips'"
+    expected_behavior: "ok: stamp round-trips"
+    timeout_ms: 30000
