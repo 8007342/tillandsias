@@ -1,0 +1,85 @@
+name: litmus:post-merge-litmus-pass-shape
+spec: ci-release
+severity: medium
+size: instant
+phase: pre-build
+
+description: >
+  Order 754-kptj, half A. Litmus never ran on the MERGED UNION of the sibling
+  platform branches until the release path needed it, so a union that no branch
+  had ever exercised alone reached the promotion gate.
+
+  MEASURED 2026-08-15: the coordinator merged both sibling branches, each green
+  on its own `./build.sh --check` gate — which runs no litmus at all (748-tkjx)
+  — and the union failed 9 litmus steps, discovered inside
+  merge-to-main-and-release STEP 3 while the operator was waiting on the v0.4
+  promotion. Every branch was honestly green. Nobody had run the thing they
+  became together.
+
+  This pins the WIRING, in the same "wiring is real, not prose" form
+  litmus:committable-branch-guard-shape uses for its probe: the coordinator
+  skill must actually name the runner, and must name it BEFORE the heavyweight
+  `--ci-full` step, because a post-merge check that runs after the expensive
+  gate has already told you what you needed to know too late.
+
+  It also pins the two caveats. Both are load-bearing and both are easy to drop
+  when someone shortens the step: `--diff-scope` fails CLOSED (an unannotated
+  test, an unresolvable base, a clean tree, or a stale full-run anchor each
+  escalate to a FULL run), and a run that SKIPPED anything blocks build.sh from
+  writing a gate stamp — so this pass informs the coordinator and can never
+  substitute for the release gate. A step that omits them reads as a cheap
+  drop-in replacement for the gate, which it is not.
+
+preconditions:
+  - workspace contains skills/coordinate-multihost-work/SKILL.md
+  - workspace contains scripts/run-litmus-test.sh
+  - shell utilities (grep, awk, bash) are available in PATH
+
+critical_path:
+  - step: "the coordinator skill actually invokes the litmus runner (wiring is real, not prose)"
+    command: "grep -q 'run-litmus-test.sh' skills/coordinate-multihost-work/SKILL.md && echo 'ok: coordinator-runs-litmus'"
+    timeout_ms: 3000
+    expected_behavior: "ok: coordinator-runs-litmus"
+
+  - step: "the litmus pass comes BEFORE the heavyweight --ci-full step, not after"
+    # Ordering is the whole point. A post-merge check that runs after the
+    # expensive gate has already surfaced the skew tells the coordinator
+    # nothing it did not just pay for. awk, not a pipeline-into-grep verdict
+    # (792-ksr8): capture line numbers, then compare them arithmetically.
+    command: "l=$(grep -n 'run-litmus-test.sh' skills/coordinate-multihost-work/SKILL.md | head -1 | cut -d: -f1); c=$(grep -n 'build.sh --ci-full' skills/coordinate-multihost-work/SKILL.md | head -1 | cut -d: -f1); case \"$l:$c\" in :*|*:) echo \"FAIL: missing marker litmus=$l cifull=$c\"; exit 1;; esac; [ \"$l\" -lt \"$c\" ] && echo 'ok: litmus-precedes-ci-full'"
+    timeout_ms: 3000
+    expected_behavior: "ok: litmus-precedes-ci-full"
+
+  - step: "both caveats travel with the step (fails-closed, and it is not the release gate)"
+    # Dropping either one turns an informative pass into a false substitute for
+    # the release gate, which is a worse failure than not having the step.
+    command: "grep -qi 'fails CLOSED' skills/coordinate-multihost-work/SKILL.md && grep -qi 'substitute for the release gate' skills/coordinate-multihost-work/SKILL.md && echo 'ok: caveats-recorded'"
+    timeout_ms: 3000
+    expected_behavior: "ok: caveats-recorded"
+
+  - step: "the runner really supports the flags the skill tells the coordinator to use"
+    # NEGATIVE-CONTROL-ADJACENT: pins that the documented invocation is not
+    # aspirational. A skill naming a flag the runner does not implement is the
+    # order-531 shape — truthful-looking instructions, wrong artifact.
+    command: "grep -q -- '--diff-scope' scripts/run-litmus-test.sh && grep -q -- '--compact' scripts/run-litmus-test.sh && echo 'ok: runner-supports-documented-flags'"
+    timeout_ms: 5000
+    expected_behavior: "ok: runner-supports-documented-flags"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "coordinator post-merge litmus pass wired, ordered before --ci-full, with both caveats"
+  log_fields:
+    spec: "ci-release"
+    test: "post-merge-litmus-pass-shape"
+    artifact: "skills/coordinate-multihost-work/SKILL.md + scripts/run-litmus-test.sh"
+
+rollback:
+  on_failure: >
+    The coordinator's post-sibling-merge litmus pass drifted. Restore the step
+    in skills/coordinate-multihost-work/SKILL.md, section "Integration And
+    Runtime Executor", between the sibling merge and the `./build.sh --ci-full`
+    step: it must invoke scripts/run-litmus-test.sh on the merged union, and it
+    must carry both caveats (--diff-scope fails CLOSED; a skipped run blocks the
+    gate stamp, so this pass never substitutes for the release gate). Order
+    754-kptj; the 2026-08-15 skew is the evidence.

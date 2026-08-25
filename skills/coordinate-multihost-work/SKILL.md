@@ -129,11 +129,40 @@ Run this before ending the loop whenever `origin/windows-next` or `origin/osx-ne
 
 1.  **Check Active Async Run**: Read `plan/localwork/runtime-litmus/current`. If alive, record "validation still running" as a `## Cycle` entry in `plan/loop_status.d/` (via `tillandsias-plan loop-status-append`) and wait.
 2.  **Merge Sibling Branches**: If clean, attempt a real merge of sibling platform branches in a fresh worktree.
-3.  **Litmus Execution**: Run the full litmus check on the merged code:
+3.  **Litmus On The MERGED UNION, before anything heavy** (order 754-kptj):
+
+    ```bash
+    scripts/run-litmus-test.sh --phase pre-build --size instant --compact
+    # or, scoped to what the merge actually changed:
+    scripts/run-litmus-test.sh --diff-scope origin/linux-next --compact
+    ```
+
+    Record the `PASS:`/`FAIL:` counts and the pass rate as a line in the cycle
+    handoff, the same way the guard verdicts are recorded.
+
+    **Why this step exists, and why it is here rather than later.** Litmus
+    never ran on the merged union until the release path needed it. On
+    2026-08-15 the coordinator merged both sibling branches, each green on its
+    own `--check` gate (which runs no litmus at all, 748-tkjx), and the UNION
+    failed 9 litmus steps — discovered inside `merge-to-main-and-release`
+    STEP 3 while the operator was waiting on a promotion. Each branch was
+    honestly green; nobody had run the thing they became together.
+
+    Two caveats that must travel with this step, or it will mislead:
+
+    -   `--diff-scope` **fails CLOSED**. An unannotated test, an unresolvable
+        base, a clean tree, or a full-run anchor older than 24h each escalate
+        to a FULL run rather than skipping. That is the safe direction, but it
+        means the scoped form is not reliably the cheap form.
+    -   A run that actually SKIPPED something blocks `build.sh` from writing a
+        gate stamp. So this pass informs the coordinator; it does **not**
+        substitute for the release gate below.
+
+4.  **Heavy Runtime Litmus**: Run the full runtime check on the merged code:
     -   `./build.sh --ci-full --install`
     -   `tillandsias --debug --init`
     -   `tillandsias . --opencode --diagnostics --prompt "$LITMUS_PROMPT"`
-4.  **Resolve & Push**: Commit and push successful merges to `origin/linux-next`. On push rejection, fetch, rebase coordination files, and retry up to 3 times.
+5.  **Resolve & Push**: Commit and push successful merges to `origin/linux-next`. On push rejection, fetch, rebase coordination files, and retry up to 3 times.
 
 ---
 

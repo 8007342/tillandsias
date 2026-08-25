@@ -167,6 +167,7 @@ specs:
   - litmus:fold-incompleteness-typed-shape
   - litmus:release-runbook-external-preconditions-shape
   - litmus:script-exec-bit-shape
+  - litmus:post-merge-litmus-pass-shape
   - litmus:sidecar-is-a-build-graph-input
   - litmus:selector-urgency-not-inert-shape
   - litmus:sigpipe-verdict-pipeline-shape
