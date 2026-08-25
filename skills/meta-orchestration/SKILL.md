@@ -989,10 +989,31 @@ Two rules, both easy to get wrong:
 - **Compaction is TEXT-LEVEL and never re-serializes the base.** It ran on the
   real ledger for the first time on 2026-08-03 (order 582-4wdi, commit 81e12b65):
   28 fragments folded, 120 comment lines preserved exactly, 535 packets
-  preserved, and the `plan/index.yaml` diff was 1021 added lines and **zero
-  removed lines**. That zero is the property to protect — existing base bytes are
-  untouched by construction, so the inline operator decisions and the four-space
-  item prefix `append-event` locates by cannot be lost by a fold.
+  preserved, and the `plan/index.yaml` diff was 1021 added lines and zero removed
+  lines. **Do not read that zero as the invariant** — it was a true measurement of
+  a fold that could only APPEND, taken before `set-field` fragments existed, and
+  it has been unreachable since. A fragment that reassigns a field must remove the
+  superseded line; a fold carrying nine status transitions removes nine `status:`
+  lines and that is the fold working.
+
+  THE PROPERTY TO PROTECT, stated so a healthy compaction cannot fail it: no line
+  is removed EXCEPT one whose field a fragment explicitly reassigned. Comment
+  lines, packet count (minus none, plus the new ones), and the four-space item
+  prefix `append-event` locates by all survive unchanged. Check THOSE, in one
+  command, rather than eyeballing the removal count:
+
+  ```bash
+  git diff --numstat plan/index.yaml                  # removals are expected
+  git diff plan/index.yaml | grep '^-' | grep -v '^---' \
+    | sed 's/^-[[:space:]]*//' | cut -d: -f1 | sort | uniq -c   # ONLY field keys?
+  ```
+
+  MEASURED TWICE, on two hosts, each of which stopped its cycle to investigate:
+  lenovinha 2026-08-23 (+888/-17 — five `status`, one multi-line `next_action`)
+  and yoga 2026-08-25 (+556/-12 — nine `status`, two `next_action`, one
+  `next_action_ts`; 37 comments and all 526 packet prefixes intact). Both folds
+  were correct. The prose is what cost the time, which is why it is corrected
+  here rather than merely noted (865-ng6r).
 
   It refused for months before that, correctly: a `serde_yaml` round-trip drops
   comments and re-indents items to column 0, after which `append-event` silently

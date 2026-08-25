@@ -2978,6 +2978,8 @@ plan_index:
           summary: |
             Group under socket-audit-master milestone (order 625-jd5f)
     - packet_id: long-running-work-packet-methodology
+      next_action_ts: "2026-08-25T15:50:51Z"
+      next_action: The three named agents re-verify LM-01..LM-05. LM-04 is now mechanically checkable — run scripts/check-long-running-view.sh instead of eyeballing the table; it fails on drift in either direction and is wired into build.sh --check. If a verifier disagrees with the gate's definition of active (non-terminal status on a multi_cycle packet), record that disagreement on this row, because the gate now encodes it for the whole fleet.
       release_target: architecture-audit-epic
       order: 251
       desired_release: v0.5
@@ -3134,6 +3136,21 @@ plan_index:
           host: forge
           summary: |
             Group under architecture-audit-epic milestone (order 625-jd5f)
+        - type: note
+          ts: "2026-08-25T15:45:03Z"
+          host: yoga
+          summary: |
+            claimed for cycle 2026-08-25T15:43Z (LM-04 drift)
+        - type: note
+          ts: "2026-08-25T15:49:55Z"
+          host: yoga
+          summary: |
+            cycle-scoped claim released (multi_cycle, phase stays verification)
+        - type: progress
+          ts: "2026-08-25T15:50:51Z"
+          host: yoga
+          summary: |
+            status 'The three named agents re-verify LM-01..LM-05. LM-04 is now mechanically checkable — run scripts/check-long-running-view.sh instead of eyeballing the table; it fails on drift in either direction and is wired into build.sh --check. If a verifier disagrees with the gate's definition of active (non-terminal status on a multi_cycle packet), record that disagreement on this row, because the gate now encodes it for the whole fleet.' (not terminal) with evidence_refs: scripts/check-long-running-view.sh + litmus:long-running-view-agreement 5/5
     - packet_id: guest-agent-attach-runs-login-flow
       release_target: socket-audit-master
       order: 273
@@ -3974,6 +3991,8 @@ plan_index:
             linux 303-307/318).
 
     - packet_id: collaborative-work-scheduling-research
+      next_action_ts: "2026-08-25T17:48:41Z"
+      next_action: Criterion 2, the prior-art survey with provenance, is not started. Before proposing mechanisms, read the six-entry failure-mode inventory in plan/issues/collaborative-work-scheduling-design-record-2026-08-25.md — it already forecloses several of this packet's own candidate mechanisms on measurement (F5 refutes better seeding; three of six modes are already mechanised). Add entries for thrashing mediation and milestone-burndown surfacing, which are named in the outcome and have no citable evidence yet.
       release_target: architecture-audit-epic
       order: 335
       desired_release: v0.5
@@ -4076,6 +4095,21 @@ plan_index:
                third is the load-bearing one — without it, twins decay into the six
                byte-identical exit_pause copies of 828-h7kw. Whatever this packet
                lands should carry that shape, or explicitly reject it.
+        - type: note
+          ts: "2026-08-25T17:47:43Z"
+          host: yoga
+          summary: |
+            claimed for cycle 2026-08-25T17:43Z (criterion 1 slice)
+        - type: progress
+          ts: "2026-08-25T17:48:41Z"
+          host: yoga
+          summary: |
+            status 'Criterion 2, the prior-art survey with provenance, is not started. Before proposing mechanisms, read the six-entry failure-mode inventory in plan/issues/collaborative-work-scheduling-design-record-2026-08-25.md — it already forecloses several of this packet's own candidate mechanisms on measurement (F5 refutes better seeding; three of six modes are already mechanised). Add entries for thrashing mediation and milestone-burndown surfacing, which are named in the outcome and have no citable evidence yet.' (not terminal) with evidence_refs: plan/issues/collaborative-work-scheduling-design-record-2026-08-25.md
+        - type: note
+          ts: "2026-08-25T17:48:41Z"
+          host: yoga
+          summary: |
+            cycle-scoped claim released; criterion 1 partially landed
     - packet_id: enclave-service-catalog-milestone
       order: 353
       desired_release: v0.6
@@ -19623,7 +19657,7 @@ plan_index:
     - packet_id: cross-host-verification-attestation-is-shareable
       order: 738-3pft
       release_target: fail-loud-diagnosis-milestone
-      status: ready
+      status: in_progress
       desired_release: v0.5
       priority: p1
       kind: fix
@@ -19743,6 +19777,11 @@ plan_index:
             So the recovery needed is points 1 and 3. With them re-posted the
             format negotiation can conclude, which is what unblocks both this row
             and sibling 739-6r6n.
+        - type: note
+          ts: "2026-08-25T19:50:36Z"
+          host: macuahuitl
+          summary: |
+            claimed for cycle 2026-08-25T19:50:35Z
     - packet_id: windows-hourly-queue-2026-08-14
       order: 738-yw6p
       release_target: stable-milestone-v1
@@ -20464,7 +20503,7 @@ plan_index:
     - packet_id: no-yaml-reader-exists-in-every-environment-the-gates-run-in
       next_action: Run rg -n '\bruby\b|\byq\b' scripts and migrate each remaining production YAML read to scripts/tillandsias-policy validate-yaml; then record forge, bare-host, and builder-toolbox evidence before closing.
       order: 746-htj9
-      status: ready
+      status: in_progress
       desired_release: v0.5
       priority: p1
       release_target: fail-loud-diagnosis-milestone
@@ -20575,9 +20614,14 @@ plan_index:
           host: forge
           summary: |
             carry forward the remaining cross-locus audit after the fragment-integrity slice
+        - type: note
+          ts: "2026-08-25T19:50:36Z"
+          host: macuahuitl
+          summary: |
+            claimed for cycle 2026-08-25T19:50:35Z
     - packet_id: image-rebuild-orphans-the-tag-the-installed-binary-launches-by
       order: 747-knbp
-      status: ready
+      status: in_progress
       desired_release: v0.5
       priority: p1
       release_target: fail-loud-diagnosis-milestone
@@ -20670,6 +20714,11 @@ plan_index:
             binary's v0.4.260809.2 tag pointing at nothing. Repaired locally with
             podman tag; filing the durable fix.
 
+        - type: note
+          ts: "2026-08-25T19:50:36Z"
+          host: macuahuitl
+          summary: |
+            claimed for cycle 2026-08-25T19:50:35Z
     - packet_id: startup-context-addendum-can-hang-launch-via-fifo-or-char-device
       order: 747-kw8u
       release_target: forge-local-experts-milestone
@@ -21226,7 +21275,7 @@ plan_index:
             SWEEP OBSOLETED (order 752-8hqx). PREMISE GONE — the filer retracted the diagnosis inside the fixing commit f5c422b44: "MY DIAGNOSIS WAS WRONG ... Every assertion there is a grep -q; a warning line cannot defeat a grep." The real cause was fixed in that same commit.
     - packet_id: base-ledger-completions-are-outside-the-status-loss-detector
       order: 751-i9mb
-      status: ready
+      status: in_progress
       desired_release: v0.5
       priority: p1
       release_target: fail-loud-diagnosis-milestone
@@ -21324,6 +21373,11 @@ plan_index:
             fragment into the base. First draft of this packet wrongly claimed no
             detector existed; corrected before landing.
 
+        - type: note
+          ts: "2026-08-25T19:50:36Z"
+          host: macuahuitl
+          summary: |
+            claimed for cycle 2026-08-25T19:50:35Z
     - packet_id: status-loss-detector-attributes-closure-markers-found-in-prose
       order: 752-pst5
       status: verified
@@ -21543,7 +21597,7 @@ plan_index:
 
     - packet_id: cross-branch-litmus-skew-gate
       order: 754-kptj
-      status: ready
+      status: in_progress
       desired_release: v0.5
       priority: p1
       release_target: fail-loud-diagnosis-milestone
@@ -21570,6 +21624,12 @@ plan_index:
         - The coordinator's post-sibling-merge pass runs the litmus phases (or a changed-pin-scoped subset) on the merged tree BEFORE any release-path gate needs them, and its verdict line is recorded in the cycle handoff.
         - 'scripts/check-script-exec-bits inventory includes bare-path scripts/<name>.sh invocations inside openspec/litmus-tests/*.yaml command: fields; a fixture with a 100644 bare-path litmus script turns the check red (negative control).'
 
+      events:
+        - type: note
+          ts: "2026-08-25T19:50:36Z"
+          host: macuahuitl
+          summary: |
+            claimed for cycle 2026-08-25T19:50:35Z
     - packet_id: podman-budget-test-contention
       order: 754-3jht
       status: obsoleted
@@ -22073,7 +22133,7 @@ plan_index:
 
     - packet_id: github-login-validates-push-authorization
       order: 759-vceg
-      status: ready
+      status: in_progress
       desired_release: v0.5
       priority: p1
       kind: fix
@@ -22115,6 +22175,11 @@ plan_index:
         - A hermetic litmus (mocked gh/api responses) pins accept and refuse paths, including the fine-grained-PAT-without-Contents:write shape from the incident.
 
       events:
+        - type: note
+          ts: "2026-08-25T19:50:36Z"
+          host: macuahuitl
+          summary: |
+            claimed for cycle 2026-08-25T19:50:35Z
         - type: note
           ts: "2026-08-25T20:24:14Z"
           agent_id: "linux-macuahuitl-fable5-20260825t195813z"
@@ -25899,7 +25964,8 @@ plan_index:
             CAUSE (a module load racing the probe, not the daemon's bind ordering)
             and therefore what the NEXT cut has to contain to clear the hold.
     - packet_id: nine-hand-rolled-length-prefixed-framing-copies
-      next_action: 'Before the next migration, refine litmus:one-length-delimited-framing-impl so deliberate hand-rolled interop fakes are explicit exceptions and reconcile the tray-host-control-socket no-length-limit text with MAX_MESSAGE_BYTES. Then take the Linux-testable vsock_server.rs slice atomically: migrate read and write through Framed, preserve pipelined bytes with into_parts, add a Hello-plus-Subscribe regression, and repair the source-scan anchor.'
+      next_action_ts: "2026-08-25T20:03:54Z"
+      next_action: Slice 5 — migrate the 13 pending rows in scripts/framing-raw-decode-baseline.tsv onto LengthDelimitedCodec, lowering each row in the SAME commit as its migration (litmus one-length-delimited-framing-impl refuses a stale ceiling, so this cannot go quiet the way this field did). Linux-testable first — control-wire/transport.rs, headless/main.rs, host-shell/provisioning.rs, host-shell/vsock_client.rs, vm-layer/vsock_exec.rs. macos-tray/pty_vsock_bridge.rs needs macOS-lane evidence and windows-tray/hvsocket.rs needs Windows-lane evidence. Also restate exit criterion 1, which asks for at most one raw decode tree-wide and is unreachable as literally written given the five enumerated interop-fake keeps.
       order: 795-5itp
       status: ready
       kind: enhancement
@@ -25970,6 +26036,36 @@ plan_index:
         an over-long-frame refusal test at each migrated call site. The scan is
         the load-bearing half; the refusal tests are the negative control.
       events:
+        - type: progress
+          ts: "2026-08-25T20:03:38Z"
+          agent_id: "linux-yoga-opus5-20260825t200338z"
+          host: yoga
+          summary: |
+            SLICE 4 — THE NAMED CLOSURE NOW EXISTS AND RUNS. Until this cycle, `litmus:one-length-delimited-framing-impl` appeared in exactly one place in the tree: this packet's `verifiable_closure` field. `grep -rl` over the whole repo returned plan/index.yaml and nothing else. Three slices of this migration (86e1bfe6c, be19f02dd, 99fe3da0f) landed over eight days against a gate that could not run, and the disposition comment written at vsock_server.rs:1715 on 2026-08-25T09:47Z explicitly says its reason is "the entry that exception list requires" — for an exception list that did not exist. A closure nothing executes is a plan, not a constraint, and this packet had been reporting progress against one.
+
+            LANDED: scripts/check-framing-raw-decodes.sh + scripts/framing-raw-decode-baseline.tsv, bound as litmus:one-length-delimited-framing-impl under spec vsock-transport (openspec/litmus-bindings.yaml). 6/6 steps PASS in 1.0s.
+
+            IT IS A RATCHET, NOT THE END-STATE ASSERTION, AND THAT IS THE DESIGN DECISION WORTH ARGUING WITH. Exit criterion 1 asks for at most ONE raw decode tree-wide. Measured at HEAD: 18, across 10 files. A scan that asserts the end state fails on day one, gets marked expected-fail, and then protects nothing during the months the migration actually takes — which is the same failure as having no closure at all, arrived at more expensively. The ratchet is falsifiable TODAY: `ok:framing-ratchet:sites=18:files=10` at HEAD, and it refuses a new hand-rolled copy immediately.
+
+            THE SECOND REFUSAL IS THE ONE THAT MATTERS. The ratchet fails equally loud when the recorded ceiling sits ABOVE the truth — i.e. when a slice landed and nobody lowered the number. That is 884-hfsj's failure mode structurally prevented rather than described: a `next_action` naming the next slice goes stale in silence (this packet's still reads "Then take the Linux-testable vsock_server.rs slice", eleven hours after be19f02dd took it), but a ceiling that must be lowered in the same commit as the migration cannot go stale without turning the build red.
+
+            BASELINE, 18 sites / 10 files, each row carrying its disposition:
+              keep    3  crates/tillandsias-headless/src/tray/mod.rs           (blocking std UnixStream registry; :590 production + :4813/:5513 its hand-rolled test peers)
+              keep    1  crates/tillandsias-headless/src/vsock_server.rs       (#[cfg(test)] interop peer — independence is its whole value)
+              keep    1  crates/tillandsias-headless/tests/vsock_listener_e2e.rs (same, at the e2e layer)
+              pending 1  crates/tillandsias-control-wire/src/transport.rs
+              pending 1  crates/tillandsias-headless/src/main.rs
+              pending 1  crates/tillandsias-host-shell/src/provisioning.rs
+              pending 2  crates/tillandsias-host-shell/src/vsock_client.rs
+              pending 5  crates/tillandsias-macos-tray/src/pty_vsock_bridge.rs (macOS-lane evidence required)
+              pending 1  crates/tillandsias-vm-layer/src/vsock_exec.rs
+              pending 2  crates/tillandsias-windows-tray/src/hvsocket.rs       (Windows-lane evidence required)
+
+            So 5 of 18 are dispositioned keeps and 13 remain to migrate. Criterion 1's "at most one" is therefore unreachable as literally written — the honest end state is one production decode plus the deliberate interop fakes that make the interop claim non-tautological. That is a criterion the packet should restate, and it is NOT a licence to loosen it: the fakes are enumerated by path in the baseline, so "deliberate exception" stays a finite committed list rather than a judgment call.
+
+            NEGATIVE CONTROLS, all five exercised live and all five refusing: a new decode in an unlisted file (blocked:framing-ratchet-new-site), a count above ceiling (blocked:framing-ratchet-regressed), a ceiling above truth via a raised row (blocked:framing-ratchet-stale:...:2<3), a ceiling above truth via a row whose file reached zero (blocked:framing-ratchet-stale:...:0<1), and an absent baseline failing CLOSED rather than reporting a clean tree (blocked:framing-ratchet-no-baseline). The last matters because the cheapest way to pass a source scan is to delete it; step 6 additionally pins that crates/tillandsias-router-sidecar/src/main.rs still uses LengthDelimitedCodec, so the ratchet cannot be satisfied by deleting the migration target rather than reaching it.
+
+            CLAIM RELEASED to ready: 13 pending sites remain across 7 files, two of them behind other platforms' lanes.
         - type: progress
           ts: "2026-08-25T09:47:30Z"
           agent_id: "linux-yoga-opus5-20260825t094730z"
@@ -26215,6 +26311,21 @@ plan_index:
           host: yoga
           summary: |
             cycle-scoped claim released: two sites dispositioned, two remain on other hosts' lanes
+        - type: note
+          ts: "2026-08-25T19:57:25Z"
+          host: yoga
+          summary: |
+            claimed for cycle 2026-08-25T19:55Z; landing the named closure litmus:one-length-delimited-framing-impl as a ratchet
+        - type: progress
+          ts: "2026-08-25T20:03:54Z"
+          host: yoga
+          summary: |
+            status 'Slice 5 — migrate the 13 pending rows in scripts/framing-raw-decode-baseline.tsv onto LengthDelimitedCodec, lowering each row in the SAME commit as its migration (litmus one-length-delimited-framing-impl refuses a stale ceiling, so this cannot go quiet the way this field did). Linux-testable first — control-wire/transport.rs, headless/main.rs, host-shell/provisioning.rs, host-shell/vsock_client.rs, vm-layer/vsock_exec.rs. macos-tray/pty_vsock_bridge.rs needs macOS-lane evidence and windows-tray/hvsocket.rs needs Windows-lane evidence. Also restate exit criterion 1, which asks for at most one raw decode tree-wide and is unreachable as literally written given the five enumerated interop-fake keeps.' (not terminal) with evidence_refs: litmus:one-length-delimited-framing-impl 6/6 PASS; ok:framing-ratchet:sites=18:files=10
+        - type: note
+          ts: "2026-08-25T20:03:55Z"
+          host: yoga
+          summary: |
+            slice 4 landed (named closure now exists and runs); 13 pending sites remain, two behind other platform lanes
     - packet_id: windows-connect-path-unbounded-and-uncancellable
       order: 795-tb4a
       status: ready
@@ -26647,7 +26758,7 @@ plan_index:
 
     - packet_id: if-not-pipeline-exit-status-as-verdict-class
       order: 795-imz3
-      status: ready
+      status: in_progress
       kind: bug
       pickup_role: any
       priority: p1
@@ -26742,6 +26853,11 @@ plan_index:
             792-ksr8's four-in-one-night finding, which is the evidence that
             case-by-case fixing is not converging.
 
+        - type: note
+          ts: "2026-08-25T19:50:36Z"
+          host: macuahuitl
+          summary: |
+            claimed for cycle 2026-08-25T19:50:35Z
     - packet_id: interactive-tui-amputated-to-work-around-argv-join
       order: 795-bmbq
       status: ready
@@ -28882,7 +28998,7 @@ plan_index:
 
     - packet_id: post-release-version-sync-is-a-mandatory-step-not-a-tidy-up
       order: 800-vk2p
-      status: ready
+      status: in_progress
       desired_release: v0.5
       priority: p1
       kind: chore
@@ -28938,6 +29054,11 @@ plan_index:
         the hook output, not the runbook they are not reading at that moment.
 
       events:
+        - type: note
+          ts: "2026-08-25T19:50:36Z"
+          host: macuahuitl
+          summary: |
+            claimed for cycle 2026-08-25T19:50:35Z
         - type: completed
           ts: "2026-08-25T20:15:39Z"
           agent_id: "linux-macuahuitl-fable5-20260825t195813z"
@@ -34167,7 +34288,7 @@ plan_index:
              makes every future failure in this crate harder to read.
 
     - packet_id: three-horizon-cycle-model-arrival-control-by-routing
-      next_action_ts: "2026-08-25T15:40:04Z"
+      next_action_ts: "2026-08-25T18:04:51Z"
       order: 831-ezea
       status: in_progress
       desired_release: v0.5
@@ -34295,7 +34416,20 @@ plan_index:
         still 0 in two weeks horizon 0 has no write side and 814-iyu7 recurs
         regardless of everything else. GUARD: read 10 sampled next_action values;
         >= 7 must name a command or file:line AND a refuted move.
-      next_action: 'COORDINATOR QUEUE @ 2026-08-25T15:55Z (macuahuitl hourly). FLEET: yoga 2h + pirria 6h on cadence; lenovinha operator-stopped. STANDING DUTY unchanged; enclave 4/4. NEXT for macuahuitl: (1) 865-n8vq closure at yoga''s TTL ~19:33Z — one stack-up ci-full as reproducibility+survival proof, then close; release decision is the operator''s. (2) 712-r5x8 is implemented (embed_endpoint discoverability in expert_capability, litmus-pinned) — its completed rung needs one real forge launch showing spec_answer confidence=retrieved in-forge; whoever launches the next forge should check the startup context''s expert_capability line and the spec_answer answer, then file. (3) 873-b1nx slices remain pickup-able (builder container; build.sh lane wiring; WSL2/VFR measurements for windows/macos hosts). (4) idle: 722-uern needs the mirror-identity live matrix (multi-hour, claim only with a full cycle free).'
+      next_action: |-
+        COLD-START COORDINATOR QUEUE, written 2026-08-25T18:05Z before an OPERATOR-DIRECTED FULL FLEET RESET (system updates, host restarts, podman reset on macuahuitl, fresh checkouts everywhere, plain meta-orchestration prompts; a BRAND-NEW host may also join). Read this top to bottom before claiming anything.
+        
+        WHAT THE RESET CHANGES ON macuahuitl: podman is EMPTY (all containers, images, networks, volumes gone — including the spec-index and builder volumes). NOT lost: the nix chroot store and nix-cache keys/certs (~/.local/share/tillandsias, outside podman) — the cache returns WARM. Product images rebuild at VERSION on first launch; the spec index republishes via scripts/spec-index-ensure.sh (minutes, warm store). This cold re-provision IS the test: it exercises image builds, enclave bring-up, the 878-79b5 self-heal, and 880-tdwn's guarantees from absolute zero.
+        
+        FIRST CYCLE ON macuahuitl (coordinator, fat host), in order: (1) skill Start Of Cycle as written — cycle-preflight will rebuild the instrument; expect services-down until first bring-up. (2) MEANINGFUL FROM-SCRATCH TESTS: tillandsias --init (cold provision, watch for panics/pull errors), then scripts/run-litmus-test.sh --phase pre-build --size instant --compact (expect ~100%; two consecutive green FULL ci-fulls predate the reset), then the 883-ncrs sibling probe (podman run --rm --network tillandsias-enclave registry.fedoraproject.org/fedora-minimal:44 curl -sk https://nix-cache:5000/nix-cache-info — if it serves, close 883-ncrs as cleared-by-reset; if RST persists, bisect per the packet). (3) Resume STANDING DUTY: fetch/prune, merge AHEAD platform branches, expire-claims, fleet-heartbeat, sweep-salvage-refs.sh --apply. Post-restart checklist: plan/issues/fleet-restart-post-restart-checklist-2026-08-13.md (718-nuvm).
+        
+        A BRAND-NEW HOST joining: welcome. Your first cycle proves your identity and capabilities, not your throughput: derive your agent id ONLY via scripts/agent-identity.sh (the ledger REFUSES hand-written ids, 874-idnt); run the instant litmus sweep as your capability proof; publish your accel_probe capability row; claim ONE small ready packet matching your pickup_role and finish it through the FULL exit contract (commit, push, mo-full-attest record, marker). Do not claim coordination duties — macuahuitl coordinates.
+        
+        TIER POLICY (operator, 2026-08-25): low-end hosts (pirria, esmeraldinha, the 8GB i7) are THE OPTIMIZATION TARGET, not cheap labour — route them tier-RELEVANT work: floor benchmarks (bench-inference-floor.sh with GPU/load recorded), low-end validation, capability rows, inference-floor measurements. Compaction-sized chores are acceptable filler, never the plan. Heavy builds belong on fat hosts.
+        
+        LONG HORIZON (v0.8, row 884-shrd): network-shared dev resources — one nix builder + a pooled inference tier on the always-on fat hosts, low-end hosts consuming in-network. Every v0.6/v0.7 packet touching build/cache/inference plumbing must say one sentence about how it composes with that.
+        
+        WORK STATE AT RESET: v0.5 trunk RELEASABLE (865-n8vq closed on a full dossier; the release itself = operator runs merge-to-main-and-release). ~20 ready v0.5 packets. In flight: 873-b1nx (implemented; builder image at images/builder/, blocked on 883-ncrs for in-container substitution; WSL2/VFR measurements want windows/macos hosts), 712-r5x8 (implemented; completed-rung = one real forge launch showing spec_answer confidence=retrieved in-forge — check the startup context capability line for embed_endpoint=), 884-shrd (direction). 880-tdwn/878-79b5/877-lwts/874-family all completed and load-bearing.
       events:
         - type: note
           ts: "2026-08-25T15:51:46Z"
@@ -36230,6 +36364,16 @@ plan_index:
           host: macuahuitl
           summary: |
             queue refresh after 712-r5x8 implemented
+        - type: note
+          ts: "2026-08-25T17:40:24Z"
+          host: macuahuitl
+          summary: |
+            queue refresh: 883-ncrs filed, builder image landed
+        - type: note
+          ts: "2026-08-25T18:04:51Z"
+          host: macuahuitl
+          summary: |
+            cold-start handoff before the operator-directed full fleet reset
     - packet_id: macos-guest-cannot-reach-a-host-native-service
       order: 830-xsk2
       status: ready
@@ -41491,6 +41635,21 @@ plan_index:
         doc turned a healthy routine step into a stop-and-investigate, and it will
         do so for every host that compacts, every time, until it is corrected.
 
+      events:
+        - type: verified
+          ts: "2026-08-25T20:10:18Z"
+          agent_id: "linux-yoga-opus5-20260825t201018z"
+          host: yoga
+          summary: |
+            CLOSED by correcting the prose, after independently reproducing the exact cost lenovinha predicted. This cycle's routine compaction folded 26 fragments as +556/-12, I read "That zero is the property to protect", stopped, and spent four tool calls establishing that nothing was wrong — the same stop-and-investigate, on a second host, two days later. That is the packet's own claim ("it will do so for every host that compacts, every time") confirmed by a host that had not read the packet first.
+
+            THE 12 REMOVALS, verified: 9 status, 2 next_action, 1 next_action_ts — every one a field a set-field fragment explicitly reassigned. Structure intact across the fold: 37 comment lines before and after, 522 -> 526 packets (the 4 newly folded), and all 526 four-space `- packet_id:` prefixes present, which is the property append-event actually depends on.
+
+            WHAT CHANGED. skills/meta-orchestration/SKILL.md (hardlinked to .claude/skills/meta-orchestration/SKILL.md — one inode, so both paths carry it) keeps the 2026-08-03 measurement as history but explicitly stops it from being read as the invariant, and states the reachable one instead: no line is removed EXCEPT one whose field a fragment reassigned; comments, packet count and the item prefix survive. Two commands are given to check that directly — `git diff --numstat`, then the removed lines' field keys via `cut -d: -f1 | sort | uniq -c` — so the next agent verifies the real property in one step rather than reasoning about a number that no longer means anything.
+
+            Both measurements are recorded in the corrected text (lenovinha +888/-17, yoga +556/-12) because one host's reading looks like a fluke and two hosts' looks like the pattern it is.
+
+            NOT ADDED, deliberately: a check that asserts the property mechanically. It would need to distinguish "removed because superseded" from "removed because lost", which means re-deriving the fold — and a checker that re-implements the thing it checks agrees with it by construction. The honest artifact here is prose an agent can act on plus the two commands that make it falsifiable by hand.
     - packet_id: fragment-fold-silently-ignores-unrecognized-entry-keys
       order: 866-pvsx
       status: completed
@@ -42784,7 +42943,7 @@ plan_index:
       packet_id: the-trunk-has-been-unreleasable-for-a-week-behind-a-gate-no-push-runs
       desired_release: v0.5
       title: 833 commits accumulated unreleased because --check runs on every push and --ci-full only at release time
-      status: in_progress
+      status: completed
       kind: defect
       pickup_role: any
       priority: p0
@@ -42989,6 +43148,16 @@ plan_index:
             re-exec — so this row's gate-green claim must come from a mutable host or from
             618-i4s6 landing. expert-groundtruth-harness remains owned by 865-r6dt.
             Freshness stamps updated on all four edited litmus components (verdict=updated).
+        - type: completed
+          ts: "2026-08-25T18:03:44Z"
+          host: macuahuitl
+          summary: |
+            status 'completed' with evidence_refs: 77ddf5c6e 879-gidx spec-index resolution ladder + sidecar stub fix
+        - type: note
+          ts: "2026-08-25T18:03:44Z"
+          host: macuahuitl
+          summary: |
+            closed on the banked dossier; operator-directed full fleet reset supersedes the TTL wait on yoga's idle claim
     - order: 865-x2mf
       packet_id: the-guard-against-pinning-live-status-had-a-test-that-pinned-live-status
       desired_release: v0.5
@@ -45083,3 +45252,421 @@ plan_index:
             with "a subcommand nobody can discover might as well not exist". That is
             exactly the orphaned-capability shape 865-n8vq's guard-activation
             failure is about, enforced one level down and working.
+    - packet_id: nix-cache-resets-enclave-peer-connections-while-host-publish-serves
+      order: 883-ncrs
+      status: ready
+      desired_release: v0.6
+      priority: p2
+      kind: bug
+      pickup_role: linux
+      capability_tags:
+        - podman
+        - enclave
+        - networking
+        - nix
+        - cache
+      estimated_hours: 3
+      title: |
+        Enclave siblings get TCP-level connection resets from the nix-cache container (alias resolves, vault on the same network serves peers fine) while the host publish and the in-container loopback both serve.
+      context: |
+        MEASURED on macuahuitl 2026-08-25T17:3xZ while prototyping the
+        873-b1nx builder container:
+          * sibling container -> https://nix-cache:5000  = curl 000 (RST),
+            plain http the same, so TCP-level not TLS-level;
+          * DNS fine: nix-cache resolves to the container's bridge IP;
+          * control: the SAME probe container gets vault:200 from
+            https://tillandsias-vault:8200 on the SAME network — network,
+            DNS, and probe method all exonerated;
+          * host publish serves: curl https://127.0.0.1:5111/nix-cache-info
+            verifies with the state-dir CA bundle;
+          * in-container self-probe serves: podman exec + curl
+            https://127.0.0.1:5000 = 200, so harmonia is up and TLS-terminating;
+          * full stop + re-ensure via scripts/nix-cache-service.sh did NOT fix;
+          * vault also publishes a host port (8200->127.0.0.1:8201), so the
+            port-publish-plus-pasta theory is dead.
+        Run-arg deltas versus vault worth suspecting first: --read-only,
+        --tmpfs /tmp, --pids-limit=256, --cap-drop=ALL, label=disable, and the
+        entrypoint served OUT of the RO chroot-store mount. Also plausible: a
+        harmonia/actix acceptor quirk vs the bridge, or nftables state
+        specific to this container's repeated 880-tdwn-era restarts surviving
+        even a container recreate (network-scoped rules are not recreated with
+        the container).
+        IMPACT: 801-kqme's "proven reachable by DNS from an enclave container"
+        no longer holds on this host, which blocks the 873-b1nx builder
+        container (its whole point is in-enclave substitution) and means a
+        FORGE consuming the cache would silently degrade to cold builds.
+      exit_criteria: |
+        (1) The RST's mechanism is identified with evidence (tcpdump/nft
+        inspection or a minimal delta bisection of the run args), not
+        inferred. (2) An enclave sibling fetches nix-cache-info over TLS with
+        the CA bundle — the 801-kqme reachability claim re-proven and pinned
+        by a litmus that runs a REAL sibling probe. (3) The 873-b1nx builder
+        prototype re-run in-container completes its cache-first build.
+      events:
+        - type: filed
+          ts: "2026-08-25T17:39:35Z"
+          agent_id: linux-macuahuitl-opus5-20260825t173935z
+          host: linux_mutable
+          summary: |
+            Filed from the 873-b1nx builder-container prototype run with the five-way discrimination (sibling RST / DNS good / vault control good / host publish good / self-probe good) already measured, so the next cycle starts at the mechanism, not the symptom. Left ready — the builder image and its baked substituter config landed with the prototype and are correct regardless of this bug.
+        - type: progress
+          ts: "2026-08-25T18:04:24Z"
+          agent_id: linux-macuahuitl-opus5-20260825t180424z
+          host: macuahuitl
+          summary: |
+            RESET NOTE (pre-flush): the operator is running a full podman system reset on this host. That wipes every container, network, and volume — including whatever bridge/nftables state this bug lives in — so THE FIRST STEP after the reset is the cheap sibling probe (podman run --rm --network tillandsias-enclave fedora-minimal curl -sk https://nix-cache:5000/nix-cache-info) once the stack re-provisions. If it serves, close this row as environment-state-cleared-by-reset with the probe as evidence and note the mechanism was never named; if it still resets, the bug is in the run-args/harmonia delta and the bisection list in the packet context stands. The chroot store and the cache keys/certs live OUTSIDE podman (~/.local/share/tillandsias) and survive the reset, so the cache returns warm either way.
+
+    - packet_id: pickup-role-goes-stale-as-slices-land-and-routing-cannot-see-it
+      order: 884-hfsj
+      status: ready
+      kind: bug
+      priority: p2
+      pickup_role: linux
+      desired_release: v0.5
+      depends_on: []
+      estimated_hours: 4
+      capability_tags:
+        - plan
+        - coordination
+        - fleet
+        - convergence
+      tags:
+        - work-selection
+        - routing
+        - v0.5
+      title: |
+        `pickup_role` records who could claim a packet WHEN FILED and never narrows as slices land, so a host is offered the same un-advanceable batch every cycle — measured five cycles running, four of five items un-advanceable.
+      deliverable: |
+        Routing can see which lane a packet's REMAINING work needs, not only which
+        lane could have claimed it at filing time — either by honouring the
+        already-defined `owner_host` field, by decaying `pickup_role` as slices
+        land, or by a recorded decision that this is the operator's to steer.
+      context: |
+        MEASURED on yoga (linux_immutable) across FIVE consecutive cycles,
+        2026-08-25 from 09:43Z through 17:43Z. Every one selected the same batch:
+        
+          batch: epic=architecture-audit-epic role=linux size=5 seed=yoga
+                 pick=2/7 route=rank:6/7:width=7
+        
+        Four of its five items cannot be advanced by a Linux host, and every one
+        of them says `pickup_role: any`:
+        
+          * 795-zshi   — its Linux item (the vsock-exec-authz spec reconciliation)
+                         was discharged 2026-08-25T00:47Z. Every remaining
+                         next_action item is macOS-lane: feature-detect
+                         CAP_EXEC_ARGV_VECTOR in a bridge that compiles to a
+                         cfg-gated stub on Linux, and the --exec-guest
+                         discriminator 838-48ca decided on.
+          * 795-5itp   — the two remaining framing sites are pty_vsock_bridge
+                         (macOS) and hvsocket (Windows), both dispositioned on the
+                         record with their hazards named.
+          * 245        — the Linux revision slice landed; what remains is the
+                         macOS items and three named verification agents.
+          * 251        — what remains is three named verification agents, none of
+                         which is a Linux builder.
+        
+        THE FACT THAT WOULD FIX THE ROUTING IS ALREADY WRITTEN DOWN — IN PROSE.
+        Each of those packets carries a progress event saying exactly which lane
+        the remainder needs, because the hosts that did the earlier slices were
+        careful. The selector cannot read prose, so the careful handoff is
+        invisible to the only mechanism that acts on it.
+        
+        AND THE SCHEMA ALREADY HAS THE FIELD. `owner_host` is defined in
+        methodology/distributed-work.yaml and carried by 45 packets in the
+        ledger. Nothing reads it: no hit in scripts/select-work-batch.sh, none in
+        crates/tillandsias-plan/src/. It is an inert field that looks like
+        routing metadata, which is worse than an absent one — a host writing it
+        believes it has steered something.
+        
+        WHY THIS IS NOT THE CAPABILITY GAP THE SELECTOR ALREADY KNOWS ABOUT. Its
+        own comment (near TOOL_CAP_TAGS) says "pickup_role answers 'which LANE
+        may claim this'; it says nothing about what the HOST can actually run",
+        and closes that hole by intersecting capability_tags with probed tools.
+        That is a different axis. Here the lane itself is wrong: `any` was TRUE
+        when the packet was filed and stopped being true as slices landed. Nobody
+        lied; the field simply has no decay.
+        
+        COST, and why it is not merely untidy: a cycle's batch selection is its
+        orientation step. On this host it has produced no actionable head packet
+        for five cycles, and each cycle paid the selection cost, read the same
+        four packets' events, and re-derived the same conclusion before finding
+        work elsewhere in the batch. That is the arrival-control concern of
+        831-ezea seen from the SERVICE side — velocity spent on re-orientation
+        rather than on drain.
+      exit_criteria:
+        - |
+            Work selection accounts for the lane a packet's REMAINING work needs.
+            Any of three outcomes is acceptable and one must be chosen on the
+            record: honour `owner_host` in the selector; narrow `pickup_role`
+            when a slice lands (with the narrowing recorded as an event, since it
+            is a claim about the world); or a recorded operator decision that
+            lane-steering stays manual — in which case `owner_host` is deleted or
+            documented as advisory, because an inert routing field is a trap.
+
+        - |
+            NEGATIVE CONTROL: a fixture packet whose remaining work is macOS-only
+            is proven NOT to be offered to a linux selection, and the same packet
+            IS offered to a macos selection. Both halves, or the change is
+            untested in the direction that matters.
+
+        - |
+            POSITIVE CONTROL: a genuinely any-lane packet is still offered to
+            every lane, so the fix cannot be "narrow everything and starve the
+            pool".
+
+        - |
+            The five-cycle repeat measured above does not recur: a linux
+            selection on this ledger state yields a batch whose head packet this
+            host can actually advance, or the selector says plainly that it
+            cannot and why (`refused:` already has that shape).
+
+      verifiable_closure: |
+        A fixture ledger with one macOS-remaining packet and one any-lane packet,
+        run through the selector for both lanes, asserting the four-way outcome
+        (macOS-remaining offered to macos and withheld from linux; any-lane
+        offered to both). The withholding half is load-bearing — a selector that
+        offers everything to everyone passes any test that only checks presence.
+      notes: |
+        Do NOT "fix" this by editing the four packets' pickup_role by hand. That
+        treats the instance and leaves the mechanism, and the same drift will be
+        back within a week as the next round of slices lands — the same trade
+        that made plan/long-running.md drift twice (order 251 LM-04).
+        
+        Sibling context: 847-wgy4 routes by ordinal rank in the capability matrix,
+        which is what pins this host to one epic; that is working as designed and
+        is not the defect. The defect is that the epic it pins to can be empty for
+        this lane and nothing notices.
+      events:
+        - type: note
+          ts: "2026-08-25T17:45:24Z"
+          agent_id: linux-yoga-opus5-20260825t174524z
+          host: yoga
+          summary: |
+            ONE OF THE THREE EXIT OPTIONS IS ALREADY REFUTED, MEASURED IN THE SAME CYCLE THE PACKET WAS FILED. Recording it immediately so nobody spends a cycle building it.  "Honour owner_host in the selector" does not work. Measured distribution across the ledger: 45 carriers out of 596 packets (7.5% coverage) — 21 linux, 18 any, 6 windows, and ZERO macos.  Three independent reasons that kills the option:   1. NONE of the four packets in the measured batch carries owner_host at all, so honouring it would not have prevented a single one of the five cycles this packet is about.   2. There is no macos value anywhere in the field, and macOS is precisely the lane the stuck remainders belong to. A routing field that cannot express the answer cannot be the answer.   3. Honouring a field written while nothing read it is actively unsafe. Those 6 windows values were recorded by hosts who had no feedback about their effect, and switching them on would immediately hide work from other lanes on the strength of metadata nobody has ever validated. That is how a routing change starves a pool.  So the live options narrow to two. DECAY pickup_role as slices land — a real behaviour change, because whoever lands a slice must then narrow the field, and the narrowing is a claim about the world so it needs an event. Or the operator decides lane-steering stays manual, in which case owner_host should be DELETED or explicitly documented as advisory rather than left sitting there. An inert field that looks like routing metadata is a trap, and 45 packets worth of writes went into it believing it steered something.  NOT DECIDING THIS UNILATERALLY, and that is deliberate. Narrowing pickup_role changes what every host in the fleet is offered. I have five cycles of evidence about ONE host's experience of it, which is enough to establish the defect and not enough to choose the fleet-wide remedy. The exit criteria already require the choice to be recorded; this note removes the option measurement refutes and leaves the two that survive.
+
+    - packet_id: local-network-shared-development-resources
+      order: 884-shrd
+      status: pending
+      desired_release: v0.8
+      priority: p3
+      kind: direction
+      pickup_role: any
+      depends_on:
+        - every-platform-builds-through-a-container-backed-by-the-nix-cache
+      capability_tags:
+        - architecture
+        - fleet
+        - nix
+        - inference
+        - networking
+        - vpn
+      estimated_hours: 40
+      title: |
+        The always-on fat hosts serve shared DEVELOPMENT RESOURCES over the local network / private VPN — one nix builder, one pooled inference tier — so low-end hosts consume instead of re-paying.
+      context: |
+        OPERATOR DIRECTION, 2026-08-25, intent close to verbatim: "let's see
+        how difficult it would be for the LOCAL NETWORK to host shared
+        DEVELOPMENT RESOURCES — a single nix-builder in MACUAHUITL would
+        benefit the whole fleet; same thing an inference box in MACUAHUITL
+        with some smaller models in LENOVINHA would combined provide a larger
+        set of live models at any given time for the whole fleet; then the low
+        end devices like Pirria and Esmeraldinha could have access to
+        nix-builders and powerful inference for shared resources in-network.
+        Definitely not for v0.5 — more like v0.7 or v0.8 — but keep that long
+        horizon in mind as we add hosts and naturally-shared resources, so
+        that by v0.8 distributed shared resources through our private VPN
+        converge easily and organically. This is why we like CRDT and
+        mathematical convergence: with the right expectations and scope it's
+        all a matter of throwing work effort into reducing the spec into an
+        implementation through monotonic reduction of uncertainty through
+        verifiable constraints."
+        
+        WHAT ALREADY POINTS HERE, so the intermediate releases build toward it
+        instead of away from it:
+          * the enclave nix cache (801-kqme/801-vm4p) and the 873-b1nx build
+            lane are slice one — a warm cache measured at 99.8% closure
+            coverage and a 96s cache-only build; the natural v0.8 extension is
+            `nix build --store ssh-ng://` / remote-builder entries pointing at
+            the fat host, which nothing in the current design precludes (the
+            873-b1nx design note says so explicitly);
+          * the per-host capability rows (accel_probe) already publish what
+            each host can serve — the resource-advertisement half of a shared
+            pool is a fold over rows the fleet already writes;
+          * the dev-inference endpoint contract rows (718-rtnh/718-ja7g) are
+            the seam where "local ollama" becomes "nearest pool member";
+          * the 8GB floor host (873-b1nx unknown #3) is the DEMAND-side proof:
+            if the floor cannot link the workspace locally, remote builders
+            are not an optimisation but the requirement.
+        
+        TIER POLICY THAT RIDES THIS DIRECTION (operator, same message): the
+        low-end hosts are THE OPTIMIZATION TARGET, not cheap labour. Work
+        routed to them should be relevant to their hardware tier — floor
+        benchmarks, low-end validation, capability rows, inference-floor
+        measurements — because they are the bottleneck the product optimises
+        for. Compaction-sized chores there are fine but are not the point;
+        heavy builds there are never faster than the fat hosts doing it
+        themselves.
+      exit_criteria: |
+        Deliberately COARSE until v0.7 scoping — this row exists so
+        intermediate work converges toward it: (1) v0.6-v0.7 packets that
+        touch build, cache, or inference plumbing record how they compose with
+        network-shared serving (a sentence in their design, not an
+        implementation). (2) By v0.7 close, a scoping slice measures one
+        remote-build and one remote-inference round-trip fat-host->low-end
+        over the private network, with wall-clock and the trust/authz story
+        named. (3) The v0.8 implementation converges from those constraints
+        rather than a fresh design.
+      events:
+        - type: filed
+          ts: "2026-08-25T18:03:19Z"
+          agent_id: linux-macuahuitl-opus5-20260825t180319z
+          host: linux_mutable
+          summary: |
+            Filed at the operator's direction during the pre-reset flush, with the already-landed convergence points enumerated so the horizon survives the fleet reset and fresh checkouts. The tier policy for low-end hosts rides in the context and is also encoded in the coordinator queue.
+
+    - packet_id: verifiable-closure-may-name-a-litmus-that-does-not-exist
+      order: 885-92iu
+      status: ready
+      kind: bug
+      pickup_role: any
+      priority: p2
+      desired_release: v0.5
+      release_target: architecture-audit-epic
+      depends_on: []
+      multi_cycle: false
+      deliverable: |
+        Order 721-77yu's pin-claim checker extended to the surface it does not
+        scan — the ledger's own `verifiable_closure` field — with a corpus
+        selector that means what it says.
+      capability_tags:
+        - rust
+        - plan-engine
+        - all-platforms
+        - architecture
+      tags:
+        - closure
+        - ledger-integrity
+        - litmus
+        - v0.5
+      title: |
+        721-77yu's pin-claim checker never sees the ledger, so a packet's `verifiable_closure` may name a litmus test that exists nowhere — 15 cited names have no file, 3 more have a file nothing binds — and its scan-corpus filter matches grep output lines rather than filenames.
+      context: |
+        THIS IS NOT A NEW CLASS. Order 721-77yu already established the defect
+        ("a sentence that READS as verification and supplies none"), already
+        names the two ways a claim can be empty in exactly the vocabulary
+        below — `unresolvable` (no test declares that name) and `unbound` (the
+        file exists but no spec lists it, and execution is binding-driven) —
+        and already ships a working checker wired into `./build.sh --check`.
+        What it does not do is look at the ledger. Filing this as a novel
+        finding would be the same mistake one level up, so it is filed as an
+        EXTENSION, and the existing checker is the thing to grow.
+        
+        FOUND BY WALKING INTO IT, while landing 795-5itp's own closure. That
+        packet declared `verifiable_closure: NAMED: litmus:one-length-delimited-framing-impl`
+        when filed on 2026-08-17. The string appeared in exactly one place in
+        the repository — plan/index.yaml — for the next eight days. Three
+        slices landed in that window (86e1bfe6c, be19f02dd, 99fe3da0f), each
+        reporting progress against a gate that could not run, and one wrote a
+        source comment reading "the reason above is the entry that exception
+        list requires" for an exception list that did not exist. `./build.sh
+        --check` was green throughout, and truthfully so — the ledger is not
+        in its scan corpus.
+        
+        MEASURED AT HEAD, 2026-08-25 (yoga). 139 distinct `litmus:<name>`
+        tokens are cited across plan/index.yaml. Of those:
+          - 15 have NO openspec/litmus-tests/litmus-<name>.yaml at all, among
+            them litmus:no-blocking-io-in-async,
+            litmus:host-guest-transport-conformance,
+            litmus:exec-transcript-capped-in-every-driver,
+            litmus:guest-vsock-bound-before-provisioning and
+            litmus:windows-connect-is-bounded-and-exits — each of which reads
+            like a real decision boundary somebody intended to build.
+          - 3 (litmus:ca-ephemeral, litmus:mount-cleanup,
+            litmus:token-file-cleanup) HAVE a file but appear in no
+            `litmus_tests:` list in openspec/litmus-bindings.yaml. That is the
+            quieter half: `ls` satisfies a reader, and the test has never run.
+        
+        SECOND DEFECT, IN THE CHECKER ITSELF. check-litmus-pin-claims.sh:141
+        selects its corpus with
+        `grep -rnE 'litmus:[a-z0-9-]+' "$SCAN_DIR" | grep -E '\.(sh|c)[:]'`.
+        The second grep filters the FIRST GREP'S OUTPUT LINES, not filenames,
+        so any line whose CONTENT mentions a `.sh:` path is scanned as if it
+        were shell source. Demonstrated: `TILLANDSIAS_PIN_SCAN_DIR=plan
+        scripts/check-litmus-pin-claims.sh` returns `ok:litmus-pin-claims:24
+        checked` against a tree where `find plan -name '*.sh'` returns ZERO
+        files — all 24 are prose lines in plan/archive/ that happen to contain
+        a script path. So the checker's own corpus is accidental, its counts
+        are inflated by prose, and pointing it at a new directory silently
+        scans nothing while reporting a number. Fix this BEFORE extending it,
+        or the extension inherits a selector that cannot be reasoned about.
+        
+        WHY THE LEDGER SURFACE MATTERS MORE THAN THE SCRIPT ONE.
+        `methodology/convergence.yaml` makes the verifiable closure the thing
+        that distinguishes a reduction from a restatement. A closure naming an
+        absent test does not merely fail to verify — it INVERTS the signal: the
+        packet reads as more rigorous than one with an honest prose closure,
+        precisely because it cites a test name, and the citation is what
+        nobody checks. Same argument order 651-2x5s makes about fabricated
+        MO-FULL markers.
+        
+        NOT ALL 18 ARE DEFECTS, and the check must say which. Some tokens are
+        spec ladder shorthands or prose mentions rather than declared closures
+        (`litmus:git-mirror-service` looks like one). The extension therefore
+        has to read the `verifiable_closure` FIELD specifically — via
+        tillandsias-plan, which already folds fragments — not grep the file,
+        or it produces a number nobody trusts and gets switched off.
+      exit_criteria:
+        - |
+            check-litmus-pin-claims.sh selects its scan corpus by FILENAME, not
+            by matching its own grep output. A negative control pins it:
+            pointed at a directory with no shell sources it reports 0 checked,
+            not a count of prose lines.
+
+        - |
+            Every packet's `verifiable_closure` is parsed for the
+            `litmus:<name>` tokens it DECLARES, and each is reported resolved,
+            file-missing, or file-present-but-unbound — reusing 721-77yu's
+            existing vocabulary and verdict grammar rather than inventing a
+            second one. Wired into `./build.sh --check`, over fragments as well
+            as the base, so a closure is validated when it is FILED.
+
+        - |
+            The 15 file-missing and 3 unbound names measured above are each
+            dispositioned in this packet's events: the test gets built, the
+            citation gets corrected to a closure that exists, or the token is
+            confirmed to be a spec shorthand the extractor should not match.
+
+        - |
+            NEGATIVE CONTROL: a fragment declaring `verifiable_closure` with an
+            invented litmus name is refused; one declaring a bound, file-backed
+            name passes.
+
+      verifiable_closure: |
+        NAMED: `litmus:declared-closure-resolves` — a fixture asserting the
+        three-way verdict (resolved / file-missing / unbound) over a hermetic
+        fixture ledger, the filename-based corpus selector's negative control,
+        and the wiring into build.sh. Deliberately a test this packet must
+        itself create, so it cannot close on a name that does not exist —
+        which is the defect.
+      events:
+        - type: filed
+          ts: "2026-08-25T20:07:25Z"
+          agent_id: linux-yoga-opus5-20260825t200725z
+          host: yoga
+          summary: |
+            Filed from the 795-5itp slice-4 cycle. Counts are measured at HEAD,
+            not estimated — `grep -o "litmus:[a-z0-9-]*" plan/index.yaml | sort -u`
+            against the bindings' `litmus_tests:` entries and against
+            `openspec/litmus-tests/litmus-<name>.yaml`.
+        
+            A NEW ROW rather than an event on 721-77yu or 795-5itp, per the
+            capture-routing rule: 721-77yu is closed and its checker shipped
+            working for the corpus it was written for; this owns a different
+            slice of the same files plus the plan engine, and a different
+            pickup_role can take it. 795-5itp is one INSTANCE of the defect,
+            not the class.
+        
+            The first exit criterion is deliberately ordered first. Extending a
+            checker whose corpus selector matches its own output would produce
+            a ledger scan that reports a confident number over the wrong input,
+            which is the failure this packet exists to remove.

@@ -174,6 +174,64 @@ case "$out" in
     *) bad "mutation reconstruction unexpected: $out" ;;
 esac
 
+# ── 8b. ORDER 886-qmdz — a BEHIND branch must not read as a credential fault. ─
+# `git push origin HEAD` names a concrete branch, so a local branch behind its
+# remote counterpart is refused as a non-fast-forward — AFTER the credential
+# authenticated. Start-Of-Cycle fetches (skill step 2) before fast-forwarding
+# (step 5), so this is the single most normal state a cycle enters the guard in.
+# The 876-exg2 retry cannot rescue it: --no-verify removes the hook, not the
+# non-fast-forward. Here the hook is a no-op, so ref state is the ONLY cause.
+behind_repo() { # behind_repo <name>; echoes a repo whose branch is behind origin
+    local d="$W/behindrepo-$1" bare="$W/bare-behind-$1.git"
+    git init -q --bare -b main "$bare"
+    git init -q -b main "$d"
+    git -C "$d" remote add origin "$bare"
+    git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
+    git -C "$d" push -q origin main
+    # Advance origin, then rewind the local branch: strictly behind, clean tree.
+    git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m ahead
+    git -C "$d" push -q origin main
+    git -C "$d" reset -q --hard HEAD~1
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$d/.git/hooks/pre-push"
+    chmod +x "$d/.git/hooks/pre-push"
+    printf '%s' "$d"
+}
+D="$(behind_repo one)"
+# precondition: the plain probe really is refused, and for the ref-state reason
+if ( cd "$D" && git push --dry-run --no-verify origin HEAD >/dev/null 2>&1 ); then
+    bad "fixture is not actually behind — arm 8b would pass vacuously"
+else
+    ok "fixture precondition: a behind branch really is refused by the remote"
+fi
+out="$(run_guard_default "$D")"; rc=$?
+case "$out" in
+    ok:gh-keyring-push-verified-refstate-refused)
+        ok "behind branch -> ok:...-refstate-refused, NOT blocked:* (rc=$rc)" ;;
+    blocked:*)
+        bad "REGRESSION: a branch merely behind origin reads as a credential fault: $out" ;;
+    *) bad "behind-branch shape returned: $out (rc=$rc)" ;;
+esac
+[ "$rc" -eq 0 ] || bad "a ref-state refusal must exit 0 — the skill hard-stops on non-zero"
+grep -q 'ff-only' "$D/.stderr" \
+    && ok "the note names the fast-forward remedy" \
+    || bad "note must name the branch update, not credential seeding"
+grep -q 'credential-store --file' "$D/.stderr" \
+    && bad "the note must NOT print the credential-seeding remedy" \
+    || ok "no misleading credential remedy printed for a ref-state refusal"
+
+# ── 8c. MUTATION CONTROL for 886-qmdz: the pre-fix guard must fail arm 8b. ────
+PRE2="$W/pre-886-guard.sh"
+awk '/# ORDER 886-qmdz\./{skip=1} skip && /^    _helpers=/{skip=0} skip{next} {print}' \
+    "$GUARD" > "$PRE2"
+D2="$(behind_repo two)"
+out="$( cd "$D2" && env -u GH_TOKEN -u GITHUB_TOKEN -u TILLANDSIAS_CRED_PROBE_CMD \
+        PATH="$W/bin:$PATH" bash "$PRE2" 2>/dev/null )"
+case "$out" in
+    blocked:gh-cli-only)
+        ok "MUTATION: the pre-fix guard calls a behind branch a credential fault — arm 8b has teeth" ;;
+    *) bad "mutation reconstruction unexpected: $out" ;;
+esac
+
 # ── 9. Grammar: every verdict this suite produced is a single pinned token. ──
 grammar='^(ok:[a-z0-9-]+|blocked:[a-z0-9-]+|missing:no-credential-channel)$'
 printf '%s\n' "ok:gh-keyring-push-verified-hook-refused" | grep -qE "$grammar" \

@@ -46,6 +46,17 @@ fi
 #                                  the skill hard-stops on those, and the tree
 #                                  is validated at Finalization, not here
 #                                  (order 876-exg2)
+#   ok:gh-keyring-push-verified-refstate-refused  the push probe was refused by
+#                                  the REMOTE'S REF STATE — the local branch is
+#                                  behind origin, so `push origin HEAD` is a
+#                                  non-fast-forward. Start-Of-Cycle fetches
+#                                  (step 2) BEFORE fast-forwarding (step 5), so
+#                                  any host whose siblings pushed enters this
+#                                  arm. A create to a fresh unique ref under
+#                                  refs/tillandsias/cred-probe/ authenticated
+#                                  fine, which is the question this guard asks.
+#                                  NOT a credential fault, so NOT blocked:*
+#                                  (order 886-qmdz)
 #   blocked:interactive-credential-helper  gh has a token but git's configured
 #                                  helper is interactive-only; remedy printed
 #   blocked:gh-cli-only            gh has a token, the push probe failed, no
@@ -345,6 +356,61 @@ credential_channel_verdict() {
     # The push cannot authenticate non-interactively. Name the interactive
     # helper if one is configured — the failure must be legible the FIRST
     # time, not on the second diagnosis pass (exit criterion 2).
+    # ORDER 886-qmdz. THE PROBE ALSO CARRIES THE REF STATE OF THE BRANCH,
+    # AND A BEHIND BRANCH IS REJECTED FOR REASONS THAT HAVE NOTHING TO DO
+    # WITH CREDENTIALS.
+    #
+    # 876-exg2 took the local pre-push hook out of the probe, on the
+    # principle that this guard asks ONE question — can this credential
+    # authenticate a push — and must not fail the cycle for any other.
+    # The same conflation survives one layer down: `git push origin HEAD`
+    # names a CONCRETE branch, so it is refused as a non-fast-forward
+    # whenever the local branch is behind its remote counterpart. That
+    # refusal happens AFTER the credential authenticated, and it is the
+    # single most normal state a cycle can be in: Start-Of-Cycle runs
+    # `git fetch` (skill step 2) and this guard IMMEDIATELY after it,
+    # before the fast-forward in step 5. Any host whose siblings pushed
+    # since its last cycle enters this arm by construction.
+    #
+    # Measured on lenovinha 2026-08-25: the guard printed
+    # `blocked:gh-cli-only` with a clean tree and a green keyring; the
+    # remote had answered `Updates were rejected because the tip of your
+    # current branch is behind its remote counterpart` — which only a
+    # remote that had ALREADY authenticated us could say. Fast-forwarding
+    # and re-running the same guard returned `ok:gh-keyring-push-verified`
+    # with nothing about the credential having changed. The 876-exg2
+    # retry does not rescue this: `--no-verify` removes the hook, not the
+    # non-fast-forward, so both probes fail and the cycle hard-stops on a
+    # `blocked:*` whose printed remedy (seed the repo-local store) is
+    # inert.
+    #
+    # THE FIX IS TO TAKE THE REF STATE OUT OF THE QUESTION. Probe a
+    # unique ref under refs/tillandsias/cred-probe/ that cannot already
+    # exist: a CREATE is always fast-forwardable, so the only thing left
+    # that can fail it is authentication — exactly what this guard is for.
+    # `--dry-run` means the ref is never created; verified on lenovinha
+    # that `git ls-remote origin refs/tillandsias/cred-probe/*` stays
+    # empty after the probe returns 0.
+    #
+    # Like 876-exg2 this runs ONLY on the failure path, so the healthy
+    # case costs nothing, and it weakens no true positive: a credential
+    # that cannot authenticate fails a create exactly as it fails an
+    # update.
+    if [ -z "${TILLANDSIAS_CRED_PROBE_CMD:-}" ]; then
+      _cred_probe_ref="refs/tillandsias/cred-probe/$(hostname -s 2>/dev/null | tr "A-Z" "a-z" || echo host)-$$"
+      if GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never GIT_ASKPASS=/bin/false \
+         timeout 45 git push --dry-run --no-verify origin "HEAD:$_cred_probe_ref" >/dev/null 2>&1; then
+        # The credential authenticated. The refusal was this branch's ref state.
+        echo "  note: the push probe was refused by the REMOTE's ref state, not by" >&2
+        echo "  the credential — a create to a fresh ref authenticated fine. Usually" >&2
+        echo "  this branch is behind origin because Start-Of-Cycle fetched before" >&2
+        echo "  fast-forwarding it (skill step 2 runs before step 5). This is NOT a" >&2
+        echo "  credential fault and must not stop the cycle; update the branch with:" >&2
+        echo "    git merge --ff-only origin/\$(git symbolic-ref --short HEAD)" >&2
+        echo "ok:gh-keyring-push-verified-refstate-refused"
+        return 0
+      fi
+    fi
     _helpers="$(git config --get-all credential.helper 2>/dev/null | tr '\n' ',' | sed 's/,$//')"
     case ",$_helpers," in
       *,manager,*|*,manager-core,*|*"\\Git Credential Manager"*)
