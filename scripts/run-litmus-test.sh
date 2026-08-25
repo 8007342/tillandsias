@@ -374,6 +374,36 @@ log_test_result() {
 # ============================================================================
 
 # Parse YAML value using yq or jq (fallback to grep)
+# Unescape a YAML double-quoted scalar captured by a bash regex (875-v7hv).
+#
+# The step parser below captures the RAW BYTES between the outer quotes, so a
+# YAML `\"` arrives as a literal backslash followed by a quote. Two passes, in
+# this order, reproduce YAML's own left-to-right escape consumption:
+#   1. \" -> "   2. \\ -> \
+# Order matters: a raw `\\\"` must become `\"`, which is what a real YAML
+# parser produces. Doing \\ first would consume the backslash that guards the
+# quote and yield something else.
+#
+# WHY THIS IS A FUNCTION AND NOT INLINE, which is the whole of 875-v7hv: these
+# two passes were applied to `command:` alone (added under
+# plan/issues/litmus-runner-command-backslash-escaping-2026-07-06.md) while
+# `expected_behavior:`, `success_pattern:` and `failure_pattern:` got none. A
+# step whose command emits a double quote and whose expected_behavior declares
+# that same text could therefore NEVER match itself — measured on yoga
+# 2026-08-25, where the runner reported
+#   expected=out.push((\"no_proxy\"...)   output=out.push(("no_proxy"...)
+# i.e. a content mismatch between two strings that are in fact identical.
+#
+# The dangerous direction is `failure_pattern`: one carrying `\"` silently
+# never matches, so a genuine failure signal is missed and the step is reported
+# green. An assertion that cannot fire is worse than an absent one.
+yaml_unescape_dq() {
+    local s="$1"
+    s="${s//\\\"/\"}"
+    s="${s//\\\\/\\}"
+    printf '%s' "$s"
+}
+
 yaml_get() {
     local file="$1"
     local path="$2"
@@ -1114,18 +1144,20 @@ run_litmus_test_file() {
                 # backslash at runtime, silently breaking any escaped
                 # metacharacter with no parse error anywhere — see
                 # plan/issues/litmus-runner-command-backslash-escaping-2026-07-06.md.
-                current_step_command="${BASH_REMATCH[1]//\\\"/\"}"
-                current_step_command="${current_step_command//\\\\/\\}"
+                current_step_command="$(yaml_unescape_dq "${BASH_REMATCH[1]}")"
             elif [[ "$line" =~ timeout_ms:\ ([0-9]+) ]]; then
                 current_step_timeout="${BASH_REMATCH[1]}"
             elif [[ "$line" =~ expected_behavior:\ \"(.+)\" ]]; then
-                current_step_expected="${BASH_REMATCH[1]}"
+                current_step_expected="$(yaml_unescape_dq "${BASH_REMATCH[1]}")"
             elif [[ "$line" =~ expected_behavior:\ (.+)$ ]]; then
+                # PLAIN (unquoted) YAML scalar: no escape sequences exist in
+                # one, so a `\"` here is literally backslash-quote and must NOT
+                # be unescaped. Only the double-quoted branch above may be.
                 current_step_expected="${BASH_REMATCH[1]}"
             elif [[ "$line" =~ success_pattern:\ \"(.+)\" ]]; then
-                current_step_success_pattern="${BASH_REMATCH[1]}"
+                current_step_success_pattern="$(yaml_unescape_dq "${BASH_REMATCH[1]}")"
             elif [[ "$line" =~ failure_pattern:\ \"(.+)\" ]]; then
-                current_step_failure_pattern="${BASH_REMATCH[1]}"
+                current_step_failure_pattern="$(yaml_unescape_dq "${BASH_REMATCH[1]}")"
             fi
         fi
 

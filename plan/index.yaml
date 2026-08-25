@@ -43466,6 +43466,29 @@ plan_index:
         runner already materialises a yq shim from the builder toolbox on hosts
         that have toolbox; the remaining fallback path is what produces skew.
 
+      events:
+        - type: completed
+          ts: "2026-08-25T02:03:50Z"
+          agent_id: "linux-yoga-opus5-20260825t020350z"
+          host: yoga
+          summary: |
+            CLOSED — and the packet's own stated premise was WRONG, which is the part worth reading. I filed this yesterday against `yq` skew: the runner falls back to grep-based YAML extraction when yq is absent, so I concluded a host without yq parses `\"` differently from a host with it. That is not what happens.
+
+            WHAT ACTUALLY HAPPENS. The yq shim was present and working on this host the whole time (target/litmus-runtime/bin/yq, v4.53.3), so yq was never the variable. The step parser does not use yq AT ALL: run-litmus-test.sh parses `critical_path` steps with bash regexes that capture the RAW BYTES between a double-quoted scalar's outer quotes, so a YAML `\"` arrives as backslash-quote and has to be unescaped by hand. Those two unescape passes (`\"` -> `"`, then `\\` -> `\`) were applied to `command:` ALONE — added under plan/issues/litmus-runner-command-backslash-escaping-2026-07-06.md — and to none of `expected_behavior:`, `success_pattern:` or `failure_pattern:`.
+
+            So the defect is a PARSER ASYMMETRY, host-independent, and it fires on every machine in the fleet identically. A step whose command emits a double quote and whose expected_behavior declares that same text can never match itself, which is exactly what I saw: `expected=out.push((\"no_proxy\"...)` against `output=out.push(("no_proxy"...)`, a reported content mismatch between two identical strings.
+
+            THE DANGEROUS HALF IS THE ONE I HAD NOT NOTICED. `expected_behavior` failing loudly is survivable — someone sees a red step and investigates. `failure_pattern` carrying `\"` silently NEVER MATCHES, so a genuine failure signal is missed and the step is reported green. An assertion that cannot fire is worse than an absent one, which is this fleet's recurring shape (660-ryhn, 721-77yu, 797-8dzt) arriving by a fourth route: not an unbound test, not an unresolvable pin, not a widened source slice, but a pattern that was silently emptied of the character it was written to match.
+
+            FIXED: a shared `yaml_unescape_dq` helper in run-litmus-test.sh, and all four double-quoted step fields routed through it. The PLAIN (unquoted) `expected_behavior` branch is deliberately left raw and says so: an unquoted YAML scalar carries no escape sequences, so unescaping one would corrupt it.
+
+            PINNED by scripts/test-litmus-scalar-unescape.sh, wired into ./build.sh --check as its own phase beside the two sibling gates (an orphaned guard is 865-n8vq's shape). 12/12 green. It loads the REAL function by name out of the runner rather than reimplementing it, so it cannot drift into testing a copy. Three scenario classes: semantics; a NEGATIVE CONTROL proving a wrong-order implementation gives a DIFFERENT answer on `x\\"y` (the first ordering input I tried, `a\\\"b`, turned out NOT to discriminate — both orders agree on it — so the control was vacuous as first written and I replaced the input rather than keep a control that proved nothing); and ROUTING, which asserts each field goes through the helper AND that no raw `${BASH_REMATCH[1]}` assignment remains, a property that survives any rewrite of the surrounding parser (634-39ik). HAND-FALSIFIED: reverting the failure_pattern routing turns the fixture red with both routing assertions naming the field, restoring it returns green.
+
+            BLAST RADIUS MEASURED BEFORE CHANGING ANYTHING: 234 of 383 litmus files use escaped quotes in `command:`, which is why a gate REFUSING `\"` — the shape this packet's own exit criteria asked for — would have been the wrong fix and was not built. Zero files currently carry one in the three previously-unescaped fields (the only one that did was repaired under 837-et6t), so the change is a pure hardening with no behaviour flip anywhere in the suite. Verified by running the full instant pre-build suite: 258/259, identical to the same suite run against the pre-change runner extracted from HEAD.
+
+            EXIT CRITERIA, reconciled against what was actually built: criteria 1 and 2 asked for a scanner that refuses `\"` in a litmus file, with controls. Superseded by the measurement above — 234 legitimate files use that construct, and banning a valid YAML escape is not the reduction; making the parser consume it correctly is. Criterion 3 (invoked by the gate, not merely written) is met literally.
+
+            SEPARATELY OBSERVED, filed as a note rather than absorbed: `litmus:forge-clone-reachability-probe-shape` STEP 1 fails on this host ("unresolvable alias did not fast-fail"). It fails IDENTICALLY under the pre-change runner from HEAD, so it is pre-existing and unrelated to this work — recorded here so the next reader of a 258/259 suite result knows which one it is and that it was not introduced by 875-v7hv.
     - order: 876-exg2
       packet_id: credential-guard-reads-a-hook-refusal-as-an-absent-credential
       desired_release: v0.6

@@ -2040,6 +2040,22 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Litmus bindings reconciliation passed"
 
+    # Order 875-v7hv. The runner parses step fields with bash regexes, which
+    # capture the RAW bytes of a double-quoted YAML scalar, so a `\"` arrives
+    # as backslash-quote and must be unescaped by hand. That unescaping was
+    # applied to `command:` alone; `expected_behavior:`, `success_pattern:` and
+    # `failure_pattern:` got none, so a step whose command emits a quote could
+    # never match its own declared expectation. The dangerous half is
+    # `failure_pattern`: one carrying `\"` silently never fires, and a step
+    # that should have gone red reports green. Same family as the two gates
+    # above — all three ask whether an assertion can still fail.
+    _step "Checking litmus step scalars are unescaped consistently (875-v7hv)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-scalar-unescape.sh" 2>&1; then
+        _error "a litmus step field bypasses yaml_unescape_dq (875-v7hv) — see the verdict line above"
+        exit 1
+    fi
+    _info "Litmus scalar-unescape check passed"
+
     _step "Checking litmus pin claims resolve and execute (721-77yu)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-pin-claims.sh" 2>&1; then
         _error "a script claims a litmus pin that cannot execute (721-77yu) — see the verdict line above"
