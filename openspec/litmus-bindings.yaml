@@ -667,12 +667,12 @@ specs:
   - litmus:startup-context-addendum-shape
   - litmus:pre-push-linux-next-merged-shape
   - litmus:salvage-net-roundtrip
-  # 740-k8ef: DERIVED from the spec's requirement count (4 of 5 requirements
-  # litmus-covered; "one checkout, one cycle" is pinned by a script suite,
-  # scripts/test-cycle-checkout-lock.sh, with no litmus binding yet), no
-  # longer asserted. The prior value was 100 for a spec file that did not
-  # exist.
-  coverage_ratio: 80
+  - litmus:cycle-checkout-lock-shape
+  # 740-k8ef: DERIVED from the spec's requirement count, no longer asserted.
+  # Was 80 while "one checkout, one cycle" had only a script suite; the
+  # litmus:cycle-checkout-lock-shape binding runs that suite from the
+  # registry, so all 5 requirements are litmus-covered.
+  coverage_ratio: 100
   last_verified: '2026-07-14'
 - spec_id: logging-levels
   status: obsolete

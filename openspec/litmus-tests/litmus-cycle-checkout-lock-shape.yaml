@@ -1,0 +1,44 @@
+# @trace order:873-zcim
+#
+# Order 873-zcim, binding filed under 740-k8ef's derived-coverage follow-up.
+# The meta-orchestration spec's "one checkout, one cycle" requirement was the
+# single requirement pinned only by a script suite with no litmus binding, so
+# the spec's derived coverage_ratio sat at 80 — this binding is what lifts it
+# to 100 honestly, by making the litmus registry actually run the suite.
+#
+# The incident being pinned: the no-stacking lock existed but only the DRIVER
+# lane held it; a /loop fire stacked onto a running driver cycle in the same
+# worktree on yoga (2026-08-24), and four hours earlier one process's
+# worktree disposal destroyed another's uncommitted work (872-c9nd). The fix
+# is two-armed (mkdir arm for prompt lanes, flock arm for the driver) with
+# CROSS-ARM visibility both directions — so the suite is deliberately
+# two-sided, and a one-sided regression reintroduces the incident shape.
+name: litmus:cycle-checkout-lock-shape
+spec: meta-orchestration
+phase: pre-build
+description: >
+  Pin the 873-zcim checkout lock end to end: prompt-lane acquire/refuse/
+  release lifecycle with the holder NAMED in refusals, stale reclaim of a
+  dead holder, cross-arm A (a prompt lane yields to a mid-cycle driver
+  flock), cross-arm B (the driver skips while a prompt lane holds the dir
+  and fires after release — no false lockout), and the overlap refusal
+  recorded durably OUTSIDE the contended checkout.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/cycle-checkout-lock.sh
+  - workspace contains scripts/tillandsias-cycle-driver.sh
+  - workspace contains scripts/test-cycle-checkout-lock.sh
+  - shell utilities (git, bash, mktemp) are available in PATH
+
+critical_path:
+  - step: "lock script and suite parse and carry exec bits"
+    command: "bash -n scripts/cycle-checkout-lock.sh && bash -n scripts/test-cycle-checkout-lock.sh && test -x scripts/cycle-checkout-lock.sh && echo 'ok: checkout-lock-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: checkout-lock-parses"
+
+  - step: "the full two-sided suite: lifecycle, named refusals, stale reclaim, BOTH cross-arm directions, external refusal record"
+    command: "bash scripts/test-cycle-checkout-lock.sh | tail -1"
+    timeout_ms: 60000
+    expected_behavior: "ok:checkout-lock-fixture:all"

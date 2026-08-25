@@ -19995,6 +19995,12 @@ plan_index:
         this packet, and a second ghost would change the fix from "write a spec"
         to "make the binding derive its ids from what exists".
       events:
+        - type: progress
+          ts: "2026-08-25T07:39:02Z"
+          agent_id: "linux-macuahuitl-opus5-20260825t073901z"
+          host: macuahuitl
+          summary: |
+            FOLLOW-UP CLOSED, COVERAGE HONESTLY 100: litmus:cycle-checkout-lock-shape now runs scripts/test-cycle-checkout-lock.sh from the registry (meta-orchestration instant set PASS; binding proven RED rc=1 with the suite removed, green restored), so all 5 spec requirements are litmus-covered and coverage_ratio is re-derived 80 -> 100. MCP WINDOWS-ROOT FINDING RESOLVED AS STALE-SESSION, NO PACKET: FORGE_SPEC_INDEX_DIR=/mnt/c/Users/... sits in this 8-day-old session's inherited environment; the tracked config was already fixed (2b1f8d188) and the launcher already self-diagnoses the stale override with a remedy naming the durable root (801-a2by) — but a fix in a file does not reach a process that already read it, and the running server also predates the fixed refusal text. Operator remedy: restart the session/MCP servers on macuahuitl; spec_answer then serves from the podman-volume index (21340 chunks, verified fresh via CLI retrieval).
         - type: filed
           ts: "2026-08-14T23:40:00Z"
           host: linux_immutable
