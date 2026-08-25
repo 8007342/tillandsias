@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: nine-hand-rolled-length-prefixed-framing-copies
+    field: next_action
+    value: Slice 5 — migrate the 13 pending rows in scripts/framing-raw-decode-baseline.tsv onto LengthDelimitedCodec, lowering each row in the SAME commit as its migration (litmus one-length-delimited-framing-impl refuses a stale ceiling, so this cannot go quiet the way this field did). Linux-testable first — control-wire/transport.rs, headless/main.rs, host-shell/provisioning.rs, host-shell/vsock_client.rs, vm-layer/vsock_exec.rs. macos-tray/pty_vsock_bridge.rs needs macOS-lane evidence and windows-tray/hvsocket.rs needs Windows-lane evidence. Also restate exit criterion 1, which asks for at most one raw decode tree-wide and is unreachable as literally written given the five enumerated interop-fake keeps.
+    ts: "2026-08-25T20:03:54Z"
+    host: yoga
+
+events:
+  - packet_id: nine-hand-rolled-length-prefixed-framing-copies
+    event:
+      type: progress
+      ts: "2026-08-25T20:03:54Z"
+      host: yoga
+      summary: >
+        status 'Slice 5 — migrate the 13 pending rows in scripts/framing-raw-decode-baseline.tsv onto LengthDelimitedCodec, lowering each row in the SAME commit as its migration (litmus one-length-delimited-framing-impl refuses a stale ceiling, so this cannot go quiet the way this field did). Linux-testable first — control-wire/transport.rs, headless/main.rs, host-shell/provisioning.rs, host-shell/vsock_client.rs, vm-layer/vsock_exec.rs. macos-tray/pty_vsock_bridge.rs needs macOS-lane evidence and windows-tray/hvsocket.rs needs Windows-lane evidence. Also restate exit criterion 1, which asks for at most one raw decode tree-wide and is unreachable as literally written given the five enumerated interop-fake keeps.' (not terminal) with evidence_refs: litmus:one-length-delimited-framing-impl 6/6 PASS; ok:framing-ratchet:sites=18:files=10

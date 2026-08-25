@@ -1,0 +1,143 @@
+packets:
+  - packet_id: verifiable-closure-may-name-a-litmus-that-does-not-exist
+    order: 885-92iu
+    status: ready
+    kind: bug
+    pickup_role: any
+    priority: p2
+    desired_release: v0.5
+    release_target: architecture-audit-epic
+    depends_on: []
+    multi_cycle: false
+    deliverable: |
+      Order 721-77yu's pin-claim checker extended to the surface it does not
+      scan — the ledger's own `verifiable_closure` field — with a corpus
+      selector that means what it says.
+    capability_tags:
+      - rust
+      - plan-engine
+      - all-platforms
+      - architecture
+    tags:
+      - closure
+      - ledger-integrity
+      - litmus
+      - v0.5
+    title: |
+      721-77yu's pin-claim checker never sees the ledger, so a packet's `verifiable_closure` may name a litmus test that exists nowhere — 15 cited names have no file, 3 more have a file nothing binds — and its scan-corpus filter matches grep output lines rather than filenames.
+    context: |
+      THIS IS NOT A NEW CLASS. Order 721-77yu already established the defect
+      ("a sentence that READS as verification and supplies none"), already
+      names the two ways a claim can be empty in exactly the vocabulary
+      below — `unresolvable` (no test declares that name) and `unbound` (the
+      file exists but no spec lists it, and execution is binding-driven) —
+      and already ships a working checker wired into `./build.sh --check`.
+      What it does not do is look at the ledger. Filing this as a novel
+      finding would be the same mistake one level up, so it is filed as an
+      EXTENSION, and the existing checker is the thing to grow.
+
+      FOUND BY WALKING INTO IT, while landing 795-5itp's own closure. That
+      packet declared `verifiable_closure: NAMED: litmus:one-length-delimited-framing-impl`
+      when filed on 2026-08-17. The string appeared in exactly one place in
+      the repository — plan/index.yaml — for the next eight days. Three
+      slices landed in that window (86e1bfe6c, be19f02dd, 99fe3da0f), each
+      reporting progress against a gate that could not run, and one wrote a
+      source comment reading "the reason above is the entry that exception
+      list requires" for an exception list that did not exist. `./build.sh
+      --check` was green throughout, and truthfully so — the ledger is not
+      in its scan corpus.
+
+      MEASURED AT HEAD, 2026-08-25 (yoga). 139 distinct `litmus:<name>`
+      tokens are cited across plan/index.yaml. Of those:
+        - 15 have NO openspec/litmus-tests/litmus-<name>.yaml at all, among
+          them litmus:no-blocking-io-in-async,
+          litmus:host-guest-transport-conformance,
+          litmus:exec-transcript-capped-in-every-driver,
+          litmus:guest-vsock-bound-before-provisioning and
+          litmus:windows-connect-is-bounded-and-exits — each of which reads
+          like a real decision boundary somebody intended to build.
+        - 3 (litmus:ca-ephemeral, litmus:mount-cleanup,
+          litmus:token-file-cleanup) HAVE a file but appear in no
+          `litmus_tests:` list in openspec/litmus-bindings.yaml. That is the
+          quieter half: `ls` satisfies a reader, and the test has never run.
+
+      SECOND DEFECT, IN THE CHECKER ITSELF. check-litmus-pin-claims.sh:141
+      selects its corpus with
+      `grep -rnE 'litmus:[a-z0-9-]+' "$SCAN_DIR" | grep -E '\.(sh|c)[:]'`.
+      The second grep filters the FIRST GREP'S OUTPUT LINES, not filenames,
+      so any line whose CONTENT mentions a `.sh:` path is scanned as if it
+      were shell source. Demonstrated: `TILLANDSIAS_PIN_SCAN_DIR=plan
+      scripts/check-litmus-pin-claims.sh` returns `ok:litmus-pin-claims:24
+      checked` against a tree where `find plan -name '*.sh'` returns ZERO
+      files — all 24 are prose lines in plan/archive/ that happen to contain
+      a script path. So the checker's own corpus is accidental, its counts
+      are inflated by prose, and pointing it at a new directory silently
+      scans nothing while reporting a number. Fix this BEFORE extending it,
+      or the extension inherits a selector that cannot be reasoned about.
+
+      WHY THE LEDGER SURFACE MATTERS MORE THAN THE SCRIPT ONE.
+      `methodology/convergence.yaml` makes the verifiable closure the thing
+      that distinguishes a reduction from a restatement. A closure naming an
+      absent test does not merely fail to verify — it INVERTS the signal: the
+      packet reads as more rigorous than one with an honest prose closure,
+      precisely because it cites a test name, and the citation is what
+      nobody checks. Same argument order 651-2x5s makes about fabricated
+      MO-FULL markers.
+
+      NOT ALL 18 ARE DEFECTS, and the check must say which. Some tokens are
+      spec ladder shorthands or prose mentions rather than declared closures
+      (`litmus:git-mirror-service` looks like one). The extension therefore
+      has to read the `verifiable_closure` FIELD specifically — via
+      tillandsias-plan, which already folds fragments — not grep the file,
+      or it produces a number nobody trusts and gets switched off.
+    exit_criteria:
+      - |
+          check-litmus-pin-claims.sh selects its scan corpus by FILENAME, not
+          by matching its own grep output. A negative control pins it:
+          pointed at a directory with no shell sources it reports 0 checked,
+          not a count of prose lines.
+      - |
+          Every packet's `verifiable_closure` is parsed for the
+          `litmus:<name>` tokens it DECLARES, and each is reported resolved,
+          file-missing, or file-present-but-unbound — reusing 721-77yu's
+          existing vocabulary and verdict grammar rather than inventing a
+          second one. Wired into `./build.sh --check`, over fragments as well
+          as the base, so a closure is validated when it is FILED.
+      - |
+          The 15 file-missing and 3 unbound names measured above are each
+          dispositioned in this packet's events: the test gets built, the
+          citation gets corrected to a closure that exists, or the token is
+          confirmed to be a spec shorthand the extractor should not match.
+      - |
+          NEGATIVE CONTROL: a fragment declaring `verifiable_closure` with an
+          invented litmus name is refused; one declaring a bound, file-backed
+          name passes.
+    verifiable_closure: |
+      NAMED: `litmus:declared-closure-resolves` — a fixture asserting the
+      three-way verdict (resolved / file-missing / unbound) over a hermetic
+      fixture ledger, the filename-based corpus selector's negative control,
+      and the wiring into build.sh. Deliberately a test this packet must
+      itself create, so it cannot close on a name that does not exist —
+      which is the defect.
+    events:
+      - type: filed
+        ts: "2026-08-25T20:07:25Z"
+        agent_id: "linux-yoga-opus5-20260825t200725z"
+        host: yoga
+        summary: |
+          Filed from the 795-5itp slice-4 cycle. Counts are measured at HEAD,
+          not estimated — `grep -o "litmus:[a-z0-9-]*" plan/index.yaml | sort -u`
+          against the bindings' `litmus_tests:` entries and against
+          `openspec/litmus-tests/litmus-<name>.yaml`.
+
+          A NEW ROW rather than an event on 721-77yu or 795-5itp, per the
+          capture-routing rule: 721-77yu is closed and its checker shipped
+          working for the corpus it was written for; this owns a different
+          slice of the same files plus the plan engine, and a different
+          pickup_role can take it. 795-5itp is one INSTANCE of the defect,
+          not the class.
+
+          The first exit criterion is deliberately ordered first. Extending a
+          checker whose corpus selector matches its own output would produce
+          a ledger scan that reports a confident number over the wrong input,
+          which is the failure this packet exists to remove.
