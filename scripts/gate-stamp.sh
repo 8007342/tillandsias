@@ -232,6 +232,27 @@ compute() {
     # stamp goes stale once, and the next `./build.sh --check` on each host
     # writes a current one. That is a single re-run per host, it is self-healing,
     # and it is the price of the stamp no longer lying about st_mode.
+    # ORDER 889-8tcb. The index modes, as a SORTED LIST consumed in lockstep —
+    # not an associative array. `local -A` is bash 4 and macOS ships bash 3.2
+    # (761-g36m); the gate caught it, which is the gate working. And not a
+    # per-path lookup either: order 675-dkif established that a fork per file
+    # turns this into a ~20-minute pre-push hook on Windows, which is precisely
+    # how a hook gets --no-verify'd.
+    #
+    # Both streams are path-sorted in C collation — git orders index entries by
+    # byte, and the enumeration below sorts with LC_ALL=C — so a single forward
+    # pointer resolves every path in one linear sweep with no forks at all.
+    # Byte collation for the whole sweep, matching the LC_ALL=C sorts below.
+    local LC_ALL=C
+    local -a _gs_xpaths=()
+    local _xline
+    while IFS= read -r _xline; do
+        [ -n "$_xline" ] && _gs_xpaths+=("$_xline")
+    done < <(git -C "$REPO_ROOT" ls-files -s 2>/dev/null \
+             | LC_ALL=C sed -n 's/^100755 [0-9a-f]* [0-9]*\t//p' \
+             | LC_ALL=C sort)
+    local _gs_xi=0 _gs_xn=${#_gs_xpaths[@]}
+
     local -a paths=() kinds=() execbits=() file_digests=() symlink_digests=()
     local path absolute digest line i
     while IFS= read -r -d '' path; do
@@ -241,7 +262,63 @@ compute() {
         elif [[ -f "$absolute" ]]; then
             # ORDER 887-bz88 — the exec bit is part of "these bytes were
             # validated", and it was not hashed. See the note above `compute`.
-            if [[ -x "$absolute" ]]; then execbits+=(x); else execbits+=(-); fi
+            #
+            # ORDER 889-8tcb — SOURCED FROM THE INDEX, NEVER THE WORKTREE.
+            # The first version tested `[[ -x "$absolute" ]]` and DEADLOCKED
+            # EVERY WINDOWS HOST. `./build.sh --check` dispatches into WSL and
+            # hashes through /mnt/c (drvfs), which reports every file
+            # executable; the pre-push hook runs in Git Bash and sees real
+            # bits. Measured on one tree at one moment: WSL `x README.md`,
+            # Git Bash `- README.md`. The two digests can never agree, so
+            # `verify` returned stale immediately after a green 287s gate,
+            # forever — and the memo said ok:gate-fresh, so the gate would not
+            # re-run either. yolanda could not push anything at all.
+            #
+            # A CAPABILITY PROBE WAS TRIED AND IS THE WRONG SHAPE, which is the
+            # part worth keeping: a probe answers PER ENVIRONMENT. Git Bash on
+            # NTFS honours chmod 0644 and concludes "bits work"; WSL on drvfs
+            # concludes "bits do not". Both answers are true about the ASKER and
+            # useless about the TREE, so the two sides pick different sources
+            # and diverge exactly as before (measured: 8ca8074b vs 83e63835).
+            # `core.fileMode` fixes the axis — it is git being TOLD the bits are
+            # untrustworthy, a DECLARATION both sides read identically, not an
+            # inference the broken filesystem gets to answer. Sourcing from the
+            # index under it made both sides agree (68b6a93b from both).
+            #
+            # Index-always goes further and takes NO branch, because a branch
+            # means a path that cannot be exercised from the host writing it —
+            # which is precisely how the worktree version shipped. Safe on
+            # POSIX by measurement, not assumption: across all tracked files
+            # the index mode and `[[ -x ]]` disagree ZERO times, verified
+            # independently on yoga (4537 files) and lenovinha (4553).
+            #
+            # It also makes the stamp agree with its own sibling: this file's
+            # comment at :195 already notes that check-script-exec-bits.sh reads
+            # the index. The stamp was the outlier, not the accommodation.
+            #
+            # WHAT THIS GIVES UP, stated because it narrows a pinned assertion:
+            # a bare unstaged `chmod -x` no longer moves the stamp. Blind spot 2
+            # still closes — the `git add` that writes 100644 moves the index —
+            # and blind spot 1 (the worktree arm of check-script-exec-bits.sh)
+            # is untouched and still refuses at GATE time, which is the guard
+            # that actually caught the original regression.
+            #
+            # Untracked files have no index entry and record `-`: constant and
+            # portable, and an untracked file's bit is not part of what a commit
+            # would carry. Staging it gives it a real mode.
+            # Advance past every executable path that sorts BEFORE this one,
+            # then test for equality. Linear over both lists, zero forks.
+            # `[[ < ]]` is a bash builtin comparison — no subshell. The first
+            # draft wrapped it in $(...), which forks once per comparison and
+            # reintroduces exactly the per-file spawn cost 675-dkif removed.
+            while [[ "$_gs_xi" -lt "$_gs_xn" && "${_gs_xpaths[$_gs_xi]}" < "$path" ]]; do
+                _gs_xi=$((_gs_xi + 1))
+            done
+            if [ "$_gs_xi" -lt "$_gs_xn" ] && [ "${_gs_xpaths[$_gs_xi]}" = "$path" ]; then
+                execbits+=(x)
+            else
+                execbits+=(-)
+            fi
             kinds+=(file) paths+=("$path")
         elif [[ ! -e "$absolute" ]]; then
             # DELETED tracked entry (order 695-nvnd). `ls-files --cached` reads the

@@ -1,0 +1,185 @@
+events:
+  - packet_id: groundtruth-harness-reds-the-gate-for-an-undeclared-environment-dependency
+    event:
+      type: note
+      ts: "2026-08-25T23:10:00Z"
+      agent_id: lenovinha-opus5-metaorch-20260825t213705z
+      host: lenovinha
+      summary: |
+        Claimed from macuahuitl, who filed it and then declined to fix it as the
+        release beneficiary. Reproduced here immediately — this host also has no
+        embedding endpoint.
+
+        ROOT CAUSE IS SHARPER THAN "SCENARIO 6 SHOULD CLASSIFY LIKE SCENARIO 4",
+        and the ledger had already predicted it. When spec-rung1.yaml was added,
+        its author wrote (plan/index.yaml:9768):
+
+          "Also NOT wired into the default grade set or build --check: the engine
+           needs a built index (TILLANDSIAS_SPEC_INDEX_DIR), and a host without
+           one would get a harness ERROR rather than a skip -- making it default
+           would turn a missing host artifact into a red build fleet-wide. The
+           gate's own committed-set test names one file rather than globbing, so
+           this set cannot affect it."
+
+        Order 786-kjke later added a step that grades `groundtruth/*.yaml` — a
+        correct test of real glob behaviour — and swept spec-rung1.yaml in,
+        which is exactly the condition that warning described. The set's
+        isolation depended on a property of a DIFFERENT test ("names one file
+        rather than globbing"), so a legitimate change elsewhere silently
+        removed it. Nobody violated the warning; the warning was load-bearing
+        and unenforced.
+
+        MECHANICS: the grader aborted the whole invocation on the first
+        spec.answer case, so no `groundtruth-result:` line was produced at all.
+        Scenario 6 captured `tail -1` of a stream that never got there, and
+        reported `committed glob not green:` with an EMPTY verdict — which reads
+        as "the sets are red" rather than "this host cannot grade one engine".
+  - packet_id: groundtruth-harness-reds-the-gate-for-an-undeclared-environment-dependency
+    event:
+      type: implemented
+      ts: "2026-08-25T23:30:00Z"
+      agent_id: lenovinha-opus5-metaorch-20260825t213705z
+      host: lenovinha
+      summary: |
+        A HOST CAPABILITY GAP is now a LOUD, RECORDED SKIP. Never a silent green
+        — that constraint was set by the coordinator and it is the whole design.
+
+        THE ASYMMETRY IS THE SAFETY ARGUMENT. `groundtruth::ENGINE_UNAVAILABLE`
+        marks exactly one condition: the spec index is ABSENT on this host. A
+        STALE index (vectors not aligned with chunks), a missing declared corpus,
+        an unknown engine, a case with no query_vec, unreadable data — all keep
+        returning a bare Err and still abort with rc=2. "This host has no index"
+        and "this host's index is wrong" look similar and mean opposite things;
+        the first is a capability gap, the second is a defect a skip would hide.
+        `is_engine_unavailable()` is a function, not a scattered starts_with, so
+        exactly one place decides.
+
+        VISIBILITY, three ways, because a skip nobody sees is the worse bug:
+          - per-case `SKIP <id> [<engine>] NOT GRADED on this host: <why>`
+          - `groundtruth-result: ... fail=0 skipped=5 skipped_engines=spec.answer`
+          - a stderr WARNING stating the run "does not certify those engines; it
+            certifies the N case(s) it could grade"
+        `total` still counts skipped cases, so pass+fail+skipped == total and a
+        skip cannot quietly shrink the denominator — a shrinking bar is a
+        lowered bar.
+
+        RELEASE AWARENESS (the coordinator's constraint 2, and it was cheap):
+        cycle-metrics' expert_accuracy line now reads
+        `pass=28 graded=28 total=33 rate=100% skipped=5 skipped_engines=spec.answer
+        NOT-EXERCISED-ON-THIS-HOST`. Two decisions in that line:
+
+          RATE IS OVER GRADED CASES, NOT TOTAL. pass/total would have read
+          28/33 = 84% on an endpoint-less host and looked exactly like a
+          16-point accuracy REGRESSION when nothing regressed. A metric that
+          moves when nothing changed is one people learn to ignore — I would
+          have introduced a second false signal while removing the first.
+
+          SKIPPED IS ALWAYS REPORTED. This line is what every handoff pastes and
+          what a release reads, so it is where "the tier was not exercised here"
+          has to become visible.
+  - packet_id: groundtruth-harness-reds-the-gate-for-an-undeclared-environment-dependency
+    event:
+      type: verified
+      ts: "2026-08-25T23:40:00Z"
+      agent_id: lenovinha-opus5-metaorch-20260825t213705z
+      host: lenovinha
+      summary: |
+        scripts/test-groundtruth-corpus-declaration.sh 6 -> 9 scenarios, all
+        green, and the three new ones are the coordinator's constraints:
+
+          7. POSITIVE: an absent index SKIPS loudly — rc=0, skipped_engines
+             named, a SKIP line per case, and total == skipped so the
+             denominator is intact. Written to self-adjust on a host that HAS an
+             index (it then asserts the cases were graded instead), so it is not
+             a test that only passes on broken hosts.
+          8. NEGATIVE: a STALE index is still rc=2, never skipped. This is the
+             control that stops the skip from swallowing a real defect.
+          9. NEGATIVE / FAIL-OPEN: a genuinely wrong graded answer is still RED
+             (rc=1) ALONGSIDE five skipped cases. Everything else here is
+             worthless if the skip path can also absorb a wrong answer — a
+             stricter-looking gate that quietly stopped failing would be the
+             exact regression this fixture exists to prevent.
+
+        Scenario 6 itself was TIGHTENED rather than merely unblocked: it now
+        requires fail=0 AND that every skip is accounted for (named engines plus
+        SKIP lines), and it fails explicitly if the glob produces no result line
+        at all — the original symptom, which previously surfaced as a blank
+        verdict. Requiring only `fail=0` would have gone green whether or not the
+        tier ran, which is the silent green the constraint forbids.
+
+        cargo test -p tillandsias-plan 226+28 pass, 0 fail (the harness's own
+        unit pins, named individually by the litmus, all intact).
+        litmus:forge-environment-discoverability 17/17.
+        ./build.sh --check green.
+
+        NOT DONE, and not claimed: this does not give the fleet an embedding
+        endpoint. spec.answer remains ungraded on hosts without one — now
+        visibly rather than invisibly. Whether the release should require a host
+        that CAN grade it is an operator call, and the metrics line is what makes
+        that call possible.
+  - packet_id: groundtruth-harness-reds-the-gate-for-an-undeclared-environment-dependency
+    event:
+      type: note
+      ts: "2026-08-25T23:45:00Z"
+      agent_id: lenovinha-opus5-metaorch-20260825t213705z
+      host: lenovinha
+      summary: |
+        EXIT CRITERION 4 IS ONLY HALF MET, AND I AM NOT CLAIMING OTHERWISE.
+
+        "Demonstrated on a host with NO embedding endpoint AND on a host WITH
+        one, so both branches are exercised rather than argued." lenovinha is
+        the NO branch and it is demonstrated here. I cannot exercise the WITH
+        branch: this host has no embedding endpoint, and building one to test
+        the fix would make the test environment differ from every host the fix
+        is for.
+
+        Constructing a fake index to simulate the WITH branch was considered and
+        rejected — a hand-made vectors.jsonl either fails the arity check (which
+        exercises the STALE path, scenario 8, not the WITH path) or requires
+        fabricating embeddings, and a green result from fabricated vectors would
+        certify a path production never runs. That is the same error the
+        spec-rung1 author named when they refused to grade a lexical stand-in.
+
+        yoga has gpu/container/ollama and a spec-index volume, and independently
+        reached this same diagnosis including the scenario-4/scenario-6
+        asymmetry, so they can exercise the WITH branch and review on the merits
+        without the release beneficiary in the loop. What they need to confirm:
+
+          1. `tillandsias-plan grade --root . openspec/litmus-tests/groundtruth/*.yaml`
+             reports `skipped=0` and PASSES the spec.answer cases — i.e. the skip
+             path does NOT engage on a capable host, and accuracy is measured
+             rather than waived.
+          2. The new litmus step prints `ok: spec-index-branch present`, the
+             opposite branch from the one this host prints.
+          3. scripts/test-groundtruth-corpus-declaration.sh still reports 9/9
+             there. Scenario 7 self-adjusts by design — on a host WITH an index
+             it asserts the cases were GRADED instead of skipped — so a 9/9 on
+             yoga is a genuinely different assertion than a 9/9 here, which is
+             the point of asking.
+
+        Until yoga confirms, this packet is implementation-complete on the NO
+        branch and UNVERIFIED on the WITH branch. Leaving status ready rather
+        than completed for exactly that reason: the criterion says both, and one
+        host cannot honestly close it.
+  - packet_id: groundtruth-harness-reds-the-gate-for-an-undeclared-environment-dependency
+    event:
+      type: note
+      ts: "2026-08-25T23:50:00Z"
+      agent_id: lenovinha-opus5-metaorch-20260825t213705z
+      host: lenovinha
+      summary: |
+        VERIFICATION GAP, stated rather than papered over: the new
+        precondition-reporting step has NOT executed under the litmus runner on
+        this host. `litmus:expert-groundtruth-harness` is reported SKIP
+        ("excluded from coverage") by scripts/run-litmus-test.sh on lenovinha at
+        both instant and quick size, alongside litmus:onboarding-cold-start-discovery.
+        The test is bound in openspec/litmus-bindings.yaml and its fixture
+        (test-groundtruth-corpus-declaration.sh) runs 9/9 green when invoked
+        directly, so the underlying assertions ARE exercised — but the step I
+        added is verified by direct invocation, not by the runner.
+
+        Worth someone's attention on its own: a bound litmus that a host silently
+        excludes from coverage is adjacent to the 660-ryhn shape (an assertion
+        nothing runs). Not filing it as a packet from here because I have not
+        determined whether the exclusion is deliberate; naming it so the next
+        host that sees this SKIP has a starting point rather than rediscovering it.

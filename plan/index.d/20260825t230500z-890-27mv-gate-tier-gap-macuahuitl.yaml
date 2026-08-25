@@ -1,0 +1,128 @@
+packets:
+  - packet_id: the-recurring-loops-gate-and-the-release-gate-are-different-tiers
+    order: 890-27mv
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    release_target: fail-loud-diagnosis-milestone
+    title: |
+      the daily loop gates on --check, the release gates on --ci-full, and nothing in between ever runs the quick litmus tier — so a release-blocking failure can ONLY surface at release time
+    deliverable: |
+      the recurring loop exercises the tier the release depends on, or the
+      release's extra tier is run on a cadence that is not "when someone tries to
+      ship"
+    pickup_role: linux
+    owner_host: any
+    depends_on: []
+    capability_tags:
+      - ci
+      - litmus
+      - release
+      - fail-loud
+      - cadence
+    estimated_hours: 4
+    context: |
+      FOUND 2026-08-25 by yoga, while answering a question about a release that
+      had just been blocked. It is the structural reason the block was a surprise.
+
+      THE MECHANISM, measured across two hosts:
+
+        - `litmus:expert-groundtruth-harness` is phase `pre-build`, size QUICK.
+        - The recurring meta-orchestration cycle gates on `./build.sh --check`,
+          which does NOT execute the quick-sized litmus tier.
+        - `run-litmus-test.sh` is invoked from build.sh only on the --ci/--ci-full
+          path (build.sh:1044).
+        - `target/convergence/check-logs.jsonl` is written ONLY by
+          scripts/local-ci.sh (local-ci.sh:257).
+
+      CONSEQUENCE: on yoga — a working Silverblue dev host that completed attested
+      cycles all day — `target/convergence/` is EMPTY. That check has never run
+      there. Not "failed quietly": NEVER RAN. On macuahuitl the same log holds
+      exactly one run, tonight's, the one that failed.
+
+      So the fleet's daily loop never asks the question that blocks a release. It
+      can only be asked at release time, which is the worst possible moment to
+      discover the answer, and is exactly what happened: an operator-directed cut
+      with 2007 passing checks was stopped by a single red in a tier no cycle had
+      exercised in days.
+
+      WHY THIS IS NOT MERELY "RUN MORE TESTS". The two gates are deliberately
+      different — `--check` is the fast inner-loop gate a cycle runs three or four
+      times, `--ci-full` is the heavy release gate, and collapsing them would make
+      every cycle pay the heavy cost (order 758-jw6v exists because gate cost
+      drives everything). The defect is not that the tiers differ; it is that the
+      DIFFERENCE IS NEVER EXERCISED between releases, so the delta accumulates
+      silently and is discharged all at once, under time pressure, by whoever is
+      trying to ship.
+
+      RELATED, AND THE REASON THIS IS FILED SEPARATELY FROM 888-miiy: 888-miiy is
+      the specific check that reds for an undeclared environment dependency. This
+      packet is why nobody knew. Fixing 888-miiy alone leaves the structural gap:
+      the next release-tier-only failure is discovered the same way.
+    outcome: |
+      A release-tier failure is discovered by a cycle, not by a release.
+    exit_criteria:
+      - 'The delta between --check and --ci-full is exercised on a cadence that is not release-triggered. Any of: a periodic --ci-full on a nominated host, a rotating tier sample in the recurring loop, or a scheduled tier run — chosen once and named.'
+      - 'The choice does NOT make the inner-loop gate materially slower: measure ./build.sh --check before and after, and record both numbers. A fix that reintroduces the 758-jw6v cost is refused.'
+      - 'An executable check reports when the release tier was last exercised on this host, so "nobody has run this in N days" is answerable without a release attempt.'
+      - 'NEGATIVE CONTROL: a host that legitimately cannot run the heavier tier (no podman, no inference) reports that it did not run it — never that it passed.'
+    verifiable_closure: |
+      A host can answer "when was the release tier last exercised here, and what
+      was the verdict" without cutting a release.
+    notes: |
+      Do not fix this by making `--check` run everything. That is the cost
+      regression 758-jw6v spent real effort removing, and a gate that gets slow
+      gets bypassed.
+
+      Note the interaction with 888-vgs8: whichever host runs the heavier tier
+      accumulates the only convergence history that exists, so wherever that lands
+      should also be where the history is preserved.
+    events:
+      - type: filed
+        ts: "2026-08-25T23:05:00Z"
+        agent_id: linux-macuahuitl-fable5-20260825t224500z
+        host: macuahuitl
+        summary: |
+          Filed after yoga measured that the failing check had NEVER run on its
+          host rather than having failed quietly, and traced it to the recurring
+          loop gating on a tier that excludes it. That reframed the release block
+          from "one bad check" to "the loop does not exercise what the release
+          depends on".
+
+events:
+  - packet_id: the-mandated-cache-sweep-destroys-the-mandated-failure-log
+    event:
+      type: note
+      ts: "2026-08-25T23:05:01Z"
+      agent_id: linux-macuahuitl-fable5-20260825t224500z
+      host: macuahuitl
+      summary: |
+        CORRECTION TO THIS PACKET'S OWN EVIDENCE, from the host that filed it.
+
+        I filed this claiming tonight was a worked example: that the sanctioned
+        cargo clean destroyed weeks of check-logs.jsonl history and I therefore
+        could not answer "was this check ever green here". The MECHANISM is real
+        and the packet stands on it — cargo clean removes target/, the log lives
+        at target/convergence/check-logs.jsonl, and the skill separately mandates
+        both the sweep and reading that log FIRST. Those two instructions cannot
+        both hold.
+
+        WHAT I OVERSTATED is that I proved a loss. I did not, and I cannot.
+        Measured after filing: my check-logs.jsonl holds 27 records from exactly
+        ONE ci_run_id — tonight's local-ci-20260825T221930Z. yoga, a working host
+        that has completed attested cycles all day, has an EMPTY
+        target/convergence/ directory. The log is written only by
+        scripts/local-ci.sh, which the recurring loop never invokes (it gates on
+        ./build.sh --check). So a host that only runs the daily loop accumulates
+        NO history at all, sweep or no sweep.
+
+        I cannot distinguish "my sweep destroyed history" from "there was never
+        any history to destroy", and I should not have asserted the first. The
+        honest residual: the sweep-versus-mandated-evidence conflict is real and
+        worth closing; tonight is NOT evidence that it has ever actually cost
+        anyone anything. The blindness I hit is better explained by 890-27mv.
+
+        yoga prompted this correction by refusing to let me keep an inference I
+        had not tested — the same rule that produced three other corrections
+        tonight: ask what result would have falsified the claim.

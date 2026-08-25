@@ -1363,6 +1363,7 @@ fn run_grade(args: &[String], index: &Path) -> i32 {
 
     let started = std::time::Instant::now();
     let mut outcomes: Vec<groundtruth::Outcome> = Vec::new();
+    let mut skipped: Vec<(String, String, String)> = Vec::new();
 
     if let Some(src) = envelope_src {
         // ENVELOPE MODE: grade a captured envelope — the one an agent actually
@@ -1405,7 +1406,7 @@ fn run_grade(args: &[String], index: &Path) -> i32 {
                     engine: format!("{} (captured envelope)", selected[0].1.engine),
                     failures: vec![format!("input is not an answer envelope: {e}")],
                 });
-                report(&outcomes, &sets, started);
+                report(&outcomes, &[], &sets, started);
                 return 1;
             }
         };
@@ -1475,6 +1476,20 @@ fn run_grade(args: &[String], index: &Path) -> i32 {
             };
             let envelope = match harnesses[slot].2.run(case) {
                 Ok(e) => e,
+                // ORDER 888-miiy. A HOST CAPABILITY GAP skips the case LOUDLY;
+                // anything else is still a hard HARNESS ERROR. The asymmetry is
+                // the point: "this host has no embedding index" must not abort
+                // the other 21 graded cases, and "the index is stale" must not
+                // be swallowed as a skip.
+                Err(e) if groundtruth::is_engine_unavailable(&e) => {
+                    skipped.push((
+                        case.id.clone(),
+                        case.engine.clone(),
+                        e.trim_start_matches(groundtruth::ENGINE_UNAVAILABLE)
+                            .to_string(),
+                    ));
+                    continue;
+                }
                 Err(e) => {
                     eprintln!("HARNESS ERROR: {e}");
                     return 2;
@@ -1489,7 +1504,7 @@ fn run_grade(args: &[String], index: &Path) -> i32 {
         }
     }
 
-    let failed = report(&outcomes, &sets, started);
+    let failed = report(&outcomes, &skipped, &sets, started);
     i32::from(failed > 0)
 }
 
@@ -1497,6 +1512,7 @@ fn run_grade(args: &[String], index: &Path) -> i32 {
 /// return the failure count.
 fn report(
     outcomes: &[tillandsias_plan::groundtruth::Outcome],
+    skipped: &[(String, String, String)],
     sets: &[PathBuf],
     started: std::time::Instant,
 ) -> usize {
@@ -1512,14 +1528,42 @@ fn report(
             println!("        - {f}");
         }
     }
+    // ORDER 888-miiy. A SKIPPED case is printed per-case and counted in the
+    // summary. It must never be possible to read a run that graded nothing as a
+    // run that graded everything and passed — that is "an unexamined thing
+    // reported as clean", which is the failure this milestone exists to kill and
+    // is strictly worse than the wrong red it replaces.
+    for (id, engine, why) in skipped {
+        println!("SKIP  {id}  [{engine}]  NOT GRADED on this host: {why}");
+    }
+    let mut engines: Vec<&str> = skipped.iter().map(|(_, e, _)| e.as_str()).collect();
+    engines.sort_unstable();
+    engines.dedup();
+    // `total` counts every case the set DECLARED, so pass+fail+skipped == total
+    // and a skip cannot quietly shrink the denominator. A shrinking bar is a
+    // lowered bar (the same rule the committed-set step already enforces).
     println!(
-        "groundtruth-result: sets={} total={} pass={} fail={} elapsed_ms={}",
+        "groundtruth-result: sets={} total={} pass={} fail={} skipped={}{} elapsed_ms={}",
         sets.len(),
-        outcomes.len(),
+        outcomes.len() + skipped.len(),
         outcomes.len() - failed,
         failed,
+        skipped.len(),
+        if engines.is_empty() {
+            String::new()
+        } else {
+            format!(" skipped_engines={}", engines.join(","))
+        },
         started.elapsed().as_millis()
     );
+    if !skipped.is_empty() {
+        eprintln!(
+            "WARNING: {} case(s) were NOT GRADED on this host (engines: {}). This run does not certify those engines; it certifies the {} case(s) it could grade.",
+            skipped.len(),
+            engines.join(","),
+            outcomes.len()
+        );
+    }
     failed
 }
 
