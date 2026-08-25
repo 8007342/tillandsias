@@ -42466,6 +42466,12 @@ plan_index:
       exit_criteria: |
         (1) A release-blocking condition is visible BEFORE release time. Either --ci-full runs on a cadence with its verdict recorded where the fleet reads it, or the delta between --check and --ci-full is named so a host knows what its green push did not cover. (2) The three current failures are cleared or explicitly waived with a recorded reason, and `./build.sh --ci-full` exits 0 on linux-next. (3) litmus:groundtruth-no-mutable-status-pin-shape stops depending on a live packet's status — the trap it exists to prevent. (4) Measured afterwards: a release actually cuts.
       events:
+        - type: progress
+          ts: "2026-08-25T07:46:02Z"
+          agent_id: "linux-macuahuitl-opus5-20260825t074602z"
+          host: macuahuitl
+          summary: |
+            COORDINATOR INVENTORY (background worktree run at 5462b3bc0, does not touch the claim): the full pre-build instant litmus sweep = 95% (251/263 executed, 184 skipped), 12 FAILING: cycle-batch-triage-shape, fragment-status-loss-attribution-shape, selector-urgency-not-inert-shape (ci-release); ensure-toolbox-include-shape, sidecar-staleness-stamp-shape (dev-build); default-image-containerfile-shape; forge-gitdir-staging-chown (git-mirror-service); host-browser-mcp-lane-socket-shape; guest-container-metrics-wire-shape (observability-metrics); launch-skips-prerequisite-fails (podman-idiomatic-patterns); podman-idiomatic-launch-routing (browser-isolation-tray-integration); vsock-unauthenticated-peer-rejected (vsock-transport). Repro per test: scripts/run-litmus-test.sh <spec> --phase pre-build --size instant. The order-477 scope-agreement cargo pair is already fixed (801-vm4p riders). If the claim TTLs at ~19:33Z, this list is the work plan.
         - type: filed
           ts: "2026-08-24T13:51:43Z"
           agent_id: linux-macuahuitl-opus5-20260824T133400Z
