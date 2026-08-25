@@ -22,7 +22,8 @@
 # order-392 boundary rule: a GPU tier in name only is worse than no GPU tier.
 #
 # PINNED GRAMMAR — one line per model, plus one embed: and one project: line:
-#   host: name=<n> cores=<N> ram_gb=<N> mem=<desc> bw_ceiling_gb_s=<F>
+#   host: name=<n> cores=<N> ram_gb=<N> mem=<desc> bw_ceiling_gb_s=<F> \
+#        dispatch=<ok:engine-cpu-dispatch:<f,..>|refused:...|unchecked:no-engine-binary>
 #   gen: model=<n> tier=<T> engine=<e> claimed=<e> offload_pct=<N> load_ms=<N> \
 #        prefill_tok_s=<F> prefill_n=<N> prefill_range=<F>-<F> prefill_prompt_tok=<N> \
 #        gen_tok_s=<F> prompt_tok=<N> eval_tok=<N> total_ms=<N>
@@ -302,8 +303,39 @@ bench_embed() {
     fi
 }
 
+
+# ---- ENGINE CPU DISPATCH GATE (order 861-n7f5) -----------------------------
+# A build that ignores the vector features this host advertises is a
+# MISCONFIGURATION, not a candidate, and its numbers are a 12.8x prefill
+# regression nobody can explain. Measured on esmeraldinha 2026-08-23 against
+# Fedora 44's packaged llama-cpp on a host with AVX/AVX2/FMA/AVX_VNNI.
+#
+# So a baseline build may still be benchmarked deliberately — what it may not
+# do is enter the ledger AS AN ENGINE-LANE MEASUREMENT. When the checked engine
+# is refused, this run publishes `claimed_engine=refused:<missing>` instead of
+# the operator's label, so the lane label can never be the thing that carries a
+# misconfigured build into evidence.
+#
+# The check runs only when an engine binary is named (BENCH_ENGINE_BINARY).
+# The common ollama-over-HTTP path has no local binary to inspect and reports
+# `dispatch=unchecked:no-engine-binary` — an honest unknown, never an `ok`.
+DISPATCH="unchecked:no-engine-binary"
+if [ -n "${BENCH_ENGINE_BINARY:-}" ]; then
+    DISPATCH="$("$(dirname "${BASH_SOURCE[0]}")/check-engine-cpu-dispatch.sh" \
+                "$BENCH_ENGINE_BINARY" 2>/dev/null)" || true
+    [ -n "$DISPATCH" ] || DISPATCH="unavailable:check-did-not-run"
+    case "$DISPATCH" in
+        refused:*)
+            echo "[bench-inference-floor] REFUSING to publish an engine lane label:" >&2
+            echo "  $DISPATCH" >&2
+            echo "  Re-run with a build that dispatches this host's vector features," >&2
+            echo "  or read the numbers below as a build comparison, not a lane." >&2
+            CLAIMED="$DISPATCH"
+            ;;
+    esac
+fi
 cores=$(nproc 2>/dev/null || echo unknown)
-echo "host: name=$HOST_NAME cores=$cores endpoint=$EP claimed_engine=$CLAIMED num_predict=$NUM_PREDICT"
+echo "host: name=$HOST_NAME cores=$cores endpoint=$EP claimed_engine=$CLAIMED dispatch=$DISPATCH num_predict=$NUM_PREDICT"
 
 # Model set. Defaults to the models.json tier table; override with a
 # space-separated `<model>:<label>` list to sweep a different range, e.g. the

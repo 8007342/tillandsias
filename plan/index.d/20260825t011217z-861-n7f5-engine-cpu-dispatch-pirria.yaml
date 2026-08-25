@@ -1,0 +1,336 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Cycle: pirria (linux_immutable, Intel N150 / 4 cores, low-end tier),
+# 2026-08-25T00:58Z. Batch epic=UNGROUPED role=linux seed=pirria route=tier:low-end.
+packets:
+  - order: 876-exg2
+    packet_id: credential-guard-reads-a-hook-refusal-as-an-absent-credential
+    desired_release: v0.6
+    title: check-credential-channel.sh calls a stale-gate pre-push refusal "blocked:gh-cli-only" — and the skill treats that as a hard cycle-fail, so every host fails its first cycle after a fast-forward
+    status: ready
+    kind: enhancement
+    pickup_role: any
+    priority: p2
+    capability_tags:
+      - guards
+      - credentials
+      - bootstrap
+      - multi-host
+    deliverable: scripts/check-credential-channel.sh
+    depends_on: []
+    estimated_hours: 2
+    context: |
+      MEASURED ON pirria 2026-08-25T01:00Z, first cycle after a clean fast-forward
+      814bt2fea2..d8767287d. The guard reported:
+
+        blocked:gh-cli-only
+          gh auth is green but a bounded non-interactive push probe failed
+          (git push --dry-run origin HEAD). Seed the repo-local store before
+          committable work.
+
+      The credential channel was FINE. Running the probe by hand showed what the
+      guard swallowed: the local pre-push hook refused, and it said why —
+
+        ✗ pre-push refused: the tree changed since ./build.sh --check last passed
+          CHANGED SINCE THE GATE RAN (12 path(s), newest-first by mtime): ...
+
+      i.e. the twelve paths the fast-forward had just written. One
+      `TILLANDSIAS_SKIP_VERSION_BUMP=1 ./build.sh --check` later the SAME guard
+      answered `ok:gh-keyring-push-verified` with nothing about the credential
+      touched.
+
+      WHY THIS IS SERIOUS RATHER THAN COSMETIC. 860-g798 upgraded the guard from
+      "a token exists somewhere" to "a push actually authenticated", which is the
+      right direction and caught a real hang. But `git push --dry-run` runs the
+      LOCAL PRE-PUSH HOOK, and that hook refuses on a stale gate stamp — a state
+      every host is in immediately after a fetch/fast-forward, which is precisely
+      where meta-orchestration Start-Of-Cycle runs this guard (skill step 2, "run
+      immediately after `git fetch`"). The skill's own rule for a `blocked:*`
+      verdict is unambiguous: "fails the cycle on its own; do NOT proceed into
+      worker drain or any committable work."
+
+      So the composition of two correct-in-isolation guards produces a false hard
+      stop on the common path, on any host, on the first cycle after it syncs.
+      The verdict even names a remedy that cannot work — seeding
+      `.git/.gh-credentials` does nothing about a stale gate stamp.
+
+      INDEPENDENTLY HIT BY yoga TEN MINUTES EARLIER, 2026-08-25T00:47Z,
+      same verdict and same true cause, recorded in its loop-status entry:
+      "the guard cannot distinguish `no credential channel` from `a local hook
+      declined before the network was touched`, and it names the former." Two
+      Silverblue hosts, two independent cycles, one shared launch pattern.
+      yoga chose to record it as an event on 860-g798 rather than a row; that
+      row is COMPLETED, so an event on it schedules nothing and the observation
+      would sit where no selector can reach it. Filed as a row here on that
+      ground — the deliverable is a file no open row owns — and not as a
+      disagreement with yoga about severity.
+
+      This is the order-531 shape inverted: not a broken thing reporting healthy,
+      but a healthy thing reporting broken, and the failure mode is the same
+      class — the probe answers a NARROWER question than the verdict claims.
+    exit_criteria: |
+      (1) The push probe distinguishes a CREDENTIAL failure from a LOCAL HOOK
+      refusal. The cheapest correct form is to run the probe with the hook out of
+      the way (`git push --dry-run --no-verify`), since the guard's question is
+      "can this credential authenticate to the remote", not "would this tree pass
+      the gate" — the gate is asked separately at Finalization step 4 and must
+      stay asked there. If `--no-verify` is judged too blunt, the alternative is
+      to parse the hook's refusal and emit a distinct verdict.
+      (2) A distinct verdict token for the hook case, in the pinned grammar, e.g.
+      `ok:gh-keyring-push-verified:local-hook-refused` or
+      `note:push-probe-hook-refused` — it must NOT be a `blocked:*` token, because
+      the skill hard-stops on those and a stale gate stamp is not a credential
+      fault. The remedy text must name `./build.sh --check`, not credential
+      seeding.
+      (3) scripts/test-check-credential-channel.sh gains a hermetic arm that
+      reproduces THIS shape: green `gh`, a probe seam that fails with a pre-push
+      hook refusal, and an assertion that the verdict is not `blocked:*`. Mutation
+      check: the arm must fail against the pre-fix script.
+      (4) Verified by a cycle that fast-forwards and then runs the guard BEFORE
+      any `./build.sh --check`, which is the exact sequence the skill mandates.
+  - order: 876-irn7
+    packet_id: cycle-preflight-declares-cargo-absent-on-a-host-that-has-cargo
+    desired_release: v0.6
+    title: a rustup toolchain that is not on the non-interactive PATH reads as blocked:preflight:plan:cargo-absent — the one verdict that stops the cycle before it can fix itself
+    status: ready
+    kind: enhancement
+    pickup_role: any
+    priority: p3
+    capability_tags:
+      - bootstrap
+      - guards
+      - low-end
+      - multi-host
+    deliverable: scripts/cycle-preflight.sh
+    depends_on: []
+    estimated_hours: 1
+    context: |
+      MEASURED ON pirria 2026-08-25T00:59Z. First tool call of the cycle:
+
+        scripts/cycle-preflight.sh  ->  blocked:preflight:plan:cargo-absent
+
+      The host has a complete, current toolchain — cargo 1.98.0, rustc 1.98.0 —
+      installed by rustup at ~/.cargo/bin. What it does not have is that
+      directory on the PATH of a NON-INTERACTIVE shell: rustup's PATH edit lands
+      in ~/.bashrc, which a non-login non-interactive bash never sources. Every
+      agent tool call is exactly that kind of shell.
+
+      Exporting PATH=$HOME/.cargo/bin:$PATH by hand and re-running produced
+      `ok:cycle-preflight:rebuilt+expert-refreshed+...` immediately, with nothing
+      else changed.
+
+      WHY THIS ONE VERDICT MATTERS MORE THAN ITS SIZE. The skill's rule for it is
+      terminal and correct: "A `blocked:preflight:*` verdict means do not start
+      the cycle — selecting work with an unverified instrument is the one failure
+      the loop cannot reason its way out of, because the tool it would reason
+      WITH is the stale thing." So this is not a warning a cycle works around; it
+      is the full stop, and it fires on a host whose toolchain is fine. An
+      unattended host — which is the whole point of the loop — would answer
+      `blocked:` every six hours forever and do no work, while a human reading
+      the transcript sees a plausible-looking "no cargo" and goes looking for a
+      missing toolchain that is already installed.
+
+      This is the JOINING-HOST class the skill already names: "If you needed
+      something said to you beyond that sentence, the thing you needed was
+      missing from this skill or the ledger, and THAT is the defect worth
+      filing." The bootstrap prompt is one sentence; it cannot also carry a PATH
+      export.
+    exit_criteria: |
+      (1) cycle-preflight.sh resolves cargo through the standard install
+      locations before declaring it absent — at minimum ~/.cargo/bin/cargo and
+      $CARGO_HOME/bin/cargo, honouring CARGO_HOME when set. A resolved-but-not-
+      on-PATH toolchain must produce the normal `ok:` verdict, not a blocked one.
+      (2) The genuinely-absent case keeps its current verdict and its current
+      terminal force. This packet narrows a false positive; it must not weaken
+      the true one. A hermetic arm must cover both.
+      (3) Anywhere else in the cycle that shells out to cargo gets the same
+      resolution rather than a fourth inline probe (859-b2zc / 704-zcgi: the copy
+      has to go, not just the instance). `./build.sh` is out of scope on
+      immutable Linux — it re-execs into the tillandsias-builder toolbox and
+      never reads the host PATH — so the surface is the host-side callers.
+      (4) Verified on a host where rustup is installed and ~/.cargo/bin is absent
+      from a non-interactive shell's PATH. pirria reproduces it as it stands.
+events:
+  - packet_id: engine-candidates-must-prove-cpu-dispatch-before-they-are-benchmarked
+    event:
+      type: completed
+      ts: "2026-08-25T01:40:00Z"
+      agent_id: linux-pirria-opus5-20260825T005828Z
+      host: linux_immutable
+      summary: |
+        DELIVERED on the floor host that filed this packet's corroborating note.
+        All four exit criteria met; gate green (./build.sh --check, forced, 88s of
+        phases).
+
+        (1) scripts/check-engine-cpu-dispatch.sh — one falsifiable line, pinned
+            grammar
+              ^(ok:engine-cpu-dispatch:[a-z0-9_,-]+
+               |refused:engine-cpu-dispatch-baseline:[a-z0-9_,-]+
+               |unavailable:[a-z0-9-]+)$
+            Exit 0 dispatched / 1 refused / 2 undetermined. It reads llama.cpp's
+            own system_info dispatch table (`AVX = 1 | AVX2 = 1 | ...`) off the
+            engine binary, and compares it against the host's advertised features.
+            It does not benchmark, load a model, or judge speed.
+
+            THE CHECKED SET IS FOUR FEATURES, NOT EVERY FLAG /proc/cpuinfo LISTS:
+            avx, avx2, fma, avx_vnni (override: ENGINE_DISPATCH_CHECKED_FEATURES).
+            A build that skips sse2 on x86-64 is not a thing that happens, and a
+            check comparing hundreds of flags produces noise instead of a verdict.
+            These four are the ones the measured 12.8x turned on.
+
+        (2) scripts/bench-inference-floor.sh calls it before publishing a lane.
+            When BENCH_ENGINE_BINARY names a build and the check refuses it, the
+            run publishes `claimed_engine=refused:<missing>` INSTEAD of the
+            operator's label, so a misconfigured build cannot enter the ledger as
+            an engine-lane measurement at all. A refused build may still be
+            benchmarked deliberately — the numbers are then a build comparison,
+            which is what they are. The `host:` line gained `dispatch=<verdict>`
+            and the docstring's pinned grammar was updated with it.
+
+            THE HTTP PATH REPORTS AN HONEST UNKNOWN, NEVER AN ok. The common
+            ollama-over-HTTP run has no local binary to inspect and publishes
+            `dispatch=unchecked:no-engine-binary`. Reporting an unmeasured build
+            as dispatched is the order-531 shape and is exactly what this packet
+            exists to stop.
+
+        (3) The host's half comes from the CAPABILITY ROW, not a second probe.
+            `tillandsias-plan capability-matrix --cpu-flags [<host>]` is new: one
+            line per host, `<host_id>\t<sorted-flags-csv>`, folded from the same
+            accel_probe document the matrix already carries. A host ABSENT from
+            the matrix prints nothing rather than an empty-flag line — absent and
+            "reported no flags" are different facts (843-624y), and the checker
+            maps them to distinct `unavailable:` verdicts. ENGINE_DISPATCH_HOST_FLAGS
+            overrides for fixtures and unpublished hosts, and the refusal names
+            which source it used, so a fixture reading is never mistaken for a
+            matrix reading.
+
+            Live output across the fleet, first run:
+              esmeraldinha           avx,avx2,avx_vnni,fma
+              lenovinha              avx,avx2,fma
+              macuahuitl             avx,avx2,avx_vnni,fma
+              pirria                 avx,avx2,avx_vnni,fma
+              tlatoanis-macbook-air  neon
+              yoga                   avx,avx2,avx512*(15),avx_vnni,fma
+              yolanda                avx,avx2,avx512*(15),avx_vnni,fma
+
+        (4) scripts/test-check-engine-cpu-dispatch.sh — 9/9 hermetic, no engine
+            binary, no model, no network, no matrix. Arms: the measured Fedora
+            baseline shape refused on this host's real flags; a fully dispatched
+            build passes; a PARTIAL build (AVX2 yes, AVX_VNNI no) is refused and
+            names only the gap; NEGATIVE CONTROL — a baseline build on a baseline
+            host PASSES, because a check that refused it would ban the only build
+            such a host can run; a build ahead of the host's row is not refused
+            (the question is one-directional); a version banner with no dispatch
+            table is `unavailable:no-dispatch-table`, never ok; silence likewise;
+            every verdict matches the pinned regex; a missing argument is a usage
+            error rather than a silent pass.
+
+        END-TO-END ON THIS HOST against the live capability row, no override:
+          baseline stub  -> refused:engine-cpu-dispatch-baseline:avx,avx2,fma,avx_vnni
+          dispatched stub -> ok:engine-cpu-dispatch:avx,avx2,fma,avx_vnni
+
+        NOT DONE, AND SAYING SO: nothing in ./build.sh or scripts/local-ci.sh runs
+        the new hermetic suite. That is the convention its siblings follow —
+        scripts/test-check-credential-channel.sh and scripts/test-cycle-checkout-lock.sh
+        are likewise invoked by nothing and recorded by hand in ledger fragments —
+        so this is consistent, not an oversight of mine, but a suite nothing runs
+        is one refactor from rotting and the fleet now has at least three. Filing
+        that as its own row would be a fourth place to say it; it belongs to
+        whoever owns guard activation (audit-guard-activation already greps for
+        guard NAMES, which is the same half-measure one level up).
+  - packet_id: lane-branch-methodology-for-a-fleet-that-outruns-its-slowest-host
+    event:
+      type: note
+      ts: "2026-08-25T01:42:00Z"
+      agent_id: linux-pirria-opus5-20260825T005828Z
+      host: linux_immutable
+      summary: |
+        CRITERION 6 DATAPOINT FROM pirria, AND IT CORRECTS THIS PACKET'S PREMISE.
+        Criterion 6 asks for verification "on a host whose gate exceeds the fleet's
+        median inter-push gap — esmeraldinha or pirria". pirria is not such a host.
+
+        MEASURED THIS CYCLE, four consecutive `./build.sh --check` runs on
+        linux-next at d876728/3d22eb5 (Intel N150, 4 cores, Silverblue, warm
+        toolbox and warm ~/.cargo):
+
+          run 1  63s wall   (61s of gate phases)
+          run 2  78s wall   (78s of phases)
+          run 3   4s wall   (clippy failure, aborted early)
+          run 4  89s wall   (88s of phases, TILLANDSIAS_FORCE_CHECK=1)
+
+        Slowest phases, consistently: fragment-event reconciliation 25.7s, plan
+        archiver 18.3s, plan ledger tests 13.5s, clippy 5.7s + 5.6s.
+
+        So pirria's T is ~1.0-1.5 min, not the 10.5 min this packet models for
+        esmeraldinha. Against the packet's own simulation that puts this host
+        between the T=3min row (P(beaten) 0.15, E[gate runs] 1.16) and better —
+        i.e. comfortably inside the fleet's 9.1 min median inter-push gap, and
+        NOWHERE NEAR the 2.0 re-runs per landed cycle esmeraldinha measured. The
+        packet's own corroborating merge-ratio table already said as much
+        (pirria 0.00, esmeraldinha 0.40); this is the direct gate measurement
+        behind that number.
+
+        WHAT THIS MEANS FOR THE PACKET. "Low-end tier" and "slow gate" are being
+        treated as the same property and they are not. pirria is the fleet's
+        designated FLOOR by core count (4 cores, N150, routed tier:low-end by
+        847-wgy4) and still gates in 90 seconds, because this gate is dominated by
+        ledger work — fragment reconciliation, archiver, plan tests — not by
+        compilation. esmeraldinha's 10.5 min is a WSL2/Windows-host property, not
+        a core-count one. Criterion 6 should name esmeraldinha alone, or be
+        restated as "a host whose MEASURED gate exceeds the median gap", and this
+        host should not be counted as a second reproduction of the problem. On the
+        current evidence it does not reproduce here.
+
+        CRITERION 7 CORROBORATED, AND A CONCRETE INSTANCE OF IT. Criterion 7 says
+        the cheapest intervention is a shorter gate, especially for plan-only
+        cycles. That lever EXISTS ALREADY and it fired on this host — the pre-push
+        hook has a plan-only lane that skips the build stamp for pushes whose
+        outgoing diff is only new plan fragments:
+
+          plan-only lane: outgoing diff adds only new plan fragment files ...
+            — accepting without the build stamp
+          ✓ local gate: plan-only lane clean (1 fragment file(s) validated;
+            build stamp not required for this push)
+
+        But it did NOT fire on the two attempts before it, on the same repo and
+        the same claim commit, printing instead:
+
+          plan-only lane: not applicable — no ref list on stdin
+            (full gate required)
+
+        Same command shape (`git push origin linux-next`), same single-fragment
+        outgoing diff, minutes apart, different answer. Whatever gates the stdin
+        ref-list read is intermittent, and each miss costs this host a FULL gate
+        (~90s) for a one-file claim push. The claim-before-work discipline makes
+        that cost recur every cycle by construction, so on the fleet's cadence it
+        is not a rounding error.
+
+        Recorded here rather than as its own row because criterion 7 already owns
+        the question and a fourth place to say "the gate is the lever" helps
+        nobody. Whoever takes 863-iicc: the plan-only lane is the intervention
+        criterion 7 asks you to evaluate, it is already written, and the thing to
+        fix may be nothing more than why it intermittently cannot see its own
+        stdin.
+  - packet_id: engine-candidates-must-prove-cpu-dispatch-before-they-are-benchmarked
+    event:
+      type: note
+      ts: "2026-08-25T01:43:00Z"
+      agent_id: linux-pirria-opus5-20260825T005828Z
+      host: linux_immutable
+      summary: |
+        SCOPE NOTE ON WHAT WAS NOT VERIFIED. The dispatch table is read from
+        llama.cpp's system_info line, which covers llama-server/llama-cli and
+        anything built from the same source. It does NOT cover ollama, whose
+        dispatch is a RUNTIME selection among 17 prebuilt microarch objects and is
+        only visible in the live runner's /proc maps — the method this host used
+        for its 2026-08-23 note on this packet, which needs a running server and a
+        podman exec and is therefore a different tool than a static binary check.
+        The two are complementary: this script answers "what can this build do",
+        the maps read answers "what did this process choose". Neither subsumes the
+        other, and a future packet wanting the second should say so rather than
+        widening this one.
+status:
+  - packet_id: engine-candidates-must-prove-cpu-dispatch-before-they-are-benchmarked
+    field: status
+    value: completed
+    ts: "2026-08-25T01:45:00Z"
+    host: linux_immutable

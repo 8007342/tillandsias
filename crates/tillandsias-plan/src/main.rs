@@ -2981,6 +2981,76 @@ fn main() {
                 return;
             }
 
+            // ORDER 861-n7f5. `--cpu-flags` is the ENGINE-DISPATCH projection:
+            // one line per distinct host_id, sorted, as
+            //   <host_id>\t<flags-csv>
+            // where flags is the sorted union, across the host's loci, of
+            // `cpu_flags` on every cpu-class device, or `none` when the host
+            // published a row that carries none.
+            //
+            // WHY THIS EXISTS RATHER THAN A SECOND INLINE PROBE. 861-n7f5's
+            // check must refuse an engine build that ignores vector features
+            // the HOST advertises, and criterion 3 requires the host's half of
+            // that comparison come from the published capability row — the
+            // accel_probe document already carries `cpu_flags` — never from a
+            // fresh `/proc/cpuinfo` read inside the checking script. 859-b2zc
+            // is the standing reminder of what re-derivation costs: three
+            // scripts re-implemented one probe and all three got it wrong the
+            // same way. The matrix is the single source; this arm is its
+            // machine-readable face.
+            //
+            // A host absent from the matrix prints NOTHING rather than an
+            // empty-flag line: absent and "reported no flags" are different
+            // facts and the caller must be able to tell them apart (843-624y).
+            if args.iter().any(|a| a == "--cpu-flags") {
+                let mut hosts: std::collections::BTreeMap<
+                    &str,
+                    std::collections::BTreeSet<String>,
+                > = std::collections::BTreeMap::new();
+                for ((host_id, _locus), entry) in &matrix {
+                    let slot = hosts.entry(host_id.as_str()).or_default();
+                    if let Some(devices) = entry.document["devices"].as_sequence() {
+                        for d in devices {
+                            if d["device_class"].as_str() != Some("cpu") {
+                                continue;
+                            }
+                            if let Some(flags) = d["cpu_flags"].as_sequence() {
+                                for f in flags {
+                                    if let Some(s) = f.as_str() {
+                                        let s = s.trim().to_ascii_lowercase();
+                                        if !s.is_empty() {
+                                            slot.insert(s);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                let want = args
+                    .iter()
+                    .position(|a| a == "--cpu-flags")
+                    .and_then(|i| args.get(i + 1))
+                    .filter(|a| !a.starts_with("--"))
+                    .map(|a| a.to_ascii_lowercase());
+                for (host_id, flags) in &hosts {
+                    if want
+                        .as_ref()
+                        .is_some_and(|w| host_id.to_ascii_lowercase() != *w)
+                    {
+                        continue;
+                    }
+                    let csv = if flags.is_empty() {
+                        "none".to_string()
+                    } else {
+                        flags.iter().cloned().collect::<Vec<_>>().join(",")
+                    };
+                    println!("{host_id}\t{csv}");
+                }
+                log_cli_usage(&subcommand, "answered", start_time.elapsed().as_millis());
+                return;
+            }
+
             // ORDER 843-624y. EMPTY IS NOT THE SAME FACT AS UNREPORTED, and
             // until now this arm could not tell them apart: it printed
             // "0 rows" and exited 0, which reads identically to a healthy
