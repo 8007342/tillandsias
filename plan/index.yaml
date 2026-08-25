@@ -25746,6 +25746,32 @@ plan_index:
         the load-bearing half; the refusal tests are the negative control.
       events:
         - type: progress
+          ts: "2026-08-25T05:56:13Z"
+          agent_id: "linux-yoga-opus5-20260825t055613z"
+          host: yoga
+          summary: |
+            SLICE 3 LANDED — the vsock_server.rs migration, designed last cycle and deliberately deferred as "a full cycle's work". It was. The guest's main control path now reads and writes through the shared codec.
+
+            WHAT MOVED. serve_ready_stream wraps the connection in Framed::new(stream, control_frame_codec()) ONCE, before the Hello, and everything afterwards — Hello read, HelloAck write, the reader task, all 17 write_envelope_with_shutdown call sites — goes through that one owner. write_envelope_with_shutdown is now generic over futures::Sink<Bytes, Error = io::Error> rather than AsyncWriteExt, which is what made this atomic: migrating the read without the write would have left two owners of one stream.
+
+            THE HAZARD, AND THE PIN THAT PROVES IT. The split is futures::StreamExt::split(framed) — the FRAMED, never tokio::io::split on the raw transport. Framed owns a read buffer and fills it opportunistically, so a single read can pull a pipelined Subscribe in alongside the Hello; reclaiming the stream afterwards discards it with no error and no log, and only when the peer pipelines. pipelined_hello_and_subscribe_both_survive_the_handoff writes both frames in ONE write_all and asserts the SubscribeAck arrives.
+
+            STATED PLAINLY BECAUSE IT MATTERS: that test CANNOT FAIL against the hand-rolled reader it was written beside. read_exact buffers nothing, so early bytes just wait in the socket. It is a pin for the migration, not a red-first reproduction, and the comment on it says so rather than letting a future reader assume it caught something. HAND-FALSIFIED against the exact naive shape instead: replacing the framed split with into_parts + a fresh Framed over the reclaimed io (dropping read_buf) makes it fail in 2s with its own message — "SubscribeAck did not arrive — a pipelined frame was swallowed at the handshake handoff". Restoring the split returns green.
+
+            ERROR SURFACES PRESERVED, which slice 1 measured as the expensive part and it held here too. read_framed_envelope remaps the codec's InvalidData bound rejection to "control frame too large" and its None-on-EOF to the UnexpectedEof "control wire closed" that read_exact used to produce; write_framed_envelope keeps the oversize pre-check AHEAD of the sink so 828-r2ek's "outbound frame too large" / InvalidData surface survives rather than becoming the codec's InvalidInput "frame size too big". A migration should not be detectable from outside by the shape of a failure.
+
+            THE HAND-ROLLED READER IS KEPT, AND IS NOW AN EXPLICIT EXCEPTION. read_envelope became dead in the production build; it is marked #[cfg(test)] with the reason written at its definition. It is the INTEROP EVIDENCE the migration rests on — this module's tests drive the framed server with a peer that decodes u32-BE ‖ postcard by hand, so "the codec produces the bytes the old framing produced" is asserted against an independent implementation rather than against itself. Delete it and the interop claim becomes a tautology. That comment is the exception-list entry the closure definition recorded last cycle requires.
+
+            COUNTS: production raw length decodes in vsock_server.rs are now 1 (the test-only fake) from 1 — the file always had exactly one, and it moved from production to test rather than disappearing. Tree-wide the count is unchanged at 18 and that is not a regression: the closure was redefined last cycle as at most one raw decode among PRODUCTION sites plus a reasoned exception list, precisely because the naive count cannot distinguish a fake from a duplicate.
+
+            VERIFIED: cargo test -p tillandsias-headless --features listen-vsock 484 passed / 0 failed / 3 ignored (35/35 in vsock_server::tests); clippy -D warnings clean; the default feature set still checks (the new #[cfg(test)] AsyncReadExt import is scoped so a non-test build has no unused import); ./build.sh --check green after cargo fmt.
+
+            tokio-util was added to tillandsias-headless as a workspace dependency for Framed. The codec still comes from control_frame_codec() rather than a builder configured here — a second construction site is exactly where max_frame_length would drift, and LengthDelimitedCodec::new() defaults to 8 MiB, 128x looser than every reader on this wire.
+
+            PRE-EXISTING FAILURE, baselined not assumed: tests/proxy_cache_policy.rs::bumped_origin_tls_and_signed_url_logs_fail_closed fails in the full crate run. I stashed this slice and re-ran — identical failure on a clean tree. It is 828-etu6, already filed; I added a note there that it reproduces on LINUX and not only on osx-next as its title implies, since the assertion is a source grep.
+
+            REMAINING SLICES, unchanged from slice 1's list except that vsock_server is now done: pty_vsock_bridge.rs (macOS-only; note its :241 currently DROPS an oversize message and keeps the session alive, and a Sink error is terminal, so a naive swap turns that into killing the PTY session), tray/mod.rs (blocking std UnixStream with an Arc<Mutex<UnixStream>> subscriber registry — disposition it under criterion 1's second branch rather than rewriting the tray onto a runtime), hvsocket.rs (Windows-only, no production callers, only #[ignore]d live-WSL tests — last, on Windows), and tests/vsock_listener_e2e.rs.
+        - type: progress
           ts: "2026-08-25T03:48:54Z"
           agent_id: "linux-yoga-opus5-20260825t034854z"
           host: yoga
@@ -33538,6 +33564,15 @@ plan_index:
         the launch by a stable anchor (`squid -N`, or the supervisor path) so a
         future wrapper does not break it a third time.
 
+      events:
+        - type: note
+          ts: "2026-08-25T05:54:06Z"
+          agent_id: "linux-yoga-opus5-20260825t055406z"
+          host: yoga
+          summary: |
+            REPRODUCES ON LINUX TOO — the title says "RED on osx-next" and that reads as platform-specific, which will cost the next reader a bisect. It is not: the assertion is a SOURCE GREP of images/proxy/entrypoint.sh for the literal `exec squid -N`, so it is red on every host that checks out the tree. Confirmed on yoga (linux_immutable) 2026-08-25 at linux-next e70cb7184: `cargo test -p tillandsias-headless --features listen-vsock --test proxy_cache_policy` gives 2 passed / 1 failed, `bumped_origin_tls_and_signed_url_logs_fail_closed` panicking at proxy_cache_policy.rs:112 — the same line this row already names.
+
+            Baselined deliberately rather than assumed: I hit it while running the crate suite for 795-5itp's vsock_server migration, stashed my changes, and re-ran. Identical failure with a clean tree, so it is pre-existing and unrelated. Recording that here so the next person who meets it in a full-suite run can attribute it in one step instead of repeating the stash.
     - packet_id: eight-production-control-wire-writes-have-no-length-bound
       next_action: 'Windows host: bound the two hvsocket.rs writes (hvsocket_handshake Hello + hvsocket_send) via one shared AsyncWrite helper or the 795-5itp codec migration; audit callers for discarded Results first; negative controls per the 2026-08-22 progress event; verify test count increases under the lane''s own test command.'
       order: 828-r2ek
