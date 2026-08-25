@@ -75,7 +75,7 @@ packets:
           boundary — the failure this packet records must be reproducible and
           then absent.
     verifiable_closure: |
-      NAMED: extend `litmus:meta-orchestration-worktree-boundary` (or the
+      NAMED: extend `litmus:meta-orchestration-dirty-tree-safety` (or the
       meta-orchestration suite's boundary fixture) with a case that snapshots,
       edits a tracked file the way a maintenance-body fix would, applies the
       chosen discharge, and asserts `verify` returns ok AND
