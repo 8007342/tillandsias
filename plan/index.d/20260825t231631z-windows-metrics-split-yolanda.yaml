@@ -1,0 +1,72 @@
+packets:
+  - packet_id: windows-instrumentation-writes-to-a-tmp-the-metrics-reader-cannot-see
+    order: 890-t9pu
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: on Windows the gate writes its timing/usage records into WSL's /tmp while cycle-metrics.sh reads Git Bash's /tmp, so every Windows timing metric in every handoff is stale or absent — and the numbers that DO exist are attributed to host "unknown"
+    deliverable: a timing/usage log location both sides of the WSL boundary agree on (repo-relative under target/, or an explicit TILLANDSIAS_TIMING_LOG forwarded across the dispatch) + host attribution in the WSL-side records
+    pickup_role: windows
+    release_target: convergence-velocity-milestone
+    capability_tags:
+      - windows
+      - wsl
+      - metrics
+      - observability
+    estimated_hours: 2
+    context: |
+      MEASURED on yolanda 2026-08-25, found while assembling a timing
+      comparison against yoga (the matched-hardware sibling).
+
+      `./build.sh --check` dispatches into WSL, so its self-instrumentation
+      lands in WSL's /tmp. `scripts/cycle-metrics.sh` runs on the Git Bash side
+      and reads Git Bash's /tmp. They are different filesystems, and neither
+      knows the other exists.
+
+        Git Bash /tmp/tillandsias-timing.jsonl: last write 2026-08-23,
+                                                build-check records: 0
+        WSL     /tmp/tillandsias-timing.jsonl: last write 2026-08-25 16:05,
+                                                build-check records: 322
+
+      CONSEQUENCE, and it is not cosmetic. This host's own cycle handoff
+      earlier tonight reported `timing: steps=170 build_check_ms_avg=-
+      slowest=litmus:cycle-metrics-answer-rate-shape:63411`. Every part of that
+      line is wrong: `build_check_ms_avg` is not "unmeasured", it is measured
+      322 times in a log the reader cannot open, and the named `slowest` step
+      is whatever happened to be in a two-day-old log rather than this cycle's
+      actual worst step. The metric the velocity work steers by
+      (`timing:`/`slowest`) is, on this platform, reporting a different
+      machine's afternoon.
+
+      THE REAL NUMBER, from the WSL-side log, last 20 runs:
+      build-check avg = 276.5s (individual runs tonight: 287s, 324s, 334s).
+      The comparison that motivates the packet: yoga, matched silicon
+      (Ryzen AI 5 340 vs this host's AI 7 350), bare-metal Silverblue,
+      reports `./build.sh --check` at 26.5s. That is a ~10.4x gate cost for
+      the WSL2 lane on hardware that is otherwise a controlled match, and it
+      was invisible in every handoff this host has ever written.
+
+      SECOND DEFECT IN THE SAME LOG: 2977 records carry `"host":"unknown"`.
+      Whatever derives host identity does not resolve inside the WSL
+      dispatch, so even the records that survive cannot be attributed to a
+      machine — which is what a fleet-wide rolling view needs most.
+
+      This is the same boundary that produced 889-8tcb (the gate stamp) and
+      the WSLENV gap (`with-wsl2-builder.sh:231` forwards only
+      TILLANDSIAS_SKIP_WSL2). Three defects, one cause: the Windows lane
+      crosses a filesystem/process boundary that nothing in the shared tooling
+      models, and each piece of tooling discovers it separately. Worth
+      considering whether the boundary deserves one explicit contract rather
+      than a third point fix.
+    verifiable_closure: |
+      `scripts/cycle-metrics.sh` on a Windows host reports a non-empty
+      `build_check_ms_avg` whose value matches the durations the gate actually
+      recorded for that host, and the records it reads carry the real hostname
+      rather than "unknown".
+    evidence:
+      - 'git bash /tmp log: 0 build-check records, last write 2026-08-23'
+      - 'wsl /tmp log: 322 build-check records, last write 2026-08-25T16:05'
+      - 'build-check avg 276528ms over last 20 runs (wsl-side log)'
+      - 'yoga matched-hardware baseline for the same command: 26.5s'
+      - '2977 records with host="unknown" in the wsl-side log'
