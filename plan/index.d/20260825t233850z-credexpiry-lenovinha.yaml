@@ -1,0 +1,177 @@
+packets:
+  - packet_id: credential-guard-verdict-has-a-shelf-life
+    order: 892-aw9p
+    release_target: fail-loud-diagnosis-milestone
+    status: completed
+    desired_release: v0.5
+    role: tooling
+    priority: p1
+    kind: bug
+    title: |
+      The Credential Channel Guard samples once at Start-Of-Cycle, so a token that expires mid-cycle surfaces only at the final push — after the work and after the gate.
+    deliverable: scripts/check-credential-channel.sh
+    depends_on: []
+    pickup_role: any
+    owner_host: any
+    capability_tags:
+      - tooling
+      - fail-loud
+      - multi-host
+    estimated_hours: 2
+    problem: |
+      DISCOVERED BY calmecacpilli, 2026-08-25, and filed here only because that
+      host is BLOCKED BY THE VERY DEFECT — it cannot push, so it cannot file.
+      Not claimed by lenovinha; recorded so it cannot evaporate. calmecacpilli
+      keeps first refusal on implementing it.
+
+      The guard runs once, at Start-Of-Cycle, before any committable work. On
+      calmecacpilli it PASSED, the cycle proceeded, two pushes succeeded, and the
+      gh keyring token then died roughly fifty minutes in. The failure surfaced
+      at the final push — after the implementation, after the local gate, after
+      the attestation was due. pirria hit the same expiry shape earlier the same
+      day and the operator refreshed the token.
+
+      A guard that samples once cannot see an expiry after it runs. That is not a
+      bug in what the guard MEASURES — the verdict was true when issued — it is
+      that the verdict has a SHELF LIFE nothing tracks or states.
+    why_it_matters: |
+      This is the most expensive possible moment to discover an auth failure. The
+      cycle's whole cost is already sunk: work implemented, gate run (276s on the
+      slowest host), attestation prepared. And the Non-Negotiable Exit Contract
+      forbids exiting with unpushed local commits, so the host is wedged rather
+      than merely delayed — exactly the state 872-c9nd showed can end with four
+      hours of finished work deleted.
+
+      Structurally identical to the stale-gate-stamp problem (887-bz88): a check
+      whose result outlives the thing it checked. Worth stating that way, because
+      the fix shape is probably the same one — re-verify at the moment of use
+      rather than trusting an earlier sample.
+    exit_criteria:
+      - |
+          A credential that expires mid-cycle is detected BEFORE the cycle's expensive work is sunk, or the failure names the expiry explicitly rather than presenting as a generic push failure.
+      - |
+          The remedy is stated in terms the blocked host can act on, and distinguishes an EXPIRED token from an absent channel and from a ref-state refusal (886-qmdz) — three conditions that previously produced overlapping verdicts.
+      - |
+          NEGATIVE CONTROL: the healthy path costs no additional round trips per push. A guard that re-probes on every operation trades one rare failure for a permanent slowdown, and a slow guard is one that gets bypassed.
+      - |
+          A host that IS wedged by this has a documented, non-destructive path to preserve its work (the 872-c9nd salvage path is the obvious candidate — confirm it applies and reference it, or say why it does not).
+    notes: |
+      RELATED BUT DISTINCT from 886-qmdz, which this host fixed earlier the same
+      night: that made the guard's verdict CORRECT (a branch merely behind origin
+      was reported as a missing credential). This is about the verdict's LIFETIME.
+      The two compose usefully — since 886-qmdz, a ref-state refusal returns
+      `ok:gh-keyring-push-verified-refstate-refused` and exits 0, so anything
+      still reporting `blocked:*` is a real credential fault. A host diagnosing
+      this defect on a checkout PREDATING 886-qmdz cannot rely on that
+      separation and should re-run the guard at a current HEAD first.
+    events:
+      - type: filed
+        ts: "2026-08-25T23:40:00Z"
+        agent_id: lenovinha-opus5-metaorch-20260825t233723z
+        host: lenovinha
+        summary: |
+          Filed BY lenovinha ON BEHALF OF calmecacpilli, who observed it and
+          cannot push. The observation is theirs; only the transcription is mine.
+          Recorded per the Reduction Engine's mandatory-capture rule — an unfiled
+          finding is a lost finding, and a finding held on a host that cannot
+          push is one teardown from unfiled.
+events:
+  - packet_id: credential-guard-verdict-has-a-shelf-life
+    event:
+      type: note
+      ts: "2026-08-25T23:50:00Z"
+      agent_id: lenovinha-opus5-metaorch-20260825t233723z
+      host: lenovinha
+      summary: |
+        HANDED OVER BY calmecacpilli DIRECTLY, after I filed this on their behalf
+        and offered rather than assigned. Their reason for handing it over is
+        worth keeping: they are session-local and die with their user's
+        terminal, so "I'll take it next cycle" is a promise they may not be alive
+        to keep. A standing host is the right owner for a finding that must not
+        wait five hours.
+
+        THEY RULED OUT MY OWN FALSE-POSITIVE SHAPE BEFORE HANDING IT OVER, which
+        is why this is a measurement and not a guess:
+          grep -c refstate-refused scripts/check-credential-channel.sh -> 2
+          scripts/check-credential-channel.sh -> missing:no-credential-channel (rc=1)
+          gh auth status -> "The token in keyring is invalid."
+        Their checkout DOES carry 886-qmdz, so a behind-branch refusal would have
+        returned ok:gh-keyring-push-verified-refstate-refused and exited 0. It
+        did not. The token is genuinely dead, established by evidence.
+  - packet_id: credential-guard-verdict-has-a-shelf-life
+    event:
+      type: implemented
+      ts: "2026-08-26T00:00:00Z"
+      agent_id: lenovinha-opus5-metaorch-20260825t233723z
+      host: lenovinha
+      summary: |
+        THE CHEAP INSTANCE, LANDED ON ITS OWN. calmecacpilli asked that the
+        five-line fix not be held hostage to the taxonomy and the coordinator
+        endorsed it; the CLASS question (which gate checks have results that go
+        stale between check and use) is deliberately NOT in this packet.
+
+        `scripts/check-credential-channel.sh reverify` re-probes and, when the
+        channel is dead AND a passing stamp from earlier this cycle exists,
+        returns the distinct verdict `blocked:credential-expired-mid-cycle`. The
+        stamp is written only on a pass and records only that a pass happened —
+        it exists solely so the guard can tell "this credential DIED" from "this
+        host never had one", two conditions with the same repair cost and very
+        different diagnoses, previously both reported as
+        missing:no-credential-channel.
+
+        WHERE IT RUNS IS THE DESIGN. Wired into the skill at Finalization 3b,
+        immediately BEFORE `./build.sh --check` — the last point where the
+        remaining cost is still worth saving. A dead credential now costs the
+        gate's wall-clock (40s here, 276s on the slowest host) instead of being
+        found after it, with the work done and the exit contract forbidding an
+        unpushed exit. NOT per push: the healthy path must not pay a round trip
+        per git operation, and a guard slow enough to notice is one that gets
+        bypassed. An explicit fixture arm counts probe INVOCATION sites to keep
+        that true.
+
+        The stderr diagnosis states the credential worked and then stopped,
+        names `gh auth refresh` rather than store-seeding, and points at the
+        872-c9nd salvage path — because a host wedged this way must be told how
+        to preserve its work, not left to discard it to get unstuck.
+  - packet_id: credential-guard-verdict-has-a-shelf-life
+    event:
+      type: verified
+      ts: "2026-08-26T00:05:00Z"
+      agent_id: lenovinha-opus5-metaorch-20260825t233723z
+      host: lenovinha
+      summary: |
+        scripts/test-check-credential-channel.sh green, extended by four arms:
+        reverify passes a healthy channel through unchanged; a pass records a
+        stamp; a DIED channel returns blocked:credential-expired-mid-cycle with
+        a diagnosis naming the refresh and the salvage path; and the probe count
+        on the hot path did not grow.
+
+        NEGATIVE CONTROL that matters most: with NO prior pass, reverify must NOT
+        claim an expiry. A host that never had a credential has not lost one, and
+        claiming otherwise sends the reader to refresh a token that never
+        existed.
+
+        TWO FIXTURE BUGS FOUND AND FIXED WHILE WRITING IT, both my own and both
+        the shape I spent tonight fixing elsewhere:
+
+          - The no-auth `gh` stub was never created (a heredoc insert missed its
+            anchor), so PATH fell through to the REAL gh and the no-prior-pass
+            arm passed on THIS HOST'S LIVE CREDENTIAL rather than on the
+            condition it claimed to test. It returned blocked:gh-cli-only; with
+            the stub it correctly returns missing:no-credential-channel.
+          - The hot-path assertion was a bare `grep -c 'push --dry-run'`, which
+            counted two COMMENT lines describing the probe and fired at 5 when
+            there are 3 real invocation sites. That is exactly the incidental
+            co-occurrence defect fixed in the promotion gate earlier tonight
+            (888-m75r) — reproduced inside a test written to check for that kind
+            of sloppiness.
+
+        ./build.sh --check green. The default no-arg invocation is unchanged and
+        still matches litmus:credential-channel-check-shape; the new verdict is a
+        single token with no second colon.
+
+        NOT CLOSED BY THIS: the CLASS. Credentials and build stamps are two
+        instances of "a check whose result outlives the thing it checked", and
+        both surface late and expensively — plausibly because a check consumed
+        far from where it was produced has the widest staleness window. Filed
+        separately rather than folded in here.
