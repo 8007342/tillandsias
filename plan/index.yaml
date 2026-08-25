@@ -43562,6 +43562,12 @@ plan_index:
         (1) A design note under openspec/ recording the lane selection mechanism and the per-platform substrate (podman / WSL2 / VFR guest), with the unknowns above as measured answers, not assumptions. (2) A Linux prototype: a clean container with no host toolchain builds a tillandsias crate with the enclave cache as its only substituter, and the wall-clock is recorded cold vs cache-warm alongside GPU/load state. (3) The lane is OPT-IN behind an env var first; build.sh behaviour is byte-identical when it is unset. (4) A measured statement of the WSL2 and macOS paths — even if the statement is "deferred, here is the cost" — so the cross-platform half is a decision rather than a hope.
       events:
         - type: progress
+          ts: "2026-08-25T13:44:05Z"
+          agent_id: "linux-macuahuitl-opus5-20260825t134405z"
+          host: macuahuitl
+          summary: |
+            ROUND 3 — THE CACHE WORKS, MEASURED: after the 113s upstream-assisted seed into the served chroot store, the cache-only dry-run of .#tillandsias-x86_64-musl went from 2791-will-build/0-fetched to FIVE will-build + 558 paths fetched (3.1 GiB), resolution in 6.0s wall — the enclave cache serves ~99.8% of the closure, and the residual five are the project's own source-stamped derivations, exactly what a warm cache should leave. GPU during runs: 0% util, 664->2369 MiB (operator app share recorded). ONE MORE PLUMBING FACT FOR THE DESIGN NOTE: Fedora's packaged nix (2.34.8, /usr/bin/nix) pins ssl-cert-file as a SETTING (/etc/pki tls-ca-bundle), which OVERRIDES NIX_SSL_CERT_FILE and SSL_CERT_FILE env — consumers must pass --option ssl-cert-file <state-dir>/ca-bundle.crt (curl verifies with the same bundle, so the chain itself is sound; this cost the first warm probe a false 0%-coverage reading and is exactly the kind of host-dialect fact the lane wrapper must own). REMAINING for EC2: one real warm BUILD (fetch 3.1GiB + build 5) timed cold-vs-warm — near-free on this host now; and the long-lived builder-container slice per the corrected 801-x1nx direction. Honest note: the 113s 'cold' was upstream-assisted seeding; true cold-from-source is hours and deliberately unmeasured (nobody will ever do it once seeding is policy).
+        - type: progress
           ts: "2026-08-25T13:39:46Z"
           agent_id: "linux-macuahuitl-opus5-20260825t133946z"
           host: macuahuitl
