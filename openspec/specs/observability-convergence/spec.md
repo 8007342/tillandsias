@@ -1,4 +1,5 @@
 <!-- @trace spec:observability-convergence -->
+<!-- # freshness: auditor=linux-macuahuitl-fable5-20260825t195813z date=2026-08-25 verdict=updated scope=standing FRESHNESS audit (order 372; freshness-next draw, seed=20260825). LIVE — traced from crates/tillandsias-metrics/src/dashboard.rs, crates/tillandsias-headless/src/main.rs and the convergence dashboard scripts; requirements re-read and still describe the delivered metric surface. UPDATED because nine example/verification paths referenced the retired src-tauri/ tree (pre-crates architecture): corrected to crates/ so a reader reproducing the Verification section runs commands that can match real files; no requirement semantics changed. -->
 
 # observability-convergence Specification
 
@@ -46,7 +47,7 @@ Traces MUST be counted and validated to ensure they cover the spec they referenc
 
 #### Scenario: Trace count per spec
 - **WHEN** counting all `@trace spec:<name>` annotations in the codebase
-- **THEN** the tray MUST log `spec = "<name>", trace_count = 42, trace_locations = ["src-tauri/src/handlers.rs:123", ...]`
+- **THEN** the tray MUST log `spec = "<name>", trace_count = 42, trace_locations = ["crates/tillandsias-headless/src/main.rs:123", ...]`
 - **AND** traces MUST be grouped by file and function
 
 #### Scenario: Dead trace detection
@@ -215,7 +216,7 @@ The following critical verification paths MUST be reproducible against the tray 
 REQ_COUNT=$(grep -c "^### Requirement:" openspec/specs/app-lifecycle/spec.md)
 
 # Count traces for that spec
-TRACE_COUNT=$(grep -r "@trace spec:app-lifecycle" src-tauri/ --include="*.rs" | wc -l)
+TRACE_COUNT=$(grep -r "@trace spec:app-lifecycle" crates/ --include="*.rs" | wc -l)
 
 # Compute coverage
 COVERAGE=$((TRACE_COUNT * 100 / REQ_COUNT))
@@ -229,14 +230,14 @@ echo "Coverage: $COVERAGE% ($TRACE_COUNT/$REQ_COUNT)"
 #### Test: Dead trace detection
 ```bash
 # Create a trace to a spec that doesn't exist
-sed -i 's/@trace spec:foo/@trace spec:nonexistent-spec/' src-tauri/src/main.rs
+sed -i 's/@trace spec:foo/@trace spec:nonexistent-spec/' crates/tillandsias-headless/src/main.rs
 
 # Run coverage check
 ./tillandsias-tray --check-specs 2>&1
-# Expected: "dead_trace = true, spec = nonexistent-spec, file = src-tauri/src/main.rs"
+# Expected: "dead_trace = true, spec = nonexistent-spec, file = crates/tillandsias-headless/src/main.rs"
 
 # Revert
-git checkout src-tauri/src/main.rs
+git checkout crates/tillandsias-headless/src/main.rs
 ```
 
 #### Test: Latency tracking
@@ -256,12 +257,12 @@ git commit -m "test: create latency spec"
 SPEC_DATE=$(git log -1 --format=%aI openspec/specs/test-latency/spec.md)
 
 # Add implementation trace
-echo "// @trace spec:test-latency" >> src-tauri/src/test.rs
-git add src-tauri/src/test.rs
+echo "// @trace spec:test-latency" >> crates/tillandsias-headless/src/test.rs
+git add crates/tillandsias-headless/src/test.rs
 git commit -m "test: implement latency spec"
 
 # Record implementation time
-IMPL_DATE=$(git log -1 --format=%aI src-tauri/src/test.rs)
+IMPL_DATE=$(git log -1 --format=%aI crates/tillandsias-headless/src/test.rs)
 
 # Run latency check
 ./tillandsias-tray --metrics 2>&1 | grep -i "test-latency.*latency"
@@ -283,7 +284,7 @@ IMPL_DATE=$(git log -1 --format=%aI src-tauri/src/test.rs)
 
 Annotations referencing this spec can be found by:
 ```bash
-grep -rn "@trace spec:observability-convergence" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+grep -rn "@trace spec:observability-convergence" scripts/ crates/ images/ --include="*.rs" --include="*.sh"
 ```
 
 Log events SHALL include:

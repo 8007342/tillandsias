@@ -192,7 +192,11 @@ if [[ -f scripts/release-preflight.sh ]]; then
     verdict="$(bash scripts/release-preflight.sh 2>/dev/null | tail -1)"
     rc=$?
     if [[ $rc -ne 0 || "$verdict" != "ok:release-preflight" ]]; then
-        detail="$(bash scripts/release-preflight.sh 2>&1 >/dev/null | head -6)"
+        # head -12, not -6 (order 800-vk2p): the preflight's own header plus a
+        # branch-aware remedy runs longer than six lines, and this hook is where
+        # a stuck pusher actually reads the refusal. A cap that truncates the
+        # remedy hides the one line that unblocks them.
+        detail="$(bash scripts/release-preflight.sh 2>&1 >/dev/null | head -12)"
         refuse "release preflight says ${verdict:-<no verdict>}" \
                "$detail" \
                "" \
