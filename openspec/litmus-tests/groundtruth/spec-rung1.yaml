@@ -1,7 +1,7 @@
 # ORDER 551 — ground truth for the FAT SPEC EXPERT (spec.answer).
 #
 # @trace order:551
-# @trace spec:fat-spec-corpus-index
+# @trace order:547
 #
 # Written to the format expert-groundtruth-rung1.yaml anticipated for exactly
 # this: register the engine in groundtruth.rs (ENGINES + Harness::run), drop a

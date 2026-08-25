@@ -112,7 +112,8 @@ RUN chmod +x /usr/local/bin/tillandsias-entrypoint.sh \
              /usr/local/bin/sse-keepalive-proxy.js
 
 # ── Locale ──────────────────────────────────────────────────────
-# @trace spec:forge-git-ergonomics
+# (Ghost trace to the never-written forge-git-ergonomics spec removed, 877 —
+# a locale default is image plumbing, not a git contract.)
 ENV LANG=en_US.UTF-8
 
 # No GIT_ASKPASS helper in the forge image — forge containers have ZERO

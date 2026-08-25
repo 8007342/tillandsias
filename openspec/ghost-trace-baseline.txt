@@ -3,15 +3,16 @@
 # merged union. All seven were resolved by the 767-yrnd owners and pruned
 # 2026-08-16 (linux_mutable cycle 2) when the ratchet flagged the baseline
 # stale — the gate's may-only-shrink direction enforced exactly this removal.
-enclave-service-catalog
-fat-spec-corpus-index
-forge-git-ergonomics
-forge-git-identity-anonymization
-forge-push-credential-channel
+# 2026-08-25 pruned eight (740-k8ef, macuahuitl): four specs WRITTEN
+# (meta-orchestration, enclave-service-catalog, guest-crashloop-detection,
+# forge-git-identity-anonymization — all registry-asserted or multi-site),
+# four re-pointed to real specs/orders or removed where the trace was
+# decoration (fat-spec-corpus-index -> order:547; litmus-runner ->
+# spec:litmus-framework; forge-push-credential-channel ->
+# spec:git-mirror-service; forge-git-ergonomics -> trace removed, locale
+# setup is not a git contract). The ratchet flagged the baseline stale and
+# this prune rode the fixing commit, exactly as designed.
 forge-skills-mapping
-guest-crashloop-detection
-litmus-runner
-meta-orchestration
 # 2026-08-23 SCOPE WIDENING (867-vd4z), lenovinha. The six below are not new
 # ghosts and nothing regressed: the gate simply could not see them. It scanned
 # six file types and never *.yaml, where 979 of the repository's ~4,200 trace

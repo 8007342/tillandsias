@@ -111,7 +111,8 @@ CACHE="$HOME/.cache/tillandsias"
 export PATH="$CACHE/openspec/bin:$HOME/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 
 # ── Standard environment variable setup ─────────────────────
-# @trace spec:forge-git-ergonomics
+# (Ghost trace to the never-written forge-git-ergonomics spec removed, 877 —
+# this block is generic environment setup, not a git contract.)
 # Set locale if not already set, to avoid locale-sensitive tool warnings.
 export LANG="${LANG:-en_US.UTF-8}"
 
