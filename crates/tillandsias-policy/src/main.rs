@@ -1301,7 +1301,36 @@ fn check_cheatsheet_sources(args: &[String]) {
     let index_file = sources_dir.join("INDEX.json");
 
     // Sanity: INDEX.json must exist. Mirrors the shell early-exit (exit 0).
+    //
+    // TWO REASONS IT CAN BE ABSENT, AND THEY MEAN OPPOSITE THINGS (order
+    // 372 freshness audit, yoga 2026-08-25). "Not fetched yet" is a
+    // migration state and the right advice is to fetch. "Deliberately
+    // retired" is a tombstone state and fetching is the WRONG advice —
+    // it would re-populate a layer someone removed on purpose.
+    //
+    // This validator could not tell them apart, so after the
+    // 2026-08-23 retirement (cheatsheet-sources/.gitkeep-tombstone,
+    // superseded by cheatsheets-license-tiered) it kept printing a
+    // migration-era instruction to re-fetch into a retired directory,
+    // exiting 0, on every pre-commit that touches openspec. A guard that
+    // passes vacuously is bad; one that passes vacuously WHILE giving an
+    // instruction that would undo a deliberate retirement is worse.
+    //
+    // The tombstone is a file, so the distinction is machine-decidable.
+    let tombstone = sources_dir.join(".gitkeep-tombstone");
     if !index_file.is_file() {
+        if tombstone.is_file() {
+            println!(
+                "ok:cheatsheet-sources-retired — the verbatim source layer was retired \
+                 (see {}); there is no INDEX.json to validate and there should not be one.",
+                tombstone.display()
+            );
+            println!(
+                "  Replacement: image-baked /opt/cheatsheet-sources/ (bundled tier) and the \
+                 per-project pull cache. Do NOT re-fetch into cheatsheet-sources/."
+            );
+            return;
+        }
         println!(
             "warning: {} does not exist — no sources fetched yet; nothing to validate",
             index_file.display()
