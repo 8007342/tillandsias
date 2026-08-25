@@ -78,6 +78,11 @@ surfaces=(
   # past a handful, the right fix is to distinguish invocation from mention,
   # not to widen the net.
   scripts/archive-plan-packets.sh
+  # check-engine-cpu-dispatch.sh (861-n7f5) is invoked at
+  # scripts/bench-inference-floor.sh:324 via a $(dirname)-relative path — a
+  # live production caller this list could not see, reported orphan=1 and
+  # failing --ci-full on 2026-08-25. Same class as archive-plan-packets above.
+  scripts/bench-inference-floor.sh
 )
 
 # Self-reference guard: don't count a script referencing its OWN name, and don't

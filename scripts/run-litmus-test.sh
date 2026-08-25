@@ -1578,7 +1578,13 @@ print_summary() {
                 'NF >= 3 { name = $2; sub(/^litmus:/, "", name); printf "litmus:%s\t%s\t%s\t%s\t%s\n", name, phase, $1, $3, host }' \
                 | bash "$PROJECT_ROOT/scripts/cycle-metrics.sh" --emit-timing-batch
         } 2>/dev/null || true
-        _slow_tests="$(printf '%s' "$_PER_TEST_LOG" | sort -rn | awk -F'\t' '$1 >= 500 {printf "  %7.1fs  %s\n", $1/1000, $2}' | head -10)"
+        # `|| true`: under `set -eo pipefail`, head's early close SIGPIPEs
+        # sort/awk (rc 141) once the sweep is big enough to overflow ten
+        # lines, aborting the runner AFTER it printed PASS — ci-full then
+        # reported "litmus failures detected" over a log reading 100%
+        # (measured 2026-08-25: full pre-build quick sweep exit 141, single
+        # -spec runs unaffected because head never closes early on them).
+        _slow_tests="$(printf '%s' "$_PER_TEST_LOG" | sort -rn | awk -F'\t' '$1 >= 500 {printf "  %7.1fs  %s\n", $1/1000, $2}' | head -10 || true)"
         if [[ -n "$_slow_tests" ]]; then
             printf '%bSlowest tests%b (>=0.5s, top 10; full ranking in the timing records):\n%s\n\n' "${BOLD}" "${NC}" "$_slow_tests" >&2
         fi

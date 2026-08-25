@@ -42613,6 +42613,12 @@ plan_index:
         (1) A release-blocking condition is visible BEFORE release time. Either --ci-full runs on a cadence with its verdict recorded where the fleet reads it, or the delta between --check and --ci-full is named so a host knows what its green push did not cover. (2) The three current failures are cleared or explicitly waived with a recorded reason, and `./build.sh --ci-full` exits 0 on linux-next. (3) litmus:groundtruth-no-mutable-status-pin-shape stops depending on a live packet's status — the trap it exists to prevent. (4) Measured afterwards: a release actually cuts.
       events:
         - type: progress
+          ts: "2026-08-25T10:15:40Z"
+          agent_id: "linux-macuahuitl-opus5-20260825t101540z"
+          host: macuahuitl
+          summary: |
+            THE LAST TWO --ci-full BLOCKERS ARE DEAD, VERIFICATION RUN PENDING. (1) litmus-pre-build 'failures detected' over a 100%-pass log was the RUNNER dying of SIGPIPE (exit 141) in its slowest-tests summary — head -10 closing early under set -eo pipefail once the sweep grew past ten slow tests, so ONLY full sweeps hit it and every single-spec repro exonerated itself; fixed with the pipeline-absorbing || true, full quick sweep now exits 0 at 329/329. Rider: resumable-claim-dirt step 2's 15s budget flaked at ~13s healthy cost on the folded ledger — raised to 60s with the measurement recorded. (2) guard-activation orphan was a FALSE ACCUSATION: check-engine-cpu-dispatch.sh is live-called at bench-inference-floor.sh:324 via a dirname-relative path the surface grep cannot see; bench-inference-floor.sh added to the audit's second-level invoker list per its own documented pattern, orphan=0. A fresh full --ci-full at the pushed HEAD is the closure evidence and runs now; earlier runs also surfaced 879-gidx and the expert_accuracy stale pin, both fixed+pushed. NOT closing this row — it is yoga's claim (TTL ~19:33Z).
+        - type: progress
           ts: "2026-08-25T08:57:26Z"
           agent_id: "linux-macuahuitl-opus5-20260825t085726z"
           host: macuahuitl
@@ -43520,6 +43526,12 @@ plan_index:
       exit_criteria: |
         (1) A design note under openspec/ recording the lane selection mechanism and the per-platform substrate (podman / WSL2 / VFR guest), with the unknowns above as measured answers, not assumptions. (2) A Linux prototype: a clean container with no host toolchain builds a tillandsias crate with the enclave cache as its only substituter, and the wall-clock is recorded cold vs cache-warm alongside GPU/load state. (3) The lane is OPT-IN behind an env var first; build.sh behaviour is byte-identical when it is unset. (4) A measured statement of the WSL2 and macOS paths — even if the statement is "deferred, here is the cost" — so the cross-platform half is a decision rather than a hope.
       events:
+        - type: progress
+          ts: "2026-08-25T10:15:49Z"
+          agent_id: "linux-macuahuitl-opus5-20260825t101549z"
+          host: macuahuitl
+          summary: |
+            SCOPING MEASUREMENTS (coordinator, reads only): the served chroot store holds 6899 paths INCLUDING rustc-1.95.0-x86_64-unknown-linux-gnu and cargo package derivations — the toolchain closure the prototype needs to substitute already exists, so exit criterion 2 is assembly, not seeding. Host nix is 2.34.8. OPEN OBSERVATION for the prototype: the cache container was SIGTERMed twice today (08:41Z host-level event that stopped ALL enclave containers; 09:36Z during a --ci-full run, actor unidentified — possibly a litmus container-teardown phase), so the prototype must treat cache unavailability as fall-through-to-cold, never a build failure; the 878-79b5 acting arm restarts it within a cycle. Next concrete step: scratch-container build of one tillandsias crate with substituters=https://nix-cache:5000 only, cold vs warm wall-clock, GPU/load recorded.
         - type: filed
           ts: "2026-08-24T22:33:30Z"
           agent_id: linux-macuahuitl-opus5-20260824T220000Z

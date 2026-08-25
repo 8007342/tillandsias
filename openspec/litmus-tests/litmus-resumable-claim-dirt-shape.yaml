@@ -39,7 +39,11 @@ critical_path:
 
   - step: "the detector emits exactly one well-formed verdict line on this live tree"
     command: "out=$(bash scripts/check-resumable-claim-dirt.sh); rc=$?; n=$(printf '%s\\n' \"$out\" | grep -cE '^(resumable:[0-9A-Za-z-]+(,[0-9A-Za-z-]+)*|ok:clean-tree|unattributable:.*)$'); [ \"$n\" = 1 ] && [ $rc -eq 0 -o $rc -eq 2 -o $rc -eq 3 -o $rc -eq 4 ] && echo 'ok: well-formed verdict' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
-    timeout_ms: 15000
+    # 60s, was 15s: the live-tree read costs ~13s HEALTHY on the coordinator's
+    # folded ledger (measured 2026-08-25, load1=1.00/20 cpus), so 15s was a
+    # razor margin that flaked under a concurrent full sweep — a budget
+    # failure, not a detector failure. The hermetic step above stays tight.
+    timeout_ms: 60000
     expected_behavior: "ok: well-formed verdict"
 
   - step: "the binary's list-live rows carry owner host and claim ts (six tab-separated fields)"
