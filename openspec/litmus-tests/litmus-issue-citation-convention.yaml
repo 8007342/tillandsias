@@ -1,0 +1,70 @@
+# freshness: auditor=linux-yoga-20260825t1343z date=2026-08-25 verdict=updated scope=created — order 881-29me; nothing checked that a plan/issues citation still resolved, and one audit's six citations all pointed at unrelated code
+name: litmus:issue-citation-convention
+spec: meta-orchestration
+phase: pre-build
+size: instant
+severity: medium
+description: >
+  Pin the citation-convention ratchet for `plan/issues/` (order 881-29me).
+
+  A `plan/issues/` audit cites its evidence and nothing checked those citations
+  still resolved. Measured in one document: every factual claim re-verified
+  TRUE while every `file:line` citation supporting it pointed at unrelated
+  code — total drift, not an offset, because the cited file had passed 22,000
+  lines.
+
+  THE OBVIOUS GATE WOULD NOT HAVE CAUGHT IT, which is why this test pins a
+  convention instead of a resolver: checking that the cited file has at least
+  that many lines PASSES all six drifted citations, since the files are huge
+  and every number is in range. Relating a span to the prose claim it supports
+  needs semantics no shell script has.
+
+  So the ratchet refuses NEWLY ADDED line citations and directs the author to
+  symbol citations. Diff-scoped on purpose — 1,282 already exist across 487
+  files, and a fleet-wide refusal would flip every host red at once (699-dycj).
+
+  Every case runs against a hermetic throwaway git repo, so nothing here
+  depends on what this checkout's own `plan/issues/` happens to contain.
+
+preconditions:
+  - workspace contains scripts/check-issue-citation-convention.sh
+
+critical_path:
+  - step: "Req: the gate exists, is executable, and emits its pinned verdict grammar"
+    command: "test -x scripts/check-issue-citation-convention.sh && scripts/check-issue-citation-convention.sh | grep -qE '^(ok:issue-citation-convention:[0-9]+ checked|violation:issue-citation-line-numbers:[0-9]+)$' && echo 'ok: grammar pinned'"
+    expected_behavior: "ok: grammar pinned"
+    timeout_ms: 30000
+
+  - step: "NEGATIVE CONTROL: a newly added file:line citation to code is REFUSED"
+    command: "d=$(mktemp -d); mkdir -p \"$d/plan/issues\" \"$d/scripts\"; cp scripts/check-issue-citation-convention.sh \"$d/scripts/\"; ( cd \"$d\" && git init -q . && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m base && git branch -q -f testbase && printf 'The const lives at `main.rs:1136-1145`.\\n' > plan/issues/new.md && out=$(TILLANDSIAS_ISSUE_CITATION_BASE=testbase bash scripts/check-issue-citation-convention.sh 2>/dev/null); rc=$?; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -qE '^violation:issue-citation-line-numbers:[0-9]+$' && echo 'ok: line citation refused' ); rm -rf \"$d\""
+    expected_behavior: "ok: line citation refused"
+    timeout_ms: 30000
+
+  - step: "POSITIVE CONTROL: the same claim cited by SYMBOL passes"
+    # Without this the refusal above could be satisfied by a gate that refuses
+    # every added line in plan/issues.
+    command: "d=$(mktemp -d); mkdir -p \"$d/plan/issues\" \"$d/scripts\"; cp scripts/check-issue-citation-convention.sh \"$d/scripts/\"; ( cd \"$d\" && git init -q . && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m base && git branch -q -f testbase && printf 'The const lives in `main.rs` `build_git_run_args`.\\n' > plan/issues/new.md && out=$(TILLANDSIAS_ISSUE_CITATION_BASE=testbase bash scripts/check-issue-citation-convention.sh 2>/dev/null); rc=$?; [ \"$rc\" -eq 0 ] && printf '%s' \"$out\" | grep -q '^ok:issue-citation-convention:' && echo 'ok: symbol citation accepted' ); rm -rf \"$d\""
+    expected_behavior: "ok: symbol citation accepted"
+    timeout_ms: 30000
+
+  - step: "ESCAPE HATCH: a reasoned cite-ok marker permits a deliberate line citation"
+    # Quoting a citation that has DRIFTED, as evidence, is how order 245
+    # recorded this finding in the first place. A ratchet with no way to do
+    # that would forbid describing its own motivating defect.
+    command: "d=$(mktemp -d); mkdir -p \"$d/plan/issues\" \"$d/scripts\"; cp scripts/check-issue-citation-convention.sh \"$d/scripts/\"; ( cd \"$d\" && git init -q . && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m base && git branch -q -f testbase && printf 'Drifted: `main.rs:1136-1145`. <!-- cite-ok: quoting the drifted citation IS the finding -->\\n' > plan/issues/new.md && out=$(TILLANDSIAS_ISSUE_CITATION_BASE=testbase bash scripts/check-issue-citation-convention.sh 2>/dev/null); rc=$?; [ \"$rc\" -eq 0 ] && echo 'ok: reasoned opt-out honored' ); rm -rf \"$d\""
+    expected_behavior: "ok: reasoned opt-out honored"
+    timeout_ms: 30000
+
+  - step: "SCOPE: a prose-to-prose citation into another markdown file is NOT judged"
+    # The rot this gate exists for is prose citing CODE, which moves under it.
+    command: "d=$(mktemp -d); mkdir -p \"$d/plan/issues\" \"$d/scripts\"; cp scripts/check-issue-citation-convention.sh \"$d/scripts/\"; ( cd \"$d\" && git init -q . && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m base && git branch -q -f testbase && printf 'See `plan/issues/other.md:42` for context.\\n' > plan/issues/new.md && out=$(TILLANDSIAS_ISSUE_CITATION_BASE=testbase bash scripts/check-issue-citation-convention.sh 2>/dev/null); rc=$?; [ \"$rc\" -eq 0 ] && echo 'ok: markdown citation left alone' ); rm -rf \"$d\""
+    expected_behavior: "ok: markdown citation left alone"
+    timeout_ms: 30000
+
+  - step: "DIFF-SCOPED: a PRE-EXISTING line citation on the base does NOT fail the gate"
+    # The load-bearing property. 1,282 citations already exist across 487
+    # files; a gate that judged them would flip every host red at once and be
+    # disabled the same day (699-dycj).
+    command: "d=$(mktemp -d); mkdir -p \"$d/plan/issues\" \"$d/scripts\"; cp scripts/check-issue-citation-convention.sh \"$d/scripts/\"; ( cd \"$d\" && git init -q . && printf 'Old: `main.rs:1136-1145`.\\n' > plan/issues/old.md && git add -A && git -c user.email=t@t -c user.name=t commit -q -m base && git branch -q -f testbase && out=$(TILLANDSIAS_ISSUE_CITATION_BASE=testbase bash scripts/check-issue-citation-convention.sh 2>/dev/null); rc=$?; [ \"$rc\" -eq 0 ] && echo 'ok: pre-existing citations are not judged' ); rm -rf \"$d\""
+    expected_behavior: "ok: pre-existing citations are not judged"
+    timeout_ms: 30000

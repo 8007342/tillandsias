@@ -2056,6 +2056,25 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Litmus scalar-unescape check passed"
 
+    # Order 881-29me. A `plan/issues/` audit cites its evidence and nothing
+    # checked those citations still resolved. Measured in one document: every
+    # factual claim re-verified TRUE while every `file:line` citation
+    # supporting it pointed at unrelated code — total drift, not an offset,
+    # because the cited file had passed 22,000 lines. A reader following one
+    # lands in plausible-looking neighbouring code and can "verify" a claim
+    # against something unrelated.
+    #
+    # A convention ratchet, NOT a resolver, and deliberately so: checking that
+    # the cited file has that many lines would PASS all six drifted citations.
+    # Diff-scoped, because 1,282 citations already exist across 487 files and a
+    # fleet-wide refusal would flip every host red at once (699-dycj).
+    _step "Checking new plan/issues citations name symbols, not lines (881-29me)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-issue-citation-convention.sh" 2>&1; then
+        _error "a newly added plan/issues citation names a source LINE (881-29me) — see the verdict line above"
+        exit 1
+    fi
+    _info "Issue-citation convention check passed"
+
     _step "Checking litmus pin claims resolve and execute (721-77yu)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-pin-claims.sh" 2>&1; then
         _error "a script claims a litmus pin that cannot execute (721-77yu) — see the verdict line above"
