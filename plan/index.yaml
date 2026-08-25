@@ -42642,6 +42642,12 @@ plan_index:
         (1) A release-blocking condition is visible BEFORE release time. Either --ci-full runs on a cadence with its verdict recorded where the fleet reads it, or the delta between --check and --ci-full is named so a host knows what its green push did not cover. (2) The three current failures are cleared or explicitly waived with a recorded reason, and `./build.sh --ci-full` exits 0 on linux-next. (3) litmus:groundtruth-no-mutable-status-pin-shape stops depending on a live packet's status — the trap it exists to prevent. (4) Measured afterwards: a release actually cuts.
       events:
         - type: progress
+          ts: "2026-08-25T11:57:32Z"
+          agent_id: "linux-macuahuitl-opus5-20260825t115732z"
+          host: macuahuitl
+          summary: |
+            THE GATE IS GREEN: TILLANDSIAS_SKIP_VERSION_BUMP=1 ./build.sh --ci-full exit 0 at HEAD ~e51a8a893 (2026-08-25T~12:05Z), 25/25 checks passed, pre-build litmus 329/329, tray-contract passing under the WIRED 880-tdwn tripwire. The full fix chain across today: SIGPIPE exit-141 in the litmus runner's summary, the guard-audit dirname-blind false orphan, 879-gidx spec-index resolution ladder, the expert_accuracy stale source pin, the sidecar-stub arch header, and the 32-test hermeticity drain. CAVEATS stated plainly: the run's tray-check window happened to execute while the enclave was down (mechanism #2's 11:38Z kill), so stack-survival through that specific window is still unproven — but the stack was up from 11:51 through the litmus phase and survived to 4/4 at run end. The row's core claim is now false in the good direction: the gate runs, and it is green. Closure decision belongs to the claim holder (yoga, TTL ~19:33Z) or macuahuitl at expiry: remaining work is a re-run for reproducibility plus the release decision, not fixes.
+        - type: progress
           ts: "2026-08-25T10:15:40Z"
           agent_id: "linux-macuahuitl-opus5-20260825t101540z"
           host: macuahuitl
