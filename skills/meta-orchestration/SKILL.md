@@ -1004,9 +1004,22 @@ Two rules, both easy to get wrong:
 
   ```bash
   git diff --numstat plan/index.yaml                  # removals are expected
-  git diff plan/index.yaml | grep '^-' | grep -v '^---' \
-    | sed 's/^-[[:space:]]*//' | cut -d: -f1 | sort | uniq -c   # ONLY field keys?
+  git diff plan/index.yaml | grep '^-' | grep -v '^---' | head -40   # READ them
   ```
+
+  **Read the removed LINES, not a histogram of their keys.** This recipe used to
+  end with `cut -d: -f1 | sort | uniq -c` and the question "ONLY field keys?".
+  That works only while every reassigned field has a SCALAR value. A fragment
+  that replaces a STRUCTURED value removes all of its lines, including list
+  items that are not field keys at all — measured on yoga 2026-08-25, a fold
+  whose 14 removals included `- container`, `- cpu`, `- gpu`, `engines`,
+  `lanes` and `supported_device_classes`, because a stale capability row's
+  `engines: [{name: ollama, ...}]` block was superseded by `engines: []`. The
+  fold was correct; the histogram made it look like structure loss, which is
+  the same stop-and-investigate 865-ng6r removed for the scalar case. The
+  question is not "are these field keys" but "does each removed line belong to
+  a field some fragment reassigned" — and the cheapest way to answer it is to
+  look at the lines.
 
   MEASURED TWICE, on two hosts, each of which stopped its cycle to investigate:
   lenovinha 2026-08-23 (+888/-17 — five `status`, one multi-line `next_action`)
