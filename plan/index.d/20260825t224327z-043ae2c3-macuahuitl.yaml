@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: dev-inference-container-exits-2-mid-workload-with-no-error
+    field: status
+    value: in_progress
+    ts: "2026-08-25T22:43:27Z"
+    host: macuahuitl
+
+events:
+  - packet_id: dev-inference-container-exits-2-mid-workload-with-no-error
+    event:
+      type: note
+      ts: "2026-08-25T22:43:27Z"
+      host: macuahuitl
+      summary: >
+        claimed for cycle 2026-08-25T22:43:26Z — the diagnosis slice (verdict names the wrong subject)
