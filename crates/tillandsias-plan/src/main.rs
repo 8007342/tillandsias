@@ -5088,8 +5088,8 @@ fn main() {
             // stored.
             //
             // WHY A SUBCOMMAND RATHER THAN A GREP AT THE CALLER.
-            // check-stranded-in-progress.sh counted a packet's activity with
-            // `grep -rh "packet_id: <pid>" plan/index.d/*.yaml`, which sees only
+            // check-stranded-in-progress.sh counted a packet's activity by
+            // grepping packet_id across the fragment overlay files, which sees only
             // the fragment overlay. Compaction folds fragments into the base as
             // routine garbage collection, and after a fold that grep returns
             // zero for a packet whose whole history is intact. Measured on the

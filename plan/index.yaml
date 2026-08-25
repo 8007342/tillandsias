@@ -42746,6 +42746,12 @@ plan_index:
         (1) A release-blocking condition is visible BEFORE release time. Either --ci-full runs on a cadence with its verdict recorded where the fleet reads it, or the delta between --check and --ci-full is named so a host knows what its green push did not cover. (2) The three current failures are cleared or explicitly waived with a recorded reason, and `./build.sh --ci-full` exits 0 on linux-next. (3) litmus:groundtruth-no-mutable-status-pin-shape stops depending on a live packet's status — the trap it exists to prevent. (4) Measured afterwards: a release actually cuts.
       events:
         - type: progress
+          ts: "2026-08-25T16:58:19Z"
+          agent_id: "linux-macuahuitl-opus5-20260825t165819z"
+          host: macuahuitl
+          summary: |
+            SURVIVAL PROOF BANKED + two fresh integration defects absorbed. The stack-up full ci-full ran end to end with the enclave 4/4 UP THROUGH THE ENTIRE FORMER KILL WINDOW (t+45/90/135s probes) and podman ps IDENTICAL before/after — the 880-tdwn fix holds under the real gate. The run's 24/25 (rc=1) was NOT regression of anything previously fixed: both failures were sibling work landed THIS HOUR and caught by the gate as designed — (a) 882-vqe4's new plan-events dispatch arm was never declared in capabilities.txt (the 583-dv9n drift guard warned, correctly failing clean-tree-silent; declared now in sorted position, manifest pin green, capabilities silent again), and (b) the same commit's comment quoted the old bad grep verbatim, tripping the glob-deletion prose-grep in litmus:ledger-fragment-convergence (reworded). Both specs PASS standalone now. Closure state: reproducibility = cifull7 25/25 + cifull8 25/25 + this run green-after-two-named-fixes; survival = proven this run. At TTL (~19:33Z) the row closes on this evidence; the release itself is the operator's call.
+        - type: progress
           ts: "2026-08-25T11:57:32Z"
           agent_id: "linux-macuahuitl-opus5-20260825t115732z"
           host: macuahuitl
