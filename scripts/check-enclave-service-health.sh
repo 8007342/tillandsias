@@ -74,16 +74,57 @@
 #   ^(ok|degraded):enclave-service-health:services=[0-9]+:up=[0-9]+:down=[0-9]+:dead=[0-9]+:absent=[0-9]+$
 #   ^blocked:enclave-service-health:(no-podman|unreadable)$
 # Per-service detail is stderr, one line each, in the supervisors' grammar.
+#
+# THE ACTING ARM (order 878-79b5, opt-in via --act). Four unattended yoga
+# cycles each re-noted the same cleanly-stopped proxy and changed nothing: on
+# a bare development host no tray runs, so the in-process LivenessProbe
+# (782-dpby) never fires, and the only component looking at the enclave was
+# this reporter — a reporter by design. A note that fires every cycle and
+# changes nothing trains its reader to skip it.
+#
+# --act makes the UNATTENDED caller (cycle-preflight) able to fix what it can
+# prove needs fixing, without fighting an operator. The discrimination the
+# in-container supervisor makes ("did I forward this stop?") is unavailable
+# from outside, so the ladder below approximates intent from what IS visible:
+#
+#   1. HOLD MARKER  $STATE_DIR/service-hold-<name> exists — the operator's
+#      sanctioned "leave it down". Never acted on:
+#        note:enclave-service-held:service=...:action=none
+#   2. STACK DOWN   up=0 — a deliberate teardown or a freshly-booted laptop,
+#      the normal no-stack state the reporter's header already names. Never
+#      acted on: note:enclave-service-unattended:...:reason=stack-down
+#   3. GRACE        age_s < TILLANDSIAS_ENCLAVE_ACT_GRACE_S (default 1800) or
+#      unknown — a just-stopped service is exactly what an operator mid-debug
+#      looks like, so a fresh stop is NEVER fought (the packet's negative
+#      control): note:enclave-service-grace:...:action=none
+#   4. CAP          restarts within the 24h window have hit
+#      TILLANDSIAS_ENCLAVE_ACT_CAP (default 3) — restarting is not helping:
+#        fail:enclave-service-flapping:...:action=operator   <- nothing will
+#      fix this; stop trying, say so once per cycle, wait for a human.
+#   5. ACT          partial enclave, old stop, no hold, under cap:
+#        fix:enclave-service-restarted:...:action=started    <- being fixed
+#      or fail:enclave-service-start-failed:...:action=operator.
+#
+# The stdout summary stays the READING (pre-action) — the fix lines are the
+# action record, and the next cycle's ok/degraded is the outcome. Counters
+# live in $STATE_DIR/service-restarts-<name> as "epoch count", windowed, so a
+# flapper goes quiet at the cap instead of being fought forever.
 
 set -uo pipefail
 
 PREFIX="${TILLANDSIAS_ENCLAVE_SERVICE_PREFIX:-tillandsias-}"
 EXPECTED="${TILLANDSIAS_ENCLAVE_EXPECTED_SERVICES:-}"
 STRICT=0
+ACT=0
+ACT_GRACE_S="${TILLANDSIAS_ENCLAVE_ACT_GRACE_S:-1800}"
+ACT_CAP="${TILLANDSIAS_ENCLAVE_ACT_CAP:-3}"
+ACT_WINDOW_S="${TILLANDSIAS_ENCLAVE_ACT_WINDOW_S:-86400}"
+STATE_DIR="${TILLANDSIAS_CYCLE_STATE_DIR:-$HOME/.cache/tillandsias}"
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --strict) STRICT=1; shift ;;
+        --act) ACT=1; shift ;;
         --expect) EXPECTED="${2:-}"; shift 2 ;;
         --expect=*) EXPECTED="${1#--expect=}"; shift ;;
         --prefix) PREFIX="${2:-}"; shift 2 ;;
@@ -232,9 +273,64 @@ while IFS='|' read -r name state exitcode started exited restarts; do
     fi
     details="${details}${_class}:service=${name}:state=${state}:rc=${exitcode}:signal=${sig}:age=$(_age "$age_s"):restarts=${restarts}:health=${health}:origin=${origin}:age_s=${age_s}
 "
+    # 878-79b5: remember the down set for the acting arm; the decision needs
+    # the final `up` count, so it runs after the loop, not here.
+    down_list="${down_list:-}${name}|${age_s}
+"
 done <<EOF
 $ps_out
 EOF
+
+# ── The acting arm (878-79b5) — see the header ladder ────────────────────────
+if [ "$ACT" -eq 1 ] && [ -n "${down_list:-}" ]; then
+    while IFS='|' read -r name age_s; do
+        [ -n "$name" ] || continue
+        if [ -f "$STATE_DIR/service-hold-${name}" ]; then
+            details="${details}note:enclave-service-held:service=${name}:action=none:reason=operator-hold-marker
+"
+            continue
+        fi
+        if [ "$up" -eq 0 ]; then
+            details="${details}note:enclave-service-unattended:service=${name}:action=none:reason=stack-down
+"
+            continue
+        fi
+        if [ "$age_s" -lt 0 ] || [ "$age_s" -lt "$ACT_GRACE_S" ]; then
+            details="${details}note:enclave-service-grace:service=${name}:action=none:age_s=${age_s}:grace_s=${ACT_GRACE_S}
+"
+            continue
+        fi
+        # Windowed restart counter: "epoch count", reset when the window laps.
+        _cf="$STATE_DIR/service-restarts-${name}"
+        _cepoch=0 _ccount=0
+        if [ -f "$_cf" ]; then
+            read -r _cepoch _ccount < "$_cf" 2>/dev/null || true
+            case "$_cepoch" in ''|*[!0-9]*) _cepoch=0 ;; esac
+            case "$_ccount" in ''|*[!0-9]*) _ccount=0 ;; esac
+            if [ "$_cepoch" -gt 0 ] && [ $((now - _cepoch)) -gt "$ACT_WINDOW_S" ]; then
+                _cepoch=0 _ccount=0
+            fi
+        fi
+        if [ "$_ccount" -ge "$ACT_CAP" ]; then
+            details="${details}fail:enclave-service-flapping:service=${name}:restarts=${_ccount}:window_s=${ACT_WINDOW_S}:action=operator
+"
+            continue
+        fi
+        if _run podman start "$name" >/dev/null 2>&1; then
+            [ "$_cepoch" -eq 0 ] && _cepoch="$now"
+            _ccount=$((_ccount + 1))
+            mkdir -p "$STATE_DIR" 2>/dev/null || true
+            printf '%s %s\n' "$_cepoch" "$_ccount" > "$_cf" 2>/dev/null || true
+            details="${details}fix:enclave-service-restarted:service=${name}:restarts=${_ccount}:action=started
+"
+        else
+            details="${details}fail:enclave-service-start-failed:service=${name}:action=operator
+"
+        fi
+    done <<EOF
+$down_list
+EOF
+fi
 
 # Declared-but-missing services. Enumeration cannot see these; only a caller
 # that says what it expects can.

@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-25T06:40:03Z.
+status:
+  - packet_id: cycle-preflight-notes-a-stopped-enclave-service-and-never-acts
+    field: status
+    value: completed
+    ts: "2026-08-25T06:40:03Z"
+    host: linux_mutable
+
+events:
+  - packet_id: cycle-preflight-notes-a-stopped-enclave-service-and-never-acts
+    event:
+      type: completed
+      ts: "2026-08-25T06:40:03Z"
+      agent_id: linux-macuahuitl-opus5-20260825t064003z
+      host: linux_mutable
+      evidence_refs:
+        - "scripts/check-enclave-service-health.sh --act (opt-in; default reporter contract byte-inert, scenario 18) — the acting ladder: hold marker > stack-down > grace window (1800s default) > windowed restart cap (3/24h) > podman start; classes note:enclave-service-held / note:enclave-service-unattended:reason=stack-down / note:enclave-service-grace / fail:enclave-service-flapping:action=operator / fix:enclave-service-restarted:action=started / fail:enclave-service-start-failed:action=operator — 'being fixed' and 'nothing will fix this' are now distinct tokens (EC1)"
+        - "bounded and counted like the sibling supervisors (EC2): $STATE_DIR/service-restarts-<name> holds 'epoch count', window-reset, cap verdict stops the fighting; stdout summary grammar unchanged (the reading), actions are stderr records in the shared severity:event:key=value grammar"
+        - "scripts/test-enclave-service-health.sh 19/19 — six new scenarios + NEGATIVE CONTROL proven by test not inspection (EC3): a fresh operator stop yields grace + an EMPTY stub start-log; hold marker and stack-down also refuse; MUTATION: deleting the grace guard makes the mutant fight the fresh stop (first sed span left a bare `continue` and was itself caught as vacuous — the control controlled the control)"
+        - "scripts/cycle-preflight.sh passes --act with the reasoning inline; litmus:enclave-service-health-shape PASS; bash-3.2 dialect clean"
+        - "LIVE ON FIRST CONTACT (EC4): this host's own services-down2 — tillandsias-vault Exited(137) 4d10h stale-healthy and tillandsias-proxy Exited(0) 4d10h — both restarted (fix: lines, counters=1), Up (healthy) 14s later, reporter silent on the next read, and cycle-preflight printed services-ok for the first time in this session's history"
+      merge_affordance: merge-now
+      merge_reason: >
+        yoga measured the defect across four consecutive cycles and is still
+        cycling; every unattended host inherits the fix (and the
+        never-fight-an-operator guarantees) on its next fast-forward.
+      summary: >
+        THE HOST WITH THE MOST CYCLES NOW HAS SUPERVISION, AND IT DOES NOT
+        FIGHT HUMANS. The re-ensure path existed only inside the tray process
+        (782-dpby), which unattended cycling hosts do not run — so the one
+        component that looked at the enclave was a reporter, and a stopped
+        proxy stayed a note for nine hours on yoga and four DAYS here. The
+        acting arm gives the unattended caller a decision ladder built from
+        what is visible outside the container: an operator hold marker and a
+        whole-stack teardown are never touched, a fresh stop gets a grace
+        window (the supervisor's did-I-forward-the-stop discrimination is
+        unavailable host-side, so recency stands in for intent), and a
+        restart that is not helping goes quiet at a windowed cap with an
+        action=operator verdict instead of being retried forever. Every
+        criterion including the ledger-settled squid teardown semantics
+        (782-9jfg: Exited(0) is DESIGNED output) is respected — a clean stop
+        is acted on only when it is old, the enclave is partial, and nobody
+        said hold.
+
+        The four-cycle-repeat criterion closed itself live: the very first
+        --act run on this host fixed its own two four-day corpses and the
+        note that had fired every cycle all session stopped firing.

@@ -48,6 +48,12 @@ case "$1" in
         eval "h=\"\${HEALTH_${key}:-}\"; l=\"\${LABEL_${key}:-}\""
         printf '%s|%s\n' "$h" "$l"
         ;;
+    start)
+        # 878-79b5 acting arm: record the attempt so tests can assert an
+        # operator stop was NOT fought; START_RC forces a failed start.
+        [ -n "${START_LOG:-}" ] && printf 'start %s\n' "$2" >> "$START_LOG"
+        exit "${START_RC:-0}"
+        ;;
     *) exit 1 ;;
 esac
 FAKE
@@ -240,6 +246,129 @@ else
     bad "unreadable: got '$out' rc=$rc"
 fi
 unset PS_RC
+
+# ================================================================ 878-79b5
+# THE ACTING ARM. Scenarios share one shape: a partial enclave (vault up)
+# with the proxy cleanly stopped; what varies is age, markers, counters, and
+# the flag itself. START_LOG records every start the stub receives, so "was
+# NOT fought" is an assertion on an empty file, not on absent output.
+SD="$TMP/act-state"
+act_run() { # extra env via caller exports
+    : > "$TMP/start.log"
+    START_LOG="$TMP/start.log" TILLANDSIAS_CYCLE_STATE_DIR="$SD" \
+    TILLANDSIAS_ENCLAVE_ACT_GRACE_S=1800 \
+        PATH="$BIN:$REALPATH_DIRS" bash "$GUARD" --act 2>"$TMP/err"
+}
+OLD_STOP="tillandsias-vault|running|0|${now}|0|0
+tillandsias-proxy|exited|0|$((now - 40000))|$((now - 36000))|0"
+FRESH_STOP="tillandsias-vault|running|0|${now}|0|0
+tillandsias-proxy|exited|0|$((now - 400))|$((now - 300))|0"
+
+# ------------------------------------------------------------- scenario 13
+# An old clean stop in a partial enclave is restarted, counted, and says so.
+rm -rf "$SD"; mkdir -p "$SD"
+export PS_OUT="$OLD_STOP"
+out="$(act_run)"; err="$(cat "$TMP/err")"
+if grep -q "start tillandsias-proxy" "$TMP/start.log" \
+   && [ "$(cat "$SD/service-restarts-tillandsias-proxy" 2>/dev/null | awk '{print $2}')" = "1" ]; then
+    case "$err" in
+        *"fix:enclave-service-restarted:service=tillandsias-proxy:restarts=1:action=started"*)
+            ok "act: old stop in partial enclave -> restarted, counted, fix: line" ;;
+        *) bad "act restart: fix line missing: $err" ;;
+    esac
+else
+    bad "act restart: no start call or no counter (log=$(cat "$TMP/start.log" 2>/dev/null))"
+fi
+
+# ------------------------------------------------------------- scenario 14
+# NEGATIVE CONTROL (the packet's load-bearing half): a service the operator
+# JUST stopped is not fought — grace note, zero start calls.
+rm -rf "$SD"; mkdir -p "$SD"
+export PS_OUT="$FRESH_STOP"
+out="$(act_run)"; err="$(cat "$TMP/err")"
+if [ ! -s "$TMP/start.log" ]; then
+    case "$err" in
+        *"note:enclave-service-grace:service=tillandsias-proxy:action=none"*)
+            ok "act NEGATIVE CONTROL: fresh operator stop is not fought (grace, no start call)" ;;
+        *) bad "act grace: note missing: $err" ;;
+    esac
+else
+    bad "act grace: the fresh stop WAS restarted: $(cat "$TMP/start.log")"
+fi
+
+# ------------------------------------------------------------- scenario 15
+# The hold marker is the operator's durable 'leave it down' — never acted on,
+# even long past grace.
+rm -rf "$SD"; mkdir -p "$SD"; touch "$SD/service-hold-tillandsias-proxy"
+export PS_OUT="$OLD_STOP"
+out="$(act_run)"; err="$(cat "$TMP/err")"
+if [ ! -s "$TMP/start.log" ] && printf '%s' "$err" | grep -q "note:enclave-service-held:service=tillandsias-proxy"; then
+    ok "act: hold marker refuses the restart durably"
+else
+    bad "act hold: log=$(cat "$TMP/start.log" 2>/dev/null) err=$err"
+fi
+
+# ------------------------------------------------------------- scenario 16
+# Whole stack down = teardown/fresh-boot shape, not a partial enclave. No act.
+rm -rf "$SD"; mkdir -p "$SD"
+export PS_OUT="tillandsias-proxy|exited|0|$((now - 40000))|$((now - 36000))|0
+tillandsias-vault|exited|0|$((now - 40000))|$((now - 36000))|0"
+out="$(act_run)"; err="$(cat "$TMP/err")"
+if [ ! -s "$TMP/start.log" ] && printf '%s' "$err" | grep -q "reason=stack-down"; then
+    ok "act: whole-stack-down is left alone (deliberate teardown shape)"
+else
+    bad "act stack-down: log=$(cat "$TMP/start.log" 2>/dev/null) err=$err"
+fi
+
+# ------------------------------------------------------------- scenario 17
+# At the cap the verdict flips to flapping:action=operator and acting stops —
+# the 'nothing will fix this' token the packet requires.
+rm -rf "$SD"; mkdir -p "$SD"
+printf '%s 3\n' "$now" > "$SD/service-restarts-tillandsias-proxy"
+export PS_OUT="$OLD_STOP"
+out="$(act_run)"; err="$(cat "$TMP/err")"
+if [ ! -s "$TMP/start.log" ] && printf '%s' "$err" | grep -q "fail:enclave-service-flapping:service=tillandsias-proxy:restarts=3:.*action=operator"; then
+    ok "act: cap reached -> flapping verdict, no further fighting"
+else
+    bad "act cap: log=$(cat "$TMP/start.log" 2>/dev/null) err=$err"
+fi
+
+# ------------------------------------------------------------- scenario 18
+# Without --act the reporter is byte-inert: no start calls, no act classes.
+rm -rf "$SD"; mkdir -p "$SD"
+: > "$TMP/start.log"
+export PS_OUT="$OLD_STOP"
+out="$(START_LOG="$TMP/start.log" TILLANDSIAS_CYCLE_STATE_DIR="$SD" PATH="$BIN:$REALPATH_DIRS" bash "$GUARD" 2>"$TMP/err")"
+err="$(cat "$TMP/err")"
+if [ ! -s "$TMP/start.log" ] && ! printf '%s' "$err" | grep -qE "enclave-service-(grace|held|restarted|flapping|unattended)"; then
+    ok "act: without --act the reporter contract is unchanged (still a reporter)"
+else
+    bad "no-act: reporter acted or spoke act classes: $err"
+fi
+
+# ---------------------------------------------------- mutation (878-79b5)
+# Delete the grace guard and the NEGATIVE CONTROL's shape must flip: the
+# fresh operator stop gets restarted. Proves scenario 14 is falsifiable.
+MUT_ACT="$TMP/mutant-act.sh"
+# The grace if-block is five physical lines (the details string embeds a
+# newline); deleting fewer leaves a bare `continue` that still skips the
+# service — measured here when +2 produced a vacuous control.
+sed '/-lt "$ACT_GRACE_S" ]; then/,+4d' "$GUARD" > "$MUT_ACT"
+chmod +x "$MUT_ACT"
+if cmp -s "$GUARD" "$MUT_ACT" || ! bash -n "$MUT_ACT" 2>/dev/null; then
+    bad "act mutation: grace guard not removed cleanly — control is vacuous"
+else
+    rm -rf "$SD"; mkdir -p "$SD"; : > "$TMP/start.log"
+    export PS_OUT="$FRESH_STOP"
+    START_LOG="$TMP/start.log" TILLANDSIAS_CYCLE_STATE_DIR="$SD" \
+        PATH="$BIN:$REALPATH_DIRS" bash "$MUT_ACT" --act >/dev/null 2>&1
+    if grep -q "start tillandsias-proxy" "$TMP/start.log"; then
+        ok "act mutation: without the grace guard the fresh stop IS fought — scenario 14 has teeth"
+    else
+        bad "act mutation: mutant did not restart the fresh stop — control proves nothing"
+    fi
+fi
+unset PS_OUT
 
 # --------------------------------------------------------------- mutation
 # Delete the stale-healthy branch (delete, not comment out: a commented line

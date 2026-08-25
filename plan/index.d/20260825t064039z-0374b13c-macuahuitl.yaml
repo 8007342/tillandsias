@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    field: next_action
+    value: 'COORDINATOR QUEUE @ 2026-08-25T06:41Z (macuahuitl hourly). FLEET: yoga 2h (795-5itp framing landed, filed 878-79b5) + pirria 6h on cadence; lenovinha operator-stopped; esmeraldinha/yolanda/macbook down. STANDING DUTY: fetch/prune, merge AHEAD platform branches, expire-claims, fleet-heartbeat, sweep-salvage-refs.sh --apply — and cycle-preflight now ACTS on stopped enclave services (878-79b5): expect fix:enclave-service-restarted lines, never a fight with an operator hold/fresh stop/teardown. 865-n8vq WATCH: yoga''s claim idles since 2026-08-24T20:35Z, TTL ~19:33Z today — at expiry macuahuitl takes it and re-inventories (order-477 pair already fixed here). NEXT for macuahuitl: (1) 865-n8vq at TTL or if yoga stays elsewhere. (2) litmus binding for the checkout lock (lifts meta-orchestration derived coverage 80 -> 100). (3) MCP server Windows-root defect: reproduce after a server restart, then packet. (4) 873-b1nx (v0.6 nix-cache container builds) once v0.5 drains. DONE THIS ARC adds 878-79b5 (preflight acting arm — this host''s own 4-day corpses fixed on first live contact, services-ok restored) after 740-k8ef, 877-lwts, 801-vm4p, 874-w2gc, 874-idnt.'
+    ts: "2026-08-25T06:40:39Z"
+    host: macuahuitl
+
+events:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    event:
+      type: note
+      ts: "2026-08-25T06:40:39Z"
+      host: macuahuitl
+      summary: >
+        queue refresh after 878-79b5 closure

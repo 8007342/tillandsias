@@ -218,7 +218,11 @@ fi
 services_report="skipped"
 if [ -x "$ROOT/scripts/check-enclave-service-health.sh" ]; then
     _svc_err="$(mktemp "${TMPDIR:-/tmp}/cycle-preflight-services.XXXXXX")"
-    services_line="$(bash "$ROOT/scripts/check-enclave-service-health.sh" 2>"$_svc_err" | tail -1)"
+    # --act (878-79b5): the unattended cycle is exactly the caller that must
+    # FIX what it can prove needs fixing — four yoga cycles re-noted one
+    # stopped proxy for nine hours. The acting ladder never fights an
+    # operator (hold marker, grace window, whole-stack-down all refuse).
+    services_line="$(bash "$ROOT/scripts/check-enclave-service-health.sh" --act 2>"$_svc_err" | tail -1)"
     case "$services_line" in
         ok:enclave-service-health:*) services_report="ok" ;;
         degraded:enclave-service-health:*)
