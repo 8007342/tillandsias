@@ -43,6 +43,11 @@ fn assert_shutdown(signal: libc::c_int, signal_name: &str) {
             format!("test-signal-{}", signal_name),
         )
         .env("TILLANDSIAS_STOP_TIMEOUT", "2")
+        // 880-tdwn: the CHILD is the production binary under test — the
+        // test-run tripwire must not propagate into it, or its startup
+        // resolution panics before the signal path this test exists to
+        // exercise ever runs.
+        .env_remove("TILLANDSIAS_PODMAN_REFUSE_REAL")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()

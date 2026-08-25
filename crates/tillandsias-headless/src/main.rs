@@ -15806,6 +15806,48 @@ mod tests {
     /// secondary failures that bury the defect which caused them.
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+    /// ORDER 880-tdwn: pin the podman seam to /bin/false for a test's
+    /// lifetime, on its own dedicated mutex, restoring on drop. The forge
+    /// arg-builder family reaches `vault_bootstrap::container_running` (via
+    /// `read_provider_api_key`), which resolves podman — bare resolution in a
+    /// parallel test run is the race that stopped the live enclave. /bin/false
+    /// makes the vault probe a deterministic "not running" (the no-vault
+    /// builder path these hermetic tests mean to exercise anyway).
+    ///
+    /// LOCK ORDER: seam-users take this guard FIRST, before env_lock/
+    /// env_guard, consistently — a consistent order cannot deadlock.
+    /// EVERY writer of TILLANDSIAS_PODMAN_BIN in this tests mod serializes on
+    /// THIS mutex, taken before env_lock/env_guard — the fake-podman tests
+    /// hold it via `podman_seam_lock()` while their TestEnvRestore manages
+    /// the value. A writer outside the lock reintroduces the mid-test
+    /// var-drop this exists to end.
+    static PODMAN_SEAM_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn podman_seam_lock() -> std::sync::MutexGuard<'static, ()> {
+        PODMAN_SEAM_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    fn podman_false_seam() -> PodmanFalseSeam {
+        let lock = podman_seam_lock();
+        let prev = std::env::var_os("TILLANDSIAS_PODMAN_BIN");
+        unsafe { std::env::set_var("TILLANDSIAS_PODMAN_BIN", "/bin/false") };
+        PodmanFalseSeam { _lock: lock, prev }
+    }
+    struct PodmanFalseSeam {
+        _lock: std::sync::MutexGuard<'static, ()>,
+        prev: Option<std::ffi::OsString>,
+    }
+    impl Drop for PodmanFalseSeam {
+        fn drop(&mut self) {
+            unsafe {
+                match self.prev.take() {
+                    Some(v) => std::env::set_var("TILLANDSIAS_PODMAN_BIN", v),
+                    None => std::env::remove_var("TILLANDSIAS_PODMAN_BIN"),
+                }
+            }
+        }
+    }
+
     fn env_guard() -> std::sync::MutexGuard<'static, ()> {
         ENV_LOCK
             .lock()
@@ -18044,6 +18086,7 @@ mod tests {
     /// container and creates a fresh one.
     #[test]
     fn forge_agent_run_args_use_replace_for_idempotent_relaunch() {
+        let _pseam = podman_false_seam();
         for mode in [
             ForgeAgentMode::Maintenance,
             ForgeAgentMode::OpenCode,
@@ -18108,6 +18151,7 @@ mod tests {
 
     #[test]
     fn launch_forge_agent_does_not_mount_user_home() {
+        let _pseam = podman_false_seam();
         // Walk every arg and reject anything that smells like a host-side
         // home mount. The only `/home/forge` references must be in the
         // *target* side of the workspace bind mount or in env values.
@@ -18196,6 +18240,7 @@ mod tests {
 
     #[test]
     fn forge_credential_quarantine_mounts_present() {
+        let _pseam = podman_false_seam();
         // Verify the credential quarantine tmpfs overlays (order 170/224) are
         // present in the forge agent mount args. These mask host credential
         // surfaces when the source mount overlaps the host checkout.
@@ -18280,6 +18325,7 @@ mod tests {
 
     #[test]
     fn forge_agent_mounts_persistent_tool_cache_named_volume() {
+        let _pseam = podman_false_seam();
         // Order 179: FIRST_RUN tool installs ($CARGO_HOME/$NPM_CONFIG_PREFIX, which
         // lib-common points at /home/forge/.cache/tillandsias-project) must survive
         // the forge's --rm. A per-project podman NAMED volume backs that path.
@@ -18302,6 +18348,7 @@ mod tests {
 
     #[test]
     fn forge_agent_mounts_durable_spec_index_volume_read_only() {
+        let _pseam = podman_false_seam();
         // Order 801-a2by. The spec RAG index is the DURABLE tier: a named
         // volume, sibling to tillandsias-mirror-<project>, so a relaunched
         // forge lands on a fingerprint HIT instead of re-paying the measured
@@ -20271,6 +20318,7 @@ mod tests {
 
     #[test]
     fn delegated_result_format_propagates_to_both_prompted_builders_only() {
+        let _pseam = podman_false_seam();
         let _env = env_lock();
         let restore = TestEnvRestore::capture(&[
             "TILLANDSIAS_AGENT_RESULT_FORMAT",
@@ -20741,6 +20789,7 @@ mod tests {
     fn delegated_result_fake_podman_covers_fresh_status_and_exact_timeout_reap() {
         use std::os::unix::fs::PermissionsExt;
 
+        let _pseam_lock = podman_seam_lock();
         let _env = env_lock();
         let restore = TestEnvRestore::capture(&[
             "TILLANDSIAS_PODMAN_BIN",
@@ -21266,6 +21315,7 @@ esac
 
     #[test]
     fn forge_agent_run_argv_exports_project_selection() {
+        let _pseam = podman_false_seam();
         let argv = build_forge_agent_run_argv(
             &PathBuf::from("/tmp/project"),
             "alpha",
@@ -21285,6 +21335,7 @@ esac
 
     #[test]
     fn forge_mounts_scoped_vault_lease_for_every_credentialed_mode() {
+        let _pseam = podman_false_seam();
         // 2026-07-15: the scoped vault-token lease was Codex-only, so
         // Claude/Antigravity lanes had no token and their OAuth restore died
         // "no Vault token" → fatal launch. Now EVERY credentialed mode
@@ -21435,6 +21486,7 @@ esac
     /// exact environment that Podman places inside the container.
     #[test]
     fn forge_launch_args_export_exact_harness_identity() {
+        let _pseam = podman_false_seam();
         let project = PathBuf::from("/tmp/project");
         let certs = PathBuf::from("/tmp/ca");
 
@@ -21485,6 +21537,7 @@ esac
 
     #[test]
     fn forge_agent_run_args_export_debug_when_requested() {
+        let _pseam = podman_false_seam();
         let args = build_forge_agent_run_args(
             &PathBuf::from("/tmp/project"),
             "alpha",
@@ -22059,6 +22112,7 @@ esac
 
     #[test]
     fn forge_repo_gitdir_quarantines_local_config_and_preserves_shared_state_mounts() {
+        let _pseam = podman_false_seam();
         let _env = env_guard();
         let _guard = env_lock();
         // Order 437: the gitdir facade/quarantine is the OPT-IN host-mount
@@ -22495,6 +22549,7 @@ esac
 
     #[test]
     fn source_built_init_and_status_check_smoke_uses_fake_podman() {
+        let _pseam_lock = podman_seam_lock();
         let _guard = env_lock();
 
         let root = find_checkout_root().expect("repo root");

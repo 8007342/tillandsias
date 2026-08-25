@@ -1376,7 +1376,13 @@ while [ $i -lt 2000 ]; do echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; i=$((
 
     #[test]
     fn remote_transport_uses_remote_flag_and_skips_local_storage_args() {
-        let _guard = env_lock();
+        // 880-tdwn: resolve through the stub seam, never bare — these tests
+        // only inspect argv, so an exit-0 stub is a complete podman.
+        let (_guard, _stub) = stub_podman(
+            "#!/bin/sh
+exit 0
+",
+        );
         unsafe {
             std::env::remove_var("TILLANDSIAS_PODMAN_GRAPHROOT");
             std::env::remove_var("TILLANDSIAS_PODMAN_RUNROOT");
@@ -1434,7 +1440,13 @@ while [ $i -lt 2000 ]; do echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; i=$((
 
     #[test]
     fn local_transport_isolation_env_enables_storage_overrides() {
-        let _guard = env_lock();
+        // 880-tdwn: resolve through the stub seam, never bare — these tests
+        // only inspect argv, so an exit-0 stub is a complete podman.
+        let (_guard, _stub) = stub_podman(
+            "#!/bin/sh
+exit 0
+",
+        );
         let mut cmd = std::process::Command::new(find_podman_path());
         unsafe {
             std::env::set_var("TILLANDSIAS_PODMAN_GRAPHROOT", "/tmp/tillandsias-graphroot");

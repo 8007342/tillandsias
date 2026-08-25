@@ -755,17 +755,15 @@ run_rust_on_host() {
     (cd "$repo_root" && "$@")
 }
 
-# 880-tdwn END STATE, defined ahead of its wiring: cargo TEST invocations
-# should run with the real-podman tripwire armed, so a parallel test racing
-# the TILLANDSIAS_PODMAN_BIN seam fails loudly by name instead of stopping
-# the live enclave (twice-measured on macuahuitl: every warm-cache --ci-full
-# killed the whole stack during tray-check; vault SIGKILLed at stop-grace).
-# NOT WIRED YET: arming it today fails 32 enumerated non-hermetic tests
-# (28 in the featured tray target, 2 workspace-lib transport tests, 2
-# signal_handling integration tests — lists on the 880-tdwn row), which
-# would red the gate the whole fleet pushes behind. Wire each cargo-test
-# line through this wrapper as its suite is made hermetic; the wiring IS
-# the packet's closing move.
+# 880-tdwn, WIRED: every cargo TEST invocation runs with the real-podman
+# tripwire armed — a parallel test racing the TILLANDSIAS_PODMAN_BIN seam
+# fails loudly by name instead of stopping the live enclave (twice-measured:
+# every warm-cache --ci-full killed the whole stack during tray-check; vault
+# SIGKILLed at stop-grace). The 32-test non-hermetic population was drained
+# 2026-08-25 (seam guards + writer-lock consolidation, evidence on the
+# 880-tdwn row); the drain ran 559/559 twice armed before this wiring. A
+# test failing HERE with the 880-tdwn panic is a latent racer surfacing —
+# fix its seam, never unwire the line.
 run_rust_test_on_host() {
     local repo_root="${REPO_ROOT}"
     (cd "$repo_root" && TILLANDSIAS_PODMAN_REFUSE_REAL=1 "$@")
@@ -1077,7 +1075,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # --no-fail-fast (order 829-g4xf): without it cargo stops at the first
     # failing binary, so this pass reported 1 failure where there were 8 and
     # more than half the workspace never ran.
-    if run_rust_on_host cargo test --workspace --lib --no-fail-fast 2>&1 | tee /tmp/test-check.log; then
+    if run_rust_test_on_host cargo test --workspace --lib --no-fail-fast 2>&1 | tee /tmp/test-check.log; then
         log_pass "All unit tests pass"
         archive_check_log "rust-tests" "pass" /tmp/test-check.log
     else
@@ -1103,7 +1101,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # pushes behind. Until that list is drained, a warm-cache ci-full beside
     # a live enclave WILL stop the stack during this check; the queue carries
     # the operational caution and the 878-79b5 supervisor restarts it.
-    if run_rust_on_host cargo test -p tillandsias-headless --bin tillandsias --features tray,listen-vsock --no-fail-fast 2>&1 | tee /tmp/tray-check.log; then
+    if run_rust_test_on_host cargo test -p tillandsias-headless --bin tillandsias --features tray,listen-vsock --no-fail-fast 2>&1 | tee /tmp/tray-check.log; then
         log_pass "Tray + vsock-server feature tests pass"
         archive_check_log "tray-contract" "pass" /tmp/tray-check.log
     else
@@ -1132,7 +1130,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # Windows it compiles to a stub with nothing to assert.
     if [[ "$(uname -s)" == "Darwin" ]]; then
         # @trace spec:macos-native-tray, spec:tray-ux
-        if run_rust_on_host cargo test -p tillandsias-macos-tray --bins --no-fail-fast 2>&1 | tee /tmp/macos-tray-check.log; then
+        if run_rust_test_on_host cargo test -p tillandsias-macos-tray --bins --no-fail-fast 2>&1 | tee /tmp/macos-tray-check.log; then
             log_pass "macOS tray tests pass"
             archive_check_log "macos-tray-tests" "pass" /tmp/macos-tray-check.log
         else
@@ -1144,7 +1142,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
 
     # Headless signal shutdown contract
     # @trace spec:headless-mode, spec:graceful-shutdown
-    if TILLANDSIAS_NO_TRAY=1 run_rust_on_host cargo test -p tillandsias-headless --test signal_handling 2>&1 | tee /tmp/signal-handling-check.log; then
+    if TILLANDSIAS_NO_TRAY=1 run_rust_test_on_host cargo test -p tillandsias-headless --test signal_handling 2>&1 | tee /tmp/signal-handling-check.log; then
         log_pass "Headless shutdown signal tests pass"
         archive_check_log "signal-handling" "pass" /tmp/signal-handling-check.log
     else
