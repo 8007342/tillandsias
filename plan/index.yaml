@@ -21389,6 +21389,30 @@ plan_index:
         pending external evidence" from "abandoned" — a third shape, and its own
         packet if anyone wants it.
       events:
+        - type: completed
+          ts: "2026-08-25T21:45:43Z"
+          agent_id: "linux-macuahuitl-fable5-20260825t214543z"
+          host: macuahuitl
+          summary: |
+            LANDED, and the packet's own root-cause statement needed correcting first — recorded so the next reader is not misled by the row above.
+
+            THE PACKET SAYS the detector reads plan/index.d only. True, and compaction moves every fragment's events into the base, so the defect appears exactly when the ledger is tidiest. BUT POINTING THE EXISTING SUBCOMMAND AT THE BASE WOULD NOT HAVE FIXED IT. MEASURED: tillandsias-plan fragment-terminal-events walked doc['packets'], while the base keeps packets at plan_index.steps[]. Against the real plan/index.yaml it parsed all 3.4MB and printed NOTHING, exit 0 — indistinguishable from 'declares no terminal events'. Implementing the packet as written would have produced a checker reporting clean on a ledger it never examined: this guard's own failure class (785-sqe6, 787-f7dh).
+
+            FIX 1 (Rust): the packet walk is now shape-independent — it stops descending at any mapping carrying packet_id, the SAME rule the fold uses. Fragments and the base fall out of one rule, so a future ledger layout cannot silently re-blind it. Live base went 0 -> 95 packets visible.
+
+            FIX 2 (Rust, opt-in): --live applies the WITHDRAWAL rule, so a closure a later falsified event retracted is not reported forever. Deliberately a FLAG: the sibling gate keeps the plain syntactic question it has always asked, and none of its callers change semantics. Timestamps are ISO-8601 Zulu so lexicographic max is correct ordering; a later re-closure wins again.
+
+            FIX 3 (shell): scripts/check-base-ledger-status-loss.sh, a SEPARATE script. Criterion 4 requires ADVISORY; check-fragment-status-loss.sh is a HARD GATE on two surfaces (build.sh exit 1; the pre-push plan-only lane refuses). Folding an advisory into a gate makes one exit code carry both meanings, and the first false positive on a historical base row gets the whole gate switched off. Separate process, distinct vocabulary, always exit 0 — the severities cannot blur because they are not in the same process. It auto-corrects NOTHING, per the packet: the event log is append-only and honest, status is a separate LWW channel by design, and a terminal event beside a non-terminal status is a QUESTION for a cycle.
+
+            EXIT CRITERION 1 VERIFIED AGAINST REAL HISTORY, NOT A FIXTURE. Reconstructed the 2026-08-15 base from 51603d0a7 with 532's status flipped back to in_progress: the advisory names inference-state-warm-grammar-multimodel by name, AND surfaces two further genuinely-adrift packets at that commit (brew-attestation-verification-always-fails-and-stalls-forge-startup, guest-agent-attach-runs-login-flow). Live tree today: ok:no-base-status-loss:94 checked, nothing adrift.
+
+            CRITERION 2 both directions and CRITERION 3 both negative controls are fixture cases 1-4; criterion 4 is case 5. Cases 6-7 add unparseable-is-never-ok and no-base-skips. 7/7.
+
+            MUTATION-PROVEN: reverting the recursive walk makes the base report 'ok:no-base-status-loss:0 checked' — a clean verdict on a ledger it never examined — and turns litmus step 4 AND fixture case 1 red.
+
+            TWO THINGS MY OWN TOOLING CAUGHT, both worth recording. (1) The first draft counted rows with printf '%s' | wc -l. wc -l counts NEWLINES, so a single-row report measured as ZERO and the advisory could never fire on the one-defect case — the common one. It printed ok: while holding the finding in a variable. Fixture case 1 caught it on the first run; without that case this would have shipped as a guard that always passes, which is the exact class the packet is about. (2) build.sh --check refused a convention violation in my new litmus (hardcoded target/ path instead of scripts/plan-binary-probe.sh) before it landed.
+
+            litmus:base-ledger-status-loss-shape, bound to methodology-accountability, 6/6 PASS. Sibling gate unchanged: ok:no-fragment-status-loss:16 checked, its own fixture green.
         - type: note
           ts: "2026-08-25T20:53:07Z"
           agent_id: "linux-macuahuitl-fable5-20260825t195813z"
@@ -32356,6 +32380,17 @@ plan_index:
         nothing reads) is the other half of "which artifact is the live one".
         Both are about a fix landing somewhere the running system does not look.
 
+      events:
+        - type: note
+          ts: "2026-08-25T21:45:55Z"
+          agent_id: "linux-macuahuitl-fable5-20260825t214555z"
+          host: macuahuitl
+          summary: |
+            RELEASED back to ready by macuahuitl 2026-08-25 without implementation. Claimed alongside 751-i9mb as one story (guards that report on the wrong artifact); the scouting agent for this half died on a provider connection error and I chose to finish 751-i9mb properly rather than half-implement this one from an unscouted reading.
+
+            WHAT THE NEXT HOST SHOULD CHECK FIRST, so it is not re-derived: this packet may be PARTLY SATISFIED ALREADY. scripts/check-mcp-surface.sh exists (order 801-m9tk) precisely because a script cannot observe the agent's own tool surface — it splits the question into a MEASURED handshake (check-mcp-expert-health.sh, which spawns its own server) and an ATTESTED surface claim, and joins them into ok:surface-exposed / unexposed:handshake-ok / unattested:*. Determine what 823-u3k9 asks for BEYOND that join before writing anything; if the answer is 'nothing', the honest close is a scope correction citing 801-m9tk rather than new code. Both probes ran green this cycle (ok:experts-healthy, ok:surface-exposed).
+
+            The crux worth measuring, if a gap remains: does check-mcp-expert-health.sh read the SAME server registration source the agent harness reads? If it reads a different one, that is the defect in concrete form and it is measurable rather than arguable.
     - packet_id: spec-expert-refusal-threshold-fleet-decision
       depends_on: inference-image-cannot-run-any-model-larger-than-0-5b
       order: 824-6qxh
