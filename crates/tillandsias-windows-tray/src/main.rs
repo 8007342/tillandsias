@@ -445,6 +445,83 @@ mod tests {
         );
     }
 
+    /// 803-49re + 804-ckst: EVERY path that wipes the guest must also clear
+    /// the host's copy of that guest's vault identity from Credential
+    /// Manager, preserving `tillandsias-vm-uuid`.
+    ///
+    /// A source scan and not a runtime test, deliberately, because the three
+    /// call sites live in three different languages — Rust, PowerShell, and
+    /// two Markdown runbooks — and no runtime test can reach all three. What
+    /// made 803-49re a p1 was not one missing call but the SET being
+    /// incomplete: the product's own advertised reset bricked its own GitHub
+    /// login, and the e2e that should have caught it carried the same gap, so
+    /// the release passed its smoke and failed for the operator forty minutes
+    /// later. A pin that covers one site would not have caught it.
+    ///
+    /// @trace order:803-49re, order:804-ckst
+    #[test]
+    fn every_guest_wipe_path_clears_the_host_side_vault_credentials() {
+        const SHARE: &str = "vault-shamir-share-v1";
+        const TOKEN: &str = "vault-root-token-v1";
+        const UUID: &str = "tillandsias-vm-uuid";
+
+        // 1. The primitive exists and names exactly the two guest credentials.
+        let cred = include_str!("installation_uuid.rs");
+        let cred_stub = include_str!("stubs/installation_uuid.rs");
+        for (src, which) in [(cred, "windows"), (cred_stub, "linux stub")] {
+            assert!(
+                src.contains("pub fn clear_guest_vault_credentials()"),
+                "the {which} credential module must expose the clear primitive"
+            );
+            assert!(
+                src.contains("pub const GUEST_VAULT_TARGETS: [&str; 2]"),
+                "the {which} module must declare exactly two guest-vault targets"
+            );
+        }
+
+        // 2. --reset-guest calls it. This is the path whose own help text
+        //    promises "you'll re-authenticate once" and then did not let you.
+        let notify = include_str!("notify_icon.rs");
+        assert!(
+            notify.contains("clear_guest_vault_credentials()"),
+            "reset_guest_once must clear the host vault credentials after the wipe"
+        );
+
+        // 3. The installer's -Purge clears them, and keeps the install anchor.
+        let installer = include_str!("../../../scripts/install-windows.ps1");
+        assert!(
+            installer.contains(SHARE) && installer.contains(TOKEN),
+            "install-windows.ps1 -Purge must clear both guest vault credentials"
+        );
+
+        // 4. Both e2e runbooks name them in their destructive-reset step —
+        //    804-ckst's verifiable closure, stated as a grep and pinned as one.
+        let curl_e2e = include_str!("../../../skills/smoke-curl-install-and-test-e2e/SKILL.md");
+        let build_e2e = include_str!("../../../skills/build-install-and-smoke-test-e2e/SKILL.md");
+        for (src, which) in [(curl_e2e, "curl-install"), (build_e2e, "local-build")] {
+            assert!(
+                src.contains(SHARE) && src.contains(TOKEN),
+                "the {which} e2e runbook's Windows reset must name both credentials, \
+                 or its 'cold run' claim is one the run cannot support"
+            );
+        }
+
+        // 5. The installation anchor is preserved everywhere. Each artifact
+        //    must SAY so, so a later editor cannot read the deletions as
+        //    "clear the credential store" and take this one too.
+        for (src, which) in [
+            (cred, "windows credential module"),
+            (installer, "installer"),
+            (curl_e2e, "curl-install runbook"),
+            (build_e2e, "local-build runbook"),
+        ] {
+            assert!(
+                src.contains(UUID),
+                "the {which} must name tillandsias-vm-uuid as preserved"
+            );
+        }
+    }
+
     /// windows-260723-1: the registered-distro integrity probe's Windows
     /// bodies are cfg-gated away on Linux. Keep a portable wiring pin so the
     /// Linux-host test suite still proves that timeouts remain inconclusive,
