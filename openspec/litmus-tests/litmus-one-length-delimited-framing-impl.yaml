@@ -1,0 +1,94 @@
+# @trace spec:vsock-transport
+# @trace order:795-5itp, order:884-hfsj
+#
+# The named verifiable closure of packet 795-5itp ("nine hand-rolled copies
+# of `u32-BE length ‖ postcard` framing exist while LengthDelimitedCodec is
+# already a workspace dependency"). For eight days that closure existed only
+# as a sentence in the ledger: the string
+# `litmus:one-length-delimited-framing-impl` appeared in plan/index.yaml and
+# NOWHERE else in the tree, so three slices of the migration landed against
+# a gate that could not run. A closure nothing executes is a plan, not a
+# constraint.
+#
+# It is a RATCHET rather than the packet's end-state assertion, and that is
+# deliberate — see the rationale block in scripts/check-framing-raw-decodes.sh.
+# The short version: 18 raw decodes across 10 files remain, several of them
+# dispositioned keeps, so "at most one" fails on day one and protects nothing
+# during the months the migration takes. The ratchet is falsifiable every day
+# in BOTH directions, and the downward refusal is what keeps 884-hfsj's
+# stale-slice-pointer failure from recurring: a `next_action` naming the next
+# slice goes stale in silence, a ceiling that must be lowered in the same
+# commit as the migration cannot.
+name: litmus:one-length-delimited-framing-impl
+spec: vsock-transport
+phase: pre-build
+description: >
+  Pin the raw frame-length decode ratchet for order 795-5itp: the scan and
+  its committed per-file baseline exist and agree with the tree, a NEW
+  hand-rolled `u32::from_be_bytes` decode is refused, a count above a file's
+  recorded ceiling is refused, and a ceiling left stale after a slice landed
+  is refused with equal loudness. Also pins that the one correct
+  LengthDelimitedCodec use the packet cites is still in tree, so the ratchet
+  cannot be satisfied by deleting the target rather than reaching it.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/check-framing-raw-decodes.sh
+  - workspace contains scripts/framing-raw-decode-baseline.tsv
+  - shell utilities (bash, grep, sed, awk, find, mktemp) are available in PATH
+
+critical_path:
+  - step: "the scan parses, is executable, and agrees with the tree at HEAD"
+    command: "bash -n scripts/check-framing-raw-decodes.sh && test -x scripts/check-framing-raw-decodes.sh && out=$(scripts/check-framing-raw-decodes.sh) && printf '%s' \"$out\" | grep -qE '^ok:framing-ratchet:sites=[0-9]+:files=[0-9]+$' && echo 'ok: ratchet-agrees'"
+    timeout_ms: 20000
+    expected_behavior: "ok: ratchet-agrees"
+
+  - step: "NEGATIVE CONTROL — a NEW hand-rolled decode in an unlisted file is refused (this is the regression the ratchet exists to catch)"
+    command: "p=crates/tillandsias-control-wire/src/zz_litmus_795_5itp_probe.rs; printf 'fn p(b: [u8; 4]) -> usize { u32::from_be_bytes(b) as usize }\\n' > \"$p\"; out=$(scripts/check-framing-raw-decodes.sh 2>&1); rc=$?; rm -f \"$p\"; [ \"$rc\" != 0 ] && printf '%s' \"$out\" | grep -qE '^blocked:framing-ratchet-new-site:' && echo 'ok: new-site-refused' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: new-site-refused"
+
+  - step: "NEGATIVE CONTROL — a count ABOVE a file's recorded ceiling is refused"
+    command: "b=scripts/framing-raw-decode-baseline.tsv; t=$(mktemp); cp \"$b\" \"$t\"; awk -F'\\t' 'BEGIN{OFS=\"\\t\"} $1 ~ /^[0-9]+$/ && $1 > 1 { $1 = $1 - 1 } { print }' \"$t\" > \"$b\"; out=$(scripts/check-framing-raw-decodes.sh 2>&1); rc=$?; cp \"$t\" \"$b\"; rm -f \"$t\"; [ \"$rc\" != 0 ] && printf '%s' \"$out\" | grep -qE '^blocked:framing-ratchet-regressed:' && echo 'ok: regression-refused' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: regression-refused"
+
+  - step: "NEGATIVE CONTROL — a ceiling left STALE after a slice landed is refused too; a one-directional ratchet would let the recorded state drift above the truth forever (884-hfsj)"
+    command: "b=scripts/framing-raw-decode-baseline.tsv; t=$(mktemp); cp \"$b\" \"$t\"; awk -F'\\t' 'BEGIN{OFS=\"\\t\"} $1 ~ /^[0-9]+$/ { $1 = $1 + 1 } { print }' \"$t\" > \"$b\"; out=$(scripts/check-framing-raw-decodes.sh 2>&1); rc=$?; cp \"$t\" \"$b\"; rm -f \"$t\"; [ \"$rc\" != 0 ] && printf '%s' \"$out\" | grep -qE '^blocked:framing-ratchet-stale:' && echo 'ok: stale-ceiling-refused' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: stale-ceiling-refused"
+
+  - step: "NEGATIVE CONTROL — an absent baseline fails closed rather than reporting a clean tree"
+    command: "b=scripts/framing-raw-decode-baseline.tsv; t=$(mktemp); cp \"$b\" \"$t\"; rm -f \"$b\"; out=$(scripts/check-framing-raw-decodes.sh 2>&1); rc=$?; cp \"$t\" \"$b\"; rm -f \"$t\"; [ \"$rc\" != 0 ] && printf '%s' \"$out\" | grep -qE '^blocked:framing-ratchet-no-baseline$' && echo 'ok: fails-closed' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: fails-closed"
+
+  - step: "every KEEP row carries its reason in the baseline, and the migration TARGET the packet cites is still in tree (the ratchet must be reachable by migrating, not by deleting)"
+    command: "grep -qE '^[0-9]+[[:space:]]+crates/.*[[:space:]]+keep$' scripts/framing-raw-decode-baseline.tsv && grep -q 'KEEP REASONS' scripts/framing-raw-decode-baseline.tsv && grep -q 'LengthDelimitedCodec' crates/tillandsias-router-sidecar/src/main.rs && echo 'ok: keeps-explained-target-present'"
+    timeout_ms: 8000
+    expected_behavior: "ok: keeps-explained-target-present"
+
+observability:
+  traces:
+    - "@trace spec:vsock-transport"
+    - "@trace order:795-5itp"
+  expected_log: "raw frame-length decode ratchet pinned (tree agrees with baseline; new-site, regressed, stale and no-baseline all refused)"
+  log_fields:
+    spec: "vsock-transport"
+    test: "one-length-delimited-framing-impl"
+    artifact: "scripts/check-framing-raw-decodes.sh + scripts/framing-raw-decode-baseline.tsv"
+
+rollback:
+  on_failure: >
+    Either a new hand-rolled `u32-BE ‖ postcard` frame-length decode entered
+    crates/ — migrate it onto tokio_util::codec::LengthDelimitedCodec with an
+    explicit max_frame_length citing MAX_MESSAGE_BYTES, as
+    crates/tillandsias-router-sidecar/src/main.rs already does — or a
+    migration landed without lowering its row in
+    scripts/framing-raw-decode-baseline.tsv. Lower the count in the SAME
+    commit as the migration and delete the row when the file reaches zero.
+    A site that genuinely cannot migrate becomes a `keep` row with its reason
+    recorded both in the baseline and at the site, never a silently raised
+    ceiling.
+  command: "scripts/check-framing-raw-decodes.sh; grep -v '^#' scripts/framing-raw-decode-baseline.tsv"
