@@ -44,6 +44,24 @@ critical_path:
     timeout_ms: 20000
     expected_behavior: "ok: resolvable-not-serving deferred to the clone loop"
 
+
+  - step: "LOCALE CONTROL: the DOA class is still classified under a non-English locale (773-f5ma)"
+    # THE STEP THAT WAS SILENTLY RED ON THIS FLEET FOR NINE DAYS. The classifier
+    # greps git's stderr for English phrases; on a French-locale host git says
+    # `fatal : impossible de rechercher ... (Nom ou service inconnu)`, nothing
+    # matches, and a DOA alias degrades to the slow seed path instead of
+    # fast-failing. Step 1 above passes on an English host and fails on a
+    # localized one, which is the worst shape a gate can have: it looks like a
+    # flaky test and is actually a real defect with a geography.
+    #
+    # This runs the SAME probe with LANG/LC_ALL forced to French, so the fix
+    # (LC_ALL=C scoped to the parsed invocation) is asserted rather than
+    # assumed. It is deliberately tolerant of a host lacking the fr_FR locale:
+    # glibc falls back to C, the step still exercises the code path, and it
+    # never reports green for a reason other than the probe working.
+    command: "trace_lifecycle() { :; }; eval \"$(awk '/^probe_mirror_reachable\\(\\) \\{/,/^\\}/' images/default/lib-common.sh)\"; export TILLANDSIAS_MIRROR_REACHABLE_TIMEOUT_S=3 LANG=fr_FR.UTF-8 LC_ALL=fr_FR.UTF-8; if probe_mirror_reachable 'bogus-alias-xyz-not-real-99' 'tillandsias' 2>/tmp/pmr_l_$$; then echo 'FAIL: unresolvable alias did not fast-fail under a French locale'; rm -f /tmp/pmr_l_$$; exit 1; fi; grep -q 'ALIAS UNRESOLVABLE' /tmp/pmr_l_$$ && echo 'ok: DOA class survives a non-English locale'; rm -f /tmp/pmr_l_$$"
+    timeout_ms: 20000
+    expected_behavior: "ok: DOA class survives a non-English locale"
   - step: "the probe runs BEFORE the clone loop in the launch path"
     # Property check (call precedes the retry loop), not a literal source pin.
     command: "probe=$(grep -n 'probe_mirror_reachable \"$(git_mirror_host)\"' images/default/lib-common.sh | head -1 | cut -d: -f1); loop=$(grep -n 'for i in $(seq 1 $max_retries)' images/default/lib-common.sh | head -1 | cut -d: -f1); if [ -n \"$probe\" ] && [ -n \"$loop\" ] && [ \"$probe\" -lt \"$loop\" ]; then echo 'ok: probe precedes the clone loop'; else echo \"FAIL: probe not before clone loop (probe=$probe loop=$loop)\"; exit 1; fi"

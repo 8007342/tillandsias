@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: probe-mirror-reachable-grep-is-locale-blind
+    field: status
+    value: done
+    ts: "2026-08-25T02:06:29Z"
+    host: yoga
+
+events:
+  - packet_id: probe-mirror-reachable-grep-is-locale-blind
+    event:
+      type: completed
+      ts: "2026-08-25T02:06:29Z"
+      host: yoga
+      summary: >
+        status 'done' with evidence_refs: litmus:forge-clone-reachability-probe-shape 5/5 with a new fr_FR locale control; git-mirror-service instant 20/20 (was 19/20); hand-falsified both directions
+  - packet_id: probe-mirror-reachable-grep-is-locale-blind
+    event:
+      type: note
+      ts: "2026-08-25T02:06:29Z"
+      host: yoga
+      summary: >
+        LC_ALL=C scoped to the parsed invocation

@@ -22974,6 +22974,22 @@ plan_index:
             litmus:forge-clone-reachability-probe-shape passes on a host with a non-English locale (negative control: the litmus or its fixture exercises the localized path, e.g. LANG=fr_FR.UTF-8, and still classifies the DOA alias).
 
       events:
+        - type: completed
+          ts: "2026-08-25T02:06:29Z"
+          agent_id: "linux-yoga-opus5-20260825t020629z"
+          host: yoga
+          summary: |
+            CLOSED. Both exit criteria met, and the second one is what makes the first checkable.
+
+            CRITERION 1: `probe_mirror_reachable` now runs `LC_ALL=C git ls-remote` — scoped to the single invocation whose stderr it parses, never exported. That distinction is the whole design and the packet asked for it explicitly: the forge's locale belongs to the operator, and a probe that rewrites the process environment to make its own grep work would be fixing itself at the operator's expense. Classifying by exit code instead of prose was the packet's other permitted option and was NOT taken — git returns the same non-zero for "cannot resolve" and "connection refused", and those two are precisely the classes this probe exists to separate (fast-fail versus defer to the seed-tolerant loop), so the prose IS the signal here and the fix is to stabilise it.
+
+            CRITERION 2: a fifth step, LOCALE CONTROL, runs the same probe with LANG and LC_ALL forced to fr_FR.UTF-8 and asserts the DOA class is still classified. It is deliberately tolerant of a host without that locale — glibc falls back to C, the code path still runs, and the step cannot report green for any reason other than the probe working.
+
+            HAND-FALSIFIED, both directions: reverting the LC_ALL=C turns STEP 1 red again on this host, restoring it returns the suite to green. git-mirror-service instant now reads 20/20; it read 19/20 on this host and on every other French-locale host in the fleet.
+
+            WHY THIS ONE MATTERED MORE THAN ITS p2 SUGGESTS. Step 1 passed on an English host and failed on a localized one, which is the worst shape a gate can take: it presents as a flaky test and is in fact a real defect with a geography. This packet's own filing event (2026-08-16, from this host) says it — "a red litmus that trains agents to shrug is its own defect" — and nine days later I met it exactly that way, as the single FAIL in a 258/259 suite run I was about to dismiss as pre-existing noise. It was pre-existing. It was also a genuine fast-fail path that had been dead on this machine the whole time: a forge on a French-locale host with a stale image requesting a retired alias would have taken the slow seed-tolerant path and DOA'd the operator's window instead of failing in three seconds with the 659-8faj/683-g7p6 remedy printed.
+
+            Found while regression-checking an unrelated change (875-v7hv), which is the only reason it was looked at rather than shrugged at again.
         - type: filed
           ts: "2026-08-16T19:40:00Z"
           agent_id: linux-yoga-claude-20260816t185912z
