@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-25T12:42:24Z.
+status:
+  - packet_id: a-ci-full-run-takes-down-the-live-enclave-stack
+    field: status
+    value: completed
+    ts: "2026-08-25T12:42:24Z"
+    host: linux_mutable
+
+events:
+  - packet_id: a-ci-full-run-takes-down-the-live-enclave-stack
+    event:
+      type: completed
+      ts: "2026-08-25T12:42:24Z"
+      agent_id: linux-macuahuitl-opus5-20260825t124224z
+      host: linux_mutable
+      evidence_refs:
+        - "MECHANISM #2 IDENTIFIED WITH EVIDENCE (EC1): the stakeout (podman events + journalctl + /proc/pressure witnesses around a triggered ci-full) showed died-with-no-stop-events at ZERO memory pressure, squid logging a graceful 'Preparing for shutdown', TWO kill waves ~30s apart — and the decisive single-test experiment: tests/signal_handling.rs sigterm alone took the stack 4/4 -> 0/4. The child is a REAL tray daemon; its graceful shutdown stops the shared Core containers AT APPLICATION EXIT, exactly per SHARED_STACK_SCOPES spec — the product behaved correctly, the TEST was the defect. The 30s-per-test cost WAS the real teardown wait (now 1.55s total)"
+        - "ESCAPE CLOSED (EC2): the signal children now receive TILLANDSIAS_PODMAN_BIN=scripts/test-support/podman-mock.sh (stateful mock) with the tripwire left armed as defense in depth; before/after proven live — pre-fix one test killed 4/4 -> 0/4, post-fix both tests pass with 4/4 -> 4/4"
+        - "STRUCTURAL GUARD (EC3, prior filing): TILLANDSIAS_PODMAN_REFUSE_REAL tripwire in resolve_podman_bin (unit-tested both directions), wired in all four local-ci test lines; every writer of the seam var in headless's tests serializes on one mutex; 32-test population drained 559/559 twice armed"
+        - "RESTART CAPS (EC4, prior filing): vault/proxy counters burned to 2/3 by this defect on macuahuitl — flapping verdicts this week are 880-tdwn, not service crashes; counters window-reset after 24h"
+        - "eliminated on the way, with evidence: env-race real-podman reach (mechanism #1, tripwire-guarded), systemd-oomd (pressure 0.00 at kill), shell-scope reaping (containers verify as delegated libpod scopes), the squid:6.1 pull-error (async dev-proxy noise), podman-mock passthrough (mock refuses unknowns, exit 97)"
+      merge_affordance: merge-now
+      merge_reason: >
+        Until this lands, every sibling's ./build.sh --check or --ci-full
+        beside a live enclave kills the host's whole stack through the signal
+        tests, and burns the 878-79b5 restart caps toward silent flapping.
+      summary: >
+        TWO MECHANISMS, BOTH CLOSED, EVERY KILL OF 2026-08-25 ACCOUNTED FOR.
+        Mechanism #1: parallel tests racing the process-wide podman seam
+        could hand a teardown path the real binary — now structurally
+        refused by an armed, named tripwire after a 32-test hermeticity
+        drain. Mechanism #2, the one that kept killing THROUGH the armed
+        tripwire: the signal-handling integration tests spawn the REAL tray
+        daemon, and a real tray's graceful shutdown stops the shared Core
+        stack at application exit — by spec. Unarmed runs killed via the
+        real child; the tripwire briefly turned the child into a startup
+        panic (masking as test failures); the env_remove escape hatch
+        restored the child and the kills. The child now runs against the
+        stateful podman mock: the signal path is exercised end to end, the
+        enclave is untouchable, and both tests run 20x faster because the
+        30-second real-teardown wait was the test's hidden cost all along.
+        A ci-full triggered mid-investigation with the stack up from 11:51
+        survived its litmus phase; the definitive stack-up end-to-end
+        survival run is now unblocked for the 865-n8vq closure at TTL.

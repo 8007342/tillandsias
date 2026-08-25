@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    field: next_action
+    value: 'COORDINATOR QUEUE @ 2026-08-25T12:44Z (macuahuitl hourly). FLEET: yoga 2h + pirria 6h on cadence; lenovinha operator-stopped. 880-tdwn CLOSED: both mechanisms named and fixed (env-race tripwire + the signal-handling tests'' real-daemon child whose spec-correct shutdown stopped the shared stack; child now mock-fed, 4/4 survives, tests 20x faster). CAUTION LIFTED: build/ci runs no longer kill the enclave — restart-cap note stands (vault/proxy at 2/3 here until the 24h window laps). 865-n8vq: gate GREEN at e51a8a893 (25/25, litmus 329/329); yoga''s claim TTLs ~19:33Z — at expiry macuahuitl runs ONE stack-up ci-full (now safe end-to-end) as the reproducibility+survival proof and closes the row; release decision (merge-to-main-and-release) is the operator''s call to schedule. NEXT: (1) 865-n8vq closure at TTL. (2) 873-b1nx prototype (scoping filed; rustc closure in the served store). (3) idle-capacity candidates: the 877-lwts next_action_ts key in compaction round-trip is covered, spec:windows-wsl-runtime change is in-flight — nothing else urgent in the v0.5 instant queue from this seat. DONE THIS ARC: 880-tdwn complete.'
+    ts: "2026-08-25T12:43:20Z"
+    host: macuahuitl
+
+events:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    event:
+      type: note
+      ts: "2026-08-25T12:43:20Z"
+      host: macuahuitl
+      summary: >
+        queue refresh: 880-tdwn closed both mechanisms
