@@ -122,9 +122,27 @@ esac
 
 # Size. A missing target/ is 0 bytes, not an error: a fresh checkout has not
 # built yet and is emphatically not due for a sweep.
+#
+# `du -sk`, NOT `du -sb`. `-b` is GNU-only: BSD du REFUSES it outright, so on
+# macOS the substitution below produced the empty string, the `|| bytes=0`
+# fallback fired, and the SIZE TRIGGER WAS DEAD — a 15 GiB target/ measured as
+# `bytes=0:gib=0` on this host, and only the marker-age trigger could ever fire.
+# Exactly the family this file's own header cites (803-bqte's GNU-sed `\b`), in
+# the file that documents it. `-k` is POSIX and reports KiB blocks on both.
+#
+# THE LITMUS DID NOT CATCH IT, and that is the more useful half of this note.
+# `litmus:build-cache-sweep-trigger`'s size case sets
+# TILLANDSIAS_BUILD_CACHE_MAX_GIB=0, so `gib >= 0` is true whatever `du`
+# returned: it asserted the COMPARISON and never the MEASUREMENT. A test that
+# pins a threshold check while the number feeding it is always zero passes
+# identically on a working and a broken host. The suite now asserts a non-zero
+# byte count for a file of known size, which fails on BSD without this fix.
 if [ -d "$TARGET_DIR" ]; then
-    bytes="$(du -sb "$TARGET_DIR" 2>/dev/null | cut -f1)"
-    [ -n "$bytes" ] || bytes=0
+    kib="$(du -sk "$TARGET_DIR" 2>/dev/null | awk 'NR==1 {print $1}')"
+    case "$kib" in
+        ''|*[!0-9]*) kib=0 ;;
+    esac
+    bytes=$(( kib * 1024 ))
 else
     bytes=0
 fi
