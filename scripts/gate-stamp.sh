@@ -180,6 +180,30 @@ compute() {
     # broke it the same way. The property we actually want is "the gate
     # validated these bytes", and bytes do not care which commit they are on.
     #
+    # ORDER 887-bz88 — st_mode IS part of "these bytes were validated". This
+    # hashed path + kind + CONTENT and nothing else, so `chmod -x` moved the
+    # stamp not at all and the pre-push hook accepted a tree the gate had never
+    # seen in that shape. MEASURED: on 2026-08-25 lenovinha's cycle rewrote
+    # scripts/check-credential-channel.sh through a temp file (`mv` drops the
+    # exec bit), ran the gate, staged, committed and pushed; origin/linux-next
+    # was left failing `violation:script-not-executable:1` on a pristine clone,
+    # on the CREDENTIAL CHANNEL GUARD itself — a script every host invokes by
+    # path before any committable work, where a lost exec bit is a permission
+    # error rather than a verdict.
+    #
+    # TWO BLIND SPOTS COMPOSED, and neither alone would have done it:
+    #   1. check-script-exec-bits.sh reads the INDEX (`git ls-files -s`), and the
+    #      skill runs the gate BEFORE `git add`. The regression was still
+    #      worktree-only, so the guard that exists for exactly this saw 100755
+    #      and passed. (Closed separately, in that script: it now reads the
+    #      worktree too, so the failure lands at gate time.)
+    #   2. This fingerprint then made the subsequent `git add` — which is what
+    #      wrote 100644 into the index — invisible, because it changed no bytes.
+    #      The stamp stayed fresh and the hook accepted.
+    #
+    # Including the bit closes 2: any chmod now goes stale, the gate re-runs,
+    # and by then the mode IS staged, so blind spot 1's guard sees it too.
+    #
     # So: staging is invisible, committing is invisible, editing is not. A
     # deleted file drops its line and therefore changes the stamp, which is
     # correct. The path list is folded in explicitly so a deletion cannot be
@@ -202,15 +226,22 @@ compute() {
     # this stamp exists to avoid. Classification uses bash builtins (no
     # forks), regular files are batch-hashed by xargs in a handful of
     # sha256sum invocations, and only symlinks (rare) pay a per-entry spawn.
-    # The emitted frames are BYTE-IDENTICAL to the per-file implementation,
-    # so existing stamps stay valid across this change.
-    local -a paths=() kinds=() file_digests=() symlink_digests=()
+    # The emitted frames were BYTE-IDENTICAL to the per-file implementation,
+    # so existing stamps stayed valid across THAT change. Order 887-bz88 adds
+    # the exec-bit field below, which DOES change the frame: every existing
+    # stamp goes stale once, and the next `./build.sh --check` on each host
+    # writes a current one. That is a single re-run per host, it is self-healing,
+    # and it is the price of the stamp no longer lying about st_mode.
+    local -a paths=() kinds=() execbits=() file_digests=() symlink_digests=()
     local path absolute digest line i
     while IFS= read -r -d '' path; do
         absolute="$REPO_ROOT/$path"
         if [[ -L "$absolute" ]]; then
-            kinds+=(symlink) paths+=("$path")
+            kinds+=(symlink) paths+=("$path") execbits+=(-)
         elif [[ -f "$absolute" ]]; then
+            # ORDER 887-bz88 — the exec bit is part of "these bytes were
+            # validated", and it was not hashed. See the note above `compute`.
+            if [[ -x "$absolute" ]]; then execbits+=(x); else execbits+=(-); fi
             kinds+=(file) paths+=("$path")
         elif [[ ! -e "$absolute" ]]; then
             # DELETED tracked entry (order 695-nvnd). `ls-files --cached` reads the
@@ -273,7 +304,7 @@ compute() {
             printf 'symlink\0%s\0%s\0' "${paths[i]}" "${symlink_digests[sidx]}"
             sidx=$((sidx + 1))
         else
-            printf 'file\0%s\0%s\0' "${paths[i]}" "${file_digests[fidx]}"
+            printf 'file\0%s\0%s\0%s\0' "${paths[i]}" "${execbits[i]}" "${file_digests[fidx]}"
             fidx=$((fidx + 1))
         fi
     done | "${GATE_STAMP_SHA256[@]}" | cut -d' ' -f1

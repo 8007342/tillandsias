@@ -68,10 +68,22 @@ scenario() {
     git -C "$repo" add -A >/dev/null 2>&1
     # The mode is the whole point of the check, so set it explicitly rather
     # than relying on whatever the filesystem reported.
+    #
+    # ORDER 887-bz88 — MATERIALIZE THE MODE ON DISK TOO, not just in the index.
+    # `update-index --chmod` alone leaves the worktree file at whatever printf
+    # created (644), so `executable-bare-ok` used to build a tree whose index
+    # said 100755 while the file on disk was not executable. Real git never
+    # produces that: checking out a 100755 entry materializes an executable
+    # file. The checker now reads BOTH views (a worktree-only regression is the
+    # pre-staging shape that let the 2026-08-25 credential-guard regression
+    # through), so it correctly condemned the fixture's impossible tree — the
+    # scenario was asserting on a state that cannot occur.
     if [ "$mode" = "100644" ]; then
         git -C "$repo" update-index --chmod=-x scripts/target.sh
+        chmod -x "$repo/scripts/target.sh"
     else
         git -C "$repo" update-index --chmod=+x scripts/target.sh
+        chmod +x "$repo/scripts/target.sh"
     fi
 
     local rc=0 out
