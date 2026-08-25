@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# @trace spec:meta-orchestration
+# @trace order:872-c9nd
 #
-# salvage-dirty-worktree.sh — ORDER 872-c9nd.
+# salvage-dirty-worktree.sh — ORDER 872-c9nd; collision handling 874-w2gc.
 #
 # Push a dirty worktree's CONTENT to origin before refusing the cycle, so that
 # work which the refusal protects cannot then be deleted by anything else.
@@ -44,7 +44,9 @@
 #                                that does not exist
 set -uo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# TILLANDSIAS_SALVAGE_ROOT: test seam (874-w2gc) so the fixture can salvage a
+# scratch repo instead of this checkout. Unset in production.
+ROOT="${TILLANDSIAS_SALVAGE_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$ROOT" || exit 2
 
 SLUG="${1:-dirty-start}"
@@ -52,6 +54,15 @@ HOST="$(hostname -s 2>/dev/null | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9-')"
 [ -n "$HOST" ] || HOST="unknown"
 STAMP="$(date -u +%Y%m%d)"
 REF="refs/heads/salvage/${HOST}/${STAMP}-${SLUG}"
+
+# 874-w2gc exit criterion 2: two salvages the same host/day must BOTH land.
+# The date-keyed name collides on the second same-day salvage and the push
+# dies non-fast-forward — measured during 874-s8vf's own bring-up. Probe the
+# remote first and uniquify with the UTC time-of-day; the base name stays
+# stable for the common one-salvage day so refs remain human-guessable.
+if git ls-remote --exit-code origin "$REF" >/dev/null 2>&1; then
+    REF="${REF}-$(date -u +%H%M%S)"
+fi
 
 if [ -z "$(git status --porcelain=v1 --untracked-files=all 2>/dev/null)" ]; then
     echo "ok:salvage-not-needed"

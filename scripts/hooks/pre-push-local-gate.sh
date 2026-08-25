@@ -114,15 +114,35 @@ refuse() {
 # like from the outside: nothing fails, nothing is saved.
 _all_salvage=1
 _any_ref=0
+_salvage_delete=""
 while read -r _l _ls _remote_ref _rs; do
     [[ -z "${_remote_ref:-}" ]] && continue
     _any_ref=1
     case "$_remote_ref" in
-        refs/heads/salvage/*) ;;
+        refs/heads/salvage/*)
+            # DELETION PROTECTION (874-w2gc). The exemption used to wave
+            # deletions through with the same enthusiasm as rescues: during
+            # 874-s8vf's bring-up a salvage ref was deleted with one command
+            # and nothing so much as asked. A salvage ref is by definition the
+            # ONLY copy of work that existed nowhere else — fine to reap for a
+            # test artifact, terrifying for a real rescue, and the hook cannot
+            # tell them apart. So deletion requires the explicit override; the
+            # decision and its reasoning are recorded on 874-w2gc's ledger row.
+            if [[ "$_ls" =~ ^0+$ ]]; then
+                _salvage_delete="$_remote_ref"
+            fi
+            ;;
         *) _all_salvage=0 ;;
     esac
 done < <(printf '%s\n' "$REFS")
 if [[ "$_any_ref" -eq 1 && "$_all_salvage" -eq 1 ]]; then
+    if [[ -n "$_salvage_delete" && "${TILLANDSIAS_SALVAGE_DELETE_OK:-0}" != "1" ]]; then
+        refuse "deleting salvage ref $_salvage_delete — a salvage ref may be the ONLY copy of rescued work (874-w2gc)" \
+               "Confirm the rescued content is merged or consciously abandoned (check the" \
+               "ledger event scripts/sweep-salvage-refs.sh filed for it), then re-run with:" \
+               "  TILLANDSIAS_SALVAGE_DELETE_OK=1 git push ..." \
+               "Mixed pushes: delete salvage refs in their own push, separate from rescues."
+    fi
     echo "${GRN}✓ local gate: salvage ref — exempt by design (872-c9nd); a dirty-tree copy is not expected to build${RST}" >&2
     exit 0
 fi

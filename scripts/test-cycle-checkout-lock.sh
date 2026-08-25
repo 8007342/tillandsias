@@ -12,6 +12,13 @@
 set -uo pipefail
 
 REAL_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Refusals must land in scratch, not the operator's real
+# ~/.cache/tillandsias/overlap-refusals.jsonl — nine fixture lines polluted
+# the live consumer feed before this line existed (874-w2gc). Scenario 5
+# overrides this per-invocation with its own dir, which is fine.
+TEST_STATE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/checkout-lock-test-state.XXXXXX")"
+export TILLANDSIAS_CYCLE_STATE_DIR="$TEST_STATE_DIR"
+trap 'rm -rf "$TEST_STATE_DIR"' EXIT
 fail=0
 ok()  { echo "ok: $1"; }
 bad() { echo "FAIL: $1" >&2; fail=1; }

@@ -666,6 +666,7 @@ specs:
   - litmus:mo-full-attestation-ledger-shape
   - litmus:startup-context-addendum-shape
   - litmus:pre-push-linux-next-merged-shape
+  - litmus:salvage-net-roundtrip
   coverage_ratio: 100
   last_verified: '2026-07-14'
 - spec_id: logging-levels

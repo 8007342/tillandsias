@@ -43341,6 +43341,12 @@ plan_index:
       exit_criteria: |
         (1) The salvage exemption is the first decision in the local gate, before any guard that inspects worktree state. (2) A live salvage lands a ref on REAL origin and round-trips. (3) A mixed push that actually transfers a non-salvage ref hits the full gate. All three measured, not argued.
       events:
+        - type: progress
+          ts: "2026-08-25T02:44:24Z"
+          agent_id: "linux-macuahuitl-opus5-20260825t024423z"
+          host: macuahuitl
+          summary: |
+            SALVAGE REF DISPOSED, LIFECYCLE PROVEN LIVE: refs/heads/salvage/macuahuitl/20260824-dirty-start (1589a268a, yesterday's 874-s8vf rescue) verified fully absorbed — all three salvaged paths byte-identical to committed linux-next HEAD — then deleted. The deletion was FIRST refused by the new 874-w2gc pre-push guard (seen RED live, remedy printed), then permitted under TILLANDSIAS_SALVAGE_DELETE_OK=1. Origin now holds zero salvage refs, all accounted for. sweep-salvage-refs.sh correctly deduped this ref (already named in 874-s8vf's closure event) and filed nothing.
         - type: completed
           ts: "2026-08-24T23:08:05Z"
           agent_id: linux-macuahuitl-opus5-20260824T230000Z

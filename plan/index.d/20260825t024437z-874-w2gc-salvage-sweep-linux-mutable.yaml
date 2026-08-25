@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-25T02:44:37Z.
+status:
+  - packet_id: salvage-refs-need-retention-sweep-and-a-consumer
+    field: status
+    value: completed
+    ts: "2026-08-25T02:44:37Z"
+    host: linux_mutable
+
+events:
+  - packet_id: salvage-refs-need-retention-sweep-and-a-consumer
+    event:
+      type: completed
+      ts: "2026-08-25T02:44:37Z"
+      agent_id: linux-macuahuitl-opus5-20260825t024437z
+      host: linux_mutable
+      evidence_refs:
+        - "scripts/sweep-salvage-refs.sh — coordinator sweep: ls-remote salvage/*, dedup against the folded+unfolded ledger, --apply files one progress event per UNSEEN ref on 874-s8vf's packet through tillandsias-plan (so every sweep write passes 874-idnt identity validation); report mode never writes"
+        - "the sweep is ALSO the overlap-refusals.jsonl consumer (873-zcim residue): reports total/new-since-cursor/newest, --apply advances the cursor; live run surfaced 9 lines, ALL fixture artifacts from 873-zcim's own bring-up — which exposed that test-cycle-checkout-lock.sh polluted the real feed; fixed (scratch TILLANDSIAS_CYCLE_STATE_DIR exported), suite 10/10, real jsonl unchanged after a run"
+        - "scripts/salvage-dirty-worktree.sh — same-day collision fix: remote-probe then uniquify with UTC hhmmss (EC2); TILLANDSIAS_SALVAGE_ROOT test seam; ghost spec:meta-orchestration trace re-pointed to order:872-c9nd"
+        - "scripts/hooks/pre-push-local-gate.sh — DELETION PROTECTION inside the exemption: local-sha-zeros on a salvage ref refuses unless TILLANDSIAS_SALVAGE_DELETE_OK=1; rescue pushes stay exempt (negative control)"
+        - "scripts/test-salvage-net.sh — 16/16 hermetic: round-trip byte-exact incl. untracked, worktree untouched, both same-day refs land under distinct names, deletion refused/override honored/rescue exempt, ORDERING pin with in-fixture counterfactual (the cheatsheet guard provably refuses the same tree a salvage-only push escapes), sweep files-once/idempotent/report-only"
+        - "openspec/litmus-tests/litmus-salvage-net-roundtrip.yaml + litmus-bindings.yaml registration (spec meta-orchestration); scripts/run-litmus-test.sh meta-orchestration --phase pre-build --size instant: 18/18 PASS including the new binding"
+        - "LIVE lifecycle on origin: the one standing salvage ref (macuahuitl/20260824-dirty-start) verified fully absorbed into linux-next (all three salvaged paths byte-identical to HEAD), deletion FIRST refused by the new guard (seen RED in production, remedy printed), then consciously deleted under the override; origin now holds zero salvage refs, all accounted for; disposition event filed on 874-s8vf's row"
+      merge_affordance: merge-now
+      merge_reason: >
+        Any sibling can wedge and salvage at any hour; until this is on origin
+        a second same-day salvage still dies non-fast-forward and a deletion
+        still goes unquestioned.
+      summary: >
+        THE SALVAGE NET NOW HAS A CONSUMER, AND ITS REFS HAVE RIGHTS. Exit
+        criterion by criterion: (1) sweep-salvage-refs.sh turns unseen
+        salvage/* refs into ledger events on the salvage packet in one
+        coordinator pass, no human action — proven in the hermetic fixture and
+        wired into the standing coordinator duty (831-ezea next_action); the
+        live sweep correctly filed NOTHING because the only real ref was
+        already named in 874-s8vf's closure (dedup working on first contact).
+        (2) Same-day collisions resolve by name (UTC time suffix after a
+        remote probe), both refs land. (3) RETENTION DECISION, recorded with
+        reasoning: salvage refs are kept until their content is confirmed
+        merged or consciously abandoned; deletion requires
+        TILLANDSIAS_SALVAGE_DELETE_OK=1 past the pre-push guard; NO time-based
+        auto-reaping — the refs are tiny, their content was by definition
+        unrecoverable from anywhere else, and expiry would reintroduce the
+        silent loss the net exists to end. Server-side protection for
+        refs/heads/salvage/* (GitHub rule) is recommended to the operator but
+        needs repo-admin action; the local guard covers every fleet push path
+        today. (4) litmus:salvage-net-roundtrip pins push+round-trip against a
+        fixture remote and goes red if the exemption is reordered below any
+        worktree-state guard — the ordering scenario asserts the
+        counterfactual in the same fixture, so a pass can never be vacuous.
+
+        Rode along: the 873-zcim residue (overlap-refusals consumer) closes
+        with this row; the consumer's first live read found its own test
+        suite polluting the feed, which is now fixed and is exactly the kind
+        of thing a consumer exists to catch.
