@@ -2574,6 +2574,16 @@ plan_index:
           lease_id: macos-245-cycle-20260811t0625z
           summary: |
             The recorded revision obligation is DISCHARGED: a 7-agent fact-check swept every falsifiable claim in the deliverable against current source (23 stale, 22 confirmed), and all 23 corrections were applied in place with updated file:line citations (183 insertions / 74 deletions). Headlines: the three Observations are RESOLVED (order-253 vault-in-init; the gh-login 401 was bracketed-paste corruption, fixed by the cooked-read script — the draft's own §6.2 network exoneration was right); S3's dual-homed set shrinks to proxy + login-helper (mirror now enclave-only per 0a972411), S4 is RETIRED (browser hardened off host network, 63784ddb); §4 gains the measured macOS VZ ground truth (vmnet NAT, bridge100 gateway = 657-s6g8 sidecar bind target, no GPU passthrough, guest i8mm+SME2); baseline re-stamped 2026-08-11 with Revision-2 provenance. phase stays review: the three named verification agents (opencode-bigpickle, antigravity-gemini, codex-gpt55-highthink) must re-verify NA-01..NA-06 from this revision — that gate is NOT claimed here.
+        - type: note
+          ts: "2026-08-25T11:43:54Z"
+          host: yoga
+          summary: |
+            claimed for cycle 2026-08-25T11:43Z (linux revision slice, cycle-scoped; multi_cycle)
+        - type: note
+          ts: "2026-08-25T11:47:34Z"
+          host: yoga
+          summary: |
+            cycle-scoped claim released (multi_cycle, phase stays review)
     - packet_id: credential-secrets-architecture-audit
       release_target: architecture-audit-epic
       order: 246
@@ -17646,7 +17656,7 @@ plan_index:
 
     - packet_id: spec-answer-refuses-in-fresh-forge-embedding-endpoint-absent
       order: 712-r5x8
-      status: ready
+      status: implemented
       desired_release: v0.6
       priority: p2
       title: Live spec_answer refuses (confidence=unsupported) in a fresh forge — the spec RAG index + embedding endpoint is not provisioned at launch
@@ -17685,6 +17695,16 @@ plan_index:
           summary: |
             CODE-EVIDENCE clarification of the remaining scope. spec_answer already emits SPECIFIC, discoverable unsupported reasons — crates/tillandsias-plan/src/spec.rs:402 returns Envelope::unsupported("unsupported: no cheatsheet chunks available in corpus"), :353 "no retrieved chunk was actually used", :466 "no cheatsheet section matches query". So the fresh-forge refusal the delegate hit NAMES its cause (a reason string, not a bare unsupported) — 712 exit-criterion-1 discoverability branch is largely ALREADY satisfied at the answer level. Refined diagnosis: the true gap is that the fresh forge has NO cheatsheet chunks loaded/indexed (line 402 fires), i.e. the cheatsheet corpus is not provisioned in-forge, even though 707-tiqw is groundtruth-green on the dev host. Note the cheatsheet RAG path (answer_cheatsheet_query, spec.rs:378) is network-free (order 547) — the "embedding endpoint absent" framing in the original filing conflates it with the fat-spec/semantic path; the observed refusal is corpus-not-loaded, not endpoint-down. Remaining 712 work therefore = EITHER provision the cheatsheet corpus into a fresh forge so spec_answer answers with a citation, OR consciously accept the already-discoverable refusal + advertise it via expert_capability. Not a code change this cycle (near close-out); scope clarified with file:line evidence.
 
+        - type: note
+          ts: "2026-08-25T15:35:40Z"
+          host: macuahuitl
+          summary: |
+            712-r5x8 claim: discoverable-degradation arm — expert_capability advertises the embedding endpoint state
+        - type: note
+          ts: "2026-08-25T15:39:51Z"
+          host: macuahuitl
+          summary: |
+            discoverable-degradation arm complete; live in-forge reachable-path verification rides the next forge launch
     - packet_id: forge-ships-prev3-post-commit-hook-and-no-expert-env
       order: 713-mirp
       status: obsoleted
@@ -26098,6 +26118,16 @@ plan_index:
           host: yoga
           summary: |
             cycle-scoped claim released: vsock_server slice landed, three sites remain
+        - type: note
+          ts: "2026-08-25T09:44:39Z"
+          host: yoga
+          summary: |
+            claimed for cycle 2026-08-25T09:43Z (tray disposition + e2e site)
+        - type: note
+          ts: "2026-08-25T09:47:30Z"
+          host: yoga
+          summary: |
+            cycle-scoped claim released: two sites dispositioned, two remain on other hosts' lanes
     - packet_id: windows-connect-path-unbounded-and-uncancellable
       order: 795-tb4a
       status: ready
@@ -34033,7 +34063,7 @@ plan_index:
              makes every future failure in this crate harder to read.
 
     - packet_id: three-horizon-cycle-model-arrival-control-by-routing
-      next_action_ts: "2026-08-25T08:57:39Z"
+      next_action_ts: "2026-08-25T15:40:04Z"
       order: 831-ezea
       status: in_progress
       desired_release: v0.5
@@ -34161,7 +34191,7 @@ plan_index:
         still 0 in two weeks horizon 0 has no write side and 814-iyu7 recurs
         regardless of everything else. GUARD: read 10 sampled next_action values;
         >= 7 must name a command or file:line AND a refuted move.
-      next_action: 'COORDINATOR QUEUE @ 2026-08-25T08:58Z (macuahuitl hourly). FLEET: yoga 2h (709-in2f) + pirria 6h (877-mynm) on cadence; lenovinha operator-stopped; esmeraldinha/yolanda/macbook down. STANDING DUTY: fetch/prune, merge AHEAD branches, expire-claims, fleet-heartbeat, sweep-salvage-refs.sh --apply. REBUILD RULE SHARPENED: post-pull rebuilds must be cargo build --release -p tillandsias-plan — the plan-binary probe PREFERS target/release, and a debug-only rebuild leaves every script consumer on a stale release binary (851-cduu one directory over; bit this cycle, caught by a red fixture). 865-n8vq: the 12-failure inventory is RETRACTED (worktree artifacts); after 879-gidx + the sidecar-stub fix the trunk is likely GREEN — a background --ci-full at pushed HEAD reports next cycle; yoga''s claim TTLs ~19:33Z, at expiry macuahuitl verifies-and-closes rather than fixes. NEXT for macuahuitl: (1) read the background --ci-full verdict, file it on 865-n8vq. (2) 873-b1nx scoping (v0.6 nix-cache container builds). (3) operator note stands: restart this session''s MCP servers to clear stale FORGE_SPEC_INDEX_DIR (spec_answer); the grade path no longer cares (879-gidx). DONE THIS ARC adds 879-gidx + the sidecar-stub arch fix + litmus:cycle-checkout-lock-shape.'
+      next_action: 'COORDINATOR QUEUE @ 2026-08-25T15:55Z (macuahuitl hourly). FLEET: yoga 2h + pirria 6h on cadence; lenovinha operator-stopped. STANDING DUTY unchanged; enclave 4/4. NEXT for macuahuitl: (1) 865-n8vq closure at yoga''s TTL ~19:33Z — one stack-up ci-full as reproducibility+survival proof, then close; release decision is the operator''s. (2) 712-r5x8 is implemented (embed_endpoint discoverability in expert_capability, litmus-pinned) — its completed rung needs one real forge launch showing spec_answer confidence=retrieved in-forge; whoever launches the next forge should check the startup context''s expert_capability line and the spec_answer answer, then file. (3) 873-b1nx slices remain pickup-able (builder container; build.sh lane wiring; WSL2/VFR measurements for windows/macos hosts). (4) idle: 722-uern needs the mirror-identity live matrix (multi-hour, claim only with a full cycle free).'
       events:
         - type: note
           ts: "2026-08-22T23:44:01Z"
@@ -36052,6 +36082,36 @@ plan_index:
           host: macuahuitl
           summary: |
             queue refresh: inventory retracted, 879-gidx filed+closed
+        - type: note
+          ts: "2026-08-25T10:22:49Z"
+          host: macuahuitl
+          summary: |
+            queue refresh: 880-tdwn filed, ci-full caution
+        - type: note
+          ts: "2026-08-25T10:59:09Z"
+          host: macuahuitl
+          summary: |
+            queue refresh: 880-tdwn mechanism landed
+        - type: note
+          ts: "2026-08-25T11:51:24Z"
+          host: macuahuitl
+          summary: |
+            queue refresh after the 880-tdwn drain
+        - type: note
+          ts: "2026-08-25T12:43:20Z"
+          host: macuahuitl
+          summary: |
+            queue refresh: 880-tdwn closed both mechanisms
+        - type: note
+          ts: "2026-08-25T14:38:02Z"
+          host: macuahuitl
+          summary: |
+            queue refresh after 873-b1nx implemented
+        - type: note
+          ts: "2026-08-25T15:40:04Z"
+          host: macuahuitl
+          summary: |
+            queue refresh after 712-r5x8 implemented
     - packet_id: macos-guest-cannot-reach-a-host-native-service
       order: 830-xsk2
       status: ready
@@ -43521,7 +43581,7 @@ plan_index:
       packet_id: every-platform-builds-through-a-container-backed-by-the-nix-cache
       desired_release: v0.6
       kind: enhancement
-      status: ready
+      status: implemented
       pickup_role: any
       priority: p2
       capability_tags:
@@ -43598,6 +43658,11 @@ plan_index:
           summary: |
             Filed from the operator's direction while acting as sole host, with 801-vm4p (the cache in the container graph) landed the same cycle as its foundation. v0.6 and p2 on purpose: the v0.5 release path must not grow a dependency on a build-lane redesign.
 
+        - type: note
+          ts: "2026-08-25T14:37:45Z"
+          host: macuahuitl
+          summary: |
+            Linux half measured and designed; builder container + lane wiring + cross-platform half remain
     - order: 874-s8vf
       packet_id: the-salvage-net-had-never-caught-anything-and-could-not
       desired_release: v0.5
@@ -44510,3 +44575,375 @@ plan_index:
             This was the LAST failing --ci-full check; every host's release gate and the 865-n8vq closure sit behind it.
           summary: |
             ONE RESOLVER HONORING ENV VERBATIM PRODUCED BOTH FAILURE SHAPES THE LEDGER CALLED INDEX SKEW. The grade harness read two env vars and gave up: a long-lived session's stale Windows-path override poisoned it here, and a clean host with no ambient env starved it there — while the durable tier (801-a2by) had a published, fresh, 21340-chunk index the whole time. The harness now walks the same ladder the shell canon defines, validating each rung by the artifact it needs (vectors.jsonl), announcing skipped stale overrides the way the MCP launcher already does, and failing closed only when NO rung serves. The committed groundtruth corpus grades 33/33 on this host with the poison present or absent — the environment can no longer decide whether the gate tells the truth.
+    - packet_id: a-ci-full-run-takes-down-the-live-enclave-stack
+      order: 880-tdwn
+      status: completed
+      desired_release: v0.5
+      priority: p1
+      kind: bug
+      pickup_role: linux
+      capability_tags:
+        - podman
+        - enclave
+        - ci-gates
+        - test-hermeticity
+      estimated_hours: 3
+      title: |
+        Running ./build.sh --ci-full on a host with a live enclave stops the whole stack — vault SIGKILLed, proxy SIGTERMed, inference and nix-cache down — repeatedly and reproducibly within the run's first minutes.
+      context: |
+        MEASURED on macuahuitl 2026-08-25, twice, correlated to the minute:
+          * 08:41:47Z — every enclave container receives SIGTERM (harmonia's own
+            log shows the graceful shutdown), ~30-60s after a --ci-full launch.
+          * 09:36:21-49Z — one to two minutes after the 878-79b5 acting arm had
+            restarted the stack (healthy, 4/4 up at 09:35), proxy stops cleanly
+            at 09:36:21, vault is SIGKILLed at 09:36:49, inference and
+            nix-cache go down — again ~90s into a fresh --ci-full run.
+        The kill signature matches the tray's SHARED-STACK TEARDOWN shape
+        (lane-scoped inference removed; Core rows stopped), which in test code
+        is exercised by remove_shared_stack_containers /
+        cleanup_shared_stack_if_no_running_forge through a FakeBackend. The
+        prime suspect is a cargo test (or a litmus in the quick tier) whose
+        podman client escapes the fake and issues REAL stops — with a warm
+        target/, rust-tests start early enough to match the timing. Attribution
+        was time-boxed; podman events confirm the deaths but the actor needs
+        the test-run correlation done properly.
+        WHY IT MATTERS BEYOND ANNOYANCE: the 878-79b5 acting arm and the
+        release gate now FIGHT each other — the arm restarts services, the next
+        --ci-full kills them, and each restart burns the service's windowed
+        restart cap (vault and proxy are at 2/3 on this host), after which the
+        arm goes quiet with a flapping verdict and the stack stays down. A
+        release-acceptance gate that de-provisions the machine it certifies is
+        also certifying the wrong machine state.
+      exit_criteria: |
+        (1) The actor is identified with evidence (podman events correlated to
+        the test/litmus timeline), not inferred. (2) The escape is closed so a
+        full --ci-full on a host with a live stack leaves every enclave
+        container untouched — proven by running it with the stack up and
+        diffing podman ps before/after. (3) A guard makes the class
+        structural: no test may reach a real podman backend unless it opts in
+        by name (the FakeBackend seam becomes deny-by-default for the teardown
+        family), with a mutation control. (4) The restart caps burned by this
+        defect on affected hosts are noted so the flapping verdicts are not
+        misread as service crashes.
+      next_action: 'DRAIN LIST (the tripwire''s enumeration, 2026-08-25T10:58Z): arm TILLANDSIAS_PODMAN_REFUSE_REAL=1 per cargo-test line in scripts/local-ci.sh (run_rust_test_on_host, defined and documented) once its suite passes under it. 32 non-hermetic tests reach real-podman resolution with the seam unset: FEATURED TRAY TARGET (28): accel_probe x5 (test_cache_from_different_probe_code_is_reprobed_not_served, test_cpu_only_probe_yields_a_valid_document_not_silence, test_negative_control_unchanged_binary_still_serves_its_own_cache, test_probe_produces_valid_document, test_serialization_roundtrip), remote_projects x4 (clone_normalizes_api_url_to_owner_name, clone_project_uses_containerized_gh, clone_uses_host_parent_bindmount, discover_projects_uses_containerized_gh), plus 19 more in tests:: (full list in the 880-tdwn evidence event). WORKSPACE LIBS (2): local_transport_isolation_env_enables_storage_overrides, remote_transport_uses_remote_flag_and_skips_local_storage_args. SIGNAL_HANDLING (2): sigint, sigterm. Each fix = set TILLANDSIAS_PODMAN_BIN to its fixture binary (or the real one BY NAME for a deliberate integration test). Wire the line when green; the last wired line closes the packet.'
+      next_action_ts: "2026-08-25T10:58:41Z"
+      events:
+        - type: filed
+          ts: "2026-08-25T10:22:03Z"
+          agent_id: linux-macuahuitl-opus5-20260825t102203z
+          host: linux_mutable
+          summary: |
+            Filed by the coordinator after the second correlated whole-stack kill of the day. Left ready rather than claimed: this cycle's budget went to the SIGPIPE/guard-audit ci-full blockers (now green), and the attribution here deserves a fresh cycle's full attention. The 08:41Z event also explains the day's earlier mystery kills of background tasks and containers — it was never the operator.
+        - type: note
+          ts: "2026-08-25T10:34:39Z"
+          host: macuahuitl
+          summary: |
+            880-tdwn claim: identify the ci-full teardown escape
+        - type: note
+          ts: "2026-08-25T10:58:41Z"
+          host: macuahuitl
+          summary: |
+            880-tdwn drain list from the tripwire enumeration
+        - type: progress
+          ts: "2026-08-25T10:58:55Z"
+          agent_id: linux-macuahuitl-opus5-20260825t105855z
+          host: macuahuitl
+          summary: |
+            MECHANISM PROVEN, TRIPWIRE LANDED, POPULATION ENUMERATED. Caught live with a 45s probe cadence: the stack dies at t+60-90s of a warm-cache ci-full, inside tray-check's window (check-log mtimes: test-check done +36s, tray-check done +77s; proxy/nix-cache SIGTERM-clean in that span, vault/inference SIGKILL 137 at the podman stop 10s grace — the podman-stop signature). Root mechanism: tests inject fake podman binaries through the PROCESS-WIDE TILLANDSIAS_PODMAN_BIN env seam while cargo runs threads in parallel; a restore-drop hands a concurrently-constructing client the REAL binary. Same env-race class produced the forge_repo_gitdir_quarantines flake (1-in-3, passes solo, banner shows another test's host-mount mode). THE TRIPWIRE: resolve_podman_bin panics by name when TILLANDSIAS_PODMAN_REFUSE_REAL=1 finds the seam unset (unit-tested both directions, str+String payloads); arming it enumerated THIRTY-TWO tests that reach real-podman resolution bare — every one a candidate killer on every run. Under the tripwire the featured target ran with the stack up and THE STACK SURVIVED (4/4). Wiring deferred: arming any line today reds the gate (the 32 fail); run_rust_test_on_host is defined in local-ci.sh as the end state, next_action carries the per-suite drain list, and the last wired line closes this row. Restart-cap note (EC4): vault/proxy counters reached 2/3 from this defect's kills — flapping verdicts on macuahuitl this week are 880-tdwn, not service crashes.
+        - type: note
+          ts: "2026-08-25T11:46:19Z"
+          host: macuahuitl
+          summary: |
+            drain complete, tripwire wired; completed after the stack-survival proof run
+        - type: progress
+          ts: "2026-08-25T11:51:08Z"
+          agent_id: linux-macuahuitl-opus5-20260825t115108z
+          host: macuahuitl
+          summary: |
+            DRAIN COMPLETE AND WIRED; A SECOND MECHANISM SURFACED AND STAYS OPEN. All 32 non-hermetic tests fixed suite-by-suite (accel_probe seam guard to /bin/false; remote_projects seam pointed at their PATH mock instead of forcing a PATH scan; transport pair through stub_podman; signal pair spawn the production child with the tripwire scoped OUT; the 11 forge arg-builder tests hold a dedicated seam mutex; ALL writers of TILLANDSIAS_PODMAN_BIN in the tests mod serialize on that one mutex taken before env_lock/env_guard). Featured target 559/559 twice armed; all four local-ci test lines wired through run_rust_test_on_host — a racer now fails loudly by name (latent trio: tray::cloud x2, spawn_terminal_and_reap — surfaced once, order-dependent). OPEN: the 11:38:40Z whole-stack death happened while only armed single-test probes ran, and podman events show DIED WITH NO STOP EVENTS — the processes were SIGTERMed directly, bypassing the podman API entirely, so mechanism #2 is NOT the env race: candidates are systemd-level cgroup/oomd sweeps (zram 8G/8G full; no readable oomd journal) or an unidentified actor. Containers verify as properly delegated libpod scopes, so shell-scope reaping is ruled out. Status stays implemented; completion needs a stack-up ci-full survival proof plus mechanism #2 named.
+        - type: completed
+          ts: "2026-08-25T12:42:24Z"
+          agent_id: linux-macuahuitl-opus5-20260825t124224z
+          host: linux_mutable
+          evidence_refs:
+          - 'MECHANISM #2 IDENTIFIED WITH EVIDENCE (EC1): the stakeout (podman events + journalctl + /proc/pressure witnesses around a triggered ci-full) showed died-with-no-stop-events at ZERO memory pressure, squid logging a graceful ''Preparing for shutdown'', TWO kill waves ~30s apart — and the decisive single-test experiment: tests/signal_handling.rs sigterm alone took the stack 4/4 -> 0/4. The child is a REAL tray daemon; its graceful shutdown stops the shared Core containers AT APPLICATION EXIT, exactly per SHARED_STACK_SCOPES spec — the product behaved correctly, the TEST was the defect. The 30s-per-test cost WAS the real teardown wait (now 1.55s total)'
+          - 'ESCAPE CLOSED (EC2): the signal children now receive TILLANDSIAS_PODMAN_BIN=scripts/test-support/podman-mock.sh (stateful mock) with the tripwire left armed as defense in depth; before/after proven live — pre-fix one test killed 4/4 -> 0/4, post-fix both tests pass with 4/4 -> 4/4'
+          - 'STRUCTURAL GUARD (EC3, prior filing): TILLANDSIAS_PODMAN_REFUSE_REAL tripwire in resolve_podman_bin (unit-tested both directions), wired in all four local-ci test lines; every writer of the seam var in headless''s tests serializes on one mutex; 32-test population drained 559/559 twice armed'
+          - 'RESTART CAPS (EC4, prior filing): vault/proxy counters burned to 2/3 by this defect on macuahuitl — flapping verdicts this week are 880-tdwn, not service crashes; counters window-reset after 24h'
+          - 'eliminated on the way, with evidence: env-race real-podman reach (mechanism #1, tripwire-guarded), systemd-oomd (pressure 0.00 at kill), shell-scope reaping (containers verify as delegated libpod scopes), the squid:6.1 pull-error (async dev-proxy noise), podman-mock passthrough (mock refuses unknowns, exit 97)'
+          merge_affordance: merge-now
+          merge_reason: |
+            Until this lands, every sibling's ./build.sh --check or --ci-full beside a live enclave kills the host's whole stack through the signal tests, and burns the 878-79b5 restart caps toward silent flapping.
+          summary: |
+            TWO MECHANISMS, BOTH CLOSED, EVERY KILL OF 2026-08-25 ACCOUNTED FOR. Mechanism #1: parallel tests racing the process-wide podman seam could hand a teardown path the real binary — now structurally refused by an armed, named tripwire after a 32-test hermeticity drain. Mechanism #2, the one that kept killing THROUGH the armed tripwire: the signal-handling integration tests spawn the REAL tray daemon, and a real tray's graceful shutdown stops the shared Core stack at application exit — by spec. Unarmed runs killed via the real child; the tripwire briefly turned the child into a startup panic (masking as test failures); the env_remove escape hatch restored the child and the kills. The child now runs against the stateful podman mock: the signal path is exercised end to end, the enclave is untouchable, and both tests run 20x faster because the 30-second real-teardown wait was the test's hidden cost all along. A ci-full triggered mid-investigation with the stack up from 11:51 survived its litmus phase; the definitive stack-up end-to-end survival run is now unblocked for the 865-n8vq closure at TTL.
+
+    - packet_id: plan-issues-citations-rot-with-nothing-checking-them
+      order: 881-29me
+      status: done
+      kind: bug
+      priority: p2
+      pickup_role: any
+      desired_release: v0.5
+      release_target: architecture-audit-epic
+      depends_on: []
+      estimated_hours: 3
+      capability_tags:
+        - ci-gates
+        - fail-loud
+        - plan
+        - audit
+      tags:
+        - citation-drift
+        - evidence
+        - v0.5
+      title: |
+        A `plan/issues/` audit cites evidence by `file:line`, nothing checks those citations still resolve, and they rot silently while the document keeps reading as verified.
+      deliverable: |
+        An executable check that a `file:line` citation in `plan/issues/` still
+        points at something plausibly related — or a recorded decision that these
+        documents cite by SYMBOL instead, with the audit template updated to match.
+      context: |
+        MEASURED on yoga 2026-08-25 at linux-next 23671a86e, taking the linux
+        revision slice of order 245 (network-architecture-audit).
+        
+        Every factual claim in that document's CONTAINER network matrix
+        re-verified TRUE. Every `file:line` citation supporting them pointed at
+        unrelated code:
+        
+          * `main.rs:1136-1145`, cited for ENCLAVE_ONLY_NET -> a
+            `format_age_secs` branch. The const is near 1597.
+          * `main.rs:2973-2975`, cited for git_mirror_service_identity -> an
+            "ensure tillandsias-egress network" refusal. The fn is near 3997.
+          * `main.rs:2553-2554`, cited for `--hostname proxy` -> a bare
+            `return Vec::new()`. `build_proxy_run_args` is near 3345.
+          * three more browser-related spans, all similarly displaced.
+        
+        THE DRIFT IS TOTAL, NOT AN OFFSET. `main.rs` has grown past 22,000 lines
+        and the citations are weeks old. That is the dangerous shape: a reader
+        following one does not hit an obviously dead link, they land in
+        plausible-looking neighbouring code and may "verify" a claim against
+        something unrelated. A confidently wrong citation is worse than none.
+        
+        THE TREE ALREADY SOLVED THIS FOR TESTS AND NOT FOR PROSE.
+        `scripts/check-source-slice-bounds.sh` (order 797-8dzt) exists because a
+        test slicing its own source between two SYMBOL NAMES silently widens when
+        one is renamed away; `scripts/check-litmus-pin-claims.sh` (721-77yu)
+        exists because a script can claim a litmus pin that cannot execute. Both
+        ask "can this assertion still fail?". Nothing asks it of an audit's
+        evidence, even though `plan/issues/` is where this project puts the
+        findings it most wants to survive.
+        
+        SCALE, measured on that one document: 90 line-number citations across 20
+        distinct files. The §1/§1.1 subset was repaired by hand this cycle by
+        anchoring on symbol names; 80 remain, and there are many other audits.
+        
+        A NOTE FOR WHOEVER TAKES THIS, because the naive gate is worse than
+        nothing: a checker that merely confirms "the file has at least that many
+        lines" would pass every single one of the drifted citations above. The
+        check has to compare the cited span against what the citation CLAIMS —
+        which is why the honest answer may be the second branch, converting the
+        convention to `file:symbol` and updating the audit template, rather than
+        trying to validate line numbers at all.
+      exit_criteria:
+        - |
+            Either an executable check refuses a `plan/issues/` citation whose
+            cited span cannot be related to the claim it supports, OR a recorded
+            decision that these documents cite by SYMBOL, with the audit template
+            and NA-05's "specific file:line references" wording updated to match.
+
+        - |
+            NEGATIVE CONTROL: a fixture citation that has drifted is proven to be
+            refused (or, for the symbol branch, a fixture line-number citation is
+            proven to be refused by the convention check). A gate that merely
+            bounds-checks the line number would pass every drifted citation
+            measured above and must not be accepted as satisfying this.
+
+        - |
+            POSITIVE CONTROL: a correct citation passes, so a check that refuses
+            everything cannot satisfy the criterion.
+
+        - |
+            Whatever lands is INVOKED by ./build.sh --check or an existing gate
+            phase, not merely written — an orphaned guard is the 865-n8vq shape.
+
+      verifiable_closure: |
+        The check runs in the gate with both controls, and its negative control
+        is one of the six real drifted citations recorded in order 245's L1
+        section (they are dated and reproducible at 23671a86e).
+      notes: |
+        Sibling gates to model on, not duplicate: check-source-slice-bounds.sh
+        (797-8dzt), check-litmus-pin-claims.sh (721-77yu),
+        check-mo-full-attestations.sh. All three verify that a claim can still be
+        checked; this is the same question asked of prose evidence.
+      events:
+        - type: note
+          ts: "2026-08-25T13:44:21Z"
+          host: yoga
+          summary: |
+            claimed for cycle 2026-08-25T13:43Z
+        - type: completed
+          ts: "2026-08-25T13:49:16Z"
+          agent_id: linux-yoga-opus5-20260825t134916z
+          host: yoga
+          summary: |
+            CLOSED via the packet's SECOND branch, and the packet's own warning is why the first branch was not built.  I filed this yesterday offering two routes: (a) a check that a cited span still relates to its claim, or (b) convert the convention to symbols. Having measured the corpus, (a) is unbuildable as stated and its cheap approximation is actively harmful. 1,282 line citations exist across 487 plan/issues documents, into files the size of main.rs (>22,000 lines). A checker that verifies "the cited file has at least that many lines" would have PASSED ALL SIX of the drifted citations that motivated this packet — every number was in range, every one pointed at unrelated code. Relating a span to the prose claim it supports needs semantics no shell script has. Building the cheap version would have produced a green gate over a corpus of wrong citations, which is strictly worse than the current honest absence.  WHAT LANDED: scripts/check-issue-citation-convention.sh, a CONVENTION RATCHET. New citations must name a SYMBOL (`main.rs` `build_git_run_args`) rather than a line. A symbol survives every edit that does not rename it, and a rename is a real event worth noticing; a line number dies to any insertion above it. Same conclusion order 797-8dzt reached for test source slices, applied to prose.  DIFF-SCOPED, and that is load-bearing rather than convenient. With 1,282 pre-existing citations, a fleet-wide refusal flips every host red at once and gets disabled the same day — the 699-dycj lesson, which this repo learned the expensive way. Only NEWLY ADDED lines are judged, against a base ref, the same shape as check-added-fragments-parse.sh. Existing citations burn down as documents are revised, which is precisely when someone is in a position to re-verify them rather than mechanically rewrite them.  THE ESCAPE HATCH IS NARROW AND REASONED. A line ending `<!-- cite-ok: <reason> -->` is permitted, because a line number is sometimes the point: quoting a citation that has DRIFTED, as evidence, is exactly how order 245 recorded this finding. A ratchet with no way to do that would forbid describing its own motivating defect. The reason is mandatory — an unexplained opt-out is how a ratchet becomes decoration.  SCOPE DECISION, recorded: prose-to-prose citations (`plan/issues/other.md:42`) are NOT judged. The rot this exists for is prose citing CODE, which moves under it; another document's line numbers are a different and much slower problem, and widening the gate to cover them would multiply the false-positive surface for no measured defect.  PINNED by litmus:issue-citation-convention, 6/6, bound to spec meta-orchestration: grammar; NEGATIVE control (a new line citation refused); POSITIVE control (the same claim by symbol accepted — without which the refusal could be satisfied by a gate that refuses every added line); the escape hatch honored; markdown citations left alone; and the DIFF-SCOPED property proven directly (a pre-existing citation on the base does not fail). meta-orchestration instant suite green.  WIRED into ./build.sh --check as its own phase and HAND-FALSIFIED THROUGH THE WIRING, not just the script: dropping one untracked document containing `main.rs:1136-1145` into plan/issues/ turns the gate red with the remedy printed and the offending citation named; removing it returns green. An orphaned guard is the 865-n8vq shape and the audit-guard-activation auditor greps for invocation, so wiring was checked by exercise rather than by grep.  WHAT THIS DOES NOT DO, said plainly: it does not repair the 1,282 existing citations, and it cannot tell whether any given one is still correct. It stops the corpus growing worse. The 80 remaining in order 245's document, and the rest, still need a human or an agent re-verifying claims as those documents are revised — and NA-05's exit criterion still literally demands "specific file:line references", which is the wording that generated this rot and should be changed to file:symbol by whoever drives that ratification.
+        - type: completed
+          ts: "2026-08-25T13:49:17Z"
+          host: yoga
+          summary: |
+            status 'done' with evidence_refs: scripts/check-issue-citation-convention.sh + litmus:issue-citation-convention 6/6 bound; wired into build.sh --check and hand-falsified through the wiring
+        - type: note
+          ts: "2026-08-25T13:49:17Z"
+          host: yoga
+          summary: |
+            convention ratchet landed; resolver branch refused with measurement
+
+    - order: 882-vqe4
+      packet_id: the-stranded-claim-detector-is-blind-to-every-event-compaction-has-folded
+      desired_release: v0.6
+      title: check-stranded-in-progress.sh counts events in plan/index.d/ only, so a packet with 35 progress events in the compacted base reports as stranded — the guard against invisible work is itself made blind by routine garbage collection
+      status: completed
+      kind: defect
+      pickup_role: any
+      priority: p2
+      capability_tags:
+        - guards
+        - plan
+        - ledger
+        - coordinator
+      deliverable: scripts/check-stranded-in-progress.sh
+      depends_on: []
+      estimated_hours: 2
+      context: |
+        MEASURED ON pirria 2026-08-25T13:47Z against the live ledger at
+        7247c2a94. The detector reported:
+        
+          stranded  831-ezea  any  three-horizon-cycle-model-arrival-control-by-routing
+          stranded  865-n8vq  any  the-trunk-has-been-unreleasable-for-a-week-behind-a-gate-no-push-runs
+          summary: population=2 in_progress=2 stranded=2 threshold_events=0
+        
+        Both are actively worked. 865-n8vq is a p0 the COORDINATOR was pushing
+        progress events into four times today, the most recent 1h46m before the
+        detector called it stranded (11:57:32Z vs 13:43Z).
+        
+        THE COUNT, side by side:
+        
+          packet     events the detector sees   events that exist
+          865-n8vq            0                       35
+          831-ezea            0                        1
+        
+        THE CAUSE IS ONE LINE. check-stranded-in-progress.sh:112 counts activity
+        with `grep -rh -A3 "packet_id: ${pid}$" plan/index.d/*.yaml`. Events live
+        in `plan/index.d/` only until compaction folds them into the base; after
+        that they are in plan/index.yaml and this grep cannot see them. So the
+        detector's window is "since the last compaction", and compaction is
+        routine garbage collection that the meta-orchestration skill tells every
+        cycle to check for and run. The longer a packet is worked, the more likely
+        its evidence has been folded, and the more confidently the detector calls
+        it abandoned.
+        
+        WHY THIS IS WORSE THAN A NOISY GUARD. 641-e2qa created this check because
+        an `in_progress` packet is invisible in BOTH directions — `ready` queries
+        skip it and burndown does not count it — and 21 packets sat that way. The
+        check is the thing that makes such work visible again. Reporting a
+        well-tended p0 as abandoned inverts it: the signal that exists to find
+        neglected work now points at the work being attended to hardest, and
+        genuine strandings are diluted in the same list. The skill's instruction
+        to watch whether "the count is rising cycle over cycle" is unusable while
+        the count tracks compaction rather than neglect.
+        
+        IT ALREADY COST A FALSE ALARM. This host's 2026-08-25T07:43Z loop-status
+        entry escalated 865-n8vq — "not a thing to leave sitting in a state where
+        `ready` queries skip it and burndown does not count it" — about a packet
+        the coordinator had touched that morning. The detector was the only
+        evidence, and it was wrong.
+        
+        THE FIX IS THE 704-zcgi LESSON AGAIN: this is a hand-rolled re-derivation
+        of a fold that tillandsias-plan already performs correctly for every other
+        reader. Counting by grep over one of the two storage locations is the
+        defect; the durable answer is to ask the folder, not to add a second grep
+        over the base. If no subcommand exposes a packet's folded events today
+        (none does — `fragment-event-packets` and friends all take a fragment
+        path), that missing tool IS the finding, per the skill's own "if the loop
+        needs it repeatedly, that is a missing tool — file a packet".
+      exit_criteria: |
+        (1) The detector counts a packet's activity across BOTH the compacted base
+        and the fragment overlay, so folding a fragment can never change a
+        packet's stranded verdict. Prefer exposing the folded events through
+        tillandsias-plan (e.g. `plan-events <packet_id>`) and consuming that, over
+        adding a second grep against plan/index.yaml — the second grep is the same
+        defect with a wider window.
+        (2) A hermetic fixture with a scratch ledger where one packet's only
+        events are in the base and another's are in a fragment: neither may report
+        stranded, and a third packet with a claim and no events anywhere MUST
+        still report stranded. The true positive is the whole point of the check
+        and must be pinned, not just the false one.
+        (3) A compaction-invariance arm: run the detector, compact, run it again,
+        and assert the verdict set is identical. That is the property that was
+        violated and it is directly testable.
+        (4) Verified against the live ledger: 865-n8vq and 831-ezea must stop
+        reporting stranded while they carry recent progress events, and
+        `summary: stranded=` must reflect neglect rather than compaction age.
+      events:
+        - type: note
+          ts: "2026-08-25T13:45:18Z"
+          host: pirria
+          summary: |
+            claimed for cycle 2026-08-25T13:43Z
+        - type: completed
+          ts: "2026-08-25T14:10:00Z"
+          agent_id: linux-pirria-opus5-20260825T134309Z
+          host: linux_immutable
+          evidence_refs:
+          - 'tillandsias-plan plan-events <packet_id|order> — new: prints a packet''s FOLDED events (base PLUS overlay) as <type>\t<ts>; exit 1 only for an unresolvable id, empty-and-0 for a real packet with no activity'
+          - 'scripts/check-stranded-in-progress.sh — classifies from plan-events instead of grepping plan/index.d/; with no folder available it reports summary: unavailable:no-runnable-plan-binary and exits 2 rather than guessing from half the ledger'
+          - 'scripts/test-check-stranded-in-progress.sh — 6/6 hermetic (scratch ledger, no repo state): base-evented, frag-evented, TRUE POSITIVE, summary shape, COMPACTION INVARIANCE, MUTATION control'
+          - 'LIVE: 865-n8vq and 831-ezea no longer report stranded; the list now names only packets claimed with no activity yet'
+          summary: |
+            THE GUARD AGAINST INVISIBLE WORK WAS MADE BLIND BY ROUTINE GARBAGE
+            COLLECTION. The detector counted a packet's activity with a grep over
+            plan/index.d/*.yaml. Compaction folds fragments into plan/index.yaml,
+            so its window was "since the last fold" — and the longer a packet is
+            worked, the more likely its evidence has been folded and the more
+            confidently it was called abandoned.
+        
+            Measured on the live ledger at 7247c2a94:
+        
+              packet     events the detector saw   events that existed
+              865-n8vq            0                       35
+              831-ezea            0                        1
+        
+            865-n8vq is a p0 the COORDINATOR had pushed progress into four times
+            that day, most recently 106 minutes before the detector called it
+            stranded. 641-e2qa built this check because an in_progress packet is
+            invisible in BOTH directions; reporting the best-tended packet in the
+            ledger as neglected inverts it and dilutes the genuine strandings in
+            the same list. The skill's instruction to watch whether "the count is
+            rising cycle over cycle" was unusable while the count tracked
+            compaction age rather than neglect.
+        
+            IT HAD ALREADY COST A FALSE ALARM — this host's own 07:43Z loop-status
+            entry escalated 865-n8vq on this evidence, about work in flight that
+            morning. That is why it was worth a packet rather than a note: a wrong
+            signal that reads as authoritative gets acted on.
+        
+            FIXED BY ASKING THE THING THAT ALREADY FOLDS. A second grep against
+            plan/index.yaml would have been the same defect one storage location
+            later, so the fold moved into the binary as `plan-events` — the
+            704-zcgi rule that the copy has to go, not just the instance. That the
+            subcommand did not exist was itself the finding the skill's
+            "if the loop needs it repeatedly, that is a missing tool" predicts.
+        
+            THE TRUE POSITIVE IS PINNED, NOT JUST THE FALSE ONE. Arm 3 asserts that
+            a claim with no events anywhere still reports stranded; without it this
+            fix could have "succeeded" by deleting the feature. Arm 5 pins the
+            property that was actually violated — run, compact, run again, verdicts
+            identical. Arm 6 reproduces the pre-fix blindness so arm 1 cannot pass
+            by luck.
+        
+            A GUARD IN THE GATE CAUGHT ME MID-FIX, and it is worth recording as a
+            win for the gate rather than a stumble of mine: adding a dispatch arm
+            without a usage entry failed `every_dispatch_arm_is_documented_in_usage`
+            with "a subcommand nobody can discover might as well not exist". That is
+            exactly the orphaned-capability shape 865-n8vq's guard-activation
+            failure is about, enforced one level down and working.
