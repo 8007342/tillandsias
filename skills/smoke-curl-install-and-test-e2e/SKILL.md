@@ -190,8 +190,43 @@ If the reset errors or leaves residue → file a finding (capability: `podman`,
 > made the gap visible — the same destruction gate was executable on one path
 > and advisory on the other, and this is the path that tests PUBLISHED releases.
 
-On macOS, stop the tray and remove `~/Library/Application Support/tillandsias`
-and `~/Library/Caches/tillandsias`.
+On macOS, stop the tray, then destroy the VM substrate and ASSERT it is gone.
+
+The paths are correct as written and match the source of truth
+(`status_item.rs:367`, `diagnose.rs:71`, `scripts/uninstall.sh:19` — all
+lowercase `tillandsias`). What was missing is the ASSERTION: this was one prose
+sentence while the Linux branch above captures `PIPESTATUS` and then proves the
+store is empty. That asymmetry is exactly what the 727-kmks note describes, one
+layer down — and this is the path that tests PUBLISHED releases, so a removal
+that silently matched nothing would let the smoke run against a pre-existing
+multi-GiB VM image while reporting a clean-room result. A false PASS on the
+destruction precondition is worse than a red run, because it gates promotion.
+
+```bash
+pkill -f 'Tillandsias.app/Contents/MacOS/tillandsias-tray' 2>/dev/null || true
+rm -rf "$HOME/Library/Application Support/tillandsias" \
+       "$HOME/Library/Caches/tillandsias"
+# ASSERT, do not assume — the point of this block.
+MACOS_RESIDUE=""
+for d in "$HOME/Library/Application Support/tillandsias" \
+         "$HOME/Library/Caches/tillandsias"; do
+    [ -e "$d" ] && MACOS_RESIDUE="${MACOS_RESIDUE}${d}"$'\n'
+done
+printf '[macos-residue]\n%s' "$MACOS_RESIDUE" | tee target/smoke-e2e/02-macos-residue.txt
+test -z "$MACOS_RESIDUE"
+```
+
+If residue survives → file a finding (capability: `macos`, `runtime`) and do NOT
+continue.
+
+> A NOTE ON WHAT DID NOT NEED FIXING, so nobody re-opens it (889-bx99,
+> retracted). This step was reported as carrying a case bug — capital-`T`
+> `Tillandsias` on disk versus lowercase in the runbook. It does not. The
+> reporting host checked by typing a capital-`T` path and watching it resolve,
+> on a case-INSENSITIVE volume where any spelling resolves; `ls` of the PARENT
+> shows the stored name is lowercase, matching the code. When testing a
+> case-sensitivity hypothesis, read the stored name — a path you typed yourself
+> proves only that the filesystem folded it.
 
 On Windows, stop the tray, then run `wsl --terminate tillandsias` followed by
 `wsl --unregister tillandsias`, tolerating an already-absent distro.
