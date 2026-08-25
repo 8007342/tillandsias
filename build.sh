@@ -2151,16 +2151,28 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # handoff. Promotion to a refusal is an operator decision, and the moment
     # for it is when dev binaries are signed and SAC stops being a coin flip.
     _step "Reporting Windows-only source verification state (716-f5kc)..."
-    _windows_only_verdict="$(bash "$SCRIPT_DIR/scripts/check-windows-only-sources-verified.sh" 2>/dev/null || echo "stale:windows-sources-check-failed")"
+    _windows_only_verdict="$(bash "$SCRIPT_DIR/scripts/check-windows-only-sources-verified.sh" 2>/dev/null || echo "stale:sources-check-failed:windows-only")"
     case "$_windows_only_verdict" in
         ok:* | skip:*)
             _info "Windows-only sources: $_windows_only_verdict"
+            ;;
+        missing:*)
+            # ORDER 738-3pft. This says the REPOSITORY holds no attestation —
+            # never that the sources are unverified. Reading the second meaning
+            # into the first is what held a release on 2026-08-14 while the
+            # Windows host had run the suite natively, twice, and stamped both
+            # times into a $GIT_DIR nobody else could see.
+            _warn "Windows-only sources: $_windows_only_verdict"
+            _warn "  No host has committed an attestation for these yet — this is a fact about"
+            _warn "  the repository, NOT a claim that the sources are broken or unverified."
+            _warn "  On a Windows host: cargo test -p tillandsias-windows-tray --bins | \\"
+            _warn "    scripts/check-windows-only-sources-verified.sh attest --from -"
             ;;
         *)
             _warn "Windows-only sources: $_windows_only_verdict"
             _warn "  A Linux build compiles src/stubs/ for these — this gate did NOT read them."
             _warn "  Verify natively (cargo test -p tillandsias-windows-tray), then:"
-            _warn "    scripts/check-windows-only-sources-verified.sh stamp"
+            _warn "    scripts/check-windows-only-sources-verified.sh attest --from <transcript>"
             ;;
     esac
 

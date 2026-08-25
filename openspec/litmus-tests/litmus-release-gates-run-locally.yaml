@@ -108,10 +108,15 @@ critical_path:
   # (6/6) → (7/7): windows commit 0d24c11a2 (orders 664-frz0, 716-f5kc) added
   # fixture case 7 — the stamp REFUSES without a transcript and refuses an
   # undeclared red — a negative control, so the count moved by getting stronger.
+  # (8/8) → (11/11): order 738-3pft added cases 9-11 — `--from -` reads stdin
+  # with the evidence gate intact, a TRACKED attestation verifies on a host that
+  # never wrote a local stamp, and it goes stale on drift while surviving
+  # unrelated edits. All three are negative-controlled, so the count again moved
+  # by getting stronger, not by getting longer.
   - step: "the gate reports whether Windows-only sources were actually compiled"
     command: "bash scripts/test-windows-only-sources-verified.sh"
     timeout_ms: 60000
-    expected_behavior: "PASS: windows-only source verification report (8/8)"
+    expected_behavior: "PASS: windows-only source verification report (11/11)"
 
   - step: "build.sh --check carries that report rather than staying silent"
     command: "grep -F 'check-windows-only-sources-verified.sh' build.sh && grep -F 'this gate did NOT read them' build.sh && echo 'ok: the gate reports the stub substitution'"

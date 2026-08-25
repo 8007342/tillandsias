@@ -16395,6 +16395,12 @@ plan_index:
         - the per-boot guest-binary hash is either cached against (path, mtime, len) or moved off the boot critical path, with the staleness argument written down
       events:
         - type: note
+          ts: "2026-08-25T19:58:13Z"
+          agent_id: "linux-macuahuitl-fable5-20260825t195813z"
+          host: macuahuitl
+          summary: |
+            Re-routed pickup_role any -> macos by the linux coordinator (batch selection offered this to a linux cycle, seed macuahuitl, 2026-08-25). Rationale: all four sites are macOS vm-layer code (vz.rs, materialize/oci.rs, fetch.rs), criterion 2 requires before/after measurements only a Darwin host can take (cold-provision timing needs --reset-guest or a pre-provision host; the per-boot hash slice needs a live VM boot), and the 2026-08-17 windows note retracted the only prior measurements as bogus. A linux host cannot advance this packet; offering it to linux batches spends selection slots on work nobody there may start. The macOS host's own 2026-08-12 note recommends slice (b) — vz.rs:698 per-boot hash — as the first landable piece.
+        - type: note
           ts: "2026-08-12T09:43:00Z"
           agent_id: "macos-tlatoanis-macbook-air-fable5-20260812t094300z"
           host: macos
@@ -19722,6 +19728,28 @@ plan_index:
         this packet before either side implements.
 
       events:
+        - type: completed
+          ts: "2026-08-25T20:23:01Z"
+          agent_id: "linux-macuahuitl-fable5-20260825t195813z"
+          host: macuahuitl
+          summary: |
+            FORMAT NEGOTIATION CONCLUDED AND IMPLEMENTED. The linux side (which owns the misreporting gate) accepted the windows writer's proposal with both open macOS constraints adopted; nothing was invented unilaterally.
+
+            ACCEPTED FROM THE WINDOWS PROPOSAL: plan/attestations/<scope>-sources.<host>.json, one file per scope+host so git has nothing to merge; fields scope/host/attested_at/commit/command/result/sources/known_red; and — the decision that matters — STALENESS KEYS ON SOURCE CONTENT HASHES, NOT THE COMMIT SHA. Keyed on the commit an attestation would read stale within minutes of being written (the next commit here is almost always a plan fragment), which is 736-28m7 rebuilt with extra steps. Answering the writer's open question 3: JSON, read line-oriented — no jq/ruby/yq, because this gate runs in the forge, on the bare host and in the builder toolbox and no parser exists in all three (746-htj9).
+
+            ADOPTED FROM THE macOS REPLY, both points it recorded as still open: (1) --from - reads stdin explicitly, so the writer is genuinely one command; GNU/BSD cat treat '-' as stdin by accident, so this is now pinned by fixture case 9 rather than left to the local cat. (3) scope is a FIELD over ONE shared grammar — ok:sources-verified:<scope>:<n>, stale:sources-drifted:<scope>:<n>:<f>, missing:sources-no-attestation:<scope>, skip:no-sources:<scope>, ok:sources-attested:<scope>:<n>. 739-6r6n's macOS writer reuses this vocabulary; it does not mint macos-sources-*.
+
+            THE MISSING SPELLING, which is the packet's own point: absence of an attestation reads missing:sources-no-attestation:<scope>, never never-verified. stale: now means exactly one thing — the sources MOVED since the evidence — and can never mean 'I cannot see it'. build.sh gained a dedicated missing: arm saying so in words.
+
+            HASHES ARE FILTERED (git hash-object -- <path>, never --no-filters) so a CRLF windows worktree and an LF linux checkout agree; raw-byte hashing would have made every cross-platform comparison fail silently, which is this packet's defect wearing a different hat. The reader RECOMPUTES every hash from its own checkout: nobody trusts the writer's '89 passed', they check that the bytes ran against are the bytes they have.
+
+            EVIDENCE GATE FACTORED so stamp and attest cannot drift — a tracked attestation on weaker evidence than a local stamp would be strictly worse than what it replaces. The 792-ksr8 here-string (a verdict pipe would SIGPIPE-invert to a false 'no tests ran') and the 801-ajcd copy-pasteable usage argv are both preserved inside it.
+
+            EXIT CRITERIA: (1) tracked file naming commit+host+what-was-run — done, and 'command' is a recorded field precisely because tillandsias-macos-tray is bin-only and a --lib run would attest a suite that executed nothing (macOS constraint 2, preserved on 731-vaqx). (2) gate reports verified/stale from that file and stale means the sources moved — done, attestation is consulted BEFORE the local stamp. (3) fixture proves both directions — cases 10 and 11.
+
+            FIXTURE 8/8 -> 11/11, every new case negative-controlled. MUTATION-PROVEN, not inspection-only: blinding check to the tracked attestation makes case 10 fail with EXACTLY the historical misreport — 'missing:sources-no-attestation:windows-only' on a tree that carries one. litmus:methodology-accountability 16/16 PASS; build.sh --check FORCED green; check-bash-dialect, check-sigpipe-verdict-pipelines-added, check-litmus-expression-pinning-added all ok.
+
+            HONEST RESIDUAL: the repo still reports missing: today. This linux host cannot compile windows sources, so writing an attestation here would be the exact assertion the evidence gate exists to refuse. The first real file is the WINDOWS host's to write, one command: cargo test -p tillandsias-windows-tray --bins 2>&1 | scripts/check-windows-only-sources-verified.sh attest --from - ; then commit it. plan/attestations/README.md carries the agreed format for both sibling writers.
         - type: note
           ts: "2026-08-14T23:37:27Z"
           agent_id: unknown
@@ -20580,6 +20608,12 @@ plan_index:
         `grep -rln 'ruby\|yq' scripts/` had 10 hits at filing time, and each one is
         the same latent outage in a different environment.
       events:
+        - type: note
+          ts: "2026-08-25T20:24:14Z"
+          agent_id: "linux-macuahuitl-fable5-20260825t195813z"
+          host: macuahuitl
+          summary: |
+            RELEASED back to ready by macuahuitl 2026-08-25 without implementation — claimed in this cycle's batch, not reached. Partially informed by this cycle's 738-3pft work, which is worth carrying: the new attestation reader in check-windows-only-sources-verified.sh deliberately parses its JSON LINE-ORIENTED rather than through jq/ruby/yq, citing this packet — one more production site that now needs no interpreter. Remaining work is the rg -n 'ruby|yq' scripts/ audit plus the executable three-environment availability check, and note that the forge/toolbox halves of that check cannot be evidenced from a mutable linux host alone.
         - type: filed
           ts: "2026-08-15T00:55:00Z"
           host: linux_immutable
@@ -20691,6 +20725,12 @@ plan_index:
         probably yes, and a vault or router image that cannot be resolved fails in
         a much less obvious place than the forge.
       events:
+        - type: note
+          ts: "2026-08-25T20:24:14Z"
+          agent_id: "linux-macuahuitl-fable5-20260825t195813z"
+          host: macuahuitl
+          summary: |
+            RELEASED back to ready by macuahuitl 2026-08-25 without implementation — claimed in this cycle's batch, not reached. Note for the next host: exit criterion 1 requires DEMONSTRATING the fix under a deliberate installed-binary/VERSION skew rather than arguing it, which means manipulating real podman image tags on the host. That is doable but wants care — use a scratch image name or restore the tag afterwards, and check the negative control (installed==VERSION gains no extra tags, stays silent) in the same pass. The packet notes forbid pinning to :latest only; remedy (a), aliasing the installed binary's version inside build-image.sh, needs no Rust and is the cheapest of the three.
         - type: filed
           ts: "2026-08-15T01:10:00Z"
           host: linux_immutable
@@ -22167,6 +22207,12 @@ plan_index:
           host: macuahuitl
           summary: |
             claimed for cycle 2026-08-25T19:50:35Z
+        - type: note
+          ts: "2026-08-25T20:24:14Z"
+          agent_id: "linux-macuahuitl-fable5-20260825t195813z"
+          host: macuahuitl
+          summary: |
+            RELEASED back to ready by macuahuitl 2026-08-25 without implementation — claimed in this cycle's batch, not reached. Recording WHY so the next host does not re-derive it: this is the largest packet in the batch and the only Rust one. The gate must run INSIDE the ephemeral login container (so the token never touches host disk), which is also the seam a hermetic litmus has to fake; scoping that test seam is most of the work, not the gh api call. Whoever takes it: the packet's cited spans (main.rs:7350-7408, 7812-7864) have DRIFTED — re-find them by symbol (run_provider_login, token_guidance, provider_login_exec_args) rather than trusting the line numbers. Landable first slice if the seam proves hard: the in-container permission check plus unit tests, leaving the hermetic mocked-gh litmus to a follow-on.
     - packet_id: fleet-propagation-write-readiness
       order: 759-vsaj
       status: ready
@@ -29040,6 +29086,22 @@ plan_index:
           host: macuahuitl
           summary: |
             claimed for cycle 2026-08-25T19:50:35Z
+        - type: completed
+          ts: "2026-08-25T20:15:39Z"
+          agent_id: "linux-macuahuitl-fable5-20260825t195813z"
+          host: macuahuitl
+          summary: |
+            BOTH HALVES LANDED, mutation-proven in both directions.
+
+            REFUSAL (the half that reaches the stuck reader): scripts/verify-version-monotonic.sh:145-182 now branches on the current branch and puts REMEDY on stderr LINE 2. linux-next/main -> 'git fetch origin && git merge origin/main'; windows-next/osx-next -> 'git merge origin/linux-next' with the note that the pre_push_gate already requires that merge, so following the gate in order self-heals; the generic arm names the back-merge first and keeps the old update-VERSION advice second. The old text's 'Update VERSION file to a value >= X' was active MISDIRECTION on a platform branch, where the runbook guardrail and pre-push-version-guard.sh both forbid hand-editing VERSION off main.
+
+            WHY LINE 2 AND NOT THE END: scripts/hooks/pre-push-local-gate.sh:195 truncated the preflight detail to head -6, and that hook is where readers actually meet this refusal — a remedy appended after the existing lines would have been invisible exactly when needed. Raised to head -12 in the same commit; verified the remedy survives a 5-line cut.
+
+            RUNBOOK: skills/merge-to-main-and-release/SKILL.md step 5 retitled 'Tag + push + MANDATORY back-merge' with the executable block (assert on source branch, fetch, merge origin/main, ./build.sh --check to re-stamp because the merge changes VERSION and a stale stamp refuses the push, push). Placed strictly AFTER the tag push so the tag keeps pointing at main's bump-merge commit (verified v0.4.260817.1 -> 0bba6525f). Added a hard guardrail bullet and a Failure-recovery entry.
+
+            PIN: litmus:versioning-shape STEP 11 (new) injects tag v99.9.991231.9 and case-matches the refusal for 'git merge origin/' — behavioural, not a source grep, so check-litmus-expression-pinning-added.sh does not flag it, and pipeline-free so check-sigpipe-verdict-pipelines-added.sh cannot either. 11/11 PASS. MUTATION: rewriting all three REMEDY lines to 'update the VERSION file' turns STEP 11 red ('FAIL: rc=1 remedy absent'); restoring turns it green. Nothing pinned the refusal text before this, so the message was previously unconstrained.
+
+            VERIFIED: pass path unchanged (rc=0, same line); release-preflight ok; check-bash-dialect clean (case/echo only, bash-3.2 floor); check-litmus-expression-pinning-added, check-sigpipe-verdict-pipelines-added both ok.
     - packet_id: tray-help-prescribes-the-one-capture-pattern-that-silently-fails
       order: 802-fbkg
       status: ready

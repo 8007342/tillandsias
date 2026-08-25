@@ -1,0 +1,91 @@
+packets:
+  - packet_id: agent-identity-derivation-absent-from-the-bootstrap-skill
+    order: 885-zvzu
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    release_target: fail-loud-diagnosis-milestone
+    title: |
+      Every ledger event a meta-orchestration cycle writes is refused for a non-canonical agent_id, because the skill that IS the bootstrap contract never names scripts/agent-identity.sh
+    deliverable: |
+      the meta-orchestration skill names the agent-identity derivation at the
+      point a cycle first needs it, so the documented bootstrap prompt is
+      sufficient to record an event
+    pickup_role: any
+    owner_host: any
+    depends_on: []
+    capability_tags:
+      - meta-orchestration
+      - plan
+      - ledger
+      - fail-loud
+      - bootstrap
+    estimated_hours: 1
+    context: |
+      MEASURED on macuahuitl 2026-08-25, first ledger write of the cycle.
+
+        tillandsias-plan append-event 690-pz68 note "..." --agent linux-macuahuitl-fable5-20260825T194605Z
+        error: agent_id "..." is not canonical — the contract is
+        <platform>-<workstation>-<backend>-<utc-timestamp>, sanitized to
+        [a-z0-9-] with a LOWERCASE timestamp. Derive it:
+        scripts/agent-identity.sh id <backend> (order 756-hn3a; enforcement
+        874-idnt).
+
+      The refusal is EXCELLENT — it is falsifiable, it names the exact contract,
+      and it names the script that satisfies it. Nothing about the enforcement
+      needs changing. The defect is upstream of it.
+
+      `scripts/agent-identity.sh` is documented in exactly two places:
+
+        skills/advance-work-from-plan/SKILL.md
+        methodology/distributed-work.yaml
+
+      It is named NOWHERE in skills/meta-orchestration/SKILL.md — which is the
+      skill the bootstrap contract points every host at, and which states in its
+      own words: "The bootstrap prompt is `Use the ./skills/meta-orchestration
+      skill.` and nothing else. If you needed something said to you beyond that
+      sentence, the thing you needed was missing from this skill or the ledger,
+      and THAT is the defect worth filing."
+
+      So a cycle driven by the documented prompt reaches its first
+      `append-event` — which the Reduction Engine section makes MANDATORY, since
+      an unfiled finding blocks exit — with no way to know how to name itself.
+      It hand-writes an id, is refused, and recovers only by reading the error
+      text. That recovery works, which is why this is p2 and not p1: the cost is
+      one wasted call per cycle per host, not lost work.
+
+      THIS IS THE SAME CLASS THE SKILL ALREADY DIAGNOSED ONCE, in its own "How
+      to invoke the gate" section: TILLANDSIAS_SKIP_VERSION_BUMP and
+      TILLANDSIAS_FORCE_CHECK "were carried in operator prompt text for ten
+      cycles before anyone noticed the skill never mentioned them — which meant
+      the bootstrap contract was quietly false for any fresh host." Identical
+      shape, different variable. That the class recurred after being named
+      suggests the fix worth having is not only this one line.
+    outcome: |
+      A host following the documented bootstrap prompt and nothing else can
+      write a ledger event on its first attempt.
+    exit_criteria:
+      - skills/meta-orchestration/SKILL.md names `scripts/agent-identity.sh id <backend>` at or before the first point a cycle is required to write a ledger event (the Reduction Engine capture rules, or Start Of Cycle beside the other identity/posture lines).
+      - 'NEGATIVE CONTROL: the enforcement is NOT weakened — a hand-written non-canonical id must still be refused, and 874-idnt''s pins must stay green. This packet adds documentation; it does not touch the guard.'
+      - 'The audit half, because the class recurred: enumerate what else a cycle MUST call that the skill never names (compare the scripts meta-orchestration invokes against those it documents) and record the result, even if the answer is "nothing else".'
+    verifiable_closure: |
+      grep for `agent-identity` in skills/meta-orchestration/SKILL.md returns a
+      hit, and the audit's enumeration is recorded as an event on this packet.
+    notes: |
+      Do not fix this by relaxing the canonical-id contract. 874-idnt exists
+      because every hand-written id in the 2026-08-24 retrospective violated it,
+      and a ledger whose agent attribution is free-form cannot answer "which
+      host did this" — the question the whole multi-host record is for.
+    events:
+      - type: filed
+        ts: "2026-08-25T20:26:00Z"
+        agent_id: linux-macuahuitl-fable5-20260825t195813z
+        host: macuahuitl
+        summary: |
+          Filed by the cycle that hit it, on its first ledger write. The
+          refusal named its own remedy so recovery cost one call — but the
+          bootstrap contract promises the skill is sufficient, and here it was
+          not. Cross-referenced against the skill's own ten-cycle
+          TILLANDSIAS_SKIP_VERSION_BUMP precedent, which is the same defect
+          class already recorded once in the same file.

@@ -273,7 +273,7 @@ still conflicting after 3 attempts, write an `ESCALATION:` line in
 
 ---
 
-## 5 — Tag + push
+## 5 — Tag + push + MANDATORY back-merge
 
 ```bash
 git tag -a "${new_tag}" -m "Release ${new_version}
@@ -285,6 +285,31 @@ git push origin "${new_tag}"
 ```
 
 The annotated tag carries the PR reference so the GitHub Release page links back to the merged work.
+
+### The back-merge is part of the cut, not a tidy-up (order 800-vk2p)
+
+```bash
+# The moment ${new_tag} is pushed, release-preflight gate 1 refuses
+# blocked:version-not-monotonic on EVERY branch still carrying the pre-release
+# VERSION. At v0.4.260817.1 that was all three platform branches, fleet-wide,
+# within seconds — including this release's OWN ledger records, so step 8
+# cannot push until this lands. Precedents: f6424070d, 97cd7068b.
+test "$(git symbolic-ref --short HEAD)" = "${release_source_branch:-linux-next}"
+git fetch origin
+git merge origin/main          # back-merge the VERSION bump; merge, never rebase
+./build.sh --check             # the merge changed VERSION, so the gate stamp is
+                               # stale and the push below would be refused
+git push origin "${release_source_branch:-linux-next}"
+```
+
+Run this **after** the tag push, never before: the tag must keep pointing at
+main's bump-merge commit.
+
+`windows-next` and `osx-next` then self-heal on their next mandated
+`git merge origin/linux-next` (methodology `pull_merge_cadence.pre_push_gate`),
+so this one push unblocks the fleet. No `--no-verify` is ever needed —
+`pre-push-version-guard.sh` already classifies a VERSION equal to
+`origin/main`'s as sync-forward.
 
 ---
 
@@ -381,6 +406,9 @@ branch is not ahead of upstream.
   Linux musl (`release` job), macOS arm64 thin tray (`macos-release`), Windows x64 thin tray
   (`windows-release`). The macOS/Windows jobs `needs: release` and upload via `--clobber`.
 - **NEVER cancel an in-flight release** — let it complete or fail, then handle in the next cycle.
+- **NEVER end a cut without the step-5 back-merge pushed to the source branch.**
+  Until it lands, every sibling push is refused `blocked:version-not-monotonic`
+  for something none of them did (order 800-vk2p).
 
 ---
 
@@ -390,6 +418,7 @@ If any STEP fails:
 
 - **STEP 3 CI fails**: surface the failing run URL, do NOT merge, do NOT tag. The next 24-hour cycle retries. The work-loop continues to land fixes meanwhile.
 - **STEP 5 tag-push fails (existing tag)**: another run beat us. Skip release; cycle ends successfully (someone else released).
+- **STEP 5 back-merge push fails**: the fleet is blocked until it lands. Fixing and pushing the back-merge takes priority over everything else in the cycle — the refusal siblings are seeing names this exact remedy, so leaving it undone strands every host that reads it (order 800-vk2p).
 - **STEP 6 workflow trigger fails**: the tag is on main; user can manually run `gh workflow run release.yml --ref ${new_tag}`. Surface a clear next-step instruction.
 - **STEP 7 release build fails**: the tag exists on main but no GitHub Release was published. Next cycle does NOT retry the tag — it bumps to N+1. The orchestrator deals with the failed build separately.
 
