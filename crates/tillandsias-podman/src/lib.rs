@@ -250,6 +250,28 @@ fn resolve_podman_bin() -> PathBuf {
         return PathBuf::from(bin);
     }
 
+    // ORDER 880-tdwn: the test-run tripwire. Tests inject fake podman
+    // binaries through TILLANDSIAS_PODMAN_BIN — a PROCESS-WIDE env seam —
+    // while cargo runs test threads in parallel, so one test's restore-drop
+    // can hand another test's freshly-constructed client the REAL podman
+    // mid-flight. On 2026-08-25 that race let a teardown-path test stop the
+    // live enclave (vault SIGKILLed at the stop-grace timeout) during every
+    // --ci-full on a warm cache, killing the stack the 878-79b5 supervisor
+    // had just healed. Test invocations export TILLANDSIAS_PODMAN_REFUSE_REAL=1
+    // (scripts/local-ci.sh), turning the race into a LOUD named test failure
+    // at the exact resolution instant instead of a silent de-provisioning of
+    // the host. Production never sets it; a test that genuinely needs the
+    // real binary states so with TILLANDSIAS_PODMAN_BIN=$(command -v podman).
+    if env::var_os("TILLANDSIAS_PODMAN_REFUSE_REAL").is_some_and(|v| v == "1") {
+        panic!(
+            "TILLANDSIAS_PODMAN_REFUSE_REAL=1: refusing to resolve the REAL podman — \
+             TILLANDSIAS_PODMAN_BIN is unset at resolution time. In a test run this is the \
+             880-tdwn env race (a parallel test dropped the seam mid-flight); the caller \
+             was one exec away from mutating live containers. Set TILLANDSIAS_PODMAN_BIN \
+             explicitly (fake, or the real binary to opt in by name)."
+        );
+    }
+
     if let Some(path) = env::var_os("PATH") {
         for dir in env::split_paths(&path) {
             let candidate = dir.join("podman");
@@ -1080,6 +1102,51 @@ fn podman_cmd_sync_std() -> std::process::Command {
 mod tests {
     use super::*;
     use std::sync::{Mutex, OnceLock};
+
+    /// ORDER 880-tdwn. With the tripwire armed and no explicit binary, the
+    /// resolver must PANIC by name rather than hand back the real podman —
+    /// this is the line between "a flaky test fails loudly" and "a flaky
+    /// test stops the live enclave" (twice-measured 2026-08-25).
+    #[test]
+    fn tripwire_refuses_the_real_podman_when_the_seam_is_unset() {
+        let _guard = env_lock();
+        let prev_bin = std::env::var_os("TILLANDSIAS_PODMAN_BIN");
+        let prev_trip = std::env::var_os("TILLANDSIAS_PODMAN_REFUSE_REAL");
+        unsafe {
+            std::env::remove_var("TILLANDSIAS_PODMAN_BIN");
+            std::env::set_var("TILLANDSIAS_PODMAN_REFUSE_REAL", "1");
+        }
+        let hit = std::panic::catch_unwind(resolve_podman_bin);
+        // MUTATION CONTROL inline: the same call with the tripwire unarmed
+        // must resolve normally — a tripwire that fires unconditionally
+        // would just be a broken resolver.
+        unsafe {
+            std::env::remove_var("TILLANDSIAS_PODMAN_REFUSE_REAL");
+        }
+        let calm = std::panic::catch_unwind(resolve_podman_bin);
+        unsafe {
+            match prev_bin {
+                Some(v) => std::env::set_var("TILLANDSIAS_PODMAN_BIN", v),
+                None => std::env::remove_var("TILLANDSIAS_PODMAN_BIN"),
+            }
+            match prev_trip {
+                Some(v) => std::env::set_var("TILLANDSIAS_PODMAN_REFUSE_REAL", v),
+                None => std::env::remove_var("TILLANDSIAS_PODMAN_REFUSE_REAL"),
+            }
+        }
+        let err = hit.expect_err("armed tripwire with no seam must panic");
+        let msg = err
+            .downcast_ref::<String>()
+            .cloned()
+            .or_else(|| err.downcast_ref::<&'static str>().map(|s| s.to_string()))
+            .unwrap_or_default();
+        assert!(
+            msg.contains("880-tdwn"),
+            "the panic must name the incident class so the next reader debugs \
+             the race, not podman; got: {msg}"
+        );
+        assert!(calm.is_ok(), "unarmed resolution must stay untouched");
+    }
 
     /// Order 714-4r6w, criterion 4: a stalled SYNCHRONOUS stand-in must fail
     /// bounded and named, the same guarantee order 690-7adz gave the async seam.

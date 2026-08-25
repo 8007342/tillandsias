@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    field: next_action
+    value: 'COORDINATOR QUEUE @ 2026-08-25T11:00Z (macuahuitl hourly). FLEET: yoga 2h + pirria 6h on cadence; lenovinha operator-stopped. STANDING DUTY unchanged; enclave restarted 4/4 after the caught-live 880-tdwn kill. 880-tdwn STATUS: mechanism proven (parallel env race on TILLANDSIAS_PODMAN_BIN; podman-stop signature inside tray-check''s window), tripwire landed in tillandsias-podman with unit tests, 32 non-hermetic tests enumerated (drain list = 880-tdwn next_action); stays in_progress on macuahuitl — next cycles drain suites and wire lines. CAUTION HOLDS: warm-cache ci-full beside a live enclave still kills the stack until the tray-target suite drains; vault/proxy restart caps at 2/3 (flapping verdicts here = 880-tdwn, EC4). 865-n8vq: every named blocker fixed; a clean full run is best taken with the stack DELIBERATELY stopped first (or absorbing one supervised restart after); yoga''s claim TTLs ~19:33Z, macuahuitl verifies-and-closes at expiry. NEXT: (1) drain 880-tdwn suites (accel_probe x5 and remote_projects x4 first — likely one shared fixture helper each). (2) 865-n8vq clean run + closure at TTL. (3) 873-b1nx prototype. DONE THIS ARC adds the 880-tdwn tripwire + enumeration + live catch.'
+    ts: "2026-08-25T10:59:09Z"
+    host: macuahuitl
+
+events:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    event:
+      type: note
+      ts: "2026-08-25T10:59:09Z"
+      host: macuahuitl
+      summary: >
+        queue refresh: 880-tdwn mechanism landed

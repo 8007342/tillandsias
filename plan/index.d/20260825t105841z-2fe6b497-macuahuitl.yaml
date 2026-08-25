@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-ci-full-run-takes-down-the-live-enclave-stack
+    field: next_action
+    value: 'DRAIN LIST (the tripwire''s enumeration, 2026-08-25T10:58Z): arm TILLANDSIAS_PODMAN_REFUSE_REAL=1 per cargo-test line in scripts/local-ci.sh (run_rust_test_on_host, defined and documented) once its suite passes under it. 32 non-hermetic tests reach real-podman resolution with the seam unset: FEATURED TRAY TARGET (28): accel_probe x5 (test_cache_from_different_probe_code_is_reprobed_not_served, test_cpu_only_probe_yields_a_valid_document_not_silence, test_negative_control_unchanged_binary_still_serves_its_own_cache, test_probe_produces_valid_document, test_serialization_roundtrip), remote_projects x4 (clone_normalizes_api_url_to_owner_name, clone_project_uses_containerized_gh, clone_uses_host_parent_bindmount, discover_projects_uses_containerized_gh), plus 19 more in tests:: (full list in the 880-tdwn evidence event). WORKSPACE LIBS (2): local_transport_isolation_env_enables_storage_overrides, remote_transport_uses_remote_flag_and_skips_local_storage_args. SIGNAL_HANDLING (2): sigint, sigterm. Each fix = set TILLANDSIAS_PODMAN_BIN to its fixture binary (or the real one BY NAME for a deliberate integration test). Wire the line when green; the last wired line closes the packet.'
+    ts: "2026-08-25T10:58:41Z"
+    host: macuahuitl
+
+events:
+  - packet_id: a-ci-full-run-takes-down-the-live-enclave-stack
+    event:
+      type: note
+      ts: "2026-08-25T10:58:41Z"
+      host: macuahuitl
+      summary: >
+        880-tdwn drain list from the tripwire enumeration

@@ -755,6 +755,22 @@ run_rust_on_host() {
     (cd "$repo_root" && "$@")
 }
 
+# 880-tdwn END STATE, defined ahead of its wiring: cargo TEST invocations
+# should run with the real-podman tripwire armed, so a parallel test racing
+# the TILLANDSIAS_PODMAN_BIN seam fails loudly by name instead of stopping
+# the live enclave (twice-measured on macuahuitl: every warm-cache --ci-full
+# killed the whole stack during tray-check; vault SIGKILLed at stop-grace).
+# NOT WIRED YET: arming it today fails 32 enumerated non-hermetic tests
+# (28 in the featured tray target, 2 workspace-lib transport tests, 2
+# signal_handling integration tests — lists on the 880-tdwn row), which
+# would red the gate the whole fleet pushes behind. Wire each cargo-test
+# line through this wrapper as its suite is made hermetic; the wiring IS
+# the packet's closing move.
+run_rust_test_on_host() {
+    local repo_root="${REPO_ROOT}"
+    (cd "$repo_root" && TILLANDSIAS_PODMAN_REFUSE_REAL=1 "$@")
+}
+
 sha256_file() {
     local file="$1"
     if command -v sha256sum >/dev/null 2>&1; then
@@ -1081,6 +1097,12 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     #
     # @trace spec:tray-app, spec:tray-ux, spec:tray-progress-and-icon-states
     # @trace spec:vsock-transport
+    # 880-tdwn: this ONE target keeps the plain wrapper FOR NOW — arming the
+    # tripwire here fails 28 named tests (the enumerated non-hermetic
+    # population, list on the 880-tdwn row) and reds the gate the fleet
+    # pushes behind. Until that list is drained, a warm-cache ci-full beside
+    # a live enclave WILL stop the stack during this check; the queue carries
+    # the operational caution and the 878-79b5 supervisor restarts it.
     if run_rust_on_host cargo test -p tillandsias-headless --bin tillandsias --features tray,listen-vsock --no-fail-fast 2>&1 | tee /tmp/tray-check.log; then
         log_pass "Tray + vsock-server feature tests pass"
         archive_check_log "tray-contract" "pass" /tmp/tray-check.log
