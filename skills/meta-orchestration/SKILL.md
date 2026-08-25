@@ -1633,6 +1633,34 @@ Before exit:
    `plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md` order 63).
    Its presence on PATH is not permission. The forge startup context lists what
    is actually available.
+3b. **Re-verify the credential BEFORE the gate** (order 892-aw9p):
+
+   ```bash
+   scripts/check-credential-channel.sh reverify
+   ```
+
+   The Start-Of-Cycle guard runs once and cannot see a credential that dies
+   afterwards. MEASURED on calmecacpilli 2026-08-25: it returned
+   `ok:gh-keyring-push-verified`, two pushes succeeded on that credential, and
+   ~50 minutes later the third failed with `remote: Invalid username or token`.
+   Nothing the guard measured was wrong — the verdict was true when issued. Its
+   RESULT simply outlived the thing it checked, which is the same shape as a
+   stale gate stamp (887-bz88).
+
+   Run it HERE, immediately before `./build.sh --check`, because that is the
+   last point where the remaining cost is still worth saving: a dead credential
+   then costs the gate's wall-clock (40s here, 276s on the slowest host) instead
+   of being discovered after it, with the work done and the exit contract
+   forbidding an unpushed exit. Not per push — the healthy path must not pay a
+   round trip for every git operation, and a guard slow enough to notice is a
+   guard that gets bypassed.
+
+   On `blocked:credential-expired-mid-cycle` the credential WORKED and then
+   stopped; that is distinct from never having had one, and the printed remedy
+   is `gh auth refresh`, not seeding a store. Do NOT discard the cycle's work to
+   get unstuck — salvage first (872-c9nd) and report blocked with the salvage
+   ref.
+
 4. Run the local gate: `./build.sh --check` and fix what it reports.
    An unparseable or unformatted push poisons every downstream clone. Push CI
    no longer exists on any working branch — only the manually-dispatched

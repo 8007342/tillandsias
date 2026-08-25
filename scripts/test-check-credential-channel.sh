@@ -19,7 +19,7 @@ bad() { echo "FAIL: $1" >&2; fail=1; }
 W="$(mktemp -d "${TMPDIR:-/tmp}/cred-channel-test.XXXXXX")"
 trap 'rm -rf "$W"' EXIT INT TERM
 
-mkdir -p "$W/bin"
+mkdir -p "$W/bin" "$W/bin-noauth"
 cat > "$W/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 # auth status green; everything else inert.
@@ -27,6 +27,17 @@ cat > "$W/bin/gh" <<'STUB'
 exit 0
 STUB
 chmod +x "$W/bin/gh"
+
+# gh present but holding NO usable auth — the shape where no token arm can
+# rescue the probe. Needed by the 892-aw9p arms: without it PATH falls through
+# to the REAL gh, and arm 12 passes on this host's live credential rather than
+# on the condition it claims to test.
+cat >"$W/bin-noauth/gh" <<'NOAUTH'
+#!/usr/bin/env bash
+[ "$1 ${2:-}" = "auth status" ] && { echo "not logged in" >&2; exit 1; }
+exit 1
+NOAUTH
+chmod +x "$W/bin-noauth/gh"
 
 scratch() {
     local d="$W/repo-$1"
@@ -231,6 +242,84 @@ case "$out" in
         ok "MUTATION: the pre-fix guard calls a behind branch a credential fault — arm 8b has teeth" ;;
     *) bad "mutation reconstruction unexpected: $out" ;;
 esac
+
+# ═══ ORDER 892-aw9p: a correct verdict has a SHELF LIFE ══════════════════════
+# calmecacpilli, 2026-08-25: the guard passed at Start-Of-Cycle, two pushes
+# succeeded, and ~50 minutes later the keyring token was invalid. Nothing the
+# guard measured was wrong — the verdict was true when issued. The failure
+# surfaced after the work and after a 142s gate, with the exit contract
+# forbidding an unpushed exit, so the host was wedged rather than delayed.
+
+# ── 10. reverify passes through a healthy channel unchanged. ─────────────────
+D="$(with_remote reverify_ok 'exit 0')"
+out="$( cd "$D" && env -u GH_TOKEN -u GITHUB_TOKEN -u TILLANDSIAS_CRED_PROBE_CMD \
+        PATH="$W/bin:$PATH" bash "$GUARD" reverify 2>/dev/null )"; rc=$?
+case "$out" in
+    ok:*) ok "reverify on a healthy channel -> $out (rc=$rc)" ;;
+    *)    bad "reverify broke the healthy path: $out (rc=$rc)" ;;
+esac
+[ "$rc" -eq 0 ] || bad "a healthy reverify must exit 0"
+
+# ── 11. THE HEADLINE: a credential that DIED reads differently from one that ─
+#        was never there. Same repair cost, very different diagnosis, and the
+#        guard previously reported both as missing:no-credential-channel.
+D="$(with_remote reverify_died 'exit 0')"
+# a pass is recorded...
+( cd "$D" && env -u GH_TOKEN -u GITHUB_TOKEN -u TILLANDSIAS_CRED_PROBE_CMD \
+  PATH="$W/bin:$PATH" bash "$GUARD" >/dev/null 2>&1 )
+[ -s "$D/.git/tillandsias-credential-verified" ] \
+    && ok "a passing verdict records a stamp" \
+    || bad "no stamp written on a pass — reverify cannot tell died from absent"
+# ...then the channel dies (unreachable remote + no token anywhere)
+git -C "$D" remote set-url origin "$W/does-not-exist.git"
+out="$( cd "$D" && env -u GH_TOKEN -u GITHUB_TOKEN -u TILLANDSIAS_CRED_PROBE_CMD \
+        PATH="$W/bin-noauth:$PATH" bash "$GUARD" reverify 2>"$D/.rv" )"; rc=$?
+case "$out" in
+    blocked:credential-expired-mid-cycle)
+        ok "a credential that DIED mid-cycle is named as such (rc=$rc)" ;;
+    *)  bad "expiry not distinguished: $out (rc=$rc)" ;;
+esac
+[ "$rc" -ne 0 ] || bad "an expired credential must exit non-zero"
+grep -q 'DIED DURING THIS CYCLE' "$D/.rv" \
+    && ok "the diagnosis states it worked and then stopped" \
+    || bad "stderr must say the credential died, not that it is absent"
+grep -q 'gh auth refresh' "$D/.rv" \
+    && ok "the remedy names the token refresh" \
+    || bad "remedy must name gh auth refresh"
+grep -q 'salvage-dirty-worktree' "$D/.rv" \
+    && ok "it points at the 872-c9nd salvage path instead of discarding work" \
+    || bad "a wedged host must be told how to preserve its work"
+
+# ── 12. NEGATIVE CONTROL: with NO prior pass, reverify must NOT claim expiry. ─
+# A host that never had a credential has not lost one. Claiming otherwise sends
+# the reader to refresh a token that never existed.
+D="$(with_remote reverify_never 'exit 0')"
+git -C "$D" remote set-url origin "$W/does-not-exist.git"
+rm -f "$D/.git/tillandsias-credential-verified"
+out="$( cd "$D" && env -u GH_TOKEN -u GITHUB_TOKEN -u TILLANDSIAS_CRED_PROBE_CMD \
+        PATH="$W/bin-noauth:$PATH" bash "$GUARD" reverify 2>/dev/null )"; rc=$?
+case "$out" in
+    blocked:credential-expired-mid-cycle)
+        bad "claimed an expiry with no prior pass — a host that never had one has not lost one" ;;
+    blocked:*|missing:*) ok "no prior pass -> ordinary verdict, not a false expiry ($out)" ;;
+    *) bad "unexpected no-stamp verdict: $out (rc=$rc)" ;;
+esac
+
+# ── 13. The healthy path costs NO extra round trip per push. ─────────────────
+# The exit criterion that keeps this from trading a rare failure for a permanent
+# slowdown: reverify is a separate mode the skill calls ONCE before the gate, not
+# something wired into every git operation. Assert the default path did not grow
+# a second probe.
+# Count INVOCATIONS, not mentions. The first version of this assertion used a
+# bare `grep -c 'push --dry-run'` and counted two COMMENT lines describing the
+# probe — the same incidental-co-occurrence error fixed in the promotion gate
+# earlier tonight (888-m75r), reproduced here in a test that was supposed to be
+# checking for exactly that kind of sloppiness.
+probes="$(grep -nE 'timeout [0-9]+ +git push --dry-run|_probe_cmd=' "$GUARD" \
+          | grep -vcE ':[[:space:]]*#')"
+[ "$probes" -le 3 ] \
+    && ok "reverify added no probe to the hot path ($probes invocation sites)" \
+    || bad "reverify added probes to the hot path ($probes invocation sites)"
 
 # ── 9. Grammar: every verdict this suite produced is a single pinned token. ──
 grammar='^(ok:[a-z0-9-]+|blocked:[a-z0-9-]+|missing:no-credential-channel)$'
