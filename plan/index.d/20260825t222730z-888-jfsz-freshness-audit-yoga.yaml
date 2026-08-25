@@ -1,0 +1,178 @@
+packets:
+  - packet_id: cheatsheet-source-validator-outlived-its-artifact
+    order: 888-jfsz
+    next_action: Ask the cheatsheets-license-tiered owner for the discard decision, then execute it. Do NOT delete the validator without also removing litmus:cheatsheet-source-layer-shape, which pins its four docstring lines, and reconciling openspec/specs/cheatsheet-source-layer/spec.md — the tombstone already calls that spec mostly superseded. Leave scripts/fetch-cheatsheet-source.sh alone; its --tier=bundled mode serves the replacement.
+    status: ready
+    kind: enhancement
+    pickup_role: any
+    priority: p3
+    desired_release: v0.5
+    depends_on: []
+    multi_cycle: false
+    deliverable: |
+      A decision, by the cheatsheets-license-tiered owner, on whether
+      check-cheatsheet-sources.sh and its two litmus tests are deleted at the
+      tombstone's final-removal release or repointed at the tiered replacement.
+    capability_tags:
+      - rust
+      - cheatsheets
+      - documentation
+    tags:
+      - freshness-audit
+      - tombstone
+      - v0.5
+    title: |
+      The cheatsheet-source validator and its two litmus tests still validate a layer that was retired on 2026-08-23; the audit could make it honest but not decide its fate.
+    context: |
+      FOUND BY THE ORDER-372 STANDING AUDIT (yoga, 2026-08-25), which selected
+      scripts/check-cheatsheet-sources.sh as the top unstamped component.
+
+      The verbatim source layer (cheatsheet-sources/<host>/<path> +
+      INDEX.json) was retired on 2026-08-23 by an explicit tombstone,
+      superseded by cheatsheets-license-tiered. All four of the validator's
+      checks key on cheatsheet-sources/INDEX.json, which that tombstone
+      lists among the files deleted.
+
+      It is NOT dead code — pre-commit-openspec.sh:286 runs it, and two litmus
+      tests pin it (cheatsheet-source-layer-shape, -validation). So on every
+      openspec-touching commit, a wired validator ran, found nothing to
+      validate, and exited 0.
+
+      THE AUDIT FIXED THE HONESTY AND DELIBERATELY DID NOT FIX THE FATE.
+      The validator could not distinguish "not fetched yet" (a migration
+      state, where "run the fetcher" is right) from "deliberately retired"
+      (a tombstone state, where fetching would UNDO the retirement). It now
+      detects the tombstone and answers `ok:cheatsheet-sources-retired`,
+      naming the replacement instead of instructing a re-fetch.
+
+      WHAT REMAINS IS A DISCARD DECISION THAT IS NOT AN AUDITOR'S TO MAKE.
+      The discard-over-repair bias points at deleting the validator and its
+      litmus. Two reasons not to do that from a passing audit: the tombstone
+      reserves removal for 0.1.<N+3>.x under the three-release retention
+      rule, and litmus-cheatsheet-source-layer-shape pins the validator's
+      four docstring lines, so deleting it silently changes what that spec's
+      coverage means. The owner of cheatsheets-license-tiered should decide.
+
+      NOTE FOR WHOEVER TAKES IT: scripts/fetch-cheatsheet-source.sh is NOT in
+      the same position and should not be swept up. It gained a
+      `--tier=bundled` mode that the replacement uses at build time, so it
+      outlived the retirement legitimately.
+    exit_criteria:
+      - |
+          A recorded decision: delete check-cheatsheet-sources.sh plus
+          litmus:cheatsheet-source-layer-shape and
+          litmus:cheatsheet-source-layer-validation at the tombstone's final
+          removal, OR repoint them at the tiered replacement with checks that
+          have a live artifact to run against.
+      - |
+          Whichever is chosen, openspec/specs/cheatsheet-source-layer/spec.md
+          (already "mostly superseded" per the tombstone) is reconciled in the
+          same change, and the bindings no longer claim coverage the tests
+          cannot deliver.
+    verifiable_closure: |
+      NAMED: the existing `litmus:cheatsheet-source-layer-validation`, either
+      deleted with its subject or asserting a live artifact. This packet
+      deliberately declares NO new litmus name — under 885-92iu a declared
+      closure must resolve, and inventing one here would be the exact defect
+      that packet closed.
+    events:
+      - type: filed
+        ts: "2026-08-25T22:27:30Z"
+        agent_id: "linux-yoga-opus5-20260825t222730z"
+        host: yoga
+        summary: |
+          Filed from the order-372 standing audit during a release-night
+          window, with the cadence cron disarmed. Disposition of the audited
+          component was `updated`, not `obsoleted`; this packet carries the
+          obsoletion question to its owner rather than an auditor answering it.
+
+  - packet_id: freshness-litmus-reruns-the-inventory-twelve-times
+    order: 888-92k6
+    next_action: First COUNT how many of the 12 invocations are pure re-reads of an unchanged report versus steps that deliberately vary the inventory's inputs (the denominator steps for generated trees, untracked files, ruled-in trees — orders 640-iujb, 730-j26z, 720-bmm9). Collapse only the pure re-reads onto one captured report; the varying steps keep their own runs. A speed-up that asserts less is a regression wearing a win's clothing.
+    status: ready
+    kind: optimization
+    pickup_role: any
+    priority: p2
+    desired_release: v0.5
+    depends_on: []
+    multi_cycle: false
+    deliverable: |
+      litmus:freshness-inventory-shape runs scripts/freshness-inventory.sh
+      ONCE and asserts over the captured report, instead of re-running it in
+      12 of its 13 steps.
+    capability_tags:
+      - litmus
+      - performance
+      - all-platforms
+    tags:
+      - freshness-audit
+      - gate-latency
+      - v0.5
+    title: |
+      The slowest step in the gate (~70s, 8x the next litmus) is 6.4s of real work executed twelve times — and it is the instrument that schedules freshness audits, so its cost suppresses the work it exists to schedule.
+    context: |
+      MEASURED ON yoga, 2026-08-25:
+        - `time scripts/freshness-inventory.sh` -> 6.4s real (6.0s user).
+        - litmus:freshness-inventory-shape has 13 steps; 12 of its
+          `command:` lines invoke freshness-inventory.sh, with NO caching
+          of the report between them (no mktemp, no shared variable).
+        - 12 x 6.4s ~= 77s, against the 69-70s the timing telemetry reports
+          for this suite across runs. The arithmetic accounts for the whole
+          cost.
+
+      So the 70s is not 70s of work. It is one 6.4s inventory computed
+      twelve times to answer twelve questions about the same report.
+
+      WHY THIS IS WORTH MORE THAN ITS 64 SECONDS. cycle-metrics has named
+      `slowest=litmus:freshness-inventory-shape` on this host for at least
+      three consecutive cycles, and it is roughly a quarter of a full
+      `./build.sh --check`. But the sharper point is what the instrument
+      IS: freshness-inventory.sh is the tool that decides which component
+      the standing order-372 audit should examine next. The most expensive
+      thing in the gate is the scheduler for the audit that keeps getting
+      deferred — this host named the skip in loop_status for two consecutive
+      cycles before discharging it.
+
+      That is a self-reinforcing loop rather than a coincidence, and it is
+      measurable rather than arguable: an instrument expensive enough to
+      deter running it suppresses exactly the work it exists to schedule.
+
+      THE FIX IS MECHANICAL AND THE RISK IS IN ONE PLACE. Capture the report
+      once into a temp file in an early step and have the remaining steps
+      grep THAT. The care needed: several steps deliberately vary the
+      inventory's inputs (the DENOMINATOR steps for generated trees,
+      untracked files and ruled-in trees, order 640-iujb / 730-j26z /
+      720-bmm9). Those steps genuinely need their own run and must keep it —
+      collapsing them would silently weaken the denominator assertions,
+      which is a worse outcome than 64 slow seconds. Count how many of the
+      12 are pure re-reads of the SAME report before collapsing any.
+    exit_criteria:
+      - |
+          litmus:freshness-inventory-shape completes in materially under its
+          current ~70s on a host where scripts/freshness-inventory.sh takes
+          ~6.4s, with every existing assertion preserved.
+      - |
+          Steps that deliberately vary the inventory's INPUTS keep their own
+          runs; only pure re-reads of an unchanged report share one.
+      - |
+          NEGATIVE CONTROL: the suite still FAILS when the inventory's report
+          grammar or coverage target actually drifts — a speed-up that
+          achieved its time by asserting less would be a regression wearing
+          a win's clothing.
+    verifiable_closure: |
+      NAMED: the existing `litmus:freshness-inventory-shape` itself, with its
+      recorded duration in the timing telemetry
+      (`scripts/cycle-metrics.sh` `timing: slowest=`) as the measurement.
+      No new litmus name is declared: under 885-92iu a declared closure must
+      resolve, and the honest closure here is the suite already being pinned.
+    events:
+      - type: filed
+        ts: "2026-08-25T22:27:30Z"
+        agent_id: "linux-yoga-opus5-20260825t222730z"
+        host: yoga
+        summary: |
+          Filed from the order-372 standing audit. The hypothesis (the
+          instrument's cost deters the audit) came from noticing I had
+          deferred the audit twice while naming this suite as the slowest
+          step both times; the 12-invocations-of-a-6.4s-script measurement is
+          what turned it from a hunch into a number.
