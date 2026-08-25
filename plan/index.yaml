@@ -4008,6 +4008,22 @@ plan_index:
         - "proposed mechanism set, each with a verifiable closure + staged adoption rung"
         - "Tlatoani sign-off recorded before any mechanism becomes worker-protocol contract"
       events:
+        - type: progress
+          ts: "2026-08-25T17:48:41Z"
+          agent_id: "linux-yoga-opus5-20260825t174841z"
+          host: yoga
+          summary: |
+            CRITERION 1 OPENED, and it is a partial slice that says so. Cycle-scoped claim released; packet stays ready.
+
+            The design record now exists at plan/issues/collaborative-work-scheduling-design-record-2026-08-25.md with the failure-mode inventory started — SIX entries, each with ledger evidence and each labelled measured-first-hand or inherited-from-the-record. No hypotheticals, because the packet's own mandate is the smallest mechanism set that fixes what we ACTUALLY HIT, and an inventory padded with imagined modes is how that mandate gets violated politely.
+
+            WHAT THE INVENTORY ALREADY SAYS, and it is not what the packet's candidate list expects. Of the six modes: THREE are already mechanised (F3 order allocation via next-order + immutable fragments, F6 the checkout lock, and F2's claiming which existed and was sitting unused); ONE is a discipline failure over an existing mechanism rather than a missing mechanism (F2, the 814-iyu7 duplicate); and TWO are live gaps in selection itself — F1, routing cannot see which lane a packet's REMAINING work needs (884-hfsj, measured here over five cycles), and F4, a claim hides work from the pool in both directions with only a 24h reaper to return it (641-e2qa's class, still live: stranded=2 on this host all day).
+
+            So on the evidence gathered so far the smallest set looks like TWO changes, and NEITHER is "dependency-aware dispatch waves" or "priority lanes with aging" — two of the five candidates the packet names. That is worth stating early rather than after someone has designed a dispatch-wave scheduler: the record already forecloses several obvious proposals. F5 forecloses another one specifically (three seeds produced a byte-identical batch on 2026-08-19, so "add a better hash" is refuted by measurement, not by opinion).
+
+            METHODOLOGY'S OWN PREDICTION IS NOW AN OBSERVATION. distributed-work.yaml's release_target.known_limits_and_next says agents "can still contend for the same packet or idle when their platform's targeted set is blocked". Both halves have happened — contention as 814-iyu7, and the second half as F1, except the host does not idle: it pays the orientation cost every cycle and finds work elsewhere. That is why it survived five cycles unwritten; it costs velocity without ever showing up in burndown.
+
+            WHAT I DID NOT DO, named so it is not mistaken for absent. Criterion 2, the prior-art survey with provenance, is not started. Mechanism proposals with verifiable closures and migration rungs are not started — 884-hfsj is a filed packet with its options narrowed to two by measurement, which is a candidate rung, not a proposal. And the inventory is INCOMPLETE: thrashing-mediation cases and milestone-burndown surfacing, both named in this packet's own outcome text, have no entry because I found no citable evidence for them in one cycle. Absence there means unexamined, not absent, and the document says so in those words.
         - type: filed
           ts: "2026-07-14T20:15:00Z"
           agent_id: "linux-macuahuitl-fable5-20260714T2005Z"
