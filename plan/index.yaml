@@ -3020,6 +3020,30 @@ plan_index:
         - "plan/long-running.md created as filtered view of active long-running packets"
         - "Additive update policy documented (new sections/supersede annotations, no rewrites)"
       events:
+        - type: progress
+          ts: "2026-08-25T15:49:55Z"
+          agent_id: "linux-yoga-opus5-20260825t154955z"
+          host: yoga
+          summary: |
+            LM-04 HAD DRIFTED AGAIN, AND FAR WORSE THAN THE FIRST TIME. Cycle-scoped claim on a multi_cycle packet; phase stays `verification`, NOT closed — the three named agents' verified-by events are still the gate.
+
+            MEASURED on yoga 2026-08-25 against the folded ledger: 31 `multi_cycle` packets, 27 live. `plan/long-running.md` listed ELEVEN rows, FOUR of which named obsoleted packets (153, 246, 247, 484), and omitted TWENTY live ones (353, 373, 389, 391, 405, 483, 537, 543, 546, 548, 549, 554, 557, 558, 591-x7ws, 682-u3si, 793-rb9u, 794-kmqe, 829-dkuc, 831-ezea). It was right about 7 of 31.
+
+            THAT IS NOT A STALE DOCUMENT, IT IS A DECOY. An agent reading the sub-queue to find claimable long-running work is steered TOWARD four dead packets and AWAY from twenty live ones. The failure is worse than an absent view, because an absent view sends you to the ledger.
+
+            THE SECOND DRIFT, AND THAT IS THE ARGUMENT FOR THE GATE. GPT verification caught the first on 2026-07-14 (orders 315/330/334 absent). It was repaired by hand and the packet returned to verification. Hand repair bought six weeks and then the same failure recurred at four times the size. An invariant whose only enforcement is a periodic human verifier is one nobody can rely on between verifications — the shape 660-ryhn fixed for unbound litmus files and 801-qasc fixed for the daily-maintenance marker.
+
+            LANDED: scripts/check-long-running-view.sh compares the orders the table lists against the ledger's live multi_cycle set and fails the build on divergence in EITHER direction. Wired into ./build.sh --check as its own phase and HAND-FALSIFIED THROUGH THE WIRING, not just the script: deleting one live row turns the gate red naming that order; restoring it returns green.
+
+            IT CHECKS MEMBERSHIP, NOT RENDERING, and that boundary is the design decision worth recording. Which orders appear IS derivable from the ledger and is exactly what rotted. The phase / blocked-on / outstanding-verification columns are editorial judgements no generator can derive — so a "regenerate the file" gate would either destroy that content or invent it. Inventing it is the worse option by far: it would make the view MORE convincing and no more true, which is the failure this repair exists to end.
+
+            VIEW REPAIRED: four stale rows removed, twenty added. The added rows carry `not yet recorded` in the editorial columns rather than plausible-looking guesses. That is deliberate honesty — I do not know what those twenty packets are blocked on, and writing something that reads like knowledge would be the same defect in a new coat. Whoever next touches one of those packets should fill in its row from what they actually know.
+
+            PINNED by litmus:long-running-view-agreement, 5/5, bound to spec meta-orchestration: agreement on this tree in the pinned grammar; a MISSING live packet refused; a STALE terminal row refused (both directions asserted separately — the 2026-08-25 measurement found four stale rows, and a gate looking only for omissions would have passed every one); a POSITIVE control so a refuse-everything gate cannot satisfy the negatives; and a scope control proving a NON-multi_cycle packet is not demanded of the view, since a gate that demanded the whole ledger would be unsatisfiable and get disabled.
+
+            WHAT THIS DOES NOT DO: it does not verify any of the packet's other criteria, and it is not a verified-by event. LM-04's exit criterion asks for the view to exist as a filtered view; it now exists AND cannot silently stop being one. LM-01/02/03/05 remain as they were, and the completion gate is unchanged — opencode-bigpickle, antigravity-gemini and codex-gpt55-highthink still owe verified-by events.
+
+            NEXT ACTION for this packet: the three named agents re-verify LM-01..LM-05. LM-04 can now be checked mechanically (`scripts/check-long-running-view.sh`), so that criterion should be verifiable in one command rather than by eye — and if a verifier disagrees with the gate's definition of "active" (non-terminal status on a multi_cycle packet), that disagreement is worth recording here, because the gate now encodes it for everyone.
         - type: claim
           ts: "2026-07-10T02:50:00Z"
           agent_id: "windows-bullo-fable5-20260710T0240Z"

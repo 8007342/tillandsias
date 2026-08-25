@@ -2075,6 +2075,23 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Issue-citation convention check passed"
 
+    # Order 251 criterion LM-04. `plan/long-running.md` is declared a filtered
+    # view of the ledger's active multi_cycle packets and nothing enforced it.
+    # It drifted in July (caught by a human verifier, repaired by hand, bought
+    # six weeks) and again by 2026-08-25, when it was right about 7 of 31
+    # packets: 11 rows, four naming obsoleted packets, twenty live ones absent.
+    # A 23%-accurate sub-queue steers agents toward dead work.
+    #
+    # Checks MEMBERSHIP, not rendering: which orders appear is derivable and is
+    # what rotted; the phase / blocked-on / verification columns are editorial
+    # and fabricating them would make the view more convincing and no more true.
+    _step "Checking plan/long-running.md matches the live multi_cycle set (251 LM-04)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-long-running-view.sh" 2>&1; then
+        _error "the long-running view disagrees with the ledger (251 LM-04) — see the verdict line above"
+        exit 1
+    fi
+    _info "Long-running view agreement check passed"
+
     _step "Checking litmus pin claims resolve and execute (721-77yu)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-pin-claims.sh" 2>&1; then
         _error "a script claims a litmus pin that cannot execute (721-77yu) — see the verdict line above"

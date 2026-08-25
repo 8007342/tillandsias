@@ -1,0 +1,62 @@
+# freshness: auditor=linux-yoga-20260825t1543z date=2026-08-25 verdict=updated scope=created — order 251 LM-04 drifted twice; this makes the invariant machine-checked instead of re-verified by hand
+name: litmus:long-running-view-agreement
+spec: meta-orchestration
+phase: pre-build
+size: instant
+severity: medium
+description: >
+  Pin that `plan/long-running.md` lists exactly the ledger's live
+  `multi_cycle: true` packets (order 251, criterion LM-04).
+
+  It has drifted twice. GPT verification caught the first on 2026-07-14 (three
+  orders absent); it was repaired by hand. Measured again on 2026-08-25 the
+  view was right about 7 of 31 packets — 11 rows, four naming obsoleted
+  packets, twenty live packets omitted. A sub-queue that is 23% accurate is
+  worse than none: an agent reading it for claimable long-running work is
+  steered toward dead packets and away from live ones.
+
+  The gate checks MEMBERSHIP, not rendering. Which orders appear is derivable
+  from the ledger and is what rotted; the phase / blocked-on / outstanding-
+  verification columns are editorial judgements no generator can produce, and
+  fabricating them would make the view more convincing and no more true.
+
+  Both directions are asserted — a missing live packet and a stale row are
+  distinct failures with distinct causes, and a gate that caught only one would
+  let the view rot in the other direction.
+
+preconditions:
+  - workspace contains scripts/check-long-running-view.sh
+  - workspace contains plan/long-running.md
+
+critical_path:
+  - step: "Req: the view agrees with the ledger on this tree, in the pinned grammar"
+    command: "scripts/check-long-running-view.sh | grep -qE '^ok:long-running-view:[0-9]+ live packets listed$' && echo 'ok: view agrees'"
+    expected_behavior: "ok: view agrees"
+    timeout_ms: 30000
+
+  - step: "NEGATIVE CONTROL: a live multi_cycle packet MISSING from the view is refused"
+    # Hermetic: a two-packet fixture index and a view that lists only one.
+    command: "d=$(mktemp -d); printf 'plan_index:\\n  packets:\\n    - packet_id: alpha\\n      order: 900\\n      status: ready\\n      multi_cycle: true\\n    - packet_id: beta\\n      order: 901\\n      status: ready\\n      multi_cycle: true\\n' > \"$d/idx.yaml\"; printf '| Order | Packet |\\n|---:|---|\\n| 900 | `alpha` |\\n' > \"$d/view.md\"; out=$(TILLANDSIAS_LONG_RUNNING_INDEX=\"$d/idx.yaml\" TILLANDSIAS_LONG_RUNNING_VIEW=\"$d/view.md\" scripts/check-long-running-view.sh 2>/dev/null); rc=$?; rm -rf \"$d\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -q '^violation:long-running-view:missing=1:stale=0$' && echo 'ok: missing packet refused'"
+    expected_behavior: "ok: missing packet refused"
+    timeout_ms: 30000
+
+  - step: "NEGATIVE CONTROL: a STALE row naming a terminal packet is refused"
+    # The other direction. The 2026-08-25 measurement found four of these, and a
+    # gate that only looked for omissions would have passed all four.
+    command: "d=$(mktemp -d); printf 'plan_index:\\n  packets:\\n    - packet_id: alpha\\n      order: 900\\n      status: ready\\n      multi_cycle: true\\n    - packet_id: gamma\\n      order: 902\\n      status: obsoleted\\n      multi_cycle: true\\n' > \"$d/idx.yaml\"; printf '| Order | Packet |\\n|---:|---|\\n| 900 | `alpha` |\\n| 902 | `gamma` |\\n' > \"$d/view.md\"; out=$(TILLANDSIAS_LONG_RUNNING_INDEX=\"$d/idx.yaml\" TILLANDSIAS_LONG_RUNNING_VIEW=\"$d/view.md\" scripts/check-long-running-view.sh 2>/dev/null); rc=$?; rm -rf \"$d\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -q '^violation:long-running-view:missing=0:stale=1$' && echo 'ok: stale row refused'"
+    expected_behavior: "ok: stale row refused"
+    timeout_ms: 30000
+
+  - step: "POSITIVE CONTROL: an exactly-agreeing pair passes"
+    # Without this, both refusals above could be satisfied by a gate that
+    # refuses everything.
+    command: "d=$(mktemp -d); printf 'plan_index:\\n  packets:\\n    - packet_id: alpha\\n      order: 900\\n      status: ready\\n      multi_cycle: true\\n    - packet_id: gamma\\n      order: 902\\n      status: obsoleted\\n      multi_cycle: true\\n' > \"$d/idx.yaml\"; printf '| Order | Packet |\\n|---:|---|\\n| 900 | `alpha` |\\n' > \"$d/view.md\"; out=$(TILLANDSIAS_LONG_RUNNING_INDEX=\"$d/idx.yaml\" TILLANDSIAS_LONG_RUNNING_VIEW=\"$d/view.md\" scripts/check-long-running-view.sh 2>/dev/null); rc=$?; rm -rf \"$d\"; [ \"$rc\" -eq 0 ] && printf '%s' \"$out\" | grep -q '^ok:long-running-view:1 live packets listed$' && echo 'ok: agreement accepted, terminal packet correctly excluded'"
+    expected_behavior: "ok: agreement accepted, terminal packet correctly excluded"
+    timeout_ms: 30000
+
+  - step: "A NON-multi_cycle packet is not demanded of the view"
+    # The view is the multi_cycle sub-queue, not the whole ledger. A gate that
+    # demanded every ready packet would be unsatisfiable and get disabled.
+    command: "d=$(mktemp -d); printf 'plan_index:\\n  packets:\\n    - packet_id: alpha\\n      order: 900\\n      status: ready\\n      multi_cycle: true\\n    - packet_id: plain\\n      order: 903\\n      status: ready\\n' > \"$d/idx.yaml\"; printf '| Order | Packet |\\n|---:|---|\\n| 900 | `alpha` |\\n' > \"$d/view.md\"; out=$(TILLANDSIAS_LONG_RUNNING_INDEX=\"$d/idx.yaml\" TILLANDSIAS_LONG_RUNNING_VIEW=\"$d/view.md\" scripts/check-long-running-view.sh 2>/dev/null); rc=$?; rm -rf \"$d\"; [ \"$rc\" -eq 0 ] && echo 'ok: single-cycle packets are out of scope'"
+    expected_behavior: "ok: single-cycle packets are out of scope"
+    timeout_ms: 30000

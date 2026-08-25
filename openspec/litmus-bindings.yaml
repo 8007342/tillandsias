@@ -662,6 +662,7 @@ specs:
   - litmus:meta-orchestration-opsx-sync-merge
   - litmus:build-cache-sweep-trigger
   - litmus:issue-citation-convention
+  - litmus:long-running-view-agreement
   - litmus:resumable-claim-dirt-shape
   - litmus:mcp-expert-health-probe-shape
   - litmus:forge-findings-persistence-shape
