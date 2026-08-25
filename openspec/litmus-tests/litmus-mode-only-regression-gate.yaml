@@ -1,0 +1,70 @@
+# @trace spec:ci-release
+# @trace order:887-bz88
+#
+# Pins the closure for a MODE-ONLY regression reaching the trunk. On 2026-08-25
+# scripts/check-credential-channel.sh went 100755 -> 100644 in a pushed commit
+# and left origin/linux-next failing violation:script-not-executable:1 on a
+# pristine clone — the credential guard itself, which every meta-orchestration
+# cycle invokes by path before any committable work, where a lost exec bit is a
+# permission error rather than a verdict.
+#
+# TWO BLIND SPOTS COMPOSED, and the pin covers both because neither alone did it:
+#   1. check-script-exec-bits.sh read only the INDEX (git ls-files -s), while the
+#      skill runs the gate BEFORE `git add` — so a worktree-only chmod passed.
+#   2. gate-stamp.sh hashed path + kind + CONTENT and never st_mode, so the
+#      `git add` that wrote 100644 changed no bytes, the stamp stayed fresh, and
+#      the pre-push hook accepted a tree the gate had never seen in that shape.
+#
+# The property pinned is stronger than "the exec bit is currently correct": a
+# chmod must MOVE the stamp, and the guard must condemn a worktree-only
+# regression, or the same hole reopens under a different file.
+name: litmus:mode-only-regression-gate
+spec: ci-release
+phase: pre-build
+description: >
+  Pin that a mode-only regression cannot cross the gate: gate-stamp.sh
+  fingerprints st_mode so a chmod goes stale, and check-script-exec-bits.sh
+  reads the WORKTREE as well as the index so the refusal lands before staging.
+  The fixture carries a mutation control proving the index-only guard misses the
+  incident tree, and negative controls for the clean tree and for shebang-less
+  files.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/gate-stamp.sh
+  - workspace contains scripts/check-script-exec-bits.sh
+  - workspace contains scripts/test-mode-only-regression-887-bz88.sh
+  - git and bash are available in PATH
+
+critical_path:
+  - step: "guards and fixture parse and the fixture is executable"
+    command: "bash -n scripts/gate-stamp.sh && bash -n scripts/check-script-exec-bits.sh && bash -n scripts/test-mode-only-regression-887-bz88.sh && test -x scripts/test-mode-only-regression-887-bz88.sh && echo 'ok: parses'"
+    timeout_ms: 5000
+    expected_behavior: "ok: parses"
+
+  - step: "all fixture arms pass (stamp sees st_mode, worktree arm refuses pre-staging, mutation control, negative controls)"
+    command: "bash scripts/test-mode-only-regression-887-bz88.sh 2>&1 | tail -1"
+    timeout_ms: 120000
+    expected_behavior: "ok:mode-only-regression-fixture:all"
+
+  - step: "the stamp still emits an exec-bit field (the frame must not silently revert to content-only)"
+    command: "if grep -q 'execbits\\[i\\]' scripts/gate-stamp.sh && grep -c '%s' scripts/gate-stamp.sh >/dev/null && grep \"printf 'file\" scripts/gate-stamp.sh | grep -q 'execbits'; then echo 'ok: exec-bit framed'; else echo 'FAIL: the file frame lost its exec-bit field'; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok: exec-bit framed"
+
+  - step: "the specific 2026-08-25 regression stays repaired on the tracked tree"
+    command: "test \"$(git ls-files -s -- scripts/check-credential-channel.sh | cut -d' ' -f1)\" = 100755 && echo 'ok: 100755'"
+    timeout_ms: 5000
+    expected_behavior: "ok: 100755"
+
+evidence:
+  artifact: "scripts/gate-stamp.sh + scripts/check-script-exec-bits.sh + scripts/test-mode-only-regression-887-bz88.sh"
+  measured_on: >
+    lenovinha (Fedora Silverblue) 2026-08-25 — fixture 9/9 green. End-to-end on a
+    scratch clone with a local bare remote and the real pre-push hook installed:
+    PRE-FIX the incident shape (stamp the good tree, chmod -x, stage, commit,
+    push) was ACCEPTED, reproducing the hole; POST-FIX the identical sequence was
+    REFUSED for a stale stamp. Controls both green: a content change with a
+    refreshed stamp still pushes, and an ordinary plan-only fragment push still
+    takes the fast lane without a build stamp.

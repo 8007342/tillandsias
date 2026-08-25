@@ -1,0 +1,103 @@
+# @trace spec:spec-traceability
+# @trace order:885-92iu, order:721-77yu
+#
+# The named closure of packet 885-92iu — and deliberately a test that packet
+# had to CREATE, because its own `verifiable_closure` named it while it did
+# not exist. Running `tillandsias-plan declared-closures` before this file
+# landed reported 885-92iu itself as `declared-closure-unresolvable`. That is
+# the defect demonstrating itself on the packet that fixes it, and it is the
+# reason the closure was written this way rather than pointing at some test
+# that already existed.
+#
+# Order 721-77yu established the defect and its two shapes for SHELL SCRIPTS
+# ("Pinned by litmus:<x>" headers): `unresolvable` and `unbound`. This extends
+# the same vocabulary to the LEDGER's `verifiable_closure` field, where the
+# empty claim costs more — methodology/convergence.yaml makes that field the
+# thing that distinguishes a reduction from a restatement.
+name: litmus:declared-closure-resolves
+spec: spec-traceability
+phase: pre-build
+description: >
+  Pin the declared-closure resolution check: the three-way verdict
+  (resolved / file-missing / file-present-but-unbound) exercised on hermetic
+  fixture fragments, the report-vs-gate split (full-ledger report never fails,
+  fragment gate exits 1), the field-scoped extraction that ignores prose and
+  spec shorthands elsewhere in the ledger, the corpus-selector fix in
+  check-litmus-pin-claims.sh (which must select by FILENAME, not by matching
+  its own grep output), and the build.sh wiring of both.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/check-declared-closures-added.sh
+  - workspace contains scripts/check-litmus-pin-claims.sh
+  - shell utilities (bash, grep, sed, find, mktemp) are available in PATH
+
+critical_path:
+  - step: "both guards parse, are executable, and build.sh invokes each by name (an orphaned guard is fixed by invoking it, not by mentioning it)"
+    command: "bash -n scripts/check-declared-closures-added.sh && bash -n scripts/check-litmus-pin-claims.sh && test -x scripts/check-declared-closures-added.sh && grep -q 'check-declared-closures-added.sh' build.sh && grep -q 'check-litmus-pin-claims.sh' build.sh && echo 'ok: guards-wired'"
+    timeout_ms: 5000
+    expected_behavior: "ok: guards-wired"
+
+  - step: "CORPUS SELECTOR (885-92iu criterion 1): pointed at a directory with no shell or C sources the pin checker reports 0, not a count of prose lines that merely mention a .sh path"
+    command: ". scripts/plan-binary-probe.sh; b=\"$(resolve_plan_binary)\" || b=; [ -n \"$b\" ] || { echo 'ok: skipped-no-plan-binary'; exit 0; }; d=$(mktemp -d); mkdir -p \"$d/sub\"; printf 'see scripts/foo.sh: it claims litmus:totally-invented-name\\n' > \"$d/sub/notes.md\"; out=$(TILLANDSIAS_PIN_SCAN_DIR=\"$d\" scripts/check-litmus-pin-claims.sh 2>/dev/null); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 0 ] && [ \"$out\" = 'ok:litmus-pin-claims:0 checked' ] && echo 'ok: corpus-by-filename' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: corpus-by-filename"
+
+  - step: "the pin checker still scans real shell sources (the selector fix must not have emptied the corpus it was written for)"
+    command: "out=$(scripts/check-litmus-pin-claims.sh 2>/dev/null); n=$(printf '%s' \"$out\" | sed 's/^ok:litmus-pin-claims:\\([0-9]*\\) checked$/\\1/'); case \"$out\" in ok:litmus-pin-claims:*) [ \"$n\" -gt 20 ] && echo 'ok: real-corpus-nonempty' || { echo \"FAIL: only $n checked\"; exit 1; } ;; *) echo \"FAIL: $out\"; exit 1 ;; esac"
+    timeout_ms: 20000
+    expected_behavior: "ok: real-corpus-nonempty"
+
+  - step: "VERDICT 1 of 3 — file-missing: a fragment declaring an invented litmus name is REFUSED, exit 1, naming the packet and the token"
+    command: ". scripts/plan-binary-probe.sh; b=\"$(resolve_plan_binary)\" || b=; [ -n \"$b\" ] || { echo 'ok: skipped-no-plan-binary'; exit 0; }; \"$b\" capabilities 2>/dev/null | grep -qx declared-closures-check || { echo 'ok: skipped-stale-binary'; exit 0; }; f=$(mktemp); printf 'packets:\\n  - packet_id: fixture-missing\\n    order: 999-zzzz\\n    status: ready\\n    verifiable_closure: |\\n      NAMED: litmus:this-test-was-never-written\\n' > \"$f\"; out=$(\"$b\" declared-closures-check \"$f\" 2>&1); rc=$?; rm -f \"$f\"; [ \"$rc\" != 0 ] && printf '%s' \"$out\" | grep -q 'violation:declared-closure-unresolvable:1' && printf '%s' \"$out\" | grep -q '999-zzzz' && echo 'ok: missing-refused' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: missing-refused"
+
+  - step: "VERDICT 2 of 3 — unbound: a test file that EXISTS but that no spec binds is refused too; execution is binding-driven, so an unbound test is as inert as a missing one and `ls` satisfying a reader is exactly the quiet half"
+    command: ". scripts/plan-binary-probe.sh; b=\"$(resolve_plan_binary)\" || b=; [ -n \"$b\" ] || { echo 'ok: skipped-no-plan-binary'; exit 0; }; \"$b\" capabilities 2>/dev/null | grep -qx declared-closures-check || { echo 'ok: skipped-stale-binary'; exit 0; }; name=$(grep -h '^name: litmus:' openspec/litmus-tests/*.yaml | sed 's/^name: litmus://' | sort -u > /tmp/885-e.txt; grep -oE '^[[:space:]]*-[[:space:]]+litmus:[a-z0-9-]+' openspec/litmus-bindings.yaml | sed 's/.*litmus://' | sort -u > /tmp/885-b.txt; comm -23 /tmp/885-e.txt /tmp/885-b.txt | head -1); rm -f /tmp/885-e.txt /tmp/885-b.txt; [ -n \"$name\" ] || { echo 'ok: no-unbound-test-in-tree'; exit 0; }; f=$(mktemp); printf 'packets:\\n  - packet_id: fixture-unbound\\n    order: 999-xxxx\\n    status: ready\\n    verifiable_closure: |\\n      NAMED: litmus:%s\\n' \"$name\" > \"$f\"; out=$(\"$b\" declared-closures-check \"$f\" 2>&1); rc=$?; rm -f \"$f\"; [ \"$rc\" != 0 ] && printf '%s' \"$out\" | grep -q 'violation:declared-closure-unbound:1' && echo 'ok: unbound-refused' || { echo \"FAIL: name=$name rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: unbound-refused"
+
+  - step: "VERDICT 3 of 3 — resolved: a closure naming a bound, file-backed test PASSES (without this the gate could be satisfied by refusing everything)"
+    command: ". scripts/plan-binary-probe.sh; b=\"$(resolve_plan_binary)\" || b=; [ -n \"$b\" ] || { echo 'ok: skipped-no-plan-binary'; exit 0; }; \"$b\" capabilities 2>/dev/null | grep -qx declared-closures-check || { echo 'ok: skipped-stale-binary'; exit 0; }; f=$(mktemp); printf 'packets:\\n  - packet_id: fixture-resolved\\n    order: 999-yyyy\\n    status: ready\\n    verifiable_closure: |\\n      NAMED: litmus:declared-closure-resolves\\n' > \"$f\"; out=$(\"$b\" declared-closures-check \"$f\" 2>&1); rc=$?; rm -f \"$f\"; [ \"$rc\" = 0 ] && [ \"$out\" = 'ok:declared-closures:1 checked' ] && echo 'ok: resolved-passes' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: resolved-passes"
+
+  - step: "EXTRACTION IS FIELD-SCOPED, not a grep: a litmus token in a packet's prose (context/title) is NOT judged — matching those produces a number nobody trusts, and a check nobody trusts gets switched off"
+    command: ". scripts/plan-binary-probe.sh; b=\"$(resolve_plan_binary)\" || b=; [ -n \"$b\" ] || { echo 'ok: skipped-no-plan-binary'; exit 0; }; \"$b\" capabilities 2>/dev/null | grep -qx declared-closures-check || { echo 'ok: skipped-stale-binary'; exit 0; }; f=$(mktemp); printf 'packets:\\n  - packet_id: fixture-prose\\n    order: 999-wwww\\n    status: ready\\n    context: |\\n      Run it with litmus:git-mirror-service, a spec shorthand, not a closure.\\n    verifiable_closure: |\\n      NAMED: litmus:declared-closure-resolves\\n' > \"$f\"; out=$(\"$b\" declared-closures-check \"$f\" 2>&1); rc=$?; rm -f \"$f\"; [ \"$rc\" = 0 ] && [ \"$out\" = 'ok:declared-closures:1 checked' ] && echo 'ok: field-scoped' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: field-scoped"
+
+  - step: "REPORT vs GATE: the full-ledger report NEVER fails a build (there is standing debt, and a gate that reds the trunk on day one gets switched off) while still naming every unresolved closure on stderr"
+    command: ". scripts/plan-binary-probe.sh; b=\"$(resolve_plan_binary)\" || b=; [ -n \"$b\" ] || { echo 'ok: skipped-no-plan-binary'; exit 0; }; \"$b\" capabilities 2>/dev/null | grep -qx declared-closures || { echo 'ok: skipped-stale-binary'; exit 0; }; out=$(\"$b\" declared-closures 2>/dev/null); rc=$?; [ \"$rc\" = 0 ] && printf '%s' \"$out\" | grep -qE '^(ok:declared-closures:[0-9]+ checked|violation:declared-closure-(unresolvable|unbound):[0-9]+)$' && echo 'ok: report-never-fails' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 60000
+    expected_behavior: "ok: report-never-fails"
+
+  - step: "the wrapper is diff-scoped and fails CLOSED on a stale binary — a skip is named, never dressed up as a clean ledger"
+    command: "out=$(TILLANDSIAS_PLAN_BIN=/nonexistent-885 scripts/check-declared-closures-added.sh 2>/dev/null); rc=$?; [ \"$rc\" = 0 ] && printf '%s' \"$out\" | grep -qE '^(skip:stale-plan-binary|ok:declared-closures:[0-9]+ checked)$' && echo 'ok: wrapper-grammar' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: wrapper-grammar"
+
+observability:
+  traces:
+    - "@trace spec:spec-traceability"
+    - "@trace order:885-92iu"
+  expected_log: "declared-closure resolution pinned (three-way verdict, report-vs-gate split, field-scoped extraction, filename-based pin-claim corpus)"
+  log_fields:
+    spec: "spec-traceability"
+    test: "declared-closure-resolves"
+    artifact: "crates/tillandsias-plan/src/main.rs (declared-closures) + scripts/check-declared-closures-added.sh + scripts/check-litmus-pin-claims.sh"
+
+rollback:
+  on_failure: >
+    Either a packet's `verifiable_closure` names a litmus test that does not
+    exist or that no spec binds — build the test and bind it in
+    openspec/litmus-bindings.yaml, or correct the citation to a closure that
+    exists — or the resolution check itself drifted. Restore
+    `tillandsias-plan declared-closures` (full-ledger REPORT, exit 0) and
+    `declared-closures-check <fragment.yaml>` (single-fragment GATE, exit 1),
+    both extracting tokens from the `verifiable_closure` FIELD only, and keep
+    check-litmus-pin-claims.sh selecting its corpus with `find -name` rather
+    than by filtering its own grep output.
+  command: "bash -c '. scripts/plan-binary-probe.sh; \"$(resolve_plan_binary)\" declared-closures'; scripts/check-litmus-pin-claims.sh; scripts/check-declared-closures-added.sh"
