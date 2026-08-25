@@ -14104,6 +14104,15 @@ fn maybe_spawn_vsock_listener(
             // 60s timeout is a backstop for a lagged/dropped receiver, not
             // the mechanism.
             let mut phase_rx = liveness_state.subscribe_vm_status();
+            // ONE probe for the task's whole life (801-vm4p rider). This used
+            // to construct `LivenessProbe::new(false)` inside every tick's
+            // spawn_blocking closure, which reset the 767-es4w cumulative
+            // death counts to zero each check — a flapping service could
+            // never show `deaths=` above 1, defeating the exact "rising
+            // number, not identical lines" property that order added. The
+            // probe is moved into the blocking task and handed back with the
+            // result so one instance spans every tick.
+            let mut probe = container_deps::LivenessProbe::new(false);
             loop {
                 // Only probe during Ready phase — containers aren't expected
                 // to be up during Starting/Draining/Stopping.
@@ -14118,11 +14127,24 @@ fn maybe_spawn_vsock_listener(
                 // RealSatisfier::satisfy are blocking); keep it off the
                 // async workers so a slow podman never stalls the vsock
                 // listener sharing this runtime.
-                let check = tokio::task::spawn_blocking(|| {
-                    container_deps::LivenessProbe::new(false).run_check()
+                let check = match tokio::task::spawn_blocking(move || {
+                    let result = probe.run_check();
+                    (probe, result)
                 })
                 .await
-                .unwrap_or_else(|join_err| Err(format!("liveness task panicked: {join_err}")));
+                {
+                    Ok((returned_probe, result)) => {
+                        probe = returned_probe;
+                        result
+                    }
+                    Err(join_err) => {
+                        // The probe (and its death counts) died with the
+                        // panicked task; start fresh rather than crash the
+                        // supervisor loop.
+                        probe = container_deps::LivenessProbe::new(false);
+                        Err(format!("liveness task panicked: {join_err}"))
+                    }
+                };
                 match check {
                     Ok(result) => {
                         if !result.all_running() {
@@ -15998,6 +16020,99 @@ mod tests {
         );
     }
 
+    /// ORDER 801-vm4p, the residue the test above cannot cover: it pins the
+    /// RUST side to the contract, so a script-side edit drifts silently — the
+    /// exact one-sided-guard shape 873-zcim was (the driver held a lock the
+    /// prompt lanes could not see). This test reads the script's actual
+    /// `_podman run` block, expands its variables to the same values the Rust
+    /// builder uses, and asserts token-for-token vector equality in BOTH
+    /// directions. Either side drifting — flag added, dropped, reordered,
+    /// mount changed — goes red here.
+    #[test]
+    fn nix_cache_launch_args_parity_is_two_sided() {
+        let script_path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../scripts/nix-cache-service.sh"
+        );
+        let script = std::fs::read_to_string(script_path).expect("script readable");
+
+        // Extract the continuation block starting at `_podman run`.
+        let mut in_block = false;
+        let mut joined = String::new();
+        for line in script.lines() {
+            if line.trim_start().starts_with("_podman run") {
+                in_block = true;
+            }
+            if in_block {
+                let t = line.trim();
+                if let Some(body) = t.strip_suffix('\\') {
+                    joined.push_str(body);
+                    joined.push(' ');
+                } else {
+                    joined.push_str(t);
+                    break;
+                }
+            }
+        }
+        assert!(!joined.is_empty(), "found the script's _podman run block");
+
+        let entrypoint = "/nix/store/abc-harmonia-3.2.0/bin/harmonia-cache";
+        let image = "registry.fedoraproject.org/fedora-minimal:44";
+        // Same fallback derivation the Rust builder performs.
+        let home = std::env::var("HOME").unwrap_or_default();
+        let chroot_store = std::env::var("TILLANDSIAS_NIX_CHROOT_STORE")
+            .unwrap_or_else(|_| format!("{home}/.local/share/tillandsias/nix-store"));
+        let state_dir = std::env::var("TILLANDSIAS_NIX_CACHE_STATE")
+            .unwrap_or_else(|_| format!("{home}/.local/share/tillandsias/nix-cache"));
+
+        // The script's variable table (defaults at its lines 92-108). No
+        // name here is a prefix of another, so plain textual substitution is
+        // unambiguous.
+        let vars: [(&str, String); 10] = [
+            ("CONTAINER_NAME", "tillandsias-nix-cache".into()),
+            ("SERVICE_ALIAS", "nix-cache".into()),
+            ("ENCLAVE_NET", ENCLAVE_NET.into()),
+            ("CHROOT_STORE", chroot_store),
+            ("SECRET_KEY", format!("{state_dir}/cache-priv.key")),
+            ("HARMONIA_CONF", format!("{state_dir}/harmonia.toml")),
+            ("BASE_IMAGE", image.into()),
+            ("HOST_PORT", "5111".into()),
+            ("IN_PORT", "5000".into()),
+            ("logical", "/nix/store/abc-harmonia-3.2.0".into()),
+        ];
+        let tls: [(&str, String); 2] = [
+            ("TLS_CRT", format!("{state_dir}/nix-cache.crt")),
+            ("TLS_KEY", format!("{state_dir}/nix-cache.key")),
+        ];
+
+        let mut script_args: Vec<String> = Vec::new();
+        for raw in joined.split_whitespace() {
+            // The block's trailing shell plumbing is not launch grammar.
+            if raw.starts_with(">/dev/null") || raw == "2>&1" || raw == "||" {
+                break;
+            }
+            if raw == "_podman" || raw == "run" {
+                continue;
+            }
+            let mut tok = raw.trim_matches('"').to_string();
+            if tok == "-d" {
+                tok = "--detach".into();
+            }
+            for (name, value) in tls.iter().chain(vars.iter()) {
+                tok = tok
+                    .replace(&format!("${{{name}}}"), value)
+                    .replace(&format!("${name}"), value);
+            }
+            script_args.push(tok);
+        }
+
+        let rust_args = build_nix_cache_run_args(entrypoint, image, 5111);
+        assert_eq!(
+            script_args, rust_args,
+            "script do_ensure and Rust ensure must launch flag-for-flag identically"
+        );
+    }
+
     #[test]
     fn inference_run_args_place_every_flag_before_the_image() {
         // Order 524. The generated arg VECTOR is the only observable form of the
@@ -16669,13 +16784,14 @@ mod tests {
         // Enumerated by value (not transcribed by name) so `Service::name()`
         // supplies the container names; the count guard fails loudly if a new
         // Service variant is declared and this list is not extended.
-        const DECLARED: [container_deps::Service; 7] = [
+        const DECLARED: [container_deps::Service; 8] = [
             container_deps::Service::EnclaveNetwork,
             container_deps::Service::EgressNetwork,
             container_deps::Service::CaBundle,
             container_deps::Service::Vault,
             container_deps::Service::Proxy,
             container_deps::Service::GitLogin,
+            container_deps::Service::NixCache,
             container_deps::Service::ForgeLaunch,
         ];
         let enum_at = liveness_src
@@ -16699,11 +16815,25 @@ mod tests {
              agreement still covers every node"
         );
 
-        let re_ensured: Vec<&'static str> = DECLARED
+        let mut re_ensured: Vec<&'static str> = DECLARED
             .into_iter()
             .filter(|service| steady_state.contains(&format!("Service::{service:?}")))
             .map(|service| service.name())
             .collect();
+        // The nix cache (801-vm4p) is supervised OUTSIDE the unconditional
+        // array — its skip-is-success semantics need the absent/dead split of
+        // `classify_nix_cache`, so it has its own conditional entry in
+        // run_check. Read structurally like the array: the classifier call
+        // must sit inside run_check, or the cache has silently fallen out of
+        // supervision.
+        let classify_at = liveness_src[run_check_at..tests_at]
+            .find("classify_nix_cache(")
+            .expect("run_check must carry the 801-vm4p conditional nix-cache supervision entry");
+        assert!(
+            run_check_at + classify_at > set_at,
+            "the nix-cache entry follows the unconditional steady-state set"
+        );
+        re_ensured.push(container_deps::Service::NixCache.name());
         assert!(
             !re_ensured.is_empty(),
             "the liveness supervisor must keep at least one container running"
@@ -16826,6 +16956,7 @@ mod tests {
           {"Names":["tillandsias-vault"],"State":"running"},
           {"Names":["tillandsias-proxy"],"State":"running"},
           {"Names":["tillandsias-router"],"State":"running"},
+          {"Names":["tillandsias-nix-cache"],"State":"running"},
           {"Names":["tillandsias-inference"],"State":"running"},
           {"Names":["tillandsias-fixture-forge"],"State":"exited"}
         ]"#;
@@ -16833,6 +16964,7 @@ mod tests {
             "tillandsias-vault",
             "tillandsias-proxy",
             "tillandsias-router",
+            "tillandsias-nix-cache",
             "tillandsias-inference",
         ];
 

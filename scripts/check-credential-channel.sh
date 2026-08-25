@@ -5,8 +5,12 @@ set -uo pipefail
 if grep -qi "microsoft" /proc/version 2>/dev/null && pwd | grep -q '^/mnt/[c-z]/'; then
   echo "[check-credential-channel] WARNING: Running in WSL but directory is on Windows host. Host credentials may be unavailable. On Windows, use Git Bash instead." >&2
 fi
-# @trace spec:meta-orchestration
-# check-credential-channel.sh: executable Credential Channel Guard (plan order 61).
+# @trace order:61, order:756-2jnj, order:860-g798
+# check-credential-channel.sh: executable Credential Channel Guard (plan order 61;
+# forge upstream-auth consumption 756-2jnj; push-verified gh arm 860-g798).
+# The former `spec:meta-orchestration` trace here was a ghost — no such spec
+# file exists — flagged by the 874 retrospective and re-pointed to the orders
+# that actually own this guard's behavior.
 #
 # Makes the meta-orchestration start-of-cycle Credential Channel Guard a
 # verifiable check that returns a pass/fail exit code, instead of advisory prose

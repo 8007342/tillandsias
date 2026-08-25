@@ -1,0 +1,54 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-25T03:43:56Z.
+status:
+  - packet_id: nix-cache-service-into-the-tray-container-lifecycle
+    field: status
+    value: completed
+    ts: "2026-08-25T03:43:56Z"
+    host: linux_mutable
+
+events:
+  - packet_id: nix-cache-service-into-the-tray-container-lifecycle
+    event:
+      type: completed
+      ts: "2026-08-25T03:43:56Z"
+      agent_id: linux-macuahuitl-opus5-20260825t034356z
+      host: linux_mutable
+      evidence_refs:
+        - "container_deps.rs — LivenessProbe now supervises Service::NixCache via classify_nix_cache: ABSENT container = inapplicable (skip-is-success carries into supervision, no death verdict, no re-ensure loop); EXITED = real death with the full 767-es4w treatment (verdict, cumulative count, re-ensure through the satisfier so the drain gate + resource lock apply)"
+        - "MUTATION both ways: collapsing Absent into Dead reddens nix_cache_absent_is_not_a_death; removing the supervision entry from run_check reddens the order-477 scope-agreement test via its new structural read (proven live with a compile-safe source mutation, restored green)"
+        - "main.rs — nix_cache_launch_args_parity_is_two_sided: reads the SCRIPT's actual _podman run block, expands its variable table, asserts token-for-token vector equality with build_nix_cache_run_args; script-side drift (--memory flag injected) went RED, restored green — the one-sided pin could not see that direction"
+        - "RIDER FIX (767-es4w contract violation): the daemon's liveness loop constructed LivenessProbe::new per tick inside spawn_blocking, resetting cumulative death counts to 1 every check — a flapping service could never show a rising number; one probe now spans the task via move-and-return"
+        - "PRE-EXISTING --ci-full DEBT FIXED: teardown_and_liveness_agree_on_shared_container_scope and post_last_lane_steady_state_needs_no_liveness_recreate failed at clean HEAD (verified via stash) — the Service enum grew to 8 with NixCache but DECLARED stayed 7 and the post-last-lane fixture predated the Core row; both extended, cargo test -p tillandsias-headless --bins 420/420"
+        - "LIVE on this host: tillandsias-nix-cache Up 5 hours; scripts/nix-cache-service.sh ensure -> ok:nix-cache:already-running:endpoint=https://nix-cache:5000:pinned=2"
+        - "ghost trace re-pointed (queue item): scripts/check-credential-channel.sh header @trace spec:meta-orchestration (no such spec) -> order:61, order:756-2jnj, order:860-g798; guard + its 6/6 fixture re-run green"
+      merge_affordance: merge-now
+      merge_reason: >
+        Fixes two tests that fail --ci-full at HEAD (865-n8vq's territory) and
+        closes the last unsupervised-service gap before the next forge launch.
+      summary: >
+        THE NIX CACHE NOW HAS THE SAME LIFECYCLE AS VAULT/PROXY/ROUTER — the
+        deliverable's exact sentence, now true in all four consequences the
+        packet catalogued: supervised (LivenessProbe entry, this filing),
+        scope-managed (Core row, prior), drain-gated (prior), and launched by
+        the graph (ForgeLaunch edge, prior). The supervision entry carries the
+        launch semantics into monitoring: skip-is-success means absent is
+        inapplicable and must never fire a death verdict, while an exited
+        container this tray launched gets the loud 767-es4w treatment. Parity
+        between the standalone script and the tray launch is now pinned from
+        BOTH sides, so the two launch paths cannot drift in either direction.
+
+        HONEST RESIDUE, named: the ForgeLaunch-edge live bring-up (tray
+        ensures the cache during a real forge launch) has not run with this
+        binary — the standalone ensure exercises flag-identical launch
+        behavior (that identity is what the two-sided parity test proves), and
+        the running daemon predates this build. The next forge launch on this
+        host closes it observationally; any cache death there now self-heals
+        and logs fail:managed-service-death with a rising count.
+
+        Found en route and fixed as riders: the liveness loop was resetting
+        767-es4w's cumulative death counts every tick (probe rebuilt per
+        check), and two order-477 scope-agreement tests had been failing at
+        HEAD since NixCache entered the Service enum — pre-existing --ci-full
+        debt relevant to 865-n8vq, verified pre-existing via stash before
+        claiming the fix.

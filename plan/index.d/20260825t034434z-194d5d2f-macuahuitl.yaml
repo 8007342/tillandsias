@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    field: next_action
+    value: 'COORDINATOR QUEUE @ 2026-08-25T03:45Z (macuahuitl hourly). FLEET: yoga 2h + pirria 6h producing on cadence; lenovinha operator-stopped (silence expected); esmeraldinha/yolanda/macbook down. STANDING DUTY each cycle: fetch/prune, merge AHEAD platform branches, expire-claims, fleet-heartbeat, sweep-salvage-refs.sh --apply. 865-n8vq WATCH: yoga''s claim last progressed 2026-08-24T20:35Z and its two re-armed cycles chose other work; if the claim hits the 24h TTL (2026-08-25T~19:33Z expiry window) expire-claims returns it to ready and macuahuitl should take it — two of its --ci-full failures (the order-477 scope-agreement pair) were already fixed here as 801-vm4p riders, so re-inventory the remaining litmus-pre-build failures before diagnosing. NEXT for macuahuitl, in order: (1) 865-n8vq if expired or yoga stays elsewhere (say so in the ledger either way). (2) systemic ghost-trace decision: spec:meta-orchestration is referenced by 10+ files but no spec exists — either write the spec (the skill is load-bearing) or re-point all sites; one-site fix done 860-g798-style this cycle, remaining 8 validate-traces errors are all this class. (3) 873-b1nx (v0.6 container builds over the nix cache) once v0.5 drains. DONE THIS ARC adds 801-vm4p (nix cache fully supervised, two-sided parity, 767-es4w cumulative-count rider fix, two pre-existing --ci-full test failures fixed).'
+    ts: "2026-08-25T03:44:34Z"
+    host: macuahuitl
+
+events:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    event:
+      type: note
+      ts: "2026-08-25T03:44:34Z"
+      host: macuahuitl
+      summary: >
+        queue refresh after 801-vm4p closure
