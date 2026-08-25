@@ -1,0 +1,109 @@
+name: litmus:base-ledger-status-loss-shape
+spec: methodology-accountability
+severity: medium
+size: instant
+phase: pre-build
+
+description: >
+  Order 751-i9mb. A completion recorded INLINE in plan/index.yaml was invisible
+  to the closure-event detector, which scans plan/index.d only — and compaction
+  moves every fragment's events into the base, so the defect appears exactly
+  when the ledger is tidiest.
+
+  MEASURED 2026-08-15: packet 532 read `in_progress` while its work was done and
+  on the remote, its exit criterion's litmus committed and passing, and the
+  ledger carried TWO closure events for it. `./build.sh --check` was green
+  throughout, including `ok:no-fragment-status-loss:16 checked` — sixteen
+  fragments checked, and the one packet with the defect was not among them
+  because it no longer lived in a fragment.
+
+  TWO BLINDNESSES, not one. Beyond the shell's corpus, `tillandsias-plan
+  fragment-terminal-events` could not read a base ledger AT ALL: it walked
+  `doc["packets"]` while the base keeps packets at `plan_index.steps[]`, so it
+  parsed the whole 3.4MB file and printed NOTHING with exit 0 — indistinguishable
+  from "declares no terminal events". Pointing the old subcommand at the base
+  would therefore have produced a checker that reports clean on a ledger it never
+  examined, which is this guard's own failure class (785-sqe6, 787-f7dh). The
+  walk is now shape-independent: it stops descending at any mapping carrying
+  `packet_id`, the same rule the fold uses.
+
+  This pins the ADVISORY half. The severity split is structural — a separate
+  script that always exits 0 — because the sibling detector is a hard gate on
+  two surfaces, and folding an advisory into a gate makes one exit code carry
+  both meanings. The first false positive on a historical base row would then
+  get the whole gate switched off.
+
+preconditions:
+  - workspace contains scripts/check-base-ledger-status-loss.sh
+  - workspace contains scripts/test-base-ledger-status-loss.sh
+  - workspace contains scripts/check-fragment-status-loss.sh
+  - tillandsias-plan is built (the fixture SKIPs loudly otherwise)
+
+critical_path:
+  - step: "the seven-scenario fixture passes, including both negative controls"
+    # Cases 1 and 2 are the packet's exit criterion 2 in both directions; 3 and 4
+    # are its named negative controls (progress/claim is not a closure; a
+    # FALSIFIED closure does not report forever); 5 pins advisory-not-gate; 6
+    # pins that an unparseable base is never reported as ok.
+    command: "bash scripts/test-base-ledger-status-loss.sh 2>&1 | tail -1"
+    timeout_ms: 120000
+    expected_behavior: "ok:base-status-loss-fixture:7"
+
+  - step: "the advisory emits its pinned grammar on the live tree"
+    command: "out=$(scripts/check-base-ledger-status-loss.sh 2>/dev/null); case \"$out\" in ok:no-base-status-loss:*\\ checked|advisory:base-status-loss:*|skip:*) echo 'ok: grammar held';; *) echo \"FAIL: off-grammar verdict: $out\"; exit 1;; esac"
+    timeout_ms: 60000
+    expected_behavior: "ok: grammar held"
+
+  - step: "ADVISORY, never a gate: it exits 0 even while reporting"
+    # The property that keeps it alive. An advisory that can red a build is a
+    # gate wearing an advisory's name, and it gets switched off the first time
+    # it is wrong about a historical row.
+    command: "scripts/check-base-ledger-status-loss.sh >/dev/null 2>&1; rc=$?; [ \"$rc\" -eq 0 ] && echo 'ok: exits zero'"
+    timeout_ms: 60000
+    expected_behavior: "ok: exits zero"
+
+  - step: "the subcommand really reads a BASE ledger, not only a fragment"
+    # THE REGRESSION THAT WOULD BE SILENT. If the recursive walk is ever reverted
+    # to doc["packets"], this returns empty with exit 0 and every base reports
+    # clean forever. Asserting a NON-EMPTY answer on the real base is the only
+    # form that catches it — a grammar check would still pass.
+    # Resolves through the shared probe (704-zcgi), never a hardcoded
+    # target/ path: resolution is by EXECUTION (721-nyev), and on a shared
+    # Windows/WSL checkout a Linux ELF sits beside the runnable .exe.
+    command: ". scripts/plan-binary-probe.sh; PLAN=$(resolve_plan_binary); n=$(\"$PLAN\" fragment-terminal-events plan/index.yaml --live 2>/dev/null | grep -c .); [ \"$n\" -gt 0 ] && echo 'ok: base ledger is readable'"
+    timeout_ms: 60000
+    expected_behavior: "ok: base ledger is readable"
+
+  - step: "build.sh consults the advisory (wiring is real, not prose)"
+    command: "grep -q 'check-base-ledger-status-loss.sh' build.sh && echo 'ok: wired'"
+    timeout_ms: 3000
+    expected_behavior: "ok: wired"
+
+  - step: "NEGATIVE CONTROL: the sibling GATE keeps its own severity and grammar"
+    # The two must not blur. If the gate ever starts emitting the advisory's
+    # tokens, the severity split has collapsed and a ledger finding can red a
+    # build again.
+    command: "out=$(scripts/check-fragment-status-loss.sh 2>/dev/null); case \"$out\" in ok:no-fragment-status-loss:*|violation:fragment-status-loss:*) echo 'ok: gate grammar intact';; *) echo \"FAIL: gate grammar drifted: $out\"; exit 1;; esac"
+    timeout_ms: 60000
+    expected_behavior: "ok: gate grammar intact"
+
+observability:
+  traces:
+    - "@trace order:751-i9mb"
+    - "@trace spec:methodology-accountability"
+  expected_log: "base-ledger closure events are examined, advisory-only, with the fragment gate unchanged"
+  log_fields:
+    spec: "methodology-accountability"
+    test: "base-ledger-status-loss-shape"
+    artifact: "scripts/check-base-ledger-status-loss.sh + scripts/test-base-ledger-status-loss.sh + crates/tillandsias-plan/src/main.rs (fragment-terminal-events --live)"
+
+rollback:
+  on_failure: >
+    The base-ledger closure pass drifted. Restore
+    scripts/check-base-ledger-status-loss.sh (verdicts
+    ok:no-base-status-loss:<n> checked / advisory:base-status-loss:<n> /
+    skip:*, ALWAYS exit 0), its seven-scenario fixture, the recursive
+    packet walk in fragment-terminal-events (it must find packets at
+    plan_index.steps[], not only doc["packets"]), the --live withdrawal
+    rule, and the advisory invocation in build.sh. Order 751-i9mb; the
+    2026-08-15 packet-532 case is the evidence.
