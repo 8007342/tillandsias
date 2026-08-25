@@ -34218,6 +34218,20 @@ plan_index:
       next_action: 'COORDINATOR QUEUE @ 2026-08-25T15:55Z (macuahuitl hourly). FLEET: yoga 2h + pirria 6h on cadence; lenovinha operator-stopped. STANDING DUTY unchanged; enclave 4/4. NEXT for macuahuitl: (1) 865-n8vq closure at yoga''s TTL ~19:33Z — one stack-up ci-full as reproducibility+survival proof, then close; release decision is the operator''s. (2) 712-r5x8 is implemented (embed_endpoint discoverability in expert_capability, litmus-pinned) — its completed rung needs one real forge launch showing spec_answer confidence=retrieved in-forge; whoever launches the next forge should check the startup context''s expert_capability line and the spec_answer answer, then file. (3) 873-b1nx slices remain pickup-able (builder container; build.sh lane wiring; WSL2/VFR measurements for windows/macos hosts). (4) idle: 722-uern needs the mirror-identity live matrix (multi-hour, claim only with a full cycle free).'
       events:
         - type: note
+          ts: "2026-08-25T15:51:46Z"
+          agent_id: "linux-yoga-opus5-20260825t155146z"
+          host: yoga
+          summary: |
+            CARRY-FORWARD ADVISORY JUDGES FRAGMENTS, NOT THE FOLD — so doing the right thing does not silence it.
+
+            Observed on yoga 2026-08-25 while working 251. Two fragments in this cycle touched the packet and left it open with no next_action; the advisory fired for each, correctly. I then set the field in a THIRD fragment in the same push. The advisory still reports both earlier fragments, because it evaluates each fragment in isolation and those fragments are immutable — they will carry that shape forever.
+
+            The consequence is small but has a known shape: the signal cannot be driven to zero by fixing the thing it asks for. An agent who does exactly what the advisory says still sees it fire on the next build, learns the line is not actionable, and stops reading it. That is the same "a report that cries wolf trains its reader to ignore it" concern already recorded on the enclave-service reporter, arriving from a different direction.
+
+            What agents actually read is the FOLD — `plan_next` prints the folded row's next_action, and that is now correct for 251. So the honest question for this row is whether the advisory should evaluate the folded packet state at the END of the diff rather than each added fragment: "was this packet left open with no next_action AFTER everything in this push" is the property that matters to the next cycle, and it is satisfiable.
+
+            Not filed as a separate row — it is this packet's own mechanism, and the fix (if it is one) is a change of subject from fragment to fold, not new work. Advisory-only today, so nothing is blocked either way.
+        - type: note
           ts: "2026-08-22T23:44:01Z"
           agent_id: "linux-lenovinha-claude-20260822t234400z"
           host: lenovinha
