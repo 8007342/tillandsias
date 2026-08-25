@@ -566,6 +566,24 @@ pub fn mcp_socket_path() -> PathBuf {
 // `$HOME/src` unless the user pins something else. (Orphaned doc: the
 // const it documented moved; kept as prose for the next reader.)
 
+/// HAND-ROLLED FRAMING, DISPOSITIONED NOT DEFERRED (order 795-5itp).
+///
+/// This does not migrate to `LengthDelimitedCodec`, and the reason is
+/// structural rather than effort: the tray's control socket is a BLOCKING
+/// `std::os::unix::net::UnixStream` accepted with a thread per connection, and
+/// the subscriber registry is `Arc<Mutex<Vec<Arc<Mutex<UnixStream>>>>>` which
+/// `broadcast_control_envelope` locks and writes to synchronously. `Framed`
+/// needs `tokio::io::AsyncRead + AsyncWrite`; a blocking std stream is neither,
+/// so adopting it here means moving the tray's control socket onto a runtime —
+/// a rewrite the packet explicitly declines.
+///
+/// WHAT IS AND IS NOT LEFT HERE, so nobody re-opens this expecting a safety
+/// win: the bound is ALREADY the shared `MAX_MESSAGE_BYTES`, refused with the
+/// same message as every other site, in both directions since 828-r2ek. The
+/// packet's headline argument — nine independent bounds policies, nine chances
+/// to get the maximum wrong — does not apply to this site. What remains
+/// duplicated is the four lines of read_exact/from_be_bytes mechanics, which is
+/// a readability cost, not a correctness one.
 fn read_control_envelope(stream: &mut UnixStream) -> std::io::Result<ControlEnvelope> {
     let mut len = [0_u8; 4];
     stream.read_exact(&mut len)?;

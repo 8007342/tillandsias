@@ -37,6 +37,28 @@ fn headless_binary() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_tillandsias"))
 }
 
+// HAND-ROLLED FRAMING, KEPT DELIBERATELY (order 795-5itp).
+//
+// `vsock_server` moved onto `LengthDelimitedCodec` via the shared
+// `control_frame_codec()`. This file is the only END-TO-END peer that talks to
+// that server over a REAL vsock socket, so framing by hand here is what makes
+// the interop claim mean anything — migrate it and the e2e would assert the
+// codec against itself.
+//
+// It is therefore an explicit entry on this packet's closure exception list
+// (at most one raw length decode among PRODUCTION sites, plus test-only
+// interop fakes that each carry a reason), not a site awaiting migration. An
+// earlier note on the packet said this file "should migrate"; that was written
+// while vsock_server still framed by hand and stopped being true the moment it
+// did not.
+//
+// CAVEAT WORTH READING BEFORE TRUSTING THE MIGRATION: this test is `#[ignore]`d
+// behind the `vsock_loopback` kernel module (see the run instructions above),
+// so on any host without it the Framed server is exercised only over
+// `tokio::io::duplex`. Duplex is an in-memory pipe and cannot reproduce vsock's
+// read granularity — which is precisely what the handshake-handoff buffering
+// hazard turns on. Running this with `--ignored` after `modprobe vsock_loopback`
+// is the leg that closes that gap.
 async fn write_envelope<W>(stream: &mut W, env: &ControlEnvelope) -> std::io::Result<()>
 where
     W: AsyncWriteExt + Unpin,

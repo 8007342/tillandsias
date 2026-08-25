@@ -25829,6 +25829,24 @@ plan_index:
         the load-bearing half; the refusal tests are the negative control.
       events:
         - type: progress
+          ts: "2026-08-25T09:47:30Z"
+          agent_id: "linux-yoga-opus5-20260825t094730z"
+          host: yoga
+          summary: |
+            TWO SITES DISPOSITIONED under criterion 1's second branch ("or is explicitly dispositioned in this packet's events with a reason it cannot"). Both blockers were VERIFIED at HEAD rather than inherited from slice 1's list, because a disposition that repeats a claim nobody rechecked is how a wrong reason becomes permanent.
+
+            SITE: crates/tillandsias-headless/src/tray/mod.rs — KEEP HAND-ROLLED. Verified: the tray's control socket is `std::os::unix::net::UnixStream` (mod.rs:17), accepted in a `std::thread::spawn` loop with a thread per connection (:1562, :1568), and the subscriber registry is `Arc<Mutex<Vec<Arc<Mutex<UnixStream>>>>>` (:490) which `broadcast_control_envelope` (:623) locks and writes to SYNCHRONOUSLY inside a `retain`. `Framed`/`LengthDelimitedCodec` require `tokio::io::AsyncRead + AsyncWrite`; a blocking std `UnixStream` is neither, and an `Arc<Mutex<Framed<..>>>` in that registry would not be a swap — the broadcaster would have to become async, which means moving the tray's control socket onto a runtime. The packet's own guidance says not to, and I agree with it.
+
+            AND THE HONEST PART, which changes what is left rather than just excusing it: this site's remaining duplication is READABILITY ONLY. `read_control_envelope` (:569) already refuses over `MAX_MESSAGE_BYTES` with the same `control frame too large` string as everywhere else, and 828-r2ek added the symmetric outbound refusal. So the packet's headline argument — "nine independent bounds policies is nine independent chances to get the maximum wrong" — does not apply here: the bound is already the shared constant, cited. What is duplicated is the four lines of read_exact/from_be_bytes mechanics. Slice 1 reached the same conclusion tree-wide (criterion 2 was already met in production); this records it per-site for the one site where the fix is genuinely expensive.
+
+            SITE: crates/tillandsias-headless/tests/vsock_listener_e2e.rs — KEEP HAND-ROLLED, as an EXCEPTION-LIST entry rather than a deferral. Last cycle I wrote that this file "frames identically and is exactly the kind of site that should migrate". That was true when vsock_server framed by hand; it stopped being true the moment vsock_server moved onto Framed. This is now the only END-TO-END peer that talks to the migrated server over a real vsock socket, so a hand-rolled peer here is the strongest interop evidence in the tree — migrate it and the e2e asserts the codec against itself. I am correcting my own recommendation from one cycle ago, on the record, because the exception list is only worth anything if its entries carry reasons that are still true.
+
+            A BLOCKER THE OPERATOR SHOULD KNOW ABOUT, and it is the weakest point of yesterday's slice 3. That e2e is `#[ignore]`d behind the `vsock_loopback` kernel module, which is NOT loaded on this host (`lsmod` empty for vsock, no /dev/vsock; the module exists at /lib/modules/7.1.9-200.fc44.x86_64/kernel/net/vmw_vsock/vsock_loopback.ko.xz). `sudo modprobe` needs a password, so an unattended cycle cannot load it and I did not try to work around that.
+
+            CONSEQUENCE, STATED PLAINLY: the Framed migration of vsock_server is verified over `tokio::io::duplex` and by 484 in-crate tests, and has NEVER been exercised over a real vsock socket. Duplex is an in-memory pipe — it cannot reproduce vsock's own read granularity, and read granularity is exactly what the pipelining hazard turns on. The pin I wrote is honest about what it covers, but the e2e is the leg that would close the gap, and it is unrunnable here. One `sudo modprobe vsock_loopback` on any Linux host makes it runnable; until someone does that, treat slice 3's real-transport behaviour as untested rather than tested.
+
+            REMAINING after these two: pty_vsock_bridge.rs (macOS lane; its :241 currently DROPS an oversize message and keeps the session alive, and a Sink error is terminal, so a naive swap turns that into killing the PTY session) and hvsocket.rs (Windows lane; no production callers, only #[ignore]d live-WSL tests). Both need their own host's evidence. With those two dispositioned or migrated, criterion 1 is dischargeable and the closure litmus becomes writable against a real exception list instead of a wish.
+        - type: progress
           ts: "2026-08-25T05:56:13Z"
           agent_id: "linux-yoga-opus5-20260825t055613z"
           host: yoga
