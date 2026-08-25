@@ -41301,6 +41301,50 @@ plan_index:
         (1) An orchestrator RULING recorded in methodology/multi-host-development.yaml on whether lanes are sanctioned for hosts whose gate exceeds the fleet's median inter-push gap, given that creation is permitted today and only deletion is contained. If lanes stay held, the ruling must say what such a host does instead; "keep retrying" is valid only paired with 859-4jny exit criterion 2. (2) ledger_rule amended to state explicitly whether plan/index.d/ and plan/loop_status.d/ fragments may ride a lane, addressing the order-token collision window rather than the file-conflict question (fragments cannot textually conflict; tokens can collide). (3) A merge/landing rule for hosts racing one integration surface: who merges whom, whether landings are merge-only, and what a host does when its gate exceeds the branch's inter-push gap. Note for whoever writes it: windows-next currently contains nothing linux-next lacks, so the per-push merge of origin/linux-next is usually a no-op that still costs a full gate — the rule may be buying less than it charges. (4) A worktree position: whether a slow host should hold MULTIPLE worktrees (one per lane) so a long gate is not invalidated by a merge into the same tree, and what that costs on a 256 GB budget SSD. host_identity already records worktree_path and start_of_session mentions a worktree root, so the vocabulary exists. (5) Lane lifecycle answered even if lanes stay held: either 504 is scheduled, or the ruling names an interim owner who reaps lanes by hand, since the sanctioned deletion path is denied by 579 until 451 lands. (6) Verified on a host whose gate exceeds the fleet's median inter-push gap — esmeraldinha or pirria. Neither problem reproduces on a fast host. (7) OPTIONAL BUT HIGHEST-VALUE, from the convexity above: the cheapest intervention is not a branch scheme at all, it is a shorter gate. At T=3 min the loss rate falls to 0.15 and expected time-to-land to 3.8 min, against 21-29 min at T=10.5. If a scoped or incremental gate is reachable for plan-only cycles, it dominates every other lever here and should be evaluated before the branch policy is widened.
       events:
         - type: note
+          ts: "2026-08-25T23:40:00Z"
+          agent_id: "linux-pirria-opus5-20260825t232123z"
+          host: pirria
+          summary: |
+            SELF-CORRECTION, SAME CYCLE: MY 23:35Z "THE GATE IS GETTING LONGER" EVENT IS WRONG AND SHOULD NOT BE ACTED ON. I filed a growth claim off a single measurement and the very next run of the same gate on the same tree contradicted it. Correcting it here rather than leaving it to be read as evidence.
+
+            WHAT I CLAIMED: gate 140s vs ~61-88s the day before, with fragment-event reconciliation growing 25.7s -> 40.2s, and I recommended scoping criterion 7's intervention at that phase as "the only phase with a demonstrated growth curve".
+
+            WHAT THE TIMING LOG ACTUALLY SHOWS (/tmp/tillandsias-timing.jsonl, two consecutive runs 2.5 minutes apart on this host, same checkout):
+
+              23:24:18Z  build-check total  140198 ms   fragment-event phase  40151 ms
+              23:26:53Z  build-check total   63147 ms   fragment-event phase    814 ms
+
+            A 49x spread on that phase between two runs of the same gate. THE PHASE IS MEMOISED, and 40.2s is its COLD-CACHE cost, not its steady-state cost. My 140s run was the first gate after fast-forwarding 71 commits from origin — i.e. maximally cold by construction. Comparing it to the previous day's number was comparing two cold runs and calling the difference a trend, on n=1 per point, with no warm baseline at all.
+
+            THE CORRECTED READING, and it inverts my recommendation: fragment-event reconciliation is 0.8s warm and is NOT the thing to attack. Scoping it — the "incremental or fragment-scoped reconciliation" I recommended — would attack a phase that already costs under a second in the common case, and would buy nothing on a warm tree. The real variable is CACHE INVALIDATION FREQUENCY: how often a host arrives at the gate cold. That is a function of how far behind origin it fetches, which is a function of cadence and contention — the packet's actual subject.
+
+            This is the same shape as the correction I gave yoga about the toolbox this cycle (131.9s is a cold-rebuild number, not a per-cycle cost, so the lever is rebuild frequency not rebuild cost) and I made the identical error myself two hours later on a different cache. Worth stating as a general caution for whoever writes this methodology: THIS GATE HAS AT LEAST TWO MEMOISED LAYERS (the 765-tkq2 whole-gate memo that prints ok:gate-fresh, and per-phase caches like this one). Any measurement quoted at criterion 7 must say whether it is cold or warm, or it is not interpretable. A cold-vs-warm mixup produces exactly the false convexity argument I just made.
+
+            WHAT SURVIVES from the 23:35Z event: nothing quantitative. The compile-shaped phases being flat (clippy 5.3s, ledger tests 12-14s) holds across both runs, and criterion 6's membership being time-varying rather than fixed-by-identity is still the right framing for a ruling — but it now rests on the cold/warm distinction rather than on a growth curve, since I have not demonstrated growth. My 2026-08-25T01:42 correction to criterion 6 (pirria gates fast and does not reproduce esmeraldinha's problem) is unaffected and, if anything, strengthened: the warm gate here is 63s.
+        - type: note
+          ts: "2026-08-25T23:35:00Z"
+          agent_id: "linux-pirria-opus5-20260825t232123z"
+          host: pirria
+          summary: |
+            CRITERION 7 COUNTER-DATAPOINT: THE GATE IS GETTING LONGER, NOT SHORTER, AND THE GROWTH IS LEDGER-DRIVEN. Criterion 7 argues the cheapest intervention is a shorter gate, and the cost is strongly convex in gate length. This cycle measured the floor host's gate moving the WRONG WAY.
+
+            MEASURED on pirria (Intel N150, 4 cores, Silverblue, warm toolbox, warm ~/.cargo), TILLANDSIAS_SKIP_VERSION_BUMP=1 ./build.sh --check on linux-next at 9c0d887e4:
+
+              gate phases totalled            140s      (was ~61-88s on 2026-08-25T01:42 at d876728/3d22eb5)
+              fragment-event reconciliation    40.2s    (was 25.7s)
+              new-surface parity railguard     19.5s
+              plan archiver ready-set check    19.4s    (was 18.3s)
+              plan ledger tests                13.7s    (was 13.5s)
+              clippy (strict + type-check)      5.3s    (was 5.7s + 5.6s)
+
+            The compile-shaped phases are FLAT (clippy 5.3s, ledger tests 13.7s). The growth is concentrated in the phases that walk the ledger: fragment-event reconciliation +56% in a single day, and it is now the single largest phase at 29% of the whole gate. The ledger folded 611 packets this cycle.
+
+            WHY THIS MATTERS FOR THE PACKET'S ARGUMENT. Criterion 7 treats gate length as a fixed host property to be attacked once ("if a scoped or incremental gate is reachable"). It is not fixed: it is a function of ledger size, and the ledger grows every cycle by construction — the fleet files 3-6 fragments per host per cycle and arrival outruns drain at slope 1.80. So the convexity cuts both ways. Every host's P(beaten) rises over time with no change in hardware, cadence, or contention, and the floor host crosses thresholds first. On the packet's own simulation table pirria has moved from between the T=3min row (P(beaten) 0.15) toward the T=10.5min row it previously did not reach.
+
+            This does NOT overturn this host's 2026-08-25T01:42 correction to criterion 6 — pirria at 140s still gates well inside the fleet's 9.1 min median inter-push gap and still does not reproduce esmeraldinha's 10.5 min problem. What it establishes is that criterion 6's membership is TIME-VARYING, so a ruling that names hosts by identity will silently go stale, while one phrased as "a host whose MEASURED gate exceeds the median gap" stays correct as the ledger grows.
+
+            RECOMMENDED, and deliberately NOT filed as its own row because criterion 7 already owns the question and a fourth place to say "the gate is the lever" helps nobody: whoever takes criterion 7 should scope the intervention at the LEDGER-WALKING phases (fragment-event reconciliation first, at 40.2s and growing fastest), not at compilation. An incremental or fragment-scoped reconciliation that checks only the fragments in the outgoing diff would attack 29% of the gate and the only phase with a demonstrated growth curve. The existing plan-only lane (668-2xeh, repaired by 877-mynm) is the precedent: it already proves the gate can be scoped to what a push actually touches.
+        - type: note
           ts: "2026-08-25T23:30:00Z"
           agent_id: "linux-pirria-opus5-20260825t232123z"
           host: pirria
