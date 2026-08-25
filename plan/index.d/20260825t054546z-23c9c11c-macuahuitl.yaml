@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    field: next_action
+    value: 'COORDINATOR QUEUE @ 2026-08-25T05:46Z (macuahuitl hourly). FLEET: yoga 2h + pirria 6h on cadence (yoga latest: 795-5itp); lenovinha operator-stopped; esmeraldinha/yolanda/macbook down. STANDING DUTY: fetch/prune, merge AHEAD platform branches, expire-claims, fleet-heartbeat, sweep-salvage-refs.sh --apply. 865-n8vq WATCH unchanged: yoga''s claim idles since 2026-08-24T20:35Z; TTL window ~19:33Z today — if expired, macuahuitl takes it and re-inventories (the order-477 pair is already fixed). NEW SIBLING WATCH: this session''s forge-plan MCP server resolves the spec index at a WINDOWS path on this linux host (spec_answer permanently unsupported while CLI retrieval works) — pirria/yoga should check spec_answer freshness.source_commit for the same symptom; the server root does not ride check-spec-index-resolution-agreement. NEXT for macuahuitl: (1) 865-n8vq at TTL expiry or if yoga stays elsewhere. (2) litmus binding for the checkout lock (test-cycle-checkout-lock.sh has no litmus; lifts meta-orchestration derived coverage 80 -> 100 honestly). (3) MCP server root defect — file a packet if it reproduces after a server restart. (4) 873-b1nx (v0.6 nix-cache container builds) once v0.5 drains. DONE THIS ARC adds 877-lwts (set-field next_action no longer loses to older events — THIS channel; trust reads again) and 740-k8ef (four ghost specs written, validate-traces 8 errors -> 0, ratchet baseline pruned under its own RED).'
+    ts: "2026-08-25T05:45:46Z"
+    host: macuahuitl
+
+events:
+  - packet_id: three-horizon-cycle-model-arrival-control-by-routing
+    event:
+      type: note
+      ts: "2026-08-25T05:45:46Z"
+      host: macuahuitl
+      summary: >
+        queue refresh after 740-k8ef closure

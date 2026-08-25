@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-25T05:45:04Z.
+status:
+  - packet_id: meta-orchestration-spec-is-a-ghost-with-a-100-percent-coverage-claim
+    field: status
+    value: completed
+    ts: "2026-08-25T05:45:04Z"
+    host: linux_mutable
+
+events:
+  - packet_id: meta-orchestration-spec-is-a-ghost-with-a-100-percent-coverage-claim
+    event:
+      type: completed
+      ts: "2026-08-25T05:45:04Z"
+      agent_id: linux-macuahuitl-opus5-20260825t054504z
+      host: linux_mutable
+      evidence_refs:
+        - "openspec/specs/meta-orchestration/spec.md — DISTILLED (five falsifiable requirements: self-proving exit, inviolable boundary, one-checkout-one-cycle, guards-before-work fail loud, mode verdict grammar), each scenario naming its pinning litmus; ~100 lines against the 52KB runbook, which stays the single operational source"
+        - "the packet's own systemic audit confirmed and DRAINED: openspec/specs/{enclave-service-catalog,guest-crashloop-detection,forge-git-identity-anonymization}/spec.md also written (registry-asserted or 7-site-traced); fat-spec-corpus-index -> order:547, litmus-runner -> spec:litmus-framework, forge-push-credential-channel -> spec:git-mirror-service, forge-git-ergonomics trace removed (locale setup is not a git contract)"
+        - "EC2 by scratch file, not inspection: a NEWLY git-added file carrying @trace spec:meta-orchestration passes pre-commit-openspec.sh (rc=0, zero flags)"
+        - "EC4 negative control both checkers: the same staged scratch file with spec:not-a-real-spec is flagged by the hook; an injected ghost turns validate-traces 0 errors -> 1 (validate-traces overall: 8 errors -> 0)"
+        - "EC5 derived, not asserted: litmus-bindings coverage_ratio meta-orchestration 100 -> 80 (4/5 requirements litmus-covered; the checkout lock is pinned by scripts/test-cycle-checkout-lock.sh with no litmus binding yet), enclave-service-catalog 100 -> 33, each with the derivation recorded inline"
+        - "EC3 at the retrieval layer: post-commit index rebuild (9910 -> 21340 chunks), question embedded via the local endpoint, tillandsias-plan spec-retrieve returns the new spec as hit #2 with the Citation span (path+lines). Full MCP spec_answer synthesis is BLOCKED ON THIS SESSION by a misconfigured server (see below), not by the corpus"
+        - "584-2qq2 ratchet seen RED live: the gate refused the stamp until the eight fixed names were pruned from openspec/ghost-trace-baseline.txt in the fixing commit (03c63fc9e) — the may-only-shrink direction enforced its own bookkeeping"
+      merge_affordance: merge-now
+      merge_reason: >
+        Eight ghost names were the entire hard-error population of
+        validate-traces; every host's commits now gate against a clean
+        baseline that can only shrink.
+      summary: >
+        FOUR SPECS EXIST NOW, FOUR GHOSTS ARE GONE, AND THE COVERAGE NUMBERS
+        ARE DERIVED. The registry asserted meta-orchestration at coverage 100
+        for a file that did not exist; the packet's open question ("is this
+        systemic?") was already answered yes in its own event stream, so the
+        closure drained the whole class in one pass: specs written where the
+        registry or a multi-site trace asserted them, re-points where the
+        trace was decoration, and the ratchet baseline pruned in the same
+        commit under the gate's own RED refusal.
+
+        DISCOVERED EN ROUTE, needs an owner: this session's forge-plan MCP
+        server resolves the spec index at /mnt/c/Users/bullo/... — a WINDOWS
+        WSL path, on macuahuitl (linux). spec_answer therefore returns
+        confidence=unsupported here regardless of index state, while the
+        CLI retrieval over the podman-volume index works. The server config
+        this session inherited was written by or for a Windows host.
+        check-spec-index-resolution-agreement.sh passes (the SCRIPT carriers
+        agree); the MCP server binary's root does not ride that agreement —
+        that is the gap. Sibling watch: pirria/yoga sessions should check
+        their spec_answer freshness.source_commit for the same symptom.
+
+        Residual, tracked not hidden: spec:windows-wsl-runtime sites warn as
+        in-flight (openspec/changes/windows-wsl-runtime/ exists — legitimate);
+        forge-skills-mapping remains the baseline's one surviving ghost; the
+        six yaml-scope baseline names from 867-vd4z are untouched; the
+        checkout-lock requirement deserves a litmus binding to lift
+        meta-orchestration's derived 80 back to 100 honestly.
