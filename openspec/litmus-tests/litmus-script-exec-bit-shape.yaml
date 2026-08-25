@@ -44,7 +44,12 @@ critical_path:
     # is preceded by `: "`, which none of the shell lead-ins accepted, so the
     # form was unreachable. Pin BOTH halves, since either alone leaves the
     # breach open.
-    command: "grep -q 'openspec/litmus-tests/\\*.yaml' scripts/check-script-exec-bits.sh && grep -q '.github/workflows/\\*.yml' scripts/check-script-exec-bits.sh && grep -q 'yamlcmd' scripts/lib/exec-bits-filter.awk && echo 'ok: non-shell caller surfaces covered'"
+    # Order 754-kptj widened the same surface again: a `command:` may lead in
+    # with `./` and/or a run of shell env assignments, and both forms were
+    # unreachable for the same reason `: "` was. Pinned as NAMED awk variables
+    # (`dotslash`, `envpfx`) rather than inlined regex, precisely so this grep
+    # can see them.
+    command: "grep -q 'openspec/litmus-tests/\\*.yaml' scripts/check-script-exec-bits.sh && grep -q '.github/workflows/\\*.yml' scripts/check-script-exec-bits.sh && grep -q 'yamlcmd' scripts/lib/exec-bits-filter.awk && grep -q 'dotslash' scripts/lib/exec-bits-filter.awk && grep -q 'envpfx' scripts/lib/exec-bits-filter.awk && echo 'ok: non-shell caller surfaces covered'"
     timeout_ms: 5000
     expected_behavior: "ok: non-shell caller surfaces covered"
 
@@ -64,10 +69,12 @@ critical_path:
     timeout_ms: 60000
     # 7 -> 10 with order 770-dyqr's non-shell caller scenarios; 10 -> 11 with
     # order 851-gpb5's portable-xargs pin (no GNU-only `xargs -r`, hit by the
-    # first macOS host). The count is pinned deliberately: it is how a
-    # wholesale fixture rewrite that drops coverage gets caught, which already
-    # happened once under 758-jw6v.
-    expected_behavior: "ok:script-exec-bits-fixture:11"
+    # first macOS host); 11 -> 14 with order 754-kptj's ./-prefix and
+    # env-assignment-prefix scenarios plus the `bash ./` narrowness control.
+    # The count is pinned deliberately: it is how a wholesale fixture rewrite
+    # that drops coverage gets caught, which already happened once under
+    # 758-jw6v.
+    expected_behavior: "ok:script-exec-bits-fixture:14"
 
 observability:
   traces:

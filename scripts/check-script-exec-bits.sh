@@ -105,8 +105,13 @@ if [ "${#candidates[@]}" -gt 0 ]; then
     # No `-r`: it is GNU-only (order 851-gpb5), and the empty-input case it
     # guards against cannot occur — $caller_files is verified non-empty above,
     # so xargs always hands grep at least one file operand.
+    # ORDER 754-kptj. The `(\./)?` and env-assignment lead-ins must widen HERE
+    # too. This sweep is a pre-filter: a form it cannot see never reaches the
+    # awk, so a widened filter behind a narrow sweep reports a clean tree it
+    # never examined — which is this guard's own failure class and the exact
+    # shape of the 770-dyqr breach.
     printf '%s\n' "$caller_files" \
-        | xargs grep -nHE "((^|[;&|(])[[:space:]]*\"?(${alt}))|(\\\$\\([[:space:]]*\"?(${alt}))|(command:[[:space:]]*\"?(${alt}))" \
+        | xargs grep -nHE "((^|[;&|(])[[:space:]]*\"?(\\./)?(${alt}))|(\\\$\\([[:space:]]*\"?(\\./)?(${alt}))|(command:[[:space:]]*\"?(([A-Za-z_][A-Za-z_0-9]*=[^[:space:]]*[[:space:]]+)*)(\\./)?(${alt}))" \
             > "$_eb_tmp/hits" 2>/dev/null
 
     while IFS=$'\t' read -r path hit; do

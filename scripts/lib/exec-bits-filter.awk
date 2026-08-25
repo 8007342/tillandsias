@@ -43,6 +43,26 @@ NR == FNR {
     content = line
     if (match(content, /^[^:]*:[0-9]+:/)) content = substr(content, RSTART + RLENGTH)
 
+    # ORDER 754-kptj. Two lead-ins that are execution sites and were invisible
+    # to every pattern below. Defined ONCE, and as NAMED variables rather than
+    # inlined four times, so litmus:script-exec-bit-shape can grep for the
+    # widening the same way it already greps for `yamlcmd`.
+    #
+    # MEASURED before landing, over all 384 tracked scripts promoted to
+    # candidates so every latent noise shape fired: 127 paths flagged before,
+    # 129 after. The two new rows are both genuine — run-observatorium.sh
+    # (litmus-clickable-trace-index-observatorium-skeleton.yaml:23) and
+    # test-image-build-convergence.sh (litmus-image-build-convergence-shape
+    # .yaml:16). Zero false positives.
+    #
+    # EXPLICIT NON-GOALS, so the next reader does not "complete" the set: a
+    # backtick `scripts/x.sh` is NOT matched — all 16 occurrences in the corpus
+    # are Markdown prose inside descriptions, and widening for them would be
+    # pure noise. Neither is $VAR/scripts/x.sh. The narrowness of this checker
+    # is the reason it is trusted.
+    dotslash = "(\\./)?"
+    envpfx   = "([A-Za-z_][A-Za-z_0-9]*=[^[:space:]]*[[:space:]]+)*"
+
     for (i = 1; i <= n; i++) {
         p = cand[i]
         if (p in found) continue
@@ -54,8 +74,8 @@ NR == FNR {
         # PROSE match, because "(" is already a leading delimiter, and that
         # flagged three comments including a sourced library that must stay
         # non-executable. So ")" is permitted only after "$(".
-        bare  = "(^|[;&|(])[[:space:]]*\"?" p "([[:space:]\"]|$)"
-        subst = "\\$\\([[:space:]]*\"?" p "([[:space:]\")]|$)"
+        bare  = "(^|[;&|(])[[:space:]]*\"?" dotslash p "([[:space:]\"]|$)"
+        subst = "\\$\\([[:space:]]*\"?" dotslash p "([[:space:]\")]|$)"
         # A litmus step's `command:` is an execution site, but its path is
         # preceded by ": \"" -- a lead-in none of the shell delimiters above
         # accept, so every litmus-only caller was invisible and the guard
@@ -65,11 +85,26 @@ NR == FNR {
         # while this checker printed ok). Keyed on the literal `command:` and
         # not on a general ":" lead-in, because ":" appears throughout prose and
         # the narrowness of this checker is the reason it is trusted.
-        yamlcmd = "command:[[:space:]]*\"?" p "([[:space:]\"]|$)"
+        # envpfx uses `*` and not `+` deliberately: zero assignments must stay
+        # legal, or the plain `command: "scripts/x.sh"` form — the 770-dyqr
+        # breach case this line was added for — stops matching entirely.
+        yamlcmd = "command:[[:space:]]*\"?" envpfx dotslash p "([[:space:]\"]|$)"
         if (content !~ bare && content !~ subst && content !~ yamlcmd) continue
 
         # Naming an interpreter works at any mode; sourcing is not execution.
-        if (content ~ ("(bash|sh|source|\\.)[[:space:]]+\"?" p)) continue
+        #
+        # The `dotslash` here is DEFENSIVE, NOT load-bearing, and this comment
+        # says so because the first draft claimed the opposite. Measured: with
+        # `bash ./scripts/x.sh`, none of the three positive patterns match in
+        # the first place — each requires the path immediately after its lead-in,
+        # and `bash ` intervenes — so this exclusion is never consulted for the
+        # ./ form, and removing the `dotslash` from it changes no verdict on
+        # this corpus. It is kept so the exclusion stays at least as wide as the
+        # patterns it guards, which is the invariant that matters if those ever
+        # widen again. Do NOT write a fixture scenario asserting this line is
+        # load-bearing: such a scenario passes whatever this line says, and a
+        # control that cannot fail is worse than no control.
+        if (content ~ ("(bash|sh|source|\\.)[[:space:]]+\"?" dotslash p)) continue
 
         # The script matching inside itself is not a caller.
         if (line ~ ("^" p ":")) continue

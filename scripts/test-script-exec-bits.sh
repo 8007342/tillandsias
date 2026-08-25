@@ -131,6 +131,36 @@ scenario "workflow-bare-refused" 1 "violation:script-not-executable:1" \
     '          scripts/target.sh --verify' 100644 \
     ".github/workflows/release.yml"
 
+# ORDER 754-kptj. Two more lead-ins that the 770-dyqr pattern could not reach,
+# both live in this corpus:
+#   litmus-clickable-trace-index-observatorium-skeleton.yaml:23 carries BOTH at
+#     once — `OBSERVATORIUM_BROWSER=none ... ./scripts/run-observatorium.sh`
+#   litmus-image-build-convergence-shape.yaml:16 carries the env prefix alone
+# Both scripts are 100755 today, so the widening flags nothing new on this tree;
+# what it buys is that a future mode regression on either is caught instead of
+# becoming an rc=126 at runtime.
+scenario "litmus-command-dotslash-refused" 1 "violation:script-not-executable:1" \
+    '    command: "./scripts/target.sh"' 100644 \
+    "openspec/litmus-tests/litmus-demo.yaml"
+scenario "litmus-command-envprefix-refused" 1 "violation:script-not-executable:1" \
+    '    command: "LITMUS_PODMAN_MODE=fake ./scripts/target.sh proxy"' 100644 \
+    "openspec/litmus-tests/litmus-demo.yaml"
+# NARROWNESS CONTROL: `bash ./scripts/x.sh` must stay silent at any mode, so the
+# ./ widening cannot turn the majority of litmus steps — which name an
+# interpreter — into noise.
+#
+# HONEST NOTE ON WHAT THIS DOES AND DOES NOT PROVE, because the first draft of
+# this comment claimed more than the scenario delivers. It pins the OUTCOME
+# (silence), not the mechanism. It does NOT discriminate the interpreter
+# exclusion: with `bash ` between the lead-in and the path, none of the three
+# positive patterns match at all, so the exclusion is never reached and this
+# scenario passes whether or not that line carries the ./ prefix — measured,
+# both ways. It is kept because the outcome is worth pinning: if a future
+# widening ever makes the interpreter form match positively, this goes red.
+scenario "litmus-command-dotslash-interpreter-ok" 0 "ok:script-exec-bits:" \
+    '    command: "bash ./scripts/target.sh"' 100644 \
+    "openspec/litmus-tests/litmus-demo.yaml"
+
 # 7. The checker must REFUSE when its filter helper is absent, not report a
 # clean tree it never examined. Without this the perf split could regress into
 # a checker that always passes.
@@ -183,6 +213,6 @@ fi
 #   bare-invocation-executable          -> executable-bare-ok
 #   interpreter-prefixed-non-executable -> interpreter-prefixed-ok
 #   sourced-library-non-executable      -> sourced-ok
-echo "PASS: script-exec-bits fixture 11/11 scenarios green (bare-invocation-refused, interpreter-prefixed-ok, sourced-ok, executable-bare-ok, command-substitution-refused, after-pipe-refused, missing-helper-refuses, litmus-command-bare-refused, litmus-command-interpreter-ok, workflow-bare-refused, portable-xargs)"
-echo "ok:script-exec-bits-fixture:11"
+echo "PASS: script-exec-bits fixture 14/14 scenarios green (bare-invocation-refused, interpreter-prefixed-ok, sourced-ok, executable-bare-ok, command-substitution-refused, after-pipe-refused, missing-helper-refuses, litmus-command-bare-refused, litmus-command-interpreter-ok, workflow-bare-refused, portable-xargs, litmus-command-dotslash-refused, litmus-command-envprefix-refused, litmus-command-dotslash-interpreter-ok)"
+echo "ok:script-exec-bits-fixture:14"
 exit 0
