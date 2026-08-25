@@ -21362,6 +21362,27 @@ plan_index:
         pending external evidence" from "abandoned" — a third shape, and its own
         packet if anyone wants it.
       events:
+        - type: note
+          ts: "2026-08-25T20:53:07Z"
+          agent_id: "linux-macuahuitl-fable5-20260825t195813z"
+          host: macuahuitl
+          summary: |
+            RELEASED back to ready by macuahuitl 2026-08-25 without implementation — claimed, scouted in depth, not reached. THE SCOUTING IS THE VALUE HERE, so it is recorded rather than lost: the packet's stated root cause is INCOMPLETE and implementing it as written would produce a checker that reports clean on a ledger it never examined.
+
+            MEASURED: tillandsias-plan fragment-terminal-events CANNOT READ A BASE LEDGER AT ALL. It looks for 'packets' and 'events' at the TOP level of the document. The base ledger's top-level keys are 'capabilities' and 'plan_index'; packets live at plan_index.steps[]. So:
+
+              ./target/release/tillandsias-plan fragment-terminal-events plan/index.yaml
+              -> no output, EXIT 0, 39ms (it parsed all 3.4MB and found nothing)
+
+            Zero output with exit 0 is indistinguishable from 'clean'. Pointing the existing subcommand at the base is therefore NOT the fix — it is this guard's own failure class (785-sqe6 / 787-f7dh: an unexamined ledger reported as clean), which is exactly what the packet is about.
+
+            SECOND FINDING: scripts/check-fragment-status-loss.sh has a FAST PATH that exits before the plan binary is even resolved — if no plan/index.d/*.yaml exist it prints 'ok:no-fragment-status-loss:0 checked' and exits 0. That is the line that fired for packet 532 after compaction had emptied the fragment dir.
+
+            THIRD, and the constraint that shapes the fix: the existing check is a HARD GATE on two surfaces (build.sh reds on non-zero; the pre-push plan-only lane fails to 'full gate required'). The packet's exit criteria require the BASE scan to be ADVISORY. So the two severities must not blur — distinct verdict tokens, and the advisory precedent to copy is check-carry-forward.sh (831-ezea), which always exits 0 and lets build.sh red only if the script itself cannot run.
+
+            FOURTH: the lib has the right walker already — collect_packets in src/lib.rs recurses and stops at any mapping containing packet_id, and it is what the fold uses. But it is pub(crate) in the LIB crate and main.rs is a separate bin crate, so it is not callable today. Making it reachable is likely the smallest correct fix.
+
+            HAZARD for whoever implements: litmus-fragment-status-loss-attribution-shape.yaml has a step matching 'ok:no-fragment-status-loss:0 checked' EXACTLY against MERGED stdout+stderr. Any extra line from that script breaks it.
         - type: filed
           ts: "2026-08-15T03:20:00Z"
           host: linux_immutable
@@ -21625,6 +21646,28 @@ plan_index:
         - 'scripts/check-script-exec-bits inventory includes bare-path scripts/<name>.sh invocations inside openspec/litmus-tests/*.yaml command: fields; a fixture with a 100644 bare-path litmus script turns the check red (negative control).'
 
       events:
+        - type: progress
+          ts: "2026-08-25T20:52:45Z"
+          agent_id: "linux-macuahuitl-fable5-20260825t195813z"
+          host: macuahuitl
+          summary: |
+            HALF (B) LANDED. Half (A) — the coordinator post-merge litmus pass — is NOT done and this packet stays ready for it.
+
+            SCOPE CORRECTION, recorded because the packet's own text would mislead the next reader. Both concrete claims in its context are stale at HEAD: scripts/test-cycle-flow-emit-idempotency.sh is 100755 now, and exit-criterion 2 as written ('a fixture with a 100644 bare-path litmus script turns the check red') was already satisfied by order 770-dyqr, which taught the checker to scan litmus command: fields. Whoever reads the packet without reading the code will either re-fix a fixed thing or close this as obsolete and lose the residual.
+
+            THE RESIDUAL, same class one lead-in further out: a command: may begin with ./ and/or a run of shell env assignments, and both were unreachable for exactly the reason the quote-lead-in was pre-770-dyqr. Two live sites, one carrying BOTH at once: litmus-clickable-trace-index-observatorium-skeleton.yaml:23 (OBSERVATORIUM_BROWSER=none ... ./scripts/run-observatorium.sh) and litmus-image-build-convergence-shape.yaml:16 (LITMUS_PODMAN_MODE=fake scripts/test-image-build-convergence.sh). Both scripts are 100755 today so nothing new is flagged; the widening buys catching a FUTURE mode regression instead of an rc=126 at runtime — which is not hypothetical, since this same cycle repaired exactly that on the trunk (887-bz88).
+
+            MEASURED, not argued: all 385 tracked scripts promoted to candidates so every latent noise shape fired. 128 flagged before, 130 after; net new is exactly the two genuine sites; nothing lost; zero false positives.
+
+            BOTH HALVES OF THE PATTERN WIDENED. The superset sweep in check-script-exec-bits.sh moved with the awk filter — a widened filter behind a narrow pre-filter reports a clean tree it never examined, which is this guard's own failure class and the 770-dyqr shape.
+
+            FIXTURE 11/11 -> 14/14, and the two refuse-scenarios are MUTATION-PROVEN: reverting the yamlcmd widening turns both red with the silent-pass symptom (ok:script-exec-bits:1 checked on a tree carrying a violation).
+
+            ONE CORRECTION I MADE TO MY OWN WORK, worth recording because it nearly shipped: the third new scenario was written as a narrowness CONTROL with a comment claiming the interpreter exclusion is load-bearing and 'verified in both directions'. It is not. I mutation-tested it and the scenario passed unchanged — with an interpreter name intervening, none of the positive patterns match at all, so the exclusion is never consulted. The scenario is kept (silence is a real guarantee worth pinning) but its comment now states plainly what it does NOT prove, and the awk carries a matching note telling the next author not to write a control asserting that line is load-bearing. A control that cannot fail is worse than no control.
+
+            litmus:script-exec-bit-shape extended: the shape step now greps for the named awk variables dotslash and envpfx — which is why they are named rather than inlined four times — and the count pin moves to 14. ci-release litmus PASS; build.sh --check FORCED green; check-bash-dialect clean; check-script-exec-bits ok:31 checked.
+
+            HALF (A) LOCATION, so the next coordinator does not re-scout it: skills/coordinate-multihost-work/SKILL.md, section 'Integration And Runtime Executor', insert a step between the sibling merge and ./build.sh --ci-full. No new script needed — scripts/run-litmus-test.sh already has --diff-scope <base> for the changed-pin subset. TWO CAVEATS the implementer must carry: --diff-scope fails CLOSED (unannotated test, unresolvable base, clean tree, or a full-run anchor older than 24h each silently escalate to a FULL run), and a run that skipped anything BLOCKS build.sh from writing a gate stamp, so a diff-scoped post-merge pass informs the coordinator but cannot double as the release gate. Verdict line goes to plan/loop_status.d/ via loop-status-append, never by editing plan/loop_status.md (582-nqw5). Unverified: whether skills/multihost-orchestration is a symlink or a divergent copy — check before assuming one edit.
         - type: note
           ts: "2026-08-25T19:50:36Z"
           host: macuahuitl
@@ -26841,6 +26884,12 @@ plan_index:
         the `case` idiom) must PASS it. A gate with only positive fixtures does
         not close this packet.
       events:
+        - type: note
+          ts: "2026-08-25T20:53:07Z"
+          agent_id: "linux-macuahuitl-fable5-20260825t195813z"
+          host: macuahuitl
+          summary: |
+            RELEASED back to ready by macuahuitl 2026-08-25 without implementation — claimed, scouted, not reached. Recording the scouting so it is not re-derived: the packet's verifiable_closure NAMES scripts/check-no-spawn-in-if-not.sh wired into ./build.sh --check, and a SIBLING GATE ALREADY EXISTS — scripts/check-sigpipe-verdict-pipelines-added.sh (order 792-ksr8). Whoever implements must first state precisely how the two differ rather than shipping a duplicate: the sibling appears to judge newly-ADDED lines only, while this packet asks for a full-tree gate over scripts/ in the check-no-python-scripts.sh family, and exit criterion 2 requires it to start GREEN (every existing occurrence converted or annotated), which is the part that decides whether it is a day or a week.
         - type: filed
           ts: "2026-08-17T07:10:08Z"
           agent_id: windows-opus5-subtractive-20260817
