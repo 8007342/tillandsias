@@ -25924,6 +25924,36 @@ plan_index:
         the load-bearing half; the refusal tests are the negative control.
       events:
         - type: progress
+          ts: "2026-08-25T20:03:38Z"
+          agent_id: "linux-yoga-opus5-20260825t200338z"
+          host: yoga
+          summary: |
+            SLICE 4 — THE NAMED CLOSURE NOW EXISTS AND RUNS. Until this cycle, `litmus:one-length-delimited-framing-impl` appeared in exactly one place in the tree: this packet's `verifiable_closure` field. `grep -rl` over the whole repo returned plan/index.yaml and nothing else. Three slices of this migration (86e1bfe6c, be19f02dd, 99fe3da0f) landed over eight days against a gate that could not run, and the disposition comment written at vsock_server.rs:1715 on 2026-08-25T09:47Z explicitly says its reason is "the entry that exception list requires" — for an exception list that did not exist. A closure nothing executes is a plan, not a constraint, and this packet had been reporting progress against one.
+
+            LANDED: scripts/check-framing-raw-decodes.sh + scripts/framing-raw-decode-baseline.tsv, bound as litmus:one-length-delimited-framing-impl under spec vsock-transport (openspec/litmus-bindings.yaml). 6/6 steps PASS in 1.0s.
+
+            IT IS A RATCHET, NOT THE END-STATE ASSERTION, AND THAT IS THE DESIGN DECISION WORTH ARGUING WITH. Exit criterion 1 asks for at most ONE raw decode tree-wide. Measured at HEAD: 18, across 10 files. A scan that asserts the end state fails on day one, gets marked expected-fail, and then protects nothing during the months the migration actually takes — which is the same failure as having no closure at all, arrived at more expensively. The ratchet is falsifiable TODAY: `ok:framing-ratchet:sites=18:files=10` at HEAD, and it refuses a new hand-rolled copy immediately.
+
+            THE SECOND REFUSAL IS THE ONE THAT MATTERS. The ratchet fails equally loud when the recorded ceiling sits ABOVE the truth — i.e. when a slice landed and nobody lowered the number. That is 884-hfsj's failure mode structurally prevented rather than described: a `next_action` naming the next slice goes stale in silence (this packet's still reads "Then take the Linux-testable vsock_server.rs slice", eleven hours after be19f02dd took it), but a ceiling that must be lowered in the same commit as the migration cannot go stale without turning the build red.
+
+            BASELINE, 18 sites / 10 files, each row carrying its disposition:
+              keep    3  crates/tillandsias-headless/src/tray/mod.rs           (blocking std UnixStream registry; :590 production + :4813/:5513 its hand-rolled test peers)
+              keep    1  crates/tillandsias-headless/src/vsock_server.rs       (#[cfg(test)] interop peer — independence is its whole value)
+              keep    1  crates/tillandsias-headless/tests/vsock_listener_e2e.rs (same, at the e2e layer)
+              pending 1  crates/tillandsias-control-wire/src/transport.rs
+              pending 1  crates/tillandsias-headless/src/main.rs
+              pending 1  crates/tillandsias-host-shell/src/provisioning.rs
+              pending 2  crates/tillandsias-host-shell/src/vsock_client.rs
+              pending 5  crates/tillandsias-macos-tray/src/pty_vsock_bridge.rs (macOS-lane evidence required)
+              pending 1  crates/tillandsias-vm-layer/src/vsock_exec.rs
+              pending 2  crates/tillandsias-windows-tray/src/hvsocket.rs       (Windows-lane evidence required)
+
+            So 5 of 18 are dispositioned keeps and 13 remain to migrate. Criterion 1's "at most one" is therefore unreachable as literally written — the honest end state is one production decode plus the deliberate interop fakes that make the interop claim non-tautological. That is a criterion the packet should restate, and it is NOT a licence to loosen it: the fakes are enumerated by path in the baseline, so "deliberate exception" stays a finite committed list rather than a judgment call.
+
+            NEGATIVE CONTROLS, all five exercised live and all five refusing: a new decode in an unlisted file (blocked:framing-ratchet-new-site), a count above ceiling (blocked:framing-ratchet-regressed), a ceiling above truth via a raised row (blocked:framing-ratchet-stale:...:2<3), a ceiling above truth via a row whose file reached zero (blocked:framing-ratchet-stale:...:0<1), and an absent baseline failing CLOSED rather than reporting a clean tree (blocked:framing-ratchet-no-baseline). The last matters because the cheapest way to pass a source scan is to delete it; step 6 additionally pins that crates/tillandsias-router-sidecar/src/main.rs still uses LengthDelimitedCodec, so the ratchet cannot be satisfied by deleting the migration target rather than reaching it.
+
+            CLAIM RELEASED to ready: 13 pending sites remain across 7 files, two of them behind other platforms' lanes.
+        - type: progress
           ts: "2026-08-25T09:47:30Z"
           agent_id: "linux-yoga-opus5-20260825t094730z"
           host: yoga
