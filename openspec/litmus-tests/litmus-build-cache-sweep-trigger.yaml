@@ -37,8 +37,25 @@ critical_path:
     expected_behavior: "ok: size wins over a fresh marker"
     timeout_ms: 30000
 
+  - step: "THE SIZE IS ACTUALLY MEASURED — not merely compared against a threshold"
+    # This leg exists because its absence hid a dead mechanism for a full
+    # release. The size step BELOW sets MAX_GIB=0, so `gib >= 0` holds whatever
+    # `du` returned: it pins the COMPARISON and never the MEASUREMENT. The gate
+    # used GNU-only `du -sb`, which BSD du refuses outright, so on macOS `bytes`
+    # was ALWAYS 0 — a 14 GiB target/ reported `bytes=0:gib=0` — and the suite
+    # went green on both a working and a broken host. Write a file of known
+    # size and demand the count reflect it; this fails on BSD without `du -sk`.
+    command: "d=$(mktemp -d); mkdir -p \"$d/t\" \"$d/c\"; head -c 2097152 /dev/zero > \"$d/t/x\"; out=$(TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/absent\" scripts/check-build-cache-sweep.sh); rm -rf \"$d\"; b=$(printf '%s' \"$out\" | sed -n 's/^[a-z:-]*:bytes=\\([0-9]*\\):.*$/\\1/p'); [ -n \"$b\" ] && [ \"$b\" -ge 1048576 ] && echo 'ok: the byte count tracks real content'"
+    expected_behavior: "ok: the byte count tracks real content"
+    timeout_ms: 30000
+
   - step: "DUE by AGE: a marker older than the window fires even when the cache is small"
-    command: "d=$(mktemp -d); mkdir -p \"$d/t\" \"$d/c\"; head -c 1000 /dev/zero > \"$d/t/x\"; printf 'date=%s utc=x host=t action=cargo-clean:done\\n' \"$(date -d '30 days ago' +%Y-%m-%d)\" > \"$d/c/m\"; out=$(TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/m\" scripts/check-build-cache-sweep.sh); rc=$?; rm -rf \"$d\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -qE ':reason=stale-[0-9]+d$' && echo 'ok: staleness fires on its own'"
+    # The BSD arm comes FIRST and the GNU form is the fallback: `date -d` is
+    # GNU-only and this step was written with it alone, so it had been RED on
+    # every macOS run since it landed — unnoticed because the packet that
+    # closed it reported 8/8 from a Linux host. A suite that can only pass on
+    # one platform is not a fleet gate.
+    command: "d=$(mktemp -d); mkdir -p \"$d/t\" \"$d/c\"; head -c 1000 /dev/zero > \"$d/t/x\"; old=$(date -v-30d +%Y-%m-%d 2>/dev/null || date -d '30 days ago' +%Y-%m-%d); printf 'date=%s utc=x host=t action=cargo-clean:done\\n' \"$old\" > \"$d/c/m\"; out=$(TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/m\" scripts/check-build-cache-sweep.sh); rc=$?; rm -rf \"$d\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -qE ':reason=stale-[0-9]+d$' && echo 'ok: staleness fires on its own'"
     expected_behavior: "ok: staleness fires on its own"
     timeout_ms: 30000
 

@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: macos-smoke-teardown-path-case-mismatch
+    event:
+      type: falsified
+      ts: "2026-08-25T22:30:53Z"
+      agent_id: macos-tlatoanis-macbook-air-opus5-20260825t223053z
+      host: tlatoanis-macbook-air
+      summary: >
+        FALSIFIED BY ITS OWN REPORTER, same host, ~40 minutes later. There is no case bug. This packet should never have been filed and I am recording exactly how I got it wrong, because the method error is more reusable than the claim was.  WHAT I CLAIMED: the app writes `~/Library/Application Support/Tillandsias` (capital T) while the smoke runbook removes `.../tillandsias` (lowercase), so on a case-sensitive APFS volume the removal would match nothing and the smoke would report a clean-room result against a live 12 GiB image.  WHY IT IS FALSE: the stored name is LOWERCASE. `ls` of the PARENT directory prints `tillandsias`, and that agrees with the source of truth — status_item.rs:367, diagnose.rs:71, e2e-preflight.sh:112 and uninstall.sh:19 all join `Library/Application Support/tillandsias`. The Caches directory is lowercase too. The runbook was right on every path.  THE METHOD ERROR, which is the part worth keeping: I tested a case-sensitivity hypothesis by TYPING a capital-T path and observing that it resolved. On a case-insensitive volume every spelling resolves, so that observation had exactly zero information content about the stored name — it confirmed the volume's case-folding, which I had separately established, and nothing else. I then reported the case I had typed as though it were the case on disk. A case hypothesis can only be tested by reading the name the filesystem STORES (list the parent), never by probing a name you supplied.  Compounding it: I wrote "the two are genuinely inconsistent" about Application Support versus Caches, which was pure inference from the same bad reading. Both are lowercase.  WHAT SURVIVES, and it is filed separately rather than smuggled through this retraction: the macOS destruction step really was one prose sentence while the Linux branch beside it captures PIPESTATUS and then proves the store is empty — the 727-kmks asymmetry, one layer down, on the path that validates PUBLISHED releases. That is a real defect with a real consequence (a removal that silently matched nothing would let a smoke report clean-room against pre-existing state), it just has nothing to do with letter case. The runbook now removes and then ASSERTS absence, and carries a short note recording this retraction so the case question is not re-opened by the next reader.  COST: the coordinator upgraded this to a release-gating prep task on the strength of my report and held a promotion-validation run for it. Told them immediately on discovery rather than after the fix landed.

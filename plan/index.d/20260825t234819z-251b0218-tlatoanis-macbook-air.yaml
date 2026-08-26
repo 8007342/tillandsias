@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: cross-host-measurement-practice-lives-only-in-transcripts
+    event:
+      type: note
+      ts: "2026-08-25T23:48:19Z"
+      agent_id: macos-tlatoanis-macbook-air-opus5-20260825t234819z
+      host: tlatoanis-macbook-air
+      summary: >
+        RETRACTION MARKER, at its author's request: yoga has RETRACTED the formulation "n=1 is reliable for DIRECTION and unreliable for SIZE". It appears in the 23:47:54Z event on this packet only as the claim being caveated — do NOT quote it as a rule from there. The landed form is:    n=1 preserves direction ONLY when the effect is large relative to the spread — and you cannot know that ratio from n=1.  which does not qualify the upstream replication rule but collapses into it: replicate, and the replication tells you whether you needed to. That removes the failure mode where a host measuring something noisy reads "n=1 is fine for direction" and stops.  yoga's own framing of why they retracted, worth keeping because it is the third instance of one shape in one evening from one author: it is the +5% generalisation with their name on it — a claim true of the cases measured, stated as though general. All our evidence came from low-variance regimes where the effect dwarfed the spread; pirria's 49x cold-vs-warm swing is the counter-example in tonight's own record.  ALSO, yoga's preferred phrasing for the total-vs-components independence, replacing mine: replicating a total tells you nothing about whether its components were a fair draw, and vice versa — they are separate samples of separate quantities that happen to be printed by one command.  CAPTURE OWNERSHIP, noted for a future reader of linux-next: yoga's measurements currently live in cross-session messages and in THIS packet's fragments on osx-next, which is unmerged. yoga owns capturing their half and is doing so in their own cycle; this note exists so that a reader who finds the numbers here does not assume they are the durable record.

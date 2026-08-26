@@ -13535,6 +13535,56 @@ plan_index:
         recorded). Sync the crate version (or embed VERSION at build time)
         so the CLI answer is truthful, and pin it.
       events:
+        - type: completed
+          ts: "2026-08-26T00:13:29Z"
+          agent_id: "macos-tlatoanis-macbook-air-opus5-20260826t001329z"
+          host: tlatoanis-macbook-air
+          summary: |
+            MACOS HALF DONE — the packet is now complete on both platform lanes, and it closes.
+
+            The windows host's 2026-08-13 scope correction was exactly right and I followed its recommended shape rather than inventing a second mechanism: a build.rs that reads the workspace VERSION into WORKSPACE_VERSION, the five CARGO_PKG_VERSION uses replaced, and a pin named the same as the Windows one so the cross-tray pattern of identically-named pins now extends to versioning.
+
+            LIVE CONFIRMATION FIRST, from tonight's release-readiness prep and not from reading code: the installed /Applications/Tillandsias.app reported `tillandsias-tray 0.1.0 (git 0548ee1f2, built 2026-08-15T06:05:26Z)` while its Info.plist CFBundleShortVersionString read 0.4. That is the defect as filed, still live sixteen days after filing, observed while establishing whether this host could validate a release.
+
+            CHANGED (crates/tillandsias-macos-tray):
+              * build.rs — reads ../../VERSION into WORKSPACE_VERSION with the same
+                unwrap_or_else(CARGO_PKG_VERSION) fallback and rerun-if-changed as the
+                windows crate. Set UNCONDITIONALLY, not behind a target gate, because the
+                crate compiles to a cfg-gated stub off Darwin and its tests still have to
+                resolve the var.
+              * main.rs — `--version` and `--help`; `version_line()` EXTRACTED from main so
+                it is testable, deliberately un-gated for the same reason
+                build_exec_guest_shell_cmd is (a pin that only compiles on a Mac stops the
+                fleet-wide test run from guarding it).
+              * diagnose.rs — the `version` field of the diagnose JSON that support tooling
+                reads, its test fixture, and the stale module doc that named CARGO_PKG_VERSION.
+              * pty_vsock_bridge.rs — the build-version skew comparison and its warning text.
+
+            THE SKEW SITE IS WHY THIS WAS NOT COSMETIC, and the windows note deserves the credit for spotting it. pty_vsock_bridge compared the guest's reported build_version against env!("CARGO_PKG_VERSION") — the literal "0.1.0" — so the mismatch warning fired on EVERY connection to a HEALTHY guest. A warning that is always true is one an operator learns to scroll past, and build-version skew is precisely the signal 648-772y needed legible when an older tray downgraded a newer guest's wiring and wedged the control wire. The always-on warning was actively destroying the signal it exists to provide.
+
+            VERIFIED END-TO-END ON THE REAL BINARY, not just in tests:
+              VERSION file: 0.4.260817.1
+              ./target/debug/tillandsias-tray --version
+                -> tillandsias-tray 0.4.260817.1 (git 8f7852f1a-dirty, built 2026-08-26T00:11:09Z)
+              --diagnose --json  ->  "version": "0.4.260817.1"
+            Both surfaces previously said 0.1.0.
+
+            PINNED BY TWO TESTS, and HAND-FALSIFIED:
+              * version_line_uses_workspace_version_and_commit — same name and same
+                assertions as the windows tray's, including the `!line.contains("0.1.0 (")`
+                guard against the static-Cargo.toml regression class. Reintroducing
+                env!("CARGO_PKG_VERSION") in version_line turns it RED with
+                "version line still reporting CARGO_PKG_VERSION shape"; restoring returns
+                green. Falsified in both directions.
+              * workspace_version_is_not_the_frozen_crate_version — asserts the VALUE
+                rather than the call site, so a future edit that hardcodes a version fails
+                whether or not it spells it the old way, AND it catches the build.rs
+                fallback firing silently (an unreadable VERSION file would otherwise
+                degrade to "0.1.0" with every other test still green).
+
+            Verified: 2/2 new pins, `./build.sh --check` green with TILLANDSIAS_FORCE_CHECK=1 (the standing declared-closure-debt line is pre-existing and explicitly not a gate).
+
+            DOWNSTREAM, per the packet's own deliverable: 624-q4jj step 5 prescribed `--version >= 0.4.260809.2` and could not bind because every build answered 0.1.0. That grammar can bind on --version now. Version proof no longer requires the CFBundleVersion + git SHA workaround this packet's filing event recorded.
         - type: filed
           ts: "2026-08-09T23:20:00Z"
           agent_id: macos-tlatoanis-macbook-air-fable5-20260809t162731z

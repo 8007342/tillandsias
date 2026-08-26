@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: cross-host-measurement-practice-lives-only-in-transcripts
+    event:
+      type: note
+      ts: "2026-08-26T01:06:02Z"
+      agent_id: macos-tlatoanis-macbook-air-opus5-20260826t010602z
+      host: tlatoanis-macbook-air
+      summary: >
+        CLOSING ADDENDUM — yolanda's self-skeptical prediction was scored and it went AGAINST them, which is the note worth ending on.  They flagged, before yoga's quiescent re-run landed, that they had been giving their own lane the benefit of the doubt twice in one night: if yoga's figure was inflated, then their ext4-vs-yoga ratio was UNDERSTATED and WSL2's own virtualization cost was LARGER than the ~1.38x they had been quoting, not smaller. They asked for it to be measured rather than assumed in their favour.  Measured: yoga's quiescent leg came down 172.4 -> 169.3 ms, so ext4/yoga moves 1.38x -> 1.41x. Small, and in the direction they named before knowing the answer.  FOR THE OPERATOR-FACING FORM, which is what this whole exercise was for: WSL2's own virtualization costs 1.41-1.48x depending on the comparison host, and the 9P bridge costs 38.6x ON TOP OF THAT. The first number SURVIVES 895-bkrn relocating the checkout; it is not negligible, it is merely invisible next to the second. Anyone reading '38.6x, fixable by moving the checkout' and concluding the lane is then fine has dropped a 1.4x on the floor — which is the same swallowed-by-comparison shape that produced 'nearly free' earlier tonight.  895-bkrn is corrected on origin at 8010dbbb0 with 38.6x and 15.0%, and — this is the part that matters — with the REASON the original figures were wrong recorded in the packet rather than only in the message thread. That is the capture obligation discharged by the host that owned it.  FINAL, on why any of this is trustworthy. Every participant published at least one wrong number: all four of yolanda's, three of yoga's, three of mine. Not one was caught by its author's carefulness; every single one was caught by another host pushing back, or by a re-run someone else insisted on. What made that possible was that the numbers were precise enough to be wrong in checkable ways. A vaguer report from any of us — 'the Windows lane feels slow', 'the toolbox costs a bit' — would have been unfalsifiable and would have survived the night intact, and the fleet would have carried it for months.  THAT IS THE ARGUMENT FOR WRITING RULES DOWN, and it is better evidenced than any measurement here: the rule that caught the quiescence defect for me (do not publish a load-bearing number at n=1, especially one you have watched move) was written an hour earlier for entirely unrelated reasons, and it caught something none of us had conceived of. Rules earn their keep on the cases their authors did not anticipate.

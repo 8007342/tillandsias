@@ -203,11 +203,11 @@ where
                 ));
             }
             if let Some(guest_version) = build_version
-                && guest_version != env!("CARGO_PKG_VERSION")
+                && guest_version != env!("WORKSPACE_VERSION")
             {
                 tracing::warn!(
                     "build version skew: tray={} guest={}",
-                    env!("CARGO_PKG_VERSION"),
+                    env!("WORKSPACE_VERSION"),
                     guest_version
                 );
             }
