@@ -14,12 +14,46 @@
 | provenance | the published v0.4.260817.1 daily — a real release |
 | distro `tillandsias` | STOPPED, will be unregistered by the reset |
 | distro `tillandsias-build` | RUNNING — **must survive**; it is the Linux-artifact lane, not the product guest |
-| Credential Manager | holds `vault-shamir-share-v1` and `tillandsias-vm-uuid` |
+| Credential Manager | holds **all three**: `vault-shamir-share-v1`, `vault-root-token-v1`, `tillandsias-vm-uuid` |
 | disk | 465G total, ~247G free (last purge reclaimed 34.9 GB) |
 
 The `vault-shamir-share-v1` entry currently present is the **repaired** one from
 the operator's 2026-08-17 manual fix, not a stale one. That matters for reading
 the result below.
+
+### PRE-RESET HASHES — recorded 2026-08-26T01:52Z, before the tag existed
+
+Read via `CredReadW` (P/Invoke), SHA-256 of the raw blob. **Hashes only — the
+share is an unseal secret and its plaintext is never printed or logged.**
+
+| target | bytes | sha256 |
+| --- | --- | --- |
+| `vault-shamir-share-v1` | 44 | `76e3de20ef39f67a78397ac74eb84fa8a23b6ec68e66bab42ac8b163795b6575` |
+| `vault-root-token-v1` | 28 | `2e30cdd09c4cfe245a543fed6c86fc6c8963d22bcbbde2f557aae9e47a8adcf2` |
+| `tillandsias-vm-uuid` | 36 | `4193d5277645f8a97ac56b4053b29c0429d81b2efbd1911efdccb75dfc5a5f86` |
+
+This is the irreversible-if-missed step: once the reset runs, the pre-reset
+value cannot be recovered. Falsifier 3 is unfalsifiable without it.
+
+`tillandsias-vm-uuid`'s hash is recorded for the opposite reason to the other
+two — it must be **UNCHANGED** afterwards. Part A preserves it deliberately, and
+a changed UUID means the reset rotated the installation identity, which is its
+own defect regardless of what GitHub login does.
+
+### A PRE-STATE FACT I REPORTED WRONG, corrected here
+
+Earlier tonight I told the coordinator this host held only
+`vault-shamir-share-v1` and `tillandsias-vm-uuid`. **That was wrong — all three
+have been present the whole time.** The cause was my own filter, not a state
+change: I ran `cmdkey /list | grep -i "tillandsias\|vault-shamir"`, and
+`vault-root-token-v1` matches neither pattern. A grep that cannot match the
+thing it is looking for returns a clean, confident, wrong answer.
+
+Recorded rather than quietly fixed because it is the same shape as the four
+findings that died tonight — an artifact read as evidence of a measurement that
+never happened — and because it was very nearly load-bearing: a run that only
+watched the share would have missed the root token being cleared or preserved,
+and Part A clears **both**.
 
 ## THE HAZARD SPECIFIC TO THIS LANE — my own fix is under test
 
