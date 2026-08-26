@@ -28643,6 +28643,12 @@ plan_index:
 
       events:
         - type: progress
+          ts: "2026-08-26T11:30:08Z"
+          agent_id: "linux-yoga-opus5-20260826t113008z"
+          host: yoga
+          summary: |
+            yoga claims 797-5sqs; measuring key churn from git history plus cold-target rebuild cost against the 600s cap
+        - type: progress
           ts: "2026-08-26T08:11:55Z"
           agent_id: "macos-tlatoanis-macbook-air-opus5-20260826t081155z"
           host: tlatoanis-macbook-air
