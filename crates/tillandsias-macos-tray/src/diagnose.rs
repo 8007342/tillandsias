@@ -17,7 +17,7 @@
 //! to hold the `VZVirtioSocketDevice` handle. So unlike windows, the
 //! macOS report covers static/filesystem health only:
 //!
-//!   * version (`CARGO_PKG_VERSION` baked at build)
+//!   * version (`WORKSPACE_VERSION`, read from the repo-root VERSION file at build — 635-bhkb; it was `CARGO_PKG_VERSION`, i.e. the frozen "0.1.0")
 //!   * bundle identity (whether the binary lives inside an `.app`)
 //!   * image-root artifacts (rootfs.img / vmlinuz / initramfs.img)
 //!   * manifest pin source (bundled, first 12 chars of SHA)
@@ -354,7 +354,7 @@ fn collect_report() -> DiagnoseReport {
     let provenance = crate::guest_binary::guest_binary_provenance();
 
     DiagnoseReport {
-        version: env!("CARGO_PKG_VERSION"),
+        version: env!("WORKSPACE_VERSION"),
         guest_version: None,
         in_app,
         exe_path,
@@ -2319,7 +2319,7 @@ mod tests {
 
     fn baseline_diagnose_report() -> DiagnoseReport {
         DiagnoseReport {
-            version: env!("CARGO_PKG_VERSION"),
+            version: env!("WORKSPACE_VERSION"),
             guest_version: None,
             in_app: true,
             exe_path: Some(
