@@ -748,8 +748,27 @@ elif [ "$traces" = "stale" ]; then
     verdict="attention:trace-indexes-stale"
 elif [ "$degraded" -gt 0 ]; then
     verdict="attention:experts-degraded-${degraded}-calls-could-not-run"
-elif [ "$graded" -gt 0 ] && [ "$answered" -eq 0 ]; then
+elif [ "$calls" -gt 0 ] && [ "$graded" -gt 0 ] && [ "$answered" -eq 0 ]; then
     # The order-531 signature: the expert ran every time and answered nothing.
+    #
+    # ORDER 902-j49y — `calls > 0` IS LOAD-BEARING AND WAS MISSING. `graded`
+    # comes from the groundtruth harness; `answered` comes from the usage log.
+    # Two independent sources, and the guard for a claim about one was read
+    # from the other. With an empty usage log — a fresh host, a rotated log —
+    # `answered` is 0 while `graded` is whatever the harness scored, so this
+    # arm fired and reported the order-531 signature ("the ARTIFACT is wrong,
+    # check the base branch") about an expert that was demonstrably fine.
+    #
+    # MEASURED on yolanda 2026-08-26, immediately after 890-t9pu rotated the
+    # usage log to a path both userlands can read: `expert_accuracy: pass=28
+    # graded=28 rate=100%` on the same line as
+    # `verdict: attention:expert-answered-nothing-check-base-branch`. A 100%
+    # accuracy score and "answered nothing" cannot both be true.
+    #
+    # "the expert ran every time and answered nothing" is FALSE when it never
+    # ran. That state has its own arm directly below — which was unreachable
+    # whenever the harness had graded anything, i.e. exactly when the report
+    # was most likely to be read.
     verdict="attention:expert-answered-nothing-check-base-branch"
 elif [ "$calls" -eq 0 ]; then
     verdict="attention:experts-never-called"
