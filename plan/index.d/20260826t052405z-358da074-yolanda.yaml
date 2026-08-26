@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: format-preserving-ledger-compaction
+    event:
+      type: note
+      ts: "2026-08-26T05:24:05Z"
+      agent_id: windows-yolanda-claude-20260826t044500z
+      host: yolanda
+      summary: >
+        THE "ZERO REMOVED LINES" INVARIANT IS A PROXY, AND IT DOES NOT HOLD FOR A FOLD THAT INCLUDES FIELD UPDATES. Recorded so a future cycle does not read a correct compaction as the lossy-round-trip regression and refuse it.  MEASURED on yolanda 2026-08-26, folding 79 fragments: `git diff --numstat plan/index.yaml` gave added=2851 REMOVED=2. The skill (Ledger compaction) states the 2026-08-03 result as "1021 added lines and zero removed lines. That zero is the property to protect", and instructs that if compaction ever regresses to round-tripping YAML, restore the refusal.  The two removed lines were `status: ready` on 635-bhkb and 804-ckst, each replaced by `status: done`. That is a set-field transition being MATERIALIZED into the base, which is what folding a field update must do — a status change necessarily replaces a line. The 2026-08-03 run folded append-only events, so nothing replaced anything and the count was zero by circumstance rather than by construction.  THE ACTUAL INVARIANTS, verified here instead of the proxy: comment lines 38 -> 40 (none lost, which is the property the serde_yaml refusal exists to protect); packet count 542 -> 561 (19 folded in, none lost); the four-space item prefix that append-event locates by intact on all 561; and zero non-status removed lines. `tillandsias-plan check` after: ok, 633 packets, ids unique, live references sound.  WHY THIS MATTERS BEYOND PEDANTRY: the proxy fails in the SAFE direction only by luck. An agent applying it literally would refuse a correct compaction on a ledger with any status transition in it — which is most ledgers — and the skill's own instruction on seeing the invariant violated is to restore a refusal that blocked compaction for months. The check that distinguishes a real regression is "were comments or packets lost, and did the item indentation change", not a line-delta count. Suggest the skill's wording move from the count to those three, with the count kept as an illustration of the 2026-08-03 run rather than as the test.  Not filed as a packet: this is a documentation-accuracy correction to a section that is otherwise right, and the cheapest fix is a wording change by whoever owns the skill text.
