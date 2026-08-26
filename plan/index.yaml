@@ -15416,6 +15416,32 @@ plan_index:
       notes: |
         Found only because the operator was asked to look at the notification area for 646-qde5 and looked at the Settings list too. No automated check would have surfaced it: the tray works, the icon appears, nothing errors. It is visible only as clutter in a Windows settings page - the kind of thing a headless loop cannot see.
       events:
+        - type: progress
+          ts: "2026-08-26T14:04:35Z"
+          agent_id: "windows-yolanda-claude-20260826t134500z"
+          host: yolanda
+          summary: |
+            IMPLEMENTED, NOT COMPLETED — the field half is explicitly outstanding and I am not claiming it.
+
+            REPRODUCED FIRST, on this host, before writing anything: InitialTooltip = "Tillandsias 0.4.260728.1" (28 July) against an installed binary of 0.4.260826.1. A month's drift, and the same value the operator reported sixteen days earlier during the 646-qde5 verification. Defect 2 confirmed live.
+
+            Defect 1 did NOT reproduce here in the accumulated form: only ONE tillandsias entry exists, the canonical installed path. The installer's prune is working — I watched it fire during the v0.4.260826.1 e2e ("removed stale tray-icon entry: ...target\release\tillandsias-tray.exe"). So the accumulation is specific to the portable flow, exactly as the packet says, and this host is not currently in it.
+
+            A NOTE ON HOW I FOUND THE TOOLTIP, because it nearly went the other way: my first enumeration read the property `ToolTip` and returned empty, which would have read as "no tooltip is written at all" — a different and wrong diagnosis. The real value is `InitialTooltip`. I caught it by enumerating the key's value names (`GetValueNames()`) instead of querying the one I had guessed. Third time in two days that enumerate-rather-than-query has caught a constructed name; a query can only fail the way you spelled it.
+
+            WHAT LANDED. The tray reconciles at startup, before registering its icon:
+              - its own entry -> refresh InitialTooltip to the running version
+              - a tillandsias entry whose executable is GONE -> prune
+              - a tillandsias entry whose executable still EXISTS elsewhere -> LEAVE
+            Best-effort and silent on failure; a cosmetic Settings hive must never stop a tray from starting.
+
+            The decision is a pure function in a new ungated module (crates/tillandsias-windows-tray/src/tray_registry.rs), not buried in the Win32 walk, so all three exit criteria are exercised on EVERY host rather than only where a registry exists. That matters most for criterion 3, the negative control — a portable build beside an installed one is a supported setup, and it is the arm that makes this a reconciliation rather than a purge. Without it "prune what is not me" would pass every positive test and quietly break a working dual-install.
+
+            7 tests: the three criteria; foreign entries untouched in BOTH existence states; case- and separator-insensitive self-match (without which the running build would classify its own entry as foreign, prune it, and re-register — churning the entry this exists to stabilise); and a directory named like the binary not matching, because the test is the file name, not a substring.
+
+            cargo test -p tillandsias-windows-tray: 106 + 9 + 3 pass. Gate green. check-windows-only-sources-verified: ok:sources-verified:windows-only:4.
+
+            WHY `implemented` AND NOT `completed`. The pure policy is verified. The Win32 application path — the enumeration, the RegSetValueExW, the RegDeleteTreeW — has NOT been exercised against a real hive on this host, because doing so requires running a tray built from this commit, and the installed tray is the previous release. I can assert what the code decides; I cannot yet assert what the registry looks like afterwards. The packet's own verifiable_closure asks for exactly that field observation, and claiming `completed` on a locally-passing unit suite would be the platform-green-counted-as-another accounting error this fleet spent 2026-08-25 correcting.
         - ts: "2026-08-10T19:30:00Z"
           event: filed
           summary: Operator field report during the 646-qde5 GUI verification.

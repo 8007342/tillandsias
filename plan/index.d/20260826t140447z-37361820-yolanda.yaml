@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tray-icon-registry-entries-accumulate-and-go-stale
+    field: next_action
+    value: 'FIELD VERIFICATION OUTSTANDING, and it needs a Windows host running a tray built from this commit. Run: (1) install or launch a tray from this build; (2) read HKCU\Control Panel\NotifyIconSettings — enumerate GetValueNames(), do NOT query ''ToolTip'', the value is ''InitialTooltip''; (3) assert the canonical entry''s InitialTooltip now matches the running version rather than 0.4.260728.1; (4) copy the exe to a temp path, run it once, delete it, start the canonical tray again, and assert the temp entry is gone while any OTHER live tillandsias entry survives. Step 4''s second half is the negative control and is the one worth not skipping.'
+    ts: "2026-08-26T14:04:47Z"
+    host: yolanda
+
+events:
+  - packet_id: tray-icon-registry-entries-accumulate-and-go-stale
+    event:
+      type: note
+      ts: "2026-08-26T14:04:47Z"
+      host: yolanda
+      summary: >
+        implemented rung requires a named verification hand-off
