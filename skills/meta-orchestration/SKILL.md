@@ -724,9 +724,29 @@ filing — not the prompt.
 
    `git fetch` at step 2 updates remote-tracking refs; it does NOT update the
    worktree ledger that `tillandsias-plan` reads. So a check placed before the
-   merge sees the claims as of your last merge and **fails silently toward "no
-   overlap" — the safe-looking answer.** A stale ledger always shows FEWER
-   claims, never more.
+   merge answers about the claims as of your LAST merge, not as of now.
+
+   **THE STALENESS IS NOT ONE-DIRECTIONAL, and the earlier wording here said it
+   was.** This passage used to end "a stale ledger always shows FEWER claims,
+   never more." Measured on yoga 2026-08-26T07:26Z, one cycle after that
+   sentence landed, running the same query either side of the merge:
+
+   ```
+   before the merge:  799-tb7q + 831-ezea    <- 799-tb7q was a PHANTOM
+   after  the merge:  831-ezea only          <- another host had released it
+   ```
+
+   `799-tb7q` was `in_progress` in the stale ledger and `ready` at the new head:
+   a sibling finished a slice and released it in commits this host had fetched
+   but not merged. So a pre-merge check can show a claim that no longer exists
+   as easily as it can hide one that does — **fewer claims when siblings have
+   been claiming, more when they have been releasing.**
+
+   Both directions are harmful and they fail differently. Missing a live claim
+   fails toward "no overlap", which is the safe-LOOKING answer and the one that
+   costs a union. Seeing a released claim fails toward a needless heads-up, or
+   toward skipping a packet that is free — cheaper, but it teaches the reader
+   that the step produces noise, which is how a step stops being run.
 
    Use `query --status in_progress`, not `expire-claims --list-live`: the
    latter prints `in_progress=N` and no rows, so it counts what it will not
