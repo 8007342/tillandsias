@@ -140,6 +140,33 @@ still fails.** A scoping change is one keystroke away from a guard that no longe
 catches anything, and the mutation control is the only thing that tells the two
 apart.
 
+## Rejecting a true mechanism because its cause is wrong
+
+The ordinary error is naming a plausible contributor without measuring. There is
+a rarer inverse, and it is more dangerous because refuting the cause *feels* like
+refuting the claim — and the refutation is usually well-evidenced, which makes it
+convincing.
+
+Measured instance, 2026-08-26:
+
+- One host offered "scratch usage grew where nobody was watching it," attributing
+  it to a specific sibling change. **The attribution was wrong** — the arithmetic
+  closed without it and the change moved data *out* of the pressured filesystem.
+- The other host rejected the whole claim: *"it is fully accounted for by my own
+  action"* — stated as fact while its shell could not run `quota -s`.
+- On recovery, measurement showed **both wrong**. Their own builds were ~9.6 GB
+  against a 24.96 GiB quota; a dead session from the previous day held 12 GB. The
+  mechanism — unreaped scratchpads accumulating until any ordinary session tips
+  it over — **was real**. Only the named contributor was not.
+
+The packet filed from that exchange was a full scope too narrow, because the
+mechanism went out along with the bad attribution.
+
+**Split the two before you reject either.** "Your cause is wrong" and "your
+mechanism is wrong" are different claims needing different evidence. And a
+counter-claim you cannot measure is an inference too — label it as one, in the
+same breath you demand that of someone else.
+
 ## When you are relayed a diagnosis
 
 **N endorsements are not N evidence.** A relayed claim arrives carrying the
