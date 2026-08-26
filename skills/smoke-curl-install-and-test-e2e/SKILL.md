@@ -78,7 +78,14 @@ download cache.
    read -r RES < <(scripts/resolve-smoke-release.sh "$CHANNEL")
    echo "$RES"   # channel:<c> tag:<vX> base:<url>
    SMOKE_TAG="$(printf '%s' "$RES" | sed -E 's/.* tag:([^ ]+) .*/\1/')"
-   SMOKE_BASE="$(printf '%s' "$RES" | sed -E 's/.* base:(\S+)$/\1/')"
+   # `[^ ]+`, NOT `\S`. `\S` is a GNU sed extension: BSD sed does not match it,
+   # so on macOS this substitution silently fails and SMOKE_BASE becomes the
+   # WHOLE line — `channel:daily tag:… base:https://…` — and every curl below
+   # is built from a malformed URL. The TAG line directly above already uses the
+   # portable form; the two were written at different times and only one lane
+   # ever ran them. Caught by dry-running step 0 on macOS before the first real
+   # macOS smoke, 2026-08-26.
+   SMOKE_BASE="$(printf '%s' "$RES" | sed -E 's/.* base:([^ ]+)$/\1/')"
    ```
    Note the tag — every filed finding cites it so issues are attributable to a
    specific published artifact AND channel.
@@ -131,11 +138,39 @@ macOS:
 ```bash
 curl -fsSL "${SMOKE_BASE}/install-macos.sh" | TILLANDSIAS_RELEASE_BASE="${SMOKE_BASE}" bash 2>&1 \
   | tee target/smoke-e2e/01-install-macos.log
-# install-macos.sh extracts to /Applications (NOT ~/Applications; a stale
-# copy there would "verify" the wrong binary — live mixup 2026-07-16).
+INSTALL_RC=${PIPESTATUS[0]}; printf 'install_exit=%s\n' "$INSTALL_RC" \
+  | tee target/smoke-e2e/01-install-macos-exit.txt
+test "$INSTALL_RC" -eq 0
+
+# install-macos.sh extracts to /Applications — but FALLS BACK to
+# ~/Applications when /Applications is not writable, and this runbook then
+# verifies /Applications unconditionally. Assert which branch it took rather
+# than assuming: a stale ~/Applications copy plus a silent fallback is the
+# live mixup of 2026-07-16, and it "verifies" the wrong binary.
+test -d "/Applications/Tillandsias.app"
+! grep -q "not writable; using" target/smoke-e2e/01-install-macos.log
+
 "/Applications/Tillandsias.app/Contents/MacOS/tillandsias-tray" --version 2>&1 \
-  | tee target/smoke-e2e/01-version.txt || true
+  | tee target/smoke-e2e/01-version.txt
+test "${PIPESTATUS[0]}" -eq 0
+# EXACT, not `>=` and not "contains 0.4". Assertable at all only since
+# 635-bhkb: every macOS build answered `0.1.0` before it, so this lane could
+# not confirm which release it was testing even in principle.
+grep -qF "tillandsias-tray ${SMOKE_TAG#v} " target/smoke-e2e/01-version.txt
 ```
+
+> The same three assertions the Linux lane got in 727-kmks, plus two the macOS
+> lane needs and Linux does not. The install ran through `| tee` with no
+> `PIPESTATUS` capture and the version check ended in `|| true` — so a
+> curl-install that failed outright, and a `--version` that failed after it,
+> both exited 0 and the smoke walked on. That is the identical defect 727-kmks
+> fixed one lane over, left standing here, in the lane that had never once been
+> run against a published release.
+>
+> The two extra assertions are the `/Applications`-vs-`~/Applications`
+> fallback (the installer chooses, this runbook does not, and only one of them
+> is the path verified below) and the exact-tag match, which was not expressible
+> before 635-bhkb.
 
 Windows PowerShell (daily-channel pinned — the release publishes
 `install-windows.ps1` + the x64 tray zip since v0.3.260721.1; the installer
@@ -302,6 +337,59 @@ rebuilds every image and brings up Vault from nothing. Scan `03-init.log` (and
 **File a finding for every distinct issue** (see §5). If `--init` did not reach
 a healthy state, STOP here — do not proceed to Step 4; record that the smoke
 halted at init and why.
+
+### macOS
+
+**The block above is Linux-only and there is no `tillandsias` CLI on macOS** —
+the installed bundle ships `tillandsias-tray`. The Host Matrix has always said
+this lane re-provisions with `--provision` + `--diagnose --json`; the step had
+no macOS block to match, so the lane the matrix promises was unexecutable as
+written. Added 2026-08-26, before this lane's first run against a published
+release.
+
+```bash
+APP="/Applications/Tillandsias.app/Contents/MacOS/tillandsias-tray"
+IMG="$HOME/Library/Application Support/tillandsias/rootfs.img"
+
+# Marker to prove the image below was built AFTER the destruction, not
+# inherited from it. `test -nt` is POSIX and needs no date arithmetic.
+touch target/smoke-e2e/03-destruction-marker
+
+"$APP" --provision 2>&1 | tee target/smoke-e2e/03-provision.log
+PROVISION_RC=${PIPESTATUS[0]}
+printf 'provision_exit=%s\n' "$PROVISION_RC" | tee target/smoke-e2e/03-provision-exit.txt
+test "$PROVISION_RC" -eq 0
+
+# A fresh image, not a survivor. An exit code cannot tell these apart.
+test -f "$IMG"
+test "$IMG" -nt target/smoke-e2e/03-destruction-marker
+
+# LAST — after every mutating step above. If anything below this line mutates
+# the host, this report is stale and the run is unfinished (the 2026-08-10
+# incident: 4/4 PASS on a health check taken before one more mutating step
+# wedged the host for 25 minutes).
+"$APP" --diagnose --json 2>&1 | tee target/smoke-e2e/03-diagnose.json
+test "${PIPESTATUS[0]}" -eq 0
+
+jq -e '.provisioned == true'    target/smoke-e2e/03-diagnose.json
+jq -e '.rootfs_present == true' target/smoke-e2e/03-diagnose.json
+# The tray's OWN version, a second surface for the step-1 assertion. Truthful
+# only since 635-bhkb; it read the frozen crate version "0.1.0" before.
+jq -e --arg v "${SMOKE_TAG#v}" '.version == $v' target/smoke-e2e/03-diagnose.json
+```
+
+> **`release_tag` is NOT the release version — it is the guest image tag**
+> (`fedora-44`). Asserting it against `$SMOKE_TAG` fails for a reason that has
+> nothing to do with the release, and reads like a real defect. Measured
+> 2026-08-26 while writing this block.
+>
+> **`guest_version` and `guest_binary_staged_matches_bundle` are `null` under a
+> plain `--diagnose`** — they need a live VM, i.e. `--with-metrics`, which
+> BOOTS. Do not assert them here; a `null == null` check would pass forever
+> without ever testing anything, which is the class this runbook has already
+> been bitten by twice. Exercise the guest/tray skew check under
+> `--with-metrics` if you want it, and note that it is a mutating step, so the
+> `--diagnose` above must then be re-run after it.
 
 ---
 
