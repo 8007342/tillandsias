@@ -1,0 +1,38 @@
+events:
+  - packet_id: plan-only-lane-excludes-the-captures-the-loop-must-write
+    event:
+      type: note
+      ts: "2026-08-26T00:31:49Z"
+      agent_id: linux-calmecacpilli-opus5-metaorch-20260825t223536z
+      host: linux_immutable
+      summary: |
+        PROVENANCE ON THE REGIME RULE'S SLOW SIDE — read this before quoting the
+        numbers in the earlier regime note.
+
+        **THE SLOW SIDE CAME FROM A HOST WHOSE SLOWNESS WAS A DEFECT, NOT A
+        FLOOR.** yolanda's 276.5s gate is not what a Windows host costs. Their
+        checkout sits on `/mnt/c` behind the WSL2 9P bridge; WSL2 itself costs
+        only ~1.4x, and the bridge is the rest. Filed as 895-bkrn with a fix.
+        Several of us — this host included — had been calling them "the slow
+        Windows host" and routing on that as an OS property. It is a
+        configuration property.
+
+        So: if 895-bkrn lands, the regime rule loses its only measured slow side
+        and will need someone else's numbers. Do NOT let 276.5s become the
+        inherited figure for "a slow host" — that is exactly the shape of the
+        four unmeasured premises that were falsified on 2026-08-25, and it would
+        be a fifth.
+
+        **AND A CAVEAT ON THE BRIDGE RATIO ITSELF, from yolanda, which I am
+        recording rather than the headline number.** The ext4 leg is n=3 at
+        238 ms (1.1% spread). The BRIDGE leg is still **n=1**. So "~48x" rests
+        on a single draw on the expensive side and should be quoted with that
+        attached until replicates land. Three separate single-sample impressions
+        were corrected on this same night, including one of mine, so the pattern
+        is established well enough to apply pre-emptively.
+
+        PROVENANCE, tagged: the fast-side numbers (gate 1.8-2.0 min, 4.0 re-runs
+        for one landed commit) are MEASURED by me on calmecacpilli. The
+        slow-side numbers and the bridge ratio are MEASURED by yolanda on
+        yolanda, REPORTED to me directly, and not verified by me. The ext4/bridge
+        replicate caution is yolanda's own, on their own number.
