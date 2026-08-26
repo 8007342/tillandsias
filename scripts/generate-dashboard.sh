@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+
+# ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has it.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/tool-dispatch.sh" 2>/dev/null || true
+if command -v resolve_tool >/dev/null 2>&1; then
+    JQ="$(resolve_tool jq || printf 'jq')"
+else
+    JQ="jq"   # lib unavailable: preserve the previous behaviour exactly
+fi
+
 METRICS_FILE="$1"
 DASHBOARD_FILE="$2"
 
@@ -9,10 +20,10 @@ if [[ ! -f "$METRICS_FILE" ]]; then
 fi
 
 # Extract times and sizes for the 'forge' image
-DURATIONS=$(jq -r 'select(.image == "forge") | .duration_s' "$METRICS_FILE" | tail -n 20)
-SIZES=$(jq -r 'select(.image == "forge") | .size_bytes' "$METRICS_FILE" | tail -n 20)
-BYTES_DL=$(jq -r 'select(.image == "forge") | .bytes_downloaded // 0' "$METRICS_FILE" | tail -n 20)
-CACHE_HITS=$(jq -r 'select(.image == "forge") | .cache_hits // 0' "$METRICS_FILE" | tail -n 20)
+DURATIONS=$("$JQ" -r 'select(.image == "forge") | .duration_s' "$METRICS_FILE" | tail -n 20)
+SIZES=$("$JQ" -r 'select(.image == "forge") | .size_bytes' "$METRICS_FILE" | tail -n 20)
+BYTES_DL=$("$JQ" -r 'select(.image == "forge") | .bytes_downloaded // 0' "$METRICS_FILE" | tail -n 20)
+CACHE_HITS=$("$JQ" -r 'select(.image == "forge") | .cache_hits // 0' "$METRICS_FILE" | tail -n 20)
 
 # 766-7zqf: the dashboard is a COMMITTED, cross-host artifact, but this
 # telemetry file is per-host ephemeral cache — on a host that never built the

@@ -69,12 +69,38 @@ else
 fi
 
 # ── 4. The converted callers carry no bare jq. ─────────────────────────────
-for f in scripts/cycle-metrics.sh scripts/select-work-batch.sh scripts/local-ci.sh; do
+CONVERTED="scripts/cycle-metrics.sh scripts/select-work-batch.sh scripts/local-ci.sh
+scripts/check-stranded-in-progress.sh scripts/check-mcp-expert-health.sh
+scripts/generate-dashboard.sh scripts/manage-cache.sh scripts/host-capability-probe.sh"
+for f in $CONVERTED; do
     if grep -nE '\| jq |^[[:space:]]*jq |\$\(jq ' "$ROOT/$f" | grep -vE ':[[:space:]]*#' | grep -q .; then
         bad "$f still calls jq bare"
     fi
 done
 ok "the converted callers route jq through the dispatch"
+
+# ── 4b. THE EXCLUSIONS, guarded so a later sweep does not "finish the job". ──
+# Three classes must never be converted, and each would look like an oversight:
+#
+#   CURL-PIPED INSTALLERS. install-macos.sh is fetched from a release URL and
+#   piped straight into bash (release.yml, and the smoke runbook's macOS row).
+#   There is no checkout and no sibling file to source. Converting it breaks the
+#   macOS installer for every user.
+#
+#   BOOTSTRAP WRAPPERS. with-tillandsias-builder.sh CREATES the toolbox; it
+#   cannot use the toolbox to decide how to make the toolbox. Same for
+#   with-wsl2-builder.sh. (Their apparent "jq" sites are the dnf INSTALL LIST
+#   `jq yq ripgrep openssl` — my own classifier regex matched a package name,
+#   which is why this arm names them explicitly rather than trusting a grep.)
+#
+#   SHIPPED DIAGNOSTICS — arm 5 below.
+for f in scripts/install-macos.sh scripts/with-tillandsias-builder.sh scripts/with-wsl2-builder.sh; do
+    [ -f "$ROOT/$f" ] || continue
+    grep -nE '^[[:space:]]*(\.|source)[[:space:]]+.*lib/tool-dispatch\.sh' "$ROOT/$f" \
+        | grep -vE ':[[:space:]]*#' | grep -q . \
+        && bad "$f SOURCES the shared lib — it is curl-piped or bootstraps the toolbox"
+done
+ok "curl-piped installer and toolbox bootstrap wrappers stay self-contained"
 
 # ── 5. THE DELIBERATE EXCEPTION, guarded so it does not read as an oversight. ─
 # The shipped diagnostics keep INLINE copies on purpose: they run on end-user

@@ -15,6 +15,17 @@
 
 set -euo pipefail
 
+
+# ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has it.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/tool-dispatch.sh" 2>/dev/null || true
+if command -v resolve_tool >/dev/null 2>&1; then
+    JQ="$(resolve_tool jq || printf 'jq')"
+else
+    JQ="jq"   # lib unavailable: preserve the previous behaviour exactly
+fi
+
 # Defaults
 DISK_THRESHOLD_PERCENT=85
 CACHE_RETENTION_DAYS=30
@@ -110,7 +121,7 @@ get_old_images() {
 
     # Parse JSON to find tillandsias-* images older than cutoff
     # Expects: [{"ID":"sha256:...", "Names":["tillandsias-forge:..."], "Created":"2026-05-14T..."}]
-    echo "$images_json" | jq -r '.[] |
+    echo "$images_json" | "$JQ" -r '.[] |
         select(.Names[]? | startswith("tillandsias-")) |
         [.ID, .Created] | @tsv' 2>/dev/null | while read -r image_id created_str; do
 
