@@ -564,13 +564,20 @@ case "${1:-}" in
       echo "  This is NOT an absent channel and NOT a ref-state refusal (886-qmdz):" >&2
       echo "  it worked, and then stopped. A keyring token expiring mid-cycle is the" >&2
       echo "  measured shape (calmecacpilli, 2026-08-25, ~50 minutes in)." >&2
-      echo "  REMEDY: refresh the token, then re-run this guard:" >&2
+      # ORDER 892-aw9p, corrected by calmecacpilli — the host this happened to.
+      # YOUR WORK IS NOT LOST, AND THAT IS THE HEADLINE, NOT A FOOTNOTE. What a
+      # dead credential costs is not the implementation (committed, gate-green,
+      # on a local branch) but the ability to FINISH: no push, so no MO-FULL
+      # marker, so a cycle that cannot attest. The expensive thing is the BLOCKED
+      # STATE, and the tempting wrong move is to discard and start clean. So the
+      # preservation path is printed FIRST.
+      echo "  YOUR WORK IS RECOVERABLE. Do NOT discard it to get unstuck:" >&2
+      echo "    scripts/salvage-dirty-worktree.sh <slug>   # pushes a COPY, cannot touch the worktree" >&2
+      echo "  Commits already made are safe on the local branch; they need a push, not a redo." >&2
+      echo "  Report blocked with the salvage ref rather than exiting clean." >&2
+      echo "  REMEDY for the credential itself:" >&2
       echo "    gh auth refresh        # or: gh auth login" >&2
       echo "    gh auth token | git credential-store --file \"\$(git rev-parse --git-dir)/.gh-credentials\" store" >&2
-      echo "  DO NOT discard the cycle's work to get unstuck. If the credential" >&2
-      echo "  cannot be repaired now, preserve it first (order 872-c9nd):" >&2
-      echo "    scripts/salvage-dirty-worktree.sh <slug>" >&2
-      echo "  and report blocked with the salvage ref rather than exiting clean." >&2
       echo "blocked:credential-expired-mid-cycle"
       exit 1
     fi
