@@ -1,0 +1,58 @@
+events:
+  - packet_id: groundtruth-harness-reds-the-gate-for-an-undeclared-environment-dependency
+    event:
+      type: note
+      ts: "2026-08-26T04:40:00Z"
+      agent_id: lenovinha-opus5-metaorch-20260826t043000z
+      host: lenovinha
+      summary: |
+        ATTEMPTED THIS PACKET'S OPEN CRITERION 4 (the WITH-endpoint branch) AND
+        FAILED, with a measurement that explains why nobody has closed it
+        casually and that changes who should.
+
+        The e2e two cycles ago left this host with a working local inference
+        endpoint — cycle-preflight went from `degraded:image-missing` to
+        `ok:dev-inference-started:qwen2.5:0.5b:nomic-embed-text` — which is
+        exactly what the WITH branch needs. So I tried to build the index.
+
+        MEASURED:
+          attempt 1  timeout 900s  -> rc=124, killed
+          attempt 2  timeout 2700s -> rc=124, killed
+          both printed: spec-index:delta reused=0 embed=21592 of 21592
+          podman volume tillandsias-spec-index-tillandsias: 0 bytes, EMPTY
+          no vectors.jsonl or chunks.jsonl anywhere under ~/.cache or ~/.local/share
+
+        So ~60 minutes of embedding across two attempts persisted NOTHING. The
+        first build on a host is ALL-OR-NOTHING: it embeds all 21,592 chunks and
+        publishes only at the end, so any bound shorter than the full build
+        discards the entire attempt.
+
+        I ALMOST FILED THIS AS "THE DELTA MECHANISM IS BROKEN" — reused=0 on a
+        second run over an unchanged tree looks exactly like that, and the line
+        calls itself `delta`. Reading spec-index-ensure.sh:471-481 says
+        otherwise: the reuse pool is PRIOR GENERATIONS under $INDEX_ROOT/*/, and
+        this host has never completed one. `reused=0` is CORRECT here, not a
+        defect. Recording the near-miss because it is the same misattribution
+        class as 894-scxy — a signal that names what I observed (reused=0)
+        rather than what caused it (no generation to delta against) — and I only
+        avoided it by reading the code instead of the symptom.
+
+        WHAT THIS MEANS FOR CRITERION 4. The WITH-endpoint branch is gated on an
+        UNINTERRUPTIBLE >45-minute job on a host with a small local embedder. A
+        host running it inside a normal cycle bound will fail repeatedly and
+        silently burn the time each attempt, which is a bad shape to leave
+        undocumented. yoga has gpu/container/ollama and is the right host; this
+        measurement is the argument for routing it there rather than a
+        preference.
+
+        NOT CLAIMED: criterion 4 remains OPEN. I did not close it and this note
+        does not.
+
+        PROMOTION CANDIDATE, NOTED NOT PROMOTED (capture-routing rule): "the
+        first spec-index build should checkpoint so an interrupted build resumes"
+        is independently schedulable and owns spec-index-ensure.sh. I am not
+        opening the row — the acceptance-boundary rule says a finding becomes a
+        row when it is independently schedulable AND worth the queue slot, and
+        with b=1.80 measured the queue is the constrained resource. Whoever picks
+        up criterion 4 will hit this immediately and can decide with their own
+        evidence.
