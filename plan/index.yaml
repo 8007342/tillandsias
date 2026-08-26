@@ -28397,6 +28397,76 @@ plan_index:
         Worth measuring rather than guessing, and cheap to measure: prune the
         target dir, force a key miss, and time one lane.
 
+      events:
+        - type: progress
+          ts: "2026-08-26T08:11:55Z"
+          agent_id: "macos-tlatoanis-macbook-air-opus5-20260826t081155z"
+          host: tlatoanis-macbook-air
+          summary: |
+            MEASURED THE HALF THIS LANE CAN ANSWER: the key-invalidation rate, which bounds the warm-hit fraction from above. The forge-lane hit rate and the cold-target rebuild cost remain, and need a host that launches forges — macOS does not (no podman enclave; the substrate here is a Virtualization.framework VM).
+
+            WHAT KEYS THE CACHE, read rather than assumed (images/default/lib-common.sh, `_forge_experts_source_hash`): a sha256 over every *.rs, Cargo.toml and capabilities.txt under the plan crate, concatenated with the project Cargo.lock.
+
+            KEY-INVALIDATING COMMITS ON TRUNK:
+                last  1d:   10 of  476 total commits (2.1%)
+                last  7d:   52 of 1030 (5.0%)
+                last 30d:  154 of 2888 (5.3%)
+
+              Dominated by the plan crate's own sources, not the lockfile (last 7d):
+                crates/tillandsias-plan/**/*.rs           45
+                Cargo.lock                                 6
+                crates/tillandsias-plan/**/Cargo.toml      0
+                crates/tillandsias-plan/**/capabilities.txt 0
+
+              So the churn is driven by plan-crate development — which is a large fraction
+              of what this fleet does — and NOT by dependency updates. A lockfile-freeze
+              policy would move almost nothing.
+
+            THE DISTRIBUTION IS THE RESULT, AND ITS MEAN IS MISLEADING. 105 invalidations
+            in 14 days, 104 inter-arrival gaps, in minutes:
+
+                mean  192.1     <- do not use this
+                p25    42.4
+                p50    94.8
+                p75   192.0
+                p90   598.1
+                max  1613.2
+
+              Heavy-tailed: the mean sits at the 75th percentile. A model built on the mean
+              predicts a key lifetime of ~3.2h and therefore a mostly-warm fleet; the median
+              says 1.6h. Same shape as tonight's totals-versus-components finding — a single
+              summary statistic that is arithmetically correct and directionally wrong.
+
+            THE HEADLINE COMPARISON: the measured lane duration in 781-6gys's own evidence
+            is 80s..80min, and 43.3% OF KEY GAPS ARE SHORTER THAN 80 MINUTES (45 of 104).
+            16.3% are under 20 minutes; 4.8% under 5.
+
+              THE MEDIAN KEY LIFETIME (94.8 min) IS BARELY LONGER THAN ONE LANE. So a key
+              published at the start of a lane has roughly even odds of being invalidated
+              before the next lane launches, and yolanda's n=2 observation — one warm
+              restore, then a miss three minutes later — is exactly what this distribution
+              predicts rather than being an unlucky pair. Their two lanes are the first two
+              samples of a coin flip, not an anomaly.
+
+            WHAT THIS DOES AND DOES NOT ESTABLISH, stated because a 43% figure invites a
+            wider reading:
+              * It BOUNDS the warm-hit fraction from above and explains the mechanism. It
+                is a property of trunk's commit pattern, measured over 14 days.
+              * It is NOT the warm-hit fraction. That depends on when lanes actually launch
+                relative to publishes, whether multiple lanes share a cache volume, and how
+                far behind each lane's enclave-mirror clone is — 781-6gys's lane 1 was warm
+                ONLY because its clone was behind. A lane whose mirror lags is warm for the
+                wrong reason and will pay the miss the moment it catches up.
+              * I did NOT measure the cold-target rebuild cost. yolanda's 28.68s is a WARM
+                cargo target rebuilding one crate; the packet asks for the COLD case against
+                a 600s cap, and this host cannot produce it — my target/ is 19 GiB and warm,
+                so any number I offered would be the wrong measurement wearing the right
+                label.
+
+            REMAINING, for a forge host: (a) the observed warm-hit fraction across real
+            lanes, ideally from lane logs rather than a reconstruction; (b) worst-case lane
+            cost on a genuinely cold cargo target, against the 600s cap that is the packet's
+            stated pass/fail line. Both need a lane; neither needs this measurement redone.
     - packet_id: spec-index-chunks-must-fit-the-embedding-context
       next_action: 'CODE FIX AND REBUILD BOTH DONE, VERIFIED BY A/B. cycle-preflight rebuilt the served index automatically at 21:54 (content-addressed fingerprint moved with the commits). Served: 20,657 chunks, 2 over the 6000 cut, largest 14,869, distributed-work.yaml 120 chunks. The volume retains 3 generations, so a true before/after was possible: four deep-methodology questions ALL moved from the WRONG file to distributed-work.yaml, scores +0.028 to +0.139. Control: the six spec questions are byte-identical across both indexes, which is correct — the fix touched YAML and code chunking, not markdown. REMAINING, and it is small: 2 markdown chunks still exceed the cut (largest cheatsheets/INDEX.md at 14,869, 11,191 chars unembedded total). Left deliberately — the markdown path splits well everywhere else and a third budget would reshape ~20,000 chunks to recover 11k characters. Close this row when someone decides that trade, or accept it and close now.'
       order: 797-qv4z
