@@ -4489,6 +4489,34 @@ plan_index:
         - "distillation policy documented; oldest rows distilled once >10 rows"
 
       events:
+        - type: progress
+          ts: "2026-08-26T14:13:04Z"
+          agent_id: "macos-tlatoanis-macbook-air-opus5-20260826t141304z"
+          host: tlatoanis-macbook-air
+          summary: |
+            CRITERION 2 DELIVERED. The smoke-curl skill now reads the release's own ledger row BEFORE testing it, and must account for that row's claims in its report. Criteria 1 and 3 assessed against the tree rather than assumed, and 3 is NOT satisfied — filed separately rather than counted.
+
+            CRITERION 1 — "merge-to-main-and-release appends a row every release (verified by the next two releases)": THE HOOK EXISTS (SKILL.md:418, "Also append a row to the README release ledger", operator directive) AND HAS RUN ONCE — the v0.4.260826.1 row is present and is the most thorough row in the table. One release down; the criterion asks for two, so this stays open on evidence rather than on missing code.
+
+            CRITERION 2 — "smoke-curl skill consults the ledger and cites it in its report": DONE, and it was the half this host was best placed to write, having run that skill twice on 2026-08-26 without ever consulting the ledger.
+              * §0 gains step 2b: extract the row for $SMOKE_TAG from README.md into
+                target/smoke-e2e/00-ledger-row.txt. Verified BOTH directions — the real
+                tag returns its row; a nonexistent tag returns `NO LEDGER ROW for <tag>`.
+              * A MISSING ROW IS A FINDING, NOT A SKIP. It means either the release skill's
+                append did not run, or the smoke is testing an artifact nobody described.
+                Both are invisible if the step proceeds silently.
+              * §5 gains a required `## Ledger claims` section sorting each claim into
+                EXERCISED / NOT APPLICABLE / NOT CHECKED.
+
+            WHY THE THIRD HEADING IS THE ONE THAT EARNS THE SECTION: a report with no NOT-CHECKED list reads as though the run covered everything the release claimed, and a reader cannot distinguish that from a run that never looked. Naming the gaps makes a PASS mean something narrower and truer.
+
+            AND THE MOTIVATING OBSERVATION IS FROM MY OWN RUN. The v0.4.260826.1 row claims 635-bhkb — "the macOS tray finally reports the workspace VERSION instead of 0.1.0". My macOS leg DID verify exactly that. BY COINCIDENCE: I had changed the runbook hours earlier to assert the exact tag, for unrelated reasons. Nothing directed the run at the release's own claim, and if I had not happened to make that change the same PASS would have been reported having checked none of it.
+
+            CRITERION 3 — "distillation policy documented; oldest rows distilled once >10 rows": THE FIRST CLAUSE IS SATISFIED AND THE SECOND IS NOT. The policy is documented twice (merge-to-main-and-release SKILL.md:431-432, README.md:82) with its destination line already in place at README.md:111. THE TABLE HAS 19 ROWS. Nothing runs the policy; it is a sentence a human or agent is expected to notice while doing something else, at nearly double its own threshold.
+
+            That is the 801-qasc/709-in2f/660-ryhn shape in a mild form — a rule that reads as active because it is written down — and I have filed it as 914-nkc4 rather than closing this packet on the documentation half. The rows are unusually good (the v0.4.260826.1 row states what the release does NOT claim, per platform), and that is part of why nobody wants to distil them; that tension is the actual decision the new packet asks someone to make.
+
+            THIS PACKET STAYS OPEN on criteria 1 and 3. It is one release of two, and one clause of two.
         - type: note
           ts: "2026-08-12T15:32:35Z"
           host: forge
