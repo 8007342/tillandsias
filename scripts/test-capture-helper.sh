@@ -25,10 +25,41 @@ bad() { printf 'FAIL: %s\n' "$1" >&2; fail=$((fail + 1)); }
 # e2e step whose last line is the part that matters.
 noisy() { bash -c 'for i in $(seq 1 200); do echo "line $i"; done; echo "RESULT: PASS"; exit '"$1"''; }
 
+# The SAME shape, but with the producer forced to OUTLIVE the consumer.
+#
+# ORDER 899-6pwv, CORRECTED 2026-08-26 after calmecacpilli measured this arm
+# racing the scheduler: 0 failures in 12 runs on an idle host, 3 failures in 8
+# runs under 4 CPU spinners. It is wired into ./build.sh --check, so it reddened
+# the gate at random on any loaded host — and it did so with a verdict that
+# named the WRONG LAYER ("needs rechecking on this platform"), sending a reader
+# to check coreutils on their distro when the property is timing, not platform.
+#
+# THE RACE: the arm asserts `tee | head` truncates, which requires `head` to
+# exit and SIGPIPE the writer BEFORE the writer finishes. With 200 short lines
+# the whole pipeline can complete inside one buffer flush, so under load the
+# producer wins, nothing truncates, and the arm concludes the premise is broken.
+# The premise was never broken.
+#
+# THE FIX: emit the head window, then SLEEP, then emit the rest. `head -30` has
+# its 30 lines and exits during the sleep, so the writer is guaranteed to still
+# be alive with writes remaining. A one-second gap against microsecond
+# scheduling is a different regime from a coin flip — not "retry until lucky",
+# which calmecacpilli explicitly and rightly ruled out, because a retry would
+# make this arm stop noticing the very thing it exists to notice.
+noisy_slow() {
+    bash -c 'for i in $(seq 1 40); do echo "line $i"; done
+             sleep 1
+             for i in $(seq 41 200); do echo "line $i"; done
+             echo "RESULT: PASS"'
+}
+
 # ── arm 1: reproduce the SIGPIPE truncation (yolanda, 2026-08-26) ───────────
-noisy 0 2>&1 | tee "$WORK/piped.log" 2>/dev/null | head -30 > /dev/null
+noisy_slow 2>&1 | tee "$WORK/piped.log" 2>/dev/null | head -30 > /dev/null
 if grep -q 'RESULT: PASS' "$WORK/piped.log"; then
-    bad "the tee|head idiom no longer truncates — capture.sh's premise needs rechecking on this platform"
+    # Name the layer correctly. This is NOT evidence about the platform's
+    # coreutils; the construction above removed the timing variable, so if it
+    # still did not truncate, SIGPIPE handling or pipe buffering is what moved.
+    bad "tee|head did NOT truncate even with the producer forced to outlive the consumer by 1s — this is a SIGPIPE/buffering property, NOT a platform-coreutils one; do not go audit head(1). capture.sh's premise needs rechecking (899-6pwv)"
 else
     ok "REPRODUCED: tee|head truncates the evidence file; RESULT line absent from $(wc -l < "$WORK/piped.log" | tr -d ' ') captured lines"
 fi
