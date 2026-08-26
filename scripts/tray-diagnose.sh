@@ -24,7 +24,11 @@
 # Exit codes mirror the tray's --diagnose contract:
 #   0 - image-root provisioned (rootfs.img + vmlinuz + initramfs.img all present).
 #   2 - degraded (the tool ran end-to-end but at least one check failed).
-#   1 - could not locate or invoke tillandsias-tray, or jq missing.
+#   1 - could not locate or invoke tillandsias-tray.
+#   3 - the tray ANSWERED but no JSON processor is available, so only the
+#       formatted view is missing; the raw diagnose JSON is printed to stdout.
+#       Distinct from 1 on purpose: a missing parser is not a broken tray
+#       (order 799-tb7q).
 #
 # Usage:
 #   scripts/tray-diagnose.sh
@@ -92,9 +96,34 @@ resolve_tray_exe() {
     exit 1
 }
 
-if ! command -v jq >/dev/null 2>&1; then
-    echo "error: jq required for JSON parsing — \`brew install jq\`" >&2
-    exit 1
+# ORDER 799-tb7q — A DIAGNOSTIC MUST ALWAYS PRODUCE ITS DATA.
+#
+# This exited 1 with "brew install jq". Two things were wrong with that, and the
+# second is the one that costs.
+#
+# 1. It told an END USER to install a developer tool. These diagnostics ship;
+#    they run where no builder toolbox exists and where nobody agreed to have a
+#    JSON processor.
+#
+# 2. IT NAMED THE WRONG FAILURE. Exit 1's documented meaning is "could not
+#    locate or invoke tillandsias-tray, or jq missing" — so a missing PARSER and
+#    a broken TRAY were the same verdict. The tray can be perfectly healthy and
+#    still produce exit 1. You run a diagnostic precisely when something is
+#    already wrong, which makes a misattributed verdict more expensive here than
+#    anywhere else in the tree.
+#
+# The dispatch is host jq -> toolbox jq (the documented pattern, which now works
+# because the init set carries jq) -> DEGRADE. Degrading prints the RAW JSON:
+# the data is complete, only the presentation is lost, and the user or agent can
+# read or pipe it. That deliberately avoids shipping a second hand-rolled JSON
+# parser — two parsers that can disagree is a misattribution generator, and a
+# diagnostic is the last place to put one.
+TILLANDSIAS_JQ=""
+if command -v jq >/dev/null 2>&1; then
+    TILLANDSIAS_JQ="jq"
+elif command -v toolbox >/dev/null 2>&1 \
+     && toolbox run --container tillandsias-builder jq --version >/dev/null 2>&1; then
+    TILLANDSIAS_JQ="toolbox run --container tillandsias-builder jq"
 fi
 
 exe="$(resolve_tray_exe)"
@@ -116,20 +145,34 @@ if [[ $tray_exit -eq 1 ]]; then
     exit 1
 fi
 
-if ! echo "$json" | jq empty 2>/dev/null; then
+if [ -z "$TILLANDSIAS_JQ" ]; then
+    # No parser anywhere. The tray ANSWERED — that is the fact worth reporting —
+    # so emit its answer verbatim and say plainly that only the formatting is
+    # missing. Exit 3, not 1: 1 means the tray could not be invoked, and this
+    # script must not claim that about a tray that just replied.
+    printf '%s\n' "$json"
+    echo "" >&2
+    echo "note: no JSON processor available (no host \`jq\`, no tillandsias-builder toolbox)." >&2
+    echo "      The tray ANSWERED and its raw output is above — the data is complete;" >&2
+    echo "      only this script's formatted view is unavailable. This is NOT a tray" >&2
+    echo "      fault and must not be read as one (order 799-tb7q)." >&2
+    echo "      For the formatted view, install jq." >&2
+    exit 3
+fi
+if ! echo "$json" | $TILLANDSIAS_JQ empty 2>/dev/null; then
     echo "error: --diagnose --json did not emit a JSON object:" >&2
     echo "$json" >&2
     exit 1
 fi
 
-version="$(echo "$json" | jq -r '.version')"
-in_app="$(echo "$json" | jq -r '.in_app')"
-release_tag="$(echo "$json" | jq -r '.release_tag')"
-manifest_pin="$(echo "$json" | jq -r '.manifest_pin_aarch64_qcow2 // "(none)"')"
-provisioned="$(echo "$json" | jq -r '.provisioned')"
-rootfs_present="$(echo "$json" | jq -r '.rootfs_present')"
-kernel_present="$(echo "$json" | jq -r '.kernel_present')"
-initrd_present="$(echo "$json" | jq -r '.initrd_present')"
+version="$(echo "$json" | $TILLANDSIAS_JQ -r '.version')"
+in_app="$(echo "$json" | $TILLANDSIAS_JQ -r '.in_app')"
+release_tag="$(echo "$json" | $TILLANDSIAS_JQ -r '.release_tag')"
+manifest_pin="$(echo "$json" | $TILLANDSIAS_JQ -r '.manifest_pin_aarch64_qcow2 // "(none)"')"
+provisioned="$(echo "$json" | $TILLANDSIAS_JQ -r '.provisioned')"
+rootfs_present="$(echo "$json" | $TILLANDSIAS_JQ -r '.rootfs_present')"
+kernel_present="$(echo "$json" | $TILLANDSIAS_JQ -r '.kernel_present')"
+initrd_present="$(echo "$json" | $TILLANDSIAS_JQ -r '.initrd_present')"
 
 write_check "Version" "true" "$version"
 write_check "Bundle" "$in_app" "$([[ "$in_app" == "true" ]] && echo "inside Tillandsias.app" || echo "running outside .app (dev binary)")"
