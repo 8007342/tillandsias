@@ -1380,13 +1380,21 @@ fn handle_control_connection(
                     //
                     // @trace spec:host-shell-architecture
                     // @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q4)
-                    let projects = crate::cloud_projects::fetch_cloud_projects(None);
+                    // 731-eupn: PROPAGATE the outcome, never re-flatten it here.
+                    // `fetch_cloud_projects` returns (projects, outcome) precisely
+                    // so an empty list from a FAILED fetch stays distinguishable
+                    // from a confirmed-empty account. Substituting
+                    // `CloudRefreshOutcome::Unknown` at this seam would restore
+                    // the four-outcomes-one-representation bug on the Linux lane
+                    // while the macOS lane reported it correctly.
+                    let (projects, outcome) = crate::cloud_projects::fetch_cloud_projects(None);
                     let reply = ControlEnvelope {
                         wire_version: WIRE_VERSION,
                         seq: first.seq,
                         body: ControlMessage::CloudRefreshReply {
                             seq_in_reply_to: seq,
                             projects,
+                            outcome,
                         },
                     };
                     let _ = write_control_envelope(&mut stream, &reply);
@@ -3555,50 +3563,6 @@ fn stable_project_item_id(project: &str, suffix: &str) -> i32 {
     if value == 0 { 1 } else { value }
 }
 
-// @trace spec:tray-minimal-ux, spec:tray-ux, spec:tray-progress-and-icon-states
-/// Build the minimal tray menu.
-///
-/// ## Final shape (top to bottom)
-///
-/// ```text
-/// 1. Status (disabled, live-updating)            id=1
-/// 2. 🔑 GitHubLogin                              id=20  (visible iff NOT authenticated)
-///    OR
-///    🏠 ~/src >                                  id=21  (visible iff authenticated)
-///    ☁️ Cloud >                                  id=22  (visible iff authenticated)
-/// 3. ─── separator ───                           id=29
-/// 4. v<full-version> — By Tlatoāni              id=30  (disabled)
-/// 5. ❌ Quit Tillandsias                         id=31
-/// ```
-///
-/// This shape is UX-curation-governed (`openspec/specs/tray-ux/spec.md` →
-/// "UX curation governance"): any addition/removal/reorder requires recorded
-/// operator approval. The `Reset Guest…` leaf (id=32) was removed 2026-07-22
-/// by operator order; the reset survives only as `--reset-guest` (CLI).
-///
-/// ## Item-count contract
-///
-/// | Authenticated? | Visible top-level items |
-/// |----------------|-------------------------|
-/// | No             | 5: status + login + separator + version + quit |
-/// | Yes            | 6: status + ~/src + Cloud + separator + version + quit |
-///
-/// ## Convergence with the shared builder (order 628-p5tj)
-///
-/// This function now delegates to the shared portable menu builder in
-/// `tillandsias-host-shell::menu_state` and converts the result to the
-/// DBus `MenuNode` format. The business logic — what items appear, their
-/// labels, enabled states, and the auth-gated structure — lives in ONE
-/// place: the shared `build()` function. This function handles only the
-/// DBus-specific translation (string IDs → integer IDs, `MenuItem` → tuple).
-///
-/// ## Podman-unavailable degradation
-///
-/// When `state.podman_available == false`, *every* per-project leaf is
-/// emitted with `enabled=false` and the status line is replaced with
-/// `❌ Podman not available`. The top-level shape is unchanged so the menu
-/// remains stable across the failure boundary.
-
 /// Map the Linux `TrayUiState` onto the shared portable `MenuState` so the
 /// shared `build()` function can compute the menu structure.
 ///
@@ -3751,15 +3715,57 @@ fn shared_menu_item_to_node(item: &shared_menu::MenuItem) -> MenuNode {
     node(id, props(p), children)
 }
 
-/// Build the Linux tray menu by delegating to the shared portable builder.
+// @trace spec:tray-minimal-ux, spec:tray-ux, spec:tray-progress-and-icon-states
+/// Build the minimal tray menu.
 ///
-/// The shared `build()` computes the menu structure (auth-gating, item
-/// ordering, labels, enabled states). This function converts the result
-/// to the DBus `MenuNode` format the Linux StatusNotifierItem expects.
+/// ## Final shape (top to bottom)
 ///
-/// Podman-unavailable status text is the one Linux-specific override:
-/// the shared builder disables per-project leaves, but the status label
-/// uses "❌ Podman not available" instead of the generic status text.
+/// ```text
+/// 1. Status (disabled, live-updating)            id=1
+/// 2. 🔑 GitHubLogin                              id=20  (visible iff NOT authenticated)
+///    OR
+///    🏠 ~/src >                                  id=21  (visible iff authenticated)
+///    ☁️ Cloud >                                  id=22  (visible iff authenticated)
+/// 3. ─── separator ───                           id=29
+/// 4. v<full-version> — By Tlatoāni              id=30  (disabled)
+/// 5. ❌ Quit Tillandsias                         id=31
+/// ```
+///
+/// This shape is UX-curation-governed (`openspec/specs/tray-ux/spec.md` →
+/// "UX curation governance"): any addition/removal/reorder requires recorded
+/// operator approval. The `Reset Guest…` leaf (id=32) was removed 2026-07-22
+/// by operator order; the reset survives only as `--reset-guest` (CLI).
+///
+/// ## Item-count contract
+///
+/// | Authenticated? | Visible top-level items |
+/// |----------------|-------------------------|
+/// | No             | 5: status + login + separator + version + quit |
+/// | Yes            | 6: status + ~/src + Cloud + separator + version + quit |
+///
+/// ## Convergence with the shared builder (order 628-p5tj)
+///
+/// This function delegates to the shared portable menu builder in
+/// `tillandsias-host-shell::menu_state` and converts the result to the
+/// DBus `MenuNode` format. The business logic — what items appear, their
+/// labels, enabled states, and the auth-gated structure — lives in ONE
+/// place: the shared `build()` function. This function handles only the
+/// DBus-specific translation (string IDs → integer IDs, `MenuItem` → tuple).
+///
+/// ## Podman-unavailable degradation
+///
+/// When `state.podman_available == false`, *every* per-project leaf is
+/// emitted with `enabled=false` and the status line is replaced with
+/// `❌ Podman not available`. The top-level shape is unchanged so the menu
+/// remains stable across the failure boundary. This status-text override is
+/// the one Linux-specific deviation from the shared builder's output.
+//
+// RELOCATED 2026-08-26 (899-q9di cycle). This block had drifted ~200 lines
+// above the function it documents, stranded when three helpers were inserted
+// between them, and clippy's `empty_line_after_doc_comments` was pointing at
+// real misattribution rather than style: rustdoc would have published a
+// menu-shape contract as the documentation for `tray_ui_state_to_menu_state`.
+// The shorter duplicate that had grown here in the meantime is folded in.
 fn build_menu(state: &TrayUiState) -> MenuNode {
     // Podman-unavailable: override the status text before building.
     let mut ui_state = tray_ui_state_to_menu_state(state);
@@ -7361,6 +7367,12 @@ mod tests {
     /// the exact integer IDs the `event()` handler dispatches on. This is
     /// the cross-platform contract — a regression here means the tray
     /// dispatches clicks to the wrong handler on Linux.
+    // `base + 0` is deliberate and must stay. These assertions are a TABLE of
+    // agent slot offsets — `+ 0`, `+ 1`, `+ 2` read down the page as the slot
+    // numbers they encode. Collapsing the first to a bare `base_local` would
+    // satisfy identity_op and hide the one fact the table exists to state:
+    // that `claude` is slot ZERO. The lint is right in general and wrong here.
+    #[allow(clippy::identity_op)]
     #[test]
     fn shared_id_to_int_matches_event_dispatch_contract() {
         use tillandsias_host_shell::menu_state::ids;
