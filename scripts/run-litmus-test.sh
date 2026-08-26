@@ -1591,13 +1591,74 @@ print_summary() {
     fi
 
     # Overall status
-    if [[ $TESTS_FAILED -eq 0 ]]; then
-        printf 'Status: %b[PASS]%b\n' "${GREEN}" "${NC}" >&2
-        return 0
-    else
+    if [[ $TESTS_FAILED -gt 0 ]]; then
         printf 'Status: %b[FAIL]%b\n' "${RED}" "${NC}" >&2
         return 1
     fi
+
+    # ORDER 913-27ex — ZERO EXECUTED IS NOT A PASS.
+    #
+    # `TESTS_FAILED -eq 0` was the whole verdict, so a run that executed NOTHING
+    # printed PASS and exited 0. MEASURED on macuahuitl 2026-08-26:
+    #
+    #   run-litmus-test.sh subdomain-routing-via-reverse-proxy --phase pre-build --size e2e
+    #   Total: 1 (executed: 0, skipped: 1)
+    #   Pass Rate: 0% (0/0 executed)
+    #   Status: [PASS]                      <-- exit 0
+    #
+    # The same command without `--phase pre-build` executes the test and returns
+    # [FAIL] on a real defect (913-7m3t). So a phase filter turned a failing
+    # suite green, and the runner printed `0/0 executed` directly above its own
+    # PASS. It had the fact and declined to act on it.
+    #
+    # THIS WAS REASONED ABOUT AND GOT THE WRONG ANSWER. The FILTER_SPEC guard
+    # below says: "Legitimately empty phase/size buckets still have TESTS_RUN >
+    # 0 because their bound tests are counted as skips, so this guard preserves
+    # those pass semantics." TESTS_RUN was 1 — the skip — so that guard did not
+    # fire, and the pass semantics it preserved are the defect.
+    #
+    # WHAT THIS CHANGES AND WHAT IT DELIBERATELY DOES NOT.
+    #
+    # The verdict STRING stops saying PASS. The EXIT CODE is unchanged.
+    #
+    # That split is not timidity; it is the resolution of a genuine conflict
+    # this fix uncovered. `litmus:litmus-name-filter-fail-loud-shape` (order
+    # 300) deliberately PINS the opposite behaviour — its second case asserts
+    # that "a valid explicit spec with every bound test excluded by phase still
+    # passes", exit 0. That pin exists because the same shape is LEGITIMATE in
+    # ordinary use: iterating specs across phases, or `--diff-scope` on a commit
+    # touching no litmus input (most commits), both select nothing through no
+    # fault of anyone. Making those non-zero would redden the fleet for the
+    # normal case, and a guard that fires constantly gets muted — the outcome
+    # 913-27ex's own criteria warn against.
+    #
+    # But the HARM I measured was not the exit code. It was reading `Status:
+    # [PASS]` and nearly recording it as evidence that a suite was green. A
+    # verdict of [NO-TESTS-EXECUTED] cannot be misread that way, at zero blast
+    # radius, and the existing order-300 guard above still exits non-zero for an
+    # explicit filter matching NO BOUND TESTS AT ALL — the distinction order 300
+    # actually cared about, which remains intact.
+    #
+    # LEFT OPEN ON PURPOSE, recorded in 913-27ex rather than decided here:
+    # whether a NAMED spec whose tests are all phase-excluded should also exit
+    # non-zero. That is a fleet-wide behaviour change against a deliberate pin,
+    # and it belongs to the operator/fleet, not to the cycle that happened to
+    # find it. The evidence for both sides is in the packet.
+    local _executed=$((TESTS_PASSED + TESTS_FAILED))
+    if [[ $_executed -eq 0 ]]; then
+        printf 'Status: %b[NO-TESTS-EXECUTED]%b\n' "${YELLOW:-}" "${NC}" >&2
+        if [[ -n "${FILTER_SPEC:-}" ]]; then
+            printf '  filter %s selected %d test(s) and executed NONE — every one was excluded by --phase/--size.\n' \
+                "'${FILTER_SPEC}'" "$TESTS_RUN" >&2
+            printf '  THIS RUN IS NOT EVIDENCE OF ANYTHING. Widen or drop the phase/size filter to actually verify it.\n' >&2
+        else
+            printf '  Nothing was selected, so this run proves nothing. Not treated as a failure: --diff-scope on a commit touching no litmus input is the normal case.\n' >&2
+        fi
+        return 0
+    fi
+
+    printf 'Status: %b[PASS]%b\n' "${GREEN}" "${NC}" >&2
+    return 0
 }
 
 print_json_summary() {
