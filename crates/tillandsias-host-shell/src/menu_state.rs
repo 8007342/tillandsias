@@ -239,6 +239,10 @@ pub struct ProjectEntry {
     /// `true` once the in-VM forge for this project has reported "ready".
     /// Used for the running checkmark on local entries.
     pub ready: bool,
+    /// Cloud-only: the GitHub `owner/repo` slug used as the menu label so
+    /// the user sees the same identifier `gh` returns. `None` for local
+    /// projects. When `Some`, used as the submenu label instead of `name`.
+    pub full_name: Option<String>,
 }
 
 /// Login state surfaced in the menu's GitHub item.
@@ -745,10 +749,11 @@ fn build_project_submenu(
         })
         .collect();
 
+    let label_base = project.full_name.as_deref().unwrap_or(&project.name);
     let label = if project.ready && scope == "local" {
-        format!("{} \u{2713}", project.name)
+        format!("{} \u{2713}", label_base)
     } else {
-        project.name.clone()
+        label_base.to_string()
     };
 
     MenuItem::submenu(id, label, children)
@@ -770,6 +775,7 @@ mod tests {
                 name: format!("local-{i}"),
                 path: format!("/home/u/src/local-{i}"),
                 ready: false,
+                full_name: None,
             })
             .collect::<Vec<_>>();
         let cloud = (0..22)
@@ -777,6 +783,7 @@ mod tests {
                 name: format!("cloud-{i}"),
                 path: format!("octocat/cloud-{i}"),
                 ready: false,
+                full_name: None,
             })
             .collect::<Vec<_>>();
 
@@ -897,6 +904,7 @@ mod tests {
                 name: "secret".into(),
                 path: "/home/u/src/secret".into(),
                 ready: false,
+                full_name: None,
             }],
             ..MenuState::initial()
         };
@@ -1079,6 +1087,7 @@ mod tests {
                 name: "secret".into(),
                 path: "/home/u/src/secret".into(),
                 ready: false,
+                full_name: None,
             }],
             ..MenuState::initial()
         };
@@ -1118,6 +1127,7 @@ mod tests {
                 name: "myapp".into(),
                 path: "/home/u/src/myapp".into(),
                 ready: false,
+                full_name: None,
             }],
             podman_ready: false,
             ..MenuState::initial()
@@ -1145,6 +1155,7 @@ mod tests {
                 name: "myapp".into(),
                 path: "/home/u/src/myapp".into(),
                 ready: false,
+                full_name: None,
             }],
             podman_ready: true,
             ..MenuState::initial()
@@ -1265,6 +1276,7 @@ mod tests {
                     name: format!("c-{i}"),
                     path: format!("o/c-{i}"),
                     ready: false,
+                    full_name: None,
                 })
                 .collect(),
             ..MenuState::initial()
@@ -1350,6 +1362,7 @@ mod tests {
                             name: "myapp".into(),
                             path: "/home/u/src/myapp".into(),
                             ready: false,
+                            full_name: None,
                         }],
                         ..MenuState::initial()
                     };
