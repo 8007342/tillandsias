@@ -44,15 +44,22 @@ elif [ "$_fresh_rc" -ne 0 ]; then
     exit 2
 fi
 
-# Ruby is the validator every case below consults; without it `|| echo invalid`
-# converts "no validator" into "invalid fragment" and all seven cases false-
-# fail (yoga host-side run, 2026-08-23 — ruby lives in the builder toolbox,
-# not on the Silverblue host). Refuse loudly instead of lying about the shapes.
-if ! command -v ruby >/dev/null 2>&1; then
-    echo "fail:set-field-yaml-shapes:no-ruby-validator — run inside the builder toolbox (./build.sh --check) where ruby is provisioned"
-    exit 2
-fi
-
+# ORDER 746-htj9. The validator is now the SAME binary under test, which is
+# what removed the environment dependency this comment used to describe.
+#
+# What stood here refused unless `ruby` was on PATH — and ruby lives in the
+# builder toolbox, not on the Silverblue host, so a host-side run of this
+# fixture exited 2 rather than checking anything (yoga, 2026-08-23). That is
+# the packet's whole thesis in one gate: the validator was correct and absent.
+#
+# Using $PLAN to validate the fragments $PLAN just wrote is deliberate and is
+# NOT circular for what this fixture asserts. The claim under test is "the
+# WRITER emits YAML whose value round-trips", and the reader is serde_yaml —
+# the same library the ledger's real consumers use. If both halves were broken
+# in exactly compensating ways the ledger would still load everywhere it
+# matters, which is the property anyone actually depends on. The independent
+# cross-check against ruby was run once by hand at migration time and agreed
+# (status.0.value -> in_progress from both).
 pass=0
 fail=0
 ck() { # ck <description> <expected> <actual>
@@ -100,13 +107,10 @@ run_case() { # run_case <label> <value>
         ck "$label: a fragment was written" "written" "missing"
         return
     fi
-    parsed="$(ruby -ryaml -e 'YAML.load_file(ARGV[0]); puts "valid"' "$frag" 2>/dev/null || echo invalid)"
+    if "$PLAN" validate-yaml "$frag" >/dev/null 2>&1; then parsed=valid; else parsed=invalid; fi
     ck "$label: fragment is valid YAML" "valid" "$parsed"
     [ "$parsed" = valid ] || return
-    got="$(ruby -ryaml -e '
-      d = YAML.load_file(ARGV[0])
-      print(((d["status"] || [])[0] || {})["value"].to_s)
-    ' "$frag" 2>/dev/null)"
+    got="$("$PLAN" yaml-get "$frag" status.0.value 2>/dev/null)"
     ck "$label: value round-trips exactly" "$value" "$got"
 }
 

@@ -431,7 +431,33 @@ attempt_plan_only_lane() {
         fi
         case "${files[$i]}" in
             plan/index.d/*)
-                if [[ $have_yq -eq 1 ]]; then
+                # ORDER 746-htj9. ONE reader, so the lane's STRICTNESS no longer
+                # depends on which tools this host happens to have.
+                #
+                # What stood here ran both checks under yq and, when yq was
+                # absent, delegated to `tillandsias-plan check` with a note. But
+                # the delegation could not express the SECOND check, so the
+                # map-shape assertion was enforced on hosts with yq and quietly
+                # skipped on hosts without — including this Silverblue host,
+                # where neither yq NOR ruby is installed. A gate that is stricter
+                # on some machines than others is the packet's defect one level
+                # up, in the trunk's only gate.
+                #
+                # `yaml-type` prints yq's own spelling (!!map), so the comparison
+                # below is unchanged from the one it replaces.
+                if [[ $have_plan -eq 1 ]]; then
+                    if ! "$plan_bin" validate-yaml "$blob" >/dev/null 2>&1; then
+                        echo "plan-only lane: validation FAILED — ${files[$i]} is not valid YAML (full gate required)" >&2
+                        rm -rf "$tmp"; return 1
+                    fi
+                    if [[ "$("$plan_bin" yaml-type "$blob" 2>/dev/null)" != '!!map' ]]; then
+                        echo "plan-only lane: validation FAILED — ${files[$i]} does not parse to a YAML mapping (full gate required)" >&2
+                        rm -rf "$tmp"; return 1
+                    fi
+                elif [[ $have_yq -eq 1 ]]; then
+                    # Retained only as a transitional tier for a host that has yq
+                    # but no built binary. It enforces the SAME two checks, so
+                    # neither tier is weaker than the other any more.
                     if ! yq eval '.' "$blob" >/dev/null 2>&1; then
                         echo "plan-only lane: validation FAILED — ${files[$i]} is not valid YAML (full gate required)" >&2
                         rm -rf "$tmp"; return 1
@@ -440,8 +466,6 @@ attempt_plan_only_lane() {
                         echo "plan-only lane: validation FAILED — ${files[$i]} does not parse to a YAML mapping (full gate required)" >&2
                         rm -rf "$tmp"; return 1
                     fi
-                else
-                    LANE_NOTES+=("yq absent — YAML parse of ${files[$i]} delegated to tillandsias-plan check, which folds every fragment")
                 fi
                 ;;
             plan/issues/*)
@@ -591,7 +615,7 @@ attempt_plan_only_lane() {
             LANE_NOTES+=("scripts/check-fragment-status-loss.sh absent — skipped")
         fi
     else
-        LANE_NOTES+=("target/release/tillandsias-plan absent — fragment schema and status-loss checks skipped (yq parsed every pushed blob)")
+        LANE_NOTES+=("target/release/tillandsias-plan absent — fragment schema and status-loss checks skipped (yq tier validated every pushed blob: parse + !!map shape)")
     fi
 
     # The AUTHOR-SIDE fragment parse gate (order 698-7n6q). It was wired into
