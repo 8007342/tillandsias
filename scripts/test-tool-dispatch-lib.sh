@@ -82,8 +82,16 @@ ok "the converted callers route jq through the dispatch"
 # fails to SOURCE a helper is worse than one that duplicates six lines. This arm
 # fails if someone "tidies" them into the lib.
 for f in scripts/tray-diagnose.sh scripts/diagnose-macos-provision.sh; do
-    grep -q 'lib/tool-dispatch.sh' "$ROOT/$f" \
-        && bad "$f sources the shared lib — it SHIPS and must stay self-contained"
+    # ASSERT THE DIRECTIVE, NOT THE STRING. The first version grepped for
+    # 'lib/tool-dispatch.sh' anywhere in the file and fired on the COMMENT that
+    # explains why this file deliberately does not source it — a guard about a
+    # decision, tripped by the sentence documenting that decision. Same class as
+    # a word-absence test firing on "Do NOT …": a bare mention is not a
+    # behaviour. Match an actual source directive (`.` or `source`), skipping
+    # comment lines.
+    grep -nE '^[[:space:]]*(\.|source)[[:space:]]+.*lib/tool-dispatch\.sh' "$ROOT/$f" \
+        | grep -vE ':[[:space:]]*#' | grep -q . \
+        && bad "$f SOURCES the shared lib — it SHIPS and must stay self-contained"
     grep -q 'toolbox run --container tillandsias-builder jq' "$ROOT/$f" \
         || bad "$f lost its inline dispatch"
 done

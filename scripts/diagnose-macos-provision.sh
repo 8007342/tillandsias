@@ -84,6 +84,21 @@ trap 'printf "\n${RED}ABORTED${RESET} — smoke test interrupted\n"' INT TERM
 # tell an end user to install a developer tool, and must not report a missing
 # PARSER as a failure of the thing under diagnosis. Dispatch is host jq ->
 # toolbox jq -> degrade with the reason named.
+#
+# WHY THIS DISPATCH IS INLINE AND NOT scripts/lib/tool-dispatch.sh — A DECISION,
+# NOT AN OVERSIGHT (order 799-tb7q). That lib exists and 46 dev-host callers use
+# it; these two diagnostics deliberately do not.
+#
+# THIS SCRIPT SHIPS. It runs on an end-user machine, and its whole job is to work
+# where nothing else does. Sourcing a sibling file would give it a dependency
+# that may be absent exactly there — and a diagnostic that fails to source its
+# helper fails at the moment its output is needed, with a failure that LOOKS LIKE
+# the thing it was sent to investigate. That is strictly worse than no
+# diagnostic.
+#
+# So: two justified copies beat one fragile abstraction. If you are sweeping
+# callers onto the lib, SKIP THIS FILE. scripts/test-shipped-diagnostic-tool-dispatch.sh
+# and scripts/test-tool-dispatch-lib.sh both FAIL if this file starts sourcing it.
 TILLANDSIAS_JQ=""
 if command -v jq >/dev/null 2>&1; then
     TILLANDSIAS_JQ="jq"
