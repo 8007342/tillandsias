@@ -93,6 +93,7 @@ mod tests {
                 name: "tillandsias".to_string(),
                 path: "/home/u/src/tillandsias".to_string(),
                 ready: true,
+                full_name: None,
             }],
             cloud_projects: Vec::new(),
             cloud_projects_loaded: true,

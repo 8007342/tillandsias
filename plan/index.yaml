@@ -12640,6 +12640,18 @@ plan_index:
       notes: |
         Linux-owned because the Linux builder is the one being retired or reconciled. Can run in parallel with 628-c7qd.
       events:
+        - type: completion
+          ts: "2026-08-26T03:35:09Z"
+          agent_id: "forge-forge-tillandsias-opencode-20260826t033509z"
+          host: forge
+          summary: |
+            Converged Linux tray menu builder on shared host-shell menu_state.rs builder. Added full_name to shared ProjectEntry, tray_ui_state_to_menu_state() conversion, shared_id_to_int() DBus integer mapping, rewrote build_menu() to delegate to shared builder. Cross-platform ID sequence test added. All 73 headless + 19 host-shell tests pass. Format clean.
+        - type: claim
+          ts: "2026-08-26T03:10:59Z"
+          agent_id: "forge-forge-tillandsias-opencode-20260826t031059z"
+          host: forge
+          summary: |
+            Claimed by forge for convergence implementation. Linux tray menu builder will be reconciled with the shared host-shell menu_state.rs builder.
         - type: filed
           ts: "2026-08-09T08:51:57Z"
           agent_id: windows-claude-fable-metaorch-20260809t063000z
