@@ -29,9 +29,43 @@ ok()  { echo "ok: $1"; pass=$((pass+1)); }
 bad() { echo "FAIL: $1" >&2; fail=$((fail+1)); }
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/prepush-refs-test.XXXXXX")"
-trap 'rm -rf "$W"' EXIT INT TERM
+trap 'restore_ambient_stamp; rm -rf "$W"' EXIT INT TERM
 export GIT_TERMINAL_PROMPT=0
 G() { git -c user.email=t@t -c user.name=t "$@"; }
+
+# ── AMBIENT STAMP CONTROL (877-mynm follow-up; diagnosed by yoga 2026-08-26) ──
+# Arms 7 and 8 invoke the real guard so that it runs against a REAL tillandsias
+# checkout — that is deliberate and necessary: in a hermetic scratch repo the
+# guard finds no gate machinery, takes its nothing-to-gate path and accepts
+# everything, so the arms would assert nothing. What was NOT deliberate is that
+# the guard then reads THIS checkout's .git/tillandsias-gate-stamp, whose
+# presence varies with what the host did last.
+#
+# That made the fixture BISTABLE, and through it the gate. The gate writes its
+# stamp at the END of a run, so:
+#   no valid stamp -> arms pass -> ./build.sh --check GREEN -> stamp written
+#   next run       -> stamp exists -> arms fail -> RED -> no stamp written
+#   next run       -> no stamp -> GREEN ...
+# `./build.sh --check` alternated green/red on an UNCHANGED tree, and "re-run
+# it and see" returned whichever answer the parity landed on. Latent from
+# 292ff7607 until a release night ran the gate twice in a row on a clean tree.
+#
+# The fix is to make the variable a CONSTANT rather than to hide from it: hold
+# the stamp aside for the duration of the arms that depend on its absence, and
+# restore it on every exit path. Isolating the guard into the scratch repo was
+# tried first and is wrong — it removes the very thing the arms measure.
+AMBIENT_STAMP="$(git -C "$ROOT" rev-parse --absolute-git-dir 2>/dev/null)/tillandsias-gate-stamp"
+STAMP_HELD=""
+hold_ambient_stamp() {
+    if [ -f "$AMBIENT_STAMP" ]; then
+        STAMP_HELD="$W/ambient-gate-stamp.held"
+        cp -p "$AMBIENT_STAMP" "$STAMP_HELD" && rm -f "$AMBIENT_STAMP"
+    fi
+}
+restore_ambient_stamp() {
+    [ -n "$STAMP_HELD" ] && [ -f "$STAMP_HELD" ] || return 0
+    cp -p "$STAMP_HELD" "$AMBIENT_STAMP"; STAMP_HELD=""
+}
 
 git init -q --bare "$W/bare.git"
 git init -q -b linux-next "$W/wc"; ( cd "$W/wc" && git remote add origin "$W/bare.git" )
@@ -98,6 +132,8 @@ printf '%s' "$out" | grep -q 'build.sh --check' \
     && bad "the empty-list path must not mention the gate as the remedy" \
     || ok "no misleading gate remedy on the empty-list path"
 
+hold_ambient_stamp   # arms 7-8 assert the guard REFUSES; a live stamp makes it accept
+
 # ── 7. NEGATIVE CONTROL — a REAL outgoing ref is still gated. This fix must
 #      not become a licence to accept an unscoped push (criterion 3).
 out="$(printf 'refs/heads/x 1111111111111111111111111111111111111111 refs/heads/x 2222222222222222222222222222222222222222\n' \
@@ -113,6 +149,21 @@ out="$(printf '' | bash "$PRE" origin "$W/bare.git" 2>&1)"; rc=$?
 [ "$rc" -ne 0 ] \
     && ok "MUTATION: without the early accept the same empty list is refused — arm 6 has teeth" \
     || bad "mutation control did not reproduce the pre-fix behaviour (rc=$rc)"
+
+restore_ambient_stamp
+
+# ── 9. BISTABILITY CONTROL — arm 7 must give the SAME verdict whichever way the
+#      ambient stamp happens to be, or this fixture is measuring the host's
+#      parity instead of the guard. This is the arm that would have caught the
+#      original defect; without it the contamination flips silently and the gate
+#      alternates green/red on an unchanged tree.
+REF='refs/heads/x 1111111111111111111111111111111111111111 refs/heads/x 2222222222222222222222222222222222222222'
+hold_ambient_stamp
+printf '%s\n' "$REF" | bash "$GUARD" origin "$W/bare.git" >/dev/null 2>&1; rc_absent=$?
+restore_ambient_stamp
+[ "$rc_absent" -ne 0 ] \
+    && ok "BISTABILITY: arm 7's premise holds under controlled stamp absence (rc=$rc_absent)" \
+    || bad "arm 7 cannot refuse even with the ambient stamp held aside (rc=$rc_absent) — its premise is gone"
 
 echo "test-pre-push-empty-ref-list: $pass passed, $fail failed"
 [ "$fail" = 0 ] || exit 1
