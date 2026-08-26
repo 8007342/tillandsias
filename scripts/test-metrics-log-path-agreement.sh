@@ -42,10 +42,40 @@ fi
 
 # ── arm 2: inside a checkout the default is repo-relative, not /tmp ───────────
 case "$probe_path" in
-    "$ROOT/target/metrics/"*) ok "in-checkout default is repo-relative: ${probe_path#"$ROOT"/}" ;;
+    "$ROOT/"*) ok "in-checkout default is repo-relative: ${probe_path#"$ROOT"/}" ;;
     /tmp/*) bad "still defaulting to /tmp inside a checkout — the boundary split is back" ;;
     *) bad "unexpected default path: $probe_path" ;;
 esac
+
+# ── arm 2b: and it must NOT live under target/, which our own GC destroys ─────
+# This arm asserts a PROPERTY, not a literal path, deliberately: arm 2 used to
+# pin "$ROOT/target/metrics/" and would have gone green on a location that our
+# own daily maintenance deletes.
+#
+# `check-build-cache-sweep.sh` fires at 40 GiB or a 14-day marker, and both
+# Start-Of-Day maintenance and Finalization 9c then run `cargo clean`, which
+# removes the target directory wholesale. Measured in a throwaway crate:
+#   before: target/metrics=1  .cache/metrics=1 ; cargo clean ;
+#   after:  target/metrics=0  .cache/metrics=1
+# And macuahuitl's target/ went 24 -> 31 GiB inside one cycle of gate runs.
+#
+# Why it matters more than a deleted file: `flow:` is a ROLLING average whose
+# value IS its length, and a reset on routine GC is indistinguishable from the
+# documented one-time /tmp migration — so the loss reads as expected.
+case "$probe_path" in
+    "$ROOT/target/"*)
+        bad "default lives under target/, which \`cargo clean\` removes — a routine build-cache sweep would silently reset every rolling metric: $probe_path" ;;
+    *)
+        ok "default is outside target/, so the build-cache sweep cannot eat the series" ;;
+esac
+
+# ── arm 2c: whatever the location, git must ignore it ────────────────────────
+# Repo-relative machine state must never become project content.
+if git -C "$ROOT" check-ignore -q "$probe_path" 2>/dev/null; then
+    ok "the default path is gitignored (machine state, not project content)"
+else
+    bad "the default path is NOT gitignored — metrics would become committable: $probe_path"
+fi
 
 # ── arm 3: NEGATIVE CONTROL — outside a checkout it must still work ───────────
 # A forge or a bare invocation has no repo to write into. Falling back to /tmp

@@ -24,10 +24,35 @@
 # WHERE IT POINTS
 #
 # The checkout is the one thing both userlands agree on, so the default lives
-# under `target/metrics/` — gitignored, already the home for build artifacts,
-# and host-local machine state rather than project content. Falls back to `/tmp`
-# when there is no writable checkout (a bare invocation, a read-only tree), so a
-# forge or an out-of-repo call keeps working exactly as before.
+# under `.cache/metrics/` — gitignored, host-local machine state rather than
+# project content. Falls back to `/tmp` when there is no writable checkout (a
+# bare invocation, a read-only tree), so a forge or an out-of-repo call keeps
+# working exactly as before.
+#
+# NOT `target/metrics/`, which this shipped as and which OUR OWN MAINTENANCE
+# DESTROYS. `check-build-cache-sweep.sh` fires at 40 GiB or a 14-day marker, and
+# both Start-Of-Day maintenance and Finalization 9c then run `cargo clean` —
+# which removes the target directory wholesale. Measured in a throwaway crate
+# rather than assumed:
+#
+#     before: target/metrics=1  .cache/metrics=1
+#     cargo clean
+#     after:  target/metrics=0  .cache/metrics=1
+#
+# Not hypothetical: macuahuitl's `target/` went 24 GiB -> 31 GiB inside ONE
+# cycle of gate runs, against that 40 GiB threshold.
+#
+# The cost is worse than a deleted file. `flow:` reports a ROLLING average whose
+# value IS its length, and a reset on routine GC is INDISTINGUISHABLE from the
+# documented one-time migration below — so a reader months from now sees
+# `source=absent`, remembers the migration note, and shrugs at a sweep that just
+# ate the series.
+#
+# The default deliberately does NOT vary by platform, though the bug it fixes is
+# Windows-only. A path that differs by lane is the shape that produced three
+# defects in eight hours on 2026-08-26 (`ps -o ppid=` absent on MSYS, GNU-only
+# `du -sb`, GNU-only `\S`), and it would mean the next person debugging metrics
+# must first work out which lane they are on.
 #
 # An explicit `TILLANDSIAS_*_LOG` env var always wins — every fixture that names
 # its own log keeps working untouched.
@@ -46,8 +71,8 @@ metrics_default_log() {
         _mdl_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]:-.}")/.." 2>/dev/null && pwd)" || _mdl_root=""
     fi
     if [ -n "$_mdl_root" ] && [ -d "$_mdl_root/.git" ] \
-        && mkdir -p "$_mdl_root/target/metrics" 2>/dev/null; then
-        printf '%s/target/metrics/%s' "$_mdl_root" "$_mdl_base"
+        && mkdir -p "$_mdl_root/.cache/metrics" 2>/dev/null; then
+        printf '%s/.cache/metrics/%s' "$_mdl_root" "$_mdl_base"
     else
         printf '/tmp/%s' "$_mdl_base"
     fi
