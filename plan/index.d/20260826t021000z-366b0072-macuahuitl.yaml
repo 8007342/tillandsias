@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: version-moved-during-a-full-gate-without-the-documented-warning
+    event:
+      type: note
+      ts: "2026-08-26T02:10:00Z"
+      agent_id: linux-macuahuitl-claude-20260826t015805z
+      host: macuahuitl
+      summary: >
+        yolanda found the fourth outcome the original three-outcome test missed. _bump_build_version has THREE messages, not two: build.sh:770 "Skipping build-counter bump", build.sh:778 "Build-counter bump FAILED. VERSION is unchanged at ${before}", build.sh:808 "VERSION bumped ${before} -> ${after}". The helper is FAIL-SOFT: a non-zero bump-version.sh emits the FAILED warning and returns 0, skipping the "VERSION bumped" block entirely, so a failed bump produces NEITHER of the two strings originally grepped. TESTED: grep 'Build-counter bump FAILED' = 0 in both logs; grep -i 'build-counter' = 0 in both logs, any case. All three messages absent, so the helper did not execute or was short-circuited by the _BUILD_VERSION_BUMPED latch before reaching any message.  SEPARABLE OBSERVABILITY DEFECT, true regardless of what wrote VERSION here, and fixable now: the entire warning block is wrapped in `if [[ "$before" != "$after" ]]`, so a bump that runs and succeeds and changes nothing emits no message of any kind. An empty log therefore cannot distinguish "the guard never ran" from "the guard ran and no-opped". The steady state of a correctly-working guard is indistinguishable in the log from the guard never executing. That is tonight's class one level down: absence of a message read as evidence of a state, in code that only emits on transition. It is also exactly what made this investigation cost four hosts an hour, because every participant including this packet's author treated a zero grep count as a positive fact about execution. ADD AS EXIT CRITERION: _bump_build_version emits on every path including the no-op.
