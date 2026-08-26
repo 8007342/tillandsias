@@ -101,7 +101,9 @@ const DISPATCH_ARMS: &[&str] = &[
     "spec-index",
     "spec-retrieve",
     "status",
+    "validate-yaml",
     "verify-answer",
+    "yaml-get",
 ];
 
 /// ORDER 583-dv9n. The dispatch arms an arbitrary declared set omits. Split out
@@ -286,6 +288,14 @@ const USAGE: &str = concat!(
     "                                     emits the plan_query projection array.\n",
     "           burndown <milestone>      release-target children with statuses\n",
     "           answer <question...>      the CITED answer envelope as JSON (order 394b)\n",
+    "           validate-yaml <file>...   ORDER 746-htj9. Load each file with serde_yaml and\n",
+    "                                     report ok:yaml-loads / blocked:yaml-load-failed /\n",
+    "                                     blocked:yaml-unreadable. THE sanctioned YAML reader:\n",
+    "                                     no interpreter (yq, ruby) exists in all three\n",
+    "                                     environments the gates run in; this binary does.\n",
+    "           yaml-get <file> <path>    ORDER 746-htj9. Read a dotted path and print the\n",
+    "                                     sequence space-joined. Missing key is EMPTY, not an\n",
+    "                                     error; unparseable stays its own verdict (720-24u6).\n",
     "           verify-answer [--root D]  read an envelope on stdin; exit 1 if any citation\n",
     "                                     does not resolve or its span does not contain the claim.\n",
     "                                     ORDER 801-g9nn: also derives caller-relation\n",
@@ -4276,6 +4286,133 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        // ORDER 746-htj9. The read half of the everywhere-reader.
+        //
+        // `validate-yaml` proves a file loads; the gates that caused the
+        // 2026-08-15 outage needed to READ something out of it — which is why
+        // they reached for yq and ruby in the first place. Shipping only the
+        // validator would have left every one of them on its interpreter
+        // chain, so this is the subcommand that actually retires them.
+        //
+        // Deliberately NOT a query language. The production call sites want a
+        // dotted path to a sequence of scalars, space-joined — that is the
+        // whole shape yq's `.a.b // [] | join(" ")` and the ruby `dig` exprs
+        // were computing. A general engine here would be a second yq with our
+        // name on it, and the packet asks for one read PATH, not one more tool.
+        //
+        // A missing key is EMPTY, not an error, matching the `// []` in the yq
+        // exprs it replaces: the schema gate distinguishes "loads, vocabulary
+        // is empty" from "will not load", and collapsing those two was the
+        // 720-24u6 defect.
+        "yaml-get" => {
+            if args.len() < 3 {
+                eprintln!("usage: tillandsias-plan yaml-get <file> <dotted.path>");
+                std::process::exit(2);
+            }
+            let (file, path) = (&args[1], &args[2]);
+            let text = match std::fs::read_to_string(file) {
+                Ok(t) => t,
+                Err(err) => {
+                    println!("blocked:yaml-unreadable:{file}: {err}");
+                    std::process::exit(1);
+                }
+            };
+            let doc: serde_yaml::Value = match serde_yaml::from_str(&text) {
+                Ok(v) => v,
+                Err(err) => {
+                    println!("blocked:yaml-load-failed:{file}: {err}");
+                    std::process::exit(1);
+                }
+            };
+            let mut cur = &doc;
+            let mut missing = false;
+            for key in path.split('.').filter(|s| !s.is_empty()) {
+                match cur.get(key) {
+                    Some(next) => cur = next,
+                    None => {
+                        missing = true;
+                        break;
+                    }
+                }
+            }
+            if missing || cur.is_null() {
+                println!();
+                return;
+            }
+            match cur {
+                serde_yaml::Value::Sequence(items) => {
+                    let parts: Vec<String> = items.iter().map(scalar_to_string).collect();
+                    println!("{}", parts.join(" "));
+                }
+                other => println!("{}", scalar_to_string(other)),
+            }
+        }
+        // ORDER 746-htj9. THE YAML READ PATH THAT EXISTS EVERYWHERE.
+        //
+        // On 2026-08-15 two locally-correct fixes caused two outages in one
+        // day, because no YAML interpreter is present in all three
+        // environments this repo's gates run in:
+        //
+        //                     yq        ruby      jq        python3
+        //   forge             present   ABSENT    present   FORBIDDEN
+        //   host (Silverblue) ABSENT    ABSENT    present   FORBIDDEN
+        //   builder toolbox   ABSENT    present   present   FORBIDDEN
+        //
+        // `jq` is the only tool present everywhere and cannot read YAML. A
+        // fallback chain (`try yq, then ruby`) does not fix this: it still
+        // leaves an environment with no reader, and every future YAML-reading
+        // script has to remember to rewrite the same chain.
+        //
+        // WHY THIS LIVES ON `tillandsias-plan` AND NOT ON `tillandsias-policy`,
+        // which already has an identical `validate-yaml`: availability is the
+        // whole point, and only this binary HAS it. `scripts/cycle-preflight.sh`
+        // rebuilds `tillandsias-plan` at the top of every cycle, so a pre-push
+        // gate can rely on it being current. `tillandsias-policy` is not built
+        // by default, and its facade falls through to `cargo run`, which is a
+        // multi-minute build in a fresh forge and needs a network the enclave
+        // may not give it. A reader that might not be there is the defect, not
+        // the fix.
+        //
+        // serde_yaml also settles order 720-24u6 by construction: the folded
+        // ledger carries 231 bare ISO-8601 timestamps, which Ruby's safe_load
+        // rejects unless the caller remembers `permitted_classes: [Time, Date]`.
+        // Forgetting it made the schema gate report a vocabulary divergence
+        // that did not exist. serde_yaml reads them as scalars with nothing to
+        // remember.
+        //
+        // The verdict grammar keeps LOAD FAILURE distinct from every other
+        // verdict, which is the 720-24u6 negative control: a file that will not
+        // parse must never be reported as anything but unparseable.
+        "validate-yaml" => {
+            let files = if args.len() > 1 {
+                &args[1..]
+            } else {
+                &args[0..0]
+            };
+            if files.is_empty() {
+                eprintln!("usage: tillandsias-plan validate-yaml <file>...");
+                std::process::exit(2);
+            }
+            let mut failed = false;
+            for file in files {
+                match std::fs::read_to_string(file) {
+                    Ok(text) => match serde_yaml::from_str::<serde_yaml::Value>(&text) {
+                        Ok(_) => println!("ok:yaml-loads:{file}"),
+                        Err(err) => {
+                            println!("blocked:yaml-load-failed:{file}: {err}");
+                            failed = true;
+                        }
+                    },
+                    Err(err) => {
+                        println!("blocked:yaml-unreadable:{file}: {err}");
+                        failed = true;
+                    }
+                }
+            }
+            if failed {
+                std::process::exit(1);
+            }
+        }
         "declared-closures" | "declared-closures-check" => {
             // ORDER 885-92iu. A packet's `verifiable_closure` may NAME a litmus
             // test — `NAMED: litmus:<x>` — and until this landed, nothing checked
@@ -6069,6 +6206,21 @@ fn expire_claim_candidates<'a>(
         }
     }
     (expired, unknown, held)
+}
+
+/// ORDER 746-htj9. Render a YAML scalar the way the shell callers expect.
+/// Strings pass through unquoted; everything else takes its YAML spelling.
+fn scalar_to_string(v: &serde_yaml::Value) -> String {
+    match v {
+        serde_yaml::Value::String(s) => s.clone(),
+        serde_yaml::Value::Bool(b) => b.to_string(),
+        serde_yaml::Value::Number(n) => n.to_string(),
+        serde_yaml::Value::Null => String::new(),
+        other => serde_yaml::to_string(other)
+            .unwrap_or_default()
+            .trim()
+            .to_string(),
+    }
 }
 
 #[cfg(test)]

@@ -1583,6 +1583,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Fragment-integrity fixture passed"
+    _step "Checking the sanctioned YAML reader is present here (746-htj9)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-yaml-reader-availability.sh" 2>&1; then
+        _error "no sanctioned YAML reader in this environment, or the load-failure verdict collapsed into the divergence verdict (720-24u6)"
+        exit 1
+    fi
+    _info "YAML reader available and its verdicts stay distinct"
+
 
     _step "Checking set-field emits valid YAML for every value shape..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-set-field-yaml-shapes.sh" 2>&1; then
