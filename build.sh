@@ -1685,6 +1685,20 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "checkout-lock attested-release fixture passed"
 
+    # The release runbook must not prescribe pushing the tag before the
+    # back-merge (898-zhf3). That order is UNEXECUTABLE with the pre-push hook
+    # installed — creating the tag locally is enough for the monotonicity guard
+    # to resolve it as "latest release" and refuse the branch's pre-release
+    # VERSION, and the back-merge that fixes it was prescribed afterwards.
+    # Measured during the v0.4.260826.1 cut. The pressure at that point is
+    # toward --no-verify, on the one ref where bypassing the gate ships.
+    _step "Checking the release runbook's tag/back-merge order (898-zhf3)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-release-runbook-tag-order.sh" 2>&1; then
+        _error "the release runbook prescribes an order the pre-push hook refuses — the next cut deadlocks at the tag push"
+        exit 1
+    fi
+    _info "release runbook tag-order fixture passed"
+
     _step "Checking the promote-stable evidence gate and dry-run..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-promote-stable-evidence-gate.sh" 2>&1; then
         _error "promote-stable's gate or its --dry-run regressed — this script flips an outward-facing release channel"

@@ -273,7 +273,31 @@ still conflicting after 3 attempts, write an `ESCALATION:` line in
 
 ---
 
-## 5 — Tag + push + MANDATORY back-merge
+## 5 — Tag, THEN back-merge, THEN push both (order 898-zhf3)
+
+> **THIS STEP USED TO SAY "push the tag, then back-merge, never before". THAT
+> ORDER IS UNEXECUTABLE and it had almost certainly never been run on a host
+> with the pre-push hook installed.** Measured on macuahuitl 2026-08-26 while
+> cutting v0.4.260826.1: `git push origin "${new_tag}"` was REFUSED —
+>
+> ```
+> ✗ pre-push refused: release preflight says blocked:version-not-monotonic
+>   ERROR: Version 0.4.260817.1 is LESS than latest release v0.4.260826.1
+>   REMEDY: git fetch origin && git merge origin/main
+> ```
+>
+> **The guard is correct.** The moment `git tag` creates the tag LOCALLY,
+> `verify-version-monotonic.sh` resolves it as "latest release" and compares it
+> against the branch's VERSION — which is still the pre-release value, because
+> the back-merge is the very thing the old text deferred until after this push.
+> So: tag push requires the back-merge; the back-merge was prescribed after the
+> tag push. Circular, on every host that has run `scripts/install-hooks.sh`.
+>
+> The pressure at that moment is toward `git push --no-verify`, which is the one
+> exit the hook's own text warns against — and it would push the release tag
+> past the only remaining gate.
+
+**Create the tag. Do NOT push it yet.**
 
 ```bash
 git tag -a "${new_tag}" -m "Release ${new_version}
@@ -281,29 +305,52 @@ git tag -a "${new_tag}" -m "Release ${new_version}
 Daily linux-next → main promotion via the merge-to-main-and-release
 skill. See PR #${existing_pr} for the merged work range.
 "
-git push origin "${new_tag}"
 ```
 
 The annotated tag carries the PR reference so the GitHub Release page links back to the merged work.
 
+**WHY DEFERRING THE PUSH IS SAFE, which is the concern the old ordering was
+protecting and which survives intact.** The old text's stated reason was "the
+tag must keep pointing at main's bump-merge commit". It does: the tag is created
+against main's bump-merge SHA and a back-merge into `linux-next` cannot move a
+tag that points at a commit on `main`. **Verified, not assumed** — during the
+v0.4.260826.1 cut `git rev-list -n1 v0.4.260826.1` returned `341ab0010` both
+before and after the back-merge.
+
 ### The back-merge is part of the cut, not a tidy-up (order 800-vk2p)
 
 ```bash
-# The moment ${new_tag} is pushed, release-preflight gate 1 refuses
-# blocked:version-not-monotonic on EVERY branch still carrying the pre-release
-# VERSION. At v0.4.260817.1 that was all three platform branches, fleet-wide,
-# within seconds — including this release's OWN ledger records, so step 8
-# cannot push until this lands. Precedents: f6424070d, 97cd7068b.
+# The moment ${new_tag} EXISTS — locally is enough — release-preflight gate 1
+# refuses blocked:version-not-monotonic on every branch still carrying the
+# pre-release VERSION. At v0.4.260817.1 that was all three platform branches,
+# fleet-wide, within seconds — including this release's OWN ledger records, so
+# step 8 cannot push until this lands. Precedents: f6424070d, 97cd7068b.
+#
+# It also refuses THIS host's tag push, which is why the back-merge comes first
+# (898-zhf3). "Locally is enough" is the correction: the old text said "is
+# pushed", and the guard resolves the tag from the local ref.
 test "$(git symbolic-ref --short HEAD)" = "${release_source_branch:-linux-next}"
 git fetch origin
 git merge origin/main          # back-merge the VERSION bump; merge, never rebase
-./build.sh --check             # the merge changed VERSION, so the gate stamp is
-                               # stale and the push below would be refused
+TILLANDSIAS_SKIP_VERSION_BUMP=1 ./build.sh --check
+                               # the merge changed VERSION, so the gate stamp is
+                               # stale and the pushes below would be refused
+
+# NOW both pushes succeed. Order between them does not matter; both are gated
+# on the back-merge above, not on each other.
+git push origin "${new_tag}"
 git push origin "${release_source_branch:-linux-next}"
 ```
 
-Run this **after** the tag push, never before: the tag must keep pointing at
-main's bump-merge commit.
+**VERIFY THE TAG DID NOT MOVE, rather than assuming it.** The whole reason the
+old ordering existed was to keep the tag on main's bump-merge commit:
+
+```bash
+git rev-list -n1 "${new_tag}"   # MUST equal main's bump-merge SHA
+```
+
+A back-merge into the source branch cannot move a tag pointing at a commit on
+`main` — but check it, because this is the property the reordering trades on.
 
 `windows-next` and `osx-next` then self-heal on their next mandated
 `git merge origin/linux-next` (methodology `pull_merge_cadence.pre_push_gate`),
