@@ -38,13 +38,43 @@ events:                       # G-Set, keyed by (packet_id, event identity)
       agent_id: my-agent-id
       summary: what happened
 
-status:                       # LWW-Register, resolved by (ts, host)
+fields:                       # LWW-Register, resolved by (ts, host)
   - packet_id: some-existing-packet
-    field: status              # ANY field — the channel is misnamed, see below
+    field: status              # ANY field name goes here — see below
     value: completed
     ts: "2026-08-01T05:00:00Z"
     host: linux-mutable
+
+  # A NON-STATUS correction, which is the case the old wording denied existed:
+  - packet_id: some-existing-packet
+    field: pickup_role         # not a status field, and equally correctable
+    value: windows
+    ts: "2026-08-01T05:01:00Z"
+    host: linux-mutable
 ```
+
+`status:` is an accepted ALIAS for `fields:` and folds identically (642-fedr).
+Every fragment already on disk keeps working; `set-field` still emits `status:`
+today, and the writer flips only once every host carries a reader that accepts
+both. A writer that moved first would leave an older host silently not seeing
+corrections.
+
+**Two different keys are spelled `status`, at different indents, and conflating
+them is the trap:**
+
+```yaml
+status:                  # column 0 — the LWW CHANNEL (alias of fields:)
+  - packet_id: p
+    field: status        # the NAME of the field being corrected
+    value: ready
+
+packets:
+  - packet_id: p
+    status: ready        # 4 spaces — a packet DECLARATION field
+```
+
+Any reader that greps `status:` unanchored will conflate the channel with the
+declaration. Anchor to the indent.
 
 ## Changing a field: use the tool, do not hand-author
 
@@ -81,14 +111,24 @@ packet is queryable immediately — reads fold fragments in automatically.
   order-independent. To change something, write another fragment.
 - **UTC first in the filename.** The fold sorts lexically, which is only
   chronological because of that ordering.
-- **Events are a set, not a register.** Two hosts commenting on one packet keep
-  both comments. Only `status` fields are last-writer-wins.
-- **Never hand-author the `status:` channel.** Use `tillandsias-plan set-field`.
+- **The `fields:` channel is last-writer-wins per `(packet_id, field)`; events
+  are a set.** Two hosts commenting on one packet keep both comments. Two hosts
+  correcting the SAME field of the same packet resolve to one value by
+  `(ts, host)`. This applies to ANY field — `pickup_role`, `priority`,
+  `depends_on`, `title` — not only `status`.
+
+  This sentence used to read "Only `status` fields are last-writer-wins", which
+  reads as *only the status field*. Combined with the never-edit-the-base rule
+  below, that said a mis-filed `pickup_role` or `depends_on` could never be
+  corrected at all — and a cycle came one step from filing that as a structural
+  defect of the ledger (642-fedr). The register was always field-generic; only
+  the prose and the channel name were wrong.
+- **Never hand-author the `fields:`/`status:` channel.** Use `tillandsias-plan set-field`.
   Re-declaring a packet under `packets:` to change it is a G-Set no-op that looks
   exactly like success — see the table above.
-- **The `status:` channel is field-generic despite its name.** It corrects
-  `pickup_role`, `priority`, `desired_release` — anything. Renaming it is tracked
-  by 642-fedr.
+- **`status:` is an accepted alias for `fields:`.** Both fold identically —
+  same LWW key `(packet_id, field)`, same closure lattice, same order
+  independence — so no fragment needs rewriting and none ever will (642-fedr).
 - **Never edit `plan/index.yaml` directly.** The base is a concurrency block
   with exactly one writer: compaction (627-c9c2, canonical statement in
   `methodology/distributed-work.yaml` → `concurrency_block`). A direct edit is

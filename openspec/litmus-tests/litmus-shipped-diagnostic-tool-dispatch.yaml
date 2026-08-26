@@ -1,0 +1,61 @@
+# @trace spec:ci-release
+# @trace order:799-tb7q
+#
+# Pins that SHIPPED diagnostics degrade rather than refuse, and that a missing
+# parser is never reported as a fault of the thing under diagnosis.
+#
+# Both diagnostics used to `exit 1` with "brew install jq" — telling an END USER
+# to install a developer tool, and (the expensive half) collapsing "the tray is
+# broken" and "I have no parser" into one verdict, since exit 1 was documented
+# as "could not locate or invoke tillandsias-tray, or jq missing". A diagnostic
+# is run precisely when something is already wrong, so a misattributed verdict
+# costs more here than anywhere else.
+#
+# The degrade path prints the RAW tray output rather than hand-rolling a
+# jq-free parse: two parsers that can disagree is a misattribution generator,
+# and a diagnostic is the last place to put one.
+name: litmus:shipped-diagnostic-tool-dispatch
+spec: ci-release
+phase: pre-build
+description: >
+  Pin scripts/tray-diagnose.sh and scripts/diagnose-macos-provision.sh: with no
+  JSON processor reachable they still emit the tray's raw answer, exit 3 rather
+  than 1, state that the tray is not at fault, and never tell an end user to
+  install a developer tool; with a parser present nothing degrades; neither
+  calls jq bare; both take the documented toolbox fallback and stay bash 3.2
+  clean for macOS.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/tray-diagnose.sh
+  - workspace contains scripts/diagnose-macos-provision.sh
+  - workspace contains scripts/test-shipped-diagnostic-tool-dispatch.sh
+  - bash and coreutils are available in PATH
+
+critical_path:
+  - step: "diagnostics and fixture parse, and the fixture is executable"
+    command: "bash -n scripts/tray-diagnose.sh && bash -n scripts/diagnose-macos-provision.sh && bash -n scripts/test-shipped-diagnostic-tool-dispatch.sh && test -x scripts/test-shipped-diagnostic-tool-dispatch.sh && echo 'ok: parses'"
+    timeout_ms: 5000
+    expected_behavior: "ok: parses"
+
+  - step: "all arms pass (degrade preserves data, exit 3 not 1, blame stated correctly, with-parser control, no bare jq, bash 3.2)"
+    command: "bash scripts/test-shipped-diagnostic-tool-dispatch.sh 2>&1 | tail -1"
+    timeout_ms: 60000
+    expected_behavior: "ok:shipped-diagnostic-tool-dispatch:all"
+
+  - step: "neither shipped diagnostic tells an end user to brew install a developer tool"
+    command: "if grep -n 'brew install jq' scripts/tray-diagnose.sh scripts/diagnose-macos-provision.sh | grep -q .; then echo 'FAIL: end-user brew instruction returned'; else echo 'ok: no end-user tool instruction'; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok: no end-user tool instruction"
+
+evidence:
+  artifact: "scripts/tray-diagnose.sh + scripts/diagnose-macos-provision.sh + scripts/test-shipped-diagnostic-tool-dispatch.sh"
+  measured_on: >
+    lenovinha (Fedora Silverblue) 2026-08-26 — all arms green. The fixture's
+    first draft did NOT reproduce its own condition: PATH kept /usr/bin, so jq
+    was found and the no-parser arms silently tested the with-parser case,
+    reporting a formatted `PASS Version: 9`. Only the exit-code assertion caught
+    it. The curated PATH is now built explicitly and the absence of jq and
+    toolbox is asserted as a precondition rather than assumed — the same trap
+    this packet's own 2026-08-24 notes recorded for the no-yq case.

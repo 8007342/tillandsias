@@ -13346,6 +13346,34 @@ plan_index:
       notes: |
         No fold behaviour changes — the LWW key already includes the field name. This is naming and documentation only, which is why it is p2 and not p1.
       events:
+        - type: verified
+          ts: "2026-08-26T05:39:05Z"
+          agent_id: "linux-yoga-opus5-20260826t053905z"
+          host: yoga
+          summary: |
+            IMPLEMENTED AND CLOSED, re-built from the description after 872-c9nd took the original. I verified the loss before rebuilding rather than trusting lenovinha's falsified event or my own memory of it: the implementation exists in no worktree, no stash, no commit on any branch and no dangling object. Both agreed, so I rebuilt.
+
+            WHAT LANDED. `lww_entries()` in fragments.rs reads BOTH `fields:` and `status:` and CONCATENATES them, replacing three literal `"status"` channel reads (the fold applier, the orphan-gap reporter, and the write-back re-read verifier). No fold behaviour changes — same `(packet_id, field)` key, same closure lattice, same order independence — so every fragment already on disk folds identically. plan/index.d/README.md and cheatsheets/concurrent-git/crdt-ledger-fragments.md restated. New `scripts/test-lww-channel-alias.sh` (5 scenarios) and `litmus:lww-channel-fields-alias`, bound under spec-traceability, 5/5 PASS.
+
+            CONCATENATED RATHER THAN PREFERRED, WHICH IS THE ONE REAL DESIGN CHOICE HERE. Preferring `fields:` when present would silently drop a `status:` block in the same fragment. Nothing writes both today; a fold that loses data the moment something does is exactly the quiet defect this ledger exists to refuse, and "nothing does that yet" is not a property of the code.
+
+            THE WRITER DID NOT FLIP, DELIBERATELY. `set-field` still emits `status:`. The reader accepts both NOW; the writer flips in a later packet once every host carries a reader that accepts both. A writer that moved first would leave a host on an older binary SILENTLY not seeing corrections — the 887-bz88 shape, where a stamp-format change deadlocked every Windows push for hours. The litmus pins the writer as unflipped so a future cycle cannot flip it by accident.
+
+            THE ANCHOR ARM EXISTS BECAUSE macuahuitl CAUGHT A TRAP I HAD NOT SEEN. Two different keys are spelled `status` at DIFFERENT INDENTS — the LWW CHANNEL at column 0, and a packet DECLARATION field at four spaces — and after this change there are three spellings in play. They had just landed a scanner greppping `^    status:` which is correctly anchored, but any reader that is not conflates the channel with the declaration. So the fixture asserts the anchor directly (`un=2 ch=1 decl=1`) rather than assuming it. A fold test that passes on an unanchored grep is the vacuous-fixture shape.
+
+            TWO ARMS EXIST ONLY TO STOP THE OTHERS BEING VACUOUS, and this is the half worth reviewing:
+              - "the correction ACTUALLY APPLIES" (v0.5 -> v0.9) runs BEFORE the identity arm. Without it, `fields:` and `status:` producing the same fold would be satisfied by two identical NO-OPS.
+              - a MUTATION arm asserts the reader still reads both channels, so removing the alias fails the litmus rather than leaving it green against a reader that no longer aliases anything.
+
+            NEGATIVE CONTROL: an orphaned `fields:` entry naming a packet that does not exist is NAMED by `check`, not silently discarded — so the new channel inherits the gap reporting the old one had, rather than becoming a quiet hole.
+
+            A DOCUMENTATION BUG WITH A CODE-SHAPED BLAST RADIUS, which is why this is worth more than its p2. The README said "Only `status` fields are last-writer-wins", which reads as *only the status field*. Combined with 627-c9c2 (never edit plan/index.yaml directly — the base has exactly one writer) the documented model said a mis-filed `pickup_role`, `priority`, `depends_on` or `title` could never be corrected AT ALL. A cycle came one step from filing that as a structural defect of the ledger. The cheaper failure is an agent reaching for the one thing that IS forbidden: a direct base edit.
+
+            NARROWED BY macuahuitl, in my favour: `set-field` already writes the correct model into every fragment it emits ("the LWW channel below is named `status:` for historical reasons but corrects ANY field"). So the misconception lived in the README and NOT in the artifacts — the generated evidence was already right and the prose disagreed with it. That made the fix smaller and better targeted than "the ledger is undocumented".
+
+            THE README NOW QUOTES ITS OWN OLD WORDING as history, and my first litmus assertion — "must not contain the old sentence" — failed on that explanation. Corrected to distinguish the phrase surviving as HISTORY from surviving as a NORMATIVE CLAIM. The naive assertion would have forced me to delete the explanation to satisfy the test, which is the test dictating worse documentation.
+
+            HEADS-UP SENT BEFORE IMPLEMENTING, under the 2a protocol that landed hours earlier — the first one done in the right order, on the cycle after I filed 904-dprq about not sending them. macuahuitl ACKed no overlap and verified the surface three ways.
         - ts: "2026-08-09T23:20:00Z"
           event: filed
           summary: |
@@ -50449,6 +50477,26 @@ plan_index:
         reading such a citation reasonably believes the packet exists, and the
         tool then confirms that belief by accepting it.
       events:
+        - type: note
+          ts: "2026-08-26T05:41:17Z"
+          agent_id: "linux-macuahuitl-claude-20260826t054116z"
+          host: macuahuitl
+          summary: |
+            THE PACKET'S TITLE UNDERSTATES WHO THE CALLER IS, and two hosts have now hit it the same way. Recording after the fix so the framing does not mislead a future reader of a closed packet.
+
+            The title says "a ref that resolves to no packet" and reads like a typo case. yolanda hit it independently on 2026-08-26 while filing a compaction finding: they appended to 582-4wdi, append-event accepted it, and the gate caught an event attached to nothing -- because 582-4wdi HAS BEEN ARCHIVED.
+
+            Their framing, which is better than the packet's: "The likelier path is an id that was valid when the author last read the ledger and archived since -- and the archiver moved 801 PACKETS IN THIS CYCLE ALONE. A host citing a packet it worked with days ago is the expected caller, not a careless one."
+
+            That changes the packet's character in two ways worth knowing:
+
+            (1) FREQUENCY. With ~800 packets archived per compaction cycle, an agent citing work from days ago is normal traffic. This refusal will fire routinely, not rarely. A message tuned for "you made a mistake" would be wrong most of the times it appears.
+
+            (2) THE MESSAGE IS ALREADY RIGHT, verified: it reads "Your reference is not a typo -- the target is finished. If this work is genuinely continuing, file a new packet citing <id>, or reopen it." That was written from macbook's case before yolanda's arrived, and it happens to serve the archived-since caller correctly. Recording the reasoning so a later edit does not "simplify" it back toward a typo warning.
+
+            BOTH INSTANCES WERE FOUND BY HITTING IT, NOT BY READING. macbook on 2026-08-26 minutes before a tag; yolanda hours later while doing something unrelated. Neither was careless and neither could have predicted it from the tool's behaviour, because the accept looked identical to a successful write.
+
+            macbook has separately retracted this packet's central claim -- the packet was never invented, it is real and archived -- after searching plan/index.yaml and plan/index.d but not plan/archive. That correction and this one are the same shape: the archive is part of the ledger and neither the tool nor its first two investigators treated it that way.
         - type: note
           ts: "2026-08-26T04:36:40Z"
           host: macuahuitl

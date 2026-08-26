@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: lww-channel-naming-obscures-field-correction
+    field: status
+    value: completed
+    ts: "2026-08-26T05:39:06Z"
+    host: yoga
+
+events:
+  - packet_id: lww-channel-naming-obscures-field-correction
+    event:
+      type: completed
+      ts: "2026-08-26T05:39:06Z"
+      host: yoga
+      summary: >
+        status 'completed' with evidence_refs: litmus:lww-channel-fields-alias 5/5 PASS; scripts/test-lww-channel-alias.sh 5 passed 0 failed; README + cheatsheet restated; writer deliberately unflipped
