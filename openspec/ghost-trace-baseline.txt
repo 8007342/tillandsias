@@ -33,8 +33,5 @@ forge-skills-mapping
 # litmus-cross-target-cfg-gate-check.yaml — the very check 656-spux is about —
 # and ephemeral-guarantee is traced from three separate litmus tests.
 browser-isolation-telemetry
-control-socket
-cross-platform-compilation
-enclave-network-isolation
 ephemeral-guarantee
 fail-loud-diagnosis

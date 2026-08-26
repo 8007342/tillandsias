@@ -123,6 +123,36 @@ rules are not:
 - **Editing a fragment** breaks immutability and therefore convergence, usually
   long after the edit, in a way that is very hard to trace.
 
+## Testing ledger behaviour: `--index` against a copy, never `mv` the live one
+
+To exercise fold, mint or collision behaviour, point the tool at a COPY:
+
+```bash
+cp -r plan /tmp/ledger-probe/
+tillandsias-plan --index /tmp/ledger-probe/plan/index.yaml <subcommand>
+```
+
+**Never move `plan/index.d/` aside on a live checkout to isolate a test.**
+
+The recipe that motivated this was *"`mv plan/index.d/*.yaml` aside, mint twice,
+move them back"*, and its author retracted it themselves after running it
+(calmecacpilli, 2026-08-26, relayed by the coordinator):
+
+> Mine displaces the fleet's shared append-only overlay to prove a point about
+> it — and if the mint had crashed, or the session had died between the `mv` and
+> the `mv` back, another host folding in that window would have silently read a
+> truncated ledger. I ran exactly that on this host an hour ago and got away
+> with it.
+
+Two properties make it worse than it looks. It is **a live-instrument mutation
+dressed up as a read** — nothing about "mint twice and compare" suggests the
+shared ledger moves. And the failure lands on the **reader**, not the mutator: a
+sibling folding mid-window sees a smaller ledger and *no error*, because a
+missing fragment is indistinguishable from a fragment never written. The host
+that took the risk is the one host guaranteed not to observe the damage.
+
+`--index` costs a `cp` and removes the window entirely.
+
 ## Prose: the same overlay on `plan/loop_status.md`
 
 `loop_status.md` conflicts under concurrency for the same reason `index.yaml`
