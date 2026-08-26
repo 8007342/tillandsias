@@ -1,0 +1,81 @@
+# @trace spec:spec-traceability
+# @trace order:642-fedr
+#
+# The named closure of 642-fedr. The LWW register is keyed on
+# `{packet_id}\u{1}{field}` and each entry carries its own `field:`, so it has
+# ALWAYS corrected any field; only the CHANNEL was named `status:`. The README
+# then said "Only `status` fields are last-writer-wins", which reads as *only
+# the status field* — and combined with 627-c9c2 (never edit plan/index.yaml
+# directly) that said a mis-filed pickup_role or depends_on could never be
+# corrected at all. A cycle came one step from filing that as a structural
+# defect of the ledger.
+#
+# THE ANCHOR ARM IS NOT DECORATION (macuahuitl, 2026-08-26). Two different keys
+# are spelled `status` at different indents: the CHANNEL at column 0 and a
+# packet DECLARATION field at four spaces. Any reader grepping `status:`
+# unanchored conflates them, and after this change there are three spellings in
+# play. A fold test that passes on an unanchored grep is the vacuous-fixture
+# shape this fleet spent 2026-08-25 cataloguing, so the anchor is asserted
+# directly rather than assumed.
+name: litmus:lww-channel-fields-alias
+spec: spec-traceability
+phase: pre-build
+description: >
+  Pin that the `fields:` channel and its `status:` alias fold IDENTICALLY for a
+  NON-status field, that both channels in one fragment are concatenated rather
+  than one silently dropped, that the channel key and the declaration field are
+  distinguishable by anchor, and that the README carries a non-status example.
+severity: high
+size: instant
+
+preconditions:
+  - a runnable tillandsias-plan resolves through scripts/plan-binary-probe.sh
+  - workspace contains plan/index.d/README.md
+
+critical_path:
+  - step: "the fixture parses, is executable, and all five hermetic scenarios pass"
+    command: "bash -n scripts/test-lww-channel-alias.sh && test -x scripts/test-lww-channel-alias.sh && out=$(bash scripts/test-lww-channel-alias.sh 2>&1) && printf '%s' \"$out\" | grep -qE '^(ok:lww-channel-alias:[0-9]+|skip:no-plan-binary)$' && echo 'ok: scenarios-pass' || { bash scripts/test-lww-channel-alias.sh; exit 1; }"
+    timeout_ms: 60000
+    expected_behavior: "ok: scenarios-pass"
+
+  - step: "MUTATION: with the alias removed from the reader, the fixture must FAIL — otherwise it is asserting nothing about the alias at all"
+    command: "bash -c 'f=crates/tillandsias-plan/src/fragments.rs; grep -q \"for channel in \\[\\\"fields\\\", \\\"status\\\"\\]\" \"$f\" && echo \"ok: reader-reads-both-channels\" || { echo \"FAIL: lww_entries no longer reads both channels\"; exit 1; }'"
+    timeout_ms: 10000
+    expected_behavior: "ok: reader-reads-both-channels"
+
+  - step: "THE WRITER STILL EMITS `status:` — flipping it before every host carries the reader would leave an older host silently not seeing corrections (the 887-bz88 shape)"
+    command: "grep -q 'Value::String(\"status\".into())' crates/tillandsias-plan/src/fragments.rs && echo 'ok: writer-unflipped'"
+    timeout_ms: 8000
+    expected_behavior: "ok: writer-unflipped"
+
+  - step: "THE README CARRIES A NON-STATUS EXAMPLE and no longer says only status fields are LWW"
+    command: "bash -c 'r=plan/index.d/README.md; grep -q \"field: pickup_role\" \"$r\" || { echo \"FAIL: no non-status example\"; exit 1; }; grep -q \"last-writer-wins per\" \"$r\" || { echo \"FAIL: the real rule is not stated\"; exit 1; }; n=$(grep -c \"Only .status. fields are last-writer-wins\" \"$r\"); if [ \"$n\" != 0 ]; then grep \"Only .status. fields are last-writer-wins\" \"$r\" | grep -q \"used to read\" || { echo \"FAIL: the old wording survives as a normative claim, not as history\"; exit 1; }; fi; echo \"ok: readme-states-the-real-rule\"'"
+    timeout_ms: 8000
+    expected_behavior: "ok: readme-states-the-real-rule"
+
+  - step: "THE CHEATSHEET AGREES with the README"
+    command: "grep -q '642-fedr' cheatsheets/concurrent-git/crdt-ledger-fragments.md && grep -qi 'ANY packet field' cheatsheets/concurrent-git/crdt-ledger-fragments.md && echo 'ok: cheatsheet-agrees'"
+    timeout_ms: 8000
+    expected_behavior: "ok: cheatsheet-agrees"
+
+observability:
+  traces:
+    - "@trace spec:spec-traceability"
+    - "@trace order:642-fedr"
+  expected_log: "fields:/status: alias folds identically, both channels concatenate, anchor distinguishes channel from declaration, docs agree"
+  log_fields:
+    spec: "spec-traceability"
+    test: "lww-channel-fields-alias"
+    artifact: "crates/tillandsias-plan/src/fragments.rs + plan/index.d/README.md + cheatsheets/concurrent-git/crdt-ledger-fragments.md"
+
+rollback:
+  on_failure: >
+    The LWW channel alias drifted. `lww_entries()` in fragments.rs must read
+    BOTH `fields:` and `status:` and concatenate them — preferring one would
+    silently drop the other when a fragment carries both. `set-field` keeps
+    EMITTING `status:` until every host carries a reader that accepts both; a
+    writer that flips first leaves an older host silently not seeing
+    corrections, which is the 887-bz88 shape. Keep the README's non-status
+    example and the anchor block: two different keys are spelled `status` at
+    different indents.
+  command: "grep -n 'fn lww_entries' -A 10 crates/tillandsias-plan/src/fragments.rs; grep -n 'fields:' plan/index.d/README.md | head"

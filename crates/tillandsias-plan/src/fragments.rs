@@ -54,6 +54,35 @@ use serde_yaml::{Mapping, Value};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
+/// ORDER 642-fedr — the LWW channel is `fields:`, and `status:` is its alias.
+///
+/// THE NAME WAS THE WHOLE DEFECT. The register is keyed on
+/// `{packet_id}\u{1}{field}` and each entry carries its own `field:` key, so it
+/// has ALWAYS applied to any field — `pickup_role`, `priority`, `depends_on`,
+/// `title`. Only the CHANNEL was named `status:`. `plan/index.d/README.md` then
+/// said "Only `status` fields are last-writer-wins", which reads as *only the
+/// status field*; combined with 627-c9c2 (never edit `plan/index.yaml`
+/// directly) the documented model said a mis-filed non-status field could never
+/// be corrected at all. A cycle came one step from filing that as a structural
+/// defect of the ledger, and the cheaper failure is an agent reaching for the
+/// one thing that IS forbidden — a direct base edit.
+///
+/// BOTH channels are read and CONCATENATED rather than one preferred, because
+/// preferring `fields:` when present would silently drop a `status:` block in
+/// the same fragment. Nothing writes both today; a fold that loses data when
+/// something does is the kind of quiet defect this ledger is built to refuse.
+/// Fold behaviour is otherwise unchanged: same key, same lattice, same order
+/// independence, so every fragment already on disk folds identically.
+fn lww_entries(doc: &Value) -> Vec<&Value> {
+    let mut out: Vec<&Value> = Vec::new();
+    for channel in ["fields", "status"] {
+        if let Some(seq) = doc.get(channel).and_then(Value::as_sequence) {
+            out.extend(seq.iter());
+        }
+    }
+    out
+}
+
 /// Directory holding fragments, as a sibling of the base index.
 ///
 /// `plan/index.yaml` → `plan/index.d/`. The `.d` suffix is the long-standing
@@ -410,8 +439,8 @@ pub fn fold_with_sources(base: &Value, fragments: &[Fragment]) -> (Value, FoldPr
         // in_progress clobbers done" and "completed overwrites verified"
         // structurally impossible in the fold, not merely refused at write
         // time (686-7qcm; the set-field gate is the write-time half).
-        if let Some(us) = frag.doc.get("status").and_then(Value::as_sequence) {
-            for u in us {
+        for u in lww_entries(&frag.doc) {
+            {
                 let (Some(pid), Some(field), Some(value)) = (
                     u.get("packet_id").and_then(Value::as_str),
                     u.get("field").and_then(Value::as_str),
@@ -742,15 +771,11 @@ pub fn verify_written_lww(path: &Path, pid: &str, field: &str, expect: &str) -> 
         std::fs::read_to_string(path).map_err(|e| format!("re-read of written fragment: {e}"))?;
     let doc: Value = serde_yaml::from_str(&raw)
         .map_err(|e| format!("fragment does not parse with the fold's parser: {e}"))?;
-    let row = doc
-        .get("status")
-        .and_then(Value::as_sequence)
-        .and_then(|rows| {
-            rows.iter().find(|r| {
-                r.get("packet_id").and_then(Value::as_str) == Some(pid)
-                    && r.get("field").and_then(Value::as_str) == Some(field)
-            })
-        });
+    let entries = lww_entries(&doc);
+    let row = entries.iter().copied().find(|r| {
+        r.get("packet_id").and_then(Value::as_str) == Some(pid)
+            && r.get("field").and_then(Value::as_str) == Some(field)
+    });
     match row.and_then(|r| r.get("value")) {
         Some(Value::String(s)) if s == expect => Ok(()),
         Some(Value::String(s)) => Err(format!(
@@ -923,8 +948,8 @@ fn fragment_coverage_gaps(result: &Value, frag: &Fragment) -> Vec<String> {
         }
     }
 
-    if let Some(us) = frag.doc.get("status").and_then(Value::as_sequence) {
-        for u in us {
+    {
+        for u in lww_entries(&frag.doc) {
             if let Some(pid) = u.get("packet_id").and_then(Value::as_str)
                 && !ids.contains(pid)
             {

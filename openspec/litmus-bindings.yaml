@@ -900,6 +900,7 @@ specs:
   - litmus:freshness-inventory-shape
   - litmus:hook-install-portability-shape
   - litmus:declared-closure-resolves
+  - litmus:lww-channel-fields-alias
   coverage_ratio: 83
   last_verified: '2026-07-17'
 - spec_id: subdomain-naming-flip
