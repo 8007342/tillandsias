@@ -11654,6 +11654,47 @@ plan_index:
 
       events:
         - type: note
+          ts: "2026-08-26T08:42:59Z"
+          agent_id: "linux-macuahuitl-claude-20260826t084259z"
+          host: macuahuitl
+          summary: |
+            CRITERIA 2 AND 3 SATISFIED. All five remaining outputs REALIZED on nixpkgs-26.05 + crane v0.24.0, RC=0.
+
+              nix build .#tillandsias-x86_64-musl .#tillandsias-headless-x86_64-musl \
+                        .#tillandsias-headless-aarch64-musl .#forge-image .#web-image
+              -> REALIZE_ALL_RC=0
+
+            TOOK ~10 MINUTES, NOT THE FEARED COLD COMPILE. 790-mbk9's "~1,000-crate cold compile per target" is the unknown this packet has been deferring to; on a host whose nix store already carried the dependency closure it was ten minutes for five outputs. That is a WARM number and must not be quoted as the cold one -- the cold case is still unmeasured and 790-mbk9 still owns it.
+
+            CLOSURE SIZES, NEW SIDE (all measured, all ZERO runtime references):
+
+              tillandsias-0.0.0                  15,226,560   refs=0
+              tillandsias-headless-x86_64-0.0.0  14,132,952   refs=0
+              tillandsias-headless-aarch64-0.0.0 13,047,480   refs=0
+              tillandsias-router-sidecar-x86_64    1,595,920   refs=0   (realized last cycle)
+              tillandsias-forge.tar.gz          343,154,792   refs=0
+              tillandsias-web.tar.gz             22,058,928   refs=0
+
+            OLD-SIDE BASELINE, and the source matters: the v0.4.260826.1 RELEASE ARTIFACTS were built by CI from the PRE-BUMP flake, so they are a genuine old-side measurement that costs nothing to obtain -- no second full build on an EOL nixpkgs required.
+
+              output                     OLD (published)   NEW (closure)   delta
+              tillandsias-linux-x86_64        15,291,632      15,226,560   -65,072  (-0.43%)
+              headless-x86_64-musl            14,177,520      14,132,952   -44,568  (-0.31%)
+              headless-aarch64-musl           13,046,984      13,047,480      +496  (+0.004%)
+              router-sidecar-x86_64            1,607,704       1,595,920   -11,784  (-0.73%)
+
+            All within +/-0.75%. No bloat, no suspicious shrinkage.
+
+            CAVEAT ON THAT COMPARISON, stated rather than buried: closure size and published FILE size are different measures. For a zero-reference static output the closure IS the output directory, so they are near-identical -- but they are not the same quantity, and the deltas above should be read as "no material change" rather than as exact byte accounting.
+
+            NO BASELINE EXISTS FOR forge-image OR web-image AND ONE CANNOT BE PRODUCED. The old flake could not EVALUATE .#forge-image at all (the copyToRoot break, measured last cycle), so there is no old-side number to diff against and no way to manufacture one. Reporting the absence rather than a delta.
+
+            "NO USER RUNTIME DEPENDENCY DISAPPEARS" IS SETTLED DEFINITIVELY: every output has ZERO runtime references, on both sides. There are none to lose. That is the correct result for static musl binaries and for docker tarballs that bundle their own root.
+
+            CRITERION 2's aarch64 AMBIGUITY, resolved as far as this fleet can: all x86_64-linux outputs build, INCLUDING the aarch64-musl cross target (pkgsCross), and aarch64-linux evaluates. The aarch64-linux HOST system is not built because no such host exists in the fleet. So the reading "the outputs covering both architectures build on a supported host" is SATISFIED; the reading "two build hosts" is not satisfiable here and would need hardware the fleet does not have.
+
+            REMAINING, and it is out of this packet's scope: `flake check --all-systems` still fails on x86_64-darwin (forge-image references pkgs.glibc for an FHS ld-linux symlink). VERIFIED PRE-EXISTING -- the old lock fails --all-systems too. eachDefaultSystem generates darwin outputs that have never been buildable and nothing checks them; worth its own packet.
+        - type: note
           ts: "2026-08-26T06:45:36Z"
           agent_id: "linux-macuahuitl-claude-20260826t064535z"
           host: macuahuitl
