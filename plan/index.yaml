@@ -13060,6 +13060,35 @@ plan_index:
         GOVERNANCE: reconciling drift CHANGES a user-visible string on whichever platform loses, which spec:tray-ux forbids without recorded operator approval for the exact surface. The claiming agent brings the inventory and PROPOSED canonical spellings to the operator and waits — including for cases where one side is obviously a typo. `🔑 GitHubLogin` vs `🔑 GitHub Login` is exactly such a case and still needs the ruling.
       events:
         - type: note
+          ts: "2026-08-26T10:34:18Z"
+          agent_id: "linux-macuahuitl-claude-20260826t103418z"
+          host: macuahuitl
+          summary: |
+            INVENTORY RE-RUN 2026-08-26. THE DRIFT IS STABLE, NOT WORSENING -- and this packet's own prose disagrees with its own deliverable in a way that would mislead the next reader.
+
+            MEASURED NOW:
+              scripts/check-tray-string-corpus-drift.sh
+              -> tray-string-drift: en_keys=168 rendered=5 unmatched=163 rendered_pct=2
+
+            THE 2026-08-17 REPORT FILE RECORDS THE IDENTICAL NUMBERS: en_keys=168 rendered=5 unmatched=163. Nine days, no change.
+
+            I ALMOST REPORTED A REGRESSION THAT DOES NOT EXIST, and the near-miss is worth recording because it is this milestone's own class. This packet's progress event of 2026-08-17 says "150 of 168 en.toml values appear NOWHERE in any tray source... a stricter production-only measurement the same day put verbatim matches at 9 rather than 18". Reading that prose against a fresh run of 5 looks like adoption collapsing from 18 to 5.
+
+            It is not. Those figures PREDATE the script's own correction:
+
+              556bef2f0  fix(tray-ux): the drift report was counting its own test code
+                         -- corrected to production text + quoted literals (792-77bt)
+
+            So 150/18/9 are pre-correction generous numbers, and 163/5 is what the corrected instrument reports -- and has reported since the day the report was written. The packet's PROSE is stale against the packet's own DELIVERABLE, which is the artifact anyone would actually check.
+
+            Caught by reading the report file's recorded numbers instead of trusting the event text. The general form is the one already on this milestone: a quoted measurement must carry the instrument it was taken with, not just its timestamp -- a number taken with a since-corrected tool reads as a trend when placed beside a current one.
+
+            WHAT THIS MEANS FOR THE PACKET, unchanged in substance: 163 of 168 locale keys render nowhere in any tray source; 5 do. Criterion 1's inventory is REGENERABLE ON DEMAND and current, so the operator ruling that criterion 2 waits on is not blocked on gathering data -- the data is a single command and it has not moved in nine days.
+
+            THE WEDGE IS STILL LIVE AND STILL OPERATOR-BREAKABLE, confirmed: this packet is `pending` and blocked_on an operator ruling; 628-c7qd is also `pending`; and this packet's depends_on names c7qd. yolanda surfaced the circularity on 2026-08-23 and it has not moved. Only a ruling, or dropping/inverting the depends_on, breaks it -- and both are operator acts under spec:tray-ux.
+
+            NOT CLAIMED. The inventory is unblocked and I ran it; the reconciliation changes user-visible strings on whichever platform loses, which spec:tray-ux forbids without a recorded ruling for the exact surface. The packet's own notes are explicit that even an obvious typo -- `GitHubLogin` vs `GitHub Login` -- still needs the ruling, and I am not going to be the agent that decides an obvious case is too obvious to ask about.
+        - type: note
           ts: "2026-08-23T09:21:46Z"
           agent_id: "windows-yolanda-fable5-20260823T091940Z"
           host: windows
