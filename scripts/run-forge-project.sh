@@ -79,7 +79,11 @@ PROJECT_ABS="$(cd "$PROJECT_PATH" && pwd)"
 PROJECT_NAME="$(basename "$PROJECT_ABS")"
 IMAGE="${FORGE_IMAGE:-tillandsias-forge:v${VERSION}}"
 CONTAINER_NAME="${FORGE_REPRO_CONTAINER_NAME:-tillandsias-repro-${PROJECT_NAME}-${KIND}}"
-ENTRYPOINT="/usr/local/bin/entrypoint-forge-${KIND}.sh"
+if [[ "$KIND" == "terminal" ]]; then
+    ENTRYPOINT="/usr/local/bin/entrypoint-terminal.sh"
+else
+    ENTRYPOINT="/usr/local/bin/entrypoint-forge-${KIND}.sh"
+fi
 CERTS_DIR="${FORGE_REPRO_CERTS_DIR:-/tmp/tillandsias-ca}"
 CA_CERT="${CERTS_DIR}/intermediate.crt"
 ENCLAVE_NET="${FORGE_REPRO_NETWORK:-tillandsias-enclave}"

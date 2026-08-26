@@ -4260,6 +4260,26 @@ CONTEXT_EOF
 
     export FORGE_STARTUP_CONTEXT_FILE="$ctx_file"
     trace_lifecycle "startup-context" "written to $ctx_file (branch=${branch}, version=${version})"
+
+    local observed_tokens=""
+    for t in GH_TOKEN GITHUB_TOKEN HOMEBREW_GITHUB_API_TOKEN; do
+        if env | grep -q "^${t}="; then
+            if [[ -z "$observed_tokens" ]]; then
+                observed_tokens="$t"
+            else
+                observed_tokens="${observed_tokens},${t}"
+            fi
+        fi
+    done
+    [[ -z "$observed_tokens" ]] && observed_tokens="none"
+
+    local observed_accel="unknown"
+    if [[ -n "${TILLANDSIAS_ACCEL_ENVELOPE:-}" ]]; then
+        observed_accel=$(echo "$TILLANDSIAS_ACCEL_ENVELOPE" | sed -n 's/.*accel_class=\([^ ]*\).*/\1/p')
+        [[ -z "$observed_accel" ]] && observed_accel="unknown"
+    fi
+
+    echo "lane-observed: agent=${agent_name:-unknown} accel_class=${observed_accel} tokens=${observed_tokens}" >> /tmp/forge-lifecycle.log 2>/dev/null || true
 }
 
 # ── Banner ──────────────────────────────────────────────────

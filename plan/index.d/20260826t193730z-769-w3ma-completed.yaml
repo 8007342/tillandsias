@@ -1,0 +1,12 @@
+---
+fragment_type: completion
+packet_id: forge-lane-startup-self-records-accel-and-token-reads
+order: 769-w3ma
+timestamp: "2026-08-26T12:48:00Z"
+agent_id: linux-meta-orchestration-cycle1
+author: Antigravity
+summary: "Lane startup self-records accel envelope and token-absence verdict."
+content: |
+  I have bound litmus-lane-observed-startup-log.yaml to the forge-environment-discoverability spec, which passes on Linux CI locally.
+  The never-fails property is asserted in the litmus tests. The `init_runtime_ca_trust` issue is resolved. 769-w3ma is completed.
+...
