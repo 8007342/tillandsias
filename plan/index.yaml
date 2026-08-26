@@ -29583,6 +29583,13 @@ plan_index:
         - 'generate-root A/B test: podman secret complete=true, fallback file MAC failure'
         - fallback share repaired 18:49:51Z, stale again by 18:50:30Z after tray relaunch
 
+      events:
+        - type: progress
+          ts: "2026-08-26T01:33:38Z"
+          agent_id: "windows-yolanda-claude-20260825t203420z"
+          host: yolanda
+          summary: |
+            PART A LANDED, PART B DEFERRED — releasing the claim back to ready rather than closing, and recording why I declined a clause that would have let me close it. Landed in a8cd8cc32: clear_guest_vault_credentials() clears vault-shamir-share-v1 + vault-root-token-v1 (tillandsias-vm-uuid deliberately preserved) from every guest-wipe path — reset_guest_once after wipe_guest, install-windows.ps1 -Purge, and both e2e runbooks. Tests a_guest_wipe_clears_the_host_side_vault_credentials (unique throwaway targets, never the operator's real credentials), clearing_guest_vault_credentials_never_touches_the_installation_uuid, and every_guest_wipe_path_clears_the_host_side_vault_credentials (cross-language source pin, each of the three sites hand-falsified independently). cargo test -p tillandsias-windows-tray 111 passed 0 failed. THIS PACKET'S OWN verifiable_closure SAYS 'a test that ... asserts the guest's share wins (OR THAT THE WIPE CLEARED THE HOST ENTRIES)'. The second clause is satisfied by the tests above, so the closure as written would permit closing this now. I am declining it, because that clause was written before Part B was split out and closing on it would misrepresent who is fixed. Part A only helps a host that wipes AFTER the fix lands. It does nothing for a host that ALREADY carries a stale credential — including every existing user who upgrades into a new release without wiping — and that population is the one this packet's context is about. Only the reconcile half reaches them, and the release notes carry a manual cmdkey recovery step precisely because of it. Part B is filed as 890-y72v (pickup_role linux): DeliverCredentialsReply reports receipt, not acceptance, and set_in_vm_credentials returns unit so it cannot report a rejection — a control-wire + tillandsias-headless change that cannot be compiled or verified from Windows. Its most useful finding: the precedence rule Part B needs already exists at vault_bootstrap.rs:80-85 and is merely too narrow, so implementing it widens an accepted rule rather than arguing a new policy.
     - packet_id: windows-e2e-reset-must-clear-host-side-vault-credentials
       order: 804-ckst
       status: ready
