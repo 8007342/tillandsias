@@ -7,6 +7,17 @@
 
 set -euo pipefail
 
+
+# ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has it.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/tool-dispatch.sh" 2>/dev/null || true
+if command -v resolve_tool >/dev/null 2>&1; then
+    JQ="$(resolve_tool jq || printf 'jq')"
+else
+    JQ="jq"   # lib unavailable: preserve the previous behaviour exactly
+fi
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LIB="$ROOT/images/default/lib-common.sh"
 WORK="$(mktemp -d)"
@@ -108,7 +119,7 @@ OPENCODE_AUTH_CONTENT="ambient-must-not-win-$RANDOM-$$"
 export OPENCODE_AUTH_CONTENT
 prepare_opencode_vault_auth || fail "Vault-backed preparation failed"
 printf '%s' "$OPENCODE_AUTH_CONTENT" \
-    | jq -e \
+    | "$JQ" -e \
         'keys == ["google"] and .google == {type:"api", key:env.TEST_GEMINI_KEY}' \
         >/dev/null \
     || fail "Vault Gemini key was not adapted to the OpenCode google record"

@@ -1,0 +1,79 @@
+events:
+  - packet_id: builder-toolbox-init-set-too-small-for-the-dispatch-pattern
+    event:
+      type: implemented
+      ts: "2026-08-26T14:00:00Z"
+      agent_id: lenovinha-opus5-metaorch-20260826t133717z
+      host: lenovinha
+      summary: |
+        FOURTH SLICE — 15 more flat callers converted, and A TRAP FOUND THAT
+        BREAKS A MECHANICAL SWEEP.
+
+        Converted: build-image.sh, check-base-ledger-status-loss.sh,
+        check-fragment-status-loss.sh, check-nix-deps-stability.sh,
+        dev-inference-ensure.sh, nix-toolbox.sh, probe-complement-selfcheck.sh,
+        windows-host-capability-probe.sh, and the test-* family
+        (bench-prompt-uniqueness, build-sh-ci-full-install-prep,
+        build-step-timing-attribution, codex-mcp-registration,
+        default-vault-cli-security, opencode-vault-auth-content, trace-coverage).
+
+        THE TRAP: `$JQ` MUST NEVER GO INSIDE A HEREDOC. A blanket
+        `| jq` -> `| "$JQ"` substitution is unsafe wherever the line sits in a
+        heredoc that GENERATES another script, because the variable belongs to
+        the generating scope and not the generated one.
+
+        MEASURED, and it broke two fixtures in opposite ways:
+          - test-opencode-vault-auth-content.sh went PASS -> FAIL. Two
+            substituted lines were inside a heredoc emitting a stub `opencode`;
+            in the stub $JQ is unset, so the pipeline ran with an EMPTY command
+            and the rollback assertion failed with no hint as to why. I caught it
+            only because I ran the converted fixtures instead of trusting
+            `bash -n`, then stashed to confirm PASS-before / FAIL-after rather
+            than assuming the failure was pre-existing.
+          - test-bench-prompt-uniqueness.sh had the same shape in a generated
+            `curl` stub, but its heredoc is UNQUOTED, so $JQ would expand at
+            GENERATION time and bake a literal
+            `toolbox run --container tillandsias-builder jq` into the stub —
+            breaking on exactly the jq-less host the sweep exists to serve.
+            Wrong in both directions, for opposite reasons.
+
+        Both reverted to bare `jq`, which is correct: a synthetic test double is
+        not a dev-host script and legitimately assumes the host tool.
+  - packet_id: builder-toolbox-init-set-too-small-for-the-dispatch-pattern
+    event:
+      type: verified
+      ts: "2026-08-26T14:05:00Z"
+      agent_id: lenovinha-opus5-metaorch-20260826t133717z
+      host: lenovinha
+      summary: |
+        A HEREDOC-SCOPE ARM NOW GUARDS IT, and proving it had teeth took two
+        attempts — the second time this session that a guard I wrote reported
+        clean on a tree where I had deliberately reintroduced the bug.
+
+        My first detector buried the needle `"$JQ"` in nested awk-inside-shell
+        quoting. On a mutation test it reported ZERO hits against a tree
+        carrying the exact defect, i.e. it would have shipped as a green arm that
+        could never go red — the same class as the `secret-service` word-absence
+        test and the `lib/tool-dispatch.sh` string match earlier today. Rewritten
+        to pass the needle as an awk variable; the mutation now fires
+        (`test-bench-prompt-uniqueness.sh:80`) and the clean tree is silent.
+
+        THE RULE I WOULD GIVE THE NEXT CONVERTER, now paid for twice in one
+        slice: run the converted scripts, do not trust `bash -n`. Syntax was
+        valid in both broken cases. And when one fails, stash-and-compare before
+        recording anything — `generate-dashboard.sh` last slice looked broken and
+        was not; these two looked fine and were.
+
+        All 15 verified: the self-verifying fixtures re-run green
+        (opencode-vault-auth PASS, bench-prompt-uniqueness
+        ok:bench-prompt-uniqueness:6, trace-coverage, timing-attribution 9,
+        codex-mcp, default-vault-cli-security, ci-full-install-prep).
+        ./build.sh --check green.
+
+        NOTED, NOT MINE: scripts/test-bench-prompt-uniqueness.sh is tracked
+        100644 and cannot be executed by path; it must be invoked as
+        `bash scripts/...`. Pre-existing, unrelated to this sweep, and it passes
+        the exec-bit gate because nothing invokes it by path.
+
+        REMAINING: the 7 LOOP callers (restructuring, not conversion), the `rg`
+        callers, and the bare openssl CLI callers.

@@ -102,6 +102,50 @@ for f in scripts/install-macos.sh scripts/with-tillandsias-builder.sh scripts/wi
 done
 ok "curl-piped installer and toolbox bootstrap wrappers stay self-contained"
 
+# ── 4c. NO `$JQ` INSIDE A HEREDOC — the trap that broke two fixtures. ───────
+# A mechanical `| jq` -> `| "$JQ"` sweep is UNSAFE wherever the line sits inside
+# a heredoc that generates another script: the variable belongs to the
+# generating scope, not the generated one.
+#
+# MEASURED, twice, in one slice. test-opencode-vault-auth-content.sh went
+# PASS -> FAIL because two substituted lines were inside a heredoc emitting a
+# stub `opencode`; in the stub $JQ is unset, so the pipeline ran with an empty
+# command and the rollback assertion failed with no hint as to why.
+# test-bench-prompt-uniqueness.sh had the same shape in a generated `curl` stub —
+# and there the heredoc is UNQUOTED, so $JQ would expand at generation time and
+# bake a literal `toolbox run --container tillandsias-builder jq` into the stub,
+# which breaks on exactly the jq-less host the sweep exists to serve. Wrong in
+# both directions, for opposite reasons.
+# The detector is deliberately simple. My first version buried the search
+# string in nested awk/shell quoting, reported 0 hits on a tree where I had
+# just REINTRODUCED the bug on purpose, and would have shipped as a green arm
+# that could never go red. Pass the needle in as an awk variable instead.
+_hd_hits=""
+for f in $(git -C "$ROOT" ls-files 'scripts/*.sh'); do
+    _h="$(awk -v needle='"$JQ"' -v fname="$f" '
+        term == "" {
+            if (match($0, /<<-?[ \t]*"?'"'"'?[A-Za-z_][A-Za-z0-9_]*"?'"'"'?/)) {
+                t = substr($0, RSTART, RLENGTH)
+                gsub(/[<\-\t "'"'"']/, "", t)
+                term = t
+            }
+            next
+        }
+        {
+            s = $0
+            gsub(/^[ \t]+|[ \t]+$/, "", s)
+            if (s == term) { term = ""; next }
+            if (index($0, needle) > 0) print fname ":" NR
+        }
+    ' "$ROOT/$f")"
+    [ -n "$_h" ] && _hd_hits="$_hd_hits$_h "
+done
+if [ -n "$_hd_hits" ]; then
+    bad "\$JQ appears inside a heredoc (the generated scope has no such variable): $_hd_hits"
+else
+    ok "no \$JQ inside any heredoc — generated scripts keep bare jq"
+fi
+
 # ── 5. THE DELIBERATE EXCEPTION, guarded so it does not read as an oversight. ─
 # The shipped diagnostics keep INLINE copies on purpose: they run on end-user
 # machines where a sibling lib may not exist, and a shipped diagnostic that

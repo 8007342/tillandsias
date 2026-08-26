@@ -22,6 +22,17 @@
 # =============================================================================
 set -uo pipefail
 
+
+# ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has it.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/tool-dispatch.sh" 2>/dev/null || true
+if command -v resolve_tool >/dev/null 2>&1; then
+    JQ="$(resolve_tool jq || printf 'jq')"
+else
+    JQ="jq"   # lib unavailable: preserve the previous behaviour exactly
+fi
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 fail=0
 pass() { echo "ok: $1"; }
@@ -81,7 +92,7 @@ run_sequence "$LOG"
 [ -s "$LOG" ] || { bad "no timing records were emitted"; exit 1; }
 
 field() { # <step-substring> <jq-field>
-    jq -r --arg s "$1" --arg f "$2" \
+    "$JQ" -r --arg s "$1" --arg f "$2" \
         'select(.step | contains($s)) | .[$f] | tostring' "$LOG" 2>/dev/null | head -1
 }
 dur()  { field "$1" duration_ms; }

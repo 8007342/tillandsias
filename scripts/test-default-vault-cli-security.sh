@@ -5,6 +5,17 @@
 
 set -euo pipefail
 
+
+# ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has it.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/tool-dispatch.sh" 2>/dev/null || true
+if command -v resolve_tool >/dev/null 2>&1; then
+    JQ="$(resolve_tool jq || printf 'jq')"
+else
+    JQ="jq"   # lib unavailable: preserve the previous behaviour exactly
+fi
+
 # Portable SHA-256 (851-28b5): coreutils sha256sum on Linux/forge/WSL; stock
 # macOS before 13 ships only `shasum`. Identical "<hex>  <name>" output.
 if command -v sha256sum >/dev/null 2>&1; then
@@ -225,10 +236,10 @@ done
 
 [[ "$(<"$WORK/default/read.out")" == shared-read-result ]] \
     || fail "read field semantics changed"
-jq -e '.data.username == "alice" and .data.password == "opaque write value"' \
+"$JQ" -e '.data.username == "alice" and .data.password == "opaque write value"' \
     "$WORK/default/write.body" >/dev/null \
     || fail "write did not send the KV-v2 request body on stdin"
-jq -e '.data.credentials_b64 == "opaque stdin value"' \
+"$JQ" -e '.data.credentials_b64 == "opaque stdin value"' \
     "$WORK/default/write-stdin.body" >/dev/null \
     || fail "write-stdin did not send its opaque value in the stdin body"
 [[ "$(wc -l <"$WORK/default/header-checks")" -eq 3 ]] \

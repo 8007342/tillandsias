@@ -8,16 +8,27 @@
 # ladder. A SOUND judge answers YES/NO on the answering passage and NO/YES on
 # the non-answering one; anything else is a self-contradiction.
 set -uo pipefail
+
+# ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has it.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/tool-dispatch.sh" 2>/dev/null || true
+if command -v resolve_tool >/dev/null 2>&1; then
+    JQ="$(resolve_tool jq || printf 'jq')"
+else
+    JQ="jq"   # lib unavailable: preserve the previous behaviour exactly
+fi
+
 EP=http://127.0.0.1:11434
 M="${1:?usage: complement-probe.sh <model>}"
 
 ask() { # $1 passage  $2 framing
   curl -fsS --max-time 900 "$EP/api/generate" -H 'Content-Type: application/json' \
-    -d "$(jq -Rn --arg m "$M" --arg p "Passage:
+    -d "$("$JQ" -Rn --arg m "$M" --arg p "Passage:
 $1
 
 Question: $2 Answer with exactly one word, YES or NO." '{model:$m,prompt:$p,stream:false,options:{num_predict:6,temperature:0}}')" \
-  | jq -r '.response' | tr -d '\n' | grep -oiE 'yes|no' | head -1 | tr '[:lower:]' '[:upper:]'
+  | "$JQ" -r '.response' | tr -d '\n' | grep -oiE 'yes|no' | head -1 | tr '[:lower:]' '[:upper:]'
 }
 
 Q1="which branch does macOS checkpoint to"

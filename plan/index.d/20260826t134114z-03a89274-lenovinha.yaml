@@ -5,17 +5,17 @@
 # corrects ANY field (642-fedr). Re-declaring the packet under
 # `packets:` would be a G-Set no-op and would silently do nothing.
 status:
-  - packet_id: prebuilt-plan-cache-key-invalidated-by-any-plan-crate-or-lockfile-commit
+  - packet_id: builder-toolbox-init-set-too-small-for-the-dispatch-pattern
     field: status
     value: in_progress
-    ts: "2026-08-26T11:30:04Z"
-    host: yoga
+    ts: "2026-08-26T13:41:14Z"
+    host: lenovinha
 
 events:
-  - packet_id: prebuilt-plan-cache-key-invalidated-by-any-plan-crate-or-lockfile-commit
+  - packet_id: builder-toolbox-init-set-too-small-for-the-dispatch-pattern
     event:
       type: note
-      ts: "2026-08-26T11:30:04Z"
-      host: yoga
+      ts: "2026-08-26T13:41:14Z"
+      host: lenovinha
       summary: >
-        yoga meta-orchestration cycle 7 claim
+        claimed for cycle 2026-08-26T13:37Z — fourth jq slice

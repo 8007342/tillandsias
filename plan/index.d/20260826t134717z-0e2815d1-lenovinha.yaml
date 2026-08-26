@@ -8,14 +8,14 @@ status:
   - packet_id: builder-toolbox-init-set-too-small-for-the-dispatch-pattern
     field: status
     value: ready
-    ts: "2026-08-26T09:43:04Z"
+    ts: "2026-08-26T13:47:17Z"
     host: lenovinha
 
 events:
   - packet_id: builder-toolbox-init-set-too-small-for-the-dispatch-pattern
     event:
       type: note
-      ts: "2026-08-26T09:43:04Z"
+      ts: "2026-08-26T13:47:17Z"
       host: lenovinha
       summary: >
-        tool-dispatch lib landed + 3 highest-traffic callers converted; 43 jq callers, rg and openssl remain
+        fourth slice: 15 callers converted, heredoc-scope trap found and guarded
