@@ -105,6 +105,7 @@ fn agent_picker_lists_three_agents_in_canonical_order() {
         name: "myapp".into(),
         path: "/home/u/src/myapp".into(),
         ready: false,
+        full_name: None,
     }];
     let menu = build(&state);
     let items = match menu {
@@ -153,6 +154,7 @@ fn logged_in_state_gates_out_github_login_row() {
         name: "a".into(),
         path: "/x".into(),
         ready: true,
+        full_name: None,
     }];
     let menu = build(&state);
     let items = match menu {

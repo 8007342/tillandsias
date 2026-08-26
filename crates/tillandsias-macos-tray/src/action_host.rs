@@ -600,6 +600,7 @@ fn local_entry_to_menu(
         name: entry.label.clone(),
         path: entry.guest_path.clone(),
         ready: false,
+        full_name: None,
     }
 }
 
@@ -680,6 +681,7 @@ fn cloud_entry_to_menu(
         name: entry.label.clone(),
         path: format!("{}/{}", entry.owner, entry.repo),
         ready: false,
+        full_name: None,
     }
 }
 
@@ -3265,6 +3267,7 @@ mod tests {
                 name: "tillandsias".into(),
                 path: "/home/forge/src/tillandsias".into(),
                 ready: false,
+                full_name: None,
             }]
         };
         assert!(
@@ -3580,6 +3583,7 @@ mod tests {
             name: "tillandsias".into(),
             path: "8007342/tillandsias".into(),
             ready: false,
+            full_name: None,
         }];
         assert!(apply_cloud_projects(projects.clone(), &menu_state));
         assert_eq!(menu_state.lock().unwrap().cloud_projects, projects);

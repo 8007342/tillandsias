@@ -35,6 +35,7 @@ use tillandsias_control_wire::{
 };
 use tillandsias_core::config::{self, SelectedAgent};
 use tillandsias_core::genus::TrayIconState;
+use tillandsias_host_shell::menu_state as shared_menu;
 use tillandsias_podman::{
     ContainerSpec, MountMode, container_exists_sync, image_exists_sync, podman_available_sync,
     stop_container_sync,
@@ -2944,6 +2945,7 @@ fn handle_stop_project(service: Arc<TrayService>, project: String) {
 }
 
 // @trace spec:tray-minimal-ux
+#[allow(dead_code)]
 fn build_separator_item(id: i32) -> MenuNode {
     node(
         id,
@@ -3158,6 +3160,10 @@ fn project_action_from_id(
 /// The submenu node's id is `base + PROJECT_SUBMENU_OFFSET`; each leaf is
 /// `base + LeafAction::offset()`. All leaves are emitted with `enabled=true`
 /// **unless** podman is unavailable, in which case every leaf is disabled.
+///
+/// @trace dead_code — retired by order 628-p5tj convergence; kept for
+/// `project_action_from_id` which shares the `project_base` scheme.
+#[allow(dead_code)]
 fn build_project_submenu(
     state: &TrayUiState,
     project: &ProjectEntry,
@@ -3209,6 +3215,9 @@ fn build_project_submenu(
 /// When the project list is empty (still loading, or genuinely empty
 /// `~/src`), a single disabled `(loading…)` child is emitted so the
 /// submenu chevron doesn't dead-end.
+///
+/// @trace dead_code — retired by order 628-p5tj convergence.
+#[allow(dead_code)]
 fn build_local_projects_submenu(state: &TrayUiState) -> MenuNode {
     let mut children: Vec<OwnedValue> = state
         .projects
@@ -3265,6 +3274,7 @@ fn build_local_projects_submenu(state: &TrayUiState) -> MenuNode {
 /// children are serialized `OwnedValue`s, so a test that walked the finished
 /// menu would be asserting against a DBus encoding rather than against the
 /// decision. The decision is what the packet is about.
+#[allow(dead_code)]
 fn cloud_overflow_row(total: usize, visible_count: usize) -> (String, bool) {
     let hidden = total.saturating_sub(visible_count);
     // Carries BOTH counts. The pre-existing test pinned the total, because
@@ -3279,6 +3289,8 @@ fn cloud_overflow_row(total: usize, visible_count: usize) -> (String, bool) {
     (label, false)
 }
 
+/// @trace dead_code — retired by order 628-p5tj convergence.
+#[allow(dead_code)]
 fn build_cloud_projects_submenu(state: &TrayUiState) -> MenuNode {
     let total = state.cloud_projects.len();
     let cap = resolved_max_cloud_projects_in_menu();
@@ -3571,123 +3583,210 @@ fn stable_project_item_id(project: &str, suffix: &str) -> i32 {
 /// | No             | 5: status + login + separator + version + quit |
 /// | Yes            | 6: status + ~/src + Cloud + separator + version + quit |
 ///
+/// ## Convergence with the shared builder (order 628-p5tj)
+///
+/// This function now delegates to the shared portable menu builder in
+/// `tillandsias-host-shell::menu_state` and converts the result to the
+/// DBus `MenuNode` format. The business logic — what items appear, their
+/// labels, enabled states, and the auth-gated structure — lives in ONE
+/// place: the shared `build()` function. This function handles only the
+/// DBus-specific translation (string IDs → integer IDs, `MenuItem` → tuple).
+///
 /// ## Podman-unavailable degradation
 ///
 /// When `state.podman_available == false`, *every* per-project leaf is
 /// emitted with `enabled=false` and the status line is replaced with
 /// `❌ Podman not available`. The top-level shape is unchanged so the menu
 /// remains stable across the failure boundary.
-fn build_menu(state: &TrayUiState) -> MenuNode {
-    let mut children = Vec::new();
 
-    // (1) Status element — always visible, always disabled.
-    let status_text = if state.podman_available {
-        state.status_text.clone()
-    } else {
-        status_label(&TrayStatusStage::PodmanMissing)
-    };
-    children.push(child(node(
-        1,
-        props(vec![
-            ("label".to_string(), ov_str(status_text)),
-            ("enabled".to_string(), ov(Value::from(false))),
-            ("visible".to_string(), ov(Value::from(true))),
-        ]),
-        Vec::new(),
-    )));
-
-    // (2) Auth-gated row. Exactly one of {GitHubLogin} OR {~/src, Cloud}
-    //     is emitted, never both. windows-260719-2: the login row is a
-    //     THREE-state machine — while a login flow is in flight the row
-    //     renders as a disabled "Logging in…" (flipped locally on the
-    //     click, before any wire round-trip; the confirming probe either
-    //     expands the menu or falls back to the actionable login row).
-    if state.is_authenticated {
-        children.push(child(build_local_projects_submenu(state)));
-        children.push(child(build_cloud_projects_submenu(state)));
+/// Map the Linux `TrayUiState` onto the shared portable `MenuState` so the
+/// shared `build()` function can compute the menu structure.
+///
+/// The Linux tray's `is_authenticated` / `login_in_progress` /
+/// `login_observed` triple maps onto the shared `GithubLoginState` four-state
+/// enum. The cloud loading state maps `last_fetched: Option<Instant>` onto
+/// `cloud_projects_loaded: bool`.
+fn tray_ui_state_to_menu_state(state: &TrayUiState) -> shared_menu::MenuState {
+    let login = if state.is_authenticated {
+        shared_menu::GithubLoginState::LoggedIn {
+            handle: String::new(),
+        }
     } else if state.login_in_progress {
-        children.push(child(node(
-            20,
-            props(vec![
-                ("label".to_string(), ov_str("\u{1F504} Logging in\u{2026}")),
-                ("enabled".to_string(), ov(Value::from(false))),
-                ("visible".to_string(), ov(Value::from(true))),
-            ]),
-            Vec::new(),
-        )));
-    } else if !state.login_observed {
-        // Order 627-m3vp: the probe has not reported yet, so we do NOT know the
-        // user is signed out — only that we have not asked. Disabled is the
-        // load-bearing part: a sign-in we have not ruled out must never be
-        // offered as an action. Operator-approved copy 2026-08-09T08:33Z, the
-        // same string the Windows and macOS trays render for this state.
-        children.push(child(node(
-            20,
-            props(vec![
-                (
-                    "label".to_string(),
-                    ov_str("\u{1F504} Checking your account\u{2026}"),
-                ),
-                ("enabled".to_string(), ov(Value::from(false))),
-                ("visible".to_string(), ov(Value::from(true))),
-            ]),
-            Vec::new(),
-        )));
+        shared_menu::GithubLoginState::LoggingIn
+    } else if state.login_observed {
+        shared_menu::GithubLoginState::LoggedOut
     } else {
-        // Confirmed signed out — the ONLY state that earns an actionable row.
-        // Operator ruling 2026-08-09T09:04Z: "GitHub" is the canonical
-        // spelling; this label was "GitHubLogin" (no space) and diverged from
-        // the other two trays and from locales/en.toml's `sign_in_github`.
-        children.push(child(node(
-            20,
-            props(vec![
-                ("label".to_string(), ov_str("\u{1F511} GitHub Login")),
-                ("enabled".to_string(), ov(Value::from(true))),
-                ("visible".to_string(), ov(Value::from(true))),
-            ]),
-            Vec::new(),
-        )));
+        shared_menu::GithubLoginState::Unknown
+    };
+
+    let local_projects = state
+        .projects
+        .iter()
+        .map(|p| shared_menu::ProjectEntry {
+            name: p.name.clone(),
+            path: p.path.to_string_lossy().into_owned(),
+            ready: false,
+            full_name: None,
+        })
+        .collect();
+
+    let cloud_projects = state
+        .cloud_projects
+        .iter()
+        .map(|p| shared_menu::ProjectEntry {
+            name: p.name.clone(),
+            path: p.path.to_string_lossy().into_owned(),
+            ready: false,
+            full_name: p.full_name.clone(),
+        })
+        .collect();
+
+    shared_menu::MenuState {
+        guest_version: None,
+        status_text: state.status_text.clone(),
+        version: state.version.clone(),
+        login,
+        local_projects,
+        cloud_projects,
+        cloud_projects_loaded: state.last_fetched.is_some(),
+        selected_agent: shared_menu::SelectedAgent::Claude,
+        gui_passthrough_available: false,
+        podman_ready: state.podman_available,
+        login_runtime_ready: state.login_observed || state.is_authenticated,
+        target: shared_menu::TargetSurface::LinuxTray,
+        provisioning_failure: None,
+    }
+}
+
+/// Fixed integer IDs for top-level menu items in the DBus protocol.
+/// These must stay stable: the `event()` handler dispatches on them.
+const MENU_ID_STATUS: i32 = 10;
+const MENU_ID_LOGIN: i32 = 20;
+const MENU_ID_LOCAL_PROJECTS: i32 = 21;
+const MENU_ID_CLOUD_PROJECTS: i32 = 22;
+const MENU_ID_SEPARATOR: i32 = 29;
+const MENU_ID_VERSION: i32 = 30;
+const MENU_ID_QUIT: i32 = 31;
+
+/// Map a shared `MenuItem` to a DBus integer ID.
+///
+/// Top-level items get fixed IDs that match the `event()` handler.
+/// Per-project submenu leaves use the same hash-based scheme the
+/// `project_action_from_id` resolver expects.
+fn shared_id_to_int(id: &str) -> i32 {
+    match id {
+        shared_menu::ids::STATUS => MENU_ID_STATUS,
+        shared_menu::ids::GITHUB_LOGIN => MENU_ID_LOGIN,
+        shared_menu::ids::LOCAL_PROJECTS => MENU_ID_LOCAL_PROJECTS,
+        shared_menu::ids::CLOUD_PROJECTS => MENU_ID_CLOUD_PROJECTS,
+        shared_menu::ids::SEPARATOR => MENU_ID_SEPARATOR,
+        shared_menu::ids::VERSION => MENU_ID_VERSION,
+        shared_menu::ids::QUIT => MENU_ID_QUIT,
+        other => {
+            // Per-project items: "project.local.<name>.<verb>" or
+            // "project.cloud.<name>.<verb>" — hash the project name to
+            // recover the integer base, then add the verb offset.
+            if let Some(rest) = other.strip_prefix("project.") {
+                let (scope_str, remainder) = rest.split_once('.').unwrap_or((rest, ""));
+                let (name, verb) = remainder.rsplit_once('.').unwrap_or((remainder, ""));
+                let scope = match scope_str {
+                    "local" => ProjectScope::Local,
+                    "cloud" => ProjectScope::Cloud,
+                    _ => return 0,
+                };
+                let base = project_base(name, scope);
+                let offset = match verb {
+                    "claude" => 0,
+                    "codex" => 1,
+                    "opencode" => 2,
+                    "antigravity" => 3,
+                    "opencode-web" => 4,
+                    "observatorium" => 5,
+                    "maintenance" => 6,
+                    "" => PROJECT_SUBMENU_OFFSET,
+                    _ => return 0,
+                };
+                base + offset
+            } else if other == shared_menu::ids::LOCAL_PROJECTS_EMPTY {
+                LOADING_LOCAL_ID
+            } else if other == shared_menu::ids::CLOUD_PROJECTS_EMPTY
+                || other == shared_menu::ids::CLOUD_PROJECTS_LOADING
+            {
+                LOADING_CLOUD_ID
+            } else if other == shared_menu::ids::CLOUD_PROJECTS_OVERFLOW {
+                CLOUD_OVERFLOW_ID
+            } else {
+                0
+            }
+        }
+    }
+}
+
+/// Convert a shared `MenuItem` tree into a DBus `MenuNode` tuple.
+///
+/// This is the only place the `MenuItem` → `(i32, props, children)`
+/// translation happens. The shared builder's string IDs are mapped to
+/// integer IDs via [`shared_id_to_int`].
+fn shared_menu_item_to_node(item: &shared_menu::MenuItem) -> MenuNode {
+    let id = shared_id_to_int(&item.id);
+
+    let mut p = vec![
+        ("label".to_string(), ov_str(&item.label)),
+        ("enabled".to_string(), ov(Value::from(item.enabled))),
+        ("visible".to_string(), ov(Value::from(true))),
+    ];
+    if let Some(ref reason) = item.disabled_reason {
+        p.push(("tooltip".to_string(), ov_str(reason)));
+    }
+    if !item.children.is_empty() {
+        p.push(("children-display".to_string(), ov_str("submenu")));
     }
 
-    // (3) Separator.
-    children.push(child(build_separator_item(29)));
+    let children: Vec<OwnedValue> = item
+        .children
+        .iter()
+        .map(|c| child(shared_menu_item_to_node(c)))
+        .collect();
 
-    // (4) Version + attribution. Always disabled.
-    children.push(child(node(
-        30,
-        props(vec![
-            (
-                "label".to_string(),
-                ov_str(format!("v{} \u{2014} By Tlatoa\u{0304}ni", state.version)),
-            ),
-            ("enabled".to_string(), ov(Value::from(false))),
-            ("visible".to_string(), ov(Value::from(true))),
-        ]),
-        Vec::new(),
-    )));
+    node(id, props(p), children)
+}
 
-    // (5) Quit. NOTE: the `Reset Guest…` leaf (id=32) that briefly sat here
-    //     was an UNAPPROVED UX surface, removed by operator order 2026-07-22
-    //     (tray-ux "UX curation governance"); a wedged guest is recovered
-    //     via the `--reset-guest` CLI verb.
-    children.push(child(node(
-        31,
-        props(vec![
-            ("label".to_string(), ov_str("\u{274C} Quit Tillandsias")),
-            ("enabled".to_string(), ov(Value::from(true))),
-            ("visible".to_string(), ov(Value::from(true))),
-        ]),
-        Vec::new(),
-    )));
+/// Build the Linux tray menu by delegating to the shared portable builder.
+///
+/// The shared `build()` computes the menu structure (auth-gating, item
+/// ordering, labels, enabled states). This function converts the result
+/// to the DBus `MenuNode` format the Linux StatusNotifierItem expects.
+///
+/// Podman-unavailable status text is the one Linux-specific override:
+/// the shared builder disables per-project leaves, but the status label
+/// uses "❌ Podman not available" instead of the generic status text.
+fn build_menu(state: &TrayUiState) -> MenuNode {
+    // Podman-unavailable: override the status text before building.
+    let mut ui_state = tray_ui_state_to_menu_state(state);
+    if !state.podman_available {
+        ui_state.status_text = status_label(&TrayStatusStage::PodmanMissing);
+    }
 
-    node(
-        0,
-        props(vec![
-            ("label".to_string(), ov_str("Tillandsias")),
-            ("visible".to_string(), ov(Value::from(true))),
-        ]),
-        children,
-    )
+    let structure = shared_menu::build(&ui_state);
+
+    match structure {
+        shared_menu::MenuStructure::Provisioning { items }
+        | shared_menu::MenuStructure::Ready { items }
+        | shared_menu::MenuStructure::Failed { items } => {
+            let children: Vec<OwnedValue> = items
+                .iter()
+                .map(|item| child(shared_menu_item_to_node(item)))
+                .collect();
+            node(
+                0,
+                props(vec![
+                    ("label".to_string(), ov_str("Tillandsias")),
+                    ("visible".to_string(), ov(Value::from(true))),
+                ]),
+                children,
+            )
+        }
+    }
 }
 
 #[interface(name = "org.kde.StatusNotifierItem")]
@@ -6074,9 +6173,16 @@ mod tests {
     /// This test fails if anyone defaults `login_observed` to true in the live
     /// constructor or makes the unobserved row clickable.
     ///
+    /// Order 628-p5tj: with the shared builder, the unobserved state renders
+    /// "Setting up…" when the runtime is not yet ready (enclave still
+    /// verifying), or "Checking your account…" when the runtime is ready but
+    /// the sign-in answer is outstanding. Both are disabled.
+    ///
     /// @trace spec:tray-ux, spec:tray-minimal-ux
     #[test]
     fn unobserved_login_renders_disabled_checking_row() {
+        // When the enclave is still verifying, login_runtime_ready is false,
+        // so the shared builder shows "Setting up…" (workspace still coming up).
         let state = TrayStateBuilder::new()
             .forge_available(false)
             .enclave_status(EnclaveStatus::Verifying)
@@ -6086,10 +6192,8 @@ mod tests {
         let menu = build_menu(&state);
         let label_list = labels(&menu);
         assert!(
-            label_list
-                .iter()
-                .any(|l| l.contains("Checking your account")),
-            "unobserved sign-in must render the Checking-your-account row. labels={label_list:?}"
+            label_list.iter().any(|l| l.contains("Setting up")),
+            "unobserved sign-in with verifying enclave must show Setting-up row. labels={label_list:?}"
         );
         assert!(
             !label_list.iter().any(|l| l.contains("GitHub Login")),
@@ -7250,6 +7354,83 @@ mod tests {
         assert!(
             after.revision > rev_before,
             "refresh must bump the menu revision so the submenu re-renders"
+        );
+    }
+
+    /// Order 628-p5tj: verify that the shared builder's string IDs map to
+    /// the exact integer IDs the `event()` handler dispatches on. This is
+    /// the cross-platform contract — a regression here means the tray
+    /// dispatches clicks to the wrong handler on Linux.
+    #[test]
+    fn shared_id_to_int_matches_event_dispatch_contract() {
+        use tillandsias_host_shell::menu_state::ids;
+
+        assert_eq!(shared_id_to_int(ids::STATUS), 10);
+        assert_eq!(shared_id_to_int(ids::GITHUB_LOGIN), 20);
+        assert_eq!(shared_id_to_int(ids::LOCAL_PROJECTS), 21);
+        assert_eq!(shared_id_to_int(ids::CLOUD_PROJECTS), 22);
+        assert_eq!(shared_id_to_int(ids::SEPARATOR), 29);
+        assert_eq!(shared_id_to_int(ids::VERSION), 30);
+        assert_eq!(shared_id_to_int(ids::QUIT), 31);
+
+        // Per-project items: project.local.<name>.<verb> → base + offset
+        let base_local = local_project_base("my-project");
+        assert_eq!(
+            shared_id_to_int("project.local.my-project."),
+            base_local + PROJECT_SUBMENU_OFFSET
+        );
+        assert_eq!(
+            shared_id_to_int("project.local.my-project.claude"),
+            base_local + 0
+        );
+        assert_eq!(
+            shared_id_to_int("project.local.my-project.codex"),
+            base_local + 1
+        );
+        assert_eq!(
+            shared_id_to_int("project.local.my-project.opencode"),
+            base_local + 2
+        );
+        assert_eq!(
+            shared_id_to_int("project.local.my-project.antigravity"),
+            base_local + 3
+        );
+        assert_eq!(
+            shared_id_to_int("project.local.my-project.opencode-web"),
+            base_local + 4
+        );
+        assert_eq!(
+            shared_id_to_int("project.local.my-project.observatorium"),
+            base_local + 5
+        );
+        assert_eq!(
+            shared_id_to_int("project.local.my-project.maintenance"),
+            base_local + 6
+        );
+
+        // Cloud projects use cloud_project_base
+        let base_cloud = cloud_project_base("my-project");
+        assert_eq!(
+            shared_id_to_int("project.cloud.my-project.claude"),
+            base_cloud + 0
+        );
+
+        // Placeholder and overflow IDs
+        assert_eq!(
+            shared_id_to_int(ids::LOCAL_PROJECTS_EMPTY),
+            LOADING_LOCAL_ID
+        );
+        assert_eq!(
+            shared_id_to_int(ids::CLOUD_PROJECTS_EMPTY),
+            LOADING_CLOUD_ID
+        );
+        assert_eq!(
+            shared_id_to_int(ids::CLOUD_PROJECTS_LOADING),
+            LOADING_CLOUD_ID
+        );
+        assert_eq!(
+            shared_id_to_int(ids::CLOUD_PROJECTS_OVERFLOW),
+            CLOUD_OVERFLOW_ID
         );
     }
 }

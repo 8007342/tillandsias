@@ -12640,6 +12640,12 @@ plan_index:
       notes: |
         Linux-owned because the Linux builder is the one being retired or reconciled. Can run in parallel with 628-c7qd.
       events:
+        - type: claim
+          ts: "2026-08-26T03:10:59Z"
+          agent_id: "forge-forge-tillandsias-opencode-20260826t031059z"
+          host: forge
+          summary: |
+            Claimed by forge for convergence implementation. Linux tray menu builder will be reconciled with the shared host-shell menu_state.rs builder.
         - type: filed
           ts: "2026-08-09T08:51:57Z"
           agent_id: windows-claude-fable-metaorch-20260809t063000z
