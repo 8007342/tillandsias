@@ -106,9 +106,42 @@ set -uo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 
-USAGE_LOG="${TILLANDSIAS_EXPERT_USAGE_LOG:-/tmp/forge-expert-usage.jsonl}"
-FLOW_LOG="${TILLANDSIAS_CYCLE_FLOW_LOG:-/tmp/tillandsias-cycle-flow.jsonl}"
-TIMING_LOG="${TILLANDSIAS_TIMING_LOG:-/tmp/tillandsias-timing.jsonl}"
+# Where a metrics log lives when the caller has not named one (order 890-t9pu).
+#
+# `/tmp` WAS the default, and `/tmp` IS NOT ONE PLACE. On a Windows host
+# `./build.sh` re-execs into WSL2 and writes there, while `cycle-metrics.sh`
+# runs in Git Bash and reads a different filesystem entirely. MEASURED on
+# yolanda 2026-08-25: 322 `build-check` records on the WSL side, 0 on the Git
+# Bash side, so `timing:` reported `build_check_ms_avg=-` while 322
+# measurements sat in a log the reader could not open, and named a `slowest`
+# step from a two-day-old file. Every timing metric that host ever published
+# was stale or absent — including, until it was found, the measurement of the
+# boundary itself.
+#
+# The checkout is the one thing both userlands agree on, so the default moves
+# under `target/` (gitignored, already the home for build artifacts). Callers
+# that name a log explicitly are untouched, which keeps every fixture working.
+#
+# ONE-TIME COST, stated rather than hidden: a host with history in `/tmp` starts
+# a fresh series here. The rolling views degrade gracefully — they report
+# `source=absent` until the first append — so this costs recent averages, not
+# correctness. That is the price of the numbers being attributable at all.
+#
+# Falls back to `/tmp` when there is no writable checkout to write into, so a
+# forge or a bare invocation outside a repo keeps working exactly as before.
+# The rule itself lives in one file so a writer and a reader cannot drift apart
+# — which is the defect this fixes. Sourced best-effort: if it is unavailable
+# the old /tmp behaviour is preserved rather than the script failing.
+# shellcheck source=scripts/metrics-log-path.sh
+. "$SCRIPT_DIR/metrics-log-path.sh" 2>/dev/null || true
+command -v metrics_default_log >/dev/null 2>&1 || {
+    metrics_default_log() { printf '/tmp/%s' "$1"; }
+}
+_metrics_default_log() { metrics_default_log "$1" "$REPO_ROOT"; }
+
+USAGE_LOG="${TILLANDSIAS_EXPERT_USAGE_LOG:-$(_metrics_default_log forge-expert-usage.jsonl)}"
+FLOW_LOG="${TILLANDSIAS_CYCLE_FLOW_LOG:-$(_metrics_default_log tillandsias-cycle-flow.jsonl)}"
+TIMING_LOG="${TILLANDSIAS_TIMING_LOG:-$(_metrics_default_log tillandsias-timing.jsonl)}"
 
 # ── --emit-timing: append one build/test/litmus DURATION record (packet 682-emvg)
 # Best-effort by construction, mirroring --emit-flow above and mcp-usage-log.sh:
@@ -368,7 +401,7 @@ printf 'experts_substitution: unknown (needs the agent harness tool log; not der
 # is retro-labelled by a fact nobody recorded. An `ok-unexposed` cycle also
 # fires the mcp_outage: line, because a read path that silently degraded for a
 # whole cycle IS the outage 737-zcj5 was built to stop losing.
-HEALTH_LOG="${TILLANDSIAS_EXPERT_HEALTH_LOG:-/tmp/forge-expert-health.jsonl}"
+HEALTH_LOG="${TILLANDSIAS_EXPERT_HEALTH_LOG:-$(_metrics_default_log forge-expert-health.jsonl)}"
 mcp_health="unprobed"
 mcp_outages=0
 if [ -s "$HEALTH_LOG" ]; then
