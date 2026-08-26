@@ -11654,6 +11654,71 @@ plan_index:
 
       events:
         - type: note
+          ts: "2026-08-26T06:45:36Z"
+          agent_id: "linux-macuahuitl-claude-20260826t064535z"
+          host: macuahuitl
+          summary: |
+            REALIZE PROVEN, NOT JUST EVALUATION -- and a pre-existing trunk break repaired on the way. Landed 9b0c27c1c.
+
+            THE MIGRATION FIXED SOMETHING THAT WAS ALREADY BROKEN. Measured both directions:
+              old flake+lock: nix eval .#packages.x86_64-linux.forge-image.drvPath -> FAILS
+                              (function 'anonymous lambda' called with unexpected argument
+                               'copyToRoot', at the OLD locked nixpkgs rev 50ab7937)
+              new flake:      same output -> /nix/store/z1fgfqy8...-tillandsias-forge.tar.gz.drv
+
+            So the forge-image nix output has been UNEVALUATABLE on the trunk for some
+            time, and nothing noticed -- because nothing in `./build.sh --check` evaluates
+            the flake, and `nix flake show` does not force a derivation. A broken output
+            that no gate touches is indistinguishable from a working one.
+
+            REALIZE, not merely evaluate:
+              nix build .#tillandsias-router-sidecar-x86_64-musl -> REALIZE_RC=0
+              out: /nix/store/aanz8y3x...-tillandsias-router-sidecar-x86_64-0.0.0
+              bin/tillandsias-router-sidecar present
+
+            CRITERION 3, CLOSURE HALF -- first real datum:
+              closureSize = 1,595,920 bytes = 1.52 MiB
+              runtime references = ZERO
+            Zero refs is the correct answer for a static musl binary and it also settles
+            "no user runtime dependency disappears" for this output trivially: there are
+            none to lose. The remaining outputs need the same measurement.
+
+            ALSO VERIFIED THIS CYCLE:
+              nix flake check                 -> all checks passed, rc=0
+              aarch64-linux evaluation        -> tillandsias-headless-aarch64-0.0.0.drv
+              check-nix-deps-stability.sh     -> ok:nix-deps-stable
+                  (765-8hc3's invariant -- source edits do not churn the deps derivation --
+                   SURVIVES the crane v0.20.3 -> v0.24.0 bump. Non-obvious and worth having:
+                   crane's mkDummySrc behaviour is exactly what that packet warned people
+                   not to hand-roll around.)
+
+            RELEASED BACK TO ready RATHER THAN LEFT in_progress. What remains is real and
+            large, and hiding it behind a claim would make it invisible to both `ready` and
+            burndown (641-e2qa).
+
+            RESIDUAL, precisely:
+              1. Realize the five remaining outputs: tillandsias-x86_64-musl,
+                 tillandsias-headless-x86_64-musl, tillandsias-headless-aarch64-musl,
+                 forge-image, web-image. This is the cold ~1,000-crate compile per target
+                 that 790-mbk9 exists to measure; the sidecar realize above proves the lane
+                 works, so what is left is time, not risk.
+              2. Record closure sizes for each and diff against the pre-bump values.
+                 NOTE the baseline is not free: the OLD flake cannot even evaluate
+                 forge-image, so an old-vs-new closure comparison for that output does not
+                 exist and cannot be produced. Say so rather than reporting a delta.
+              3. `flake check --all-systems` still fails on x86_64-darwin (forge-image
+                 references pkgs.glibc for an FHS ld-linux symlink). VERIFIED PRE-EXISTING
+                 -- the old lock fails --all-systems too. Out of scope here; worth its own
+                 packet, because eachDefaultSystem is generating darwin outputs that have
+                 never been buildable and nothing checks them.
+
+            AMBIGUITY IN CRITERION 2 worth resolving before someone claims completion:
+            "builds for x86_64-linux and aarch64-linux". This flake exposes aarch64 as
+            pkgsCross MUSL TARGETS built ON x86_64, not as a separate aarch64-linux HOST
+            system, and the fleet has no aarch64 host. Reading it as "the outputs covering
+            both architectures build on a supported host" is satisfiable; reading it as
+            "two build hosts" is not, here.
+        - type: note
           ts: "2026-08-26T06:39:30Z"
           agent_id: "linux-macuahuitl-claude-20260826t063930z"
           host: macuahuitl

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: nix-supported-release-and-crane-migration
+    field: status
+    value: ready
+    ts: "2026-08-26T06:45:36Z"
+    host: macuahuitl
+
+events:
+  - packet_id: nix-supported-release-and-crane-migration
+    event:
+      type: note
+      ts: "2026-08-26T06:45:36Z"
+      host: macuahuitl
+      summary: >
+        inputs migrated and landed 9b0c27c1c; flake check green; realize proven on one target; residual is the 5 remaining realizes + closure diffs
