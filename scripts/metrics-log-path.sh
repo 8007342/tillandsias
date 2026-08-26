@@ -24,10 +24,28 @@
 # WHERE IT POINTS
 #
 # The checkout is the one thing both userlands agree on, so the default lives
-# under `target/metrics/` — gitignored, already the home for build artifacts,
-# and host-local machine state rather than project content. Falls back to `/tmp`
-# when there is no writable checkout (a bare invocation, a read-only tree), so a
-# forge or an out-of-repo call keeps working exactly as before.
+# under `.cache/metrics/` — gitignored, host-local machine state rather than
+# project content. Falls back to `/tmp` when there is no writable checkout (a
+# bare invocation, a read-only tree), so a forge or an out-of-repo call keeps
+# working exactly as before.
+#
+# NOT `target/`, AND THIS IS LOAD-BEARING (macuahuitl, 2026-08-26). `target/`
+# was the first choice and it is wrong: daily maintenance runs `cargo clean`
+# (`check-build-cache-sweep.sh` fires above 40 GiB or a 14-day-old marker, from
+# Finalization 9c and Start-Of-Day), and `cargo clean` removes the target
+# directory WHOLESALE — taking `target/metrics/` with it. Measured in a
+# throwaway crate: `target/metrics` 1 -> 0 across a clean, `.cache/metrics`
+# 1 -> 1. And it is not hypothetical: that host's `target/` went 24 GiB -> 31
+# GiB in a single cycle against a 40 GiB threshold.
+#
+# The failure would have been near-undetectable, which is why it is pinned:
+# a routine GC silently resets every rolling series, and the reset looks
+# EXACTLY like the documented one-time migration cost below. Someone would see
+# `source=absent` months later, remember the migration note, and shrug at a
+# sweep that had just eaten the history.
+#
+# A repo-relative path also fixes something `/tmp` never could: two worktrees
+# on one host share `/tmp` and collide there, and do not collide here.
 #
 # An explicit `TILLANDSIAS_*_LOG` env var always wins — every fixture that names
 # its own log keeps working untouched.
@@ -46,8 +64,8 @@ metrics_default_log() {
         _mdl_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]:-.}")/.." 2>/dev/null && pwd)" || _mdl_root=""
     fi
     if [ -n "$_mdl_root" ] && [ -d "$_mdl_root/.git" ] \
-        && mkdir -p "$_mdl_root/target/metrics" 2>/dev/null; then
-        printf '%s/target/metrics/%s' "$_mdl_root" "$_mdl_base"
+        && mkdir -p "$_mdl_root/.cache/metrics" 2>/dev/null; then
+        printf '%s/.cache/metrics/%s' "$_mdl_root" "$_mdl_base"
     else
         printf '/tmp/%s' "$_mdl_base"
     fi

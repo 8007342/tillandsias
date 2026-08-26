@@ -42,7 +42,7 @@ fi
 
 # ── arm 2: inside a checkout the default is repo-relative, not /tmp ───────────
 case "$probe_path" in
-    "$ROOT/target/metrics/"*) ok "in-checkout default is repo-relative: ${probe_path#"$ROOT"/}" ;;
+    "$ROOT/.cache/metrics/"*) ok "in-checkout default is repo-relative: ${probe_path#"$ROOT"/}" ;;
     /tmp/*) bad "still defaulting to /tmp inside a checkout — the boundary split is back" ;;
     *) bad "unexpected default path: $probe_path" ;;
 esac
@@ -116,6 +116,21 @@ if [ "$resolved_none" = "unknown" ]; then
 else
     bad "expected unknown with no source available, got '$resolved_none'"
 fi
+
+# ── arm 7: the log must survive `cargo clean` ────────────────────────────────
+# `target/` was the first choice and it is wrong: daily maintenance runs
+# `cargo clean`, which removes the target directory WHOLESALE and would take the
+# metrics with it. Measured by macuahuitl in a throwaway crate — target/metrics
+# 1 -> 0 across a clean, .cache/metrics 1 -> 1 — on a host whose target/ grew
+# 24 -> 31 GiB in one cycle against a 40 GiB sweep threshold.
+#
+# Pinned because the failure is near-undetectable: a routine GC silently resets
+# every rolling series, and the reset looks exactly like the documented one-time
+# migration. This arm is what stops someone moving it back into target/.
+case "$probe_path" in
+    */target/*) bad "metrics log is under target/ — cargo clean will delete it (see macuahuitl 2026-08-26)" ;;
+    *) ok "metrics log is outside target/, so daily-maintenance cargo clean cannot eat it" ;;
+esac
 
 printf 'metrics-log-path-agreement: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1
