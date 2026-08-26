@@ -1359,13 +1359,14 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         # guard-activation audit directly above. PIPESTATUS[0] is read only to
         # NAME the exit code in the failure message; do not read `$?` there,
         # it is tee's.
-        if bash scripts/check-markdown-distillation.sh 2>&1 | tee /tmp/markdown-distillation.log; then
+        bash scripts/check-markdown-distillation.sh 2>&1 | tee /tmp/markdown-distillation.log
+        _rc="${PIPESTATUS[0]}"
+        if [ "$_rc" -eq 0 ]; then
             log_pass "Markdown distillation policy checked"
             archive_check_log "markdown-distillation" "pass" /tmp/markdown-distillation.log
         else
-            rc=${PIPESTATUS[0]}
             log_fail_tracked "markdown-distillation" \
-                "Markdown distillation policy FAILED (exit ${rc}) — noncanonical markdown outside the inventory; see /tmp/markdown-distillation.log"
+                "Markdown distillation policy FAILED (exit ${_rc}) — noncanonical markdown outside the inventory; see /tmp/markdown-distillation.log"
             archive_check_log "markdown-distillation" "fail" /tmp/markdown-distillation.log
         fi
     else
