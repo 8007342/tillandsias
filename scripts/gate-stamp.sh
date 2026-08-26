@@ -219,11 +219,33 @@ compute() {
     # Hash the link target text instead. Refuse any other non-file entry rather
     # than silently claiming that an unmeasured tree was validated.
     # PROCESS COUNT IS THE BUDGET (order 675-dkif, 2026-08-10). The original loop
-    # spawned sha256sum once (twice, with the $() subshell) PER FILE. On Linux
-    # that is the advertised ~60ms; on a Windows/MSYS host a process spawn
-    # costs ~100-150ms, so ~4000 files became a ~20-MINUTE pre-push hook —
-    # which is precisely the "multi-minute hook gets --no-verify'd" failure
-    # this stamp exists to avoid. Classification uses bash builtins (no
+    # spawned sha256sum once (twice, with the $() subshell) PER FILE, which is
+    # the "multi-minute hook gets --no-verify'd" failure this stamp exists to
+    # avoid. The batching below is still the right call — but the NUMBER that
+    # justified it was a ghost, and it is corrected here.
+    #
+    # MEASURED by yolanda on yolanda (Windows), 2026-08-26, 1000 iterations:
+    #
+    #   Git Bash     /bin/true 17.58 ms    sha256sum 18.51 ms
+    #   WSL          /bin/true  0.69 ms    sha256sum  1.33 ms
+    #   yoga native  /bin/true  0.32 ms    sha256sum  0.80 ms
+    #
+    # This comment used to claim "~100-150 ms per spawn on a Windows/MSYS host",
+    # inherited and never measured. The real MSYS floor is 17.6 ms — 6-9x lower
+    # — and the figure was stale in the direction that made it scarier, which is
+    # the direction that quietly justifies whatever it is cited for.
+    #
+    # It was also aimed at the wrong process. `./build.sh --check` runs INSIDE
+    # WSL, where a spawn costs 0.69 ms — 2.2x yoga's native floor, not 55x — so
+    # Windows spawn cost was never what made the gate slow there. The 9P/drvfs
+    # filesystem bridge is (macbook measured a no-op cargo probe at 11.4 s over
+    # /mnt/c against ~165 ms on two native hosts).
+    #
+    # WHAT SURVIVES, and it is why the batching stays: the pre-push HOOK runs in
+    # Git Bash, at 17.6 ms a spawn. Thousands of per-file spawns there is still
+    # tens of seconds of pure overhead on every push. A handful of batched
+    # invocations beats that comfortably. The design was right; only its
+    # arithmetic was fiction. Classification uses bash builtins (no
     # forks), regular files are batch-hashed by xargs in a handful of
     # sha256sum invocations, and only symlinks (rare) pay a per-entry spawn.
     # The emitted frames were BYTE-IDENTICAL to the per-file implementation,
