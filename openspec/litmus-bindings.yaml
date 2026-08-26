@@ -363,6 +363,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:forge-environment-discoverability-shape
+  - litmus:lane-observed-startup-log
   - litmus:onboarding-cold-start-discovery
   - litmus:forge-environment-discoverability-install-shape
   - litmus:mcp-discoverability-shape

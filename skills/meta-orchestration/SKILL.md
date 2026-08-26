@@ -1344,6 +1344,7 @@ So a validation packet this loop writes should say, explicitly:
 
 ```bash
 scripts/check-stranded-in-progress.sh
+scripts/archive-plan-packets.sh
 ```
 
 A packet in `in_progress` is invisible in BOTH directions: `ready` queries skip
