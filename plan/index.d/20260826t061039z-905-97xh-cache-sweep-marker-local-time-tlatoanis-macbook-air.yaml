@@ -1,0 +1,86 @@
+packets:
+  - packet_id: build-cache-sweep-marker-dates-in-local-time
+    order: 905-97xh
+    status: ready
+    kind: bug
+    pickup_role: any
+    priority: p3
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    depends_on: []
+    deliverable: |
+      check-build-cache-sweep.sh stamps and compares its marker date in UTC,
+      matching check-daily-maintenance.sh and every other timestamp this
+      project writes.
+    capability_tags:
+      - tooling
+      - timestamps
+      - fleet
+    tags:
+      - utc-consistency
+      - marker
+      - v0.3
+    title: |
+      The build-cache-sweep marker records its date in LOCAL time while its own `utc=` field records UTC — so one line of one file says two different days, and it disagrees with the daily-maintenance marker written in the same second.
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-08-26T06:09:41Z (23:09 PDT on
+      2026-08-25), stamping both markers in the same cycle seconds apart:
+
+        build-cache:       date=2026-08-25 utc=2026-08-26T06:09:41Z
+        daily-maintenance: date=2026-08-26 utc=2026-08-26T06:09:41Z
+
+      Same host, same instant, two different days — and THE CACHE MARKER
+      CONTRADICTS ITSELF WITHIN A SINGLE LINE.
+
+      The cause is one character. `check-daily-maintenance.sh:101` uses
+      `date -u +%Y-%m-%d`. `check-build-cache-sweep.sh` uses bare `date
+      +%Y-%m-%d` at its stamp (:108, :112) and at its comparison (:154).
+
+      NOT CURRENTLY A CORRECTNESS BUG, and the packet says so plainly: the
+      sweep stamps local AND compares local, so it is internally consistent
+      and the 14-day staleness arithmetic is right today. This is filed as p3
+      for that reason, not p1.
+
+      WHY IT IS STILL WORTH FIXING:
+        * The marker is EVIDENCE. A file whose own two fields name different
+          days is evidence a reader has to reconcile before trusting, and the
+          `--action` requirement exists precisely so the marker can be read as
+          a record rather than a checkbox.
+        * It diverges from every other timestamp discipline in this project —
+          ledger events, loop-status `--ts`, mo-full attestations and agent
+          identities are all UTC, and the ledger writers now REFUSE
+          non-canonical identity at write time (874-idnt). A local-time date
+          in a committed-adjacent marker is the one holdout.
+        * A host that crosses DST or changes timezone gets a one-day
+          discontinuity in the staleness math, in whichever direction the
+          clock moved. The fleet already spans PDT and CEST hosts.
+        * Two sibling gates on one host disagreeing about the date is exactly
+          the sort of small inconsistency that costs an hour when someone is
+          correlating a marker against a cycle log at 23:00 local.
+    exit_criteria:
+      - |
+          `check-build-cache-sweep.sh` stamps `date=` from `date -u` and
+          compares against `date -u`, so stamp and comparison stay in the same
+          clock as each other AND as the daily-maintenance marker.
+      - |
+          A marker written before the fix (local date) is still readable
+          afterwards — the change must not silently invalidate an existing
+          marker and trigger a spurious sweep on every host at once. Either
+          tolerate the old value or state that a one-off re-stamp is expected.
+      - |
+          NEGATIVE CONTROL: a marker dated more than the window ago still
+          reads as stale. Without it the fix could be "always return
+          not-due", which passes an equality check and disables the gate.
+    verifiable_closure: |
+      NAMED: extend `litmus:build-cache-sweep-trigger` with a leg that stamps
+      with `TZ` set to a zone whose local date differs from UTC (e.g.
+      `TZ=Pacific/Auckland` or `TZ=Etc/GMT+12`) and asserts the recorded
+      `date=` equals the UTC date, not the local one. Must be RED before the
+      fix. That suite already has the shape for it — it was extended on
+      2026-08-25 with a leg asserting the byte count is MEASURED rather than
+      merely compared.
+    notes: |
+      Found while stamping the marker honestly rather than performing a sweep
+      the size threshold did not call for: target/ was 18 GiB against a 40 GiB
+      trigger, and the sweep was "due" only because the marker had never been
+      initialised. That is a separate observation and is filed on its own.
