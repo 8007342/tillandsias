@@ -1,0 +1,97 @@
+packets:
+  - packet_id: terminal-event-on-a-nonterminal-row-is-invisible
+    order: 910-9bqq
+    status: ready
+    kind: bug
+    pickup_role: any
+    priority: p2
+    desired_release: v0.5
+    depends_on: []
+    multi_cycle: false
+    next_action: |
+      Add the check to tillandsias-plan check as an ADVISORY line naming each row, not a gate — a fleet-wide refusal over one host's bookkeeping is 699-dycj. Then a negative control: a row whose terminal event and terminal status agree must NOT be named, or the check reports every closed packet forever and is switched off.
+    deliverable: |
+      A row carrying a `completion`/`verified`/`falsified` event while its
+      `status` is non-terminal is NAMED by a check, so finished work stops
+      being offered to selection as fresh.
+    capability_tags:
+      - plan
+      - ledger
+      - fail-loud
+    tags:
+      - claims
+      - duplicate-work
+      - v0.5
+    title: |
+      A packet can carry a `completion` event and a `ready` status at the same time, and nothing notices — so finished work is offered to the next host as fresh p1 work.
+    context: |
+      MEASURED on yoga 2026-08-26T09:28Z. 628-p5tj (`estimated_hours: 10`,
+      p1) was offered by `select-work-batch.sh` as claimable. It carried:
+
+        status:  ready
+        events:  - type: completion
+                   ts: "2026-08-26T03:35:09Z"
+                   host: forge
+                   summary: Converged Linux tray menu builder ... All 73
+                            headless + 19 host-shell tests pass.
+
+      Six hours old. The convergence was REAL — verified in the tree at
+      3500e6301 — and the row was still advertising ten hours of it as
+      unclaimed. I was one step from re-implementing it; what stopped me was
+      reading the events before the description, which is a habit rather than
+      a mechanism.
+
+      THIS IS 641-e2qa RUNNING IN THE OPPOSITE DIRECTION. That packet is about
+      work hidden BY a claim: `in_progress` makes a row invisible to `ready`
+      queries and to burndown, so unfinished work is never picked up. This is
+      the mirror: a terminal EVENT with a non-terminal STATUS makes finished
+      work maximally visible — selection keeps offering it, and the more
+      expensive the row's estimate, the more attractive it looks.
+
+      The two states have opposite symptoms and one cause: the status field
+      and the event stream can disagree, and only the status field is
+      consulted by selection.
+
+      WHY A CHECK RATHER THAN "SET THE STATUS PROPERLY". The forge cycle that
+      did the work filed a correct completion event and did not set the field;
+      that is one host's slip, and the fleet has ~7 hosts and a 24h claim
+      reaper. The ledger already knows both facts — it folds the events and it
+      folds the status — so the disagreement is derivable rather than needing
+      discipline. `check` naming it costs nothing and does not depend on the
+      next agent having the habit I happened to have.
+
+      NOT A GATE, DELIBERATELY. `tillandsias-plan check` runs on every host in
+      `./build.sh --check`, and a fleet-wide refusal over one host's
+      bookkeeping is 699-dycj — one host's typo becoming every host's red
+      build. Advisory, named, counted.
+    exit_criteria:
+      - |
+          `tillandsias-plan check` emits an ADVISORY line naming every row
+          whose latest `completion`/`verified`/`falsified` event coexists
+          with a non-terminal `status`. Exit code unchanged.
+      - |
+          NEGATIVE CONTROL: a row whose terminal event and terminal status
+          AGREE is not named. Without this the check names every closed packet
+          in the ledger forever, which is the same as naming none.
+      - |
+          The advisory names the event type, its timestamp and the current
+          status, so a reader can tell a six-hour-old completion from a
+          multi_cycle packet that legitimately returned to `ready`.
+      - |
+          multi_cycle rows are NOT flagged for returning to `ready` after a
+          cycle — that is documented correct behaviour (251), and a check that
+          flags it would train the fleet to ignore the advisory.
+    verifiable_closure: |
+      A fixture over a scratch ledger containing one disagreeing row, one
+      agreeing row and one multi_cycle row, asserting exactly the first is
+      named. No `litmus:` name is declared here: under 885-92iu a declared
+      closure must resolve to a bound, file-backed test.
+    events:
+      - type: filed
+        ts: "2026-08-26T09:31:56Z"
+        agent_id: "linux-yoga-opus5-20260826t093156z"
+        host: yoga
+        summary: |
+          Filed from the cycle that nearly duplicated the work. The row was
+          selected, sized and about to be claimed as fresh; the completion
+          event was six hours old and the code was already in the tree.

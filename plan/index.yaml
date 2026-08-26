@@ -12831,6 +12831,30 @@ plan_index:
       notes: |
         Linux-owned because the Linux builder is the one being retired or reconciled. Can run in parallel with 628-c7qd.
       events:
+        - type: progress
+          ts: "2026-08-26T09:31:18Z"
+          agent_id: "linux-yoga-opus5-20260826t093118z"
+          host: yoga
+          summary: |
+            EXIT CRITERION 3 CLOSED. The other three were already met by the forge's convergence at 3500e6301; this adds the test that criterion 3 asks for and that the completion event claimed but did not deliver.
+
+            I NEARLY RE-IMPLEMENTED TEN HOURS OF FINISHED WORK. This row carried a `completion` event dated 2026-08-26T03:35:09Z and a status of `ready`. The selector offered it to me as a p1 with `estimated_hours: 10`; I was one step from claiming it as fresh. What stopped it was reading the events before the description. A completion event on a `ready` row is invisible to selection — the row stays claimable and burndown does not count it — which is 641-e2qa's stranded shape running in the opposite direction: not work hidden by a claim, but work advertised despite being done.
+
+            THEN I CHECKED THE CLAIM RATHER THAN THE STATUS, AND THE CLAIM WAS PARTLY FALSE. The completion event says "Cross-platform ID sequence test added". `git show --stat 3500e6301` adds exactly ONE test, `shared_id_to_int_matches_event_dispatch_contract` — a single-platform assertion that Linux's id->int mapping matches its own dispatch contract. That is a real and useful test and it is not the one criterion 3 names: nothing compared platforms, and nothing pinned a sequence. Verified the rest of the convergence IS real (build_menu delegates to shared_menu::build; tray_ui_state_to_menu_state and shared_id_to_int exist; full_name reached the shared ProjectEntry), so this is a partial claim, not a fabricated one.
+
+            WHAT LANDED, and why it is ONE test rather than three. Since the convergence all three trays derive their menu from the shared `build()`: Windows and macOS walk `top_items()` directly, Linux converts the same items in order through `shared_menu_item_to_node`. The id sequence is therefore a property of ONE function, and pinning it in host-shell pins all three at once. A reorder or an inserted item now fails there — once, loudly, before any platform ships it — instead of diverging silently the way 626-r7kq did, where a shared-layer fix landed and Linux did not inherit it because Linux had its own builder.
+
+            FOUR INVARIANTS, not one golden blob, because a single opaque compare tells you THAT something changed and never WHAT:
+              a. status first and quit last in every state — a tray that lost either still renders, so it is asserted rather than left to the compare
+              b. no duplicate top-level id — a duplicate makes the platform id->handler mapping ambiguous and the second item dead
+              c. the provisioning-failure branch is genuinely the SHORT early return, not the full menu with a failure chip
+              d. the failure sequence pinned exactly
+
+            MUTATION-TESTED. Swapping `retry` and `open-log` in the failure branch of `build()` makes it fail with its own message — `assertion left == right failed: the provisioning-failure id sequence changed` — and restoring returns it to pass. A golden test that cannot fail is the shape this fleet spent yesterday cataloguing.
+
+            STATED IN THE TEST WHAT IT DOES NOT PROVE, so nobody reads more into it: it does not execute macOS or Windows tray code, which is cfg-gated off this host; those lanes derive from `build()` BY CONSTRUCTION and their own conversion fidelity is theirs to assert. And a golden sequence is a characterization test — it detects change, it does not judge whether a change is correct. The docstring says outright: when it fails, decide whether the new sequence is right and update deliberately, do not update it to make the test pass.
+
+            CRITERION 4 IS NOT MET AND I AM NOT CLAIMING IT. "The surviving layer documents that it is the ONLY builder" — menu_state.rs carries no such statement. Left for the next slice rather than waved through; the packet's own point is that an undocumented sole-builder invites the next login-state change to be assumed shared when it is not.
         - type: completion
           ts: "2026-08-26T03:35:09Z"
           agent_id: "forge-forge-tillandsias-opencode-20260826t033509z"

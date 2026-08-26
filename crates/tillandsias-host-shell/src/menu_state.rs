@@ -763,6 +763,134 @@ fn build_project_submenu(
 mod tests {
     use super::*;
 
+    /// @trace spec:host-shell-architecture
+    /// @trace order:628-p5tj
+    ///
+    /// EXIT CRITERION 3: the three platforms produce the same top-level item id
+    /// sequence for the same state.
+    ///
+    /// WHY THIS TEST IS HERE AND NOT THREE TESTS. Since the convergence
+    /// (3500e6301) all three trays derive their menu from THIS `build()`:
+    /// Windows and macOS walk `top_items()` directly; Linux converts the same
+    /// items in order via `shared_menu_item_to_node`. So the id sequence is a
+    /// property of one function, and pinning it here pins all three at once. A
+    /// reorder or an inserted item now fails HERE — once, loudly, before any
+    /// platform ships it — instead of diverging silently in one tray the way
+    /// 626-r7kq did, where a shared-layer fix landed and Linux did not inherit
+    /// it because Linux had its own builder.
+    ///
+    /// WHAT IT DOES NOT PROVE, stated so nobody reads more into it. It does not
+    /// execute the macOS or Windows tray code, which is cfg-gated off this
+    /// host; those lanes derive from `build()` BY CONSTRUCTION and their own
+    /// conversion fidelity is theirs to assert. And a golden sequence is a
+    /// characterization test: it detects change, it does not judge whether a
+    /// change is correct. When it fails, decide whether the new sequence is
+    /// right and update it deliberately — do not update it to make the test
+    /// pass.
+    #[test]
+    fn top_level_id_sequence_is_pinned_for_all_platforms() {
+        fn ids_of(state: &MenuState) -> Vec<String> {
+            build(state)
+                .top_items()
+                .iter()
+                .map(|i| i.id.clone())
+                .collect()
+        }
+
+        // 1. Cold start, logged out, nothing ready.
+        let cold = MenuState::initial();
+        let cold_ids = ids_of(&cold);
+
+        // 2. Same state with a terminal provisioning failure — the early-return
+        //    branch, which is where a divergence would be least visible because
+        //    the menu is short.
+        let mut failed = MenuState::initial();
+        failed.provisioning_failure = Some("disk full".to_string());
+        let failed_ids = ids_of(&failed);
+
+        // 3. Logged in with one local and one cloud project.
+        let mut ready = MenuState::initial();
+        ready.login = GithubLoginState::LoggedIn {
+            handle: "tlatoani".to_string(),
+        };
+        ready.podman_ready = true;
+        ready.login_runtime_ready = true;
+        ready.cloud_projects_loaded = true;
+        ready.local_projects = vec![ProjectEntry {
+            name: "proj".to_string(),
+            path: "/home/u/src/proj".to_string(),
+            ready: true,
+            full_name: None,
+        }];
+        ready.cloud_projects = vec![ProjectEntry {
+            name: "repo".to_string(),
+            path: "octocat/repo".to_string(),
+            ready: false,
+            full_name: Some("octocat/repo".to_string()),
+        }];
+        let ready_ids = ids_of(&ready);
+
+        // THE INVARIANTS, checked rather than eyeballed.
+
+        // a. Every state opens with the status line and closes with quit. A tray
+        //    that lost either would still render, which is why this is asserted
+        //    rather than left to the golden compare below.
+        for (name, seq) in [
+            ("cold", &cold_ids),
+            ("failed", &failed_ids),
+            ("ready", &ready_ids),
+        ] {
+            assert_eq!(
+                seq.first().map(String::as_str),
+                Some(ids::STATUS),
+                "{name}: status line is not first: {seq:?}"
+            );
+            assert_eq!(
+                seq.last().map(String::as_str),
+                Some(ids::QUIT),
+                "{name}: quit is not last: {seq:?}"
+            );
+        }
+
+        // b. No duplicate ids within a menu. A duplicate would make the
+        //    platform id->handler mapping ambiguous and the second item dead.
+        for (name, seq) in [
+            ("cold", &cold_ids),
+            ("failed", &failed_ids),
+            ("ready", &ready_ids),
+        ] {
+            let mut sorted = seq.clone();
+            sorted.sort();
+            let before = sorted.len();
+            sorted.dedup();
+            assert_eq!(
+                before,
+                sorted.len(),
+                "{name}: duplicate top-level id in {seq:?}"
+            );
+        }
+
+        // c. The failure branch really is the short early-return, not the full
+        //    menu with a failure chip. If this stops holding, the branch above
+        //    it changed and the reason in `build()` needs re-reading.
+        assert!(
+            failed_ids.len() < ready_ids.len(),
+            "failure menu is not shorter than the ready menu: {failed_ids:?} vs {ready_ids:?}"
+        );
+
+        // d. GOLDEN SEQUENCES. Update deliberately, never to make this pass.
+        assert_eq!(
+            failed_ids,
+            vec![
+                ids::STATUS.to_string(),
+                "retry".to_string(),
+                "open-log".to_string(),
+                ids::QUIT.to_string(),
+            ],
+            "the provisioning-failure id sequence changed"
+        );
+    }
+
     /// @trace spec:host-shell-architecture, spec:windows-native-tray
     ///
     /// Logged-in menu: status + ~/src submenu + Cloud submenu + separator +
