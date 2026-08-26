@@ -24758,6 +24758,42 @@ plan_index:
             A rule with no discoverable rationale is either given one (from git history) or removed, and the reasoning is recorded in the commit rather than inferred later.
 
       events:
+        - type: completed
+          ts: "2026-08-26T06:17:05Z"
+          agent_id: "macos-tlatoanis-macbook-air-opus5-20260826t061705z"
+          host: tlatoanis-macbook-air
+          summary: |
+            DONE. Every surviving comment is reunited with the rule it explains, the nine post-sort patterns that had no rationale now have one recovered from git history, and the ignore BEHAVIOUR is provably unchanged.
+
+            WHAT c38e91f83 DID: a commit whose message says only ".gitignore: add mock-release/" rewrote the file +62/-76, alphabetically sorted. That hoisted every explanatory comment into a sorted block at the top (lines 1-35 of the file I started from), leaving ~30 ignore patterns reading as arbitrary. The rationales were never lost — they were DETACHED, which is why the operator experienced it as ignore rules that "flip-flop".
+
+            RECOVERED the pre-sort structure from c38e91f83^ and reattached each comment to its rule. NINE PATTERNS were added after the sort and had never carried a rationale; each now has one, cited to the commit that introduced it:
+              /research/images/, /research/vfr-spike/.build/  <- 399d2cfca (macOS packaging spike)
+              /target-guest/                                  <- 5af983061 (guest-binary cross builds)
+              build-git.log                                   <- d4df11750 (git-mirror seed log)
+              images/default/{skills,cheatsheets,cheatsheet-sources}/ <- 35ba3d3f4 (forge agent staging)
+              images/router/.sidecar.stamp                    <- e2a421b40 (765-5efu content-addressed stamp)
+              mock-release/                                   <- c38e91f83 (the sorting commit's actual subject)
+
+            A NEAR-MISS I CAUGHT, AND IT IS THE MORE USEFUL HALF OF THIS PACKET. My first reconstruction attached two rationales as TRAILING comments:
+                /target-musl/          # sidecar nested-cargo target dir
+            GITIGNORE HAS NO INLINE COMMENTS. A `#` anywhere but the start of a line is literal, so both patterns silently stopped matching.
+
+            WORSE, MY OWN VERIFICATION HID IT. I diffed the pattern sets through
+                sed 's/[[:space:]]*#.*//'
+            to normalise, which STRIPPED THE VERY CHARACTERS THAT BROKE THE PATTERNS, and reported "IDENTICAL — no rule added, removed or altered". A check whose normalisation removes the defect it is checking for. Caught only by running `git check-ignore -v target-musl/foo` and getting nothing back where the old file returned `.gitignore:69:/target-musl/`.
+
+            VERIFICATION AS IT NOW STANDS, both legs, because the first alone was the thing that lied:
+              * RAW pattern-set diff with NO stripping: identical.
+              * BEHAVIOURAL: `git check-ignore` over 20 representative paths — including
+                the `!cheatsheet-sources/.gitkeep-tombstone` NEGATION, which is the one
+                entry whose correctness depends on ordering relative to its parent rule —
+                gives byte-identical verdicts old vs new. The negation still correctly
+                reports NOT ignored while `cheatsheet-sources/x` reports ignored.
+
+            `./build.sh --check` green.
+
+            THE GENERALISABLE PART, which is this packet's own defect class turned on my repair: an unattributable ignore rule reads as documented and documents nothing, and a normalising diff reads as a check and checked nothing. Both are artifacts that survive inspection because the thing that would falsify them was removed before the inspection ran.
         - type: filed
           ts: "2026-08-17T00:10:00Z"
           agent_id: linux-yoga-claude-20260816t185912z
