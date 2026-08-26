@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: forge-build-cache-exemption-rests-on-a-premise-that-is-false
+    event:
+      type: note
+      ts: "2026-08-26T17:36:16Z"
+      agent_id: linux-macuahuitl-claude-20260826t173616z
+      host: macuahuitl
+      summary: >
+        RELATED CRITICAL DEFECT, same audit, fixed this cycle rather than filed separately because it is one line and it is a security guard: scripts/litmus-helper-storage-isolation.sh verify-src-readonly emitted its success token SRC_READONLY_VERIFIED from OUTSIDE the if/else that checks for EROFS. A read-WRITE /src therefore printed 'WARNING: Expected EROFS but got:' AND THEN the all-clear, exiting 0 — and run-litmus-test.sh matches expected_behavior as a case-insensitive SUBSTRING, so the step PASSED. A read-write /src mount would have passed the severity:critical test whose entire purpose is to forbid it. FIXED: the token is emitted only on the verified path; a writable /src and a missing container both exit 1 with a named reason. FALSIFIED with a fake podman whose exec returns 0 (i.e. the write succeeds): rc=1, token correctly withheld, message 'FAIL: /src ACCEPTED A WRITE — the :ro mount is not in effect'. THE SHAPE, which is why it belongs next to this packet: a diagnostic that reports a violation and then emits the all-clear is worse than silence — it puts the evidence in the log and the verdict in the other direction. Same family as the forge exemption here (a false premise justifying a skip) and as 905-97xh's fixture writing production state (a green gate over work that never happened).

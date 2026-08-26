@@ -1,0 +1,122 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: local-expert-system-in-toolboxes-on-accelerated-hosts
+    order: 917-6iwv
+    status: ready
+    desired_release: v0.6
+    priority: p1
+    kind: enhancement
+    release_target: convergence-velocity-milestone
+    multi_cycle: true
+    title: |
+      run the local RAG expert system inside per-host toolboxes on the accelerated hosts, with model metadata and MEASURED accuracy recorded per host so model selection becomes evidence rather than preference
+    deliverable: |
+      a toolbox-hosted expert on macuahuitl, yoga and lenovinha, indexing the
+      local checkout, retrained on commit, each recording which model it ran
+      and how accurate it actually was
+    pickup_role: linux
+    owner_host: any
+    depends_on: []
+    capability_tags:
+      - experts
+      - rag
+      - gpu
+      - npu
+      - toolbox
+      - convergence
+    estimated_hours: 24
+    context: |
+      OPERATOR DIRECTION 2026-08-26, following the toolbox validation: with
+      builds now running in toolboxes on every Linux host, the same substrate
+      should carry per-host RAG experts that leverage local accelerators.
+      A strong local model gives "multi-stage adversarial prompting and semantic
+      interpretation of the git-mirror multi-branch context", so an agent can
+      get verifiable answers that INCLUDE SIBLING WORK — which is what turns
+      long-horizon packets into convergence rather than drift. Low-end hosts
+      wait for this; they are not the target.
+
+      THE BLOCKER, AND IT IS THE SAME ONE ON EVERY HOST. Read from
+      `tillandsias-plan capability-matrix` this cycle — every accelerator in
+      the fleet is present and NOT SCHEDULABLE:
+
+        macuahuitl  gpu/NVIDIA RTX A5000 ...... usable; NO ENGINE covers lanes
+                    npu/Intel NPU ............. engine-missing
+                    tier gpu-cuda, Intel Core Ultra 7 265KF, 20 cores, 62 GiB
+        yoga        gpu/Krackan Radeon 840M/860M  usable; NO ENGINE covers lanes
+                    npu/AMD XDNA NPU .......... engine-missing
+                    tier gpu-rocm, 12 cores, 14 GiB
+        lenovinha   gpu/NVIDIA RTX 3070 Laptop  usable; NO ENGINE covers lanes
+                    gpu/Cezanne Radeon Vega ... rocm-runtime-missing
+        yolanda     gpu/AMD Radeon 860M ....... wsl2-no-dri-render-node
+                    npu/NPU Compute Accel ..... wsl2-npu-not-exposed
+        pirria      gpu/Alder Lake-N .......... intel-compute-runtime-missing
+        macbook     gpu/Apple Metal ........... usable; NO ENGINE covers lanes
+
+      So the hardware is there and NOTHING CAN SCHEDULE IT. "usable; no engine
+      covers lanes [container,host-native]" is the matrix saying the capability
+      exists and no runtime claims it. That is the first deliverable, and the
+      toolbox direction is what makes it tractable: an engine in a container is
+      installable without touching an immutable host.
+
+      HOST GROUPING, from the matrix rather than from names:
+        - macuahuitl: the only discrete-workstation GPU (A5000) plus an Intel
+          NPU and 62 GiB. Largest models.
+        - lenovinha: RTX 3070 Laptop, discrete NVIDIA — same engine family as
+          macuahuitl, so CUDA work transfers.
+        - yoga and yolanda are the AMD pair (Radeon 860M-class + NPU); yoga is
+          bare-metal Linux and reachable, yolanda's are BOTH blocked behind
+          WSL2 passthrough and it should NOT be counted on until that is solved.
+        - pirria and the WSL2 guests are explicitly out of scope.
+
+      WHY MEASURED ACCURACY IS PART OF THE DELIVERABLE AND NOT A FOLLOW-UP.
+      The operator asked for model metadata plus ESTIMATED VS VALIDATED
+      accuracy, harvested CRDT-style so model selection is evidence-driven.
+      This codebase already has the failure this prevents: `expert_accuracy
+      rate=100%` was printed in the same run as
+      `verdict:attention:expert-answered-nothing-check-base-branch`, and after
+      that fix a clean tree with an empty usage log reported
+      `verdict:attention:experts-never-called` (911-m7js lineage). An accuracy
+      number with no denominator, or one that cannot distinguish "answered
+      correctly" from "was never asked", is worse than none.
+    outcome: |
+      Agents on accelerated hosts get answers grounded in the local checkout and
+      sibling branches, and the fleet learns which model is actually good at
+      which task.
+    exit_criteria:
+      - 'AN ENGINE EXISTS. At least one accelerator moves from `present-unscheduled` / `engine-missing` to schedulable in the capability matrix, on at least one host. Until this is true nothing else in this packet can be measured, so it is the first slice.'
+      - 'The expert runs INSIDE a toolbox, created idempotently by a script the way `with-tillandsias-builder.sh` now does — not installed onto the host. NEGATIVE CONTROL: a host with no toolbox must fail loudly, never fall back to a host-native expert, per the 2026-08-26 ruling.'
+      - 'The RAG index is built from the LOCAL CHECKOUT (typically /home/claudia/tillandsias for claude harnesses) over CODE, CHEATSHEETS, SPECS, METHODOLOGY and PLAN, and is retrained on commit. State which hook or trigger does it and prove it fires — a retrain that only runs when someone remembers is the guard-nobody-honours shape.'
+      - 'EVERY ANSWER CARRIES MODEL METADATA: model id, quantisation, engine, host, and index generation. An answer whose provenance is unknown cannot be used to compare models later, which is the entire point of collecting them.'
+      - 'ACCURACY IS RECORDED AS ESTIMATED VS VALIDATED, with a denominator, into .cache/metrics/ for CRDT-style harvest. NEGATIVE CONTROL, and it is the one that matters: a host that was never asked must report `never-called`, NOT 100%. This codebase has already shipped `rate=100%` alongside `expert-answered-nothing`; a repeat is a regression, not a new bug.'
+      - 'DIFFERENT MODELS ON DIFFERENT HOSTS IS INTENDED, not a defect to normalise away. The schema must let two hosts disagree about which model is best for a task and have that disagreement be readable, since selecting on one host*s preference is what the measurement exists to replace.'
+    verifiable_closure: |
+      On at least two accelerated hosts running DIFFERENT models, an agent asks
+      the local expert a question whose answer is checkable against the
+      checkout, and the recorded metrics show model id, engine, index
+      generation, and a validated accuracy with a denominator — with a
+      never-asked host correctly reporting never-called rather than a rate.
+    notes: |
+      SEQUENCE MATTERS. The engine slice is a hard prerequisite: every other
+      criterion is unmeasurable until an accelerator is schedulable. Do not
+      start with model selection.
+
+      SCOPE the first slice to ONE host and ONE model. macuahuitl is the
+      obvious candidate (largest memory, discrete A5000, and it is the
+      coordinator, so a bad expert there is noticed immediately) — but note it
+      is also the host whose GPU has "no engine covers lanes [container,
+      host-native]", i.e. the container lane is exactly what needs solving.
+
+      Related: 888-miiy criterion 4 (spec-index build cost, routed to yoga —
+      21,592 embeddings, both time bounds blown, nothing persisted between
+      attempts), 911-m7js, 908-44rw (expert usage log writer/reader disagree on
+      path), 917-zkge (the nix-cache attractor this shares a substrate with).
+    events:
+      - type: filed
+        ts: "2026-08-26T17:46:00Z"
+        agent_id: linux-macuahuitl-claude-20260826t114259z
+        host: macuahuitl
+        summary: |
+          Filed at operator direction after the toolbox model was validated by
+          a full podman reset followed by a green cold build. Grounded in the
+          live capability matrix, which shows every accelerator in the fleet
+          present and unschedulable — that is the first slice.

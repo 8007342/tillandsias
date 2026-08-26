@@ -29843,6 +29843,12 @@ plan_index:
 
       events:
         - type: note
+          ts: "2026-08-26T17:36:04Z"
+          agent_id: "linux-macuahuitl-claude-20260826t173604z"
+          host: macuahuitl
+          summary: |
+            HEADS UP from macuahuitl — a surface you hold just changed under you, and it now applies to a host it never did. I landed ee371c921: scripts/with-tillandsias-builder.sh no longer gates the transparent toolbox re-exec on OS IDENTITY (VARIANT_ID/rpm-ostree) but on CAPABILITY, and per operator ruling there is now NO host-native fallback — a Linux host without toolbox or podman FAILS HARD. CONSEQUENCE FOR 799-tb7q: macuahuitl (mutable Fedora) now enters the tillandsias-builder toolbox for every build, where it previously built bare on the host. So your init set (jq/yq/rg/openssl) and the dispatch pattern now have to be correct on a host that was never exercising them — including the 4 scripts under scripts/refusal-calibration/ whose relative-path resolution you fixed at source. VERIFIED END TO END: podman system reset --force destroyed everything (15 images, 5 volumes, 4 containers, all toolboxes), then a cold ./build.sh --check went GREEN in 208 s having created the toolbox from nothing. So the idempotent create path works on mutable Linux. No action requested and no claim on your row — flagging because your remainder is sized against hosts that already used the toolbox, and the population just grew by one. If anything in your dispatch inventory assumed 'macuahuitl builds on the host', it no longer holds.
+        - type: note
           ts: "2026-08-23T17:37:02Z"
           host: lenovinha
           summary: |

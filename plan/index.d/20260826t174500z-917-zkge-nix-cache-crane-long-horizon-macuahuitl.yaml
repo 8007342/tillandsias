@@ -1,0 +1,117 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: nix-cache-and-crane-build-path-with-its-instrumentation
+    order: 917-zkge
+    status: ready
+    desired_release: v0.6
+    priority: p2
+    kind: enhancement
+    release_target: convergence-velocity-milestone
+    multi_cycle: true
+    title: |
+      route the Rust build through crane and give every host a transparent nix cache — filed as a LONG-HORIZON attractor so today's incremental fixes converge on it rather than being redirected by it
+    deliverable: |
+      a nix-substituted build path that a throwaway toolbox can use without
+      paying a cold compile, plus the instrumentation to know whether it is
+      actually helping
+    pickup_role: any
+    owner_host: any
+    depends_on: []
+    capability_tags:
+      - nix
+      - build
+      - toolbox
+      - convergence
+      - long-horizon
+    estimated_hours: 20
+    context: |
+      OPERATOR DIRECTION 2026-08-26, and the filing style is deliberate: "let's
+      file the nix cache and all its instrumentation needed as a v0.6 target, so
+      any fixes we do today should organically converge to that later. let's
+      just unblock our workflow and continue building the way we are doing, we
+      like convergence, and long horizon work is convergence friendly." This
+      packet is explicitly an ATTRACTOR, not a queue item to be drained soon.
+      Filing it is itself the experiment.
+
+      WHY IT IS NOT ACTIONABLE TODAY, measured this cycle rather than assumed:
+
+      1. NO HOST USES A NIX CACHE FOR LOCAL BUILDS, and that is by design.
+         yoga, pirria, calmecacpilli, macbook and yolanda each independently
+         confirmed no nix at all — they are Silverblue boxes with rootless
+         podman, which is the intended substrate. macuahuitl has nix and its
+         cache service reports `absent`.
+
+      2. 801-kqme BUILT AN ENCLAVE SERVICE, NOT A HOST BUILD ACCELERATOR.
+         `openspec/specs/nix-cache-service/spec.md:34-36` requires it NOT be a
+         host-loopback-only listener. The host-local half exists
+         (`127.0.0.1:5111`, a `substituter-args` subcommand) and has ZERO
+         consumers: not build.sh, not local-ci.sh, not flake.nix, not
+         release.yml.
+
+      3. A NIX CACHE CANNOT ACCELERATE THE BUILD AS IT STANDS. `./build.sh
+         --check` is cargo + rustup. No nix binary cache holds cargo's
+         incremental artifacts. Every host lane emits only
+         `--extra-experimental-features` and `--store $CHROOT_STORE`
+         (`nix-toolbox.sh:329-335`) — 795-h8er gave hosts a warm STORE, not a
+         cache.
+
+      4. THE ONE MEASURED SUCCESS SHOWS THE SHAPE AND ITS LIMIT. 2026-08-25 on
+         macuahuitl, `.#tillandsias-x86_64-musl` against a fresh store with the
+         enclave cache as sole substituter: 96 s, 563 paths substituted, 5 local
+         builds. But it was hand-driven, the cache had been pre-seeded with that
+         exact closure (113 s), and THERE IS NO PUSH SIDE — 790-6n2k's
+         "release.yml pushes to" is `ready` and unstarted. A new commit's crate
+         derivations are in no cache anywhere.
+
+      5. cache.nixos.org does not rescue it: 873-b1nx measured a cache-only
+         dry-run of the musl target against a fresh store at 2,791 derivations
+         to build, 0 fetchable.
+
+      WHAT MAKES IT WORTH DOING ANYWAY, and why crane is the hinge. `flake.nix`
+      already uses crane (v0.24.0). Routing the Rust build through it turns
+      dependency compilation into nix derivations, which a binary cache CAN
+      serve. That is the only condition under which a throwaway toolbox becomes
+      affordable — and disposability is otherwise in direct conflict with build
+      caching, because the dirty state IS the cache. Measured on macuahuitl:
+      `target/` 34 GB against 504 MB of source, artifacts ~180x source; a cold
+      full gate in a fresh worktree is 125 s on 20 cores and roughly 10 min on
+      a 4-core host.
+
+      THE CONVERGENCE BET being tested here: several packets already point this
+      way without being told to — 916-ijxa (the forge cache exemption resting on
+      a false ephemerality premise), 915-wkm2 (scratchpad quota), 863-iicc
+      criterion 4 (worktree cost), 906-qi89 (sweep triggers). If long-horizon
+      filing works, those close individually and this becomes reachable without
+      anyone re-planning it. If it does not, this row sits untouched and that is
+      the measurement.
+    outcome: |
+      A build that can be thrown away without being paid for twice.
+    exit_criteria:
+      - 'The Rust build has a crane path that produces the same artifacts as the cargo path. NEGATIVE CONTROL: the cargo path still works and is still the default until the crane path is measured faster end-to-end on at least two hosts of different tiers.'
+      - 'A nix cache is reachable from a HOST build, not only from inside the enclave — or the spec constraint at nix-cache-service/spec.md:34-36 is amended with a stated reason. Today those two requirements contradict each other and the contradiction is undeclared.'
+      - 'A PUSH side exists (790-6n2k). Without it the cache only ever holds what someone seeded by hand, and the first cache miss is every crate in a new commit.'
+      - 'INSTRUMENTATION IS PART OF THE DELIVERABLE, not a follow-up: substituted-vs-built path counts, cache hit rate, and wall-clock with and without the substituter, recorded per host in .cache/metrics/. A cache nobody measures is indistinguishable from a cache nobody uses — which is the current state of the enclave one.'
+      - 'NEGATIVE CONTROL on the whole premise: if the measured end-to-end time with the cache is not better than the cargo path on a mid-tier host, this closes as REJECTED with the numbers. That is a legitimate outcome and must not be quietly converted into "needs more work".'
+    verifiable_closure: |
+      On a host with a cold store, a full build completes with a majority of
+      dependency paths SUBSTITUTED rather than built, and the measured wall
+      clock beats the equivalent cold cargo build. Both numbers recorded.
+    notes: |
+      DO NOT drain this in a single cycle, and do not let it block the
+      incremental work it is meant to attract. It is filed as an attractor: the
+      right behaviour is for other packets to close in its direction.
+
+      Related and already pointing here: 916-ijxa, 915-wkm2, 863-iicc,
+      906-qi89, 790-6n2k (push side, ready/unstarted), 873-b1nx, 795-h8er,
+      801-kqme.
+    events:
+      - type: filed
+        ts: "2026-08-26T17:45:00Z"
+        agent_id: linux-macuahuitl-claude-20260826t114259z
+        host: macuahuitl
+        summary: |
+          Filed at operator direction as a deliberate long-horizon attractor,
+          with the measurements establishing why it is not actionable today:
+          no host uses a nix cache, 801-kqme is enclave-only by spec, and no
+          nix cache can hold cargo's incremental artifacts until the build
+          routes through crane.
