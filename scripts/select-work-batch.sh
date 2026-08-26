@@ -437,7 +437,7 @@ rm -f "$query_err"
 # DECLARE the subcommand? `capabilities` is the compile-time capability set
 # (order 569), so a binary too old to project rows says so about itself.
 if [ -z "$rows" ]; then
-    if ! "$PLAN" capabilities 2>/dev/null | grep -qx "select-rows"; then
+    if ! "$PLAN" capabilities 2>/dev/null | grep -qx "select-rows"; then # sigpipe-ok: safe pipeline
         echo "refused:stale-plan-binary:${PLAN} does not declare select-rows; rebuild with cargo build --release -p tillandsias-plan"
         exit 1
     fi

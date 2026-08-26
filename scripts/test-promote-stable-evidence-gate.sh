@@ -102,7 +102,7 @@ run_case() {
     rc=$?
     local last; last="$(printf '%s\n' "$out" | grep -E '^(promoted|would-promote|would-demote|demoted|refused):' | tail -1)"
     local viol; viol="$(wc -l < "$VIOLATIONS" | tr -d ' ')"
-    if ! printf '%s' "$last" | grep -Eq "$expect"; then
+    if ! grep -Eq "$expect" <<<"$last"; then
         printf 'FAIL %-52s -> %s (expected %s, rc=%s)\n' "$name" "${last:-<none>}" "$expect" "$rc"
         fail=$((fail + 1)); return
     fi

@@ -78,7 +78,7 @@ while IFS= read -r f; do
     # would be the "gate that greps its own comment" antipattern 601-462g
     # names, one level up.
     code="$(sed 's/#.*//' "$f")"
-    if ! printf '%s' "$code" | grep -qE 'target/(release|debug)/tillandsias-plan'; then
+    if ! grep -qE 'target/(release|debug)/tillandsias-plan' <<<"$code"; then # sigpipe-ok: safe pipeline
         continue
     fi
     # Messages that merely NAME the path (echo/printf/array notes) are not

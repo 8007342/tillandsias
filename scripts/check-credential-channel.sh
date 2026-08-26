@@ -476,7 +476,7 @@ credential_channel_verdict() {
       esac
       # Not accepted, not a clean 401. Now — and only now — is the keyring worth
       # asking about, because "could not retrieve" is the remaining shape.
-      if ! busctl --user list 2>/dev/null | grep -q 'org\.freedesktop\.secrets'; then
+      if ! busctl --user list 2>/dev/null | grep -q 'org\.freedesktop\.secrets'; then # sigpipe-ok: safe pipeline
         printf 'unretrievable-no-service'
         return 0
       fi

@@ -103,7 +103,7 @@ _test_secret_creation_and_mount() {
     fi
 
     # Create the secret
-    if ! echo "$test_value" | "$PODMAN" secret create --driver=file "$test_secret" - &>/dev/null; then
+    if ! echo "$test_value" | "$PODMAN" secret create --driver=file "$test_secret" - &>/dev/null; then # sigpipe-ok: safe pipeline
         _fail "Secret creation failed"
         ((TESTS_FAILED++)) || true
         return 1
@@ -160,7 +160,7 @@ _test_secret_not_in_inspect() {
     fi
 
     # Create the secret
-    if ! echo "$test_value" | "$PODMAN" secret create --driver=file "$test_secret" - &>/dev/null; then
+    if ! echo "$test_value" | "$PODMAN" secret create --driver=file "$test_secret" - &>/dev/null; then # sigpipe-ok: safe pipeline
         _fail "Secret creation failed"
         ((TESTS_FAILED++)) || true
         return 1
@@ -219,7 +219,7 @@ _test_secret_not_in_ps() {
     fi
 
     # Create the secret
-    if ! echo "$test_value" | "$PODMAN" secret create --driver=file "$test_secret" - &>/dev/null; then
+    if ! echo "$test_value" | "$PODMAN" secret create --driver=file "$test_secret" - &>/dev/null; then # sigpipe-ok: safe pipeline
         _fail "Secret creation failed"
         ((TESTS_FAILED++)) || true
         return 1
@@ -273,7 +273,7 @@ _test_secret_cleanup() {
     fi
 
     # Create the secret
-    if ! echo "$test_value" | "$PODMAN" secret create --driver=file "$test_secret" - &>/dev/null; then
+    if ! echo "$test_value" | "$PODMAN" secret create --driver=file "$test_secret" - &>/dev/null; then # sigpipe-ok: safe pipeline
         _fail "Secret creation failed"
         ((TESTS_FAILED++)) || true
         return 1

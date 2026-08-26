@@ -98,7 +98,7 @@ EOF
 while IFS="$(printf '\t')" read -r bcount bpath _rest; do
     case "$bcount" in ''|'#'*) continue ;; esac
     [ -n "${bpath:-}" ] || continue
-    if ! printf '%s\n' "$actual" | grep -q "	$bpath\$"; then
+    if ! grep -q "	$bpath\$" <<<"$actual"; then
         echo "blocked:framing-ratchet-stale:$bpath:0<$bcount"
         exit 1
     fi

@@ -165,7 +165,7 @@ fi
 # was green against the pre-fix build while three others failed, which is the
 # vacuous-control shape 905-wjfj is itself about. Requiring the `rows:` line to
 # be PRESENT makes the absence of the mismatch line mean something.
-if ! printf '%s\n' "$out" | grep -q '^rows: '; then
+if ! grep -q '^rows: ' <<<"$out"; then
     bad "no 'rows:' accounting line at all — 'no mismatch reported' is unfalsifiable without it"
 elif printf '%s\n' "$out" | grep -q '^attention:list-live-partition-mismatch'; then
     bad "the partition self-check fired on a ledger that should balance: $out"

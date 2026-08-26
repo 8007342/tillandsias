@@ -211,8 +211,8 @@ check_log() {
             return 1
             ;;
     esac
-    if ! printf '%s' "$local_sha" | grep -qE "$SHA_RE" \
-        || ! printf '%s' "$remote_sha" | grep -qE "$SHA_RE"; then
+    if ! grep -qE "$SHA_RE" <<<"$local_sha" \
+        || ! grep -qE "$SHA_RE" <<<"$remote_sha"; then
         echo "MO-FULL: FAIL malformed sha in: $marker"
         return 1
     fi
@@ -271,7 +271,7 @@ self_attest() {
     fi
 
     local_sha="$(git rev-parse HEAD 2>/dev/null || true)"
-    if ! printf '%s' "$local_sha" | grep -qE "$SHA_RE"; then
+    if ! grep -qE "$SHA_RE" <<<"$local_sha"; then
         echo "MO-FULL: FAIL cannot read a valid local HEAD sha (not a git repo, or an unborn branch)"
         return 1
     fi

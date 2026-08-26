@@ -195,12 +195,12 @@ if ! OUT5B="$(TILLANDSIAS_BRANCH_CREATION_REGEX="$CREATION_REGEX" \
     printf '%s\n' "$OUT5B"
     exit 1
 fi
-if ! printf '%s\n' "$OUT5B" | grep -q 'WARNING: new branch'; then
+if ! grep -q 'WARNING: new branch' <<<"$OUT5B"; then
     echo "FAIL: out-of-grammar new branch pushed without the expected WARNING"
     printf '%s\n' "$OUT5B"
     exit 1
 fi
-if ! printf '%s\n' "$OUT5B" | grep -q 'warn-only'; then
+if ! grep -q 'warn-only' <<<"$OUT5B"; then
     echo "FAIL: grammar warning does not state it is warn-only"
     printf '%s\n' "$OUT5B"
     exit 1

@@ -1,0 +1,27 @@
+# @trace spec:ci-release
+name: litmus:if-not-pipeline-guard-shape
+spec: ci-release
+phase: pre-build
+description: The if-not-pipeline gate refuses spawn pipelines but correctly allows safe alternatives
+severity: high
+size: instant
+
+preconditions:
+  - scripts/check-no-spawn-in-if-not.sh is present and executable
+  - scripts/test-if-not-pipeline-guard.sh is present and executable
+
+critical_path:
+  - step: "NEGATIVE CONTROL: the fixture script proving the gate behavior passes"
+    command: "bash scripts/test-if-not-pipeline-guard.sh"
+    timeout_ms: 10000
+    expected_behavior: "ok:if-not-pipeline-guard-shape:3"
+
+  - step: "the gate runs green on the whole scripts/ tree"
+    command: "bash scripts/check-no-spawn-in-if-not.sh >/dev/null && echo 'ok: clean tree'"
+    timeout_ms: 30000
+    expected_behavior: "ok: clean tree"
+
+  - step: "the gate is wired into the build suite"
+    command: "grep -q 'check-no-spawn-in-if-not.sh' build.sh && echo 'ok: wired'"
+    timeout_ms: 3000
+    expected_behavior: "ok: wired"

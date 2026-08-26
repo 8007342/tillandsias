@@ -180,7 +180,7 @@ full="$("$PLAN" grade "$ROOT"/openspec/litmus-tests/groundtruth/*.yaml 2>/dev/nu
 out="$(printf '%s' "$full" | grep '^groundtruth-result:' | tail -1)"
 if [ -z "$out" ]; then
     bad "the glob produced NO result line at all (the 888-miiy symptom): $(printf '%s' "$full" | tail -1)"
-elif ! printf '%s' "$out" | grep -q 'fail=0'; then
+elif ! grep -q 'fail=0' <<<"$out"; then
     bad "committed glob not green: $out"
 elif printf '%s' "$out" | grep -q 'skipped=0'; then
     ok "the committed groundtruth glob grades fail=0 with nothing skipped ($out)"

@@ -243,7 +243,7 @@ require_evidence() {
     # writing producer, which `set -uo pipefail` then promotes to the pipeline's
     # status even on a MATCH. A false "no tests ran" here would record a
     # verification that never happened.
-    if ! grep -qE '^test .* \.\.\. (ok|FAILED|ignored)' <<<"$TRANSCRIPT"; then
+    if ! grep -qE '^test .* \.\.\. (ok|FAILED|ignored)' <<<"$TRANSCRIPT"; then # sigpipe-ok: safe pipeline
         echo "refused:stamp-needs-evidence:the transcript contains no test results"
         exit 1
     fi

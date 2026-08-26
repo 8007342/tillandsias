@@ -92,7 +92,7 @@ if [ -z "$STRANDED" ]; then
   cat "$source_log" >&2
   exit 1
 fi
-if ! printf '%s' "$STRANDED" | grep -q stranded; then
+if ! grep -q stranded <<<"$STRANDED"; then
   echo "FAIL: stranded ref not logged by name: '$STRANDED'" >&2
   exit 1
 fi

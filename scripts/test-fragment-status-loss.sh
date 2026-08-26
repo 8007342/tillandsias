@@ -393,7 +393,7 @@ out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
 assert "MUTATION unparseable fragment hiding a closure refuses" 1 \
     "violation:fragment-status-loss:1" "$rc" "$out"
 # The refusal must NAME the file — "something failed" sends the reader hunting.
-if ! printf '%s' "$out" | grep -qF 'plan/index.d/a.yaml'; then
+if ! grep -qF 'plan/index.d/a.yaml' <<<"$out"; then
     echo "FAIL: the refusal did not name the unparseable file; out=$out" >&2
     fail=1
 else

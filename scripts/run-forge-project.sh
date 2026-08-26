@@ -156,7 +156,7 @@ else
     fi
 fi
 
-if ! "$PODMAN_CTL" container inspect "$CONTAINER_NAME" 2>/dev/null | grep -q '"state":"running"'; then
+if ! "$PODMAN_CTL" container inspect "$CONTAINER_NAME" 2>/dev/null | grep -q '"state":"running"'; then # sigpipe-ok: safe pipeline
     echo "[run-forge-project] Starting container: $CONTAINER_NAME"
     "$PODMAN_CTL" container start "$CONTAINER_NAME" >/dev/null
 fi

@@ -174,7 +174,7 @@ if [ -z "$TILLANDSIAS_JQ" ]; then
     echo "      For the formatted view, install jq." >&2
     exit 3
 fi
-if ! echo "$json" | $TILLANDSIAS_JQ empty 2>/dev/null; then
+if ! echo "$json" | $TILLANDSIAS_JQ empty 2>/dev/null; then # sigpipe-ok: safe pipeline
     echo "error: --diagnose --json did not emit a JSON object:" >&2
     echo "$json" >&2
     exit 1

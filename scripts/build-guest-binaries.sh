@@ -73,7 +73,7 @@ verify_binaries() {
         echo "[build-guest-binaries] ✓ x86_64 version check passed: $x86_version"
     else
         # Fallback to strings check if not on x86_64
-        if ! strings "$X86_64_DEST" | grep -F "$VERSION_VAL" >/dev/null; then
+        if ! strings "$X86_64_DEST" | grep -F "$VERSION_VAL" >/dev/null; then # sigpipe-ok: safe pipeline
             echo "[build-guest-binaries] ERROR: $X86_64_DEST does not contain version string '$VERSION_VAL'" >&2
             return 1
         fi
@@ -81,7 +81,7 @@ verify_binaries() {
     fi
 
     # For aarch64, we can do strings check as we cannot run aarch64 on x86_64 natively
-    if ! strings "$AARCH64_DEST" | grep -F "$VERSION_VAL" >/dev/null; then
+    if ! strings "$AARCH64_DEST" | grep -F "$VERSION_VAL" >/dev/null; then # sigpipe-ok: safe pipeline
         echo "[build-guest-binaries] ERROR: $AARCH64_DEST does not contain version string '$VERSION_VAL'" >&2
         return 1
     fi

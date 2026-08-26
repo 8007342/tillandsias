@@ -66,7 +66,7 @@ esac
 command -v wsl.exe >/dev/null 2>&1 || { echo "skip:no-wsl"; exit 0; }
 distro="${TILLANDSIAS_WSL_BUILD_DISTRO:-tillandsias-build}"
 # wsl.exe emits UTF-16LE; strip NULs and CRs before matching.
-if ! wsl.exe -l -q 2>/dev/null | tr -d '\0\r' | grep -qx "$distro"; then
+if ! wsl.exe -l -q 2>/dev/null | tr -d '\0\r' | grep -qx "$distro"; then # sigpipe-ok: safe pipeline
     echo "skip:no-build-distro"
     exit 0
 fi

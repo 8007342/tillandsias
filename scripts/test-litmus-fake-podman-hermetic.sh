@@ -151,7 +151,7 @@ fi
 mock_out="$(scripts/test-support/podman-mock.sh definitely-not-a-subcommand --weird 2>&1)"; mock_rc=$?
 if [ "$mock_rc" -eq 0 ]; then
     echo "FAIL: podman-mock accepted an absurd subcommand with exit 0 (fails OPEN)"; fail=1
-elif ! printf '%s' "$mock_out" | grep -q 'definitely-not-a-subcommand'; then
+elif ! grep -q 'definitely-not-a-subcommand' <<<"$mock_out"; then
     # A refusal that does not NAME the thing it refused sends the reader back
     # to the same search that made this class expensive.
     echo "FAIL: podman-mock refused (rc=$mock_rc) without naming the subcommand: $mock_out"; fail=1

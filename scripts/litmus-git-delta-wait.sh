@@ -73,7 +73,7 @@ if [ ! -s "$before_file" ]; then
   exit 2
 fi
 before="$(head -n1 "$before_file" | tr -d '[:space:]')"
-if ! printf '%s' "$before" | grep -qE '^[0-9a-f]{7,64}$'; then
+if ! grep -qE '^[0-9a-f]{7,64}$' <<<"$before"; then
   echo "FAIL: before-file does not contain a sha: $before_file ('$before')"
   exit 2
 fi

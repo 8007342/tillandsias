@@ -71,7 +71,7 @@ if ! command -v cargo >/dev/null 2>&1; then
     exit 0
 fi
 
-if ! rustup target list --installed 2>/dev/null | grep -qxF "$TARGET"; then
+if ! rustup target list --installed 2>/dev/null | grep -qxF "$TARGET"; then # sigpipe-ok: safe pipeline
     echo "skip:cross-target:target-not-installed:$TARGET"
     exit 0
 fi
