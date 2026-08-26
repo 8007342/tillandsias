@@ -140,7 +140,12 @@ set -uo pipefail
 
 EXPECTED_DEFAULT="forge-plan,project-info"
 EXPECTED="${TILLANDSIAS_MCP_EXPECTED:-$EXPECTED_DEFAULT}"
-HEALTH_LOG="${TILLANDSIAS_EXPERT_HEALTH_LOG:-/tmp/forge-expert-health.jsonl}"
+# 890-t9pu: the writer and the reader of this log must agree on its path, and
+# /tmp is not one place across the WSL boundary. Shared rule, best-effort source.
+# shellcheck source=scripts/metrics-log-path.sh
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/metrics-log-path.sh" 2>/dev/null || true
+command -v metrics_default_log >/dev/null 2>&1 || { metrics_default_log() { printf '/tmp/%s' "$1"; }; }
+HEALTH_LOG="${TILLANDSIAS_EXPERT_HEALTH_LOG:-$(metrics_default_log forge-expert-health.jsonl)}"
 PROBE_TIMEOUT="${TILLANDSIAS_MCP_PROBE_TIMEOUT:-10}"
 PROBE_MAXLINES="${TILLANDSIAS_MCP_PROBE_MAXLINES:-500}"
 PROBE_ID=1

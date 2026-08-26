@@ -49,7 +49,7 @@ Do not invent a scheme. Pick the right primitive per field.
 |---|---|---|
 | A new work packet | **G-Set** (grow-only set), keyed by `packet_id` | Union is commutative, associative, idempotent. Two hosts adding different packets → both present. Adding the same packet twice → present once. |
 | An event on an existing packet | **G-Set of events**, keyed by `(packet_id, event identity)` | Same. Events are immutable facts; you never edit one, you add another. |
-| A status / progress field | **LWW-Register** (last-writer-wins) | Only one value can survive, so pick deterministically: highest `(timestamp, host)` wins. |
+| ANY packet field (status, pickup_role, priority, depends_on, title) | **LWW-Register** (last-writer-wins) | Only one value can survive, so pick deterministically: highest `(timestamp, host)` wins. The register is keyed on `(packet_id, field)`, so it was never status-specific — the channel was merely NAMED `status:` until 642-fedr renamed it `fields:` and kept `status:` as an alias. |
 
 Deletion is the trap. A grow-only set has no remove, and "just delete it" breaks
 convergence — a host that never saw the delete will re-add the element on its next

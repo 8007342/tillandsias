@@ -167,6 +167,7 @@ specs:
   - litmus:fold-incompleteness-typed-shape
   - litmus:release-runbook-external-preconditions-shape
   - litmus:script-exec-bit-shape
+  - litmus:shipped-diagnostic-tool-dispatch
   - litmus:daily-maintenance-day-boundary
   - litmus:mode-only-regression-gate
   - litmus:post-merge-litmus-pass-shape
@@ -900,6 +901,7 @@ specs:
   - litmus:freshness-inventory-shape
   - litmus:hook-install-portability-shape
   - litmus:declared-closure-resolves
+  - litmus:lww-channel-fields-alias
   coverage_ratio: 83
   last_verified: '2026-07-17'
 - spec_id: subdomain-naming-flip

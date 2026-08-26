@@ -96,7 +96,12 @@ set -uo pipefail
 
 _git_dir="$(git rev-parse --absolute-git-dir 2>/dev/null || echo .git)"
 STAMP="${TILLANDSIAS_MCP_SURFACE_STAMP:-$_git_dir/tillandsias-mcp-surface}"
-HEALTH_LOG="${TILLANDSIAS_EXPERT_HEALTH_LOG:-/tmp/forge-expert-health.jsonl}"
+# 890-t9pu: the writer and the reader of this log must agree on its path, and
+# /tmp is not one place across the WSL boundary. Shared rule, best-effort source.
+# shellcheck source=scripts/metrics-log-path.sh
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/metrics-log-path.sh" 2>/dev/null || true
+command -v metrics_default_log >/dev/null 2>&1 || { metrics_default_log() { printf '/tmp/%s' "$1"; }; }
+HEALTH_LOG="${TILLANDSIAS_EXPERT_HEALTH_LOG:-$(metrics_default_log forge-expert-health.jsonl)}"
 MAX_AGE="${TILLANDSIAS_MCP_SURFACE_MAX_AGE:-14400}"
 
 now_epoch() {
