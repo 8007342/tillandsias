@@ -104,12 +104,28 @@ case "${1:-check}" in
             echo "  usage: $0 stamp --host <host> --action 'cargo-clean:<result>,nix-gc:<result>'" >&2
             exit 2
         fi
+        # ORDER 905-97xh — UTC, like every other timestamp this project writes.
+        #
+        # `date +%Y-%m-%d` (local) alongside `date -u` (UTC) made ONE LINE OF
+        # ONE FILE NAME TWO DIFFERENT DAYS. Measured on tlatoanis-macbook-air
+        # 2026-08-26T06:09:41Z, which was 23:09 PDT on the 25th, stamping both
+        # markers seconds apart:
+        #
+        #   build-cache:       date=2026-08-25 utc=2026-08-26T06:09:41Z
+        #   daily-maintenance: date=2026-08-26 utc=2026-08-26T06:09:41Z
+        #
+        # The arithmetic was self-consistent (stamped local, compared local), so
+        # this was never a wrong verdict — it was evidence a reader has to
+        # reconcile before trusting, in a marker whose `--action` requirement
+        # exists precisely so it reads as a record. It also broke on any host
+        # that crosses DST or changes timezone, and this fleet spans PDT and
+        # CEST.
         printf 'date=%s utc=%s host=%s action=%s\n' \
-            "$(date +%Y-%m-%d)" \
+            "$(date -u +%Y-%m-%d)" \
             "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)" \
             "${host:-unknown}" \
             "$action" > "$MARKER" || { echo "blocked:marker-unwritable"; exit 2; }
-        echo "ok:build-cache-sweep-stamped:$(date +%Y-%m-%d)"
+        echo "ok:build-cache-sweep-stamped:$(date -u +%Y-%m-%d)"
         exit 0
         ;;
     show)
@@ -151,9 +167,27 @@ gib=$(( bytes / 1073741824 ))
 mdate="$(marker_date || true)"
 if [ -n "$mdate" ]; then
     mdays="$(_date_to_days "$mdate" 2>/dev/null || true)"
-    today_days="$(_date_to_days "$(date +%Y-%m-%d)" 2>/dev/null || true)"
+    # UTC on BOTH sides (905-97xh).
+    #
+    # THE MIGRATION EDGE, handled rather than asserted away. Markers stamped
+    # before this change carry a LOCAL date. On a host EAST of UTC that date can
+    # be TOMORROW in UTC terms — measured with TZ=Pacific/Kiritimati (UTC+14),
+    # where the old stamp wrote `date=2026-08-27` while `utc=2026-08-26`. Naive
+    # subtraction then yields age_days=-1, which this script's next branch
+    # reports as `unreadable-marker` — a perfectly good marker declared corrupt,
+    # and a full sweep prescribed for it.
+    #
+    # A marker one day in the future is a legacy local stamp, not corruption, so
+    # clamp exactly that case to 0 (fresh). Anything further ahead is a real
+    # anomaly — a badly wrong clock — and still falls through to the
+    # unreadable-marker branch, because silently accepting an arbitrary future
+    # date would disable the staleness trigger entirely.
+    today_days="$(_date_to_days "$(date -u +%Y-%m-%d)" 2>/dev/null || true)"
     if [ -n "$mdays" ] && [ -n "$today_days" ]; then
         age_days=$(( today_days - mdays ))
+        if [ "$age_days" -eq -1 ]; then
+            age_days=0
+        fi
     else
         age_days=-1
     fi
@@ -184,6 +218,49 @@ if [ "$marker_field" = "unreadable" ]; then
     exit 1
 fi
 if [ "$marker_field" = "absent" ]; then
+    # ORDER 906-qi89 — A BOOKKEEPING ABSENCE IS NOT EVIDENCE OF BLOAT.
+    #
+    # The two triggers mean different things and the reason field already says
+    # so: `over-size` is evidence of bloat, `stale-Nd` is evidence of neglect,
+    # `no-marker` is evidence of NEITHER — only that this host has not stamped
+    # before. Returning `due` for it prescribed `cargo clean`, which the policy
+    # itself calls out as expensive and requires to be rare. Measured on
+    # tlatoanis-macbook-air across three consecutive cycles: a full rebuild
+    # prescribed at 18 GiB against a 40 GiB trigger, at 45% of the threshold.
+    # A fresh host paid it on its FIRST cycle — the cycle where a warm cache is
+    # worth the most.
+    #
+    # RESOLVED as exit-criterion (a): initialise and report not-due. The
+    # alternative — stay due and document why a fresh host pays a sweep — was
+    # rejected because there is no evidence to justify the cost.
+    #
+    # INITIALISING IS NOT MERELY THE CHEAP OPTION; IT CLOSES A REAL GAP. The
+    # 14-day trigger exists to catch a host accumulating slowly WITHOUT
+    # crossing 40 GiB. A never-stamped marker has no age, so that trigger could
+    # never fire for such a host — leaving it at 39 GiB forever with no
+    # periodic sweep. Starting the clock is what makes staleness live.
+    #
+    # THE STAMP MUST NOT LIE. It records that no reclaim ran and why, so nobody
+    # reading the marker later mistakes an initialisation for a sweep — the
+    # `--action` requirement exists for exactly that reason.
+    if [ "$gib" -lt "$MAX_GIB" ]; then
+        _init_action="initialised:NO-SWEEP-PERFORMED(${gib}GiB<${MAX_GIB}GiB);reason:trigger-was-marker-absent-not-size"
+        mkdir -p "$(dirname "$MARKER")" 2>/dev/null || true
+        if printf 'date=%s utc=%s host=%s action=%s\n' \
+            "$(date -u +%Y-%m-%d)" \
+            "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)" \
+            "$(hostname -s 2>/dev/null || echo unknown)" \
+            "$_init_action" > "$MARKER" 2>/dev/null; then
+            echo "ok:build-cache-sweep-not-due:bytes=${bytes}:gib=${gib}:marker=initialised:reason=no-marker-initialised-under-threshold"
+            exit 0
+        fi
+        # Could not write: fall through to `due` rather than inventing a pass.
+        # An uninitialisable marker is a real problem and must stay visible.
+        echo "due:build-cache-sweep:bytes=${bytes}:gib=${gib}:marker=absent:reason=no-marker-uninitialisable"
+        exit 1
+    fi
+    # Over the size threshold with no marker: the size trigger above already
+    # returned. Unreachable in practice; kept so the branch is total.
     echo "due:build-cache-sweep:bytes=${bytes}:gib=${gib}:marker=absent:reason=no-marker"
     exit 1
 fi

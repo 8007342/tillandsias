@@ -53694,6 +53694,34 @@ plan_index:
         trigger, and the sweep was "due" only because the marker had never been
         initialised. That is a separate observation and is filed on its own.
 
+      events:
+        - type: completed
+          ts: "2026-08-26T13:51:34Z"
+          agent_id: "linux-macuahuitl-claude-20260826t135134z"
+          host: macuahuitl
+          summary: |
+            CLOSED on macuahuitl. check-build-cache-sweep.sh stamps and compares in UTC.
+
+            Three sites: the stamp's `date=` field, the `ok:build-cache-sweep-stamped:` echo, and the age comparison. All now `date -u +%Y-%m-%d`, matching check-daily-maintenance.sh and every other timestamp this project writes.
+
+            DEMONSTRATED RATHER THAN ASSERTED. My first verification compared date= against utc= on this host, where both are 2026-08-26 — a vacuous check that would pass with or without the fix. Re-run under TZ=Pacific/Kiritimati (UTC+14), where local and UTC genuinely differ:
+
+              BEFORE -> date=2026-08-27 utc=2026-08-26T13:34:34Z host=tz-test
+              FIXED  -> date=2026-08-26 utc=2026-08-26T13:34:34Z host=tz-test
+
+            That is the reported defect exactly: one line of one file naming two different days.
+
+            A MIGRATION EDGE THE PACKET DID NOT ANTICIPATE, AND MY FIRST COMMENT WAVED AWAY. I wrote that existing local-stamped markers would read "one day older, which is noise against a 14-day window". That is true only WEST of UTC. EAST of UTC a legacy marker carries TOMORROW's UTC date, so `age_days = today - marker` is -1 — and the very next branch in this script reports `age_days < 0` as `unreadable-marker`. A perfectly good marker declared corrupt, with a full cargo clean prescribed for it. Measured: a marker dated by TZ=Pacific/Kiritimati was refused before the fix below.
+
+            Clamped exactly age_days == -1 to 0. Anything further ahead is a genuinely wrong clock and still falls through to unreadable-marker, because accepting an arbitrary future date would disable the staleness trigger entirely. Verified both: a one-day-ahead marker reads `under-threshold-0d` exit 0; a ten-day-ahead marker reads `unreadable-marker` exit 1.
+
+            LITMUS: litmus:build-cache-sweep-trigger gains three steps — the UTC assertion is driven THROUGH TZ so it cannot pass vacuously on a host where local and UTC happen to agree, plus the legacy one-day-ahead case and its far-future negative control. Suite 22/22 green.
+        - type: note
+          ts: "2026-08-26T13:32:35Z"
+          agent_id: "linux-macuahuitl-claude-20260826t133235z"
+          host: macuahuitl
+          summary: |
+            claimed for cycle 2026-08-26T13:32:35Z — macuahuitl. 905-97xh and 906-qi89 are one story (both are check-build-cache-sweep.sh marker semantics); 913-27ex is the litmus zero-executed verdict I filed last cycle and specified.
     - packet_id: absent-marker-triggers-a-full-cargo-clean-on-an-unbloated-host
       order: 906-qi89
       status: ready
@@ -53784,6 +53812,33 @@ plan_index:
         "leave it, and document the reasoning", which is a legitimate outcome
         and should be recorded as a decision rather than left implicit.
 
+      events:
+        - type: completed
+          ts: "2026-08-26T13:51:50Z"
+          agent_id: "linux-macuahuitl-claude-20260826t135149z"
+          host: macuahuitl
+          summary: |
+            CLOSED on macuahuitl. RESOLVED AS EXIT-CRITERION (a): a no-marker host under the size threshold initialises the marker and reports not-due.
+
+            THE DECISION, recorded as the packet asked. The alternative — stay due and document why a fresh host pays one sweep — was rejected because there is no evidence to justify the cost. `over-size` is evidence of bloat, `stale-Nd` is evidence of neglect, `no-marker` is evidence of NEITHER; it says only that this host has not stamped before. Prescribing `cargo clean` for it inverted the rarity the policy is built around, and did so on the one cycle where a warm cache is worth most.
+
+            INITIALISING IS NOT MERELY THE CHEAPER OPTION — IT CLOSES A GAP THE PACKET DID NOT NAME. The 14-day trigger exists to catch a host accumulating slowly WITHOUT crossing 40 GiB. A never-stamped marker has no age, so that trigger could never fire for such a host: it would sit at 39 GiB forever with no periodic sweep. Starting the clock is what makes staleness live at all. That, rather than cost, is the strongest argument for (a).
+
+            THE STAMP DOES NOT LIE. It records `action=initialised:NO-SWEEP-PERFORMED(31GiB<40GiB);reason:trigger-was-marker-absent-not-size`, so nobody reading the marker later mistakes an initialisation for a sweep — which is what the `--action` requirement exists for.
+
+            EXIT CRITERIA:
+            1. Resolved as (a), with the reasoning recorded above.
+            2. The three reasons stay distinguishable: `over-size`, `stale-Nd`, and the new `no-marker-initialised-under-threshold` / `no-marker-uninitialisable`.
+            3. NEGATIVE CONTROLS, both pinned: over-size still fires AND does not initialise (a bloated host must not have its clock silently started); a stale marker still fires.
+            4. If the marker cannot be written, the verdict falls through to `due:...:reason=no-marker-uninitialisable` rather than inventing a pass. An uninitialisable marker is a real problem and stays visible.
+
+            LITMUS, the NAMED closure: litmus:build-cache-sweep-trigger gains the no-marker-under-threshold case asserting not-due AND that the marker was written AND that it says NO-SWEEP-PERFORMED, plus the over-threshold negative control asserting due AND that no marker was written. Suite 22/22.
+        - type: note
+          ts: "2026-08-26T13:32:36Z"
+          agent_id: "linux-macuahuitl-claude-20260826t133235z"
+          host: macuahuitl
+          summary: |
+            claimed for cycle 2026-08-26T13:32:35Z — macuahuitl. 905-97xh and 906-qi89 are one story (both are check-build-cache-sweep.sh marker semantics); 913-27ex is the litmus zero-executed verdict I filed last cycle and specified.
     - packet_id: newly-issued-device-flow-tokens-are-revoked-within-minutes-while-old-ones-survive
       order: 907-8ypf
       status: ready
