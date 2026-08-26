@@ -233,7 +233,7 @@ fi
 LANE_NOTES=()
 
 attempt_plan_only_lane() {
-    local -a files=() srcs=() bases=()
+    local -a files=() srcs=() bases=() issue_bases=()
     local att_seen=0
     LANE_NOTES=()
 
@@ -262,7 +262,7 @@ attempt_plan_only_lane() {
         # Net outgoing diff for this ref: what the remote will see change.
         # --no-renames keeps the status alphabet to A/M/D/T: a rename of a
         # fragment decomposes into D+A and the D disqualifies, as it must.
-        local status path
+        local status path issue_base=""
         while IFS=$'\t' read -r status path; do
             [[ -n "$status" ]] || continue
             case "$path" in
@@ -319,13 +319,66 @@ attempt_plan_only_lane() {
                     fi
                     bases+=("")
                     ;;
+                plan/issues/?*.md)
+                    # Order 889-twhe. The Reduction Engine makes filing a
+                    # plan/issues capture a NON-NEGOTIABLE exit condition of
+                    # every meta-orchestration cycle, and this lane excluded
+                    # exactly that path — so the loop's own mandatory step
+                    # forced every finding-bearing cycle onto the full gate, on
+                    # every host, every cycle. Measured on calmecacpilli: 4.0
+                    # gate re-runs for ONE landed commit carrying two captures,
+                    # against 0 for the fragment-only pushes in the same
+                    # session. That is a structural tax on precisely the cycles
+                    # that produce the most value, and it quietly incentivises
+                    # filing LESS. Ruled approved by the coordinator with the
+                    # four conditions enforced here and in the validator below.
+                    #
+                    # NEW FILES ONLY — status A, never M/D/T. Same immutability
+                    # rule the fragment arms apply, for the same reason: a new
+                    # file is a capture, a modified one can carry anything.
+                    if [[ "$status" != "A" ]]; then
+                        echo "plan-only lane: not applicable — '$path' has status '$status' in the outgoing diff; only NEW issue captures qualify (full gate required)" >&2
+                        return 1
+                    fi
+                    # DEPTH IS DECIDED EXPLICITLY, not left to a glob. The
+                    # Reduction Engine names four classification directories;
+                    # a capture lives at the top level or in exactly one of
+                    # them. Anything deeper is something else and takes the
+                    # full gate.
+                    case "${path#plan/issues/}" in
+                        */*/*)
+                            echo "plan-only lane: not applicable — '$path' is nested more than one directory below plan/issues/ (full gate required)" >&2
+                            return 1
+                            ;;
+                        research/*|exploration/*|enhancement/*|optimization/*)
+                            ;;
+                        */*)
+                            echo "plan-only lane: not applicable — '$path' is not under a Reduction Engine class directory (research/, exploration/, enhancement/, optimization/); full gate required" >&2
+                            return 1
+                            ;;
+                    esac
+                    # Prose that is not a capture, mirroring the attestation
+                    # arm's README refusal.
+                    case "${path##*/}" in
+                        README.md|TEMPLATE.md)
+                            echo "plan-only lane: not applicable — '$path' is prose, not an issue capture (full gate required)" >&2
+                            return 1
+                            ;;
+                    esac
+                    issue_base="$remote_sha"
+                    bases+=("")
+                    ;;
                 *)
-                    echo "plan-only lane: not applicable — '$path' is outside plan/index.d/, plan/loop_status.d/, and plan/mo-full-attestations.d/ (full gate required)" >&2
+                    echo "plan-only lane: not applicable — '$path' is outside plan/index.d/, plan/loop_status.d/, plan/issues/, and plan/mo-full-attestations.d/ (full gate required)" >&2
                     return 1
                     ;;
             esac
             files+=("$path")
             srcs+=("$local_sha")
+            # Parallel to files/srcs/bases: empty for every non-issue path, so
+            # the validator below can index it without drifting out of step.
+            issue_bases+=("$issue_base")
+            issue_base=""
         done < <(git diff --name-status --no-renames "$remote_sha" "$local_sha" -- 2>/dev/null)
     done <<< "$REFS"
 
@@ -349,7 +402,16 @@ attempt_plan_only_lane() {
     . "$(dirname "${BASH_SOURCE[0]}")/../plan-binary-probe.sh"
     plan_bin="$(resolve_plan_binary || true)"
     [[ -n "$plan_bin" ]] && have_plan=1
-    if [[ $have_yq -eq 0 && $have_plan -eq 0 ]]; then
+    # Order 889-twhe: fail closed only when this push actually carries YAML that
+    # needs a YAML parser. Before, an issues-only or loop-status-only push was
+    # refused for lacking a validator it had nothing to run — the fail-closed
+    # rule is right, but it must be scoped to what is being validated, or it
+    # refuses pushes on the absence of an irrelevant tool.
+    local needs_yaml=0 f
+    for f in "${files[@]}"; do
+        case "$f" in plan/index.d/*) needs_yaml=1 ;; esac
+    done
+    if [[ $needs_yaml -eq 1 && $have_yq -eq 0 && $have_plan -eq 0 ]]; then
         echo "plan-only lane: not applicable — neither yq nor target/release/tillandsias-plan is available to validate fragments (fail closed; full gate required)" >&2
         return 1
     fi
@@ -380,6 +442,30 @@ attempt_plan_only_lane() {
                     fi
                 else
                     LANE_NOTES+=("yq absent — YAML parse of ${files[$i]} delegated to tillandsias-plan check, which folds every fragment")
+                fi
+                ;;
+            plan/issues/*)
+                # Order 889-twhe, coordinator condition (b): the lane may only
+                # accept what it VALIDATES. plan/issues is not gate-free —
+                # check-issue-citation-convention.sh (881-29me) is the one gate
+                # that reads newly-added issue files, and it must run here and
+                # pass, per file, the way fragments are parsed above.
+                #
+                # It is invoked against the PUSHED commit, not the worktree:
+                # TILLANDSIAS_ISSUE_CITATION_HEAD (added by this order) makes it
+                # diff base..head instead of base..worktree, so the lane vouches
+                # for the bytes the remote receives. Scoped to the single file
+                # via _DIR, so one document's violation names that document.
+                if [[ ! -x "$REPO_ROOT/scripts/check-issue-citation-convention.sh" && ! -r "$REPO_ROOT/scripts/check-issue-citation-convention.sh" ]]; then
+                    echo "plan-only lane: not applicable — scripts/check-issue-citation-convention.sh is unavailable to validate ${files[$i]} (fail closed; full gate required)" >&2
+                    rm -rf "$tmp"; return 1
+                fi
+                if ! TILLANDSIAS_ISSUE_CITATION_DIR="${files[$i]}" \
+                     TILLANDSIAS_ISSUE_CITATION_BASE="${issue_bases[$i]}" \
+                     TILLANDSIAS_ISSUE_CITATION_HEAD="${srcs[$i]}" \
+                     bash "$REPO_ROOT/scripts/check-issue-citation-convention.sh" >/dev/null 2>&1; then
+                    echo "plan-only lane: validation FAILED — ${files[$i]} does not pass check-issue-citation-convention (881-29me); full gate required" >&2
+                    rm -rf "$tmp"; return 1
                 fi
                 ;;
             plan/loop_status.d/*)
