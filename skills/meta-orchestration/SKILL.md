@@ -597,53 +597,6 @@ filing — not the prompt.
    Expert Health Probe here too — it is advisory and never blocks, but it must
    run BEFORE the cycle's first expert read, or an outage during that read has
    no recorded baseline to be visible against.
-2a. **Check for sibling overlap, and say hello if there is any** (methodology
-   `sibling_heads_up_protocol`). Hosts can message each other directly —
-   `ListAgents` to see who is live, `SendMessage` to reach them. **The
-   capability is new and you will not discover it on your own**; the fleet
-   coordinated exclusively through the ledger and the trunk for months before
-   anyone noticed it existed.
-
-   ```bash
-   tillandsias-plan expire-claims --list-live   # who is holding what, right now
-   ```
-
-   If a live claim touches the SAME SURFACE your batch touches — a wire type,
-   a shared struct, a script another lane runs, a schema, a guard wired into
-   `--check` — send one HEADS UP before implementing: what you are touching,
-   the shape of the change, any sibling call sites you know of, and the ask.
-   They reply ACK plus comments. Two short messages.
-
-   **WHY, structurally: THE UNION IS A STATE NO SINGLE BRANCH'S GATE OBSERVES.**
-   Every branch can be green alone and the merge still broken, because no
-   branch's `--check` compiles the other's configuration. Care cannot close
-   that; only a second lane looking can.
-
-   MEASURED 2026-08-26: macbook's 731-eupn added an `outcome` field to
-   `ControlMessage::CloudRefreshReply` (a good fix), updated
-   `vsock_server.rs:1365`, missed `tray/mod.rs:1383`. Green on both branches,
-   `E0063 + E0308` in the union — a red gate and ~30 minutes of coordinator
-   cycle.
-
-   **The first version of this note said the author "could not see" that site
-   because the lane does not compile on macOS. That was false and they refuted
-   it:** `cargo check -p tillandsias-headless --features tray --all-targets`
-   takes 6.80s on their Mac, and the missed site was the **tenth line of their
-   own `grep … | head -10`**. The honest caption is theirs: *the author had
-   every call site in his own grep output and compiled only the configurations
-   his host reaches by default; a heads-up would have caused the Linux lane to
-   check its own configuration, which no amount of care on the macOS side
-   substitutes for.*
-
-   **And prefer the message to the resolve-to-be-careful: a heads-up is a
-   falsifiable act, care is not.** "I considered the siblings" cannot be checked
-   by anyone, including you an hour later.
-
-   DO NOT broadcast routine drain. Most work touches only your own lane, and a
-   channel that carries everything is one nobody reads — the recipient is
-   mid-cycle, holding a checkout lock, with expensive context. The heads-up is
-   for what the ledger cannot carry in time: **intent, before the fact.**
-
 2b. **Acquire the checkout lock — EVERY lane, before the boundary snapshot**
    (order 873-zcim):
 
@@ -749,6 +702,57 @@ filing — not the prompt.
    `litmus:resumable-claim-dirt-shape`.
 5. Update the active local branch from remote with fast-forward or an explicit
    merge from `origin/linux-next` into the platform branch when appropriate.
+
+5a. **NOW check for sibling overlap** (methodology `sibling_heads_up_protocol`).
+   Hosts can message each other directly — `ListAgents` to see who is live,
+   `SendMessage` to reach them. **The capability is new and you will not
+   discover it on your own**; the fleet coordinated exclusively through the
+   ledger and the trunk for months before anyone noticed it existed.
+
+   ```bash
+   tillandsias-plan query --status in_progress   # who is holding what, right now
+   ```
+
+   **AFTER THE MERGE, NOT BEFORE, AND THIS ORDERING IS THE WHOLE STEP.** This
+   check first shipped as step 2a — before the branch update — and was MEASURED
+   BROKEN on the next cycle by its own author:
+
+   ```
+   before the merge:  831-ezea only            <- the other host's claim INVISIBLE
+   after the merge:   642-fedr + 831-ezea      <- yoga's fragments.rs claim
+   ```
+
+   `git fetch` at step 2 updates remote-tracking refs; it does NOT update the
+   worktree ledger that `tillandsias-plan` reads. So a check placed before the
+   merge sees the claims as of your last merge and **fails silently toward "no
+   overlap" — the safe-looking answer.** A stale ledger always shows FEWER
+   claims, never more.
+
+   Use `query --status in_progress`, not `expire-claims --list-live`: the
+   latter prints `in_progress=N` and no rows, so it counts what it will not
+   name. Two hosts hit that on the same day.
+
+   If a live claim touches the SAME SURFACE your batch touches — a wire type, a
+   shared struct, a script another lane runs, a schema, a guard wired into
+   `--check` — send one HEADS UP before implementing: what you are touching, the
+   shape of the change, any sibling call sites you know of, and the ask. They
+   reply ACK plus comments. Two short messages.
+
+   **WHY, structurally: THE UNION IS A STATE NO SINGLE BRANCH'S GATE OBSERVES.**
+   Every branch can be green alone and the merge still broken, because no
+   branch's `--check` compiles the other's configuration. Care cannot close
+   that; only a second lane looking can. MEASURED 2026-08-26: macbook's
+   731-eupn was green on both branches and `E0063 + E0308` in the union — a red
+   gate and ~30 minutes of coordinator cycle.
+
+   **Prefer the message to the resolve-to-be-careful: a heads-up is a
+   falsifiable act, care is not.** "I considered the siblings" cannot be checked
+   by anyone, including you an hour later.
+
+   DO NOT broadcast routine drain. Most work touches only your own lane, and a
+   channel that carries everything is one nobody reads — the recipient is
+   mid-cycle, holding a checkout lock, with expensive context. The heads-up is
+   for what the ledger cannot carry in time: **intent, before the fact.**
 
 ## Credential Channel Guard
 
