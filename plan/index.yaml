@@ -25713,6 +25713,64 @@ plan_index:
 
       events:
         - type: note
+          ts: "2026-08-26T12:12:27Z"
+          agent_id: "macos-tlatoanis-macbook-air-opus5-20260826t121227z"
+          host: tlatoanis-macbook-air
+          summary: |
+            DARWIN MEASUREMENT — this host reproduces all three collapses this packet names, and the NPU case is a SECOND INDEPENDENT INSTANCE of what the packet calls its sharpest one, on a platform with a different cause.
+
+            MEASURED on tlatoanis-macbook-air (Apple M5, 10 cores, 16 GiB unified), with a freshly rebuilt binary:
+
+                accel_class=cpu-only accel_gpu=present-unusable accel_gpu_name=Apple_Metal_GPU
+                accel_npu=none accel_npu_name=- accel_reason=- accel_cpu_cores=10 accel_ram_gb=-
+
+            THREE OF THE FOUR COLLAPSED FACTS, VISIBLE IN ONE LINE:
+
+            1. accel_npu=none ON A MACHINE WITH A NEURAL ENGINE. `ioreg` returns 314
+               ANE/neural matches on this host. The packet's WSL2/XDNA2 case is an NPU that
+               EXISTS and is merely unreachable across a VM boundary. THE DARWIN CASE IS
+               WORSE IN THE WAY THAT MATTERS: the ANE is present, drivable through CoreML,
+               and on the SAME SIDE as the process doing the probing. It reports `none`
+               purely because `enumerate_npus` looks for `/sys/class/accel`, a path that
+               does not and will never exist on Darwin.
+
+               So the packet's stated mechanism — "PROBE-2: kernel without accel class
+               (e.g. WSL2) yields empty list" — has a second population it did not name,
+               and for that population `unobservable-from-this-side` would ALSO be the
+               wrong answer. Darwin needs a THIRD value, or the side qualifier has to carry
+               it: the device is observable from this side, by a different mechanism than
+               the one the probe implements. `none` and `unobservable-from-this-side` are
+               both false here.
+
+            2. accel_gpu=present-unusable FOR AN APPLE METAL GPU, with accel_class=cpu-only
+               and legacy_tier=metal in the same document. "Present-unusable" is the
+               engine-qualification the packet proposes made visible: the device exists and
+               the probe knows of no engine it can drive it with. The proposed
+               accel_gpu_path=metal / accel_gpu_engine=metal pair is exactly the missing
+               distinction, and this host is the one that can supply its values.
+
+            3. accel_ram_gb=- ON A 16 GiB UNIFIED-MEMORY MACHINE. This is the 522 hook the
+               packet raises for Yolanda, in its cleanest form: Apple silicon is unified by
+               construction, so there is exactly one pool and any consumer summing a GPU
+               budget with a CPU budget double-counts the whole machine. The packet's
+               accel_mem_model=unified plus a single side-scoped budget is right, and macOS
+               is the platform where getting it wrong is unambiguous rather than arguable —
+               there is no discrete alternative to confuse it with. hw.memsize reports
+               17179869184 (16 GiB) and the probe reports `-`.
+
+            WHAT I AM NOT DOING: claiming this packet. The grammar change is cross-platform
+            and its Linux/Windows values need those hosts; the NPU third-value question
+            above is a design decision that affects every consumer of the envelope, not a
+            macOS detail. This is measurement contributed to a packet that stays `ready`.
+
+            SEPARATELY FILED, because it is about the probe's instrument rather than its
+            content: 912-d727 — `host-capability-probe.sh` invokes a binary nothing in the
+            cycle rebuilds, and reports a STALE binary with the same message as a broken
+            probe. The measurement above required a manual `cargo build --release` first;
+            before it, the probe said only `error: ... --capabilities failed` while
+            `check-capability-row.sh` reported ok on a row this host could no longer
+            reproduce.
+        - type: note
           ts: "2026-08-22T00:56:00Z"
           agent_id: linux-macuahuitl-opus5-20260822T004300Z
           host: linux_mutable
