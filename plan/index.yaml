@@ -28642,6 +28642,12 @@ plan_index:
         target dir, force a key miss, and time one lane.
 
       events:
+        - type: completion
+          ts: "2026-08-26T11:31:43Z"
+          agent_id: "linux-yoga-opus5-20260826t113143z"
+          host: yoga
+          summary: |
+            ANSWERED, no fix recommended. Key churn 156/2921 commits (5.3%) over 30d on linux-next; the driver is the plan crate (130) not the lockfile (20), contradicting the packet title. Median key lifetime 85.5 min; only 3.2 pct of key-change gaps are under 3 min, so the observed 3-min lane pair was a tail draw, not typical. Cold-target rebuild measured 58.9s against the 600s cap, a 10x margin, with a warm registry which is the correct model for this packet's miss scenario. Evidence: plan/issues/prebuilt-plan-cache-key-churn-measured-yoga-2026-08-26.md
         - type: progress
           ts: "2026-08-26T11:30:08Z"
           agent_id: "linux-yoga-opus5-20260826t113008z"
