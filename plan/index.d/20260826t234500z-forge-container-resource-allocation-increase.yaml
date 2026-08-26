@@ -1,0 +1,78 @@
+packets:
+  - packet_id: forge-container-resource-allocation-increase
+    order: 919-jii2
+    status: ready
+    title: |
+      Increase forge container allocation: 8 GB RAM, 6+ CPU cores for Apple Silicon hosts
+    kind: feature
+    pickup_role: any
+    priority: p1
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    capability_tags:
+      - forge
+      - infrastructure
+      - inference
+      - resources
+    estimated_hours: 2
+    deliverable: |
+      Updated forge container resource defaults: 8 GB RAM (half of 16 GB host),
+      6+ CPU cores (from 10 available), enabling 3b models and faster embedding.
+    context: |
+      OBSERVED on forge-tillandsias (Apple Silicon M5, 16 GB host RAM, 10 CPU cores):
+
+      CURRENT ALLOCATION (measured):
+      - RAM: 3.8 GiB total, ~1.2 GiB available after OS/buff/cache
+      - CPU: 4 vCPUs (of10 available on host)
+      - Inference: CPU-only (no GPU passthrough to container)
+
+      IMPACT OF UNDER-ALLOCATION:
+      - qwen2.5:0.5b (494M): fits, but hallucinates 100% without RAG context
+      - qwen2.5:1.5b (1.5B): fits barely, equally hallucinated, 3-4x slower
+      - qwen2.5:3b (3B): theoretical ceiling but <1 GB headroom for OS+KV cache
+      - qwen2.5:7b (7B): IMPOSSIBLE — needs ~5 GB, container has3.8 GB total
+      - nomic-embed-text: works but slow (19 chunks/sec), full index build ~60 min
+
+      SIBLING HOSTS (Windows/Silverblue with GPU):
+      - Report 7b as the "sweet spot" for spec expert accuracy
+      - GPU-accelerated inference: prefill/gen tok/s orders of magnitude higher
+      - Embedding build completes in ~2 minutes vs ~60 minutes on CPU
+
+      PROPOSED ALLOCATION:
+      - RAM: 8 GB (half of 16 GB host) — enables 3b models comfortably, 7b with quantization
+      - CPU: 6+ cores — 50% faster embedding, faster model loading
+      - GPU passthrough: investigate CDI spec for Apple Silicon Metal (future work)
+
+      WHY HALF THE HOST RAM:
+      - Host needs RAM for macOS/system processes
+      - Forge is ephemeral — shouldn't starve the host
+      - 8 GB enables qwen2.5:3b with room for context and OS overhead
+      - 7b Q3_K_M might fit in 8 GB but would be tight; 8 GB is the minimum viable
+
+      COST: zero monetary cost (re allocation of existing hardware to a container).
+      The host currently wastes 6 GB RAM and6 CPU cores that the forge cannot see.
+    exit_criteria:
+      - |
+        Forge container default allocation updated to 8 GB RAM / 6 cores
+      - |
+        3b model tested and confirmed working within new allocation
+      - |
+        Spec index build time measured at <20 min (vs current ~60 min)
+    verifiable_closure: |
+      Launch a forge with new allocation, run bench-inference-floor.sh, confirm 3b model
+      loads and generates without OOM, spec index build completes in <20 min.
+    evidence:
+      - 'Current allocation: 3.8 GiB RAM, 4 cores (measured via free -h, nproc)'
+      - 'Host capacity: 16 GB RAM,10 cores (from forge startup context)'
+      - '0.5b hallucination: 6/6 queries fabricated (direct API test)'
+      - '1.5b hallucination: 6/6 queries fabricated (direct API test)'
+      - 'Sibling host report: 7b is sweet spot for spec expert accuracy'
+    notes: |
+      This is a resource allocation request, not a code change. The forge launcher
+      (podman run / container creation) needs updated resource limits. On Silverblue
+      hosts this means the podman command or Quadlet unit; on macOS it means the
+      Virtualization.framework VM configuration.
+
+      The 7b sweet spot reported by sibling hosts is unreachable on 3.8 GiB.
+      With 8 GB, 3b models become viable and embedding speed doubles.
+      Full 7b support would need either GPU passthrough or16 GB allocation.
