@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: expire-claims-list-live-counts-without-naming
+    field: status
+    value: completed
+    ts: "2026-08-26T12:45:49Z"
+    host: macuahuitl
+
+events:
+  - packet_id: expire-claims-list-live-counts-without-naming
+    event:
+      type: completed
+      ts: "2026-08-26T12:45:49Z"
+      host: macuahuitl
+      summary: >
+        status 'completed' with evidence_refs: scripts/test-expire-claims-list-live-rows.sh 9/9; 5 arms fail against a pre-fix binary
+  - packet_id: expire-claims-list-live-counts-without-naming
+    event:
+      type: note
+      ts: "2026-08-26T12:45:49Z"
+      host: macuahuitl
+      summary: >
+        rows printed, partition accounted, fixture wired and falsified

@@ -1692,6 +1692,30 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # VERSION, and the back-merge that fixes it was prescribed afterwards.
     # Measured during the v0.4.260826.1 cut. The pressure at that point is
     # toward --no-verify, on the one ref where bypassing the gate ships.
+    # Evidence capture must not be truncated by its own display (899-6pwv).
+    # Arms 1 and 2 reproduce the two original incidents with the original
+    # idioms, so if `tee|head` ever stops truncating — or the pipe-status rule
+    # changes — this fails and tells us the helper's premise moved.
+    _step "Checking the evidence capture helper (899-6pwv)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-capture-helper.sh" 2>&1; then
+        _error "capture.sh regressed — evidence files can be silently truncated by the excerpt that displays them"
+        exit 1
+    fi
+    _info "capture helper fixture passed"
+
+    # `expire-claims --list-live` must NAME every in_progress packet it counts
+    # (905-wjfj). The count and the rows had different sources: the summary
+    # counted all in_progress, the rows came from a claim-event filter, and a
+    # packet that was fresh but unclaimed fell through every bucket — observed
+    # on two hosts an hour apart as `in_progress=1` with zero rows. The arm that
+    # matters is the fresh-unclaimed one; it fails against the pre-fix binary.
+    _step "Checking expire-claims --list-live names what it counts (905-wjfj)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-expire-claims-list-live-rows.sh" 2>&1; then
+        _error "--list-live is counting in_progress packets it will not name — the sibling-overlap step built on it is blind again"
+        exit 1
+    fi
+    _info "expire-claims --list-live rows fixture passed"
+
     _step "Checking the release runbook's tag/back-merge order (898-zhf3)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-release-runbook-tag-order.sh" 2>&1; then
         _error "the release runbook prescribes an order the pre-push hook refuses — the next cut deadlocks at the tag push"

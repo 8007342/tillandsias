@@ -5613,9 +5613,117 @@ fn main() {
             // resumable-claim-dirt detector. Read-only regardless of
             // --dry-run — listing must never write.
             if list_live {
-                for (order, pid, claim_host, claim_ts, last) in &live_claims(&ledger, &cutoff) {
+                let live = live_claims(&ledger, &cutoff);
+                for (order, pid, claim_host, claim_ts, last) in &live {
                     emit(&format!(
                         "live-claim\t{order}\t{pid}\t{claim_host}\t{claim_ts}\t{last}"
+                    ));
+                }
+                // ORDER 905-wjfj — THE COUNT AND THE ROWS HAD DIFFERENT SOURCES.
+                //
+                // `summary: in_progress=N` counts every in_progress packet.
+                // The rows above come from `live_claims`, which yields a row
+                // only for a packet carrying a `claimed for cycle` event. The
+                // two never had to agree, and on 2026-08-26 they did not:
+                // `in_progress=1` with zero rows, on yoga and on macuahuitl an
+                // hour apart, against the same ledger.
+                //
+                // The missing row was not an edge case. `expire_claim_candidates`
+                // ends in `match last_ts { ... Some(_) => {} ... }` — a packet
+                // whose newest activity is INSIDE the TTL is not expired, not
+                // unknown-age and not held, so it emits nothing; and if it also
+                // carries no claim event it gets no live-claim row either. Fresh
+                // and unclaimed is a silent fifth bucket, and 831-ezea has been
+                // sitting in it with a gate step wired into ./build.sh --check.
+                //
+                // FAIL-CLOSED IS RIGHT FOR 833-fpe7 AND INVERTED HERE. live_claims
+                // refuses to name an owner it cannot attribute, which is correct
+                // for the resumable-dirt detector: do not resume work whose owner
+                // is unknown. For sibling overlap the same silence is dangerous —
+                // an in_progress packet with NO claimant is the one you cannot
+                // send a heads-up to, so dropping it hides exactly the case that
+                // needs a human. Hence a distinct row rather than a widened
+                // live_claims: the two callers want opposite defaults, and the
+                // row type says which situation the reader is in.
+                let mut reported: std::collections::HashSet<&str> =
+                    std::collections::HashSet::new();
+                for (_, pid, _) in &expired {
+                    reported.insert(pid);
+                }
+                for (_, pid) in &unknown {
+                    reported.insert(pid);
+                }
+                for (_, pid, _) in &held {
+                    reported.insert(pid);
+                }
+                for (_, pid, _, _, _) in &live {
+                    reported.insert(pid);
+                }
+                let in_progress = query_packets(
+                    &ledger,
+                    Some("in_progress"),
+                    None,
+                    None,
+                    None,
+                    &[],
+                    usize::MAX,
+                );
+                let mut unclaimed = 0usize;
+                for p in &in_progress {
+                    let Some(pid) = str_field(p, "packet_id") else {
+                        continue;
+                    };
+                    if reported.contains(pid) {
+                        continue;
+                    }
+                    let order = p
+                        .get("order")
+                        .map(|v| match v {
+                            serde_yaml::Value::Number(n) => n.to_string(),
+                            serde_yaml::Value::String(s) => s.clone(),
+                            _ => "?".into(),
+                        })
+                        .unwrap_or_else(|| "?".into());
+                    let mut last = String::from("-");
+                    if let Some(seq) = p.get("events").and_then(serde_yaml::Value::as_sequence) {
+                        for ev in seq {
+                            let Some(ts) = ev.get("ts").and_then(serde_yaml::Value::as_str) else {
+                                continue;
+                            };
+                            if ts.len() < 4 || !ts.as_bytes()[..4].iter().all(u8::is_ascii_digit) {
+                                continue;
+                            }
+                            if last == "-" || ts > last.as_str() {
+                                last = ts.to_string();
+                            }
+                        }
+                    }
+                    // Field positions match `live-claim` so one parser reads
+                    // both; `-` where a claim would name a host and a time,
+                    // because there is no host to warn and no lease to reason
+                    // about. That absence is the actionable part of the row.
+                    emit(&format!("unclaimed-in-progress\t{order}\t{pid}\t-\t-\t{last}"));
+                    unclaimed += 1;
+                }
+                // THE PARTITION, STATED SO IT CAN BE FALSIFIED. Every in_progress
+                // packet lands in exactly one bucket, and this line lets a reader
+                // — or a fixture — check that against the summary's count instead
+                // of trusting it. `mismatch` is the loud form: a bucket added
+                // later without a row type would otherwise re-open the same hole
+                // silently, which is the whole defect repeating.
+                let rows = expired.len() + unknown.len() + held.len() + live.len() + unclaimed;
+                emit(&format!(
+                    "rows: live={} unclaimed={} expired={} held={} unknown_age={} total={rows}",
+                    live.len(),
+                    unclaimed,
+                    expired.len(),
+                    held.len(),
+                    unknown.len()
+                ));
+                if rows != in_progress.len() {
+                    emit(&format!(
+                        "attention:list-live-partition-mismatch: rows={rows} in_progress={} — an in_progress packet is in no bucket or in two; --list-live is under-reporting and the sibling-overlap step built on it is blind (905-wjfj)",
+                        in_progress.len()
                     ));
                 }
             }

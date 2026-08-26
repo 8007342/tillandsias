@@ -52065,6 +52065,26 @@ plan_index:
         - same host, same class, three occurrences across two incidents
 
       events:
+        - type: completed
+          ts: "2026-08-26T12:46:14Z"
+          agent_id: "linux-macuahuitl-claude-20260826t124614z"
+          host: macuahuitl
+          summary: |
+            CLOSED on macuahuitl, with one deliberate scope note at the end.
+
+            DELIVERED: scripts/capture.sh — a capture helper the runbooks can call. `capture.sh [--tail N|--head N|--quiet] <log> -- <cmd>` redirects instead of piping, records the exit code in `<log>.exit`, appends a `### capture-complete rc= lines= bytes= ###` terminator, prints the excerpt from the FINISHED file, and exits with the COMMAND's status. `--verify <log>` re-reads it. Absence of the terminator now means truncation, checkably — a distinction that did not previously exist in any artifact this fleet commits, which is why "the file looked fine" was an available conclusion.
+
+            IDIOMS CHANGED, the packet's "cheapest half": openspec/litmus-tests/litmus-browser-isolation-e2e.yaml had three real instances of `podman run ... 2>&1 | tee /tmp/litmus-X.log | head -1`, where the log IS the evidence and `head -1` truncates it. Rewritten to redirect, print the first line separately, and propagate podman's status — previously the step's exit code was `head`'s, so a failed `podman run` could not fail the step.
+
+            VERIFIED BY RUNNING IT, not by reading it. The e2e executes on this host: STEP 2 (a rewritten step) [OK], STEP 3 [FAIL]. I then restored the ORIGINAL file from a pre-edit copy and re-ran: identical failure, same step. So the step-3 failure is pre-existing and the rewrite is exonerated. Filed as 913-7m3t rather than left in a commit message.
+
+            A CORRECTION TO MY OWN FRAMING, which the fixture forced. I had claimed flatly that `cmd | tail` returns tail's status. Arm 2 FAILED asserting that — because the fixture sets `pipefail`, under which the pipeline propagates correctly. The true rule is narrower: the status is lost only when pipefail is UNSET, which is the default for an interactive shell, `bash -c`, and any ad-hoc command typed at a prompt, and is set in most of this repo's scripts. So the hazard is real precisely where it is least visible — outside the carefully written scripts. Arm 2 now measures both branches and names the precondition. On the macuahuitl run I cited when claiming this packet, the gate had genuinely passed, so the reported 0 was correct and the truncated 40-line WINDOW was the whole of the damage. Both the helper's header and the fixture now say this exactly.
+
+            FIXTURE: scripts/test-capture-helper.sh, 10 arms, wired into --check. Arms 1 and 2 REPRODUCE the two original incidents using the original idioms and assert they still fail — if `tee|head` ever stops truncating, the helper's premise has moved and someone should know. Arm 6 is the negative control that matters: a file that keeps its terminator but loses its body is still rejected, because checking only for a trailing marker would be the same artifact-stands-in-for-a-measurement shape one level up. Arm 7 asserts a complete log of a FAILING command still verifies — completeness is not success.
+
+            SCOPE LEFT UNDONE, deliberately and stated rather than quietly dropped: the packet's second suggested shape — "a check that scans COMMITTED evidence files for a missing terminator" — is not implemented. It cannot do useful work until capture.sh is actually adopted by the e2e runbooks that produce those files; today it would scan a corpus of files written by the old idiom and flag all of them. That adoption is a larger change across the e2e skills and belongs with 901-jtvi (step composition), where the runbooks are being restructured anyway. The helper and the guard exist now; the corpus scanner should follow adoption, not precede it.
+
+            ALSO FILED: 913-27ex — the litmus runner prints `Status: [PASS]` and exits 0 after executing zero tests. Found because my first verification run used a phase filter that matched nothing and returned green. An agent moving faster would have recorded that green as evidence.
         - type: note
           ts: "2026-08-26T12:33:14Z"
           agent_id: "linux-macuahuitl-claude-20260826t123313z"
@@ -53001,6 +53021,35 @@ plan_index:
         bound, file-backed test, and naming one that does not exist yet is the
         defect that packet closed.
       events:
+        - type: completed
+          ts: "2026-08-26T12:45:49Z"
+          agent_id: "linux-macuahuitl-claude-20260826t124549z"
+          host: macuahuitl
+          summary: |
+            CLOSED on macuahuitl.
+
+            `expire-claims --list-live` now prints one row per in_progress packet plus a `rows:` accounting line, and the count and the rows finally have the same source.
+
+            THE DEFECT WAS DEEPER THAN "IT DOES NOT PRINT ROWS". `summary: in_progress=N` counts every in_progress packet; the rows came from `live_claims`, which yields a row only for a packet carrying a `claimed for cycle` event. Nothing made them agree. And `expire_claim_candidates` ends in `match last_ts { ... Some(_) => {} ... }` — a packet whose newest activity is INSIDE the TTL is not expired, not unknown-age, not held, so it emits nothing. Fresh AND unclaimed was a silent fifth bucket that no output surfaced at all. So the criterion "the summary count equals the number of rows printed" was UNSATISFIABLE by adding row printing alone; it required deciding what to do with claimless in_progress work.
+
+            The real ledger had one sitting in that bucket the whole time: 831-ezea, in_progress with a gate step wired into ./build.sh --check, last activity 18h old and therefore inside the 24h TTL, so neither the reaper nor the live list would ever have shown it.
+
+            WHY A NEW ROW TYPE RATHER THAN WIDENING live_claims. Its fail-closed silence is CORRECT for its own caller (833-fpe7's resumable-dirt detector: never resume work whose owner you cannot name). For sibling overlap the same silence is inverted — a packet with no claimant is exactly the one you cannot send a heads-up to. Two callers, opposite defaults. `unclaimed-in-progress` carries `-` where a host and claim time would be, in live-claim field positions so one parser reads both, and those dashes are the actionable content.
+
+            Added `rows: live=N unclaimed=N expired=N held=N unknown_age=N total=N` and an `attention:list-live-partition-mismatch` line that fires if the buckets ever stop partitioning. A bucket added later without a row type would otherwise re-open this hole silently.
+
+            EXIT CRITERIA:
+            1. Rows above the summary, count equals rows. DONE — live ledger: rows total=3, summary in_progress=3.
+            2. NEGATIVE CONTROL, zero live claims prints summary and no rows. DONE, arm 1 — and the `rows: total=0` line is what makes "nothing there" distinguishable from "does not print", which was the packet's actual complaint.
+            3. Existing summary grammar unchanged. DONE, arm 5 asserts the exact regex; callers parsing it keep working.
+
+            FIXTURE: scripts/test-expire-claims-list-live-rows.sh, hermetic over a scratch ledger via --index and a fixed --now-epoch, wired into --check. 9 arms. FALSIFIED against a pre-fix binary built from stashed sources: 5 arms fail, including the fresh-unclaimed arm that reproduces the exact reported symptom (in_progress=1, zero rows).
+
+            TWO DEFECTS THE FIXTURE CAUGHT IN ITSELF:
+            (a) I hand-computed the fixed clock and put NOW two days late, pushing every "fresh" timestamp outside the TTL and turning three arms into expire-candidates. Caught only because the arms assert on the row TYPE rather than on "some row was printed".
+            (b) The partition-mismatch arm passed against the PRE-FIX binary — which never emits that line at all. An assertion that only something is absent is vacuous when the whole feature is absent. Now it requires the `rows:` line to be present in the same arm.
+
+            Also updated the consumers: meta-orchestration Start Of Cycle 5a and methodology `sibling_heads_up_protocol` both said "use query --status in_progress, NOT --list-live". That workaround is retired, and both now document what each row type OBLIGES the reader to do — including that silence on an unclaimed row is not evidence the surface is free.
         - type: note
           ts: "2026-08-26T12:33:14Z"
           agent_id: "linux-macuahuitl-claude-20260826t123313z"

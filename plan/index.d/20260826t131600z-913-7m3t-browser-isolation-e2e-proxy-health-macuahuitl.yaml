@@ -1,0 +1,89 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: browser-isolation-e2e-fails-at-proxy-health-check-on-macuahuitl
+    order: 913-7m3t
+    status: ready
+    desired_release: v0.5
+    priority: p3
+    kind: bug
+    depends_on: []
+    pickup_role: any
+    owner_host: any
+    capability_tags:
+      - testing
+      - enclave
+      - podman
+    estimated_hours: 3
+    title: |
+      litmus:browser-isolation-e2e fails at step 3/16 — the proxy container launches but never answers on 3128 within 15s
+    deliverable: |
+      the proxy either becomes healthy inside the window, or the step's failure
+      names which of the two it is (never started vs started and not listening)
+    context: |
+      MEASURED on macuahuitl 2026-08-26, twice, while verifying an unrelated
+      change to this same file:
+
+        scripts/run-litmus-test.sh subdomain-routing-via-reverse-proxy --size e2e --compact
+        [STEP 1/16] setup: create test project, enclave network, ephemeral CA ... [OK]
+        [STEP 2/16] launch proxy container (Squid forward proxy) ............... [OK]
+        [STEP 3/16] wait for proxy health check (port 3128) .................... [FAIL]
+        Status: [FAIL]
+
+      ATTRIBUTED, not assumed. I had just rewritten steps 2, 4 and 5 of this
+      litmus for 899-6pwv (replacing `| tee LOG | head -1` with a redirect). To
+      establish the failure was not mine I restored the ORIGINAL file from a
+      pre-edit copy and re-ran: identical failure, same step, same shape. So
+      step 3 is broken on this host independently of that change, and the
+      change is exonerated.
+
+      WHAT IS KNOWN: the container LAUNCHES (step 2 returns a container id and
+      exits 0 — and after the 899-6pwv change that exit code is genuinely
+      podman's, where before it was `head`'s). What fails is:
+
+        for i in {1..15}; do
+          podman exec tillandsias-test-proxy-e2e sh -c 'nc -zv 127.0.0.1 3128' \
+            &>/dev/null && echo OK && exit 0
+          sleep 1
+        done; echo TIMEOUT && exit 1
+
+      WHAT IS NOT KNOWN, and this is the actual work: that loop discards all
+      output with `&>/dev/null`, so TIMEOUT cannot distinguish between
+      (a) the container exited immediately after launch, (b) it is running but
+      squid never bound 3128, (c) `nc` is absent from the image, or (d) 15s is
+      simply too short on this host. Those need different fixes.
+
+      The teardown removes the container, so the evidence is gone by the time
+      anyone reads the verdict. The full squid log IS now written to
+      /tmp/litmus-proxy-e2e.log by step 2 (899-6pwv) — but teardown deletes it
+      before a reader arrives. Capturing it under $boundary_dir/tmp/, or simply
+      not deleting it on failure, is the cheapest first move.
+
+      SCOPE: p3. This is a pre-build e2e that the default `--phase pre-build`
+      filter does not even select (it is skipped there — see 913-27ex, where
+      that skip is currently reported as PASS). Nothing in the release path
+      depends on it today, which is exactly why it could rot unnoticed.
+    outcome: |
+      The e2e either passes on a normal Linux host, or its failure says which
+      of the four causes it is.
+    exit_criteria:
+      - 'The proxy health step distinguishes its failure modes: container-not-running, port-not-listening, tool-missing, and timed-out are four different messages. `&>/dev/null` on the only diagnostic in the loop is the defect to remove.'
+      - 'On failure, the squid log written by step 2 survives teardown long enough to be read, and the step says where it is.'
+      - 'DECIDE whether 15s is the right window and record the measurement behind the number. If the container is simply slow here, raising it is a legitimate fix — but only with a measured startup time, not a guess.'
+      - 'NEGATIVE CONTROL: a genuinely broken proxy still fails. A fix that lengthens the timeout until the loop always succeeds, or that treats a missing `nc` as healthy, is the failure this packet is about, one level up.'
+    verifiable_closure: |
+      `scripts/run-litmus-test.sh subdomain-routing-via-reverse-proxy --size e2e`
+      reaches step 4 on macuahuitl, or fails at step 3 with a message naming
+      which of the four causes applies.
+    notes: |
+      Do NOT fix this by removing the step or marking the litmus expected-fail.
+      It is the only end-to-end coverage of the forge→proxy→router→sidecar
+      chain.
+    events:
+      - type: filed
+        ts: "2026-08-26T13:16:00Z"
+        agent_id: linux-macuahuitl-claude-20260826t114259z
+        host: macuahuitl
+        summary: |
+          Found while verifying an 899-6pwv idiom change to this same file, and
+          attributed away from that change by re-running the original file from
+          a pre-edit copy: identical failure at the same step.

@@ -748,9 +748,30 @@ filing — not the prompt.
    toward skipping a packet that is free — cheaper, but it teaches the reader
    that the step produces noise, which is how a step stops being run.
 
-   Use `query --status in_progress`, not `expire-claims --list-live`: the
-   latter prints `in_progress=N` and no rows, so it counts what it will not
-   name. Two hosts hit that on the same day.
+   `expire-claims --list-live` is the tool again as of 905-wjfj: it now prints
+   one row per in_progress packet and a `rows:` accounting line whose total must
+   equal the summary's `in_progress=N`. Before that fix it printed the count and
+   no rows — two hosts hit it on the same day — and the workaround here was
+   `query --status in_progress`, which still works and is a fine cross-check.
+
+   **READ THE ROW TYPE, because the two mean opposite things.**
+
+   - `live-claim <order> <pid> <host> <claimed-at> <last>` — a sibling holds
+     this. If it touches your surface, message that host.
+   - `unclaimed-in-progress <order> <pid> - - <last>` — in_progress, recent
+     enough that no reaper will touch it, and **nobody to send a heads-up to**.
+     The dashes are the actionable part. This row is not the quiet case; it is
+     the one where the protocol has no addressee, so if it touches your surface
+     you inspect the diff yourself rather than assuming silence means free.
+   - `attention:list-live-partition-mismatch` — a packet is in no bucket or in
+     two. The enumeration is under-reporting; do not trust a `no overlap`
+     verdict derived from it.
+
+   MEASURED 2026-08-26: `831-ezea` sat in the unclaimed row for at least a day —
+   in_progress, with a gate step wired into `./build.sh --check`, last activity
+   18h old and therefore inside the 24h TTL, so neither the reaper nor the
+   live-claim list would ever surface it. Exactly the row an overlap check
+   exists to show you, and the only one it could not.
 
    If a live claim touches the SAME SURFACE your batch touches — a wire type, a
    shared struct, a script another lane runs, a schema, a guard wired into

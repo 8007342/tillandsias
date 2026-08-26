@@ -2072,10 +2072,23 @@ distributed_work:
       claims, never more, so it FAILS SILENTLY TOWARD "no overlap", which is
       the answer that looks safe. Moved to step 5a, after the merge.
 
-      Use `query --status in_progress`, NOT `expire-claims --list-live`: the
-      latter prints `in_progress=N` and no rows — it counts what it will not
-      name. Two hosts hit that on the same day, one of them while performing
-      this exact step.
+      `expire-claims --list-live` is the tool again as of 905-wjfj: it prints
+      one row per in_progress packet plus a `rows:` line whose total must equal
+      the summary's `in_progress=N`. Before that fix it printed the count and no
+      rows — two hosts hit it on the same day, one while performing this exact
+      step — and `query --status in_progress` was the workaround. That still
+      works as a cross-check.
+
+      READ THE ROW TYPE; the two carry opposite instructions.
+      `live-claim` names a host to message. `unclaimed-in-progress` carries
+      dashes where the host and claim time would be, and those dashes ARE the
+      finding: the packet is in_progress, recent enough that no reaper will
+      surface it, and there is nobody to send a heads-up to. Silence on that row
+      is not evidence the surface is free — it means the protocol has no
+      addressee and you inspect the diff yourself. MEASURED: 831-ezea sat there
+      for over a day with a gate step wired into `./build.sh --check`.
+      `attention:list-live-partition-mismatch` means the enumeration is
+      under-reporting; a "no overlap" verdict derived from it is not evidence.
       - >
         WHEN YOU LAND something a sibling is waiting on — "pull when you are
         done" — so a blocked host stops guessing whether it is blocked.
