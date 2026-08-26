@@ -23,86 +23,17 @@ use std::sync::OnceLock;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
-/// Windows CREATE_NO_WINDOW process creation flag.
-/// @trace spec:cross-platform, spec:windows-wsl-runtime, spec:no-terminal-flicker
-/// @cheatsheet runtime/windows-process-creation.md
-///
-/// When std::process::Command spawns a child on Windows, the child inherits
-/// the parent's console — but if there's no console (GUI tray context) OR
-/// the child is a console program (wsl.exe, podman.exe), Windows allocates
-/// a NEW console window for the child by default. That window flashes for a
-/// few hundred ms before the child exits, producing the "flickering windows"
-/// the user sees during enclave bring-up.
-///
-/// CREATE_NO_WINDOW (0x08000000) tells CreateProcess NOT to allocate a
-/// console for the child. Documented at:
-/// https://learn.microsoft.com/en-us/windows/win32/procthread/process-creation-flags
+// Order 795-jjw3: CREATE_NO_WINDOW, the window helpers and the `wsl.exe`
+// constructor were duplicated here and in `tillandsias-vm-layer`, because
+// neither crate could depend on the other. Both now reach
+// `tillandsias-core::wsl`, which owns the single copy. Re-exported so this
+// crate's call sites (and `podman.exe` spawns, which use `no_window_*` too)
+// are unchanged.
 #[cfg(target_os = "windows")]
-pub const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-
-/// Apply CREATE_NO_WINDOW to a tokio Command on Windows. No-op on other platforms.
-/// All Tillandsias background `wsl.exe` / `podman.exe` invocations should pass
-/// through this so the user never sees a console flash.
-/// @trace spec:cross-platform, spec:windows-wsl-runtime, spec:no-terminal-flicker
-pub fn no_window_async(cmd: &mut tokio::process::Command) -> &mut tokio::process::Command {
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.as_std_mut().creation_flags(CREATE_NO_WINDOW);
-    }
-    cmd
-}
-
-/// Apply CREATE_NO_WINDOW to a synchronous std Command on Windows. No-op elsewhere.
-/// @trace spec:cross-platform, spec:windows-wsl-runtime, spec:no-terminal-flicker
-pub fn no_window_sync(cmd: &mut std::process::Command) -> &mut std::process::Command {
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(CREATE_NO_WINDOW);
-    }
-    cmd
-}
-
-/// The environment variable that makes `wsl.exe` speak UTF-8 instead of
-/// UTF-16LE. Documented WSL behaviour since WSL 0.64.0.
-pub const WSL_UTF8_ENV: &str = "WSL_UTF8";
-
-/// Build a `wsl.exe` command with `WSL_UTF8=1` already applied.
-///
-/// Without the variable, `wsl.exe` writes its OWN output as UTF-16LE and every
-/// reader has to scrub NUL bytes back out. Mirror of
-/// `tillandsias_vm_layer::wsl_command_async` — this crate cannot depend on the
-/// vm-layer crate, and vm-layer cannot depend on this one, which is the same
-/// reason `no_window_async` above is also duplicated. Collapsing both pairs
-/// into one constructor is packet 795-jjw3.
-///
-/// Window policy stays with the caller, deliberately: some `wsl.exe` spawns
-/// want a visible console.
-/// @trace spec:cross-platform
-pub fn wsl_command_async() -> tokio::process::Command {
-    let mut cmd = tokio::process::Command::new("wsl.exe");
-    cmd.env(WSL_UTF8_ENV, "1");
-    cmd
-}
-
-#[cfg(test)]
-mod wsl_command_tests {
-    use super::*;
-
-    #[test]
-    fn wsl_command_async_carries_wsl_utf8() {
-        let cmd = wsl_command_async();
-        let std_cmd = cmd.as_std();
-        assert_eq!(std_cmd.get_program(), "wsl.exe");
-        assert!(
-            std_cmd
-                .get_envs()
-                .any(|(k, v)| k == WSL_UTF8_ENV && v == Some("1".as_ref())),
-            "wsl_command_async must set WSL_UTF8=1"
-        );
-    }
-}
+pub use tillandsias_core::wsl::CREATE_NO_WINDOW;
+pub use tillandsias_core::wsl::{
+    WSL_UTF8_ENV, no_window_async, no_window_sync, wsl_command_async, wsl_command_sync,
+};
 
 pub use backend::{
     BackendRef, CommandFailure, CommandOutput, FakeBackend, OperationKind, PodmanBackend,
@@ -317,6 +248,28 @@ pub fn enclave_network_name(project_label: &str) -> String {
 fn resolve_podman_bin() -> PathBuf {
     if let Some(bin) = env::var_os("TILLANDSIAS_PODMAN_BIN") {
         return PathBuf::from(bin);
+    }
+
+    // ORDER 880-tdwn: the test-run tripwire. Tests inject fake podman
+    // binaries through TILLANDSIAS_PODMAN_BIN — a PROCESS-WIDE env seam —
+    // while cargo runs test threads in parallel, so one test's restore-drop
+    // can hand another test's freshly-constructed client the REAL podman
+    // mid-flight. On 2026-08-25 that race let a teardown-path test stop the
+    // live enclave (vault SIGKILLed at the stop-grace timeout) during every
+    // --ci-full on a warm cache, killing the stack the 878-79b5 supervisor
+    // had just healed. Test invocations export TILLANDSIAS_PODMAN_REFUSE_REAL=1
+    // (scripts/local-ci.sh), turning the race into a LOUD named test failure
+    // at the exact resolution instant instead of a silent de-provisioning of
+    // the host. Production never sets it; a test that genuinely needs the
+    // real binary states so with TILLANDSIAS_PODMAN_BIN=$(command -v podman).
+    if env::var_os("TILLANDSIAS_PODMAN_REFUSE_REAL").is_some_and(|v| v == "1") {
+        panic!(
+            "TILLANDSIAS_PODMAN_REFUSE_REAL=1: refusing to resolve the REAL podman — \
+             TILLANDSIAS_PODMAN_BIN is unset at resolution time. In a test run this is the \
+             880-tdwn env race (a parallel test dropped the seam mid-flight); the caller \
+             was one exec away from mutating live containers. Set TILLANDSIAS_PODMAN_BIN \
+             explicitly (fake, or the real binary to opt in by name)."
+        );
     }
 
     if let Some(path) = env::var_os("PATH") {
@@ -961,60 +914,39 @@ impl SyncPodmanCommand {
         budget: std::time::Duration,
         redacted_args: &[String],
     ) -> std::io::Result<std::process::Output> {
-        use std::io::Read;
+        let stdout_pipe = child.stdout.take();
+        let stderr_pipe = child.stderr.take();
+        let stdout_reader = std::thread::spawn(move || read_capped(stdout_pipe));
+        let stderr_reader = std::thread::spawn(move || read_capped(stderr_pipe));
 
-        let mut stdout_pipe = child.stdout.take();
-        let mut stderr_pipe = child.stderr.take();
-        let stdout_reader = std::thread::spawn(move || {
-            let mut buf = Vec::new();
-            if let Some(pipe) = stdout_pipe.as_mut() {
-                let _ = pipe.read_to_end(&mut buf);
-            }
-            buf
-        });
-        let stderr_reader = std::thread::spawn(move || {
-            let mut buf = Vec::new();
-            if let Some(pipe) = stderr_pipe.as_mut() {
-                let _ = pipe.read_to_end(&mut buf);
-            }
-            buf
-        });
+        // Do NOT join the reader threads when wait_for_exit returns TimedOut.
+        // Killing the child does not close a pipe a GRANDCHILD still holds — a
+        // `sh -c` wrapper dies while the `sleep` it spawned keeps the write end
+        // open — so the readers may never see EOF. Joining them would trade the
+        // hang this method exists to prevent for an identical one two frames up
+        // the stack; the first version of this code did exactly that and hung
+        // its own test. They are abandoned instead: each owns nothing but a
+        // bounded-cost pipe drain, and the caller returns now.
+        let status = wait_for_exit(&mut child, budget, Some(redacted_args))?;
 
-        let started = std::time::Instant::now();
-        let status = loop {
-            match child.try_wait()? {
-                Some(status) => break status,
-                None => {
-                    if started.elapsed() >= budget {
-                        let _ = child.kill();
-                        let _ = child.wait();
-                        // Do NOT join the reader threads here. Killing the child
-                        // does not close a pipe a GRANDCHILD still holds — a
-                        // `sh -c` wrapper dies while the `sleep` it spawned keeps
-                        // the write end open — so the readers may never see EOF.
-                        // Joining them would trade the hang this method exists to
-                        // prevent for an identical one two frames up the stack;
-                        // the first version of this code did exactly that and
-                        // hung its own test. They are abandoned instead: each
-                        // owns nothing but a pipe read, and the caller — which is
-                        // the thing that must not block — returns now.
-                        let message = format!(
-                            "podman sync operation exceeded its {}s budget and was killed: podman {}",
-                            budget.as_secs(),
-                            redacted_args.join(" ")
-                        );
-                        log_podman_failure("sync", "timeout", &message);
-                        return Err(std::io::Error::new(std::io::ErrorKind::TimedOut, message));
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(20));
-                }
-            }
-        };
-
+        let (stdout, stdout_dropped) = stdout_reader.join().unwrap_or_default();
+        let (stderr, stderr_dropped) = stderr_reader.join().unwrap_or_default();
+        // Order 795-hzpg (slice A): exceeding the cap is REPORTED, never
+        // silent — a consumer parsing truncated JSON should find this line
+        // next to its parse error, naming the command that overflowed.
+        if stdout_dropped > 0 || stderr_dropped > 0 {
+            let message = format!(
+                "podman sync output exceeded the {MAX_CAPTURED_OUTPUT_BYTES}-byte capture cap \
+                 (stdout dropped {stdout_dropped} byte(s), stderr dropped {stderr_dropped} byte(s)): \
+                 podman {}",
+                redacted_args.join(" ")
+            );
+            log_podman_failure("sync", "output-cap-exceeded", &message);
+        }
         Ok(std::process::Output {
             status,
-            stdout: stdout_reader.join().unwrap_or_default(),
-            stderr: stderr_reader.join().unwrap_or_default(),
+            stdout,
+            stderr,
         })
     }
 
@@ -1025,26 +957,93 @@ impl SyncPodmanCommand {
         budget: std::time::Duration,
     ) -> std::io::Result<std::process::ExitStatus> {
         let mut child = self.inner.spawn()?;
-        let started = std::time::Instant::now();
+        wait_for_exit(&mut child, budget, None)
+    }
+}
+
+/// Park until `child` exits or the deadline expires, then kill and reap it.
+///
+/// `wait-timeout` uses the platform's child-wait primitive instead of waking a
+/// thread every 20 ms. Its Unix implementation coordinates through a global
+/// SIGCHLD handler, while Tokio may also observe SIGCHLD for async children.
+/// That shared-handler tradeoff is deliberate; revisit it if either library's
+/// chaining behavior changes or Tillandsias adds an exclusive handler.
+fn wait_for_exit(
+    child: &mut std::process::Child,
+    budget: std::time::Duration,
+    redacted_args: Option<&[String]>,
+) -> std::io::Result<std::process::ExitStatus> {
+    use wait_timeout::ChildExt as _;
+
+    if let Some(status) = child.wait_timeout(budget)? {
+        return Ok(status);
+    }
+
+    let kill_error = child.kill().err();
+    let reap_error = child.wait().err();
+    let cleanup_detail = match (kill_error, reap_error) {
+        (None, None) => String::new(),
+        (Some(kill), None) => {
+            format!(" (kill reported {kill}; child was nevertheless reaped)")
+        }
+        (None, Some(reap)) => format!(" (child reap failed: {reap})"),
+        (Some(kill), Some(reap)) => {
+            format!(" (kill failed: {kill}; child reap failed: {reap})")
+        }
+    };
+    let message = match redacted_args {
+        Some(args) => format!(
+            "podman sync operation exceeded its {}s budget; termination was requested{}: podman {}",
+            budget.as_secs(),
+            cleanup_detail,
+            args.join(" ")
+        ),
+        None => format!(
+            "podman sync operation exceeded its {}s budget; termination was requested{}",
+            budget.as_secs(),
+            cleanup_detail
+        ),
+    };
+    log_podman_failure("sync", "timeout", &message);
+    Err(std::io::Error::new(std::io::ErrorKind::TimedOut, message))
+}
+
+/// Cap on captured child stdout/stderr, per stream (order 795-hzpg, slice A).
+///
+/// Large enough for the biggest legitimate consumer in the tree — multi-object
+/// `podman inspect`/`images --format json` output measures in the tens to
+/// hundreds of KiB — and small enough that a runaway child (a `logs --follow`
+/// mistake, a wedged stream) cannot grow host memory without bound. This cap is
+/// also what makes the timeout path's abandoned reader threads bounded-COST:
+/// before it, a reader left draining a grandchild's pipe could grow forever.
+const MAX_CAPTURED_OUTPUT_BYTES: usize = 8 * 1024 * 1024;
+
+/// Drain a child pipe into a buffer capped at [`MAX_CAPTURED_OUTPUT_BYTES`],
+/// returning the (possibly truncated) capture and how many bytes were dropped.
+///
+/// On overflow the pipe is still drained to EOF — stopping the read would
+/// block the child on a full pipe, converting an over-chatty child into a
+/// hung one, which is the exact failure `wait_bounded` exists to prevent. The
+/// caller reports the dropped count loudly; truncation is never silent.
+fn read_capped<R: std::io::Read>(pipe: Option<R>) -> (Vec<u8>, u64) {
+    let mut buf = Vec::new();
+    let mut dropped: u64 = 0;
+    if let Some(mut pipe) = pipe {
+        let mut chunk = [0u8; 8192];
         loop {
-            match child.try_wait()? {
-                Some(status) => return Ok(status),
-                None => {
-                    if started.elapsed() >= budget {
-                        let _ = child.kill();
-                        let _ = child.wait();
-                        let message = format!(
-                            "podman sync operation exceeded its {}s budget and was killed",
-                            budget.as_secs()
-                        );
-                        log_podman_failure("sync", "timeout", &message);
-                        return Err(std::io::Error::new(std::io::ErrorKind::TimedOut, message));
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(20));
+            match pipe.read(&mut chunk) {
+                Ok(0) => break,
+                Ok(n) => {
+                    let room = MAX_CAPTURED_OUTPUT_BYTES.saturating_sub(buf.len());
+                    let take = n.min(room);
+                    buf.extend_from_slice(&chunk[..take]);
+                    dropped += (n - take) as u64;
                 }
+                Err(_) => break,
             }
         }
     }
+    (buf, dropped)
 }
 
 /// Same as [`podman_cmd`] but for synchronous use. Returns a
@@ -1104,6 +1103,51 @@ mod tests {
     use super::*;
     use std::sync::{Mutex, OnceLock};
 
+    /// ORDER 880-tdwn. With the tripwire armed and no explicit binary, the
+    /// resolver must PANIC by name rather than hand back the real podman —
+    /// this is the line between "a flaky test fails loudly" and "a flaky
+    /// test stops the live enclave" (twice-measured 2026-08-25).
+    #[test]
+    fn tripwire_refuses_the_real_podman_when_the_seam_is_unset() {
+        let _guard = env_lock();
+        let prev_bin = std::env::var_os("TILLANDSIAS_PODMAN_BIN");
+        let prev_trip = std::env::var_os("TILLANDSIAS_PODMAN_REFUSE_REAL");
+        unsafe {
+            std::env::remove_var("TILLANDSIAS_PODMAN_BIN");
+            std::env::set_var("TILLANDSIAS_PODMAN_REFUSE_REAL", "1");
+        }
+        let hit = std::panic::catch_unwind(resolve_podman_bin);
+        // MUTATION CONTROL inline: the same call with the tripwire unarmed
+        // must resolve normally — a tripwire that fires unconditionally
+        // would just be a broken resolver.
+        unsafe {
+            std::env::remove_var("TILLANDSIAS_PODMAN_REFUSE_REAL");
+        }
+        let calm = std::panic::catch_unwind(resolve_podman_bin);
+        unsafe {
+            match prev_bin {
+                Some(v) => std::env::set_var("TILLANDSIAS_PODMAN_BIN", v),
+                None => std::env::remove_var("TILLANDSIAS_PODMAN_BIN"),
+            }
+            match prev_trip {
+                Some(v) => std::env::set_var("TILLANDSIAS_PODMAN_REFUSE_REAL", v),
+                None => std::env::remove_var("TILLANDSIAS_PODMAN_REFUSE_REAL"),
+            }
+        }
+        let err = hit.expect_err("armed tripwire with no seam must panic");
+        let msg = err
+            .downcast_ref::<String>()
+            .cloned()
+            .or_else(|| err.downcast_ref::<&'static str>().map(|s| s.to_string()))
+            .unwrap_or_default();
+        assert!(
+            msg.contains("880-tdwn"),
+            "the panic must name the incident class so the next reader debugs \
+             the race, not podman; got: {msg}"
+        );
+        assert!(calm.is_ok(), "unarmed resolution must stay untouched");
+    }
+
     /// Order 714-4r6w, criterion 4: a stalled SYNCHRONOUS stand-in must fail
     /// bounded and named, the same guarantee order 690-7adz gave the async seam.
     #[cfg(unix)]
@@ -1133,6 +1177,64 @@ sleep 600
             message.contains("wait --condition=healthy vault"),
             "names the command: {message}"
         );
+    }
+
+    /// Order 795-hzpg slice B: the output-capturing path must not merely return
+    /// on time; the exact child it timed out must already be killed and reaped.
+    #[cfg(unix)]
+    #[test]
+    fn wait_bounded_timeout_kills_the_exact_output_child_pid() {
+        let (_guard, dir) = stub_podman(
+            "#!/bin/sh
+printf '%s\\n' \"$$\" > \"$TILLANDSIAS_TEST_CHILD_PID_FILE\"
+exec sleep 600
+",
+        );
+        let pid_file = dir.join("output-child.pid");
+        let started = std::time::Instant::now();
+        let err = podman_cmd_sync()
+            .env("TILLANDSIAS_TEST_CHILD_PID_FILE", &pid_file)
+            .output_bounded(std::time::Duration::from_secs(1))
+            .expect_err("the hanging output child must time out");
+        let elapsed = started.elapsed();
+        let pid = read_recorded_pid(&pid_file);
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert_eq!(err.kind(), std::io::ErrorKind::TimedOut);
+        assert!(
+            elapsed < std::time::Duration::from_secs(5),
+            "bounded output timeout took {elapsed:?}"
+        );
+        assert_pid_is_gone(pid);
+    }
+
+    /// The inherited-output caller uses the same parked wait and carries the
+    /// same kill-and-reap guarantee as `output_bounded`.
+    #[cfg(unix)]
+    #[test]
+    fn status_bounded_timeout_kills_the_exact_child_pid() {
+        let (_guard, dir) = stub_podman(
+            "#!/bin/sh
+printf '%s\\n' \"$$\" > \"$TILLANDSIAS_TEST_CHILD_PID_FILE\"
+exec sleep 600
+",
+        );
+        let pid_file = dir.join("status-child.pid");
+        let started = std::time::Instant::now();
+        let err = podman_cmd_sync()
+            .env("TILLANDSIAS_TEST_CHILD_PID_FILE", &pid_file)
+            .status_bounded(std::time::Duration::from_secs(1))
+            .expect_err("the hanging status child must time out");
+        let elapsed = started.elapsed();
+        let pid = read_recorded_pid(&pid_file);
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert_eq!(err.kind(), std::io::ErrorKind::TimedOut);
+        assert!(
+            elapsed < std::time::Duration::from_secs(5),
+            "bounded status timeout took {elapsed:?}"
+        );
+        assert_pid_is_gone(pid);
     }
 
     /// Negative control: the same transport and budget must still SUCCEED for a
@@ -1217,20 +1319,70 @@ while [ $i -lt 2000 ]; do echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; i=$((
         ((lock, Restore), dir)
     }
 
+    #[cfg(unix)]
+    fn read_recorded_pid(path: &std::path::Path) -> u32 {
+        std::fs::read_to_string(path)
+            .unwrap_or_else(|e| panic!("read recorded child pid {}: {e}", path.display()))
+            .trim()
+            .parse()
+            .unwrap_or_else(|e| panic!("parse recorded child pid {}: {e}", path.display()))
+    }
+
+    #[cfg(unix)]
+    fn assert_pid_is_gone(pid: u32) {
+        let rc = unsafe { libc::kill(pid as libc::pid_t, 0) };
+        if rc == 0 {
+            panic!("timed-out child PID {pid} still exists after bounded wait returned");
+        }
+        let err = std::io::Error::last_os_error();
+        assert_eq!(
+            err.raw_os_error(),
+            Some(libc::ESRCH),
+            "checking timed-out child PID {pid} failed for a reason other than nonexistence: {err}"
+        );
+    }
+
     fn args_of(cmd: &std::process::Command) -> Vec<String> {
         cmd.get_args()
             .map(|arg| arg.to_string_lossy().into_owned())
             .collect()
     }
 
+    /// Serializes the env-mutating tests below.
+    ///
+    /// Order 833-u85z: this RECOVERS from poisoning instead of unwrapping.
+    /// A `.lock().unwrap()` here meant that any one test panicking while
+    /// holding the guard poisoned the mutex for every test that ran after it,
+    /// converting one failure into N — measured 2026-08-19 as 1 real defect
+    /// (833-8u5g) reported as 6 failures, five of which passed in isolation.
+    ///
+    /// Recovery is sound BECAUSE the guarded data is `()`. Poisoning exists to
+    /// stop a reader from observing state a panicking writer left half-updated;
+    /// with no state there is no such invariant to protect. The lock's only job
+    /// is mutual exclusion over the process-wide environment, and a panicking
+    /// test does not make the *next* test's exclusive access unsafe.
+    ///
+    /// What this deliberately does NOT do is hide the failure: the test that
+    /// actually panicked still fails and still reports. It only stops that
+    /// panic from being restated as five more, which is noise that buries the
+    /// one line worth reading.
     fn env_lock() -> std::sync::MutexGuard<'static, ()> {
         static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
+        ENV_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     #[test]
     fn remote_transport_uses_remote_flag_and_skips_local_storage_args() {
-        let _guard = env_lock();
+        // 880-tdwn: resolve through the stub seam, never bare — these tests
+        // only inspect argv, so an exit-0 stub is a complete podman.
+        let (_guard, _stub) = stub_podman(
+            "#!/bin/sh
+exit 0
+",
+        );
         unsafe {
             std::env::remove_var("TILLANDSIAS_PODMAN_GRAPHROOT");
             std::env::remove_var("TILLANDSIAS_PODMAN_RUNROOT");
@@ -1288,7 +1440,13 @@ while [ $i -lt 2000 ]; do echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; i=$((
 
     #[test]
     fn local_transport_isolation_env_enables_storage_overrides() {
-        let _guard = env_lock();
+        // 880-tdwn: resolve through the stub seam, never bare — these tests
+        // only inspect argv, so an exit-0 stub is a complete podman.
+        let (_guard, _stub) = stub_podman(
+            "#!/bin/sh
+exit 0
+",
+        );
         let mut cmd = std::process::Command::new(find_podman_path());
         unsafe {
             std::env::set_var("TILLANDSIAS_PODMAN_GRAPHROOT", "/tmp/tillandsias-graphroot");
@@ -1349,8 +1507,56 @@ while [ $i -lt 2000 ]; do echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; i=$((
         }
     }
 
+    /// Negative control for 833-u85z: prove the poison recovery in `env_lock`
+    /// is load-bearing rather than decorative.
+    ///
+    /// Without it this test's second acquisition returns `Err(PoisonError)` and
+    /// the `.unwrap()` that used to be there turns THIS panic into a failure in
+    /// every env-mutating test that runs afterwards. That is not hypothetical —
+    /// it is exactly the 1-real-failure-reported-as-6 cascade measured on
+    /// 2026-08-19, reproduced here deliberately and in one place.
+    ///
+    /// The poisoning is caused in a child thread on purpose: a panic on the
+    /// test thread would fail this test rather than the next one.
+    #[test]
+    fn env_lock_recovers_from_a_poisoned_guard() {
+        let poisoner = std::thread::spawn(|| {
+            let _guard = env_lock();
+            panic!(
+                "833-u85z: deliberate poison, expected — see env_lock_recovers_from_a_poisoned_guard"
+            );
+        });
+        assert!(
+            poisoner.join().is_err(),
+            "the poisoning thread must actually have panicked, or this control asserts nothing"
+        );
+
+        // The assertion IS that this line is reached: under `.lock().unwrap()`
+        // it panics with PoisonError.
+        let _recovered = env_lock();
+    }
+
     #[test]
     fn desktop_user_session_preflight_requires_writable_runtime_dir() {
+        // Order 833-8u5g. `require_desktop_user_session` carries its ENTIRE
+        // body under #[cfg(target_os = "linux")], so on every other target it
+        // is `Ok(())` unconditionally. That makes this test's two assertions
+        // disagree about the same fact: the is_ok() below passes VACUOUSLY and
+        // the is_err() cannot pass at all.
+        //
+        // SKIPPED LOUDLY rather than #[cfg]-gated, matching 831-wmn4: the test
+        // keeps compiling on every target, so it cannot rot unnoticed the way a
+        // cfg-gated one does. XDG_RUNTIME_DIR is a Linux desktop-session
+        // concept; Linux runs the assertions.
+        if !cfg!(target_os = "linux") {
+            eprintln!(
+                "SKIP desktop_user_session_preflight_requires_writable_runtime_dir: \
+                 require_desktop_user_session is #[cfg(target_os = \"linux\")] and returns \
+                 Ok(()) unconditionally here, so the is_ok() half would assert nothing."
+            );
+            return;
+        }
+
         let _guard = env_lock();
         unsafe {
             std::env::remove_var("TILLANDSIAS_PODMAN_REMOTE_URL");
@@ -1561,5 +1767,74 @@ while [ $i -lt 2000 ]; do echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; i=$((
             ),
             "missing failure line in stderr:\n{stderr}"
         );
+    }
+
+    /// Order 795-hzpg exit criterion 3 (NEGATIVE CONTROL): a child that exits
+    /// normally well inside the budget still yields its FULL stdout and its
+    /// real exit status — the cap must not shave a byte off ordinary output.
+    #[cfg(unix)]
+    #[test]
+    fn wait_bounded_small_output_arrives_whole_with_real_status() {
+        let mut cmd = std::process::Command::new("sh");
+        cmd.args(["-c", "printf hello; printf oops >&2; exit 3"])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        let child = cmd.spawn().expect("spawn sh");
+        let out = SyncPodmanCommand::wait_bounded(
+            child,
+            std::time::Duration::from_secs(30),
+            &["<test>".to_string()],
+        )
+        .expect("wait_bounded");
+        assert_eq!(out.stdout, b"hello");
+        assert_eq!(out.stderr, b"oops");
+        assert_eq!(out.status.code(), Some(3), "real exit status must survive");
+    }
+
+    /// Order 795-hzpg slice A: a chatty child is truncated at EXACTLY the cap,
+    /// drained to EOF (so it never blocks on a full pipe), and still reports
+    /// its real exit status. The dropped bytes are reported via
+    /// `log_podman_failure`; this test pins the boundary and the drain.
+    #[cfg(unix)]
+    #[test]
+    fn wait_bounded_caps_a_chatty_child_at_the_named_constant() {
+        let over = MAX_CAPTURED_OUTPUT_BYTES + 4096;
+        let mut cmd = std::process::Command::new("sh");
+        cmd.args(["-c", &format!("head -c {over} /dev/zero")])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        let child = cmd.spawn().expect("spawn sh");
+        let out = SyncPodmanCommand::wait_bounded(
+            child,
+            std::time::Duration::from_secs(60),
+            &["<test>".to_string()],
+        )
+        .expect("wait_bounded");
+        assert_eq!(
+            out.stdout.len(),
+            MAX_CAPTURED_OUTPUT_BYTES,
+            "capture must stop at exactly the named cap"
+        );
+        assert!(
+            out.status.success(),
+            "the child was drained, not wedged: it must exit 0, got {:?}",
+            out.status
+        );
+    }
+
+    /// The capped reader itself: the boundary is inclusive at the cap (a
+    /// payload of exactly MAX_CAPTURED_OUTPUT_BYTES drops nothing) and one
+    /// byte over drops exactly one.
+    #[test]
+    fn read_capped_boundary_is_inclusive_at_the_cap() {
+        let exact = vec![0u8; MAX_CAPTURED_OUTPUT_BYTES];
+        let (buf, dropped) = read_capped(Some(std::io::Cursor::new(exact)));
+        assert_eq!(buf.len(), MAX_CAPTURED_OUTPUT_BYTES);
+        assert_eq!(dropped, 0, "a payload exactly at the cap is not truncated");
+
+        let one_over = vec![0u8; MAX_CAPTURED_OUTPUT_BYTES + 1];
+        let (buf, dropped) = read_capped(Some(std::io::Cursor::new(one_over)));
+        assert_eq!(buf.len(), MAX_CAPTURED_OUTPUT_BYTES);
+        assert_eq!(dropped, 1, "one byte over the cap drops exactly one byte");
     }
 }

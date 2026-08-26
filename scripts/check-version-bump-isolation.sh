@@ -49,8 +49,23 @@
 # guard is a no-op (nothing to push-check).
 #
 # Verdict (last line):
-#   version-bump-isolation: commits=<n> version-touching=<n> violations=<n> verdict=(ok|version-swept-with-unrelated-files)
+#   version-bump-isolation: population=<n> commits=<n> version-touching=<n> violations=<n> \
+#     verdict=(ok|ok:nothing-to-examine|ok:no-comparable-range|version-swept-with-unrelated-files)
 # Exit 0 when clean; exit 1 when a sweep is found (fail loud, naming the commit).
+#
+# POPULATION AND THE EMPTY RANGE (order 831-ezea). This guard printed
+# `commits=0 version-touching=0 violations=0 verdict=ok` — measured on
+# linux-next 2026-08-19 with nothing outgoing — which is indistinguishable, to
+# a reader or a grep, from "I examined the outgoing commits and they are clean".
+# `violations=0` over an empty range is not evidence of isolation; it is
+# evidence of an empty range.
+#
+# `population=<n>` names the denominator (the commits actually walked), and the
+# two empty-population paths get their OWN verdict strings so `verdict=ok` means
+# what it says. They stay EXIT 0 on purpose: "nothing outgoing to check" is the
+# normal state of a clean tree, and this guard is wired into ./build.sh --check
+# (build.sh:1536) — failing it there would refuse every build that has nothing
+# to push, which is a far worse gate than the ambiguity being fixed.
 set -uo pipefail
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "not-a-git-repo"; exit 0; }
@@ -76,7 +91,10 @@ elif [ -n "$(git for-each-ref --count=1 --format='%(refname)' refs/remotes/origi
 elif up="$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null)" && [ -n "$up" ]; then
   rev_args=(--no-merges "${up}..HEAD")
 else
-  echo "version-bump-isolation: commits=0 version-touching=0 violations=0 verdict=ok"
+  # No origin remote-tracking refs AND no @{upstream}: there is no range to
+  # compare against, so nothing was examined. Named distinctly from a walked-
+  # and-clean range (831-ezea).
+  echo "version-bump-isolation: population=0 commits=0 version-touching=0 violations=0 verdict=ok:no-comparable-range"
   exit 0
 fi
 
@@ -119,11 +137,16 @@ while IFS= read -r sha; do
   fi
 done < <(git rev-list "${rev_args[@]}" 2>/dev/null)
 
-if [ "$violations" -eq 0 ]; then
-  echo "version-bump-isolation: commits=$commits version-touching=$vtouch violations=0 verdict=ok"
+if [ "$violations" -eq 0 ] && [ "$commits" -eq 0 ]; then
+  # The range resolved but walked nothing. `violations=0` here is arithmetic on
+  # an empty set, not a clean bill of health (831-ezea).
+  echo "version-bump-isolation: population=0 commits=0 version-touching=0 violations=0 verdict=ok:nothing-to-examine"
+  exit 0
+elif [ "$violations" -eq 0 ]; then
+  echo "version-bump-isolation: population=$commits commits=$commits version-touching=$vtouch violations=0 verdict=ok"
   exit 0
 else
-  echo "version-bump-isolation: commits=$commits version-touching=$vtouch violations=$violations verdict=version-swept-with-unrelated-files"
+  echo "version-bump-isolation: population=$commits commits=$commits version-touching=$vtouch violations=$violations verdict=version-swept-with-unrelated-files"
   echo "A build-number bump must land alone (VERSION + Cargo.lock/Cargo.toml/crates only), via a release/version-bump-* branch — never swept into an unrelated commit (702-eusw)."
   exit 1
 fi

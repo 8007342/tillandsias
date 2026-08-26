@@ -23,7 +23,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use tillandsias_control_wire::transport::{
-    AsyncReadWrite, CONTROL_WIRE_VSOCK_PORT, Listener, Transport, bind,
+    AsyncReadWrite, CONTROL_WIRE_VSOCK_PORT, Listener, Transport, bind, control_frame_codec,
 };
 use tillandsias_control_wire::{
     CAP_PTY_ATTACH_V1, CAP_PTY_HEARTBEAT_V1, CAP_PTY_HEARTBEAT_V2, CloudProjectEntry,
@@ -32,7 +32,9 @@ use tillandsias_control_wire::{
     encode,
 };
 use tillandsias_secure_channel::{HopId, channel_psk, server_handshake_or_reclaim};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+#[cfg(test)]
+use tokio::io::AsyncReadExt;
+use tokio::io::AsyncWriteExt;
 use tokio::sync::{broadcast, mpsc, watch};
 use tracing::{debug, info, warn};
 
@@ -674,6 +676,26 @@ pub async fn run_vsock_listener(
         port,
     };
     let mut listener = bind(&transport).await?;
+    // 798-q4m9 criterion 3: THE BIND MOMENT MUST BE OBSERVABLE, or the packet's
+    // own exit criterion cannot be met by anyone.
+    //
+    // The `info!` below has no subscriber in the guest — measured 2026-08-18:
+    // there is no `tillandsias.log` anywhere in the guest filesystem and no
+    // vsock-transport line in `journalctl -u tillandsias-headless`. So the one
+    // event the criterion asks to time left no trace at all, and an attempt to
+    // measure it instead timed the vsock PREFLIGHT line, which marks when the
+    // listener task was SPAWNED. That is the wrong quantity: `tokio::spawn`
+    // only enqueues, so issuing five spawns costs microseconds and the before/
+    // after readings were 6.624 ms and 6.605 ms — indistinguishable, and
+    // measuring nothing about when the listener actually became reachable.
+    //
+    // eprintln! rather than fixing the tracing subscriber: stderr from this
+    // unit demonstrably reaches the journal with a monotonic timestamp (the
+    // preflight line proves the path), so this is the smallest change that
+    // makes the criterion measurable. Deliberately one line, at the exact
+    // instant `bind` returns, so the timestamp means the listener is reachable
+    // and nothing else.
+    eprintln!("[tillandsias] vsock listener bound port={port}");
     info!(
         spec = "vsock-transport",
         port = port,
@@ -869,12 +891,26 @@ async fn handle_connection_with_mode(
 /// consume the secured stream inside its own match arm while the failure
 /// path keeps the reclaimed raw stream for the Unauthorized notice.
 async fn serve_ready_stream(
-    mut stream: Box<dyn AsyncReadWrite + Unpin + Send>,
+    stream: Box<dyn AsyncReadWrite + Unpin + Send>,
     state: VmStateHandle,
     mut shutdown: watch::Receiver<bool>,
 ) {
+    // Order 795-5itp. ONE owner of the read buffer for the whole
+    // connection: the Hello, the HelloAck and every subsequent frame go
+    // through this `Framed`, and the split below splits the FRAMED, never
+    // the raw stream. Wrapping for the handshake and then reclaiming the
+    // stream would discard whatever the codec had already buffered — a
+    // pipelined Subscribe riding in behind the Hello would vanish with no
+    // error and no log. Pinned by
+    // `pipelined_hello_and_subscribe_both_survive_the_handoff`.
+    //
+    // The codec comes from the shared constructor so `max_frame_length`
+    // cannot drift from MAX_MESSAGE_BYTES; `LengthDelimitedCodec::new()`
+    // defaults to 8 MiB, 128x looser than every reader on this wire.
+    let mut framed = tokio_util::codec::Framed::new(stream, control_frame_codec());
+
     let first = match tokio::select! {
-        result = read_envelope(&mut stream) => result,
+        result = read_framed_envelope(&mut framed) => result,
         _ = connection_shutdown(&mut shutdown) => return,
     } {
         Ok(env) => env,
@@ -924,6 +960,18 @@ async fn serve_ready_stream(
                 // Order 333: advertise guest metrics so a tray can feature-
                 // detect instead of probing a version table.
                 "MetricsSnapshotRequest".into(),
+                // Order 795-zshi: advertise that this guest accepts a
+                // verbatim argv vector, so a host can stop flattening argv
+                // into a shell string — and can tell whether THIS guest
+                // supports it rather than guessing from a version.
+                tillandsias_control_wire::CAP_EXEC_ARGV_VECTOR.into(),
+                // Order 795-zshi slice 4: advertise that THIS guest heals a
+                // widened CA key mode on ensure_proxy_running's already-running
+                // early-return path, so a host can drop the `chmod 600` from its
+                // exec preamble. Separate from ExecArgvVector deliberately —
+                // they shipped in different commits, so the argv cap does not
+                // imply the heal. See CAP_PROXY_CA_KEY_HEAL's doc comment.
+                tillandsias_control_wire::CAP_PROXY_CA_KEY_HEAL.into(),
                 CAP_PTY_ATTACH_V1.into(),
                 CAP_PTY_HEARTBEAT_V1.into(),
             ],
@@ -936,17 +984,19 @@ async fn serve_ready_stream(
             build_version: Some(tillandsias_secure_channel::workspace_version().to_string()),
         },
     };
-    if let Err(err) = write_envelope(&mut stream, &ack).await {
+    if let Err(err) = write_framed_envelope(&mut framed, &ack).await {
         warn!(spec = "vsock-transport", error = %err, "failed to write HelloAck");
         return;
     }
 
-    // Split the stream into independent read/write halves so the read side
-    // can be owned by a dedicated task. This eliminates the cancel-safety
-    // bug where `read_envelope` (which uses `read_exact`, not cancellation-
-    // safe) was raced against six other `select!` arms — a preempted partial
-    // frame was silently discarded, desynchronizing the wire (795-57y6).
-    let (read_half, mut write_half) = tokio::io::split(stream);
+    // Split the FRAMED, not the raw stream (order 795-5itp): `futures::StreamExt`
+    // hands back a sink and a stream that share one codec and therefore one read
+    // buffer, so anything already decoded during the handshake is still there for
+    // the reader task. `tokio::io::split(stream)` on the underlying transport
+    // would silently strip it. The read side is owned by a dedicated task so it
+    // is never a `select!` branch — cancellation cannot interrupt it mid-frame,
+    // which is the 795-57y6 desync this split was introduced to fix.
+    let (mut write_half, read_half) = futures::StreamExt::split(framed);
 
     // Spawn a dedicated reader task that owns the read half. The read is
     // never a select! branch, so cancellation cannot interrupt it mid-frame.
@@ -955,7 +1005,7 @@ async fn serve_ready_stream(
     tokio::spawn(async move {
         let mut reader = read_half;
         loop {
-            let result = read_envelope(&mut reader).await;
+            let result = read_framed_envelope(&mut reader).await;
             let is_err = result.is_err();
             if inbound_tx.send(result).await.is_err() {
                 break; // main loop dropped the receiver
@@ -1603,6 +1653,75 @@ async fn serve_ready_stream(
     pty_store.shutdown_all().await;
 }
 
+/// Read one envelope from a `Framed` control wire (order 795-5itp).
+///
+/// The error surface is deliberately IDENTICAL to `read_envelope`'s, because
+/// the callers and tests here have always seen those exact strings. The codec
+/// reports its own bound violation as "frame size too big"; that is remapped
+/// to `inbound control frame too large` rather than allowed to leak, so a
+/// migration cannot be detected from the outside by the shape of a failure.
+async fn read_framed_envelope<S>(framed: &mut S) -> io::Result<ControlEnvelope>
+where
+    S: futures::Stream<Item = Result<bytes::BytesMut, io::Error>> + Unpin,
+{
+    use futures::StreamExt;
+    let body = match framed.next().await {
+        Some(Ok(body)) => body,
+        Some(Err(err)) if err.kind() == io::ErrorKind::InvalidData => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "control frame too large",
+            ));
+        }
+        Some(Err(err)) => return Err(err),
+        // A clean EOF. The hand-rolled reader surfaced this as the
+        // `read_exact` UnexpectedEof it got from the socket; `Framed` reports
+        // it as `None`, so it is restated here in the caller's vocabulary.
+        None => {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "control wire closed",
+            ));
+        }
+    };
+    decode(&body).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+}
+
+/// Write one envelope to a `Framed` control wire (order 795-5itp).
+///
+/// The oversize pre-check is kept AHEAD of the sink on purpose. The codec
+/// would also refuse the frame, but with `InvalidInput` and its own message;
+/// this preserves the `outbound frame too large` / `InvalidData` surface that
+/// 828-r2ek established and that this module's tests assert directly.
+async fn write_framed_envelope<S>(sink: &mut S, env: &ControlEnvelope) -> io::Result<()>
+where
+    S: futures::Sink<bytes::Bytes, Error = io::Error> + Unpin,
+{
+    use futures::SinkExt;
+    let bytes = encode(env).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    if bytes.len() > MAX_MESSAGE_BYTES {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "outbound frame too large",
+        ));
+    }
+    sink.send(bytes.into()).await?;
+    sink.flush().await
+}
+
+/// HAND-ROLLED READER, KEPT DELIBERATELY AND TEST-ONLY (order 795-5itp).
+///
+/// Production reading moved onto `Framed` above. This copy survives as the
+/// INTEROP EVIDENCE the migration rests on: the tests in this module drive
+/// the framed server with a peer that decodes `u32-BE length ‖ postcard` by
+/// hand, so "the codec produces the bytes the old framing produced" is
+/// asserted against an independent implementation rather than against
+/// itself. Delete it and the interop claim becomes a tautology.
+///
+/// It is therefore an EXPLICIT EXCEPTION to this packet's closure scan
+/// (at most one raw length decode among PRODUCTION sites), and the reason
+/// above is the entry that exception list requires.
+#[cfg(test)]
 async fn read_envelope<R>(stream: &mut R) -> io::Result<ControlEnvelope>
 where
     R: AsyncReadExt + Unpin,
@@ -1626,6 +1745,15 @@ where
     W: AsyncWriteExt + Unpin,
 {
     let bytes = encode(env).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    // Order 828-r2ek: symmetric with read_envelope's bound above. Without this
+    // the guest emits a frame the host is obliged to reject, so the connection
+    // dies at the reader and the writer never learns why.
+    if bytes.len() > MAX_MESSAGE_BYTES {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "outbound frame too large",
+        ));
+    }
     stream
         .write_all(&(bytes.len() as u32).to_be_bytes())
         .await?;
@@ -1644,16 +1772,16 @@ async fn connection_shutdown(shutdown: &mut watch::Receiver<bool>) {
     }
 }
 
-async fn write_envelope_with_shutdown<W>(
-    stream: &mut W,
+async fn write_envelope_with_shutdown<S>(
+    sink: &mut S,
     env: &ControlEnvelope,
     shutdown: &mut watch::Receiver<bool>,
 ) -> io::Result<()>
 where
-    W: AsyncWriteExt + Unpin,
+    S: futures::Sink<bytes::Bytes, Error = io::Error> + Unpin,
 {
     tokio::select! {
-        result = write_envelope(stream, env) => result,
+        result = write_framed_envelope(sink, env) => result,
         _ = connection_shutdown(shutdown) => Err(io::Error::new(
             io::ErrorKind::Interrupted,
             "connection shutdown requested",
@@ -1744,6 +1872,62 @@ pub(crate) fn fetch_cloud_projects() -> Vec<CloudProjectEntry> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Order 828-r2ek NEGATIVE CONTROL: the guest refuses to EMIT a frame its
+    /// own reader would refuse to accept.
+    ///
+    /// Before this, `read_envelope` bounded inbound frames at
+    /// `MAX_MESSAGE_BYTES` and `write_envelope` bounded nothing — so the guest
+    /// could put a frame on the wire that every peer in the fleet is obliged
+    /// to reject. The connection then died at the READER, which is the wrong
+    /// end to diagnose from: the writer saw a successful write and a closed
+    /// socket, with nothing linking the two.
+    #[tokio::test]
+    async fn write_envelope_refuses_a_frame_over_the_shared_maximum() {
+        let oversize = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 1,
+            body: ControlMessage::PtyData {
+                session_id: 1,
+                direction: tillandsias_control_wire::PtyDirection::ToHost,
+                bytes: vec![0xCDu8; MAX_MESSAGE_BYTES + 1],
+            },
+        };
+        let mut sink: Vec<u8> = Vec::new();
+        let err = write_envelope(&mut sink, &oversize)
+            .await
+            .expect_err("a frame over MAX_MESSAGE_BYTES must be refused before it is written");
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+        assert!(
+            sink.is_empty(),
+            "the refusal must happen BEFORE any byte reaches the wire, got {} byte(s)",
+            sink.len()
+        );
+
+        // And the boundary is inclusive: a frame at the maximum still goes.
+        let mut payload = vec![0xCDu8; MAX_MESSAGE_BYTES - 64];
+        let at_limit = loop {
+            let candidate = ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: 2,
+                body: ControlMessage::PtyData {
+                    session_id: 1,
+                    direction: tillandsias_control_wire::PtyDirection::ToHost,
+                    bytes: payload.clone(),
+                },
+            };
+            match encode(&candidate).expect("encode").len() {
+                n if n == MAX_MESSAGE_BYTES => break candidate,
+                n if n < MAX_MESSAGE_BYTES => payload.push(0xCD),
+                _ => panic!("overshot MAX_MESSAGE_BYTES while sizing the fixture"),
+            }
+        };
+        let mut sink: Vec<u8> = Vec::new();
+        write_envelope(&mut sink, &at_limit)
+            .await
+            .expect("a frame exactly at MAX_MESSAGE_BYTES must still be written");
+        assert_eq!(sink.len(), 4 + MAX_MESSAGE_BYTES);
+    }
 
     #[test]
     fn pty_heartbeat_requires_explicit_client_capability() {
@@ -1965,6 +2149,97 @@ mod tests {
         }
     }
 
+    /// Order 795-5itp: PIPELINED Hello+Subscribe must both survive the
+    /// handshake-to-read-loop handoff.
+    ///
+    /// THIS TEST CANNOT FAIL AGAINST THE HAND-ROLLED READER IT WAS WRITTEN
+    /// BESIDE, and that is stated rather than hidden: `read_exact` on the raw
+    /// stream buffers nothing, so bytes that arrive early simply wait in the
+    /// socket. It is a pin for the MIGRATION, not a red-first reproduction.
+    ///
+    /// What it guards: `Framed` OWNS a read buffer and fills it opportunistically
+    /// — a single `read` can pull the Subscribe frame in alongside the Hello.
+    /// Building a `Framed` for the handshake and then dropping it to reclaim the
+    /// stream (or calling `tokio::io::split` on the raw stream afterwards)
+    /// discards whatever the buffer already holds. No error, no log: the
+    /// Subscribe is simply gone, the client waits forever for a SubscribeAck,
+    /// and it only happens when the peer pipelines. Hand-falsified against
+    /// exactly that naive shape before this migration landed.
+    ///
+    /// The two frames are written in ONE `write_all` so they are guaranteed to
+    /// be available to a single read, which is what makes the buffer-loss
+    /// window reachable at all.
+    #[tokio::test]
+    async fn pipelined_hello_and_subscribe_both_survive_the_handoff() {
+        let state = VmStateHandle::new();
+        let (mut client, server) = tokio::io::duplex(64 * 1024);
+        let (_shutdown_tx, shutdown_rx) = watch::channel(false);
+        let _server_task = tokio::spawn(handle_connection(
+            Box::new(server),
+            state.clone(),
+            shutdown_rx,
+        ));
+
+        let hello = encode_frame_for_test(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 1,
+            body: ControlMessage::Hello {
+                from: "pipelining-client".to_string(),
+                capabilities: Vec::new(),
+                build_version: None,
+            },
+        });
+        let subscribe = encode_frame_for_test(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 2,
+            body: ControlMessage::Subscribe {
+                topics: vec![tillandsias_control_wire::SubscriptionTopic::VmStatus],
+            },
+        });
+
+        let mut both = hello;
+        both.extend_from_slice(&subscribe);
+        tokio::io::AsyncWriteExt::write_all(&mut client, &both)
+            .await
+            .expect("pipelined write");
+        tokio::io::AsyncWriteExt::flush(&mut client)
+            .await
+            .expect("flush");
+
+        // HelloAck first...
+        let ack = tokio::time::timeout(Duration::from_secs(2), read_envelope(&mut client))
+            .await
+            .expect("HelloAck did not arrive")
+            .expect("HelloAck decodes");
+        assert!(
+            matches!(ack.body, ControlMessage::HelloAck { .. }),
+            "expected HelloAck, got {:?}",
+            ack.body
+        );
+
+        // ...then the SubscribeAck for the frame that rode in behind it. This
+        // is the assertion the whole test exists for: a dropped read buffer
+        // makes this time out rather than fail loudly.
+        let sub_ack = tokio::time::timeout(Duration::from_secs(2), read_envelope(&mut client))
+            .await
+            .expect("SubscribeAck did not arrive — a pipelined frame was swallowed at the handshake handoff")
+            .expect("SubscribeAck decodes");
+        assert!(
+            matches!(sub_ack.body, ControlMessage::SubscribeAck),
+            "expected SubscribeAck, got {:?}",
+            sub_ack.body
+        );
+    }
+
+    /// Frame an envelope the way a hand-rolled peer does, for tests that must
+    /// control exactly how bytes hit the wire (rather than going through
+    /// `write_envelope`, which writes the length and body separately).
+    fn encode_frame_for_test(env: &ControlEnvelope) -> Vec<u8> {
+        let body = encode(env).expect("encode");
+        let mut out = (body.len() as u32).to_be_bytes().to_vec();
+        out.extend_from_slice(&body);
+        out
+    }
     async fn subscribed_vm_status_test_client(
         state: &VmStateHandle,
         socket_capacity: usize,
@@ -2783,10 +3058,37 @@ mod tests {
         .expect("client writes Hello");
         let ack = read_envelope(&mut client).await.expect("HelloAck");
         match ack.body {
-            ControlMessage::HelloAck { server_caps, .. } => assert!(
-                server_caps.iter().any(|c| c == "MetricsSnapshotRequest"),
-                "guest must advertise MetricsSnapshotRequest: {server_caps:?}"
-            ),
+            ControlMessage::HelloAck { server_caps, .. } => {
+                assert!(
+                    server_caps.iter().any(|c| c == "MetricsSnapshotRequest"),
+                    "guest must advertise MetricsSnapshotRequest: {server_caps:?}"
+                );
+                // 795-zshi slice 4. A host may only drop the `chmod 600` from
+                // its exec preamble once the guest heals a widened CA key on
+                // ensure_proxy_running's already-running EARLY-RETURN path.
+                assert!(
+                    server_caps
+                        .iter()
+                        .any(|c| c == tillandsias_control_wire::CAP_PROXY_CA_KEY_HEAL),
+                    "guest must advertise {} so hosts can gate the preamble chmod on the \
+                     BEHAVIOUR rather than on a neighbouring capability: {server_caps:?}",
+                    tillandsias_control_wire::CAP_PROXY_CA_KEY_HEAL
+                );
+                // THE POINT OF A SEPARATE CAPABILITY, asserted rather than
+                // commented: these two are distinct strings. CAP_EXEC_ARGV_VECTOR
+                // shipped in cc4bee155 and the heal in d4e12b425 — two commits —
+                // so a guest built in between advertises the argv cap WITHOUT the
+                // heal. If someone later collapses them into one constant to
+                // "simplify", this fails and the mixed-version argument has to be
+                // re-made rather than silently lost, taking 772-shi9's clamp with
+                // it on exactly the builds it protects.
+                assert_ne!(
+                    tillandsias_control_wire::CAP_PROXY_CA_KEY_HEAL,
+                    tillandsias_control_wire::CAP_EXEC_ARGV_VECTOR,
+                    "the CA-key-heal capability must not be aliased to the argv one — they \
+                     shipped in different commits and do not imply each other"
+                );
+            }
             other => panic!("expected HelloAck, got {other:?}"),
         }
 

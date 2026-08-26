@@ -1,4 +1,6 @@
 # @trace spec:cheatsheet-tooling
+# freshness: auditor=linux-lenovinha-fable5-20260824t155325z date=2026-08-24 verdict=refreshed scope=full file, 4 steps, EXECUTED (spec cheatsheet-tooling, PASS) and clean under scripts/scan-litmus-false-pass.sh — no step would report OK on a command that exited non-zero. Still meaningful: the four steps pin the cheatsheet corpus's SHAPE (canonical categories exist, the template carries the tooling owner trace, the index is generated rather than hand-edited, and it exposes category sections), which is what keeps the corpus navigable by agents that read it through the index rather than by filename.
+# freshness-note: the third step — "index is auto-generated and not hand-edited" — is the one carrying real weight, because a hand-edited index is exactly the drift nobody notices until an agent cannot find a cheatsheet that exists. If this file is ever trimmed, keep that one.
 name: litmus:cheatsheet-tooling-structure
 spec: cheatsheet-tooling
 phase: pre-build

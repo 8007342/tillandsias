@@ -14,8 +14,30 @@
 #   - .claude/skills/**, methodology*  (run directly by the orchestration loop)
 #
 # Output: one line per guard, then a machine verdict line matching
-#   ^guard-activation: total=<n> active=<n> orphan=<n> verdict=(ok|orphans-found)$
-# Exit 0 when every guard is active; exit 1 when any orphan is found (fail loud).
+#   ^guard-activation: population=<n> total=<n> active=<n> orphan=<n> verdict=(ok|orphans-found|unavailable:no-guards-enumerated)$
+# Exit 0 when every guard is active; exit 1 when any orphan is found (fail
+# loud) AND exit 1 when the enumeration is empty (see below).
+#
+# POPULATION, AND WHY AN EMPTY ONE IS NOT `ok` (order 831-ezea).
+#
+# MEASURED 2026-08-19: copy this script into a tree whose `scripts/check-*.sh`
+# glob matches nothing and it prints
+#
+#   guard-activation: total=0 active=0 orphan=0 verdict=ok
+#
+# and exits 0. The auditor whose entire thesis is "a guard nobody can prove is
+# running is not a guard" declared every guard active having enumerated none —
+# it is the 599-w5jd class turned on the instrument itself, and it is exactly
+# how a rename of the check-*.sh prefix, a moved scripts/ dir, or a run from
+# the wrong root would delete the whole audit while local-ci printed a tick.
+#
+# So: `population=<n>` is the count enumerated (== total), printed first so no
+# consumer has to know which of the four numbers is the denominator; and
+# population=0 is a REFUSAL, not an ok. Zero guards in a repo that ships 53 is
+# a broken checkout, which is the same judgement local-ci already makes for a
+# missing guard script (log_fail_missing_guard: "a guard that cannot run is not
+# a guard"). local-ci wires this auditor as if/else on its exit status, so the
+# refusal surfaces as a named red rather than a silent pass.
 #
 # Scope note: this proves a guard is WIRED on this checkout. Per 599-4wzr
 # criterion 3, hook INSTALLATION is per-checkout — each platform (Linux, Windows,
@@ -37,6 +59,30 @@ surfaces=(
   .claude/skills
   methodology.yaml
   methodology
+  # SECOND-LEVEL INVOKERS. A guard can be wired through a script that is itself
+  # invoked by build.sh, and a surface list of only top-level entry points
+  # cannot see that. Measured 2026-08-21: check-archive-answerability.sh is
+  # invoked at scripts/archive-plan-packets.sh:148, which build.sh invokes at
+  # :1668 — wired, running, and reported `orphan=1`, which reds
+  # scripts/local-ci.sh. That is the SAME false-accusation failure the grep -R
+  # note above documents, arriving through a different door: the guard was
+  # correct and the auditor could not see it.
+  #
+  # Listed explicitly rather than resolved transitively ON PURPOSE. The
+  # transitive closure — treat every script reachable from a surface as a
+  # surface — would make nearly every scripts/*.sh an invoker, and since
+  # activation is decided by `grep -Rl <basename>`, a guard merely NAMED in a
+  # comment anywhere in that set would count as active. That trades a loud
+  # false orphan for a silent false ACTIVE, which is the failure this auditor
+  # exists to catch. Extending the list is cheap and stays honest; if it grows
+  # past a handful, the right fix is to distinguish invocation from mention,
+  # not to widen the net.
+  scripts/archive-plan-packets.sh
+  # check-engine-cpu-dispatch.sh (861-n7f5) is invoked at
+  # scripts/bench-inference-floor.sh:324 via a $(dirname)-relative path — a
+  # live production caller this list could not see, reported orphan=1 and
+  # failing --ci-full on 2026-08-25. Same class as archive-plan-packets above.
+  scripts/bench-inference-floor.sh
 )
 
 # Self-reference guard: don't count a script referencing its OWN name, and don't
@@ -47,7 +93,22 @@ find_invoker() { # find_invoker <basename>
     [ -e "$s" ] || continue
     # grep the surface for the guard's basename; exclude the guard file itself
     # and this auditor from counting as an invoker.
-    hit="$(grep -rl -- "$name" "$s" 2>/dev/null \
+    # -R, not -r: the skill surfaces are SYMLINK FARMS by construction. There is
+    # one canonical skills/<name>/ and each runtime (.claude, .opencode, .codex,
+    # .gemini, .github) reaches it through a symlink, so there is exactly one
+    # source of truth. `grep -r` does not follow symlinks found during traversal,
+    # so it read `.claude/skills` as empty and every guard invoked ONLY from a
+    # skill was reported "shipped but never invoked".
+    #
+    # Measured 2026-08-17: check-daily-maintenance.sh (order 801-qasc, windows)
+    # is referenced twice in skills/meta-orchestration/SKILL.md and was still
+    # counted an ORPHAN, failing ./build.sh --ci-full. `grep -rl` over
+    # .claude/skills returned nothing; `grep -Rl` returned
+    # .claude/skills/meta-orchestration/SKILL.md. The guard was wired correctly
+    # and the auditor could not see it — a false accusation that blocks a gate
+    # is worse than no audit, because the fix it demands is to re-wire something
+    # that is already wired.
+    hit="$(grep -Rl -- "$name" "$s" 2>/dev/null \
             | grep -vE "scripts/${name}$|scripts/audit-guard-activation.sh$" \
             | head -1)"
     if [ -n "$hit" ]; then printf '%s' "$hit"; return 0; fi
@@ -71,11 +132,16 @@ for f in scripts/check-*.sh; do
   fi
 done
 
-if [ "$orphan" -eq 0 ]; then
-  echo "guard-activation: total=$total active=$active orphan=0 verdict=ok"
+if [ "$total" -eq 0 ]; then
+  # EMPTY POPULATION IS A REFUSAL, NOT AN OK (831-ezea — see the header).
+  echo "guard-activation: population=0 total=0 active=0 orphan=0 verdict=unavailable:no-guards-enumerated"
+  echo "scripts/check-*.sh matched no files under $ROOT — the audit proved nothing. Zero guards in a repo that ships dozens means a broken checkout, a moved scripts/ directory, or a renamed guard prefix; it does not mean every guard is active." >&2
+  exit 1
+elif [ "$orphan" -eq 0 ]; then
+  echo "guard-activation: population=$total total=$total active=$active orphan=0 verdict=ok"
   exit 0
 else
-  echo "guard-activation: total=$total active=$active orphan=$orphan verdict=orphans-found"
+  echo "guard-activation: population=$total total=$total active=$active orphan=$orphan verdict=orphans-found"
   printf 'orphans: %s\n' "${orphans[*]}"
   exit 1
 fi

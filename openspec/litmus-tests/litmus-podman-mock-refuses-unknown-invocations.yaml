@@ -1,0 +1,76 @@
+# @trace spec:litmus-framework
+#
+# Pins order 797-p2xa. scripts/test-support/podman-mock.sh ended in a bare
+# `exit 0`, so any invocation its `case` did not match reported SUCCESS with
+# EMPTY output — a test double that fails OPEN, letting every test built on it
+# pass while exercising nothing. On 2026-08-17 that cost roughly four hours
+# across three wrong diagnoses (797-vv3n): the trigger was
+# `podman --remote --url <u> run ...`, dispatch saw `--remote`, matched no arm,
+# and fell through. The only symptoms were downstream consequences —
+# "atomic rename failed: No such file or directory" (the temp checkout the mock
+# never created) and "invalid gh JSON: EOF while parsing a value at line 1
+# column 0" (the array it never printed). Neither string contains the words
+# podman, mock, or unrecognized.
+#
+# The contract pinned here: an invocation the mock does not understand is a
+# typed refusal on stderr with a non-zero exit, and the arms that legitimately
+# do nothing (network/compose/system) stay EXPLICIT — so "handled deliberately"
+# and "not handled at all" are no longer the same answer.
+name: litmus:podman-mock-refuses-unknown-invocations
+spec: litmus-framework
+backend: fake
+phase: pre-build
+description: >
+  Pin the podman test double's fail-loud contract: an unhandled subcommand
+  (top-level, or nested under image/secret, or absent entirely) exits non-zero
+  with a diagnostic naming the subject; the deliberate no-op arms still exit 0
+  silently; every handled arm still answers as before.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-support/podman-mock.sh
+  - workspace contains scripts/test-podman-mock-refusal.sh
+  - shell utilities (bash, grep, printf) are available in PATH
+
+inputs:
+  - scripts/test-support/podman-mock.sh
+  - scripts/test-podman-mock-refusal.sh
+
+critical_path:
+  - step: "the refusal fixture passes every scenario (refusal, interpolated subject, nested dispatch, deliberate no-ops, handled arms)"
+    command: "bash scripts/test-podman-mock-refusal.sh 2>&1 | tail -1"
+    timeout_ms: 60000
+    expected_behavior: "ok: all podman-mock-refusal scenarios passed"
+
+  - step: "NEGATIVE CONTROL: a deliberately absurd subcommand exits non-zero and the diagnostic names that subcommand"
+    command: "err=$(scripts/test-support/podman-mock.sh frobnicate-the-widget 2>&1 >/dev/null); rc=$?; if [ \"$rc\" -ne 0 ] && printf '%s' \"$err\" | grep -q frobnicate-the-widget; then echo 'ok: absurd-subcommand-refused-and-named'; else echo \"BAD rc=$rc err=$err\"; fi"
+    timeout_ms: 10000
+    expected_behavior: "ok: absurd-subcommand-refused-and-named"
+
+  - step: "NEGATIVE CONTROL: the refusal names the SUBCOMMAND after podman global flags, not the flag"
+    command: "err=$(scripts/test-support/podman-mock.sh --remote --url unix:///x frobnicate-the-widget 2>&1 >/dev/null); rc=$?; if [ \"$rc\" -ne 0 ] && printf '%s' \"$err\" | grep -q frobnicate-the-widget; then echo 'ok: remote-form-refusal-names-the-verb'; else echo \"BAD rc=$rc err=$err\"; fi"
+    timeout_ms: 10000
+    expected_behavior: "ok: remote-form-refusal-names-the-verb"
+
+  - step: "POSITIVE CONTROL: a handled subcommand is unaffected, so a refusal wired too broadly cannot pass this test"
+    command: "out=$(scripts/test-support/podman-mock.sh version); rc=$?; if [ \"$rc\" -eq 0 ] && printf '%s' \"$out\" | grep -q 5.0.0-mock; then echo 'ok: handled-subcommand-unaffected'; else echo \"BAD rc=$rc out=$out\"; fi"
+    timeout_ms: 10000
+    expected_behavior: "ok: handled-subcommand-unaffected"
+
+  - step: "POSITIVE CONTROL: the deliberate no-op arms still exit 0 silently (handled-deliberately is not not-handled)"
+    command: "scripts/test-support/podman-mock.sh network create tillandsias-enclave >/dev/null 2>&1; a=$?; scripts/test-support/podman-mock.sh system prune -f >/dev/null 2>&1; b=$?; scripts/test-support/podman-mock.sh compose up -d >/dev/null 2>&1; c=$?; if [ \"$a\" -eq 0 ] && [ \"$b\" -eq 0 ] && [ \"$c\" -eq 0 ]; then echo 'ok: deliberate-no-ops-still-succeed'; else echo \"BAD network=$a system=$b compose=$c\"; fi"
+    timeout_ms: 10000
+    expected_behavior: "ok: deliberate-no-ops-still-succeed"
+
+observability:
+  traces:
+    - "@trace spec:litmus-framework"
+  expected_log: "[litmus] podman mock refused an unhandled invocation instead of exiting 0"
+  log_fields:
+    spec: "litmus-framework"
+    test: "podman-mock-refuses-unknown-invocations"
+    backend: "fake"
+
+rollback:
+  on_failure: "inspect scripts/test-support/podman-mock.sh: the *) arms of the top-level, image and secret dispatches must call mock_refuse, and the file's tail must be reachable only from arms that deliberately produced output"

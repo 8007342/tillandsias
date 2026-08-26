@@ -1,4 +1,6 @@
 # @trace spec:chromium-debug-variant, spec:chromium-safe-variant
+# freshness: auditor=linux-lenovinha-fable5-20260824t135317z date=2026-08-24 verdict=refreshed scope=full file, 9 steps, EXECUTED (spec chromium-debug-variant, PASS). Still meaningful: the nine steps pin the properties that make the DEBUG variant safe to ship beside the safe one — safe-by-default WINDOW_TYPE, the remote-debugging flags confined to the debug branch, a per-launch mktemp profile with a cleanup trap, and the cap-drop/userns/no-new-privileges envelope. Those are security properties, so drift here is not cosmetic.
+# freshness-note: also passed through scripts/scan-litmus-false-pass.sh (new this cycle, 870-fv7k) — none of its nine steps mis-pass, i.e. none would report OK on a command that exited non-zero. Worth saying because these ARE source-expression pins over launch-chromium.sh and the Containerfiles: legitimate here, since the properties are "this flag is present in this branch" and there is no runtime to interrogate pre-build, but they are the shape that hid a live defect elsewhere. If a behavioural launch harness ever exists, prefer it and re-audit rather than re-stamping.
 #
 # Drift-protection for the SHARED launch path implementing the two
 # chromium variants. Both specs (chromium-debug-variant and chromium-

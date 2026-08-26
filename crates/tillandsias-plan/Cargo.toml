@@ -26,3 +26,7 @@ serde_yaml = { workspace = true }
 # the critical path of an evidence check. Already a workspace dependency used
 # by 15 sibling crates — no new third-party code enters the tree.
 serde_json = { workspace = true }
+# Order 879-gidx: the spec-index resolution ladder's podman-volume rung. The
+# 714-4r6w gate forbids raw synchronous podman anywhere — this workspace crate
+# is the one bounded surface, and the rung inherits its budget discipline.
+tillandsias-podman = { path = "../tillandsias-podman" }

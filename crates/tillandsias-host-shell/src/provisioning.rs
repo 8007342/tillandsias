@@ -157,6 +157,10 @@ mod tests {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::UnixListener;
 
+    // Order 828-r2ek: this fake in-VM responder reads and writes its frames
+    // hand-rolled and UNBOUNDED, deliberately — it is the unbounded peer that
+    // proves the bounded production client interoperates with one. Do not give
+    // it MAX_MESSAGE_BYTES in a bounds sweep.
     async fn spawn_handshake_responder(path: std::path::PathBuf) -> tokio::task::JoinHandle<()> {
         let listener = UnixListener::bind(&path).expect("bind");
         tokio::spawn(async move {

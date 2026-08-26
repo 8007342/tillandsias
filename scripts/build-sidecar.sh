@@ -45,7 +45,37 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-TARGET="x86_64-unknown-linux-musl"
+# TARGET IS DERIVED FROM THE MACHINE, no longer pinned (order 723-ji4v).
+# The sidecar's only consumers run inside the LINUX GUEST, whose CPU is the
+# host's: podman/WSL2 guests are native, and the Apple-Silicon VZ guest is
+# aarch64 Linux. The old unconditional x86_64 pin staged an x86-64 ELF on
+# Apple Silicon — measured on this checkout 2026-08-23: file(1) said x86-64
+# while the guest is aarch64, a deterministic ENOEXEC at exec time that
+# degrades to the silent 502 the packet describes. Release CI (ubuntu
+# x86_64) derives exactly the triple it used to pin. The stamp already
+# carries `target:` as an input, so this change self-invalidates every
+# previously staged wrong-arch artifact. TILLANDSIAS_SIDECAR_TARGET
+# overrides for cross builds; an unknown machine fails LOUD — a guessed
+# triple stages bytes that fail only at exec time in a container.
+if [[ -n "${TILLANDSIAS_SIDECAR_TARGET:-}" ]]; then
+    TARGET="$TILLANDSIAS_SIDECAR_TARGET"
+else
+    case "$(uname -m)" in
+        x86_64|amd64)  TARGET="x86_64-unknown-linux-musl" ;;
+        arm64|aarch64) TARGET="aarch64-unknown-linux-musl" ;;
+        *)
+            echo "[build-sidecar] ERROR: unsupported machine '$(uname -m)' for the sidecar's Linux guest consumers." >&2
+            echo "[build-sidecar]   Set TILLANDSIAS_SIDECAR_TARGET=<triple> explicitly." >&2
+            exit 2
+            ;;
+    esac
+fi
+# Fixture seam (order 723-ji4v): print the derived triple and stop, so the
+# derivation is testable without a 12s cargo build.
+if [[ "${1:-}" == "--print-target" ]]; then
+    echo "$TARGET"
+    exit 0
+fi
 SIDECAR_DEST="$ROOT/images/router/tillandsias-router-sidecar"
 # Use a SEPARATE target dir so a nested invocation (e.g. build.rs calling
 # this script while the parent cargo holds target/'s lock) cannot deadlock.
@@ -192,8 +222,13 @@ if [[ "$USE_TARGET" == true ]]; then
     # Linux keeps the system cc resolution it has always used.
     case "${OSTYPE:-}" in
         msys*|cygwin*|win32*|darwin*)
-            export CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER="rust-lld"
-            export CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_RUSTFLAGS="-C link-self-contained=yes"
+            # Var names are TARGET-derived (order 723-ji4v): the old literal
+            # X86_64 spelling silently stopped applying the moment TARGET
+            # became derivable, leaving aarch64 links to a cc that cannot
+            # emit ELF.
+            _triple_env="$(printf '%s' "$TARGET" | tr 'a-z-' 'A-Z_')"
+            export "CARGO_TARGET_${_triple_env}_LINKER=rust-lld"
+            export "CARGO_TARGET_${_triple_env}_RUSTFLAGS=-C link-self-contained=yes"
             ;;
     esac
 
@@ -243,6 +278,19 @@ if ! file "$SRC" | grep -q 'ELF'; then
     echo "[build-sidecar]   Its consumers are a Linux container image and the guest" >&2
     echo "[build-sidecar]   runtime asset, so a host-target build cannot be staged." >&2
     echo "[build-sidecar]   Install the cross target: rustup target add ${TARGET}" >&2
+    rm -f "$SRC"
+    exit 4
+fi
+# ...and the RIGHT ELF (order 723-ji4v): 723-b9cn's format assert accepted
+# any ELF, so an x86-64 sidecar staged happily on an Apple-Silicon host whose
+# guest is aarch64 — exactly the wrong-arch artifact this packet is about.
+case "$TARGET" in
+    x86_64-*)  WANT_ARCH_RE='x86-64' ;;
+    aarch64-*) WANT_ARCH_RE='aarch64' ;;
+    *)         WANT_ARCH_RE='' ;;
+esac
+if [[ -n "$WANT_ARCH_RE" ]] && ! file "$SRC" | grep -Eqi "$WANT_ARCH_RE"; then
+    echo "[build-sidecar] ERROR: built sidecar is '$(file -b "$SRC")' but the target is ${TARGET} — wrong-arch artifact refused, not staged." >&2
     rm -f "$SRC"
     exit 4
 fi

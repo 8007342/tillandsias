@@ -1,6 +1,7 @@
 # @trace spec:meta-orchestration
 # @trace order:737-zcj5
 # @trace order:770-f6u4
+# freshness: auditor=linux-yoga-opus5-20260824T193300Z date=2026-08-24 verdict=updated scope=STEP 18 budget 20s -> 120s after measuring 14.1s per cycle-metrics call x3 on an idle 12-core host (structurally unreacheable, not flaky); full 20-step suite green on linux-next
 #
 # Pins the executable MCP expert health probe (order 737-zcj5). `mcp_first_read_path`
 # has always said "fall back and keep going, THEN RECORD IT" — but named no
@@ -164,6 +165,42 @@ critical_path:
     command: "grep -q 'unavailable_record_where' methodology/distributed-work.yaml && grep -q 'check-mcp-expert-health.sh' methodology/distributed-work.yaml && echo 'ok: methodology-names-destination'"
     timeout_ms: 3000
     expected_behavior: "ok: methodology-names-destination"
+
+  # ── order 801-m9tk: the SURFACE, not just the handshake ─────────────────────
+  # For three consecutive windows cycles this very probe printed
+  # ok:experts-healthy while no mcp__forge-plan__* / mcp__project-info__* tool
+  # was bound to the session at all — every read fell back to the binary. The
+  # handshake and the agent's tool surface are different facts; a subprocess can
+  # measure only the first. The companion check joins the measured half with the
+  # cycle's ATTESTED half so "healthy but unexposed" becomes sayable.
+  - step: "the surface companion check separates handshake-healthy from surface-exposed (9 scenarios, incl. the three-cycle defect and 4 negative controls)"
+    command: "bash scripts/check-mcp-surface.sh fixture 2>&1 | tail -1"
+    timeout_ms: 30000
+    expected_behavior: "ok:mcp-surface-check-fixture:9"
+
+  - step: "cycle-metrics expresses health=ok-unexposed distinctly from health=ok and health=down"
+    # Handshake log says every expert is up. A FRESH `unexposed` attestation must
+    # refine the line to ok-unexposed AND fire mcp_outage:; an `exposed` one must
+    # leave it exactly `health=ok` with no outage line (the negative control that
+    # stops the new state from firing every cycle and being ignored).
+    command: "d=$(mktemp -d); printf '{\"ts\":\"t\",\"server\":\"forge-plan\",\"state\":\"up\",\"host\":\"h\"}\\n{\"ts\":\"t\",\"server\":\"project-info\",\"state\":\"up\",\"host\":\"h\"}\\n' > $d/h.jsonl; printf 'ts=x epoch=%s claim=unexposed tools=none agent=fx\\n' \"$(date -u +%s)\" > $d/s; a=$(TILLANDSIAS_EXPERT_HEALTH_LOG=$d/h.jsonl TILLANDSIAS_MCP_SURFACE_STAMP=$d/s scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep -c 'health=ok-unexposed'); printf 'ts=x epoch=%s claim=exposed tools=all agent=fx\\n' \"$(date -u +%s)\" > $d/s; b=$(TILLANDSIAS_EXPERT_HEALTH_LOG=$d/h.jsonl TILLANDSIAS_MCP_SURFACE_STAMP=$d/s scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^mcp:' | grep -c 'health=ok '); c=$(TILLANDSIAS_EXPERT_HEALTH_LOG=$d/h.jsonl TILLANDSIAS_MCP_SURFACE_STAMP=$d/s scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep -c '^mcp_outage:'); rm -rf $d; if [ \"$a\" -ge 2 ] && [ \"$b\" = 1 ] && [ \"$c\" = 0 ]; then echo 'ok: unexposed-is-its-own-state'; else echo \"observed unexposed_lines=$a exposed_ok=$b exposed_outage=$c\"; echo 'fail: healthy-but-unexposed must be distinct from healthy'; fi"
+    # Three cycle-metrics invocations at a measured ~14s each on an
+    # idle 12-core host = ~42s of real work; the original 20s budget
+    # was structurally unreacheable, not flaky (measured yoga
+    # 2026-08-24). Sized to 120s — the property is output shape, not
+    # speed.
+    timeout_ms: 120000
+    expected_behavior: "ok: unexposed-is-its-own-state"
+
+  - step: "a STALE surface attestation cannot label this cycle (an earlier cycle's marker is not evidence)"
+    command: "d=$(mktemp -d); printf '{\"ts\":\"t\",\"server\":\"forge-plan\",\"state\":\"up\",\"host\":\"h\"}\\n' > $d/h.jsonl; printf 'ts=x epoch=1 claim=unexposed tools=none agent=fx\\n' > $d/s; out=$(TILLANDSIAS_EXPERT_HEALTH_LOG=$d/h.jsonl TILLANDSIAS_MCP_SURFACE_STAMP=$d/s scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^mcp:'); rm -rf $d; case \"$out\" in *health=ok\\ *) echo 'ok: stale-claim-does-not-label' ;; *) echo \"observed=$out\"; echo 'fail: a stale surface claim must not label this cycle' ;; esac"
+    timeout_ms: 20000
+    expected_behavior: "ok: stale-claim-does-not-label"
+
+  - step: "the meta-orchestration skill wires the surface check and names the unfalsifiable half"
+    command: "grep -q 'check-mcp-surface.sh' skills/meta-orchestration/SKILL.md && grep -q 'attested, not measured' skills/meta-orchestration/SKILL.md && echo 'ok: skill-wires-surface-check'"
+    timeout_ms: 3000
+    expected_behavior: "ok: skill-wires-surface-check"
 
 observability:
   traces:

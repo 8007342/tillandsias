@@ -1,4 +1,4 @@
-# @trace spec:meta-orchestration, spec:forge-push-credential-channel
+# @trace spec:meta-orchestration, spec:git-mirror-service
 # OpenCode-prompt E2E smoke — verify agent commits and pushes findings.
 #
 # Asserts forge_exit=0, new commit since smoke start, at least one
@@ -119,7 +119,7 @@ critical_path:
 observability:
   traces:
     - "@trace spec:meta-orchestration"
-    - "@trace spec:forge-push-credential-channel"
+    - "@trace spec:git-mirror-service"
   expected_log: >
     OpenCode-prompt E2E smoke: forge launched (exit=0), HEAD advanced
     with new commit in plan/, and remote HEAD advanced via git push

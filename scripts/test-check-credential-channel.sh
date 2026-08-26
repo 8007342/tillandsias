@@ -1,0 +1,335 @@
+#!/usr/bin/env bash
+# test-check-credential-channel.sh — pin the 860-g798 fix: `gh auth status`
+# succeeding while git cannot push non-interactively must NEVER produce a bare
+# ok. The measured incident: a fresh clone passed `ok:gh-keyring`, entered
+# committable work, and the first push hung >10 minutes on Git Credential
+# Manager's interactive prompt (esmeraldinha, 2026-08-23).
+#
+# Hermetic: a stub `gh` on PATH answers auth status green; the push probe is a
+# fixture seam (TILLANDSIAS_CRED_PROBE_CMD) so no network is touched; each
+# scenario runs in its own scratch repo.
+set -uo pipefail
+
+REAL_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+GUARD="$REAL_ROOT/scripts/check-credential-channel.sh"
+fail=0
+ok()  { echo "ok: $1"; }
+bad() { echo "FAIL: $1" >&2; fail=1; }
+
+W="$(mktemp -d "${TMPDIR:-/tmp}/cred-channel-test.XXXXXX")"
+trap 'rm -rf "$W"' EXIT INT TERM
+
+mkdir -p "$W/bin" "$W/bin-noauth"
+cat > "$W/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+# auth status green; everything else inert.
+[ "$1 ${2:-}" = "auth status" ] && exit 0
+exit 0
+STUB
+chmod +x "$W/bin/gh"
+
+# gh present but holding NO usable auth — the shape where no token arm can
+# rescue the probe. Needed by the 892-aw9p arms: without it PATH falls through
+# to the REAL gh, and arm 12 passes on this host's live credential rather than
+# on the condition it claims to test.
+cat >"$W/bin-noauth/gh" <<'NOAUTH'
+#!/usr/bin/env bash
+[ "$1 ${2:-}" = "auth status" ] && { echo "not logged in" >&2; exit 1; }
+exit 1
+NOAUTH
+chmod +x "$W/bin-noauth/gh"
+
+scratch() {
+    local d="$W/repo-$1"
+    git init -q -b main "$d"
+    git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m x
+    printf '%s' "$d"
+}
+
+# Run the guard inside a scratch repo with the stub gh and a controlled probe.
+# Env/store arms are neutralised: no GH_TOKEN/GITHUB_TOKEN, no .gh-credentials.
+run_guard() {
+    local repo="$1" probe="$2"
+    ( cd "$repo" && \
+      env -u GH_TOKEN -u GITHUB_TOKEN PATH="$W/bin:$PATH" \
+          TILLANDSIAS_CRED_PROBE_CMD="$probe" \
+          bash "$GUARD" 2>"$repo/.stderr" )
+}
+
+# ── 1. THE INCIDENT SHAPE: gh green + probe fails + interactive helper ──────
+D="$(scratch a)"
+git -C "$D" config credential.helper manager
+out="$(run_guard "$D" "false")"; rc=$?
+case "$out" in
+    *blocked:interactive-credential-helper*) ok "gh-green + GCM helper -> blocked, not ok (rc=$rc)" ;;
+    *) bad "incident shape returned: $out (rc=$rc)" ;;
+esac
+[ "$rc" -ne 0 ] || bad "incident shape must exit non-zero"
+grep -q "credential-store --file" "$D/.stderr" && ok "remedy names the repo-local seeding" \
+    || bad "remedy missing from stderr"
+
+# ── 2. gh green + probe fails + NO interactive helper -> distinct verdict ───
+D="$(scratch b)"
+out="$(run_guard "$D" "false")"; rc=$?
+case "$out" in
+    *blocked:gh-cli-only*) ok "gh-green + unexplained probe failure -> blocked:gh-cli-only" ;;
+    *) bad "no-helper shape returned: $out" ;;
+esac
+[ "$rc" -ne 0 ] || bad "gh-cli-only must exit non-zero"
+
+# ── 3. gh green + probe SUCCEEDS -> the verified ok ─────────────────────────
+D="$(scratch c)"
+out="$(run_guard "$D" "true")"; rc=$?
+case "$out" in
+    ok:gh-keyring-push-verified) ok "working channel -> ok:gh-keyring-push-verified (rc=$rc)" ;;
+    *) bad "working shape returned: $out" ;;
+esac
+[ "$rc" -eq 0 ] || bad "verified ok must exit 0"
+
+# ── 4. the repo-local store STILL short-circuits first (no regression) ──────
+D="$(scratch d)"
+printf 'x\n' > "$(git -C "$D" rev-parse --absolute-git-dir)/.gh-credentials"
+out="$(run_guard "$D" "false")"
+case "$out" in
+    ok:gh-credentials-store) ok "repo-local store arm unchanged, checked first" ;;
+    *) bad "store arm returned: $out" ;;
+esac
+
+# ── 5. MUTATION CONTROL: the pre-fix guard must FAIL this suite ─────────────
+# Reconstruct the old arm (bare ok:gh-keyring on gh auth status alone) and
+# assert scenario 1 would have passed it — proving the suite detects the
+# regression this fix exists to prevent.
+OLD="$W/old-guard.sh"
+sed -e 's/ok:gh-keyring-push-verified/ok:gh-keyring/' \
+    -e 's/^\( *\)_probe_cmd=.*/\1_probe_cmd="true"/' "$GUARD" > "$OLD"
+D="$(scratch e)"
+git -C "$D" config credential.helper manager
+out="$( cd "$D" && env -u GH_TOKEN -u GITHUB_TOKEN PATH="$W/bin:$PATH" bash "$OLD" 2>/dev/null )"
+case "$out" in
+    ok:gh-keyring)
+        ok "MUTATION: the pre-fix arm passes the incident shape — the suite has teeth" ;;
+    *) bad "mutation reconstruction unexpected: $out" ;;
+esac
+
+# ── 6. ORDER 876-exg2: OUR OWN PRE-PUSH HOOK REFUSING IS NOT A CREDENTIAL ───
+# FAULT. Fully hermetic: a local bare remote (no network, no credential of any
+# kind) and a pre-push hook that always refuses. The default probe therefore
+# fails for a reason that has nothing to do with authentication, exactly as it
+# does on a real host whose gate stamp went stale behind a fetch, a claim
+# fragment, or the previous cycle's mandated attestation commit.
+#
+# These arms deliberately do NOT set TILLANDSIAS_CRED_PROBE_CMD — the seam the
+# arms above use bypasses the retry, and the whole defect lives on the default
+# path.
+run_guard_default() {
+    ( cd "$1" && \
+      env -u GH_TOKEN -u GITHUB_TOKEN -u TILLANDSIAS_CRED_PROBE_CMD \
+          PATH="$W/bin:$PATH" bash "$GUARD" 2>"$1/.stderr" )
+}
+
+with_remote() { # with_remote <name> <hook-body> ; echoes the repo path
+    local d="$W/hookrepo-$1" bare="$W/bare-$1.git"
+    git init -q --bare "$bare"
+    git init -q -b main "$d"
+    git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m x
+    git -C "$d" remote add origin "$bare"
+    git -C "$d" push -q origin main 2>/dev/null
+    git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m y
+    printf '#!/usr/bin/env bash\n%s\n' "$2" > "$d/.git/hooks/pre-push"
+    chmod +x "$d/.git/hooks/pre-push"
+    printf '%s' "$d"
+}
+
+D="$(with_remote refuse 'echo "✗ pre-push refused: the tree changed since ./build.sh --check last passed" >&2; exit 1')"
+out="$(run_guard_default "$D")"; rc=$?
+case "$out" in
+    ok:gh-keyring-push-verified-hook-refused)
+        ok "hook refusal -> ok:...-hook-refused, NOT blocked:* (rc=$rc)" ;;
+    blocked:*)
+        bad "REGRESSION: our own hook refusing still reads as a credential fault: $out" ;;
+    *) bad "hook-refusal shape returned: $out (rc=$rc)" ;;
+esac
+[ "$rc" -eq 0 ] || bad "a hook refusal must exit 0 — the skill hard-stops on non-zero"
+grep -q 'build.sh --check' "$D/.stderr" \
+    && ok "the note names ./build.sh --check, not credential seeding" \
+    || bad "note must name the gate, not the credential remedy"
+grep -q 'credential-store --file' "$D/.stderr" \
+    && bad "the note must NOT print the credential-seeding remedy" \
+    || ok "no misleading credential remedy printed"
+
+# ── 7. NEGATIVE CONTROL — the true positive 860-g798 caught must survive. ───
+# When the push cannot authenticate at ALL, --no-verify does not rescue it and
+# the verdict must still be blocked. Here the remote path does not exist, so
+# both probes fail for a real transport/auth reason.
+D="$(with_remote broken 'exit 0')"
+git -C "$D" remote set-url origin "$W/does-not-exist.git"
+out="$(run_guard_default "$D")"; rc=$?
+case "$out" in
+    blocked:*) ok "an unreachable remote is still blocked:* (rc=$rc) — the retry rescues nothing real" ;;
+    *) bad "unreachable-remote shape returned: $out (rc=$rc) — the true positive was weakened" ;;
+esac
+[ "$rc" -ne 0 ] || bad "a genuinely broken channel must exit non-zero"
+
+# ── 8. MUTATION CONTROL for this fix: the PRE-876-exg2 guard must fail arm 6. ─
+# Strip the retry block and assert the old script calls the hook refusal a
+# credential fault — proving arm 6 has teeth rather than passing by luck.
+PRE="$W/pre-876-guard.sh"
+awk '/# ORDER 876-exg2\./{skip=1} skip && /^    _helpers=/{skip=0} skip{next} {print}' \
+    "$GUARD" > "$PRE"
+D="$(with_remote mutation 'echo refused >&2; exit 1')"
+out="$( cd "$D" && env -u GH_TOKEN -u GITHUB_TOKEN -u TILLANDSIAS_CRED_PROBE_CMD \
+        PATH="$W/bin:$PATH" bash "$PRE" 2>/dev/null )"
+case "$out" in
+    blocked:gh-cli-only)
+        ok "MUTATION: the pre-fix guard calls our own hook a credential fault — arm 6 has teeth" ;;
+    *) bad "mutation reconstruction unexpected: $out" ;;
+esac
+
+# ── 8b. ORDER 886-qmdz — a BEHIND branch must not read as a credential fault. ─
+# `git push origin HEAD` names a concrete branch, so a local branch behind its
+# remote counterpart is refused as a non-fast-forward — AFTER the credential
+# authenticated. Start-Of-Cycle fetches (skill step 2) before fast-forwarding
+# (step 5), so this is the single most normal state a cycle enters the guard in.
+# The 876-exg2 retry cannot rescue it: --no-verify removes the hook, not the
+# non-fast-forward. Here the hook is a no-op, so ref state is the ONLY cause.
+behind_repo() { # behind_repo <name>; echoes a repo whose branch is behind origin
+    local d="$W/behindrepo-$1" bare="$W/bare-behind-$1.git"
+    git init -q --bare -b main "$bare"
+    git init -q -b main "$d"
+    git -C "$d" remote add origin "$bare"
+    git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
+    git -C "$d" push -q origin main
+    # Advance origin, then rewind the local branch: strictly behind, clean tree.
+    git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m ahead
+    git -C "$d" push -q origin main
+    git -C "$d" reset -q --hard HEAD~1
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$d/.git/hooks/pre-push"
+    chmod +x "$d/.git/hooks/pre-push"
+    printf '%s' "$d"
+}
+D="$(behind_repo one)"
+# precondition: the plain probe really is refused, and for the ref-state reason
+if ( cd "$D" && git push --dry-run --no-verify origin HEAD >/dev/null 2>&1 ); then
+    bad "fixture is not actually behind — arm 8b would pass vacuously"
+else
+    ok "fixture precondition: a behind branch really is refused by the remote"
+fi
+out="$(run_guard_default "$D")"; rc=$?
+case "$out" in
+    ok:gh-keyring-push-verified-refstate-refused)
+        ok "behind branch -> ok:...-refstate-refused, NOT blocked:* (rc=$rc)" ;;
+    blocked:*)
+        bad "REGRESSION: a branch merely behind origin reads as a credential fault: $out" ;;
+    *) bad "behind-branch shape returned: $out (rc=$rc)" ;;
+esac
+[ "$rc" -eq 0 ] || bad "a ref-state refusal must exit 0 — the skill hard-stops on non-zero"
+grep -q 'ff-only' "$D/.stderr" \
+    && ok "the note names the fast-forward remedy" \
+    || bad "note must name the branch update, not credential seeding"
+grep -q 'credential-store --file' "$D/.stderr" \
+    && bad "the note must NOT print the credential-seeding remedy" \
+    || ok "no misleading credential remedy printed for a ref-state refusal"
+
+# ── 8c. MUTATION CONTROL for 886-qmdz: the pre-fix guard must fail arm 8b. ────
+PRE2="$W/pre-886-guard.sh"
+awk '/# ORDER 886-qmdz\./{skip=1} skip && /^    _helpers=/{skip=0} skip{next} {print}' \
+    "$GUARD" > "$PRE2"
+D2="$(behind_repo two)"
+out="$( cd "$D2" && env -u GH_TOKEN -u GITHUB_TOKEN -u TILLANDSIAS_CRED_PROBE_CMD \
+        PATH="$W/bin:$PATH" bash "$PRE2" 2>/dev/null )"
+case "$out" in
+    blocked:gh-cli-only)
+        ok "MUTATION: the pre-fix guard calls a behind branch a credential fault — arm 8b has teeth" ;;
+    *) bad "mutation reconstruction unexpected: $out" ;;
+esac
+
+# ═══ ORDER 892-aw9p: a correct verdict has a SHELF LIFE ══════════════════════
+# calmecacpilli, 2026-08-25: the guard passed at Start-Of-Cycle, two pushes
+# succeeded, and ~50 minutes later the keyring token was invalid. Nothing the
+# guard measured was wrong — the verdict was true when issued. The failure
+# surfaced after the work and after a 142s gate, with the exit contract
+# forbidding an unpushed exit, so the host was wedged rather than delayed.
+
+# ── 10. reverify passes through a healthy channel unchanged. ─────────────────
+D="$(with_remote reverify_ok 'exit 0')"
+out="$( cd "$D" && env -u GH_TOKEN -u GITHUB_TOKEN -u TILLANDSIAS_CRED_PROBE_CMD \
+        PATH="$W/bin:$PATH" bash "$GUARD" reverify 2>/dev/null )"; rc=$?
+case "$out" in
+    ok:*) ok "reverify on a healthy channel -> $out (rc=$rc)" ;;
+    *)    bad "reverify broke the healthy path: $out (rc=$rc)" ;;
+esac
+[ "$rc" -eq 0 ] || bad "a healthy reverify must exit 0"
+
+# ── 11. THE HEADLINE: a credential that DIED reads differently from one that ─
+#        was never there. Same repair cost, very different diagnosis, and the
+#        guard previously reported both as missing:no-credential-channel.
+D="$(with_remote reverify_died 'exit 0')"
+# a pass is recorded...
+( cd "$D" && env -u GH_TOKEN -u GITHUB_TOKEN -u TILLANDSIAS_CRED_PROBE_CMD \
+  PATH="$W/bin:$PATH" bash "$GUARD" >/dev/null 2>&1 )
+[ -s "$D/.git/tillandsias-credential-verified" ] \
+    && ok "a passing verdict records a stamp" \
+    || bad "no stamp written on a pass — reverify cannot tell died from absent"
+# ...then the channel dies (unreachable remote + no token anywhere)
+git -C "$D" remote set-url origin "$W/does-not-exist.git"
+out="$( cd "$D" && env -u GH_TOKEN -u GITHUB_TOKEN -u TILLANDSIAS_CRED_PROBE_CMD \
+        PATH="$W/bin-noauth:$PATH" bash "$GUARD" reverify 2>"$D/.rv" )"; rc=$?
+case "$out" in
+    blocked:credential-expired-mid-cycle)
+        ok "a credential that DIED mid-cycle is named as such (rc=$rc)" ;;
+    *)  bad "expiry not distinguished: $out (rc=$rc)" ;;
+esac
+[ "$rc" -ne 0 ] || bad "an expired credential must exit non-zero"
+grep -q 'DIED DURING THIS CYCLE' "$D/.rv" \
+    && ok "the diagnosis states it worked and then stopped" \
+    || bad "stderr must say the credential died, not that it is absent"
+grep -q 'gh auth refresh' "$D/.rv" \
+    && ok "the remedy names the token refresh" \
+    || bad "remedy must name gh auth refresh"
+grep -q 'salvage-dirty-worktree' "$D/.rv" \
+    && ok "it points at the 872-c9nd salvage path instead of discarding work" \
+    || bad "a wedged host must be told how to preserve its work"
+
+# ── 12. NEGATIVE CONTROL: with NO prior pass, reverify must NOT claim expiry. ─
+# A host that never had a credential has not lost one. Claiming otherwise sends
+# the reader to refresh a token that never existed.
+D="$(with_remote reverify_never 'exit 0')"
+git -C "$D" remote set-url origin "$W/does-not-exist.git"
+rm -f "$D/.git/tillandsias-credential-verified"
+out="$( cd "$D" && env -u GH_TOKEN -u GITHUB_TOKEN -u TILLANDSIAS_CRED_PROBE_CMD \
+        PATH="$W/bin-noauth:$PATH" bash "$GUARD" reverify 2>/dev/null )"; rc=$?
+case "$out" in
+    blocked:credential-expired-mid-cycle)
+        bad "claimed an expiry with no prior pass — a host that never had one has not lost one" ;;
+    blocked:*|missing:*) ok "no prior pass -> ordinary verdict, not a false expiry ($out)" ;;
+    *) bad "unexpected no-stamp verdict: $out (rc=$rc)" ;;
+esac
+
+# ── 13. The healthy path costs NO extra round trip per push. ─────────────────
+# The exit criterion that keeps this from trading a rare failure for a permanent
+# slowdown: reverify is a separate mode the skill calls ONCE before the gate, not
+# something wired into every git operation. Assert the default path did not grow
+# a second probe.
+# Count INVOCATIONS, not mentions. The first version of this assertion used a
+# bare `grep -c 'push --dry-run'` and counted two COMMENT lines describing the
+# probe — the same incidental-co-occurrence error fixed in the promotion gate
+# earlier tonight (888-m75r), reproduced here in a test that was supposed to be
+# checking for exactly that kind of sloppiness.
+probes="$(grep -nE 'timeout [0-9]+ +git push --dry-run|_probe_cmd=' "$GUARD" \
+          | grep -vcE ':[[:space:]]*#')"
+[ "$probes" -le 3 ] \
+    && ok "reverify added no probe to the hot path ($probes invocation sites)" \
+    || bad "reverify added probes to the hot path ($probes invocation sites)"
+
+# ── 9. Grammar: every verdict this suite produced is a single pinned token. ──
+grammar='^(ok:[a-z0-9-]+|blocked:[a-z0-9-]+|missing:no-credential-channel)$'
+printf '%s\n' "ok:gh-keyring-push-verified-hook-refused" | grep -qE "$grammar" \
+    && ok "the new verdict matches the pinned grammar (no second colon)" \
+    || bad "the new verdict breaks litmus:credential-channel-check-shape"
+
+if [ "$fail" -eq 0 ]; then
+    echo "ok:credential-channel-fixture:all"
+    exit 0
+fi
+echo "fail:credential-channel-fixture"
+exit 1

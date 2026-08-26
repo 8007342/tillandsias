@@ -59,9 +59,58 @@ PLAN="$(resolve_plan_binary)" || PLAN=""
 
 # Every (packet_id, status) pair declared under a `packets:` list in any
 # fragment. Deliberately ignores the `status:` LWW channel — that one works.
+# ORDER 864-hv2n. This pass was BOTH blind and noisy, and the two faults hid
+# each other. The previous extraction was:
+#
+#     /^  - packet_id:/ { pid = $3; st = ""; next }
+#     /^    status:/    { if (pid != "" && st == "") { st = $2; print pid "\t" st; pid = "" } }
+#
+# BLIND: it keys on `  - packet_id:` as the start of a packet, but the repo's
+# house style opens a packet with `  - order:` and puts `    packet_id:` on the
+# next line (every fragment written this month). So the pattern it matched was
+# almost never a PACKET — it was the `  - packet_id:` entries under `events:`,
+# which is the one section this pass is supposed to ignore.
+#
+# NOISY: awk state is global, and nothing reset `pid` between FILES. A fragment
+# whose last `  - packet_id:` is an event (no `    status:` after it) leaves
+# `pid` dangling into the NEXT file, where the first `    status:` line — quite
+# possibly a legitimate declaration for an unrelated packet in an unrelated
+# fragment — gets printed under the previous file's packet_id. On 2026-08-23
+# that reported `three-horizon-cycle-model-arrival-control-by-routing: declared
+# 'completed'` when no fragment anywhere declares that packet's status; the
+# `completed` came from a different fragment, for a different packet, filed
+# eight minutes later. Two further pairs were misattributed the same way.
+#
+# So the gate refused a push over a packet that was never touched, while never
+# once checking the class it exists to check. Fixed: reset per file, scope to
+# the `packets:` section, and accept either key order within an item.
 declared="$(awk '
-    /^  - packet_id:/ { pid = $3; st = ""; next }
-    /^    status:/    { if (pid != "" && st == "") { st = $2; print pid "\t" st; pid = "" } }
+    function flush() { if (pid != "" && st != "") print pid "\t" st; pid = ""; st = "" }
+    FNR == 1                                                 { flush(); sect = "" }
+    /^packets:[[:space:]]*$/                                 { flush(); sect = "packets"; next }
+    /^[a-z_]+:[[:space:]]*$/                                 { flush(); sect = "";        next }
+    sect == "packets" && /^  - /                             { flush() }
+    sect == "packets" && /^(  - |    )packet_id:[[:space:]]/ { pid = $NF }
+    sect == "packets" && /^(  - |    )status:[[:space:]]/    { st  = $NF }
+    END { flush() }
+' "$FRAG_DIR"/*.yaml 2>/dev/null | sort -u)"
+
+# ORDER 797-qm4t. The LWW `status:` block, scanned ONLY to ask "does this
+# packet_id name anything?". Loss on this channel is not a concern — the comment
+# above is right that it works — but a terminal status declared here for a
+# packet that does not exist creates nothing and silently records nothing. That
+# is how a closure was written against an invented packet_id and collected four
+# green signals. Section-scoped, because `  - packet_id:` also appears under
+# `packets:` and `events:`.
+# The `FNR == 1` reset is the same 864-hv2n fix as above: this pass is
+# section-scoped, but `in_s`/`pid` were still global across files, so a fragment
+# ending inside its `status:` block carried that state into the next fragment.
+declared_lww="$(awk '
+    FNR == 1 { in_s = 0; pid = "" }
+    /^status:[[:space:]]*$/ { in_s = 1; pid = ""; next }
+    /^[a-z_]+:[[:space:]]*$/ { in_s = 0; pid = "" }
+    in_s && /^  - packet_id:/ { pid = $3; next }
+    in_s && /^    value:/ { if (pid != "") { print pid "\t" $2; pid = "" } }
 ' "$FRAG_DIR"/*.yaml 2>/dev/null | sort -u)"
 
 # NOTE (order 785-sqe6): there is deliberately NO early exit here. See the
@@ -114,12 +163,50 @@ declared="$(awk '
 # instead. stderr is deliberately NOT redirected now — the parse error names
 # the file and line, and it is the operator's fastest path to the fix.
 unparseable_fragments=""
+# ORDER 797-qm4t, the non-terminal half. The unknown-packet checks on the status
+# and terminal-event channels catch a fragment that CLAIMS a closure against a
+# packet_id nobody filed. They cannot see a `note` or `progress` event aimed at
+# one — that work is dropped in total silence, and the guard reports ok over a
+# corpus containing it. Measured: fragment 20260817t184639z carried the whole
+# GPU-passthrough measurement set for order 406 as a `note`, addressed to an
+# invented packet_id; it is on disk, absent from the fold, and nothing said so.
+# Collected in the SAME loop so an unparseable fragment is counted once.
+_anyev_capable=no
+if plan_binary_has "$PLAN" fragment-event-packets; then _anyev_capable=yes; fi
+_anyev_seen=""
+_misdef_capable=no
+if plan_binary_has "$PLAN" fragment-misplaced-definitions; then _misdef_capable=yes; fi
+_misdef_seen=""
 if plan_binary_has "$PLAN" fragment-terminal-events; then
     _events_seen=""
     for f in "$FRAG_DIR"/*.yaml; do
         [ -f "$f" ] || continue
         _ev_out="$("$PLAN" fragment-terminal-events "$f")"
         _ev_rc=$?
+        if [ "$_ev_rc" -eq 0 ] && [ "$_anyev_capable" = yes ]; then
+            # Same file, already known parseable — so this call cannot add a
+            # second unparseable count for one fragment.
+            _any_out="$("$PLAN" fragment-event-packets "$f" 2>/dev/null)"
+            [ -n "$_any_out" ] && _anyev_seen="${_anyev_seen}${_any_out}
+"
+            # ORDER 812-d45t. A packet DEFINITION written under `events:`
+            # instead of `packets:` is accepted by every gate and dropped
+            # entirely by the fold — no packet_id is claimed, so the
+            # unknown-packet pass above cannot see it either.
+            if [ "$_misdef_capable" = yes ]; then
+                _mis_out="$("$PLAN" fragment-misplaced-definitions "$f" 2>/dev/null)"
+                # Prefix each id with its file HERE rather than joining with a
+                # separator and splitting later. The first version used "\t",
+                # which inside double quotes is a literal backslash-t, so the
+                # reader's tab-IFS split never fired, every line was skipped,
+                # and the advisory this block exists to print was silently
+                # suppressed — the same shape as the defect being reported.
+                if [ -n "$_mis_out" ]; then
+                    _misdef_seen="${_misdef_seen}$(printf '%s\n' "$_mis_out" | sed "s|^|${f}: |")
+"
+                fi
+            fi
+        fi
         case "$_ev_rc" in
             0) [ -n "$_ev_out" ] && _events_seen="${_events_seen}${_ev_out}
 " ;;
@@ -132,6 +219,7 @@ if plan_binary_has "$PLAN" fragment-terminal-events; then
         esac
     done
     declared_events="$(printf '%s' "$_events_seen" | sort -u)"
+    event_packets="$(printf '%s' "$_anyev_seen" | sort -u)"
 else
     # ORDER 702-68zj: a binary that predates the rule is STALE HOST STATE, not
     # a ledger defect. The `declared` pass still runs (it only needs the fold);
@@ -140,6 +228,7 @@ else
     # worse than no checker, and a half-correct scanner is exactly the next
     # 752. Rebuild to enable the pass.
     declared_events=""
+    event_packets=""
     echo "  note: $PLAN predates fragment-terminal-events — closure-event pass SKIPPED (rebuild with 'cargo build --release -p tillandsias-plan')" >&2
 fi
 
@@ -179,7 +268,19 @@ fi
 #
 # Only genuinely-nothing-to-examine exits early now. A fragment set carrying
 # events and no declarations reaches the join below, which is the whole point.
-if [ -z "$declared" ] && [ -z "$declared_events" ]; then
+#
+# THIS GUARD CLAIMED A THIRD PASS IN 864-hv2n, and the mechanism is worth
+# recording because the comment above did not prevent it. The misplaced-
+# definition advisory (812-d45t) is computed above but PRINTED below, so it is
+# reachable only if this guard lets execution through. It always did — but by
+# accident: a packet definition misfiled under `events:` matched the old
+# `declared` awk (which keyed on `  - packet_id:`, the events-section shape),
+# so `declared` came back non-empty and carried the advisory past this line.
+# Fixing that awk to scan only `packets:` made `declared` correctly empty for
+# such a fragment, and the advisory silently vanished — a gate losing its voice
+# because an unrelated bug it had been leaning on was repaired. `_misdef_seen`
+# now keeps itself alive rather than depending on another pass's mistake.
+if [ -z "$declared" ] && [ -z "$declared_events" ] && [ -z "$_misdef_seen" ]; then
     echo "ok:no-fragment-status-loss:0 checked"
     exit 0
 fi
@@ -240,13 +341,19 @@ fi
 # POSIX awk arrays only: bash stays 3.2-clean (no associative arrays, 761-g36m).
 join_out="$( { printf '%s\n' "$status_map"      | sed 's/^/M\t/'
                printf '%s\n' "$declared"        | sed 's/^/D\t/'
-               printf '%s\n' "$declared_events" | sed 's/^/E\t/'; } \
+               printf '%s\n' "$declared_lww"    | sed 's/^/L\t/'
+               printf '%s\n' "$declared_events" | sed 's/^/E\t/'
+               printf '%s\n' "$event_packets"   | sed 's/^/A\t/'; } \
     | awk -F'\t' -v q="'" '
         $1 == "M" { if ($2 != "") st[$2] = $3; next }
         $1 == "D" {
             pid = $2; want = $3
             if (pid == "") next
             if (!(pid in seen)) { seen[pid] = 1; checked++ }
+            # A `packets:` entry CREATES the packet in the fold, so an
+            # unknown pid is unreachable on this path — verified with a control
+            # that produced no violation. The unknown-pid checks live on the L
+            # and E paths below, which declare without creating.
             if (!(pid in st)) next
             got = st[pid]
             if (got == want) next
@@ -258,11 +365,43 @@ join_out="$( { printf '%s\n' "$status_map"      | sed 's/^/M\t/'
                 dv = dv sprintf("%s: declared %s%s%s in a fragment, folds as %s%s%s\n", pid, q, want, q, q, got, q)
             next
         }
+        $1 == "L" {
+            pid = $2; want = $3
+            if (pid == "") next
+            if (!(pid in seen)) { seen[pid] = 1; checked++ }
+            # ONLY the unknown-packet question on this channel.
+            if (pid in st) next
+            if (want == "completed" || want == "verified" || want == "done" || want == "obsoleted")
+                dv = dv sprintf("%s: declared %s%s%s in a fragment status block but NO SUCH PACKET is in the fold (typo, or filed against a deleted packet)\n", pid, q, want, q)
+            next
+        }
+        $1 == "A" {
+            # ORDER 797-qm4t. Every packet_id an events block addresses, of
+            # ANY event type. The only question asked here is whether the
+            # fold knows the packet at all: a `note` or `progress` aimed at
+            # a packet_id nobody filed is discarded silently, and the
+            # terminal-only channel below cannot see it. Deliberately NOT a
+            # status comparison — that belongs to D/L/E.
+            pid = $2
+            if (pid == "") next
+            if (!(pid in seen)) { seen[pid] = 1; checked++ }
+            if (pid in st) next
+            if (pid in unk) next
+            unk[pid] = 1
+            uv = uv sprintf("__ADVISORY__%s: an events block addresses it but NO SUCH PACKET is in the fold (typo, or filed against a deleted packet) — that event was discarded\n", pid)
+            next
+        }
         $1 == "E" {
             pid = $2
             if (pid == "") next
             if (!(pid in seen)) { seen[pid] = 1; checked++ }
-            if (!(pid in st)) next
+            if (!(pid in st)) {
+                # Same hole from the event side, and here it needs no
+                # terminal-status test: a `completed` EVENT for a packet the
+                # fold has never heard of is wrong however it got there.
+                ev = ev sprintf("%s: has a %scompleted%s EVENT but NO SUCH PACKET is in the fold (typo, or filed against a deleted packet)\n", pid, q, q)
+                next
+            }
             got = st[pid]
             # A completed EVENT legitimately pairs with ANY closure-ladder
             # terminal: per 650-dq6u the event may set status to completed, or
@@ -272,12 +411,76 @@ join_out="$( { printf '%s\n' "$status_map"      | sed 's/^/M\t/'
             ev = ev sprintf("%s: has a %scompleted%s EVENT but folds as %s%s%s\n", pid, q, q, q, got, q)
             next
         }
-        END { printf "%s%s__CHECKED__%d\n", dv, ev, checked }
+        END { printf "%s%s%s__CHECKED__%d\n", dv, ev, uv, checked }
     ')"
 
 checked="$(printf '%s\n' "$join_out" | sed -n 's/^__CHECKED__\([0-9][0-9]*\)$/\1/p' | tail -1)"
 [ -n "$checked" ] || checked=0
-violations="$(printf '%s\n' "$join_out" | grep -v '^__CHECKED__' | grep -v '^$')"
+advisories="$(printf '%s\n' "$join_out" | sed -n 's/^__ADVISORY__//p')"
+violations="$(printf '%s\n' "$join_out" | grep -v '^__CHECKED__' | grep -v '^__ADVISORY__' | grep -v '^$')"
+# ORDER 797-qm4t. A non-terminal event on an unknown packet_id is REPORTED
+# but does not fail the gate. The closure channels (status block, terminal
+# event) stay hard violations because a lost closure is lost work with a
+# claim attached. This channel sees every `note` and `progress` in the
+# corpus, including historical ones in append-only fragments no one may
+# rewrite — and 699-dycj is explicit that one host's typo must not become
+# every host's red build. Naming it is the fix; the silence was the defect.
+if [ -n "$advisories" ]; then
+    printf '%s\n' "$advisories" | sed 's/^/  advisory: /' >&2
+fi
+# ORDER 812-d45t, reported on the same terms as the unknown-packet advisory
+# above and for the same reason: historical fragments are append-only, so a
+# past mistake must not redden every host's build (699-dycj). The silence was
+# the defect.
+if [ -n "${_misdef_seen:-}" ]; then
+    printf '%s' "$_misdef_seen" | while IFS= read -r _ml; do
+        [ -n "$_ml" ] || continue
+        echo "  advisory: ${_ml} is a packet DEFINITION under \`events:\` — the fold DROPS it; move it under the top-level \`packets:\` key" >&2
+    done
+fi
+# `query` reads the LIVE fold only, while set-field's write-gate resolver and
+# per-packet `status` also answer from plan/archive rows ("archived rows still
+# answer", c1f6595c5). A terminal declaration against an ARCHIVED packet
+# therefore flags above as "NO SUCH PACKET is in the fold" even though the
+# answering surface has already applied it — live case 2026-08-23: the
+# 829-dkuc retraction batch obsoleted five archived split-parents on
+# lenovinha, the fragments rode the plan-only push lane, and every host's
+# next full gate went red on closures that were not lost. Re-ask the
+# resolver before failing: declared == resolved is supersession of an
+# archived row (advisory, same 699-dycj terms as the channels above);
+# anything else stays a hard violation.
+if [ -n "$violations" ]; then
+    _kept=""
+    _archived_adv=""
+    while IFS= read -r _vl; do
+        [ -n "$_vl" ] || continue
+        case "$_vl" in
+            *"in a fragment status block but NO SUCH PACKET is in the fold"*)
+                _pid="${_vl%%:*}"
+                _want="$(printf '%s\n' "$_vl" | sed -n "s/.*declared '\([a-z-]*\)'.*/\1/p")"
+                _got="$("$PLAN" status "$_pid" 2>/dev/null | awk '{print $2}' | head -1)"
+                if [ -n "$_got" ] && [ "$_got" = "$_want" ]; then
+                    _archived_adv="${_archived_adv}${_pid}: declared '${_want}' targets an ARCHIVED row — absent from the live fold (query) but the resolver reports it applied; supersession of an archived packet, not a lost closure
+"
+                else
+                    _kept="${_kept}${_vl}
+"
+                fi
+                ;;
+            *)
+                _kept="${_kept}${_vl}
+"
+                ;;
+        esac
+    done <<VIOLATIONS_EOF
+$violations
+VIOLATIONS_EOF
+    violations="$(printf '%s' "$_kept" | grep -v '^$' || true)"
+    if [ -n "$_archived_adv" ]; then
+        printf '%s' "$_archived_adv" | sed 's/^/  advisory: /' >&2
+    fi
+fi
+
 [ -n "$violations" ] && violations="${violations}"$'\n'
 
 if [ -n "$violations" ]; then

@@ -111,7 +111,8 @@ CACHE="$HOME/.cache/tillandsias"
 export PATH="$CACHE/openspec/bin:$HOME/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 
 # ── Standard environment variable setup ─────────────────────
-# @trace spec:forge-git-ergonomics
+# (Ghost trace to the never-written forge-git-ergonomics spec removed, 877 —
+# this block is generic environment setup, not a git contract.)
 # Set locale if not already set, to avoid locale-sensitive tool warnings.
 export LANG="${LANG:-en_US.UTF-8}"
 
@@ -515,7 +516,14 @@ probe_mirror_reachable() {
     local start now elapsed=0 lsout lsrc last_class="unknown"
     start="$(date +%s 2>/dev/null || echo 0)"
     while :; do
-        lsout="$(git ls-remote "$url" 2>&1)"; lsrc=$?
+        # LC_ALL=C on THIS invocation only (773-f5ma). The classifier below greps
+        # git's stderr for English phrases; on a French-locale host git emits
+        # `fatal : impossible de rechercher ... (Nom ou service inconnu)`, the
+        # grep never matches, and a DOA alias silently degrades to the slow
+        # seed-tolerant path instead of fast-failing with its remedy. Scoped to
+        # the command whose stderr is parsed, never exported: the forge's own
+        # locale is the operator's and must not be rewritten by a probe.
+        lsout="$(LC_ALL=C git ls-remote "$url" 2>&1)"; lsrc=$?
         if [[ $lsrc -eq 0 && -n "$lsout" ]]; then
             return 0                       # resolvable AND serving refs
         fi
@@ -2160,6 +2168,33 @@ harness_update_lock_release() {
     rm -rf "$(harness_update_lock_path)" 2>/dev/null || true
 }
 
+# Order 805-yzhw: bounded wait for a sibling harness installer.
+#
+# harness_update_lock_acquire is non-blocking by design, which left the loser
+# with only two options: race the winner, or skip. Racing is what broke the
+# lane — two 127MB vendor extractions into one 256MB tmpfs both die with
+# ENOSPC and neither cleans up. Waiting turns the race into serialization,
+# which is the entire point of holding a mutex.
+#
+# The ceiling is deliberate and small. The winner is installing the SAME
+# binary this caller wants, so waiting is useful; but a lane must never hang
+# on a harness update, so a caller that times out falls through to whatever is
+# already cached (see require_opencode). Override with
+# TILLANDSIAS_HARNESS_LOCK_WAIT_SECS in fixtures.
+harness_update_lock_wait_acquire() {
+    local budget="${1:-${TILLANDSIAS_HARNESS_LOCK_WAIT_SECS:-180}}"
+    local waited=0
+    while :; do
+        if harness_update_lock_acquire; then
+            [ "$waited" -gt 0 ] && trace_lifecycle "harness" "acquired the harness-update lock after waiting ${waited}s for a sibling installer"
+            return 0
+        fi
+        [ "$waited" -ge "$budget" ] && return 1
+        sleep 2
+        waited=$((waited + 2))
+    done
+}
+
 ensure_forge_harnesses() {
     # Avoid a concurrent npm join race — only the first process runs npm.
     local npm_lock="$HOME/.cache/tillandsias-project/npm-update.lock"
@@ -2517,9 +2552,29 @@ opencode_validate_or_rollback() {
     return 1
 }
 
+# Order 805-yzhw (secondary defect). curl_install_opencode removes its OWN two
+# temp files but knows nothing about the tree the VENDOR script creates —
+# /tmp/opencode_install_<pid>, ~127MB extracted. The vendor cleans it on
+# success and leaves it on failure, so on the forge's 256MB /tmp one failed
+# install permanently poisons the tmpfs for the container's remaining life and
+# no retry inside that container can recover.
+#
+# Two belts, because we do not control the vendor script: point TMPDIR at a
+# private directory we delete unconditionally, and sweep any opencode_install_*
+# tree left in /tmp that is too old to belong to an install still running. The
+# age bound is what makes the sweep safe under concurrency — it can never
+# remove a sibling's in-flight extraction.
+opencode_vendor_scratch_clean() {
+    local scratch="${1:-}"
+    [ -n "$scratch" ] && rm -rf "$scratch" 2>/dev/null
+    find /tmp -maxdepth 1 -type d -name 'opencode_install_*' -mmin +5 \
+        -exec rm -rf {} + 2>/dev/null
+    return 0
+}
+
 curl_install_opencode() {
     OC_BIN=""
-    local dir="$HARNESS_CURL_ROOT/opencode/bin" tmp errlog bin
+    local dir="$HARNESS_CURL_ROOT/opencode/bin" tmp errlog bin scratch
     local refresh_ok=0
     mkdir -p "$dir" 2>/dev/null || true
     bin="$dir/opencode"
@@ -2535,13 +2590,15 @@ curl_install_opencode() {
     # OPENCODE_INSTALL_DIR is the installer's documented target override; the
     # binary downloads from GitHub releases (opencode.ai + github.com are
     # both in the egress allowlist).
+    scratch="$(mktemp -d /tmp/oc-vendor.XXXXXX 2>/dev/null || echo "/tmp/oc-vendor.$$")"
     if env -u OPENCODE_AUTH_CONTENT \
         curl -fsSL --max-time 60 https://opencode.ai/install -o "$tmp" 2>"$errlog" \
-       && env -u OPENCODE_AUTH_CONTENT OPENCODE_INSTALL_DIR="$dir" \
+       && env -u OPENCODE_AUTH_CONTENT OPENCODE_INSTALL_DIR="$dir" TMPDIR="$scratch" \
         bash "$tmp" >>"$errlog" 2>&1 \
        && [ -x "$bin" ]; then
         refresh_ok=1
     fi
+    opencode_vendor_scratch_clean "$scratch"
 
     if opencode_validate_or_rollback "$bin"; then
         if [ "${OPENCODE_ROLLBACK_USED:-0}" -eq 1 ]; then
@@ -2892,17 +2949,38 @@ require_opencode() {
     # installing the same binary, so fall through and use whatever it
     # produced. Blocking the lane on a harness update would be worse than the
     # race — this path exists to make the lane launchable.
+    # ORDER 805-yzhw: THE LOCK NOW GATES THE INSTALL, NOT JUST ITS RELEASE.
+    # `held` used to guard only the two release calls while curl_install_opencode
+    # ran unconditionally — so the loser logged "deferring to the in-flight
+    # harness updater" and then installed anyway. Two 127MB vendor extractions
+    # into the forge's 256MB /tmp tmpfs: one fits, two do not. Both died with
+    # `tar: Wrote only 2560 of 10240 bytes`, neither cleaned up, and the lane
+    # ended at a "Press any key to exit" prompt that reads as a hang. The mutex
+    # faithfully RECORDED a race it did not prevent.
     local held=0
     if harness_update_lock_acquire; then
         held=1
     else
-        trace_lifecycle "harness" "opencode install deferring to the in-flight harness updater (shared lock held elsewhere)"
+        trace_lifecycle "harness" "opencode install waiting for the in-flight harness updater (shared lock held elsewhere)"
+        harness_update_lock_wait_acquire && held=1
     fi
-    if curl_install_opencode && [ -n "${OC_BIN:-}" ] && [ -x "$OC_BIN" ]; then
-        [ "$held" -eq 1 ] && harness_update_lock_release
-        return 0
+
+    if [ "$held" -eq 1 ]; then
+        if curl_install_opencode && [ -n "${OC_BIN:-}" ] && [ -x "$OC_BIN" ]; then
+            harness_update_lock_release
+            return 0
+        fi
+        harness_update_lock_release
+    else
+        # Waited out the budget and the sibling still holds it. Do NOT install
+        # concurrently — that is the defect. Use what the sibling produced.
+        trace_lifecycle "harness" "opencode install SKIPPED after the wait budget; a sibling installer still holds the lock, so using the cached binary rather than racing it into a full tmpfs (805-yzhw)"
+        local cached="$HARNESS_CURL_ROOT/opencode/bin/opencode"
+        if [ -x "$cached" ] && harness_probe opencode "$cached"; then
+            OC_BIN="$cached"
+            return 0
+        fi
     fi
-    [ "$held" -eq 1 ] && harness_update_lock_release
     OC_BIN="$(_require_harness opencode opencode-ai opencode)"
     return 0
 }
@@ -3900,6 +3978,26 @@ inject_startup_context() {
     # So the verdict rests on two things that are true of ANY project:
     #   - did the checkout land on the branch this launch was GATED on, and
     #   - can this base actually build the expert.
+    # Order 835-h2wq: the head being answered FROM, and how far the newest
+    # mirror branch is ahead of it. base_state=ok cannot see this case — a
+    # seed that MATCHES an old branch agrees with itself while the expert
+    # answers from a days-old ledger with confident, well-cited, wrong-for-
+    # today answers. Separately-sourceable lib (the lib-inference-state.sh
+    # precedent), fail-soft: a missing lib degrades to unknown/0, never
+    # breaks a launch.
+    local _base_head="unknown" _ledger_lag_h=0 _ledger_newest="unknown"
+    local _ledger_freshness_lib="${BASH_SOURCE[0]%/*}/lib-ledger-freshness.sh"
+    if [[ -r "$_ledger_freshness_lib" ]]; then
+        # shellcheck source=lib-ledger-freshness.sh
+        source "$_ledger_freshness_lib" || true
+        if declare -F tillandsias_ledger_freshness >/dev/null 2>&1; then
+            tillandsias_ledger_freshness "$project_dir" || true
+            _base_head="$TILLANDSIAS_BASE_HEAD"
+            _ledger_lag_h="$TILLANDSIAS_LEDGER_LAG_H"
+            _ledger_newest="$TILLANDSIAS_LEDGER_NEWEST"
+        fi
+    fi
+
     local _base_state _base_detail _seed
     _seed="${TILLANDSIAS_FORGE_SEED_BRANCH:-}"
     if [[ "$branch" == "unknown" ]]; then
@@ -3940,8 +4038,9 @@ inject_startup_context() {
 **Project**: ${project_name}
 **Startup branch**: ${branch} — \`base_state=${_base_state}\`
 > Note: Branch is a startup snapshot; agents may switch branches during orchestration.
-> Machine-readable (branch on this, do not parse the prose): \`base_state=${_base_state} base_actual=${branch} base_expected=${_seed:-<unset>} expert_sources=${_expert_sources}\`
+> Machine-readable (branch on this, do not parse the prose): \`base_state=${_base_state} base_actual=${branch} base_expected=${_seed:-<unset>} base_head=${_base_head} ledger_lag_h=${_ledger_lag_h} ledger_newest=${_ledger_newest} expert_sources=${_expert_sources}\`
 > \`base_state\` is one of \`ok\` | \`mismatch\` | \`unknown\`. ${_base_detail}.
+> EVERY expert answer reflects THIS checkout at \`${branch}@${_base_head}\` (order 835-h2wq). A nonzero \`ledger_lag_h\` means the mirror carries a branch (\`ledger_newest=${_ledger_newest}\`) whose newest commit is ~${_ledger_lag_h}h ahead of this base — rows filed there are INVISIBLE to the experts here, and a confident answer about "current" blockers, packet counts, or fleet state may be days stale. \`base_state=ok\` does NOT clear this: a seed that matches an old branch agrees with itself. When reporting plan or fleet state, say "as of \`${branch}@${_base_head}\`"; when \`ledger_lag_h\` is large, prefer switching to (or at least reading) \`${_ledger_newest}\` before recommending operator action.
 > \`expert_sources=absent\` means this checkout HAS a \`crates/tillandsias-plan\` but NOT \`src/answer.rs\`, so the expert build produces a PRE-EXPERT binary: \`experts: ready\` is then reported truthfully while every \`plan_answer\` / \`methodology_path\` call returns \`confidence=unsupported\`. That is order 531, and note \`base_state\` can read \`ok\` in this situation — the launch landed exactly where it was gated, on a base that cannot build the expert. Do NOT read \`unsupported\` as "the plan has no answer"; it means the ARTIFACT is wrong. Switch to a branch carrying the expert sources before trusting any expert answer, and report which branch you moved to. (\`n/a\` means this project has no plan-expert crate at all, which is normal off-Tillandsias.)
 **Version**: ${version}
 **Agent**: ${agent_name}

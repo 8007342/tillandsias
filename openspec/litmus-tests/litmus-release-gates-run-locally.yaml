@@ -23,7 +23,7 @@ spec: methodology-accountability
 phase: pre-build
 description: >
   Assert that the release validations which do not need GitHub secrets run on
-  local hardware and are enforced by the pre-push gate: the preflight exists and
+  local hardware and are enforced at push time by the pre-push hook: the preflight exists and
   passes, its gates are absent from release.yml, the pre-push hook composes
   fail-fast, build.sh installs the hooks, and the stamp mechanism can actually
   refuse a stale tree.
@@ -108,10 +108,15 @@ critical_path:
   # (6/6) → (7/7): windows commit 0d24c11a2 (orders 664-frz0, 716-f5kc) added
   # fixture case 7 — the stamp REFUSES without a transcript and refuses an
   # undeclared red — a negative control, so the count moved by getting stronger.
+  # (8/8) → (11/11): order 738-3pft added cases 9-11 — `--from -` reads stdin
+  # with the evidence gate intact, a TRACKED attestation verifies on a host that
+  # never wrote a local stamp, and it goes stale on drift while surviving
+  # unrelated edits. All three are negative-controlled, so the count again moved
+  # by getting stronger, not by getting longer.
   - step: "the gate reports whether Windows-only sources were actually compiled"
     command: "bash scripts/test-windows-only-sources-verified.sh"
     timeout_ms: 60000
-    expected_behavior: "PASS: windows-only source verification report (7/7)"
+    expected_behavior: "PASS: windows-only source verification report (11/11)"
 
   - step: "build.sh --check carries that report rather than staying silent"
     command: "grep -F 'check-windows-only-sources-verified.sh' build.sh && grep -F 'this gate did NOT read them' build.sh && echo 'ok: the gate reports the stub substitution'"
@@ -192,6 +197,15 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok: stamp is local machine state"
 
+  # Order 765-tkq2. Behavioural, not a source grep: the memo decides whether a
+  # gate runs at all, so what must be pinned is the DECISION under real
+  # stamps — including every fail-closed refusal and the negative control that
+  # keeps "refuse everything" from satisfying them.
+  - step: "gate-stamp memoization decides correctly and fails closed (765-tkq2)"
+    command: "bash scripts/test-gate-stamp-memoization.sh 2>&1 | tail -1"
+    timeout_ms: 900000
+    expected_behavior: "ok:gate-stamp-memoization-fixture:14"
+
 failure_modes:
   - "a validation is deleted from release.yml and never lands locally, trading cost for coverage"
   - "the preflight exists but cannot refuse, so it reports green on a broken release"
@@ -199,6 +213,9 @@ failure_modes:
   - "the installer writes .git/hooks while core.hooksPath points elsewhere, reporting success for guards Git never executes"
   - "the pre-push hook reverts to appended `bash <script>` lines, masking a failing guard's exit code behind a later passing one"
   - "the stamp becomes time-based instead of content-based, so reverting an edit no longer restores freshness"
+  - "memoization skips the gate on a stamp that predates the toolchain in use, hiding the new compiler's lints"
+  - "memoization trusts a scoped or foreign-dispatch stamp and skips checks that stamp never ran"
+  - "a red gate leaves a stamp behind, so the next run memoizes a failure as green"
   - "the gate stamp gets committed, making one machine's local state look authoritative to every other host"
   - "the stamp follows a tracked skill symlink into its directory and therefore cannot record any real Tillandsias checkout"
   - "a new workflow is added to .github/workflows and quietly resumes burning cloud minutes"

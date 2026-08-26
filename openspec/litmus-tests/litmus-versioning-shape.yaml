@@ -143,6 +143,18 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "workspace.package"
 
+  - step: "Req: a below-tag VERSION refusal names the back-merge remedy, not just the violation (800-vk2p)"
+    # BEHAVIOURAL, not a source grep: inject a tag far above any real release
+    # (arg 1 overrides tag discovery; nothing is created or fetched) and assert
+    # the refusal actually names the merge. Cutting a release makes every branch
+    # still carrying the pre-release VERSION unpushable within seconds, and the
+    # old text described a RELEASE to a reader who was pushing a plan fragment.
+    # Every branch arm names `git merge origin/<something>`, including the
+    # generic fallback, so the pin holds on any checkout. case-match, no pipes.
+    command: "out=$(bash scripts/verify-version-monotonic.sh v99.9.991231.9 2>&1); rc=$?; case \"$out\" in *'git merge origin/'*) [ \"$rc\" -eq 1 ] && echo 'ok: refusal names the back-merge remedy';; *) echo \"FAIL: rc=$rc remedy absent\"; exit 1;; esac"
+    timeout_ms: 15000
+    expected_behavior: "ok: refusal names the back-merge remedy"
+
 observability:
   traces:
     - "@trace spec:versioning"

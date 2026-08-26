@@ -25,7 +25,9 @@ The system SHALL run an inference container with ollama on the enclave network. 
 - **AND** the proxy SHALL allow traffic to ollama.com
 
 ### Requirement: Shared model cache
-Models SHALL be stored in a persistent volume at `~/.cache/tillandsias/models/` on the host, mounted into the inference container at `/home/ollama/.ollama/models/`.
+Models SHALL be stored in a HOST DIRECTORY (a bind mount, NOT a named Podman volume) at `~/.cache/tillandsias/models/`, mounted into the inference container at `/home/ollama/.ollama/models/`.
+
+The distinction is the entire answer to whether `podman system reset` destroys the cache: it does not, because the reset clears Podman's own storage and named volumes and never touches an arbitrary host path. Calling this a "volume" cost an agent a wrong assertion to the operator (803-su4n, secondary finding); the mount is `-v "$HOME/.cache/tillandsias/models:/home/ollama/.ollama/models:rw"` in `scripts/orchestrate-enclave.sh`.
 
 @trace spec:inference-container
 
@@ -102,8 +104,8 @@ other non-tool-call-supporting models MUST NOT appear in any tier.
 
 T0 and T1 SHALL be pulled at container startup (entrypoint time, not image
 build time) so image build stays fast (<30s). The entrypoint pulls them on
-first container start; subsequent starts load them from a host-mounted cache
-volume (~/.cache/tillandsias/models/) with zero network latency. T2+ MAY be
+first container start; subsequent starts load them from the host directory
+bind-mounted at ~/.cache/tillandsias/models/ with zero network latency. T2+ MAY be
 pulled at runtime if the host has sufficient capacity; failures SHALL log
 "[inference] T<N> pull failed" and continue (not fatal).
 

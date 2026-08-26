@@ -56,6 +56,18 @@ PAT_PRINTF_T='%\([^)]*\)T'
 # (found by the cycle-22 freshness audit, 784-dwkh).
 PAT_GNUDATE='(^|[^A-Za-z0-9_])date[^|;&()]*\+[^ "]*%-?[0-9]*N|(^|[^A-Za-z0-9_])date( +-[A-Za-z-]+)* +(-d|--date)[ =]'
 GNUDATE_EXEMPT='# gnu-date: ok'
+# GNU-du-only forms. `du -b` / `--bytes` does not exist in BSD du, which
+# REFUSES the flag rather than ignoring it — so the usual shape
+# `bytes="$(du -sb "$d" 2>/dev/null | cut -f1)"` yields the empty string and
+# whatever `|| bytes=0` fallback sits beside it silently becomes the answer.
+# Measured on tlatoanis-macbook-air 2026-08-25: check-build-cache-sweep.sh
+# reported `bytes=0:gib=0` for a 14 GiB target/, so its size trigger could
+# never fire on macOS, and its litmus passed anyway because the size case
+# pinned the threshold comparison rather than the measurement.
+# `du -sk` is POSIX and works on both; multiply by 1024.
+# Same exemption convention as the date rule: `# gnu-du: ok (<reason>)`.
+PAT_GNUDU='(^|[^A-Za-z0-9_])du( +-[A-Za-z-]+)* +-[A-Za-z]*b|(^|[^A-Za-z0-9_])du[^|;&()]* --bytes'
+GNUDU_EXEMPT='# gnu-du: ok'
 
 in_allowlist() {
   case " $ALLOWLIST " in
@@ -91,11 +103,34 @@ allowlisted_hits=0
 # landed on a `|| continue`, so its staleness warning could never fire on
 # macOS and looked exactly like "nothing is stale".
 SCAN_FILES=""
-for _c in "$SCAN_DIR"/*.sh "$SCAN_DIR"/*/*.sh; do
-  [ -f "$_c" ] && SCAN_FILES="$SCAN_FILES $_c"
-done
+# A SINGLE FILE is a legitimate scan target: a litmus pinning one script wants
+# that script judged, not the whole tree beside it. Until 798-tk7b it was not
+# handled — a file fell through both globs below, matched nothing, and the
+# script printed `ok:bash-dialect-clean`. Measured 2026-08-18 against a copy
+# carrying BOTH `${v^^}` and `declare -A`: reported clean, rc=0.
+if [ -f "$SCAN_DIR" ]; then
+  SCAN_FILES="$SCAN_DIR"
+else
+  for _c in "$SCAN_DIR"/*.sh "$SCAN_DIR"/*/*.sh; do
+    [ -f "$_c" ] && SCAN_FILES="$SCAN_FILES $_c"
+  done
+fi
 if [ -z "${TILLANDSIAS_DIALECT_SCAN_DIR:-}" ] && [ -f build.sh ]; then
   SCAN_FILES="$SCAN_FILES build.sh"
+fi
+
+# A SCAN THAT CONSIDERED NOTHING IS NOT A CLEAN SCAN. With the file case fixed
+# above, the remaining way to reach zero files is a SCAN_DIR that does not
+# exist — a typo, or a directory renamed out from under a caller — and that
+# used to yield a confident green from a gate wired into ./build.sh --check.
+# Same family as everything else this gate guards against: the answer was not
+# missing, it was wrong.
+if [ -z "$SCAN_FILES" ]; then
+  echo "blocked:bash-dialect:scan-empty"
+  echo "[check-bash-dialect] TILLANDSIAS_DIALECT_SCAN_DIR='${SCAN_DIR}' matched no .sh file." >&2
+  echo "  CAUSE: the path is neither a readable file nor a directory containing *.sh or */*.sh. Nothing was judged." >&2
+  echo "  REMEDY: point it at an existing directory or a single .sh file. Do not read this as a passing dialect check — no file was read at all." >&2
+  exit 1
 fi
 
 for f in $SCAN_FILES; do
@@ -153,6 +188,34 @@ for f in $SCAN_FILES; do
   if [ -n "$gnudate_bad" ]; then
     echo "[check-bash-dialect] UNEXEMPTED GNU-date-ism in '$f' (BSD date succeeds with garbage output — exit-code guards cannot catch it):" >&2
     printf '%s' "$gnudate_bad" | head -3 >&2
+    unguarded=$((unguarded + 1))
+  fi
+
+  # GNU-du-isms. Judged per line like the date rule, and for the same reason:
+  # neither the version guard nor the allowlist says anything about du(1).
+  # A BSD-portable arm on the same logical command (a `du -sk`/`-sm`/`-sh`
+  # fallback in a `||` chain) makes the line self-portable, so scan a small
+  # following window before flagging — a lint that cries wolf gets muted.
+  gnudu_bad=""
+  _du="$(code_of "$f" | grep -nE "$PAT_GNUDU" || true)"
+  if [ -n "$_du" ]; then
+    while IFS= read -r _h; do
+      [ -n "$_h" ] || continue
+      _ln="${_h%%:*}"
+      if sed -n "${_ln},$((_ln + 2))p" "$f" 2>/dev/null \
+           | grep -qE 'du( +-[A-Za-z-]+)* +-[A-Za-z]*(k|m|h)'; then
+        continue
+      fi
+      if sed -n "${_ln}p" "$f" | grep -qF "$GNUDU_EXEMPT"; then
+        continue
+      fi
+      gnudu_bad="${gnudu_bad}${_h}
+"
+    done <<< "$_du"
+  fi
+  if [ -n "$gnudu_bad" ]; then
+    echo "[check-bash-dialect] UNEXEMPTED GNU-du-ism in '$f' (BSD du REFUSES -b, so the substitution is empty and a '|| n=0' fallback silently becomes the answer):" >&2
+    printf '%s' "$gnudu_bad" | head -3 >&2
     unguarded=$((unguarded + 1))
   fi
 done

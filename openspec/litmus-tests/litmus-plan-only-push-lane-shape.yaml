@@ -20,7 +20,11 @@
 #           APPEND-ONLY extension of a per-host attestation ledger under
 #           plan/mo-full-attestations.d/ (the Finalization bookkeeping commit)
 #           also passes, validated by the append-only + marker-grammar closure
-#           plus check-mo-full-attestations.sh.
+#           plus check-mo-full-attestations.sh. Order 848-bx2q: a NEW per-host
+#           ledger — a joining host's FIRST record — passes with its leading
+#           '# '-comment header admitted (the header is mo-full-attest.sh
+#           record's own output; every line after it holds to the append
+#           grammar, so a '# ' line after content still refuses).
 #   REFUSE (fail closed): any non-fragment path (a .rs file), any modification
 #           of an EXISTING fragment (fragments are immutable), any REWRITE of
 #           an attestation ledger (append-only is the only admitted
@@ -78,6 +82,16 @@ critical_path:
     timeout_ms: 15000
     expected_behavior: "ok: lane-accepts-attestation-append"
 
+  - step: "ACCEPT (848-bx2q): a joining host's FIRST attestation record — new ledger file with the record header — passes the lane and the remote advances"
+    command: "root=$(pwd); _mfp=$(mf_plan_binary 2>/dev/null || true); [ -n \"$_mfp\" ] && export TILLANDSIAS_PLAN_BIN=\"$root/${_mfp#./}\"; t=$(mktemp -d); trap 'rm -rf \"$t\"' EXIT; git init -q -b main \"$t/work\"; cd \"$t/work\"; git config user.email l@t; git config user.name l; mkdir -p scripts/hooks plan/index.d plan/loop_status.d plan/mo-full-attestations.d; printf 'packets: []\\n' > plan/index.yaml; cp \"$root/scripts/gate-stamp.sh\" scripts/; cp \"$root/scripts/hooks/pre-push-local-gate.sh\" scripts/hooks/; cp \"$root/scripts/plan-binary-probe.sh\" scripts/; cp \"$root/scripts/check-mo-full-attestations.sh\" scripts/; printf '#!/bin/sh\\necho fixture-nonledger-host\\n' > scripts/mo-full-attest.sh; chmod +x scripts/mo-full-attest.sh; touch plan/mo-full-attestations.d/.keep; git add -A; git commit -qm base; git init -q --bare \"$t/origin.git\"; git remote add origin \"$t/origin.git\"; git push -q origin main; printf '#!/usr/bin/env bash\\nexec bash \"$(git rev-parse --show-toplevel)/scripts/hooks/pre-push-local-gate.sh\" \"$@\"\\n' > .git/hooks/pre-push; chmod +x .git/hooks/pre-push; sha=$(printf '%040d' 7); { printf '%s\\n' '# MO-FULL attestation ledger — fixturehost.md (see methodology/mo-full-attestation.yaml)' '# One verified marker per cycle, appended by: scripts/mo-full-attest.sh record' '# Grammar: MO-FULL: <COMPLETE|BLOCKED> <LOCAL_SHA> <BRANCH> <REMOTE_SHA> (LOCAL_SHA == REMOTE_SHA)' '# Verified at write time: startup boundary (717-3bvv) + remote convergence (614-2gqx).' '# Gate: scripts/check-mo-full-attestations.sh (./build.sh --check).' ''; printf '## 2026-08-22T23:57:48Z fixturehost\\nMO-FULL: COMPLETE %s main %s\\n' \"$sha\" \"$sha\"; } > plan/mo-full-attestations.d/fixturehost.md; git add -A; git commit -qm first-att; out=$(git push origin main 2>&1); rc=$?; if [ \"$rc\" = 0 ] && echo \"$out\" | grep -q 'plan-only lane: validated plan/mo-full-attestations.d/fixturehost.md' && echo \"$out\" | grep -q 'plan-only lane clean' && [ \"$(git ls-remote origin refs/heads/main | cut -f1)\" = \"$(git rev-parse HEAD)\" ]; then echo 'ok: lane-accepts-first-attestation'; else echo \"FAIL: rc=$rc\"; echo \"$out\"; exit 1; fi"
+    timeout_ms: 15000
+    expected_behavior: "ok: lane-accepts-first-attestation"
+
+  - step: "REFUSE (848-bx2q): a NEW ledger whose marker is malformed (short SHA, stray prose) still falls closed and the remote does not move"
+    command: "root=$(pwd); _mfp=$(mf_plan_binary 2>/dev/null || true); [ -n \"$_mfp\" ] && export TILLANDSIAS_PLAN_BIN=\"$root/${_mfp#./}\"; t=$(mktemp -d); trap 'rm -rf \"$t\"' EXIT; git init -q -b main \"$t/work\"; cd \"$t/work\"; git config user.email l@t; git config user.name l; mkdir -p scripts/hooks plan/index.d plan/loop_status.d plan/mo-full-attestations.d; printf 'packets: []\\n' > plan/index.yaml; cp \"$root/scripts/gate-stamp.sh\" scripts/; cp \"$root/scripts/hooks/pre-push-local-gate.sh\" scripts/hooks/; cp \"$root/scripts/plan-binary-probe.sh\" scripts/; cp \"$root/scripts/check-mo-full-attestations.sh\" scripts/; printf '#!/bin/sh\\necho fixture-nonledger-host\\n' > scripts/mo-full-attest.sh; chmod +x scripts/mo-full-attest.sh; touch plan/mo-full-attestations.d/.keep; git add -A; git commit -qm base; git init -q --bare \"$t/origin.git\"; git remote add origin \"$t/origin.git\"; git push -q origin main; printf '#!/usr/bin/env bash\\nexec bash \"$(git rev-parse --show-toplevel)/scripts/hooks/pre-push-local-gate.sh\" \"$@\"\\n' > .git/hooks/pre-push; chmod +x .git/hooks/pre-push; { printf '%s\\n' '# MO-FULL attestation ledger — fixturehost.md (see methodology/mo-full-attestation.yaml)' ''; printf '## 2026-08-22T23:57:48Z fixturehost\\nMO-FULL: COMPLETE abc123 main abc123\\nhand-typed prose after the marker\\n'; } > plan/mo-full-attestations.d/fixturehost.md; git add -A; git commit -qm bad-att; before=$(git ls-remote origin refs/heads/main | cut -f1); out=$(git push origin main 2>&1); rc=$?; after=$(git ls-remote origin refs/heads/main | cut -f1); if [ \"$rc\" != 0 ] && echo \"$out\" | grep -q 'break the attestation-ledger grammar' && echo \"$out\" | grep -q 'pre-push refused' && ! echo \"$out\" | grep -q 'plan-only lane clean' && [ \"$before\" = \"$after\" ]; then echo 'ok: malformed-first-attestation-fails-closed'; else echo \"FAIL: rc=$rc before=$before after=$after\"; echo \"$out\"; exit 1; fi"
+    timeout_ms: 15000
+    expected_behavior: "ok: malformed-first-attestation-fails-closed"
+
   - step: "REFUSE (767-iukh): a REWRITE of an existing attestation ledger falls closed to the full gate and the remote does not move"
     command: "root=$(pwd); _mfp=$(mf_plan_binary 2>/dev/null || true); [ -n \"$_mfp\" ] && export TILLANDSIAS_PLAN_BIN=\"$root/${_mfp#./}\"; t=$(mktemp -d); trap 'rm -rf \"$t\"' EXIT; git init -q -b main \"$t/work\"; cd \"$t/work\"; git config user.email l@t; git config user.name l; mkdir -p scripts/hooks plan/index.d plan/loop_status.d plan/mo-full-attestations.d; printf 'packets: []\\n' > plan/index.yaml; cp \"$root/scripts/gate-stamp.sh\" scripts/; cp \"$root/scripts/hooks/pre-push-local-gate.sh\" scripts/hooks/; cp \"$root/scripts/plan-binary-probe.sh\" scripts/; cp \"$root/scripts/check-mo-full-attestations.sh\" scripts/; printf '#!/bin/sh\\necho fixture-nonledger-host\\n' > scripts/mo-full-attest.sh; chmod +x scripts/mo-full-attest.sh; sha=$(printf '%040d' 1); printf '## 2026-08-16T00:00:00Z fixturehost\\nMO-FULL: COMPLETE %s main %s\\n' \"$sha\" \"$sha\" > plan/mo-full-attestations.d/fixturehost.md; git add -A; git commit -qm base; git init -q --bare \"$t/origin.git\"; git remote add origin \"$t/origin.git\"; git push -q origin main; printf '#!/usr/bin/env bash\\nexec bash \"$(git rev-parse --show-toplevel)/scripts/hooks/pre-push-local-gate.sh\" \"$@\"\\n' > .git/hooks/pre-push; chmod +x .git/hooks/pre-push; sha2=$(printf '%040d' 2); printf '## 2026-08-16T02:00:00Z fixturehost\\nMO-FULL: BLOCKED %s main %s\\n' \"$sha2\" \"$sha2\" > plan/mo-full-attestations.d/fixturehost.md; git add -A; git commit -qm rewrite; before=$(git ls-remote origin refs/heads/main | cut -f1); out=$(git push origin main 2>&1); rc=$?; after=$(git ls-remote origin refs/heads/main | cut -f1); if [ \"$rc\" != 0 ] && echo \"$out\" | grep -q 'not an append-only extension' && echo \"$out\" | grep -q 'pre-push refused' && ! echo \"$out\" | grep -q 'plan-only lane clean' && [ \"$before\" = \"$after\" ]; then echo 'ok: ledger-rewrite-demands-full-gate'; else echo \"FAIL: rc=$rc before=$before after=$after\"; echo \"$out\"; exit 1; fi"
     timeout_ms: 15000
@@ -105,8 +119,10 @@ rollback:
     top-level plan/index.d/*.yaml or plan/loop_status.d/*.md file — or, per
     order 767-iukh, a new/append-only-modified per-host ledger under
     plan/mo-full-attestations.d/ (byte-exact prefix property, added lines
-    matching the MO-FULL grammar with LOCAL_SHA == REMOTE_SHA, and
-    check-mo-full-attestations.sh green) — validate the pushed blobs (yq
+    matching the MO-FULL grammar with LOCAL_SHA == REMOTE_SHA — for a NEW
+    ledger admitting only the LEADING '# '-comment header record writes
+    (848-bx2q) — and check-mo-full-attestations.sh green) — validate the
+    pushed blobs (yq
     parse / Cycle-only headings) plus tillandsias-plan check and the
     fragment-applicable forbidden-pattern checks when present, emit
     "plan-only lane: validated <path>" per file and a "plan-only lane clean"

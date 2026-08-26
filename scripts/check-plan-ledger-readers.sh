@@ -102,7 +102,12 @@ while IFS= read -r file; do
   fi
 
   while IFS= read -r line; do
-    if is_content_read "$file" "$line"; then
+    # grep -n prefixes 'NN:' — strip it before classifying, or the comment
+    # exemption in is_content_read can never match (^[[:space:]]*# sees the
+    # line number first). Latent since the gate was written; first tripped
+    # 2026-08-23 by a ruby reproduce-recipe COMMENT in
+    # scripts/check-arrival-routing.sh.
+    if is_content_read "$file" "${line#*:}"; then
       echo "violation: content read of plan/index.yaml in ${file}:"
       echo "  $line"
       violations=$((violations + 1))

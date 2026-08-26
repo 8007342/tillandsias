@@ -17,7 +17,7 @@
 //! to hold the `VZVirtioSocketDevice` handle. So unlike windows, the
 //! macOS report covers static/filesystem health only:
 //!
-//!   * version (`CARGO_PKG_VERSION` baked at build)
+//!   * version (`WORKSPACE_VERSION`, read from the repo-root VERSION file at build — 635-bhkb; it was `CARGO_PKG_VERSION`, i.e. the frozen "0.1.0")
 //!   * bundle identity (whether the binary lives inside an `.app`)
 //!   * image-root artifacts (rootfs.img / vmlinuz / initramfs.img)
 //!   * manifest pin source (bundled, first 12 chars of SHA)
@@ -189,9 +189,25 @@ async fn open_control_wire_stream(
                 tillandsias_control_wire::WIRE_VERSION,
                 HopId::HostGuest,
             );
-            let secure = client_handshake(stream, &psk)
-                .await
-                .map_err(|e| format!("secure control wire handshake failed: {e}"))?;
+            // 733-mppc. Same defect as action_host.rs's copy of this function,
+            // and WORSE HERE because of where it sits: this is the DIAGNOSTIC
+            // path, so the tool an operator reaches for when the host is sick
+            // was itself the thing that hung. A guest that completes the socket
+            // and then stalls mid-Noise parked `--diagnose` forever.
+            //
+            // THE BOUND IS THE CALLER'S, and for an interactive tool that is the
+            // deliberate choice rather than an inherited one. Criterion 2 warns
+            // against inheriting an exec-shaped timeout that would leave the
+            // diagnostic hanging for minutes; the callers here pass 30s (and
+            // `probe_phase_secure_or_plain` passes the readiness probe's own
+            // per-attempt budget), so the ceiling is tens of seconds, not
+            // minutes — an operator gets an answer while a genuinely slow guest
+            // on a loaded host still completes. A shorter fixed constant was
+            // rejected: it would make the readiness probe, which legitimately
+            // retries against a booting guest, fail faster than the guest can
+            // reasonably answer.
+            let secure =
+                crate::action_host::secure_handshake_bounded(stream, &psk, timeout).await?;
             Ok(ControlWireStream::Secure(Box::new(secure)))
         }
     }
@@ -338,7 +354,7 @@ fn collect_report() -> DiagnoseReport {
     let provenance = crate::guest_binary::guest_binary_provenance();
 
     DiagnoseReport {
-        version: env!("CARGO_PKG_VERSION"),
+        version: env!("WORKSPACE_VERSION"),
         guest_version: None,
         in_app,
         exe_path,
@@ -713,7 +729,14 @@ fn read_piped_stdin_bounded(timeout: std::time::Duration) -> Vec<u8> {
 /// NSApp-on-main + worker model).
 ///
 /// @trace plan/issues/optimization-macos-vz-idiomatic-exec-layer-2026-06-21.md
-pub fn exec_guest_main(argv: Vec<String>) -> i32 {
+///
+/// `required_cap` is the capability the chosen argv SHAPE depends on (795-zshi):
+/// `Some(CAP_EXEC_ARGV_VECTOR)` for a verbatim argv vector, `None` for the
+/// flattened `/bin/bash -lc <string>` shape, which every guest has always
+/// admitted. It is checked against `HelloAck.server_caps`, never against a wire
+/// version — a version says what a peer IS, a capability says what it can DO,
+/// and this fleet routinely runs a tray newer than the guest image beside it.
+pub fn exec_guest_main(argv: Vec<String>, required_cap: Option<&'static str>) -> i32 {
     use tillandsias_vm_layer::VmRuntime;
 
     if argv.is_empty() {
@@ -790,17 +813,32 @@ pub fn exec_guest_main(argv: Vec<String>) -> i32 {
         let result = {
             use std::io::Write;
             let stdout = std::io::stdout();
-            tillandsias_vm_layer::vsock_exec::exec_over_stream_with_input_streaming(
-                stream,
-                &argv_ref,
-                &stdin_bytes,
-                |chunk| {
-                    let mut out = stdout.lock();
-                    let _ = out.write_all(chunk);
-                    let _ = out.flush();
-                },
-            )
-            .await
+            let on_chunk = |chunk: &[u8]| {
+                let mut out = stdout.lock();
+                let _ = out.write_all(chunk);
+                let _ = out.flush();
+            };
+            match required_cap {
+                Some(cap) => {
+                    tillandsias_vm_layer::vsock_exec::exec_over_stream_with_input_streaming_requiring(
+                        stream,
+                        &argv_ref,
+                        &stdin_bytes,
+                        cap,
+                        on_chunk,
+                    )
+                    .await
+                }
+                None => {
+                    tillandsias_vm_layer::vsock_exec::exec_over_stream_with_input_streaming(
+                        stream,
+                        &argv_ref,
+                        &stdin_bytes,
+                        on_chunk,
+                    )
+                    .await
+                }
+            }
         };
         let _ = vz.stop(Duration::from_secs(10)).await;
 
@@ -825,23 +863,168 @@ pub fn exec_guest_main(argv: Vec<String>) -> i32 {
     })
 }
 
+/// The guest-side pre-flight both one-shot exec paths run before handing off to
+/// `tillandsias-headless` (795-zshi slice 5).
+///
+/// THIS WAS DUPLICATED VERBATIM at two call sites — `--github-login` and
+/// `--list-cloud-projects` — differing by EXACTLY ONE TOKEN, the headless
+/// subcommand at the end. A `diff` of the two blocks reported a single changed
+/// line. Two copies of a shell string that reaches a guest as one flattened
+/// `-lc` word is the shape this whole packet is about, and it is also how this
+/// codebase keeps producing paired defects: 733-mppc had two copies of
+/// `open_control_wire_stream` and the same unbounded handshake was written twice
+/// and fixed neither time.
+///
+/// WHAT IT DOES, and why each part is still here rather than deleted:
+///   * three `export`s — the control-wire exec env is cleared (no host-env
+///     leak), so HOME, XDG_RUNTIME_DIR and the vault base URL must be set here;
+///   * `install -d -m 0700 "$XDG_RUNTIME_DIR"` — the DesktopUserSession gate
+///     requires it to exist and be writable;
+///   * `podman rm tillandsias-proxy` — redundant with `ensure_proxy_running`'s
+///     own `rm --ignore`, and idempotent (`|| true`);
+///   * the openssl block — first-use CA generation, genuinely needed;
+///   * the trailing unconditional `chmod 600` — redundant since the guest gained
+///     `CAP_PROXY_CA_KEY_HEAL` (795-zshi slice 4), and idempotent.
+///
+/// SLICE 5 WAS BRIEFED TO DELETE THE TWO REDUNDANT LINES BEHIND THAT CAPABILITY.
+/// Measured first, and it does not pay: both are already `|| true`-guarded
+/// no-ops on a healed guest, NEITHER is among the packet's five named
+/// workarounds, and removing them leaves the exports, the `install -d` and the
+/// openssl block — so the preamble REMAINS a shell script and not one
+/// flattening workaround becomes deletable. Buying that with a second
+/// connection and handshake purely to read one capability is a bad trade on a
+/// path with wedge history. The real blocker is the openssl/env work, which has
+/// to move guest-side or into the structured env field, exactly as slice 2 said.
+/// So this slice takes the reduction that IS real — one copy instead of two —
+/// and leaves the capability gate unspent for the slice that can use it.
+fn proxy_exec_preamble(headless_arg: &str) -> String {
+    format!(
+        "export HOME=/root; export XDG_RUNTIME_DIR=/run/user/0; \
+         export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200; \
+         install -d -m 0700 \"$XDG_RUNTIME_DIR\"; \
+         podman rm tillandsias-proxy 2>/dev/null || true; \
+         if ! test -s /tmp/tillandsias-ca/intermediate.key 2>/dev/null; then \
+           mkdir -p /tmp/tillandsias-ca && \
+           openssl req -x509 -newkey rsa:2048 \
+             -keyout /tmp/tillandsias-ca/intermediate.key \
+             -out /tmp/tillandsias-ca/intermediate.crt \
+             -days 25 -nodes -subj '/CN=Tillandsias CA' 2>/dev/null && \
+           chmod 600 /tmp/tillandsias-ca/intermediate.key || true; \
+         fi; \
+         chmod 600 /tmp/tillandsias-ca/intermediate.key 2>/dev/null || true; \
+         exec /usr/local/bin/tillandsias-headless {headless_arg}"
+    )
+}
+
+/// How long a NON-INTERACTIVE stdin gets to answer a prompt before we give up.
+///
+/// Generous compared to `STDIN_FORWARD_TIMEOUT`'s 5s, because a pipe feeding a
+/// three-prompt login may be doing real work between lines. Still bounded,
+/// because the alternative is unbounded (see `prompt_line`).
+const PROMPT_LINE_PIPED_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
 /// Prompt the user on the host terminal and read a single line. When `hidden`,
 /// terminal echo is disabled via `stty -echo` for the duration (no extra crate
-/// dep) so secrets like the PAT are not shown. Returns the trimmed line.
+/// dep) so secrets like the PAT are not shown. Returns the trimmed line, or an
+/// empty string when stdin could not answer — callers already treat empty as a
+/// hard error.
+///
+/// 663-69kp THIRD PATH. 689-stig bounded the `--exec-guest` stdin read and
+/// 689-y2my dealt with the guest heartbeat resetting the exec idle deadline.
+/// This function was the remaining unbounded read, and it is the one
+/// `--github-login` uses (three call sites). It is worse-placed than the one
+/// 689-stig fixed, in a way that changes the SIGNATURE of the hang:
+///
+///   * `read_line` here had NO `is_terminal()` guard and no timeout at all;
+///   * it is called from inside a `DynamicExpect` response closure, i.e. AFTER
+///     the VM is booted and the control-wire stream is open — so the symptom is
+///     NOT the pre-breadcrumb silence of 689-stig, it is a wedge that already
+///     printed its progress lines and is holding a live VM;
+///   * and per the comment on the `expects` list below, the guest's 30s PTY
+///     heartbeat keeps resetting the exec idle deadline (689-y2my), so nothing
+///     upstream bounds the wait either.
+///
+/// So an unattended `--github-login` WITHOUT `--with-token` boots a VM, reaches
+/// the guest's token prompt, and then blocks here forever on a stdin whose
+/// parent never closes the write end — an agent harness, a launchd job, a
+/// background shell. The 07-29 prompt-ordering deadlock the comment below
+/// describes was a SECOND, independent cause of the same 70-minute wedges; it
+/// was fixed by reordering, which is why this one survived.
+///
+/// The rule mirrors 689-stig's insight — "not a TTY" is not "a pipe that will
+/// EOF" — without breaking interactive use:
+///   * stdin IS a terminal: read unbounded. A human is reading the prompt and
+///     typing a token; timing that out would be the bug.
+///   * stdin is NOT a terminal: bounded, and on expiry refuse LOUDLY telling the
+///     operator how to answer by pipe.
+///
+/// The refusal deliberately does NOT suggest `--with-token`. That is a
+/// tillandsias-headless (GUEST) flag with no macOS host equivalent, and
+/// suggesting it here would repeat 663-acdw, where it cost one session two blind
+/// credential runs. On macOS the host drives the guest login over the control
+/// wire, so PIPING credentials to `--github-login` is the supported unattended
+/// path (main.rs:262-271 is the authority) — which is exactly the path this
+/// bounded read has to keep working, not merely tolerate.
 fn prompt_line(label: &str, hidden: bool) -> String {
-    use std::io::Write;
+    use std::io::{IsTerminal, Write};
+
     print!("{label}: ");
     let _ = std::io::stdout().flush();
+
+    // Echo suppression must be undone on EVERY exit from this function,
+    // including the timeout path. Leaving a terminal with echo off after an
+    // already-confusing hang is a hostile end state, and it outlives the
+    // process.
     if hidden {
         let _ = std::process::Command::new("stty").arg("-echo").status();
     }
-    let mut line = String::new();
-    let _ = std::io::stdin().read_line(&mut line);
-    if hidden {
-        let _ = std::process::Command::new("stty").arg("echo").status();
-        println!(); // newline the suppressed Enter would have produced
+    let restore_echo = || {
+        if hidden {
+            let _ = std::process::Command::new("stty").arg("echo").status();
+            println!(); // newline the suppressed Enter would have produced
+        }
+    };
+
+    if std::io::stdin().is_terminal() {
+        let mut line = String::new();
+        let _ = std::io::stdin().read_line(&mut line);
+        restore_echo();
+        return line.trim().to_string();
     }
-    line.trim().to_string()
+
+    // Non-interactive: the read happens on a detached helper thread so the
+    // timeout is real — a thread parked in `read(2)` cannot be cancelled. This
+    // is a one-shot process, so the thread is left to die with it.
+    let (tx, rx) = std::sync::mpsc::channel::<String>();
+    std::thread::spawn(move || {
+        let mut line = String::new();
+        let _ = std::io::stdin().read_line(&mut line);
+        let _ = tx.send(line);
+    });
+    match rx.recv_timeout(PROMPT_LINE_PIPED_TIMEOUT) {
+        Ok(line) => {
+            restore_echo();
+            line.trim().to_string()
+        }
+        Err(_) => {
+            restore_echo();
+            eprintln!(
+                "[github-login] stdin is not a terminal and sent no line for \"{label}\" \
+                 within {}s — refusing to wait longer.\n\
+                 A VM is already booted and the guest is waiting at its prompt, so an \
+                 unbounded wait here holds a live VM open indefinitely (663-69kp).\n\
+                 On macOS the host drives the guest login over the control wire, so pipe \
+                 the answers in — one full line each, in this order (token, author name, \
+                 author email), with the producer closing its end:\n\
+                 \x20 printf '%s\\n%s\\n%s\\n' \"$TOKEN\" \"$NAME\" \"$EMAIL\" \
+                 | tillandsias-tray --github-login\n\
+                 (`--with-token` is a tillandsias-headless GUEST flag and is NOT accepted \
+                 here — see 663-acdw.)",
+                PROMPT_LINE_PIPED_TIMEOUT.as_secs()
+            );
+            String::new()
+        }
+    }
 }
 
 /// `--transport-conformance`: run the shared GuestTransport conformance
@@ -1094,6 +1277,7 @@ pub fn github_login_main() -> i32 {
             },
         ];
         eprintln!("[github-login] driving guest login (token -> git name -> email)…");
+        let github_login_preamble = proxy_exec_preamble("--github-login");
         let result = exec_over_stream_expect_dynamic(
             stream,
             &[
@@ -1134,20 +1318,10 @@ pub fn github_login_main() -> i32 {
                 //      proxy is already up, BEFORE the ensure_ca_bundle call that
                 //      would otherwise heal it, so the widened key would survive
                 //      for the VM's lifetime.
-                "export HOME=/root; export XDG_RUNTIME_DIR=/run/user/0; \
-                 export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200; \
-                 install -d -m 0700 \"$XDG_RUNTIME_DIR\"; \
-                 podman rm tillandsias-proxy 2>/dev/null || true; \
-                 if ! test -s /tmp/tillandsias-ca/intermediate.key 2>/dev/null; then \
-                   mkdir -p /tmp/tillandsias-ca && \
-                   openssl req -x509 -newkey rsa:2048 \
-                     -keyout /tmp/tillandsias-ca/intermediate.key \
-                     -out /tmp/tillandsias-ca/intermediate.crt \
-                     -days 25 -nodes -subj '/CN=Tillandsias CA' 2>/dev/null && \
-                   chmod 600 /tmp/tillandsias-ca/intermediate.key || true; \
-                 fi; \
-                 chmod 600 /tmp/tillandsias-ca/intermediate.key 2>/dev/null || true; \
-                 exec /usr/local/bin/tillandsias-headless --github-login",
+                // 795-zshi slice 5: one builder, two call sites. See
+                // `proxy_exec_preamble` for what each part does and why the two
+                // redundant lines are still in it.
+                &github_login_preamble,
             ],
             expects,
             |ev| eprintln!("[github-login] {ev}"),
@@ -1434,24 +1608,11 @@ pub fn list_cloud_projects_main() -> i32 {
         // the 0o600 clamp and the unconditional heal-down (772-shi9 — see the
         // reasoning at that site: the proxy gets the key as a 0400 podman
         // secret, so no reader ever needed this file widened).
-        let cmd = "export HOME=/root; export XDG_RUNTIME_DIR=/run/user/0; \
-                   export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200; \
-                   install -d -m 0700 \"$XDG_RUNTIME_DIR\"; \
-                   podman rm tillandsias-proxy 2>/dev/null || true; \
-                   if ! test -s /tmp/tillandsias-ca/intermediate.key 2>/dev/null; then \
-                     mkdir -p /tmp/tillandsias-ca && \
-                     openssl req -x509 -newkey rsa:2048 \
-                       -keyout /tmp/tillandsias-ca/intermediate.key \
-                       -out /tmp/tillandsias-ca/intermediate.crt \
-                       -days 25 -nodes -subj '/CN=Tillandsias CA' 2>/dev/null && \
-                     chmod 600 /tmp/tillandsias-ca/intermediate.key || true; \
-                   fi; \
-                   chmod 600 /tmp/tillandsias-ca/intermediate.key 2>/dev/null || true; \
-                   exec /usr/local/bin/tillandsias-headless --list-cloud-projects";
+        let cmd = proxy_exec_preamble("--list-cloud-projects");
 
         let result = exec_over_stream_with_input_streaming(
             stream,
-            &["/bin/bash", "-lc", cmd],
+            &["/bin/bash", "-lc", cmd.as_str()],
             &[],
             |chunk| {
                 use std::io::Write;
@@ -1687,6 +1848,63 @@ fn parse_aarch64_qcow2_sha(manifest_toml: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    /// 795-zshi slice 5. The two exec preambles were duplicated VERBATIM and
+    /// differed by exactly one token — a `diff` of the two blocks reported a
+    /// single changed line. This pins the property that made the duplication
+    /// dangerous rather than merely untidy: the guest-side pre-flight must be
+    /// THE SAME for both one-shot paths, so a fix to one cannot miss the other.
+    ///
+    /// That is not a hypothetical concern in this file. 733-mppc found two
+    /// copies of `open_control_wire_stream` where the identical unbounded
+    /// handshake had been written twice and fixed neither time.
+    #[test]
+    fn both_exec_paths_share_one_preamble_differing_only_in_the_subcommand() {
+        let login = super::proxy_exec_preamble("--github-login");
+        let projects = super::proxy_exec_preamble("--list-cloud-projects");
+
+        let marker = "exec /usr/local/bin/tillandsias-headless ";
+        let login_head = login.split(marker).next().expect("login preamble head");
+        let projects_head = projects.split(marker).next().expect("projects head");
+        assert_eq!(
+            login_head, projects_head,
+            "both one-shot paths must run the IDENTICAL guest pre-flight; divergence here is \
+             how a fix lands on one path and misses the other"
+        );
+        assert!(login.ends_with(&format!("{marker}--github-login")));
+        assert!(projects.ends_with(&format!("{marker}--list-cloud-projects")));
+    }
+
+    /// The pre-flight's parts, asserted so a future edit cannot quietly drop one.
+    ///
+    /// Each is load-bearing for a reason recorded at `proxy_exec_preamble`: the
+    /// control-wire exec env is CLEARED, so the three exports are the only way
+    /// HOME / XDG_RUNTIME_DIR / the vault base URL reach the guest; the
+    /// `install -d` satisfies the DesktopUserSession gate; the openssl block is
+    /// first-use CA generation.
+    ///
+    /// The two REDUNDANT lines (`podman rm`, the trailing `chmod 600`) are
+    /// asserted present ON PURPOSE. Slice 5 was briefed to delete them behind
+    /// CAP_PROXY_CA_KEY_HEAL and measured that it does not pay — both are
+    /// already `|| true` no-ops, neither is among the packet's five named
+    /// workarounds, and removing them leaves the preamble a shell script
+    /// regardless. If a later slice DOES delete them it must edit this test,
+    /// which is the point: the deletion should be a decision, not a drift.
+    #[test]
+    fn the_preamble_keeps_every_part_that_is_load_bearing() {
+        let p = super::proxy_exec_preamble("--github-login");
+        for needle in [
+            "export HOME=/root",
+            "export XDG_RUNTIME_DIR=/run/user/0",
+            "export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200",
+            "install -d -m 0700",
+            "openssl req -x509",
+            "podman rm tillandsias-proxy",
+            "chmod 600 /tmp/tillandsias-ca/intermediate.key",
+        ] {
+            assert!(p.contains(needle), "preamble lost {needle:?}: {p}");
+        }
+    }
+
     use super::parse_aarch64_qcow2_sha;
     use super::translate_project_path_for_guest;
     use super::{METRICS_STATUS_NO_CAPABILITY, METRICS_STATUS_NO_HANDLE};
@@ -1741,6 +1959,72 @@ mod tests {
         &tail[..end]
     }
 
+    /// 663-69kp THIRD PATH. `prompt_line` is the only remaining stdin read on a
+    /// one-shot path, and it had no `is_terminal()` guard and no timeout. It is
+    /// reached from inside the `DynamicExpect` closures — after the VM is booted
+    /// and the control wire is open — and per 689-y2my the guest's 30s PTY
+    /// heartbeat keeps resetting the exec idle deadline, so nothing upstream
+    /// bounds it either. An unattended `--github-login` therefore booted a VM and
+    /// then blocked here forever on a stdin whose parent never closes.
+    ///
+    /// HONEST LIMIT OF THIS TEST: it is a SOURCE-SHAPE assertion, not a
+    /// behavioural one. It cannot prove the timeout fires — only that the guard
+    /// and the bound are present and that the interactive path stays unbounded.
+    /// A behavioural test would have to boot a VM, which is far too heavy for a
+    /// unit test and is why the property is pinned this way rather than not at
+    /// all. Treat a green result here as "the shape is right", not as "measured".
+    #[test]
+    fn prompt_line_is_bounded_for_non_interactive_stdin() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/diagnose.rs"));
+        let window = source_window(
+            source,
+            "fn prompt_line(label: &str, hidden: bool) -> String {",
+        );
+
+        assert!(
+            window.contains("is_terminal()"),
+            "prompt_line must distinguish an interactive stdin from a pipe — treating \
+             'not a TTY' as 'a pipe that will EOF' is the 689-stig mistake: {window}"
+        );
+        assert!(
+            window.contains("recv_timeout(PROMPT_LINE_PIPED_TIMEOUT)"),
+            "the NON-INTERACTIVE read must be bounded, or an unattended --github-login \
+             wedges forever holding a live VM (663-69kp): {window}"
+        );
+        // The interactive branch must stay UNBOUNDED. A human reading a prompt and
+        // typing a token must never be timed out; a fix that bounded both paths
+        // would satisfy the assertion above and break attended logins.
+        let terminal_idx = window
+            .find("if std::io::stdin().is_terminal() {")
+            .expect("prompt_line must special-case an interactive stdin");
+        let terminal_branch = &window[terminal_idx..];
+        let terminal_end = terminal_branch
+            .find("// Non-interactive")
+            .expect("the interactive branch must precede the bounded one");
+        assert!(
+            !terminal_branch[..terminal_end].contains("recv_timeout"),
+            "the INTERACTIVE branch must not be bounded — a human typing a token is not a \
+             hang: {}",
+            &terminal_branch[..terminal_end]
+        );
+
+        // Echo restoration must be reachable from the timeout path too: leaving a
+        // terminal with echo off outlives the process.
+        assert!(
+            window.matches("restore_echo()").count() >= 3,
+            "restore_echo must run on the interactive, piped-ok AND timeout exits — a \
+             terminal left with echo disabled after a hang is a hostile end state: {window}"
+        );
+
+        // The refusal must not send the operator to a flag this binary rejects.
+        assert!(
+            !window.contains("--github-login --with-token"),
+            "must NOT suggest --with-token: it is a tillandsias-headless GUEST flag with no \
+             macOS host equivalent, and suggesting it repeats 663-acdw (two blind credential \
+             runs). main.rs:262-271 is the authority: pipe to --github-login instead."
+        );
+    }
+
     #[test]
     fn github_login_host_prompts_after_control_wire_ready() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/diagnose.rs"));
@@ -1782,10 +2066,17 @@ mod tests {
     /// fresh-VM first-login name-in-use race (exit 125) returns.
     #[test]
     fn github_login_preamble_pins_the_shared_lock_namespace() {
-        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/diagnose.rs"));
-        let window = source_window(source, "pub fn github_login_main() -> i32");
+        // 795-zshi slice 5 re-expressed this against the BUILT value. It used to
+        // grep the source window of `github_login_main` for the literal, which
+        // broke the moment the preamble moved into `proxy_exec_preamble` — a
+        // correct refactor reading as a regression, the same literal-pin failure
+        // 701-iu9b hit one cycle earlier in vz.rs. Asserting the built string is
+        // also STRICTLY STRONGER: a source-window grep passes on a literal that
+        // is present but unused, whereas this proves the export actually reaches
+        // the guest.
         assert!(
-            window.contains("export XDG_RUNTIME_DIR=/run/user/0;"),
+            super::proxy_exec_preamble("--github-login")
+                .contains("export XDG_RUNTIME_DIR=/run/user/0;"),
             "login preamble must export the lock namespace the headless unit pins (order 259)"
         );
     }
@@ -1980,25 +2271,30 @@ mod tests {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/diagnose.rs"));
         let key = concat!("/tmp/tillandsias-ca/inter", "mediate.key");
 
-        for signature in [
-            "pub fn github_login_main() -> i32",
-            "pub fn list_cloud_projects_main() -> i32",
-        ] {
-            let window = source_window(source, signature);
+        // 795-zshi slice 5 moved these assertions from the two call sites'
+        // SOURCE WINDOWS onto the BUILT preamble. The windows stopped containing
+        // the literal when the duplicated preamble became one builder, so a
+        // correct refactor read as a regression — the same literal-pin failure
+        // 701-iu9b hit in vz.rs one cycle earlier, and the second instance in
+        // this session. Asserting the built value is strictly stronger: a
+        // source-window grep passes on a literal that is present but never
+        // reaches the guest.
+        for arg in ["--github-login", "--list-cloud-projects"] {
+            let preamble = super::proxy_exec_preamble(arg);
             assert!(
-                window.contains(&format!("chmod 600 {key}")),
-                "{signature}: preflight must clamp the CA private key to 0600"
+                preamble.contains(&format!("chmod 600 {key}")),
+                "{arg}: preflight must clamp the CA private key to 0600"
             );
             // The heal must sit OUTSIDE the `test -s` guard: an existing 0644
             // key never reaches the openssl block.
-            let guarded = window
-                .split("fi; \\")
+            let guarded = preamble
+                .split("fi; ")
                 .next()
                 .expect("preamble must contain the test -s guard block");
-            let after_guard = &window[guarded.len()..];
+            let after_guard = &preamble[guarded.len()..];
             assert!(
                 after_guard.contains(&format!("chmod 600 {key}")),
-                "{signature}: the heal-down must run unconditionally, after the guard"
+                "{arg}: the heal-down must run unconditionally, after the guard"
             );
         }
 
@@ -2023,7 +2319,7 @@ mod tests {
 
     fn baseline_diagnose_report() -> DiagnoseReport {
         DiagnoseReport {
-            version: env!("CARGO_PKG_VERSION"),
+            version: env!("WORKSPACE_VERSION"),
             guest_version: None,
             in_app: true,
             exe_path: Some(

@@ -56,6 +56,17 @@ preconditions:
   - workspace contains plan/index.yaml, methodology.yaml and methodology/
   - workspace contains images/default/config-overlay/mcp/forge-plan.sh
   - cargo (or an installed tillandsias-plan), jq and sed are available in PATH
+  # ORDER 888-miiy. The dependency that was never declared, and reded the gate
+  # for it. The `spec.answer` engine (openspec/litmus-tests/groundtruth/spec-rung1.yaml)
+  # needs a BUILT EMBEDDING INDEX, which needs an embedding endpoint. That is a
+  # HOST artifact, not a repo one, so it is OPTIONAL by design: a host without
+  # one skips those cases loudly rather than failing. Stated here so an unmet
+  # environment is legible before a step runs, not inferred from a red.
+  - OPTIONAL (spec.answer cases only): a built spec index — TILLANDSIAS_SPEC_INDEX_DIR,
+    FORGE_SPEC_INDEX_DIR, FORGE_SPEC_INDEX_ROOT, the tillandsias-spec-index-tillandsias
+    podman volume, or the XDG cache — containing vectors.jsonl. Build one with
+    scripts/spec-index-ensure.sh. WITHOUT IT the spec.answer cases are SKIPPED and
+    named (skipped_engines=), never silently passed; every other engine grades normally.
 
 critical_path:
   # ── the binary under grade ───────────────────────────────────────────────
@@ -73,6 +84,16 @@ critical_path:
     command: "rm -f /tmp/.litmus-394d-bin /tmp/.litmus-394d-*.yaml /tmp/.litmus-394d-*.json /tmp/.litmus-394d-*.txt; b=''; if cargo build -q --release -p tillandsias-plan 2>/dev/null; then b=\"$(cargo metadata --format-version 1 2>/dev/null | jq -r .target_directory)/release/tillandsias-plan\"; test -x \"$b\" || b=\"$PWD/target/release/tillandsias-plan\"; else for c in \"$HOME/.local/bin/tillandsias-plan\" /usr/local/bin/tillandsias-plan /usr/bin/tillandsias-plan; do if [ -x \"$c\" ]; then b=\"$c\"; break; fi; done; fi; test -n \"$b\" && test -x \"$b\" || { echo 'FAIL: no tillandsias-plan binary, and no cargo to build one from the checkout'; exit 1; }; printf '%s' \"$b\" > /tmp/.litmus-394d-bin; echo 'ok: harness-binary-resolved'"
     timeout_ms: 300000
     expected_behavior: "ok: harness-binary-resolved"
+
+  - step: "ORDER 888-miiy: report the spec-index branch BEFORE grading, never after a red"
+    # ADVISORY, never a gate. The point is that the log states which branch this
+    # host is on up front, so an operator reading a later skip knows it was
+    # expected rather than discovering the environment from a failure. A host
+    # WITH an index grades spec.answer; a host WITHOUT one skips those cases and
+    # says so. Both are healthy; only silence is not.
+    command: "PB=$(cat /tmp/.litmus-394d-bin); if \"$PB\" grade --root . openspec/litmus-tests/groundtruth/spec-rung1.yaml 2>/dev/null | grep -q 'skipped=0'; then echo 'ok: spec-index-branch present (spec.answer WILL be graded)'; else echo 'ok: spec-index-branch absent (spec.answer cases will be SKIPPED and named)'; fi"
+    timeout_ms: 60000
+    expected_behavior: "ok: spec-index-branch"
 
   - step: "the ground truth is COMMITTED DATA in the repo, not generated at run time"
     # A ground truth the harness writes for itself grades nothing. It must be a
@@ -110,7 +131,7 @@ critical_path:
     # The load-bearing one. The citation still resolves and the range is still
     # in bounds — only the expected TEXT is wrong, so this can only be caught
     # by re-reading the span from the corpus.
-    command: "PB=$(cat /tmp/.litmus-394d-bin); Q=openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml; sed 's/drain AT MOST ONE plan packet per cycle/drain AS MANY plan packets as you like/' \"$Q\" > /tmp/.litmus-394d-w1.yaml; \"$PB\" grade --root . /tmp/.litmus-394d-w1.yaml > /tmp/.litmus-394d-w1.txt 2>&1 && { echo 'FAIL: a WRONG expected methodology answer was graded GREEN'; exit 1; }; grep -q '^FAIL  methodology-forge-cycle-budget' /tmp/.litmus-394d-w1.txt && grep -q 'cited span does not contain' /tmp/.litmus-394d-w1.txt && echo 'ok: wrong-methodology-quote-is-red'"
+    command: "PB=$(cat /tmp/.litmus-394d-bin); Q=openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml; sed 's/MAY drain more than one plan packet/drain AT MOST ONE plan packet per cycle/' \"$Q\" > /tmp/.litmus-394d-w1.yaml; \"$PB\" grade --root . /tmp/.litmus-394d-w1.yaml > /tmp/.litmus-394d-w1.txt 2>&1 && { echo 'FAIL: a WRONG expected methodology answer was graded GREEN'; exit 1; }; grep -q '^FAIL  methodology-forge-cycle-budget' /tmp/.litmus-394d-w1.txt && grep -q 'cited span does not contain' /tmp/.litmus-394d-w1.txt && echo 'ok: wrong-methodology-quote-is-red'"
     timeout_ms: 120000
     expected_behavior: "ok: wrong-methodology-quote-is-red"
 
@@ -315,6 +336,18 @@ critical_path:
     command: "out=$(cargo test -p tillandsias-plan 2>&1); printf '%s' \"$out\" | grep -q 'FAILED' && { echo 'FAIL: the crate test suite is red'; exit 1; }; for t in the_committed_query_set_is_green_at_head the_fragment_provenance_query_set_is_green_at_head the_plan_next_query_set_is_green_at_head both_corpora_are_represented_in_the_committed_set a_wrong_expected_span_turns_a_passing_case_red a_misspelled_expectation_key_is_refused_not_ignored an_empty_query_set_is_an_error_not_a_pass an_unknown_engine_names_the_registration_site a_wrong_expected_cheatsheet_span_turns_a_passing_case_red grading_works_on_a_corpus_this_crate_does_not_own; do printf '%s' \"$out\" | grep -q \"groundtruth::tests::$t ... ok\" || { echo \"FAIL: missing unit pin $t\"; exit 1; }; done; for t in fragments::overlay_citation_tests::fold_provenance_records_the_same_winner_the_fold_applies fragments::overlay_citation_tests::a_fragment_only_packet_cites_the_fragment_that_created_it fragments::overlay_citation_tests::an_lww_override_cites_the_winning_fragment_never_the_stale_base_span fragments::overlay_citation_tests::answers_over_a_folded_corpus_omit_no_rows fragments::overlay_citation_tests::freshness_is_derived_from_base_plus_fragments answer::tests::fabricated_authority_values_are_refused_even_on_a_real_span answer::tests::head_sha_resolves_through_a_worktree_commondir_layout answer::tests::plan_next_is_bounded_deterministic_and_release_defaulted; do printf '%s' \"$out\" | grep -q \"$t ... ok\" || { echo \"FAIL: missing 606-h9vy unit pin $t\"; exit 1; }; done; echo 'ok: groundtruth-unit-pins-green'"
     timeout_ms: 300000
     expected_behavior: "ok: groundtruth-unit-pins-green"
+
+  - step: "ORDER 786-kjke: the obvious glob invocation grades every set against ITS OWN corpus"
+    # The bug: `grade groundtruth/*.yaml` graded the two fixture-backed sets
+    # against the LIVE ledger and reported six FALSE reds, because the corpus
+    # contract lived only in each file's header. A false red on the accuracy
+    # harness is the 741-2izr shape aimed at the instrument the fleet's
+    # expert_accuracy: line rests on. The fixture carries its own negative
+    # control — a genuinely wrong expectation must still FAIL under a declared
+    # corpus — so this cannot be satisfied by making everything green.
+    command: "bash scripts/test-groundtruth-corpus-declaration.sh 2>&1 | tail -1"
+    timeout_ms: 120000
+    expected_behavior: "ok:groundtruth-corpus-declaration-fixture:9"
 
   - step: "NO NEW DEPENDENCY, no interpreter, and the query set is DATA not code"
     # The ratified §5 constraints of the 394 family, carried into slice 4. The

@@ -47,6 +47,29 @@ fn main() {
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
         .unwrap_or_else(|| "unknown".into());
 
+    // 635-bhkb: the repo-root VERSION file is the single source of truth for
+    // the release version. Crate versions are never bumped per release, so
+    // `CARGO_PKG_VERSION` here is the literal "0.1.0" forever — which made
+    // `--version` untruthful, put "0.1.0" in the diagnose JSON that support
+    // tooling reads, and (the part that was not cosmetic) made the control
+    // wire's build-version skew check compare a real guest version against
+    // "0.1.0", so the warning fired on EVERY connection to a healthy guest.
+    // A warning that is always true is one an operator learns to scroll past.
+    //
+    // Mirrors tillandsias-windows-tray/build.rs rather than inventing a second
+    // mechanism: same env name, same fallback, same rerun-if-changed. Set
+    // UNCONDITIONALLY (not behind a macOS-target gate) so cross-checks from
+    // Linux and Windows have the var available — the crate compiles to a
+    // cfg-gated stub off Darwin and its tests still need to resolve it.
+    let manifest_dir_path =
+        std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default());
+    let version_file = manifest_dir_path.join("../../VERSION");
+    let workspace_version = std::fs::read_to_string(&version_file)
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|_| env!("CARGO_PKG_VERSION").to_string());
+    println!("cargo:rerun-if-changed=../../VERSION");
+    println!("cargo:rustc-env=WORKSPACE_VERSION={workspace_version}");
+
     println!("cargo:rustc-env=TILLANDSIAS_GIT_SHA={sha_full}");
     println!("cargo:rustc-env=TILLANDSIAS_BUILD_TIME={build_time}");
 

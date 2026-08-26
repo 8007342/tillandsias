@@ -43,6 +43,20 @@ fn assert_shutdown(signal: libc::c_int, signal_name: &str) {
             format!("test-signal-{}", signal_name),
         )
         .env("TILLANDSIAS_STOP_TIMEOUT", "2")
+        // 880-tdwn MECHANISM #2, confirmed live (4/4 -> 0/4 from this one
+        // test): the child is a REAL tray daemon, and its graceful SIGTERM
+        // shutdown STOPS THE SHARED ENCLAVE STACK it believes it manages —
+        // every whole-stack kill of 2026-08-25 traces here (unarmed runs
+        // pre-tripwire; the env_remove escape hatch after). The subject of
+        // this test is signal -> clean exit, not container management, so
+        // the child gets the STATEFUL MOCK: it starts, waits, shuts down,
+        // and "stops" mock containers. The tripwire stays armed in the
+        // child as defense in depth — with the mock set it never fires.
+        .env(
+            "TILLANDSIAS_PODMAN_BIN",
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../scripts/test-support/podman-mock.sh"),
+        )
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()

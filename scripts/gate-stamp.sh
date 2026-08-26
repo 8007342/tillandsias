@@ -59,6 +59,29 @@
 #       exactly the assumption this packet exists to remove. The cost is one
 #       `./build.sh --check` per host, once.
 #
+# TWO ADDITIONAL FIELDS FOR MEMOIZATION (order 765-tkq2)
+#
+#   toolchain <64-hex>   digest of `rustc -V` + `cargo clippy -V`
+#   stamped   <iso8601>  when the recorded gate passed
+#
+# These are ADDITIVE and deliberately do NOT change what `verify` accepts. The
+# distinction matters and is easy to get backwards:
+#
+#   `verify` answers "did the gate validate these BYTES", which is what
+#   pre-push needs — trunk correctness is a property of the code, and every
+#   other host compiles it with its own toolchain anyway. Requiring a
+#   toolchain match there would force a second fleet-wide re-stamp for no
+#   gain in trunk protection.
+#
+#   `memo-check` answers "would re-running the gate RIGHT HERE produce the
+#   same verdict", which is a strictly stronger question: a clippy bump with
+#   identical bytes yields new lints, so skipping the local re-run would hide
+#   them. Hence memoization requires the toolchain to match and treats a
+#   stamp without the field as stale.
+#
+# So a stamp written before this change keeps working for pre-push and simply
+# never memoizes — fail-closed, no migration.
+#
 # SUBCOMMANDS
 #   compute   print the stamp for the current tree
 #   write     record the current stamp (call after the gate PASSES)
@@ -66,8 +89,28 @@
 #   verify    ok:gate-fresh | stale:<reason>   (exit 0 / non-zero)
 #   scope     print the recorded scope (`full` or a class list) | stale:<reason>
 #   classify  read paths on stdin, print the sorted unique class set
+#   memo-check <dispatch>
+#             ok:gate-fresh <iso8601> | stale:<reason>   (exit 0 / non-zero)
+#             Every condition below must hold, or the answer is stale:
+#               v2 stamp, digest matches, scope is full, toolchain matches,
+#               recorded dispatch equals <dispatch>, stamped timestamp present.
 
 set -uo pipefail
+
+# ── Portable SHA-256 (order 851-gpb5) ─────────────────────────────────────────
+# `sha256sum` is coreutils (Linux/forge/WSL); Apple only added /sbin/sha256sum
+# in macOS 13, and stock macOS otherwise ships `shasum`. Both print the same
+# digest in the same "<hex>  <name>" line shape, so every first-field parse
+# below works with either tool and the emitted frames — and therefore existing
+# stamps — stay byte-identical across hosts (pinned by
+# scripts/test-gate-stamp-portable-digest.sh). Same dispatch as
+# scripts/build-sidecar.sh::_sha256; kept local because this script is
+# deliberately self-contained.
+if command -v sha256sum >/dev/null 2>&1; then
+    GATE_STAMP_SHA256=(sha256sum)
+else
+    GATE_STAMP_SHA256=(shasum -a 256)
+fi
 
 # ── Change-class taxonomy (order 765-dt8h) ────────────────────────────────────
 # TOTAL by construction: the final `*)` arm is what makes an unclassified path
@@ -89,6 +132,25 @@ gate_stamp_classify_path() {
 }
 
 GATE_STAMP_KNOWN_CLASSES="plan-ledger rust images specs methodology build-scripts ci docs other"
+
+# Digest of the toolchain whose verdict the stamp records (order 765-tkq2).
+# Only the two compilers whose OUTPUT the gate consumes: rustc decides whether
+# the tree builds, clippy decides whether it is clean. `cargo -V` is
+# deliberately absent — a cargo bump with an identical rustc/clippy cannot
+# change a lint verdict, and every input added here costs a re-run.
+#
+# A probe that cannot run yields the literal "unknown", which never equals a
+# recorded digest, so a host without a toolchain simply never memoizes. That
+# is the correct direction: the failure mode of guessing here is skipping a
+# gate that would have failed.
+gate_stamp_toolchain_digest() {
+    local rustc_v clippy_v
+    rustc_v="$(rustc -V 2>/dev/null)" || rustc_v="unknown"
+    clippy_v="$(cargo clippy -V 2>/dev/null)" || clippy_v="unknown"
+    [[ -n "$rustc_v" ]] || rustc_v="unknown"
+    [[ -n "$clippy_v" ]] || clippy_v="unknown"
+    printf 'rustc:%s\nclippy:%s\n' "$rustc_v" "$clippy_v" | "${GATE_STAMP_SHA256[@]}" | cut -d' ' -f1
+}
 
 gate_stamp_class_is_known() {
     local c
@@ -118,6 +180,30 @@ compute() {
     # broke it the same way. The property we actually want is "the gate
     # validated these bytes", and bytes do not care which commit they are on.
     #
+    # ORDER 887-bz88 — st_mode IS part of "these bytes were validated". This
+    # hashed path + kind + CONTENT and nothing else, so `chmod -x` moved the
+    # stamp not at all and the pre-push hook accepted a tree the gate had never
+    # seen in that shape. MEASURED: on 2026-08-25 lenovinha's cycle rewrote
+    # scripts/check-credential-channel.sh through a temp file (`mv` drops the
+    # exec bit), ran the gate, staged, committed and pushed; origin/linux-next
+    # was left failing `violation:script-not-executable:1` on a pristine clone,
+    # on the CREDENTIAL CHANNEL GUARD itself — a script every host invokes by
+    # path before any committable work, where a lost exec bit is a permission
+    # error rather than a verdict.
+    #
+    # TWO BLIND SPOTS COMPOSED, and neither alone would have done it:
+    #   1. check-script-exec-bits.sh reads the INDEX (`git ls-files -s`), and the
+    #      skill runs the gate BEFORE `git add`. The regression was still
+    #      worktree-only, so the guard that exists for exactly this saw 100755
+    #      and passed. (Closed separately, in that script: it now reads the
+    #      worktree too, so the failure lands at gate time.)
+    #   2. This fingerprint then made the subsequent `git add` — which is what
+    #      wrote 100644 into the index — invisible, because it changed no bytes.
+    #      The stamp stayed fresh and the hook accepted.
+    #
+    # Including the bit closes 2: any chmod now goes stale, the gate re-runs,
+    # and by then the mode IS staged, so blind spot 1's guard sees it too.
+    #
     # So: staging is invisible, committing is invisible, editing is not. A
     # deleted file drops its line and therefore changes the stamp, which is
     # correct. The path list is folded in explicitly so a deletion cannot be
@@ -133,22 +219,128 @@ compute() {
     # Hash the link target text instead. Refuse any other non-file entry rather
     # than silently claiming that an unmeasured tree was validated.
     # PROCESS COUNT IS THE BUDGET (order 675-dkif, 2026-08-10). The original loop
-    # spawned sha256sum once (twice, with the $() subshell) PER FILE. On Linux
-    # that is the advertised ~60ms; on a Windows/MSYS host a process spawn
-    # costs ~100-150ms, so ~4000 files became a ~20-MINUTE pre-push hook —
-    # which is precisely the "multi-minute hook gets --no-verify'd" failure
-    # this stamp exists to avoid. Classification uses bash builtins (no
+    # spawned sha256sum once (twice, with the $() subshell) PER FILE, which is
+    # the "multi-minute hook gets --no-verify'd" failure this stamp exists to
+    # avoid. The batching below is still the right call — but the NUMBER that
+    # justified it was a ghost, and it is corrected here.
+    #
+    # MEASURED by yolanda on yolanda (Windows), 2026-08-26, 1000 iterations:
+    #
+    #   Git Bash     /bin/true 17.58 ms    sha256sum 18.51 ms
+    #   WSL          /bin/true  0.69 ms    sha256sum  1.33 ms
+    #   yoga native  /bin/true  0.32 ms    sha256sum  0.80 ms
+    #
+    # This comment used to claim "~100-150 ms per spawn on a Windows/MSYS host",
+    # inherited and never measured. The real MSYS floor is 17.6 ms — 6-9x lower
+    # — and the figure was stale in the direction that made it scarier, which is
+    # the direction that quietly justifies whatever it is cited for.
+    #
+    # It was also aimed at the wrong process. `./build.sh --check` runs INSIDE
+    # WSL, where a spawn costs 0.69 ms — 2.2x yoga's native floor, not 55x — so
+    # Windows spawn cost was never what made the gate slow there. The 9P/drvfs
+    # filesystem bridge is (macbook measured a no-op cargo probe at 11.4 s over
+    # /mnt/c against ~165 ms on two native hosts).
+    #
+    # WHAT SURVIVES, and it is why the batching stays: the pre-push HOOK runs in
+    # Git Bash, at 17.6 ms a spawn. Thousands of per-file spawns there is still
+    # tens of seconds of pure overhead on every push. A handful of batched
+    # invocations beats that comfortably. The design was right; only its
+    # arithmetic was fiction. Classification uses bash builtins (no
     # forks), regular files are batch-hashed by xargs in a handful of
     # sha256sum invocations, and only symlinks (rare) pay a per-entry spawn.
-    # The emitted frames are BYTE-IDENTICAL to the per-file implementation,
-    # so existing stamps stay valid across this change.
-    local -a paths=() kinds=() file_digests=() symlink_digests=()
+    # The emitted frames were BYTE-IDENTICAL to the per-file implementation,
+    # so existing stamps stayed valid across THAT change. Order 887-bz88 adds
+    # the exec-bit field below, which DOES change the frame: every existing
+    # stamp goes stale once, and the next `./build.sh --check` on each host
+    # writes a current one. That is a single re-run per host, it is self-healing,
+    # and it is the price of the stamp no longer lying about st_mode.
+    # ORDER 889-8tcb. The index modes, as a SORTED LIST consumed in lockstep —
+    # not an associative array. `local -A` is bash 4 and macOS ships bash 3.2
+    # (761-g36m); the gate caught it, which is the gate working. And not a
+    # per-path lookup either: order 675-dkif established that a fork per file
+    # turns this into a ~20-minute pre-push hook on Windows, which is precisely
+    # how a hook gets --no-verify'd.
+    #
+    # Both streams are path-sorted in C collation — git orders index entries by
+    # byte, and the enumeration below sorts with LC_ALL=C — so a single forward
+    # pointer resolves every path in one linear sweep with no forks at all.
+    # Byte collation for the whole sweep, matching the LC_ALL=C sorts below.
+    local LC_ALL=C
+    local -a _gs_xpaths=()
+    local _xline
+    while IFS= read -r _xline; do
+        [ -n "$_xline" ] && _gs_xpaths+=("$_xline")
+    done < <(git -C "$REPO_ROOT" ls-files -s 2>/dev/null \
+             | LC_ALL=C sed -n 's/^100755 [0-9a-f]* [0-9]*\t//p' \
+             | LC_ALL=C sort)
+    local _gs_xi=0 _gs_xn=${#_gs_xpaths[@]}
+
+    local -a paths=() kinds=() execbits=() file_digests=() symlink_digests=()
     local path absolute digest line i
     while IFS= read -r -d '' path; do
         absolute="$REPO_ROOT/$path"
         if [[ -L "$absolute" ]]; then
-            kinds+=(symlink) paths+=("$path")
+            kinds+=(symlink) paths+=("$path") execbits+=(-)
         elif [[ -f "$absolute" ]]; then
+            # ORDER 887-bz88 — the exec bit is part of "these bytes were
+            # validated", and it was not hashed. See the note above `compute`.
+            #
+            # ORDER 889-8tcb — SOURCED FROM THE INDEX, NEVER THE WORKTREE.
+            # The first version tested `[[ -x "$absolute" ]]` and DEADLOCKED
+            # EVERY WINDOWS HOST. `./build.sh --check` dispatches into WSL and
+            # hashes through /mnt/c (drvfs), which reports every file
+            # executable; the pre-push hook runs in Git Bash and sees real
+            # bits. Measured on one tree at one moment: WSL `x README.md`,
+            # Git Bash `- README.md`. The two digests can never agree, so
+            # `verify` returned stale immediately after a green 287s gate,
+            # forever — and the memo said ok:gate-fresh, so the gate would not
+            # re-run either. yolanda could not push anything at all.
+            #
+            # A CAPABILITY PROBE WAS TRIED AND IS THE WRONG SHAPE, which is the
+            # part worth keeping: a probe answers PER ENVIRONMENT. Git Bash on
+            # NTFS honours chmod 0644 and concludes "bits work"; WSL on drvfs
+            # concludes "bits do not". Both answers are true about the ASKER and
+            # useless about the TREE, so the two sides pick different sources
+            # and diverge exactly as before (measured: 8ca8074b vs 83e63835).
+            # `core.fileMode` fixes the axis — it is git being TOLD the bits are
+            # untrustworthy, a DECLARATION both sides read identically, not an
+            # inference the broken filesystem gets to answer. Sourcing from the
+            # index under it made both sides agree (68b6a93b from both).
+            #
+            # Index-always goes further and takes NO branch, because a branch
+            # means a path that cannot be exercised from the host writing it —
+            # which is precisely how the worktree version shipped. Safe on
+            # POSIX by measurement, not assumption: across all tracked files
+            # the index mode and `[[ -x ]]` disagree ZERO times, verified
+            # independently on yoga (4537 files) and lenovinha (4553).
+            #
+            # It also makes the stamp agree with its own sibling: this file's
+            # comment at :195 already notes that check-script-exec-bits.sh reads
+            # the index. The stamp was the outlier, not the accommodation.
+            #
+            # WHAT THIS GIVES UP, stated because it narrows a pinned assertion:
+            # a bare unstaged `chmod -x` no longer moves the stamp. Blind spot 2
+            # still closes — the `git add` that writes 100644 moves the index —
+            # and blind spot 1 (the worktree arm of check-script-exec-bits.sh)
+            # is untouched and still refuses at GATE time, which is the guard
+            # that actually caught the original regression.
+            #
+            # Untracked files have no index entry and record `-`: constant and
+            # portable, and an untracked file's bit is not part of what a commit
+            # would carry. Staging it gives it a real mode.
+            # Advance past every executable path that sorts BEFORE this one,
+            # then test for equality. Linear over both lists, zero forks.
+            # `[[ < ]]` is a bash builtin comparison — no subshell. The first
+            # draft wrapped it in $(...), which forks once per comparison and
+            # reintroduces exactly the per-file spawn cost 675-dkif removed.
+            while [[ "$_gs_xi" -lt "$_gs_xn" && "${_gs_xpaths[$_gs_xi]}" < "$path" ]]; do
+                _gs_xi=$((_gs_xi + 1))
+            done
+            if [ "$_gs_xi" -lt "$_gs_xn" ] && [ "${_gs_xpaths[$_gs_xi]}" = "$path" ]; then
+                execbits+=(x)
+            else
+                execbits+=(-)
+            fi
             kinds+=(file) paths+=("$path")
         elif [[ ! -e "$absolute" ]]; then
             # DELETED tracked entry (order 695-nvnd). `ls-files --cached` reads the
@@ -187,7 +379,7 @@ compute() {
     done < <(
         for ((i = 0; i < ${#paths[@]}; i++)); do
             [[ "${kinds[i]}" == file ]] && printf '%s\0' "$REPO_ROOT/${paths[i]}"
-        done | xargs -0 -r sha256sum
+        done | xargs -0 -r "${GATE_STAMP_SHA256[@]}"
     )
     for ((i = 0; i < ${#paths[@]}; i++)); do
         [[ "${kinds[i]}" == file ]] && nfiles=$((nfiles + 1))
@@ -200,7 +392,7 @@ compute() {
     fi
     for ((i = 0; i < ${#paths[@]}; i++)); do
         if [[ "${kinds[i]}" == symlink ]]; then
-            digest="$(readlink "$REPO_ROOT/${paths[i]}" | sha256sum | cut -d' ' -f1)" || return 1
+            digest="$(readlink "$REPO_ROOT/${paths[i]}" | "${GATE_STAMP_SHA256[@]}" | cut -d' ' -f1)" || return 1
             symlink_digests+=("$digest")
         fi
     done
@@ -211,10 +403,10 @@ compute() {
             printf 'symlink\0%s\0%s\0' "${paths[i]}" "${symlink_digests[sidx]}"
             sidx=$((sidx + 1))
         else
-            printf 'file\0%s\0%s\0' "${paths[i]}" "${file_digests[fidx]}"
+            printf 'file\0%s\0%s\0%s\0' "${paths[i]}" "${execbits[i]}" "${file_digests[fidx]}"
             fidx=$((fidx + 1))
         fi
-    done | sha256sum | cut -d' ' -f1
+    done | "${GATE_STAMP_SHA256[@]}" | cut -d' ' -f1
 }
 
 # Read one keyed field out of a v2 stamp. Prints nothing for a v1/legacy or
@@ -275,6 +467,8 @@ case "${1:-verify}" in
             printf 'digest %s\n' "$digest"
             printf 'scope %s\n' "$scope_spec"
             printf 'dispatch %s\n' "$dispatch"
+            printf 'toolchain %s\n' "$(gate_stamp_toolchain_digest)"
+            printf 'stamped %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
         } > "$STAMP_FILE" || {
             echo "stale:cannot-write-stamp"
             exit 1
@@ -336,6 +530,76 @@ case "${1:-verify}" in
         fi
         printf '%s\n' "$recorded_scope"
         ;;
+    memo-check)
+        # "Would re-running the gate right here produce the same verdict?"
+        #
+        # Every arm below is fail-CLOSED: the only path to exit 0 is one where
+        # each condition was affirmatively checked. The reasons are distinct
+        # strings on purpose — a memo that refuses should say which assumption
+        # broke, or the next reader learns nothing from it.
+        expected_dispatch="${2:-}"
+        if [[ -z "$expected_dispatch" ]]; then
+            echo "stale:memo-check-needs-a-dispatch"
+            exit 2
+        fi
+        if [[ ! -f "$STAMP_FILE" ]]; then
+            echo "stale:never-run"
+            exit 1
+        fi
+        if ! stamp_is_v2; then
+            echo "stale:legacy-stamp-format"
+            exit 1
+        fi
+        recorded_scope="$(stamp_field scope 2>/dev/null)"
+        # Only a whole-tree gate may be memoized. A scoped stamp vouches for a
+        # subset of the tree, and this memo skips the WHOLE gate — trusting a
+        # subset stamp for that is precisely the silent-green the scope field
+        # was added to prevent. When scoped gates land (765-xpct), the memo
+        # they need is per-class and belongs with them, not here.
+        if [[ "$recorded_scope" != "full" ]]; then
+            echo "stale:scoped-stamp-cannot-memoize-full-gate"
+            exit 1
+        fi
+        recorded_dispatch="$(stamp_field dispatch 2>/dev/null)"
+        # Deliberately an EQUALITY test, not a superset test. `--ci-full` is
+        # documented as the stronger gate and would in fact cover a `--check`,
+        # but "stronger" is a claim nobody has encoded — the dispatch field is
+        # provenance, not an ordering. Inventing an ordering here would be the
+        # same unverified inference the v1-stamp refusal exists to reject. The
+        # cost is one honest re-run after a ci-full; the alternative is a memo
+        # whose soundness rests on a comment.
+        if [[ "$recorded_dispatch" != "$expected_dispatch" ]]; then
+            echo "stale:dispatch-mismatch:${recorded_dispatch:-none}"
+            exit 1
+        fi
+        recorded_toolchain="$(stamp_field toolchain 2>/dev/null)"
+        if [[ -z "$recorded_toolchain" ]]; then
+            # Written before 765-tkq2. Absent is not "assume unchanged".
+            echo "stale:no-toolchain-recorded"
+            exit 1
+        fi
+        if [[ "$recorded_toolchain" != "$(gate_stamp_toolchain_digest)" ]]; then
+            echo "stale:toolchain-changed"
+            exit 1
+        fi
+        recorded_stamped="$(stamp_field stamped 2>/dev/null)"
+        if [[ -z "$recorded_stamped" ]]; then
+            echo "stale:no-timestamp-recorded"
+            exit 1
+        fi
+        recorded="$(stamp_field digest 2>/dev/null)"
+        if [[ -z "$recorded" ]]; then
+            echo "stale:empty-stamp"
+            exit 1
+        fi
+        # Content digest LAST: it is the expensive check (~60ms over ~4200
+        # files) and every cheap disqualifier above has already run.
+        if [[ "$recorded" != "$(compute)" ]]; then
+            echo "stale:tree-changed-since-gate"
+            exit 1
+        fi
+        echo "ok:gate-fresh $recorded_stamped"
+        ;;
     classify)
         # Paths on stdin (one per line) -> the sorted unique class set, one per
         # line. One spawn for a whole diff; the hook must not fork per path.
@@ -345,7 +609,7 @@ case "${1:-verify}" in
         done | LC_ALL=C sort -u
         ;;
     *)
-        echo "usage: gate-stamp.sh [compute|write [--scope S] [--dispatch D]|verify|scope|classify]" >&2
+        echo "usage: gate-stamp.sh [compute|write [--scope S] [--dispatch D]|verify|scope|classify|memo-check <dispatch>]" >&2
         exit 2
         ;;
 esac

@@ -1,0 +1,58 @@
+# @trace spec:ci-release
+#
+# Pins the litmus-bindings reconciliation gate (order 660-ryhn). A litmus file
+# nothing binds never executes in any suite: the suite prints PASS while the
+# author's assertions have run zero times — 26 files were in that state,
+# security-critical ones among them. The gate makes the gap a creation-time
+# refusal: retired files exempt, historical strays grandfathered (ratchet
+# list, deletions only), new unbound files and dangling bindings refuse.
+name: litmus:litmus-bindings-reconciliation-shape
+spec: ci-release
+phase: pre-build
+description: >
+  Pin scripts/check-litmus-bindings.sh: the live tree reconciles; a clean
+  fixture counts bound/retired/grandfathered; a NEW unbound file is refused
+  BY NAME (the exact state 660-ryhn was filed from); a dangling binding is
+  refused by name; phase: retired is the sanctioned unbound state. Plus the
+  build-gate wiring, so the check itself cannot become the unregistered
+  assertion it polices.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/check-litmus-bindings.sh and scripts/test-litmus-bindings.sh
+  - workspace contains openspec/litmus-tests/unbound-grandfathered.txt
+
+critical_path:
+  - step: "the five-case fixture passes"
+    command: "bash scripts/test-litmus-bindings.sh 2>&1 | tail -1 | grep -qx 'PASS: litmus bindings reconciliation (5/5)' && echo 'ok: fixture 5/5'"
+    timeout_ms: 30000
+    expected_behavior: "ok: fixture 5/5"
+
+  - step: "the build gate runs the reconciliation"
+    command: "grep -q 'check-litmus-bindings.sh' build.sh && echo 'ok: gate wired'"
+    timeout_ms: 3000
+    expected_behavior: "ok: gate wired"
+
+  - step: "the grandfather list forbids additions in its own text"
+    command: "grep -qi 'THE ONLY LEGITIMATE EDIT TO THIS FILE IS A DELETION' openspec/litmus-tests/unbound-grandfathered.txt && echo 'ok: ratchet stated'"
+    timeout_ms: 3000
+    expected_behavior: "ok: ratchet stated"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "litmus bindings reconciliation pinned (unbound refused by name, dangling refused, ratchet list)"
+  log_fields:
+    spec: "ci-release"
+    test: "litmus-bindings-reconciliation-shape"
+    artifact: "scripts/check-litmus-bindings.sh + openspec/litmus-tests/unbound-grandfathered.txt"
+
+rollback:
+  on_failure: >
+    The bindings reconciliation drifted. Restore scripts/check-litmus-bindings.sh
+    (grammar ok:litmus-bindings:files= bound= retired= grandfathered= /
+    violation:unbound-litmus:<csv> / violation:dangling-binding:<csv>; retired
+    files exempt; grandfathered list is deletions-only), its build.sh wiring
+    next to check-litmus-pin-claims, and the five fixture cases.
+  command: "bash scripts/check-litmus-bindings.sh; bash scripts/test-litmus-bindings.sh 2>&1 | tail -2"

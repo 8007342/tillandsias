@@ -1,0 +1,12 @@
+# tillandsias-builder — the LONG-LIVED-tier build container (order 873-b1nx).
+#
+# The forge image is nix-free BY DESIGN (801-x1nx: the ephemeral tier stays
+# cheap to launch and destroy); builds that want nix artifacts run HERE, a
+# durable sibling of nix-cache/vault/proxy, with /nix on a named volume so a
+# relaunch lands warm. The toolchain closure arrives from the enclave cache:
+# measured 2026-08-25, a fresh store builds the full musl target cache-only
+# in 96s versus hours from source.
+FROM registry.fedoraproject.org/fedora-minimal:44
+RUN microdnf -y install nix git && microdnf clean all
+COPY nix.conf /etc/nix/nix.conf
+WORKDIR /src

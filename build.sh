@@ -397,7 +397,8 @@ Usage: ./build.sh [flags]
 Build flags:
   (none)            Debug build (cargo build --workspace)
   --release         Release build (native launcher, optimized)
-  --test            Run test suite (cargo test --workspace)
+  --test            Run test suite (cargo test --workspace --no-fail-fast,
+                    plus the tray/listen-vsock feature pass)
   --check           Type-check only (cargo check --workspace)
   --clean           Clean build artifacts before building
   --ci              Run local CI/CD validation (quick: spec binding, drift, version, fmt, clippy, tests)
@@ -436,6 +437,45 @@ if [[ -n "$CI_SPEC_LIST" ]]; then
     if [[ -z "$CI_STRICT_SPEC_LIST" ]]; then
         CI_STRICT_SPEC_LIST="$CI_SPEC_LIST"
     fi
+fi
+
+# ---------------------------------------------------------------------------
+# 723-whrx: --install has no macOS meaning, so say so instead of half-doing it
+# ---------------------------------------------------------------------------
+# Before this, `grep -niE 'darwin|uname|OSTYPE'` over this whole file matched
+# nothing: build.sh had no host branch at all. On macOS `--install` therefore
+# built an x86_64 Linux musl launcher and tried to EXECUTE it, while the
+# readiness guard reported the host as ready. `--ci-full --install` is the
+# phased gate the release and meta-orchestration runbooks treat as the strong
+# evidence path, so on macOS that path was not merely unsupported — it was
+# unsupported SILENTLY, which is the part that lets a "builds from scratch on
+# macOS" claim get made.
+#
+# PLACEMENT IS THE POINT, and it is why this sits here rather than beside the
+# install block. Three things downstream mutate state before the install work
+# begins: `_bump_build_version` and `_check_trace_coverage` (the FLAG_INSTALL
+# pre-gate), `_prepare_ci_full_install_inputs` on the --ci-full --install path,
+# and the main install block. Refusing at any of those still dirties VERSION
+# first, and build.sh then tells the operator not to commit the dirt it just
+# made. Refusing HERE — flags parsed, nothing done — is the only position where
+# "no Linux binary was built" and "the tree is clean" are both true.
+#
+# Deliberately NOT gated on --check/--test: those are the paths that DO work on
+# macOS and this must not touch them.
+if [[ "$(uname -s)" == "Darwin" ]] && [[ "$FLAG_INSTALL" == true ]]; then
+    cat >&2 <<'DARWIN_INSTALL_REFUSAL'
+Error: --install is not supported on macOS.
+
+  It builds an x86_64 Linux musl launcher and then tries to run it, which
+  cannot work on this host. (--ci-full --install is the same path.)
+
+  The macOS build is a signed .app bundle, not a musl binary:
+
+      scripts/build-macos-tray.sh
+
+  What DOES work here: ./build.sh --check and ./build.sh --test.
+DARWIN_INSTALL_REFUSAL
+    exit 2
 fi
 
 # ---------------------------------------------------------------------------
@@ -660,7 +700,15 @@ _require_host_build_tools() {
     fi
     if [[ "${#missing[@]}" -gt 0 ]]; then
         _error "Missing host build tools: ${missing[*]}"
-        _error "Install the Fedora build dependencies, then rerun this command."
+        # Remediation must name THIS host's package path (order 851-gpb5): the
+        # Fedora line on a Mac strands the operator at the first --check.
+        if [[ "$(uname -s)" == "Darwin" ]]; then
+            _error "macOS: install the Xcode Command Line Tools for gcc (xcode-select --install),"
+            _error "pkg-config via Homebrew (brew install pkg-config), and the Rust tools via"
+            _error "rustup (https://rustup.rs; rustup component add rustfmt clippy). Then rerun."
+        else
+            _error "Install the Fedora build dependencies, then rerun this command."
+        fi
         exit 1
     fi
 
@@ -860,6 +908,34 @@ _stage_router_sidecar_if_compiling
 # ---------------------------------------------------------------------------
 
 if [[ "$FLAG_INIT" == true ]]; then
+    # 723-whrx: build the binary BEFORE the podman gate and the VERSION bump.
+    #
+    # This block used to execute target/debug/tillandsias without ever building
+    # it, so from a clean tree --init failed on ANY platform — but only AFTER
+    # require_podman had run and _bump_build_version had dirtied VERSION, and
+    # build.sh then tells the operator not to commit that dirt. The failure was
+    # therefore both avoidable and expensive: a missing artifact reported as a
+    # podman problem or a bare "no such file", with a dirty tree left behind.
+    #
+    # Ordering is the property being fixed, not the message. Everything that
+    # mutates state or gates on external services now happens only once the
+    # thing we are about to run is known to exist.
+    if [[ ! -x "$SCRIPT_DIR/target/debug/tillandsias" ]]; then
+        _step "target/debug/tillandsias is absent — building it first (723-whrx)..."
+        if ! cargo build -p tillandsias-headless 2>&1; then
+            _error "--init needs target/debug/tillandsias and the build failed."
+            _error "Nothing was changed: no VERSION bump, no podman calls."
+            exit 1
+        fi
+    fi
+    if [[ ! -x "$SCRIPT_DIR/target/debug/tillandsias" ]]; then
+        # Built without error yet still absent: refuse rather than fall through
+        # to a confusing exec failure three steps later.
+        _error "--init: target/debug/tillandsias is still absent after a successful build."
+        _error "Nothing was changed: no VERSION bump, no podman calls."
+        exit 1
+    fi
+
     # The only build.sh flag with a genuine, unconditional Podman need
     # (it builds every container image). Fail fast with a clear message
     # here rather than a possibly-confusing downstream Rust error.
@@ -1261,9 +1337,79 @@ fi
 
 # Test build
 if [[ "$FLAG_TEST" == true ]]; then
+    # --no-fail-fast (order 829-g4xf) and the feature pass (order 831-wmn4).
+    # Both exist because the count this prints did not mean what it said. BOTH
+    # FIGURES BELOW WERE MEASURED ON MACOS (2026-08-19) and neither is this
+    # host's:
+    #
+    #   cargo test --workspace                 -> 801 passed,  1 failed   [macOS]
+    #   cargo test --workspace --no-fail-fast  -> 1911 passed, 8 failed   [macOS]
+    #
+    # Cargo runs test binaries sequentially and STOPS at the first one that
+    # fails, so more than half the workspace never ran and seven failures were
+    # invisible behind the first. A truncated run and a complete one look
+    # identical except for totals nobody knows in advance.
+    #
+    # LINUX'S FAILURE SET IS 1, NOT 8 — and that 8 sat here unattributed until
+    # 2026-08-21. Measured on THIS host at f9ee195a9, same command, complete
+    # run:
+    #
+    #   cargo test --workspace --no-fail-fast  -> 1894 passed, 1 failed,
+    #                                             10 ignored              [Linux]
+    #
+    # The one failure is proxy_cache_policy's
+    # bumped_origin_tls_and_signed_url_logs_fail_closed (also measured red on
+    # 2026-08-20 at 81d2315f5, so it predates this cycle). The other seven were
+    # macOS's and arrived with that host's merge. An unattributed count in a
+    # shared file is how a real Linux regression gets waved through as a
+    # known-bad baseline, so every figure here names the host it came from.
+    #
+    # THE VERDICT IS A RATCHET, NOT CARGO'S EXIT CODE. cargo exits non-zero for
+    # that one standing failure, so this dispatch was red on a clean tree and
+    # its exit code carried no information about THIS change. What carries
+    # information is whether the failure SET moved: a failure not named in
+    # scripts/test-known-red.txt is a new regression, and a listed test that
+    # PASSED is a stale entry that must be deleted. Both are red.
+    #
+    # PIPESTATUS, not `$?`: `cmd | tee f` returns TEE's status, and tee happily
+    # succeeds while cargo is failing. The pipe costs `_run`'s phase accounting
+    # for this step (the function body runs in a subshell); --test emits no
+    # phase report, and a live-streamed transcript is worth more here than a
+    # timing record nothing prints.
+    _TEST_TRANSCRIPT="$SCRIPT_DIR/target/test-transcript-workspace.log"
+    mkdir -p "$(dirname "$_TEST_TRANSCRIPT")"
     _step "Running tests..."
-    _run cargo test --workspace --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1
-    _info "Tests passed"
+    _test_rc=0
+    _run cargo test --workspace --no-fail-fast --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1 |
+        tee "$_TEST_TRANSCRIPT" || _test_rc="${PIPESTATUS[0]}"
+    if ! _test_baseline_verdict="$(bash "$SCRIPT_DIR/scripts/check-test-baseline.sh" --from "$_TEST_TRANSCRIPT")"; then
+        _error "$_test_baseline_verdict"
+        _error "the workspace failure set moved (cargo rc=$_test_rc) — see the named tests above; transcript: $_TEST_TRANSCRIPT"
+        _error "if a failure is genuinely pre-existing, file its issue and add its key to scripts/test-known-red.txt"
+        exit 1
+    fi
+    _info "$_test_baseline_verdict"
+
+    # `tray` and `listen-vsock` are NOT default features, so the plain pass
+    # above compiles neither `mod tray` nor `mod vsock_server` — 139 of that
+    # binary's 522 tests. They are not peripheral: one is the Linux tray's
+    # control socket, the other the in-VM control wire's server half. A test
+    # added there runs nowhere and the suite still counts it as coverage
+    # (measured 2026-08-19: two new bound tests reported "0 passed; 383
+    # filtered out", indistinguishable from a filter typo).
+    #
+    # local-ci.sh already runs the `tray` half for exactly this reason and
+    # documents it at length; it does not run `listen-vsock`, which is why
+    # this pass names both.
+    #
+    # Deliberately NOT routed through the baseline ratchet: no known-red entry
+    # lives in this pass today, so strict is both correct and stricter. If one
+    # ever does, wrap it the same way rather than deleting the entry.
+    _step "Running feature-gated tests (tray, listen-vsock)..."
+    _run cargo test -p tillandsias-headless --bin tillandsias \
+        --features tray,listen-vsock --no-fail-fast \
+        --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1
+    _info "Feature-gated tests passed"
 
     # Prune dangling images accumulated during the test
     _step "Pruning dangling podman images..."
@@ -1287,6 +1433,58 @@ if [[ "$FLAG_CHECK" == true ]]; then
     timing_emit build-preamble check "${_PREAMBLE_T0:-$(timing_now_ms)}" 0 || true
     _CHECK_T0="$(timing_now_ms)"
     trap 'timing_emit build-check check "$_CHECK_T0" $?' EXIT
+
+    # ── Stamp memoization (order 765-tkq2) ────────────────────────────────
+    #
+    # `--check` runs 2-5x per cycle and the 2nd..5th are usually against an
+    # identical tree: a cycle re-runs the gate after a ledger-only commit,
+    # after the attestation commit, after a rebase. The gate is a pure
+    # function of (tree bytes, toolchain), and the stamp already records
+    # exactly that pair — so when both match a PASSING run, re-running cannot
+    # produce a different verdict.
+    #
+    # WHY THE WHOLE GATE AND NOT THE EXPENSIVE STEPS. Memoizing individual
+    # steps (clippy is ~17s of a ~20s gate) needs each step's INPUT SET —
+    # which files that step's verdict depends on. The stamp makes no such
+    # claim and cannot: it vouches for the tree as a whole. Inventing
+    # per-step input sets here would duplicate the change-class taxonomy
+    # 765-xpct is building and would be a scope claim with no verification
+    # behind it. So this memo asserts exactly what the stamp already proves,
+    # and nothing more; partial credit on a CHANGED tree stays with 765-xpct.
+    #
+    # This is the same trust pre-push already places in the stamp — it skips
+    # the entire gate on a fresh one. Extending that trust to the gate's own
+    # entry point is consistency, not a new assumption.
+    #
+    # SAFETY, in the order the failure modes matter:
+    #   * only a GREEN run writes a stamp (_write_gate_stamp is reached only
+    #     after every check passes), so a red gate can never be memoized;
+    #   * memo-check is fail-closed on every unknown — legacy stamp, absent
+    #     toolchain, scoped stamp, different dispatch, any digest drift;
+    #   * combined dispatches never memoize: the guard below is the SAME
+    #     "only flag" condition this block uses to decide whether to exit, so
+    #     `--check --install` still runs the full gate and still installs;
+    #   * TILLANDSIAS_FORCE_CHECK=1 bypasses unconditionally.
+    #
+    # The record is emitted as `build-check-memoized`, NOT `build-check`:
+    # folding sub-second skips into the build-check series would drag
+    # build_check_ms_avg down and misreport the gate's real cost, which is
+    # the metric the velocity work steers by.
+    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CLEAN$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE" == "falsefalsefalsefalsefalsefalsefalsefalse" ]] &&
+        [[ "${TILLANDSIAS_FORCE_CHECK:-0}" != "1" ]] &&
+        [[ -f "$SCRIPT_DIR/scripts/gate-stamp.sh" ]]; then
+        _memo_verdict="$(bash "$SCRIPT_DIR/scripts/gate-stamp.sh" memo-check check 2>/dev/null)" || _memo_verdict=""
+        case "$_memo_verdict" in
+            "ok:gate-fresh "*)
+                _info "ok:gate-fresh (stamped ${_memo_verdict#ok:gate-fresh }; TILLANDSIAS_FORCE_CHECK=1 to re-run)"
+                _info "  Tree bytes and toolchain are unchanged since that passing gate; nothing re-run."
+                trap - EXIT
+                timing_emit build-check-memoized check "$_CHECK_T0" 0 || true
+                exit 0
+                ;;
+        esac
+    fi
+
     _step "Checking Rust formatting..."
     if ! _run cargo fmt --check --all --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1; then
         _error "Rust code not formatted: run 'cargo fmt --all'"
@@ -1316,6 +1514,265 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Plan ledger check passed"
+
+    # ── The test baseline (2026-08-20 archive-sweep regression) ───────────
+    #
+    # An archive sweep moved 550 packets out of plan/index.yaml. `--check` was
+    # green every run, so were archive-plan-packets.sh --check (both
+    # invariants), check-fragment-status-loss.sh, and two hand-written
+    # acceptance assertions. Seven tests in `-p tillandsias-plan --lib` were
+    # red the whole time: the expert system could no longer ANSWER about an
+    # archived packet, and a real query returned `unsupported: no packet in
+    # the ledger matches any token`. NONE of those gates runs cargo test — it
+    # lived only in the --test dispatch, which the pre-push gate never calls.
+    # It was caught by accident, taking an unrelated baseline for a pending
+    # merge.
+    #
+    # A ledger SHAPE gate cannot see a CAPABILITY loss. So the smallest suite
+    # that can is now part of the gate that runs every cycle.
+    #
+    # SCOPE IS DELIBERATE: `-p tillandsias-plan --lib` only, 10.4s measured in
+    # this gate on 2026-08-21 (203 tests), and it is exactly where the
+    # regression was — the same suite went 180/0 pre-sweep, 173/7 post-sweep
+    # and 180/0 after the revert, at the 180 tests it held on 2026-08-20. The
+    # FULL workspace suite stays in --test: it is minutes long and --check runs
+    # 2-5x per cycle, which is how a gate gets bypassed.
+    #
+    # The fixture runs first (0.1s, hermetic). A ratchet that cannot go red is
+    # indistinguishable from a passing one — the whole failure class this
+    # block exists for — and the fixture is what proves both directions still
+    # fail. Its own non-vacuity is proven by mutation, in its header.
+    # Host identity seeds work selection on every host in the fleet, and its
+    # two vendor-detection traps ("VGA compatible controller" contains `ati`;
+    # "Non-VGA unclassified device" contains `vga`) are invisible on any single
+    # box — they only misfire on hardware that machine does not have. The
+    # fixture is hermetic for exactly that reason.
+    # set-field writes the ledger's LWW channel, and it has now emitted
+    # unparseable YAML twice from two different value shapes (832-698m's
+    # colon-space, then a multi-line block scalar indented under its own key).
+    # Both times it printed `ok:` and the pre-push gate was the only thing that
+    # noticed. A writer that reports success while corrupting an append-only
+    # record needs a fixture, not a third incident.
+    # WHOLE-OVERLAY, not diff-scoped. check-added-fragments-parse.sh refuses a
+    # push that ADDS an unreadable fragment, and check-fragment-status-loss.sh
+    # already wrote the caveat down: a fragment damaged by MERGE is outside it.
+    # On 2026-08-23 git rename detection paired two hosts' set-field fragments
+    # after concurrent compactions and wrote conflict markers into both; they
+    # presented as renames, so the diff-scoped gate could not see them.
+    # A typo'd packet_id does not corrupt anything and does not fail anything —
+    # the fold refuses the fragment, the file survives, and the record is
+    # invisible. One sat here for fourteen hours being reported on every
+    # compaction while three cycle reports called it a benign refusal.
+    _step "Checking every fragment event lands on a real packet..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-events-land.sh" 2>&1; then
+        _error "an event is attached to no packet — invisible, not merely unfolded"
+        exit 1
+    fi
+    _info "All fragment events land"
+
+    _step "Checking every ledger fragment is intact (whole overlay)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-all-fragments-intact.sh" 2>&1; then
+        _error "a ledger fragment is damaged — append-only files are restored, not merged"
+        exit 1
+    fi
+    _info "All fragments intact"
+
+    _step "Checking the whole-overlay fragment guard's negative controls..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-all-fragments-intact.sh" 2>&1; then
+        _error "the fragment-integrity guard cannot distinguish valid YAML, parse damage, and conflict markers"
+        exit 1
+    fi
+    _info "Fragment-integrity fixture passed"
+
+    _step "Checking set-field emits valid YAML for every value shape..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-set-field-yaml-shapes.sh" 2>&1; then
+        _error "set-field can write an unparseable ledger fragment — the ledger is append-only"
+        exit 1
+    fi
+    _info "set-field YAML-shape fixture passed"
+
+    # ORDER 877-mynm's fixture, wired 2026-08-25. It shipped INVOKED BY NOTHING:
+    # named only in a comment inside the hook it guards and in plan prose, so
+    # `grep -Rl` saw the name and nothing ever ran the file. A negative control
+    # nobody executes cannot protect the hole it names (calmecacpilli).
+    #
+    # scripts/audit-guard-activation.sh did not catch it for two reasons, both
+    # worth knowing: its population is the 76 `check-*` guards, so `test-*`
+    # fixtures are not audited at all; and its own source (line ~74) records that
+    # it decides activation by `grep -Rl <basename>`, which cannot tell an
+    # invocation from a mention. 6.2s, and it guards the plan-only fast lane —
+    # the path a widening is about to make busier (889-twhe).
+    # RE-WIRED 2026-08-26 after the fixture was made parity-independent
+    # (d678058ea). Verified here before restoring the call, in BOTH parities:
+    # ambient stamp PRESENT 11/11, ambient stamp ABSENT 11/11, stamp restored
+    # afterwards. The history below is kept because the failure mode is subtle
+    # and the next author should not have to rediscover it.
+    #
+    # WAS UNWIRED BRIEFLY, by the same host that wired it in at b5f6399cc, because
+    # the fixture was NOT HERMETIC and wiring it exposed that to the trunk's only
+    # gate.
+    #
+    # MEASURED on macuahuitl: with a valid .git/tillandsias-gate-stamp present the
+    # fixture reports 8 passed / 2 failed; with the stamp removed, 10 passed / 0
+    # failed. Arm 7 pipes a synthetic outgoing ref through the REAL
+    # pre-push-local-gate.sh against a scratch bare repo and asserts a refusal —
+    # but the hook resolves the stamp from the AMBIENT repository, finds this
+    # checkout's valid stamp, and correctly accepts. The arm then reports "a real
+    # outgoing ref was accepted without gating" while observing nothing but its
+    # own contamination. Independently found and isolated by yoga.
+    #
+    # WHY THIS MATTERS MORE THAN A FLAKY TEST: the gate WRITES its stamp at the
+    # END of a run, so a tree whose last gate was RED runs green and a tree whose
+    # last gate was GREEN runs red. A gate that alternates on an unchanged tree
+    # makes "re-run it and see" return whichever answer the parity lands on, and
+    # a single green stops being evidence of anything.
+    #
+    # THE DEFECT IS LATENT AND PREDATES ME — the fixture landed 292ff7607
+    # (877-mynm, pirria) on 2026-08-25 and was orphaned, invoked by nothing.
+    # calmecacpilli was right that a negative control nobody executes cannot
+    # protect the hole it names, and I was right to wire it; I was wrong not to
+    # check that it was safe to EXERCISE first. Making an unexercised thing
+    # exercised without verifying it is hermetic is its own instance of tonight's
+    # class.
+    #
+    # AND THE OBVIOUS FIX WAS WRONG — recorded because it nearly shipped. Both
+    # yoga and I proposed isolating the guard into the scratch repo via
+    # GIT_DIR/GIT_WORK_TREE. yoga implemented it and found it makes arms 7 and 8
+    # pass VACUOUSLY: in a hermetic scratch repo the guard finds no gate
+    # machinery, takes its nothing-to-gate path, and accepts everything, so the
+    # arms assert nothing at all. The gate would have gone green with two arms
+    # measuring nothing. They reverted it.
+    #
+    # The arms invoke a real checkout DELIBERATELY — that is what makes them mean
+    # anything. The contamination was never the real checkout; it was that the
+    # STAMP's presence varies with what the host last did. So the landed fix makes
+    # that variable a constant rather than hiding from it: hold the ambient stamp
+    # aside for the arms that need its absence, and restore it on every exit path
+    # including INT/TERM. Arm 9 (pirria's design) asserts arm 7's verdict is
+    # IDENTICAL whichever way the stamp happens to be, so a future leak fails
+    # loudly instead of flipping silently.
+    _step "Checking the pre-push empty-ref-list fixture (877-mynm)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-pre-push-empty-ref-list.sh" 2>&1; then
+        _error "the empty-ref-list lane fixture regressed — the plan-only fast lane's acceptance path is unproven"
+        exit 1
+    fi
+    _info "pre-push empty-ref-list fixture passed"
+
+    _step "Checking the promote-stable evidence gate and dry-run..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-promote-stable-evidence-gate.sh" 2>&1; then
+        _error "promote-stable's gate or its --dry-run regressed — this script flips an outward-facing release channel"
+        exit 1
+    fi
+    _info "promote-stable gate + dry-run fixture passed"
+
+    _step "Checking host-identity derivation..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-derive-host-identity.sh" 2>&1; then
+        _error "host identity derivation is wrong — every host's work seed depends on it"
+        exit 1
+    fi
+    _info "Host-identity fixture passed"
+
+    _step "Checking the test-baseline ratchet's own fixture..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-check-test-baseline.sh" 2>&1; then
+        _error "the test-baseline ratchet's fixture failed — the gate below cannot be trusted to go red"
+        exit 1
+    fi
+    _info "Test-baseline fixture passed"
+
+    # Order 843-624y. Compaction is the ONE ledger operation that can destroy:
+    # everything else here is append-only. Both compaction paths used to report
+    # every LOADED fragment as consumed and the caller deleted exactly that
+    # list, so a fragment the fold could not absorb was removed having
+    # contributed nothing. A v0.4 release-gate closure went that way
+    # (9d12276ca^, order 735-6iki) and 1,144 fragment files have been deleted
+    # across history with nothing distinguishing folded from eaten.
+    #
+    # Hermetic — the fixture builds its own ledger under mktemp and never
+    # touches plan/, which matters more than usual for a test of a deleter.
+    _step "Checking compaction deletes only what it folded (843-624y)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-compaction-coverage.sh" 2>&1; then
+        _error "compaction would delete fragments it never folded — that is silent data loss"
+        exit 1
+    fi
+    _info "Compaction coverage fixture passed"
+
+    # Order 851-cduu. The instrument gate for every ledger check in this file:
+    # a stale tillandsias-plan does not fail, it answers wrong (measured twice
+    # on 2026-08-23 — yolanda's WSL gate cache, macuahuitl's mid-cycle pull).
+    # ensure_fresh_plan_binary's point-of-use contract is what stands between
+    # those checks and a binary built for another checkout; this fixture pins
+    # the contract hermetically.
+    _step "Checking point-of-use instrument freshness (851-cduu)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-plan-binary-freshness.sh" 2>&1; then
+        _error "ensure_fresh_plan_binary broke its contract — a stale instrument could pass for HEAD"
+        exit 1
+    fi
+    _info "Instrument freshness fixture passed"
+
+    # Order 628-r2vk. The NEW-surface railguard: a user-visible tray surface
+    # (menu id, notification, status chip, tooltip) cannot land without a
+    # parity-matrix claim. The hermetic fixture pins both directions; the
+    # LIVE check over the real tree is litmus:tray-new-surface-parity-gate
+    # (post-build phase). Ruby-free: the check is the Rust policy binary.
+    _step "Checking the new-surface parity railguard fixture (628-r2vk)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-tray-surface-parity-gate.sh" 2>&1; then
+        _error "the new-surface parity railguard broke — surfaces could land rowless again"
+        exit 1
+    fi
+    _info "New-surface parity railguard fixture passed"
+
+    # Order 859-b2zc. Host identity must resolve WITHOUT a `hostname` binary —
+    # no Fedora image this project runs ships one, so five scripts that
+    # re-derived the chain inline were blind in the forge and in both WSL
+    # distros. The forge case is the one that hid: `unavailable:` is the single
+    # verdict that asks nobody to do anything, so the capability gate never
+    # once prompted it.
+    _step "Checking capability-row host resolution (859-b2zc)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-capability-row-check.sh" 2>&1; then
+        _error "check-capability-row.sh cannot resolve a host without \`hostname\` — the forge goes silent again"
+        exit 1
+    fi
+    _info "Capability-row host-resolution fixture passed"
+
+    # Order 858-ihcb. A benchmark that measures a warm prompt cache reports a
+    # number that is wrong by 10x and looks plausible. This fixture inspects
+    # the payloads the harness's REAL call sites put on the wire, because the
+    # defect's second incarnation — a nonce counter incremented inside `$( )`,
+    # which never advances in the parent — is invisible to any test that calls
+    # the helper directly.
+    _step "Checking bench prompt uniqueness (858-ihcb)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-bench-prompt-uniqueness.sh" 2>&1; then
+        _error "bench-inference-floor.sh can reach a measured call with a reused prompt — prefill numbers would be cache hits"
+        exit 1
+    fi
+    _info "Bench prompt-uniqueness fixture passed"
+
+    # PIPESTATUS, not `$?` — `cmd | tee f` returns TEE's status. The verdict is
+    # the ratchet's, not cargo's: a failure not in scripts/test-known-red.txt
+    # is a regression, a listed test that PASSED is a stale entry, and a listed
+    # test this run never built is neither (the workspace's one known-red entry
+    # lives in a different binary and is simply absent here).
+    # `--lib` WAS HERE UNTIL 2026-08-22, and it made this ratchet blind to the
+    # binary's own tests. Two of them — the pair asserting every dispatch arm
+    # and every declared capability appears in the usage text — sat RED for
+    # several cycles while `--check` reported green, because a subcommand added
+    # earlier in the campaign was never documented. The ratchet's whole premise
+    # is that no gate ran `cargo test`; scoping it to one target recreated that
+    # blind spot inside the fix. Dropping `--lib` covers the bin and integration
+    # targets too, and cost ~0.0s: the bin suite is 23 assertions of pure text.
+    _step "Running plan ledger tests (cargo test -p tillandsias-plan, all targets)..."
+    _PLAN_TEST_TRANSCRIPT="$SCRIPT_DIR/target/test-transcript-plan-lib.log"
+    mkdir -p "$(dirname "$_PLAN_TEST_TRANSCRIPT")"
+    _plan_test_rc=0
+    _run cargo test -p tillandsias-plan --no-fail-fast --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1 |
+        tee "$_PLAN_TEST_TRANSCRIPT" || _plan_test_rc="${PIPESTATUS[0]}"
+    if ! _plan_baseline_verdict="$(bash "$SCRIPT_DIR/scripts/check-test-baseline.sh" --from "$_PLAN_TEST_TRANSCRIPT")"; then
+        _error "$_plan_baseline_verdict"
+        _error "the plan ledger suite's failure set moved (cargo rc=$_plan_test_rc) — transcript: $_PLAN_TEST_TRANSCRIPT"
+        _error "a ledger change every shape gate calls clean can still break what the expert system can ANSWER"
+        exit 1
+    fi
+    _info "$_plan_baseline_verdict"
 
     _step "Checking plan order uniqueness (tillandsias-policy plan-orders)..."
     if ! _run cargo run -q --manifest-path "$SCRIPT_DIR/Cargo.toml" -p tillandsias-policy -- plan-orders 2>&1; then
@@ -1351,6 +1808,128 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Fragment status-loss check passed"
 
+    # Order 831-ezea. The sibling of the check above, on the other axis: that
+    # one asks whether a fragment's CLOSURE reached the fold; this one asks
+    # whether a fragment that did NOT close a packet left it resumable. The
+    # loop's only blocking exit condition today is FILING A NEW ROW, so arrival
+    # scales with service — every cycle adds rows and carries none forward.
+    # `next_action` is the carry-forward artifact and it has had a reader since
+    # 606-xu52 (answer.rs next_action_snippet -> the `next:` line of every
+    # `plan next` row); without it the row hands the next agent the packet's own
+    # TITLE as its next step.
+    #
+    # ADVISORY, NOT A GATE, AND `_run` IS DELIBERATE HERE: the script exits 0
+    # even when it names fragments. Measured 2026-08-19, next_action adoption is
+    # 4.6% of ready rows (17/367), so a refusal would reject essentially every
+    # fragment the fleet writes tonight and would be switched off within a day —
+    # and 699-dycj forbids making one host's habit every host's red build. The
+    # promotion bar (>= 40% adoption) and the command that measures it are
+    # recorded in the script's header; promoting it means flipping its `exit 0`
+    # and adding an `_error` branch here. Its own non-zero exits (a broken
+    # checkout) still red the build through the `if !` below, which is why this
+    # is wired as a gate whose guard is currently unarmed rather than as a bare
+    # invocation nobody would notice breaking.
+    _step "Checking that open packets carry a next_action (831-ezea, advisory)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-carry-forward.sh" 2>&1; then
+        _error "the carry-forward advisory could not run — that is a broken checkout, not a clean ledger"
+        exit 1
+    fi
+    _info "Carry-forward advisory reported"
+
+    # ORDER 751-i9mb. The closure-event pass applied to the BASE ledger, where
+    # compaction puts every fragment's events. The sibling gate above scans
+    # plan/index.d only, so the moment a ledger is compacted its closure events
+    # move out of that gate's reach — packet 532 sat claimable with its exit
+    # criterion already green while --check printed
+    # ok:no-fragment-status-loss:16 checked.
+    #
+    # ADVISORY, on the same terms as the carry-forward line above and for the
+    # same reason: a terminal event beside a non-terminal status is a QUESTION
+    # for a cycle, not a fact to apply. Auto-promoting a status from an event is
+    # how a false completion becomes permanent, and 532 was only closable
+    # because its litmus was re-run and passed. The `if !` guards that the
+    # advisory can RUN — a broken checkout is a build break; a ledger finding is
+    # not.
+    _step "Checking the base ledger for completions the fold hides (751-i9mb, advisory)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-base-ledger-status-loss.sh" 2>&1; then
+        _error "the base-ledger status-loss advisory could not run — that is a broken checkout, not a clean ledger"
+        exit 1
+    fi
+    _info "Base-ledger status-loss advisory reported"
+
+    # Order 810-k8jy. Which file classes under a corpus root the RAG indexer
+    # indexes, declines, or has never been told about. ADVISORY like the
+    # carry-forward line above, and for the same reason: a new file class in the
+    # tree is news, not a build break, and redding the gate the first time
+    # someone adds a .lock is how a check gets switched off.
+    #
+    # The packet's complaint was not that HCL, PowerShell and SELinux policy
+    # were unindexed — it was that their absence was INVISIBLE. walk_files
+    # returns "no files matched" for a class deliberately declined and for a
+    # class nobody has considered, and those two silences are identical.
+    # UNCLASSIFIED is the difference.
+    # `cargo run -q` like the ledger-integrity step above, not a target/ path:
+    # check-plan-binary-probe-usage.sh reds the build for a hardcoded
+    # target/release path, and it is right to (704-zcgi). The subcommand lives
+    # on the LEDGER-FREE dispatch path, so this costs a walk, not a fold.
+    _step "Reporting RAG corpus coverage (810-k8jy, advisory)..."
+    if ! _run cargo run -q --manifest-path "$SCRIPT_DIR/Cargo.toml" -p tillandsias-plan -- corpus-coverage >/dev/null 2>&1; then
+        _error "the corpus-coverage report could not run — a broken checkout, not an unclassified tree"
+        exit 1
+    fi
+    # Printed separately from the run above so the verdict is not swallowed by
+    # a pipeline whose exit status belongs to `tail` (727-kmks, hit twice today).
+    _info "$(cargo run -q --manifest-path "$SCRIPT_DIR/Cargo.toml" -p tillandsias-plan -- corpus-coverage 2>/dev/null | tail -1)"
+
+    # Order 831-ezea, the OTHER half of the same arithmetic. Carry-forward above
+    # is about SERVICE — did the cycle leave the rows it touched resumable. This
+    # one is about ARRIVAL — should the rows the cycle FILED have been rows at
+    # all. Arrivals measured at lambda = 2.2 + 1.80*mu, so dL/dt = a + (b-1)*mu
+    # and the sign flips at b = 1: at b = 1.80 the ready queue drains at NO
+    # service rate and adding hosts diverges faster. Every budget in the
+    # methodology caps service; new_row_only_if_independently_schedulable is the
+    # only rule that touches arrival, and until this line it was prose with no
+    # checker — written by the host measured as the largest single filer.
+    #
+    # ADVISORY, AND ONLY HALF THE RULE — the script's header says so in its own
+    # words. It checks the owned_files disjunct (reusing answer.rs
+    # `owned_file_owners`, the same fold the selector uses for claim exclusion)
+    # plus a normalized-equality heuristic on deliverable/title. It does NOT
+    # decide the pickup_role disjunct and does not judge whether two rows are
+    # really the same work; it prints both roles and leaves the call to the
+    # filer. Diff-scoped to fragments this change ADDS, so an inherited row can
+    # never shout at a host that did not file it (699-dycj).
+    #
+    # `_run` with `if !` is deliberate, exactly as above: the advisory itself
+    # exits 0, so only a pass that CANNOT RUN reds the build. Promotion bar —
+    # open rows carrying owned_files at >= 40%, today 0.6% (3/490) — is recorded
+    # in the script header along with the clause that must never be promoted.
+    _step "Checking that newly filed rows are independently schedulable (831-ezea, advisory)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-arrival-routing.sh" 2>&1; then
+        _error "the arrival-routing advisory could not run — that is a broken checkout, not a clean ledger"
+        exit 1
+    fi
+    _info "Arrival-routing advisory reported"
+
+    # Order 831-ezea. The archiver is the ONLY bulk drain the ledger has, and
+    # until this line it had ZERO call sites — so its correctness was never
+    # exercised by anything. When it was finally dry-run on 2026-08-19 it
+    # archived two READY rows (424, 437) into a file where they answer `no
+    # packet matches`, while its own `--check` printed "script is idempotent"
+    # and its freshness header cited that as evidence of soundness.
+    #
+    # --check now asserts the actual invariant — archiving moves TERMINAL rows,
+    # so the ready set must be byte-identical across a run — and this wires it
+    # to a caller. 2.0s. Gating a tool nobody invokes yet is deliberate: the
+    # sweep gets its call site under R3, and the gate must predate the sweep
+    # rather than be added after the first bad run.
+    _step "Checking the plan archiver preserves the ready set (831-ezea)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/archive-plan-packets.sh" --check 2>&1; then
+        _error "the plan archiver would change the ready set, or its check could not run"
+        exit 1
+    fi
+    _info "Plan archiver check passed"
+
     # Order 698-7n6q. The sibling of the check above: that one catches a
     # fragment whose declared status the fold DISCARDS; this one catches a
     # fragment the fold cannot READ AT ALL. `tillandsias-plan check` warns about
@@ -1379,6 +1958,23 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Expression-pinning enforcement passed"
 
+    # Order 792-ksr8. Refuse a NEWLY ADDED pipeline whose verdict SIGPIPE can
+    # decide: an unbounded producer into an early-exiting consumer, under
+    # pipefail, in an if/while condition. A match then surfaces as a failure
+    # whenever the producer is still writing — which is how a push-blocking
+    # gate returned 1/2/3/4/5/6/13/27 violations on unchanged trees and blocked
+    # four agents in one night. Diff-scoped for the same reason as 634-39ik
+    # above, and here the whole-repo sweep is the ARGUMENT for it: ~50 legacy
+    # sites carry the shape and nearly all are benign (producer size decides,
+    # and it is not statically decidable), so a corpus-wide gate would be a
+    # false-alarm generator. New code gets the safe idiom for free.
+    _step "Checking for newly-added SIGPIPE-decidable verdict pipelines (792-ksr8)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-sigpipe-verdict-pipelines-added.sh" 2>&1; then
+        _error "a newly-added pipeline lets SIGPIPE decide a verdict (792-ksr8)"
+        exit 1
+    fi
+    _info "SIGPIPE verdict-pipeline enforcement passed"
+
     # Order 686-7qcm criterion 3. Refuse a NEWLY ADDED fragment that records a
     # closure rung (completed/verified/done) with no evidence-bearing event —
     # the gate-time backstop to set-field's write-time --evidence requirement,
@@ -1390,6 +1986,53 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Closure-evidence enforcement passed"
+
+    # Order 885-92iu. Refuse a NEWLY FILED packet whose `verifiable_closure`
+    # NAMES a litmus test that cannot run — one no test declares, or one no
+    # spec binds (execution is binding-driven, so an unbound test runs in no
+    # suite and is as inert as a missing one). 721-77yu already caught this
+    # shape in shell scripts; the ledger, where the claim carries more weight,
+    # was never scanned. 795-5itp declared a closure on 2026-08-17 that existed
+    # in exactly one place in the repository — that field — for eight days,
+    # while three slices landed against it and this gate stayed green.
+    # Diff-scoped: standing debt is REPORTED by `tillandsias-plan
+    # declared-closures` (exit 0), never redded here.
+    _step "Checking that added fragments' declared closures resolve (885-92iu)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-declared-closures-added.sh" 2>&1; then
+        _error "this change files a packet whose verifiable_closure names a litmus test that does not exist or that no spec binds (885-92iu)"
+        exit 1
+    fi
+    _info "Declared-closure resolution check passed"
+
+    # ADVISORY, never a gate (885-92iu). The gate above refuses NEW debt; this
+    # names the STANDING debt, every run, so it cannot go quiet the way
+    # 795-5itp's closure did for eight days. Reporting on demand is not
+    # reporting: a number nobody is shown is a number nobody acts on.
+    if _plan_bin="$(TILLANDSIAS_PLAN_BIN="${TILLANDSIAS_PLAN_BIN:-}" bash -c '. scripts/plan-binary-probe.sh; resolve_plan_binary')" \
+       && [ -n "$_plan_bin" ] \
+       && "$_plan_bin" capabilities 2>/dev/null | grep -qx declared-closures; then
+        _closure_debt="$("$_plan_bin" declared-closures 2>/dev/null || true)"
+        case "$_closure_debt" in
+            violation:*) _warn "standing declared-closure debt: $_closure_debt (see 'tillandsias-plan declared-closures'; not a gate)" ;;
+        esac
+    fi
+
+    # ORDER 656-spux. Every host compiles for itself and nothing else, so
+    # cfg-gated code is verified by exactly the platform that cannot exercise
+    # the other arms. This builds the workspace for ONE non-host target on hosts
+    # that can. It SKIPS (exit 0, one line saying why) where the rustup std or
+    # the C cross-toolchain is absent — 115 MiB of mingw is not something to
+    # force onto every machine as a side effect of a lint, and a check that
+    # reddens a host for lacking an optional toolchain would be turned off.
+    #
+    # Its first run found a live break on linux-next: a `#[cfg(unix)]`
+    # definition with three unguarded callers and no fallback arm, invisible to
+    # every host's gate. Same shape as 653-7rag.
+    _step "Cross-target workspace check (656-spux)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-cross-target-build.sh" 2>&1; then
+        _error "the workspace does not compile for a non-host target (656-spux) — a cfg arm is missing a fallback"
+        exit 1
+    fi
 
     # Order 614-2gqx / 651-2x5s. The durable MO-FULL attestation ledger
     # (plan/mo-full-attestations.d/) must never carry a tampered, fabricated,
@@ -1426,6 +2069,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # 2026-08-14 (723-b9cn). Scripts must be 3.2-clean, refuse loudly, or
     # carry the probed-fallback dual marker; the allowlist inside the
     # checker is a burndown list, never an escape hatch.
+    # Order 309: the guest headless unit forks podman, and order 308 proved a
+    # cap-stripped uid-0 podman selects ROOTLESS mode and wedges every ensure.
+    # Re-adding confinement without the listener/orchestrator split reproduces
+    # that outage, so the absence of those directives is now enforced rather
+    # than merely true.
+    _step "Checking guest headless unit hardening (309)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-guest-unit-hardening.sh" 2>&1; then
+        _error "the guest headless unit carries confinement directives that wedge podman — see the verdict above (309)"
+        exit 1
+    fi
+    _info "Guest unit hardening guard passed"
+
     _step "Checking scripts/ bash dialect (761-g36m)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-bash-dialect.sh" 2>&1; then
         _error "a shared script carries an unguarded bash-4-only construct — see the verdict line above (761-g36m)"
@@ -1490,12 +2145,104 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # never been written. Both empty shapes fail here — a name no test declares,
     # and a test no spec binds (execution is binding-driven, so an unbound test
     # runs in no suite and is as inert as a missing one).
+    # Order 660-ryhn. The mirror image of 721-77yu: a litmus FILE nothing
+    # binds never executes in any suite, and the suite prints PASS while the
+    # author's assertions have run zero times. 26 files were in that state
+    # when measured, security-critical ones among them. Creation-time gate:
+    # retired files are exempt, historical strays are grandfathered (ratchet
+    # list — deletions only), NEW unbound files refuse here.
+    _step "Checking every litmus file is bound, retired, or grandfathered (660-ryhn)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-bindings.sh" 2>&1; then
+        _error "a litmus file exists that no suite will ever run, or a binding names no file (660-ryhn) — see the verdict line above"
+        exit 1
+    fi
+    _info "Litmus bindings reconciliation passed"
+
+    # Order 875-v7hv. The runner parses step fields with bash regexes, which
+    # capture the RAW bytes of a double-quoted YAML scalar, so a `\"` arrives
+    # as backslash-quote and must be unescaped by hand. That unescaping was
+    # applied to `command:` alone; `expected_behavior:`, `success_pattern:` and
+    # `failure_pattern:` got none, so a step whose command emits a quote could
+    # never match its own declared expectation. The dangerous half is
+    # `failure_pattern`: one carrying `\"` silently never fires, and a step
+    # that should have gone red reports green. Same family as the two gates
+    # above — all three ask whether an assertion can still fail.
+    _step "Checking litmus step scalars are unescaped consistently (875-v7hv)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-scalar-unescape.sh" 2>&1; then
+        _error "a litmus step field bypasses yaml_unescape_dq (875-v7hv) — see the verdict line above"
+        exit 1
+    fi
+    _info "Litmus scalar-unescape check passed"
+
+    # Order 881-29me. A `plan/issues/` audit cites its evidence and nothing
+    # checked those citations still resolved. Measured in one document: every
+    # factual claim re-verified TRUE while every `file:line` citation
+    # supporting it pointed at unrelated code — total drift, not an offset,
+    # because the cited file had passed 22,000 lines. A reader following one
+    # lands in plausible-looking neighbouring code and can "verify" a claim
+    # against something unrelated.
+    #
+    # A convention ratchet, NOT a resolver, and deliberately so: checking that
+    # the cited file has that many lines would PASS all six drifted citations.
+    # Diff-scoped, because 1,282 citations already exist across 487 files and a
+    # fleet-wide refusal would flip every host red at once (699-dycj).
+    _step "Checking new plan/issues citations name symbols, not lines (881-29me)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-issue-citation-convention.sh" 2>&1; then
+        _error "a newly added plan/issues citation names a source LINE (881-29me) — see the verdict line above"
+        exit 1
+    fi
+    _info "Issue-citation convention check passed"
+
+    # Order 889-twhe. The plan-only fast lane admits NEW plan/issues captures,
+    # which WIDENS what may bypass this gate — so the fixture proving each
+    # boundary of that admission runs INSIDE the gate. Half a second, and a
+    # negative control nothing executes cannot protect the hole it names.
+    _step "Checking the issue-capture fast lane keeps its boundaries (889-twhe)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-pre-push-issue-capture-lane.sh" 2>&1; then
+        _error "the plan-only lane's plan/issues admission lost a boundary (889-twhe) — see the verdict line above"
+        exit 1
+    fi
+    _info "Issue-capture lane fixture passed"
+
+    # Order 251 criterion LM-04. `plan/long-running.md` is declared a filtered
+    # view of the ledger's active multi_cycle packets and nothing enforced it.
+    # It drifted in July (caught by a human verifier, repaired by hand, bought
+    # six weeks) and again by 2026-08-25, when it was right about 7 of 31
+    # packets: 11 rows, four naming obsoleted packets, twenty live ones absent.
+    # A 23%-accurate sub-queue steers agents toward dead work.
+    #
+    # Checks MEMBERSHIP, not rendering: which orders appear is derivable and is
+    # what rotted; the phase / blocked-on / verification columns are editorial
+    # and fabricating them would make the view more convincing and no more true.
+    _step "Checking plan/long-running.md matches the live multi_cycle set (251 LM-04)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-long-running-view.sh" 2>&1; then
+        _error "the long-running view disagrees with the ledger (251 LM-04) — see the verdict line above"
+        exit 1
+    fi
+    _info "Long-running view agreement check passed"
+
     _step "Checking litmus pin claims resolve and execute (721-77yu)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-pin-claims.sh" 2>&1; then
         _error "a script claims a litmus pin that cannot execute (721-77yu) — see the verdict line above"
         exit 1
     fi
     _info "Litmus pin-claim check passed"
+
+    # Order 797-8dzt. A test that slices its own source between two SYMBOL
+    # NAMES silently widens when one of those symbols is renamed away:
+    # `str::split` on an absent needle returns the WHOLE remainder, so the
+    # window runs past its intended end and the assertion is satisfied by
+    # unrelated code. Measured in remote_projects.rs — a guard bounded by
+    # `fn run_command_with_timeout`, a function no longer in that file, had
+    # been unable to fail for as long as the bound had been missing, and
+    # deleting the exact line it protected left it green. Same family as the
+    # pin-claim gate above: both ask whether an assertion can still fail.
+    _step "Checking source-slice bounds still resolve (797-8dzt)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-source-slice-bounds.sh" 2>&1; then
+        _error "a source-slicing test is bounded by a symbol that no longer exists (797-8dzt) — see the verdict line above"
+        exit 1
+    fi
+    _info "Source-slice bound check passed"
 
     # Order 731-d89b. A script a caller RUNS by path must be tracked executable.
     # resolve-release-run.sh reached linux-next at mode 100644 from the Windows
@@ -1510,6 +2257,20 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Script exec-bit check passed"
 
+    # Order 795-jjw3. Exactly one module may construct a `wsl.exe` child, so a
+    # cross-cutting policy about wsl.exe is set once rather than N times.
+    # Collapsing the duplicate constructors was a one-time edit; this check is
+    # what keeps it collapsed. The previous duplication cost something real:
+    # WSL_UTF8 landed at 6 of 17 call sites and the other 11 hand-scrubbed NUL
+    # bytes out of UTF-16LE output, indistinguishable by grep from the
+    # legitimate scrubs on hcsdiag.exe and CIM output.
+    _step "Checking wsl.exe has a single constructor (795-jjw3)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-wsl-exe-single-constructor.sh" 2>&1; then
+        _error "a second wsl.exe constructor appeared (795-jjw3) — see the violation lines above"
+        exit 1
+    fi
+    _info "wsl.exe single-constructor check passed"
+
     # Order 716-f5kc. REPORT, not refusal. A Linux build of the Windows tray
     # compiles src/stubs/ and goes green without ever parsing the edited file,
     # which produced two unverified changes on 2026-08-13 alone. Refusing here
@@ -1519,16 +2280,28 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # handoff. Promotion to a refusal is an operator decision, and the moment
     # for it is when dev binaries are signed and SAC stops being a coin flip.
     _step "Reporting Windows-only source verification state (716-f5kc)..."
-    _windows_only_verdict="$(bash "$SCRIPT_DIR/scripts/check-windows-only-sources-verified.sh" 2>/dev/null || echo "stale:windows-sources-check-failed")"
+    _windows_only_verdict="$(bash "$SCRIPT_DIR/scripts/check-windows-only-sources-verified.sh" 2>/dev/null || echo "stale:sources-check-failed:windows-only")"
     case "$_windows_only_verdict" in
         ok:* | skip:*)
             _info "Windows-only sources: $_windows_only_verdict"
+            ;;
+        missing:*)
+            # ORDER 738-3pft. This says the REPOSITORY holds no attestation —
+            # never that the sources are unverified. Reading the second meaning
+            # into the first is what held a release on 2026-08-14 while the
+            # Windows host had run the suite natively, twice, and stamped both
+            # times into a $GIT_DIR nobody else could see.
+            _warn "Windows-only sources: $_windows_only_verdict"
+            _warn "  No host has committed an attestation for these yet — this is a fact about"
+            _warn "  the repository, NOT a claim that the sources are broken or unverified."
+            _warn "  On a Windows host: cargo test -p tillandsias-windows-tray --bins | \\"
+            _warn "    scripts/check-windows-only-sources-verified.sh attest --from -"
             ;;
         *)
             _warn "Windows-only sources: $_windows_only_verdict"
             _warn "  A Linux build compiles src/stubs/ for these — this gate did NOT read them."
             _warn "  Verify natively (cargo test -p tillandsias-windows-tray), then:"
-            _warn "    scripts/check-windows-only-sources-verified.sh stamp"
+            _warn "    scripts/check-windows-only-sources-verified.sh attest --from <transcript>"
             ;;
     esac
 

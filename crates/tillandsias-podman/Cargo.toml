@@ -1,6 +1,6 @@
 [package]
 name = "tillandsias-podman"
-version = "0.4.260812"
+version = "0.4.260819"
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
@@ -17,6 +17,7 @@ async-trait = { workspace = true }
 parking_lot = { workspace = true }
 # ISO-8601 UTC timestamps on the runtime-diagnostics launch-event stream.
 chrono = { workspace = true }
+wait-timeout = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

@@ -105,7 +105,6 @@ if ! podman run \
     --name "$PROXY_CONTAINER" \
     --hostname proxy \
     --network "$ENCLAVE_NET" \
-    --ip "10.0.42.2" \
     --cap-drop=ALL \
     --security-opt=no-new-privileges \
     --security-opt=label=disable \
@@ -156,12 +155,10 @@ log_step "Starting git mirror container..."
 
         if ! podman run \
             --detach \
-            --rm \
             --name "$GIT_CONTAINER" \
             --hostname "git-$PROJECT_NAME" \
             --network-alias git-service \
             --network "$ENCLAVE_NET" \
-            --ip "10.0.42.3" \
         --cap-drop=ALL \
         --security-opt=no-new-privileges \
         --security-opt=label=disable \
@@ -170,9 +167,10 @@ log_step "Starting git mirror container..."
             --read-only \
             --env "PROJECT=$PROJECT_NAME" \
             --env "GIT_TRACE=1" \
+            --volume "tillandsias-mirror-$PROJECT_NAME:/srv/git" \
             --mount "type=bind,source=$CERTS_DIR/intermediate.crt,target=/etc/tillandsias/ca.crt,readonly=true" \
             "$GIT_IMAGE" \
-        /usr/bin/git daemon --verbose --listen=0.0.0.0 --base-path=/var/lib/git 2>&1 | tee /tmp/git-start.log; then
+        /usr/bin/git daemon --verbose --listen=0.0.0.0 --base-path=/srv/git 2>&1 | tee /tmp/git-start.log; then
         log_error "Failed to start git mirror container"
         exit 1
     fi
@@ -195,9 +193,31 @@ fi
 log_step "Starting inference container (non-blocking)..."
 
     INFERENCE_CONTAINER="tillandsias-inference"
+    INFERENCE_IMAGE=$(podman images --format "{{.Repository}}:{{.Tag}}" | grep "tillandsias-inference" | grep -v "sha256-" | head -1)
     mkdir -p "$HOME/.cache/tillandsias/models"
     podman rm -f "$INFERENCE_CONTAINER" 2>/dev/null || true
     inference_env_args=()
+    # Order 826-gsjg: the product's build_inference_run_args passes
+    # --device=nvidia.com/gpu=all and exports the effective tier (main.rs:4201,
+    # pinned by the source-window test at :15308). This script passed NEITHER, so
+    # a stack brought up here ran CPU-only on a GPU host and said nothing.
+    #
+    # Same resolution the dev endpoint already uses (dev-inference-ensure.sh):
+    # ask the PRODUCT for the tier, default cpu on any surprise, and attach the
+    # device only when the tier actually says gpu-cuda — the fleet is gaining
+    # hosts with no CDI at all, where an unconditional --device is a hard failure.
+    bash "$SCRIPT_DIR/nvidia-cdi-ensure.sh" >/dev/null 2>&1 || true
+    _oe_tier="cpu"
+    if command -v tillandsias >/dev/null 2>&1; then
+        _oe_probe="$(tillandsias --capabilities 2>/dev/null \
+            | grep -m1 -o '"legacy_tier"[[:space:]]*:[[:space:]]*"[^"]*"' \
+            | sed 's/.*"\([^"]*\)"$/\1/')"
+        [ -n "$_oe_probe" ] && _oe_tier="$_oe_probe"
+    fi
+    inference_env_args+=(--env "TILLANDSIAS_INFERENCE_TIER=$_oe_tier")
+    if [ "$_oe_tier" = "gpu-cuda" ]; then
+        inference_env_args+=(--device=nvidia.com/gpu=all)
+    fi
     if [ -n "$STATUS_CHECK_MODE" ]; then
         inference_env_args+=(--env "TILLANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS=1")
     fi
@@ -208,7 +228,6 @@ log_step "Starting inference container (non-blocking)..."
         --hostname inference \
         --network-alias inference \
         --network "$ENCLAVE_NET" \
-        --ip "10.0.42.4" \
         --cap-drop=ALL \
         --security-opt=no-new-privileges \
         --security-opt=label=disable \
@@ -219,7 +238,7 @@ log_step "Starting inference container (non-blocking)..."
         "${inference_env_args[@]}" \
         -v "$HOME/.cache/tillandsias/models:/home/ollama/.ollama/models:rw" \
         --mount "type=bind,source=$CERTS_DIR/intermediate.crt,target=/etc/tillandsias/ca.crt,readonly=true" \
-        "tillandsias-inference:v${VERSION}" \
+        "$INFERENCE_IMAGE" \
         /usr/bin/ollama serve >/tmp/inference-start.log 2>&1; then
         log_error "Failed to start inference container"
         exit 1

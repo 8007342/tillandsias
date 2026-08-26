@@ -58,12 +58,26 @@ HOOK_LOG="${TILLANDSIAS_HOOK_LOG:-/tmp/tillandsias-hooks.log}"
 # would silently stop refreshing here, and the index would go quietly stale
 # rather than loudly absent. Instead the ensure script re-chunks (25ms) and
 # compares a fingerprint of the chunk corpus + embedding model, so it decides
-# for itself whether anything changed. Measured on yoga: 0.05s when the corpus
-# is unchanged, ~12min for a cold 9909-chunk rebuild.
+# for itself whether anything changed.
+#
+# COLD-BUILD COST IS A PROPERTY OF THE ENDPOINT, NOT OF THIS HOOK, and it varies
+# by more than an order of magnitude:
+#   yoga (CPU embed)          0.05s warm / 12m19s cold, 9909 chunks
+#   macuahuitl (GPU embed)    0.08s warm /     43s cold, 9910 chunks
+# The macuahuitl figure is with nomic-embed-text fully VRAM-resident on an RTX
+# A5000; the same host served the 12-minute class before the GPU lane was
+# plugged into the dev inference container. Assume the slow number when
+# reasoning about a fleet host, because most of them are the slow case.
 #
 # That cost is exactly why this is forked and never awaited: a commit must not
 # wait twelve minutes for an embedding pass. The script takes its own lock, so
 # a burst of commits during a spec change starts one builder, not six.
+#
+# Order 801-a2by: the index now lands in the DURABLE tier (a podman named
+# volume, content-addressed by that same fingerprint) rather than in tmpfs, so
+# what this hook builds outlives the host's next reboot and is shared read-only
+# by every forge. A warm caller is served even while a builder holds the lock,
+# so the fork below no longer starves a concurrent forge launch of its index.
 if [ -x "$REPO_ROOT/scripts/spec-index-ensure.sh" ]; then
     (
         # The VERDICT is stdout; the explanation is stderr. Folding them with

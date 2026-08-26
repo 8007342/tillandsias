@@ -1,5 +1,7 @@
 #!/bin/bash
 # @trace spec:project-summarizers
+# freshness: auditor=linux-lenovinha-fable5-20260824t015308z date=2026-08-24 verdict=refreshed scope=full file, 67 lines, exercised on a synthetic manifest and on a directory with none. Correct on both paths: exits 2 (skip-not-error) with no package.json, and against a manifest carrying react/express/typescript it emits the three sections and exits 0. Still meaningful as one of six summarizers giving a cold-start agent a project's shape without reading its build files.
+# freshness-note, deliberately NOT changed: detection is substring `grep -q` over the raw file, not `jq` over the dependency maps — so `grep -q 'react'` also matches a package NAMED react-something, a comment, or a URL in a repository field, and `grep -q 'next'` is the weakest of them (it matches "next" anywhere, including inside words). jq IS available here and would be exact. Left alone because being generous is arguably the RIGHT bias for a summarizer whose output is an orientation hint rather than a fact a gate consumes, and because changing one of six siblings in isolation would break the family's uniformity. If this is ever tightened, tighten all six in one pass and say which way the bias goes.
 
 set -euo pipefail
 

@@ -1,0 +1,81 @@
+packets:
+  - packet_id: macos-smoke-teardown-path-case-mismatch
+    order: 889-bx99
+    status: ready
+    kind: bug
+    pickup_role: macos
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    depends_on: []
+    deliverable: |
+      The macOS destruction step of /smoke-curl-install-and-test-e2e names its
+      teardown paths with the case the app actually uses, or asserts the
+      directories are gone afterwards instead of trusting the rm.
+    capability_tags:
+      - macos
+      - e2e
+      - portability
+    tags:
+      - case-sensitivity
+      - false-pass
+      - smoke-teardown
+      - v0.5
+    title: |
+      The macOS smoke teardown removes `~/Library/Application Support/tillandsias` (lowercase) while the app writes `Tillandsias` — correct only by APFS case-insensitivity, and a silent false PASS on a case-sensitive volume.
+    context: |
+      FOUND 2026-08-25 on tlatoanis-macbook-air while preparing for an
+      operator-directed release validation, not by looking for it.
+
+      `/smoke-curl-install-and-test-e2e` step 2 says: "On macOS, stop the tray
+      and remove `~/Library/Application Support/tillandsias` and
+      `~/Library/Caches/tillandsias`." The app actually writes
+      `~/Library/Application Support/Tillandsias` with a capital T (verified
+      here: the directory holds console.log, nvram.bin, rootfs.img,
+      rootfs.qcow2, crashloop.state, 12 GiB). The Caches directory really is
+      lowercase, so the two are genuinely inconsistent and the runbook happens
+      to match one of them.
+
+      On a DEFAULT macOS volume this is harmless: I confirmed the boot volume
+      is case-INSENSITIVE by creating a marker under the capital-T path and
+      resolving it through the lowercase one. The rm therefore hits the right
+      directory by luck of filesystem configuration, not by being correct.
+
+      On a case-SENSITIVE APFS volume — a supported and not-rare developer
+      choice — the lowercase rm matches nothing, exits 0, and the smoke
+      proceeds against a 12 GiB pre-existing VM image. The run would then be
+      testing an UPGRADE over old state while reporting a clean-room result.
+      That is a false PASS on the destruction precondition, and this is the
+      path that validates PUBLISHED releases before a stable promotion.
+
+      Directly relevant to this file's own history: the sibling runbook's §2
+      was hardened (plan note at SKILL.md:188-192) precisely because "the
+      directory is empty" had been an instruction rather than an ASSERTION.
+      The same gap is still open here one layer down — the rm is now
+      prescribed, but nothing checks it did anything.
+    exit_criteria:
+      - |
+          The macOS teardown names the real paths, case-correct, for both the
+          Application Support and Caches directories.
+      - |
+          The teardown ASSERTS the directories are absent afterwards and fails
+          loud if not, so a future path drift cannot degrade into a silent
+          skip. An assertion makes the case question moot, and is the stronger
+          fix of the two.
+      - |
+          NEGATIVE CONTROL: with a directory deliberately left in place, the
+          step must FAIL. Without this the assertion could be satisfied by a
+          check that never runs.
+    verifiable_closure: |
+      NAMED: extend the meta-orchestration / smoke-e2e litmus with a case that
+      creates BOTH `~/Library/Application Support/Tillandsias` and its
+      lowercase spelling under a temporary HOME, runs the teardown step, and
+      asserts the real directory is gone AND that a deliberately-retained
+      directory fails the step. Must be red before the fix and green after.
+    notes: |
+      Filed by the macOS host during release-readiness prep for a cut whose
+      macOS lane had ZERO prior validation. It does not block tonight's run on
+      THIS host — the boot volume is case-insensitive and I verified that
+      directly — but the verdict a case-sensitive host would produce is
+      indistinguishable from a real pass, which is why it is filed rather than
+      noted in passing.

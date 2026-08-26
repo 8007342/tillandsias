@@ -152,6 +152,76 @@ unset TILLANDSIAS_PODMAN_BIN
 PATH="\$new_path" exec "$PROJECT_ROOT/scripts/tillandsias-podman" raw "\${args[@]}"
 EOF
 chmod 755 "$LITMUS_RUNTIME_DIR/bin/podman"
+
+# ── yq for hosts that do not ship one (order 799-tb7q) ──────────────────────
+# TWO REAL DEFECTS, one cause. On an immutable host (Silverblue/Kinoite) there
+# is no host `yq`; it lives only in the tillandsias-builder toolbox.
+#
+#   1. 121 litmus STEP COMMANDS across ~30 files call `yq` directly. Measured
+#      2026-08-23 on lenovinha: litmus:skills-canonical-and-mcp-first-shape
+#      STEP 6 ("the MCP-first read rule is declared in methodology") reports
+#      FAIL. The rule is present and correct — the same command run inside the
+#      toolbox prints `ok: rule declared`. The step collapses "key absent" and
+#      "command not found" into one verdict, so the failure is dressed as a
+#      statement about methodology. A test that lies is worse than no test.
+#   2. THIS RUNNER'S OWN yaml_get / get_litmus_tests_for_spec fall back to
+#      grep-based approximations whose comment admits "not perfect but
+#      functional". Those decide phase, size, host_kind, inputs and WHICH TESTS
+#      RUN. So a host without yq silently selects a different test set than a
+#      host with one, and nothing reports the difference.
+#
+# Materialised ONCE into the runtime bin rather than dispatched per call: a
+# `toolbox run` round trip measures ~0.29s here, and this runner invokes yq
+# once per metadata field per file — on a full suite that is minutes of pure
+# overhead. Copying the toolbox's binary costs one call and then runs native.
+#
+# VERIFIED BEFORE IT IS TRUSTED. The binary is dynamically linked (glibc,
+# libresolv), so a copy is only valid when the host can actually run it. If the
+# extracted file does not answer `--version`, it is removed and the existing
+# grep fallbacks apply exactly as before — this is strictly additive and can
+# only improve fidelity, never reduce it.
+#
+# THIS MUST RUN BEFORE the runtime bin joins PATH, and that ordering is load
+# bearing rather than stylistic. That directory holds this runner's `podman`
+# WRAPPER; `toolbox` shells out to podman, so with the wrapper ahead of the real
+# binary the extraction fails silently and the shim is never written. Measured
+# the confusing way: the block was reached with `yq=none toolbox=/usr/bin/toolbox`
+# and still produced nothing, because the tool it needed had been replaced two
+# lines earlier.
+if ! command -v yq &>/dev/null && command -v toolbox &>/dev/null; then
+    _yq_shim="$LITMUS_RUNTIME_DIR/bin/yq"
+    if [[ ! -x "$_yq_shim" ]]; then
+        if toolbox run --container tillandsias-builder cat /usr/bin/yq \
+             >"$_yq_shim" 2>/dev/null && [[ -s "$_yq_shim" ]]; then
+            chmod 755 "$_yq_shim"
+            if ! "$_yq_shim" --version &>/dev/null; then
+                rm -f "$_yq_shim"
+            fi
+        else
+            rm -f "$_yq_shim"
+        fi
+    fi
+fi
+
+# ── Say so when yq is still missing (order 799-tb7q) ────────────────────────
+# A run without yq is DEGRADED and used to be indistinguishable from a clean
+# one. Measured on this host: with yq absent,
+# litmus:added-fragment-parse-gate-shape STEP 8 produces EMPTY output and fails,
+# and litmus:skills-canonical-and-mcp-first-shape STEP 6 reports that a
+# methodology rule is missing when it is present and correct. Those are wrong
+# answers, not skips, and nothing in the output said the toolchain was short a
+# parser.
+#
+# A warning, never a refusal: a host without yq must still be able to run its
+# suite, and the metadata fallbacks are real fallbacks. The point is only that
+# the reader can tell which kind of green they are holding.
+if ! command -v yq &>/dev/null && [[ ! -x "$LITMUS_RUNTIME_DIR/bin/yq" ]]; then
+    printf 'warn:litmus-degraded-no-yq — yq is not on PATH and could not be provisioned from the tillandsias-builder toolbox. Steps whose commands call yq will fail or return empty, and YAML metadata falls back to grep. Install yq on the host, or create the toolbox (see scripts/with-tillandsias-builder.sh), before trusting a verdict from this run.\n' >&2
+fi
+
+# Now the runtime bin joins PATH — after the extraction above, and carrying the
+# shim it may just have written, so both this runner's own yaml_get and every
+# litmus step command resolve the same real yq.
 export PATH="$LITMUS_RUNTIME_DIR/bin:$PATH"
 export TILLANDSIAS_NO_SINGLETON=1
 export LITMUS_PODMAN_CALLS_FILE="${LITMUS_PODMAN_CALLS_FILE:-$PROJECT_ROOT/target/litmus-podman/calls.log}"
@@ -304,6 +374,36 @@ log_test_result() {
 # ============================================================================
 
 # Parse YAML value using yq or jq (fallback to grep)
+# Unescape a YAML double-quoted scalar captured by a bash regex (875-v7hv).
+#
+# The step parser below captures the RAW BYTES between the outer quotes, so a
+# YAML `\"` arrives as a literal backslash followed by a quote. Two passes, in
+# this order, reproduce YAML's own left-to-right escape consumption:
+#   1. \" -> "   2. \\ -> \
+# Order matters: a raw `\\\"` must become `\"`, which is what a real YAML
+# parser produces. Doing \\ first would consume the backslash that guards the
+# quote and yield something else.
+#
+# WHY THIS IS A FUNCTION AND NOT INLINE, which is the whole of 875-v7hv: these
+# two passes were applied to `command:` alone (added under
+# plan/issues/litmus-runner-command-backslash-escaping-2026-07-06.md) while
+# `expected_behavior:`, `success_pattern:` and `failure_pattern:` got none. A
+# step whose command emits a double quote and whose expected_behavior declares
+# that same text could therefore NEVER match itself — measured on yoga
+# 2026-08-25, where the runner reported
+#   expected=out.push((\"no_proxy\"...)   output=out.push(("no_proxy"...)
+# i.e. a content mismatch between two strings that are in fact identical.
+#
+# The dangerous direction is `failure_pattern`: one carrying `\"` silently
+# never matches, so a genuine failure signal is missed and the step is reported
+# green. An assertion that cannot fire is worse than an absent one.
+yaml_unescape_dq() {
+    local s="$1"
+    s="${s//\\\"/\"}"
+    s="${s//\\\\/\\}"
+    printf '%s' "$s"
+}
+
 yaml_get() {
     local file="$1"
     local path="$2"
@@ -1044,18 +1144,20 @@ run_litmus_test_file() {
                 # backslash at runtime, silently breaking any escaped
                 # metacharacter with no parse error anywhere — see
                 # plan/issues/litmus-runner-command-backslash-escaping-2026-07-06.md.
-                current_step_command="${BASH_REMATCH[1]//\\\"/\"}"
-                current_step_command="${current_step_command//\\\\/\\}"
+                current_step_command="$(yaml_unescape_dq "${BASH_REMATCH[1]}")"
             elif [[ "$line" =~ timeout_ms:\ ([0-9]+) ]]; then
                 current_step_timeout="${BASH_REMATCH[1]}"
             elif [[ "$line" =~ expected_behavior:\ \"(.+)\" ]]; then
-                current_step_expected="${BASH_REMATCH[1]}"
+                current_step_expected="$(yaml_unescape_dq "${BASH_REMATCH[1]}")"
             elif [[ "$line" =~ expected_behavior:\ (.+)$ ]]; then
+                # PLAIN (unquoted) YAML scalar: no escape sequences exist in
+                # one, so a `\"` here is literally backslash-quote and must NOT
+                # be unescaped. Only the double-quoted branch above may be.
                 current_step_expected="${BASH_REMATCH[1]}"
             elif [[ "$line" =~ success_pattern:\ \"(.+)\" ]]; then
-                current_step_success_pattern="${BASH_REMATCH[1]}"
+                current_step_success_pattern="$(yaml_unescape_dq "${BASH_REMATCH[1]}")"
             elif [[ "$line" =~ failure_pattern:\ \"(.+)\" ]]; then
-                current_step_failure_pattern="${BASH_REMATCH[1]}"
+                current_step_failure_pattern="$(yaml_unescape_dq "${BASH_REMATCH[1]}")"
             fi
         fi
 
@@ -1131,6 +1233,49 @@ run_litmus_test_file() {
         if [[ $exit_code -eq 124 ]]; then
             printf ' %b[TIMEOUT]%b\n' "${RED}" "${NC}" >&2
             log_warn "Test timeout after ${timeout_sec}s in step: ${step_name:-step-${step_index}}"
+            # ORDER 820-c8q8. A TIMEOUT has two causes that read identically,
+            # and both happened on macuahuitl on 2026-08-18 within one hour:
+            #   * fragment-status-loss step 5 — the guard genuinely took 41s
+            #     against a 30s budget (a real regression, 816-kq2z).
+            #   * forge-standard-gitconfig-path step 1 — the SAME fixture exits
+            #     0 in ZERO seconds when run alone, and had passed in the
+            #     previous full run. The box was saturated.
+            # In the first the answer was to fix code; in the second, to re-run.
+            # Nothing on the line distinguished them, so the verdict named a
+            # suspect it had not convicted.
+            #
+            # ELAPSED TIME CANNOT DISCRIMINATE — a killed step always elapses
+            # its budget, by construction. Load at kill time can: a runqueue
+            # longer than the core count means other work was competing for the
+            # CPU this step was being timed on. Reported, never used to change
+            # the verdict: the step still FAILS, because a step that cannot
+            # finish inside its budget on this host has not passed.
+            _lt_load="unknown"; _lt_cpus="unknown"
+            if [ -r /proc/loadavg ]; then
+                _lt_load="$(cut -d' ' -f1 < /proc/loadavg 2>/dev/null)"
+            elif command -v sysctl >/dev/null 2>&1; then
+                _lt_load="$(sysctl -n vm.loadavg 2>/dev/null | tr -d '{}' | awk '{print $1}')"
+            fi
+            if command -v nproc >/dev/null 2>&1; then
+                _lt_cpus="$(nproc 2>/dev/null)"
+            elif command -v sysctl >/dev/null 2>&1; then
+                _lt_cpus="$(sysctl -n hw.ncpu 2>/dev/null)"
+            fi
+            case "${_lt_load}:${_lt_cpus}" in
+                unknown:*|*:unknown|:*|*:)
+                    log_warn "  load at kill time: unavailable on this host — cause UNCLASSIFIED (slow step vs starved step)" ;;
+                *)
+                    # Scaled integer compare; bash 3.2 has no floats and bc is
+                    # not guaranteed present.
+                    _lt_l100="$(printf '%s' "$_lt_load" | awk '{printf "%d", $1 * 100}' 2>/dev/null)"
+                    _lt_c100=$(( _lt_cpus * 100 ))
+                    if [ -n "$_lt_l100" ] && [ "$_lt_l100" -gt "$_lt_c100" ] 2>/dev/null; then
+                        log_warn "  load1=${_lt_load} over ${_lt_cpus} cpus — host SATURATED at kill time; a step that is fast when idle can be starved here, so re-run before treating this as a regression"
+                    else
+                        log_warn "  load1=${_lt_load} over ${_lt_cpus} cpus — host NOT saturated at kill time; this step is genuinely too slow for its ${timeout_sec}s budget"
+                    fi
+                    ;;
+            esac
             return 1
         fi
 
@@ -1169,6 +1314,23 @@ run_litmus_test_file() {
             printf ' %b[FAIL]%b\n' "${RED}" "${NC}" >&2
             printf '%s\n' "         expected=${step_expected}" >&2
             printf '%s\n' "         output=${step_output}" >&2
+            # ORDER 868-p8xi. An expectation written as a regex alternation is
+            # searched for VERBATIM — behavior_matches_output's fallback is
+            # `grep -Fqi` — so it can never match and the step fails on every
+            # one of its own legitimate outcomes. That is what happened to
+            # litmus:sidecar-arch-derivation STEP 3, which printed
+            # `ok: staged-arch-matches` against an expectation that listed
+            # exactly that string among three alternatives, and still failed.
+            #
+            # Named only HERE, in the already-failing path, so it costs a green
+            # run nothing and cannot produce a false positive. The alternative —
+            # teaching the matcher to interpret expectations as regexes — would
+            # silently reinterpret every existing expectation that happens to
+            # contain a metacharacter, which is a far wider blast radius than
+            # the one authoring mistake it would fix.
+            if [[ "$step_expected" =~ \([^\)]*\|[^\)]*\) ]]; then
+                printf '%s\n' "         note: this expectation contains (a|b) alternation, but expectations are matched as a LITERAL SUBSTRING, not a regex — rewrite it as the longest literal all accepted outputs share (868-p8xi)" >&2
+            fi
             return 1
         fi
 
@@ -1416,7 +1578,13 @@ print_summary() {
                 'NF >= 3 { name = $2; sub(/^litmus:/, "", name); printf "litmus:%s\t%s\t%s\t%s\t%s\n", name, phase, $1, $3, host }' \
                 | bash "$PROJECT_ROOT/scripts/cycle-metrics.sh" --emit-timing-batch
         } 2>/dev/null || true
-        _slow_tests="$(printf '%s' "$_PER_TEST_LOG" | sort -rn | awk -F'\t' '$1 >= 500 {printf "  %7.1fs  %s\n", $1/1000, $2}' | head -10)"
+        # `|| true`: under `set -eo pipefail`, head's early close SIGPIPEs
+        # sort/awk (rc 141) once the sweep is big enough to overflow ten
+        # lines, aborting the runner AFTER it printed PASS — ci-full then
+        # reported "litmus failures detected" over a log reading 100%
+        # (measured 2026-08-25: full pre-build quick sweep exit 141, single
+        # -spec runs unaffected because head never closes early on them).
+        _slow_tests="$(printf '%s' "$_PER_TEST_LOG" | sort -rn | awk -F'\t' '$1 >= 500 {printf "  %7.1fs  %s\n", $1/1000, $2}' | head -10 || true)"
         if [[ -n "$_slow_tests" ]]; then
             printf '%bSlowest tests%b (>=0.5s, top 10; full ranking in the timing records):\n%s\n\n' "${BOLD}" "${NC}" "$_slow_tests" >&2
         fi

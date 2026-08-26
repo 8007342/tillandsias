@@ -103,8 +103,25 @@ pub fn set_in_vm_credentials(
     // handed a perfectly good share by the host, use it in memory, still fail
     // the predicate, and have its intact Vault wiped on the next launch — the
     // host had the evidence and the guest threw it away.
-    if let Ok(cache_dir) = crate::init_cache_dir() {
-        write_vm_credential_fallbacks(&cache_dir, root_token.as_deref(), share_for_disk.as_deref());
+    // 701-se6x criterion 2: surface a failed write instead of discarding it.
+    // The `Err` arm of init_cache_dir was silent too — same consequence, since
+    // no cache dir means no share file either.
+    match crate::init_cache_dir() {
+        Ok(cache_dir) => {
+            if let Err(e) = write_vm_credential_fallbacks(
+                &cache_dir,
+                root_token.as_deref(),
+                share_for_disk.as_deref(),
+            ) {
+                report_fallback_write_failure("host delivery into the guest", &e.to_string());
+            }
+        }
+        Err(e) => {
+            report_fallback_write_failure(
+                "host delivery into the guest",
+                &format!("cache dir unavailable: {e}"),
+            );
+        }
     }
 }
 
@@ -245,6 +262,122 @@ fn revocation_registry() -> &'static Mutex<HashMap<String, String>> {
 struct AppRoleAutoAuthRegistration {
     role: String,
     secret_id_accessor: String,
+    /// The container this material was minted FOR, when the caller knows it.
+    ///
+    /// Order 828-k3mq: the drain must not destroy a SecretID whose container is
+    /// still running. `None` means the caller could not name one, and such a
+    /// registration keeps the pre-828 behaviour (destroy on drain).
+    owning_container: Option<String>,
+}
+
+/// Whether the container an AppRole registration belongs to is still alive.
+///
+/// Order 828-k3mq. Deliberately TRI-STATE, and deliberately NOT
+/// [`container_running`], which collapses every failure to `false`. That
+/// collapse is the right default for "should I start this?" and exactly the
+/// wrong one here: a transient `podman inspect` failure would read as "the
+/// container is gone", and the drain would destroy the credential of a mirror
+/// that is still serving clones — the precise defect 828-k3mq records.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OwningContainerState {
+    /// Inspect answered and the container is up. Never destroy its material.
+    Running,
+    /// Inspect answered that no such container exists. Safe to destroy.
+    Gone,
+    /// Inspect could not answer. Treated as Running (leak-not-destroy), the
+    /// same rule `cleanup_shared_stack_if_no_running_forge` applies to a failed
+    /// container listing. The role's 48h server-side SecretID TTL bounds the
+    /// resulting orphan, which is the job that TTL exists to do.
+    Unknown,
+}
+
+/// Classify a `podman inspect --format {{.State.Running}}` result.
+///
+/// Split out of [`owning_container_state`] as a PURE function so the
+/// destroy/keep decision is testable without podman — the decision is the
+/// load-bearing half of order 828-k3mq, and a rule that can only be exercised
+/// against a live daemon is a rule nothing gates.
+fn classify_owning_container_output(
+    exit_ok: bool,
+    stdout: &str,
+    stderr: &str,
+) -> OwningContainerState {
+    if exit_ok {
+        return if stdout.trim() == "true" {
+            OwningContainerState::Running
+        } else {
+            OwningContainerState::Gone
+        };
+    }
+    // A non-zero inspect is "no such container" (the container really is gone)
+    // OR a transport failure. Only the former is safe to act on, so the message
+    // is matched explicitly and everything else stays Unknown.
+    let stderr = stderr.to_ascii_lowercase();
+    if stderr.contains("no such container") || stderr.contains("no such object") {
+        OwningContainerState::Gone
+    } else {
+        OwningContainerState::Unknown
+    }
+}
+
+/// Split drained AppRole registrations into (destroy, keep) by owner liveness.
+///
+/// Order 828-k3mq, closure half. The keep/destroy decision used to live inline
+/// in `revoke_pending_container_tokens`'s loop, which meant the only way to
+/// exercise it was to have a live Vault and a live podman — and a rule that
+/// can only be tested against live infrastructure is a rule nothing gates.
+/// That is the same reasoning that split `classify_owning_container_output`
+/// out of `owning_container_state`, applied one level up: here it is the
+/// DRAIN's behaviour under test, not just the classifier's.
+///
+/// `probe` is injected so a fixture can drive every arm without podman.
+///
+/// A registration with NO owning container is destroyed, preserving pre-828
+/// behaviour for any caller that cannot name one — that arm is asserted too,
+/// because silently starting to keep unowned material would be a credential
+/// leak wearing this fix's clothes.
+///
+/// Returns `(to_destroy, kept)` where `kept` carries the container name and
+/// the observed state so the caller can log the right thing for each arm.
+/// `Gone` never appears in `kept`.
+#[allow(clippy::type_complexity)]
+fn partition_auto_auth_entries<P>(
+    entries: Vec<(String, AppRoleAutoAuthRegistration)>,
+    mut probe: P,
+) -> (
+    Vec<(String, AppRoleAutoAuthRegistration)>,
+    Vec<(String, String, OwningContainerState)>,
+)
+where
+    P: FnMut(&str) -> OwningContainerState,
+{
+    let mut to_destroy = Vec::new();
+    let mut kept = Vec::new();
+    for (secret_name, registration) in entries {
+        let Some(container) = registration.owning_container.clone() else {
+            to_destroy.push((secret_name, registration));
+            continue;
+        };
+        match probe(&container) {
+            OwningContainerState::Gone => to_destroy.push((secret_name, registration)),
+            state => kept.push((secret_name, container, state)),
+        }
+    }
+    (to_destroy, kept)
+}
+
+fn owning_container_state(name: &str) -> OwningContainerState {
+    let out = podman_cmd_sync()
+        .args(["inspect", "--format", "{{.State.Running}}", name])
+        .output_bounded(tillandsias_podman::OperationKind::Inspect.default_budget());
+    match out {
+        Ok(o) => classify_owning_container_output(
+            o.status.success(),
+            &String::from_utf8_lossy(&o.stdout),
+            &String::from_utf8_lossy(&o.stderr),
+        ),
+        Err(_) => OwningContainerState::Unknown,
+    }
 }
 
 #[derive(serde::Serialize)]
@@ -1143,20 +1276,64 @@ fn vault_data_volume_exists() -> bool {
 ///
 /// Best-effort by design — a failure here must not abort a successful init;
 /// the worst case is the pre-694 behavior.
+/// 701-se6x criterion 2. Both writes used to be `let _ = fs::write(...)`.
+///
+/// That is a credential-destroying silence, not a cosmetic one. The share file
+/// is the ONLY evidence inside the guest that `operator init` ever completed —
+/// `has_shamir_share_in_keyring` consults an OS keychain the guest does not
+/// have, then this file — and its answer is what the partial-init WIPE turns
+/// on. So a single failed 30-byte write (ENOSPC, a non-writable cache dir, a
+/// write lost to an unclean VM stop) leaves the predicate false with a healthy
+/// Vault on disk, and the next launch wipes it, taking the stored GitHub token
+/// with it. That is exactly the 694-mhz8 failure, re-armed by an error nobody
+/// looked at. 694 removed the PERMANENT failure; it did not make the remaining
+/// single point of evidence robust or loud.
+///
+/// Returns Err naming every artifact that failed, so callers can surface it.
+/// BOTH writes are always ATTEMPTED — a token failure must never skip the
+/// share, because the share is the half that arms the wipe.
 fn write_vm_credential_fallbacks(
     cache_dir: &std::path::Path,
     token: Option<&str>,
     share_b64: Option<&str>,
-) {
-    if let Some(token) = token {
-        let _ = fs::write(cache_dir.join("fallback_vault-root-token-v1"), token);
+) -> std::io::Result<()> {
+    let mut failures: Vec<String> = Vec::new();
+
+    if let Some(token) = token
+        && let Err(e) = fs::write(cache_dir.join("fallback_vault-root-token-v1"), token)
+    {
+        failures.push(format!("fallback_vault-root-token-v1: {e}"));
     }
-    if let Some(share_b64) = share_b64 {
-        let _ = fs::write(
+
+    // Deliberately NOT an early return above: see the doc comment.
+    if let Some(share_b64) = share_b64
+        && let Err(e) = fs::write(
             cache_dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}")),
             share_b64,
-        );
+        )
+    {
+        failures.push(format!("fallback_{VAULT_SHAMIR_SHARE_V1}: {e}"));
     }
+
+    if failures.is_empty() {
+        return Ok(());
+    }
+    Err(std::io::Error::other(failures.join("; ")))
+}
+
+/// The one place that turns a failed fallback write into something a human or a
+/// log scraper can act on. Kept as a helper so the two call sites cannot drift
+/// into reporting it differently — which is how the original asymmetry between
+/// them arose in the first place (694-mhz8 fixed one site, 701-se6x the other).
+#[cfg(feature = "vault")]
+fn report_fallback_write_failure(context: &str, detail: &str) {
+    eprintln!("[tillandsias-vault] CREDENTIAL FALLBACK WRITE FAILED ({context}): {detail}");
+    eprintln!(
+        "[tillandsias-vault]   the Shamir share may not be on disk. \
+         has_shamir_share_in_keyring() will then read false, and the NEXT launch \
+         can classify this initialized Vault as a crashed partial init and WIPE it \
+         (694-mhz8 / 701-se6x). Free space / fix permissions on the cache dir before relaunching."
+    );
 }
 
 /// True iff the host keychain holds a valid (32-byte, base64-encoded) Shamir
@@ -1194,6 +1371,35 @@ fn has_shamir_share_in_keyring() -> bool {
     false
 }
 
+/// UNREACHABLE BY CONSTRUCTION — and this comment is the point (701-iu9b).
+///
+/// TRAP 2 asked whether this stub could ship and make the partial-init WIPE
+/// unconditional: `has_shamir_share_in_keyring() == false` turns
+/// `vault_data_volume_exists() && !has_shamir_share_in_keyring()` into "always
+/// a partial init", i.e. wipe a healthy Vault on every boot. That was REFUTED,
+/// twice over:
+///
+///   1. `mod vault_bootstrap;` is itself `#[cfg(feature = "vault")]`
+///      (main.rs:101-103), so with vault OFF this module — and therefore this
+///      item — is never compiled at all.
+///   2. `compile_error!` (main.rs:94-99) fails the build outright for
+///      `listen-vsock` without `vault`, so the dangerous combination cannot be
+///      produced even by accident. The guest build path passes
+///      `--features listen-vsock` while keeping default features, and
+///      `default = ["vault"]`.
+///
+/// The criterion asked for "a test [that] exercises the wipe predicate under
+/// the stub cfg and documents the intended behaviour THERE". The test half is
+/// UNACHIEVABLE — no test can reach an item that is never compiled — but the
+/// documentation half was genuinely undone: the rationale lived only in
+/// main.rs and in the ledger, so a reader arriving HERE, at the item that looks
+/// dangerous, found nothing. Now they do.
+///
+/// NOT DELETED, deliberately. Ten sibling `cfg(not(feature = "vault"))` items
+/// in this file are dead for the same reason, and removing eleven items to
+/// tidy one is a larger regression surface than the tidiness is worth while
+/// the compile_error! guard makes the whole class unreachable. Recorded rather
+/// than swept.
 #[cfg(not(feature = "vault"))]
 fn has_shamir_share_in_keyring() -> bool {
     false
@@ -1241,6 +1447,7 @@ pub async fn mint_approle_token_for_container(
 pub async fn mint_approle_auto_auth_for_container(
     role: &str,
     container_instance: &str,
+    owning_container: Option<&str>,
     debug: bool,
 ) -> Result<String, String> {
     if !container_running(VAULT_CONTAINER_NAME) {
@@ -1279,6 +1486,7 @@ pub async fn mint_approle_auto_auth_for_container(
     let registration = AppRoleAutoAuthRegistration {
         role: role.to_string(),
         secret_id_accessor,
+        owning_container: owning_container.map(str::to_string),
     };
     match approle_auto_auth_registry().lock() {
         Ok(mut registry) => {
@@ -1408,6 +1616,41 @@ pub async fn revoke_pending_container_tokens(debug: bool) {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status_bounded(tillandsias_podman::OperationKind::Secret.default_budget());
+    }
+
+    // Order 828-k3mq: REFCOUNT THE CREDENTIAL THE WAY THE CONTAINER IS ALREADY
+    // REFCOUNTED. `cleanup_shared_stack_if_no_running_forge` keeps a mirror
+    // alive whenever a sibling lane is live (and on any listing error), so a
+    // lane exiting into a live sibling deliberately LEAVES the mirror running.
+    // Destroying its SecretID here anyway left that mirror renewing a client
+    // token it could no longer replace: at max_ttl the Agent re-login failed
+    // "invalid role or secret ID", the retries tripped Vault's user-lockout,
+    // and every forge push was rejected by the relay gate while clones kept
+    // working. Measured on yolanda 2026-08-18, exactly 24h after the lane
+    // exited.
+    let (auto_auth_entries, kept) =
+        partition_auto_auth_entries(auto_auth_entries, owning_container_state);
+    for (secret_name, container, state) in kept {
+        match state {
+            OwningContainerState::Running => {
+                if debug {
+                    eprintln!(
+                        "[tillandsias-vault] keeping AppRole material {secret_name} alive; \
+                         its container {container} is still running (order 828-k3mq)"
+                    );
+                }
+            }
+            // Loud, not debug-gated: this is the leak-not-destroy arm and the
+            // operator should be able to see it happen.
+            OwningContainerState::Unknown => eprintln!(
+                "[tillandsias-vault] could not determine whether {container} is running; \
+                 keeping its AppRole material {secret_name} rather than risk destroying a \
+                 live mirror's credential (leak-not-destroy, order 828-k3mq). The role's \
+                 48h SecretID TTL bounds this."
+            ),
+            // partition_auto_auth_entries never returns Gone as kept.
+            OwningContainerState::Gone => {}
+        }
     }
 
     for (secret_name, registration) in auto_auth_entries {
@@ -3169,8 +3412,24 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
             // genuine partial-init case: if init crashes before reaching this line,
             // the file is absent, the predicate is false, and the wipe still fires —
             // which is exactly what it is for.
-            if let Ok(cache_dir) = crate::init_cache_dir() {
-                write_vm_credential_fallbacks(&cache_dir, Some(&token), Some(&share_b64));
+            // 701-se6x criterion 2: this site had the same discarded error. It
+            // is the MORE dangerous of the two, because it runs immediately
+            // after `operator init` — the moment the share exists and nothing
+            // else on the host has a copy.
+            match crate::init_cache_dir() {
+                Ok(cache_dir) => {
+                    if let Err(e) =
+                        write_vm_credential_fallbacks(&cache_dir, Some(&token), Some(&share_b64))
+                    {
+                        report_fallback_write_failure("in-VM fresh init", &e.to_string());
+                    }
+                }
+                Err(e) => {
+                    report_fallback_write_failure(
+                        "in-VM fresh init",
+                        &format!("cache dir unavailable: {e}"),
+                    );
+                }
             }
 
             // Update in-memory credentials so the current process has the new token.
@@ -3909,6 +4168,150 @@ mod tests {
 
     static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
+    // ---- order 828-k3mq: the credential drain's keep/destroy decision ----
+
+    /// A RUNNING container's material must survive the drain.
+    ///
+    /// This is the whole defect. `cleanup_shared_stack_if_no_running_forge` is
+    /// refcounted and deliberately leaves a mirror up when a sibling lane is
+    /// live; destroying its SecretID anyway left that mirror renewing a token
+    /// it could never replace, and 24h later every forge push was rejected.
+    #[test]
+    fn running_owner_is_never_destroyed() {
+        assert_eq!(
+            classify_owning_container_output(true, "true\n", ""),
+            OwningContainerState::Running
+        );
+    }
+
+    /// The control, without which "keep everything" would pass the test above.
+    /// Material whose container has exited MUST still be destroyed, or the fix
+    /// degrades into a blanket credential leak.
+    #[test]
+    fn exited_owner_is_still_destroyed() {
+        assert_eq!(
+            classify_owning_container_output(true, "false\n", ""),
+            OwningContainerState::Gone
+        );
+        assert_eq!(
+            classify_owning_container_output(
+                false,
+                "",
+                "Error: no such container tillandsias-git-demo"
+            ),
+            OwningContainerState::Gone
+        );
+    }
+
+    // ---- order 828-k3mq: the DRAIN's keep/destroy behaviour ----------------
+    //
+    // The three tests above pin the CLASSIFIER. These pin the drain, which is
+    // what the packet's closure actually asks for: "mint AppRole auto-auth
+    // material for a container, leave that container RUNNING, run the CLI-lane
+    // credential drain, and assert the SecretID accessor still authenticates".
+    // The accessor cannot be authenticated without a Vault, so the assertion
+    // is made one step earlier and equivalently: the drain must not select
+    // that material for destruction at all.
+
+    fn reg(container: Option<&str>) -> AppRoleAutoAuthRegistration {
+        AppRoleAutoAuthRegistration {
+            role: GIT_MIRROR_AGENT_ROLE.to_string(),
+            secret_id_accessor: "accessor-1".to_string(),
+            owning_container: container.map(str::to_string),
+        }
+    }
+
+    /// THE CLOSURE. A mirror order 443 kept running must keep its credential.
+    #[test]
+    fn drain_keeps_material_whose_container_is_still_running() {
+        let entries = vec![("secret-a".to_string(), reg(Some("tillandsias-git-demo")))];
+        let (destroy, kept) =
+            partition_auto_auth_entries(entries, |_| OwningContainerState::Running);
+        assert!(
+            destroy.is_empty(),
+            "a running mirror's SecretID must never be selected for destruction"
+        );
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].1, "tillandsias-git-demo");
+    }
+
+    /// THE CONTROL. Without it, a drain that destroys nothing would satisfy
+    /// every other test here while leaking a credential per lane exit.
+    #[test]
+    fn drain_destroys_material_whose_container_has_exited() {
+        let entries = vec![("secret-a".to_string(), reg(Some("tillandsias-git-demo")))];
+        let (destroy, kept) = partition_auto_auth_entries(entries, |_| OwningContainerState::Gone);
+        assert_eq!(destroy.len(), 1, "an exited owner's material must still go");
+        assert_eq!(destroy[0].0, "secret-a");
+        assert!(kept.is_empty());
+    }
+
+    /// Leak-not-destroy: an unreadable owner state is treated as alive.
+    #[test]
+    fn drain_keeps_material_when_owner_state_is_unreadable() {
+        let entries = vec![("secret-a".to_string(), reg(Some("tillandsias-git-demo")))];
+        let (destroy, kept) =
+            partition_auto_auth_entries(entries, |_| OwningContainerState::Unknown);
+        assert!(destroy.is_empty());
+        assert_eq!(kept[0].2, OwningContainerState::Unknown);
+    }
+
+    /// PRE-828 PARITY. Material with no named owner is still destroyed —
+    /// starting to keep it would be a credential leak wearing this fix's
+    /// clothes, and the probe must not even be consulted for it.
+    #[test]
+    fn drain_destroys_material_with_no_owning_container() {
+        let entries = vec![("secret-a".to_string(), reg(None))];
+        let mut probed = false;
+        let (destroy, kept) = partition_auto_auth_entries(entries, |_| {
+            probed = true;
+            OwningContainerState::Running
+        });
+        assert_eq!(destroy.len(), 1);
+        assert!(kept.is_empty());
+        assert!(
+            !probed,
+            "an unowned registration must not consult the probe"
+        );
+    }
+
+    /// A mixed drain resolves each entry independently — the realistic shape,
+    /// since one lane exit drains every registration the process accumulated.
+    #[test]
+    fn drain_resolves_a_mixed_batch_per_entry() {
+        let entries = vec![
+            ("live".to_string(), reg(Some("container-live"))),
+            ("dead".to_string(), reg(Some("container-dead"))),
+            ("unowned".to_string(), reg(None)),
+        ];
+        let (destroy, kept) = partition_auto_auth_entries(entries, |c| match c {
+            "container-live" => OwningContainerState::Running,
+            _ => OwningContainerState::Gone,
+        });
+        let destroyed: Vec<&str> = destroy.iter().map(|(n, _)| n.as_str()).collect();
+        assert_eq!(destroyed, vec!["dead", "unowned"]);
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].0, "live");
+    }
+
+    /// An inspect that could not ANSWER is not evidence the container is gone.
+    ///
+    /// `container_running` collapses this case to `false`; reusing it here
+    /// would mean a transient podman failure destroys a live mirror's
+    /// credential — the same outage through a different door. Leak-not-destroy
+    /// instead, bounded by the role's 48h server-side SecretID TTL.
+    #[test]
+    fn unreadable_owner_state_keeps_the_material() {
+        assert_eq!(
+            classify_owning_container_output(false, "", "connection refused"),
+            OwningContainerState::Unknown
+        );
+        assert_eq!(
+            classify_owning_container_output(false, "", ""),
+            OwningContainerState::Unknown
+        );
+    }
+
     /// 701-se6x. The HOST-DELIVERED share must be persisted too, not just the
     /// host-delivered root token.
     ///
@@ -3975,6 +4378,104 @@ mod tests {
     /// unknown key can never unseal, and preserving it strands the guest
     /// permanently. A delivery carrying only a token must therefore leave the
     /// share file absent.
+    /// 701-se6x criterion 2. A FAILED share write must be SURFACED, not
+    /// discarded. This is the assertion that makes the difference observable:
+    /// before the fix the helper returned `()`, so there was no value a test
+    /// could look at and no way for a caller to know the wipe had been re-armed.
+    ///
+    /// The failure is induced portably by making the destination an existing
+    /// DIRECTORY — `fs::write` cannot clobber one on any platform — rather than
+    /// by chmod games, which root ignores and which behave differently across
+    /// the fleet's three host kinds.
+    #[test]
+    fn a_failed_share_fallback_write_is_reported_not_discarded() {
+        let dir = std::env::temp_dir().join(format!(
+            "tillandsias-701se6x-loud-{}-{}",
+            std::process::id(),
+            line!()
+        ));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        // Occupy the share path with a directory so the write must fail.
+        std::fs::create_dir_all(dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}")))
+            .expect("occupy the share path");
+
+        let res = write_vm_credential_fallbacks(&dir, Some("s.roottoken"), Some("c2hhcmU="));
+
+        assert!(
+            res.is_err(),
+            "a share-fallback write that FAILED must be reported. Discarding it leaves \
+             has_shamir_share_in_keyring() false with a healthy Vault on disk, and the next \
+             launch wipes it (694-mhz8 re-armed)."
+        );
+        let msg = res.unwrap_err().to_string();
+        assert!(
+            msg.contains(VAULT_SHAMIR_SHARE_V1),
+            "the report must NAME the artifact that failed so an operator knows the wipe is \
+             armed; got: {msg}"
+        );
+
+        // The token half must still have been ATTEMPTED and succeeded — a
+        // failure on one artifact must not skip the other.
+        assert!(
+            dir.join("fallback_vault-root-token-v1").is_file(),
+            "the token write must still happen when the share write fails"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// NEGATIVE CONTROL for the test above. Without this, a helper that simply
+    /// returned `Err` unconditionally would satisfy every assertion there while
+    /// making the loud path fire on every healthy boot — an alarm that is always
+    /// on is one nobody reads, and it would push operators to ignore the one
+    /// message that means their Vault is about to be wiped.
+    #[test]
+    fn a_successful_fallback_write_reports_success() {
+        let dir = std::env::temp_dir().join(format!(
+            "tillandsias-701se6x-quiet-{}-{}",
+            std::process::id(),
+            line!()
+        ));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+
+        let res = write_vm_credential_fallbacks(&dir, Some("s.roottoken"), Some("c2hhcmU="));
+
+        assert!(
+            res.is_ok(),
+            "the healthy path must stay silent — an always-firing alarm trains operators to \
+             ignore the wipe warning; got: {res:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 701-se6x criterion 2, the ORDERING property. The share is the half that
+    /// arms the wipe, so a token write that fails must not prevent it from being
+    /// attempted. An early return after the token — the obvious way to write
+    /// this with `?` — would pass both tests above and silently reintroduce the
+    /// bug for the exact host whose disk is already misbehaving.
+    #[test]
+    fn a_failed_token_write_still_attempts_the_share() {
+        let dir = std::env::temp_dir().join(format!(
+            "tillandsias-701se6x-order-{}-{}",
+            std::process::id(),
+            line!()
+        ));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        // Occupy the TOKEN path so its write fails first.
+        std::fs::create_dir_all(dir.join("fallback_vault-root-token-v1"))
+            .expect("occupy the token path");
+
+        let res = write_vm_credential_fallbacks(&dir, Some("s.roottoken"), Some("c2hhcmU="));
+
+        assert!(res.is_err(), "the token failure must still be reported");
+        assert!(
+            dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}"))
+                .is_file(),
+            "the SHARE must be written even though the token write failed — it is the half \
+             that decides whether the next launch wipes an initialized Vault"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn delivery_without_a_share_leaves_the_wipe_predicate_able_to_fire() {
         let dir = std::env::temp_dir().join(format!(
@@ -3984,7 +4485,11 @@ mod tests {
         ));
         std::fs::create_dir_all(&dir).expect("temp dir");
 
-        write_vm_credential_fallbacks(&dir, Some("s.delivered-token"), None);
+        // 701-se6x: assert the write succeeded rather than discarding the
+        // Result. Silencing it with `let _ =` here would reintroduce, in the
+        // tests, precisely the habit this packet removed from the product.
+        write_vm_credential_fallbacks(&dir, Some("s.delivered-token"), None)
+            .expect("fallback write must succeed on a writable temp dir");
 
         assert!(
             dir.join("fallback_vault-root-token-v1").is_file(),
@@ -4016,7 +4521,8 @@ mod tests {
         ));
         std::fs::create_dir_all(&dir).expect("temp dir");
 
-        write_vm_credential_fallbacks(&dir, Some("s.roottoken"), Some("c2hhcmU="));
+        write_vm_credential_fallbacks(&dir, Some("s.roottoken"), Some("c2hhcmU="))
+            .expect("fallback write must succeed on a writable temp dir");
 
         let share = dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}"));
         let token = dir.join("fallback_vault-root-token-v1");
@@ -4056,7 +4562,8 @@ mod tests {
 
         // Init got far enough to mint a root token, then crashed before the
         // Shamir handover — exactly the case the wipe exists to recover.
-        write_vm_credential_fallbacks(&dir, Some("s.roottoken"), None);
+        write_vm_credential_fallbacks(&dir, Some("s.roottoken"), None)
+            .expect("fallback write must succeed on a writable temp dir");
 
         assert!(
             dir.join("fallback_vault-root-token-v1").is_file(),

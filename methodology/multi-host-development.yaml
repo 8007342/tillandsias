@@ -8,6 +8,58 @@ multi_host_development:
     stable, zero-drift runtime enclave. `plan/` remains the durable inter-agent
     ledger for long-running work, failures, restarts, and idempotent recovery.
 
+  branch_inventory:
+    rule: >
+      THE REMOTE CARRIES EXACTLY FOUR BRANCHES. Anything else is debris from a
+      finished lane and should be retired, not inherited. Verified and enforced
+      by cleanup on 2026-08-21, which took the remote from 28 refs to 4.
+    branches:
+      main: "release only, PR-only, server-side branch protection with enforce_admins since order 476"
+      linux-next: "Linux integration, and the CANONICAL HOME for plan/, methodology/, openspec/ and cheatsheets/"
+      windows-next: "Windows code"
+      osx-next: "macOS code. The name is osx-next. `macos-next` does not exist and never has."
+    retired_gh_pages: >
+      `gh-pages` was deleted 2026-08-21 by operator ruling, and the reasoning is
+      kept because the NEAR-MISS is the lesson, not the outcome.
+
+      It was an orphan branch, 4,477 files, one commit from 2026-03-25 reading
+      "init: gh-pages branch for APT repository" — a multi-platform
+      distribution route the project explored and did not take. Nothing in the
+      tree referenced it. The operator confirmed it unmaintained.
+
+      THE NEAR-MISS: it was flagged NEVER-DELETE hours earlier, on the strength
+      of `gh api .../pages` reporting `status: built` and a live public URL.
+      That reading was correct about the mechanism and wrong about the value —
+      a site can be genuinely served and serve nothing anyone wants. Neither
+      the git evidence nor the API could distinguish "published" from
+      "published and abandoned"; only the operator knew the route had been
+      dropped.
+
+      SO THE RULE IS NOT "check whether Pages is enabled". It is: an orphan
+      branch outside the four is an OPERATOR QUESTION, not an agent decision,
+      in BOTH directions. Deleting it can take down a live surface; keeping it
+      forever on the strength of an HTTP 200 preserves abandoned exploration
+      that then has to be reasoned about by every future cleanup.
+
+      Note also what is still true after the delete: the repository's Pages
+      SETTING remains enabled and now sources from a branch that no longer
+      exists. Deleting a branch does not disable Pages. Whoever revisits this
+      should decide that setting deliberately rather than leaving a published
+      surface pointed at nothing.
+    retiring_a_branch: >
+      A branch is a MUTABLE REF: no merge function, no history of its own,
+      nothing that converges it. It is therefore NOT a CRDT and NOT storage,
+      which is the whole reason the ledger exists. So before deleting a ref
+      that carries unmerged content, RECORD THE FACT IN A PLAN FRAGMENT first —
+      what the branch held, its SHA, and why it is not needed — then delete.
+      The fragment is append-only and folds across hosts; the ref was neither.
+
+      And inspect before deleting, do not sort by date. On 2026-08-20 an
+      unmerged fork branch turned out to hold the build-gate memoization that
+      cut re-gating from 9.94s to 0.44s, and it existed on exactly one disk.
+      "Old and unmerged" is not evidence of "unwanted"; it is evidence of
+      "nobody looked".
+
   platform_branches:
     linux: linux-next
     windows: windows-next
@@ -196,6 +248,70 @@ multi_host_development:
       lane green-exit procedure and ledger checkpoints MUST merge
       origin/linux-next first when <base> != linux-next, preserving the
       gate's intent for platform branches.
+    side_branch_for_cost_constrained_hosts: >
+      A host MAY work on `<platform>-side-<feature>` instead of committing
+      every cycle to its platform branch, and that ref is ALREADY ungated:
+      scripts/hooks/pre-push-linux-next-merged.sh matches exactly
+      refs/heads/osx-next and refs/heads/windows-next, so a side branch pushes
+      without a trunk merge. The merge is paid ONCE, when the side branch is
+      promoted to the platform branch, rather than once per cycle.
+
+      WHY THIS IS A REAL DISCIPLINE AND NOT A LOOPHOLE. The pre_push_gate
+      exists so a platform branch never exports conflicts to the coordinator.
+      A side branch exports nothing until it is promoted, at which point the
+      gate applies in full. The rationale is the one already recorded above for
+      agent/* and salvage/*: a mid-cycle checkpoint must not require a trunk
+      merge, because durability beats integration.
+
+      WHO IT IS FOR, and this is a measured cost rather than a preference. On a
+      four-core host (esmeraldinha, an Intel N100; pirria, an Alder Lake-N) a
+      per-cycle merge of origin/linux-next can cost tens of minutes of rebuild,
+      much of it re-establishing state the cycle did not need. The same merge on
+      macuahuitl is seconds and invisible. A cadence that is free on the fastest
+      host is not therefore free, and the fleet's low-end members are the only
+      ones who can see the difference.
+
+      THE COORDINATOR'S DUTY IS UNCHANGED: it merges PLATFORM branches into
+      linux-next. Side branches are the host's own and are never merged by the
+      coordinator; a host promotes its own work when the feature is coherent.
+      A side branch idle beyond the lane deadlines in sweep_role below is
+      treated the same way as any other stale lane.
+
+    in_progress_output_of_a_long_horizon_job: >
+      A LONG-RUNNING JOB'S PARTIAL OUTPUT LIVES OUTSIDE THE CHECKOUT UNTIL IT
+      IS COMPLETE, then is copied in and committed as one atomic change.
+
+      WHY THIS NEEDED SAYING (order 864-q7dm, macuahuitl 2026-08-23). The
+      meta-orchestration exit contract recognises exactly two kinds of file: a
+      DISPOSABLE artifact, which belongs under the external $boundary_dir/tmp/,
+      and MEANINGFUL CYCLE OUTPUT, which must be committed and pushed. A
+      measurement that will run for twenty minutes across several cycles is
+      neither. It is meaningful output that is NOT YET READY to commit, and
+      because the contract has no word for that state, the natural place to put
+      it is inside the checkout — which is the wrong one.
+
+      THE COST IS NOT UNTIDINESS, IT IS A HOST THAT CANNOT PUSH. The pre-push
+      gate stamp covers `git ls-files --cached --others`, so an untracked file
+      that merely GROWS invalidates it exactly as a tracked edit would. A job
+      appending a row every few seconds therefore makes every push fail with
+      "the tree changed since ./build.sh --check last passed" — correct, and
+      unfixable by the re-run that message used to recommend, because the
+      re-run stamps a tree that changes again before the push completes. The
+      cycle could push NOTHING, including work with no relation to the job, for
+      as long as it ran.
+
+      THE ESCAPE HATCH, for a job already running: a shell redirect holds its
+      file by INODE, not by path, so `mv` out of the checkout is safe mid-run
+      and the job keeps appending to the moved file. Verified live: 146 rows
+      before the move, 159 after, job still running, worktree clean, push
+      accepted.
+
+      This is a fleet rule and not a macuahuitl rule. Any host told to start
+      work that outlives its cycle inherits the same conflict between "run
+      long-horizon background work" and "the gate assumes the tree holds
+      still", and only one of those two instructions is written down where the
+      other can see it.
+
     sweep_role: >
       Lane/salvage backstop (enumerate, sweep-merge, packet, escalate,
       archive+delete) binds to the coordinate-multihost-work ROLE — any host
@@ -338,9 +454,19 @@ multi_host_development:
         pre_push_gate_amendment, 2026-07-28): a mid-cycle lane checkpoint
         must not require a trunk merge — durability beats integration
         freshness for work-in-progress refs. The gate's INTENT is preserved
-        at the boundary instead: the lane green-exit procedure
-        (lane-exit.sh, order 502) and ledger checkpoints MUST merge
-        origin/linux-next first when the lane's <base> is not linux-next.
+        at the boundary instead: the lane green-exit procedure and ledger
+        checkpoints MUST merge origin/linux-next first when the lane's
+        <base> is not linux-next. That procedure is NOT YET BUILT — its
+        sole sanctioned command, scripts/lane-exit.sh, is ordered by the
+        order-502 packet forge-lane-branch-seeding-optin, which is pending
+        deliberately behind the authenticated write transport
+        (security-rescope 2026-08-06); until it lands no agent/* or
+        salvage/* refs are seeded, so this exclusion is vacuously
+        satisfied. (Rewritten per philosophy.yaml
+        obsolete_mechanism_live_intent by 851-28b5: the prior text cited
+        lane-exit.sh in the present tense though it exists nowhere in the
+        tree or its history — the intent is live, the mechanism is
+        future.)
       race_exception: >
         If the coordinator is actively merging your already-pushed head (your
         commits are in flight toward linux-next), do NOT race them with a second

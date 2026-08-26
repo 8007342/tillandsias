@@ -27,7 +27,20 @@
 #
 # GRAMMAR — one line per stranded packet, then one summary line:
 #   ^stranded\t<order>\t<role>\t<packet_id>$
-#   ^summary: (in_progress=<n> stranded=<n> threshold_events=<n>|unavailable:<reason>)$
+#   ^summary: (population=<n> in_progress=<n> stranded=<n> threshold_events=<n>|unavailable:<reason>)$
+#
+# POPULATION (order 831-ezea). Every check verdict names the size of the set it
+# examined, so that a green cannot be misread as health over nothing. Here
+# `population` is DELIBERATELY equal to `in_progress`, and that is the point
+# rather than a redundancy: this sweep's population IS the in_progress set, so
+# the number a reader saw as a clean finding ("nothing in progress — good") was
+# always the denominator ("I examined nothing"). The field does not add a new
+# number, it names the role of one that was already there. Anything that greps
+# `stranded=0` as evidence of health must first read `population=`.
+#
+# An `unavailable:` verdict carries NO population field: the sweep did not look,
+# so the denominator is unknown, not zero. Printing `population=0` there would
+# be the same false all-clear the third verdict exists to prevent.
 #
 # `unavailable:<reason>` (702-68zj) is a THIRD verdict for "this sweep could not
 # be computed" — no runnable plan binary, no jq, a failed or unparseable query.
@@ -89,15 +102,46 @@ total=0
 # A packet is STRANDED when its most recent recorded activity is the claim
 # itself — no progress event since. That is the signature of an interrupted
 # cycle: something took it, wrote nothing, and never came back.
+#
+# ORDER 882-vqe4. COUNT THE FOLDED EVENTS, NOT THE FRAGMENT OVERLAY. This loop
+# used to count with `grep -rh "packet_id: <pid>" plan/index.d/*.yaml`, which
+# sees a packet's history only until compaction folds it into plan/index.yaml.
+# Compaction is routine garbage collection the cycle is told to run, so the
+# detector's window was "since the last fold" — and the longer a packet is
+# worked, the more likely its evidence has been folded and the more confidently
+# this reported it abandoned.
+#
+# MEASURED on the live ledger 2026-08-25T13:47Z:
+#
+#   packet     events this loop saw   events that existed
+#   865-n8vq            0                    35
+#   831-ezea            0                     1
+#
+# 865-n8vq is a p0 the COORDINATOR had pushed progress into 106 minutes
+# earlier. Calling it stranded inverts the whole point of 641-e2qa: the signal
+# that exists to surface NEGLECTED work pointed at the work being attended to
+# hardest, and diluted the genuine strandings in the same list.
+#
+# `tillandsias-plan plan-events <pid>` folds base and overlay the way every
+# other reader already does. A second grep against plan/index.yaml would be the
+# same defect one storage location later (704-zcgi: the copy has to go, not
+# just the instance). When the binary is unavailable the loop DECLINES to
+# classify rather than guessing from half the ledger — an unreadable history is
+# not an absent one.
 stranded=0
 out=""
 if [ -n "$rows" ]; then
     while IFS=$'\t' read -r order role pid; do
         [ -n "$pid" ] || continue
-        # Count progress-ish events recorded for this packet anywhere in the
-        # fragments. `filed` and `claim` do not count as activity.
-        events=$(grep -rh -A3 "packet_id: ${pid}\$" plan/index.d/*.yaml 2>/dev/null \
-            | grep -cE 'event: (progress|completed|blocked)|type: (progress|completed|blocked)' || true)
+        if [ -z "$PLAN" ]; then
+            # No folder available: report the population and refuse the verdict.
+            echo "summary: unavailable:no-runnable-plan-binary"
+            exit 2
+        fi
+        # `filed` and `claim` do not count as activity; `progress`, `completed`
+        # and `blocked` do. plan-events exits 1 only for an unresolvable id.
+        events=$("$PLAN" plan-events "$pid" 2>/dev/null \
+            | grep -cE '^(progress|completed|blocked)	' || true)
         if [ "${events:-0}" -eq 0 ]; then
             out="${out}stranded	${order}	${role}	${pid}"$'\n'
             stranded=$((stranded + 1))
@@ -119,4 +163,5 @@ if "$PLAN" capabilities 2>/dev/null | grep -qx 'expire-claims'; then
         echo "hint: ${threshold} claim(s) past the 24h TTL — run 'tillandsias-plan expire-claims' to return them to ready (641-e2qa criterion 2)"
     fi
 fi
-printf 'summary: in_progress=%s stranded=%s threshold_events=%s\n' "$total" "$stranded" "${threshold:-0}"
+printf 'summary: population=%s in_progress=%s stranded=%s threshold_events=%s\n' \
+    "$total" "$total" "$stranded" "${threshold:-0}"

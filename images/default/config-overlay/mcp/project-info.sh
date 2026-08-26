@@ -22,6 +22,15 @@ for _mcp_log_cand in \
     if [ -r "$_mcp_log_cand" ]; then . "$_mcp_log_cand" 2>/dev/null && break; fi
 done
 command -v mcp_log_usage >/dev/null 2>&1 || mcp_log_usage() { return 0; }
+# 841-ruh9: the same guarantee for the clock. A missing mcp_now_ms under
+# `set -e` would abort the very call the telemetry exists to observe.
+command -v mcp_now_ms >/dev/null 2>&1 || mcp_now_ms() { printf ''; }
+# 757-qwqz: the same guarantee for the transport-death trace. A stale shared
+# lib must degrade these to no-ops, never abort the server under `set -eu`.
+command -v mcp_transport_guard >/dev/null 2>&1 || mcp_transport_guard() { return 0; }
+command -v mcp_tg_inflight >/dev/null 2>&1 || mcp_tg_inflight() { return 0; }
+command -v mcp_tg_done >/dev/null 2>&1 || mcp_tg_done() { return 0; }
+command -v mcp_tg_clean_shutdown >/dev/null 2>&1 || mcp_tg_clean_shutdown() { return 0; }
 
 # Dev-vs-runtime environment hook: on the bare-metal DEVELOPMENT host this
 # defaults the inference endpoints to loopback and fires the idempotent
@@ -677,6 +686,11 @@ _pa_synthesis_refusal() {
     fi
 }
 
+# 757-qwqz: from here on this process IS the session transport — arm the
+# mid-session death trace. Armed only for the JSON-RPC loop, never for the
+# capabilities/index subcommand exits above, which are CLI calls, not sessions.
+mcp_transport_guard "project-info"
+
 # Read JSON-RPC requests from stdin, respond on stdout
 while IFS= read -r line; do
     [ -n "$line" ] || continue
@@ -698,9 +712,12 @@ while IFS= read -r line; do
         "tools/call")
             tool=$(echo "$line" | jq -r '.params.name // empty')
             args=$(echo "$line" | jq -c '.params.arguments // {}')
+            # 757-qwqz: a death between here and mcp_tg_done below is a
+            # mid-request transport failure and must name the tool it took.
+            mcp_tg_inflight "$tool"
             error_code=""
             error_msg=""
-            _mcp_t0=$(date +%s%3N 2>/dev/null || echo "")
+            _mcp_t0=$(mcp_now_ms)
             case "$tool" in
                 "project_structure")
                     depth=$(echo "$args" | jq -r '.depth // 3')
@@ -1183,7 +1200,7 @@ ${preview}"
             # with THIS server's name. Best-effort; never fails the call.
             _mcp_lat=""
             if [ -n "$_mcp_t0" ]; then
-                _mcp_t1=$(date +%s%3N 2>/dev/null || echo "")
+                _mcp_t1=$(mcp_now_ms)
                 [ -n "$_mcp_t1" ] && _mcp_lat=$((_mcp_t1 - _mcp_t0))
             fi
             if [ -n "$error_code" ]; then
@@ -1200,6 +1217,9 @@ ${preview}"
                 escaped=$(echo "$result" | jq -Rs .)
                 echo '{"jsonrpc":"2.0","id":'"$id_json"',"result":{"content":[{"type":"text","text":'"$escaped"'}]}}'
             fi
+            # 757-qwqz: response is on the wire — the request is no longer
+            # in flight.
+            mcp_tg_done
             ;;
         "prompts/list")
             # @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
@@ -1226,3 +1246,6 @@ ${preview}"
             ;;
     esac
 done
+
+# 757-qwqz: stdin EOF is the one sanctioned shutdown; everything else records.
+mcp_tg_clean_shutdown

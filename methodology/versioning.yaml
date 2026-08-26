@@ -175,11 +175,32 @@ branch_versioning_discipline:
 
     - name: methodology_refinements_branch
       rule: >
-        Methodology work that is not already finished integration work MUST target
-        the remote methodology-refinements branch. Agents MUST NOT push methodology
-        refinements directly to main. Main receives methodology changes only by an
-        explicit integration merge after review.
-      enforcement: "pre-push hook or reviewer gate rejects direct methodology pushes to main"
+        SUPERSEDED 2026-08-21 — the `methodology-refinements` branch NO LONGER
+        EXISTS and must not be recreated. It was fully merged and was retired
+        with 22 other branches in the operator-directed cleanup that left
+        exactly five: main, linux-next, windows-next, osx-next, gh-pages.
+
+        The rule that survives is the HALF ABOUT MAIN, which is now
+        server-enforced and stronger than a branch convention ever was:
+        methodology changes MUST NOT be pushed directly to main. Since
+        2026-07-28 main is branch-protected with enforce_admins, so a direct
+        push fails for everyone, and every change reaches it through a PR.
+
+        Methodology work therefore lands on the host's PLATFORM BRANCH like any
+        other change — linux-next for the coordinator, windows-next / osx-next
+        for the siblings — and reaches main through the normal release
+        promotion. There is no separate methodology lane and there has not been
+        a working one for some time; this rule pointed at a branch that had
+        been merged and idle since 2026-05-05.
+
+        WHY THE SEPARATE LANE IS NOT REINSTATED: its stated purpose was "their
+        own reviewable convergence lane", but a branch nobody merges is not a
+        review lane, it is a place changes go to be forgotten. The reviewable
+        convergence this project actually got is the ledger — methodology edits
+        carry a plan fragment recording the reasoning, and that fragment is
+        append-only and folds across hosts, which a mutable branch ref cannot
+        do.
+      enforcement: "server-side branch protection on main (enforce_admins, PR required, order 476) — no branch convention needed"
       rationale: >
         Methodology changes alter the bootstrap contract for future agents. They
         require their own reviewable convergence lane rather than being silently
@@ -457,7 +478,15 @@ stable_channel:
     no install-script branching — the prerelease bit IS the channel.
   promotion:
     owner: "The Tlatoāni (explicit operator action, never automatic)"
-    command: "scripts/promote-stable.sh vX.Y.YYMMDD.N"
+    command: "scripts/promote-stable.sh vX.Y.YYMMDD.N [--force] [--dry-run]"
+    ask_first: >
+      --dry-run (order 864-8tqv) runs every gate and mutates nothing, printing
+      would-promote:<tag> or refused:<reason>:<tag>. Use it to test a change to
+      the gate: before it existed the only observable this script offered was
+      its side effect, so verifying the gate meant publishing a channel change.
+      That happened on 2026-08-23 — piping the script to `head -4` promoted a
+      release and SIGPIPE-killed it between the release edit and the stable-tag
+      push, leaving the GitHub release and the git tag disagreeing.
     gate: >
       The script refuses (refused:no-evidence) unless plan/ contains a dated
       e2e/smoke PASS record naming that version; --force overrides loudly
@@ -466,7 +495,29 @@ stable_channel:
       On success it flips
       prerelease=false, marks the release "latest", and moves the annotated
       `stable` git tag to the release commit.
-    demotion: "gh release edit <tag> --prerelease (README URLs fall back to the previous stable)"
+    demotion: "scripts/promote-stable.sh demote <mistaken-tag> --to <intended-tag> [--dry-run]"
+    demotion_is_not_the_inverse_of_promotion: >
+      MEASURED 2026-08-23, order 864-mk2p. This field used to read
+      "gh release edit <tag> --prerelease (README URLs fall back to the previous
+      stable)". BOTH HALVES ARE FALSE. That command sets prerelease=true, and
+      /releases/latest GOES ON SERVING THE DEMOTED TAG: GitHub's `make_latest`
+      is an explicit sticky field, not a view recomputed from "newest
+      non-prerelease by date", so the README's
+      /releases/latest/download/... install URLs keep pointing at the release
+      you just demoted. Nothing falls back.
+
+      Undoing a promotion therefore requires NAMING the release that should be
+      latest and re-marking it explicitly:
+        gh release edit <mistaken> --prerelease --latest=false
+        gh api -X PATCH repos/<owner>/<repo>/releases/<intended-id> -f make_latest=true
+        git tag -f stable <intended-commit> && git push origin refs/tags/stable --force
+      and then VERIFYING by re-reading repos/<owner>/<repo>/releases/latest
+      rather than assuming. The `demote` subcommand does exactly this and
+      refuses (refused:demote-verify-failed) if the channel did not move.
+
+      A REMEDIATION INSTRUCTION THAT LIES IS WORSE THAN A MISSING ONE: it is
+      read during an incident, by someone who wants the blast radius to stop,
+      and it reports success while leaving the channel wrong.
   pinned_by: "litmus:stable-channel-shape (spec ci-release)"
 
 references:

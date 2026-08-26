@@ -102,6 +102,13 @@ pub enum PtyIntent {
 /// IMPORTANT: `&&` only, never bare `;` — Windows Terminal (wt.exe) treats
 /// `;` as ITS OWN argv separator and splits the script (0x80070002).
 /// See plan/issues/wt-github-login-semicolons-2026-06-30.md.
+/// Absolute path to the guest binary a project lane execs.
+///
+/// Order 823-u5zf. Absolute because the guest PTY handler `env_clear()`s the
+/// child: a bare `tillandsias-headless` would resolve only through the PATH the
+/// `-l` login shell used to rebuild, and removing that shell is the point.
+const GUEST_HEADLESS_BIN: &str = "/usr/local/bin/tillandsias-headless";
+
 fn vm_login_shell_argv(exec_tail: &str) -> Vec<String> {
     let script = String::from("export HOME=\"${HOME:-/root}\"")
         + " && export XDG_RUNTIME_DIR=\"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}\""
@@ -139,16 +146,23 @@ impl std::error::Error for ProjectNameRefused {}
 
 /// Refuse a project name that cannot safely cross the guest launch path.
 ///
-/// WHY THIS EXISTS. [`launch_spec`] interpolates the project name into a
-/// SINGLE-QUOTED shell word — `exec tillandsias-headless --cloud '<p>' …` —
-/// which the guest then runs through `/bin/bash -lc`. Until 2026-08-17 that
+/// WHY THIS EXISTS. [`launch_spec`] USED to interpolate the project name into
+/// a SINGLE-QUOTED shell word — `exec tillandsias-headless --cloud '<p>' …` —
+/// which the guest then ran through `/bin/bash -lc`. Until 2026-08-17 that
 /// interpolation had no escaping and no validation, and for LOCAL projects the
 /// name is a directory name read verbatim off disk by
 /// `tillandsias_headless::local_projects::scan_project_root` (`file_name()`).
-/// A directory literally named `a'b` closes the quote and everything after it
-/// is bash source. The same string also crosses `std::process` MSVC quoting and
-/// (on Windows) wt.exe's own re-parser, both of which have already produced
-/// field crashes — see plan/issues/windows-github-login-blank-terminal-2026-08-09.md
+/// A directory literally named `a'b` closed the quote and everything after it
+/// was bash source. Order 823-u5zf removed that layer: project launches now
+/// emit a verbatim argv VECTOR, so the quote-breakout is structurally gone.
+/// The validator stays anyway — deliberately (belt and braces, recorded at
+/// `launch_spec_still_accepts_legitimate_project_names`) and because it is
+/// still load-bearing on its own: a leading `-` reads as a FLAG to the guest
+/// binary (the guest's verbatim-argv arm inspects no arguments), `.`/`..`
+/// traverse against the projects root, and on Windows the name still crosses
+/// `std::process` MSVC quoting and wt.exe's re-parser, both of which have
+/// produced field crashes — see
+/// plan/issues/windows-github-login-blank-terminal-2026-08-09.md
 /// and plan/issues/wt-github-login-semicolons-2026-06-30.md.
 ///
 /// REFUSE, DO NOT SANITIZE. A silently rewritten name launches the WRONG
@@ -164,8 +178,11 @@ impl std::error::Error for ProjectNameRefused {}
 /// including every shell metacharacter, every quote, and whitespace — is
 /// refused.
 ///
-/// THIS IS A GUARD, NOT THE FIX. The real fix is to stop flattening argv into
-/// a shell string at all; that is packet 795-zshi.
+/// THE FIX LANDED; THIS GUARD REMAINS BY DECISION. Packet 795-zshi's real fix
+/// — stop flattening argv into a shell string — landed for project launches as
+/// order 823-u5zf (verbatim vector, byte-pinned in this module's tests). The
+/// one lane still composed through `vm_login_shell_argv` is GithubLogin, which
+/// interpolates no project name.
 ///
 /// @trace spec:host-shell-architecture, spec:remote-projects
 pub fn validate_project_name(name: &str) -> Result<(), ProjectNameRefused> {
@@ -290,10 +307,12 @@ pub fn launch_spec(
     rows: u16,
     cols: u16,
 ) -> Result<PtyOpenOpts, ProjectNameRefused> {
-    // Fail BEFORE building anything. `project` is interpolated into a
-    // single-quoted shell word below and the name may come verbatim off disk;
-    // see `validate_project_name` for the full reasoning. Refusal is loud and
-    // names the offending character — this is deliberately not a sanitizer.
+    // Fail BEFORE building anything. `project` reaches the guest as ONE
+    // verbatim argv element below (823-u5zf — no quoting layer remains), but
+    // the name may come verbatim off disk and the validator still blocks
+    // flag-shaped names, traversal, and wt-unsafe tokens; kept deliberately —
+    // see `validate_project_name`. Refusal is loud and names the offending
+    // character — this is deliberately not a sanitizer.
     if let Some(p) = project {
         validate_project_name(p)?;
     }
@@ -355,15 +374,46 @@ pub fn launch_spec(
         // 2026-07-02: `no container with name or ID ... found`, exit 125),
         // and cloud names (`owner/repo`) aren't even valid container names.
         // @trace spec:remote-projects, spec:host-shell-architecture
-        Some(p) => match intent {
-            PtyIntent::Agent(agent) => vm_login_shell_argv(&format!(
-                "exec tillandsias-headless --cloud '{p}' {}",
-                agent_flag(*agent)
-            )),
-            // Maintenance shell on a project: same resolve-then-launch path,
-            // `--bash` kind (forge maintenance shell, not the bare VM).
-            _ => vm_login_shell_argv(&format!("exec tillandsias-headless --cloud '{p}' --bash")),
-        },
+        // ORDER 823-u5zf: VERBATIM ARGV, NO SHELL, NO QUOTING LAYER.
+        //
+        // This used to compose `/bin/bash -lc "export … && exec
+        // tillandsias-headless --cloud '<p>' --claude"`. That single flattened
+        // token is the entire reason every Windows project lane fell back to a
+        // legacy conhost window: notify_icon's `argv_survives_wt_reparse`
+        // admits only tokens of [A-Za-z0-9 / \ . - _ : =], the script token
+        // cannot qualify, and conhost has no clickable links and no working
+        // paste — so device-code logins inside an agent lane could not be
+        // completed at all (805-ek9e, operator field session 2026-08-17).
+        //
+        // Measured on the real argv: the flattened form fails on exactly ONE
+        // token; every token of the form below passes, so the lane reaches
+        // Windows Terminal instead.
+        //
+        // The shell was only ever carrying environment setup. Its last
+        // irreducible side effect (`install -d -m 0700 "$XDG_RUNTIME_DIR"`)
+        // moved into the binary as ensure_xdg_runtime_dir(), and the two
+        // exports moved as ensure_lane_process_env() — both under this order.
+        // `TILLANDSIAS_VAULT_API_BASE_URL` needed neither: vault_api_base_url()
+        // already self-defaults to the enclave URL in-VM.
+        //
+        // ABSOLUTE PATH, not a bare name, deliberately: the guest PTY handler
+        // env_clear()s the child, so a bare argv[0] would depend on the PATH
+        // the login shell used to rebuild — which is the other thing the `-l`
+        // was doing. Naming the binary outright removes that dependency too.
+        Some(p) => {
+            let flag = match intent {
+                PtyIntent::Agent(agent) => agent_flag(*agent),
+                // Maintenance shell on a project: same resolve-then-launch
+                // path, `--bash` kind (forge maintenance shell, not the bare VM).
+                _ => "--bash",
+            };
+            vec![
+                GUEST_HEADLESS_BIN.to_string(),
+                "--cloud".to_string(),
+                p.to_string(),
+                flag.to_string(),
+            ]
+        }
         // No project: bare VM (Shell = debug escape hatch; gh login = user-level).
         None => inner,
     };
@@ -1084,9 +1134,18 @@ mod tests {
         // The wire trays reach it via the orchestrated headless flow (resolve/
         // clone + enclave bring-up + attach) — never a bare `podman exec` into
         // a forge that nothing provisioned (e2e failure 2026-07-02).
+        // Order 823-u5zf: the argv is VERBATIM — one token per argument, no
+        // shell, no quoting layer for anything downstream to re-parse.
         let sh = launch_spec(&PtyIntent::Shell, Some("myapp"), 24, 80).unwrap();
-        assert_eq!(&sh.argv[0..2], &["/bin/bash", "-lc"]);
-        assert!(sh.argv[2].contains("exec tillandsias-headless --cloud 'myapp' --bash"));
+        assert_eq!(
+            sh.argv,
+            vec![
+                "/usr/local/bin/tillandsias-headless",
+                "--cloud",
+                "myapp",
+                "--bash"
+            ]
+        );
         let ag = launch_spec(
             &PtyIntent::Agent(SelectedAgent::Claude),
             Some("octo-repo"),
@@ -1094,15 +1153,42 @@ mod tests {
             80,
         )
         .unwrap();
-        assert_eq!(&ag.argv[0..2], &["/bin/bash", "-lc"]);
-        assert!(
-            ag.argv[2].contains("exec tillandsias-headless --cloud 'octo-repo' --claude"),
-            "agent attach must run the orchestrated flow: {}",
-            ag.argv[2]
+        assert_eq!(
+            ag.argv,
+            vec![
+                "/usr/local/bin/tillandsias-headless",
+                "--cloud",
+                "octo-repo",
+                "--claude"
+            ],
+            "agent attach must run the orchestrated flow as a verbatim argv"
         );
-        assert!(!ag.argv[2].contains("podman exec"));
-        // wt.exe invariant holds for every project script.
-        assert!(!ag.argv[2].contains(';') && !sh.argv[2].contains(';'));
+        assert!(ag.argv.iter().all(|a| !a.contains("podman exec")));
+
+        // THE PROPERTY THAT MADE THIS CHANGE WORTH MAKING, asserted directly
+        // rather than left to notify_icon: every token must survive wt.exe's
+        // re-parse, i.e. carry no character outside [A-Za-z0-9 / \ . - _ : =].
+        // The old flattened script token could never qualify, which is why
+        // every Windows project lane fell back to conhost and lost paste and
+        // clickable links (805-ek9e). Duplicated here on purpose — this crate
+        // composes the argv, so this is where the guarantee originates.
+        let wt_safe = |argv: &[String]| {
+            argv.iter().all(|a| {
+                !a.is_empty()
+                    && a.chars().all(|c| {
+                        c.is_ascii_alphanumeric()
+                            || matches!(c, '/' | '\\' | '.' | '-' | '_' | ':' | '=')
+                    })
+            })
+        };
+        assert!(
+            wt_safe(&ag.argv),
+            "agent lane argv must reach wt.exe intact"
+        );
+        assert!(
+            wt_safe(&sh.argv),
+            "shell lane argv must reach wt.exe intact"
+        );
     }
 
     /// Cloud attach (`owner/repo`) must NOT podman-exec into a forge — no
@@ -1119,29 +1205,47 @@ mod tests {
             80,
         )
         .unwrap();
-        assert_eq!(spec.argv[0], "/bin/bash");
-        assert_eq!(spec.argv[1], "-lc");
-        let script = &spec.argv[2];
+        // Order 823-u5zf: verbatim argv. `owner/repo` is ONE token, so the
+        // single-quoting that used to wrap it — and that no downstream parser
+        // could be trusted with — is gone entirely.
+        assert_eq!(
+            spec.argv,
+            vec![
+                "/usr/local/bin/tillandsias-headless",
+                "--cloud",
+                "8007342/visual-chess",
+                "--opencode"
+            ],
+            "cloud attach must run the orchestrated clone-then-launch verbatim"
+        );
         assert!(
-            !script.contains("podman exec"),
+            spec.argv.iter().all(|a| !a.contains("podman exec")),
             "cloud attach must not assume a running forge"
         );
+        // The `;` invariant that the wt.exe separator bug forced on the old
+        // script (wt-github-login-semicolons-2026-06-30) is now structural:
+        // there is no script token for wt.exe to split.
+        assert!(spec.argv.iter().all(|a| !a.contains(';')));
+        assert!(spec.argv.iter().all(|a| !a.contains("podman-selinux-wrap")));
+        // The XDG_RUNTIME_DIR side effect moved into the binary
+        // (ensure_xdg_runtime_dir / ensure_lane_process_env, same order), so
+        // the argv must NOT carry it any more.
         assert!(
-            script.contains("exec tillandsias-headless --cloud '8007342/visual-chess' --opencode"),
-            "cloud attach must run the orchestrated clone-then-launch: {script}"
+            spec.argv.iter().all(|a| !a.contains("XDG_RUNTIME_DIR")),
+            "env setup belongs in the binary now, not in a shell preamble"
         );
-        // Same wt.exe + session-lane invariants as the GithubLogin script.
-        assert!(
-            !script.contains(';'),
-            "script must not contain `;` (wt.exe separator bug)"
-        );
-        assert!(!script.contains("podman-selinux-wrap"));
-        assert!(script.contains("install -d -m 0700 \"$XDG_RUNTIME_DIR\""));
 
         // Maintenance shell on a cloud project takes the same path, --bash kind.
         let sh = launch_spec(&PtyIntent::Shell, Some("owner/repo"), 24, 80).unwrap();
-        assert_eq!(sh.argv[1], "-lc");
-        assert!(sh.argv[2].contains("--cloud 'owner/repo' --bash"));
+        assert_eq!(
+            sh.argv,
+            vec![
+                "/usr/local/bin/tillandsias-headless",
+                "--cloud",
+                "owner/repo",
+                "--bash"
+            ]
+        );
 
         // Local names (no `/`) take the same orchestrated path — the headless
         // resolves them under the bind-mount root without cloning.
@@ -1152,7 +1256,15 @@ mod tests {
             80,
         )
         .unwrap();
-        assert!(local.argv[2].contains("--cloud 'myapp' --opencode"));
+        assert_eq!(
+            local.argv,
+            vec![
+                "/usr/local/bin/tillandsias-headless",
+                "--cloud",
+                "myapp",
+                "--opencode"
+            ]
+        );
     }
 
     /// E3, 2026-08-17. `launch_spec` interpolates the project name into a
@@ -1219,10 +1331,21 @@ mod tests {
         ] {
             let spec = launch_spec(&PtyIntent::Shell, Some(ok), 24, 80)
                 .unwrap_or_else(|e| panic!("{ok:?} must still launch: {e}"));
-            assert!(
-                spec.argv[2].contains(&format!("--cloud '{ok}' --bash")),
-                "{ok:?} must reach the guest unchanged: {}",
-                spec.argv[2]
+            // Order 823-u5zf: the name is its OWN argv token now, so "reaches
+            // the guest unchanged" is an equality rather than a substring
+            // search inside a composed script. This also retires the hazard
+            // E3 was about: there is no surrounding single quote left for a
+            // name like `a'b` to close (the validator still refuses it, and
+            // that refusal is asserted separately — belt and braces).
+            assert_eq!(
+                spec.argv,
+                vec![
+                    "/usr/local/bin/tillandsias-headless",
+                    "--cloud",
+                    ok,
+                    "--bash"
+                ],
+                "{ok:?} must reach the guest unchanged"
             );
         }
         // The guard must not touch the no-project intents at all.

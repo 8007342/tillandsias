@@ -1,0 +1,105 @@
+# @trace spec:runtime-diagnostics
+#
+# Pins order 798-tk7b: the enclave service SET has one place that reports its
+# health, and a dead service is visible without anyone typing `podman ps -a`.
+#
+# Measured on macuahuitl 2026-08-17T11:02Z:
+#
+#   tillandsias-nix     Exited (143)  2 days ago
+#   tillandsias-vault   Exited (137)  5 hours ago (healthy)
+#
+# and STILL true at 2026-08-18T02:50Z when the reporter was written — nix had
+# then been dead 2d21h. Several cycles ran on this host across those hours,
+# some of them using podman heavily, and none of them said a word. Both
+# discoveries happened the same way: somebody ran `podman ps -a` for an
+# unrelated reason.
+#
+# The vault line is the sharper half. podman prints `(healthy)` beside a
+# container that is not running, because the recorded healthcheck outlives it.
+# That is the 797-5kqe shape — a status that is not absent but confidently
+# wrong — and it is why this litmus pins `health=stale-healthy` by name rather
+# than pinning "some health field is reported".
+#
+# THIS IS THE THIRD MEMBER OF A FAMILY, and the packet asked it to converge on
+# one vocabulary rather than become a fourth mechanism:
+#
+#   litmus:proxy-crash-supervision-shape     767-es4w  PID 1 inside the proxy
+#   litmus:harness-crash-supervision-shape   767-nkkq  PID 1 inside the forge
+#   this one                                 798-tk7b  the host's view of the set
+#
+# The supervisors can only speak while their container is alive, which is
+# precisely the wrong precondition for reporting a corpse. So the reporter
+# starts, restarts and kills nothing, and speaks the supervisors'
+# `<class>:<subject>:key=value:...` grammar with the same service/rc/signal
+# keys, so one grep spans all three.
+#
+# All assertions live in the hermetic fixture (scripted podman, no containers,
+# no network), per the 634-39ik expression-pinning rule: PROPERTIES through
+# behaviour, never bare source shapes. The fixture carries its own controls —
+# a running container that IS healthy must stay silent, a foreign container in
+# the same store must not be counted, and the stale-healthy branch is proven
+# falsifiable by deletion.
+name: litmus:enclave-service-health-shape
+spec: runtime-diagnostics
+phase: pre-build
+description: >
+  Pin check-enclave-service-health.sh's contract: every enclave service is
+  enumerated and each dead one is named with its exit code, DERIVED signal, and
+  age; a stopped container still advertising podman's recorded `healthy` is
+  reported as health=stale-healthy rather than passed through; a failed or
+  impossible reading is blocked:* and never a clean bill of health; a
+  declared-but-missing service is reported absent; foreign containers are
+  ignored; and the whole thing is a REPORT (exit 0) unless a caller opts into
+  --strict.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/check-enclave-service-health.sh
+  - workspace contains scripts/test-enclave-service-health.sh
+  - bash, sed, tr available in PATH
+
+critical_path:
+  - step: "reporter exists, is executable, and parses"
+    command: "test -x scripts/check-enclave-service-health.sh && bash -n scripts/check-enclave-service-health.sh && echo 'ok: enclave-service-health-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: enclave-service-health-parses"
+
+  - step: "reporter is bash-3.2 clean (macOS system bash is the floor)"
+    command: "TILLANDSIAS_DIALECT_SCAN_FILES=scripts/check-enclave-service-health.sh bash scripts/check-bash-dialect.sh"
+    timeout_ms: 10000
+    expected_behavior: "ok:bash-dialect-clean"
+
+  - step: "hermetic fixture suite passes (no-podman blocked, all-up ok, exited names rc+signal+age, origin annotates product-built vs merely-prefixed WITHOUT filtering either out, the stale-healthy corpse, the healthy-running cross-control, declared-absent, foreign container ignored, --strict gate, unreadable-not-healthy, and the stale-healthy mutation control)"
+    command: "bash scripts/test-enclave-service-health.sh 2>&1 | tail -1"
+    timeout_ms: 60000
+    expected_behavior: "ok: all enclave-service-health scenarios passed"
+
+  - step: "the cycle preflight actually asks — the blind spot was this exact position in the cycle, so a reporter nothing calls closes nothing"
+    command: "grep -q 'check-enclave-service-health.sh' scripts/cycle-preflight.sh && echo 'ok: preflight-wired'"
+    timeout_ms: 3000
+    expected_behavior: "ok: preflight-wired"
+
+  - step: "TWO SURFACES, ONE VOCABULARY (814-iyu7 decision): the product's end-user formatter emits the SAME spellings the cycle surface pins — the convergence bought by four duplicated hours stays converged by guard, not by discipline"
+    # Decision recorded on 814-iyu7 (2026-08-23): the script OWNS the cycle
+    # surface (no build required, --expect, stale-healthy), the product OWNS
+    # the end-user surface (--diagnostics inside the enclave); neither is
+    # deleted, and the shared grammar is pinned HERE so the surfaces cannot
+    # drift apart by accretion — which is how they were born.
+    # ORDER 686-7qcm cycle, 2026-08-24: the script clause used to demand the
+    # ASSEMBLED literal `fail:enclave-service-dead:service=`. f4f08709e
+    # ("converge the host reporter onto yoga's grammar") correctly split that
+    # into `_class="fail:enclave-service-dead"` plus a `:service=${name}:...`
+    # concatenation, so the contiguous string stopped existing in the source and
+    # this step went red while the BEHAVIOUR was unchanged — cycle-preflight
+    # emits the full vocabulary on every run, and the behavioural fixture
+    # scripts/test-enclave-service-health.sh covers the assembled output.
+    #
+    # A text pin broken by a correct refactor. The step now pins the VOCABULARY
+    # TOKEN in both surfaces, which is what "one vocabulary, both surfaces"
+    # actually claims, and leaves how each surface assembles its line to the
+    # fixture. The Rust side keeps its full format-string form because there the
+    # literal genuinely is contiguous.
+    command: "grep -q 'fail:enclave-service-dead:service={name}:state={state}:rc={exit_code}:signal={signal}' crates/tillandsias-headless/src/main.rs && grep -q 'fail:enclave-service-dead' scripts/check-enclave-service-health.sh && grep -q 'note:enclave-service-stopped' crates/tillandsias-headless/src/main.rs && grep -q 'note:enclave-service-stopped' scripts/check-enclave-service-health.sh && echo 'ok: one vocabulary, both surfaces'"
+    timeout_ms: 3000
+    expected_behavior: "ok: one vocabulary, both surfaces"

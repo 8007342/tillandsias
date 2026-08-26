@@ -58,6 +58,10 @@ use std::path::{Path, PathBuf};
 /// being silently skipped.
 pub const ENGINES: &[(&str, &str)] = &[
     (
+        "spec.answer",
+        "the whole-spec RAG corpus via spec::top_k + spec::build_envelope over a CALLER-SUPPLIED query vector (orders 547/551)",
+    ),
+    (
         "plan.answer",
         "plan/index.yaml via answer::answer_question (order 394b)",
     ),
@@ -90,6 +94,30 @@ pub struct QuerySet {
     pub name: String,
     #[serde(default)]
     pub description: String,
+    /// The ledger THIS SET must be graded against, repo-relative (order
+    /// 786-kjke). Absent (the common case) means "whatever `--index` the run
+    /// supplies", which is the live ledger by default.
+    ///
+    /// THIS DOES NOT WEAKEN THE MODULE'S no-corpus INVARIANT, and the
+    /// distinction is the whole reason it is safe. That invariant is about
+    /// [`Expect`]: an expectation may never name a corpus, so a second corpus
+    /// cannot quietly lower the bar, and [`grade_envelope`] still takes
+    /// `(&Envelope, &Expect, &Path)` and nothing else. This field is not an
+    /// expectation and the grader never reads it — it only tells the RUNNER
+    /// which ledger to hand the engine, which is exactly the fact that
+    /// previously lived in a file-header comment no machine could read.
+    ///
+    /// WHY IT EXISTS. `grade openspec/litmus-tests/groundtruth/*.yaml` — the
+    /// obvious invocation — graded the two fixture-backed sets against the
+    /// LIVE ledger and reported `pass=22 fail=6`, every one of those six a
+    /// FALSE red (observed 2026-08-17; correctly graded the true state is
+    /// 28/28). The contract was documented only in each file's header, so the
+    /// tool cheerfully did the wrong thing and blamed the expert. That is the
+    /// 741-2izr shape — a false red trains readers to discount the signal —
+    /// landing on the accuracy harness the fleet's `expert_accuracy:` metric
+    /// rests on.
+    #[serde(default)]
+    pub corpus: Option<String>,
     pub cases: Vec<Case>,
 }
 
@@ -107,6 +135,51 @@ pub struct Case {
     /// what a human reads when the case goes red.
     #[serde(default)]
     pub why: String,
+    /// Repo-relative path to a JSON array of floats: the EMBEDDING of `query`.
+    ///
+    /// Required by `spec.answer` and meaningless to the other engines. It is
+    /// committed rather than computed because this crate is network-free by
+    /// construction (spec.rs:2) and `spec-retrieve` is already specified as
+    /// "network-free cosine top-k over CALLER-SUPPLIED embeddings" — so the
+    /// grader supplies the vector exactly as every other caller does. The
+    /// alternative, having the grader make an HTTP call, would trade
+    /// determinism for nothing; grading a lexical path instead would be worse
+    /// still, because a green grade would then certify a path production never
+    /// runs.
+    ///
+    /// It pins the set to an embedding model (768-dim nomic-embed-text here).
+    /// That is a managed fact, not a new one: check-dev-embed-model-agreement.sh
+    /// exists so the producer and the query path cannot name different models.
+    /// A model change re-embeds the set; it does not rewrite it.
+    #[serde(default)]
+    pub query_vec: Option<String>,
+    /// The ANSWER PROSE to build the envelope from, when the case needs to
+    /// control it. Omitted by default, which keeps the grader synthesising one
+    /// exactly as before.
+    ///
+    /// ORDER 865-h4tn — WITHOUT THIS THE SUITE CANNOT EXPRESS A REFUSAL.
+    /// `spec::build_envelope` keeps a chunk only if the answer CONTAINS that
+    /// chunk's key (spec.rs:1079) and refuses only when none survive
+    /// (spec.rs:1095). The synthesised answer, `spec::retrieval_only_answer`,
+    /// emits one `- {key} [path:start-end]` line per chunk — so it contains
+    /// EVERY key by construction, every chunk always survives, and no case can
+    /// ever grade `unsupported`, whatever it asks.
+    ///
+    /// Measured before this field existed: "what is the flibber flobber
+    /// protocol and how do I bake sourdough", run through the grader's own
+    /// answer construction over the real index, graded `retrieved` — citing
+    /// `fn basic_recipe()` in the VM layer and a Windows smoke-test recipe,
+    /// because "recipe" sits near "sourdough". The expert offered a function
+    /// that builds a VM image as evidence about baking bread and the harness
+    /// called it a pass.
+    ///
+    /// In production the prose comes from a real model, which may legitimately
+    /// answer without echoing an identifier — that is how `unsupported` is
+    /// reachable at all. Substituting a constant chosen to always satisfy the
+    /// check under test made the one behaviour the suite most needed to pin the
+    /// one behaviour it could not exercise.
+    #[serde(default)]
+    pub answer: Option<String>,
     pub expect: Expect,
 }
 
@@ -389,6 +462,113 @@ fn citation_matches(
     Ok(())
 }
 
+/// ORDER 879-gidx. Resolve the spec index the way the canonical shell ladder
+/// does (801-a2by: explicit dir, forge dir, forge root, podman volume, XDG),
+/// VALIDATING every rung — a rung is taken only if its `vectors.jsonl`
+/// exists. This is what lets a stale override HEAL instead of poison:
+/// macuahuitl's --ci-full failed its last check for a week because a
+/// long-lived session exported FORGE_SPEC_INDEX_DIR=/mnt/c/Users/... (a
+/// Windows WSL path) and this reader honoured it verbatim; on clean hosts the
+/// same check failed the other way, because NOTHING ambient named the index
+/// even though scripts/spec-index-ensure.sh had published it to the durable
+/// tier. Both shapes were filed against the harness as "index-vs-HEAD skew"
+/// (865-r6dt) — the skew was resolution, not staleness.
+///
+/// Skipped stale rungs are ANNOUNCED on stderr, mirroring the launcher's
+/// 801-a2by diagnostic, so the next reader debugs the override, not the index.
+fn spec_index_rung_usable(dir: &str) -> bool {
+    !dir.trim().is_empty() && Path::new(dir).join("vectors.jsonl").is_file()
+}
+
+/// Pure core: the ladder over already-fetched candidate values, so tests need
+/// no env mutation. `roots` are entry-POINTER roots (root/current names the
+/// entry); `dirs` are exact serving directories.
+fn resolve_spec_index_from(
+    dirs: &[(&str, Option<String>)],
+    roots: &[(&str, Option<String>)],
+) -> Option<String> {
+    for (name, val) in dirs {
+        if let Some(d) = val {
+            if spec_index_rung_usable(d) {
+                return Some(d.clone());
+            }
+            eprintln!(
+                "note: {name}={d} names no usable index (no vectors.jsonl) — stale override skipped, trying the durable tier (879-gidx)"
+            );
+        }
+    }
+    for (_name, val) in roots {
+        if let Some(root) = val {
+            let fp = std::fs::read_to_string(Path::new(root).join("current"))
+                .unwrap_or_default()
+                .trim()
+                .to_string();
+            if !fp.is_empty() {
+                let entry = format!("{root}/{fp}");
+                if spec_index_rung_usable(&entry) {
+                    return Some(entry);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn resolve_spec_index_dir() -> Result<String, String> {
+    let dirs = [
+        (
+            "TILLANDSIAS_SPEC_INDEX_DIR",
+            std::env::var("TILLANDSIAS_SPEC_INDEX_DIR").ok(),
+        ),
+        (
+            "FORGE_SPEC_INDEX_DIR",
+            std::env::var("FORGE_SPEC_INDEX_DIR").ok(),
+        ),
+    ];
+    let xdg_root = std::env::var("XDG_CACHE_HOME")
+        .ok()
+        .filter(|v| !v.is_empty())
+        .or_else(|| std::env::var("HOME").ok().map(|h| format!("{h}/.cache")))
+        .map(|c| format!("{c}/tillandsias/spec-index"));
+    // Rung 3 of the shell ladder: the shared podman named volume. Bounded and
+    // fail-soft — a hiccup degrades to XDG, never to an error (801-a2by).
+    let podman_root = if std::env::var("TILLANDSIAS_SPEC_INDEX_NO_PODMAN")
+        .ok()
+        .as_deref()
+        == Some("1")
+    {
+        None
+    } else {
+        tillandsias_podman::podman_cmd_sync()
+            .args([
+                "volume",
+                "inspect",
+                "-f",
+                "{{.Mountpoint}}",
+                "tillandsias-spec-index-tillandsias",
+            ])
+            .output_bounded(tillandsias_podman::OperationKind::Inspect.default_budget())
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .filter(|s| !s.is_empty())
+    };
+    let roots = [
+        (
+            "FORGE_SPEC_INDEX_ROOT",
+            std::env::var("FORGE_SPEC_INDEX_ROOT").ok(),
+        ),
+        ("podman-volume", podman_root),
+        ("xdg-cache", xdg_root),
+    ];
+    resolve_spec_index_from(&dirs, &roots).ok_or_else(|| {
+        // 888-miiy: ABSENT index is a host capability gap -> the case is
+        // SKIPPED and named. A STALE index (below) stays a hard error.
+        format!("{ENGINE_UNAVAILABLE}spec.answer needs a built index: no rung of the resolution ladder (TILLANDSIAS_SPEC_INDEX_DIR, FORGE_SPEC_INDEX_DIR, FORGE_SPEC_INDEX_ROOT, the podman volume, XDG cache) names a directory containing vectors.jsonl — scripts/spec-index-ensure.sh builds and publishes one (801-a2by)")
+            .to_string()
+    })
+}
+
 fn read_lines<'a>(root: &Path, rel: &str, cache: &'a mut SpanCache) -> Option<&'a Vec<String>> {
     if !cache.contains_key(rel) {
         let loaded = std::fs::read_to_string(root.join(rel))
@@ -440,6 +620,36 @@ pub struct Harness {
     ledger: Option<Ledger>,
     corpus: Option<methodology::Corpus>,
     cheatsheets: Option<Vec<crate::spec::Chunk>>,
+    spec_vectors: Option<Vec<Vec<f32>>>,
+    spec_chunks: Option<Vec<crate::spec::Chunk>>,
+}
+
+/// ORDER 888-miiy. Marks an engine error as a HOST CAPABILITY GAP rather than
+/// a defect — the one distinction that decides whether a case is SKIPPED or the
+/// whole run is a HARNESS ERROR.
+///
+/// The line this exists for: `spec.answer` needs a built embedding index, and a
+/// host with no embedding endpoint has none. That is a fact about the HOST, not
+/// about the code or the query set, and it aborted the entire glob invocation —
+/// so on 2026-08-25 the release coordinator's `./build.sh --ci-full` went red on
+/// one step out of 2007 for having no ollama running.
+///
+/// WHAT MUST *NOT* CARRY THIS PREFIX, and it is the whole safety argument: a
+/// STALE index (vectors not aligned with chunks), a missing declared corpus, an
+/// unknown engine, a case with no `query_vec`, unreadable data. Every one of
+/// those is a real defect that a skip would hide, and every one keeps returning
+/// a bare `Err` that still aborts with rc=2. "The index is wrong" and "this host
+/// has no index" look similar and mean opposite things.
+pub const ENGINE_UNAVAILABLE: &str = "engine-unavailable: ";
+
+/// True when an engine error is a host capability gap (see [`ENGINE_UNAVAILABLE`]).
+///
+/// A function rather than a scattered `starts_with` so there is exactly one
+/// place that decides, and so the sentinel cannot drift out of sync with its
+/// readers.
+#[must_use]
+pub fn is_engine_unavailable(msg: &str) -> bool {
+    msg.starts_with(ENGINE_UNAVAILABLE)
 }
 
 impl Harness {
@@ -451,6 +661,8 @@ impl Harness {
             ledger: None,
             corpus: None,
             cheatsheets: None,
+            spec_vectors: None,
+            spec_chunks: None,
         }
     }
 
@@ -475,6 +687,58 @@ impl Harness {
             self.corpus = Some(methodology::Corpus::load(&self.root)?);
         }
         Ok(self.corpus.as_ref().expect("just loaded"))
+    }
+
+    /// The embedding vectors, index-aligned with `chunk_corpus(root)`.
+    ///
+    /// The chunks are re-derived from the repo (deterministic: sorted files,
+    /// sequential ids), so they are hermetic; only the VECTORS are host state,
+    /// because 19k x 768 floats is not a thing to commit. The alignment between
+    /// them is what the index's fingerprint guarantees, so a count mismatch is
+    /// refused rather than graded — a shifted pairing answers plausibly and
+    /// wrongly, which is the one failure mode a grader must never certify.
+    fn spec_index(&mut self) -> Result<(&[crate::spec::Chunk], &[Vec<f32>]), String> {
+        if self.spec_vectors.is_none() {
+            let dir = resolve_spec_index_dir()?;
+            let path = PathBuf::from(&dir).join("vectors.jsonl");
+            let text = std::fs::read_to_string(&path)
+                .map_err(|e| format!("read {}: {e}", path.display()))?;
+            let mut out: Vec<Vec<f32>> = Vec::new();
+            for (n, line) in text.lines().enumerate() {
+                if line.trim().is_empty() {
+                    continue;
+                }
+                out.push(serde_json::from_str::<Vec<f32>>(line).map_err(|e| {
+                    format!("{}:{}: not a float vector: {e}", path.display(), n + 1)
+                })?);
+            }
+            self.spec_vectors = Some(out);
+
+            let cpath = PathBuf::from(&dir).join("chunks.jsonl");
+            let ctext = std::fs::read_to_string(&cpath)
+                .map_err(|e| format!("read {}: {e}", cpath.display()))?;
+            let mut cs: Vec<crate::spec::Chunk> = Vec::new();
+            for (n, line) in ctext.lines().enumerate() {
+                if line.trim().is_empty() {
+                    continue;
+                }
+                cs.push(serde_json::from_str(line).map_err(|e| {
+                    format!("{}:{}: not a chunk record: {e}", cpath.display(), n + 1)
+                })?);
+            }
+            self.spec_chunks = Some(cs);
+        }
+        let got = self.spec_vectors.as_ref().expect("just loaded").len();
+        let want = self.spec_chunks.as_ref().expect("just loaded").len();
+        if got != want {
+            return Err(format!(
+                "index is stale: {got} vectors for {want} chunks. The vectors must be                  index-aligned with chunk_corpus(root); rebuild with                  scripts/spec-index-ensure.sh"
+            ));
+        }
+        Ok((
+            self.spec_chunks.as_ref().expect("just loaded"),
+            self.spec_vectors.as_ref().expect("just loaded"),
+        ))
     }
 
     fn cheatsheets(&mut self) -> Result<&[crate::spec::Chunk], String> {
@@ -503,6 +767,48 @@ impl Harness {
             "methodology.path" => {
                 let corpus = self.corpus()?;
                 Ok(methodology::answer_path_query(corpus, &case.query, None))
+            }
+            "spec.answer" => {
+                let rel = case.query_vec.as_deref().ok_or_else(|| {
+                    format!(
+                        "case {:?} uses spec.answer but has no query_vec; the grader supplies                          the embedding (this crate is network-free)",
+                        case.id
+                    )
+                })?;
+                let root = self.root.clone();
+                let qpath = root.join(rel);
+                let qtext = std::fs::read_to_string(&qpath)
+                    .map_err(|e| format!("read {}: {e}", qpath.display()))?;
+                let qvec: Vec<f32> = serde_json::from_str(&qtext)
+                    .map_err(|e| format!("{}: not a float vector: {e}", qpath.display()))?;
+                // BOTH sides from the index, written by one run over one tree.
+                // Re-deriving chunks from the repo was the first shape and it is
+                // wrong: `crates/` is IN the corpus, so editing any Rust file
+                // shifts the pairing. Caught immediately — adding this engine
+                // took the tree to 19485 chunks against 19483 stored vectors.
+                let (chunks, vectors) = self.spec_index()?;
+                let top = crate::spec::top_k(&qvec, vectors, 6);
+                let picked: Vec<crate::spec::ScoredChunk> = top
+                    .iter()
+                    .map(|(i, sc)| crate::spec::ScoredChunk {
+                        chunk: chunks[*i].clone(),
+                        score: *sc,
+                    })
+                    .collect();
+                // The retrieval-only answer is the documented zero-token floor
+                // and is what makes this deterministic. What is graded is the
+                // citation set, not the prose (this packet's own criterion).
+                let plain: Vec<crate::spec::Chunk> =
+                    picked.iter().map(|p| p.chunk.clone()).collect();
+                // 865-h4tn: a case may supply its OWN prose. The synthesised
+                // fallback lists every chunk key, which is what makes the
+                // retrieval-only floor deterministic — and also what made
+                // `unsupported` unreachable for every case in the suite.
+                let answer = match case.answer.as_deref() {
+                    Some(a) => a.to_string(),
+                    None => crate::spec::retrieval_only_answer(&plain),
+                };
+                Ok(crate::spec::build_envelope_scored(&answer, &picked, &root))
             }
             "cheatsheet.ask" => {
                 let root = self.root.clone();
@@ -601,6 +907,27 @@ mod tests {
 
     fn committed_set() -> PathBuf {
         repo_root().join("openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml")
+    }
+
+    /// EVERY committed corpus, one entry per registered engine's query set.
+    ///
+    /// Order 551 registered the `spec.answer` engine and added its cases in a
+    /// SEPARATE file, `spec-rung1.yaml`, but the representation test still read
+    /// only `committed_set()` — so the engine was registered, never graded, and
+    /// the test that exists to catch exactly that went red instead of the
+    /// corpus being found. It was doing its job; it simply had no way to see
+    /// the second file.
+    ///
+    /// Listed explicitly rather than globbed: the other two files in that
+    /// directory (fragment-provenance, plan-next) are scoped query sets, not
+    /// per-engine corpora, and sweeping the directory would silently change
+    /// what "represented" means the next time someone adds one.
+    fn committed_sets() -> Vec<PathBuf> {
+        let root = repo_root().join("openspec/litmus-tests/groundtruth");
+        vec![
+            root.join("expert-groundtruth-rung1.yaml"),
+            root.join("spec-rung1.yaml"),
+        ]
     }
 
     fn harness() -> Harness {
@@ -738,7 +1065,7 @@ expect:
     /// being graded without anything going red.
     #[test]
     fn both_corpora_are_represented_in_the_committed_set() {
-        let sets = load_all(&[committed_set()]).expect("loads");
+        let sets = load_all(&committed_sets()).expect("loads");
         let engines: BTreeSet<&str> = sets
             .iter()
             .flat_map(|s| s.cases.iter())
@@ -767,7 +1094,7 @@ expect:
   confidence: exact
   citations_include:
     - path: methodology/distributed-work.yaml
-      span_contains: ["drain AT MOST ONE plan packet per cycle"]
+      span_contains: ["MAY drain more than one plan packet"]
 "#,
         )
         .expect("probe case parses");
@@ -917,5 +1244,79 @@ citations_include:
             !red.is_empty(),
             "a future corpus must also be FALSIFIABLE with no change to the grader"
         );
+    }
+
+    /// ORDER 879-gidx. The macuahuitl incident replayed: a stale exact-dir
+    /// override (a Windows path on a Linux host) must be SKIPPED, and the
+    /// durable tier's published entry taken instead — the override healing
+    /// rather than poisoning is the entire fix.
+    #[test]
+    fn stale_spec_index_override_heals_to_the_durable_tier() {
+        let tmp = std::env::temp_dir().join(format!("gidx-heal-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let entry = tmp.join("root/abc123");
+        std::fs::create_dir_all(&entry).unwrap();
+        std::fs::write(entry.join("vectors.jsonl"), "[0.1]\n").unwrap();
+        std::fs::write(tmp.join("root/current"), "abc123\n").unwrap();
+
+        let got = resolve_spec_index_from(
+            &[(
+                "FORGE_SPEC_INDEX_DIR",
+                Some("/mnt/c/Users/nobody/tillandsias/target/spec-index".into()),
+            )],
+            &[(
+                "xdg-cache",
+                Some(tmp.join("root").to_string_lossy().into_owned()),
+            )],
+        );
+        assert_eq!(
+            got.as_deref(),
+            Some(tmp.join("root/abc123").to_string_lossy().as_ref()),
+            "the stale override must be skipped and the published entry resolved"
+        );
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// A VALID exact dir still wins over every root rung — the forge's
+    /// injected read-only mount must keep its priority.
+    #[test]
+    fn valid_exact_dir_outranks_the_roots() {
+        let tmp = std::env::temp_dir().join(format!("gidx-exact-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let exact = tmp.join("exact");
+        std::fs::create_dir_all(&exact).unwrap();
+        std::fs::write(exact.join("vectors.jsonl"), "[0.1]\n").unwrap();
+        let decoy = tmp.join("root/zzz");
+        std::fs::create_dir_all(&decoy).unwrap();
+        std::fs::write(decoy.join("vectors.jsonl"), "[0.2]\n").unwrap();
+        std::fs::write(tmp.join("root/current"), "zzz\n").unwrap();
+
+        let got = resolve_spec_index_from(
+            &[(
+                "TILLANDSIAS_SPEC_INDEX_DIR",
+                Some(exact.to_string_lossy().into_owned()),
+            )],
+            &[(
+                "xdg-cache",
+                Some(tmp.join("root").to_string_lossy().into_owned()),
+            )],
+        );
+        assert_eq!(got.as_deref(), Some(exact.to_string_lossy().as_ref()));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// NEGATIVE CONTROL: with every rung empty or unusable the resolver
+    /// returns None — the caller's needs-a-built-index refusal must still be
+    /// reachable, or a missing index would grade as a mysterious read error.
+    #[test]
+    fn no_usable_rung_resolves_nothing() {
+        assert_eq!(
+            resolve_spec_index_from(
+                &[("FORGE_SPEC_INDEX_DIR", Some("/nonexistent/dir".into()))],
+                &[("xdg-cache", Some("/also/nonexistent".into()))],
+            ),
+            None
+        );
+        assert_eq!(resolve_spec_index_from(&[], &[]), None);
     }
 }

@@ -297,6 +297,7 @@ fn show_balloon(hwnd: HWND, title: &str, message: &str, severity: BalloonSeverit
 ///
 /// Pure helper so a unit test can pin the format without touching Win32.
 /// Pinned by `compose_tooltip_includes_version_and_status`.
+// parity-surface: tooltip.version-status
 fn compose_tooltip(version: &str, status: &str) -> String {
     if status.is_empty() {
         format!("Tillandsias {version}")
@@ -917,6 +918,36 @@ pub fn reset_guest_once() -> i32 {
             return 1;
         }
         reset_crashloop_state();
+        // The wipe just invalidated the host's copy of THIS guest's vault
+        // identity. Clearing it is what makes the reset actually reset:
+        // left in place, the tray delivers the stale share into the fresh
+        // guest unconditionally and GitHub login is permanently broken
+        // (803-49re). Non-fatal — a reprovisioned guest is still better
+        // than an aborted reset, and the operator can clear it by hand.
+        match crate::installation_uuid::clear_guest_vault_credentials() {
+            Ok(cleared) if cleared.is_empty() => {
+                println!("[reset-guest] no host-side vault credentials to clear");
+            }
+            Ok(cleared) => {
+                println!(
+                    "[reset-guest] cleared host-side vault credentials: {} \
+                     (installation UUID preserved)",
+                    cleared.join(", ")
+                );
+                tracing::info!(?cleared, "reset-guest cleared host vault credentials");
+            }
+            Err(err) => {
+                eprintln!(
+                    "[reset-guest] WARNING: could not clear host-side vault credentials: {err}"
+                );
+                eprintln!(
+                    "[reset-guest] GitHub login may fail against the fresh guest. \
+                     Clear vault-shamir-share-v1 and vault-root-token-v1 by hand \
+                     (keep tillandsias-vm-uuid) and relaunch the tray."
+                );
+                tracing::warn!(%err, "reset-guest could not clear host vault credentials");
+            }
+        }
         println!("[reset-guest] guest wiped \u{2014} reprovisioning from scratch\u{2026}");
         match lifecycle
             .provision_via_recipe(std::sync::Arc::new(ConsoleProgress))
@@ -1635,14 +1666,7 @@ fn apply_github_login(logged_in: bool, handle: Option<String>) {
         if menu.login != state {
             transition = Some((login_state_label(&menu.login), login_state_label(&state)));
         }
-        if menu.login != state && state == GithubLoginState::LoggedOut {
-            // Fresh logout: the next login must re-fetch cloud projects, so
-            // its submenu shows "(loading repos…)" rather than a stale
-            // "(no repos)" / repo list from the previous session.
-            menu.cloud_projects_loaded = false;
-            menu.cloud_projects = Vec::new();
-        }
-        menu.login = state;
+        apply_login_state(menu, state);
     }
     // Sign-in state gates the ENTIRE project body, and until now every
     // observation of it landed at DEBUG — so a release tray's log could not
@@ -1672,6 +1696,54 @@ fn login_state_label(state: &GithubLoginState) -> &'static str {
     }
 }
 
+/// Record a confirmed cloud-projects answer on `menu`, returning whether this
+/// was the FIRST confirmed answer (the moment the submenu stops showing
+/// "(loading repos…)"). Factored out of the global `MENU_STATE` so the
+/// latch it sets can be exercised alongside [`apply_login_state`].
+fn apply_cloud_projects_state(menu: &mut MenuState, mapped: Vec<ProjectEntry>) -> bool {
+    // Before this observation the submenu was still showing
+    // "(loading repos…)"; this is the moment the list becomes real.
+    let first_answer = !menu.cloud_projects_loaded;
+    menu.cloud_projects = mapped;
+    // A confirmed answer (even an empty one) flips the cloud submenu
+    // from "(loading repos…)" to real entries / "(no repos)".
+    menu.cloud_projects_loaded = true;
+    first_answer
+}
+
+/// Apply a confirmed GitHub login state to `menu`, resetting the cloud-projects
+/// verdict when the state actually changed. Factored out of the global
+/// `MENU_STATE` so the ordering rule is unit-testable.
+///
+/// A login TRANSITION invalidates the previous session's cloud verdict, in BOTH
+/// directions.
+///
+/// Logout is the obvious half: the next login must re-fetch cloud projects, so
+/// its submenu shows "(loading repos…)" rather than a stale "(no repos)" / repo
+/// list from the previous session.
+///
+/// LOGIN IS THE HALF THAT WAS MISSING (731-qth3, sibling of the macOS
+/// 731-m58f). A cloud reply that lands while logged out — the push listener
+/// primes a `CloudRefreshRequest` before any login answer exists — latches
+/// `cloud_projects_loaded` on an empty list. Resetting only on `LoggedOut` left
+/// that latch in place across sign-in, so the first post-login render claimed
+/// "(no repos)" to a user who has repositories: exactly the falsehood the flag
+/// exists to prevent.
+///
+/// @trace order:731-qth3
+fn apply_login_state(menu: &mut MenuState, state: GithubLoginState) {
+    if menu.login != state
+        && matches!(
+            state,
+            GithubLoginState::LoggedOut | GithubLoginState::LoggedIn { .. }
+        )
+    {
+        menu.cloud_projects_loaded = false;
+        menu.cloud_projects = Vec::new();
+    }
+    menu.login = state;
+}
+
 /// Apply a live cloud-projects observation — from a `CloudRefreshReply` poll
 /// or an unrequested `CloudProjectsPush` frame (order 154 slice 2; full
 /// replacement list per the wire doc) — to the shared
@@ -1682,13 +1754,7 @@ fn apply_cloud_projects(projects: &[tillandsias_control_wire::CloudProjectEntry]
     let mut first_answer = false;
     if let Ok(mut guard) = MENU_STATE.lock() {
         let state = guard.get_or_insert_with(MenuState::initial);
-        // Before this observation the submenu was still showing
-        // "(loading repos…)"; this is the moment the list becomes real.
-        first_answer = !state.cloud_projects_loaded;
-        state.cloud_projects = mapped;
-        // A confirmed answer (even an empty one) flips the cloud submenu
-        // from "(loading repos…)" to real entries / "(no repos)".
-        state.cloud_projects_loaded = true;
+        first_answer = apply_cloud_projects_state(state, mapped);
     }
     // Companion to the sign-in transition above: the pair of INFO lines is
     // what lets a field log time the startup handoff end to end. First
@@ -2944,7 +3010,9 @@ fn spawn_guest_reset(hwnd: HWND) {
             }
             Err(err) => {
                 tracing::error!(%err, "guest wipe failed — reset aborted");
+                // parity-surface: status-chip.guest-reset-failed
                 hwnd.status("\u{1F534} Guest reset failed");
+                // parity-surface: notification.guest-reset-failed
                 hwnd.balloon(
                     "Tillandsias — guest reset failed",
                     &err,
@@ -3026,6 +3094,7 @@ fn spawn_provisioning(hwnd: HWND) {
             preflight,
             tillandsias_vm_layer::wsl::WslPlatformVerdict::WslPlatformAbsent
         ) {
+            // parity-surface: notification.feature-setup
             hwnd.balloon(
                 "Tillandsias \u{2014} one-time setup",
                 crate::wsl_lifecycle::TOAST_FEATURE_SETUP,
@@ -3035,6 +3104,7 @@ fn spawn_provisioning(hwnd: HWND) {
         match lifecycle.provision_via_recipe(progress).await {
             Ok(()) => {
                 tracing::info!("VM ready — control wire established");
+                // parity-surface: status-chip.ready
                 hwnd.status("\u{1F7E2} Ready");
                 // Parking this task holds `_keepalive` for the tray's lifetime.
                 // TEARDOWN CONTRACT (post windows-260722 runtime split): this
@@ -3061,7 +3131,9 @@ fn spawn_provisioning(hwnd: HWND) {
                             while terminal_rx.changed().await.is_ok() {
                                 let reason = terminal_rx.borrow_and_update().clone();
                                 if let Some(reason) = reason {
+                                    // parity-surface: status-chip.workspace-connection-lost
                                     hwnd.status("\u{1F534} Workspace connection lost \u{2014} Retry");
+                                    // parity-surface: notification.workspace-connection-lost
                                     hwnd.balloon(
                                         "Tillandsias \u{2014} workspace connection lost",
                                         &reason,
@@ -3191,6 +3263,7 @@ fn spawn_provisioning(hwnd: HWND) {
                     }
                     Err(err) => {
                         eprintln!("VM keepalive spawn failed: {err}");
+                        // parity-surface: status-chip.ready-idle-risk
                         hwnd.status("\u{1F7E1} Ready (VM may idle out)");
                         // No keepalive to hold; still surface one live status read.
                         refresh_vm_status(hwnd).await;
@@ -3204,7 +3277,9 @@ fn spawn_provisioning(hwnd: HWND) {
                 // over the generic classifier (operator-approved wording;
                 // tray-ux governance).
                 if err_text.contains(crate::wsl_lifecycle::PLATFORM_RESTART_REQUIRED_MARKER) {
+                    // parity-surface: status-chip.feature-restart-needed
                     hwnd.status(crate::wsl_lifecycle::CHIP_FEATURE_RESTART);
+                    // parity-surface: notification.feature-restart-needed
                     hwnd.balloon(
                         "Tillandsias \u{2014} restart needed",
                         crate::wsl_lifecycle::TOAST_FEATURE_RESTART,
@@ -3216,7 +3291,9 @@ fn spawn_provisioning(hwnd: HWND) {
                     return;
                 }
                 if err_text.contains(crate::wsl_lifecycle::PLATFORM_SETUP_FAILED_MARKER) {
+                    // parity-surface: status-chip.feature-setup-failed
                     hwnd.status(crate::wsl_lifecycle::CHIP_FEATURE_FAILED);
+                    // parity-surface: notification.feature-setup-failed
                     hwnd.balloon(
                         "Tillandsias \u{2014} setup didn't finish",
                         &err_text,
@@ -3231,6 +3308,7 @@ fn spawn_provisioning(hwnd: HWND) {
                         .ok()
                         .flatten();
                         if let Some(path) = written {
+                            // parity-surface: notification.diagnostics-saved
                             hwnd.balloon(
                                 "Tillandsias \u{2014} diagnostics saved",
                                 &format!(
@@ -3251,13 +3329,16 @@ fn spawn_provisioning(hwnd: HWND) {
                 // hosts. Unclassified failures keep the curated message
                 // (full error in the log).
                 if let Some(short) = tillandsias_vm_layer::wsl::classified_short_status(&err_text) {
+                    // parity-surface: status-chip.provisioning-failed-classified
                     hwnd.status(&format!("\u{1F534} {short}"));
+                    // parity-surface: notification.provisioning-failed
                     hwnd.balloon(
                         "Tillandsias — provisioning failed",
                         &err_text,
                         BalloonSeverity::Error,
                     );
                 } else {
+                    // parity-surface: status-chip.provisioning-failed
                     hwnd.status("\u{1F534} Provisioning failed — right-click \u{25B8} Retry");
                 }
                 // Order 648-jv69. Surface the Retry + Open log affordances the
@@ -3283,6 +3364,7 @@ fn spawn_provisioning(hwnd: HWND) {
                     .ok()
                     .flatten();
                     if let Some(path) = written {
+                        // parity-surface: notification.diagnostics-saved
                         hwnd.balloon(
                             "Tillandsias — diagnostics saved",
                             &format!(
@@ -3711,13 +3793,13 @@ fn launch_open_shell_terminal(action: &MenuAction) {
     };
     // Default geometry until the tray owns a real terminal surface to size from.
     //
-    // A project name that would break out of the guest's single-quoted
-    // `--cloud '<p>'` word is REFUSED here rather than interpolated (E3,
-    // 2026-08-17). For local projects the name comes verbatim off disk, so a
-    // directory called `a'b` used to close the quote. The refusal names the
-    // offending character; it deliberately does not sanitize, because a
-    // silently rewritten name launches a DIFFERENT project than the one
-    // clicked. `tracing::error!` is the loud channel here: this function has no
+    // Hostile project names are REFUSED here (E3, 2026-08-17). launch_spec
+    // now emits the project as ONE verbatim argv element (823-u5zf), so the
+    // old single-quoted `--cloud '<p>'` breakout is structurally gone; the
+    // refusal stays because names come verbatim off disk and it is what keeps
+    // every token wt-safe (belt and braces). It deliberately does not
+    // sanitize, because a silently rewritten name launches a DIFFERENT
+    // project than the one clicked. `tracing::error!` is the loud channel here: this function has no
     // HWND in scope for a balloon, and ERROR relays to tray.log AND the Windows
     // Event Log (source "Tillandsias"), which is the surface a GUI-only user is
     // pointed at by `--logs` and `--diagnose`.
@@ -3753,45 +3835,22 @@ fn launch_open_shell_terminal(action: &MenuAction) {
     // The plain-console spawn hands argv straight to CreateProcess — there is
     // no second parser to mangle it.
     //
-    // Restricting that to GithubLogin was too narrow: the PROJECT lanes carry a
-    // whole inline `bash -lc "export … && exec tillandsias-headless --cloud
-    // 'owner/repo' --opencode"` — strictly MORE quoting than the login argv that
-    // already crashed twice — and they died on the very same error on the peke
-    // field host (2026-08-09): `/bin/bash: -c: line 1: unexpected EOF while
-    // looking for matching '"'`, exit 2, instantly on every project click. wt is
-    // therefore allowed only for argv that needs no quoting at all.
+    // All other lanes now emit verbatim argv vectors (order 823-u5zf) whose
+    // tokens are safe for wt.exe re-parsing, so the earlier
+    // argv_survives_wt_reparse guard (order 795-zshi) is deleted: it always
+    // returned true for the shapes launch_spec actually emits.
     // @trace plan/issues/windows-github-login-blank-terminal-2026-08-09.md
-    let spawn_result =
-        if matches!(intent, PtyIntent::GithubLogin) || !argv_survives_wt_reparse(&argv) {
-            spawn_wsl_console(distro, &argv)
-        } else {
-            spawn_wsl_terminal(distro, &title, &argv)
-        };
+    let spawn_result = if matches!(intent, PtyIntent::GithubLogin) {
+        spawn_wsl_console(distro, &argv)
+    } else {
+        spawn_wsl_terminal(distro, &title, &argv)
+    };
     match spawn_result {
         Ok(()) => tracing::info!(?intent, project = ?project, argv = ?argv,
             "opened in-VM PTY in a native terminal (wsl.exe)"),
         Err(err) => tracing::warn!(%err, ?intent, project = ?project,
             "failed to open terminal for in-VM PTY"),
     }
-}
-
-/// Can every token of `argv` cross wt.exe's re-parser unchanged?
-///
-/// `std::process` quotes any argument containing spaces or quotes for
-/// CreateProcess; wt.exe then re-parses that whole command line with its own
-/// rules and hands the remainder to `wsl.exe`, which joins it into a single
-/// `bash -c` string. Anything that had to be quoted can lose a delimiter on the
-/// way. Only fully quote-free tokens are safe; everything else must take the
-/// plain-console path, where argv reaches CreateProcess verbatim.
-///
-/// @trace plan/issues/windows-github-login-blank-terminal-2026-08-09.md
-fn argv_survives_wt_reparse(argv: &[String]) -> bool {
-    argv.iter().all(|arg| {
-        !arg.is_empty()
-            && arg.chars().all(|c| {
-                c.is_ascii_alphanumeric() || matches!(c, '/' | '\\' | '.' | '-' | '_' | ':' | '=')
-            })
-    })
 }
 
 /// Plain-console spawn: `wsl.exe` in its own fresh conhost window, argv passed
@@ -3819,34 +3878,6 @@ fn terminal_title(intent: &PtyIntent, project: Option<&str>) -> String {
     }
 }
 
-/// wt.exe re-parses its ENTIRE command line with its own quote rules, so any
-/// argument std::process has to quote is a mangling hazard: the quoted
-/// `"Tillandsias — GitHub Login"` title bled a dangling `"` into the trailing
-/// `wsl.exe` command line, which wsl joins into ONE `bash -c` string — the
-/// guest shell then died with `unexpected EOF while looking for matching '"'`
-/// (Esmeralda field crash, 2026-08-09, reproduced with a metacharacter-free
-/// in-VM argv, isolating the title as the only quoted token). Titles handed
-/// to wt are therefore single ASCII tokens that never need quoting.
-fn wt_safe_title(raw: &str) -> String {
-    let mut out = String::with_capacity(raw.len());
-    let mut last_dash = false;
-    for c in raw.chars() {
-        if c.is_ascii_alphanumeric() || c == '_' || c == '.' {
-            out.push(c);
-            last_dash = false;
-        } else if !last_dash && !out.is_empty() {
-            out.push('-');
-            last_dash = true;
-        }
-    }
-    let trimmed = out.trim_end_matches('-');
-    if trimmed.is_empty() {
-        "Tillandsias".to_string()
-    } else {
-        trimmed.to_string()
-    }
-}
-
 /// Build the Windows Terminal (`wt.exe`) argv that opens `in_vm_argv` in the VM
 /// via `wsl.exe -d <distro> --`, in a titled new tab. Pure + testable; the spawn
 /// wrapper feeds this to `wt.exe` (with a bare-console fallback if wt is absent).
@@ -3860,7 +3891,28 @@ fn wt_terminal_argv(distro: &str, title: &str, in_vm_argv: &[String]) -> Vec<Str
         "new".to_string(),
         "new-tab".to_string(),
         "--title".to_string(),
-        wt_safe_title(title),
+        // wt.exe re-parses its entire command line; a title needing quoting
+        // bleeds delimiters into the joined `bash -c` string (Esmeralda
+        // 2026-08-09). Collapse to a single quote-free token inline.
+        {
+            let mut out = String::with_capacity(title.len());
+            let mut last_dash = false;
+            for c in title.chars() {
+                if c.is_ascii_alphanumeric() || c == '_' || c == '.' {
+                    out.push(c);
+                    last_dash = false;
+                } else if !last_dash && !out.is_empty() {
+                    out.push('-');
+                    last_dash = true;
+                }
+            }
+            let trimmed = out.trim_end_matches('-');
+            if trimmed.is_empty() {
+                "Tillandsias".to_string()
+            } else {
+                trimmed.to_string()
+            }
+        },
         "wsl.exe".to_string(),
         "-d".to_string(),
         distro.to_string(),
@@ -3917,6 +3969,79 @@ fn apply_menu_action_state(state: &mut MenuState, action: &MenuAction) -> bool {
 mod tests {
     use super::*;
 
+    /// 731-qth3, the windows half of the macOS 731-m58f defect. This is the
+    /// PRODUCTION ordering — LoggedOut, then an empty cloud reply, then
+    /// sign-in — not the returning-user ordering that starts from LoggedIn,
+    /// where the bug is invisible.
+    ///
+    /// Hand-falsified: restore the `state == GithubLoginState::LoggedOut`
+    /// condition in `apply_login_state` and the final assertion fails with
+    /// `cloud_projects_loaded == true`, i.e. the submenu's first visible
+    /// render claims "(no repos)" to a user who has repositories.
+    #[test]
+    fn cloud_reply_received_while_logged_out_does_not_survive_the_next_sign_in() {
+        let mut menu = MenuState::initial();
+
+        // 1. A confirmed logged-out observation.
+        apply_login_state(&mut menu, GithubLoginState::LoggedOut);
+        assert!(
+            !menu.cloud_projects_loaded,
+            "no cloud answer has been received yet"
+        );
+
+        // 2. The push listener's unconditional CloudRefreshRequest answers
+        //    while there is no token: an empty list, which latches the flag.
+        assert!(apply_cloud_projects_state(&mut menu, Vec::new()));
+        assert!(
+            menu.cloud_projects_loaded,
+            "an empty answer is still a confirmed answer while logged out"
+        );
+
+        // 3. The user signs in. The previous session's verdict must not
+        //    survive the transition.
+        apply_login_state(
+            &mut menu,
+            GithubLoginState::LoggedIn {
+                handle: "octocat".into(),
+            },
+        );
+        assert!(
+            !menu.cloud_projects_loaded,
+            "the first post-login render must be the loading row, not (no repos)"
+        );
+        assert!(
+            menu.cloud_projects.is_empty(),
+            "the logged-out list is not this session's list"
+        );
+    }
+
+    /// The negative control for the reset above: a repeat of the SAME
+    /// confirmed state is not a transition and must not discard a live list.
+    #[test]
+    fn a_repeated_login_state_does_not_discard_the_cloud_list() {
+        let mut menu = MenuState::initial();
+        let signed_in = GithubLoginState::LoggedIn {
+            handle: "octocat".into(),
+        };
+        apply_login_state(&mut menu, signed_in.clone());
+        apply_cloud_projects_state(
+            &mut menu,
+            vec![ProjectEntry {
+                name: "hello-world".into(),
+                path: "octocat/hello-world".into(),
+                ready: false,
+            }],
+        );
+
+        apply_login_state(&mut menu, signed_in);
+
+        assert!(
+            menu.cloud_projects_loaded,
+            "no transition occurred, so the confirmed answer still stands"
+        );
+        assert_eq!(menu.cloud_projects.len(), 1, "the list must survive");
+    }
+
     /// Order 154 (SC-11): the timer may be dropped only in the state where a
     /// wake would find every fallback gate closed. The three false cases are
     /// the negative control — each is a state in which the tick loop still
@@ -3942,35 +4067,38 @@ mod tests {
         );
     }
 
-    /// Every project lane died instantly on `/bin/bash: -c: line 1: unexpected
-    /// EOF while looking for matching '"'` because its inline script went
-    /// through wt.exe's re-parser (peke field host, 2026-08-09). Pin that the
-    /// real launch argv is classified unsafe, so it takes the plain console.
+    /// Order 823-u5zf + 836-smm2: launch_spec now emits verbatim argv whose
+    /// tokens are safe for wt.exe re-parsing, so all non-login lanes route
+    /// through wt.exe unconditionally. This test pins the invariant that makes
+    /// argv_survives_wt_reparse (order 795-zshi) dead code.
     ///
     /// @trace plan/issues/windows-github-login-blank-terminal-2026-08-09.md
     #[test]
-    fn project_lane_argv_is_never_routed_through_wt() {
-        // Verbatim from tray.log, the argv of a cloud project click.
+    fn project_lane_argv_is_wt_safe_and_login_bypasses_wt() {
+        fn is_wt_safe(argv: &[String]) -> bool {
+            argv.iter().all(|arg| {
+                !arg.is_empty()
+                    && arg.chars().all(|c| {
+                        c.is_ascii_alphanumeric()
+                            || matches!(c, '/' | '\\' | '.' | '-' | '_' | ':' | '=')
+                    })
+            })
+        }
+
+        // What launch_spec emits for a cloud project click.
         let project_argv = vec![
-            "/bin/bash".to_string(),
-            "-lc".to_string(),
-            "export HOME=\"${HOME:-/root}\" && exec tillandsias-headless \
-             --cloud '8007342/tillandsias' --opencode"
-                .to_string(),
+            "/usr/local/bin/tillandsias-headless".to_string(),
+            "--cloud".to_string(),
+            "8007342/tillandsias".to_string(),
+            "--opencode".to_string(),
         ];
         assert!(
-            !argv_survives_wt_reparse(&project_argv),
-            "a quoted inline script must never be handed to wt.exe"
+            is_wt_safe(&project_argv),
+            "the verbatim project argv must be safe for wt.exe re-parsing"
         );
 
-        // The injected login wrapper is a bare path — quote-free — but the
-        // login lane is pinned to the console independently of this predicate.
-        assert!(argv_survives_wt_reparse(&[
-            "/usr/local/lib/tillandsias/github-login.sh".to_string()
-        ]));
-
-        // A plain podman argv stays eligible for the nicer wt tab.
-        assert!(argv_survives_wt_reparse(&[
+        // A plain podman argv stays eligible for the wt tab.
+        assert!(is_wt_safe(&[
             "podman".to_string(),
             "exec".to_string(),
             "-it".to_string(),
@@ -3978,9 +4106,20 @@ mod tests {
             "/bin/bash".to_string(),
         ]));
 
-        // Spaces alone force quoting, so they are disqualifying.
-        assert!(!argv_survives_wt_reparse(&["two words".to_string()]));
-        assert!(!argv_survives_wt_reparse(&[String::new()]));
+        // NEGATIVE CONTROL: the legacy flattened shape that caused the
+        // regression is NOT what launch_spec emits anymore. If it reappears,
+        // this test catches it.
+        let legacy_flattened = vec![
+            "/bin/bash".to_string(),
+            "-lc".to_string(),
+            "export HOME=\"${HOME:-/root}\" && exec tillandsias-headless \
+             --cloud '8007342/tillandsias' --opencode"
+                .to_string(),
+        ];
+        assert!(
+            !is_wt_safe(&legacy_flattened),
+            "a quoted inline script must not be emitted by launch_spec"
+        );
     }
 
     /// Order 420: credential-shaped words never survive into the shareable
@@ -5075,27 +5214,27 @@ mod tests {
         );
     }
 
+    /// The `--title` argument to wt.exe must always be a single quote-free
+    /// token. After 836-smm2 the sanitization is inlined in wt_terminal_argv;
+    /// this test pins the invariant through that function.
     #[test]
-    fn wt_safe_title_never_needs_quoting() {
-        for (raw, want) in [
-            (
-                "Tillandsias \u{2014} GitHub Login",
-                "Tillandsias-GitHub-Login",
-            ),
-            ("Tillandsias \u{2014} foo", "Tillandsias-foo"),
-            ("Tillandsias shell", "Tillandsias-shell"),
-            ("has \"quotes\" & specials;|", "has-quotes-specials"),
-            ("\u{2014}\u{2014}", "Tillandsias"),
-            ("", "Tillandsias"),
+    fn wt_terminal_title_is_always_safe() {
+        for raw in [
+            "Tillandsias \u{2014} GitHub Login",
+            "Tillandsias \u{2014} foo",
+            "Tillandsias shell",
+            "has \"quotes\" & specials;|",
+            "\u{2014}\u{2014}",
+            "",
         ] {
-            let got = wt_safe_title(raw);
-            assert_eq!(got, want, "raw={raw:?}");
-            // The invariant that matters: std::process would pass this token
-            // verbatim (no quoting), so wt.exe's re-parser cannot split it.
+            let argv = wt_terminal_argv("distro", raw, &["cmd".to_string()]);
+            let title_idx = argv.iter().position(|a| a == "--title").unwrap() + 1;
+            let title = &argv[title_idx];
             assert!(
-                got.chars()
+                title
+                    .chars()
                     .all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c)),
-                "sanitized title contains a quoting-hazard char: {got:?}"
+                "title from {raw:?} contains a quoting-hazard char: {title:?}"
             );
         }
     }

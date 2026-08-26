@@ -19,6 +19,11 @@
 
 version: 1
 name: expert-groundtruth-fragment-provenance
+# Order 786-kjke: the corpus this set MUST be graded against, declared where a
+# machine can read it. It was documented in the header above and nowhere else,
+# so `grade groundtruth/*.yaml` graded these cases against the live ledger and
+# reported three false FAILs.
+corpus: openspec/litmus-tests/groundtruth/fixtures/fragment-provenance/plan/index.yaml
 description: >
   Fragment-provenance ground truth: a fragment-born packet is cited to the
   fragment that created it; an LWW-overridden field is cited to the winning

@@ -142,7 +142,7 @@ _toolbox_exists() {
 # init so `./build.sh --check` does not fail with "Missing host build tools".
 _toolbox_initialized() {
     toolbox run --container "$TOOLBOX_NAME" \
-        bash -c 'command -v gcc && command -v pkg-config && command -v ruby && command -v rustup && rustup target list --installed 2>/dev/null | grep -qxF x86_64-unknown-linux-musl' \
+        bash -c 'command -v gcc && command -v musl-gcc && command -v pkg-config && command -v ruby && command -v rustup && command -v jq && command -v yq && command -v rg && command -v openssl && command -v x86_64-w64-mingw32-gcc && rustup target list --installed 2>/dev/null | grep -qxF x86_64-unknown-linux-musl && rustup target list --installed 2>/dev/null | grep -qxF x86_64-pc-windows-gnu' \
         &>/dev/null 2>&1
 }
 
@@ -157,12 +157,43 @@ fi
 if ! _toolbox_initialized; then
     echo "[tillandsias-builder] Initializing '$TOOLBOX_NAME' with build tools..."
 
+    # musl-gcc: the rustup musl TARGET alone is not enough — the musl-static
+    # portable launcher pulls `ring`, whose cc-rs build script needs a musl C
+    # cross-compiler. A toolbox without it fails `--install` at ring with
+    # "failed to find tool x86_64-linux-musl-gcc" (yoga, 2026-08-23). The
+    # _toolbox_initialized probe above requires it so pre-existing toolboxes
+    # re-run this init and pick it up.
+    # mingw64-gcc + the x86_64-pc-windows-gnu rustup target: what
+    # scripts/check-cross-target-build.sh (656-spux) needs to build the
+    # workspace for a NON-HOST target. Without them that gate prints
+    # `skip:cross-target:...` and every host keeps compiling only for itself,
+    # which is the blind spot the packet exists to close — a cfg-gated defect is
+    # invisible from the host most likely to introduce it, and the gate's first
+    # run found exactly such a break sitting on trunk.
+    #
+    # THE COST IS SMALLER THAN IT LOOKS, and I got this wrong once. 115 MiB
+    # installed reads as a lot until it is set against the 2.8 GB /usr and 1.9 GB
+    # rustup this toolbox already carries — roughly 2% of an environment whose
+    # entire purpose is compiling. The RECURRING cost is 0.3s per gate run
+    # (profiled), not the ~37s I first recorded: that figure was the one-off
+    # first build of every dependency for the new target, not steady state.
+    #
+    # jq/yq/ripgrep/openssl: the toolbox-first dispatch pattern
+    # (methodology multi_host_development.toolbox_first_scripts) is only valid
+    # for tools the toolbox HAS, and it had none of these — so the ~50 scripts
+    # that call bare `jq`/`rg`/`openssl` could not be converted (799-tb7q).
+    # openssl-devel above is the headers, not the CLI; the CLI ships in the base
+    # image today, but naming it here makes that a guarantee rather than an
+    # accident. Fedora's `yq` is mikefarah v4, whose `yq . <file>` is the syntax
+    # the finalization YAML-validation step names.
     toolbox run --container "$TOOLBOX_NAME" \
         sudo dnf install -y \
-            gcc pkg-config file cmake make \
+            gcc musl-gcc pkg-config file cmake make \
             openssl-devel systemd-devel \
             ruby perl-FindBin \
             procps-ng findutils diffutils \
+            jq yq ripgrep openssl \
+            mingw64-gcc \
         2>&1 | while IFS= read -r line; do printf '  [dnf] %s\n' "$line"; done
 
     RUSTUP_INIT="$HOME/.cache/tillandsias/rustup-init.sh"
@@ -177,7 +208,7 @@ if ! _toolbox_initialized; then
         bash "$RUSTUP_INIT" -y 2>&1 | while IFS= read -r line; do printf '  [rustup] %s\n' "$line"; done
 
     toolbox run --container "$TOOLBOX_NAME" \
-        bash -l -c "rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl" \
+        bash -l -c "rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl x86_64-pc-windows-gnu" \
         2>&1 | while IFS= read -r line; do printf '  [rustup] %s\n' "$line"; done
 
     toolbox run --container "$TOOLBOX_NAME" \
@@ -197,6 +228,19 @@ for arg in "$@"; do
 done
 PWD_QUOTED="$(printf '%q' "$(pwd)")"
 
+# `toolbox run` does NOT forward the caller's environment, so every
+# TILLANDSIAS_* control flag silently died at this boundary: on Silverblue,
+# TILLANDSIAS_FORCE_CHECK=1 could not bypass the gate memo (caught by
+# test-gate-stamp-memoization case 12 on yoga, 2026-08-23) and
+# TILLANDSIAS_SKIP_VERSION_BUMP=1 could not stop the version bump. Re-export
+# the whole namespace inside the toolbox. TILLANDSIAS_SKIP_TOOLBOX is
+# exported AFTER this string in both exec lines, so the recursion guard
+# always wins over anything forwarded here.
+ENV_FORWARD=""
+while IFS= read -r _tb_var; do
+    ENV_FORWARD="${ENV_FORWARD}export $(printf '%q' "$_tb_var")=$(printf '%q' "${!_tb_var}") ; "
+done < <(compgen -v | grep '^TILLANDSIAS_' || true)
+
 echo "[tillandsias-builder] Re-execing inside '$TOOLBOX_NAME' toolbox..."
 
 if [[ "$_TB_DIRECT" == 1 ]]; then
@@ -209,7 +253,7 @@ if [[ "$_TB_DIRECT" == 1 ]]; then
         exit 2
     fi
     exec toolbox run --container "$TOOLBOX_NAME" \
-        bash -l -c "export TILLANDSIAS_SKIP_TOOLBOX=1 ; cd $PWD_QUOTED && exec $ARGS_QUOTED"
+        bash -l -c "${ENV_FORWARD}export TILLANDSIAS_SKIP_TOOLBOX=1 ; cd $PWD_QUOTED && exec $ARGS_QUOTED"
 fi
 
 # Sourced from a build script: when `source`d, $0 and $@ are the calling
@@ -219,4 +263,4 @@ if [[ "$SCRIPT" != /* ]]; then
     SCRIPT="$(pwd)/$SCRIPT"
 fi
 exec toolbox run --container "$TOOLBOX_NAME" \
-    bash -l -c "export TILLANDSIAS_SKIP_TOOLBOX=1 ; cd $PWD_QUOTED && exec bash $(printf '%q' "$SCRIPT") $ARGS_QUOTED"
+    bash -l -c "${ENV_FORWARD}export TILLANDSIAS_SKIP_TOOLBOX=1 ; cd $PWD_QUOTED && exec bash $(printf '%q' "$SCRIPT") $ARGS_QUOTED"

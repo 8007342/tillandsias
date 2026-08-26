@@ -155,6 +155,7 @@ fn apply_status_text_main_thread(
 /// Best-effort: spawn osascript detached, log any error, never
 /// block. The chip text remains the authoritative failure surface;
 /// the notification is purely a "look here" nudge.
+// parity-surface: notification.provisioning-failed
 fn notify_provisioning_failed(reason: &str) {
     // AppleScript single-quote-escape so a `'` in the reason doesn't
     // terminate the literal. Then wrap the whole call in another
@@ -190,6 +191,7 @@ fn notify_provisioning_failed(reason: &str) {
 /// the chip carries the same verdict authoritatively.
 ///
 /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+// parity-surface: notification.guest-crash-loop
 fn notify_crash_loop(reason: &str) {
     let escaped = applescript_escape_single_quoted(reason);
     let body = format!(
@@ -350,6 +352,46 @@ impl AsyncWrite for ControlWireStream {
     }
 }
 
+/// How long the LONG-LIVED push subscription waits for the guest's Hello
+/// before giving up and letting the loop back off and resubscribe (733-mppc).
+///
+/// Deliberately longer than the 5s connect budget and than anything the
+/// interactive `--diagnose` path uses: this connection is not a one-shot an
+/// operator is waiting on, so failing it fast buys nothing. It is bounded at
+/// all only because the loop's own recovery is unreachable while the await
+/// never returns.
+const PUSH_HELLO_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// The bounded secure (Noise) handshake, in ONE place (733-mppc).
+///
+/// Both copies of `open_control_wire_stream` — this file's and diagnose.rs's —
+/// call it, so the bound and its message cannot drift between them. That
+/// duplication is why this packet had two sites in the first place: the same
+/// unbounded handshake was written twice and fixed neither time.
+///
+/// Kept as a named function rather than an inline `tokio::time::timeout` so the
+/// fixture can drive the REAL failure path against a real silent peer. Testing
+/// an inline copy of the composition would assert the test's own message and
+/// prove nothing about either call site — the "verified where it was written is
+/// not verified where it runs" trap this project keeps meeting.
+pub(crate) async fn secure_handshake_bounded<S>(
+    stream: S,
+    psk: &[u8; 32],
+    timeout: Duration,
+) -> Result<tillandsias_secure_channel::secure_stream::EncryptedStream<S>, String>
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    match tokio::time::timeout(timeout, client_handshake(stream, psk)).await {
+        Ok(r) => r.map_err(|e| format!("secure control wire handshake failed: {e}")),
+        Err(_) => Err(format!(
+            "secure control wire handshake timed out after {timeout:?} — the guest accepted the \
+             connection and then went silent mid-handshake, which is neither a refused connection \
+             nor a stale session (733-mppc)"
+        )),
+    }
+}
+
 async fn open_control_wire_stream(
     vz: &VzRuntime,
     port: u32,
@@ -369,9 +411,20 @@ async fn open_control_wire_stream(
                 tillandsias_control_wire::WIRE_VERSION,
                 HopId::HostGuest,
             );
-            let secure = client_handshake(stream, &psk)
-                .await
-                .map_err(|e| format!("secure control wire handshake failed: {e}"))?;
+            // 733-mppc: the caller's budget covers CONNECT + HANDSHAKE, which is
+            // what it always claimed to cover and never did. The timeout above
+            // bounded only `vz.open_stream`; a guest that completed the socket
+            // and then stalled mid-Noise parked this forever, because every
+            // other bound on this seam lives on the DATA path and a connection
+            // that never establishes reaches none of them.
+            //
+            // Sharing the caller's Duration rather than inventing a second
+            // constant is deliberate: the caller already expressed how long it
+            // is willing to wait for a USABLE stream, and a stream that is
+            // connected but not handshaken is not usable. A separate constant
+            // would let the two drift and would silently re-introduce a
+            // component the caller cannot bound.
+            let secure = secure_handshake_bounded(stream, &psk, timeout).await?;
             Ok(ControlWireStream::Secure(Box::new(secure)))
         }
     }
@@ -392,7 +445,15 @@ async fn open_control_wire_stream(
 /// Best-effort: a transient wire error is returned as `Err(String)` so
 /// the caller can log + leave the last-known chip text untouched
 /// (matching the windows-tray policy of "transient error → no chip
-/// update"). The 5 s timeout covers connect + handshake + reply.
+/// update"). The 5 s timeout covers connect + the secure handshake.
+///
+/// 733-mppc corrected this sentence. It read "connect + handshake + reply",
+/// and none of that was true: the Duration bounded ONLY `vz.open_stream`, so
+/// both the Noise handshake and the reply were unbounded. The handshake half is
+/// now genuinely covered (see `open_control_wire_stream`); the REPLY still is
+/// not, and the comment no longer claims otherwise. A doc comment that
+/// overstates a bound is worse than none — it is exactly what stops the next
+/// reader from checking.
 ///
 /// @trace spec:vsock-transport,
 ///        plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4)
@@ -1389,6 +1450,37 @@ async fn run_start(
         }
     }
     let vz = Arc::new(VzRuntime::new(TILLANDSIAS_GUEST_CID, image_root));
+
+    // 690-cb62 criterion 2 — tray-mode serial routing, DECIDED (2026-08-17).
+    //
+    // The flag was previously left unset here, which routed the guest's
+    // virtio-console stream to this process's stderr for the life of the VM.
+    // The stated rationale for that default was "keep the getty's
+    // terminal-probe escapes off the user's terminal" — but in tray mode there
+    // is no such terminal, and the destination turns out not to exist:
+    //
+    //   * the tray ships as an LSUIElement .app (status_item.rs:56) launched
+    //     from Finder or a LaunchAgent, so it has no controlling terminal;
+    //   * nothing on this side ever writes a log file. Every `tray.log`
+    //     writer in the tree belongs to tillandsias-windows-tray
+    //     (notify_icon.rs:533-552, with its own rotation); the macOS tray has
+    //     no equivalent, and no StandardErrorPath is set anywhere;
+    //   * MenuAction::OpenLog (:1508-1518) opens ~/Library/Logs/Tillandsias,
+    //     a directory that does not exist on a host that has been running
+    //     this tray — confirmed absent on the filing host.
+    //
+    // So the default sent the guest's entire boot and getty stream somewhere
+    // unreadable, while console.log — which 690-cb62 criterion 1 had just
+    // bounded to two generations of 4 MiB with rotation (vz.rs:1398-1415) —
+    // stayed empty in precisely the mode users run. The reason to defer this
+    // was that the log was unbounded; that reason is gone.
+    //
+    // Routing it to the rotated log therefore loses nothing and makes the one
+    // artifact a macOS user can actually be asked for ("send me console.log")
+    // the one that contains the boot. Bounded by construction, so it cannot
+    // grow without limit, and best-effort on the VM start path: a logging
+    // failure must never stop a VM booting.
+    vz.set_serial_to_log(true);
 
     // First-launch flow (m9 Fedora pivot): if no rootfs.img is present
     // yet, fetch Fedora's official Cloud qcow2 via the bundled manifest
@@ -2526,10 +2618,30 @@ async fn run_push_listener(
                     port: CONTROL_WIRE_VSOCK_PORT,
                 },
             );
-            let (_, guest_version) = client
-                .handshake()
-                .await
-                .map_err(|e| format!("handshake: {e}"))?;
+            // 733-mppc: bound the control-wire Hello too. `open_control_wire_stream`
+            // above now bounds connect + Noise, but this is a SECOND handshake on
+            // the same seam — the Hello/HelloAck exchange — and it was untimed. A
+            // guest that finishes Noise and then never answers Hello parked this
+            // subscription loop forever with `health` stuck false, so the tray
+            // showed a stale chip and never resubscribed.
+            //
+            // PUSH_HELLO_TIMEOUT rather than the 5s connect budget above: this
+            // connection is LONG-LIVED, and the packet is explicit that a push
+            // subscription "should not" fail as fast as an interactive tool. It
+            // still must fail EVENTUALLY, because the loop's own recovery —
+            // backoff and resubscribe — is unreachable while this await never
+            // returns. The bound exists to reach that recovery, not to be strict.
+            let (_, guest_version) =
+                match tokio::time::timeout(PUSH_HELLO_TIMEOUT, client.handshake()).await {
+                    Ok(r) => r.map_err(|e| format!("handshake: {e}"))?,
+                    Err(_) => {
+                        return Err(format!(
+                            "push subscription: guest completed the connection but never \
+                             answered the Hello handshake within {PUSH_HELLO_TIMEOUT:?} — \
+                             backing off and resubscribing (733-mppc)"
+                        ));
+                    }
+                };
             if let Some(ref gv) = guest_version
                 && gv != tillandsias_secure_channel::workspace_version()
             {
@@ -3028,6 +3140,84 @@ fn dispatch_rebuild(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 733-mppc criterion 3. A peer that ACCEPTS the connection and then goes
+    /// silent must fail within a bounded time, naming the stage.
+    ///
+    /// Driven against a REAL socket with a REAL silent peer, not a mock: the
+    /// listener accepts and then holds the connection without writing a byte,
+    /// which is exactly the guest behaviour the packet describes ("reachable and
+    /// silent, which is neither a refused connection nor a stale session").
+    /// Before the fix this await never returned.
+    ///
+    /// The clock is paused so the 30s bound is asserted without waiting 30s;
+    /// tokio auto-advances when every task is idle, which a silent peer
+    /// guarantees. That is what makes the SILENT case deterministic rather than
+    /// timing-dependent.
+    #[tokio::test(flavor = "current_thread", start_paused = true)]
+    async fn silent_peer_fails_the_secure_handshake_within_the_bound() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        // Accept and then say nothing, forever, holding the connection open.
+        let _peer = tokio::spawn(async move {
+            let (sock, _) = listener.accept().await.unwrap();
+            std::future::pending::<()>().await;
+            drop(sock);
+        });
+
+        let client = tokio::net::TcpStream::connect(addr).await.unwrap();
+        let psk = [7u8; 32];
+        // `EncryptedStream` is not Debug, so map to () before asserting rather
+        // than reaching for expect_err/unwrap_err.
+        let err = match secure_handshake_bounded(client, &psk, Duration::from_secs(30)).await {
+            Ok(_) => panic!("a silent peer must NOT complete the handshake"),
+            Err(e) => e,
+        };
+
+        assert!(
+            err.contains("timed out"),
+            "the failure must say it timed out, not surface as a generic io error: {err}"
+        );
+        assert!(
+            err.contains("went silent mid-handshake"),
+            "the failure must NAME THE STAGE — 'the connection failed' sends an operator to the \
+             network when the peer is reachable: {err}"
+        );
+    }
+
+    /// 733-mppc criterion 4, the NEGATIVE CONTROL. A responsive peer completes
+    /// the handshake untouched.
+    ///
+    /// Without this, a `secure_handshake_bounded` hard-wired to return Err would
+    /// satisfy the silent-peer test above while breaking every real connection
+    /// the tray makes. Runs on the REAL clock — pausing it here would let the
+    /// bound fire before the genuine handshake I/O completes and turn a passing
+    /// control into a false failure.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn responsive_peer_completes_the_secure_handshake_untouched() {
+        use tillandsias_secure_channel::secure_stream::server_handshake;
+
+        let psk = [7u8; 32];
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (sock, _) = listener.accept().await.unwrap();
+            server_handshake(sock, &psk).await.map(|_| ())
+        });
+
+        let client = tokio::net::TcpStream::connect(addr).await.unwrap();
+        // Discard the Ok payload: EncryptedStream is not Debug.
+        let out = secure_handshake_bounded(client, &psk, Duration::from_secs(30))
+            .await
+            .map(|_| ());
+
+        assert!(
+            out.is_ok(),
+            "a responsive peer must complete the handshake untouched — the bound exists to catch \
+             silence, not to break working connections: {out:?}"
+        );
+        assert!(server.await.unwrap().is_ok(), "the server side must agree");
+    }
 
     /// SC-07 pin: the fallback polls run exactly when the push
     /// subscription is NOT delivering. Mirrors windows-tray's gate
@@ -3763,15 +3953,16 @@ mod tests {
     /// m10: pin the dispatcher's `Attach`/`Maintain` arm contract — every
     /// click on a per-project menu row resolves via the shared
     /// `intent_for_action` table to a `(PtyIntent, Some(project))` tuple
-    /// that `attach_pty` threads into `launch_spec`, producing a forge-
-    /// container-wrapped argv (`podman exec -it tillandsias-<p>-forge …`)
-    /// rather than a bare-VM shell. A future refactor of either
+    /// that `attach_pty` threads into `launch_spec`, producing the
+    /// orchestrated verbatim-argv launch
+    /// (`/usr/local/bin/tillandsias-headless --cloud <p> …`, order
+    /// 823-u5zf) rather than a bare-VM shell. A future refactor of either
     /// `intent_for_action` or the dispatcher's resolve path that lost
     /// the project would silently dump users into the wrong shell.
     ///
-    /// The host-shell crate already byte-pins `launch_spec`'s wrapping
-    /// behaviour for `project=Some` (`launch_spec_wraps_in_forge_podman_
-    /// exec_when_project_given` at pty/mod.rs:632). This macOS-side test
+    /// The host-shell crate already byte-pins `launch_spec`'s vector for
+    /// `project=Some` (`launch_spec_routes_project_clicks_through_
+    /// orchestrated_launch` in pty/mod.rs). This macOS-side test
     /// pins the LINK: the macOS dispatcher invokes `intent_for_action`
     /// with the right arguments to produce a non-None project.
     #[test]

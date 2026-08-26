@@ -187,6 +187,12 @@ for _mcp_log_cand in \
     if [ -r "$_mcp_log_cand" ]; then . "$_mcp_log_cand" 2>/dev/null && break; fi
 done
 command -v mcp_log_usage >/dev/null 2>&1 || mcp_log_usage() { return 0; }
+# 757-qwqz: the same guarantee for the transport-death trace. A stale shared
+# lib must degrade these to no-ops, never abort the server under `set -eu`.
+command -v mcp_transport_guard >/dev/null 2>&1 || mcp_transport_guard() { return 0; }
+command -v mcp_tg_inflight >/dev/null 2>&1 || mcp_tg_inflight() { return 0; }
+command -v mcp_tg_done >/dev/null 2>&1 || mcp_tg_done() { return 0; }
+command -v mcp_tg_clean_shutdown >/dev/null 2>&1 || mcp_tg_clean_shutdown() { return 0; }
 
 # Dev-vs-runtime environment hook: on the bare-metal DEVELOPMENT host this
 # defaults the inference endpoints to loopback and fires the idempotent
@@ -697,8 +703,73 @@ methodology_envelope() {
 # `unsupported` envelope — never a crash, never a guess — when the index or an
 # endpoint is absent. The GPU fat model / NPU fallback is a config choice: point
 # TILLANDSIAS_SPEC_EXPERT_ENDPOINT at whichever /v1 the policy router selected.
-SPEC_INDEX_DIR="${FORGE_SPEC_INDEX_DIR:-$FORGE_EXPERTS_STATE_DIR/spec-index}"
+#
+# ORDER 801-a2by: the index moved OUT of $FORGE_EXPERTS_STATE_DIR (tmpfs, dies
+# with this container) into the DURABLE tier — a podman named volume mounted
+# here read-only at /opt/tillandsias/spec-index. The forge keeps every
+# ephemerality guarantee it had; it just stops owning state that outlives it.
+# Entries are content-addressed by the corpus+model fingerprint and are
+# IMMUTABLE once published, so this reader takes NO lock: it opens a directory
+# that is either wholly absent or wholly complete.
+#
+# >>> BEGIN spec-index resolution (801-a2by) — BYTE-IDENTICAL in three files:
+#       scripts/spec-index-ensure.sh                     (the producer)
+#       images/default/config-overlay/mcp/forge-plan.sh  (spec_answer)
+#       images/default/lib-expert-capability.sh          (the capability line)
+#     A producer that writes where the reader does not look builds an index that
+#     is silently ABSENT rather than loudly missing, which is how the embedding
+#     step stayed unwritten on every host for weeks. Agreement is proven
+#     BEHAVIOURALLY — the block is extracted from each file and executed under
+#     one env — by scripts/check-spec-index-resolution-agreement.sh. Edit all
+#     three together or that guard goes red.
+#
+#     Precedence, highest first:
+#       1. FORGE_SPEC_INDEX_DIR   — an EXACT serving directory, honoured
+#          verbatim so the 789-nc2s stale-override diagnostics keep working.
+#       2. FORGE_SPEC_INDEX_ROOT  — an explicit durable root. The forge launcher
+#          injects this (/opt/tillandsias/spec-index, the read-only volume
+#          mount), so nothing inside the enclave ever shells out to podman.
+#       3. The project's podman named volume — what makes the host builder and
+#          every forge share ONE store. INSPECT only: creating it is the
+#          producer's job, never a reader's.
+#       4. $XDG_CACHE_HOME/tillandsias/spec-index — durable, podman-free, for
+#          hosts and harnesses with no podman (macOS/Windows bare metal).
+#     Every podman step is fail-soft: a hiccup degrades to (4), never to an
+#     error. POSIX sh — lib-expert-capability.sh is not bash.
+_tillandsias_spec_index_paths() {
+    _tsi_root="${FORGE_SPEC_INDEX_ROOT:-}"
+    if [ -z "$_tsi_root" ] && [ "${TILLANDSIAS_SPEC_INDEX_NO_PODMAN:-0}" != "1" ] \
+       && command -v podman >/dev/null 2>&1; then
+        _tsi_vol="${TILLANDSIAS_SPEC_INDEX_VOLUME:-tillandsias-spec-index-${TILLANDSIAS_PROJECT:-tillandsias}}"
+        _tsi_root="$(podman volume inspect -f '{{.Mountpoint}}' "$_tsi_vol" 2>/dev/null)" || _tsi_root=""
+        if [ -z "$_tsi_root" ] || [ ! -d "$_tsi_root" ]; then _tsi_root=""; fi
+    fi
+    if [ -z "$_tsi_root" ]; then
+        _tsi_root="${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/spec-index"
+    fi
+    _tsi_dir="${FORGE_SPEC_INDEX_DIR:-}"
+    if [ -z "$_tsi_dir" ]; then
+        # `current` is written last and RENAMED into place, so it never names a
+        # half-published entry. With no pointer yet, name the ROOT so a refusal
+        # points at a real directory a human can inspect.
+        _tsi_fp="$(cat "$_tsi_root/current" 2>/dev/null | tr -d '[:space:]')"
+        if [ -n "$_tsi_fp" ]; then _tsi_dir="$_tsi_root/$_tsi_fp"; else _tsi_dir="$_tsi_root"; fi
+    fi
+    printf '%s\n%s\n' "$_tsi_root" "$_tsi_dir"
+}
+# <<< END spec-index resolution (801-a2by)
+
+# Resolved PER CALL, not once at load: this server is long-lived, the durable
+# store is shared, and a builder can publish a new entry (moving `current`)
+# while this process is running. Caching the path at startup would pin a
+# long-running MCP server to whatever the index was when it booted — the exact
+# "a fix in a file does not reach a process that already read it" shape that
+# 789-nc2s and 783-6rik both landed on.
+SPEC_INDEX_ROOT="$(_tillandsias_spec_index_paths | sed -n 1p)"
+SPEC_INDEX_DIR="$(_tillandsias_spec_index_paths | sed -n 2p)"
 spec_answer_envelope() {
+    SPEC_INDEX_ROOT="$(_tillandsias_spec_index_paths | sed -n 1p)"
+    SPEC_INDEX_DIR="$(_tillandsias_spec_index_paths | sed -n 2p)"
     local question="$1"
     [ -n "$PLAN_BIN" ] || PLAN_BIN="$(resolve_plan_bin)"
     local embed_ep="${TILLANDSIAS_EMBED_ENDPOINT:-}"
@@ -741,11 +812,21 @@ spec_answer_envelope() {
         #     tracked config that 2b1f8d188 had already fixed — a fix in a file
         #     does not reach a process that already read it. The env override is
         #     invisible in the message, so the reader debugs the index.
+        #
+        # (3) Order 801-a2by. The durable root and the served ENTRY are now two
+        #     different things, and only naming the entry hides the interesting
+        #     half. "Nothing is published in the root yet" and "the pointer names
+        #     an entry that is not there" are different faults with different
+        #     fixes, so the refusal reports the root as well as the directory.
         local _si_note=""
         if [ -n "${FORGE_SPEC_INDEX_DIR:-}" ] && [ ! -d "$(dirname "$SPEC_INDEX_DIR")" ]; then
-            _si_note=" NOTE: that location came from FORGE_SPEC_INDEX_DIR in this process's environment and its parent does not exist on this host, so the override is stale rather than the index missing. Unset it (or restart the server) to use the default ${FORGE_EXPERTS_STATE_DIR}/spec-index."
+            _si_note=" NOTE: that location came from FORGE_SPEC_INDEX_DIR in this process's environment and its parent does not exist on this host, so the override is stale rather than the index missing. Unset it (or restart the server) to use the durable root ${SPEC_INDEX_ROOT}."
+        elif [ ! -d "$SPEC_INDEX_ROOT" ]; then
+            _si_note=" NOTE: the durable index root ${SPEC_INDEX_ROOT} does not exist on this host, so nothing has ever been published — this is a cold tier, not a lost index."
+        elif [ ! -s "$SPEC_INDEX_ROOT/current" ]; then
+            _si_note=" NOTE: the durable index root ${SPEC_INDEX_ROOT} exists but publishes no 'current' pointer, so no entry has finished building there yet."
         fi
-        unsupported_envelope "the spec RAG index is not built at ${SPEC_INDEX_DIR} (need chunks.jsonl + vectors.jsonl). Build it: scripts/spec-index-ensure.sh (orders 552, 760-hzi4).${_si_note}"
+        unsupported_envelope "the spec RAG index is not built at ${SPEC_INDEX_DIR} (need chunks.jsonl + vectors.jsonl; durable root ${SPEC_INDEX_ROOT}). Build it: scripts/spec-index-ensure.sh (orders 552, 760-hzi4, 801-a2by).${_si_note}"
         return 0
     fi
     if [ -z "$embed_ep" ]; then
@@ -792,15 +873,30 @@ ${ctx}"
         { echo; echo "Sources: $keys"; } >> "$synth"
     }
     [ "$ok" = 1 ] || retrieval_only
+    # ORDER 801-g9nn — THE FRAME THIS ANSWER WAS READ IN, not the frame this
+    # process is standing in. The durable index is content-addressed and SHARED:
+    # a warm entry mounted read-only into this forge was very likely built by a
+    # different harness at a different commit (801-a2by). Stamping our own HEAD
+    # onto spans we did not read here would be a confident lie, so the commit
+    # comes from the entry itself and the flag is simply omitted when an older,
+    # frameless entry is being served.
+    _sa_frame=()
+    if [ -s "$SPEC_INDEX_DIR/.commit" ]; then
+        _sa_commit="$(tr -d '[:space:]' < "$SPEC_INDEX_DIR/.commit" 2>/dev/null)"
+        case "$_sa_commit" in
+            *[!0-9a-fA-F]* | '') : ;;
+            *) _sa_frame=(--corpus-commit "$_sa_commit") ;;
+        esac
+    fi
     # 4) build a VERIFIED envelope (keeps only citations the answer used). If the
     #    synthesized prose grounded in NO key (small model paraphrased away the
     #    section names), the envelope comes back unsupported — fall back to the
     #    cited digest so good retrieval still yields a verifiable cited answer,
     #    rather than refusing a question we actually found spec sections for.
-    "$PLAN_BIN" spec-envelope --chunks-json "$top" --answer-file "$synth" --root "${TILLANDSIAS_REPO_ROOT:-.}" > "$env" 2>/dev/null || true
+    "$PLAN_BIN" spec-envelope --chunks-json "$top" --answer-file "$synth" --root "${TILLANDSIAS_REPO_ROOT:-.}" "${_sa_frame[@]+"${_sa_frame[@]}"}" > "$env" 2>/dev/null || true
     if [ "$ok" = 1 ] && { [ ! -s "$env" ] || [ "$(jq -r '.confidence // "unsupported"' "$env" 2>/dev/null)" = "unsupported" ]; }; then
         retrieval_only
-        "$PLAN_BIN" spec-envelope --chunks-json "$top" --answer-file "$synth" --root "${TILLANDSIAS_REPO_ROOT:-.}" > "$env" 2>/dev/null || true
+        "$PLAN_BIN" spec-envelope --chunks-json "$top" --answer-file "$synth" --root "${TILLANDSIAS_REPO_ROOT:-.}" "${_sa_frame[@]+"${_sa_frame[@]}"}" > "$env" 2>/dev/null || true
     fi
     if [ -s "$env" ]; then
         cat "$env"
@@ -854,7 +950,28 @@ emit_frame() {
 rpc_result_text() {
     _rr_id="$1"
     _rr_text="$2"
-    emit_frame "$(jq -cn --argjson id "$_rr_id" --arg text "$_rr_text" \
+    # THE ANSWER GOES IN ON STDIN, NOT IN ARGV. Order 865-b3xf.
+    #
+    # This was `--arg text "$_rr_text"`, and $_rr_text is the EXPERT'S WHOLE
+    # ANSWER — the one value here that grows with the corpus rather than with
+    # the request. Past the kernel's argv limit, execve returns E2BIG and the
+    # frame is never built:
+    #
+    #   images/default/config-overlay/mcp/forge-plan.sh: line 953:
+    #   /usr/bin/jq: Argument list too long
+    #
+    # Reproduced at 300 KB on macuahuitl (rc=126). What makes it worse than a
+    # size limit is WHERE it lands: the server has already done the work and
+    # fails while framing the reply, so the client sees no result and no error
+    # it can attribute — and the message names jq, which is the last honest
+    # component in the chain. The bigger and more useful the answer, the more
+    # certainly it is lost. litmus:expert-capability-skew-honesty caught it.
+    #
+    # `--rawfile text /dev/stdin` reads the whole payload as a string with no
+    # argv involvement. Verified byte-identical to the old form on small
+    # payloads containing quotes and embedded newlines; `printf '%s'` (no
+    # trailing newline) is what keeps them equal.
+    emit_frame "$(printf '%s' "$_rr_text" | jq -cn --argjson id "$_rr_id" --rawfile text /dev/stdin \
         '{jsonrpc:"2.0", id:$id, result:{content:[{type:"text", text:$text}]}}')"
 }
 
@@ -865,6 +982,10 @@ rpc_error() {
     emit_frame "$(jq -cn --argjson id "$_re_id" --argjson code "$_re_code" --arg msg "$_re_msg" \
         '{jsonrpc:"2.0", id:$id, error:{code:$code, message:$msg}}')"
 }
+
+# 757-qwqz: from here on this process IS the session transport — arm the
+# mid-session death trace (shared guard in mcp-usage-log.sh).
+mcp_transport_guard "forge-plan"
 
 # Read JSON-RPC requests from stdin, respond on stdout
 while IFS= read -r line; do
@@ -909,6 +1030,9 @@ TOOLS_JSON
         "tools/call")
             tool=$(echo "$line" | jq -r '.params.name')
             args=$(echo "$line" | jq -r '.params.arguments // {}')
+            # 757-qwqz: a death between here and mcp_tg_done below is a
+            # mid-request transport failure and must name the tool it took.
+            mcp_tg_inflight "$tool"
             result=""
             unknown_tool=0
             invalid_params=0
@@ -1115,6 +1239,9 @@ TOOLS_JSON
             else
                 rpc_result_text "$id_json" "$result"
             fi
+            # 757-qwqz: response is on the wire — the request is no longer
+            # in flight.
+            mcp_tg_done
             ;;
         "prompts/list")
             emit_frame "$(jq -cn --argjson id "$id_json" '{jsonrpc:"2.0", id:$id, result:{prompts:[]}}')"
@@ -1134,3 +1261,6 @@ TOOLS_JSON
             ;;
     esac
 done
+
+# 757-qwqz: stdin EOF is the one sanctioned shutdown; everything else records.
+mcp_tg_clean_shutdown

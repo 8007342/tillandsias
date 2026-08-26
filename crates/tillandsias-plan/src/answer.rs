@@ -36,8 +36,9 @@
 //! @trace order:394, order:394b
 
 use crate::Ledger;
+use crate::gitref::{self, GitView, Relation};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Component, Path, PathBuf};
 
 /// The `confidence` vocabulary is CLOSED (§4). `Unsupported` is not a lower
@@ -68,7 +69,11 @@ pub enum CitationKind {
 /// payload from §4's table, kept as an open string map rather than a closed
 /// struct so a new kind adds data, not a schema migration — the same
 /// open-world discipline the ledger itself uses.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+// `Eq` is deliberately NOT derived (order 821-73es): `score` is an f32, and
+// f32 has no total equality. Nothing needed `Eq` — no HashSet/HashMap keyed
+// on a citation, no trait bound requiring it — so dropping it costs nothing,
+// while `PartialEq` keeps every assert_eq! in the tests working.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Citation {
     /// Repo-relative. An absolute path or one containing `..` is REFUSED by
     /// [`verify`]: a citation a reader cannot resolve from the checkout root
@@ -80,6 +85,41 @@ pub struct Citation {
     line_end: usize,
     kind: CitationKind,
     authority: BTreeMap<String, String>,
+    /// ORDER 801-g9nn — the commit whose blob this span was extracted from.
+    ///
+    /// `line_start`/`line_end` are only meaningful relative to a version of the
+    /// file, and until this field existed the envelope named none: an agent
+    /// handed `openspec/specs/forge-offline/spec.md:45-49` opened line 45 in ITS
+    /// OWN checkout, and if the file had moved it read the wrong lines with full
+    /// confidence. With a mirror-backed index shared by concurrent harnesses
+    /// (801-a2by) the two frames routinely differ, and since 803-su4n the corpus
+    /// includes CODE, where a stale line number is a wrong edit rather than a
+    /// wrong quote.
+    ///
+    /// ADDITIVE AND ABSENT WHEN UNKNOWN. A citation from a corpus with no commit
+    /// behind it (a scratch checkout, a fixture) omits the field entirely rather
+    /// than writing a placeholder that later reads as a real rev. Absent means
+    /// "no frame is claimed", which is honest; a fabricated sha would not be.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    commit: Option<String>,
+    /// ORDER 821-73es — how well this span actually matched the query.
+    ///
+    /// Cosine top-k ALWAYS returns k results, so `confidence: retrieved` means
+    /// "k chunks were found", not "the corpus covers this". Without a number,
+    /// nothing downstream could tell those apart: a question the corpus knows
+    /// nothing about came back with six real, verifiable citations. This is the
+    /// signal a consumer needs to decide otherwise.
+    ///
+    /// ADDITIVE AND ABSENT WHEN UNKNOWN, exactly like `commit` above. A
+    /// deterministic expert (plan, methodology) has no similarity to report and
+    /// omits the field rather than writing 1.0, which would read as a perfect
+    /// match rather than as "not applicable".
+    ///
+    /// Carrying it is NOT refusing on it. No threshold is applied anywhere yet;
+    /// measurement on this host put the usable band at 0.693-0.720 against near
+    /// misses, a 0.027 margin too thin to pick a fleet-wide number from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    score: Option<f32>,
 }
 
 impl Citation {
@@ -96,7 +136,35 @@ impl Citation {
             line_end,
             kind,
             authority,
+            commit: None,
+            score: None,
         }
+    }
+
+    /// ORDER 821-73es — stamp how well this span matched the query.
+    ///
+    /// A value outside [-1, 1], or NaN, is DROPPED rather than stored — the
+    /// same discipline `with_commit` uses below. A cosine similarity cannot be
+    /// 3.0, so a number that says so is a bug in the caller, and recording it
+    /// would hand a threshold something that is not a similarity at all.
+    pub fn with_score(mut self, score: f32) -> Self {
+        self.score = (score.is_finite() && (-1.0..=1.0).contains(&score)).then_some(score);
+        self
+    }
+
+    /// ORDER 801-g9nn — stamp the frame this span was read in. A value that is
+    /// not a plain object name is DROPPED rather than stored, so the field can
+    /// never carry `unknown`, a ref name, or a command-line argument into the
+    /// verifier.
+    pub fn with_commit(mut self, commit: impl AsRef<str>) -> Self {
+        let c = commit.as_ref();
+        self.commit = gitref::looks_like_sha(c).then(|| c.to_string());
+        self
+    }
+
+    /// The commit this span was extracted from, when one is known.
+    pub fn commit(&self) -> Option<&str> {
+        self.commit.as_deref()
     }
 
     pub fn path(&self) -> &str {
@@ -129,6 +197,73 @@ impl Citation {
                 .ok_or_else(|| {
                     format!(
                         "{}:{}-{}: plan citation carries no authority.packet_id or authority.key, so nothing can be verified against its span",
+                        self.path, self.line_start, self.line_end
+                    )
+                }),
+            // METHODOLOGY KEYS ARE SYNTHESISED, NOT LITERAL, and requiring them
+            // verbatim withheld three quarters of this corpus as FABRICATED.
+            //
+            // A methodology `authority.key` is a DOTTED PATH built by walking
+            // the YAML tree — `philosophy.core_principle`, `distributed_work.
+            // order_number_assignment`. No YAML file contains that string
+            // anywhere: the document holds only the leaf, `core_principle:`,
+            // indented under its parents. Every other kind's key IS literal in
+            // its span — a spec carries its own trace annotation naming the
+            // capability, cheatsheets a heading, code a symbol — which is why
+            // this went unnoticed. (Do not write a literal example of that
+            // annotation here: the ghost-trace gate reads it as a reference to
+            // a spec that does not exist, which is how this comment first
+            // turned the build red.)
+            //
+            // MEASURED 2026-08-23 over 50 in-corpus questions through the real
+            // spec-retrieve -> spec-envelope path:
+            //     methodology   4 passed, 12 WITHHELD   (75%)
+            //     spec         11 passed,  0 withheld
+            //     cheatsheet   17 passed,  0 withheld
+            //     code          6 passed,  0 withheld
+            // The methodology corpus is this project's declared source of truth
+            // (CLAUDE.md), so the corpus most likely to be asked an
+            // authoritative question was the one answering "unsupported" — and
+            // a withheld answer is indistinguishable from a corpus that simply
+            // does not know, which is how it stayed invisible.
+            //
+            // The leaf plus its colon is the strongest token that CAN appear.
+            // It is weaker than a full-path match and deliberately so: combined
+            // with the path and the line span it still proves the span is that
+            // key's own block rather than a passing mention, and a check that
+            // cannot ever pass proves nothing at all. The stronger fix is for
+            // the indexer to record a literal key; until then this fails for
+            // the right reason instead of always.
+            CitationKind::Methodology => self
+                .authority
+                .get("key")
+                .map(|k| {
+                    // TWO PRODUCERS, TWO KEY SHAPES, and only one of them was
+                    // ever checkable.
+                    //
+                    // methodology.rs:456 stores `hit.decl` — the literal YAML
+                    // DECLARATION token, `rule:`, colon included, chosen
+                    // deliberately (its comment: "span.contains(\"rule\") would
+                    // be satisfied by almost any 10 lines of the corpus"). That
+                    // shape is already correct and must be passed through
+                    // untouched; appending a colon to it yields `rule::`, which
+                    // matches nothing.
+                    //
+                    // spec.rs builds the SAME CitationKind from index chunks
+                    // and stores the dotted YAML PATH instead —
+                    // `philosophy.core_principle` — which appears in no file,
+                    // because it is synthesised by walking the tree. Every
+                    // methodology answer served through the RAG path therefore
+                    // failed as FABRICATED.
+                    if k.ends_with(':') {
+                        k.clone()
+                    } else {
+                        format!("{}:", k.rsplit('.').next().unwrap_or(k))
+                    }
+                })
+                .ok_or_else(|| {
+                    format!(
+                        "{}:{}-{}: methodology citation carries no authority.key, so its span cannot be checked",
                         self.path, self.line_start, self.line_end
                     )
                 }),
@@ -210,8 +345,201 @@ impl Freshness {
     }
 }
 
-/// The answer envelope. FIELDS ARE PRIVATE ON PURPOSE — see the module doc.
+/// ORDER 801-g9nn — where the READER stands relative to the frame this answer
+/// was computed in, and which of its citations do not survive the difference.
+///
+/// This is deliberately NOT a version number. Git is a DAG with a partial
+/// order: two concurrent branches are genuinely unordered, and a `vNNNN` that
+/// implied otherwise would be a confident lie in exactly the situation that
+/// needs the truth. What is derivable is a RELATIONSHIP between two named
+/// commits, and that is what this carries.
+///
+/// The `drifted` list is the operational payload. `relation` alone says the
+/// frames differ; `drifted` says which citations' line numbers therefore do not
+/// transfer — which is the difference between "be careful" and "do not open
+/// line 45 in your tree, it is not the line 45 this answer read".
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CallerRelation {
+    /// The reader's HEAD, or the literal `unknown` when it could not be read.
+    caller_head: String,
+    /// The commit the answer was computed from, or `unknown`.
+    answer_commit: String,
+    relation: Relation,
+    /// Cited paths whose bytes differ between `answer_commit` and what is on
+    /// disk in the reader's checkout. Sorted, de-duplicated. NON-EMPTY MEANS THE
+    /// LINE NUMBERS FOR THOSE PATHS ARE NOT VALID HERE.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    drifted: Vec<String>,
+    /// Cited paths the reader's checkout does not contain at all. With a shared
+    /// index this is the normal shape of a citation from the reader's FUTURE:
+    /// the file exists at `answer_commit` and has never been fetched here.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    absent_here: Vec<String>,
+}
+
+impl CallerRelation {
+    /// ORDER 801-g9nn — the EMITTER's version: ancestry only, both file lists
+    /// deliberately empty.
+    ///
+    /// An expert answering in its own checkout can derive where the reader's
+    /// HEAD sits in the DAG — that is a fact about two commits and needs no
+    /// access to the reader. It emphatically CANNOT derive `drifted`, because
+    /// drift is measured against the reader's WORKING TREE, which the emitter
+    /// has never seen and which may carry uncommitted edits to the very files
+    /// being cited. Filling those lists from the emitter's own tree would
+    /// produce an empty, reassuring, and meaningless answer. The reader
+    /// completes them with [`relate`]; until then the silence is honest.
+    pub fn ancestry_only(view: &GitView, caller_head: &str, answer_commit: &str) -> Self {
+        Self {
+            relation: gitref::classify(view, Some(caller_head), Some(answer_commit)),
+            caller_head: caller_head.to_string(),
+            answer_commit: answer_commit.to_string(),
+            drifted: Vec::new(),
+            absent_here: Vec::new(),
+        }
+    }
+
+    pub fn caller_head(&self) -> &str {
+        &self.caller_head
+    }
+    pub fn answer_commit(&self) -> &str {
+        &self.answer_commit
+    }
+    pub fn relation(&self) -> Relation {
+        self.relation
+    }
+    pub fn drifted(&self) -> &[String] {
+        &self.drifted
+    }
+    pub fn absent_here(&self) -> &[String] {
+        &self.absent_here
+    }
+
+    /// Are this answer's citations safe to open at their stated line numbers in
+    /// the reader's checkout? True only when the frames agree AND nothing moved.
+    ///
+    /// `unknown` is NOT trustworthy: an unverified frame is not a matching one,
+    /// and the whole defect class this order closes is a reader treating
+    /// "nobody checked" as "checked and fine".
+    pub fn spans_transfer(&self) -> bool {
+        self.relation == Relation::Same && self.drifted.is_empty() && self.absent_here.is_empty()
+    }
+
+    /// One pinned, machine-branchable line for a human or a log. The leading
+    /// token is the relation, so `grep -c '^caller-relation: same'` is a test.
+    pub fn render(&self) -> String {
+        let mut s = format!(
+            "caller-relation: {} (caller_head={}, answer_commit={})",
+            self.relation.as_str(),
+            short(&self.caller_head),
+            short(&self.answer_commit)
+        );
+        if !self.drifted.is_empty() {
+            s.push_str(&format!(
+                "\n  DRIFTED — these line numbers are NOT valid in your checkout: {}",
+                self.drifted.join(", ")
+            ));
+        }
+        if !self.absent_here.is_empty() {
+            s.push_str(&format!(
+                "\n  ABSENT HERE — cited at {} but not present in your checkout; fetch: {}",
+                short(&self.answer_commit),
+                self.absent_here.join(", ")
+            ));
+        }
+        s
+    }
+}
+
+fn short(sha: &str) -> String {
+    if gitref::looks_like_sha(sha) {
+        sha.chars().take(12).collect()
+    } else {
+        sha.to_string()
+    }
+}
+
+/// ORDER 801-g9nn — derive the reader's position from a checkout on disk.
+///
+/// `root` is the READER's checkout, which is emphatically not assumed to be the
+/// one that produced the envelope. Every step fails soft: no git, no
+/// repository, or an unfetched object yields [`Relation::Unknown`] or
+/// [`Relation::Unfetched`] and an empty drift list, never a fabricated `same`.
+///
+/// DRIFT IS MEASURED AGAINST THE WORKING TREE, not against the reader's HEAD
+/// commit, because the working tree is what the reader will actually open. An
+/// uncommitted edit to a cited file moves its line numbers just as surely as a
+/// merge does, and an answer that called that `same` would be wrong in the only
+/// way that matters.
+pub fn relate(envelope: &Envelope, root: &Path) -> CallerRelation {
+    let view = GitView::new(root);
+    let caller_head = view.head();
+    let answer_commit = envelope_commit(envelope);
+    let relation = classify_relation(&view, caller_head.as_deref(), answer_commit.as_deref());
+
+    let mut drifted = BTreeSet::new();
+    let mut absent_here = BTreeSet::new();
+    for c in &envelope.citations {
+        // A path that escapes the checkout is a separate, harder violation that
+        // `verify` already reports; do not hand it to git.
+        let rel = Path::new(&c.path);
+        if c.path.is_empty()
+            || rel.is_absolute()
+            || rel
+                .components()
+                .any(|p| matches!(p, Component::ParentDir | Component::Prefix(_)))
+        {
+            continue;
+        }
+        let here = std::fs::read_to_string(root.join(rel)).ok();
+        let frame = c.commit.as_deref().or(answer_commit.as_deref());
+        let there = frame.and_then(|sha| view.file_at(sha, &c.path));
+        match (here, there) {
+            (None, Some(_)) => {
+                absent_here.insert(c.path.clone());
+            }
+            (Some(h), Some(t)) if h != t => {
+                drifted.insert(c.path.clone());
+            }
+            // (Some, None): the frame is unfetched or the path did not exist
+            // there. Nothing is provable, so nothing is claimed — `relation`
+            // already carries `unfetched` when that is why.
+            // (None, None): unresolvable on both sides; `verify` owns it.
+            _ => {}
+        }
+    }
+
+    CallerRelation {
+        caller_head: caller_head.unwrap_or_else(|| "unknown".to_string()),
+        answer_commit: answer_commit.unwrap_or_else(|| "unknown".to_string()),
+        relation,
+        drifted: drifted.into_iter().collect(),
+        absent_here: absent_here.into_iter().collect(),
+    }
+}
+
+/// Split out so a test can drive the classification without a filesystem.
+fn classify_relation(view: &GitView, head: Option<&str>, answer: Option<&str>) -> Relation {
+    gitref::classify(view, head, answer)
+}
+
+/// The frame an envelope as a whole was computed in: `freshness.source_commit`
+/// when it is a real object name, otherwise the first commit any citation
+/// carries. Returns `None` rather than a placeholder when neither exists.
+fn envelope_commit(envelope: &Envelope) -> Option<String> {
+    let fresh = &envelope.freshness.source_commit;
+    if gitref::looks_like_sha(fresh) {
+        return Some(fresh.clone());
+    }
+    envelope
+        .citations
+        .iter()
+        .find_map(|c| c.commit.clone())
+        .filter(|c| gitref::looks_like_sha(c))
+}
+
+/// The answer envelope. FIELDS ARE PRIVATE ON PURPOSE — see the module doc.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Envelope {
     answer: String,
     citations: Vec<Citation>,
@@ -235,6 +563,18 @@ pub struct Envelope {
     /// the envelope shape sees a change until there is something to report.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     skipped_sources: Vec<String>,
+    /// ORDER 801-g9nn — where the READER stands relative to this answer's frame.
+    ///
+    /// STAMPED ONLY WHEN A READER IS KNOWN, and absent otherwise. The expert
+    /// process answers from ITS checkout, which need not be the asking agent's:
+    /// the MCP server serves a main checkout while a fork asks from a worktree
+    /// several commits away. Defaulting this to `same` because the emitter
+    /// happens to be self-consistent would manufacture exactly the false
+    /// assurance the order exists to remove, so an unknown reader gets NO field
+    /// rather than a reassuring one. The reader re-derives it for itself with
+    /// `verify-answer`, which is where the claim becomes falsifiable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    caller_relation: Option<CallerRelation>,
 }
 
 impl Envelope {
@@ -261,6 +601,7 @@ impl Envelope {
             confidence,
             citation_root: None,
             skipped_sources: Vec::new(),
+            caller_relation: None,
         }
     }
 
@@ -275,6 +616,7 @@ impl Envelope {
             confidence: Confidence::Unsupported,
             citation_root: None,
             skipped_sources: Vec::new(),
+            caller_relation: None,
         }
     }
 
@@ -326,6 +668,39 @@ impl Envelope {
     pub fn citation_root(&self) -> Option<&str> {
         self.citation_root.as_deref()
     }
+
+    /// ORDER 801-g9nn — stamp every citation that has no frame of its own with
+    /// the commit this answer was computed from.
+    ///
+    /// The DEFAULT is correct for the deterministic layer, where the engine
+    /// reads the corpus out of the working tree at query time, so the frame IS
+    /// the checkout's HEAD. It is NOT correct for a retrieved answer served from
+    /// an index built elsewhere, which is why [`Citation::with_commit`] can
+    /// override per citation and why this never overwrites an existing value:
+    /// a shared warm index knows its own build commit and the process reading it
+    /// does not.
+    pub fn with_default_citation_commit(mut self, commit: &str) -> Self {
+        if !gitref::looks_like_sha(commit) {
+            return self;
+        }
+        for c in &mut self.citations {
+            if c.commit.is_none() {
+                c.commit = Some(commit.to_string());
+            }
+        }
+        self
+    }
+
+    /// ORDER 801-g9nn — attach the reader's position. See the field doc for why
+    /// this is never defaulted.
+    pub fn with_caller_relation(mut self, relation: CallerRelation) -> Self {
+        self.caller_relation = Some(relation);
+        self
+    }
+
+    pub fn caller_relation(&self) -> Option<&CallerRelation> {
+        self.caller_relation.as_ref()
+    }
 }
 
 /// The falsifiability gate (§4 rule 1). Returns the violations that make this
@@ -337,7 +712,24 @@ impl Envelope {
 /// This runs on envelopes that were DESERIALIZED, i.e. that crossed a tool
 /// boundary and lost the type-level guarantee. It is the check the litmus
 /// exercises, and the check a seeded fabrication must trip.
+///
+/// PURE AND FRAME-BLIND ON PURPOSE. It reads only the working tree and spawns
+/// nothing, so it stays usable where git is not — and so the EMITTER, which
+/// answers from the very tree it just read, keeps its cheap self-check
+/// unchanged. The frame-aware reader-side audit is [`audit`].
 pub fn verify(envelope: &Envelope, root: &Path) -> Vec<String> {
+    verify_inner(envelope, root, None, &mut Vec::new())
+}
+
+/// The shared body. `rescue` is `Some` only on the reader-side [`audit`] path;
+/// with `None` every finding stays a violation and the behaviour is exactly
+/// what it was before order 801-g9nn.
+fn verify_inner(
+    envelope: &Envelope,
+    root: &Path,
+    rescue: Option<&GitView>,
+    stale: &mut Vec<String>,
+) -> Vec<String> {
     let mut violations = Vec::new();
 
     // (0) The envelope-level invariant, in BOTH directions.
@@ -382,15 +774,30 @@ pub fn verify(envelope: &Envelope, root: &Path) -> Vec<String> {
         }
         let full = root.join(rel);
         let Ok(text) = std::fs::read_to_string(&full) else {
-            violations.push(format!(
+            let unreadable = format!(
                 "{}: citation path does not resolve to a readable file ({})",
                 c.path,
                 full.display()
-            ));
+            );
+            match rescue {
+                // ORDER 801-g9nn — the load-bearing case. A citation into a file
+                // this checkout does not have is INDISTINGUISHABLE from a
+                // fabricated one until somebody checks the frame it was read in.
+                // With the frame named and reachable, the span can be re-read at
+                // its own commit: if it holds there, the citation is not a lie,
+                // the reader is simply not standing where the answer was
+                // computed. That is a fetch instruction, not a refusal.
+                Some(view) if frame_holds(c, envelope, view) == Some(true) => {
+                    stale.push(format!("{unreadable} — but the span VERIFIES at {}; you do not have this commit, fetch it", frame_label(c, envelope)));
+                }
+                _ => violations.push(unreadable),
+            }
             continue;
         };
         let lines: Vec<&str> = text.lines().collect();
         if c.line_start == 0 || c.line_end < c.line_start {
+            // Malformed in EVERY frame — an inverted range cites nothing
+            // anywhere, so there is nothing for a commit to rescue.
             violations.push(format!(
                 "{}:{}-{}: citation line range is empty or inverted",
                 c.path, c.line_start, c.line_end
@@ -398,21 +805,31 @@ pub fn verify(envelope: &Envelope, root: &Path) -> Vec<String> {
             continue;
         }
         if c.line_end > lines.len() {
-            violations.push(format!(
+            let past_eof = format!(
                 "{}:{}-{}: citation line range runs past end of file ({} lines)",
                 c.path,
                 c.line_start,
                 c.line_end,
                 lines.len()
-            ));
+            );
+            match rescue {
+                Some(view) if frame_holds(c, envelope, view) == Some(true) => {
+                    stale.push(format!(
+                        "{past_eof} — but the span VERIFIES at {}; the file SHRANK under you",
+                        frame_label(c, envelope)
+                    ));
+                }
+                _ => violations.push(past_eof),
+            }
             continue;
         }
         let span = lines[c.line_start - 1..c.line_end].join("\n");
+        let mut span_findings = Vec::new();
         match c.span_key() {
-            Err(e) => violations.push(e),
+            Err(e) => span_findings.push(e),
             Ok(key) => {
                 if !span.contains(&key) {
-                    violations.push(format!(
+                    span_findings.push(format!(
                         "{}:{}-{}: cited span does not contain '{}' — FABRICATED citation",
                         c.path, c.line_start, c.line_end, key
                     ));
@@ -430,13 +847,36 @@ pub fn verify(envelope: &Envelope, root: &Path) -> Vec<String> {
                     continue;
                 }
                 if !span_substantiates(&span, key, value) {
-                    violations.push(format!(
+                    span_findings.push(format!(
                         "{}:{}-{}: cited span does not substantiate authority {}={} — TAMPERED or stale authority",
                         c.path, c.line_start, c.line_end, key, value
                     ));
                 }
             }
         }
+        if !span_findings.is_empty()
+            && let Some(view) = rescue
+            && frame_holds(c, envelope, view) == Some(true)
+        {
+            // Same rescue as above, for the subtler and more dangerous shape:
+            // the path still exists here, the range is still in bounds, and the
+            // lines say something ELSE. Read at face value that is a fabricated
+            // citation; read against its frame it is a moved span, which is
+            // precisely the "reads the wrong lines and acts on them with full
+            // confidence" failure this order was filed for.
+            let at = frame_label(c, envelope);
+            stale.extend(span_findings.drain(..).map(|f| {
+                format!(
+                    "{} — but the span VERIFIES at {at}; THIS SPAN MOVED, your line numbers are stale",
+                    without_verdict(&f)
+                )
+            }));
+        }
+        violations.append(&mut span_findings);
+
+        // Frame-INDEPENDENT: whether the answer text mentions the claim has
+        // nothing to do with which commit the reader is on, so it is never
+        // rescued.
         if let Some(claim) = c.claim_key()
             && !envelope.answer.contains(&claim)
         {
@@ -448,6 +888,133 @@ pub fn verify(envelope: &Envelope, root: &Path) -> Vec<String> {
     }
 
     violations
+}
+
+/// Drop the VERDICT a rescued finding no longer carries, keeping the fact it
+/// reported. A stale finding that still ends in `FABRICATED citation` tells the
+/// reader the opposite of what the line concludes, and a message that argues
+/// with itself gets read as the scarier half.
+fn without_verdict(finding: &str) -> &str {
+    for tail in [" — FABRICATED citation", " — TAMPERED or stale authority"] {
+        if let Some(head) = finding.strip_suffix(tail) {
+            return head;
+        }
+    }
+    finding
+}
+
+/// The frame a single citation was read in: its own `commit` when it has one,
+/// otherwise the envelope's. Rendered for a message.
+fn frame_label(c: &Citation, envelope: &Envelope) -> String {
+    match c.commit.as_deref().or(envelope_commit(envelope).as_deref()) {
+        Some(sha) => short(sha),
+        None => "unknown".to_string(),
+    }
+}
+
+/// ORDER 801-g9nn — does this citation hold AT ITS OWN COMMIT?
+///
+/// `Some(true)` means the span at that commit contains everything the citation
+/// claims: the citation is sound and the READER is in a different frame.
+/// `Some(false)` means it does not hold even there — a real fabrication, which
+/// the frame excuse must not launder. `None` means the question could not be
+/// asked (no commit named, object never fetched, path absent there), and an
+/// unaskable question is never an acquittal.
+fn frame_holds(c: &Citation, envelope: &Envelope, view: &GitView) -> Option<bool> {
+    let frame = c.commit.clone().or_else(|| envelope_commit(envelope))?;
+    let text = view.file_at(&frame, &c.path)?;
+    let lines: Vec<&str> = text.lines().collect();
+    if c.line_start == 0 || c.line_end < c.line_start || c.line_end > lines.len() {
+        return Some(false);
+    }
+    let span = lines[c.line_start - 1..c.line_end].join("\n");
+    let Ok(key) = c.span_key() else {
+        return Some(false);
+    };
+    if !span.contains(&key) {
+        return Some(false);
+    }
+    if c.kind == CitationKind::Plan {
+        for (key, value) in &c.authority {
+            if key == "packet_id" || key == "section" || key == "key" {
+                continue;
+            }
+            if !span_substantiates(&span, key, value) {
+                return Some(false);
+            }
+        }
+    }
+    Some(true)
+}
+
+/// ORDER 801-g9nn — the reader-side audit: [`verify`] plus the frame the
+/// citations were read in.
+///
+/// `violations` keeps its meaning exactly — these citations are unsound and the
+/// envelope must not be trusted. `stale` is the NEW bucket and the point of the
+/// order: citations that are sound at their own commit and wrong here. Collapsing
+/// the two in either direction loses information the reader needs. Calling a
+/// stale citation FABRICATED slanders a correct answer and teaches agents to
+/// ignore the verifier; calling a fabricated one stale hands a lie a fetch
+/// instruction and a clean bill of health.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Audit {
+    pub violations: Vec<String>,
+    pub stale: Vec<String>,
+    pub relation: CallerRelation,
+}
+
+impl Audit {
+    /// Does this envelope's evidence hold for THIS reader, right here? Requires
+    /// both buckets empty: a stale citation resolves to different bytes than the
+    /// answer was built from, which is not a pass.
+    pub fn trustworthy_here(&self) -> bool {
+        self.violations.is_empty() && self.stale.is_empty()
+    }
+}
+
+/// Audit an envelope against the READER's checkout, consulting the commit DAG.
+///
+/// This is what `verify-answer` runs. It differs from [`verify`] in exactly one
+/// way: when a citation fails here, its own commit is asked whether it held
+/// THERE, and a citation that did is reported as stale rather than fabricated.
+/// Everything git cannot establish stays a violation — the frame is an
+/// explanation, never an excuse.
+pub fn audit(envelope: &Envelope, root: &Path) -> Audit {
+    let view = GitView::new(root);
+    let mut stale = Vec::new();
+    let mut violations = verify_inner(envelope, root, Some(&view), &mut stale);
+    let relation = relate(envelope, root);
+
+    // The stamped relation is a CLAIM, so it gets checked like every other
+    // claim in this envelope. It is only contradicted when this checkout can
+    // independently derive the same comparison: a relation computed for a
+    // different reader is not wrong just because we are not that reader, and an
+    // object we have never fetched cannot refute anything.
+    if let Some(stamped) = &envelope.caller_relation {
+        let derived = gitref::classify(
+            &view,
+            Some(stamped.caller_head.as_str()),
+            Some(stamped.answer_commit.as_str()),
+        );
+        if !matches!(derived, Relation::Unknown | Relation::Unfetched)
+            && derived != stamped.relation
+        {
+            violations.push(format!(
+                "caller_relation claims '{}' between {} and {}, but this checkout derives '{}' — FABRICATED relation",
+                stamped.relation.as_str(),
+                short(&stamped.caller_head),
+                short(&stamped.answer_commit),
+                derived.as_str()
+            ));
+        }
+    }
+
+    Audit {
+        violations,
+        stale,
+        relation,
+    }
 }
 
 fn truncate(s: &str, n: usize) -> String {
@@ -826,7 +1393,18 @@ pub fn answer_question(ledger: &Ledger, question: &str, source_rel: &str) -> Env
         );
     }
 
-    let mut body = String::from("order\tstatus\tdesired_release\trelease_target\tpacket_id\n");
+    // The `provenance` column is how a caller tells HISTORY from live work.
+    //
+    // Added as a SIXTH COLUMN rather than folded into `status`, and always
+    // emitted rather than only when something archived shows up. Both choices
+    // are about not lying to a parser: a consumer indexing fields 0..4 reads
+    // exactly what it read before, and a column that appears only sometimes
+    // would make `live` unstated — leaving "no marker" to mean both "live" and
+    // "this build predates the marker". An archived row rendered as if it were
+    // live is a worse answer than the refusal this whole change replaces,
+    // because it sends an agent to work that is already finished.
+    let mut body =
+        String::from("order\tstatus\tdesired_release\trelease_target\tpacket_id\tprovenance\n");
     let mut citations = Vec::new();
     let mut uncitable = Vec::new();
     for p in &packets {
@@ -866,8 +1444,13 @@ pub fn answer_question(ledger: &Ledger, question: &str, source_rel: &str) -> Env
             uncitable.push(id);
             continue;
         };
+        let provenance = if ledger.is_archived(&id) {
+            "archived"
+        } else {
+            "live"
+        };
         body.push_str(&format!(
-            "{order}\t{status}\t{desired_release}\t{release_target}\t{id}\n"
+            "{order}\t{status}\t{desired_release}\t{release_target}\t{id}\t{provenance}\n"
         ));
         citations.extend(row_citations);
     }
@@ -915,6 +1498,18 @@ fn packet_row_citations(
                     src.line_end,
                 )
             })
+        })
+        // ARCHIVED work cites the archive file it actually lives in. Third and
+        // last, so nothing about a live packet's citation changes: an archived
+        // packet has no base span and no fragment origin, which is precisely
+        // why every one of these rows used to be dropped as uncitable and the
+        // answer downgraded to `unsupported`. The path is openable and the
+        // span verifies against it under the same order-523 self-check as any
+        // other citation — history is cited, never asserted.
+        .or_else(|| {
+            ledger
+                .archived_span_of(id)
+                .map(|(file, start, end)| (archive_rel(source_rel, file), start, end))
         })?;
     let mut citations = Vec::new();
     let mut origin_authority = BTreeMap::new();
@@ -1006,15 +1601,138 @@ fn next_ranking_key(ledger: &Ledger, p: &serde_yaml::Value) -> (u8, u8, u64, Str
     )
 }
 
+/// The EFFECTIVE `next_action`: the newest of the packet field and any event
+/// carrying one.
+///
+/// ORDER 864-r9wt FIXED THIS FOR THE `next-action` SUBCOMMAND AND MISSED THIS
+/// CALLER — found by the 2026-08-24 fleet retrospective, and this caller is the
+/// higher-traffic one. `packets:` is a G-Set, so cycles update `next_action`
+/// by APPENDING EVENTS; the packet-level field keeps whatever the row was born
+/// with. `plan_next` is the selector — the primary work-pull surface every
+/// host reads — and its per-row "next:" snippet was serving that original
+/// value, arbitrarily stale, while the live queue sat in events beneath it.
+/// The coordinator itself acted on a twenty-hour-stale queue this way before
+/// the subcommand existed; every OTHER host kept getting the stale text after.
+///
+/// The packet field is untimestamped and therefore the OLDEST candidate — it
+/// never wins a tie, being the one value guaranteed never to have been updated.
+pub fn effective_next_action(p: &serde_yaml::Value) -> Option<(String, Option<String>)> {
+    let mut best: Option<String> = crate::str_field(p, "next_action").map(str::to_string);
+    // ORDER 877-lwts: when the field arrived through the set-field LWW
+    // channel, the fold records its timestamp as `next_action_ts`, and the
+    // field competes on equal clock terms with the event channel. A packet
+    // whose field is the hand-authored original still has no ts and yields to
+    // any event, as before.
+    let mut best_ts = if best.is_some() {
+        crate::str_field(p, "next_action_ts")
+            .unwrap_or("")
+            .to_string()
+    } else {
+        String::new()
+    };
+    if let Some(evs) = p.get("events").and_then(serde_yaml::Value::as_sequence) {
+        for e in evs {
+            let Some(na) = e.get("next_action").and_then(serde_yaml::Value::as_str) else {
+                continue;
+            };
+            // ISO-8601 UTC sorts lexicographically; the ledger writes it so.
+            let ts = e
+                .get("ts")
+                .and_then(serde_yaml::Value::as_str)
+                .unwrap_or("");
+            if best.is_none() || ts > best_ts.as_str() {
+                best_ts = ts.to_string();
+                best = Some(na.to_string());
+            }
+        }
+    }
+    best.map(|v| {
+        (
+            v,
+            if best_ts.is_empty() {
+                None
+            } else {
+                Some(best_ts)
+            },
+        )
+    })
+}
+
 /// One-line, bounded rendering of the packet's own next step.
 fn next_action_snippet(p: &serde_yaml::Value) -> String {
-    let raw = crate::str_field(p, "next_action")
+    let effective = effective_next_action(p).map(|(v, _)| v);
+    let raw = effective
+        .as_deref()
         .or_else(|| crate::str_field(p, "handoff_note"))
         .or_else(|| crate::str_field(p, "outcome"))
         .or_else(|| crate::str_field(p, "title"))
         .unwrap_or("see packet");
     let one_line = raw.split_whitespace().collect::<Vec<_>>().join(" ");
     truncate(&one_line, NEXT_ACTION_SNIPPET_CHARS)
+}
+
+/// Which rows count as OWNING the paths in their `owned_files`. The two scopes
+/// are genuinely different questions and both are load-bearing, so naming them
+/// is cheaper than two folds that drift.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum OwnershipScope {
+    /// Rows under an ACTIVE claim: a live `lease`, or `status: in_progress` /
+    /// `claimed`. What [`answer_next`] must exclude — handing two agents the
+    /// same file scope is a merge conflict the selector could have prevented.
+    ActiveClaims,
+    /// Every OPEN row: any packet whose status is not terminal
+    /// ([`crate::is_terminal_status`]). Strictly wider than `ActiveClaims`,
+    /// and it is the scope the ARRIVAL rule is written over —
+    /// `methodology/distributed-work.yaml` →
+    /// `new_row_only_if_independently_schedulable` reads "it names owned_files
+    /// no OPEN row already owns", not "no claimed row".
+    OpenRows,
+}
+
+/// The `owned_files` ownership index over `scope`: file path → the packet_ids
+/// that declare it. Sorted throughout, so two hosts render identical results
+/// from identical ledgers.
+///
+/// ONE COMPUTATION, TWO READERS, on purpose. [`answer_next`] built this fold
+/// inline and consumed only the KEY SET; the arrival-routing check (order
+/// 831-ezea, `scripts/check-arrival-routing.sh`) needs the same fold plus the
+/// owner names, and re-deriving "who owns this file" beside the selector is
+/// exactly how an invariant with two implementations acquires two answers.
+/// 831-ezea's own design note claims a second copy already exists at
+/// `main.rs:3195`; it does not — that line is the `check` arm — so this is the
+/// first and, deliberately, the only fold of `owned_files` in the crate.
+pub fn owned_file_owners(
+    ledger: &Ledger,
+    scope: OwnershipScope,
+) -> BTreeMap<String, BTreeSet<String>> {
+    let mut index: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for p in &ledger.packets {
+        let selected = match scope {
+            OwnershipScope::ActiveClaims => {
+                let leased = p.get("lease").is_some_and(|v| !v.is_null());
+                let in_flight = matches!(
+                    crate::str_field(p, "status"),
+                    Some("in_progress" | "claimed")
+                );
+                leased || in_flight
+            }
+            // A packet with NO status counts as open. `status` is a
+            // required_field, so this is a malformed row rather than a
+            // terminal one, and treating an unreadable row as closed would
+            // silently shrink the set the arrival rule is measured against.
+            OwnershipScope::OpenRows => {
+                !crate::str_field(p, "status").is_some_and(crate::is_terminal_status)
+            }
+        };
+        if !selected {
+            continue;
+        }
+        let id = ledger.id_of(p);
+        for f in crate::str_list(p, "owned_files") {
+            index.entry(f).or_default().insert(id.clone());
+        }
+    }
+    index
 }
 
 /// ORDER 606-xu52 — the cold-start selector. At most [`NEXT_LIMIT_MAX`] cited,
@@ -1068,20 +1786,12 @@ pub fn answer_next(
         .map(str::to_string)
         .collect();
     // File scopes under an active claim: owned_files of every leased or
-    // in-flight packet.
-    let mut claimed_files: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-    for p in &ledger.packets {
-        let leased = p.get("lease").is_some_and(|v| !v.is_null());
-        let in_flight = matches!(
-            crate::str_field(p, "status"),
-            Some("in_progress" | "claimed")
-        );
-        if leased || in_flight {
-            for f in crate::str_list(p, "owned_files") {
-                claimed_files.insert(f);
-            }
-        }
-    }
+    // in-flight packet. The fold lives in [`owned_file_owners`] — this call
+    // site wants only the key set, the arrival-routing check wants the owners
+    // too, and one fold serves both.
+    let claimed_files: BTreeSet<String> = owned_file_owners(ledger, OwnershipScope::ActiveClaims)
+        .into_keys()
+        .collect();
 
     let mut eligible: Vec<&serde_yaml::Value> = ledger
         .ready(role)
@@ -1184,7 +1894,21 @@ pub fn answer_next(
 /// of `.git`. Handles the plain repo, a `.git` FILE (worktree/submodule), and
 /// packed refs. Returns `None` rather than guessing.
 fn git_head_sha(source: &Path) -> Option<String> {
-    let mut dir = source.parent()?;
+    // ORDER 801-g9nn — START AT `source` WHEN IT IS ALREADY A DIRECTORY.
+    //
+    // Unconditionally taking `.parent()` silently skips the repository whose
+    // root was handed in. `spec::build_envelope` passes the checkout root, so
+    // the spec expert's `freshness.source_commit` was resolved from one
+    // directory ABOVE the checkout: `unknown` in the ordinary case, and — found
+    // here on 2026-08-18 — the WRONG repository's HEAD when the checkout is a
+    // linked worktree nested inside its main one, which is how a fork agent
+    // runs. An answer stamped with a commit from a different repository is the
+    // very defect this order exists to remove, one level further out.
+    let mut dir = if source.is_dir() {
+        source
+    } else {
+        source.parent()?
+    };
     loop {
         let dot_git = dir.join(".git");
         if dot_git.is_dir() {
@@ -1253,6 +1977,19 @@ fn file_mtime_epoch(path: &Path) -> Option<i64> {
             .ok()?
             .as_secs() as i64,
     )
+}
+
+/// The repo-relative path of an archive file, derived from the index's own
+/// repo-relative path exactly as [`fragment_rel`] below derives a fragment's:
+/// `plan/index.yaml` + `packets-2026-07.yaml` -> `plan/archive/packets-2026-07.yaml`.
+///
+/// Derived rather than stored because the ledger holds absolute paths and a
+/// citation must be repo-relative — the same reason `fragment_rel` exists.
+fn archive_rel(source_rel: &str, archive_file: &str) -> String {
+    match source_rel.rsplit_once('/') {
+        Some((dir, _)) => format!("{dir}/archive/{archive_file}"),
+        None => format!("archive/{archive_file}"),
+    }
 }
 
 /// ORDER 606-h9vy — the repo-relative path of a fragment, derived from the
@@ -1351,6 +2088,51 @@ mod tests {
 
     fn live_ledger() -> Ledger {
         Ledger::load(&repo_root().join("plan/index.yaml")).expect("live plan/index.yaml loads")
+    }
+
+    /// 864-r9wt's second half, found by the 2026-08-24 retrospective: the
+    /// `next-action` subcommand learned to take the newest EVENT, but
+    /// `plan_next`'s per-row snippet — the selector, the surface every host
+    /// reads — kept serving the packet FIELD, which is the value guaranteed
+    /// never to have been updated. Pin the snippet to the effective value.
+    #[test]
+    fn next_snippet_prefers_the_newest_event_over_the_stale_field() {
+        let p: serde_yaml::Value = serde_yaml::from_str(
+            r#"
+packet_id: q
+next_action: "STALE original queue from birth"
+events:
+  - type: progress
+    ts: "2026-08-01T00:00:00Z"
+    next_action: "older event"
+  - type: progress
+    ts: "2026-08-24T00:00:00Z"
+    next_action: "the live queue"
+  - type: note
+    ts: "2026-08-25T00:00:00Z"
+"#,
+        )
+        .expect("packet parses");
+        assert_eq!(
+            effective_next_action(&p).map(|(v, _)| v).as_deref(),
+            Some("the live queue")
+        );
+        assert!(
+            next_action_snippet(&p).contains("the live queue"),
+            "the selector snippet must carry the effective value"
+        );
+        assert!(
+            !next_action_snippet(&p).contains("STALE"),
+            "the birth value must not survive an event update"
+        );
+
+        // No events carrying next_action -> the field is genuinely current.
+        let bare: serde_yaml::Value =
+            serde_yaml::from_str("packet_id: r\nnext_action: only value\n").unwrap();
+        assert_eq!(
+            effective_next_action(&bare).map(|(v, _)| v).as_deref(),
+            Some("only value")
+        );
     }
 
     fn fresh() -> Freshness {
@@ -1535,7 +2317,20 @@ mod tests {
                 .any(|v| v.contains("empty or inverted"))
         );
 
-        // (e) a citation for a packet the answer never mentions
+        // (e) a citation for a packet the answer never mentions.
+        //
+        // Cited against "plan/index.yaml" and NOT against `good.path()`,
+        // because `span_of` reads the ledger's own source file and pairing its
+        // line numbers with some other file's path describes no citation at
+        // all. The two were the same file until `status of 394a` could answer
+        // from the archive; after an archival sweep `good.path()` is
+        // plan/archive/*.yaml, the index-derived range lands past that file's
+        // end, and verify short-circuits on "past end of file" — so this case
+        // stopped exercising the decorative check it exists for and started
+        // re-testing case (b). Naming the span's real file restores it: the
+        // citation is now well-formed, in-bounds, and genuinely does contain
+        // the packet it claims. The only thing wrong with it is that the
+        // answer never mentions that packet, which is the point.
         auth.insert("packet_id".into(), "plan-yaml-compiled-editor".into());
         let span = ledger
             .span_of("plan-yaml-compiled-editor")
@@ -1543,7 +2338,7 @@ mod tests {
         let decorative = Envelope::supported(
             env.answer(),
             vec![Citation::new(
-                good.path().into(),
+                "plan/index.yaml".into(),
                 span.0,
                 span.1,
                 CitationKind::Plan,
@@ -1805,6 +2600,62 @@ mod tests {
         );
         assert_eq!(env.confidence(), Confidence::Unsupported);
         assert!(env.answer().starts_with("unsupported:"));
+    }
+
+    /// ORDER 831-ezea. The two ownership scopes are DIFFERENT SETS and the
+    /// difference is load-bearing: the selector excludes ACTIVE CLAIMS, the
+    /// arrival rule reads every OPEN row. A regression that collapsed
+    /// `OpenRows` onto `ActiveClaims` would leave
+    /// `scripts/check-arrival-routing.sh` reporting green over an almost-empty
+    /// set on any ledger where nothing happens to be in flight — the exact
+    /// green-over-nothing failure 831-ezea was filed against.
+    #[test]
+    fn owned_file_owners_separates_active_claims_from_open_rows() {
+        let raw = concat!(
+            "steps:\n",
+            "  - packet_id: claimed-row\n    order: 990\n    status: in_progress\n",
+            "    owned_files: [flake.nix]\n",
+            "  - packet_id: open-row\n    order: 991\n    status: ready\n",
+            "    owned_files: [flake.nix, build.sh]\n",
+            "  - packet_id: closed-row\n    order: 992\n    status: completed\n",
+            "    owned_files: [build.sh]\n",
+        );
+        let ledger = Ledger::parse(raw, BTreeSet::new()).expect("parses");
+
+        let active = owned_file_owners(&ledger, OwnershipScope::ActiveClaims);
+        assert_eq!(
+            active.keys().map(String::as_str).collect::<Vec<_>>(),
+            ["flake.nix"]
+        );
+        assert_eq!(
+            active["flake.nix"]
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            ["claimed-row"]
+        );
+
+        let open = owned_file_owners(&ledger, OwnershipScope::OpenRows);
+        // A TERMINAL row is not an owner: `closed-row` also names build.sh and
+        // must not appear, or the rule would route new work away from files
+        // nobody is holding.
+        assert_eq!(
+            open["build.sh"]
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            ["open-row"]
+        );
+        // flake.nix is CONTENDED across the claimed row and the merely-open
+        // one. Only the wider scope sees the second owner, which is the whole
+        // reason the arrival check does not reuse the narrow one.
+        assert_eq!(
+            open["flake.nix"]
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            ["claimed-row", "open-row"]
+        );
     }
 
     /// The envelope's JSON shape IS the contract (§4). Field names and the
@@ -2090,5 +2941,544 @@ mod tests {
         .with_skipped_sources(vec!["plan/index.d/broken.yaml".to_string()]);
         assert_eq!(e.confidence(), Confidence::Exact);
         assert_eq!(e.skipped_sources().len(), 1);
+    }
+
+    // ── ORDER 801-g9nn — the frame a citation was read in ────────────────────
+    //
+    // Every test below runs against a REAL repository with REAL commits. The
+    // whole subject is what git says about two commits, so a mock would only
+    // confirm that the test and the implementation share an assumption.
+
+    use crate::gitref::testrepo::{Repo, repo};
+
+    const KEY: &str = "Egress allowlist";
+
+    /// An envelope as it arrives at `verify-answer`: deserialized from JSON,
+    /// having crossed a tool boundary and lost every type-level guarantee.
+    /// Built this way on purpose — a hand-constructed `Envelope` could not carry
+    /// the fabricated `caller_relation` the tamper tests need.
+    fn envelope_json(
+        answer_text: &str,
+        path: &str,
+        line_start: usize,
+        line_end: usize,
+        key: &str,
+        commit: &str,
+        caller_relation: Option<serde_json::Value>,
+    ) -> Envelope {
+        let mut v = serde_json::json!({
+            "answer": answer_text,
+            "citations": [{
+                "path": path,
+                "line_start": line_start,
+                "line_end": line_end,
+                "kind": "spec",
+                "authority": { "key": key },
+                "commit": commit,
+            }],
+            "freshness": { "source_commit": commit, "indexed_at": "2026-08-18T00:00:00Z" },
+            "confidence": "retrieved",
+        });
+        if let Some(cr) = caller_relation {
+            v["caller_relation"] = cr;
+        }
+        serde_json::from_value(v).expect("envelope deserializes")
+    }
+
+    /// `a` has no `spec.md`; `b` adds it with the key on line 2.
+    fn repo_where_the_file_arrives_later(tag: &str) -> (Repo, String, String) {
+        let r = repo(tag);
+        r.write("README.md", "seed\n");
+        let a = r.commit("a");
+        r.write(
+            "openspec/specs/x/spec.md",
+            &format!("intro\n## {KEY}\nbody\n"),
+        );
+        let b = r.commit("b");
+        (r, a, b)
+    }
+
+    /// THE CASE THE ORDER WAS FILED FOR, end to end.
+    ///
+    /// A shared, mirror-backed index lets the expert answer from a commit the
+    /// asking agent has never checked out. The cited file is simply not there.
+    /// Served bare that is a line number into nothing, and — critically — it is
+    /// byte-for-byte the same symptom as a fabricated path. With the frame
+    /// named, the two separate: this one is SOUND, the reader is just not
+    /// standing where the answer was computed.
+    #[test]
+    fn a_citation_in_the_callers_future_is_stale_with_a_fetch_instruction_not_a_fabrication() {
+        let (r, a, b) = repo_where_the_file_arrives_later("future");
+        r.checkout(&a); // the reader is at `a` and has never seen the file
+
+        let env = envelope_json(
+            &format!("The {KEY} section says to deny by default."),
+            "openspec/specs/x/spec.md",
+            1,
+            3,
+            KEY,
+            &b,
+            None,
+        );
+
+        // The frame-blind verifier can only call this unresolvable. That is the
+        // old behaviour and it is preserved exactly.
+        let blind = verify(&env, r.path());
+        assert_eq!(
+            blind.len(),
+            1,
+            "frame-blind verify still refuses: {blind:?}"
+        );
+        assert!(blind[0].contains("does not resolve"), "{blind:?}");
+
+        // The frame-aware audit tells the reader what to DO.
+        let verdict = audit(&env, r.path());
+        assert!(
+            verdict.violations.is_empty(),
+            "a sound citation from the future must not be reported as a violation: {:?}",
+            verdict.violations
+        );
+        assert_eq!(verdict.stale.len(), 1, "{:?}", verdict.stale);
+        assert!(
+            verdict.stale[0].contains("fetch"),
+            "the stale finding must say what to do: {}",
+            verdict.stale[0]
+        );
+        assert!(!verdict.trustworthy_here());
+        assert_eq!(verdict.relation.relation(), Relation::Behind);
+        assert_eq!(verdict.relation.absent_here(), ["openspec/specs/x/spec.md"]);
+        assert!(!verdict.relation.spans_transfer());
+        assert!(
+            verdict
+                .relation
+                .render()
+                .starts_with("caller-relation: behind")
+        );
+    }
+
+    /// The subtler and more dangerous shape: the file is still here, the range
+    /// is still in bounds, and the lines say something ELSE. Since 803-su4n put
+    /// CODE in the corpus, this is the one that becomes a wrong edit.
+    #[test]
+    fn a_span_that_moved_under_the_reader_is_stale_and_names_the_drifted_path() {
+        let r = repo("moved");
+        r.write("openspec/specs/x/spec.md", &format!("## {KEY}\ndeny\n"));
+        let a = r.commit("a");
+        // Ten lines land above it; the span at 1-2 now says something else.
+        r.write(
+            "openspec/specs/x/spec.md",
+            &format!("{}## {KEY}\ndeny\n", "preamble\n".repeat(10)),
+        );
+        let b = r.commit("b");
+        assert_ne!(a, b);
+
+        let env = envelope_json(
+            &format!("The {KEY} section denies by default."),
+            "openspec/specs/x/spec.md",
+            1,
+            2,
+            KEY,
+            &a, // read at `a`, where 1-2 IS the section
+            None,
+        );
+
+        let verdict = audit(&env, r.path()); // reader is at `b`
+        assert!(
+            verdict.violations.is_empty(),
+            "a moved span is not a fabrication: {:?}",
+            verdict.violations
+        );
+        assert_eq!(verdict.stale.len(), 1, "{:?}", verdict.stale);
+        assert!(
+            verdict.stale[0].contains("THIS SPAN MOVED"),
+            "{}",
+            verdict.stale[0]
+        );
+        assert_eq!(verdict.relation.relation(), Relation::Ahead);
+        assert_eq!(verdict.relation.drifted(), ["openspec/specs/x/spec.md"]);
+    }
+
+    /// THE NEGATIVE CONTROL, and the reason the rescue is written as a question
+    /// to git rather than a trust of the envelope.
+    ///
+    /// A citation that holds NOWHERE — not here, not at the commit it names —
+    /// must stay a violation. If naming a commit were enough to be excused, the
+    /// field would be a laundering mechanism: every fabricated citation would
+    /// arrive with a sha attached and a clean bill of health.
+    #[test]
+    fn a_fabricated_span_is_not_laundered_by_naming_a_commit() {
+        let r = repo("fabricated");
+        r.write("openspec/specs/x/spec.md", &format!("## {KEY}\ndeny\n"));
+        let a = r.commit("a");
+        r.write(
+            "openspec/specs/x/spec.md",
+            &format!("{}## {KEY}\ndeny\n", "preamble\n".repeat(10)),
+        );
+        let b = r.commit("b");
+
+        // Claims a section that appears at NEITHER commit.
+        let env = envelope_json(
+            "The Ingress allowlist section permits everything.",
+            "openspec/specs/x/spec.md",
+            1,
+            2,
+            "Ingress allowlist",
+            &a,
+            None,
+        );
+        let verdict = audit(&env, r.path());
+        assert_eq!(
+            verdict.stale.len(),
+            0,
+            "a span that holds nowhere must not be excused as stale: {:?}",
+            verdict.stale
+        );
+        assert!(
+            verdict.violations.iter().any(|v| v.contains("FABRICATED")),
+            "{:?}",
+            verdict.violations
+        );
+
+        // Same shape, but the commit is one this checkout has never fetched:
+        // an unanswerable question is not an acquittal either.
+        let elsewhere = repo("fabricated-elsewhere");
+        elsewhere.write("f", "z\n");
+        let never_fetched = elsewhere.commit("z");
+        let env2 = envelope_json(
+            "The Ingress allowlist section permits everything.",
+            "openspec/specs/x/spec.md",
+            1,
+            2,
+            "Ingress allowlist",
+            &never_fetched,
+            None,
+        );
+        let verdict2 = audit(&env2, r.path());
+        assert_eq!(verdict2.stale.len(), 0, "{:?}", verdict2.stale);
+        assert!(
+            verdict2.violations.iter().any(|v| v.contains("FABRICATED")),
+            "{:?}",
+            verdict2.violations
+        );
+        assert_eq!(verdict2.relation.relation(), Relation::Unfetched);
+        assert_eq!(b, r.git(&["rev-parse", "HEAD"]));
+    }
+
+    /// The other way a citation can hold nowhere: a range that runs off the end
+    /// of the file AT THE COMMIT IT NAMES.
+    ///
+    /// Found by a mutation that the first draft of the laundering control
+    /// survived. That control cites lines 1-2 of a two-line file, so the
+    /// out-of-range branch inside the rescue was never reached and could be
+    /// flipped to `Some(true)` — "any span git cannot slice is fine" — with every
+    /// test still green. A rescue is only as strong as its narrowest untested
+    /// path.
+    #[test]
+    fn a_range_past_the_end_of_the_file_at_its_own_commit_is_not_rescued() {
+        let r = repo("past-eof-at-frame");
+        r.write("openspec/specs/x/spec.md", &format!("## {KEY}\ndeny\n"));
+        let a = r.commit("a");
+        r.write(
+            "openspec/specs/x/spec.md",
+            &format!("{}## {KEY}\ndeny\n", "filler\n".repeat(10)),
+        );
+        r.commit("b");
+
+        // 50-60 exists at NEITHER commit; the file is 2 lines at `a` and 12 at `b`.
+        let env = envelope_json(
+            &format!("The {KEY} section says to deny by default."),
+            "openspec/specs/x/spec.md",
+            50,
+            60,
+            KEY,
+            &a,
+            None,
+        );
+        let verdict = audit(&env, r.path());
+        assert_eq!(
+            verdict.stale.len(),
+            0,
+            "a range that exists at no commit must not be excused as a moved span: {:?}",
+            verdict.stale
+        );
+        assert!(
+            verdict
+                .violations
+                .iter()
+                .any(|v| v.contains("runs past end of file")),
+            "{:?}",
+            verdict.violations
+        );
+    }
+
+    /// A file that genuinely SHRANK under the reader is the rescuable twin of
+    /// the test above, and pairing them is what keeps the past-EOF branch from
+    /// collapsing to a single answer in either direction.
+    #[test]
+    fn a_file_that_shrank_under_the_reader_is_stale_not_a_violation() {
+        let r = repo("shrank");
+        r.write(
+            "openspec/specs/x/spec.md",
+            &format!("{}## {KEY}\ndeny\n", "filler\n".repeat(10)),
+        );
+        let a = r.commit("a");
+        r.write("openspec/specs/x/spec.md", "tiny\n");
+        r.commit("b");
+
+        let env = envelope_json(
+            &format!("The {KEY} section says to deny by default."),
+            "openspec/specs/x/spec.md",
+            11,
+            12,
+            KEY,
+            &a,
+            None,
+        );
+        let verdict = audit(&env, r.path());
+        assert!(verdict.violations.is_empty(), "{:?}", verdict.violations);
+        assert_eq!(verdict.stale.len(), 1, "{:?}", verdict.stale);
+        assert!(verdict.stale[0].contains("SHRANK"), "{}", verdict.stale[0]);
+    }
+
+    /// A stamped relation is a CLAIM and gets checked like every other claim.
+    #[test]
+    fn a_stamped_caller_relation_that_the_dag_contradicts_is_a_violation() {
+        let (r, a, b) = repo_where_the_file_arrives_later("tampered-relation");
+        r.checkout(&b);
+
+        let honest = envelope_json(
+            &format!("The {KEY} section says to deny by default."),
+            "openspec/specs/x/spec.md",
+            1,
+            3,
+            KEY,
+            &b,
+            Some(serde_json::json!({
+                "caller_head": a, "answer_commit": b, "relation": "behind"
+            })),
+        );
+        let clean = audit(&honest, r.path());
+        assert!(clean.violations.is_empty(), "{:?}", clean.violations);
+
+        let lying = envelope_json(
+            &format!("The {KEY} section says to deny by default."),
+            "openspec/specs/x/spec.md",
+            1,
+            3,
+            KEY,
+            &b,
+            Some(serde_json::json!({
+                "caller_head": a, "answer_commit": b, "relation": "same"
+            })),
+        );
+        let caught = audit(&lying, r.path());
+        assert!(
+            caught
+                .violations
+                .iter()
+                .any(|v| v.contains("FABRICATED relation")),
+            "{:?}",
+            caught.violations
+        );
+    }
+
+    /// A relation this checkout cannot independently derive is NOT contradicted.
+    /// An envelope answered for someone else, carrying commits we have never
+    /// fetched, is not wrong just because we cannot check it — and silently
+    /// refusing it would make the field unusable across harnesses, which is the
+    /// only place it matters.
+    #[test]
+    fn an_underivable_stamped_relation_is_left_alone_rather_than_refused() {
+        let (r, _a, b) = repo_where_the_file_arrives_later("foreign-relation");
+        let elsewhere = repo("foreign-other");
+        elsewhere.write("f", "z\n");
+        let foreign = elsewhere.commit("z");
+
+        let env = envelope_json(
+            &format!("The {KEY} section says to deny by default."),
+            "openspec/specs/x/spec.md",
+            1,
+            3,
+            KEY,
+            &b,
+            Some(serde_json::json!({
+                "caller_head": foreign, "answer_commit": b, "relation": "diverged"
+            })),
+        );
+        let verdict = audit(&env, r.path());
+        assert!(
+            verdict.violations.is_empty(),
+            "an unfetched caller_head cannot refute anything: {:?}",
+            verdict.violations
+        );
+    }
+
+    /// `same` is the only clean bill of health, and it has to be REACHABLE —
+    /// otherwise the field would be a permanent warning nobody reads.
+    #[test]
+    fn a_reader_standing_on_the_answers_commit_is_same_and_spans_transfer() {
+        let (r, _a, b) = repo_where_the_file_arrives_later("same");
+        let env = envelope_json(
+            &format!("The {KEY} section says to deny by default."),
+            "openspec/specs/x/spec.md",
+            1,
+            3,
+            KEY,
+            &b,
+            None,
+        );
+        let verdict = audit(&env, r.path());
+        assert!(verdict.trustworthy_here(), "{verdict:?}");
+        assert_eq!(verdict.relation.relation(), Relation::Same);
+        assert!(verdict.relation.spans_transfer());
+        assert!(verdict.relation.drifted().is_empty());
+    }
+
+    /// Drift is measured against the WORKING TREE, not the reader's HEAD commit.
+    /// An uncommitted edit moves line numbers exactly as a merge does, and an
+    /// answer that called that `same` would be wrong in the only way that
+    /// matters — the reader is about to open the file, not the commit.
+    #[test]
+    fn an_uncommitted_edit_drifts_even_when_the_commits_agree() {
+        let (r, _a, b) = repo_where_the_file_arrives_later("dirty");
+        let env = envelope_json(
+            &format!("The {KEY} section says to deny by default."),
+            "openspec/specs/x/spec.md",
+            1,
+            3,
+            KEY,
+            &b,
+            None,
+        );
+        assert!(audit(&env, r.path()).relation.spans_transfer());
+
+        r.write(
+            "openspec/specs/x/spec.md",
+            &format!("{}## {KEY}\nbody\n", "inserted\n".repeat(4)),
+        );
+        let dirty = audit(&env, r.path());
+        assert_eq!(
+            dirty.relation.relation(),
+            Relation::Same,
+            "the commits still agree"
+        );
+        assert_eq!(
+            dirty.relation.drifted(),
+            ["openspec/specs/x/spec.md"],
+            "but the bytes on disk do not"
+        );
+        assert!(
+            !dirty.relation.spans_transfer(),
+            "'same' plus drift must not read as safe"
+        );
+    }
+
+    /// The default stamp fills only what has no frame, so an index that knows
+    /// its own build commit is never overwritten by the reading process's HEAD.
+    #[test]
+    fn the_default_citation_commit_never_overwrites_a_retrieved_frame() {
+        let index_commit = "1111111111111111111111111111111111111111";
+        let process_head = "2222222222222222222222222222222222222222";
+        let mut authority = BTreeMap::new();
+        authority.insert("key".to_string(), KEY.to_string());
+        let stamped = Citation::new(
+            "a.md".to_string(),
+            1,
+            2,
+            CitationKind::Spec,
+            authority.clone(),
+        )
+        .with_commit(index_commit);
+        let bare = Citation::new("b.md".to_string(), 1, 2, CitationKind::Spec, authority);
+
+        let env = Envelope::supported(
+            KEY,
+            vec![stamped, bare],
+            Confidence::Retrieved,
+            Freshness::new(index_commit.to_string(), "2026-08-18T00:00:00Z".to_string()),
+        )
+        .with_default_citation_commit(process_head);
+        assert_eq!(env.citations()[0].commit(), Some(index_commit));
+        assert_eq!(env.citations()[1].commit(), Some(process_head));
+
+        // A non-sha is dropped rather than stored: no `unknown`, no ref name,
+        // and nothing that could become a command-line argument.
+        let junk = Citation::new(
+            "c.md".to_string(),
+            1,
+            2,
+            CitationKind::Spec,
+            BTreeMap::new(),
+        )
+        .with_commit("HEAD");
+        assert_eq!(junk.commit(), None);
+    }
+
+    /// A checkout ROOT resolves to that checkout's HEAD, not to whatever
+    /// repository happens to enclose it.
+    ///
+    /// Found by an end-to-end exercise of `spec-envelope`, not by reading the
+    /// code: the spec expert stamped `freshness.source_commit` with the MAIN
+    /// checkout's HEAD while running inside a linked worktree six commits away,
+    /// because `for_source` was given a directory and took its parent. Nothing
+    /// was red — the envelope verified, the sha was a real sha, and it named the
+    /// wrong repository.
+    #[test]
+    fn freshness_for_a_checkout_root_is_that_checkouts_head() {
+        let outer = repo("nested-outer");
+        outer.write("f", "outer\n");
+        let outer_head = outer.commit("outer");
+
+        // A second repository nested inside the first, exactly as a linked
+        // worktree under .claude/worktrees/ sits inside its main checkout.
+        let inner_dir = outer.path().join("nested/inner");
+        std::fs::create_dir_all(&inner_dir).expect("mkdir inner");
+        let git = |args: &[&str]| {
+            let out = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&inner_dir)
+                .args(args)
+                .output()
+                .expect("git");
+            assert!(out.status.success(), "git {args:?}");
+            String::from_utf8_lossy(&out.stdout).trim().to_string()
+        };
+        git(&["init", "-q", "-b", "main"]);
+        git(&["config", "user.email", "l@t.invalid"]);
+        git(&["config", "user.name", "l"]);
+        std::fs::write(inner_dir.join("g"), "inner\n").expect("write");
+        git(&["add", "-A"]);
+        git(&["commit", "-q", "--no-verify", "-m", "inner"]);
+        let inner_head = git(&["rev-parse", "HEAD"]);
+        assert_ne!(inner_head, outer_head);
+
+        let fresh = Freshness::for_source(&inner_dir);
+        assert_eq!(
+            fresh.source_commit(),
+            inner_head,
+            "a root must resolve to its own HEAD, not the enclosing repository's"
+        );
+        // A FILE inside it keeps resolving as it always did.
+        let fresh_file = Freshness::for_source(&inner_dir.join("g"));
+        assert_eq!(fresh_file.source_commit(), inner_head);
+    }
+
+    /// An envelope with no frame at all still serializes to the pre-801-g9nn
+    /// shape, byte for byte. Both fields are additive and absent when unknown,
+    /// which is what keeps every existing key-set pin honest instead of merely
+    /// updated.
+    #[test]
+    fn an_unframed_envelope_serializes_exactly_as_it_did_before() {
+        let ledger = live_ledger();
+        let env = answer_question(&ledger, "status of 394a", "plan/index.yaml");
+        let v = serde_json::to_value(&env).expect("serializes");
+        let obj = v.as_object().expect("object");
+        assert!(!obj.contains_key("caller_relation"));
+        assert!(
+            !v["citations"][0]
+                .as_object()
+                .expect("citation object")
+                .contains_key("commit")
+        );
     }
 }

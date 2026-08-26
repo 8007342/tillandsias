@@ -71,9 +71,49 @@ if [[ ! -t 0 ]]; then
     REFS="$(cat 2>/dev/null || true)"
 fi
 
+
+
 RED=$'\033[0;31m'; YLW=$'\033[0;33m'; GRN=$'\033[0;32m'; RST=$'\033[0m'
 [[ -t 2 ]] || { RED=""; YLW=""; GRN=""; RST=""; }
 
+
+# ── ORDER 877-mynm: AN EMPTY REF LIST MEANS GIT IS PUSHING NOTHING ──────────
+#
+# This guard used to fall through to the full gate whenever stdin carried no
+# refs, printing "plan-only lane: not applicable — no ref list on stdin" and
+# then, on a stale stamp, refusing with "the tree changed since ./build.sh
+# --check last passed". Both lines are true and the conclusion was wrong,
+# because nobody had decoded what an empty list MEANS.
+#
+# MEASURED, hermetically, against a scratch repo with a bare remote (the
+# fixture is scripts/test-pre-push-empty-ref-list.sh):
+#
+#   fast-forward push .................... 125 bytes, one ref
+#   git push --dry-run origin HEAD ....... 108 bytes, one ref
+#   already up to date ................... 0 bytes
+#   non-fast-forward, remote-tracking ref
+#     CURRENT (git already knows) ........ 0 bytes
+#   non-fast-forward, remote-tracking ref
+#     STALE (git does not know yet) ...... 125 bytes, then the REMOTE rejects
+#
+# The list is empty exactly when git has already decided to send nothing. Git
+# still runs the hook — it always does — but there is no ref to gate. So the
+# expensive path was being paid for a push that cannot happen, and the reader
+# was sent to `./build.sh --check` when the actual remedy was `git pull
+# --rebase`. Measured on pirria at ~90s per wasted gate, recurring by
+# construction: the claim-before-work discipline races other hosts, and losing
+# that race is precisely how the remote-tracking ref ends up current-and-ahead.
+#
+# THIS IS NOT A LICENCE TO ACCEPT AN UNSCOPED PUSH (877-mynm criterion 3).
+# "No refs" and "refs I could not scope" are different facts. When a ref IS
+# outgoing and its range cannot be determined, every refusal below stands
+# exactly as written; the plan-only lane still falls back to the full gate, and
+# the full gate still refuses a stale stamp. What changes is only the case where
+# there is nothing to gate at all.
+if [[ -z "${REFS//[[:space:]]/}" ]]; then
+    echo "${GRN}✓ local gate: no refs on stdin — git is pushing nothing (already up to date, or a non-fast-forward it has already declined). Nothing to gate; if you expected a push, fetch and rebase.${RST}" >&2
+    exit 0
+fi
 refuse() {
     echo "" >&2
     echo "${RED}✗ pre-push refused: $1${RST}" >&2
@@ -86,12 +126,77 @@ refuse() {
     exit 1
 }
 
+# ── 0. Salvage refs are exempt, by definition (872-c9nd) ──────────────────────
+# A `salvage/<host>/<yyyymmdd>-<slug>` ref is a COPY of a dirty worktree pushed
+# so the work cannot be lost — it is expected to be half-edited, unbuildable,
+# and to carry a tree no gate has ever seen. Requiring a green build stamp of it
+# makes the mechanism unusable, which is exactly what happened: the ref grammar
+# has been accepted by the pre-receive gate (and deliberately exempted from its
+# YAML check) since before 872-c9nd, and nothing ever pushed one. Four hours of
+# finished work were then deleted with a fresh clone.
+#
+# Exempt ONLY when every ref in this push is a salvage ref, so a salvage cannot
+# be used to smuggle a normal branch past the gate. Nothing here can reach
+# main/linux-next: the grammar has its own namespace and the pre-receive gate
+# enforces it independently.
+#
+# THIS BLOCK MUST BE THE HOOK'S FIRST DECISION, and originally it was not.
+# Placed after release-preflight and the cheatsheet-sync guard, a salvage from
+# a dirty tree whose dirt included a cheatsheet edit was REFUSED by the sync
+# guard before this exemption was ever consulted — measured live on macuahuitl
+# 2026-08-24 (`fail:salvage:push:` with the sync guard's refusal behind it).
+# yoga's destroyed dirt contained cheatsheets/concurrent-git/
+# crdt-ledger-fragments.md, so the net would have failed the exact incident it
+# was built for. Any guard that inspects WORKTREE STATE will, on some dirty
+# tree, refuse the push that exists to preserve that dirty tree — so no such
+# guard may run before this line. Origin held ZERO salvage refs when the
+# 2026-08-24 retrospective checked; that is what "unusable safety net" looks
+# like from the outside: nothing fails, nothing is saved.
+_all_salvage=1
+_any_ref=0
+_salvage_delete=""
+while read -r _l _ls _remote_ref _rs; do
+    [[ -z "${_remote_ref:-}" ]] && continue
+    _any_ref=1
+    case "$_remote_ref" in
+        refs/heads/salvage/*)
+            # DELETION PROTECTION (874-w2gc). The exemption used to wave
+            # deletions through with the same enthusiasm as rescues: during
+            # 874-s8vf's bring-up a salvage ref was deleted with one command
+            # and nothing so much as asked. A salvage ref is by definition the
+            # ONLY copy of work that existed nowhere else — fine to reap for a
+            # test artifact, terrifying for a real rescue, and the hook cannot
+            # tell them apart. So deletion requires the explicit override; the
+            # decision and its reasoning are recorded on 874-w2gc's ledger row.
+            if [[ "$_ls" =~ ^0+$ ]]; then
+                _salvage_delete="$_remote_ref"
+            fi
+            ;;
+        *) _all_salvage=0 ;;
+    esac
+done < <(printf '%s\n' "$REFS")
+if [[ "$_any_ref" -eq 1 && "$_all_salvage" -eq 1 ]]; then
+    if [[ -n "$_salvage_delete" && "${TILLANDSIAS_SALVAGE_DELETE_OK:-0}" != "1" ]]; then
+        refuse "deleting salvage ref $_salvage_delete — a salvage ref may be the ONLY copy of rescued work (874-w2gc)" \
+               "Confirm the rescued content is merged or consciously abandoned (check the" \
+               "ledger event scripts/sweep-salvage-refs.sh filed for it), then re-run with:" \
+               "  TILLANDSIAS_SALVAGE_DELETE_OK=1 git push ..." \
+               "Mixed pushes: delete salvage refs in their own push, separate from rescues."
+    fi
+    echo "${GRN}✓ local gate: salvage ref — exempt by design (872-c9nd); a dirty-tree copy is not expected to build${RST}" >&2
+    exit 0
+fi
+
 # ── 1. Release preflight ───────────────────────────────────────────────────────
 if [[ -f scripts/release-preflight.sh ]]; then
     verdict="$(bash scripts/release-preflight.sh 2>/dev/null | tail -1)"
     rc=$?
     if [[ $rc -ne 0 || "$verdict" != "ok:release-preflight" ]]; then
-        detail="$(bash scripts/release-preflight.sh 2>&1 >/dev/null | head -6)"
+        # head -12, not -6 (order 800-vk2p): the preflight's own header plus a
+        # branch-aware remedy runs longer than six lines, and this hook is where
+        # a stuck pusher actually reads the refusal. A cap that truncates the
+        # remedy hides the one line that unblocks them.
+        detail="$(bash scripts/release-preflight.sh 2>&1 >/dev/null | head -12)"
         refuse "release preflight says ${verdict:-<no verdict>}" \
                "$detail" \
                "" \
@@ -128,7 +233,7 @@ fi
 LANE_NOTES=()
 
 attempt_plan_only_lane() {
-    local -a files=() srcs=() bases=()
+    local -a files=() srcs=() bases=() issue_bases=()
     local att_seen=0
     LANE_NOTES=()
 
@@ -157,7 +262,7 @@ attempt_plan_only_lane() {
         # Net outgoing diff for this ref: what the remote will see change.
         # --no-renames keeps the status alphabet to A/M/D/T: a rename of a
         # fragment decomposes into D+A and the D disqualifies, as it must.
-        local status path
+        local status path issue_base=""
         while IFS=$'\t' read -r status path; do
             [[ -n "$status" ]] || continue
             case "$path" in
@@ -214,13 +319,66 @@ attempt_plan_only_lane() {
                     fi
                     bases+=("")
                     ;;
+                plan/issues/?*.md)
+                    # Order 889-twhe. The Reduction Engine makes filing a
+                    # plan/issues capture a NON-NEGOTIABLE exit condition of
+                    # every meta-orchestration cycle, and this lane excluded
+                    # exactly that path — so the loop's own mandatory step
+                    # forced every finding-bearing cycle onto the full gate, on
+                    # every host, every cycle. Measured on calmecacpilli: 4.0
+                    # gate re-runs for ONE landed commit carrying two captures,
+                    # against 0 for the fragment-only pushes in the same
+                    # session. That is a structural tax on precisely the cycles
+                    # that produce the most value, and it quietly incentivises
+                    # filing LESS. Ruled approved by the coordinator with the
+                    # four conditions enforced here and in the validator below.
+                    #
+                    # NEW FILES ONLY — status A, never M/D/T. Same immutability
+                    # rule the fragment arms apply, for the same reason: a new
+                    # file is a capture, a modified one can carry anything.
+                    if [[ "$status" != "A" ]]; then
+                        echo "plan-only lane: not applicable — '$path' has status '$status' in the outgoing diff; only NEW issue captures qualify (full gate required)" >&2
+                        return 1
+                    fi
+                    # DEPTH IS DECIDED EXPLICITLY, not left to a glob. The
+                    # Reduction Engine names four classification directories;
+                    # a capture lives at the top level or in exactly one of
+                    # them. Anything deeper is something else and takes the
+                    # full gate.
+                    case "${path#plan/issues/}" in
+                        */*/*)
+                            echo "plan-only lane: not applicable — '$path' is nested more than one directory below plan/issues/ (full gate required)" >&2
+                            return 1
+                            ;;
+                        research/*|exploration/*|enhancement/*|optimization/*)
+                            ;;
+                        */*)
+                            echo "plan-only lane: not applicable — '$path' is not under a Reduction Engine class directory (research/, exploration/, enhancement/, optimization/); full gate required" >&2
+                            return 1
+                            ;;
+                    esac
+                    # Prose that is not a capture, mirroring the attestation
+                    # arm's README refusal.
+                    case "${path##*/}" in
+                        README.md|TEMPLATE.md)
+                            echo "plan-only lane: not applicable — '$path' is prose, not an issue capture (full gate required)" >&2
+                            return 1
+                            ;;
+                    esac
+                    issue_base="$remote_sha"
+                    bases+=("")
+                    ;;
                 *)
-                    echo "plan-only lane: not applicable — '$path' is outside plan/index.d/, plan/loop_status.d/, and plan/mo-full-attestations.d/ (full gate required)" >&2
+                    echo "plan-only lane: not applicable — '$path' is outside plan/index.d/, plan/loop_status.d/, plan/issues/, and plan/mo-full-attestations.d/ (full gate required)" >&2
                     return 1
                     ;;
             esac
             files+=("$path")
             srcs+=("$local_sha")
+            # Parallel to files/srcs/bases: empty for every non-issue path, so
+            # the validator below can index it without drifting out of step.
+            issue_bases+=("$issue_base")
+            issue_base=""
         done < <(git diff --name-status --no-renames "$remote_sha" "$local_sha" -- 2>/dev/null)
     done <<< "$REFS"
 
@@ -244,7 +402,16 @@ attempt_plan_only_lane() {
     . "$(dirname "${BASH_SOURCE[0]}")/../plan-binary-probe.sh"
     plan_bin="$(resolve_plan_binary || true)"
     [[ -n "$plan_bin" ]] && have_plan=1
-    if [[ $have_yq -eq 0 && $have_plan -eq 0 ]]; then
+    # Order 889-twhe: fail closed only when this push actually carries YAML that
+    # needs a YAML parser. Before, an issues-only or loop-status-only push was
+    # refused for lacking a validator it had nothing to run — the fail-closed
+    # rule is right, but it must be scoped to what is being validated, or it
+    # refuses pushes on the absence of an irrelevant tool.
+    local needs_yaml=0 f
+    for f in "${files[@]}"; do
+        case "$f" in plan/index.d/*) needs_yaml=1 ;; esac
+    done
+    if [[ $needs_yaml -eq 1 && $have_yq -eq 0 && $have_plan -eq 0 ]]; then
         echo "plan-only lane: not applicable — neither yq nor target/release/tillandsias-plan is available to validate fragments (fail closed; full gate required)" >&2
         return 1
     fi
@@ -275,6 +442,30 @@ attempt_plan_only_lane() {
                     fi
                 else
                     LANE_NOTES+=("yq absent — YAML parse of ${files[$i]} delegated to tillandsias-plan check, which folds every fragment")
+                fi
+                ;;
+            plan/issues/*)
+                # Order 889-twhe, coordinator condition (b): the lane may only
+                # accept what it VALIDATES. plan/issues is not gate-free —
+                # check-issue-citation-convention.sh (881-29me) is the one gate
+                # that reads newly-added issue files, and it must run here and
+                # pass, per file, the way fragments are parsed above.
+                #
+                # It is invoked against the PUSHED commit, not the worktree:
+                # TILLANDSIAS_ISSUE_CITATION_HEAD (added by this order) makes it
+                # diff base..head instead of base..worktree, so the lane vouches
+                # for the bytes the remote receives. Scoped to the single file
+                # via _DIR, so one document's violation names that document.
+                if [[ ! -x "$REPO_ROOT/scripts/check-issue-citation-convention.sh" && ! -r "$REPO_ROOT/scripts/check-issue-citation-convention.sh" ]]; then
+                    echo "plan-only lane: not applicable — scripts/check-issue-citation-convention.sh is unavailable to validate ${files[$i]} (fail closed; full gate required)" >&2
+                    rm -rf "$tmp"; return 1
+                fi
+                if ! TILLANDSIAS_ISSUE_CITATION_DIR="${files[$i]}" \
+                     TILLANDSIAS_ISSUE_CITATION_BASE="${issue_bases[$i]}" \
+                     TILLANDSIAS_ISSUE_CITATION_HEAD="${srcs[$i]}" \
+                     bash "$REPO_ROOT/scripts/check-issue-citation-convention.sh" >/dev/null 2>&1; then
+                    echo "plan-only lane: validation FAILED — ${files[$i]} does not pass check-issue-citation-convention (881-29me); full gate required" >&2
+                    rm -rf "$tmp"; return 1
                 fi
                 ;;
             plan/loop_status.d/*)
@@ -313,7 +504,16 @@ attempt_plan_only_lane() {
                     fi
                     tail -c +"$((oldsz + 1))" "$blob" > "$added"
                 else
-                    cp "$blob" "$added"
+                    # Order 848-bx2q: a NEW per-host ledger begins with the
+                    # fixed '# '-comment header mo-full-attest.sh record
+                    # writes, and the grammar below has no comment form — so a
+                    # joining host's FIRST attestation always failed here and
+                    # paid a full gate for the tool's own output (measured on
+                    # lenovinha's rejoin, 2026-08-22). Admit the header:
+                    # LEADING comment lines only, then hold every line after
+                    # it to the same grammar as an append. A '# ' line after
+                    # content still refuses.
+                    awk '!started && /^# / { next } { started=1; print }' "$blob" > "$added"
                 fi
                 if LC_ALL=C grep -qvE '^(|## [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z [A-Za-z0-9._-]+|MO-FULL: (COMPLETE|BLOCKED) [0-9a-f]{40} [A-Za-z0-9][A-Za-z0-9._/-]* [0-9a-f]{40})$' "$added"; then
                     echo "plan-only lane: validation FAILED — ${files[$i]} added lines break the attestation-ledger grammar (full gate required)" >&2
@@ -446,10 +646,18 @@ attempt_plan_only_lane() {
     for i in "${!files[@]}"; do
         echo "plan-only lane: validated ${files[$i]}" >&2
     done
+    # bash 3.2 (the project floor, and the macOS system bash) treats
+    # "${arr[@]}" on an EMPTY array as an unbound variable under `set -u`;
+    # bash 4.4 fixed it. LANE_NOTES is empty on the happy path — notes are only
+    # appended when a checker was ABSENT and got skipped — so this loop aborted
+    # the hook precisely when every check had run, and took the push with it.
+    # Guard on the length, which is well-defined for an empty array everywhere.
     local note
-    for note in "${LANE_NOTES[@]}"; do
-        echo "plan-only lane: note: $note" >&2
-    done
+    if [ "${#LANE_NOTES[@]}" -gt 0 ]; then
+        for note in "${LANE_NOTES[@]}"; do
+            echo "plan-only lane: note: $note" >&2
+        done
+    fi
     echo "${GRN}✓ local gate: plan-only lane clean (${#files[@]} fragment file(s) validated; build stamp not required for this push)${RST}" >&2
     return 0
 }
@@ -576,10 +784,57 @@ if [[ -f scripts/gate-stamp.sh ]]; then
                        "Run it once, then push:" \
                        "  ./build.sh --check"
             else
-                refuse "the tree changed since ./build.sh --check last passed" \
-                       "The gate validated a different tree than the one you are pushing." \
-                       "Re-run it:" \
-                       "  ./build.sh --check"
+                # ORDER 864-q7dm — NAME WHAT CHANGED, because "re-run it" is
+                # sometimes ACTIVELY WRONG ADVICE.
+                #
+                # This host is told to run long-horizon background work, and
+                # the stamp assumes the tree holds still. Those instructions
+                # conflict. Measured 2026-08-23: a band measurement appending a
+                # TSV inside the checkout made every push fail here, and the
+                # re-run the message recommends stamps a tree that changes
+                # again before the push completes — so the advice cannot
+                # terminate. The cycle could not push ANY work, including work
+                # entirely unrelated to the job, for as long as the job ran.
+                #
+                # Untracked does not exempt a path: the stamp covers
+                # `ls-files --cached --others`, so a file APPEARING or GROWING
+                # invalidates it exactly as a tracked edit does.
+                #
+                # Naming the paths turns a puzzle into a decision. mtime
+                # against the stamp file is the cheap signal — it needs no
+                # per-path digests and it points straight at a live writer.
+                _gs="$(git rev-parse --absolute-git-dir 2>/dev/null)/tillandsias-gate-stamp"
+                _changed=""
+                if [[ -f "$_gs" ]]; then
+                    _changed="$(git ls-files -z --cached --others --exclude-standard 2>/dev/null \
+                        | xargs -0 -r -I{} sh -c '[ -f "{}" ] && [ "{}" -nt "'"$_gs"'" ] && printf "%s\n" "{}"' 2>/dev/null \
+                        | head -12)"
+                fi
+                if [[ -n "$_changed" ]]; then
+                    _n="$(printf '%s\n' "$_changed" | wc -l | tr -d ' ')"
+                    refuse "the tree changed since ./build.sh --check last passed" \
+                           "The gate validated a different tree than the one you are pushing." \
+                           "" \
+                           "CHANGED SINCE THE GATE RAN (${_n} path(s), newest-first by mtime):" \
+                           "$(printf '  %s\n' $_changed)" \
+                           "" \
+                           "IF ONE OF THOSE IS A BACKGROUND JOB STILL WRITING, re-running the" \
+                           "gate will not help — it stamps a tree that changes again before the" \
+                           "push lands (864-q7dm). Move the in-progress output OUT of the" \
+                           "checkout instead; a running redirect holds the file by inode, so" \
+                           "\`mv\` is safe mid-run and the job keeps appending:" \
+                           "  mv <path> target/   # target/ is gitignored" \
+                           "" \
+                           "Otherwise the change is yours and the gate is right:" \
+                           "  ./build.sh --check"
+                else
+                    refuse "the tree changed since ./build.sh --check last passed" \
+                           "The gate validated a different tree than the one you are pushing." \
+                           "(No path is newer than the stamp — the change is a deletion, a mode" \
+                           "change, or a same-mtime rewrite.)" \
+                           "Re-run it:" \
+                           "  ./build.sh --check"
+                fi
             fi
             ;;
         *)

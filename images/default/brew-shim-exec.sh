@@ -128,6 +128,16 @@ if [ ! -x "$BREW_PREFIX/bin/brew" ]; then
 fi
 
 brew_env
+# Per-arch policy, stated in ONE owned line (order 317, scope item 3):
+# aarch64 Linux — every macOS-hosted guest — is Homebrew Tier 2 with no
+# supported bottles, so an install may degrade to a slow source build inside
+# the bounded timeout below. Owning the statement here replaces Homebrew's
+# multi-line "unsupported, do not report issues" wall with policy an agent
+# can act on. Install-path only: a tool already present execs above without
+# ceremony.
+if [ "$(uname -s 2>/dev/null)" = "Linux" ] && [ "$(uname -m 2>/dev/null)" = "aarch64" ]; then
+    echo "tillandsias: aarch64 Linux is Homebrew Tier 2 (no bottles): this may source-build slowly or time out; harnesses/tools whose official docs name npm/curl channels install that way instead (order 317)." >&2
+fi
 echo "tillandsias: installing '$FORMULA' in userspace via brew (signed formula index, checksum-verified bottle)..." >&2
 # BOUND THE INSTALL, but not for the reason an earlier version of this comment
 # gave — that reason was wrong and is corrected here rather than deleted, because

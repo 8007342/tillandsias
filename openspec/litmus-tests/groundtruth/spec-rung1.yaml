@@ -1,0 +1,170 @@
+# ORDER 551 — ground truth for the FAT SPEC EXPERT (spec.answer).
+#
+# @trace order:551
+# @trace order:547
+#
+# Written to the format expert-groundtruth-rung1.yaml anticipated for exactly
+# this: register the engine in groundtruth.rs (ENGINES + Harness::run), drop a
+# set NEXT TO that file, and grade with the same code path — so the accuracy bar
+# cannot be quietly lowered for a new expert.
+#
+# WHY EACH CASE CARRIES A query_vec
+#
+#   This crate is network-free (spec.rs:2) and `spec-retrieve` is specified as
+#   "network-free cosine top-k over CALLER-SUPPLIED embeddings". So the grader
+#   supplies the query embedding exactly as every other caller of that path
+#   does, and grading stays deterministic while still exercising the REAL
+#   retrieval and envelope code. Having the grader make an HTTP call would
+#   trade determinism for nothing; grading a lexical stand-in would be worse,
+#   because a green grade would then certify a path production never runs.
+#
+#   The vectors pin this set to an embedding model (768-dim nomic-embed-text).
+#   That is a managed fact, not a new one — check-dev-embed-model-agreement.sh
+#   exists so the producer and the query path cannot name different models. A
+#   model change re-embeds the set; it does not rewrite it.
+#
+# PRECONDITION: spec.answer needs a built index. Point
+# TILLANDSIAS_SPEC_INDEX_DIR at one (scripts/spec-index-ensure.sh builds it).
+# A missing index is reported as an error naming that variable, never as a
+# silent pass — an ungradeable case must not read as a graded one.
+version: 1
+name: spec-rung1
+description: >
+  Cross-cutting questions the deterministic plan and methodology experts
+  refuse, whose answers live in whole-spec prose and in code.
+cases:
+  - id: spec-forge-isolation-and-egress
+    engine: spec.answer
+    query: "how does the forge stay isolated from the host and control outbound network access?"
+    query_vec: openspec/litmus-tests/groundtruth/query-vectors/forge-isolation.json
+    why: >
+      The question 803-su4n's scorecard used as its worked example of a JOIN
+      across specs: no single spec answers it, and the deterministic experts
+      correctly refuse. It is the case that justifies the fat expert existing
+      at all, so if retrieval stops finding the two governing requirements the
+      expert has lost the thing it was built for.
+    expect:
+      confidence: retrieved
+      min_citations: 3
+      citations_include:
+        # The REQUIREMENT, re-read from disk at grading time. Asserting the
+        # governing sentence rather than the file means a citation that points
+        # at the right file and the wrong lines goes red — the failure mode
+        # that otherwise looks entirely healthy.
+        - path: openspec/specs/forge-offline/spec.md
+          kind: spec
+          span_contains:
+            - "SHALL be attached to the `tillandsias-enclave` internal network only"
+            - "All HTTP/HTTPS traffic SHALL go through the proxy"
+        # The SCENARIO that makes the requirement checkable, in a different
+        # spec — which is what makes this a join rather than a lookup.
+        - path: openspec/specs/enclave-network/spec.md
+          kind: spec
+          span_contains:
+            - "MUST NOT have access to the default bridge network"
+      citations_exclude:
+        # A "return everything" regression satisfies citations_include for
+        # free. These are the corpora a top-6 must NOT reach for this question:
+        # the plan ledger is not in this corpus at all, and a localization spec
+        # is present, adjacent in neither meaning nor vocabulary, and would
+        # indicate the ranking had collapsed.
+        - path: plan/index.yaml
+        - path: openspec/specs/i18n-localization/spec.md
+
+  - id: spec-inference-tier-mechanism-is-in-code
+    engine: spec.answer
+    query: "how is the inference accelerator tier selected, and what makes it fall back to CPU?"
+    query_vec: openspec/litmus-tests/groundtruth/query-vectors/inference-tier.json
+    why: >
+      803-su4n's scorecard graded this PARTIAL: the specs describe the tier
+      architecture correctly and cannot state the MECHANISM, because the
+      mechanism is code. It is the case that justified putting crates/ in the
+      corpus, so it is the case that should go red if code ever falls back out.
+    expect:
+      confidence: retrieved
+      min_citations: 3
+      citations_include:
+        # The FALLBACK ITSELF, re-read from disk. Asserting the match arm rather
+        # than the file means a citation that lands on the right file and the
+        # wrong function goes red — and line numbers move constantly in this
+        # file, which is exactly why the assertion is on text.
+        - path: crates/tillandsias-headless/src/main.rs
+          kind: code
+          span_contains:
+            - "fn effective_inference_tier"
+            - "if !nvidia_cdi_available()"
+      citations_exclude:
+        - path: plan/index.yaml
+
+  - id: spec-podman-reset-what-survives
+    engine: spec.answer
+    query: "what does podman system reset delete, and what survives it?"
+    query_vec: openspec/litmus-tests/groundtruth/query-vectors/podman-reset.json
+    why: >
+      803-su4n's scorecard graded this a MISS with a specific shape worth
+      pinning: retrieval reached the right FILE and the WRONG SPAN — it cited
+      podman.md's Troubleshooting block, and the corpus contains exactly ONE
+      authoritative line about what a reset destroys. A reader following that
+      citation learned nothing and had no signal they had been sent to the
+      wrong place. This case exists so that regression is loud rather than
+      quiet: it demands the span that actually contains the rule.
+    expect:
+      confidence: retrieved
+      min_citations: 3
+      citations_include:
+        - path: cheatsheets/runtime/podman-logging.md
+          kind: cheatsheet
+          span_contains:
+            - "Destructive host reset"
+            - "wipes Podman state"
+      citations_exclude:
+        - path: plan/index.yaml
+
+  # ── ORDER 865-h4tn / 824-6qxh criterion 3 ─────────────────────────────────
+  #
+  # The refusal, pinned. These two cases share a query and a vector and differ
+  # ONLY in the answer prose, which is the whole point: the envelope keeps a
+  # chunk when the answer contains that chunk's key (spec.rs:1079) and refuses
+  # when none survive (spec.rs:1095).
+  #
+  # WHAT THIS DOES AND DOES NOT CERTIFY. It pins KEY CONTAINMENT, not semantic
+  # support. A green row here does NOT mean the expert declines questions the
+  # corpus cannot answer — the retrieval stage happily returns three chunks at
+  # ~0.59 for this very question, and before 865-h4tn the grader's synthesised
+  # answer listed every one of their keys and graded it `retrieved`, citing
+  # `fn basic_recipe()` in the VM layer as evidence about baking bread. Semantic
+  # refusal is 853-6gz3's Tier B and is not tested here.
+  - id: spec-refuses-when-the-answer-uses-no-retrieved-chunk
+    engine: spec.answer
+    query: what is the flibber flobber protocol and how do I bake sourdough bread
+    query_vec: openspec/litmus-tests/groundtruth/query-vectors/out-of-corpus-refusal.json
+    answer: >
+      I cannot answer this from the indexed corpus. Nothing retrieved bears on
+      the question, so there is no span to cite.
+    why: >
+      824-6qxh criterion 3 — a refusal must not silently regress. Retrieval
+      cannot refuse (cosine top-k always returns k), so the ONLY thing standing
+      between a caller and a confident irrelevant citation is the envelope
+      dropping chunks the answer never used. If that check is ever weakened to
+      "cite whatever was retrieved", this case goes red and nothing else in the
+      suite would.
+    expect:
+      confidence: unsupported
+      max_citations: 0
+      answer_excludes:
+        - "basic_recipe"
+
+  - id: spec-still-cites-when-the-answer-does-use-a-chunk
+    engine: spec.answer
+    query: what is the flibber flobber protocol and how do I bake sourdough bread
+    query_vec: openspec/litmus-tests/groundtruth/query-vectors/out-of-corpus-refusal.json
+    why: >
+      NEGATIVE CONTROL for the case above, and it is not optional: without it a
+      harness that refused EVERYTHING would score green on the refusal case and
+      look correct. Same question, same vector, no `answer` — so the grader
+      synthesises its retrieval-only prose, which lists every chunk key and must
+      therefore still produce citations. Refusing here would mean the envelope
+      had stopped citing rather than started refusing.
+    expect:
+      confidence: retrieved
+      min_citations: 1

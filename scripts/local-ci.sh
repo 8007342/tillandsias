@@ -399,7 +399,7 @@ failed_reason_for_check() {
         rust-formatting) echo "Rust code not formatted: run 'cargo fmt --all' (see /tmp/fmt-check.log)" ;;
         rust-clippy) echo "Clippy warnings found: run 'cargo clippy --workspace' to see details (see /tmp/clippy-check.log)" ;;
         rust-clippy-all-features) echo "All-features clippy warnings: run 'cargo clippy --workspace --all-targets --all-features -- -D warnings' (see /tmp/clippy-all-features-check.log)" ;;
-        rust-tests) echo "Test failures detected: run 'cargo test --workspace --lib' to see details (see /tmp/test-check.log)" ;;
+        rust-tests) echo "Test failures detected: run 'cargo test --workspace --lib --no-fail-fast' to see details (see /tmp/test-check.log)" ;;
         container-base-policy) echo "Container base-image policy drift found (see /tmp/container-bases.log)" ;;
         cheatsheet-tiers) echo "Cheatsheet tier errors or strict warnings found (see /tmp/cheatsheet-tiers.log)" ;;
         no-python-scripts) echo "Python scripts found in tracked files (see /tmp/no-python-check.log)" ;;
@@ -755,6 +755,20 @@ run_rust_on_host() {
     (cd "$repo_root" && "$@")
 }
 
+# 880-tdwn, WIRED: every cargo TEST invocation runs with the real-podman
+# tripwire armed — a parallel test racing the TILLANDSIAS_PODMAN_BIN seam
+# fails loudly by name instead of stopping the live enclave (twice-measured:
+# every warm-cache --ci-full killed the whole stack during tray-check; vault
+# SIGKILLed at stop-grace). The 32-test non-hermetic population was drained
+# 2026-08-25 (seam guards + writer-lock consolidation, evidence on the
+# 880-tdwn row); the drain ran 559/559 twice armed before this wiring. A
+# test failing HERE with the 880-tdwn panic is a latent racer surfacing —
+# fix its seam, never unwire the line.
+run_rust_test_on_host() {
+    local repo_root="${REPO_ROOT}"
+    (cd "$repo_root" && TILLANDSIAS_PODMAN_REFUSE_REAL=1 "$@")
+}
+
 sha256_file() {
     local file="$1"
     if command -v sha256sum >/dev/null 2>&1; then
@@ -874,6 +888,42 @@ else
 fi
 
 # ============================================================================
+# CHECK 0b: DEAD ENV BRANCHES advisory (order 829-dkuc, wired 865-j3kd)
+# ============================================================================
+# Advisory ONLY, and the distinction matters. check-dead-env-branches.sh names
+# TILLANDSIAS_* variables that live code READS and nothing ASSIGNS or DOCUMENTS
+# — a branch guarded by a variable nothing sets is unreachable code wearing a
+# feature flag's costume. It currently reports dead=14, which is a BURNDOWN
+# LIST, not a release defect: those branches have been unreachable for as long
+# as they have existed and shipping is not made worse by one more day of them.
+#
+# WHY IT IS WIRED HERE AT ALL. The guard shipped invoked by nothing, so
+# audit-guard-activation reported it an orphan and ./build.sh --ci-full failed
+# — one of three checks that made the trunk unreleasable for a week (865-n8vq).
+# The fix for an orphaned guard is to INVOKE it, not to mention it: the auditor
+# greps for the name, so a comment would have flipped the verdict while leaving
+# the guard exactly as dead. Gaming a guard is the one repair worse than the
+# defect.
+#
+# Gating it would trade one release blocker for another, which is why this is
+# advisory until 829-dkuc burns the list down.
+if [[ -x "scripts/check-dead-env-branches.sh" ]]; then
+    log_section "DEAD ENV BRANCH advisory (non-gating)"
+    _dead_report="$(scripts/check-dead-env-branches.sh 2>/dev/null || true)"
+    _dead_verdict="$(printf '%s\n' "$_dead_report" | grep -E '^dead-env-branches:' | tail -1)"
+    if [[ -n "$_dead_verdict" ]]; then
+        log_info "${_dead_verdict}"
+        log_info "Advisory: a variable nothing sets makes its branch unreachable (829-dkuc). Burndown, not a gate."
+    else
+        log_info "dead-env-branch detector produced no verdict line (treated as advisory-clean)."
+    fi
+    archive_check_log "dead-env-branches-advisory" "pass" /dev/null
+else
+    log_skip "dead-env-branch detector not found (advisory step skipped)"
+    archive_check_log "dead-env-branches-advisory" "skipped"
+fi
+
+# ============================================================================
 # CHECK 1: Spec-cheatsheet binding validation
 # ============================================================================
 
@@ -988,7 +1038,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # 765-uti9 quick win (audit F4c): --all-targets aligns this lane with
     # build.sh --check's clippy flavor, so the two share fingerprints instead
     # of recompiling — and coverage strictly widens (trunk is already held
-    # clean at --all-targets -D warnings by the pre-push gate). The heavy
+    # clean at --all-targets -D warnings by the local gate). The heavy
     # --all-features flavor below is deliberately untouched.
     if run_rust_on_host cargo clippy --workspace --all-targets -- -D warnings 2>&1 | tee /tmp/clippy-check.log; then
         log_pass "Clippy checks pass (no warnings)"
@@ -1022,22 +1072,40 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # Tests - run lib tests only; host-sensitive integration suites are covered by
     # their dedicated litmus/runtime gates rather than the fast deterministic pass.
     # @trace spec:testing
-    if run_rust_on_host cargo test --workspace --lib 2>&1 | tee /tmp/test-check.log; then
+    # --no-fail-fast (order 829-g4xf): without it cargo stops at the first
+    # failing binary, so this pass reported 1 failure where there were 8 and
+    # more than half the workspace never ran.
+    if run_rust_test_on_host cargo test --workspace --lib --no-fail-fast 2>&1 | tee /tmp/test-check.log; then
         log_pass "All unit tests pass"
         archive_check_log "rust-tests" "pass" /tmp/test-check.log
     else
-        log_fail_tracked "rust-tests" "Test failures detected: run 'cargo test --workspace --lib' to see details (see /tmp/test-check.log)"
+        log_fail_tracked "rust-tests" "Test failures detected: run 'cargo test --workspace --lib --no-fail-fast' to see details (see /tmp/test-check.log)"
         [[ "$VERBOSE" == "1" ]] && cat /tmp/test-check.log >&2
         archive_check_log "rust-tests" "fail" /tmp/test-check.log
     fi
 
-    # Tray feature contract
+    # Tray + vsock-server feature contract
+    #
+    # `listen-vsock` added by order 831-wmn4. This pass named only `tray`, so
+    # `mod vsock_server` — the in-VM control wire's SERVER half — was compiled
+    # by no gate that runs tests, exactly the way `mod tray` had been before
+    # this check existed. Measured 2026-08-19: a new bound test in
+    # vsock_server.rs ran nowhere, while the suite still reported all green.
+    # Same defect as the macOS-tray comment below, one crate over.
+    #
     # @trace spec:tray-app, spec:tray-ux, spec:tray-progress-and-icon-states
-    if run_rust_on_host cargo test -p tillandsias-headless --bin tillandsias --features tray 2>&1 | tee /tmp/tray-check.log; then
-        log_pass "Tray feature tests pass"
+    # @trace spec:vsock-transport
+    # 880-tdwn: this ONE target keeps the plain wrapper FOR NOW — arming the
+    # tripwire here fails 28 named tests (the enumerated non-hermetic
+    # population, list on the 880-tdwn row) and reds the gate the fleet
+    # pushes behind. Until that list is drained, a warm-cache ci-full beside
+    # a live enclave WILL stop the stack during this check; the queue carries
+    # the operational caution and the 878-79b5 supervisor restarts it.
+    if run_rust_test_on_host cargo test -p tillandsias-headless --bin tillandsias --features tray,listen-vsock --no-fail-fast 2>&1 | tee /tmp/tray-check.log; then
+        log_pass "Tray + vsock-server feature tests pass"
         archive_check_log "tray-contract" "pass" /tmp/tray-check.log
     else
-        log_fail_tracked "tray-contract" "Tray feature tests failed (see /tmp/tray-check.log)"
+        log_fail_tracked "tray-contract" "Tray/vsock-server feature tests failed (see /tmp/tray-check.log)"
         [[ "$VERBOSE" == "1" ]] && cat /tmp/tray-check.log >&2
         archive_check_log "tray-contract" "fail" /tmp/tray-check.log
     fi
@@ -1062,7 +1130,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # Windows it compiles to a stub with nothing to assert.
     if [[ "$(uname -s)" == "Darwin" ]]; then
         # @trace spec:macos-native-tray, spec:tray-ux
-        if run_rust_on_host cargo test -p tillandsias-macos-tray --bins 2>&1 | tee /tmp/macos-tray-check.log; then
+        if run_rust_test_on_host cargo test -p tillandsias-macos-tray --bins --no-fail-fast 2>&1 | tee /tmp/macos-tray-check.log; then
             log_pass "macOS tray tests pass"
             archive_check_log "macos-tray-tests" "pass" /tmp/macos-tray-check.log
         else
@@ -1074,7 +1142,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
 
     # Headless signal shutdown contract
     # @trace spec:headless-mode, spec:graceful-shutdown
-    if TILLANDSIAS_NO_TRAY=1 run_rust_on_host cargo test -p tillandsias-headless --test signal_handling 2>&1 | tee /tmp/signal-handling-check.log; then
+    if TILLANDSIAS_NO_TRAY=1 run_rust_test_on_host cargo test -p tillandsias-headless --test signal_handling 2>&1 | tee /tmp/signal-handling-check.log; then
         log_pass "Headless shutdown signal tests pass"
         archive_check_log "signal-handling" "pass" /tmp/signal-handling-check.log
     else
@@ -1197,6 +1265,25 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         archive_check_log "dev-embed-model-agreement" "skipped"
     fi
 
+    # Order 801-a2by. Sibling of the check above and for the same reason: the
+    # spec-index PRODUCER and its two READERS resolve the durable root
+    # independently, in two runtimes that cannot share a file. A disagreement is
+    # silent by construction — the index gets built where nobody looks and the
+    # system reports a missing index rather than a misconfigured one, which is
+    # the shape that hid the whole embedding step for weeks (552).
+    if [[ -f "scripts/check-spec-index-resolution-agreement.sh" ]]; then
+        if bash scripts/check-spec-index-resolution-agreement.sh 2>&1 | tee /tmp/spec-index-resolution-agreement.log; then
+            log_pass "Spec-index resolution agrees across producer and readers"
+            archive_check_log "spec-index-resolution-agreement" "pass" /tmp/spec-index-resolution-agreement.log
+        else
+            log_fail_tracked "spec-index-resolution-agreement" "Spec-index resolution drift (see /tmp/spec-index-resolution-agreement.log)"
+            archive_check_log "spec-index-resolution-agreement" "fail" /tmp/spec-index-resolution-agreement.log
+        fi
+    else
+        log_fail_missing_guard "spec-index-resolution-agreement" "scripts/check-spec-index-resolution-agreement.sh"
+        archive_check_log "spec-index-resolution-agreement" "skipped"
+    fi
+
     # Order 765-mza8. Wired here, literally, for the same reason as the two
     # above. A dead `inputs:` glob is silent by construction: it cannot make a
     # test run, only skip, so nothing else in this suite would ever go red for
@@ -1236,9 +1323,28 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # Markdown distillation policy (order 599-4wzr activation): was orphaned.
     log_section "Markdown Distillation Policy"
     if [[ -f "scripts/check-markdown-distillation.sh" ]]; then
-        bash scripts/check-markdown-distillation.sh 2>&1 | tee /tmp/markdown-distillation.log
-        log_pass "Markdown distillation policy checked (advisory)"
-        archive_check_log "markdown-distillation" "pass" /tmp/markdown-distillation.log
+        # ORDER 831-ezea. This ran the checker into `tee` with NO `if`, then
+        # logged `log_pass` unconditionally. `tee` always exits 0, so the
+        # checker's exit 1 was discarded before anything could read it — the
+        # gate printed "✓ Markdown distillation policy checked (advisory)" on
+        # every run, including runs where the checker was naming noncanonical
+        # files on stderr two lines above. Same defect class as the pre-build
+        # litmus scar at the bottom of this file: a check that cannot fail.
+        #
+        # `set -o pipefail` is active (line 27), so `if <cmd> | tee` already
+        # propagates the producer's status — that is the shape used by the
+        # guard-activation audit directly above. PIPESTATUS[0] is read only to
+        # NAME the exit code in the failure message; do not read `$?` there,
+        # it is tee's.
+        if bash scripts/check-markdown-distillation.sh 2>&1 | tee /tmp/markdown-distillation.log; then
+            log_pass "Markdown distillation policy checked"
+            archive_check_log "markdown-distillation" "pass" /tmp/markdown-distillation.log
+        else
+            rc=${PIPESTATUS[0]}
+            log_fail_tracked "markdown-distillation" \
+                "Markdown distillation policy FAILED (exit ${rc}) — noncanonical markdown outside the inventory; see /tmp/markdown-distillation.log"
+            archive_check_log "markdown-distillation" "fail" /tmp/markdown-distillation.log
+        fi
     else
         log_fail_missing_guard "markdown-distillation" "scripts/check-markdown-distillation.sh"
         archive_check_log "markdown-distillation" "skipped"

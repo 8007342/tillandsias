@@ -21,6 +21,7 @@ specs:
   - litmus:environment-isolation
   - litmus:app-lifecycle-state-machine-shape
   - litmus:app-lifecycle-tray-state-api-shape
+  - litmus:uninstall-preserves-vm-image
   coverage_ratio: 75
   last_verified: '2026-06-02'
 - spec_id: appimage-build-pipeline
@@ -151,11 +152,14 @@ specs:
   - litmus:stable-channel-shape
   - litmus:smoke-release-channel-shape
   - litmus:cycle-batch-triage-shape
+  - litmus:harness-affinity-selection-shape
+  - litmus:capability-routing-shape
   - litmus:pickup-role-grammar-shape
   - litmus:terminal-status-vocabulary-shape
   - litmus:local-ci-self-clean-evidence
   - litmus:installer-ascii-expansion-safety
   - litmus:litmus-expression-pinning-enforcement-shape
+  - litmus:litmus-bindings-reconciliation-shape
   - litmus:parked-blocks-visibility-shape
   - litmus:fragment-closure-evidence-gate-shape
   - litmus:fragment-status-loss-attribution-shape
@@ -163,10 +167,16 @@ specs:
   - litmus:fold-incompleteness-typed-shape
   - litmus:release-runbook-external-preconditions-shape
   - litmus:script-exec-bit-shape
+  - litmus:mode-only-regression-gate
+  - litmus:post-merge-litmus-pass-shape
   - litmus:sidecar-is-a-build-graph-input
   - litmus:selector-urgency-not-inert-shape
+  - litmus:sigpipe-verdict-pipeline-shape
+  - litmus:gate-stamp-portable-digest
+  - litmus:macos-portability-residuals
+  - litmus:sidecar-arch-derivation
   coverage_ratio: 75
-  last_verified: '2026-08-12'
+  last_verified: '2026-08-17'
 - spec_id: codex-tray-launcher
   status: active
   litmus_tests:
@@ -226,6 +236,7 @@ specs:
   - litmus:forge-policy-binary-discoverability
   - litmus:npm-harness-install-idempotent-shape
   - litmus:harness-crash-supervision-shape
+  - litmus:forge-ledger-freshness-shape
   coverage_ratio: 80
   last_verified: '2026-07-24'
 - spec_id: dev-build
@@ -237,10 +248,13 @@ specs:
   - litmus:podman-idiomatic-launch-routing
   - litmus:build-ci-dispatch-shape
   - litmus:wsl2-builder-wrapper-shape
+  - litmus:wsl2-builder-shell-options-shape
   - litmus:cross-target-cfg-gate-check
   - litmus:no-tracked-binaries-shape
   - litmus:ensure-toolbox-include-shape
   - litmus:sidecar-staleness-stamp-shape
+  - litmus:build-sh-darwin-install-refusal
+  - litmus:build-sh-darwin-tool-remediation
   coverage_ratio: 100
   last_verified: '2026-08-16'
 - spec_id: direct-podman-calls
@@ -355,6 +369,7 @@ specs:
   - litmus:forge-experts-discoverability-shape
   - litmus:forge-experts-ephemerality-shape
   - litmus:plan-answer-envelope-citability
+  - litmus:citation-frame-and-caller-relation
   - litmus:methodology-path-query-citability
   - litmus:groundtruth-no-mutable-status-pin-shape
   - litmus:host-expert-refresh-gate-shape
@@ -366,6 +381,7 @@ specs:
   - litmus:project-answer-synthesis-refusal-typed
   - litmus:generic-index-deterministic-subset
   - litmus:mcp-usage-telemetry-shape
+  - litmus:mcp-transport-death-trace-shape
   coverage_ratio: 80
   last_verified: '2026-08-10'
 - spec_id: forge-forward-compat
@@ -587,15 +603,15 @@ specs:
   litmus_tests:
   - litmus:fake-podman-direct-invocation-safety
   - litmus:litmus-podman-preflight-diagnosis-shape
+  - litmus:podman-mock-refuses-unknown-invocations
   coverage_ratio: 100
-  last_verified: '2026-08-17'
+  last_verified: '2026-08-18'
 - spec_id: macos-native-tray
   status: active
   litmus_tests:
   - litmus:macos-tray-import-surface
   - litmus:wire-unreachable-chip-text-symmetric
   - litmus:macos-tray-diagnose-cli-surface
-  - litmus:recipe-release-tag-symmetric
   - litmus:tray-status-text-helpers-symmetric
   - litmus:exit-code-provisioned-zero-degraded-two-symmetric
   - litmus:macos-tray-architectural-invariants
@@ -606,6 +622,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:methodology-accountability-shape
+  - litmus:base-ledger-status-loss-shape
   - litmus:agent-identity-canonical-source-shape
   - litmus:no-duplicate-rust-item-defs
   - litmus:integration-strategy-consistency
@@ -646,10 +663,21 @@ specs:
   - litmus:smoke-lock-fd-isolation-shape
   - litmus:meta-orchestration-dirty-tree-safety
   - litmus:meta-orchestration-opsx-sync-merge
+  - litmus:build-cache-sweep-trigger
+  - litmus:issue-citation-convention
+  - litmus:long-running-view-agreement
+  - litmus:resumable-claim-dirt-shape
   - litmus:mcp-expert-health-probe-shape
   - litmus:forge-findings-persistence-shape
   - litmus:mo-full-attestation-ledger-shape
   - litmus:startup-context-addendum-shape
+  - litmus:pre-push-linux-next-merged-shape
+  - litmus:salvage-net-roundtrip
+  - litmus:cycle-checkout-lock-shape
+  # 740-k8ef: DERIVED from the spec's requirement count, no longer asserted.
+  # Was 80 while "one checkout, one cycle" had only a script suite; the
+  # litmus:cycle-checkout-lock-shape binding runs that suite from the
+  # registry, so all 5 requirements are litmus-covered.
   coverage_ratio: 100
   last_verified: '2026-07-14'
 - spec_id: logging-levels
@@ -811,8 +839,9 @@ specs:
   - litmus:runtime-diagnostics-shape
   - litmus:runtime-diagnostics-emitter-shape
   - litmus:runtime-diagnostics-spec-mapping-shape
+  - litmus:enclave-service-health-shape
   coverage_ratio: 75
-  last_verified: '2026-05-29'
+  last_verified: '2026-08-18'
 - spec_id: runtime-diagnostics-stream
   status: active
   litmus_tests:
@@ -869,6 +898,7 @@ specs:
   - litmus:plan-engine-invariants-shape
   - litmus:freshness-inventory-shape
   - litmus:hook-install-portability-shape
+  - litmus:declared-closure-resolves
   coverage_ratio: 83
   last_verified: '2026-07-17'
 - spec_id: subdomain-naming-flip
@@ -899,6 +929,7 @@ specs:
   - litmus:web-container-stop
   - litmus:binary-e2e-smoke
   - litmus:tray-parity-matrix-complete
+  - litmus:tray-new-surface-parity-gate
   coverage_ratio: 100
   last_verified: '2026-05-15'
 - spec_id: tray-cli-coexistence
@@ -985,7 +1016,6 @@ specs:
   litmus_tests:
   - litmus:wire-unreachable-chip-text-symmetric
   - litmus:windows-tray-diagnose-cli-surface
-  - litmus:recipe-release-tag-symmetric
   - litmus:tray-status-text-helpers-symmetric
   - litmus:exit-code-provisioned-zero-degraded-two-symmetric
   - litmus:windows-tray-architectural-invariants
@@ -999,8 +1029,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:wsl-daemon-orchestration-shape
+  - litmus:guest-vsock-loopback-ordered-before-readiness-probe
   coverage_ratio: 30
-  last_verified: '2026-05-03'
+  last_verified: '2026-08-17'
 - spec_id: wsl-runtime
   status: active
   litmus_tests:
@@ -1012,7 +1043,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:service-catalog-allowlist-shape
-  coverage_ratio: 100
+  # 740-k8ef: derived — 1 of the spec's 3 requirements (the allowlist) is
+  # litmus-covered; fixed-name join and public-route auth defaults are not.
+  coverage_ratio: 33
   last_verified: '2026-07-15'
 - spec_id: zen-default-with-ollama-analysis-pool
   status: active
@@ -1135,11 +1168,19 @@ specs:
   - litmus:vm-launch-graceful-failure-shape
   coverage_ratio: 20
   last_verified: '2026-07-18'
+- spec_id: vsock-exec-authz
+  status: active
+  litmus_tests:
+  - litmus:pty-open-argv-allowlisted
+  - litmus:guest-exec-argv-vector-no-shell
+  coverage_ratio: 100
+  last_verified: '2026-08-25'
 - spec_id: vsock-transport
   status: active
   litmus_tests:
   - litmus:vsock-handshake
   - litmus:vsock-exec-heartbeat
   - litmus:vsock-unauthenticated-peer-rejected
+  - litmus:one-length-delimited-framing-impl
   coverage_ratio: 100
   last_verified: '2026-07-14'

@@ -842,7 +842,7 @@ mod tests {
         (
             "may a forge cycle drain two packets?",
             "distributed_work.worker_agent_protocol.forge_cycle_budget.rule",
-            "drain AT MOST ONE plan packet per cycle",
+            "MAY drain more than one plan packet",
         ),
         (
             "is Python allowed in a committed script?",

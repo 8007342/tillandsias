@@ -43,3 +43,23 @@ copy `registry/{cache,index}` to `/root/.cargo/registry/`, then
 Linux owner: move the proxy CA bind source off tmpfs (or regenerate in the
 entrypoint) and add a litmus that `podman start tillandsias-proxy` succeeds on a
 freshly booted VM without the headless ensure path having run.
+
+## 2026-08-23 — second host reproduction (yoga, Silverblue, bare metal — not a VM)
+
+Same shape outside any VM: after a host reboot (~9h before), `podman start
+tillandsias-proxy` failed with `crun: cannot stat /tmp/tillandsias-ca/
+intermediate.crt: No such file or directory` — tmpfs wiped the CA, the
+container definition still binds it. `tillandsias-vault` was also down
+(SIGKILL at shutdown, `restarts=0`) but started cleanly by hand; the asymmetry
+is precisely the /tmp bind. cycle-preflight's fail:enclave-service-dead caught
+vault; the proxy only rated a note. Re-running `scripts/orchestrate-enclave.sh`
+regenerated the CA and brought the proxy up, but that script is a full
+lifecycle harness: its cleanup step REMOVED the proxy (and git mirror and
+inference containers) on exit, so the "remedy" leaves the host with no proxy
+container at all — recreated on demand by the product's ensure_proxy_running.
+Two open questions this adds to the original: (a) enclave services on a
+durable dev host have no restart policy or unit, so every reboot leaves
+vault/proxy dead until a cycle's preflight notices; (b) the documented remedy
+path for the proxy (orchestrate-enclave.sh) is not a service-repair tool.
+Second independent host observation of the /tmp CA bind — promotion candidate,
+noted for the Tlatoāni, not promoted (2026-08-19 ruling).

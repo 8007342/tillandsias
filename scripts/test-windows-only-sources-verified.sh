@@ -36,7 +36,10 @@ echo "// windows only" > "$SRC/hvsocket.rs"
 echo "// windows only" > "$SRC/wsl_lifecycle.rs"
 echo "// portable" > "$SRC/portable_thing.rs"
 
-run() { WINDOWS_ONLY_ROOT="$WORK" WINDOWS_ONLY_STAMP="$WORK/stamp" bash "$CHECK" "$@"; }
+run() {
+    WINDOWS_ONLY_ROOT="$WORK" WINDOWS_ONLY_STAMP="$WORK/stamp" \
+        WINDOWS_ONLY_ATTEST_DIR="$WORK/plan/attestations" bash "$CHECK" "$@"
+}
 
 # A transcript that looks like a clean cargo run. `stamp` demands one, because a
 # stamp without evidence is an assertion (see the check's own grammar).
@@ -47,7 +50,7 @@ stamp() { run stamp --from "$WORK/green.txt"; }
 
 # --- case 1: no stamp yet is reported, not assumed fine ----------------------
 out="$(run check)"
-[ "$out" = "stale:windows-sources-never-verified:2" ] \
+[ "$out" = "missing:sources-no-attestation:windows-only" ] \
     || fail "case 1: an unstamped host must say so, got '$out'"
 echo "ok: case 1 — never-verified is a verdict, not silence"
 
@@ -55,15 +58,15 @@ echo "ok: case 1 — never-verified is a verdict, not silence"
 # hvsocket has no `#[path = "stubs/…"]` line. The first version of the checker
 # read the stub declarations and silently missed it — a Windows-only module
 # that is just as invisible to a Linux build.
-[ "$out" = "stale:windows-sources-never-verified:2" ] \
+[ "$out" = "missing:sources-no-attestation:windows-only" ] \
     || fail "case 2: expected both windows-only modules, got '$out'"
 echo "ok: case 2 — a stubless windows-only module is still counted"
 
 # --- case 3: stamping makes it verified --------------------------------------
 out="$(stamp)"
-[ "$out" = "ok:windows-sources-verified:2" ] || fail "case 3: stamp said '$out'"
+[ "$out" = "ok:sources-verified:windows-only:2" ] || fail "case 3: stamp said '$out'"
 out="$(run check)"
-[ "$out" = "ok:windows-sources-verified:2" ] || fail "case 3: check after stamp said '$out'"
+[ "$out" = "ok:sources-verified:windows-only:2" ] || fail "case 3: check after stamp said '$out'"
 echo "ok: case 3 — a stamped tree verifies"
 
 # --- case 4 (NEGATIVE CONTROL): an edit goes stale and NAMES the file --------
@@ -72,7 +75,7 @@ echo "ok: case 3 — a stamped tree verifies"
 echo "// edited on a host that cannot compile it" >> "$SRC/wsl_lifecycle.rs"
 out="$(run check)"
 case "$out" in
-    stale:windows-sources-unverified:*wsl_lifecycle.rs) ;;
+    stale:sources-drifted:windows-only:*wsl_lifecycle.rs) ;;
     *) fail "case 4: an edited windows-only source must go stale and be named, got '$out'" ;;
 esac
 echo "ok: case 4 — an edit goes stale and the file is named"
@@ -83,14 +86,14 @@ echo "ok: case 4 — an edit goes stale and the file is named"
 stamp >/dev/null
 echo "// portable edit" >> "$SRC/portable_thing.rs"
 out="$(run check)"
-[ "$out" = "ok:windows-sources-verified:2" ] \
+[ "$out" = "ok:sources-verified:windows-only:2" ] \
     || fail "case 5: a portable-source edit must NOT go stale, got '$out'"
 echo "ok: case 5 — portable edits are not reported (the check stays quiet when it should)"
 
 # --- case 6: a crate that is not there at all ---------------------------------
 rm -rf "$WORK/crates"
 out="$(run check)"
-[ "$out" = "skip:no-windows-only-sources" ] \
+[ "$out" = "skip:no-sources:windows-only" ] \
     || fail "case 6: a missing crate must skip, got '$out'"
 echo "ok: case 6 — nothing to check is said out loud too"
 
@@ -122,7 +125,112 @@ printf 'undeclared_red
     mkdir -p "$WORK/scripts"; printf 'undeclared_red
 ' > "$WORK/scripts/windows-only-known-red.txt"; }
 out="$(run stamp --from "$WORK/red.txt")"
-[ "$out" = "ok:windows-sources-verified:2" ]     || fail "case 7: a DECLARED red must be tolerated, got '$out'"
+[ "$out" = "ok:sources-verified:windows-only:2" ]     || fail "case 7: a DECLARED red must be tolerated, got '$out'"
 echo "ok: case 7 — the stamp demands evidence and refuses undeclared reds"
 
-echo "PASS: windows-only source verification report (7/7)"
+# --- case 8: THE REFUSAL'S OWN COMMAND SHAPE MUST BE ACCEPTED (order 801-ajcd)
+# Self-referential on purpose, and the only form that cannot drift: the argv is
+# EXTRACTED from the live refusal text and then EXECUTED. A message that says
+# one thing while the parser wants another turns this red, which is exactly what
+# happened for weeks — the text read `pass --from <cargo-test-output>`, so
+# obeying it verbatim produced `stamp pass --from …` and was refused again.
+rm -f "$WORK/stamp"
+refusal="$(run stamp 2>/dev/null)"
+case "$refusal" in
+    refused:stamp-needs-evidence:usage:*) ;;
+    *) fail "case 8: the bare-stamp refusal must carry a 'usage: <argv>' shape, got '$refusal'" ;;
+esac
+# Everything between `usage: ` and the first `;` is the claimed argv.
+claimed="${refusal#*usage: }"
+claimed="${claimed%%;*}"
+# Drop argv[0] (the script name) and the <placeholder>, substitute the real
+# transcript, and run what the message told the reader to run.
+claimed_args="${claimed#* }"
+claimed_args="${claimed_args%% <*}"
+# shellcheck disable=SC2086
+out="$(run $claimed_args "$WORK/green.txt")"
+[ "$out" = "ok:sources-verified:windows-only:2" ] \
+    || fail "case 8: the refusal's own argv ('$claimed_args <file>') was not accepted by the parser, got '$out'"
+# The literal pre-801-ajcd wording is still answered rather than refused twice —
+# scripts and transcripts written from it during those weeks keep working.
+rm -f "$WORK/stamp"
+out="$(run stamp pass --from "$WORK/green.txt")"
+[ "$out" = "ok:sources-verified:windows-only:2" ] \
+    || fail "case 8: the legacy 'stamp pass --from <file>' form must be tolerated, got '$out'"
+# NEGATIVE CONTROL: tolerating `pass` must not have made evidence optional.
+rm -f "$WORK/stamp"
+out="$(run stamp pass 2>/dev/null)"
+case "$out" in
+    refused:stamp-needs-evidence:usage:*) ;;
+    *) fail "case 8 negative control: 'stamp pass' with no --from must still refuse, got '$out'" ;;
+esac
+out="$(run stamp --from 2>/dev/null)"
+case "$out" in
+    refused:stamp-needs-evidence:usage:*) ;;
+    *) fail "case 8 negative control: '--from' with no path must still refuse, got '$out'" ;;
+esac
+echo "ok: case 8 — the refusal's own command shape parses, and evidence stays mandatory"
+
+# --- case 9: `--from -` READS STDIN (order 738-3pft, macOS constraint 1) ------
+# A path argument forces the writer to materialise a temp file, which makes the
+# "one command" claim false. GNU/BSD cat happen to treat the operand `-` as
+# stdin already, so this can look like a no-op in casual testing — which is
+# exactly why it is pinned here rather than left to the local cat.
+rm -f "$WORK/stamp"
+out="$(run stamp --from - < "$WORK/green.txt")"
+[ "$out" = "ok:sources-verified:windows-only:2" ] \
+    || fail "case 9: 'stamp --from -' must read the transcript from stdin, got '$out'"
+# NEGATIVE CONTROL: stdin is not a way around the evidence gate.
+rm -f "$WORK/stamp"
+out="$(printf 'no test results here\n' | run stamp --from - 2>/dev/null)"
+[ "$out" = "refused:stamp-needs-evidence:the transcript contains no test results" ] \
+    || fail "case 9 negative control: an evidence-free stdin transcript must refuse, got '$out'"
+echo "ok: case 9 — --from - reads stdin and the evidence gate still applies"
+
+# --- case 10: A TRACKED ATTESTATION CROSSES THE HOST BOUNDARY ----------------
+# THE PACKET'S WHOLE POINT. On 2026-08-14 a green Windows run was invisible to
+# linux, which quoted its own blindness to the operator as a statement about the
+# sources and held a release on it. Here the local stamp is DELETED — standing
+# in for "a different host entirely" — and the tracked file alone must carry the
+# verdict.
+rm -f "$WORK/stamp"
+rm -rf "$WORK/stamp.d"
+out="$(run attest --host windows --from "$WORK/green.txt" 2>/dev/null)"
+[ "$out" = "ok:sources-attested:windows-only:2" ] \
+    || fail "case 10: attest must write a tracked file, got '$out'"
+[ -f "$WORK/plan/attestations/windows-only-sources.windows.json" ] \
+    || fail "case 10: attest wrote no file at the expected per-scope+host path"
+grep -q '"scope": "windows-only"' "$WORK/plan/attestations/windows-only-sources.windows.json" \
+    || fail "case 10: the attestation does not record its scope as a FIELD"
+grep -q '"host": "windows"' "$WORK/plan/attestations/windows-only-sources.windows.json" \
+    || fail "case 10: the attestation does not name the host that wrote it"
+grep -q '"command":' "$WORK/plan/attestations/windows-only-sources.windows.json" \
+    || fail "case 10: the attestation does not record WHAT WAS RUN (bin-only crates make this load-bearing)"
+# No local stamp exists, so a pass here can only have come from the tracked file.
+out="$(run check)"
+[ "$out" = "ok:sources-verified:windows-only:2" ] \
+    || fail "case 10: a tracked attestation must verify with NO local stamp, got '$out'"
+echo "ok: case 10 — a tracked attestation is readable by a host that did not write it"
+
+# --- case 11 (NEGATIVE CONTROL): stale means MOVED, never "I cannot see it" ---
+# The second half of the exit criterion. An attestation must die exactly when a
+# source it covers changes, and the verdict must name the drift rather than
+# reporting the reader's own blindness.
+echo "// edited after the attestation was written" >> "$SRC/wsl_lifecycle.rs"
+out="$(run check)"
+case "$out" in
+    stale:sources-drifted:windows-only:1:*wsl_lifecycle.rs) ;;
+    *) fail "case 11: a moved source must read stale-drifted and name the file, got '$out'" ;;
+esac
+# And a PORTABLE edit still must not disturb it — the attestation lane keeps the
+# property case 5 pins for the stamp lane, or it becomes noise within a day.
+git -C "$WORK" init -q 2>/dev/null || true
+out="$(run attest --host windows --from "$WORK/green.txt" 2>/dev/null)"
+[ "$out" = "ok:sources-attested:windows-only:2" ] || fail "case 11: re-attest failed, got '$out'"
+echo "// another portable edit" >> "$SRC/portable_thing.rs"
+out="$(run check)"
+[ "$out" = "ok:sources-verified:windows-only:2" ] \
+    || fail "case 11: a portable edit must NOT drift a windows-only attestation, got '$out'"
+echo "ok: case 11 — an attestation dies on drift and survives unrelated commits"
+
+echo "PASS: windows-only source verification report (11/11)"

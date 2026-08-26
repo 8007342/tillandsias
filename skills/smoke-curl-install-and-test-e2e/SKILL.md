@@ -26,7 +26,7 @@ become `plan/issues/` work packets so they flow through the normal
 | immutable Linux | `scripts/install.sh` via release curl URL | `podman system reset --force` | `tillandsias --debug --init` |
 | mutable Linux | `scripts/install.sh` via release curl URL | `podman system reset --force` | `tillandsias --debug --init` |
 | macOS | `scripts/install-macos.sh` via release curl URL | remove Tillandsias app state/cache VM dirs | installed tray `--provision` + `--diagnose --json` |
-| Windows | `scripts/install-windows.ps1` release path when available | `wsl --unregister tillandsias` plus cache purge | installed tray provision/diagnose |
+| Windows | `scripts/install-windows.ps1` release path when available | `wsl --unregister tillandsias`, cache purge, plus `vault-shamir-share-v1` + `vault-root-token-v1` cleared from Credential Manager (keeping `tillandsias-vm-uuid`) | installed tray provision/diagnose |
 
 This is the only e2e install skill allowed on immutable Linux.
 
@@ -190,9 +190,90 @@ If the reset errors or leaves residue → file a finding (capability: `podman`,
 > made the gap visible — the same destruction gate was executable on one path
 > and advisory on the other, and this is the path that tests PUBLISHED releases.
 
-On macOS, stop the tray and remove `~/Library/Application Support/tillandsias`
-and `~/Library/Caches/tillandsias`. On Windows, run `wsl --shutdown` and
+On macOS, stop the tray, then destroy the VM substrate and ASSERT it is gone.
+
+The paths are correct as written and match the source of truth
+(`status_item.rs:367`, `diagnose.rs:71`, `scripts/uninstall.sh:19` — all
+lowercase `tillandsias`). What was missing is the ASSERTION: this was one prose
+sentence while the Linux branch above captures `PIPESTATUS` and then proves the
+store is empty. That asymmetry is exactly what the 727-kmks note describes, one
+layer down — and this is the path that tests PUBLISHED releases, so a removal
+that silently matched nothing would let the smoke run against a pre-existing
+multi-GiB VM image while reporting a clean-room result. A false PASS on the
+destruction precondition is worse than a red run, because it gates promotion.
+
+```bash
+pkill -f 'Tillandsias.app/Contents/MacOS/tillandsias-tray' 2>/dev/null || true
+rm -rf "$HOME/Library/Application Support/tillandsias" \
+       "$HOME/Library/Caches/tillandsias"
+# ASSERT, do not assume — the point of this block.
+MACOS_RESIDUE=""
+for d in "$HOME/Library/Application Support/tillandsias" \
+         "$HOME/Library/Caches/tillandsias"; do
+    [ -e "$d" ] && MACOS_RESIDUE="${MACOS_RESIDUE}${d}"$'\n'
+done
+printf '[macos-residue]\n%s' "$MACOS_RESIDUE" | tee target/smoke-e2e/02-macos-residue.txt
+test -z "$MACOS_RESIDUE"
+```
+
+If residue survives → file a finding (capability: `macos`, `runtime`) and do NOT
+continue.
+
+> A NOTE ON WHAT DID NOT NEED FIXING, so nobody re-opens it (889-bx99,
+> retracted). This step was reported as carrying a case bug — capital-`T`
+> `Tillandsias` on disk versus lowercase in the runbook. It does not. The
+> reporting host checked by typing a capital-`T` path and watching it resolve,
+> on a case-INSENSITIVE volume where any spelling resolves; `ls` of the PARENT
+> shows the stored name is lowercase, matching the code. When testing a
+> case-sensitivity hypothesis, read the stored name — a path you typed yourself
+> proves only that the filesystem folded it.
+
+On Windows, stop the tray, then run `wsl --terminate tillandsias` followed by
 `wsl --unregister tillandsias`, tolerating an already-absent distro.
+
+**Then clear the host credential store, or the run is not a clean room (order
+804-ckst).** Unregistering the distro and purging the cache leave Windows
+Credential Manager untouched, and the tray treats it as authoritative:
+
+```powershell
+# 'tillandsias-vm-uuid' is deliberately PRESERVED -- it anchors the
+# INSTALLATION, not the guest, and the in-VM Vault derives its master key
+# from it. Only the two guest-vault entries go.
+foreach ($cred in @('vault-shamir-share-v1', 'vault-root-token-v1')) {
+    $listed = & cmdkey.exe /list:$cred 2>$null
+    if ($listed -match [regex]::Escape($cred)) { & cmdkey.exe /delete:$cred > $null 2>&1 }
+}
+$stillThere = @('vault-shamir-share-v1', 'vault-root-token-v1') | Where-Object {
+    (& cmdkey.exe /list:$_ 2>$null) -match [regex]::Escape($_)
+}
+if ($stillThere) { throw "host vault credentials survived the reset: $($stillThere -join ', ')" }
+```
+
+This is not hygiene, it is the difference between a valid result and an
+invalid one. The 2026-08-17 run on v0.4.260817.1 claimed a "truly cold" run
+because it purged the 34.9 GB `ext4.vhdx` AND the rootfs cache — both true,
+both irrelevant to this store. The stale share survived, the tray delivered it
+into the fresh guest unconditionally, and the release looked healthy in the
+smoke and then broke for the operator forty minutes later on the first GitHub
+login (803-49re). A "cold" claim without this step is a claim the run cannot
+support.
+
+**Use `--terminate`, NOT `wsl --shutdown` (order 802-bajv).** `--shutdown` stops
+EVERY WSL2 distro on the host, while `--unregister` only requires the target
+distro to be stopped. A Windows host commonly also runs `tillandsias-build` —
+the lane that builds Linux-target artifacts, kept deliberately separate so the
+smoke cannot wipe a toolchain mid-cycle — and a global shutdown kills it for no
+test benefit.
+
+**This step DESTROYS the model cache, and that is not a footnote (order
+806-a4tu).** On Windows the weights live at `/root/.cache/tillandsias/models`
+INSIDE the distro's `ext4.vhdx`, so `--unregister` deletes them along with the
+disk. Measured on yolanda 2026-08-17: ~447 MB of `nomic-embed-text` plus
+`qwen2.5:0.5b` had to be re-pulled after the reset. Every Windows run of this
+smoke therefore starts cold BY CONSTRUCTION. Do not describe a Windows result as
+a warm-cache run, and do not treat warm-vs-cold as a variable on this lane — it
+has exactly one value. Budget the re-pull into the run, and note that a host on a
+metered or slow link pays it every time.
 
 ---
 

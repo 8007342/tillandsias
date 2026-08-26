@@ -1,0 +1,10 @@
+{"band":"near","corpus":"methodology","q":"what is the rollback procedure for a failed Helm chart upgrade"}
+{"band":"near","corpus":"methodology","q":"how do I write a docker-compose file for the services"}
+{"band":"near","corpus":"methodology","q":"which ansible playbook provisions the host"}
+{"band":"far","corpus":"methodology","q":"what is the flibber flobber"}
+{"band":"far","corpus":"methodology","q":"how do I bake sourdough bread"}
+{"band":"in","corpus":"methodology","q":"what is the rule for filing a new plan row versus an event"}
+{"band":"in","corpus":"methodology","q":"how do multi-host branches merge"}
+{"band":"in","corpus":"methodology","q":"what does the pre-push gate check"}
+{"band":"in","corpus":"cheatsheets","q":"how do I set up a git mirror service"}
+{"band":"in","corpus":"code","q":"how does compaction decide which fragments to delete"}

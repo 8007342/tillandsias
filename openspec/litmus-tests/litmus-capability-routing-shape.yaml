@@ -1,0 +1,71 @@
+# @trace spec:ci-release
+#
+# Pins capability-aware work routing (order 847-wgy4). The selector's top-K
+# entropy pick is a TIME-diversity device that was being misread as
+# host separation: N hosts pigeonhole into K=3 batches however unique their
+# seeds are (8 announced identities measured 3/3/2). Routing keys a host's
+# pick to its ORDINAL RANK in the shared capability-matrix roster over a
+# frontier widened to the roster size — distinct hosts, distinct ranks,
+# disjoint epics by construction — while the tier gate keeps ~4-core hosts on
+# profiling work only (operator mandate) and rowless hosts keep the seeded
+# pick unchanged. The fixture's breadth is itself the lesson: the prior R4
+# test passed on two hand-picked seeds while the property was false on
+# eleven.
+name: litmus:capability-routing-shape
+spec: ci-release
+phase: pre-build
+description: >
+  Pin scripts/select-work-batch.sh capability routing: eight announced
+  identities receive pairwise-disjoint epics (EC1); the accelerator filter
+  can exclude and accounts exactly (EC2 with negative control); one host's
+  rotation walks every widened-frontier slot so nothing is starved (EC3);
+  a rowless host degrades byte-for-byte to the seeded top-3 pick (EC4); a
+  low-end host receives only tier-tagged work and refuses rather than
+  draining the general queue (operator mandate). All via the routing seams
+  (TILLANDSIAS_CAP_HOSTS/HOST_TIER/HOST_ACCELS/ROUTE_ROT/WORKSTATION) in
+  scripts/test-capability-routing.sh.
+severity: high
+size: quick
+
+preconditions:
+  - workspace contains scripts/select-work-batch.sh and scripts/test-capability-routing.sh
+  - a runnable tillandsias-plan binary is resolvable (plan-binary-probe)
+  - the ledger carries ready linux work (the fixture routes over the live pool)
+
+critical_path:
+  - step: "the five-case routing fixture passes end to end"
+    command: "bash scripts/test-capability-routing.sh 2>&1 | tail -1 | grep -qx 'PASS: capability routing (5/5)' && echo 'ok: fixture 5/5'"
+    timeout_ms: 120000
+    expected_behavior: "ok: fixture 5/5"
+
+  - step: "the binary serves the routing roster projection"
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; out=$(\"$MFPLAN\" capability-matrix --hosts 2>/dev/null); printf '%s\\n' \"$out\" | awk -F'\\t' 'NF != 3 { bad = 1 } END { exit bad }' && echo 'ok: hosts projection is three tab-separated fields per row'"
+    timeout_ms: 10000
+    expected_behavior: "ok: hosts projection"
+
+  - step: "the skill's fleet section reflects that routing landed"
+    command: "grep -q 'check-capability-row.sh' skills/meta-orchestration/SKILL.md && ! grep -q 'Until capability-aware routing lands (847-wgy4)' skills/meta-orchestration/SKILL.md && echo 'ok: skill updated'"
+    timeout_ms: 3000
+    expected_behavior: "ok: skill updated"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "capability routing pinned (disjointness, accel exclusion, anti-starvation, rowless degradation, tier mandate)"
+  log_fields:
+    spec: "ci-release"
+    test: "capability-routing-shape"
+    artifact: "scripts/select-work-batch.sh + scripts/test-capability-routing.sh"
+
+rollback:
+  on_failure: >
+    Capability routing drifted. Restore in scripts/select-work-batch.sh: the
+    roster read (capability-matrix --hosts, seam TILLANDSIAS_CAP_HOSTS), the
+    ordinal pick ((rank-1+rot) mod width, width = max(TOPK, roster) capped at
+    the epic count, rot from the UTC date alone), the low-end tier gate
+    (TIER_TAGS pool for <=4-core hosts, refusal rather than general-queue
+    fallback, subtraction for general hosts), the accelerator subtraction
+    (ACCEL_CAP_TAGS decided by the host's matrix row, skipped entirely for a
+    rowless host), and the conditional route=/tier_filtered=/accel_filtered=
+    output fields; keep scripts/test-capability-routing.sh's five cases green.
+  command: "bash scripts/test-capability-routing.sh 2>&1 | tail -3"

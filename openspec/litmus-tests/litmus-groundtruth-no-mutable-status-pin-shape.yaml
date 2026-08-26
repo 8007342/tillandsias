@@ -17,13 +17,31 @@ preconditions:
   - a built tillandsias-plan binary is reachable at target/release/tillandsias-plan
 
 critical_path:
-  - step: "NEGATIVE CONTROL: a case pinning status on a live NON-TERMINAL packet (394, ready) is REFUSED"
-    command: "D=$(mktemp -d); printf 'cases:\\n  - query: x\\n    expect:\\n      citations_include:\\n        - path: plan/index.yaml\\n          packet_id: plan-methodology-experts-rung1\\n          status: ready\\n' > \"$D/case.yaml\"; if scripts/check-groundtruth-mutable-status-pins.sh \"$D\" >/dev/null 2>&1; then echo 'FAIL: a non-terminal status pin was admitted'; rm -rf \"$D\"; exit 1; fi; rm -rf \"$D\"; echo 'ok: non-terminal status pin refused'"
+  # ORDER 865-x2mf — THESE TWO CONTROLS OWN THEIR LEDGER NOW.
+  #
+  # They used to cite REAL packet ids (394 ready, 394a completed) and resolve
+  # them against the live ledger. 394 was obsoleted on 2026-08-23, which is a
+  # terminal status, so the pin became legitimate, the guard correctly admitted
+  # it, and the negative control went red hunting a refusal it could no longer
+  # earn. It stayed red for a day and blocked the release gate.
+  #
+  # The guard exists to enforce "never depend on a live packet's status"
+  # (680-zphp) and its own test depended on a live packet's status. Choosing a
+  # longer-lived packet would only postpone this: every live packet is mortal.
+  # TILLANDSIAS_GROUNDTRUTH_LEDGER_ROOT lets each control supply a frozen
+  # two-packet ledger it owns, so nothing in plan/ can ever move it again.
+  - step: "NEGATIVE CONTROL: a case pinning status on a NON-TERMINAL packet is REFUSED"
+    command: "D=$(mktemp -d); mkdir -p \"$D/plan\" \"$D/cases\"; printf 'plan_index:\\n  version: v1\\n  steps:\\n    - packet_id: hermetic-ready-packet\\n      order: 9001\\n      title: \"non-terminal, owned by this fixture\"\\n      status: ready\\n      desired_release: v0.5\\n' > \"$D/plan/index.yaml\"; printf 'cases:\\n  - query: x\\n    expect:\\n      citations_include:\\n        - path: plan/index.yaml\\n          packet_id: hermetic-ready-packet\\n          status: ready\\n' > \"$D/cases/case.yaml\"; if TILLANDSIAS_GROUNDTRUTH_LEDGER_ROOT=\"$D\" scripts/check-groundtruth-mutable-status-pins.sh \"$D/cases\" >/dev/null 2>&1; then echo 'FAIL: a non-terminal status pin was admitted'; rm -rf \"$D\"; exit 1; fi; rm -rf \"$D\"; echo 'ok: non-terminal status pin refused'"
     timeout_ms: 20000
     expected_behavior: "ok: non-terminal status pin refused"
 
-  - step: "POSITIVE CONTROL: a case pinning status on a live TERMINAL packet (394a, completed) is admitted"
-    command: "D=$(mktemp -d); printf 'cases:\\n  - query: x\\n    expect:\\n      citations_include:\\n        - path: plan/index.yaml\\n          packet_id: plan-methodology-experts-rung1/plan-expert-binary-shipping\\n          status: completed\\n' > \"$D/case.yaml\"; scripts/check-groundtruth-mutable-status-pins.sh \"$D\" >/dev/null 2>&1 && echo 'ok: terminal status pin admitted'; rm -rf \"$D\""
+  - step: "POSITIVE CONTROL: a case pinning status on a TERMINAL packet is admitted, and is actually CHECKED"
+    # Asserts `1 live-checked`, not merely exit 0. A guard that silently checks
+    # NOTHING also exits 0 — which is exactly how this pair failed while looking
+    # fine: before 865-x2mf a relative binary path inside the lookup's subshell
+    # made every status resolve empty, every pin skip as "unknown packet", and
+    # the verdict read `0 live-checked`.
+    command: "D=$(mktemp -d); mkdir -p \"$D/plan\" \"$D/cases\"; printf 'plan_index:\\n  version: v1\\n  steps:\\n    - packet_id: hermetic-done-packet\\n      order: 9002\\n      title: \"terminal, owned by this fixture\"\\n      status: completed\\n      desired_release: v0.5\\n' > \"$D/plan/index.yaml\"; printf 'cases:\\n  - query: x\\n    expect:\\n      citations_include:\\n        - path: plan/index.yaml\\n          packet_id: hermetic-done-packet\\n          status: completed\\n' > \"$D/cases/case.yaml\"; out=$(TILLANDSIAS_GROUNDTRUTH_LEDGER_ROOT=\"$D\" scripts/check-groundtruth-mutable-status-pins.sh \"$D/cases\" 2>/dev/null); rm -rf \"$D\"; printf '%s' \"$out\" | grep -q '^ok:groundtruth-status-pins:1 live-checked' && echo 'ok: terminal status pin admitted'"
     timeout_ms: 20000
     expected_behavior: "ok: terminal status pin admitted"
 

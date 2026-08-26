@@ -36,6 +36,7 @@ preconditions:
   - workspace contains scripts/summarize-nix.sh
   - workspace contains scripts/summarize-pubspec.sh
   - workspace contains scripts/summarize-pyproject.sh
+  - workspace contains scripts/test-summarize-pubspec.sh
   - shell utilities (grep) are available in PATH
 
 critical_path:
@@ -93,6 +94,14 @@ critical_path:
     command: "for f in scripts/summarize-cargo.sh scripts/summarize-package-json.sh scripts/summarize-go-mod.sh scripts/summarize-nix.sh scripts/summarize-pubspec.sh scripts/summarize-pyproject.sh; do [ -x \"$f\" ] || { echo \"FAIL: $f not executable\"; exit 1; }; done && echo \"ok: 6 summarizers executable\""
     timeout_ms: 3000
     expected_behavior: "ok:"
+
+  - step: "pubspec summarizer preserves SDK constraints and direct dependency boundaries"
+    # The family-wide shape checks cannot detect a parser that emits empty
+    # versions or counts nested YAML keys as dependencies. Keep one runtime
+    # negative control on the component found by the 2026-08-24 freshness draw.
+    command: "bash scripts/test-summarize-pubspec.sh"
+    timeout_ms: 3000
+    expected_behavior: "PASS: summarize-pubspec behavior (3/3)"
 
   # A step that greped the TRACES.md row for spec:project-summarizers lived here
   # until 2026-08-09. It was removed with the rendering, and NOT replaced: STEP 2

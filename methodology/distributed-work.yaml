@@ -113,6 +113,40 @@ distributed_work:
             and that refusal was correct. If compaction ever regresses to
             round-tripping YAML, restore the refusal; do not accept a lossy fold
             to make the tool run.
+          concurrency_block: >
+            ORDER 627-c9c2. plan/index.yaml is a CONCURRENCY BLOCK: direct
+            in-place updates are forbidden for normal work. Every normal
+            ledger change — filing a packet, appending an event, correcting a
+            field — flows through a NEW plan/index.d/ fragment (via
+            tillandsias-plan set-field, or a fragment file only you could
+            have named), never through an edit to the base. The base admits
+            exactly one writer, compaction, under the guards below. A direct
+            base edit forfeits both properties the design rests on (one
+            writer per file; immutable once written) and, when pushed through
+            the enclave mirror, is additionally refused by the mirror's YAML
+            gate — see mirror_psych_gate.
+          mirror_psych_gate: >
+            ORDER 627-c9c2, learned from a twice-rejected forge push
+            2026-08-09. The enclave git mirror's pre-receive hook
+            (images/git/pre-receive-hook.sh) validates every changed .yaml
+            file — with tillandsias-policy validate-yaml when the image
+            carries it, else ruby -ryaml YAML.load_file, which in Psych 5 is
+            safe_load with an EMPTY permitted_classes list. Psych 5 speaks
+            YAML 1.1, where a BARE ISO timestamp
+            (ts: 2026-...Z, unquoted) builds a Time object — refused as
+            Psych::DisallowedClass. Consequences, in force: (1) fragments
+            QUOTE every timestamp-shaped scalar; the tillandsias-plan writers
+            do this for ts: lines, LWW value: lines (775-b4qz) and
+            compaction's folded output (quote_timestamp_line) — one more
+            reason never to hand-author a fragment. (2) The base
+            plan/index.yaml carries ~110 HISTORICAL bare timestamps that
+            text-level compaction must not rewrite, and the hook validates
+            the whole changed file, not the diff — so ANY commit touching the
+            base fails the mirror wholesale. Compaction therefore runs only
+            on hosts whose push channel reaches upstream directly (gh
+            keyring/token), never from a forge routed through the mirror; a
+            mirror-routed cycle that needs a ledger write reroutes it through
+            a fragment, which is always sufficient for normal work.
         exceptions:
           - "Status fields in YAML index files (plan/index.yaml) ARE
             last-writer-wins; this is the trade-off for queryability.
@@ -530,11 +564,70 @@ distributed_work:
         Implementing soon-to-be-irrelevant work burns budget and can
         conflict with the specs about to supersede it — the exact anti-value
         churn this rule exists to stop.
+      new_row_only_if_independently_schedulable: >
+        A finding becomes a new ROW only if INDEPENDENTLY SCHEDULABLE: it names
+        owned_files no open row already owns, OR a different pickup_role can
+        claim it than every open row covering that scope. Otherwise it is a
+        next_action clause on that row, or an event on it. Both predicates are
+        already computed as claimed_files (plan_answer, batch selector).
+      accumulate_then_promote: >
+        THE OTHER HALF OF THE RULE, and without it the rule above is only a
+        refusal. Observations that are NOT independently schedulable accumulate
+        as events on their row. That accumulation is not a graveyard: when a
+        row's events show a CONFIRMED PATTERN — several independent
+        observations, ideally from different hosts or cycles, converging on one
+        defect or one missing capability — the row has OVERFLOWED and the
+        pattern should be promoted to schedulable work.
+
+        PROMOTION IS TLATOĀNI-GATED (operator ruling, 2026-08-19). An agent may
+        NOTE that a row looks ready to promote and MUST NOT promote it. What
+        counts as a confirmed pattern is not yet expressible as a threshold, and
+        an agent that promotes on its own judgment reintroduces exactly the
+        unbounded arrival this rule exists to bound — by a longer path.
+
+        WHY THIS PRESERVES THE CONVERGENCE GUARANTEE: nothing here adds work.
+        Every observation is still recorded, in full, forever. What changes is
+        only the CURATION AT THE ACCEPTANCE BOUNDARY — whether an observation
+        becomes a schedulable row the moment it is noticed, or waits until a
+        pattern confirms it is worth someone's cycle. The corpus stays
+        monotone; the SELECTABLE set stops growing on every observation.
+
+      why_velocity_is_the_other_lever: >
+        THE SIGN FLIPS AT b = 1, and the previously recorded rejoin target was
+        set on the wrong side of it.
+
+        With arrivals λ = a + b·μ (measured: a = 2.2/day, b = 1.80, r = 0.868)
+        and service μ, the queue moves at
+
+            dL/dt = a + (b − 1)·μ
+
+        so ∂(dL/dt)/∂μ = b − 1. Above b = 1 throughput is a DIVERGENCE
+        multiplier — every host added, every cycle shortened, fills the queue
+        faster. Below b = 1 the same throughput DRAINS it, and the queue
+        converges once μ > a/(1 − b).
+
+        This retires R2's "b ≤ 1.30" as a target: at b = 1.30,
+        dL/dt = 2.2 + 0.30·μ, which is strictly positive for EVERY μ ≥ 0. That
+        criterion cannot converge at any velocity, on any number of hosts. It
+        was chosen as "better than the measured 1.80" without checking which
+        side of the threshold it lands on. THE TARGET IS b < 1. At b = 0.5 and
+        today's μ ≈ 19/day, dL/dt = −7.3/day.
+
+        AND THIS IS WHY OVERHEAD REDUCTION COMPOUNDS (operator, 2026-08-19):
+        halving orchestration overhead roughly doubles both a and μ, so
+        dL/dt doubles — WITH ITS SIGN PRESERVED. Velocity is a multiplier on
+        the direction already travelled, never a fix for the direction. Hence
+        the ordering: get b below 1 by curation FIRST, and only then is the
+        acceleration from the nix cache, a reliable expert system, and shorter
+        cycles self-sustaining rather than self-defeating.
+
       trace: >
         operator directive 2026-07-17 (Hy3 size-aversion → stale-task
-        churn); philosophy.yaml (monotonic reduction); convergence.yaml
-        (drift_control); worker_agent_protocol.select_shaped_work (selection
-        seam); forge_cycle_budget (the forge-scoped split precedent this
+        churn); operator ruling 2026-08-19 (Tlatoāni-gated promotion; velocity
+        as a convergence multiplier); philosophy.yaml (monotonic reduction);
+        convergence.yaml (drift_control);
+        worker_agent_protocol.select_shaped_work (selection seam);
+        forge_cycle_budget (the forge-scoped split precedent this
         generalizes). Mirrored operationally in the /advance-work-from-plan
         and /meta-orchestration reduction-engine sections.
 
@@ -724,6 +817,60 @@ distributed_work:
       - "If the partial work is unrecoverable, emit a `released` event for
         the unrecoverable portion citing the prior lease_id, then claim
         the item fresh."
+
+  concurrent_correct_fixes:
+    rule: >
+      WHEN TWO BRANCHES CHANGE THE SAME LINE AND BOTH CHANGES ARE RIGHT, THE
+      RESOLUTION IS BOTH. Not the newer one, not the one with the better commit
+      message, and never "theirs" because their branch is further ahead.
+
+      This is the CODE analogue of the ledger's merge_policy below, and it needs
+      its own rule because git presents it identically to an either/or conflict.
+      A conflict marker means "two edits, same region" — it carries NO
+      information about whether the edits are alternatives or complements, and
+      the default reading of a conflict is alternatives. That default is wrong
+      often enough to be dangerous, because a fix landing on a fork is usually
+      written from the text as it stood when the fork was cut.
+    the_asymmetry_that_bites: >
+      THE DANGEROUS SHAPE IS NOT A SYMMETRIC TIE. It is a NEWER branch carrying
+      a REAL improvement that was written against a STALE base, so taking its
+      side looks like fast-forwarding a newer fix over an older one while
+      silently reverting a fix it never saw.
+
+      Worked example, 2026-08-20, litmus-ledger-node-claim-shape.yaml. 797-295s
+      had moved the step's capture file from a relative `out.txt` to mktemp,
+      because a timeout stranded an untracked file in the checkout and the
+      meta-orchestration startup boundary then reads that as sibling work — a
+      dirty-start refusal for the NEXT cycle. A fork later rewrote the same step
+      for 790-u8x6 to add a phantom-lease case (fixture index, an `a/nope`
+      claim, `unknown` in the grammar). Real work, correctly done — and written
+      from the pre-797-295s text, so it still redirected into `out.txt`. Taking
+      the fork wholesale would have reinstated a cross-host hazard while
+      appearing to accept the newer change.
+    procedure:
+      - "For each conflicting hunk, name what EACH side changed and WHY, from
+        its commit message, its order number, and the comment it left. If you
+        cannot state the reason for a side, you are not ready to resolve it."
+      - "Ask whether the two reasons are mutually exclusive. Usually they are
+        not: they are two different defects that happen to live on one line."
+      - "If they are not exclusive, COMBINE. Keep both mechanisms and both
+        explanations. The combined hunk carries both order numbers."
+      - "If they genuinely are exclusive, keep the one that survives the other's
+        test, and record the discarded one as an event on its order — never
+        delete a correct fix silently."
+      - "Leave a comment at the resolution site saying it was a concurrent
+        correct fix and naming both orders. The next reader sees one line and
+        cannot otherwise tell it was contested."
+      - "Run the tests BOTH sides brought, not just the ones that already
+        existed. A combination that passes neither side's new test is not a
+        resolution."
+    why_not_a_gate: >
+      There is no checker for this and there probably cannot be one: deciding
+      whether two edits are complements requires knowing what each was FOR,
+      which is not recoverable from the diff. This is one of the few rules that
+      has to live as judgement. What CAN be mechanised is the trail — the
+      both-orders comment at the site, so a later audit can find every place
+      two fixes were fused and re-examine the call.
 
   merge_policy:
     rule: >
@@ -920,10 +1067,9 @@ distributed_work:
         finding.
       work_the_forge_agent_can_do_itself: >
         If the packet is `forge`-capability-tagged or `owner_host: any` and
-        fits the forge_cycle_budget (one packet/cycle; split if it will not
-        fit the launch envelope), the in-forge agent CLAIMS and implements it
-        directly rather than only proposing — self-service includes doing the
-        work when the lane is capable.
+        fits the forge_cycle_budget envelope, the in-forge agent CLAIMS and
+        implements it directly rather than only proposing — self-service
+        includes doing the work when the lane is capable.
     discipline:
       - "Every request is a shaped, VERIFIABLE packet/proposal (work_shaping_protocol + large_packet_is_eligible_work), never prose intent alone — a wish an attentive host might honor is not a constraint."
       - "File with agent_id + host=forge so the coordinator can see forge-originated demand and prioritize what unblocks the most lanes."
@@ -1222,6 +1368,178 @@ distributed_work:
         Stalling a cycle because MCP is down. "'Tis broken? keep goin'" — fall
         back, note it, continue.
 
+  the_lane_and_the_stamp_have_opposite_preconditions:
+    purpose: >
+      A host under push contention must choose which of the two acceptance paths
+      it is aiming for, because they cannot both be satisfied. THE LANE needs the
+      remote base present locally — a FRESH fetch. THE STAMP needs the tree
+      UNCHANGED since `./build.sh --check` passed — and a fetch+rebase changes the
+      tree and voids it. Fetching buys the lane and costs the stamp; not fetching
+      keeps the stamp and forfeits the lane.
+    authority: >
+      Derived by calmecacpilli 2026-08-26 from the hook itself, after yolanda
+      measured that the opposite advice was correct on a slow-gate host. Both
+      halves measured on the hosts that live in each regime.
+    which_regime_am_i_in: >
+      Decided by GATE DURATION against the contention interval, not by preference.
+      A cheap gate re-gates freely and should chase the lane. A gate longer than
+      the interval between sibling pushes cannot afford to void a stamp it already
+      holds, and should protect it — gate against the last fetch and push without
+      re-fetching. The crossover is roughly where gate duration exceeds the
+      inter-push interval; during the 2026-08-25 release burst that interval was
+      about three minutes.
+    the_evidence: >
+      FAST SIDE (calmecacpilli, 1.8-2.0 min gate): 4.0 gate re-runs for one landed
+      commit against 0 for fragment-only commits that rode the lane. Fetching late
+      minimises the staleness window and wins.
+      SLOW SIDE (yolanda, 276.5s gate, n=20): three lost races before landing, at
+      429s, 442s and 453s per re-gate, with trunk moving again during each. What
+      broke the treadmill was gating and pushing with NO fetch in between, because
+      the hook compares against the origin/linux-next the last fetch recorded.
+    the_slow_leg_is_provisional: >
+      READ THIS BEFORE QUOTING THE SLOW SIDE. yolanda's 276.5s is NOT a Windows
+      or WSL2 property: their checkout sits on /mnt/c behind the 9P bridge,
+      measured at ~48x the same machine's native ext4 at the same commit, one
+      variable — while WSL2 itself costs only ~1.4x. It is a configuration
+      defect with a fix (895-bkrn), not a platform floor. If that packet lands,
+      this rule loses its only measured slow side.
+      And the number carries yolanda's own caveat, volunteered about the figure
+      that made their own problem look most urgent: the ext4 leg is n=3 at 238 ms
+      (1.1% spread) while the BRIDGE leg is still n=1, so the ~48x rests on a
+      single draw on the expensive side.
+      THE MECHANISM IS UNAFFECTED AND REMAINS DERIVABLE — the lane needs a fresh
+      fetch, the stamp needs an unchanged tree, they are mutually exclusive, and
+      gate duration decides which to chase. Only the empirical slow leg is
+      provisional. A host should derive its own regime from its own gate rather
+      than matching itself to yolanda's numbers.
+    it_narrows_the_window_it_does_not_close_it: >
+      Not fetching does NOT make a moved remote go away. If trunk actually
+      advanced, the push is rejected as non-fast-forward regardless of how fresh
+      the stamp is. The discipline buys a SHORTER INTERVAL between gate-end and
+      push. A host on a slow gate will still lose races; losing one is consistent
+      with this rule rather than a refutation of it. Sold as a guarantee it would
+      teach its user to distrust a correct rule the first time it loses.
+    path_eligibility_is_necessary_not_sufficient: >
+      The merge that pull_merge_cadence.pre_push_gate REQUIRES imports non-plan
+      paths — yolanda's refusal named scripts/check-credential-channel.sh, a file
+      they had never touched — so a plan-only commit stops qualifying for the lane
+      the moment its host obeys the merge rule. THE LANE IS THEREFORE
+      STRUCTURALLY UNAVAILABLE TO EVERY PLATFORM-BRANCH HOST on any push that
+      follows a merge, which is most of them. Widening WHICH paths qualify
+      (889-twhe) does not touch this. A platform-branch host's lever is the stamp,
+      not the lane.
+    anti_patterns:
+      - >
+        Broadcasting one host's push discipline fleet-wide without naming the
+        regime it was measured in. Done on 2026-08-25; it was a free win on three
+        hosts and an active trap on the fourth.
+      - >
+        Assuming the fast lane is available whenever the PATHS qualify. Path
+        eligibility is necessary and not sufficient.
+
+  cross_host_relay_provenance:
+    purpose: >
+      A relay carries its provenance, and a relay is NEVER corroboration. Every
+      finding forwarded between hosts is tagged with its evidence state —
+      MEASURED (by whom, on which host, with what command), REPORTED (told to
+      me, not verified), or INFERRED (reasoning, no measurement) — and a host
+      that verified something itself says so and says how.
+    authority: >
+      Coordinator ruling, macuahuitl, 2026-08-25, on a defect in the
+      COORDINATOR's own role named by yoga. Adopted the same night it was
+      identified.
+    the_problem: >
+      Direct host-to-host messaging makes a coordinator an AMPLIFIER. A finding
+      forwarded by the coordinator reads as corroboration when it is only
+      transmission, because it arrives carrying the coordinator's implicit
+      weight. The receiving host then reasonably weights it above the same
+      sentence from its author.
+    the_evidence: >
+      MEASURED on 2026-08-25, the first night the fleet had lateral messaging.
+      FOUR premises were endorsed by multiple hosts and then falsified by
+      whichever host finally measured them: the coordinator's claim that the
+      sanctioned build-cache sweep had destroyed the convergence history
+      (retracted — could not show any history ever existed); yoga's committed
+      capability row advertising gpu/container/ollama against a live probe
+      reporting engines:[] (which MISROUTED the authoritative release gate);
+      the warm-toolbox velocity lever (falsified at +5% container overhead
+      against a 131.9s one-time construction cost); and a macOS filesystem
+      case-sensitivity defect (retracted — the probe's outcome was fixed before
+      it ran). In every case the ENDORSEMENT CHAIN WAS LONGER THAN THE EVIDENCE
+      CHAIN, and the coordinator amplified at least twice.
+    the_sharper_half: >
+      N ENDORSEMENTS ARE NOT N EVIDENCE. Three hosts agreed the warm-toolbox
+      premise was worth a packet. That agreement was not weak evidence, it was
+      ZERO evidence: all three were reasoning from ONE host's single number, so
+      there was one measurement wearing three hats. Aggregated agreement feels
+      like corroboration and is the most common way a fleet convinces itself of
+      something nobody checked. This is a reasoning bug rather than a discipline,
+      which is why it is stated ahead of the tagging.
+    what_this_must_not_cost: >
+      The transmission is not the defect — it is most of a coordinator's value.
+      On the same night, relaying carried a reframing, a lane discovery, a
+      whole-tree measurement and a 9.7x ratio between hosts that would otherwise
+      have had none of them. THE DEFECT IS SPECIFICALLY THE UNTAGGED RELAY.
+      Tagging costs one word per finding; relaying less costs the pairing. So:
+      tag everything, relay MORE, and let the tags carry the weight. Ten
+      REPORTED-tagged findings beat three personally verified ones.
+    anti_patterns:
+      - >
+        Forwarding a finding without naming who measured it, so the receiver
+        cannot tell verification from transmission.
+      - >
+        Counting agreement as evidence. Ask how many MEASUREMENTS are under the
+        agreement, not how many hosts hold it.
+      - >
+        Relaying less to avoid the amplifier problem. The fix is the tag, not
+        the silence.
+
+  every_gate_number_states_cold_or_warm:
+    purpose: >
+      A gate duration quoted anywhere — a packet, a handoff, a cross-host
+      message — MUST state whether it was COLD or WARM. An unlabelled gate
+      number is not interpretable.
+    authority: >
+      Proposed by pirria 2026-08-25 after retracting its own trend claim;
+      adopted by the coordinator the same night. Same family as
+      cross_host_relay_provenance above.
+    the_problem: >
+      This gate has at least TWO memoisation layers and neither announces which
+      one you got: the whole-gate memo (765-tkq2) that returns ok:gate-fresh in
+      ~0.4s on an unchanged tree, and per-phase caches beneath it. So two runs
+      of "the same gate" on "the same tree" can differ by orders of magnitude
+      for reasons that have nothing to do with the tree.
+    the_evidence: >
+      MEASURED on pirria 2026-08-25, on ONE tree, 2.5 minutes apart:
+        23:24:18Z  total 140198 ms   fragment-event phase  40151 ms
+        23:26:53Z  total  63147 ms   fragment-event phase    814 ms
+      49x on that phase. The 140s run was the first gate after fast-forwarding
+      71 commits — maximally cold by construction — and was compared against
+      another cold number and reported as a GROWTH TREND, with a recommendation
+      to scope an intervention at the phase that had grown. The phase is 0.8s
+      warm. Retracted by its own author within the hour.
+      THREE HOSTS WERE FOOLED BY A COLD/WARM CONFUSION IN ONE EVENING: yoga's
+      131.9s cold-toolbox number (which survived two reframings before being
+      falsified at +5%), macbook's build_check_ms_avg mixing memoised and forced
+      runs, and pirria's trend above. That is not three mistakes; it is one
+      missing label.
+    the_rule: >
+      State it or the number does not travel. "28.6s" is not a measurement;
+      "28.6s, forced, n=15, range 13.4-40.4s" is. Prefer FORCED runs
+      (TILLANDSIAS_FORCE_CHECK=1) for any cross-host comparison, and say n and
+      spread — a mean over a mixed population encodes how many no-op runs a host
+      happened to do rather than how fast it is.
+    anti_patterns:
+      - >
+        Comparing two cold numbers and calling the difference a trend. A
+        first-gate-after-a-large-fast-forward is maximally cold by construction.
+      - >
+        Quoting a mean over memoised and forced runs together. It measures
+        neither.
+      - >
+        Reporting a ratio whose two sides have different n. State both, or state
+        that one is a single observation.
+
   ledger_write_path:
     purpose: >
       One command changes a packet field. Hand-authoring the LWW channel is the
@@ -1401,18 +1719,78 @@ distributed_work:
           If blocked or failed, write a 'blocked' or 'failed' event with a clear error/reason
           under the item's events list, update status, release the lease, and switch to a ready fallback task.
 
+    harness_affinity_selection:
+      decided_by: "order 555 (routing enabler for the operator's harness-validation ask)"
+      rule: >
+        A forge cycle that knows which harness drives it
+        (TILLANDSIAS_HOST_KIND=forge AND TILLANDSIAS_AGENT set to a
+        tag-shaped harness name: opencode, claude, codex, antigravity,
+        gemini, ...) MUST prefer a ready packet tagged
+        [harness-validation, <that harness>] over the general backlog — an
+        OpenCode forge claims the OpenCode validation packet, never a random
+        platform packet. scripts/select-work-batch.sh implements this: the
+        affinity pick takes the batch HEAD (above the order-645 urgent slot —
+        a validation forge that defers its own validation never validates its
+        harness) and the header confesses it with `harness=<packet_id>`.
+      convention: >
+        A harness-validation packet tags capability_tags
+        [harness-validation, <harness>]. The affinity query is
+        release-unscoped for the tier-pool reason: the pool is small and
+        hand-curated, and validating THIS harness is valuable whenever its
+        packet was filed.
+      fallback: >
+        No matching ready packet, a non-tag-shaped agent name, or a non-forge
+        host leaves the batch untouched — never idle. Bare-metal hosts never
+        enter the branch: a host that runs many harnesses proves nothing
+        about any one of them.
+      pinned_by: "litmus:harness-affinity-selection-shape (fixture-proven; scripts/test-harness-affinity-selection.sh)"
+      live_signal_gap: >
+        Order 570: the tray launch spec does not yet export TILLANDSIAS_AGENT
+        into live forges, so until it lands the affinity branch fires only in
+        fixtures. The selector rule is deliberately in place first, so 570's
+        landing turns routing on without a second selector change.
+
     forge_cycle_budget:
       decided_by: "The Tlatoāni (order 264, updated order 707-3x9d 2026-08-12)"
       rule: >
-        Agents running INSIDE a forge container (TILLANDSIAS_HOST_KIND=forge)
-        drain AT MOST ONE plan packet per cycle when running in unattended litmus
-        gates (TILLANDSIAS_LITMUS_STEP) and must SPLIT the packet into smaller ready
-        child packets if it will not fit within the 600s launch budget. Autonomous
-        and pairing forge cycles scale to an ADAPTIVE BATCH BUDGET (default 4,
-        configurable up to 6 via TILLANDSIAS_CYCLE_BUDGET) drawn from a single
-        cohesive epic (release_target) to maximize the work-to-orchestration ratio.
+        YES — a forge cycle MAY drain more than one plan packet. It drains as
+        much of the batch as fits the 600s launch envelope, taken as ONE story.
+        The bound is TIME, never a count. No budget NUMBER lives here:
+        scripts/select-work-batch.sh is the sole authority for all of them,
+        forge and non-forge, defaults and TILLANDSIAS_CYCLE_BUDGET bounds.
       supersedes: >
-        The static 1-packet-per-cycle limitation across all forge sessions.
+        The static 1-packet-per-cycle limit on forge sessions; and (831-ezea)
+        mandatory SPLIT on overrun — minting rows exactly when service
+        saturates manufactures arrival. Overrun means carry less, not split.
+      the_batch_is_a_story: >
+        Order 830-6rte (The Tlatoāni, 2026-08-19). The unit of work is the
+        STORY, not the packet: take the whole batch, implement it as one
+        coherent change, and pay the cycle's fixed costs ONCE — one
+        build/verify pass, one loop-status entry, one attestation. Never
+        ./build.sh --check per packet; never attest per packet.
+        WHY, measured on the fleet 2026-08-16..19: 155 attestation-only commits
+        and 88 ledger-bookkeeping commits in three days, against single digits
+        for every category of product work; over five days, 127 product-code
+        commits against 457 plan-only, 149 attestation-only and 219 merges.
+        EVERY CYCLE PAYS THE SAME EXIT COST WHETHER IT CARRIED ONE PACKET OR
+        EIGHT — loop-status, attestation record, attestation self-check at the
+        new HEAD, and the merges each provokes. Bundling does not shrink the
+        overhead; it amortizes it over more delivered work, which is the only
+        lever available that does not weaken the exit contract itself.
+      count_versus_envelope: >
+        The forge bound is TIME, not a count. "One packet" was always a proxy
+        for "fits in the 600s launch budget", and it is a bad proxy in both
+        directions: three one-line ledger closures fit easily, one large packet
+        does not fit at all. Ask the envelope question about the STORY.
+      how_this_rule_failed_to_reach_anyone: >
+        Recorded because it is an instance of the class it now governs. 707-3x9d
+        lifted the single-packet limit on 2026-08-12. The skill agents actually
+        read went on saying "Drain at most ONE packet per forge cycle" and
+        "Budget is 1 on forge and 3 elsewhere" for a week, in the same paragraph
+        that said 4 and 6. Three numbers for one budget; agents took the
+        smallest. A methodology change that does not land in the skill is
+        "fixed but not enabled", and the fleet spent a week draining one packet
+        at a time while tuned for ten.
       interim_note: >
         Reliance on step timeouts is interim. Order 265 (forge
         heartbeat/liveness signals — we own the launch and the container

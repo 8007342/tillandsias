@@ -23,16 +23,54 @@
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$REPO_ROOT" || exit 2
 
-# Default to the real groundtruth dir; an argument overrides it so the litmus
-# can point the guard at a fixture directory of case files (status is still
-# resolved against the LIVE ledger, so the fixture cites real packet ids).
+# Resolve the case dir BEFORE the cd, so a caller may pass a relative path to a
+# fixture directory outside the repo. Previously the cd below silently
+# reinterpreted any relative argument against the repo root.
 GT_DIR="${1:-openspec/litmus-tests/groundtruth}"
+case "$GT_DIR" in
+    /*) : ;;
+    *) [ -d "$GT_DIR" ] && GT_DIR="$(cd "$GT_DIR" && pwd)" ;;
+esac
+
+# THE LEDGER STATUS IS RESOLVED HERE, AND IT DID NOT USED TO BE OVERRIDABLE.
+#
+# ORDER 865-x2mf. This guard exists (680-zphp) to stop a groundtruth case
+# pinning `status:` on a packet whose live status can still move. Its own
+# negative control did exactly that: it pinned `status: ready` on packet 394 and
+# required a refusal. 394 was later obsoleted — terminal — so the pin became
+# legitimate, the guard correctly admitted it, and
+# litmus:groundtruth-no-mutable-status-pin-shape went red looking for a refusal
+# it could no longer earn. The litmus header still asserts "394 is ready
+# (non-terminal, a trap)".
+#
+# The guard written to enforce "never depend on a live packet's status" had a
+# test that depended on a live packet's status, and it broke exactly as the rule
+# predicts. That is not a reason to pick a longer-lived packet — every live
+# packet is mortal. It is a reason to let the TEST supply its own ledger.
+#
+# Defaults to the repo, so production behaviour is byte-identical.
+LEDGER_ROOT="${TILLANDSIAS_GROUNDTRUTH_LEDGER_ROOT:-$REPO_ROOT}"
+case "$LEDGER_ROOT" in
+    /*) : ;;
+    *) LEDGER_ROOT="$(cd "$LEDGER_ROOT" 2>/dev/null && pwd)" || LEDGER_ROOT="$REPO_ROOT" ;;
+esac
+
+cd "$REPO_ROOT" || exit 2
 
 # Order 721-nyev: resolve by execution, not by the executable bit.
 . "$(dirname "${BASH_SOURCE[0]}")/plan-binary-probe.sh"
 _bin="$(resolve_plan_binary || true)"
+# ABSOLUTISE IT. resolve_plan_binary returns a REPO-RELATIVE path
+# (`./target/release/tillandsias-plan`), and the status lookup below runs inside
+# `cd "$LEDGER_ROOT"` — so a relative path silently resolves to nothing there,
+# every lookup returns empty, every pin is skipped as "unknown packet", and the
+# guard reports `0 live-checked` while looking exactly like a pass. I wrote a
+# comment asserting this path was already absolute and did not check; it is not.
+case "$_bin" in
+    ''|/*) : ;;
+    *) _bin="$REPO_ROOT/${_bin#./}" ;;
+esac
 if [ -z "$_bin" ]; then
     echo "ok:groundtruth-status-pins:0 live-checked"
     echo "  note: tillandsias-plan not built — groundtruth status-pin guard skipped" >&2
@@ -48,7 +86,10 @@ for f in "$GT_DIR"/*.yaml; do
     # preceding `packet_id:` names the packet the pin applies to.
     while IFS=$'\t' read -r pid pinned; do
         [ -n "$pid" ] || continue
-        live="$("$_bin" status "$pid" 2>/dev/null | awk '{print $2}')"
+        # Resolved from LEDGER_ROOT, which is the repo unless a test supplies
+        # its own frozen ledger (865-x2mf). `_bin` is absolutised above, so the
+        # subshell cd cannot lose it.
+        live="$( cd "$LEDGER_ROOT" && "$_bin" status "$pid" 2>/dev/null | awk '{print $2}' )"
         # Unknown packet (fixture-* or typo) -> not a live pin, skip.
         [ -n "$live" ] || continue
         checked=$((checked + 1))

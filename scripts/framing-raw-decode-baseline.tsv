@@ -1,0 +1,66 @@
+# @trace order:795-5itp
+# Raw frame-length decode ratchet baseline for
+# scripts/check-framing-raw-decodes.sh.
+#
+# One row per file that still decodes `u32-BE` frame lengths by hand:
+#   <count>\t<path>\t<disposition>
+#
+# The count is an EXACT ceiling, not an upper bound: the guard refuses a
+# count above it (a new hand-rolled copy) AND a count below it (a slice
+# landed and nobody tightened the ratchet). Lower the number in the same
+# commit as the migration, and delete the row when the file reaches zero.
+#
+# Dispositions:
+#   pending  — still to migrate onto LengthDelimitedCodec.
+#   keep     — deliberate, with the reason recorded in this packet's events
+#              AND at the site itself; never silently converted to pending.
+1	crates/tillandsias-control-wire/src/transport.rs	keep
+1	crates/tillandsias-headless/src/main.rs	keep
+3	crates/tillandsias-headless/src/tray/mod.rs	keep
+1	crates/tillandsias-headless/src/vsock_server.rs	keep
+1	crates/tillandsias-headless/tests/vsock_listener_e2e.rs	keep
+1	crates/tillandsias-host-shell/src/provisioning.rs	keep
+2	crates/tillandsias-host-shell/src/vsock_client.rs	keep
+5	crates/tillandsias-macos-tray/src/pty_vsock_bridge.rs	pending
+1	crates/tillandsias-vm-layer/src/vsock_exec.rs	pending
+2	crates/tillandsias-windows-tray/src/hvsocket.rs	pending
+#
+# KEEP REASONS, recorded here as well as at each site (795-5itp events
+# 2026-08-25T09:47:30Z and the doc comment at vsock_server.rs:1715):
+#   headless/src/tray/mod.rs        — the tray control socket is a BLOCKING
+#     std::os::unix::net::UnixStream held in an Arc<Mutex<Vec<..>>> subscriber
+#     registry and written synchronously inside a retain; Framed needs
+#     tokio AsyncRead+AsyncWrite, so this is not a swap but a move of the
+#     tray control socket onto a runtime. Its bound is already the shared
+#     MAX_MESSAGE_BYTES, so the duplication here is mechanics, not policy.
+#     The two test sites are hand-rolled peers of that same socket.
+#   headless/src/vsock_server.rs    — #[cfg(test)] interop peer. Its value is
+#     being an INDEPENDENT hand-rolled decoder: delete it and "the codec
+#     produces the bytes the old framing produced" becomes a tautology.
+#   headless/tests/vsock_listener_e2e.rs — same, at the e2e layer.
+#
+# CLASSIFICATION OF THE LINUX-TESTABLE SITES (yoga, 2026-08-25, slice 5).
+# The rows above were all filed as `pending` because the original scan counted
+# DECODE SITES. Reading each one shows they are not the same kind of thing, and
+# five of the six Linux-testable ones cannot migrate for reasons already
+# accepted elsewhere in this packet:
+#   control-wire/transport.rs:246   test peer   (inside #[cfg(test)] at :206)
+#   host-shell/provisioning.rs:170  test peer   (inside #[cfg(test)] at :154)
+#   host-shell/vsock_client.rs:639  test peer   (#[cfg(test)] at :402)
+#   host-shell/vsock_client.rs:667  test peer   (#[cfg(all(test,unix))] at :656)
+#     -- all four are independent hand-rolled decoders whose VALUE is being
+#        independent; migrating them makes the interop assertion a tautology,
+#        exactly as recorded for vsock_server.rs and tray/mod.rs.
+#   headless/main.rs:11925          PRODUCTION but BLOCKING. `stream.read_exact`
+#     with no .await -- the std UnixStream client side of the tray control
+#     socket. Framed requires tokio AsyncRead+AsyncWrite; this is the same
+#     blocking-stream keep already recorded for tray/mod.rs:590, seen from the
+#     other end of the same socket.
+#
+# THE ONE REAL LINUX PRODUCTION TARGET:
+#   vm-layer/vsock_exec.rs:354  async read_envelope<R: AsyncRead + Unpin>
+#     Genuinely migratable and genuinely NOT a mechanical swap: 41 call sites
+#     share one stream (`&mut guest` reused across reads), so a per-call Framed
+#     would over-read and drop pipelined bytes; tokio-util is not yet a
+#     dependency of tillandsias-vm-layer. Needs the into_parts treatment the
+#     vsock_server slice used, or callers restructured to own the Framed.

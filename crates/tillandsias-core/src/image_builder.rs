@@ -506,11 +506,9 @@ impl PodmanDirect {
         // Windows hosts); `USERPROFILE` keeps this crate compiling and
         // sane on a Windows host. A compile-time `env!("HOME")` would break
         // the MSVC build since Windows has no `HOME` at compile time.
-        let home_dir = std::env::var_os("HOME")
-            .or_else(|| std::env::var_os("USERPROFILE"))
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(std::env::temp_dir);
-        let cache_dir = home_dir.join(".cache/tillandsias/packages");
+        // Order 815-gdjk: resolution (incl. the USERPROFILE Windows spelling
+        // the comment above litigated) now lives in cache_root, XDG-first.
+        let cache_dir = crate::cache_root::cache_root().join("packages");
         std::fs::create_dir_all(&cache_dir)
             .map_err(|e| ImageBuilderError::Io(format!("create cache dir: {e}")))?;
 

@@ -1,0 +1,57 @@
+# @trace spec:meta-orchestration
+# @trace order:851-gpb5
+# freshness: auditor=linux-yoga-opus5-20260824T193300Z date=2026-08-24 verdict=updated scope=STEP 3 version literal v5 -> versioned-marker shape (installer is v6); regex negative controls 3/3 (v6 matches, absent fails, future v9 matches) and suite green on linux-next
+#
+# Pins the executable half of methodology's pre-push gate
+# (pull_merge_cadence.pre_push_gate): non-linux-next platform branches MUST
+# merge origin/linux-next before EVERY push. From 2026-07-02 to 851-gpb5 the
+# rule was stated in methodology/multi-host-development.yaml, CLAUDE.md and
+# two script comments and enforced by NO code — while the phrase "pre-push
+# gate" also named `./build.sh --check` in the meta-orchestration skill, so
+# the unenforced rule hid behind an enforced namesake. Both halves are pinned
+# here: the guard's refusal shape, and the skill's statement of the rule
+# under its methodology name.
+name: litmus:pre-push-linux-next-merged-shape
+spec: meta-orchestration
+phase: pre-build
+description: >
+  Pin scripts/hooks/pre-push-linux-next-merged.sh: an osx-next/windows-next
+  push whose local head does not contain origin/linux-next is refused with
+  blocked:linux-next-not-merged:<branch>; merged pushes, linux-next itself,
+  deletions, and repos without an origin/linux-next ref pass; a neutered
+  guard is caught by the fixture's mutation-control arm; and the
+  meta-orchestration skill states the rule (and no longer calls
+  ./build.sh --check "the pre-push gate").
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/hooks/pre-push-linux-next-merged.sh
+  - workspace contains scripts/test-pre-push-linux-next-merged.sh
+  - git and bash are available in PATH
+
+critical_path:
+  - step: "guard and fixture parse and are executable"
+    command: "bash -n scripts/hooks/pre-push-linux-next-merged.sh && bash -n scripts/test-pre-push-linux-next-merged.sh && test -x scripts/hooks/pre-push-linux-next-merged.sh && test -x scripts/test-pre-push-linux-next-merged.sh && echo 'ok: parses'"
+    timeout_ms: 5000
+    expected_behavior: "ok: parses"
+
+  - step: "all fixture scenarios pass (refusal, allow twin, scope, deletion, no-ref, mutation control, skill pins)"
+    command: "bash scripts/test-pre-push-linux-next-merged.sh 2>&1 | tail -1"
+    timeout_ms: 60000
+    expected_behavior: "ok:pre-push-linux-next-merged-fixture:12"
+
+  - step: "the installed-hook composition includes the merge gate (installer generates a versioned hook with the merge gate composed)"
+    # The property is COMPOSITION — the installer's generated hook
+    # carries the merge gate under its current versioned marker.
+    # Pinning a specific version literal (v5) guaranteed this check
+    # broke on every legitimate installer bump (it is v6 since the
+    # main-branch affordance landed); pin the versioned-marker SHAPE
+    # instead, per order 622-rmit (expression pinning).
+    command: "grep -qE 'tillandsias-pre-push-v[0-9]+' scripts/install-hooks.sh && grep -q 'pre-push-linux-next-merged.sh' scripts/install-hooks.sh && echo 'ok: composed'"
+    timeout_ms: 5000
+    expected_behavior: "ok: composed"
+
+evidence:
+  artifact: "scripts/hooks/pre-push-linux-next-merged.sh + scripts/test-pre-push-linux-next-merged.sh"
+  measured_on: "macOS Darwin 25.6.0 2026-08-22 — 12/12 fixture checks green, mutation control red->green verified"

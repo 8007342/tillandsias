@@ -11,6 +11,7 @@
 # and fails if the binary answers "unknown subcommand". Removing a token here
 answer
 append-event
+arrival-routing-check
 # `[a-z][a-z0-9-]*` only. Comments (`#`) and blank lines are ignored by every
 blocked-by
 blocked-closure
@@ -22,14 +23,21 @@ blocking-counts
 burndown
 capabilities
 #      capabilities` prints this file, embedded at compile time via
+capability-matrix
+carry-forward-check
 check
 # close: order 531 ran a forge whose checkout was a pre-expert `main` snapshot,
 closure-evidence-check
 compact
+corpus-coverage
+declared-closures
+declared-closures-check
 dependencies-of
 expire-claims
 # does not remove the capability — it makes the expert UNDER-report itself, and
 # file are checked against each other BEHAVIOURALLY by
+fragment-event-packets
+fragment-misplaced-definitions
 fragment-terminal-events
 fragments
 grade
@@ -49,6 +57,7 @@ next-order
 # One filename, two readers, so the "available now" and "available after a
 # ONE token per line: the subcommands this expert can answer. Sorted, unique,
 parked-blocks
+plan-events
 query
 # reader.
 ready

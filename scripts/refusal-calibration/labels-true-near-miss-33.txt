@@ -1,0 +1,33 @@
+Are there keyboard shortcuts for opening the tray menu?
+Does the test suite run under Miri?
+Do you run Dependabot or Renovate to keep Cargo.lock current?
+How do I attach gdb or lldb to a hung tray process and get a backtrace?
+How do I generate a code coverage report for the workspace?
+How do I run the litmus suite against a remote host?
+How long did the 661-packet archive sweep take in wall-clock seconds?
+How long may a packet stay `blocked` before it must be escalated to the operator?
+How many bytes is plan/index.yaml after the sweep?
+How many days may a deprecated spec sit before it must be moved to obsolete?
+How many delegates are allowed at ramp stage 1?
+How many releases have been published so far?
+Is cargo-audit or cargo-deny run as part of any gate?
+Is there a cargo-fuzz target for the control-wire frame parser?
+Is there an uptime or availability target for the enclave services?
+Is there a support email or chat channel where users report problems?
+What ack-latency number should page someone for the git mirror?
+What did the five Raspberry Pi 5 nodes cost?
+What in-corpus and near-miss cosine bands did the macOS host measure for spec_answer?
+What is the current head commit of origin/osx-next?
+What is the SHA-256 of the current published tillandsias-linux-x86_64 binary?
+What line-coverage percentage must the Rust unit tests reach?
+What memory limit is set on the tray process itself?
+What screen-reader support does the tray menu have?
+What's the p50 end-to-end wall-clock time of a complete ./build.sh --ci-full run?
+What's the security vulnerability disclosure process for this project?
+What's the test coverage percentage for the workspace?
+What's the upstream Bun issue number for the arm64 segfault we hit?
+When is v1.0 scheduled to ship?
+Which cargo-fuzz targets exist for the control-wire decoder?
+Which commit introduced the em-dash into install-windows.ps1 that broke saved-file runs?
+Which model does NanoClawV2 itself run on?
+Which specific fragments were folded in the 101-fragment compaction on 2026-08-22?

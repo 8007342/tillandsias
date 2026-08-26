@@ -83,10 +83,19 @@
 #
 # With `cycle=<id>`, a second emit for the same host+cycle REPLACES the first.
 # Replace rather than skip: a retry happens after MORE work, so its counts are
-# the truthful ones. Without `cycle=`, behaviour is the old append and a warning
-# goes to stderr naming the risk -- a silent heuristic (bucket by hour, say)
-# would drop genuine records to hide a caller's omission, which is the same
-# class of lie this file exists to avoid.
+# the truthful ones.
+#
+# Without `cycle=`, the id is MINTED here as `<host>-<utc>` (order 801-tpxd)
+# rather than written as the sentinel `-`. The old behaviour wrote `-` and
+# warned; the warning did not stop two windows cycles from shipping a `-` row,
+# and the attempt to repair one of them with a global sed clobbered a HISTORICAL
+# record. The id was required from the caller yet fully derivable by the callee
+# -- host + UTC is precisely what every cycle assembles by hand -- so deriving
+# it removes the failure instead of narrating it. This is not the "silent
+# heuristic" that was rightly refused before: bucketing by clock hour would have
+# MERGED distinct cycles and dropped genuine records, whereas a second-resolution
+# mint is injective over real cycles, so an unlabelled retry still appends
+# exactly as it used to. The mint is announced on stderr as `note:`.
 #
 # Exit status is 0 whenever the report was produced. A metrics reporter that
 # fails the cycle it is measuring is a metric that can take down what it
@@ -195,9 +204,36 @@ if [ "${1:-}" = "--emit-flow" ]; then
              ef_commits ef_plan_open ef_plan_total; do
         eval "case \"\$$v\" in ''|*[!0-9]*) $v=0 ;; esac"
     done
+    # MINT the cycle id when the caller omitted it (order 801-tpxd). The old
+    # behaviour wrote `"cycle":"-"` and warned; two windows cycles then shipped
+    # a `-` row, and one of them "repaired" it with a global sed that clobbered
+    # a HISTORICAL record. Both failures trace to the same root: the id was
+    # required from the caller but derivable by the callee. Host + UTC timestamp
+    # is exactly what every cycle constructs by hand, so construct it here and
+    # the omission stops being able to produce a poisoned row at all.
+    #
+    # `-` is now unreachable by construction, which is the pinned property
+    # (test-cycle-flow-emit-idempotency.sh scenarios 5 and 8): a sentinel that
+    # cannot be written cannot be mistaken for a cycle id, and the replace-key
+    # (host+cycle) can no longer collapse every unlabelled cycle onto one row.
+    #
+    # Minted ids are second-resolution, so a genuine retry (which happens
+    # seconds-to-minutes later) mints a NEW id and APPENDS — preserving the old
+    # no-cycle= behaviour for the case the caller really is unlabelled — while a
+    # caller that passes cycle= keeps full replace-on-retry idempotency. Passing
+    # cycle= is still the right thing; it is simply no longer load-bearing for
+    # the log's integrity.
     if [ -z "$ef_cycle" ]; then
-        ef_cycle="-"
-        echo "warn: --emit-flow without cycle=<id>; a retried finalization will append a SECOND record for this cycle and skew overhead_ratio (682-epud)" >&2
+        ef_mint_host="$ef_host"
+        case "$ef_mint_host" in '' | '-') ef_mint_host="unknown-host" ;; esac
+        ef_cycle="${ef_mint_host}-$(date -u +%Y%m%dT%H%M%SZ 2>/dev/null || echo unknown)"
+        echo "note: --emit-flow without cycle=<id>; minted cycle=$ef_cycle from host+UTC (order 801-tpxd). Pass cycle=<id> for replace-on-retry idempotency (682-epud)." >&2
+    fi
+    # Defence in depth: a caller that passes the literal sentinel gets it
+    # rewritten too, so no path reaches the record printf with `-`.
+    if [ "$ef_cycle" = "-" ]; then
+        ef_cycle="unlabelled-$(date -u +%Y%m%dT%H%M%SZ 2>/dev/null || echo unknown)"
+        echo "note: --emit-flow cycle=- is not a cycle id; minted cycle=$ef_cycle (order 801-tpxd)." >&2
     fi
     {
         ef_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
@@ -309,13 +345,29 @@ printf 'experts_substitution: unknown (needs the agent harness tool log; not der
 # and neither does a server nobody called — both render as absence in every
 # count above. `health=` is the field that separates them, sourced from
 # scripts/check-mcp-expert-health.sh's JSONL rather than from usage at all.
-#   health=ok         every expected expert answered its last probe
-#   health=down:<csv> named experts failed their last probe (the outage)
-#   health=absent     no expected expert is registered in this environment
-#   health=unprobed   the probe has not run here; NOT the same as healthy
+#   health=ok           every expected expert answered its last probe
+#   health=ok-unexposed the servers answered, but the CYCLE reported the tools
+#                       were absent from its own tool surface (order 801-m9tk)
+#   health=down:<csv>   named experts failed their last probe (the outage)
+#   health=absent       no expected expert is registered in this environment
+#   health=unprobed     the probe has not run here; NOT the same as healthy
 # Keeping `unprobed` distinct from `ok` matters: reporting an unmeasured expert
 # as healthy is the order-531 shape (truthful `experts: ready`, every answer
 # unsupported) this line exists to prevent.
+#
+# `ok-unexposed` is the SAME LESSON one level up (order 801-m9tk). For three
+# consecutive windows cycles the probe printed ok:experts-healthy while no
+# mcp__forge-plan__* / mcp__project-info__* tool was bound to the session at
+# all, so every read fell back to the binary and this line said `health=ok`
+# throughout. The handshake and the agent's tool surface are different facts;
+# the probe can only measure the first, and a script cannot observe the second
+# from a subprocess. So the cycle ATTESTS the surface
+# (scripts/check-mcp-surface.sh attest exposed|unexposed) and this line carries
+# the join. Absence of an attestation reads `ok` exactly as before — the value
+# only appears when a cycle explicitly reported an unexposed surface, so no host
+# is retro-labelled by a fact nobody recorded. An `ok-unexposed` cycle also
+# fires the mcp_outage: line, because a read path that silently degraded for a
+# whole cycle IS the outage 737-zcj5 was built to stop losing.
 HEALTH_LOG="${TILLANDSIAS_EXPERT_HEALTH_LOG:-/tmp/forge-expert-health.jsonl}"
 mcp_health="unprobed"
 mcp_outages=0
@@ -344,6 +396,35 @@ if [ -s "$HEALTH_LOG" ]; then
         }' "$HEALTH_LOG" 2>/dev/null)"
     [ -n "$mcp_health" ] || mcp_health="unprobed"
     mcp_outages="$(grep -c '"state":"\(down\|absent\)"' "$HEALTH_LOG" 2>/dev/null)" || mcp_outages=0
+fi
+
+# ── surface join (order 801-m9tk) ────────────────────────────────────────────
+# Only ever REFINES `ok` into `ok-unexposed`; never rescues a `down`, never
+# invents a state for a cycle that attested nothing. The attestation is read
+# through the same freshness rule check-mcp-surface.sh applies, so a previous
+# cycle's marker cannot label this one.
+if [ "$mcp_health" = "ok" ]; then
+    _surface_stamp="${TILLANDSIAS_MCP_SURFACE_STAMP:-$(git rev-parse --absolute-git-dir 2>/dev/null || echo "$REPO_ROOT/.git")/tillandsias-mcp-surface}"
+    if [ -f "$_surface_stamp" ]; then
+        # Space-split + anchored, not `\b` (order 803-bqte): BSD sed has no
+        # `\b`, so on macOS both reads returned empty and the `mcp:` line
+        # silently dropped the surface attestation it is supposed to fold in.
+        _sfc_claim="$(tr ' ' '\n' < "$_surface_stamp" 2>/dev/null | sed -n 's/^claim=\(.*\)$/\1/p' | head -1)"
+        _sfc_epoch="$(tr ' ' '\n' < "$_surface_stamp" 2>/dev/null | sed -n 's/^epoch=\([0-9]*\)$/\1/p' | head -1)"
+        _sfc_now="$(date -u +%s 2>/dev/null || echo 0)"
+        _sfc_max="${TILLANDSIAS_MCP_SURFACE_MAX_AGE:-14400}"
+        _sfc_fresh=1
+        case "$_sfc_epoch" in
+            '' | *[!0-9]*) : ;;
+            *) [ $((_sfc_now - _sfc_epoch)) -gt "$_sfc_max" ] && _sfc_fresh=0 ;;
+        esac
+        if [ "$_sfc_fresh" = "1" ] && [ "$_sfc_claim" = "unexposed" ]; then
+            mcp_health="ok-unexposed"
+            # A degraded read path for a whole cycle is an outage record even
+            # though no server ever reported `down`.
+            mcp_outages=$((mcp_outages + 1))
+        fi
+    fi
 fi
 
 if grep -q '"server":"' "$USAGE_LOG" 2>/dev/null; then
@@ -397,13 +478,61 @@ GRADE_BIN=""
 . "$REPO_ROOT/scripts/plan-binary-probe.sh"
 GRADE_BIN="$(cd "$REPO_ROOT" && resolve_plan_binary || true)"
 accuracy_line='expert_accuracy: deferred source=litmus:expert-groundtruth-harness'
+# Order 786-kjke: grade EVERY committed query set, not just rung1.
+#
+# This line used to run bare `grade --root .`, which defaults to rung1 and
+# reported `pass=22 total=22 rate=100% source=groundtruth-rung1`. That was
+# TRUE but its scope was undisclosed: six further graded cases in two
+# fixture-backed sets were never in the number. Widening was impossible before
+# now — globbing the directory graded those sets against the live ledger and
+# produced six FALSE reds — and is safe now that each set declares its own
+# corpus. A missing corpus is exit 2, which yields no result line and leaves
+# the `deferred` fallback in place, so this cannot silently under-report.
 if [ -n "$GRADE_BIN" ]; then
-    gr="$(cd "$REPO_ROOT" && ( command -v timeout >/dev/null 2>&1 && timeout 30 "$GRADE_BIN" grade --root . || "$GRADE_BIN" grade --root . ) 2>/dev/null | grep '^groundtruth-result:' | tail -1)"
+    gt_sets="$REPO_ROOT/openspec/litmus-tests/groundtruth"
+    gr=""
+    if [ -d "$gt_sets" ]; then
+        # shellcheck disable=SC2086
+        gr="$(cd "$REPO_ROOT" && ( command -v timeout >/dev/null 2>&1 && timeout 60 "$GRADE_BIN" grade --root . openspec/litmus-tests/groundtruth/*.yaml || "$GRADE_BIN" grade --root . openspec/litmus-tests/groundtruth/*.yaml ) 2>/dev/null | grep '^groundtruth-result:' | tail -1)"
+    fi
+    if [ -z "$gr" ]; then
+        gr="$(cd "$REPO_ROOT" && ( command -v timeout >/dev/null 2>&1 && timeout 30 "$GRADE_BIN" grade --root . || "$GRADE_BIN" grade --root . ) 2>/dev/null | grep '^groundtruth-result:' | tail -1)"
+        gsrc="groundtruth-rung1"
+    else
+        gsrc="groundtruth-all-sets"
+    fi
     if [ -n "$gr" ]; then
         gp="$(printf '%s' "$gr" | sed -n 's/.*pass=\([0-9]*\).*/\1/p')"
         gt="$(printf '%s' "$gr" | sed -n 's/.*total=\([0-9]*\).*/\1/p')"
+        # ORDER 888-miiy. `total` now includes cases the host could not GRADE
+        # (no embedding endpoint -> spec.answer skipped). Two things follow, and
+        # getting either wrong is worse than the bug this replaced:
+        #
+        #   RATE IS OVER GRADED CASES, NOT TOTAL. pass/total on an endpoint-less
+        #   host reads 28/33 = 84% and looks exactly like a 16-point accuracy
+        #   REGRESSION, when nothing regressed and five cases simply did not run.
+        #   A metric that moves when nothing changed is one people learn to
+        #   ignore.
+        #
+        #   SKIPPED IS REPORTED, ALWAYS. This line is what every handoff pastes
+        #   and what a release reads, so it is where "the expert tier was not
+        #   exercised here" has to become visible. Silence would make an
+        #   ungraded tier indistinguishable from a passing one — the exact
+        #   failure this milestone exists to kill.
+        gs="$(printf '%s' "$gr" | sed -n 's/.*skipped=\([0-9]*\).*/\1/p')"
+        [ -n "$gs" ] || gs=0
+        gse="$(printf '%s' "$gr" | sed -n 's/.*skipped_engines=\([^ ]*\).*/\1/p')"
         if [ -n "$gp" ] && [ -n "$gt" ] && [ "$gt" -gt 0 ]; then
-            accuracy_line="expert_accuracy: pass=${gp} total=${gt} rate=$(( gp * 100 / gt ))% source=groundtruth-rung1"
+            graded=$(( gt - gs ))
+            if [ "$graded" -gt 0 ]; then
+                accuracy_line="expert_accuracy: pass=${gp} graded=${graded} total=${gt} rate=$(( gp * 100 / graded ))% source=${gsrc}"
+            else
+                # Nothing was graded at all. Never render that as a rate.
+                accuracy_line="expert_accuracy: pass=0 graded=0 total=${gt} rate=n/a source=${gsrc}"
+            fi
+            if [ "$gs" -gt 0 ]; then
+                accuracy_line="${accuracy_line} skipped=${gs}${gse:+ skipped_engines=${gse}} NOT-EXERCISED-ON-THIS-HOST"
+            fi
         fi
     fi
 fi
@@ -451,7 +580,7 @@ printf 'flow: cycles=%s avg_completed_per_cycle=%s avg_commits_per_cycle=%s over
 # each line is parsed with `fromjson?` so a malformed row is dropped, never fatal
 # — fail-soft exactly like the flow: block above. The two named averages scope to
 # distinct step namespaces so nested emitters cannot double-count:
-#   build_check_ms_avg — step == "build-check"     (build.sh --check, the pre-push gate)
+#   build_check_ms_avg — step == "build-check"     (build.sh --check, the local gate)
 #   litmus_ms_avg      — step matches ^litmus       (run-litmus-test.sh suite)
 # `slowest` is the single step:ms with the largest duration across ALL records —
 # the one fact to look at first, in the spirit of the verdict line.

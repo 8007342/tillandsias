@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # @trace order:601-462g, spec:ci-release
+# freshness: auditor=linux-lenovinha-fable5-20260823t195304z date=2026-08-23 verdict=refreshed scope=full file, 70 lines. Twin of resolve-open-pr.sh (audited 2026-08-23, same verdict) and the pair still reads as one pattern, which is the property worth preserving — they guard the same `gh` failure mode on the two different objects the release runbook extracts. Still sound: fixture scripts/test-resolve-release-run.sh 6/6 green here, and litmus:release-runbook-external-preconditions-shape pins the distinct `blocked:release-run:gh-failed:` grammar against its sibling's. Its sixth scenario (no-tag-given) has no counterpart in the twin and is correct: the tag is an argument here and the branch pair is not. No change needed.
 #
 # Resolve the release workflow run for a tag, and REFUSE when there is none.
 #

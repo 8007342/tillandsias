@@ -3077,16 +3077,18 @@ name = "tillandsias-control-wire"
 version = "0.1.170"
 dependencies = [
  "async-trait",
+ "futures-util",
  "postcard",
  "serde",
  "tempfile",
  "tokio",
+ "tokio-util",
  "tokio-vsock",
 ]
 
 [[package]]
 name = "tillandsias-core"
-version = "0.4.260812"
+version = "0.4.260819"
 dependencies = [
  "async-trait",
  "dirs",
@@ -3109,7 +3111,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-headless"
-version = "0.4.260812"
+version = "0.4.260819"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -3138,6 +3140,7 @@ dependencies = [
  "tillandsias-secure-channel",
  "tillandsias-vault-client",
  "tokio",
+ "tokio-util",
  "tokio-vsock",
  "toml 0.8.2",
  "tracing",
@@ -3155,6 +3158,7 @@ name = "tillandsias-host-shell"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "futures-util",
  "postcard",
  "serde",
  "tempfile",
@@ -3164,6 +3168,7 @@ dependencies = [
  "tillandsias-secure-channel",
  "tillandsias-vm-layer",
  "tokio",
+ "tokio-util",
  "toml 0.8.2",
  "tracing",
  "windows 0.58.0",
@@ -3260,11 +3265,12 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "tillandsias-podman",
 ]
 
 [[package]]
 name = "tillandsias-podman"
-version = "0.4.260812"
+version = "0.4.260819"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3276,6 +3282,7 @@ dependencies = [
  "tillandsias-core",
  "tokio",
  "tracing",
+ "wait-timeout",
 ]
 
 [[package]]
@@ -3326,7 +3333,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-scanner"
-version = "0.4.260812"
+version = "0.4.260819"
 dependencies = [
  "dirs",
  "notify",
@@ -3388,6 +3395,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tillandsias-control-wire",
+ "tillandsias-core",
  "tokio",
  "toml 0.8.2",
  "tracing",
@@ -3957,6 +3965,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fb067e4cbd1ff067d1df46c9194b5de0e98efd2810bbc95c5d5e5f25a3231150"
 dependencies = [
  "cc",
+ "libc",
+]
+
+[[package]]
+name = "wait-timeout"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09ac3b126d3914f9849036f826e054cbabdc8519970b8998ddaf3b5bd3c65f11"
+dependencies = [
  "libc",
 ]
 

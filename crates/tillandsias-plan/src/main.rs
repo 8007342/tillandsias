@@ -61,16 +61,25 @@ const DISPATCH_ARMS: &[&str] = &[
     "set-field",
     "append-event",
     "answer",
+    "arrival-routing-check",
     "blocked-by",
     "blocked-closure",
     "blocking-counts",
     "burndown",
     "capabilities",
+    "capability-matrix",
+    "carry-forward-check",
     "check",
     "closure-evidence-check",
     "compact",
+    "corpus-coverage",
+    "declared-closures",
+    "declared-closures-check",
     "dependencies-of",
     "expire-claims",
+    "plan-events",
+    "fragment-event-packets",
+    "fragment-misplaced-definitions",
     "fragment-terminal-events",
     "fragments",
     "grade",
@@ -125,6 +134,16 @@ const USAGE: &str = concat!(
     "                                     predates order 569 and its capabilities are unknowable —\n",
     "                                     that absence is itself the stale-binary signal the forge\n",
     "                                     wrapper branches on.\n",
+    "           capability-matrix         ORDER 808-7yrd. The FLEET HARDWARE matrix, folded from the\n",
+    "                                     `capabilities:` fragment channel: one row per host_id, its\n",
+    "                                     schedulable (device_class, lane, engine) triples, and its\n",
+    "                                     present-but-unusable devices. Distinct from `capabilities`\n",
+    "                                     above, which reports THIS BINARY's subcommands.\n",
+    "           corpus-coverage           Which repository file types the spec/answer corpus indexes,\n",
+    "                                     which it DECLINES and why. Read-only. The declined list is\n",
+    "                                     explicit so an answer's absence can be attributed to a\n",
+    "                                     deliberate boundary rather than mistaken for a retrieval\n",
+    "                                     miss — the two look identical from the asking side.\n",
     "           check [--strict-fragments]\n",
     "                                     integrity + schema validation (exit 1 on violations).\n",
     "                                     ORDER 796-4ydb. A fragment the fold could not parse is\n",
@@ -139,6 +158,26 @@ const USAGE: &str = concat!(
     "           closure-evidence-check <fragment.yaml>\n",
     "                                     exit 1 if the fragment sets a closure rung\n",
     "                                     (completed/verified/done) with no evidence event (686-7qcm)\n",
+    "           declared-closures [--] | declared-closures-check <fragment.yaml>\n",
+    "                                     ORDER 885-92iu. A `verifiable_closure` that NAMES a\n",
+    "                                     litmus test must name one that exists AND that some\n",
+    "                                     spec binds — execution is binding-driven, so an unbound\n",
+    "                                     test runs in no suite and is as inert as a missing one.\n",
+    "                                     Bare form REPORTS over the folded ledger (exit 0, there\n",
+    "                                     is standing debt); `-check` GATES one fragment (exit 1),\n",
+    "                                     so new debt is refused when it is FILED.\n",
+    "           fragment-misplaced-definitions <fragment.yaml>\n",
+    "                                     ORDER 812-d45t. Print the packet_ids of `events:`\n",
+    "                                     entries that carry DEFINITION fields but no `event:` —\n",
+    "                                     a packet written under the wrong key, which every gate\n",
+    "                                     accepts and the fold then drops entirely.\n",
+    "           fragment-event-packets <fragment.yaml>\n",
+    "                                     ORDER 797-qm4t. Print EVERY packet_id an events block\n",
+    "                                     addresses, whatever the event type, one per line, exit 0.\n",
+    "                                     The terminal-only sibling below cannot see a `note` or\n",
+    "                                     `progress` event aimed at a packet_id that does not exist,\n",
+    "                                     so such work is discarded in silence. Same YAML parse and\n",
+    "                                     the same exit 3 on an unparseable fragment.\n",
     "           fragment-terminal-events <fragment.yaml>\n",
     "                                     ORDER 752-pst5. Print the packet_ids whose events block\n",
     "                                     DECLARES a terminal `completed` event (inline packet\n",
@@ -147,6 +186,30 @@ const USAGE: &str = concat!(
     "                                     events block, so PROSE that quotes the marker inside a\n",
     "                                     block scalar is never read as a declaration. Backs the\n",
     "                                     closure-event pass of check-fragment-status-loss.sh.\n",
+    "           carry-forward-check <fragment.yaml>\n",
+    "                                     ORDER 831-ezea. Print the packet_ids this fragment\n",
+    "                                     TOUCHED (has an event for) and LEFT OPEN (no terminal\n",
+    "                                     event, status: value, or declared status) while naming\n",
+    "                                     no `next_action` — one per line, exit 0. Closures are\n",
+    "                                     EXEMPT: a carry-forward note on a terminal row is a dead\n",
+    "                                     letter no selector reads again. Same YAML parse and the\n",
+    "                                     same exit 3 on an unparseable fragment as its three\n",
+    "                                     fragment-* siblings. ADVISORY today (adoption 4.6%),\n",
+    "                                     see scripts/check-carry-forward.sh for the promotion bar.\n",
+    "           arrival-routing-check <fragment.yaml>...\n",
+    "                                     ORDER 831-ezea, the ARRIVAL half of carry-forward.\n",
+    "                                     Print `population|<n>` (rows the named fragments NEWLY\n",
+    "                                     DEFINE, by origin, so a G-Set re-declaration is not an\n",
+    "                                     arrival) then one `overlap|<id>|<predicate>|<sentence>`\n",
+    "                                     per collision with an OPEN row. Predicates: owned_files\n",
+    "                                     (the rule as written, from the same fold answer_next\n",
+    "                                     uses for claim exclusion, at OpenRows scope), and\n",
+    "                                     deliverable / title (normalized string EQUALITY only —\n",
+    "                                     the re-filing class, never semantic sameness). Does NOT\n",
+    "                                     decide the pickup_role disjunct: both roles are printed\n",
+    "                                     for the reader. Exit 0 with overlaps (ADVISORY, bar in\n",
+    "                                     scripts/check-arrival-routing.sh), 3 on a named fragment\n",
+    "                                     the fold could not read.\n",
     "           next-order [prefix]       mint a COLLISION-FREE order token for a new packet\n",
     "                                     (<seq>-<suffix>, e.g. 581-k3f9). Never compute the\n",
     "                                     'next free order' yourself: that reads a ledger snapshot\n",
@@ -155,7 +218,16 @@ const USAGE: &str = concat!(
     "                                     is PERMANENT — never renumber it. A prefix shared by two\n",
     "                                     packets is normal. See methodology/distributed-work.yaml\n",
     "                                     -> order_id_allocation.\n",
-    "           expire-claims [--ttl-hours N] [--dry-run] [--now-epoch S] [--host H]\n",
+    "           plan-events <packet_id|order>\n",
+    "                                     ORDER 882-vqe4. Print a packet's FOLDED events —\n",
+    "                                     base PLUS fragment overlay — one per line as\n",
+    "                                     <type>\\t<ts>. Exists because callers were counting\n",
+    "                                     activity by grepping plan/index.d/ alone, which goes\n",
+    "                                     blind the moment compaction folds a fragment into\n",
+    "                                     the base. Exit 1 only for an unresolvable id; an\n",
+    "                                     existing packet with no events prints nothing and\n",
+    "                                     exits 0, which is what a stranded claim looks like.\n",
+    "           expire-claims [--ttl-hours N] [--dry-run] [--list-live] [--now-epoch S] [--host H]\n",
     "                                     ORDER 672-bz7u. Return stranded in_progress claims to\n",
     "                                     ready: any packet whose LAST recorded event activity is\n",
     "                                     older than the TTL (default 24h) gets a status fragment\n",
@@ -164,6 +236,11 @@ const USAGE: &str = concat!(
     "                                     with NO parseable activity timestamp is reported as\n",
     "                                     unknown-age and NEVER expired (fail conservative).\n",
     "           status <id|order>         one packet's status line\n",
+    "           next-action <id|order>    the EFFECTIVE next_action — newest of the\n",
+    "                                     packet field and any event carrying one. Reading\n",
+    "                                     the field alone returns a stale queue, because\n",
+    "                                     `packets:` is a G-Set and cycles append events\n",
+    "                                     rather than re-declaring the packet (864-r9wt).\n",
     "           blocked-by <id|order>     packets directly blocked by X\n",
     "           dependencies-of <id|order> X's direct unsatisfied depends_on prerequisites\n",
     "           blocked-closure <id|order> everything transitively downstream of X\n",
@@ -210,7 +287,11 @@ const USAGE: &str = concat!(
     "           burndown <milestone>      release-target children with statuses\n",
     "           answer <question...>      the CITED answer envelope as JSON (order 394b)\n",
     "           verify-answer [--root D]  read an envelope on stdin; exit 1 if any citation\n",
-    "                                     does not resolve or its span does not contain the claim\n",
+    "                                     does not resolve or its span does not contain the claim.\n",
+    "                                     ORDER 801-g9nn: also derives caller-relation\n",
+    "                                     (same|behind|ahead|diverged|unfetched|unknown) between D's\n",
+    "                                     HEAD and the answer's commit, and exits 3 — not 1 — when a\n",
+    "                                     citation is SOUND at its own commit but stale here.\n",
     "           methodology [--root D] [--file S] <yaml.path>\n",
     "                                     ORDER 394c. YAML path query over methodology.yaml and\n",
     "                                     methodology/**/*.yaml. Prints the 394b envelope: the\n",
@@ -238,8 +319,10 @@ const USAGE: &str = concat!(
     "           spec-retrieve --index-dir <dir> --query-vec <f> [--k N]\n",
     "                                     network-free cosine top-k over caller-supplied embeddings\n",
     "           spec-envelope --chunks-json <f> [--answer-file F] [--root D]\n",
+    "                         [--corpus-commit SHA]\n",
     "                                     build a VERIFIED envelope keeping only the citations the\n",
-    "                                     answer actually used\n",
+    "                                     answer actually used. --corpus-commit stamps the frame the\n",
+    "                                     INDEX was built at onto every citation (order 801-g9nn)\n",
     "           fragments                 report the append-only plan/index.d/ overlay: which\n",
     "                                     fragments are live, which are malformed, and whether\n",
     "                                     compaction is eligible\n",
@@ -343,7 +426,7 @@ fn unknown_subcommand(name: &str) -> ! {
 fn emit_verified_envelope(envelope: answer::Envelope, root: &Path, skipped: &[PathBuf]) {
     // Stamped AFTER self-verification: `self_verified` may replace the envelope
     // with a fresh refusal, and the corpus was still partial either way.
-    let verified = self_verified(envelope, root)
+    let verified = stamp_frame(self_verified(envelope, root), root)
         .with_skipped_sources(skipped.iter().map(|p| citation_path(p, root)).collect());
     match serde_json::to_string_pretty(&verified) {
         Ok(json) => println!("{json}"),
@@ -352,6 +435,54 @@ fn emit_verified_envelope(envelope: answer::Envelope, root: &Path, skipped: &[Pa
             std::process::exit(1);
         }
     }
+}
+
+/// The environment variable a caller uses to tell the expert where it stands.
+///
+/// AN EXPERT CANNOT SEE ITS CALLER. The MCP server answers out of the checkout
+/// it was launched in; the asking agent may be in a linked worktree several
+/// commits away, or in a forge whose repo was seeded at a different sha. There
+/// is no ambient way to learn the reader's HEAD, so the reader supplies it — and
+/// when it does not, the field is OMITTED rather than defaulted, because a
+/// `caller_relation: same` invented from the emitter's own self-consistency is
+/// the precise false assurance order 801-g9nn exists to remove.
+const CALLER_HEAD_ENV: &str = "TILLANDSIAS_CALLER_HEAD";
+
+/// ORDER 801-g9nn — stamp the answer's FRAME onto the envelope on its way out.
+///
+/// Two stamps, and they answer different questions:
+///
+/// * every citation gets the commit its span was read at, defaulting to the
+///   checkout HEAD already in `freshness.source_commit` — correct for the
+///   deterministic layer, which reads the corpus out of the working tree at
+///   query time. A retrieved answer served from an index built elsewhere sets
+///   its own per-citation commit first and this leaves it alone.
+/// * `caller_relation` is stamped ONLY when the reader identified itself. See
+///   [`CALLER_HEAD_ENV`].
+///
+/// A refusal is stamped too. `unsupported` carries no citations, but it does
+/// carry a freshness block, and "which frame refused you" is worth as much as
+/// "which frame answered you" when two harnesses disagree about whether a packet
+/// exists.
+fn stamp_frame(envelope: answer::Envelope, root: &Path) -> answer::Envelope {
+    let commit = envelope.freshness().source_commit().to_string();
+    let envelope = envelope.with_default_citation_commit(&commit);
+    let Ok(caller_head) = std::env::var(CALLER_HEAD_ENV) else {
+        return envelope;
+    };
+    let caller_head = caller_head.trim();
+    if !tillandsias_plan::gitref::looks_like_sha(caller_head) {
+        // A malformed hint is dropped in silence rather than stamped: an
+        // envelope that reported `caller_head: HEAD` would look answered and be
+        // unusable, which is worse than an absent field.
+        return envelope;
+    }
+    let view = tillandsias_plan::gitref::GitView::new(root);
+    envelope.with_caller_relation(answer::CallerRelation::ancestry_only(
+        &view,
+        caller_head,
+        &commit,
+    ))
 }
 
 /// The pure half of [`emit_verified_envelope`], split out so the downgrade is
@@ -488,12 +619,55 @@ fn resolve_writer_host() -> String {
     writer_host_from(std::env::var("TILLANDSIAS_HOST_KIND").ok())
 }
 
+/// ORDER 874-idnt — the `host:` label alphabet, enforced at write time.
+///
+/// The ledger's `host:` field had come to mix THREE vocabularies — node names
+/// (`yoga`), host kinds (`linux_mutable`), and git-author display names
+/// (`Laptopirria`) — and 864-m2vc's claim-TTL attribution compares these by
+/// EXACT EQUALITY, so the mixing silently defeats it. Full unification onto
+/// one vocabulary is a fleet decision this function does not make; what it
+/// refuses is the class that can never be right: anything outside
+/// `^[a-z0-9_-]+$`. That blocks display names, uppercase, spaces, and unicode
+/// — every observed pollutant — while accepting both surviving vocabularies
+/// until the unification lands.
+fn host_label_is_acceptable(host: &str) -> bool {
+    !host.is_empty()
+        && host
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-')
+}
+
+/// An explicitly flagged `--host` is stated intent, so a malformed one is
+/// REFUSED rather than silently replaced the way the env fallback path
+/// corrects itself — the caller asked for a specific label and must learn it
+/// was wrong, not have a different label recorded under them (874-idnt).
+fn require_acceptable_host(host: String) -> String {
+    if host_label_is_acceptable(&host) {
+        return host;
+    }
+    eprintln!(
+        "error: --host {host:?} is not a valid ledger host label — [a-z0-9_-]+ only \
+         (874-idnt). Use the node name (e.g. macuahuitl) or a documented host kind \
+         (e.g. linux_mutable); git-author display names are exactly the pollution \
+         this refuses (872-k4pv)."
+    );
+    std::process::exit(2);
+}
+
 /// Pure core of [`resolve_writer_host`], unit-testable without env races.
 fn writer_host_from(kind: Option<String>) -> String {
     if let Some(kind) = kind
         && !kind.is_empty()
     {
-        return kind;
+        if host_label_is_acceptable(&kind) {
+            return kind;
+        }
+        // A malformed TILLANDSIAS_HOST_KIND (an author name, mixed case) must
+        // not become durable ledger data; the OS constant is always canonical.
+        eprintln!(
+            "warning: TILLANDSIAS_HOST_KIND {kind:?} is not a valid host label \
+             ([a-z0-9_-]+ only, 874-idnt) — falling back to the platform constant"
+        );
     }
     std::env::consts::OS.to_string()
 }
@@ -516,23 +690,89 @@ fn resolve_writer_agent(flag: Option<String>) -> String {
 }
 
 /// Pure core of [`resolve_writer_agent`], unit-testable without env races.
+/// ORDER 874-idnt — the canonical agent-id GRAMMAR, enforced where identity
+/// becomes DURABLE DATA.
+///
+/// scripts/agent-identity.sh (order 756-hn3a, litmus-pinned) is the one
+/// canonical source: `<platform>-<workstation>-<backend>-<utc-timestamp>`,
+/// each component sanitized to `[a-z0-9-]`, the timestamp LOWERCASE
+/// (`20260815t162555z`). Nothing enforced that at the ledger choke point, and
+/// the 2026-08-24 fleet retrospective found EVERY hand-written agent_id of the
+/// preceding 48 hours violating it — uppercase `T`/`Z` timestamps, including
+/// the coordinator's own. A contract with one canonical source and zero
+/// enforcement is a convention, and conventions lost every incident this week.
+///
+/// The check is structural, not a roster lookup: ≥4 dash-separated components
+/// in the sanitized alphabet, ending in the canonical timestamp shape. It
+/// accepts every id the helper can emit and refuses every hand-composed
+/// improvisation the retrospective catalogued.
+fn agent_id_is_canonical(id: &str) -> bool {
+    let comps: Vec<&str> = id.split('-').collect();
+    if comps.len() < 4 {
+        return false;
+    }
+    if !id
+        .bytes()
+        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+    {
+        return false;
+    }
+    if comps.iter().any(|c| c.is_empty()) {
+        return false;
+    }
+    // Timestamp: 8 digits, 't', 6 digits, 'z' — the printf '%(...)T' shape
+    // agent-identity.sh emits, lowercased by its sanitize pass.
+    let ts = comps[comps.len() - 1].as_bytes();
+    ts.len() == 16
+        && ts[..8].iter().all(u8::is_ascii_digit)
+        && ts[8] == b't'
+        && ts[9..15].iter().all(u8::is_ascii_digit)
+        && ts[15] == b'z'
+}
+
 fn writer_agent_from(flag: Option<String>, env_id: Option<String>) -> Result<String, String> {
     let usable = |s: &String| {
         let t = s.trim();
         !t.is_empty() && t != "unknown"
     };
-    if let Some(agent) = flag.filter(usable) {
-        return Ok(agent);
+    let candidate = flag.filter(usable).or_else(|| env_id.filter(usable));
+    match candidate {
+        Some(agent) if agent_id_is_canonical(&agent) => Ok(agent),
+        Some(agent) => Err(format!(
+            "error: agent_id {agent:?} is not canonical — the contract is \
+             <platform>-<workstation>-<backend>-<utc-timestamp>, sanitized to [a-z0-9-] with a \
+             LOWERCASE timestamp (e.g. linux-macuahuitl-opus5-20260825t013400z). Derive it: \
+             scripts/agent-identity.sh id <backend> (order 756-hn3a; enforcement 874-idnt — \
+             every hand-written id in the 2026-08-24 retrospective violated this)."
+        )),
+        None => Err(
+            "error: ledger event has no --agent and TILLANDSIAS_AGENT_ID is unset — refusing to \
+             record agent_id 'unknown'. Derive the id from scripts/agent-identity.sh (order \
+             756-hn3a) and pass --agent, or export TILLANDSIAS_AGENT_ID."
+                .to_string(),
+        ),
     }
-    if let Some(agent) = env_id.filter(usable) {
-        return Ok(agent);
+}
+
+/// ORDER 775-b4qz. A written fragment failed write-time verification: move it
+/// out of the fold's `*.yaml` glob (named for repair, out of the corpus) and
+/// exit non-zero. The one thing this must never do is return — exit-0 on a
+/// fragment the fold will skip is the defect class the packet closes.
+fn reject_written_fragment(path: &std::path::Path, err: &str) -> ! {
+    let rejected = path.with_extension("yaml.rejected");
+    eprintln!("error: set-field wrote a fragment that failed write-time verification: {err}");
+    if std::fs::rename(path, &rejected).is_ok() {
+        eprintln!(
+            "       nothing was recorded; the rejected bytes are at {} for repair (775-b4qz)",
+            rejected.display()
+        );
+    } else {
+        eprintln!(
+            "       could not move it aside — REMOVE OR REPAIR {} before the next fold (775-b4qz)",
+            path.display()
+        );
     }
-    Err(
-        "error: ledger event has no --agent and TILLANDSIAS_AGENT_ID is unset — refusing to \
-         record agent_id 'unknown'. Derive the id from scripts/agent-identity.sh (order \
-         756-hn3a) and pass --agent, or export TILLANDSIAS_AGENT_ID."
-            .to_string(),
-    )
+    std::process::exit(1);
 }
 
 /// Resolve the `--ts` for a ledger write (order 719-kgr5).
@@ -614,6 +854,14 @@ fn line(ledger: &Ledger, p: &serde_yaml::Value) -> String {
         .get("status")
         .and_then(serde_yaml::Value::as_str)
         .unwrap_or("?");
+    // ARCHIVED rows say so. Appended as a fourth field ONLY when the packet is
+    // history, so every live row — which is every row `ready`, `query` and
+    // `next` can ever emit — stays byte-identical for the scripts that parse
+    // this on three fields. A caller that never asks about history never sees
+    // the column; one that does cannot miss it.
+    if ledger.is_archived(&id) {
+        return format!("{order}\t{status}\t{id}\tARCHIVED");
+    }
     format!("{order}\t{status}\t{id}")
 }
 
@@ -960,6 +1208,15 @@ fn query_packets<'a>(
             Some(r) => str_field(p, "desired_release") == Some(r),
             None => true,
         })
+        // A `kind: milestone` row is a criteria HOLDER — a head to group by,
+        // never a row to hand out (worker_agent_protocol; 647-6c3g's own
+        // notes say "never claim this for implementation"). The CLAIMABILITY
+        // question therefore excludes milestones; a plain --role/--status
+        // query still lists them (dashboards, burndown). Measured 2026-08-23
+        // (yolanda loop cycles #7-#8): the windows batch's urgent slot
+        // offered architecture-audit-epic itself, twice, and the
+        // route-to-the-children knowledge lived in the agent, not the machine.
+        .filter(|p| claimable_by.is_none() || str_field(p, "kind") != Some("milestone"))
         .filter(|p| {
             let have = str_list(p, "capability_tags");
             tags.iter().all(|t| have.contains(t))
@@ -1083,10 +1340,14 @@ fn run_grade(args: &[String], index: &Path) -> i32 {
             return 2;
         }
     };
-    let selected: Vec<&groundtruth::Case> = query_sets
+    // Each case carries its owning set's declared corpus (order 786-kjke), so
+    // a fixture-backed set is graded against the ledger it was written for
+    // instead of whatever `--index` the run happened to supply. The pairing is
+    // what makes the declaration honourable per-set in a single run.
+    let selected: Vec<(&groundtruth::QuerySet, &groundtruth::Case)> = query_sets
         .iter()
-        .flat_map(|q| q.cases.iter())
-        .filter(|c| only_case.as_deref().is_none_or(|id| c.id == id))
+        .flat_map(|q| q.cases.iter().map(move |c| (q, c)))
+        .filter(|(_, c)| only_case.as_deref().is_none_or(|id| c.id == id))
         .collect();
     if selected.is_empty() {
         eprintln!(
@@ -1102,6 +1363,7 @@ fn run_grade(args: &[String], index: &Path) -> i32 {
 
     let started = std::time::Instant::now();
     let mut outcomes: Vec<groundtruth::Outcome> = Vec::new();
+    let mut skipped: Vec<(String, String, String)> = Vec::new();
 
     if let Some(src) = envelope_src {
         // ENVELOPE MODE: grade a captured envelope — the one an agent actually
@@ -1140,39 +1402,109 @@ fn run_grade(args: &[String], index: &Path) -> i32 {
                 // is exactly the order-456 dead-on-arrival regression this
                 // harness exists to catch.
                 outcomes.push(groundtruth::Outcome {
-                    id: selected[0].id.clone(),
-                    engine: format!("{} (captured envelope)", selected[0].engine),
+                    id: selected[0].1.id.clone(),
+                    engine: format!("{} (captured envelope)", selected[0].1.engine),
                     failures: vec![format!("input is not an answer envelope: {e}")],
                 });
-                report(&outcomes, &sets, started);
+                report(&outcomes, &[], &sets, started);
                 return 1;
             }
         };
         outcomes.push(groundtruth::Outcome {
-            id: selected[0].id.clone(),
-            engine: format!("{} (captured envelope)", selected[0].engine),
-            failures: groundtruth::grade_envelope(&envelope, &selected[0].expect, &root),
+            id: selected[0].1.id.clone(),
+            engine: format!("{} (captured envelope)", selected[0].1.engine),
+            failures: groundtruth::grade_envelope(&envelope, &selected[0].1.expect, &root),
         });
     } else {
-        let index_rel = citation_path(&index, &root);
-        let mut harness = groundtruth::Harness::new(root.clone(), index.clone(), index_rel);
-        for case in &selected {
-            let envelope = match harness.run(case) {
+        // One harness PER RESOLVED CORPUS, cached: a set that declares its own
+        // ledger is graded against that ledger, everything else against the
+        // run's `--index`. Caching matters because Harness memoizes a loaded
+        // ledger, and rebuilding it per case would re-read a 22k-line file.
+        //
+        // A declared corpus fixes BOTH the index and the ROOT for that set.
+        // `--index` already implies a root (root_for), because citations are
+        // resolved and re-read relative to it — so honouring the index while
+        // leaving the root pointing at the checkout would make every fixture
+        // citation unresolvable, which is a different false red in place of
+        // the one this fixes. The declaration is resolved against the CHECKOUT
+        // root, computed independently of `--index` for exactly the same
+        // reason: with `--index <fixture>` the run's own root is already the
+        // fixture's.
+        let checkout_root = root_for(Path::new("plan/index.yaml"));
+        let mut harnesses: Vec<(PathBuf, PathBuf, groundtruth::Harness)> = Vec::new();
+        let mut announced: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for (set, case) in &selected {
+            let set_index = match &set.corpus {
+                Some(rel) => checkout_root.join(rel),
+                None => index.clone(),
+            };
+            let set_root = match &set.corpus {
+                Some(_) => root_for(&set_index),
+                None => root.clone(),
+            };
+            // Say so when a set's declared corpus is not the run's index. The
+            // previous behaviour was to grade against the wrong ledger in
+            // silence and report the mismatch as six ordinary FAILs.
+            if set_index != index && announced.insert(set.name.clone()) {
+                eprintln!(
+                    "note: query set {:?} declares corpus {} — grading it against that, not {}",
+                    set.name,
+                    citation_path(&set_index, &root),
+                    citation_path(&index, &root),
+                );
+            }
+            if !set_index.exists() {
+                eprintln!(
+                    "HARNESS ERROR: query set {:?} declares corpus {} which does not exist",
+                    set.name,
+                    citation_path(&set_index, &root),
+                );
+                return 2;
+            }
+            let slot = harnesses.iter().position(|(p, _, _)| *p == set_index);
+            let slot = match slot {
+                Some(s) => s,
+                None => {
+                    let rel = citation_path(&set_index, &set_root);
+                    harnesses.push((
+                        set_index.clone(),
+                        set_root.clone(),
+                        groundtruth::Harness::new(set_root.clone(), set_index.clone(), rel),
+                    ));
+                    harnesses.len() - 1
+                }
+            };
+            let envelope = match harnesses[slot].2.run(case) {
                 Ok(e) => e,
+                // ORDER 888-miiy. A HOST CAPABILITY GAP skips the case LOUDLY;
+                // anything else is still a hard HARNESS ERROR. The asymmetry is
+                // the point: "this host has no embedding index" must not abort
+                // the other 21 graded cases, and "the index is stale" must not
+                // be swallowed as a skip.
+                Err(e) if groundtruth::is_engine_unavailable(&e) => {
+                    skipped.push((
+                        case.id.clone(),
+                        case.engine.clone(),
+                        e.trim_start_matches(groundtruth::ENGINE_UNAVAILABLE)
+                            .to_string(),
+                    ));
+                    continue;
+                }
                 Err(e) => {
                     eprintln!("HARNESS ERROR: {e}");
                     return 2;
                 }
             };
+            let grade_root = harnesses[slot].1.clone();
             outcomes.push(groundtruth::Outcome {
                 id: case.id.clone(),
                 engine: case.engine.clone(),
-                failures: groundtruth::grade_envelope(&envelope, &case.expect, &root),
+                failures: groundtruth::grade_envelope(&envelope, &case.expect, &grade_root),
             });
         }
     }
 
-    let failed = report(&outcomes, &sets, started);
+    let failed = report(&outcomes, &skipped, &sets, started);
     i32::from(failed > 0)
 }
 
@@ -1180,6 +1512,7 @@ fn run_grade(args: &[String], index: &Path) -> i32 {
 /// return the failure count.
 fn report(
     outcomes: &[tillandsias_plan::groundtruth::Outcome],
+    skipped: &[(String, String, String)],
     sets: &[PathBuf],
     started: std::time::Instant,
 ) -> usize {
@@ -1195,14 +1528,42 @@ fn report(
             println!("        - {f}");
         }
     }
+    // ORDER 888-miiy. A SKIPPED case is printed per-case and counted in the
+    // summary. It must never be possible to read a run that graded nothing as a
+    // run that graded everything and passed — that is "an unexamined thing
+    // reported as clean", which is the failure this milestone exists to kill and
+    // is strictly worse than the wrong red it replaces.
+    for (id, engine, why) in skipped {
+        println!("SKIP  {id}  [{engine}]  NOT GRADED on this host: {why}");
+    }
+    let mut engines: Vec<&str> = skipped.iter().map(|(_, e, _)| e.as_str()).collect();
+    engines.sort_unstable();
+    engines.dedup();
+    // `total` counts every case the set DECLARED, so pass+fail+skipped == total
+    // and a skip cannot quietly shrink the denominator. A shrinking bar is a
+    // lowered bar (the same rule the committed-set step already enforces).
     println!(
-        "groundtruth-result: sets={} total={} pass={} fail={} elapsed_ms={}",
+        "groundtruth-result: sets={} total={} pass={} fail={} skipped={}{} elapsed_ms={}",
         sets.len(),
-        outcomes.len(),
+        outcomes.len() + skipped.len(),
         outcomes.len() - failed,
         failed,
+        skipped.len(),
+        if engines.is_empty() {
+            String::new()
+        } else {
+            format!(" skipped_engines={}", engines.join(","))
+        },
         started.elapsed().as_millis()
     );
+    if !skipped.is_empty() {
+        eprintln!(
+            "WARNING: {} case(s) were NOT GRADED on this host (engines: {}). This run does not certify those engines; it certifies the {} case(s) it could grade.",
+            skipped.len(),
+            engines.join(","),
+            outcomes.len()
+        );
+    }
     failed
 }
 
@@ -1482,6 +1843,7 @@ fn run_loop_status(args: &[String], base: &Path) {
                 .position(|a| a == "--host")
                 .and_then(|i| args.get(i + 1))
                 .cloned()
+                .map(require_acceptable_host)
                 .unwrap_or_else(resolve_writer_host);
             let suffix = args
                 .iter()
@@ -1682,6 +2044,627 @@ pub fn log_cli_usage(tool: &str, outcome: &str, latency_ms: u128) {
     }
 }
 
+/// ORDER 816-kq2z. The three `fragment-*` subcommands parse ONE fragment file
+/// and never consult the ledger — yet they sat in the main dispatch AFTER
+/// `Ledger::load_with_fragments`, which reads a 60,192-line index plus every
+/// fragment in plan/index.d.
+///
+/// MEASURED on macuahuitl 2026-08-18: 133ms per invocation, of which 132ms is
+/// that load. `capabilities`, which returns before it, costs 1ms.
+///
+/// check-fragment-status-loss.sh calls all three once per fragment, so the
+/// waste was 3 x 102 x 132ms ~= 40s on EVERY `./build.sh --check`, on every
+/// host. It crossed litmus:fragment-status-loss-attribution-shape's 30s step
+/// budget when the second and third channels landed (797-qm4t, 812-d45t) —
+/// which is why the symptom was a TIMEOUT rather than a wrong answer, and why
+/// `--check` (no per-phase budget) stayed green while `--ci-full` went red.
+///
+/// Returns true when it handled the subcommand; main must return immediately.
+/// These arms fall off their own end rather than exiting, so a bool is the
+/// safe contract: `std::process::exit` here would skip the stdout flush and
+/// can truncate piped output.
+/// ORDER 831-ezea. The CARRY-FORWARD GAPS in one fragment: every packet the
+/// fragment TOUCHED and LEFT OPEN while naming no next action.
+///
+/// WHY THIS IS A DISTINCT CHECK. The only blocking exit condition the work loop
+/// enforces today is FILING A NEW ROW. Nothing anywhere requires that a cycle
+/// which picked a packet up and put it down again leaves that packet resumable,
+/// so arrival scales with service: every cycle adds rows and carries none
+/// forward. `next_action` is the field the cold-start selector already reads
+/// (answer.rs `next_action_snippet` -> the `next:` line of every `plan next`
+/// row, since 606-xu52) and it is declared in plan/schema.yaml. Where a packet
+/// omits it that reader falls through to handoff_note -> outcome -> title, so
+/// the row advertises the packet's own NAME as its next step.
+///
+/// TOUCHED means the fragment carries an EVENT for the packet — the same
+/// definition `fragment-event-packets` uses, deliberately, so "addresses a
+/// packet" means one thing across this family. A bare `packets:` definition
+/// with no events is a filing, not a touch.
+///
+/// LEFT OPEN means this fragment does not close the packet. Closure is read
+/// from all three channels a fragment can close on: a terminal EVENT type, a
+/// terminal `status:` LWW value, and a terminal status on an inline `packets:`
+/// declaration. Terminal-set membership is the resolver's
+/// ([`tillandsias_plan::is_terminal_status`], 650-dq6u) rather than a literal
+/// list — a guard laxer OR wider than the resolver is decorative (649-b2e4),
+/// and litmus:terminal-status-vocabulary-shape exists because an earlier guard
+/// drifted to `done|completed|retired|obsolete`.
+///
+/// CLOSURES ARE EXEMPT BY DESIGN, which is the whole reason this is not simply
+/// "every packet named in a fragment needs a next_action". A "what would have
+/// made this cheaper" note on a terminal row is a dead letter: no selector ever
+/// reads that row again, so requiring one would buy nothing and would train
+/// filers to write filler.
+///
+/// CARRIED accepts the two channels a fragment can actually write the field on:
+/// a `packets:` entry with `next_action`, and a `status:` LWW entry with
+/// `field: next_action`. It does NOT accept a next_action nested inside an
+/// EVENT. That shape exists in the corpus — measured 2026-08-19 on
+/// plan/index.yaml, 6 event-nested (indent 10) against 65 packet-level (indent
+/// 6) — but `next_action_snippet` reads the PACKET field, so an event-nested
+/// value is never printed by `plan next`. Accepting it would let a fragment
+/// satisfy this check with a value no selector can reach.
+///
+/// KNOWN LIMIT, stated rather than hidden: a `packets:` entry that RE-declares
+/// an existing packet is a G-Set no-op, so a next_action written there on an
+/// existing packet is discarded by the fold. This subcommand cannot tell a
+/// fresh definition from a re-declaration without loading the ledger, and it
+/// must not load the ledger (it lives with the 816-kq2z fragment-only arms for
+/// the same 132ms reason). The discarded-declaration class is
+/// check-fragment-status-loss.sh's, not this one; the remedy text points at
+/// `set-field`, which writes the LWW channel.
+///
+/// Returns the gap packet_ids, sorted and deduplicated.
+fn carry_forward_gaps(doc: &serde_yaml::Value) -> Vec<String> {
+    use serde_yaml::Value;
+    // Plain `fn`s rather than closures: a closure here infers a single lifetime
+    // for the borrow and the returned &str, which does not compile once the
+    // result outlives the call. Not a style choice.
+    fn text<'a>(v: &'a Value, k: &str) -> Option<&'a str> {
+        v.get(k).and_then(Value::as_str)
+    }
+    fn named(v: &Value, k: &str) -> bool {
+        text(v, k).is_some_and(|t| !t.trim().is_empty())
+    }
+
+    // A terminal EVENT: `type: completed` at the entry, or nested under
+    // `event:` as a scalar or a mapping. Same three shapes
+    // `fragment-terminal-events` accepts (752-pst5), widened from `completed`
+    // alone to the whole closure ladder because a fragment that closes a packet
+    // straight to `verified` or `done` has closed it just as finally. All four
+    // ladder words are live event types in the corpus (measured 2026-08-19:
+    // completed 550, verified 60, done 3, obsoleted 1).
+    let terminal_event = |event: &Value| -> bool {
+        let terminal = |t: Option<&str>| t.is_some_and(tillandsias_plan::is_terminal_status);
+        if terminal(text(event, "type")) {
+            return true;
+        }
+        if let Some(inner) = event.get("event")
+            && (terminal(inner.as_str()) || terminal(text(inner, "type")))
+        {
+            return true;
+        }
+        false
+    };
+
+    let mut touched: Vec<String> = Vec::new();
+    let mut closed: Vec<String> = Vec::new();
+    let mut carried: Vec<String> = Vec::new();
+
+    // Inline: packets: [{packet_id, status, next_action, events: [...]}]
+    if let Some(pkts) = doc.get("packets").and_then(Value::as_sequence) {
+        for p in pkts {
+            let Some(pid) = text(p, "packet_id") else {
+                continue;
+            };
+            let events = p.get("events").and_then(Value::as_sequence);
+            if events.is_some_and(|evs| !evs.is_empty()) {
+                touched.push(pid.to_string());
+            }
+            if events.is_some_and(|evs| evs.iter().any(&terminal_event)) {
+                closed.push(pid.to_string());
+            }
+            if text(p, "status").is_some_and(tillandsias_plan::is_terminal_status) {
+                closed.push(pid.to_string());
+            }
+            if named(p, "next_action") {
+                carried.push(pid.to_string());
+            }
+        }
+    }
+
+    // Top-level: events: [{packet_id, event: {...}}] — declares without
+    // creating, so this is the shape a cycle uses to put a packet down.
+    if let Some(evs) = doc.get("events").and_then(Value::as_sequence) {
+        for e in evs {
+            let Some(pid) = text(e, "packet_id") else {
+                continue;
+            };
+            if e.get("event").is_none() {
+                // A misplaced DEFINITION under `events:` (812-d45t), not an
+                // event. Its own subcommand reports it; counting it as a touch
+                // here would put one authoring mistake in two advisories.
+                continue;
+            }
+            touched.push(pid.to_string());
+            if terminal_event(e) {
+                closed.push(pid.to_string());
+            }
+        }
+    }
+
+    // The LWW channel. `field:` is ANY field, not just status — the key is
+    // misnamed and plan/index.d/README.md says so.
+    if let Some(sts) = doc.get("status").and_then(Value::as_sequence) {
+        for s in sts {
+            let Some(pid) = text(s, "packet_id") else {
+                continue;
+            };
+            match text(s, "field") {
+                Some("status")
+                    if text(s, "value").is_some_and(tillandsias_plan::is_terminal_status) =>
+                {
+                    closed.push(pid.to_string());
+                }
+                Some("next_action") if named(s, "value") => {
+                    carried.push(pid.to_string());
+                }
+                _ => {}
+            }
+        }
+    }
+
+    let mut gaps: Vec<String> = touched
+        .into_iter()
+        .filter(|pid| !closed.contains(pid) && !carried.contains(pid))
+        .collect();
+    gaps.sort_unstable();
+    gaps.dedup();
+    gaps
+}
+
+fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
+    match subcommand {
+        "corpus-coverage" => {
+            // ORDER 810-k8jy. Every file class under a corpus root, and how the
+            // indexer treats it. The packet's complaint was not that HCL and
+            // PowerShell were missing — it was that their absence was
+            // INVISIBLE: `walk_files` returns "no match" for a class nobody
+            // considered and for one deliberately declined, and those two
+            // silences are identical. UNCLASSIFIED is the difference.
+            //
+            // Advisory by design. A new file class appearing in the tree is
+            // news, not a build break, and redding the gate for it would get
+            // the check switched off the first time someone adds a .lock.
+            let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            let rows = tillandsias_plan::spec::corpus_coverage(&root);
+            let unclassified: Vec<&(String, usize, String)> = rows
+                .iter()
+                .filter(|(_, _, v)| v.as_str() == "UNCLASSIFIED")
+                .collect();
+            for (ext, n, verdict) in &rows {
+                let short = verdict
+                    .split_once(':')
+                    .map(|(k, _)| k)
+                    .unwrap_or(verdict.as_str());
+                println!("{short}\t{n}\t.{ext}");
+            }
+            if unclassified.is_empty() {
+                println!(
+                    "ok:corpus-coverage:{} class(es), 0 unclassified",
+                    rows.len()
+                );
+            } else {
+                println!(
+                    "advisory:corpus-coverage:{} class(es) NEITHER indexed NOR declined — {}",
+                    unclassified.len(),
+                    unclassified
+                        .iter()
+                        .map(|(e, n, _)| format!(".{e}({n})"))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                );
+                eprintln!(
+                    "A class here is a decision nobody has made yet. Add it to \
+                     CORPUS_CODE_EXTS to index it, or to CORPUS_DECLINED with the \
+                     reason (spec.rs, order 810-k8jy)."
+                );
+            }
+            // This dispatcher is the LEDGER-FREE fast path and its arms return
+            // whether they handled the subcommand. corpus-coverage belongs here
+            // rather than in the main match precisely because it walks the
+            // filesystem and never folds the plan — the 133ms ledger load would
+            // be pure waste (the same reason the fragment-* arms moved here).
+            true
+        }
+        "carry-forward-check" => {
+            // ORDER 831-ezea. See [`carry_forward_gaps`] for the contract. This
+            // arm is IO only: read, parse, print one packet_id per line, exit 0.
+            //
+            // ADVISORY BY DESIGN — exit 0 even with gaps. Measured 2026-08-19,
+            // next_action adoption across the fold is 4.6% of ready rows (65
+            // packet-level values in plan/index.yaml). A hard refusal at that
+            // adoption would reject essentially every fragment the fleet writes
+            // tonight, and a gate that blocks everyone on its first night is
+            // switched off within a day. The caller
+            // (scripts/check-carry-forward.sh) prints the advisory and exits 0;
+            // the promotion threshold is recorded there.
+            //
+            // Exit 3 on an unparseable fragment, identically to its three
+            // siblings: silence from a parser is not evidence of absence
+            // (787-f7dh), and "this fragment carries every packet forward" must
+            // never be the same answer as "this fragment could not be read".
+            const EXIT_FRAGMENT_UNPARSEABLE: i32 = 3;
+            let Some(path) = args.get(1) else {
+                eprintln!("usage: tillandsias-plan carry-forward-check <fragment.yaml>");
+                std::process::exit(2);
+            };
+            let raw = match std::fs::read_to_string(path) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("error: read {path}: {e}");
+                    std::process::exit(2);
+                }
+            };
+            let doc: serde_yaml::Value = match serde_yaml::from_str(&raw) {
+                Ok(d) => d,
+                Err(e) => {
+                    eprintln!(
+                        "unparseable:{path}: {e} — the carry-forward pass cannot read this fragment, so any packet it leaves open is UNEXAMINED (831-ezea)"
+                    );
+                    std::process::exit(EXIT_FRAGMENT_UNPARSEABLE);
+                }
+            };
+            for id in carry_forward_gaps(&doc) {
+                emit(&id);
+            }
+            true
+        }
+        "fragment-misplaced-definitions" => {
+            // ORDER 812-d45t. A PACKET DEFINITION written under the top-level
+            // `events:` key instead of `packets:` is accepted by every gate and
+            // then dropped entirely. Measured 2026-08-18: a closure fragment
+            // filed three follow-up packets that way; `./build.sh --check` was
+            // rc=0, the fragment's own status transition folded correctly, and
+            // all three packets simply did not exist. The author found it only
+            // by asking for the packets back afterwards.
+            //
+            // It is a different hole from 797-qm4t. There the packet_id named
+            // nothing; here the entry is a well-formed definition sitting under
+            // the wrong key, so no packet_id is even claimed — the
+            // unknown-packet check cannot see it, and neither can the
+            // terminal-event or status-block checks, because it declares
+            // neither.
+            //
+            // THE SIGNATURE IS UNAMBIGUOUS: an entry under `events:` that has
+            // NO `event:` key but DOES carry definition fields (order, title,
+            // kind, deliverable). A real event entry always nests `event:`; a
+            // real definition never appears here. Requiring a definition field
+            // rather than merely "no event key" keeps a malformed-but-intended
+            // event from being reported as a lost packet.
+            const EXIT_FRAGMENT_UNPARSEABLE: i32 = 3;
+            let Some(path) = args.get(1) else {
+                eprintln!("usage: tillandsias-plan fragment-misplaced-definitions <fragment.yaml>");
+                std::process::exit(2);
+            };
+            let raw = match std::fs::read_to_string(path) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("error: read {path}: {e}");
+                    std::process::exit(2);
+                }
+            };
+            let doc: serde_yaml::Value = match serde_yaml::from_str(&raw) {
+                Ok(d) => d,
+                Err(e) => {
+                    eprintln!(
+                        "unparseable:{path}: {e} — the misplaced-definition pass cannot read this fragment, so any packet it drops is UNEXAMINED (812-d45t)"
+                    );
+                    std::process::exit(EXIT_FRAGMENT_UNPARSEABLE);
+                }
+            };
+            let mut ids: Vec<String> = Vec::new();
+            if let Some(evs) = doc.get("events").and_then(serde_yaml::Value::as_sequence) {
+                for e in evs {
+                    if e.get("event").is_some() {
+                        continue;
+                    }
+                    let looks_like_definition = ["order", "title", "kind", "deliverable"]
+                        .iter()
+                        .any(|k| e.get(*k).is_some());
+                    if !looks_like_definition {
+                        continue;
+                    }
+                    let pid = e
+                        .get("packet_id")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("<no packet_id>");
+                    ids.push(pid.to_string());
+                }
+            }
+            ids.sort_unstable();
+            ids.dedup();
+            for id in ids {
+                emit(&id);
+            }
+            true
+        }
+        "fragment-event-packets" => {
+            // ORDER 797-qm4t. Sibling of fragment-terminal-events, and the reason
+            // it exists is a loss I caused and then measured.
+            //
+            // The unknown-packet_id checks added on the status and terminal-event
+            // channels close the cases where a fragment CLAIMS a closure. They
+            // cannot see a NON-TERMINAL event — `note`, `progress`, `filed` —
+            // addressed to a packet_id the fold has never heard of. That event is
+            // dropped in total silence: the fold ignores it, the loss guard skips
+            // it, and every validator still answers ok.
+            //
+            // Measured 2026-08-17: fragment 20260817t184639z carried a `note`
+            // event with the full GPU-passthrough measurements for order 406,
+            // addressed to `inference-gpu-passthrough-fat-host-thinnest-rung` —
+            // a plausible id I invented rather than asked for. The real one is
+            // `inference-cuda-bringup-fat-host`. The note is on disk, is not in
+            // the fold, and is not on 406. Nothing reported it; the guard said
+            // ok:no-fragment-status-loss over a corpus containing it.
+            //
+            // Prints EVERY packet_id an events block addresses, whatever the type
+            // (sorted, deduplicated), so the caller can ask the one question this
+            // subcommand exists for: does the fold know this packet at all. Same
+            // parse and the same exit 3 on an unparseable fragment, because
+            // silence from a parser is not evidence of absence (787-f7dh).
+            const EXIT_FRAGMENT_UNPARSEABLE: i32 = 3;
+            let Some(path) = args.get(1) else {
+                eprintln!("usage: tillandsias-plan fragment-event-packets <fragment.yaml>");
+                std::process::exit(2);
+            };
+            let raw = match std::fs::read_to_string(path) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("error: read {path}: {e}");
+                    std::process::exit(2);
+                }
+            };
+            let doc: serde_yaml::Value = match serde_yaml::from_str(&raw) {
+                Ok(d) => d,
+                Err(e) => {
+                    eprintln!(
+                        "unparseable:{path}: {e} — the unknown-packet pass cannot read this fragment, so any event it addresses is UNEXAMINED (797-qm4t)"
+                    );
+                    std::process::exit(EXIT_FRAGMENT_UNPARSEABLE);
+                }
+            };
+            let mut ids: Vec<String> = Vec::new();
+            // Inline: packets: [{packet_id, events: [...]}]. A pid here also
+            // CREATES the packet, so it can never be unknown — collected anyway
+            // so the caller sees one consistent set and decides for itself.
+            if let Some(pkts) = doc.get("packets").and_then(serde_yaml::Value::as_sequence) {
+                for p in pkts {
+                    let Some(pid) = p.get("packet_id").and_then(serde_yaml::Value::as_str) else {
+                        continue;
+                    };
+                    if p.get("events")
+                        .and_then(serde_yaml::Value::as_sequence)
+                        .is_some_and(|evs| !evs.is_empty())
+                    {
+                        ids.push(pid.to_string());
+                    }
+                }
+            }
+            // Top-level: events: [{packet_id, event: {...}}] — the shape that
+            // declares WITHOUT creating, and therefore the one that can address
+            // a packet nobody has ever filed.
+            if let Some(evs) = doc.get("events").and_then(serde_yaml::Value::as_sequence) {
+                for e in evs {
+                    let Some(pid) = e.get("packet_id").and_then(serde_yaml::Value::as_str) else {
+                        continue;
+                    };
+                    if e.get("event").is_some() {
+                        ids.push(pid.to_string());
+                    }
+                }
+            }
+            ids.sort_unstable();
+            ids.dedup();
+            for id in ids {
+                emit(&id);
+            }
+            true
+        }
+        "fragment-terminal-events" => {
+            // ORDER 752-pst5. The closure-event pass of check-fragment-status-loss.sh
+            // reads every fragment in plan/index.d and asks, per packet: does its
+            // events block DECLARE a terminal `completed` event? The shell's old
+            // answer was a line-grep with ad-hoc resets, and it could not tell an
+            // event declaration from PROSE that quotes the marker inside a block
+            // scalar — it invented a completion for packet 751-i9mb whose real
+            // event was `type: filed` (752-pst5). A YAML parse bounds attribution
+            // to the actual events block, so no indent heuristic can silently
+            // disable or widen the check.
+            //
+            // Prints one packet_id per line (sorted, deduplicated), nothing else
+            // on stdout, exit 0.
+            //
+            // ORDER 787-f7dh. An unparseable fragment used to `return` here —
+            // a stderr note and exit 0, on the reasoning that parse failures
+            // are the sibling added-fragments-parse gate's job. That made
+            // "this fragment declares no terminal events" and "this fragment
+            // could not be read" the SAME answer to the caller: empty stdout,
+            // exit 0. The caller (check-fragment-status-loss.sh) additionally
+            // sent stderr to /dev/null, so the note reached nobody and a
+            // fragment carrying an undelivered closure passed the gate green.
+            // Found when the 785-sqe6 fixture wrote `": "` into a summary,
+            // silently invalidating its own YAML.
+            //
+            // The delegation was also an ASSUMPTION rather than a guarantee:
+            // added-fragments-parse is DIFF-SCOPED (698-7n6q), so a malformed
+            // fragment arriving by merge, hand edit, sibling branch, or one
+            // already present before that gate landed is never seen by it.
+            // Exit 3 makes the two cases distinguishable at the point of use;
+            // silence from a parser is not evidence of absence.
+            const EXIT_FRAGMENT_UNPARSEABLE: i32 = 3;
+            let Some(path) = args.get(1) else {
+                eprintln!("usage: tillandsias-plan fragment-terminal-events <fragment.yaml>");
+                std::process::exit(2);
+            };
+            let raw = match std::fs::read_to_string(path) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("error: read {path}: {e}");
+                    std::process::exit(2);
+                }
+            };
+            let doc: serde_yaml::Value = match serde_yaml::from_str(&raw) {
+                Ok(d) => d,
+                Err(e) => {
+                    // Distinguishable, and stdout stays EMPTY so no caller can
+                    // mistake a parse failure for a set of declarations.
+                    eprintln!(
+                        "unparseable:{path}: {e} — the closure-event pass cannot read this fragment, so any terminal event it declares is UNEXAMINED (787-f7dh)"
+                    );
+                    std::process::exit(EXIT_FRAGMENT_UNPARSEABLE);
+                }
+            };
+            // A `declares` entry: the event carries `type: completed`, or nests
+            // `event: completed` / `event: {type: completed}` (the shapes the old
+            // awk reached via `/type: completed/ || /event: completed/`).
+            let declares_terminal = |event: &serde_yaml::Value| -> bool {
+                if event.get("type").and_then(serde_yaml::Value::as_str) == Some("completed") {
+                    return true;
+                }
+                if let Some(inner) = event.get("event")
+                    && (inner.as_str() == Some("completed")
+                        || inner.get("type").and_then(serde_yaml::Value::as_str)
+                            == Some("completed"))
+                {
+                    return true;
+                }
+                false
+            };
+            // ORDER 751-i9mb. Packets do not only live at `doc["packets"]`.
+            // Compaction folds every fragment INTO plan/index.yaml, where they
+            // live at `plan_index.steps[]` — so this subcommand, pointed at the
+            // base ledger, parsed all 3.4MB and printed NOTHING with exit 0.
+            // Empty-and-zero is indistinguishable from "declares no terminal
+            // events", so a checker built on that answer reports clean on a
+            // ledger it never examined: this guard's OWN failure class
+            // (785-sqe6, 787-f7dh), and the mechanical reason packet 532 sat
+            // claimable with its exit criterion already green while
+            // `./build.sh --check` printed ok:no-fragment-status-loss.
+            //
+            // The walk stops descending at any mapping carrying `packet_id` —
+            // the same rule the fold itself uses — so it is shape-independent
+            // by construction and a future ledger layout cannot silently
+            // re-blind it. Fragments (top-level `packets:`) and the base
+            // (`plan_index.steps[]`) both fall out of the one rule.
+            fn collect_packet_nodes(v: &serde_yaml::Value, out: &mut Vec<serde_yaml::Value>) {
+                if v.get("packet_id").is_some() {
+                    out.push(v.clone());
+                    return;
+                }
+                if let Some(map) = v.as_mapping() {
+                    for (_k, val) in map {
+                        collect_packet_nodes(val, out);
+                    }
+                } else if let Some(seq) = v.as_sequence() {
+                    for item in seq {
+                        collect_packet_nodes(item, out);
+                    }
+                }
+            }
+
+            // ORDER 751-i9mb. `--live` additionally applies the WITHDRAWAL rule:
+            // a closure that a later `falsified` event retracted is not a live
+            // declaration. Opt-in, so the existing gate's syntactic question —
+            // "does this events block DECLARE a terminal event?" — is unchanged
+            // and its callers keep their exact semantics. The advisory base pass
+            // asks the different, semantic question, and the packet requires the
+            // negative control: "a packet ... whose closure was later falsified"
+            // must NOT be flagged.
+            //
+            // Timestamps are ISO-8601 Zulu, which orders correctly under plain
+            // lexicographic comparison; an event with no ts sorts as empty and
+            // therefore never wins against a stamped one.
+            let live_only = args.iter().any(|a| a == "--live");
+            let event_ts = |e: &serde_yaml::Value| -> String {
+                e.get("ts")
+                    .and_then(serde_yaml::Value::as_str)
+                    .or_else(|| e.get("event").and_then(|i| i.get("ts")?.as_str()))
+                    .unwrap_or("")
+                    .to_string()
+            };
+            let declares_falsified = |event: &serde_yaml::Value| -> bool {
+                if event.get("type").and_then(serde_yaml::Value::as_str) == Some("falsified") {
+                    return true;
+                }
+                if let Some(inner) = event.get("event")
+                    && (inner.as_str() == Some("falsified")
+                        || inner.get("type").and_then(serde_yaml::Value::as_str)
+                            == Some("falsified"))
+                {
+                    return true;
+                }
+                false
+            };
+
+            let mut ids: Vec<String> = Vec::new();
+            // Inline: a node carrying packet_id and events: [{type: completed}],
+            // at ANY depth.
+            let mut packet_nodes: Vec<serde_yaml::Value> = Vec::new();
+            collect_packet_nodes(&doc, &mut packet_nodes);
+            for p in &packet_nodes {
+                let Some(pid) = p.get("packet_id").and_then(serde_yaml::Value::as_str) else {
+                    continue;
+                };
+                let Some(evs) = p.get("events").and_then(serde_yaml::Value::as_sequence) else {
+                    continue;
+                };
+                if !evs.iter().any(declares_terminal) {
+                    continue;
+                }
+                if live_only {
+                    let newest_closure = evs
+                        .iter()
+                        .filter(|e| declares_terminal(e))
+                        .map(event_ts)
+                        .max()
+                        .unwrap_or_default();
+                    let newest_withdrawal = evs
+                        .iter()
+                        .filter(|e| declares_falsified(e))
+                        .map(event_ts)
+                        .max()
+                        .unwrap_or_default();
+                    // A withdrawal only counts when it POSTDATES the closure it
+                    // retracts; a later re-closure wins again.
+                    if !newest_withdrawal.is_empty() && newest_withdrawal > newest_closure {
+                        continue;
+                    }
+                }
+                ids.push(pid.to_string());
+            }
+            // Top-level: events: [{packet_id, event: {type: completed, ...}}]
+            if let Some(evs) = doc.get("events").and_then(serde_yaml::Value::as_sequence) {
+                for e in evs {
+                    let Some(pid) = e.get("packet_id").and_then(serde_yaml::Value::as_str) else {
+                        continue;
+                    };
+                    if e.get("event").is_some_and(declares_terminal) {
+                        ids.push(pid.to_string());
+                    }
+                }
+            }
+            ids.sort_unstable();
+            ids.dedup();
+            for id in ids {
+                emit(&id);
+            }
+            true
+        }
+        _ => false,
+    }
+}
+
 fn main() {
     let start_time = std::time::Instant::now();
     let mut args: Vec<String> = std::env::args().skip(1).collect();
@@ -1761,19 +2744,57 @@ fn main() {
         if !root_explicit && let Some(r) = envelope.citation_root() {
             root = PathBuf::from(r);
         }
-        let violations = answer::verify(&envelope, &root);
-        if violations.is_empty() {
+        // ORDER 801-g9nn. The reader-side audit, not the frame-blind `verify`:
+        // this is the ONE place that knows both the envelope's frame and the
+        // reader's, so it is the only place that can tell a fabricated citation
+        // from a citation the reader has simply not fetched yet.
+        let audit = answer::audit(&envelope, &root);
+        if audit.violations.is_empty() && audit.stale.is_empty() {
+            // FIRST LINE IS PINNED. Litmus steps and MCP wrappers grep
+            // '^ok: envelope verified'; the relation is additive below it.
             println!(
                 "ok: envelope verified — {} citation(s) resolve, confidence={:?}",
                 envelope.citations().len(),
                 envelope.confidence()
             );
+            println!("{}", audit.relation.render());
+            // RESOLVING HERE IS NOT THE SAME AS HAVING BEEN READ HERE. Every
+            // span matched, but if the answer's frame is one this checkout
+            // cannot reach, that match is unconfirmed: the line numbers may
+            // land on a DIFFERENT passage that happens to contain the same key.
+            // The `ok:` prefix stays pinned for the consumers that grep it; the
+            // caution is what stops it being read as "safe to open".
+            if audit.relation.relation().may_differ() {
+                println!(
+                    "caution: the spans matched here, but this checkout is NOT the frame they were read in"
+                );
+            }
             return;
         }
-        eprintln!("REFUSED: {} citation violation(s):", violations.len());
-        for v in &violations {
+        if audit.violations.is_empty() {
+            // SOUND THERE, WRONG HERE. Exit 3, deliberately neither 0 nor 1: a
+            // reader that treats this as a pass opens stale line numbers, and a
+            // reader that treats it as a refusal throws away a correct answer
+            // plus the fetch instruction that would fix it. It needs its own
+            // code because it needs its own response.
+            println!(
+                "stale: envelope is sound at its own frame but NOT in this checkout — {} citation(s) moved",
+                audit.stale.len()
+            );
+            println!("{}", audit.relation.render());
+            for s in &audit.stale {
+                println!("  stale: {s}");
+            }
+            std::process::exit(3);
+        }
+        eprintln!("REFUSED: {} citation violation(s):", audit.violations.len());
+        for v in &audit.violations {
             eprintln!("  violation: {v}");
         }
+        for s in &audit.stale {
+            eprintln!("  stale: {s}");
+        }
+        eprintln!("{}", audit.relation.render());
         std::process::exit(1);
     }
 
@@ -1871,6 +2892,13 @@ fn main() {
         let mut query_vec: Option<PathBuf> = None;
         let mut chunks_json: Option<PathBuf> = None;
         let mut answer_file: Option<PathBuf> = None;
+        // ORDER 801-g9nn — the commit the INDEX was built at, which for a
+        // retrieved answer is the frame the spans were read in and is NOT this
+        // process's HEAD. A shared, mirror-backed index (801-a2by) is routinely
+        // built by another harness at another commit; without this flag the
+        // envelope would stamp the reader's own HEAD onto spans it never read
+        // there, which is a worse lie than no stamp at all.
+        let mut corpus_commit: Option<String> = None;
         let mut k = 8usize;
         let mut i = 1;
         while i < args.len() {
@@ -1900,6 +2928,10 @@ fn main() {
                 "--answer-file" => {
                     i += 1;
                     answer_file = args.get(i).map(PathBuf::from);
+                }
+                "--corpus-commit" => {
+                    i += 1;
+                    corpus_commit = args.get(i).cloned();
                 }
                 "--k" => {
                     i += 1;
@@ -1972,8 +3004,20 @@ fn main() {
                 }
                 let query = read_query_vec(&qv);
                 let top = spec::top_k(&query, &vectors, k);
-                let selected: Vec<&spec::Chunk> =
-                    top.iter().map(|(idx, _)| &chunks[*idx]).collect();
+                // ORDER 821-73es. The score used to be dropped here, which is
+                // why nothing downstream could tell "the corpus covers this"
+                // from "the corpus was searched": cosine top-k always returns
+                // k, so an out-of-corpus question yields k confident-looking
+                // citations. Carrying the similarity is the prerequisite for
+                // any refusal — a threshold cannot be applied to a number that
+                // was thrown away.
+                let selected: Vec<spec::ScoredChunk> = top
+                    .iter()
+                    .map(|(idx, score)| spec::ScoredChunk {
+                        chunk: chunks[*idx].clone(),
+                        score: *score,
+                    })
+                    .collect();
                 match serde_json::to_string_pretty(&selected) {
                     Ok(s) => println!("{s}"),
                     Err(e) => {
@@ -1997,7 +3041,14 @@ fn main() {
                         buf
                     }
                 };
-                let envelope = spec::build_envelope(answer.trim(), &chunks, &root);
+                let mut envelope = spec::build_envelope(answer.trim(), &chunks, &root);
+                // ORDER 801-g9nn. Applied BEFORE `emit_verified_envelope`, whose
+                // own default stamp only fills citations that still have no
+                // frame — so the index's commit wins over this process's HEAD
+                // wherever the two differ, which is the whole point.
+                if let Some(sha) = corpus_commit.as_deref() {
+                    envelope = envelope.with_default_citation_commit(sha.trim());
+                }
                 // Spec corpus, not the ledger: nothing skipped to report here.
                 emit_verified_envelope(envelope, &root, &[]);
                 return;
@@ -2036,6 +3087,12 @@ fn main() {
     // overlay: a reader that forgets fragments reports a stale ledger with total
     // confidence, and if the CLI, the MCP server and the expert disagree about
     // what the plan says, the retrieval surface is worse than useless.
+    // ORDER 816-kq2z: handled BEFORE the ledger load below, which these
+    // three never use and which costs 132ms of their 133ms.
+    if dispatch_fragment_only(&subcommand, &args) {
+        return;
+    }
+
     let ledger = match Ledger::load_with_fragments(&index) {
         Ok(l) => l,
         Err(e) => {
@@ -2088,6 +3145,362 @@ fn main() {
     let schema = Schema::load(&schema_path).unwrap_or_else(|_| Schema::minimal());
 
     match args[0].as_str() {
+        "capability-matrix" => {
+            // ORDER 808-7yrd. The fleet capability matrix, folded from the
+            // `capabilities:` channel of the SAME fragments every other channel
+            // uses.
+            //
+            // NOT named `capabilities` — that arm is taken by order 569 and
+            // reports this BINARY's subcommand set. Two meanings of the word,
+            // and a reader who conflates them gets a confident wrong answer.
+            //
+            // One line per host, then its schedulable triples. `legacy_tier` is
+            // printed as DERIVED context, never as the routing input: a single
+            // string cannot express "GPU present, no lane", which is the state
+            // every WSL2 host is in.
+            // ORDER 846-idhn. The base now CARRIES capability rows (compaction
+            // serialises the channel), so reading only plan/index.d/ would show
+            // an empty matrix the moment a fold consumed the fragments — the
+            // exact silent-emptiness this channel exists to avoid. The base is
+            // presented as a synthetic fragment; precedence is the row's own
+            // (ts, host), so its position in the slice does not matter.
+            // 864-v8kr: the base splice lives inside the fold now, so this
+            // reads the base and hands it over rather than hand-rolling a
+            // synthetic fragment that a third caller would not know to build.
+            let frags = tillandsias_plan::fragments::load_all(&index);
+            let base_doc: serde_yaml::Value = std::fs::read_to_string(&index)
+                .ok()
+                .and_then(|raw| serde_yaml::from_str(&raw).ok())
+                .unwrap_or(serde_yaml::Value::Null);
+            let (matrix, skipped) =
+                tillandsias_plan::fragments::fold_capabilities_with_base(&base_doc, &frags);
+
+            // ORDER 847-wgy4. `--hosts` is the ROUTING projection: one line
+            // per distinct host_id, sorted (BTreeMap order), as
+            //   <host_id>\t<derived_tier>\t<accels>
+            // where accels is a comma-joined, sorted union across the host's
+            // loci of `<class>:<vendor>:<usable|unusable>` for every gpu/npu
+            // device, or `none`. The selector consumes this to (a) rank a
+            // host among the matrix's hosts for collision-free epic routing
+            // and (b) decide which accelerator tags the host can serve.
+            // Sorted, deterministic, and machine-parseable — the human view
+            // below stays the human view.
+            if args.iter().any(|a| a == "--hosts") {
+                let mut hosts: std::collections::BTreeMap<
+                    &str,
+                    (String, std::collections::BTreeSet<String>),
+                > = std::collections::BTreeMap::new();
+                for ((host_id, _locus), entry) in &matrix {
+                    let tier = entry.document["legacy_tier"].as_str().unwrap_or("unknown");
+                    let slot = hosts
+                        .entry(host_id.as_str())
+                        .or_insert_with(|| (tier.to_string(), Default::default()));
+                    // Newest-locus tier wins only when the stored one is
+                    // unknown/cpu — a machine is at least its most capable
+                    // locus.
+                    if slot.0 == "unknown" || (slot.0 == "cpu" && tier != "unknown") {
+                        slot.0 = tier.to_string();
+                    }
+                    if let Some(devices) = entry.document["devices"].as_sequence() {
+                        for d in devices {
+                            let class = d["device_class"].as_str().unwrap_or("");
+                            if class != "gpu" && class != "npu" {
+                                continue;
+                            }
+                            let vendor = d["vendor"].as_str().unwrap_or("unknown");
+                            let usable = if d["usable"].as_bool() == Some(true) {
+                                "usable"
+                            } else {
+                                "unusable"
+                            };
+                            slot.1.insert(format!("{class}:{vendor}:{usable}"));
+                        }
+                    }
+                }
+                for (host_id, (tier, accels)) in &hosts {
+                    let accel_csv = if accels.is_empty() {
+                        "none".to_string()
+                    } else {
+                        accels.iter().cloned().collect::<Vec<_>>().join(",")
+                    };
+                    println!("{host_id}\t{tier}\t{accel_csv}");
+                }
+                log_cli_usage(&subcommand, "answered", start_time.elapsed().as_millis());
+                return;
+            }
+
+            // ORDER 861-n7f5. `--cpu-flags` is the ENGINE-DISPATCH projection:
+            // one line per distinct host_id, sorted, as
+            //   <host_id>\t<flags-csv>
+            // where flags is the sorted union, across the host's loci, of
+            // `cpu_flags` on every cpu-class device, or `none` when the host
+            // published a row that carries none.
+            //
+            // WHY THIS EXISTS RATHER THAN A SECOND INLINE PROBE. 861-n7f5's
+            // check must refuse an engine build that ignores vector features
+            // the HOST advertises, and criterion 3 requires the host's half of
+            // that comparison come from the published capability row — the
+            // accel_probe document already carries `cpu_flags` — never from a
+            // fresh `/proc/cpuinfo` read inside the checking script. 859-b2zc
+            // is the standing reminder of what re-derivation costs: three
+            // scripts re-implemented one probe and all three got it wrong the
+            // same way. The matrix is the single source; this arm is its
+            // machine-readable face.
+            //
+            // A host absent from the matrix prints NOTHING rather than an
+            // empty-flag line: absent and "reported no flags" are different
+            // facts and the caller must be able to tell them apart (843-624y).
+            if args.iter().any(|a| a == "--cpu-flags") {
+                let mut hosts: std::collections::BTreeMap<
+                    &str,
+                    std::collections::BTreeSet<String>,
+                > = std::collections::BTreeMap::new();
+                for ((host_id, _locus), entry) in &matrix {
+                    let slot = hosts.entry(host_id.as_str()).or_default();
+                    if let Some(devices) = entry.document["devices"].as_sequence() {
+                        for d in devices {
+                            if d["device_class"].as_str() != Some("cpu") {
+                                continue;
+                            }
+                            if let Some(flags) = d["cpu_flags"].as_sequence() {
+                                for f in flags {
+                                    if let Some(s) = f.as_str() {
+                                        let s = s.trim().to_ascii_lowercase();
+                                        if !s.is_empty() {
+                                            slot.insert(s);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                let want = args
+                    .iter()
+                    .position(|a| a == "--cpu-flags")
+                    .and_then(|i| args.get(i + 1))
+                    .filter(|a| !a.starts_with("--"))
+                    .map(|a| a.to_ascii_lowercase());
+                for (host_id, flags) in &hosts {
+                    if want
+                        .as_ref()
+                        .is_some_and(|w| host_id.to_ascii_lowercase() != *w)
+                    {
+                        continue;
+                    }
+                    let csv = if flags.is_empty() {
+                        "none".to_string()
+                    } else {
+                        flags.iter().cloned().collect::<Vec<_>>().join(",")
+                    };
+                    println!("{host_id}\t{csv}");
+                }
+                log_cli_usage(&subcommand, "answered", start_time.elapsed().as_millis());
+                return;
+            }
+
+            // ORDER 843-624y. EMPTY IS NOT THE SAME FACT AS UNREPORTED, and
+            // until now this arm could not tell them apart: it printed
+            // "0 rows" and exited 0, which reads identically to a healthy
+            // fleet that simply has not probed yet. It printed exactly that
+            // for four days while the channel's only two rows sat destroyed by
+            // compaction, and 808-7yrd — the packet that DELIVERED the channel
+            // — read `completed` the whole time.
+            //
+            // The known-host set is taken from the per-host attestation
+            // ledgers, which is a PROXY and is stated as one: a host appears
+            // there once it has completed a full-mode cycle, so it answers
+            // "which hosts are real and working", not "which hosts should
+            // report capabilities". A host that has never run a cycle is
+            // invisible here, and that is the right failure direction — better
+            // to under-claim the fleet than to invent members of it.
+            let attest_dir = index
+                .parent()
+                .map(|d| d.join("mo-full-attestations.d"))
+                .unwrap_or_default();
+            let mut known: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+            if let Ok(entries) = std::fs::read_dir(&attest_dir) {
+                for e in entries.flatten() {
+                    let p = e.path();
+                    if p.extension().and_then(|x| x.to_str()) == Some("md")
+                        && let Some(stem) = p.file_stem().and_then(|s| s.to_str())
+                        && stem != "README"
+                    {
+                        known.insert(stem.to_string());
+                    }
+                }
+            }
+            let reporting: std::collections::BTreeSet<&str> =
+                matrix.keys().map(|(h, _)| h.as_str()).collect();
+            let missing: Vec<&String> = known
+                .iter()
+                .filter(|h| !reporting.contains(h.as_str()))
+                .collect();
+
+            if matrix.is_empty() {
+                if known.is_empty() {
+                    println!(
+                        "capability-matrix: 0 rows, and NO KNOWN HOSTS — nothing has completed a full-mode cycle here, so the fleet is unknown rather than silent"
+                    );
+                } else {
+                    println!(
+                        "capability-matrix: 0 rows — UNREPORTED by all {} known host(s): {}. This is a GAP, not an empty fleet: every one of these has completed a cycle and none has contributed a capability row.",
+                        known.len(),
+                        known
+                            .iter()
+                            .map(String::as_str)
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
+                }
+            } else {
+                println!(
+                    "capability-matrix: {} row(s), {} of {} known host(s) reporting{}",
+                    matrix.len(),
+                    reporting.len(),
+                    known.len(),
+                    if missing.is_empty() {
+                        String::new()
+                    } else {
+                        format!(
+                            " — SILENT: {}",
+                            missing
+                                .iter()
+                                .map(|s| s.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        )
+                    }
+                );
+            }
+            for ((host_id, locus), entry) in &matrix {
+                let kind = entry.document["host"]["host_kind"]
+                    .as_str()
+                    .unwrap_or("unknown");
+                let source = entry.document["host"]["host_id_source"]
+                    .as_str()
+                    .unwrap_or("unknown");
+                let tier = entry.document["legacy_tier"].as_str().unwrap_or("unknown");
+                println!(
+                    "host:{host_id}\tlocus:{locus}\tkind:{kind}\tid_source:{source}\tderived_tier:{tier}\tts:{}\twriter:{}\tfrom:{}",
+                    entry.ts, entry.host, entry.source
+                );
+                // Machine RAM, when the contributing context knows it. This is
+                // deliberately NOT a field on the Rust `HostInfo` (adding one
+                // would give a second home to a value DeviceRecord already
+                // owns), so without printing it here the number is carried in
+                // the ledger and visible to nobody — the write-only field this
+                // milestone keeps collecting. Printing it is the cheap half of
+                // that fix; typing it waits for a consumer that needs
+                // machine-capacity RAM as distinct from context-available RAM.
+                //
+                // Two loci legitimately disagree: this machine's guest reports
+                // its 7.3 GB VM slice and Windows reports 15.2 GB installed.
+                // Neither is wrong, which is why the figure is printed per-row
+                // rather than once per host.
+                if let Some(ram) = entry.document["host"]["system_ram_gb"].as_f64() {
+                    println!("  machine_ram_gb: {ram:.2}");
+                }
+                let triples = tillandsias_plan::fragments::schedulable_triples(&entry.document);
+                if triples.is_empty() {
+                    println!("  schedulable: none");
+                }
+                for (class, lane, engine) in &triples {
+                    println!("  schedulable: {class}/{lane}/{engine}");
+                }
+                // Order 850-bif2: a USABLE device that produced no triple is
+                // otherwise invisible here — the matrix showed a working RTX
+                // A5000 on no line at all, which read as "this host has
+                // nothing" instead of "this host has hardware no engine
+                // covers". Name it, with its uncovered lanes, so the gap is
+                // an engineering problem someone can see.
+                if let Some(devices) = entry.document["devices"].as_sequence() {
+                    for d in devices {
+                        if d["usable"].as_bool() != Some(true) {
+                            continue;
+                        }
+                        let class = d["device_class"].as_str().unwrap_or("?");
+                        let scheduled = triples.iter().any(|(c, _, _)| c == class);
+                        if scheduled {
+                            continue;
+                        }
+                        let lanes: Vec<&str> = d["lanes"]
+                            .as_sequence()
+                            .map(|ls| ls.iter().filter_map(|l| l.as_str()).collect())
+                            .unwrap_or_default();
+                        println!(
+                            "  present-unscheduled: {}/{} (usable; no engine covers lanes [{}])",
+                            class,
+                            d["name"].as_str().unwrap_or("?"),
+                            lanes.join(",")
+                        );
+                    }
+                }
+                // Measurements the matrix will not place (order 810-jeg7). An
+                // unlocated number is refused rather than shown as a plain
+                // figure, because the locus difference has been measured at
+                // 5-10% on the embed arm — enough to have inverted a cross-host
+                // conclusion once. Reported rather than dropped: a measurement
+                // discarded in silence is indistinguishable from one never
+                // taken.
+                let (placed, unplaced) =
+                    tillandsias_plan::fragments::partition_measurements(&entry.document);
+                for meas in &placed {
+                    println!(
+                        "  measured: {}/{} suite:{} decode_tps:{}",
+                        meas["device"].as_str().unwrap_or("?"),
+                        meas["engine"].as_str().unwrap_or("?"),
+                        meas["workload_suite"].as_str().unwrap_or("unstated"),
+                        meas["decode_tps"].as_f64().unwrap_or(f64::NAN)
+                    );
+                }
+                for (meas, why) in &unplaced {
+                    println!(
+                        "  measurement-refused: {}/{} ({why})",
+                        meas["device"].as_str().unwrap_or("?"),
+                        meas["engine"].as_str().unwrap_or("?")
+                    );
+                }
+                // Present-unusable devices are reported BESIDE the schedulable
+                // set, because "present but unreachable" and "absent" are
+                // different engineering problems (806-2r4s) and a matrix that
+                // shows only what is schedulable cannot tell them apart.
+                if let Some(devices) = entry.document["devices"].as_sequence() {
+                    for d in devices {
+                        if d["usable"].as_bool() == Some(false) {
+                            // `os_status` is printed BESIDE the reason, not
+                            // folded into it, because they are two independent
+                            // facts and 806-2r4s is precisely about not
+                            // collapsing them. Windows calls this NPU healthy
+                            // AND we cannot reach it; a reader who sees only
+                            // the reason cannot tell "the OS says it is
+                            // broken" from "the OS says it is fine and our
+                            // lanes cannot get to it" — which are different
+                            // engineering problems. Omitted when the
+                            // contributing context did not report one, rather
+                            // than guessed.
+                            let os_status = d["os_status"]
+                                .as_str()
+                                .map(|s| format!(" os_status:{s}"))
+                                .unwrap_or_default();
+                            println!(
+                                "  present-unusable: {}/{} ({}){os_status}",
+                                d["device_class"].as_str().unwrap_or("?"),
+                                d["name"].as_str().unwrap_or("?"),
+                                d["unusable_reason"].as_str().unwrap_or("unstated")
+                            );
+                        }
+                    }
+                }
+            }
+            // Reported, never silent: a row that could not be keyed is
+            // indistinguishable from a host that never contributed unless the
+            // reader is told, and "the matrix looks empty" is exactly the
+            // symptom a misfiled row produces.
+            for s in &skipped {
+                println!("skipped: {} ({})", s.source, s.reason);
+            }
+        }
         "fragments" => {
             // Report the overlay's state and whether compaction is eligible.
             // Read-only: compaction itself is a separate, deliberate act.
@@ -2123,6 +3536,47 @@ fn main() {
             // append — the refusal-to-round-trip rationale that preceded this
             // implementation is recorded in packet
             // format-preserving-ledger-compaction.
+            // A MUTATING SUBCOMMAND MUST NOT RUN ON AN UNRECOGNISED FLAG, and
+            // `--help` must never BE the mutation.
+            //
+            // This arm read none of its arguments until 2026-08-22: every token
+            // after `compact` — `--help`, `--dry-run`, a typo — was ignored and
+            // the fold executed regardless. So asking the command what it did
+            // was the same act as running it, on the one ledger command
+            // carrying a p0 (843-624y) and a standing operator prohibition. It
+            // was found exactly that way, by an agent running `compact --help`
+            // to read usage and folding 27 live fragments instead.
+            //
+            // The safety added for 843-624y held — the three unfoldable
+            // fragments were refused and survived — which is why this cost a
+            // revert and not data. Two defects, one of them latent: the arm
+            // was unsafe to INVOKE long before it was safe to RUN.
+            let mut dry_run = false;
+            for a in &args[1..] {
+                match a.as_str() {
+                    "--help" | "-h" => {
+                        println!("usage: tillandsias-plan compact [--dry-run]");
+                        println!();
+                        println!("Folds every foldable fragment in plan/index.d/ into the base");
+                        println!("plan/index.yaml and deletes EXACTLY the ones folded. MUTATING.");
+                        println!();
+                        println!(
+                            "  --dry-run, -n   validate the fold and report it; write nothing"
+                        );
+                        println!();
+                        println!("`tillandsias-plan fragments` reports overlay state read-only.");
+                        return;
+                    }
+                    "--dry-run" | "-n" => dry_run = true,
+                    other => {
+                        eprintln!(
+                            "error: compact: unknown argument {other:?} — refusing rather than \
+                             compacting, because this command mutates the ledger"
+                        );
+                        std::process::exit(2);
+                    }
+                }
+            }
             let c = match tillandsias_plan::fragments::compact_text(&index) {
                 Ok(c) => c,
                 Err(e) => {
@@ -2134,8 +3588,38 @@ fn main() {
                     std::process::exit(1);
                 }
             };
+            // ORDER 843-624y. Fragments whose records the rendered candidate
+            // does NOT carry are refused rather than consumed, and they are
+            // REPORTED. Silence would trade one failure for another: before
+            // this fix such a fragment was DELETED having contributed nothing;
+            // if we merely skipped it, it would accumulate forever with nobody
+            // told why compaction stopped shrinking the base.
+            //
+            // Loud on purpose. A refusal means a fragment shape the fold cannot
+            // absorb — a defect in the writer or in the fold, to be FIXED, not
+            // a file to route around.
+            if !c.refused.is_empty() {
+                eprintln!(
+                    "warning: {} fragment(s) NOT consumed — the compacted base would not carry \
+                     their records, so they are left on disk rather than deleted (843-624y):",
+                    c.refused.len()
+                );
+                for (path, gaps) in &c.refused {
+                    eprintln!("  {}", path.display());
+                    for g in gaps {
+                        eprintln!("      {g}");
+                    }
+                }
+            }
             if c.consumed.is_empty() {
-                println!("ok: nothing to compact (0 fragments)");
+                if c.refused.is_empty() {
+                    println!("ok: nothing to compact (0 fragments)");
+                } else {
+                    println!(
+                        "ok: nothing compacted — all {} fragment(s) refused (see above)",
+                        c.refused.len()
+                    );
+                }
                 return;
             }
             // The gate: the merged ledger must load AND pass integrity before it
@@ -2167,6 +3651,20 @@ fn main() {
                     );
                     std::process::exit(1);
                 }
+            }
+            // Deliberately AFTER parse + integrity: the useful half of a
+            // dry-run is learning the fold would be ACCEPTED, which only the
+            // validation above can answer. Stopping earlier would report a
+            // count and prove nothing.
+            if dry_run {
+                println!(
+                    "ok: dry-run — would fold {} fragment(s) into {} and delete them; \
+                     {} refused; nothing written",
+                    c.consumed.len(),
+                    index.display(),
+                    c.refused.len()
+                );
+                return;
             }
             if let Err(e) = std::fs::write(&index, &c.candidate) {
                 eprintln!("error: write {}: {e}", index.display());
@@ -2337,6 +3835,28 @@ fn main() {
                 // condition — one word for one thing across the CLI.
                 emit(&format!("malformed: {}", bad.display()));
             }
+
+            // ORDER 866-pvsx. A fragment ENTRY the fold cannot use is a
+            // different loss from a fragment FILE it cannot parse, and until
+            // now only the second one was reported here. The first was detected
+            // — `fragment_coverage_gaps` has caught this shape all along — but
+            // only inside `compact`, where the verdict is used to refuse
+            // DELETING the fragment. That protects the bytes and tells the
+            // author nothing, and it only happens when the fragment count makes
+            // compaction eligible. A dropped entry in a small overlay is
+            // therefore reported to nobody, indefinitely.
+            //
+            // Reported, never refused, for exactly the 699-dycj reason spelled
+            // out below for `malformed:`: `build.sh` runs this on every host, so
+            // a refusal would turn one host's typo into every other host's red
+            // build on a file they did not write. `--strict-fragments` arms the
+            // refusal for callers that cannot tolerate a partial write.
+            let dropped = tillandsias_plan::fragments::overlay_coverage_gaps(&index);
+            for (path, gaps) in &dropped {
+                for gap in gaps {
+                    emit(&format!("dropped-entry: {}: {gap}", path.display()));
+                }
+            }
             if !report.violations.is_empty() && !skipped.is_empty() {
                 // WHY THIS CAVEAT IS NOT DECORATION: a `depends_on` whose
                 // target is DEFINED in the unreadable fragment reports here as
@@ -2355,7 +3875,15 @@ fn main() {
                 }
                 std::process::exit(1);
             }
-            if skipped.is_empty() {
+            // ORDER 866-pvsx. An unusable ENTRY makes the corpus partial for
+            // the same reason an unreadable FILE does — filed work is absent
+            // from every answer derived from this ledger — so it lands the
+            // verdict in the same place. The two causes stay named separately:
+            // one is repaired by fixing a parse error, the other by rewriting an
+            // entry the fold cannot use, and a reader who confuses them repairs
+            // the wrong thing.
+            let dropped_entries: usize = dropped.iter().map(|(_, g)| g.len()).sum();
+            if skipped.is_empty() && dropped_entries == 0 {
                 // `emit`, not `println!`: this line is routinely piped
                 // (litmus:parked-blocks-visibility-shape does `check | grep -q`),
                 // and `println!` PANICS with exit 101 when the reader closes
@@ -2373,21 +3901,26 @@ fn main() {
                 // was never read is the precise lie this order was filed
                 // against — the checks that follow the colon are all true, and
                 // they were run over less than the plan.
+                let cause = match (skipped.len(), dropped_entries) {
+                    (0, d) => format!(
+                        "{d} fragment entr{} the fold could not use",
+                        if d == 1 { "y" } else { "ies" }
+                    ),
+                    (s, 0) => format!("{s} fragment(s) could not be read"),
+                    (s, d) => format!(
+                        "{s} fragment(s) could not be read and {d} entr{} the fold could not use",
+                        if d == 1 { "y" } else { "ies" }
+                    ),
+                };
                 emit(&format!(
-                    "incomplete: {} packets from a PARTIAL corpus — {} fragment(s) could not be \
-                     read; ids unique and live references sound across what WAS read \
-                     ({} parked-block edge{})",
+                    "incomplete: {} packets from a PARTIAL corpus — {cause}; ids unique and live \
+                     references sound across what WAS read ({} parked-block edge{})",
                     ledger.packets.len(),
-                    skipped.len(),
                     parked.len(),
                     if parked.len() == 1 { "" } else { "s" }
                 ));
                 if strict_fragments {
-                    eprintln!(
-                        "refusing (--strict-fragments): the fold skipped {} unreadable \
-                         fragment(s); this ledger is incomplete",
-                        skipped.len()
-                    );
+                    eprintln!("refusing (--strict-fragments): {cause}; this ledger is incomplete");
                     // DISTINCT EXIT CODE, so a caller can tell "incomplete
                     // corpus" from "unsound ledger" WITHOUT parsing prose. The
                     // pre-push plan-only lane used to grep this binary's stderr
@@ -2395,6 +3928,200 @@ fn main() {
                     // said so in a comment; that is what a condition with no
                     // machine-readable form costs its callers.
                     std::process::exit(EXIT_FOLD_INCOMPLETE);
+                }
+            }
+        }
+        "arrival-routing-check" => {
+            // ORDER 831-ezea, the ARRIVAL half. Its sibling carry-forward-check
+            // asks whether a cycle left the rows it touched resumable; this one
+            // asks whether the rows it FILED should have been rows at all.
+            //
+            // THE RULE (methodology/distributed-work.yaml ->
+            // new_row_only_if_independently_schedulable): a finding becomes a
+            // NEW ROW only if it is independently schedulable — it names
+            // owned_files no open row already owns, OR a different pickup_role
+            // can claim it than every open row covering that scope. Otherwise
+            // it is a next_action clause or an event on the row it belongs to.
+            // Arrivals measured at lambda = 2.2 + 1.80*mu, so dL/dt = a +
+            // (b-1)*mu and the sign flips at b = 1: at b = 1.80 every extra
+            // cycle fills the queue faster than it drains, and this rule is the
+            // only lever that moves b.
+            //
+            // WHAT IT DECIDES, and it is only the FIRST disjunct: file-scope
+            // overlap, from [`answer::owned_file_owners`] at `OpenRows` scope —
+            // the same fold `answer_next` uses for its claim exclusion, called
+            // at a wider scope rather than copied. It does NOT decide the
+            // pickup_role disjunct and does NOT judge whether two rows are
+            // "really" the same work; both roles are PRINTED so the reader can
+            // apply the half a machine cannot.
+            //
+            // DELIVERABLE / TITLE are a second, weaker predicate: normalized
+            // string EQUALITY, nothing cleverer. It catches the re-filing class
+            // (a finding written twice in the same words) and nothing else.
+            // Stated as its own predicate token so a reader can never mistake
+            // it for semantic sameness — see scripts/check-arrival-routing.sh.
+            //
+            // NEWLY DEFINED is decided by `origin_source_of`, not by the
+            // fragment text: a `packets:` entry that RE-declares an existing
+            // packet is a G-Set no-op whose origin stays the base, so it is
+            // correctly not counted as an arrival. That is the distinction
+            // carry-forward-check documents itself as unable to make — this arm
+            // can make it because it loads the ledger.
+            //
+            // Output, one record per line, `|`-delimited so a bash 3.2 caller
+            // can cut it:
+            //   population|<n>                     ALWAYS first. A verdict that
+            //                                      names its own denominator
+            //                                      can never be misread as
+            //                                      health over an empty set.
+            //   overlap|<new_id>|<predicate>|<sentence>
+            // Exit 0 even with overlaps — ADVISORY, see the script's header for
+            // the promotion bar. Exit 2 on usage. Exit 3 when a NAMED fragment
+            // is one the fold could not read: its packets are absent from the
+            // ledger entirely, so "no arrivals" and "unreadable" would
+            // otherwise be the same answer (787-f7dh).
+            const EXIT_FRAGMENT_UNPARSEABLE: i32 = 3;
+            let frags = &args[1..];
+            if frags.is_empty() {
+                eprintln!(
+                    "usage: tillandsias-plan arrival-routing-check <fragment.yaml> [<fragment.yaml>...]"
+                );
+                std::process::exit(2);
+            }
+            // FieldSource carries a fragment FILENAME, not a path, so the
+            // comparison is on basenames at both ends.
+            let basename = |p: &Path| {
+                p.file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default()
+            };
+            let named: std::collections::BTreeSet<String> =
+                frags.iter().map(|f| basename(Path::new(f))).collect();
+
+            let unread: Vec<String> = ledger
+                .skipped_fragments()
+                .iter()
+                .map(|p| basename(p))
+                .filter(|n| named.contains(n))
+                .collect();
+            if !unread.is_empty() {
+                eprintln!(
+                    "unparseable:{} — the fold could not read {} named fragment(s), so any row \
+                     they file is UNEXAMINED by the arrival rule, not cleared by it (831-ezea)",
+                    unread.join(","),
+                    unread.len()
+                );
+                std::process::exit(EXIT_FRAGMENT_UNPARSEABLE);
+            }
+
+            // Normalized text: lowercased, punctuation dropped, whitespace
+            // collapsed. Deliberately dumb — see the predicate note above.
+            fn normalized(text: &str) -> String {
+                text.split_whitespace()
+                    .map(|w| {
+                        w.chars()
+                            .filter(|c| c.is_alphanumeric())
+                            .flat_map(char::to_lowercase)
+                            .collect::<String>()
+                    })
+                    .filter(|w| !w.is_empty())
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            }
+
+            let new_rows: Vec<String> = ledger
+                .packets
+                .iter()
+                .map(|p| ledger.id_of(p))
+                .filter(|id| {
+                    ledger
+                        .origin_source_of(id)
+                        .is_some_and(|s| named.contains(&s.fragment_name))
+                })
+                .collect();
+            emit(&format!("population|{}", new_rows.len()));
+
+            let owners = answer::owned_file_owners(&ledger, answer::OwnershipScope::OpenRows);
+            let mut by_deliverable: std::collections::BTreeMap<
+                String,
+                std::collections::BTreeSet<String>,
+            > = std::collections::BTreeMap::new();
+            let mut by_title = by_deliverable.clone();
+            for p in &ledger.packets {
+                if str_field(p, "status").is_some_and(tillandsias_plan::is_terminal_status) {
+                    continue;
+                }
+                let id = ledger.id_of(p);
+                for (field, map) in [
+                    ("deliverable", &mut by_deliverable),
+                    ("title", &mut by_title),
+                ] {
+                    if let Some(v) = str_field(p, field) {
+                        let key = normalized(v);
+                        if !key.is_empty() {
+                            map.entry(key).or_default().insert(id.clone());
+                        }
+                    }
+                }
+            }
+
+            // "status=<s>, role=<r>" for the row an arrival collides with. The
+            // role is the pickup_role DISJUNCT's raw material and this arm
+            // refuses to evaluate it for the reader.
+            let describe = |id: &str| -> String {
+                let Some(p) = ledger.resolve(id) else {
+                    return "status=?, role=?".into();
+                };
+                format!(
+                    "status={}, pickup_role={}",
+                    str_field(p, "status").unwrap_or("?"),
+                    str_field(p, "pickup_role").unwrap_or("unset")
+                )
+            };
+
+            for id in &new_rows {
+                let Some(p) = ledger.resolve(id) else {
+                    continue;
+                };
+                let mine = format!(
+                    "pickup_role={}",
+                    str_field(p, "pickup_role").unwrap_or("unset")
+                );
+                // SELF is excluded; a SIBLING row born in the same change is
+                // NOT. Two rows filed together over one file scope is the same
+                // arrival defect as one filed over an inherited scope, and
+                // suppressing it would make the gate blind to the case a single
+                // fragment produces on its own.
+                for f in str_list(p, "owned_files") {
+                    let Some(holders) = owners.get(&f) else {
+                        continue;
+                    };
+                    for other in holders.iter().filter(|o| o.as_str() != id.as_str()) {
+                        emit(&format!(
+                            "overlap|{id}|owned_files|{id} ({mine}) claims owned_file '{f}', \
+                             already owned by OPEN row {other} ({})",
+                            describe(other)
+                        ));
+                    }
+                }
+                for (field, map) in [("deliverable", &by_deliverable), ("title", &by_title)] {
+                    let Some(v) = str_field(p, field) else {
+                        continue;
+                    };
+                    let key = normalized(v);
+                    if key.is_empty() {
+                        continue;
+                    }
+                    let Some(holders) = map.get(&key) else {
+                        continue;
+                    };
+                    for other in holders.iter().filter(|o| o.as_str() != id.as_str()) {
+                        emit(&format!(
+                            "overlap|{id}|{field}|{id} ({mine}) states the same {field} as OPEN \
+                             row {other} ({}) — verbatim after normalization",
+                            describe(other)
+                        ));
+                    }
                 }
             }
         }
@@ -2549,107 +4276,205 @@ fn main() {
                 std::process::exit(1);
             }
         }
-        "fragment-terminal-events" => {
-            // ORDER 752-pst5. The closure-event pass of check-fragment-status-loss.sh
-            // reads every fragment in plan/index.d and asks, per packet: does its
-            // events block DECLARE a terminal `completed` event? The shell's old
-            // answer was a line-grep with ad-hoc resets, and it could not tell an
-            // event declaration from PROSE that quotes the marker inside a block
-            // scalar — it invented a completion for packet 751-i9mb whose real
-            // event was `type: filed` (752-pst5). A YAML parse bounds attribution
-            // to the actual events block, so no indent heuristic can silently
-            // disable or widen the check.
+        "declared-closures" | "declared-closures-check" => {
+            // ORDER 885-92iu. A packet's `verifiable_closure` may NAME a litmus
+            // test — `NAMED: litmus:<x>` — and until this landed, nothing checked
+            // that `litmus:<x>` resolved to anything runnable.
             //
-            // Prints one packet_id per line (sorted, deduplicated), nothing else
-            // on stdout, exit 0.
+            // Order 721-77yu had already established the defect and its two
+            // shapes for SHELL SCRIPTS ("Pinned by litmus:<x>" header claims):
+            // `unresolvable` (no test declares that name) and `unbound` (the file
+            // exists but no spec lists it in openspec/litmus-bindings.yaml, and
+            // execution is binding-driven, so it runs in no suite). What that
+            // checker never looked at is the LEDGER, where the same claim carries
+            // more weight: methodology/convergence.yaml makes the verifiable
+            // closure the thing distinguishing a reduction from a restatement.
             //
-            // ORDER 787-f7dh. An unparseable fragment used to `return` here —
-            // a stderr note and exit 0, on the reasoning that parse failures
-            // are the sibling added-fragments-parse gate's job. That made
-            // "this fragment declares no terminal events" and "this fragment
-            // could not be read" the SAME answer to the caller: empty stdout,
-            // exit 0. The caller (check-fragment-status-loss.sh) additionally
-            // sent stderr to /dev/null, so the note reached nobody and a
-            // fragment carrying an undelivered closure passed the gate green.
-            // Found when the 785-sqe6 fixture wrote `": "` into a summary,
-            // silently invalidating its own YAML.
+            // Measured at HEAD 2026-08-25: 795-5itp declared
+            // `litmus:one-length-delimited-framing-impl` on 2026-08-17 and the
+            // string existed in exactly one place in the repository — that field —
+            // for eight days, while three slices landed against it and the gate
+            // stayed green, truthfully.
             //
-            // The delegation was also an ASSUMPTION rather than a guarantee:
-            // added-fragments-parse is DIFF-SCOPED (698-7n6q), so a malformed
-            // fragment arriving by merge, hand edit, sibling branch, or one
-            // already present before that gate landed is never seen by it.
-            // Exit 3 makes the two cases distinguishable at the point of use;
-            // silence from a parser is not evidence of absence.
-            const EXIT_FRAGMENT_UNPARSEABLE: i32 = 3;
-            let Some(path) = args.get(1) else {
-                eprintln!("usage: tillandsias-plan fragment-terminal-events <fragment.yaml>");
-                std::process::exit(2);
+            // TWO MODES, and the split is deliberate:
+            //   `declared-closures`                  full-ledger REPORT, exit 0
+            //   `declared-closures-check <frag.yaml>` single-fragment GATE, exit 1
+            //
+            // The report never fails a build. There is standing debt (15 names
+            // with no file, 3 with a file no spec binds), and a gate that reds
+            // the trunk on day one gets switched off — the same argument that
+            // made 795-5itp's own closure a ratchet rather than an assertion.
+            // The GATE refuses NEW debt at the door, fragment-scoped exactly as
+            // closure-evidence-check is, so a closure is validated when it is
+            // FILED rather than after the next compaction.
+            let root = root_for(&index);
+            let litmus_dir = root.join("openspec/litmus-tests");
+            let bindings = root.join("openspec/litmus-bindings.yaml");
+
+            // The names that exist, and the names some spec actually binds.
+            let mut existing: Vec<String> = Vec::new();
+            if let Ok(rd) = std::fs::read_dir(&litmus_dir) {
+                for e in rd.flatten() {
+                    let p = e.path();
+                    if p.extension().and_then(|s| s.to_str()) != Some("yaml") {
+                        continue;
+                    }
+                    if let Ok(text) = std::fs::read_to_string(&p) {
+                        for l in text.lines() {
+                            if let Some(rest) = l.strip_prefix("name: litmus:") {
+                                existing.push(rest.trim().to_string());
+                            }
+                        }
+                    }
+                }
+            }
+            let bound: Vec<String> = std::fs::read_to_string(&bindings)
+                .unwrap_or_default()
+                .lines()
+                .filter_map(|l| {
+                    let t = l.trim_start();
+                    t.strip_prefix("- litmus:").map(|r| r.trim().to_string())
+                })
+                .collect();
+
+            // Extract the litmus tokens a closure DECLARES. Field-scoped, not a
+            // grep of the file: some `litmus:<x>` tokens elsewhere in the ledger
+            // are spec ladder shorthands or prose, and matching those would
+            // produce a number nobody trusts and get the check switched off.
+            let declared_tokens = |closure: &str| -> Vec<String> {
+                let mut out: Vec<String> = Vec::new();
+                for (i, _) in closure.match_indices("litmus:") {
+                    let rest = &closure[i + "litmus:".len()..];
+                    let end = rest
+                        .find(|c: char| !(c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'))
+                        .unwrap_or(rest.len());
+                    let tok = &rest[..end];
+                    // A token ending on a hyphen is prose wrapped mid-name
+                    // (721-77yu's `wrapped` rule); a real claim never does.
+                    if tok.is_empty() || tok.ends_with('-') {
+                        continue;
+                    }
+                    if !out.iter().any(|t| t == tok) {
+                        out.push(tok.to_string());
+                    }
+                }
+                out
             };
-            let raw = match std::fs::read_to_string(path) {
-                Ok(r) => r,
-                Err(e) => {
-                    eprintln!("error: read {path}: {e}");
+
+            // (packet label, token, verdict)
+            let mut checked = 0u32;
+            let mut missing: Vec<(String, String)> = Vec::new();
+            let mut unbound: Vec<(String, String)> = Vec::new();
+
+            let mut judge = |label: &str, closure: &str| {
+                for tok in declared_tokens(closure) {
+                    checked += 1;
+                    if !existing.contains(&tok) {
+                        missing.push((label.to_string(), tok));
+                    } else if !bound.is_empty() && !bound.contains(&tok) {
+                        unbound.push((label.to_string(), tok));
+                    }
+                }
+            };
+
+            let gate = subcommand == "declared-closures-check";
+            if gate {
+                let Some(path) = args.get(1) else {
+                    eprintln!("usage: tillandsias-plan declared-closures-check <fragment.yaml>");
                     std::process::exit(2);
+                };
+                let raw = match std::fs::read_to_string(path) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        eprintln!("error: read {path}: {e}");
+                        std::process::exit(2);
+                    }
+                };
+                let doc: serde_yaml::Value = match serde_yaml::from_str(&raw) {
+                    Ok(d) => d,
+                    // A parse failure is the sibling gate's job
+                    // (added-fragments-parse); a pass-through here, not a
+                    // violation this check invented.
+                    Err(_) => {
+                        println!(
+                            "ok:declared-closures:0 checked (unparseable — see added-fragments-parse)"
+                        );
+                        return;
+                    }
+                };
+                if let Some(pkts) = doc.get("packets").and_then(serde_yaml::Value::as_sequence) {
+                    for p in pkts {
+                        let label = p
+                            .get("order")
+                            .and_then(serde_yaml::Value::as_str)
+                            .or_else(|| p.get("packet_id").and_then(serde_yaml::Value::as_str))
+                            .unwrap_or("<unnamed>")
+                            .to_string();
+                        if let Some(c) = p
+                            .get("verifiable_closure")
+                            .and_then(serde_yaml::Value::as_str)
+                        {
+                            judge(&label, c);
+                        }
+                    }
                 }
-            };
-            let doc: serde_yaml::Value = match serde_yaml::from_str(&raw) {
-                Ok(d) => d,
-                Err(e) => {
-                    // Distinguishable, and stdout stays EMPTY so no caller can
-                    // mistake a parse failure for a set of declarations.
-                    eprintln!(
-                        "unparseable:{path}: {e} — the closure-event pass cannot read this fragment, so any terminal event it declares is UNEXAMINED (787-f7dh)"
-                    );
-                    std::process::exit(EXIT_FRAGMENT_UNPARSEABLE);
+                // A set-field fragment may reassign the closure text too.
+                if let Some(us) = doc.get("status").and_then(serde_yaml::Value::as_sequence) {
+                    for u in us {
+                        if u.get("field").and_then(serde_yaml::Value::as_str)
+                            == Some("verifiable_closure")
+                        {
+                            let label = u
+                                .get("packet_id")
+                                .and_then(serde_yaml::Value::as_str)
+                                .unwrap_or("<unnamed>")
+                                .to_string();
+                            if let Some(c) = u.get("value").and_then(serde_yaml::Value::as_str) {
+                                judge(&label, c);
+                            }
+                        }
+                    }
                 }
-            };
-            // A `declares` entry: the event carries `type: completed`, or nests
-            // `event: completed` / `event: {type: completed}` (the shapes the old
-            // awk reached via `/type: completed/ || /event: completed/`).
-            let declares_terminal = |event: &serde_yaml::Value| -> bool {
-                if event.get("type").and_then(serde_yaml::Value::as_str) == Some("completed") {
-                    return true;
-                }
-                if let Some(inner) = event.get("event")
-                    && (inner.as_str() == Some("completed")
-                        || inner.get("type").and_then(serde_yaml::Value::as_str)
-                            == Some("completed"))
-                {
-                    return true;
-                }
-                false
-            };
-            let mut ids: Vec<String> = Vec::new();
-            // Inline: packets: [{packet_id, events: [{type: completed, ...}]}]
-            if let Some(pkts) = doc.get("packets").and_then(serde_yaml::Value::as_sequence) {
-                for p in pkts {
-                    let Some(pid) = p.get("packet_id").and_then(serde_yaml::Value::as_str) else {
-                        continue;
-                    };
-                    let declares = p
-                        .get("events")
-                        .and_then(serde_yaml::Value::as_sequence)
-                        .is_some_and(|evs| evs.iter().any(declares_terminal));
-                    if declares {
-                        ids.push(pid.to_string());
+            } else {
+                for p in &ledger.packets {
+                    let label = p
+                        .get("order")
+                        .and_then(serde_yaml::Value::as_str)
+                        .or_else(|| p.get("packet_id").and_then(serde_yaml::Value::as_str))
+                        .unwrap_or("<unnamed>")
+                        .to_string();
+                    if let Some(c) = p
+                        .get("verifiable_closure")
+                        .and_then(serde_yaml::Value::as_str)
+                    {
+                        judge(&label, c);
                     }
                 }
             }
-            // Top-level: events: [{packet_id, event: {type: completed, ...}}]
-            if let Some(evs) = doc.get("events").and_then(serde_yaml::Value::as_sequence) {
-                for e in evs {
-                    let Some(pid) = e.get("packet_id").and_then(serde_yaml::Value::as_str) else {
-                        continue;
-                    };
-                    if e.get("event").is_some_and(declares_terminal) {
-                        ids.push(pid.to_string());
-                    }
-                }
+
+            for (label, tok) in &missing {
+                eprintln!(
+                    "declared-closure-unresolvable: {label} declares litmus:{tok} — no litmus test declares that name."
+                );
             }
-            ids.sort_unstable();
-            ids.dedup();
-            for id in ids {
-                emit(&id);
+            for (label, tok) in &unbound {
+                eprintln!(
+                    "declared-closure-unbound: {label} declares litmus:{tok} — the test file exists but no spec binds it in openspec/litmus-bindings.yaml, so it executes in no suite."
+                );
+            }
+
+            if !missing.is_empty() {
+                println!("violation:declared-closure-unresolvable:{}", missing.len());
+                if gate {
+                    std::process::exit(1);
+                }
+            } else if !unbound.is_empty() {
+                println!("violation:declared-closure-unbound:{}", unbound.len());
+                if gate {
+                    std::process::exit(1);
+                }
+            } else {
+                println!("ok:declared-closures:{checked} checked");
             }
         }
         "status" => {
@@ -2678,6 +4503,62 @@ fn main() {
                 None => {
                     eprintln!("error: {}", unresolved_reason(&ledger, reference));
                     std::process::exit(1);
+                }
+            }
+        }
+        // ORDER 864-r9wt. The EFFECTIVE next_action, which until now could not
+        // be read back at all.
+        //
+        // Every coordinator cycle writes its queue into `next_action` — but it
+        // writes it as an EVENT, because `packets:` is a G-Set and re-declaring
+        // a packet does not change its fields. So the packet-level
+        // `next_action` keeps whatever it was created with while the live queue
+        // accumulates in events beneath it, and reading the field returns an
+        // arbitrarily old answer that LOOKS current.
+        //
+        // Measured 2026-08-24: this host read the packet field and acted on a
+        // twenty-hour-stale queue whose three items were all closed. The
+        // hand-rolled reader that did it also missed the events entirely,
+        // because in the base they are NESTED under the packet rather than at
+        // the document's top level — the same shape trips anyone who writes the
+        // obvious loop. Three ad-hoc probes lied in one session; the fix is not
+        // a better ad-hoc probe, it is for the instrument to answer.
+        "next-action" => {
+            let Some(reference) = args.get(1) else {
+                usage()
+            };
+            let Some(p) = ledger.resolve(reference) else {
+                eprintln!("error: {}", unresolved_reason(&ledger, reference));
+                std::process::exit(1);
+            };
+
+            // ONE implementation of "newest event wins", shared with
+            // plan_next's per-row snippet. This arm had its own inline copy
+            // until the 2026-08-24 retrospective found the snippet still
+            // reading the raw field — two copies of the rule is exactly how
+            // one of them stays wrong.
+            match tillandsias_plan::answer::effective_next_action(p) {
+                Some((text, Some(ts))) => {
+                    // 877-lwts: name the channel that actually won. A set-field
+                    // win carries its ts in next_action_ts; an event win does not
+                    // match it.
+                    let via_field = p
+                        .get("next_action_ts")
+                        .and_then(serde_yaml::Value::as_str)
+                        .is_some_and(|fts| fts == ts);
+                    if via_field {
+                        eprintln!("source: set-field (LWW) @ {ts}");
+                    } else {
+                        eprintln!("source: event @ {ts}");
+                    }
+                    println!("{}", text.trim_end());
+                }
+                Some((text, None)) => {
+                    eprintln!("source: packet field (no timestamp — the packet's original value)");
+                    println!("{}", text.trim_end());
+                }
+                None => {
+                    println!("none:next-action:{reference}");
                 }
             }
         }
@@ -3170,6 +5051,7 @@ fn main() {
             let agent = resolve_writer_agent(agent);
             let host = host
                 .filter(|h| !h.trim().is_empty())
+                .map(require_acceptable_host)
                 .unwrap_or_else(resolve_writer_host);
             let block = edit::event_block(etype, &ts, &agent, &host, summary);
             let raw = match std::fs::read_to_string(&index) {
@@ -3367,7 +5249,9 @@ fn main() {
                     args.iter().any(|a| a == "--backfill"),
                     "set-field",
                 );
-                let host = flagged("--host").unwrap_or_else(resolve_writer_host);
+                let host = flagged("--host")
+                    .map(require_acceptable_host)
+                    .unwrap_or_else(resolve_writer_host);
                 let compact = loop_status::iso_to_compact(&ts);
                 let suffix = format!(
                     "{:08x}",
@@ -3400,6 +5284,10 @@ fn main() {
                 if let Err(e) = std::fs::write(&path, body) {
                     eprintln!("error: write {}: {e}", path.display());
                     std::process::exit(1);
+                }
+                // 775-b4qz: never exit 0 on a fragment the fold would skip.
+                if let Err(e) = fragments::verify_written_parses(&path) {
+                    reject_written_fragment(&path, &e);
                 }
                 println!(
                     "ok: no-op — {pid}.{field} is already '{value}'; note recorded ({})",
@@ -3463,7 +5351,9 @@ fn main() {
                 args.iter().any(|a| a == "--backfill"),
                 "set-field",
             );
-            let host = flagged("--host").unwrap_or_else(resolve_writer_host);
+            let host = flagged("--host")
+                .map(require_acceptable_host)
+                .unwrap_or_else(resolve_writer_host);
             let reason = flagged("--reason").unwrap_or_default();
 
             let compact = loop_status::iso_to_compact(&ts);
@@ -3481,21 +5371,17 @@ fn main() {
             }
             let path = dir.join(fragments::fragment_name(&compact, &suffix, &host));
 
-            let mut body = String::new();
-            body.push_str("# Ledger fragment — append-only, IMMUTABLE once written.\n");
-            body.push_str("# Written by: tillandsias-plan set-field (order 636-9m79).\n");
-            body.push_str("#\n");
-            body.push_str(
-                "# The LWW channel below is named `status:` for historical reasons but\n",
-            );
-            body.push_str("# corrects ANY field (642-fedr). Re-declaring the packet under\n");
-            body.push_str("# `packets:` would be a G-Set no-op and would silently do nothing.\n");
-            body.push_str("status:\n");
-            body.push_str(&format!("  - packet_id: {pid}\n"));
-            body.push_str(&format!("    field: {field}\n"));
-            body.push_str(&format!("    value: {value}\n"));
-            body.push_str(&format!("    ts: \"{ts}\"\n"));
-            body.push_str(&format!("    host: {host}\n"));
+            // ORDER 832-698m → 775-b4qz. The value is EMITTED AS YAML, not
+            // interpolated — the rendering lives in fragments::lww_value_lines
+            // (via set_field_fragment_body) beside the fold it must survive,
+            // with the unit tests that pin it. Short history, because this
+            // line broke twice: raw interpolation let a "Wave 2: (1) …"
+            // next_action open a nested mapping (fragment unparseable, ok:
+            // printed anyway); the serde_yaml fix then broke on MULTI-LINE
+            // prose, whose block-scalar continuation lines serde_yaml indents
+            // from the document root, not the column-4 key. Both times the
+            // pre-push gate caught what set-field blessed — the write-time
+            // verification below is 775-b4qz closing that exit-0 gap.
             let mut event_blocks: Vec<(String, String)> = Vec::new();
             if let Some(refs) = &reopen_evidence {
                 // The mandatory record for a ladder downgrade (650-dq6u): the
@@ -3529,26 +5415,80 @@ fn main() {
             if !reason.is_empty() {
                 event_blocks.push(("note".to_string(), reason.replace('\n', " ")));
             }
-            if !event_blocks.is_empty() {
-                body.push_str("\nevents:\n");
-                for (etype, summary) in &event_blocks {
-                    body.push_str(&format!("  - packet_id: {pid}\n"));
-                    body.push_str("    event:\n");
-                    body.push_str(&format!("      type: {etype}\n"));
-                    body.push_str(&format!("      ts: \"{ts}\"\n"));
-                    body.push_str(&format!("      host: {host}\n"));
-                    body.push_str(&format!("      summary: >\n        {summary}\n"));
-                }
-            }
+            let body =
+                fragments::set_field_fragment_body(&pid, &field, &value, &ts, &host, &event_blocks);
 
             if let Err(e) = std::fs::write(&path, body) {
                 eprintln!("error: write {}: {e}", path.display());
                 std::process::exit(1);
             }
+            // 775-b4qz: re-parse with the fold's parser and confirm the value
+            // reads back byte-identical BEFORE claiming success.
+            if let Err(e) = fragments::verify_written_lww(&path, &pid, &field, &value) {
+                reject_written_fragment(&path, &e);
+            }
             println!(
                 "ok: {pid}.{field} {current} -> {value} ({})",
                 path.display()
             );
+        }
+        "plan-events" => {
+            // ORDER 882-vqe4. Print a packet's FOLDED events — base plus
+            // fragment overlay — one per line, `<type>\t<ts>`, oldest first as
+            // stored.
+            //
+            // WHY A SUBCOMMAND RATHER THAN A GREP AT THE CALLER.
+            // check-stranded-in-progress.sh counted a packet's activity by
+            // grepping packet_id across the fragment overlay files, which sees only
+            // the fragment overlay. Compaction folds fragments into the base as
+            // routine garbage collection, and after a fold that grep returns
+            // zero for a packet whose whole history is intact. Measured on the
+            // live ledger 2026-08-25: 865-n8vq carried 35 progress events in
+            // the base and the detector saw 0, so it reported a p0 the
+            // coordinator had touched 106 minutes earlier as STRANDED.
+            //
+            // The durable fix is not a second grep with a wider window — that
+            // is the same defect one storage location later. It is to ask the
+            // thing that already folds correctly for every other reader. This
+            // is the 704-zcgi shape: a hand-rolled re-derivation of a fold is
+            // the defect, and fixing the instance without removing the copy
+            // leaves the next caller to make it again.
+            //
+            // Exit 0 with output when the packet has events; exit 0 with NO
+            // output when it exists and has none — an existing packet with no
+            // activity is a real and meaningful answer, and it is precisely
+            // what a genuinely stranded claim looks like. Exit 1 only when the
+            // packet_id resolves to nothing, so a caller cannot silently read a
+            // typo as "no activity".
+            let want = match args.get(1) {
+                Some(p) if !p.starts_with("--") => p.clone(),
+                _ => {
+                    eprintln!("usage: tillandsias-plan plan-events <packet_id|order>");
+                    std::process::exit(2);
+                }
+            };
+            let pkt = ledger.packets.iter().find(|p| {
+                str_field(p, "packet_id") == Some(want.as_str())
+                    || str_field(p, "order") == Some(want.as_str())
+            });
+            let Some(pkt) = pkt else {
+                eprintln!("error: no packet matches '{want}'");
+                std::process::exit(1);
+            };
+            if let Some(seq) = pkt.get("events").and_then(serde_yaml::Value::as_sequence) {
+                for ev in seq {
+                    let ty = ev
+                        .get("type")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("unknown");
+                    let ts = ev
+                        .get("ts")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("-");
+                    println!("{ty}\t{ts}");
+                }
+            }
+            log_cli_usage(&subcommand, "answered", start_time.elapsed().as_millis());
         }
         "expire-claims" => {
             // ORDER 672-bz7u — 641-e2qa criterion 2: a claim that produces no
@@ -3558,6 +5498,7 @@ fn main() {
             // shell-side is the brittle parsing 456 eliminated.
             let mut ttl_hours: i64 = 24;
             let mut dry_run = false;
+            let mut list_live = false;
             let mut now_epoch: Option<i64> = None;
             let mut host = resolve_writer_host();
             let mut i = 1;
@@ -3574,6 +5515,7 @@ fn main() {
                         };
                     }
                     "--dry-run" => dry_run = true,
+                    "--list-live" => list_live = true,
                     "--now-epoch" => {
                         i += 1;
                         now_epoch = match args.get(i).and_then(|s| s.parse().ok()) {
@@ -3587,7 +5529,7 @@ fn main() {
                     "--host" => {
                         i += 1;
                         match args.get(i) {
-                            Some(h) => host = h.clone(),
+                            Some(h) => host = require_acceptable_host(h.clone()),
                             None => {
                                 eprintln!("error: --host needs a value");
                                 std::process::exit(2);
@@ -3613,7 +5555,7 @@ fn main() {
             });
             let cutoff = answer::epoch_to_iso8601(now - ttl_hours * 3600);
             let now_iso = answer::epoch_to_iso8601(now);
-            let (expired, unknown) = expire_claim_candidates(&ledger, &cutoff);
+            let (expired, unknown, held) = expire_claim_candidates(&ledger, &cutoff);
             let label = if dry_run {
                 "expire-candidate"
             } else {
@@ -3624,6 +5566,22 @@ fn main() {
             }
             for (order, pid) in &unknown {
                 emit(&format!("unknown-age\t{order}\t{pid}\tnever-expired"));
+            }
+            // 864-k8dp: a hold is REPORTED, never silent. A claim the reaper
+            // declined to take is exactly as interesting as one it took.
+            for (order, pid, reason) in &held {
+                emit(&format!("held-claim\t{order}\t{pid}\t{reason}"));
+            }
+            // ORDER 833-fpe7. `--list-live` additionally names the claims the
+            // reaper would KEEP: owner host + claim ts, for the
+            // resumable-claim-dirt detector. Read-only regardless of
+            // --dry-run — listing must never write.
+            if list_live {
+                for (order, pid, claim_host, claim_ts, last) in &live_claims(&ledger, &cutoff) {
+                    emit(&format!(
+                        "live-claim\t{order}\t{pid}\t{claim_host}\t{claim_ts}\t{last}"
+                    ));
+                }
             }
             if !dry_run && !expired.is_empty() {
                 let compact = loop_status::iso_to_compact(&now_iso);
@@ -3681,8 +5639,9 @@ fn main() {
             )
             .len();
             emit(&format!(
-                "summary: in_progress={total} expired={} unknown_age={} ttl_hours={ttl_hours} mode={}",
+                "summary: in_progress={total} expired={} held={} unknown_age={} ttl_hours={ttl_hours} mode={}",
                 expired.len(),
+                held.len(),
                 unknown.len(),
                 if dry_run { "dry-run" } else { "write" }
             ));
@@ -3709,13 +5668,27 @@ fn main() {
 /// are `(order, packet_id)`.
 type ExpiredClaim<'a> = (String, &'a str, String);
 type UnknownAgeClaim<'a> = (String, &'a str);
+type HeldClaim<'a> = (String, &'a str, String);
 
-fn expire_claim_candidates<'a>(
-    ledger: &'a Ledger,
-    cutoff_iso: &str,
-) -> (Vec<ExpiredClaim<'a>>, Vec<UnknownAgeClaim<'a>>) {
-    let mut expired: Vec<(String, &str, String)> = Vec::new();
-    let mut unknown: Vec<(String, &str)> = Vec::new();
+/// ORDER 833-fpe7. The live complement of [`expire_claim_candidates`], for the
+/// resumable-claim-dirt detector: every `in_progress` packet that the reaper
+/// would NOT expire (newest event activity at or after the cutoff) AND whose
+/// claim itself is younger than the TTL, with the claiming host and claim ts.
+///
+/// OWNERSHIP COMES FROM THE CLAIM EVENT, NEVER THE NEWEST EVENT. Any host may
+/// append a note to a claimed row (freshness audits do), so "host of the
+/// newest event" is last-toucher attribution — the wrong host. The claim
+/// convention is machine-recognizable: the skill's claim recipe records a
+/// `claimed for cycle <ts>` summary via set-field --reason, so the claim
+/// event is the NEWEST event whose summary starts with that prefix. A row
+/// with no such event yields no live-claim row at all: an owner the ledger
+/// cannot name is not this host (fail closed), and the detector must refuse.
+///
+/// Rows are `(order, packet_id, claim_host, claim_ts, last_activity_ts)`.
+type LiveClaim<'a> = (String, &'a str, String, String, String);
+
+fn live_claims<'a>(ledger: &'a Ledger, cutoff_iso: &str) -> Vec<LiveClaim<'a>> {
+    let mut live: Vec<LiveClaim<'a>> = Vec::new();
     for p in query_packets(
         ledger,
         Some("in_progress"),
@@ -3736,6 +5709,127 @@ fn expire_claim_candidates<'a>(
                 _ => "?".into(),
             })
             .unwrap_or_else(|| "?".into());
+        let mut last_ts: Option<&str> = None;
+        let mut claim: Option<(&str, &str)> = None; // (host, ts), newest claim event
+        if let Some(seq) = p.get("events").and_then(serde_yaml::Value::as_sequence) {
+            for ev in seq {
+                let Some(ts) = ev.get("ts").and_then(serde_yaml::Value::as_str) else {
+                    continue;
+                };
+                if ts.len() < 4 || !ts.as_bytes()[..4].iter().all(u8::is_ascii_digit) {
+                    continue;
+                }
+                if last_ts.is_none_or(|cur| ts > cur) {
+                    last_ts = Some(ts);
+                }
+                let is_claim = ev
+                    .get("summary")
+                    .and_then(serde_yaml::Value::as_str)
+                    .is_some_and(|s| s.trim_start().starts_with("claimed for cycle"));
+                if is_claim {
+                    let host = ev
+                        .get("host")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("");
+                    if !host.is_empty() && claim.is_none_or(|(_, cur)| ts > cur) {
+                        claim = Some((host, ts));
+                    }
+                }
+            }
+        }
+        let (Some(last), Some((claim_host, claim_ts))) = (last_ts, claim) else {
+            continue;
+        };
+        // Both halves of "young enough": the reaper would not expire the row,
+        // and the claim itself is inside the TTL. A stale claim kept alive by
+        // later notes is not a resume anchor.
+        if last >= cutoff_iso && claim_ts >= cutoff_iso {
+            live.push((
+                order,
+                pid,
+                claim_host.to_string(),
+                claim_ts.to_string(),
+                last.to_string(),
+            ));
+        }
+    }
+    live
+}
+
+fn expire_claim_candidates<'a>(
+    ledger: &'a Ledger,
+    cutoff_iso: &str,
+) -> (
+    Vec<ExpiredClaim<'a>>,
+    Vec<UnknownAgeClaim<'a>>,
+    Vec<HeldClaim<'a>>,
+) {
+    let mut expired: Vec<(String, &str, String)> = Vec::new();
+    let mut unknown: Vec<(String, &str)> = Vec::new();
+    let mut held: Vec<(String, &str, String)> = Vec::new();
+    for p in query_packets(
+        ledger,
+        Some("in_progress"),
+        None,
+        None,
+        None,
+        &[],
+        usize::MAX,
+    ) {
+        let Some(pid) = str_field(p, "packet_id") else {
+            continue;
+        };
+        let order = p
+            .get("order")
+            .map(|v| match v {
+                serde_yaml::Value::Number(n) => n.to_string(),
+                serde_yaml::Value::String(s) => s.clone(),
+                _ => "?".into(),
+            })
+            .unwrap_or_else(|| "?".into());
+        // ORDER 864-m2vc — THE TTL MUST MEASURE THE CLAIMANT, NOT THE ROOM.
+        //
+        // 641-e2qa criterion 2 is "a claim that PRODUCES no event within its
+        // cycle" — produced by the claimant. This scanned every event on the
+        // packet regardless of author, so ANY host's note refreshed ANY host's
+        // lease and the reaper was defeated for any actively-discussed row.
+        //
+        // Measured 2026-08-24: a coordinator note written by linux_mutable,
+        // whose entire content was a statement that it was NOT working on the
+        // row, extended yoga's claim on 642-fedr by twenty-one hours.
+        //
+        // The claimant is identified the way live_claims already does it — the
+        // newest event whose summary opens "claimed for cycle". When that
+        // cannot be determined the OLD any-host rule still applies, because
+        // silently making the reaper more aggressive on rows whose claim
+        // provenance is unreadable would expire work for a reason nobody could
+        // see. The verdict says which rule it used instead of leaving the
+        // reader to guess.
+        let mut claim_host: Option<&str> = None;
+        let mut claim_ts: Option<&str> = None;
+        if let Some(seq) = p.get("events").and_then(serde_yaml::Value::as_sequence) {
+            for ev in seq {
+                let Some(ts) = ev.get("ts").and_then(serde_yaml::Value::as_str) else {
+                    continue;
+                };
+                let is_claim = ev
+                    .get("summary")
+                    .and_then(serde_yaml::Value::as_str)
+                    .is_some_and(|s| s.trim_start().starts_with("claimed for cycle"));
+                if !is_claim {
+                    continue;
+                }
+                let host = ev
+                    .get("host")
+                    .and_then(serde_yaml::Value::as_str)
+                    .unwrap_or("");
+                if !host.is_empty() && claim_ts.is_none_or(|cur| ts > cur) {
+                    claim_host = Some(host);
+                    claim_ts = Some(ts);
+                }
+            }
+        }
+
         let mut last_ts: Option<String> = None;
         if let Some(seq) = p.get("events").and_then(serde_yaml::Value::as_sequence) {
             for ev in seq {
@@ -3745,18 +5839,90 @@ fn expire_claim_candidates<'a>(
                 if ts.len() < 4 || !ts.as_bytes()[..4].iter().all(u8::is_ascii_digit) {
                     continue;
                 }
+                // Attributable claim -> only the claimant's own events count.
+                if let Some(owner) = claim_host {
+                    let evh = ev
+                        .get("host")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("");
+                    if evh != owner {
+                        continue;
+                    }
+                }
                 if last_ts.as_deref().is_none_or(|cur| ts > cur) {
                     last_ts = Some(ts.to_string());
                 }
             }
         }
+        // ORDER 864-k8dp — A REAP HOLD THE REAPER CAN ACTUALLY SEE.
+        //
+        // The reaper decides on ONE fact: time since the last event. It cannot
+        // tell a stalled claim from a claim whose work is FINISHED and merely
+        // unlanded, and returning the second to the pool does not free work, it
+        // duplicates it — 833-fpe7's "expire-claims launders finished work into
+        // lost work".
+        //
+        // That is live right now. yoga implemented 642-fedr and 776-cm74 in
+        // full, was interrupted before committing, and is wedged behind a
+        // dirty-start refusal it cannot clear itself. The only thing standing
+        // between four hours of finished work and a duplicate implementation
+        // was the phrase DO NOT RE-IMPLEMENT written in an event SUMMARY — free
+        // text this function never reads.
+        //
+        // `reap_hold` is that declaration in a form the reaper can honour: the
+        // newest event carrying it wins, `false` releases, and the reason is
+        // mandatory because a hold with no reason is an indefinite block
+        // wearing a temporary label (the 863-7mhg rule, applied here).
+        let mut hold: Option<(String, String)> = None; // (ts, reason)
+        if let Some(seq) = p.get("events").and_then(serde_yaml::Value::as_sequence) {
+            for ev in seq {
+                let Some(raw) = ev.get("reap_hold") else {
+                    continue;
+                };
+                let Some(ts) = ev.get("ts").and_then(serde_yaml::Value::as_str) else {
+                    continue;
+                };
+                if hold.as_ref().is_some_and(|(cur, _)| ts <= cur.as_str()) {
+                    continue;
+                }
+                match raw {
+                    // `reap_hold: false` is an explicit RELEASE, not a missing
+                    // field — it must be able to override an earlier hold, or a
+                    // hold could never be lifted without rewriting history in an
+                    // append-only ledger.
+                    serde_yaml::Value::Bool(false) => hold = Some((ts.to_string(), String::new())),
+                    serde_yaml::Value::String(reason) if !reason.trim().is_empty() => {
+                        hold = Some((ts.to_string(), reason.trim().to_string()))
+                    }
+                    _ => {}
+                }
+            }
+        }
+        if let Some((_, reason)) = &hold
+            && !reason.is_empty()
+        {
+            held.push((order, pid, reason.clone()));
+            continue;
+        }
+
         match last_ts {
-            Some(ts) if ts.as_str() < cutoff_iso => expired.push((order, pid, ts)),
+            Some(ts) if ts.as_str() < cutoff_iso => {
+                // Name the rule in the verdict. "Nothing happened here" and
+                // "the CLAIMANT did nothing here, whatever else was said" are
+                // different facts, and reaping on the second is the whole point
+                // of 864-m2vc — so a reader must be able to tell which one this
+                // row was reaped on.
+                let attributed = match claim_host {
+                    Some(h) => format!("{ts}\tclaimant:{h}"),
+                    None => format!("{ts}\tclaimant:unattributed(any-host-rule)"),
+                };
+                expired.push((order, pid, attributed));
+            }
             Some(_) => {}
             None => unknown.push((order, pid)),
         }
     }
-    (expired, unknown)
+    (expired, unknown, held)
 }
 
 #[cfg(test)]
@@ -3797,8 +5963,12 @@ mod tests {
     #[test]
     fn writer_agent_refuses_absence_and_the_literal_unknown() {
         assert_eq!(
-            writer_agent_from(Some("flag-id".into()), Some("env-id".into())).unwrap(),
-            "flag-id",
+            writer_agent_from(
+                Some("linux-macuahuitl-opus5-20260825t013400z".into()),
+                Some("linux-macuahuitl-codex-20260825t013401z".into())
+            )
+            .unwrap(),
+            "linux-macuahuitl-opus5-20260825t013400z",
             "an explicit --agent wins over the environment"
         );
         assert_eq!(
@@ -3822,6 +5992,100 @@ mod tests {
         assert!(
             writer_agent_from(Some("   ".into()), Some(String::new())).is_err(),
             "whitespace and empty values are absence"
+        );
+    }
+
+    /// ORDER 874-idnt. The 2026-08-24 retrospective found every hand-written
+    /// agent_id of 48 hours violating the 756-hn3a grammar — the contract had
+    /// one canonical source (scripts/agent-identity.sh) and zero enforcement.
+    /// The ledger writer is the choke point where identity becomes durable
+    /// data, so the grammar is enforced HERE.
+    #[test]
+    fn writer_agent_refuses_noncanonical_ids_874_idnt() {
+        // Everything agent-identity.sh can emit passes.
+        for id in [
+            "linux-macuahuitl-opus5-20260825t013400z",
+            "forge-forge-tillandsias-codex-20260815t162555z",
+            "windows-yolanda-fable5-20260816t124617z",
+        ] {
+            assert!(
+                writer_agent_from(Some(id.into()), None).is_ok(),
+                "canonical id {id:?} must be accepted"
+            );
+        }
+        // The catalogued improvisations refuse, each for its own defect.
+        for (id, defect) in [
+            (
+                "linux-macuahuitl-opus5-20260825T013400Z",
+                "uppercase T/Z timestamp — the retrospective's dominant shape",
+            ),
+            ("flag-id", "too few components, no timestamp"),
+            (
+                "Laptopirria",
+                "a git-author display name is not an agent id",
+            ),
+            ("linux-macuahuitl-opus5", "no timestamp component at all"),
+            (
+                "linux--macuahuitl-opus5-20260825t013400z",
+                "empty component — sanitize collapses runs, so this was never emitted",
+            ),
+            (
+                "linux-macuahuitl-opus5-2026-08-25t013400z",
+                "a dashed date is not the compact timestamp shape",
+            ),
+        ] {
+            let err = writer_agent_from(Some(id.into()), None)
+                .expect_err(&format!("{id:?} must refuse: {defect}"));
+            assert!(
+                err.contains("agent-identity.sh"),
+                "the refusal must name the canonical source as the remedy; got: {err}"
+            );
+        }
+        // The flag does NOT shadow a valid environment id with garbage accepted:
+        // a malformed flag refuses outright rather than falling through, because
+        // an explicit flag is stated intent (same rule as --host).
+        assert!(
+            writer_agent_from(
+                Some("BAD-ID".into()),
+                Some("linux-macuahuitl-opus5-20260825t013400z".into())
+            )
+            .is_err(),
+            "a malformed explicit --agent refuses; it does not silently fall back"
+        );
+    }
+
+    /// ORDER 874-idnt. The `host:` field mixed three vocabularies (node names,
+    /// kind labels, git-author display names) and 864-m2vc's attribution
+    /// compares them by exact equality. The alphabet check refuses the class
+    /// that can never be right while accepting both surviving vocabularies.
+    #[test]
+    fn host_label_alphabet_874_idnt() {
+        for host in [
+            "macuahuitl",
+            "yoga",
+            "linux_mutable",
+            "forge",
+            "fixturehost",
+        ] {
+            assert!(
+                host_label_is_acceptable(host),
+                "{host:?} is a legitimate ledger host label"
+            );
+        }
+        for host in ["Laptopirria", "Tlatoāni", "linux mutable", "", "MACUAHUITL"] {
+            assert!(
+                !host_label_is_acceptable(host),
+                "{host:?} must be refused as a host label"
+            );
+        }
+        // A malformed TILLANDSIAS_HOST_KIND self-corrects to the platform
+        // constant instead of becoming durable data (env is ambient, not
+        // stated intent — unlike --host, which refuses via
+        // require_acceptable_host).
+        assert_eq!(
+            writer_host_from(Some("Laptopirria".into())),
+            std::env::consts::OS,
+            "a display-name TILLANDSIAS_HOST_KIND must not reach the ledger"
         );
     }
 
@@ -3888,10 +6152,19 @@ mod tests {
             "    events:\n      - type: completed\n        ts: \"2026-08-01T00:00:00Z\"\n",
         );
         let ledger = Ledger::parse(raw, Default::default()).expect("synthetic ledger parses");
-        let (expired, unknown) = expire_claim_candidates(&ledger, "2026-08-09T00:00:00Z");
+        let (expired, unknown, _held) = expire_claim_candidates(&ledger, "2026-08-09T00:00:00Z");
+        // 864-m2vc changed the SHAPE of the third element, not the
+        // partitioning: it now carries the attribution rule the reap was
+        // decided under. None of these fixtures has a claim-convention event,
+        // so all of them fall to the any-host rule and must SAY so — a reap
+        // whose rule is invisible is the thing that packet exists to end.
         assert_eq!(
             expired,
-            vec![("1".to_string(), "stale", "2026-08-01T00:00:00Z".to_string())],
+            vec![(
+                "1".to_string(),
+                "stale",
+                "2026-08-01T00:00:00Z\tclaimant:unattributed(any-host-rule)".to_string()
+            )],
             "only the stale in_progress claim expires; the fresh one's newest event is inside the TTL"
         );
         assert_eq!(
@@ -3899,6 +6172,257 @@ mod tests {
             vec![("3".to_string(), "ageless")],
             "no-timestamp packets are reported as unknown-age, never expired"
         );
+    }
+
+    /// ORDER 864-m2vc. The TTL measures the CLAIMANT, not the room.
+    ///
+    /// The defect: `expire_claim_candidates` took the newest event on the
+    /// packet regardless of author, so any host's note refreshed any host's
+    /// lease. Measured on the live ledger — a coordinator note by
+    /// linux_mutable, whose content was "I am NOT absorbing this row",
+    /// extended yoga's claim by twenty-one hours. A row several hosts discuss
+    /// could never be reaped however dead its claim.
+    ///
+    /// `propped` is the assertion that matters: hostA claimed it and went
+    /// quiet, hostB has been chatting about it ever since. Under the old rule
+    /// hostB's note kept it alive forever; it must now expire, and the verdict
+    /// must say the claimant is hostA so the reader can see WHY.
+    #[test]
+    fn a_siblings_note_no_longer_refreshes_someone_elses_lease() {
+        let raw = concat!(
+            "packets:\n",
+            // hostA claimed and went silent; hostB keeps talking. EXPIRES.
+            "  - packet_id: propped\n    order: 1\n    title: \"p\"\n    status: in_progress\n    desired_release: v0.5\n",
+            "    events:\n",
+            "      - type: note\n        ts: \"2026-08-01T00:00:00Z\"\n        host: hosta\n",
+            "        summary: claimed for cycle 2026-08-01T00:00Z\n",
+            "      - type: note\n        ts: \"2026-08-20T00:00:00Z\"\n        host: hostb\n",
+            "        summary: drive-by note from a host that does not own this\n",
+            // hostA claimed and IS still working. SURVIVES.
+            "  - packet_id: active\n    order: 2\n    title: \"a\"\n    status: in_progress\n    desired_release: v0.5\n",
+            "    events:\n",
+            "      - type: note\n        ts: \"2026-08-01T00:00:00Z\"\n        host: hosta\n",
+            "        summary: claimed for cycle 2026-08-01T00:00Z\n",
+            "      - type: progress\n        ts: \"2026-08-20T00:00:00Z\"\n        host: hosta\n",
+            "        summary: the claimant itself is still going\n",
+            // No claim event at all: the old any-host rule still applies, and
+            // the verdict must SAY so rather than silently reaping harder.
+            "  - packet_id: unattributed\n    order: 3\n    title: \"u\"\n    status: in_progress\n    desired_release: v0.5\n",
+            "    events:\n",
+            "      - type: note\n        ts: \"2026-08-20T00:00:00Z\"\n        host: hostb\n",
+            "        summary: nobody ever claimed this properly\n",
+        );
+        let ledger = Ledger::parse(raw, Default::default()).expect("synthetic ledger parses");
+        let (expired, _unknown, _held) = expire_claim_candidates(&ledger, "2026-08-10T00:00:00Z");
+        let ids: Vec<&str> = expired.iter().map(|(_, pid, _)| *pid).collect();
+
+        assert!(
+            ids.contains(&"propped"),
+            "a claim whose OWNER went silent must expire even though a sibling \
+             kept noting on it; got {ids:?}"
+        );
+        assert!(
+            !ids.contains(&"active"),
+            "a claim whose owner is still producing events must NOT expire; got {ids:?}"
+        );
+        assert!(
+            !ids.contains(&"unattributed"),
+            "with no claim event the any-host rule still applies, so a recent \
+             sibling note keeps it alive; got {ids:?}"
+        );
+
+        let propped = expired
+            .iter()
+            .find(|(_, pid, _)| *pid == "propped")
+            .unwrap();
+        assert!(
+            propped.2.contains("claimant:hosta"),
+            "the verdict must name the claimant it measured, got {:?}",
+            propped.2
+        );
+    }
+
+    /// ORDER 833-fpe7. `live_claims` is what the resumable-claim-dirt detector
+    /// consults, and every clause here is a refusal it depends on: ownership
+    /// comes from the claim-convention event (never the newest event's host —
+    /// any host may note on a claimed row), a claim-less in_progress row
+    /// yields nothing, and both the activity AND the claim itself must be
+    /// inside the TTL.
+    #[test]
+    fn live_claims_name_the_claiming_host_and_fail_closed_without_one() {
+        let raw = concat!(
+            "packets:\n",
+            // Fresh claim by hostA, later note by hostB: owner stays hostA.
+            "  - packet_id: owned\n    order: 1\n    title: \"o\"\n    status: in_progress\n    desired_release: v0.5\n",
+            "    events:\n",
+            "      - type: note\n        ts: \"2026-08-10T00:00:00Z\"\n        host: hosta\n",
+            "        summary: claimed for cycle 2026-08-10T00:00Z\n",
+            "      - type: note\n        ts: \"2026-08-10T02:00:00Z\"\n        host: hostb\n",
+            "        summary: drive-by freshness note from another host\n",
+            // in_progress with events but NO claim-convention event: no row.
+            "  - packet_id: unowned\n    order: 2\n    title: \"u\"\n    status: in_progress\n    desired_release: v0.5\n",
+            "    events:\n      - type: progress\n        ts: \"2026-08-10T00:00:00Z\"\n        host: hosta\n",
+            // Claim OUTSIDE the TTL, kept 'alive' by a later note: excluded —
+            // a stale claim propped up by notes is not a resume anchor.
+            "  - packet_id: propped\n    order: 3\n    title: \"p\"\n    status: in_progress\n    desired_release: v0.5\n",
+            "    events:\n",
+            "      - type: note\n        ts: \"2026-08-01T00:00:00Z\"\n        host: hosta\n",
+            "        summary: claimed for cycle 2026-08-01T00:00Z\n",
+            "      - type: note\n        ts: \"2026-08-10T00:00:00Z\"\n        host: hosta\n",
+            "        summary: still poking at it\n",
+            // Claim event missing its host: fail closed, no row.
+            "  - packet_id: hostless\n    order: 4\n    title: \"h\"\n    status: in_progress\n    desired_release: v0.5\n",
+            "    events:\n",
+            "      - type: note\n        ts: \"2026-08-10T00:00:00Z\"\n",
+            "        summary: claimed for cycle 2026-08-10T00:00Z\n",
+            // Not in_progress at all: never listed.
+            "  - packet_id: done\n    order: 5\n    title: \"d\"\n    status: completed\n    desired_release: v0.5\n",
+            "    events:\n",
+            "      - type: note\n        ts: \"2026-08-10T00:00:00Z\"\n        host: hosta\n",
+            "        summary: claimed for cycle 2026-08-10T00:00Z\n",
+        );
+        let ledger = Ledger::parse(raw, Default::default()).expect("synthetic ledger parses");
+        let live = live_claims(&ledger, "2026-08-09T00:00:00Z");
+        assert_eq!(
+            live,
+            vec![(
+                "1".to_string(),
+                "owned",
+                "hosta".to_string(),
+                "2026-08-10T00:00:00Z".to_string(),
+                "2026-08-10T02:00:00Z".to_string(),
+            )],
+            "only the freshly-claimed row is live, owned by the CLAIMING host, \
+             with claim ts and newest-activity ts both reported"
+        );
+    }
+
+    /// ORDER 831-ezea. The carry-forward contract, both directions in one
+    /// fragment so the EXEMPTION is proved rather than asserted: `abandoned` is
+    /// touched-and-left-open with no next_action and must be named; `closed` is
+    /// touched and CLOSED and must not be, even though it too carries no
+    /// next_action. A check that named both would be a check that just counts
+    /// packets.
+    fn gaps_of(raw: &str) -> Vec<String> {
+        let doc: serde_yaml::Value = serde_yaml::from_str(raw).expect("fixture parses");
+        carry_forward_gaps(&doc)
+    }
+
+    #[test]
+    fn carry_forward_names_open_touches_and_exempts_closures() {
+        let raw = concat!(
+            "packets:\n",
+            // Touched, left open, no next_action anywhere -> NAMED.
+            "  - packet_id: abandoned\n    order: 1\n    title: \"a\"\n    status: ready\n",
+            "    events:\n      - type: progress\n        ts: \"2026-08-19T00:00:00Z\"\n",
+            // Touched and CLOSED by a terminal event -> exempt.
+            "  - packet_id: closed-by-event\n    order: 2\n    title: \"b\"\n    status: ready\n",
+            "    events:\n      - type: completed\n        ts: \"2026-08-19T00:00:00Z\"\n",
+            // Touched, left open, but CARRIED at packet level -> exempt.
+            "  - packet_id: carried-inline\n    order: 3\n    title: \"c\"\n    status: ready\n",
+            "    next_action: \"Run scripts/foo.sh and quote the output.\"\n",
+            "    events:\n      - type: progress\n        ts: \"2026-08-19T00:00:00Z\"\n",
+            // Declared straight to a terminal status -> exempt.
+            "  - packet_id: closed-by-declaration\n    order: 4\n    title: \"d\"\n    status: verified\n",
+            "    events:\n      - type: note\n        ts: \"2026-08-19T00:00:00Z\"\n",
+            // A DEFINITION with no events is a filing, not a touch -> not named.
+            "  - packet_id: merely-filed\n    order: 5\n    title: \"e\"\n    status: ready\n",
+        );
+        assert_eq!(
+            gaps_of(raw),
+            vec!["abandoned".to_string()],
+            "only the touched-and-left-open packet with no next_action may be named"
+        );
+    }
+
+    #[test]
+    fn carry_forward_reads_the_top_level_event_and_lww_channels() {
+        let raw = concat!(
+            "events:\n",
+            // Put down with a note, nothing carried -> NAMED.
+            "  - packet_id: open-note\n    event:\n      type: note\n      ts: \"2026-08-19T00:00:00Z\"\n",
+            // Put down with a note, carried on the LWW channel -> exempt.
+            "  - packet_id: open-carried\n    event:\n      type: progress\n      ts: \"2026-08-19T00:00:00Z\"\n",
+            // Closed on the LWW status channel -> exempt.
+            "  - packet_id: closed-lww\n    event:\n      type: note\n      ts: \"2026-08-19T00:00:00Z\"\n",
+            // Closed by a terminal event nested under `event:` -> exempt.
+            "  - packet_id: closed-nested\n    event:\n      type: done\n      ts: \"2026-08-19T00:00:00Z\"\n",
+            "status:\n",
+            "  - packet_id: open-carried\n    field: next_action\n    value: \"Rerun the fixture.\"\n    ts: \"2026-08-19T00:00:00Z\"\n    host: h\n",
+            "  - packet_id: closed-lww\n    field: status\n    value: completed\n    ts: \"2026-08-19T00:00:00Z\"\n    host: h\n",
+        );
+        assert_eq!(
+            gaps_of(raw),
+            vec!["open-note".to_string()],
+            "the LWW next_action and status channels must both be read"
+        );
+    }
+
+    /// ORDER 831-ezea. An EVENT-nested `next_action` must NOT satisfy the
+    /// check. The shape is real — 6 occurrences in plan/index.yaml against 65
+    /// packet-level, measured 2026-08-19 — but `answer.rs next_action_snippet`
+    /// reads the PACKET field, so an event-nested value is never printed on a
+    /// `plan next` row. Accepting it would let a fragment pass with a value no
+    /// selector can reach, which is this order's own failure class.
+    #[test]
+    fn an_event_nested_next_action_does_not_satisfy_carry_forward() {
+        let raw = concat!(
+            "packets:\n",
+            "  - packet_id: buried\n    order: 1\n    title: \"a\"\n    status: ready\n",
+            "    events:\n      - type: progress\n        ts: \"2026-08-19T00:00:00Z\"\n",
+            "        next_action: \"invisible to plan next\"\n",
+        );
+        assert_eq!(
+            gaps_of(raw),
+            vec!["buried".to_string()],
+            "a next_action the cold-start selector cannot read must not exempt the packet"
+        );
+    }
+
+    /// An empty or whitespace-only value is not a carry-forward. Filler is the
+    /// predictable response to any adoption push, so the check refuses it at
+    /// the point where the field is read.
+    #[test]
+    fn a_blank_next_action_is_not_a_carry_forward() {
+        let raw = concat!(
+            "packets:\n",
+            "  - packet_id: blank\n    order: 1\n    title: \"a\"\n    status: ready\n",
+            "    next_action: \"   \"\n",
+            "    events:\n      - type: progress\n        ts: \"2026-08-19T00:00:00Z\"\n",
+        );
+        assert_eq!(gaps_of(raw), vec!["blank".to_string()]);
+    }
+
+    /// A fragment that ONLY closes packets is the exemption in isolation — the
+    /// shape a closure cycle actually writes. It must produce an EMPTY result,
+    /// not a list of every id it mentions.
+    #[test]
+    fn a_pure_closure_fragment_has_no_carry_forward_gaps() {
+        let raw = concat!(
+            "events:\n",
+            "  - packet_id: one\n    event:\n      type: completed\n      ts: \"2026-08-19T00:00:00Z\"\n",
+            "  - packet_id: two\n    event:\n      type: verified\n      ts: \"2026-08-19T00:00:00Z\"\n",
+            "status:\n",
+            "  - packet_id: one\n    field: status\n    value: completed\n    ts: \"2026-08-19T00:00:00Z\"\n    host: h\n",
+            "  - packet_id: two\n    field: status\n    value: verified\n    ts: \"2026-08-19T00:00:00Z\"\n    host: h\n",
+        );
+        assert!(
+            gaps_of(raw).is_empty(),
+            "closures are exempt by design: a carry-forward note on a terminal row is a dead letter"
+        );
+    }
+
+    /// ORDER 812-d45t interaction. A misplaced DEFINITION under `events:`
+    /// carries no `event:` key. It is already reported by
+    /// `fragment-misplaced-definitions`; counting it as a touch here would put
+    /// one authoring mistake into two different advisories.
+    #[test]
+    fn a_misplaced_definition_is_not_counted_as_a_touch() {
+        let raw = concat!(
+            "events:\n",
+            "  - packet_id: misfiled\n    order: 9\n    title: \"written under the wrong key\"\n    kind: fix\n",
+        );
+        assert!(gaps_of(raw).is_empty());
     }
 
     #[test]
@@ -4316,6 +6840,29 @@ mod tests {
         let absent = query_json_projection(led.resolve("p4").expect("p4 resolves"));
         assert!(absent.get("desired_release").is_some_and(|v| v.is_null()));
         assert!(absent.get("release_target").is_some_and(|v| v.is_null()));
+    }
+
+    #[test]
+    fn claimability_excludes_milestone_criteria_holders() {
+        // 647-6c3g's notes say "never claim this for implementation"; the
+        // machine query is where that rule must live. Measured 2026-08-23:
+        // the windows batch's urgent slot offered the epic row itself twice.
+        let led = Ledger::parse(
+            "plan_index:\n  steps:\n\
+             \x20 - packet_id: epic-head\n    order: 10\n    status: ready\n    kind: milestone\n    pickup_role: any\n\
+             \x20 - packet_id: child-work\n    order: 11\n    status: ready\n    kind: bug\n    pickup_role: any\n",
+            Default::default(),
+        )
+        .expect("parse");
+
+        // The claimability question: milestones are heads, not hand-outs.
+        let claimable = query_packets(&led, Some("ready"), None, Some("windows"), None, &[], 0);
+        assert_eq!(ids(claimable), vec!["child-work"]);
+
+        // A plain status query still lists the milestone (dashboards,
+        // burndown) — the exclusion is scoped to claimability alone.
+        let all_ready = query_packets(&led, Some("ready"), None, None, None, &[], 0);
+        assert_eq!(ids(all_ready), vec!["epic-head", "child-work"]);
     }
 
     #[test]

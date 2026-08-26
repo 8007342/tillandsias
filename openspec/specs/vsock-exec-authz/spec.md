@@ -2,17 +2,26 @@
 
 The host-to-guest-to-container exec path crosses a critical trust boundary: the host shell or tray uses the vsock control wire (`PtyOpen`) to spawn arbitrary commands in the VM guest. Without an authorization boundary, any process that can write to the control wire could execute arbitrary code as the VM root.
 
+The boundary has TWO admission arms. The name-based arm below is the original one, and it accepts a command FLATTENED into a shell string. The verbatim-argv arm (order 795-zshi) exists so structured callers stop flattening: it accepts an argv vector and passes the arguments to `execve` untouched. Everything reachable through the verbatim arm was already reachable through `/bin/bash -lc <string>`, which never inspects its script — the arm changes HOW a request is expressed, not what authority it carries, and that removes the quoting layer behind four field defects (the Esmeralda unbalanced-quote crashes, the `wt.exe` semicolon split, orders 326 and 366).
+
 ## Policy
 
-1. **Allowlist Enforced:** The `tillandsias-headless` vsock server MUST validate the `argv` in a `PtyOpen` envelope against an explicit allowlist before calling `fork()` + `exec()`.
-2. **Permitted Executables:** The only permitted targets are:
-    - `/bin/bash`
-    - `tillandsias`
-    - `podman`
-    - `tillandsias-headless`
-3. **Project Name Validation:** When `podman exec` is requested, the target container name MUST follow the format `tillandsias-{project}-forge`. The `{project}` name MUST be validated against a strict alphanumeric-and-hyphen character set (`^[a-zA-Z0-9-]+$`).
-4. **Proxy Exemption:** All in-VM child processes executed via this boundary MUST inherit the proxy exemption pattern (`no_proxy` and `NO_PROXY` set to `enclave_no_proxy()`) so that direct-to-enclave service requests bypass external routing.
+1. **Allowlist Enforced:** The `tillandsias-headless` vsock server MUST validate the `argv` in a `PtyOpen` envelope against an explicit allowlist before calling `fork()` + `exec()`. The decision MUST be a pure, unconditionally-compiled, unit-testable function (`crates/tillandsias-headless/src/exec_allowlist.rs`), not inline logic reachable only from a live guest — `pty_handler` is gated on the `listen-vsock`+unix feature combination that order 254 recorded as never linted or tested in CI.
+2. **Permitted Executables (name-based arm):** The only permitted targets are:
+    - `/bin/bash`, with `argv[1]` equal to `-l` or `-lc`
+    - `tillandsias`, with `argv[1]` equal to `--agent`
+    - `podman`, with `argv[1..3]` equal to `exec -it`
+    - `tillandsias-headless`, with `argv[1]` equal to `--github-login`
+3. **Project Name Validation:** When `podman exec` is requested, the target container name MUST follow the format `tillandsias-{project}-forge`. The `{project}` name MUST be non-empty and validated against a strict alphanumeric-and-hyphen character set (`^[a-zA-Z0-9-]+$`), and the nested sub-command MUST itself be an allowlisted shape (`/bin/bash -l|-lc`, or `tillandsias --agent`).
+4. **Verbatim Argv Arm:** An `argv[0]` beginning with `/` that matches no name-based arm MUST be admitted only when ALL of the following hold. Because the arm is reached only on an absolute path, it can never shadow a name-based arm.
+    - `argv[0]` begins with one of the allowed absolute prefixes: `/usr/local/bin/`, `/usr/bin/`, `/bin/`. Prefixes rather than a fixed binary list, deliberately: a two-entry list would leave every other caller flattening, which is the defect rather than a mitigation. A bare name is refused because it would resolve through `PATH`, i.e. environment the caller also controls.
+    - `argv[0]` contains no `/..` component. Traversal such as `/usr/bin/../../bin/bash` starts with an allowed prefix and ends at a shell.
+    - The basename of `argv[0]` is not a shell or a shell-equivalent launcher: `bash`, `sh`, `dash`, `zsh`, `ksh`, `fish`, `env`. A shell here would launder the exact flattening this arm replaces.
+    - The remaining arguments MUST NOT be inspected, escaped, or re-parsed. They reach `execve` as a vector, so no parser sees them and no quoting rule can be got wrong. A hostile project name (`a'b`, `a b`, `a$(id)b`, `a;b`) therefore arrives as ONE argv element and is executed as data.
+5. **Capability Advertisement and Host Feature Detection:** A guest whose allowlist implements the verbatim arm MUST advertise `CAP_EXEC_ARGV_VECTOR` (`"ExecArgvVector"`) in `HelloAck.server_caps`. Hosts MUST feature-detect on that capability before sending an argv vector, reading `server_caps` and never comparing wire or product versions — this fleet routinely runs a host newer than the guest binary staged beside it, and a guest predating the arm refuses the vector with an opaque `PermissionDenied`. A host facing a guest that does not advertise the capability MUST take exactly one of two paths, and MUST NOT simply send the vector anyway: fall back to the flattened `/bin/bash -lc` shape, or REFUSE with a diagnosis naming the missing capability and the capabilities the guest did advertise. Refusal is the preferred path where no flattened form is already maintained, because reintroducing a flattening path solely as a fallback leaves two code paths for the same request — the condition this spec's verbatim arm exists to remove.
+6. **Capabilities Name Behaviours, Not Build Windows:** A capability MUST name the behaviour a caller depends on. `CAP_PROXY_CA_KEY_HEAL` (`"ProxyCaKeyHeal"`) is advertised separately from `CAP_EXEC_ARGV_VECTOR` for this reason: the argv arm shipped in `cc4bee155` and the CA-key heal in `d4e12b425`, so a guest built between them advertises `ExecArgvVector` without the heal. Gating an exec preamble's `chmod 600` on the argv capability would drop the clamp for exactly that build window and reintroduce 772-shi9.
+7. **Proxy Exemption:** All in-VM child processes executed via this boundary MUST inherit the proxy exemption pattern (`no_proxy` and `NO_PROXY` set to `enclave_no_proxy()`) so that direct-to-enclave service requests bypass external routing.
 
 ## Rejection
 
-Violations of the allowlist MUST return `ErrorCode::Internal` via the `PtyOpenError::Spawn(PermissionDenied)` path, terminating the PTY launch sequence before any OS processes are created.
+Violations of the allowlist MUST return `ErrorCode::Internal` via the `PtyOpenError::Spawn(PermissionDenied)` path, terminating the PTY launch sequence before any OS processes are created. This applies identically to both arms: a verbatim `argv[0]` outside the allowed prefixes, containing a traversal, or naming a shell MUST be refused, and the refusals MUST be pinned by unit tests that fail when the refusal is removed.

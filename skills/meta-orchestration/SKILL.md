@@ -54,7 +54,44 @@ Hard rules:
    `git fetch --dry-run` reachability, the targets' named verifiable
    closures). Skip anything that builds, launches containers, or exceeds
    the budget.
+2a. **WHAT DECIDES THE VERDICT** (order 822-4vwa). Rule 2's last sentence and
+   its first are in tension INSIDE A FORGE, because a large fraction of
+   pre-build litmus needs vault, podman or vsock — none of which a forge has.
+   An agent that runs the unscoped suite there gets a near-total failure that
+   says nothing about the lane. So:
+
+   - The VERDICT is the forge SUBSTRATE: the checkout resolves and is on the
+     expected branch, the plan ledger parses, the plan/methodology experts
+     answer, and the harness came up. If those hold, the lane is healthy.
+   - Litmus results in a forge are a **REPORT**, on the same footing as the
+     credential verdict in 3a. Quote the pass rate; do NOT convert it into
+     `MO-SMOKE: FAIL` on its own.
+   - When the invoking prompt NAMES targets, their scoped closures ARE part of
+     the verdict — that is the whole point of a targeted verify.
+
+   MEASURED on macuahuitl 2026-08-18, the same prompt on the same host 25
+   minutes apart with a verified-fresh seed, disagreeing with itself:
+   run 20260818T053811Z returned `MO-SMOKE: PASS` (post-build 11/11), and run
+   20260818T063931Z returned `MO-SMOKE: FAIL litmus pre-build 0% pass rate
+   (1/252); infrastructure-dependent failures expected but unconfirmed`. The
+   second agent was right to refuse to bless what it could not confirm; the
+   first agent's PASS is the one that should worry you. A gate whose result
+   depends on how much the agent chose to run is not a gate.
 3. Budget: finish well inside ~5 minutes of wall time.
+3a. The **Credential Channel Guard is a REPORT here, never a gate** (order
+   818-cgpn). That guard is a precondition for COMMITTABLE work, and rule 1
+   says a smoke run performs none — it claims nothing, commits nothing and
+   pushes nothing, so an absent or stale push credential cannot harm it.
+   Report the verdict in your output and carry on verifying; do NOT return
+   `MO-SMOKE: FAIL` for it.
+
+   MEASURED on macuahuitl 2026-08-18, twice: with the mirror's upstream-auth
+   verdict stale, the FULL lane blocked (correctly — it would have pushed) and
+   the SMOKE lane returned `MO-SMOKE: FAIL credential channel blocked
+   (upstream-auth-stale, 22880s > 900s max)`. Smoke exists precisely as the
+   cheap path for when the expensive one is unavailable; gating it on the same
+   credential leaves NO path, and takes the substrate-idempotence e2e (§2/§3,
+   which never touch a credential) down with it — see 808-zrzz.
 4. Verdict grammar: your FINAL output line MUST be exactly one of
    `MO-SMOKE: PASS` or `MO-SMOKE: FAIL <one-line reason>`. The launching
    litmus greps for this marker; a smoke run that exits without it is a
@@ -131,7 +168,7 @@ nothing parses unless the litmus launcher runs; an operator-prompt or `./repeat`
 cycle emits it into the void. `record` closes that: it runs the SAME
 verification and appends the verified line to the per-host ledger under
 `plan/mo-full-attestations.d/<host>.md`, a committed, machine-parseable log the
-pre-push gate (`scripts/check-mo-full-attestations.sh`, wired into
+local gate (`scripts/check-mo-full-attestations.sh`, wired into
 `./build.sh --check`) re-verifies. Automation consumes the ledger, never the
 transcript. The ledger line attests the cycle's WORK head; committing the
 ledger moves the head, so the terminal marker is re-derived at the head that
@@ -188,12 +225,57 @@ be committed and pushed to the correct remote branch.
 - No blocked state without a blocker, owner if known, and smallest next action.
 - Explicitly log things that make you slower (e.g., repeated steps, invalidated caches, uncoordinated scripts) into `plan/issues/`.
 
+**SALVAGE BEFORE YOU REFUSE (order 872-c9nd). This is not optional and it comes
+FIRST — before the handoff, before the blocker, before anything else.**
+
+```bash
+scripts/salvage-dirty-worktree.sh <slug>   # -> ok:salvaged:<ref>:<sha>
+```
+
+It pushes a COPY of the dirty tree — tracked modifications, deletions and
+untracked files — to `salvage/<host>/<yyyymmdd>-<slug>` on origin, and it CANNOT
+touch the worktree: it builds the commit through a temporary `GIT_INDEX_FILE`
+and plumbing (`write-tree` / `commit-tree`), never a stash, an add against the
+real index, or a checkout. Verified: worktree status and `.git/index` are
+byte-identical afterwards, and `git show <sha>:<path>` returns an untracked
+file's full content.
+
+WHY THIS RULE EXISTS, and it is the most expensive lesson in this file. On
+2026-08-23 a host wedged with 16 modified paths and one untracked litmus file
+belonging to two claimed packets. Three consecutive cycles refused the dirty
+tree, verified all 17 paths byte-identical to their boundary snapshots, and
+wrote increasingly detailed prose about the diff. On 2026-08-24T06:09Z the
+checkout was replaced by a fresh clone. Four hours of finished work are
+unrecoverable; the untracked file's name appears in no commit on any branch.
+
+**The boundary guard did its job perfectly and protected a directory that
+someone then deleted wholesale.** A guard that forbids the AGENT from touching
+the work does not forbid anything else from touching it, and a prose description
+of a diff is not a copy of it. The refusal path was a place work could sit
+indefinitely; it is now a place work passes THROUGH on its way to origin.
+
 A dirty-start preflight refusal is not a work cycle and is the sole exception
 to in-checkout blocker filing: touching `plan/` would itself violate the
 startup boundary. Report `blocked: dirty-start-worktree`, owner, the exact
-status paths, and the smallest next action in the final handoff so the clean
-host/orchestrator can file it durably. Do not create then delete a blocker file
-inside either the shared checkout or `$boundary_dir`.
+status paths, **the salvage ref and sha**, and the smallest next action in the
+final handoff so the clean host/orchestrator can file it durably. Do not create
+then delete a blocker file inside either the shared checkout or `$boundary_dir`.
+
+If the salvage itself fails, say so loudly and do NOT soften the refusal: an
+unsalvaged dirty tree is the exact state that cost four hours, and the operator
+needs to know the copy does not exist before deciding what to do with the
+directory.
+
+**AN OPERATOR LICENCE CAN GO STALE, AND A CLEAN TREE IS HOW YOU KNOW.** When a
+prompt authorises you to land dirt — order 833-fpe7's `resumable:` verdict,
+order 540's opsx merge, or an operator sentence naming specific work to review
+and land — CHECK THAT THE DIRT IS STILL THERE before acting on it. If
+`git status --porcelain --untracked-files=all` is empty, the premise of the
+licence is gone: answer **"the premise is gone"**, say what the licence expected
+to find, and stop. Do NOT reconstruct what you think it referred to and land
+that instead. This is how 872-c9nd was discovered: an operator relaunched a host
+with a verbatim unblock prompt hours after the checkout had been re-cloned, and
+the honest answer was that there was nothing left to land.
 
 If a push fails after three fetch/rebase retries, mark the active plan item
 `blocked` or `failed-retryable`, include the failed push output, and stop.
@@ -221,9 +303,24 @@ All `plan/`, `methodology/`, `openspec/`, and `cheatsheets/` files consider `lin
 
 Every host restarts with the prompt "Use the ./skills/meta-orchestration skill",
 so THIS gate is how a restart or a new day gets its maintenance and verification.
-It is idempotent and cheap when already done today — gate it on a
-`.last-daily-maintenance` marker under the cache dir; skip the body if the marker
-is from today. On a durable bare-metal DEVELOPMENT host (not an ephemeral forge):
+It is idempotent and cheap when already done today, and the marker that makes it
+so is now REAL and CHECKABLE (order 801-qasc) — run the check, do not eyeball it:
+
+```bash
+scripts/check-daily-maintenance.sh check     # exit 0 = today's gate ran; skip the body
+```
+
+It prints exactly one line matching
+`^(ok:daily-maintenance-(current|stamped):[0-9]{4}-[0-9]{2}-[0-9]{2}|skip:forge-exempt|due:(no-marker|unreadable-marker|stale:[0-9]{4}-[0-9]{2}-[0-9]{2}))$`
+and exits 0 only when today's gate is recorded. **`due:*` means run the body**;
+a corrupt or missing marker is `due:`, never a pass. From 2026-08-13 to
+2026-08-17 the marker this section names existed only as prose — nothing wrote
+it, nothing read it — so "did today's gate run" had no answer at all, one cycle
+inherited a false "already stamped" premise from its brief and skipped the body,
+and the next found nothing to confirm. An unobservable gate is indistinguishable
+from one that never runs, and the cheapest way to satisfy it is to skip it.
+
+On a durable bare-metal DEVELOPMENT host (not an ephemeral forge):
 
 1. **Post-restart verification** (only when the stack looks freshly booted — MCP
    experts just rebuilt, images/binary possibly toolchain-bumped): run the durable
@@ -242,16 +339,203 @@ is from today. On a durable bare-metal DEVELOPMENT host (not an ephemeral forge)
    superseded versioned images,
    the nix-lane guards on hosts with nix (`scripts/test-nix-toolbox.sh`,
    `scripts/check-nix-deps-stability.sh` — daily, not per-commit: each is a
-   flake evaluation), reap defunct delegate handles (`delegate-outcome.sh
-   sweep`), and verify the
+   flake evaluation), the enclave nix binary cache on Linux hosts with a
+   running enclave (`scripts/nix-cache-service.sh ensure` then
+   `scripts/test-nix-cache-service.sh` — order 801-kqme; serves the persistent
+   795-h8er store to the enclave so a disposable forge lands warm without any
+   host path being mounted into it), reap defunct delegate handles
+   (`delegate-outcome.sh sweep`), verify the
    dev-environment expert containers are up + fresh (`dev_environment_experts` —
-   the same ephemeral RAG experts + commit-hook RAG retraining the forge runs).
-3. Stamp the `.last-daily-maintenance` marker. Ephemeral forges skip this whole
-   gate (they discard their substrate on teardown).
+   the same ephemeral RAG experts + commit-hook RAG retraining the forge runs),
+   and confirm this host is visible in the capability matrix (order 850-bif2):
+   ```bash
+   scripts/check-capability-row.sh   # ok:capability-row-reported:<host> | due:no-capability-row:<host>
+   ```
+   On `due:`, publish the row THIS cycle — the matrix was silent for 5 of 7
+   hosts because nothing ever asked, and capability routing (847-wgy4) cannot
+   route to hardware it cannot see:
+   ```bash
+   bash scripts/host-capability-probe.sh --fragment \
+     > "plan/index.d/$(date -u +%Y%m%dt%H%M%Sz)-capability-row-$(hostname -s | tr 'A-Z' 'a-z').yaml"
+   ```
+   then commit it with the cycle's plan changes. Never hand-assemble a row
+   (the unquoted-heredoc incident on 850-bif2 is why the generator exists).
+3. Stamp the marker, NAMING what actually ran — the stamp is refused without
+   `--steps`, because a stamp that records "something happened" without
+   recording what restores the same unfalsifiability one level up:
+
+   ```bash
+   scripts/check-daily-maintenance.sh stamp --host <host> \
+     --steps 'delegate-sweep:<result>,podman-prune:<result>,nix-gc:<result>,cargo-gc:<result>'
+   ```
+
+   Record `skipped-absent` / `deferred-<reason>` honestly for steps this host
+   cannot or did not run; a partial pass that says so is worth more than a
+   green that says nothing. `scripts/check-daily-maintenance.sh show` prints the
+   last claim. Ephemeral forges skip this whole gate (they discard their
+   substrate on teardown) and read `skip:forge-exempt`.
 
 Then favor the expert system for the cycle's work-pull/triage/debug/research
 (methodology `expert_first_work`): ask the experts first; on a gap, fall back
 with a loud warning naming the gap, never silently.
+
+## How to invoke the gate (read this before your first `./build.sh`)
+
+Two environment variables are not optional and neither is discoverable by
+reading `build.sh`. They were carried in operator prompt text for ten cycles
+before anyone noticed the skill never mentioned them — which meant the
+bootstrap contract ("Use the ./skills/meta-orchestration skill." and nothing
+else) was quietly false for any fresh host.
+
+```bash
+TILLANDSIAS_SKIP_VERSION_BUMP=1 ./build.sh --check                  # every time
+TILLANDSIAS_SKIP_VERSION_BUMP=1 TILLANDSIAS_FORCE_CHECK=1 ./build.sh --check   # to VERIFY
+```
+
+- **`TILLANDSIAS_SKIP_VERSION_BUMP=1` — always.** Without it the gate bumps
+  VERSION as a side effect and the pre-push hook then refuses YOUR OWN push,
+  because VERSION may not change on a platform branch (643-64bx). The blast
+  radius is six files — VERSION, Cargo.lock and four crate Cargo.tomls — so a
+  remedy that reverts only VERSION leaves the tree dirty and the push still
+  refused. Measured live on linux-next 2026-08-20.
+- **`TILLANDSIAS_FORCE_CHECK=1` whenever the green matters.** Since 765-tkq2 a
+  plain `--check` MEMOISES: on an unchanged tree it prints `ok:gate-fresh` and
+  re-runs nothing, in 0.4s instead of 10s. That is correct for the inner loop
+  and useless as evidence. A green you did not force proves only that the tree
+  has not changed since some earlier green.
+
+## Where standing direction lives
+
+Ask, do not guess:
+
+```bash
+tillandsias-plan answer "what is the current Direction?"
+tillandsias-plan next <role>
+```
+
+The Direction section is operator-owned and is the one place a theme is
+declared. Per-row carry-forward lives in each row's `next_action`, which
+`next` prints beside the row it belongs to.
+
+**A caveat learned the hard way, 2026-08-22.** Cross-cutting direction parked in
+the `next_action` of a CLAIMED row is invisible: claiming removes the row from
+selection, so `next` never shows it and a fresh host cannot find it. That is
+R1 working as designed, and it means a claimed row is the wrong home for
+anything a future host must read. Standing direction belongs in the Direction
+section or in this skill; `next_action` is for the row's own next step.
+
+## Joining the fleet (read this if you are not macuahuitl)
+
+As of 2026-08-23 the fleet is FIVE working hosts, not one: macuahuitl
+(`linux_mutable`, coordinator), lenovinha and yoga (Silverblue, `linux-next`),
+tlatoanis-macbook-air (`osx-next`), and yolanda (Windows 11, `windows-next`).
+All five have completed attested cycles. The staged rejoin this section used to
+describe is DONE; the three mechanisms it was gating on — claiming, the
+first-attestation lane, and capability rows — all landed on 2026-08-22/23.
+
+NOT EVERY HOST IS A DRAIN HOST. Machines with roughly four cores are the
+fleet's deliberate LOWER BOUND and take profiling and characterization work in
+their own tier, never the general queue (operator mandate 2026-08-16 for
+esmeraldinha, extended 2026-08-23 to its Silverblue cousin). A slow host in the
+general queue produces slow duplicates of work a faster host already claimed.
+The SELECTOR now enforces this (847-wgy4): it probes physical cores locally,
+routes a <=4-core host to `low-end`-tagged work only, refuses loudly
+(`refused:no-tier-work`) rather than falling back to the general queue, and
+subtracts that tier from everyone else's pool — a fast host running the
+floor's profiling work would measure the wrong machine. Override with
+TILLANDSIAS_HOST_TIER when the probe misreads a host. Separation between
+general hosts is ordinal: your rank in the capability-matrix roster picks
+your epic (route=rank:<r>/<n> in the batch header), so publishing your row
+(850-bif2, above) is what buys you a collision-free lane; a rowless host
+falls back to the seeded pick and R1 claiming.
+
+The criteria that gated the original rejoin, kept because they are still what
+"working" means:
+
+- **Claiming is live.** `expire-claims` reports a non-zero `in_progress`, and a
+  claimed row is genuinely hidden from `next <role>`. Verified on a real claim,
+  both halves. What one host CANNOT prove is the cross-host half — a row
+  claimed HERE being skipped THERE. That is the second host's first job, and it
+  is worth doing deliberately before it drains anything.
+- **The selector separates hosts.** `select-work-batch.sh <role> --seed <host>`
+  returns disjoint batches for different seeds — different epic, different
+  packets, and `urgent=` no longer forces every host to one head. This FAILED
+  on 2026-08-19 (three seeds, one byte-identical batch) and the `--seed` flag
+  did not exist then. **Pass your hostname as `--seed`.** The default is
+  `${TILLANDSIAS_HOST_KIND:-host}-$(date -u +%Y%m%d)`
+  (`scripts/select-work-batch.sh:232`), which varies by host KIND and date — not
+  by host. Two Linux boxes therefore derive the same seed every day whether or
+  not that variable is set, so separation is available but NOT automatic: a
+  second host that forgets the flag collides exactly as the fleet did before.
+
+The third is a fleet property no single host can close: the queue must stop
+growing faster than it drains. One host currently measures well inside the
+bound, but that reading says nothing about what a second host does to it —
+which is precisely why hosts rejoin one at a time and the number is re-measured
+after each.
+
+**If you are on immutable Linux (Silverblue/Kinoite), two things differ.**
+First, `./build.sh` transparently re-execs inside the `tillandsias-builder`
+toolbox (`scripts/with-tillandsias-builder.sh`), creating it with
+`toolbox create --assumeyes` on first use. So unlike a mutable host, your gate
+NEEDS a working podman — a Silverblue box with podman broken cannot run
+`--check` at all, where a mutable box happily would. The first `--check` of a
+fresh checkout spends its opening minutes building the toolbox — measured on
+yoga (Silverblue, Ryzen AI 5 340, ~250 Mbit/s registry link, 2026-08-23; filed
+as an event on 850-bif2): image pull 11.5s (355 MiB compressed), `toolbox
+create` 0.1s, then 131.9s for the first forced `--check` (dnf 17s, rustup 14s,
+gate ~100s), with a warm `~/.cargo` — a truly pristine home also pays crates.io
+downloads on top. That is the toolbox being built, not a hang. (The previous
+"minutes" figure here was an unmeasured inference written on a mutable host
+that never executes this path — b629bb379.)
+Second, `scripts/e2e-preflight.sh` carries NO immutability logic and will report
+`eligible` to you. Do not believe it: the skill's E2E table routes immutable
+Linux to `/smoke-curl-install-and-test-e2e` (test a PUBLISHED release), never to
+`/build-install-and-smoke-test-e2e` (test a LOCAL build). The preflight is
+answering a narrower question than the one you are asking it.
+
+**If you are on macOS (Darwin), most defaults hold — these are the parts that
+do not** (851-gpb5, learned by the first Mac to join). Your branch is
+`osx-next`: commit and push everything there, and before EVERY push merge
+`origin/linux-next` into it — methodology's pre-push gate
+(`pull_merge_cadence.pre_push_gate`; Finalization step 6). Run
+`scripts/install-hooks.sh` once so the v5 pre-push hook actually enforces that
+merge on your checkout. `./build.sh --check`/`--test` work natively (host
+tools: Xcode Command Line Tools for gcc, `brew install pkg-config`, rustup
+with the rustfmt and clippy components), but `--install` is REFUSED by design
+(723-whrx): the macOS build path is `scripts/build-macos-tray.sh` — wrapped by
+`/build-macos-tray`, which also files findings to
+`plan/issues/macos-build-findings-<DATE>.md` — and local-build e2e
+(`/build-install-and-smoke-test-e2e`) destroys and re-provisions the
+Virtualization.framework VM directory, not a podman store. The system shell is
+bash 3.2 with BSD userland: no GNU-only flags in anything a Mac must run (no
+`xargs -r`, no suffix-less `sed -i`), and `sha256sum` only exists on macOS
+13+ — use the `sha256sum`-or-`shasum -a 256` dispatch
+(`scripts/build-sidecar.sh`, `scripts/gate-stamp.sh`). Expect the MCP experts
+to be DOWN on first boot (`down:forge-plan`, `degraded(not-built)`):
+`scripts/cycle-preflight.sh` builds `./target/release/tillandsias-plan`, the
+same binary the MCP wrapper serves — work through it by path and record the
+outage, per `mcp_first_read_path`. And like every joining host, pass your
+hostname as `--seed` to `select-work-batch.sh`.
+
+**Publish your capability row before you drain anything** (order 850-bif2).
+`scripts/check-capability-row.sh` answers whether the matrix can see you; on
+`due:` generate and commit a row with
+`scripts/host-capability-probe.sh --fragment` (Linux/macOS/forge loci; the
+windows-host locus keeps its own generator). A joining host that drains work
+while publishing nothing is how the matrix went silent for 5 of 7 hosts —
+and capability-aware routing (847-wgy4) cannot route to hardware the matrix
+cannot see.
+
+**Expect to be offered other hosts' abandoned work.** Claims expire on a 24h
+lease, and expired rows return to the pool with their history intact — a row
+you are offered may have been started elsewhere and dropped. Read the row's
+events before assuming it is fresh.
+
+The bootstrap prompt is `Use the ./skills/meta-orchestration skill.` and nothing
+else. If you needed something said to you beyond that sentence, the thing you
+needed was missing from this skill or the ledger, and THAT is the defect worth
+filing — not the prompt.
 
 ## Start Of Cycle
 
@@ -285,11 +569,69 @@ with a loud warning naming the gap, never silently.
    reserved for `blocked:preflight:*`); continue the cycle.
 
 1. Record UTC time, host kind, current branch, worktree path, and sibling heads.
+   Report this host's scheduler posture in the same breath — it is one line and
+   it answers the question an operator otherwise has to read a transcript for:
+
+   ```bash
+   scripts/check-cycle-scheduler.sh   # armed? last fire? next due?
+   ```
+
+   ADVISORY, NEVER A GATE (order 856-s56y exit criterion 5, wired 865-j3kd).
+   `due:not-installed` is a true and acceptable answer: macuahuitl is driven by
+   an external hourly loop rather than a systemd timer, and a host with no
+   durable timer is differently-scheduled, not broken. What the line buys is
+   that "no scheduler is armed here" becomes a stated fact rather than something
+   nobody discovers until a host has been quietly not-cycling for a day — which
+   is the 856-s56y failure, and the same shape as a wedged host reading as
+   silent (864-t4nq).
+
+   It is wired here because the guard shipped invoked by nothing and
+   audit-guard-activation therefore failed `./build.sh --ci-full`, one of three
+   checks that left the trunk unreleasable for a week (865-n8vq). The auditor
+   greps for the guard's NAME, so a mention would have cleared the verdict while
+   leaving the guard as dead as it was; an orphaned guard is fixed by invoking
+   it. Arming an actual scheduler is 856-s56y's own work and remains yoga's.
+
 2. `git fetch origin --prune`, then run the Credential Channel Guard and the
    Committable Branch Guard below before any committable work. Run the MCP
    Expert Health Probe here too — it is advisory and never blocks, but it must
    run BEFORE the cycle's first expert read, or an outage during that read has
    no recorded baseline to be visible against.
+2b. **Acquire the checkout lock — EVERY lane, before the boundary snapshot**
+   (order 873-zcim):
+
+   ```bash
+   TILLANDSIAS_CYCLE_HOLDER_PID=$PPID scripts/cycle-checkout-lock.sh acquire \
+       --lane <how-this-cycle-was-launched> --source "<prompt source, one line>"
+   ```
+
+   The no-stacking lock used to be taken only by the driver lane
+   (tillandsias-cycle-driver.sh), so a cycle launched by an operator prompt, a
+   /loop cron, or a cloud schedule acquired nothing and STACKED on a running
+   driver in the same worktree — measured on yoga 2026-08-24, 21 minutes into
+   a driver cycle, duplicating its claims. The lock guarded the driver lane;
+   the thing two agents contend for is the CHECKOUT.
+
+   On `skip:overlap-lock-held:<holder>` DO NOT PROCEED: the verdict names who
+   holds the checkout (lane, pid, start, source). Report it as the cycle's
+   final output and exit — this is the designed outcome, not a failure, and
+   the refusal is recorded durably OUTSIDE the checkout in
+   `~/.cache/tillandsias/overlap-refusals.jsonl`, so a refused-for-overlap
+   cycle is distinguishable in the record from a cycle that ran and found
+   nothing (873-zcim criterion 3). Do not retry in a loop; the next scheduled
+   fire retries on its own clock.
+
+   `TILLANDSIAS_CYCLE_HOLDER_PID=$PPID` must be evaluated in YOUR shell — it
+   anchors liveness to the agent-harness process that spans the whole cycle.
+   The script's own default is one shell too deep and dies with the tool call.
+
+   DECIDED (873-zcim criterion 4): a second agent NEVER works in a locked
+   checkout. The sanctioned path for concurrent work on one host is a separate
+   git worktree or a clean temp clone — the technique yoga used to file its
+   wedge record and 873-zcim itself while another cycle held its checkout.
+   Release at Finalization (step 9b) with
+   `TILLANDSIAS_CYCLE_HOLDER_PID=$PPID scripts/cycle-checkout-lock.sh release`.
+
 3. Snapshot the startup boundary before classifying or changing any path:
    ```bash
    boundary_dir="$(mktemp -d "${TMPDIR:-/tmp}/meta-orchestration-boundary.XXXXXX")"
@@ -302,6 +644,15 @@ with a loud warning naming the gap, never silently.
    Refuse the cycle and do not begin committable work. Report the dirty-start
    blocker through the final handoff as defined above. Do not commit, discard,
    restore, reset, or clean unknown startup dirt.
+
+   **Before that refusal, run `scripts/salvage-dirty-worktree.sh <slug>`**
+   (order 872-c9nd, full rationale in the Exit Contract above). Refusing
+   protects the work from YOU; it does not protect it from a fresh clone, and on
+   2026-08-24 a fresh clone is exactly what took it. The salvage cannot touch
+   the worktree — temporary index and plumbing only — so it is safe to run on
+   dirt you have just been forbidden to alter, and it must run BEFORE the two
+   detectors below: whether the dirt turns out to be `ok:opsx-only` or
+   `resumable:` changes what you may LAND, never whether a copy should exist.
 4. **Generated opsx sync merge (deterministic, order 540)**: before refusing on
    startup dirt, run the deterministic detector:
    ```bash
@@ -325,13 +676,57 @@ with a loud warning naming the gap, never silently.
    dirty-start refusal exactly as written; never commit, discard, or clean it.
    An `ok:clean-tree` verdict means there is nothing to merge. The checker is a
    falsifiable machine decision; do not substitute prose judgment for it.
+4b. **Resumable claim dirt (deterministic, order 833-fpe7)**: when the dirt is
+   NOT the opsx set, run the second detector before refusing:
+   ```bash
+   scripts/check-resumable-claim-dirt.sh
+   ```
+   It prints exactly one line matching
+   `^(resumable:<order>(,<order>)*|ok:clean-tree|unattributable:.*)$` and exits
+   `0` only when EVERY dirty path is tracked, the folded ledger names a live
+   claim OWNED BY THIS HOST (`tillandsias-plan expire-claims --list-live`:
+   claim-convention event host, both claim and activity inside the TTL), and
+   every dirty path's mtime postdates the oldest such claim. That is the
+   signature of this host's OWN previous cycle interrupted between implement
+   and commit — the dirt the refusal would otherwise deadlock on until
+   expire-claims launders finished work into lost work (the 833-fpe7 shape;
+   814-iyu7 arriving by a second route).
+
+   `resumable:` is a licence to REVIEW AND LAND, never to auto-commit: read
+   the diff against each named order's packet, land what implements it as its
+   own commit(s) citing the orders, then re-anchor with the guard's
+   `re-snapshot` — the same sequence order 540 sanctions. Whether an edit
+   IMPLEMENTS the packet beside it is the agent's judgment; the detector only
+   removes the deadlock. Any `unattributable:` verdict falls through to the
+   dirty-start refusal exactly as written. Pinned by
+   `litmus:resumable-claim-dirt-shape`.
 5. Update the active local branch from remote with fast-forward or an explicit
    merge from `origin/linux-next` into the platform branch when appropriate.
 
 ## Credential Channel Guard
 
 Run immediately after `git fetch` and before any worker drain or committable
-work. The Cowork scheduled-task runtime can inherit dangling session sockets
+work.
+
+**Close the interactive escape hatches around EVERY push** (order 860-g798,
+exit criterion 3):
+
+```bash
+export GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never
+```
+
+A credential problem must fail FAST AND LOUDLY, not hang. Measured on
+esmeraldinha: the guard reported green (`gh auth status` held a token), the
+cycle entered committable work, and the first push sat >10 minutes behind Git
+Credential Manager's interactive prompt — a hang with no output, presenting as
+a slow build on the host least able to afford the misdiagnosis. With the
+prompts closed the same failure surfaces in seconds as an auth error the guard
+now names (`blocked:interactive-credential-helper`, remedy printed). The guard
+itself verifies the PUSH path since 860-g798 — `ok:gh-keyring-push-verified`
+means a bounded non-interactive dry-run push actually authenticated, not
+merely that a token exists somewhere. In SMOKE mode it is a REPORT, not a gate — a smoke run
+performs no committable work, so a stale push credential cannot harm it (order
+818-cgpn; see Smoke Mode Runbook rule 3a). The Cowork scheduled-task runtime can inherit dangling session sockets
 (`DBUS_SESSION_BUS_ADDRESS`, `SSH_AUTH_SOCK` pointing into a non-existent
 `/run/user/<uid>`) so anonymous reads succeed while every `git push` silently
 fails for lack of a credential. See
@@ -478,6 +873,37 @@ continue:
 - `ok:experts-healthy` — say nothing further. The probe is silent by design when
   healthy; a signal that fires every cycle is one nobody reads.
 
+### The handshake is not the surface (order 801-m9tk)
+
+`ok:experts-healthy` means the registered servers answered when the PROBE
+launched them. It does not mean the tools reached YOUR session. For three
+consecutive windows cycles the probe printed `ok:experts-healthy` while not one
+`mcp__forge-plan__*` / `mcp__project-info__*` tool was bound to the agent, so
+every read silently fell back to `./target/release/tillandsias-plan`. A server
+that is up but not exposed is exactly the outage worth catching, and the
+handshake probe calls it healthy — the order-531 shape again.
+
+A script cannot see your tool surface; nothing in this repo can. **You** are the
+only observer of that fact, so the surface half is **attested, not measured** —
+and an unattested cycle reads `unattested:no-surface-claim`, never `ok:`.
+Immediately after the health probe, look at your own tool surface and say so:
+
+```bash
+scripts/check-mcp-surface.sh attest exposed      # mcp__* tools resolved this session
+scripts/check-mcp-surface.sh attest unexposed    # they did not — every read is a fallback
+scripts/check-mcp-surface.sh check               # the joined verdict
+```
+
+`check` joins the measured handshake with the attested surface and prints
+`ok:surface-exposed` / `unexposed:handshake-ok` / `down:<csv>` /
+`absent:not-registered` / `unattested:*` / `skip:no-health-log`. Advisory, never
+a gate — like the probe it extends. `cycle-metrics.sh` folds a fresh `unexposed`
+attestation into `mcp: health=ok-unexposed` and fires the `mcp_outage:` line, so
+the degraded read path reaches the ledger without anyone choosing to write it
+down. An `exposed` attestation leaves `health=ok` unchanged, and a claim older
+than the freshness window labels nothing: a previous cycle's marker never
+vouches for this one.
+
 Do NOT substitute `test -x` or a registration-file check for the handshake. A
 server that exists but wedges on startup is precisely the outage worth catching,
 and a file-existence test calls it healthy. (The first draft of the probe read
@@ -497,6 +923,32 @@ never let an observed problem evaporate.
 Any time a worker notices "welp, this isn't great" — an inefficiency, a rough
 edge, a fragile assumption, an advisory-only guard, a repeated manual step, a
 log warning, a deprecation notice — it MUST be filed before the cycle exits.
+
+**CAPTURE IS MANDATORY. A NEW ROW IS NOT.** These are different acts and
+conflating them is what grew the ready queue to 410 rows against a service rate
+of ~19/day. Route every capture:
+
+- **A new ROW** only if INDEPENDENTLY SCHEDULABLE — it names owned files no open
+  row already owns, OR a different `pickup_role` can claim it than every open
+  row covering that scope.
+- **Otherwise an EVENT on the row it belongs to**, or a `next_action` clause on
+  that row. The finding is recorded in full either way; only its *selectability*
+  differs.
+
+**When a row's events show a confirmed pattern — several independent
+observations, ideally from different hosts or cycles, converging on one defect
+or one missing capability — that row has OVERFLOWED and is a promotion
+candidate. NOTE it; do NOT promote it. Promotion is Tlatoāni-gated** (operator
+ruling, 2026-08-19): what counts as a confirmed pattern is not yet expressible
+as a threshold, and an agent promoting on its own judgment restores unbounded
+arrival by a longer path.
+
+Why this is safe, and why it is not a throughput cut: with arrivals
+λ = a + b·μ, the queue moves at `dL/dt = a + (b−1)·μ`. Above b = 1 every extra
+host and every shortened cycle fills the queue FASTER; below b = 1 the same
+velocity drains it. Measured b is 1.80. So curation at the acceptance boundary
+is the *precondition* for velocity paying off at all — see
+`methodology/distributed-work.yaml` → `why_velocity_is_the_other_lever`.
 
 ### Standing FRESHNESS audit class (order 372, methodology `component_freshness`)
 Each cycle, after worker drain, treat the top component the `freshness-advisory`
@@ -537,10 +989,44 @@ Two rules, both easy to get wrong:
 - **Compaction is TEXT-LEVEL and never re-serializes the base.** It ran on the
   real ledger for the first time on 2026-08-03 (order 582-4wdi, commit 81e12b65):
   28 fragments folded, 120 comment lines preserved exactly, 535 packets
-  preserved, and the `plan/index.yaml` diff was 1021 added lines and **zero
-  removed lines**. That zero is the property to protect — existing base bytes are
-  untouched by construction, so the inline operator decisions and the four-space
-  item prefix `append-event` locates by cannot be lost by a fold.
+  preserved, and the `plan/index.yaml` diff was 1021 added lines and zero removed
+  lines. **Do not read that zero as the invariant** — it was a true measurement of
+  a fold that could only APPEND, taken before `set-field` fragments existed, and
+  it has been unreachable since. A fragment that reassigns a field must remove the
+  superseded line; a fold carrying nine status transitions removes nine `status:`
+  lines and that is the fold working.
+
+  THE PROPERTY TO PROTECT, stated so a healthy compaction cannot fail it: no line
+  is removed EXCEPT one whose field a fragment explicitly reassigned. Comment
+  lines, packet count (minus none, plus the new ones), and the four-space item
+  prefix `append-event` locates by all survive unchanged. Check THOSE, in one
+  command, rather than eyeballing the removal count:
+
+  ```bash
+  git diff --numstat plan/index.yaml                  # removals are expected
+  git diff plan/index.yaml | grep '^-' | grep -v '^---' | head -40   # READ them
+  ```
+
+  **Read the removed LINES, not a histogram of their keys.** This recipe used to
+  end with `cut -d: -f1 | sort | uniq -c` and the question "ONLY field keys?".
+  That works only while every reassigned field has a SCALAR value. A fragment
+  that replaces a STRUCTURED value removes all of its lines, including list
+  items that are not field keys at all — measured on yoga 2026-08-25, a fold
+  whose 14 removals included `- container`, `- cpu`, `- gpu`, `engines`,
+  `lanes` and `supported_device_classes`, because a stale capability row's
+  `engines: [{name: ollama, ...}]` block was superseded by `engines: []`. The
+  fold was correct; the histogram made it look like structure loss, which is
+  the same stop-and-investigate 865-ng6r removed for the scalar case. The
+  question is not "are these field keys" but "does each removed line belong to
+  a field some fragment reassigned" — and the cheapest way to answer it is to
+  look at the lines.
+
+  MEASURED TWICE, on two hosts, each of which stopped its cycle to investigate:
+  lenovinha 2026-08-23 (+888/-17 — five `status`, one multi-line `next_action`)
+  and yoga 2026-08-25 (+556/-12 — nine `status`, two `next_action`, one
+  `next_action_ts`; 37 comments and all 526 packet prefixes intact). Both folds
+  were correct. The prose is what cost the time, which is why it is corrected
+  here rather than merely noted (865-ng6r).
 
   It refused for months before that, correctly: a `serde_yaml` round-trip drops
   comments and re-indents items to column 0, after which `append-event` silently
@@ -550,6 +1036,46 @@ Two rules, both easy to get wrong:
 
 If `malformed=N` is non-zero, a fragment did not parse and was SKIPPED — its
 contents are absent from every answer. Treat that as a finding, not noise.
+
+### De-slop sweep clock (consult each cycle; act only when due)
+
+```bash
+scripts/check-deslop-due.sh check    # exit 0 = NOT due; exit 1 = due; exit 2 = cannot compute
+```
+
+**Read the exit polarity before wiring anything to it.** The file is named
+`check-deslop-due.sh` and exits **0 when the sweep is NOT due** — same
+convention as `check-daily-maintenance.sh`, where the actionable state is the
+non-zero one and the healthy steady state stays at 0 for callers under `set -e`.
+The idiom is `if ! scripts/check-deslop-due.sh; then run_the_sweep; fi`, or
+branch on the verdict token (`deslop-due` / `deslop-not-due`), which cannot be
+inverted by a copy-paste.
+
+It prints exactly one line carrying the numbers it decided on, e.g.
+`ok:deslop-not-due:order=844 last=834 delta=10 hours=44 reason=under-threshold`.
+The rule is **event-counted only**: due when
+`(current_order - order_at_last_sweep) >= 200`, with a 48h floor so a filing
+burst cannot fire two sweeps in a day, and **no calendar ceiling** — a ceiling
+would fire low-yield sweeps over a quiet fortnight and
+`red:two-sweeps-zero-confirmed` would then retire the reconciler for doing
+nothing wrong. Time-decaying properties already have their own TTLs
+(`expire-claims` 24h, `component_freshness`). This is **not** a build gate and
+nothing in `./build.sh` runs it; it is a scheduler input for this section.
+
+After running a sweep, record it — the marker is committed, not host-local, so
+the whole fleet shares one clock:
+
+```bash
+scripts/check-deslop-due.sh record --examined <rows-looked-at> --confirmed <n> \
+  [--retracted <n>] [--filed <n>] [--net-lines <±n>]
+```
+
+`--examined` and `--confirmed` are mandatory. The sweep's kill rule counts only
+sweeps that **examined new rows**, and this is why: the first real sweep
+retracted 51 of 410 rows (12.4%) against a modelled ~50%, and that pass drained
+accumulated stock. Steady-state yield will be far lower, so **two consecutive
+near-zero sweeps is a normal outcome for a healthy queue**, not evidence the
+reconciler is broken. A sweep that confirms the queue is clean has done its job.
 
 ### Filing a packet: mint its order, never pick one
 
@@ -735,16 +1261,96 @@ scripts/select-work-batch.sh <linux|macos|windows|any>
 ```
 
 Run this once, at the top of the drain, and take the batch it prints. It selects
-ONE epic (`release_target`) and at most `budget` packets from it (default 4 for
-autonomous/pairing forge cycles, 6 for non-forge hosts, 1 for unattended litmus runs;
-order 707-3x9d), so a cycle drains a coherent slice instead of five unrelated subsystems — the scatter that
+ONE epic (`release_target`) and at most `budget` packets from it, so a cycle
+drains a coherent slice instead of five unrelated subsystems — the scatter that
 made small packets cost more in orientation than in work.
 
+**THE BATCH IS A STORY, AND THE STORY IS THE UNIT OF WORK — not the packet.**
+Take the whole batch, implement it as one coherent change, and pay the cycle's
+fixed costs ONCE: one build/verify pass, one loop-status entry, one attestation.
+Do not run `./build.sh --check` per packet, and do not attest per packet.
+
+Why this is the rule and not a preference — measured on the fleet 2026-08-16..19:
+
+| commits, 3 days | count |
+| --------------- | ----- |
+| `record(mo-full)` (attestation only) | 155 |
+| `chore(plan)` (ledger bookkeeping)   |  88 |
+| every category of actual product work | single digits each |
+
+Over 5 days that is 127 product-code commits against 457 plan-only, 149
+attestation-only and 219 merge commits. **Every cycle pays the same exit cost
+whether it carried one packet or eight** — loop-status, attestation record,
+attestation self-check at the new HEAD, and the merges each of those provokes.
+A one-packet cycle spends most of itself on the exit contract. Bundling does not
+make the overhead smaller; it amortizes it across more delivered work, which is
+the only lever available without weakening the contract itself.
+
+Budgets, which the selector already implements — do not restate a different
+number here, and if this text and `scripts/select-work-batch.sh` ever disagree,
+the SCRIPT is right and this paragraph is stale:
+
+- non-forge hosts: adaptive **6 → 10** (order 682-yiz7, evidence-backed tuning)
+- autonomous / pairing forge cycles: adaptive **4**, or `TILLANDSIAS_CYCLE_BUDGET`
+- unattended litmus runs: 1 (order 707-3x9d)
+
+This paragraph used to end "Budget is 1 on forge (order 264) and 3 elsewhere"
+while its own opening sentence said 4 and 6, and the script said 6 → 10. Three
+numbers for one budget, in one paragraph plus its tool. Agents read the smallest
+one, which is how a fleet tuned to 10 spent its nights draining one packet at a
+time.
+
 It is minimax-ranked (largest residual first, per `convergence.yaml` →
-`minimax_convergence_strategy`), with score-weighted entropy over the top-3 so
-coverage spreads over time and two concurrent hosts do not collide on one epic.
+`minimax_convergence_strategy`), with score-weighted entropy over the top-3.
 The seed is printed; record it in the loop-status entry so the cycle can be
-replayed. Budget is 1 on forge (order 264) and 3 elsewhere.
+replayed. Budgets are stated ONCE, above — never restate them here.
+
+**THE SEED DOES NOT SEPARATE CONCURRENT HOSTS. Do not rely on it to.** This
+paragraph used to end "...so coverage spreads over time and two concurrent hosts
+do not collide on one epic". The second half is false and was never measured.
+Measured 2026-08-19 on macuahuitl against the live ledger: three distinct seeds
+(`macuahuitl-`, `yoga-`, `esmeraldinha-20260819`) produced a byte-identical
+batch — same `epic=socket-audit-master`, same `pick=2/3`, same score, same head
+packet. Two independent reasons, and neither is fixable by reseeding:
+
+- The default seed is `${TILLANDSIAS_HOST_KIND:-host}-<date>`
+  (select-work-batch.sh:232). `TILLANDSIAS_HOST_KIND` is set only inside the
+  forge, so every bare-metal host falls back to the literal `host` and they all
+  seed identically. Even when set it is host KIND, so three Linux boxes collide
+  with each other regardless.
+- The `urgent=<packet>` override puts one globally-urgent packet at the head of
+  the batch. Urgency is a property of the PACKET, so it is host-independent by
+  construction and preempts the epic pick on every host at once.
+
+**SEPARATION COMES FROM CLAIMING, which is the mechanism that already exists and
+is sitting at zero.** `next`/`select-work-batch` filter to `unleased`, and
+"leased" means `status: in_progress`. `expire-claims` (order 672-bz7u) reaps
+claims older than 24h so a dead host cannot strand work permanently. As of
+2026-08-19 `expire-claims` reports `in_progress=0` — nothing has been claimed at
+all, so every host is offered every packet, and on 2026-08-18 two hosts
+implemented 798-tk7b six minutes apart (order 814-iyu7, ~4h duplicated).
+
+So, before you implement anything from the batch:
+
+```bash
+tillandsias-plan set-field <order> status in_progress \
+    --host "$(hostname -s)" --reason "claimed for cycle <UTC ts>"
+git add plan/index.d && git commit -m "claim(<order>): <host>" && git push
+```
+
+Push the claim BEFORE the work, not with it — an unpushed claim separates
+nobody. Then:
+
+- **Losing the race is normal and cheap.** The ledger is a CRDT; two hosts can
+  claim in the same window. On your next fetch, if another host's claim event
+  for that order carries an EARLIER timestamp (ties broken by lexicographically
+  smaller hostname), you lost: release yours back to `ready` and take the next
+  batch item. Do not both continue — that is exactly 814-iyu7.
+- **Release on exit, always.** Completed work moves to its terminal status.
+  Work you did NOT finish goes back to `ready` in the same cycle you abandon it.
+  Leaving it `in_progress` hides it from `ready` AND from burndown until the 24h
+  reaper runs — 21 packets were stranded that way on 2026-08-09 (641-e2qa).
+  Claiming is only safe because releasing is unconditional.
 
 The `triage:` line reports `ungrouped=N` — eligible packets with no
 `release_target`. That number is the health of the epic tier itself: when it is
@@ -765,10 +1371,25 @@ Forge-hosted cycles (`TILLANDSIAS_HOST_KIND=forge`) are the OPPOSITE of
 greedy — decided by The Tlatoāni 2026-07-10 (order 264), replacing the earlier
 "drain as many as possible" exception:
 
-- Drain **at most ONE packet per forge cycle**.
-- Before implementing, estimate whether implement+verify+commit+push fits the
-  launch envelope (litmus-launched forge cycles live inside
-  `litmus:opencode-prompt-e2e-shape` STEP 3's 600s budget).
+- Drain **as much of the batch as fits the envelope, as ONE story** — bounded by
+  TIME, not by a count. Superseded 2026-08-19 by The Tlatoāni, who set order 264
+  in the first place: *"that's also why I was asking for bundles of related
+  packets in stories and epics, rather than the 'take a single packet' baked
+  into the ./methodology that I've been fighting you to lift."*
+
+  Order 264's REASONING survives intact and is the reason this is a time bound
+  rather than a licence: a litmus-launched forge cycle lives inside
+  `litmus:opencode-prompt-e2e-shape` STEP 3's 600s budget, and a cycle that
+  overruns it dies mid-work with nothing pushed. What does NOT survive is the
+  count. "One packet" was a proxy for "fits in 600s", and it is a bad proxy in
+  both directions: three one-line ledger closures fit easily, and one large
+  packet does not fit at all.
+
+  So the forge asks the envelope question about the STORY, not the packet, and
+  the selector's adaptive budget (4, or `TILLANDSIAS_CYCLE_BUDGET`) is the
+  starting size.
+- Before implementing, estimate whether implement+verify+commit+push for the
+  whole story fits the launch envelope.
 - If it does not fit, do NOT start implementing: **split** the packet into
   smaller ready child packets (`split_into` pattern), record the shaping
   events, commit and push. The shaping commit IS that cycle's completed work —
@@ -857,6 +1478,11 @@ and skip the local-build gate without re-litigating it. Pinned by
 Rules:
 
 - Local-build e2e uses `/build-install-and-smoke-test-e2e`.
+- On macOS the local build that gate exercises is
+  `scripts/build-macos-tray.sh` (the `/build-macos-tray` skill wraps it and
+  files findings to `plan/issues/macos-build-findings-<DATE>.md`);
+  `./build.sh --install` is refused on Darwin by design (723-whrx), so there
+  is no build.sh install path to look for.
 - Published-release e2e uses `/smoke-curl-install-and-test-e2e`.
 - Destructive substrate reset is expected setup on Tillandsias smoke hosts.
   `podman system reset --force` is a precondition for Linux idempotence tests,
@@ -945,7 +1571,7 @@ distinct — measure before you optimize:
   `slowest=<step>:<ms>`). "Time spent building, testing" is the most likely
   bottleneck and was invisible until the build/test/litmus entry points began
   appending one duration record per heavy step (packet 682-emvg). `build.sh
-  --check` (the pre-push gate), each `scripts/local-ci.sh` litmus phase, and each
+  --check` (the local gate), each `scripts/local-ci.sh` litmus phase, and each
   `scripts/run-litmus-test.sh` suite now self-instrument — best-effort, the
   timing write never changes the wrapped step's exit code or output. It reads
   `source=absent` until this host has run one instrumented step. `slowest` names
@@ -995,6 +1621,22 @@ Before exit:
    (packet 582-nqw5). The folded view (`tillandsias-plan loop-status`) is the
    status every host sees; `loop-status-compact` folds fragments into the base
    when drift makes it eligible.
+
+   **A long cycle's `--ts` legitimately predates its write, and `--backfill` is
+   the sanctioned path for it (order 801-w4pn).** `--ts` must agree with the
+   host clock within 900s or the write is refused; a cycle that read the clock
+   at Start Of Cycle and appends at Finalization two hours later trips that by
+   construction. Do not widen the window and do not invent a fresh timestamp —
+   the limit is what catches a fabricated hour, and re-reading the clock would
+   silently relabel when the work happened. Pass `--backfill` with the real
+   timestamp, or omit `--ts` entirely when "now" is genuinely the right stamp:
+
+   ```bash
+   tillandsias-plan loop-status-append --host <host> --ts <cycle-start-UTC> --backfill
+   ```
+
+   `--backfill` only reaches BACKWARD (a future `--ts` is still refused), so it
+   waives nothing the limit exists to protect, and the refusal already names it.
 3. Validate touched YAML with a parser, using the one that EXISTS where you are:
    `tillandsias-policy validate-yaml <files>` where built, else
    `yq . <file> >/dev/null`, else `ruby -ryaml -e "YAML.load_file('<file>')"`.
@@ -1004,14 +1646,62 @@ Before exit:
    `plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md` order 63).
    Its presence on PATH is not permission. The forge startup context lists what
    is actually available.
-4. Run the local pre-push gate: `./build.sh --check` and fix what it reports.
+3b. **Re-verify the credential BEFORE the gate** (order 892-aw9p):
+
+   ```bash
+   scripts/check-credential-channel.sh reverify
+   ```
+
+   The Start-Of-Cycle guard runs once and cannot see a credential that dies
+   afterwards. MEASURED on calmecacpilli 2026-08-25: it returned
+   `ok:gh-keyring-push-verified`, two pushes succeeded on that credential, and
+   ~50 minutes later the third failed with `remote: Invalid username or token`.
+   Nothing the guard measured was wrong — the verdict was true when issued. Its
+   RESULT simply outlived the thing it checked, which is the same shape as a
+   stale gate stamp (887-bz88).
+
+   Run it HERE, immediately before `./build.sh --check`, because that is the
+   last point where the remaining cost is still worth saving: a dead credential
+   then costs the gate's wall-clock (40s here, 276s on the slowest host) instead
+   of being discovered after it, with the work done and the exit contract
+   forbidding an unpushed exit. Not per push — the healthy path must not pay a
+   round trip for every git operation, and a guard slow enough to notice is a
+   guard that gets bypassed.
+
+   On `blocked:credential-expired-mid-cycle` the credential WORKED and then
+   stopped; that is distinct from never having had one, and the printed remedy
+   is `gh auth refresh`, not seeding a store. Do NOT discard the cycle's work to
+   get unstuck — salvage first (872-c9nd) and report blocked with the salvage
+   ref.
+
+4. Run the local gate: `./build.sh --check` and fix what it reports.
    An unparseable or unformatted push poisons every downstream clone. Push CI
    no longer exists on any working branch — only the manually-dispatched
    release workflow remains (litmus:github-actions-budget) — so this gate is
    the ONLY trunk protection. Do not push past a red gate (evidence case:
    `plan/issues/local-gate-evidence-query-packets-clippy-2026-08-09.md`).
+
+   Terminology (851-gpb5): this skill called this step "the pre-push gate"
+   for months while methodology used the SAME name for a different rule —
+   the step-6 merge below — and the collision kept that rule invisible.
+   Here "local gate" always means `./build.sh --check`; "pre-push gate" is
+   reserved for methodology's `pull_merge_cadence.pre_push_gate`.
 5. Commit targeted files only.
-6. Push the relevant branch.
+6. Satisfy methodology's pre-push gate (`pull_merge_cadence.pre_push_gate`,
+   `methodology/multi-host-development.yaml`), then push the relevant branch.
+   On a non-`linux-next` branch (`osx-next`, `windows-next`, any shared
+   non-trunk branch; `agent/*` and `salvage/*` are exempt) that gate
+   requires, before EVERY push — not just at cycle start:
+
+   ```bash
+   git fetch origin && git merge origin/linux-next   # resolve conflicts locally
+   ```
+
+   The v5 pre-push hook enforces the merge half on the two platform branches
+   (`scripts/hooks/pre-push-linux-next-merged.sh`, installed by
+   `scripts/install-hooks.sh`); the fetch half stays yours — the hook can
+   only compare against the `origin/linux-next` your last fetch recorded. If
+   the hook refuses, merge and push again; never `--no-verify` past it.
 7. If a startup boundary was recorded, run the guard's `verify` mode. A guard
    failure is a blocker: do not attempt destructive Git cleanup. Finalization
    never deletes, restores, or resets a worktree path.
@@ -1069,7 +1759,7 @@ Before exit:
    edit it. If any step prints `MO-FULL: FAIL …` and exits non-zero, do NOT
    emit a marker — treat it as a blocker (a missing marker is itself the loud
    failure). The ledger line and the emitted line differ by exactly the
-   bookkeeping commit; both are real commits the pre-push gate
+   bookkeeping commit; both are real commits the local gate
    (`scripts/check-mo-full-attestations.sh`) verifies exist and are reachable.
    This gives EVERY full-mode lane the same convergence verification the
    litmus launcher's `check` applies to its one lane, and leaves a durable
@@ -1077,3 +1767,49 @@ Before exit:
    that finalization steps 1-8 all passed; the outer launcher rejects exit
    zero without it. See "Full-Mode Terminal Attestation" above for the grammar
    and invariants.
+
+9b. Release the checkout lock (order 873-zcim) — AFTER the terminal marker is
+   derived, as the cycle's last mutation:
+   ```bash
+   TILLANDSIAS_CYCLE_HOLDER_PID=$PPID scripts/cycle-checkout-lock.sh release
+   ```
+   The stale-reclaim bound (dead holder, or 3h) covers a cycle that dies
+   before reaching this line, so a crashed cycle cannot silence the cadence —
+   but do not lean on it: an explicitly released lock frees the checkout NOW,
+   a reclaimed one frees it up to three hours later, and on a 30-minute
+   cadence that is six skipped fires.
+
+9c. Reclaim the build cache when it is genuinely due (order 709-in2f,
+   methodology `build_cache_hygiene`) — LAST, after the lock is released, so a
+   full rebuild's cost is paid in the idle gap rather than inside the cycle:
+
+   ```bash
+   scripts/check-build-cache-sweep.sh   # exit 0 = NOT due; skip the body
+   ```
+
+   **Read the exit polarity before wiring anything to it.** It exits **0 when
+   the sweep is NOT due**, the same convention as `check-deslop-due.sh` and
+   `check-daily-maintenance.sh`: the actionable state is the non-zero one, so a
+   healthy steady state stays quiet under `set -e`. Branch on the verdict token
+   (`build-cache-sweep-not-due` / `build-cache-sweep`), which a copy-paste
+   cannot invert.
+
+   Due when `target/` exceeds 40 GiB, OR the marker is older than 14 days, OR
+   the marker is absent/unreadable. On `due:`, run `cargo clean` (plus
+   `scripts/nix-toolbox.sh gc` where nix is present — never a bare
+   `nix store gc`, which would delete the whole persistent cache rather than
+   prune it), then stamp what actually ran:
+
+   ```bash
+   scripts/check-build-cache-sweep.sh stamp --host <host> \
+       --action 'cargo-clean:<result>,nix-gc:<result>'
+   ```
+
+   `--action` is REQUIRED, for the same reason `check-daily-maintenance.sh`
+   requires `--steps`: a stamp recording that "something happened" without
+   recording what moves the unfalsifiability up a level instead of removing it.
+   Record `skipped-absent` / `deferred-<reason>` honestly.
+
+   BEST-EFFORT, NEVER A GATE: a failed sweep must not fail the cycle, and the
+   sweep must not run before the work. Ephemeral forges read `skip:forge-exempt`
+   and never sweep — their `target/` dies with the container.

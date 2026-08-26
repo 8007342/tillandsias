@@ -580,6 +580,9 @@ impl PodmanClient {
                     .map(|e| ContainerListEntry {
                         name: e.names.first().cloned().unwrap_or_default(),
                         state: e.state,
+                        exit_code: e.exit_code,
+                        exited_at: e.exited_at,
+                        restarts: e.restarts,
                     })
                     .collect())
             }
@@ -1902,6 +1905,12 @@ pub struct ContainerInspect {
 pub struct ContainerListEntry {
     pub name: String,
     pub state: String,
+    /// Last exit code (order 798-tk7b). 0 when the container has never exited.
+    pub exit_code: i32,
+    /// Unix epoch of the last exit, 0 when it has never exited.
+    pub exited_at: i64,
+    /// Restart count, which distinguishes "died once" from "is flapping".
+    pub restarts: u32,
 }
 
 /// Outcome of [`PodmanClient::remove_container_unless_running`] (order 494
@@ -1927,6 +1936,18 @@ struct PodmanPsEntry {
     names: Vec<String>,
     #[serde(rename = "State")]
     state: String,
+    // Order 798-tk7b. A dead service is only visible if the reader gets its
+    // exit code and how long it has been dead. `podman ps -a` prints
+    // "Exited (137) 5 hours ago (healthy)" — the recorded healthcheck state
+    // outlives the container, so the human line is not merely missing the
+    // fault, it asserts the opposite. Carrying the structured fields lets a
+    // caller state the death plainly instead of re-parsing that string.
+    #[serde(rename = "ExitCode", default)]
+    exit_code: i32,
+    #[serde(rename = "ExitedAt", default)]
+    exited_at: i64,
+    #[serde(rename = "Restarts", default)]
+    restarts: u32,
 }
 
 #[derive(Debug, thiserror::Error)]

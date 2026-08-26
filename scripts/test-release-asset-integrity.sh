@@ -2,6 +2,14 @@
 # @trace order:756-rfdr, spec:ci-release
 set -uo pipefail
 
+# Portable SHA-256 (851-28b5): coreutils sha256sum on Linux/forge/WSL; stock
+# macOS before 13 ships only `shasum`. Identical "<hex>  <name>" output.
+if command -v sha256sum >/dev/null 2>&1; then
+    PORTABLE_SHA256=(sha256sum)
+else
+    PORTABLE_SHA256=(shasum -a 256)
+fi
+
 # Fixture for scripts/check-release-asset-integrity.sh (order 756-rfdr).
 #
 # WHAT IT GUARDS. On the published v0.4.260815.1, install-windows.ps1 had no
@@ -44,7 +52,7 @@ sig() { : > "$1.cosign.bundle"; }   # presence is what the rule reads
 d="$work/bare-installer"; mk "$d"; cd "$d"
 printf 'zip\n'   > tillandsias-windows-x64.zip
 printf 'script\n' > install-windows.ps1
-sha256sum tillandsias-windows-x64.zip > SHA256SUMS-windows
+"${PORTABLE_SHA256[@]}" tillandsias-windows-x64.zip > SHA256SUMS-windows
 sig SHA256SUMS-windows
 cd "$ROOT"
 run "1 bare installer is caught" 1 "install-windows.ps1 has no integrity path" "$d"
@@ -53,7 +61,7 @@ run "1 bare installer is caught" 1 "install-windows.ps1 has no integrity path" "
 d="$work/fixed"; mk "$d"; cd "$d"
 printf 'zip\n'    > tillandsias-windows-x64.zip
 printf 'script\n' > install-windows.ps1
-sha256sum tillandsias-windows-x64.zip install-windows.ps1 > SHA256SUMS-windows
+"${PORTABLE_SHA256[@]}" tillandsias-windows-x64.zip install-windows.ps1 > SHA256SUMS-windows
 sig SHA256SUMS-windows; sig tillandsias-windows-x64.zip; sig install-windows.ps1
 cd "$ROOT"
 run "2 signed + manifested passes" 0 "ok:release-asset-integrity:3 of 3 checked" "$d"
@@ -65,7 +73,7 @@ run "2 signed + manifested passes" 0 "ok:release-asset-integrity:3 of 3 checked"
 d="$work/transitive"; mk "$d"; cd "$d"
 printf 'zip\n' > tillandsias-windows-x64.zip
 printf 'exe\n' > tillandsias-tray.exe
-sha256sum tillandsias-windows-x64.zip tillandsias-tray.exe > SHA256SUMS-windows
+"${PORTABLE_SHA256[@]}" tillandsias-windows-x64.zip tillandsias-tray.exe > SHA256SUMS-windows
 sig SHA256SUMS-windows
 cd "$ROOT"
 run "3 transitively covered not flagged" 0 "ok:release-asset-integrity:3 of 3 checked" "$d"
@@ -75,7 +83,7 @@ run "3 transitively covered not flagged" 0 "ok:release-asset-integrity:3 of 3 ch
 d="$work/manifest-of-signed"; mk "$d"; cd "$d"
 printf 'a\n' > install.sh
 printf 'b\n' > tillandsias-linux-x86_64
-sha256sum install.sh tillandsias-linux-x86_64 > SHA256SUMS
+"${PORTABLE_SHA256[@]}" install.sh tillandsias-linux-x86_64 > SHA256SUMS
 sig install.sh; sig tillandsias-linux-x86_64
 cd "$ROOT"
 run "4 manifest of signed files is covered" 0 "ok:release-asset-integrity:3 of 3 checked" "$d"
@@ -85,7 +93,7 @@ run "4 manifest of signed files is covered" 0 "ok:release-asset-integrity:3 of 3
 # which is a claim rather than evidence.
 d="$work/unsigned-manifest"; mk "$d"; cd "$d"
 printf 'a\n' > install-windows.ps1
-sha256sum install-windows.ps1 > SHA256SUMS-windows
+"${PORTABLE_SHA256[@]}" install-windows.ps1 > SHA256SUMS-windows
 cd "$ROOT"
 run "5 unsigned manifest vouches for nothing" 1 "install-windows.ps1 has no integrity path" "$d"
 
@@ -93,7 +101,7 @@ run "5 unsigned manifest vouches for nothing" 1 "install-windows.ps1 has no inte
 # the old workflow's allow-list meant anything added later was unsigned silently.
 d="$work/new-script"; mk "$d"; cd "$d"
 printf 'zip\n' > tillandsias-windows-x64.zip
-sha256sum tillandsias-windows-x64.zip > SHA256SUMS-windows
+"${PORTABLE_SHA256[@]}" tillandsias-windows-x64.zip > SHA256SUMS-windows
 sig SHA256SUMS-windows
 printf 'brand new\n' > setup-extras.ps1
 cd "$ROOT"

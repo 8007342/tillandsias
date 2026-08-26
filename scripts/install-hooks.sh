@@ -2,9 +2,10 @@
 # install-hooks.sh — Install git hooks for OpenSpec workflow
 # @trace spec:spec-traceability, spec:versioning
 #
-# Installs two git hooks:
+# Installs three git hooks:
 #   1. pre-commit: OpenSpec trace warnings and spec-cheatsheet drift checks
-#   2. pre-push: VERSION guard (prevents VERSION modifications on non-main branches)
+#   2. pre-push: linux-next merge gate (851-gpb5) + VERSION guard + local gate
+#   3. post-commit: dashboard refresh + env-gated expert index refresh
 #
 # Idempotent: safe to run multiple times. If hooks already exist and aren't ours,
 # warns but does not overwrite (appends to existing).
@@ -85,14 +86,18 @@ fi
 # --- Install pre-push hook -------------------------------------------------
 
 PREPUSH_TARGET="$GIT_HOOKS_DIR/pre-push"
-PREPUSH_MARKER="# tillandsias-pre-push-v4"
+PREPUSH_MARKER="# tillandsias-pre-push-v6"
 
+MAIN_AFFORD_REL="scripts/hooks/pre-push-main-branch-affordance.sh"
+MERGE_GATE_REL="scripts/hooks/pre-push-linux-next-merged.sh"
 VERSION_GUARD_REL="scripts/hooks/pre-push-version-guard.sh"
 LOCAL_GATE_REL="scripts/hooks/pre-push-local-gate.sh"
+MAIN_AFFORD="$REPO_ROOT/$MAIN_AFFORD_REL"
+MERGE_GATE="$REPO_ROOT/$MERGE_GATE_REL"
 VERSION_GUARD="$REPO_ROOT/$VERSION_GUARD_REL"
 LOCAL_GATE="$REPO_ROOT/$LOCAL_GATE_REL"
 
-for src in "$VERSION_GUARD" "$LOCAL_GATE"; do
+for src in "$MAIN_AFFORD" "$MERGE_GATE" "$VERSION_GUARD" "$LOCAL_GATE"; do
     if [[ ! -f "$src" ]]; then
         echo "error: $src not found" >&2
         exit 1
@@ -106,9 +111,14 @@ done
 # guard returned. A failing VERSION guard would be silently masked by a passing
 # local gate. Composing with explicit `|| exit` makes the first failure decisive.
 #
-# v4 supersedes the v1/v2/v3 markers; an older hook is replaced. v3 differed only
-# in baking install-time absolute paths, which broke it under a second path view
-# of the same checkout (WSL /mnt/c vs Git Bash /c).
+# v5 supersedes the v1/v2/v3/v4 markers; an older hook is replaced. v3 differed
+# only in baking install-time absolute paths, which broke it under a second path
+# view of the same checkout (WSL /mnt/c vs Git Bash /c). v5 adds the
+# linux-next merge gate (order 851-gpb5) — methodology's
+# pull_merge_cadence.pre_push_gate, previously enforced by no code — placed
+# FIRST because it is the cheapest guard and its remediation (a merge) changes
+# the tree, after which the other guards' verdicts would need re-deriving
+# anyway.
 install_prepush() {
     cat > "$PREPUSH_TARGET" <<HOOK
 #!/usr/bin/env bash
@@ -128,6 +138,8 @@ $PREPUSH_MARKER
 # No host path is baked in; see the HOOK_PREAMBLE rationale in the installer.
 $HOOK_PREAMBLE
 REFS="\$(cat)"
+printf '%s\n' "\$REFS" | bash "\$HOOK_ROOT/$MAIN_AFFORD_REL" "\$@" || exit \$?
+printf '%s\n' "\$REFS" | bash "\$HOOK_ROOT/$MERGE_GATE_REL"    "\$@" || exit \$?
 printf '%s\n' "\$REFS" | bash "\$HOOK_ROOT/$VERSION_GUARD_REL" "\$@" || exit \$?
 printf '%s\n' "\$REFS" | bash "\$HOOK_ROOT/$LOCAL_GATE_REL"    "\$@" || exit \$?
 HOOK
@@ -135,16 +147,16 @@ HOOK
 }
 
 if [[ -f "$PREPUSH_TARGET" ]] && grep -qF "$PREPUSH_MARKER" "$PREPUSH_TARGET" 2>/dev/null; then
-    echo "✓ pre-push hook (VERSION guard + local gate) already installed"
-elif [[ -f "$PREPUSH_TARGET" ]] && grep -qE "# (version-guard-hook|tillandsias-pre-push-v[23])" "$PREPUSH_TARGET" 2>/dev/null; then
+    echo "✓ pre-push hook (linux-next merge gate + VERSION guard + local gate) already installed"
+elif [[ -f "$PREPUSH_TARGET" ]] && grep -qE "# (version-guard-hook|tillandsias-pre-push-v[2345])" "$PREPUSH_TARGET" 2>/dev/null; then
     install_prepush
-    echo "✓ pre-push hook upgraded to v4 (run-time root resolution)"
+    echo "✓ pre-push hook upgraded to v6 (adds the main-branch affordance)"
 elif [[ -f "$PREPUSH_TARGET" ]]; then
     echo "⚠ an unrecognized pre-push hook exists — leaving it alone" >&2
     echo "  To adopt the Tillandsias gate, move it aside and re-run this script." >&2
 else
     install_prepush
-    echo "✓ pre-push hook installed (VERSION guard + local gate)"
+    echo "✓ pre-push hook installed (linux-next merge gate + VERSION guard + local gate)"
 fi
 
 # --- Install post-commit hook -----------------------------------------------
@@ -171,10 +183,18 @@ fi
 
 POSTCOMMIT_SOURCE="$REPO_ROOT/scripts/hooks/post-commit-dashboard-refresh.sh"
 POSTCOMMIT_TARGET="$GIT_HOOKS_DIR/post-commit"
-POSTCOMMIT_MARKER="# tillandsias-post-commit-v3"
-POSTCOMMIT_MARKER_OLD_RE="# (dashboard-refresh-hook(-v2)?)"
+POSTCOMMIT_MARKER="# tillandsias-post-commit-v4"
+# Any hook THIS installer generated in the past, so a marker bump upgrades
+# rather than stranding the host. The version-number alternative is deliberate:
+# matching only the specific predecessors meant every bump turned every
+# existing install into "an unrecognized post-commit hook — leaving it alone",
+# so the installer could install fresh but never upgrade itself. Found on the
+# v3 -> v4 bump, 2026-08-17: the regenerated dispatcher was silently declined
+# on the host that had asked for it.
+POSTCOMMIT_MARKER_OLD_RE="# (dashboard-refresh-hook(-v2)?|tillandsias-post-commit-v[0-9]+)"
 POSTCOMMIT_REL="scripts/hooks/post-commit-dashboard-refresh.sh"
 EXPERT_REFRESH_REL="scripts/hooks/post-commit-expert-refresh.sh"
+DEV_HOST_EXPERTS_REL="scripts/dev-host-experts.sh"
 
 if [[ ! -f "$POSTCOMMIT_SOURCE" ]]; then
     echo "error: $POSTCOMMIT_SOURCE not found" >&2
@@ -197,6 +217,17 @@ bash "\$HOOK_ROOT/$POSTCOMMIT_REL"
 # Expert index refresh (685-yidq) — ONLY on hosts that opt in via
 # TILLANDSIAS_HOST_EXPERTS. Absent => bounded no-op, never rebuilds on CI or a
 # plain checkout. Best-effort like the body itself; never fails the commit.
+#
+# The declaration is RESOLVED here rather than inherited. A git hook runs with
+# whatever environment the committing process had, so gating on an inherited
+# variable meant the refresh had never once fired on either dev host — measured
+# independently on macuahuitl and yoga, 2026-08-17. Sourcing the resolver makes
+# the hook ask the host instead of hoping the caller was configured.
+# The resolver refuses inside a forge and sets nothing without a host-local
+# declaration, so CI and plain checkouts are unchanged.
+if [ -f "\$HOOK_ROOT/$DEV_HOST_EXPERTS_REL" ]; then
+    . "\$HOOK_ROOT/$DEV_HOST_EXPERTS_REL"
+fi
 if [ -n "\${TILLANDSIAS_HOST_EXPERTS:-}" ]; then
     bash "\$HOOK_ROOT/$EXPERT_REFRESH_REL" || true
 fi
@@ -208,7 +239,7 @@ if [[ -f "$POSTCOMMIT_TARGET" ]] && grep -qF "$POSTCOMMIT_MARKER" "$POSTCOMMIT_T
     echo "✓ post-commit hook (dashboard + env-gated expert refresh) already installed"
 elif [[ -f "$POSTCOMMIT_TARGET" ]] && grep -qE "$POSTCOMMIT_MARKER_OLD_RE" "$POSTCOMMIT_TARGET" 2>/dev/null; then
     install_postcommit
-    echo "✓ post-commit hook upgraded to v3 (dashboard + env-gated expert refresh, 685-yidq)"
+    echo "✓ post-commit hook upgraded to v4 (dashboard + env-gated expert refresh, 685-yidq)"
 elif [[ -f "$POSTCOMMIT_TARGET" ]]; then
     echo "⚠ an unrecognized post-commit hook exists — leaving it alone" >&2
 else

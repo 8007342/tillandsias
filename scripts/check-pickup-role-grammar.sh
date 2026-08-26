@@ -129,8 +129,14 @@ else
     # Only pickup_role is extracted, so splitting records on `},{` is safe: the
     # field is a short role string with no braces or escaped quotes. No jq — see
     # the portability note above.
+    #
+    # The split is awk, not sed (851-28b5): GNU sed expands a backslash-n in
+    # the REPLACEMENT to a newline but BSD sed emits a literal 'n', so on
+    # macOS the stream never split and the next sed extracted at most ONE
+    # pickup_role per line — a silent undercount. POSIX awk's gsub handles
+    # the escape identically on both userlands.
     values="$("$PLAN" query --limit 0 --json 2>/dev/null \
-        | sed 's/},{/}\n{/g' \
+        | awk '{gsub(/\},\{/, "}\n{"); print}' \
         | sed -n 's/.*"pickup_role":"\([^"]*\)".*/\1/p' \
         | grep -v '^ *$')"
 

@@ -67,10 +67,16 @@ critical_path:
     timeout_ms: 240000
     expected_behavior: "ok: envelope-keys-exact"
 
-  - step: "citations carry path + line_start + line_end + kind + authority"
+  - step: "citations carry path + line_start + line_end + kind + authority + commit"
     # A citation without a LINE RANGE is unverifiable — file-level citations
     # are the classic way a citation system becomes unfalsifiable.
-    command: "test \"$(jq -r '.citations[0] | keys | join(\",\")' /tmp/.litmus-394b-env.json)\" = 'authority,kind,line_end,line_start,path' && jq -e '.citations[0].line_start >= 1 and .citations[0].line_end >= .citations[0].line_start' /tmp/.litmus-394b-env.json >/dev/null && echo 'ok: citation-shape'"
+    #
+    # ORDER 801-g9nn ADDED `commit`, and the line range is WHY. `45-49` means
+    # nothing without a version of the file: a concurrent agent opens line 45 in
+    # ITS OWN checkout and may read different bytes. The commit is asserted to be
+    # the real HEAD rather than merely present, because a placeholder there would
+    # be worse than the absent field it replaced — it would look like a frame.
+    command: "test \"$(jq -r '.citations[0] | keys | join(\",\")' /tmp/.litmus-394b-env.json)\" = 'authority,commit,kind,line_end,line_start,path' && jq -e '.citations[0].line_start >= 1 and .citations[0].line_end >= .citations[0].line_start' /tmp/.litmus-394b-env.json >/dev/null && test \"$(jq -r '.citations[0].commit' /tmp/.litmus-394b-env.json)\" = \"$(git rev-parse HEAD)\" && echo 'ok: citation-shape'"
     timeout_ms: 10000
     expected_behavior: "ok: citation-shape"
 
@@ -229,7 +235,11 @@ critical_path:
     #
     # A COMMENTED-OUT invocation is correctly not an invocation. What must still
     # fire is real code, and the falsifiability check below proves it does.
-    command: "for f in crates/tillandsias-plan/src/answer.rs crates/tillandsias-plan/src/lib.rs crates/tillandsias-plan/src/main.rs images/default/config-overlay/mcp/forge-plan.sh; do sed -E 's@^[[:space:]]*(#|//|///|//!).*$@@' \"$f\"; done | grep -qiE '(^|[[:space:]|(!\"'\"'\"'=])(python[0-9.]*|pip[0-9.]*)([[:space:]\"'\"'\"']|$)' && { echo 'FAIL: python invocation on the envelope path'; exit 1; }; grep -q 'serde_json' crates/tillandsias-plan/Cargo.toml && echo 'ok: no-python'"
+    # ORDER 801-g9nn added crates/tillandsias-plan/src/gitref.rs to this list.
+    # It is the ONE module on the envelope path that spawns a subprocess at all,
+    # so leaving it out would have left the only file where the policy could
+    # actually be broken unscanned.
+    command: "for f in crates/tillandsias-plan/src/answer.rs crates/tillandsias-plan/src/gitref.rs crates/tillandsias-plan/src/lib.rs crates/tillandsias-plan/src/main.rs images/default/config-overlay/mcp/forge-plan.sh; do sed -E 's@^[[:space:]]*(#|//|///|//!).*$@@' \"$f\"; done | grep -qiE '(^|[[:space:]|(!\"'\"'\"'=])(python[0-9.]*|pip[0-9.]*)([[:space:]\"'\"'\"']|$)' && { echo 'FAIL: python invocation on the envelope path'; exit 1; }; grep -q 'serde_json' crates/tillandsias-plan/Cargo.toml && echo 'ok: no-python'"
     timeout_ms: 10000
     expected_behavior: "ok: no-python"
 

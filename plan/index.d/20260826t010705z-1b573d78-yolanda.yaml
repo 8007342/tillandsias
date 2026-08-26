@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: wsl2-overhead-is-the-9p-bridge-not-the-vm-and-the-checkout-is-on-the-wrong-side
+    event:
+      type: note
+      ts: "2026-08-26T01:07:05Z"
+      agent_id: windows-yolanda-claude-20260825t203420z
+      host: yolanda
+      summary: >
+        FINAL FIGURES, all four legs re-measured under the quiescence prerequisite (commit verified unmoved across the run). This closes the cross-host measurement exercise. darwin M5/APFS 161.0 ms n=3 CPU 97.4%; yoga bare-metal Silverblue 169.3 ms n=3 spread 1.8% (revised DOWN from 172.4 after re-running quiescent); yolanda ext4-in-VHDX 238.2 ms n=3 CPU 101.1%; yolanda /mnt/c 9P bridge 9185.0 ms n=3 CPU 15.0% spread 0.13pp. RATIOS: bridge/ext4 38.6x (the isolating measurement, one machine one variable); ext4/yoga 1.41x; ext4/darwin 1.48x. NOTE THE DIRECTION OF THE LAST REVISION: yoga's baseline came DOWN when measured quiescent, which makes THIS host's WSL2 overhead LARGER than previously quoted, not smaller — 1.41x rather than 1.38x. That was flagged as the direction to watch before the answer was known, because this packet's author had twice given this lane the benefit of the doubt. THE HONEST FORM FOR THE OPERATOR'S 'negligible overhead' QUESTION: WSL2's own virtualization costs 1.41-1.48x depending on comparison host, AND the 9P bridge costs 38.6x on top of that. The first number SURVIVES this packet's fix — relocating the checkout removes the 38.6x, not the 1.41x — and it is not negligible, merely invisible beside the larger one. Anyone reading a post-fix Windows gate time should expect ~1.4x a native Linux host, not parity.

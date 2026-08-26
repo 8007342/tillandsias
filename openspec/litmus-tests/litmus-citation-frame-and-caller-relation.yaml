@@ -1,0 +1,176 @@
+# @trace spec:forge-environment-discoverability
+# @trace order:801-g9nn
+#
+# THE REGRESSION THIS EXISTS TO PREVENT
+#
+# An expert citation used to be `path:45-49` with no version. A line range only
+# means something relative to a version of the file, so a concurrent agent
+# opened line 45 in ITS OWN checkout and, if the file had moved, read the wrong
+# lines and acted on them with full confidence. That was survivable while the
+# corpus was prose. It stopped being survivable when 803-su4n indexed CODE — a
+# stale line number in a spec is a wrong quote, in a function about to be
+# edited it is a WRONG EDIT — and when 801-a2by moved the index into a durable
+# volume shared read-only by every concurrent forge, which made "the answer's
+# frame is not the reader's frame" the NORMAL case rather than a rare one.
+#
+# WHAT IS PINNED, and why each half is useless without the other:
+#
+#   (a) THE FRAME IS RECORDED. Every citation carries the commit its span was
+#       read at, and it is the real HEAD rather than a placeholder. Without
+#       this there is nothing to compare and the rest is unfalsifiable.
+#
+#   (b) THE RELATIONSHIP IS DERIVED, NOT DECLARED. `verify-answer` compares the
+#       reader's HEAD with the answer's commit and reports one of
+#       same | behind | ahead | diverged | unfetched | unknown. All four
+#       orderable verdicts are exercised here against a REAL commit DAG built
+#       in a scratch repository, because they are claims about what git does
+#       and a fixture that fakes git only proves the author's belief about git.
+#       `diverged` is the one a version number cannot express: two concurrent
+#       branches are genuinely unordered, and an expert that reported a `vNNNN`
+#       for them would be confidently wrong exactly when it mattered.
+#
+#   (c) A CITATION IN THE READER'S FUTURE IS LABELLED, NOT REFUSED. With a
+#       shared index the expert can legitimately answer from a commit the
+#       asking agent has never fetched. Served bare that is a line number into
+#       a file the agent cannot open — and, crucially, it is INDISTINGUISHABLE
+#       from a fabricated path. Labelled, it is the most useful thing the
+#       expert can say: this moved under you, fetch. It exits 3, deliberately
+#       neither 0 nor 1.
+#
+#   (d) THE FALSIFIABILITY HALF. The frame must not become a laundering
+#       mechanism. A span that holds at NO commit — not the reader's, not the
+#       one it names — stays a hard violation, and so does one whose named
+#       commit this checkout has never fetched. If naming a sha were enough to
+#       be excused, every fabricated citation would simply arrive with one.
+name: litmus:citation-frame-and-caller-relation
+spec: forge-environment-discoverability
+phase: pre-build
+description: >
+  Pin order 801-g9nn: every citation carries the commit its span was read at,
+  and verify-answer derives the honest same|behind|ahead|diverged|unfetched
+  relationship between the reader's HEAD and that commit — labelling a citation
+  from the reader's future as stale-with-a-fetch-instruction while still
+  refusing a span that holds at no commit at all.
+severity: critical
+size: quick
+
+preconditions:
+  - workspace contains crates/tillandsias-plan
+  - git and jq are available in PATH
+
+inputs:
+  - crates/tillandsias-plan/src/gitref.rs
+  - crates/tillandsias-plan/src/answer.rs
+  - crates/tillandsias-plan/src/main.rs
+
+critical_path:
+  - step: "build the verifier and a REAL commit DAG to verify against"
+    # The DAG:  a ── b   (main)
+    #            \
+    #             └── x  (side)
+    # Nothing here is mocked. Every verdict below is git's, not the fixture's.
+    #
+    # The `rm -rf` is load-bearing rather than tidiness: every later step reads
+    # this scratch repo, so a stale copy from a previous run would let them all
+    # pass while this step built nothing at all.
+    #
+    # Commit `b` also ADDS a file that does not exist at `a`, which is the
+    # purest shape of a citation in the reader's future: not a moved span but a
+    # path the reader's checkout has never contained.
+    command: "rm -rf /tmp/.litmus-801g9nn && mkdir -p /tmp/.litmus-801g9nn && cargo build -q --release -p tillandsias-plan && PB=\"$PWD/${CARGO_TARGET_DIR:-target}/release/tillandsias-plan\" && echo \"$PB\" > /tmp/.litmus-801g9nn/bin && R=/tmp/.litmus-801g9nn/repo && mkdir -p \"$R/openspec/specs/x\" && git -C \"$R\" init -q -b main && git -C \"$R\" config user.email l@t.invalid && git -C \"$R\" config user.name l && printf '## Egress allowlist\\ndeny by default\\n' > \"$R/openspec/specs/x/spec.md\" && git -C \"$R\" add -A && git -C \"$R\" commit -q -m a && git -C \"$R\" rev-parse HEAD > /tmp/.litmus-801g9nn/a && printf 'pad\\npad\\npad\\n## Egress allowlist\\ndeny by default\\n' > \"$R/openspec/specs/x/spec.md\" && printf '## Egress allowlist\\narrived later\\n' > \"$R/openspec/specs/x/added-later.md\" && git -C \"$R\" add -A && git -C \"$R\" commit -q -m b && git -C \"$R\" rev-parse HEAD > /tmp/.litmus-801g9nn/b && git -C \"$R\" checkout -q -b side \"$(cat /tmp/.litmus-801g9nn/a)\" && printf '## Egress allowlist\\nallow everything\\n' > \"$R/openspec/specs/x/spec.md\" && git -C \"$R\" add -A && git -C \"$R\" commit -q -m x && git -C \"$R\" rev-parse HEAD > /tmp/.litmus-801g9nn/x && git -C \"$R\" checkout -q main && O=/tmp/.litmus-801g9nn/other && mkdir -p \"$O\" && git -C \"$O\" init -q -b main && git -C \"$O\" config user.email l@t.invalid && git -C \"$O\" config user.name l && echo z > \"$O/f\" && git -C \"$O\" add -A && git -C \"$O\" commit -q -m z && git -C \"$O\" rev-parse HEAD > /tmp/.litmus-801g9nn/foreign && test -s /tmp/.litmus-801g9nn/foreign && echo 'ok: dag-built'"
+    timeout_ms: 300000
+    expected_behavior: "ok: dag-built"
+
+  - step: "(a) a live plan_answer citation carries the REAL HEAD as its commit"
+    # Present AND correct. A placeholder here would be worse than the absent
+    # field it replaced: it would look like a frame and compare as one.
+    command: "PB=$(cat /tmp/.litmus-801g9nn/bin); \"$PB\" --index plan/index.yaml answer 'what is blocked by 394a' > /tmp/.litmus-801g9nn/live.json && test \"$(jq -r '.citations[0].commit' /tmp/.litmus-801g9nn/live.json)\" = \"$(git rev-parse HEAD)\" && echo 'ok: citation-carries-real-head'"
+    timeout_ms: 60000
+    expected_behavior: "ok: citation-carries-real-head"
+
+  - step: "(b) same | behind | ahead | diverged are DERIVED from the real DAG"
+    # The four orderable verdicts, each from a different reader position against
+    # the same DAG. `diverged` is the one no version number can express.
+    command: "PB=$(cat /tmp/.litmus-801g9nn/bin); R=/tmp/.litmus-801g9nn/repo; A=$(cat /tmp/.litmus-801g9nn/a); B=$(cat /tmp/.litmus-801g9nn/b); X=$(cat /tmp/.litmus-801g9nn/x); mkenv() { printf '{\"answer\":\"The Egress allowlist section denies by default.\",\"citations\":[{\"path\":\"openspec/specs/x/spec.md\",\"line_start\":%s,\"line_end\":%s,\"kind\":\"spec\",\"authority\":{\"key\":\"Egress allowlist\"},\"commit\":\"%s\"}],\"freshness\":{\"source_commit\":\"%s\",\"indexed_at\":\"2026-08-18T00:00:00Z\"},\"confidence\":\"retrieved\"}\\n' \"$2\" \"$3\" \"$1\" \"$1\"; }; rel() { git -C \"$R\" checkout -q \"$1\"; mkenv \"$2\" \"$3\" \"$4\" | \"$PB\" verify-answer --root \"$R\" 2>&1 | sed -n 's/^caller-relation: \\([a-z]*\\) .*/\\1/p'; }; test \"$(rel \"$B\" \"$B\" 4 5)\" = same || { echo FAIL-same; exit 1; }; test \"$(rel \"$A\" \"$B\" 4 5)\" = behind || { echo FAIL-behind; exit 1; }; test \"$(rel \"$B\" \"$A\" 1 2)\" = ahead || { echo FAIL-ahead; exit 1; }; test \"$(rel \"$X\" \"$B\" 4 5)\" = diverged || { echo FAIL-diverged; exit 1; }; echo 'ok: four-relations-derived'"
+    timeout_ms: 60000
+    expected_behavior: "ok: four-relations-derived"
+
+  - step: "(c) a citation from the reader's FUTURE is stale-with-a-fetch, exit 3"
+    # The shared-index case, end to end: the cited file does not exist in the
+    # reader's checkout at all. Exit 3 is asserted because it is the whole
+    # point — 0 would let a reader open line numbers that are not there, and 1
+    # would throw away a correct answer along with the instruction that fixes
+    # it. The relation must ALSO read `behind`: "you are missing commits" is
+    # the actionable half.
+    command: "PB=$(cat /tmp/.litmus-801g9nn/bin); R=/tmp/.litmus-801g9nn/repo; A=$(cat /tmp/.litmus-801g9nn/a); B=$(cat /tmp/.litmus-801g9nn/b); git -C \"$R\" checkout -q \"$A\"; test ! -e \"$R/openspec/specs/x/added-later.md\" || { echo 'FAIL: fixture precondition — the future file is present at a'; exit 1; }; printf '{\"answer\":\"The Egress allowlist section denies by default.\",\"citations\":[{\"path\":\"openspec/specs/x/added-later.md\",\"line_start\":1,\"line_end\":2,\"kind\":\"spec\",\"authority\":{\"key\":\"Egress allowlist\"},\"commit\":\"%s\"}],\"freshness\":{\"source_commit\":\"%s\",\"indexed_at\":\"2026-08-18T00:00:00Z\"},\"confidence\":\"retrieved\"}\\n' \"$B\" \"$B\" | \"$PB\" verify-answer --root \"$R\" > /tmp/.litmus-801g9nn/future.txt 2>&1; rc=$?; test \"$rc\" = 3 || { echo \"FAIL: expected exit 3, got $rc\"; cat /tmp/.litmus-801g9nn/future.txt; exit 1; }; grep -q '^stale: envelope is sound at its own frame' /tmp/.litmus-801g9nn/future.txt || { echo FAIL-no-stale-line; cat /tmp/.litmus-801g9nn/future.txt; exit 1; }; grep -q '^caller-relation: behind' /tmp/.litmus-801g9nn/future.txt || { echo FAIL-not-behind; cat /tmp/.litmus-801g9nn/future.txt; exit 1; }; grep -q 'ABSENT HERE' /tmp/.litmus-801g9nn/future.txt || { echo FAIL-not-named-absent; cat /tmp/.litmus-801g9nn/future.txt; exit 1; }; grep -q 'fetch' /tmp/.litmus-801g9nn/future.txt && echo 'ok: future-citation-labelled-not-refused'"
+    timeout_ms: 60000
+    expected_behavior: "ok: future-citation-labelled-not-refused"
+
+  - step: "(d) FALSIFIABILITY: naming a commit does not launder a fabrication"
+    # Three seeded lies, each of which must stay a REFUSAL (exit 1) rather than
+    # be softened into `stale`:
+    #   1. a key that appears at neither commit;
+    #   2. a range that runs past the end of the file at the commit it names;
+    #   3. a commit this checkout has never fetched — an unanswerable question
+    #      is not an acquittal.
+    # Plus a positive control on the same shapes, so a step that refuses
+    # everything cannot pass by accident.
+    command: "PB=$(cat /tmp/.litmus-801g9nn/bin); R=/tmp/.litmus-801g9nn/repo; B=$(cat /tmp/.litmus-801g9nn/b); F=$(cat /tmp/.litmus-801g9nn/foreign); git -C \"$R\" checkout -q \"$B\"; lie() { printf '{\"answer\":\"The %s section denies by default.\",\"citations\":[{\"path\":\"openspec/specs/x/spec.md\",\"line_start\":%s,\"line_end\":%s,\"kind\":\"spec\",\"authority\":{\"key\":\"%s\"},\"commit\":\"%s\"}],\"freshness\":{\"source_commit\":\"%s\",\"indexed_at\":\"2026-08-18T00:00:00Z\"},\"confidence\":\"retrieved\"}\\n' \"$1\" \"$2\" \"$3\" \"$1\" \"$4\" \"$4\" | \"$PB\" verify-answer --root \"$R\" > /tmp/.litmus-801g9nn/lie.txt 2>&1; echo $?; }; test \"$(lie 'Ingress allowlist' 4 5 \"$B\")\" = 1 || { echo 'FAIL: a key present at no commit was not refused'; cat /tmp/.litmus-801g9nn/lie.txt; exit 1; }; test \"$(lie 'Egress allowlist' 900 905 \"$B\")\" = 1 || { echo 'FAIL: a range past EOF at its own commit was not refused'; cat /tmp/.litmus-801g9nn/lie.txt; exit 1; }; test \"$(lie 'Ingress allowlist' 4 5 \"$F\")\" = 1 || { echo 'FAIL: an unfetched commit acquitted a fabrication'; cat /tmp/.litmus-801g9nn/lie.txt; exit 1; }; test \"$(lie 'Egress allowlist' 4 5 \"$B\")\" = 0 || { echo 'FAIL: the honest control was refused, so the step refuses everything'; cat /tmp/.litmus-801g9nn/lie.txt; exit 1; }; echo 'ok: frame-does-not-launder-fabrication'"
+    timeout_ms: 60000
+    expected_behavior: "ok: frame-does-not-launder-fabrication"
+
+  - step: "(e) a stamped caller_relation the DAG contradicts is REFUSED"
+    # The stamped relation is a claim like any other. Negative control paired
+    # with a positive one: an honest stamp must still pass, or this step would
+    # pass by refusing every stamped envelope.
+    command: "PB=$(cat /tmp/.litmus-801g9nn/bin); R=/tmp/.litmus-801g9nn/repo; A=$(cat /tmp/.litmus-801g9nn/a); B=$(cat /tmp/.litmus-801g9nn/b); git -C \"$R\" checkout -q \"$B\"; stamp() { printf '{\"answer\":\"The Egress allowlist section denies by default.\",\"citations\":[{\"path\":\"openspec/specs/x/spec.md\",\"line_start\":4,\"line_end\":5,\"kind\":\"spec\",\"authority\":{\"key\":\"Egress allowlist\"},\"commit\":\"%s\"}],\"freshness\":{\"source_commit\":\"%s\",\"indexed_at\":\"2026-08-18T00:00:00Z\"},\"confidence\":\"retrieved\",\"caller_relation\":{\"caller_head\":\"%s\",\"answer_commit\":\"%s\",\"relation\":\"%s\"}}\\n' \"$B\" \"$B\" \"$A\" \"$B\" \"$1\" | \"$PB\" verify-answer --root \"$R\" > /tmp/.litmus-801g9nn/stamp.txt 2>&1; echo $?; }; test \"$(stamp behind)\" = 0 || { echo 'FAIL: an honest stamped relation was refused'; cat /tmp/.litmus-801g9nn/stamp.txt; exit 1; }; test \"$(stamp same)\" = 1 || { echo 'FAIL: a stamped relation the DAG contradicts was accepted'; cat /tmp/.litmus-801g9nn/stamp.txt; exit 1; }; grep -q 'FABRICATED relation' /tmp/.litmus-801g9nn/stamp.txt && echo 'ok: stamped-relation-is-checked'"
+    timeout_ms: 60000
+    expected_behavior: "ok: stamped-relation-is-checked"
+
+  - step: "(f) the emitter stamps caller_relation only when a reader identifies itself"
+    # An expert cannot see its caller: the server answers out of the checkout it
+    # was launched in, while the asking agent may be in a worktree several
+    # commits away. So the reader supplies its HEAD, and when it does not the
+    # field is OMITTED — never defaulted to `same`, which would manufacture the
+    # exact false assurance this order removes. The absent case is asserted
+    # first because it is the one a regression would silently turn into a
+    # reassuring lie, and a malformed hint must be dropped rather than stamped:
+    # `caller_head: HEAD` would look answered and compare as nothing.
+    command: "PB=$(cat /tmp/.litmus-801g9nn/bin); OLD=$(git rev-parse HEAD~5); env -u TILLANDSIAS_CALLER_HEAD \"$PB\" --index plan/index.yaml answer 'what is blocked by 394a' > /tmp/.litmus-801g9nn/noreader.json && jq -e 'has(\"caller_relation\") | not' /tmp/.litmus-801g9nn/noreader.json >/dev/null || { echo 'FAIL: caller_relation stamped with no reader identified'; exit 1; }; TILLANDSIAS_CALLER_HEAD=\"$OLD\" \"$PB\" --index plan/index.yaml answer 'what is blocked by 394a' > /tmp/.litmus-801g9nn/reader.json && test \"$(jq -r '.caller_relation.relation' /tmp/.litmus-801g9nn/reader.json)\" = behind || { echo 'FAIL: an ancestor reader was not reported as behind'; jq -c '.caller_relation' /tmp/.litmus-801g9nn/reader.json; exit 1; }; test \"$(jq -r '.caller_relation.caller_head' /tmp/.litmus-801g9nn/reader.json)\" = \"$OLD\" || { echo 'FAIL: stamped caller_head is not the supplied one'; exit 1; }; TILLANDSIAS_CALLER_HEAD=HEAD \"$PB\" --index plan/index.yaml answer 'what is blocked by 394a' > /tmp/.litmus-801g9nn/junk.json && jq -e 'has(\"caller_relation\") | not' /tmp/.litmus-801g9nn/junk.json >/dev/null || { echo 'FAIL: a malformed caller-head hint was stamped'; exit 1; }; echo 'ok: caller-relation-stamped-only-for-a-known-reader'"
+    timeout_ms: 60000
+    expected_behavior: "ok: caller-relation-stamped-only-for-a-known-reader"
+
+  - step: "the frame unit pins are green and the DAG cases are real"
+    # Counts the frame-specific unit tests rather than the whole suite, so a
+    # regression that deletes them is a failure rather than a smaller number
+    # nobody reads.
+    command: "out=$(cargo test -p tillandsias-plan 2>&1); printf '%s' \"$out\" | grep -q 'FAILED' && exit 1; n=$(printf '%s' \"$out\" | grep -cE '^test (gitref::tests::(the_four_relations|a_commit_the_reader_never_fetched|file_at_reads|is_ancestor_says)|answer::tests::(a_citation_in_the_callers_future|a_span_that_moved|a_fabricated_span|a_range_past|a_file_that_shrank|a_stamped_caller_relation|an_underivable|a_reader_standing|an_uncommitted_edit|the_default_citation_commit|an_unframed_envelope)).* ok$'); test \"$n\" -ge 15 || { echo \"FAIL: only $n frame unit pins ran\"; exit 1; }; echo \"ok: frame-unit-pins-green n=$n\""
+    timeout_ms: 300000
+    expected_behavior: "ok: frame-unit-pins-green"
+
+observability:
+  traces:
+    - "@trace spec:forge-environment-discoverability"
+    - "@trace order:801-g9nn"
+  expected_log: "Citation frame recorded, caller relation derived from the commit DAG, future citations labelled rather than refused, fabrication still refused"
+  log_fields:
+    spec: "forge-environment-discoverability"
+    test: "citation-frame-and-caller-relation"
+    engine_artifact: "crates/tillandsias-plan/src/gitref.rs"
+    envelope_artifact: "crates/tillandsias-plan/src/answer.rs"
+    index_artifact: "scripts/spec-index-ensure.sh"
+
+rollback:
+  on_failure: >
+    The citation frame contract drifted. If step (a) failed, citations are no
+    longer recording the commit their span was read at, and every line range
+    the experts emit is once again meaningful only to the process that produced
+    it. If step (b) failed, the derived relationship disagrees with git — worse
+    than no relationship, because a reader will act on it. If step (c) failed,
+    a citation from the reader's future is being served bare again: with the
+    shared durable index (801-a2by) that is the normal case, and bare it is
+    indistinguishable from a fabricated path. If step (d) failed, the frame has
+    become a laundering mechanism and any fabricated citation can buy an
+    acquittal by attaching a sha — at which point the whole envelope contract
+    is decoration.
+  command: "R=/tmp/.litmus-801g9nn/repo; PB=$(cat /tmp/.litmus-801g9nn/bin); git -C \"$R\" log --oneline --all --graph; \"$PB\" --index plan/index.yaml answer 'what is blocked by 394a' | jq '.citations[0]'"

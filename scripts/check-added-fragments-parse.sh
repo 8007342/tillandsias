@@ -7,8 +7,9 @@
 # WHY THIS EXISTS. `tillandsias-plan check` already prints, accurately:
 #   warning: ledger fragment <path> does not parse and was SKIPPED
 #            — its contents are not in the answers below
-# and then exits 0. So `./build.sh --check` passes, the pre-push hook stamps the
-# tree, and the fragment reaches origin carrying a packet that exists in git and
+# and then exits 0. So `./build.sh --check` passes, the local gate stamps the
+# tree (the pre-push hook merely verifies that stamp), and the fragment reaches
+# origin carrying a packet that exists in git and
 # in NO ANSWER: not in `plan status`, not in `plan next`, not in burndown, not
 # claimable, invisible to every sibling host. The author believes they filed
 # work. The fleet never sees it.

@@ -80,9 +80,28 @@ cases:
       confidence: exact
       citation_kind: plan
       min_citations: 20
+      # ── `path:` IS A MUTABLE FIELD ON A PLAN CITATION ────────────────────
+      # Same lesson as the `status:` pins below, one level up, and learned the
+      # same way. A burndown returns TERMINAL children by design, and terminal
+      # packets are exactly what scripts/archive-plan-packets.sh sweeps out of
+      # plan/index.yaml into plan/archive/*.yaml. Pinning the file therefore
+      # pins WHERE THE LEDGER HAPPENS TO KEEP a packet today, which archiving
+      # legitimately changes without changing anything this case is about.
+      #
+      # Dropping the pin does NOT soften the case. Identity (packet_id +
+      # order), status and span_contains all still have to match, and the
+      # citation is still verified against the file it names — so a citation
+      # into the archive must genuinely contain the packet it claims. What the
+      # pin was catching, it is not catching: when the capability was actually
+      # lost, these cases failed on `confidence: exact` and `min_citations`
+      # with ZERO citations, long before any path was compared.
+      #
+      # Kept on the METHODOLOGY cases below, where a yaml_path in
+      # methodology.yaml does not relocate, and on
+      # plan-upstream-prerequisites-of-experts-milestone, whose query returns
+      # only NON-terminal prerequisites and so can never cite archived work.
       citations_include:
-        - path: plan/index.yaml
-          packet_id: plan-methodology-experts-rung1
+        - packet_id: plan-methodology-experts-rung1
           order: "394"
           # Status deliberately NOT pinned (680-zphp) — 394 is a live
           # non-terminal packet (ready), so a `status:` pin here goes red the
@@ -92,21 +111,18 @@ cases:
           span_contains:
             - "packet_id: plan-methodology-experts-rung1"
             - "release_target: forge-local-experts-milestone"
-        - path: plan/index.yaml
-          packet_id: plan-methodology-experts-rung1/plan-expert-binary-shipping
+        - packet_id: plan-methodology-experts-rung1/plan-expert-binary-shipping
           order: 394a
           status: completed
         # NOTE: deliberately does NOT assert this packet's status. A query set
         # that pins the MUTABLE status of an in-flight packet goes red on every
         # legitimate ledger update — this case did exactly that the first time
         # 394d was closed. Identity + deliverable text are stable; status is not.
-        - path: plan/index.yaml
-          packet_id: plan-methodology-experts-rung1/expert-groundtruth-harness
+        - packet_id: plan-methodology-experts-rung1/expert-groundtruth-harness
           order: 394d
           span_contains:
             - "committed query set (plan + methodology) + grading harness runnable in-forge"
-        - path: plan/index.yaml
-          packet_id: plan-methodology-experts-rung1/expert-launch-state-and-ephemerality
+        - packet_id: plan-methodology-experts-rung1/expert-launch-state-and-ephemerality
           order: 394e
           # Status deliberately NOT pinned — same lesson as 394a/394d above.
           # 394e went in_progress -> ready via the 672-bz7u expire-claims
@@ -114,8 +130,7 @@ cases:
           # case red for exactly the mutable-field reason the 394a comment
           # warns against. Identity + release_target coverage is what this
           # citation is here to prove; status is not.
-        - path: plan/index.yaml
-          packet_id: experts-construction-research
+        - packet_id: experts-construction-research
           status: completed
       citations_exclude:
         # Not in this milestone. If it shows up, the release-target filter is
@@ -140,8 +155,11 @@ cases:
       min_citations: 1
       max_citations: 1
       citations_include:
-        - path: plan/index.yaml
-          packet_id: plan-methodology-experts-rung1/expert-groundtruth-harness
+        # No `path:` pin — a dependency edge does not stop being a fact when
+        # both of its ends are archived, and after a sweep 394c and 394d both
+        # live in plan/archive/. See the mutable-`path` note on
+        # plan-active-release-experts-milestone above.
+        - packet_id: plan-methodology-experts-rung1/expert-groundtruth-harness
           order: 394d
           span_contains:
             - "packet_id: plan-methodology-experts-rung1/expert-groundtruth-harness"
@@ -182,8 +200,12 @@ cases:
       min_citations: 1
       max_citations: 1
       citations_include:
-        - path: plan/index.yaml
-          packet_id: plan-methodology-experts-rung1/plan-expert-binary-shipping
+        # No `path:` pin. 394a is DONE, which is precisely the state that gets
+        # swept into plan/archive/ — a location pin on a packet pinned
+        # `status: completed` in the same breath is a pin on the one thing
+        # about it that is guaranteed to move. See the mutable-`path` note on
+        # plan-active-release-experts-milestone above.
+        - packet_id: plan-methodology-experts-rung1/plan-expert-binary-shipping
           order: 394a
           status: completed
           span_contains:
@@ -315,8 +337,8 @@ cases:
           yaml_path: distributed_work.worker_agent_protocol.forge_cycle_budget.rule
           key: "rule:"
           span_contains:
-            - "drain AT MOST ONE plan packet per cycle"
-            - "SPLIT the packet into smaller ready"
+            - "MAY drain more than one plan packet"
+            - "The bound is TIME, never a count"
 
   - id: methodology-no-python
     engine: methodology.ask
@@ -470,7 +492,7 @@ cases:
         - "navigation only"
         - "distributed_work.worker_agent_protocol.forge_cycle_budget"
       answer_excludes:
-        - "drain AT MOST ONE plan packet per cycle"
+        - "MAY drain more than one plan packet"
 
   - id: methodology-refuses-an-unrouted-question
     engine: methodology.ask

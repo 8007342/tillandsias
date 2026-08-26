@@ -1,4 +1,6 @@
-# @trace spec:litmus-runner
+# @trace spec:litmus-framework
+# (formerly spec:litmus-runner — a ghost name no spec file ever carried; the
+# stdlib is part of the litmus framework and traces to its spec, order 877)
 #
 # litmus-stdlib.sh — portable building-block primitives for litmus command: fields
 #

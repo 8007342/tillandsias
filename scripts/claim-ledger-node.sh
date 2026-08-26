@@ -28,13 +28,33 @@ set -uo pipefail
 # auto-reclaimed. This is advisory (CRDT-friendly), not a mutex.
 #
 # Verdict grammar (exactly one line on stdout, falsifiable):
-#   ^(claimed|reclaimed|in-flight|released|free):[a-z0-9._/-]+$
+#   ^(claimed|reclaimed|in-flight|released|free|unknown):[a-z0-9._/-]+$
 #
 #   claimed:<id>     lease acquired by this caller (exit 0)
 #   reclaimed:<id>   a stale/expired lease was taken over by this caller (exit 0)
 #   in-flight:<id>   a live lease is held by another caller; skip re-derivation (exit 1)
 #   released:<id>    this caller's lease was released (exit 0)
 #   free:<id>        status: no live lease is held (exit 1)
+#   unknown:<id>     claim only: no packet resolves to this id — NOT leased (exit 2)
+#
+# WHY `unknown` EXISTS (order 790-u8x6). `claim` used to answer `claimed:<id>`
+# for ANY string, including one that names no packet. Observed live 2026-08-17:
+# a cycle claimed a three-packet bundle from ids guessed off their titles and
+# got `claimed:squid-proxy-version-bump-past-6-9` and
+# `claimed:crane-deps-stability-and-fleet-binary-cache` — neither of which
+# exists (the real ids are `proxy-squid-...` and `crane-deps-stability-and-
+# binary-cache`). The cycle then believed it held leases on two packets that
+# were in fact unleased and claimable by any sibling, and the output was
+# byte-indistinguishable from success. An advisory lease is weak coordination
+# BY DESIGN and that is correct; an advisory lease on a node that does not
+# exist is ZERO coordination reported as success, which is the
+# reads-as-protective-and-is-not class (723-ydmk) landing on the coordination
+# layer. The blast radius is precisely what the lease prevents: two hosts doing
+# the same work (plan/issues/agent-concurrency-collisions-2026-06-20.md).
+#
+# `release` and `status` stay PERMISSIVE and never resolve the id: a packet
+# that was obsoleted or renamed after a lease was taken still needs releasing,
+# and a stale lease you cannot drop is worse than a phantom one.
 #
 # Subcommands:
 #   claim   <node-id>   (default) try to reserve the node
@@ -45,10 +65,21 @@ set -uo pipefail
 #   TILLANDSIAS_LEDGER_LEASE_ROOT       lease root dir (default runtime/tmp)
 #   TILLANDSIAS_LEDGER_LEASE_TTL_SECS   lease TTL seconds (default 14400 = 4h)
 #   TILLANDSIAS_LEDGER_LEASE_ID         opaque lease/agent id recorded in holder
+#   TILLANDSIAS_LEDGER_CLAIM_INDEX      ledger the claim resolves ids against
+#                                       (default <repo>/plan/index.yaml). A
+#                                       FIXTURE index — not a skip switch — is
+#                                       the seam, so the litmus exercises this
+#                                       exact resolution path against a
+#                                       controlled corpus rather than bypassing
+#                                       it (same shape as AUTH_PROBE).
+
+SCRIPT_DIR_CLN="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT_CLN="$(cd "$SCRIPT_DIR_CLN/.." && pwd)"
 
 LEASE_ROOT="${TILLANDSIAS_LEDGER_LEASE_ROOT:-${XDG_RUNTIME_DIR:-/tmp}/tillandsias-locks/ledger-nodes}"
 LEASE_TTL="${TILLANDSIAS_LEDGER_LEASE_TTL_SECS:-14400}"
 LEASE_ID="${TILLANDSIAS_LEDGER_LEASE_ID:-$(hostname 2>/dev/null || echo unknown)-$$}"
+CLAIM_INDEX="${TILLANDSIAS_LEDGER_CLAIM_INDEX:-$REPO_ROOT_CLN/plan/index.yaml}"
 
 usage() {
   cat >&2 <<'EOF'
@@ -70,11 +101,13 @@ Verdict (exactly one line on stdout):
   in-flight:<id>   live lease held by another caller — SKIP this node
   released:<id>    this caller's lease was released
   free:<id>        no live lease is held
+  unknown:<id>     claim only: no packet resolves to this id — nothing leased (exit 2)
 
 Env:
   TILLANDSIAS_LEDGER_LEASE_ROOT       lease root dir (default /tmp/tillandsias-locks/ledger-nodes)
   TILLANDSIAS_LEDGER_LEASE_TTL_SECS   lease TTL seconds (default 14400 = 4h)
   TILLANDSIAS_LEDGER_LEASE_ID         opaque lease/agent id (default hostname-pid)
+  TILLANDSIAS_LEDGER_CLAIM_INDEX      ledger claim resolves ids against (default plan/index.yaml)
 EOF
 }
 
@@ -130,8 +163,53 @@ lease_is_stale() {
   [ "$(now_epoch)" -ge "$((mtime + LEASE_TTL))" ]
 }
 
+# Does a packet resolve to this id? Delegates to `tillandsias-plan status`,
+# which is the authority: it resolves BOTH a packet_id and an order token, and
+# it reads the FOLDED ledger (base + plan/index.d/ fragments), so a packet
+# filed minutes ago in a fragment resolves correctly. A grep over the base
+# alone would refuse those — a false refusal is worse than the phantom lease
+# this fix removes.
+#
+# Returns 0 exists, 1 does not exist, 2 UNVERIFIABLE (no binary or no index).
+# Deliberately no pipeline: `producer | grep -q` under `set -o pipefail`
+# (line 3) is load-flaky via SIGPIPE, which cost the fleet a red trunk gate
+# four times in one night (order 792-ksr8).
+node_exists() {
+  local id="$1" plan_bin probe_dir
+  [ -f "$CLAIM_INDEX" ] || return 2
+  probe_dir="$SCRIPT_DIR_CLN/plan-binary-probe.sh"
+  [ -r "$probe_dir" ] || return 2
+  # shellcheck source=/dev/null
+  . "$probe_dir"
+  plan_bin="$(resolve_plan_binary)" || return 2
+  [ -n "$plan_bin" ] || return 2
+  "$plan_bin" --index "$CLAIM_INDEX" status "$id" >/dev/null 2>&1
+  case "$?" in
+    0) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 cmd_claim() {
   local id="$1" dir
+  # Resolve BEFORE taking the lease: a lease on a node that does not exist is
+  # zero coordination reported as success (790-u8x6).
+  node_exists "$id"
+  case "$?" in
+    1)
+      echo "unknown:$id"
+      echo "  no packet resolves to '$id' in $CLAIM_INDEX — nothing was leased." >&2
+      echo "  Check the id with: tillandsias-plan status $id" >&2
+      return 2
+      ;;
+    2)
+      # Cannot verify (no built binary, or no ledger here). Degrade LOUDLY and
+      # still lease — refusing would break claims on a fresh checkout, and the
+      # 702-68zj precedent is that stale/absent host state is skipped by name,
+      # never silently and never as a violation.
+      echo "  note: claim could not verify '$id' (no resolvable plan binary or ledger at $CLAIM_INDEX); leasing unverified" >&2
+      ;;
+  esac
   dir="$(lease_path "$id")"
   mkdir -p "$LEASE_ROOT"
   if mkdir "$dir" 2>/dev/null; then

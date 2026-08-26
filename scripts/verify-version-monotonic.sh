@@ -143,11 +143,40 @@ if version_compare "$current_major" "$current_minor" "$current_component3" "$cur
     echo "✓ Version $current_version is monotonically >= latest release $latest_tag"
     exit 0
 else
+    # ORDER 800-vk2p. The remedy must arrive with the refusal, and it must arrive
+    # EARLY. Cutting a release moves the tag within seconds, so every branch still
+    # carrying the pre-release VERSION becomes unpushable for something none of
+    # them did — at v0.4.260817.1 that was linux-next, windows-next and osx-next
+    # simultaneously. The old text was true about a RELEASE while the reader was
+    # pushing a plan fragment, and named hand-editing VERSION, which the runbook
+    # guardrail and pre-push-version-guard.sh both forbid off main.
+    #
+    # The REMEDY line is deliberately the second stderr line: the hook that most
+    # readers actually meet this through truncates the preflight detail
+    # (scripts/hooks/pre-push-local-gate.sh), so a remedy appended at the end is
+    # invisible exactly when it is needed.
+    branch="$(git symbolic-ref --short HEAD 2>/dev/null)" || branch=""
     echo "ERROR: Version $current_version is LESS than latest release $latest_tag" >&2
-    echo "  Latest:  $latest_version" >&2
-    echo "  Current: $current_version" >&2
-    echo "" >&2
-    echo "Monotonicity violation. Cannot release a version that regresses." >&2
-    echo "Update VERSION file to a value >= $latest_version" >&2
+    case "$branch" in
+        linux-next|main)
+            echo "REMEDY: git fetch origin && git merge origin/main" >&2
+            echo "A release was just cut: tag $latest_tag moved while this branch still carries $current_version." >&2
+            echo "This branch is not broken — it is missing the post-release back-merge (order 800-vk2p; precedent f6424070d)." >&2
+            echo "Do NOT edit VERSION by hand off main; the merge is the fix." >&2
+            ;;
+        windows-next|osx-next)
+            echo "REMEDY: git fetch origin && git merge origin/linux-next" >&2
+            echo "A release was just cut: tag $latest_tag moved while this branch still carries $current_version." >&2
+            echo "linux-next carries main's post-release VERSION, and the pre_push_gate already requires that merge" >&2
+            echo "before every non-linux-next push — following the gate in order self-heals this (order 800-vk2p)." >&2
+            ;;
+        *)
+            echo "REMEDY: if a release was just cut, back-merge it: git fetch origin && git merge origin/main (order 800-vk2p)" >&2
+            echo "  Latest:  $latest_version" >&2
+            echo "  Current: $current_version" >&2
+            echo "Monotonicity violation. Cannot release a version that regresses." >&2
+            echo "Otherwise update VERSION file to a value >= $latest_version" >&2
+            ;;
+    esac
     exit 1
 fi

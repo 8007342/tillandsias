@@ -474,6 +474,164 @@ case "$out" in
     *) echo "ok: declared-class violation does not print the event remedy" ;;
 esac
 
+# ── 797-qm4t: a NON-TERMINAL event on an unknown packet_id is REPORTED ──────
+# The status and terminal-event channels only see a fragment that CLAIMS a
+# closure. A `note` or `progress` aimed at a packet_id nobody filed is dropped
+# in total silence — that is how a full set of GPU measurements for order 406
+# was written against an invented id, landed nowhere, and drew four green
+# signals. It is an ADVISORY, not a violation: this channel sees every note in
+# an append-only corpus no one may rewrite, and 699-dycj forbids turning one
+# host's typo into every host's red build.
+S="$TDIR/anyevent-unknown"; sandbox "$S"
+cat >"$S/plan/index.d/a.yaml" <<'F'
+packets:
+  - packet_id: alpha-packet
+    order: 900
+    status: ready
+    title: "a real packet, so the fold knows something"
+events:
+  - packet_id: ghost-packet
+    event:
+      type: note
+      ts: "2026-08-17T23:30:00Z"
+      host: fixture
+      summary: "a note addressed to a packet nobody ever filed"
+F
+out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+assert "non-terminal event on an unknown packet_id is named" 0 \
+    "ghost-packet: an events block addresses it but NO SUCH PACKET is in the fold" "$rc" "$out"
+case "$out" in
+    violation:*)
+        echo "FAIL: an unknown-pid NOTE must not fail the gate (699-dycj); out=$out" >&2
+        fail=1
+        ;;
+    *) echo "ok: unknown-pid note reports without failing the gate" ;;
+esac
+
+# NEGATIVE CONTROL: the same shape against a packet that DOES exist must stay
+# silent, or the advisory becomes noise on every well-formed fragment.
+S="$TDIR/anyevent-known"; sandbox "$S"
+cat >"$S/plan/index.d/a.yaml" <<'F'
+packets:
+  - packet_id: alpha-packet
+    order: 900
+    status: ready
+    title: "a real packet"
+events:
+  - packet_id: alpha-packet
+    event:
+      type: note
+      ts: "2026-08-17T23:30:00Z"
+      host: fixture
+      summary: "an ordinary note on a real packet"
+F
+out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+case "$out" in
+    *"an events block addresses it"*)
+        echo "FAIL: advisory fired on a KNOWN packet_id; out=$out" >&2
+        fail=1
+        ;;
+    *) echo "ok: no advisory for a note on a packet the fold knows" ;;
+esac
+
+# ── 812-d45t: a packet DEFINITION under `events:` is REPORTED ───────────────
+# Every gate accepts it and the fold drops it entirely. No packet_id is claimed
+# as an event, so the unknown-packet channel above cannot see it either — this
+# needs its own question. Advisory, not violation, for the 699-dycj reason:
+# past fragments are append-only.
+S="$TDIR/misplaced-definition"; sandbox "$S"
+cat >"$S/plan/index.d/a.yaml" <<'F'
+events:
+  - packet_id: dropped-on-the-floor
+    order: 999
+    status: ready
+    kind: bug
+    title: "a packet definition written under the wrong key"
+    deliverable: "should be reported, not silently discarded"
+F
+out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+assert "misplaced packet definition is named" 0 \
+    "dropped-on-the-floor is a packet DEFINITION under" "$rc" "$out"
+case "$out" in
+    violation:*) echo "FAIL: a misplaced definition must not fail the gate (699-dycj); out=$out" >&2; fail=1 ;;
+    *) echo "ok: misplaced definition reports without failing the gate" ;;
+esac
+
+# NEGATIVE CONTROL: the SAME definition under the correct key must be silent,
+# or the advisory fires on every well-formed fragment in the tree.
+S="$TDIR/correct-definition"; sandbox "$S"
+cat >"$S/plan/index.d/a.yaml" <<'F'
+packets:
+  - packet_id: properly-filed
+    order: 999
+    status: ready
+    kind: bug
+    title: "a packet definition under the correct key"
+    deliverable: "must draw no advisory"
+F
+out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+case "$out" in
+    *"is a packet DEFINITION under"*)
+        echo "FAIL: advisory fired on a CORRECTLY filed packet; out=$out" >&2; fail=1 ;;
+    *) echo "ok: no advisory for a definition under packets:" ;;
+esac
+
+# ── 864-hv2n: awk state must not leak BETWEEN fragment files ────────────────
+# The extraction kept `pid` in a global that nothing reset per file. A fragment
+# whose last `  - packet_id:` is an EVENT leaves that id dangling; the next
+# file's first `    status:` was then printed under it. Here a.yaml ends with a
+# dangling event on beta-packet (folds in_progress) and b.yaml declares a
+# terminal status for an unrelated NEW packet. The pre-fix scanner reported
+# "beta-packet: declared 'completed'" — a violation against a packet no
+# fragment declares, blocking a push over work nobody had touched.
+S="$TDIR/cross-file-leak"; sandbox "$S"
+cat >"$S/plan/index.d/a.yaml" <<'F'
+events:
+  - packet_id: beta-packet
+    event:
+      type: note
+      ts: "2026-08-23T17:00:00Z"
+      host: fixture
+      summary: "a trailing event, deliberately the last packet_id in this file"
+F
+cat >"$S/plan/index.d/b.yaml" <<'F'
+packets:
+  - order: 902
+    packet_id: gamma-fresh
+    status: completed
+    kind: fix
+    title: "declared complete at birth in a LATER file"
+    depends_on: []
+F
+out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+case "$out" in
+    *beta-packet*)
+        echo "FAIL: status leaked across files onto beta-packet; out=$out" >&2; fail=1 ;;
+    *) echo "ok: awk state does not leak between fragment files" ;;
+esac
+assert "a later file's own declaration is judged on its own merits" 0 "" "$rc" "$out"
+
+# ── 864-hv2n: the house style must actually be SEEN ─────────────────────────
+# Fragments open a packet with `  - order:` and put `    packet_id:` beneath it.
+# The pre-fix scanner keyed on `  - packet_id:` as the item start, so it never
+# matched a real packet declaration — the pass was dead for its stated purpose
+# while appearing to work. This is the genuine loss it should always have
+# caught: alpha-packet already exists as `ready`, so re-declaring it `completed`
+# under `packets:` is discarded by the G-Set.
+S="$TDIR/house-style-declaration"; sandbox "$S"
+cat >"$S/plan/index.d/a.yaml" <<'F'
+packets:
+  - order: 900
+    packet_id: alpha-packet
+    status: completed
+    kind: fix
+    title: "re-declared terminal in house key order — the G-Set drops this"
+    depends_on: []
+F
+out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+assert "order-first declaration is seen and its loss refused" 1 \
+    "alpha-packet" "$rc" "$out"
+
 if [ "$fail" -eq 0 ]; then
     echo "ok: all fragment-status-loss scenarios passed"
     exit 0

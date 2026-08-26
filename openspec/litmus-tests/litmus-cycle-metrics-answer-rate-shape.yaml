@@ -112,7 +112,13 @@ critical_path:
     # The groundtruth pass-rate, distinct from answer_rate. It either reports
     # pass=/total=/rate= from groundtruth-rung1, or defers to the litmus gate —
     # never a fabricated number.
-    command: "L=$(mktemp); printf '{\"tool\":\"plan_answer\",\"outcome\":\"answered\"}\\n' > $L; out=$(TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^expert_accuracy: '); rm -f $L; case \"$out\" in *pass=*total=*rate=*source=groundtruth-rung1*) echo 'ok: expert_accuracy graded' ;; *deferred*source=litmus:expert-groundtruth-harness*) echo 'ok: expert_accuracy deferred' ;; *) echo \"observed=$out\"; echo 'fail: expert_accuracy grammar' ;; esac"
+    # source= accepts every label the emitter can produce: 786-kjke widened
+    # the metric to groundtruth-all-sets (with rung1 as the narrow fallback),
+    # but this pin still named only rung1 — invisible for a week because the
+    # grade harness failed on every host (879-gidx) so the DEFERRAL arm always
+    # matched, and the graded arm's stale pattern was never exercised. The
+    # first host whose grading worked was failed by this step FOR succeeding.
+    command: "L=$(mktemp); printf '{\"tool\":\"plan_answer\",\"outcome\":\"answered\"}\\n' > $L; out=$(TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^expert_accuracy: '); rm -f $L; case \"$out\" in *pass=*total=*rate=*source=groundtruth-*) echo 'ok: expert_accuracy graded' ;; *deferred*source=litmus:expert-groundtruth-harness*) echo 'ok: expert_accuracy deferred' ;; *) echo \"observed=$out\"; echo 'fail: expert_accuracy grammar' ;; esac"
     timeout_ms: 40000
     expected_behavior: "ok: expert_accuracy"
 

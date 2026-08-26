@@ -1,4 +1,5 @@
 // @trace spec:runtime-logging
+pub mod cache_root;
 pub mod cache_validation;
 pub mod config;
 pub mod container_profile;
@@ -13,6 +14,8 @@ pub mod secrets;
 pub mod singleton;
 pub mod state;
 pub mod tools;
+pub mod version_guard;
+pub mod wsl;
 
 // Re-export logging module
 pub use tillandsias_logging as logging;

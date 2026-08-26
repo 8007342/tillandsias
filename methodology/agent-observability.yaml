@@ -299,7 +299,7 @@ agent_observability_protocol:
           Packet 682-emvg. "Time spent building, testing" is the most likely
           bottleneck and was invisible until the build/test/litmus entry points
           began appending one duration record per heavy step. build.sh --check
-          (the pre-push gate, run every cycle), each scripts/local-ci.sh litmus
+          (the local gate, run every cycle), each scripts/local-ci.sh litmus
           phase, and each scripts/run-litmus-test.sh suite self-instrument via a
           shared best-effort helper (scripts/timing-log.sh). The two named
           averages scope to distinct step namespaces so nested emitters never

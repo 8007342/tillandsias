@@ -1,0 +1,39 @@
+Which Helm chart do we use to deploy the enclave services?
+    was: near-miss -> in-corpus
+    Two files answer it, and neither is the spec they retrieved. (1) /home/tlatoani/claudia/tillandsias/openspec/changes/archive/2026-03-22-tillandsias-bootstrap/design.md:25 — the fou
+Is there a docker-compose file for bringing the service stack up locally?
+    was: near-miss -> in-corpus
+    This is the most damaging miss: three independent files affirmatively answer the EXISTENCE question they claimed was unanswered. (1) /home/tlatoani/claudia/tillandsias/plan/index.y
+Do we use Ansible or any configuration-management tool to provision the dev hosts?
+    was: near-miss -> in-corpus
+    The host-provisioning POLICY exists and is named — just not with the word 'configuration management'. /home/tlatoani/claudia/tillandsias/methodology/multi-host-development.yaml:672
+Which Terraform modules manage the GitHub repository settings and branch protection?
+    was: near-miss -> in-corpus
+    The repo documents the actual mechanism completely enough to answer the question (as a correction of its premise), and they treated that as 'refutes but does not answer'. /home/tla
+What is the actual numeric value of V_min, the minimum acceptable convergence velocity?
+    was: near-miss -> in-corpus
+    A concrete number IS set — in the skills corpus, not the methodology corpus they searched. /home/tlatoani/claudia/tillandsias/skills/coordinate-multihost-work/SKILL.md:98: 'If $\ma
+How many concurrent requests can the inference container handle before it queues?
+    was: near-miss -> in-corpus
+    ANSWERED BY: /home/tlatoani/claudia/tillandsias/images/inference/engine-tuning.sh (lines 63-90 policy, 114-119 override, 139 pinned line). The other agent never searched it — their
+What does the Jenkins pipeline for Tillandsias look like?
+    was: near-miss -> in-corpus
+    ANSWERED BY: /home/tlatoani/claudia/tillandsias/methodology/ci.yaml (github_actions_budget, lines 286-325) plus /home/tlatoani/claudia/tillandsias/openspec/specs/ci-release/spec.md
+What usage telemetry is sent to Tillandsias servers, and how do I opt out?
+    was: near-miss -> in-corpus
+    They searched for the word 'telemetry' as a feature and only found the download-telemetry tombstone; the answer is recorded as an explicit ARCHITECTURAL PROHIBITION, in the cheatsh
+Does the GitHub sign-in flow support hardware security keys or TOTP?
+    was: near-miss -> unsure
+    Their evidence claims no 'device code' text exists in the login spec. That is factually wrong: /home/tlatoani/claudia/tillandsias/openspec/specs/gh-auth-script/spec.md:79 requires 
+What happens to running forge containers when the laptop suspends and resumes?
+    was: near-miss -> unsure
+    Their grep set missed the one file that talks about host sleep and the container runtime together: /home/tlatoani/claudia/tillandsias/docs/cheatsheets/wsl-bash.md:263 ('Podman mach
+What keyboard shortcuts does the tray support?
+    was: near-miss -> in-corpus
+    The concept is recorded as AppKit's "key equivalent" and as the glyph ⌘Q, not as "keyboard/shortcut/hotkey/accelerator/mnemonic" — so a grep on those five words missed it. crates/t
+What throughput does the vsock control wire achieve in practice?
+    was: near-miss -> in-corpus
+    The measurement exists — it is in the PLAN ledger, not in cheatsheets, which is why a cheatsheet/spec-scoped search missed it and why grepping 'MB/s|Gbps' failed (the datum is reco
+How do I migrate an existing Tillandsias installation to a new machine?
+    was: near-miss -> unsure
+    They searched only for migration vocabulary ('new machine', 'migrat') and missed the two files that state the substance in other words. /home/tlatoani/claudia/tillandsias/cheatshee

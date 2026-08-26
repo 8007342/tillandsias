@@ -65,10 +65,51 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Resolve the DEVELOPMENT ENVIRONMENT declaration before anything reads an
+# expert. The resolver exports TILLANDSIAS_HOST_EXPERTS only on a host that has
+# declared itself, refuses inside a forge (the enclave's END USER RUNTIME owns
+# its own expert lifecycle), and never overrides a value the caller already
+# set. Sourcing it is a no-op on every other host, and it sets no shell options.
+if [ -f "$ROOT/scripts/dev-host-experts.sh" ]; then
+    . "$ROOT/scripts/dev-host-experts.sh"
+fi
 cd "$ROOT" || { echo "blocked:preflight:root:cannot-cd"; exit 1; }
 
 plan_verdict="skipped"
 if [ "${CYCLE_PREFLIGHT_SKIP_BUILD:-0}" != "1" ]; then
+    # ORDER 876-irn7. A rustup toolchain that is not on the NON-INTERACTIVE
+    # PATH is not an absent toolchain, and this is the one verdict that stops
+    # the cycle outright — the skill's own words: "selecting work with an
+    # unverified instrument is the one failure the loop cannot reason its way
+    # out of, because the tool it would reason WITH is the stale thing."
+    #
+    # Measured on pirria 2026-08-25, the first tool call of its first cycle:
+    # `blocked:preflight:plan:cargo-absent` on a host carrying cargo 1.98.0 and
+    # rustc 1.98.0. rustup writes its PATH edit into ~/.bashrc, which a
+    # non-login non-interactive bash never sources — and EVERY agent tool call
+    # is exactly that kind of shell. Exporting $HOME/.cargo/bin by hand and
+    # changing nothing else produced `ok:cycle-preflight:...` immediately.
+    #
+    # Left alone, an unattended host answers `blocked:` on every fire forever
+    # while a human reading the transcript goes looking for a toolchain that is
+    # already installed. So resolve through the standard install locations
+    # before declaring absence — CARGO_HOME first, since a host that set it
+    # meant it — and put the resolved directory on PATH for the rest of the
+    # script, so the `cargo build` below and every later caller see it too.
+    #
+    # THE GENUINELY-ABSENT CASE KEEPS ITS VERDICT AND ITS TERMINAL FORCE. This
+    # narrows a false positive; it must not weaken the true one.
+    if ! command -v cargo >/dev/null 2>&1; then
+        for _cargo_dir in "${CARGO_HOME:-}/bin" "$HOME/.cargo/bin"; do
+            case "$_cargo_dir" in /bin) continue ;; esac
+            if [ -x "$_cargo_dir/cargo" ]; then
+                PATH="$_cargo_dir:$PATH"
+                export PATH
+                break
+            fi
+        done
+    fi
     if ! command -v cargo >/dev/null 2>&1; then
         # Name the fault. A cycle that cannot rebuild its instrument should say
         # so rather than proceed on whatever binary happens to be lying around.
@@ -156,6 +197,49 @@ if [ "${CYCLE_PREFLIGHT_SKIP_BUILD:-0}" != "1" ]; then
             ;;
     esac
 fi
+
+# Enclave service health (order 798-tk7b). The blind spot this closes is
+# EXACTLY this position in the cycle: tillandsias-nix sat Exited(143) for three
+# days and tillandsias-vault Exited(137) for five hours while cycle after cycle
+# started on this host, several of them using podman heavily, and nothing on
+# the path a cycle actually walks ever said so. This is that path.
+#
+# A REPORT, never a gate, and folded colon-free like +expert-* so the pinned
+# line arity is preserved. A host whose stack is simply not running has every
+# service down; blocking there would strand every cycle on a freshly booted
+# laptop, and a check that stops honest work is a check someone switches off.
+# The per-service detail — exit code, derived signal, age, and whether podman
+# is still advertising a stale `healthy` — goes to stderr where the operator
+# reading the preflight sees it.
+#
+# ONE reading, not two. Calling the script once for its verdict and again for
+# its detail would let a service die between the two calls and print a detail
+# block that disagrees with the summary beside it.
+services_report="skipped"
+if [ -x "$ROOT/scripts/check-enclave-service-health.sh" ]; then
+    _svc_err="$(mktemp "${TMPDIR:-/tmp}/cycle-preflight-services.XXXXXX")"
+    # --act (878-79b5): the unattended cycle is exactly the caller that must
+    # FIX what it can prove needs fixing — four yoga cycles re-noted one
+    # stopped proxy for nine hours. The acting ladder never fights an
+    # operator (hold marker, grace window, whole-stack-down all refuse).
+    services_line="$(bash "$ROOT/scripts/check-enclave-service-health.sh" --act 2>"$_svc_err" | tail -1)"
+    case "$services_line" in
+        ok:enclave-service-health:*) services_report="ok" ;;
+        degraded:enclave-service-health:*)
+            _down="$(printf '%s' "$services_line" | sed -n 's/.*:down=\([0-9][0-9]*\).*/\1/p')"
+            _absent="$(printf '%s' "$services_line" | sed -n 's/.*:absent=\([0-9][0-9]*\).*/\1/p')"
+            services_report="down${_down:-unknown}"
+            [ "${_absent:-0}" != "0" ] && services_report="${services_report}-absent${_absent}"
+            cat "$_svc_err" >&2
+            ;;
+        blocked:enclave-service-health:*)
+            services_report="$(printf '%s' "${services_line#blocked:enclave-service-health:}" | cut -c1-30)"
+            ;;
+        *) services_report="no-verdict" ;;
+    esac
+    rm -f "$_svc_err"
+fi
+plan_verdict="${plan_verdict}+services-${services_report}"
 
 # Host-state security migration (order 791-swxt). Runs SILENTLY and never
 # touches this script's verdict line, so the pinned arity is unaffected.

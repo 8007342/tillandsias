@@ -32,7 +32,12 @@ critical_path:
     expected_behavior: "ok: guard-parses"
 
   - step: "live run on this tree passes with the pinned grammar (falsifiable single line)"
-    command: "out=$(bash scripts/check-no-tracked-binaries.sh); echo \"$out\" | grep -qE '^ok:no-tracked-binaries:[0-9]+ binary-classified [0-9]+ allowlisted$' && [ \"$(echo \"$out\" | wc -l)\" = 1 ] && echo 'ok: live-grammar'"
+    # `wc -l` is piped through `tr -d '[:space:]'` because BSD wc PADS its count
+    # with leading spaces ("       1"), so the bare comparison was false on every
+    # macOS host while the guard it wraps passed cleanly — this step could never
+    # go green here (order 812-64j7). GNU coreutils prints "1" unpadded, which is
+    # why it was invisible from Linux.
+    command: "out=$(bash scripts/check-no-tracked-binaries.sh); echo \"$out\" | grep -qE '^ok:no-tracked-binaries:[0-9]+ binary-classified [0-9]+ allowlisted$' && [ \"$(echo \"$out\" | wc -l | tr -d '[:space:]')\" = 1 ] && echo 'ok: live-grammar'"
     timeout_ms: 10000
     expected_behavior: "ok: live-grammar"
 

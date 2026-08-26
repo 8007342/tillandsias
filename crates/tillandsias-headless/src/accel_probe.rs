@@ -8,7 +8,13 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// Schema version for capabilities.json per spec:accel-capability-probe
-pub const SCHEMA_VERSION: u32 = 1;
+///
+/// 2 (order 808-43mw) adds host identity to `HostInfo` and workload/locus
+/// labels to `MeasurementRecord`. Bumped rather than added silently because
+/// `load_or_probe` uses this to decide a cached document is still describable
+/// — a v1 cache has no `host_id`, and re-probing is cheaper than reasoning
+/// about a document that cannot name itself.
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// Derived document describing host execution devices, engine availability, and measurements.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -21,6 +27,14 @@ pub struct CapabilityDocument {
     pub measurements: Vec<MeasurementRecord>,
     pub host: HostInfo,
     pub timestamp: String,
+    /// Order 852-dk9z. WHICH PROBE CODE produced this document. Absent on every
+    /// document written before that order, which is why it is Option + default:
+    /// a legacy cache reads as None, compares unequal to any real identity, and
+    /// is therefore re-probed rather than served. It is serialised into
+    /// published rows on purpose — the old complaint was that nothing on a row
+    /// said which code probed it.
+    #[serde(default)]
+    pub probe_identity: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -55,6 +69,15 @@ pub struct EngineRecord {
     pub name: String,
     pub backend: String,
     pub supported_device_classes: Vec<String>,
+    /// Which lanes this engine is reachable on (order 850-bif2). `None` means
+    /// every lane — the pre-existing semantics for a host-PATH binary, and the
+    /// deserialization default for every row filed before this field existed.
+    /// A containerized engine says `Some(["container"])`: the fleet's ollama
+    /// lives inside the tillandsias-inference image, which the old host-PATH
+    /// probe could not see — that blindness is how a host with a usable RTX
+    /// A5000 filed `engines: []` and the matrix read `schedulable: none`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lanes: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -67,6 +90,37 @@ pub struct MeasurementRecord {
     pub joules_per_token: Option<f64>,
     pub degraded: bool,
     pub degraded_reason: Option<String>,
+
+    /// Which workload produced these numbers (order 808-43mw).
+    ///
+    /// `scripts/bench-accel-lane.sh` ALREADY KNOWS this — it stamps
+    /// `workload_suite: "802-2536-v1"` onto its own stdout JSON — and then
+    /// drops it when it pipes a record to `--record-measurement`, because
+    /// this struct had nowhere to put it. The label existed upstream and
+    /// downstream and was discarded in the middle, so every number in a
+    /// capability document was unattributable to the workload that produced
+    /// it. Comparing two such numbers is not a comparison.
+    ///
+    /// `Option` + `serde(default)`, NOT required: `--record-measurement`
+    /// must keep accepting the payload the bench sends TODAY, or a host
+    /// running this binary against the current script silently stops
+    /// recording. Widening the reader is the compatible half of the change;
+    /// teaching the writer to send it is the other half, and belongs with
+    /// the script, not here.
+    #[serde(default)]
+    pub workload_suite: Option<String>,
+
+    /// WHERE the measurement ran, e.g. `in-guest`, `host-side-via-mirror`
+    /// (order 808-43mw; motivated by the measurement in 810-jeg7).
+    ///
+    /// This host measured the same suite at two loci and the hop cost 5-10%
+    /// on the embed arm — the same order as the cross-host differences the
+    /// fleet matrix exists to detect. It did not merely add noise: it
+    /// INVERTED a reported conclusion, because two errors happened to
+    /// cancel. A row without a locus is not under-annotated, it is
+    /// potentially wrong in a way no consumer can see.
+    #[serde(default)]
+    pub locus: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -74,7 +128,75 @@ pub struct MeasurementRecord {
 pub struct HostInfo {
     pub is_battery_present: bool,
     pub kernel_release: String,
+
+    /// WHICH MACHINE this document describes (order 808-43mw).
+    ///
+    /// Without it a CapabilityDocument cannot say whose capabilities it
+    /// reports, which blocks the fleet matrix outright: 808-7yrd folds
+    /// `host_id -> LWW-Register(document)`, so this is the FOLD KEY. There is
+    /// no matrix without it.
+    ///
+    /// `kernel_release` is not a substitute and the reason is measurable: two
+    /// WSL2 guests share `6.18.33.2-microsoft-standard-WSL2` exactly. Keying
+    /// on it would silently merge two machines' rows into one, and LWW would
+    /// then arbitrate between hosts that are not in conflict — turning a
+    /// design whose whole point is "single writer per key by construction"
+    /// into one that quietly drops half the fleet.
+    ///
+    /// NOT A NEW NAMING SCHEME. This is the identifier the fleet already
+    /// uses: `scripts/agent-identity.sh`'s `tillandsias_node_name` (short
+    /// hostname, lowercased), the same string that names
+    /// `plan/mo-full-attestations.d/<host>.md`. Minting a second name for a
+    /// machine that already has one would mean the matrix and the ledger
+    /// disagree about who a host is.
+    pub host_id: String,
+
+    /// How `host_id` was determined: `input` or `node-name`.
+    ///
+    /// The packet's complaint is SILENT collision, so a consumer must be able
+    /// to distinguish a host that was NAMED from one whose name was inferred
+    /// and might collide. Recording only the value would reproduce the
+    /// original defect one level up.
+    ///
+    /// Measured on this host: WSL2 inherits the Windows machine name, so the
+    /// guest's `uname -n` is `Yolanda` — the derived chain agrees with the
+    /// Windows side for free. That is a DEFAULT, not a guarantee:
+    /// `/etc/wsl.conf`'s `network.hostname` can override it, at which point
+    /// a guest-produced row would file itself under a second key for the same
+    /// machine. `input` is how an operator forecloses that.
+    pub host_id_source: String,
+
+    /// OS family of the EXECUTION CONTEXT that produced this document:
+    /// `linux` | `windows` | `macos`. A consumer folding the matrix reads
+    /// documents produced elsewhere, so it cannot use its own `cfg!` to tell
+    /// what it is looking at.
+    ///
+    /// READ THE NAME CAREFULLY — this is the context, not the machine, and on
+    /// Windows those differ. Measured on yolanda 2026-08-18: the probe runs
+    /// inside the WSL2 guest and reports `host_kind: "linux"` on a machine
+    /// whose hardware spec is a Windows laptop's. That is not a defect in this
+    /// field; it is 809-7e4m's two-execution-context finding arriving in the
+    /// schema, and the field's value is that it now makes the split VISIBLE
+    /// instead of leaving a Windows row indistinguishable from a Linux one.
+    ///
+    /// Deliberately NOT resolved here by inventing a `windows-wsl2` term. The
+    /// guest could detect WSL2 from `kernel_release` and relabel itself, but a
+    /// guess made by the context that cannot see the NPU or the machine's real
+    /// RAM (the guest reports its 7.3 GB VM slice against 15.2 GB installed)
+    /// would be a confident half-answer. The correct fix is the host-side
+    /// contribution 809-7e4m specifies, which knows rather than infers.
+    pub host_kind: String,
 }
+
+/// The env INPUT that names this machine, overriding the derived chain.
+///
+/// Deliberately the same shape as `TILLANDSIAS_INFERENCE_TIER`: identity, like
+/// the tier, is an input corroborated against the machine rather than derived
+/// from it. On Windows a single capability row spans two execution contexts
+/// (809-7e4m), and the context that can see the NPU is not the one that runs
+/// this probe — so the two contributions must agree on a name that neither is
+/// solely entitled to invent.
+pub const HOST_ID_ENV: &str = "TILLANDSIAS_HOST_ID";
 
 // @trace spec:accel-capability-probe
 pub fn capabilities_cache_path() -> PathBuf {
@@ -92,21 +214,56 @@ pub fn capabilities_cache_path() -> PathBuf {
     //
     // A cache is by definition discardable, so the temp dir is the correct home
     // for one with nowhere else to live.
-    let base = std::env::var("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| std::env::temp_dir());
-    base.join(".cache")
-        .join("tillandsias")
-        .join("capabilities.json")
+    // Order 815-gdjk: XDG-first via the shared resolver (this probe was the
+    // measured half of the split: with XDG_CACHE_HOME set it wrote here
+    // while every shell consumer resolved under the XDG root).
+    tillandsias_core::cache_root::cache_root().join("capabilities.json")
 }
 
 // @trace spec:accel-capability-probe
 pub fn load_or_probe(effective_tier: &str) -> CapabilityDocument {
-    let cache_file = capabilities_cache_path();
-    if let Ok(content) = fs::read_to_string(&cache_file)
+    load_or_probe_at(
+        &capabilities_cache_path(),
+        effective_tier,
+        Freshness::Cached,
+    )
+}
+
+/// Order 852-dk9z. Publication must never be able to emit a cached document.
+/// `scripts/host-capability-probe.sh` takes this path, so a published capability
+/// row is fresh BY CONSTRUCTION rather than by the operator having remembered to
+/// clear a cache directory first.
+// @trace order:852-dk9z, spec:accel-capability-probe
+pub fn probe_fresh(effective_tier: &str) -> CapabilityDocument {
+    load_or_probe_at(&capabilities_cache_path(), effective_tier, Freshness::Force)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+// @trace order:852-dk9z, spec:accel-capability-probe
+pub enum Freshness {
+    /// Serve a cache entry that matches this binary's probe identity.
+    Cached,
+    /// Probe regardless of what the cache holds (and refresh the cache).
+    Force,
+}
+
+/// The cache path is a PARAMETER so this is testable without mutating process
+/// environment — env-var tests race against every other test in the binary.
+// @trace order:852-dk9z, spec:accel-capability-probe
+pub fn load_or_probe_at(
+    cache_file: &Path,
+    effective_tier: &str,
+    freshness: Freshness,
+) -> CapabilityDocument {
+    let identity = probe_identity();
+    if freshness == Freshness::Cached
+        && let Ok(content) = fs::read_to_string(cache_file)
         && let Ok(doc) = serde_json::from_str::<CapabilityDocument>(&content)
         && doc.schema_version == SCHEMA_VERSION
         && doc.legacy_tier == effective_tier
+        // The check 852-dk9z adds. Without it a rebuilt binary republishes its
+        // predecessor's document as if it had probed.
+        && doc.probe_identity.as_deref() == Some(identity.as_str())
     {
         return doc;
     }
@@ -115,9 +272,54 @@ pub fn load_or_probe(effective_tier: &str) -> CapabilityDocument {
         let _ = fs::create_dir_all(parent);
     }
     if let Ok(json) = serde_json::to_string_pretty(&doc) {
-        let _ = fs::write(&cache_file, json);
+        let _ = fs::write(cache_file, json);
     }
     doc
+}
+
+/// Merge one measurement into the persisted capability document (order 805-wgbb).
+///
+/// `run_probe` hard-codes `measurements = Vec::new()` under a comment saying
+/// microbenchmarks "run on demand" — and no on-demand path existed anywhere in
+/// the tree, so `measurements: []` meant NOTHING WRITES rather than nothing has
+/// run. 802-2536 asks every host to record cpu/npu/gpu numbers "into the
+/// existing MeasurementRecord", which no host could do. This is that path.
+///
+/// KEYED BY (device, engine), replacing in place. A second run of the same
+/// workload on the same lane is a NEW measurement of the same thing, not an
+/// additional data point — appending would grow an unbounded log whose newest
+/// entry a reader has to find by scanning, and the router reads this document
+/// as its input surface, not as history.
+///
+/// NOTE ON LIFETIME, because it is easy to be surprised by: `load_or_probe`
+/// re-probes and overwrites the cache when the schema version or the legacy
+/// tier changes. Measurements are dropped then, and that is correct — a tier
+/// change means the numbers describe a configuration that no longer exists —
+/// but it does mean a measurement is not durable across a tier flip.
+pub fn record_measurement(m: MeasurementRecord) -> Result<(), String> {
+    let cache_file = capabilities_cache_path();
+    let mut doc: CapabilityDocument = match fs::read_to_string(&cache_file) {
+        Ok(content) => serde_json::from_str(&content).map_err(|e| {
+            format!("capabilities cache is unreadable ({e}); re-run --capabilities")
+        })?,
+        // No cache yet: probe rather than refuse, so the first thing a fresh
+        // host does can be to record a measurement.
+        Err(_) => run_probe(crate::effective_inference_tier()),
+    };
+    match doc
+        .measurements
+        .iter_mut()
+        .find(|e| e.device == m.device && e.engine == m.engine)
+    {
+        Some(slot) => *slot = m,
+        None => doc.measurements.push(m),
+    }
+    if let Some(parent) = cache_file.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("create {}: {e}", parent.display()))?;
+    }
+    let json = serde_json::to_string_pretty(&doc).map_err(|e| format!("serialize: {e}"))?;
+    fs::write(&cache_file, json).map_err(|e| format!("write {}: {e}", cache_file.display()))?;
+    Ok(())
 }
 
 // @trace spec:accel-capability-probe
@@ -136,7 +338,23 @@ pub fn run_probe(effective_tier: &str) -> CapabilityDocument {
         measurements,
         host,
         timestamp,
+        probe_identity: Some(probe_identity()),
     }
+}
+
+/// Order 852-dk9z. The identity of the probe CODE, not of the host.
+///
+/// Crate version alone is insufficient and that is not hypothetical: 856-fwyh
+/// changed enumeration output on this very crate without moving its version, so
+/// a version-keyed cache would still have served the stale document. The
+/// revision half is an FNV-1a hash of src/accel_probe.rs computed in build.rs,
+/// so ANY edit here changes it and no one has to remember to bump a constant.
+pub fn probe_identity() -> String {
+    format!(
+        "{}+{}",
+        env!("CARGO_PKG_VERSION"),
+        env!("TILLANDSIAS_PROBE_REVISION")
+    )
 }
 
 // @trace spec:accel-capability-probe
@@ -261,6 +479,232 @@ fn enumerate_cpu() -> DeviceRecord {
 }
 
 // @trace spec:accel-capability-probe
+/// The WSL2 paravirtual-GPU decision, as a pure function so every combination
+/// is testable without a matching host (order 806-2r4s).
+///
+/// WSL2 presents the GPU as `/dev/dxg` with the D3D12 userspace in
+/// `/usr/lib/wsl/lib`, and exposes NO DRI render node. With no branch for that
+/// shape the probe emits nothing at all, and `accel_envelope` then reports
+/// `accel_gpu=none` — making a machine with a healthy GPU indistinguishable
+/// from one that has none. Those are different engineering problems ("buy
+/// hardware" versus "ship a lane"), and the fleet capability matrix cannot tell
+/// them apart from the envelope alone.
+///
+/// The device is real and present; it is only unreachable by the engines we
+/// ship today. That is exactly the present-unusable state `accel_envelope`
+/// already renders — this function supplies the record it needs, and adds no
+/// new vocabulary.
+///
+/// Returns `None` (emit nothing) unless the shape is unambiguously WSL2's:
+/// `/dev/dxg` present, no DRI render node, and no better GPU already found.
+/// `/dev/dxg` does not exist on bare-metal Linux, and a WSL2 host that DOES
+/// expose a render node is handled by the `/dev/dri` arm, so this cannot
+/// manufacture a phantom device off-WSL2.
+// @trace spec:accel-capability-probe
+#[cfg(target_os = "linux")]
+fn wsl2_paravirtual_gpu(dxg_present: bool, dri_present: bool, already_found: bool) -> bool {
+    dxg_present && !dri_present && !already_found
+}
+
+/// Order 850-bif2, the pure decision half of the AMD arm (unit-tested):
+/// given what the walker observed for an amdgpu card, decide usability,
+/// lanes, and the reason for any refusal.
+///
+/// `rocm-smi` presence alone is deliberately NOT evidence — the tier lattice
+/// already learned that on Fedora (see detect_inference_tier's caveat): the
+/// admission ticket is a ROCm runtime reporting a gfx agent. Without it the
+/// device is present-unusable, which the matrix renders distinctly from
+/// absent — that distinction is the whole point of recording it.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn amd_gpu_disposition(
+    rocm_gfx: bool,
+    kfd: bool,
+    render_node: bool,
+) -> (bool, Vec<String>, Option<String>) {
+    if !rocm_gfx {
+        return (
+            false,
+            vec!["host-native".to_string()],
+            Some("rocm-runtime-missing".to_string()),
+        );
+    }
+    if !kfd {
+        return (
+            false,
+            vec!["host-native".to_string()],
+            Some("kfd-missing".to_string()),
+        );
+    }
+    if !render_node {
+        return (false, vec![], Some("render-node-missing".to_string()));
+    }
+    (
+        true,
+        vec!["container".to_string(), "host-native".to_string()],
+        None,
+    )
+}
+
+/// Intel's admission ticket, the sibling of `amd_gpu_disposition`.
+///
+/// Order 855-wrr3. An i915/xe RENDER NODE PROVES A DISPLAY/MEDIA DRIVER, NEVER
+/// A COMPUTE LANE. Alder Lake-N ships /dev/dri/renderD128 on a part no engine
+/// in this project can offload to, and Intel was the one vendor with no
+/// disposition check at all: it fell through to the last-resort arm, which
+/// hardcodes `usable: true` because a DRM card exists. On the fleet's declared
+/// LOWER-BOUND host that published `accel_class=workstation-gpu` for a 4-core
+/// N150 while the SAME BINARY's `--inference-tier` answered `tier:cpu`.
+///
+/// The ticket is an Intel compute runtime — Level Zero or an OpenCL ICD — the
+/// same shape as ROCm's gfx agent. Without it the device is present-unusable
+/// with the reason named, which the matrix renders distinctly from absent.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn intel_gpu_disposition(
+    compute_runtime: bool,
+    render_node: bool,
+) -> (bool, Vec<String>, Option<String>) {
+    if !compute_runtime {
+        return (
+            false,
+            vec!["host-native".to_string()],
+            Some("intel-compute-runtime-missing".to_string()),
+        );
+    }
+    if !render_node {
+        return (false, vec![], Some("render-node-missing".to_string()));
+    }
+    (
+        true,
+        vec!["container".to_string(), "host-native".to_string()],
+        None,
+    )
+}
+
+/// Every /sys/class/drm/card<N> as (pci_address, vendor_id, driver), sorted
+/// by card number. Reads sysfs only; anything unreadable is skipped rather
+/// than guessed.
+#[cfg(target_os = "linux")]
+fn drm_cards() -> Vec<(String, String, Option<String>)> {
+    let mut cards: Vec<(String, String, Option<String>)> = Vec::new();
+    let Ok(entries) = fs::read_dir("/sys/class/drm") else {
+        return cards;
+    };
+    let mut names: Vec<String> = entries
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().to_string())
+        .filter(|n| {
+            n.strip_prefix("card")
+                .is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()))
+        })
+        .collect();
+    names.sort();
+    for name in names {
+        let dev = Path::new("/sys/class/drm").join(&name).join("device");
+        let Ok(target) = fs::canonicalize(&dev) else {
+            continue;
+        };
+        let Some(pci_addr) = target.file_name().map(|f| f.to_string_lossy().to_string()) else {
+            continue;
+        };
+        let Some(vendor_id) = fs::read_to_string(dev.join("vendor"))
+            .ok()
+            .map(|s| s.trim().to_lowercase())
+        else {
+            continue;
+        };
+        let driver = fs::read_to_string(dev.join("uevent")).ok().and_then(|u| {
+            u.lines()
+                .find_map(|l| l.strip_prefix("DRIVER=").map(|d| d.trim().to_string()))
+        });
+        cards.push((pci_addr, vendor_id, driver));
+    }
+    cards
+}
+
+/// The /dev/dri/renderD* node whose sysfs device resolves to the same PCI
+/// address, if any — the node the container run args would deliver.
+#[cfg(target_os = "linux")]
+fn drm_render_node_for(pci_addr: &str) -> Option<String> {
+    let entries = fs::read_dir("/sys/class/drm").ok()?;
+    for e in entries.flatten() {
+        let name = e.file_name().to_string_lossy().to_string();
+        if !name.starts_with("renderD") {
+            continue;
+        }
+        let dev = Path::new("/sys/class/drm").join(&name).join("device");
+        if let Ok(target) = fs::canonicalize(&dev)
+            && target.file_name().map(|f| f.to_string_lossy().to_string())
+                == Some(pci_addr.to_string())
+        {
+            let node = format!("/dev/dri/{name}");
+            if Path::new(&node).exists() {
+                return Some(node);
+            }
+        }
+    }
+    None
+}
+
+/// Marketing name for a PCI device via `lspci -mm -s <addr>`, parsing the
+/// QUOTED device field — never a substring of the whole line (the
+/// comp-ATI-ble trap). None when lspci is absent or the line is malformed.
+#[cfg(target_os = "linux")]
+fn pci_device_name_via_lspci(pci_addr: &str) -> Option<String> {
+    // lspci speaks the short form (05:00.0); sysfs the long (0000:05:00.0).
+    let short = pci_addr.strip_prefix("0000:").unwrap_or(pci_addr);
+    let out = Command::new("lspci")
+        .args(["-mm", "-s", short])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())?;
+    let line = String::from_utf8_lossy(&out.stdout);
+    // Quoted fields: [1]=class, [3]=vendor, [5]=device name.
+    let fields: Vec<&str> = line.trim().split('"').collect();
+    let name = fields.get(5)?.trim();
+    if name.is_empty() {
+        None
+    } else {
+        Some(name.to_string())
+    }
+}
+
+/// Does `rocminfo` report a gfx agent? Mirrors detect_inference_tier: the
+/// runtime answering for the silicon, not a tool merely being installed.
+#[cfg(target_os = "linux")]
+fn rocm_gfx_present() -> bool {
+    Command::new("rocminfo")
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).contains("gfx"))
+        .unwrap_or(false)
+}
+
+/// Is an Intel COMPUTE runtime installed? Filesystem probe only — no
+/// subprocess, and nothing substring-matches prose (the comp-ATI-ble trap).
+/// Level Zero is the primary ticket; an Intel OpenCL ICD is accepted as the
+/// secondary. Mesa's Vulkan ICD is deliberately NOT evidence here: it is
+/// present in the Fedora Silverblue base on every Intel host and would
+/// re-admit exactly the display silicon this check exists to exclude.
+#[cfg(target_os = "linux")]
+fn intel_compute_runtime_present() -> bool {
+    const ZE: [&str; 4] = [
+        "/usr/lib64/libze_intel_gpu.so.1",
+        "/usr/lib64/libze_loader.so.1",
+        "/usr/lib/x86_64-linux-gnu/libze_intel_gpu.so.1",
+        "/usr/lib/x86_64-linux-gnu/libze_loader.so.1",
+    ];
+    if ZE.iter().any(|p| Path::new(p).exists()) {
+        return true;
+    }
+    fs::read_dir("/etc/OpenCL/vendors")
+        .map(|d| {
+            d.flatten()
+                .any(|e| e.file_name().to_string_lossy().contains("intel"))
+        })
+        .unwrap_or(false)
+}
+
 fn enumerate_gpus(effective_tier: &str) -> Vec<DeviceRecord> {
     let mut gpus = Vec::new();
 
@@ -331,35 +775,124 @@ fn enumerate_gpus(effective_tier: &str) -> Vec<DeviceRecord> {
             });
         }
 
-        if Path::new("/dev/dri").exists() {
-            let mut dri_name = "Vulkan / DRM GPU".to_string();
-            if let Ok(entries) = fs::read_dir("/dev/dri") {
-                for entry in entries.flatten() {
-                    let name = entry.file_name().to_string_lossy().to_string();
-                    if name.starts_with("renderD") || name.starts_with("card") {
-                        dri_name = format!("/dev/dri/{}", name);
-                        break;
-                    }
+        // Order 850-bif2: enumerate DRM cards by PCI identity. The old arm
+        // fired only when NO GPU had been found yet — an AMD iGPU beside an
+        // NVIDIA dGPU was invisible to the matrix — and hardcoded vendor
+        // "amd" for whatever it hit. /sys/class/drm/card*/device carries the
+        // real vendor id and driver, so nothing here substring-matches prose
+        // (the comp-ATI-ble trap; see scripts/derive-host-identity.sh).
+        let rocm_gfx = rocm_gfx_present();
+        let kfd = Path::new("/dev/kfd").exists();
+        let intel_rt = intel_compute_runtime_present();
+        for (pci_addr, vendor_id, driver) in drm_cards() {
+            let render_node = drm_render_node_for(&pci_addr);
+            match (vendor_id.as_str(), driver.as_deref()) {
+                // The nvidia-smi arm above owns NVIDIA cards; re-reporting
+                // them here would double-count the same silicon.
+                ("0x10de", _) => continue,
+                ("0x1002", Some("amdgpu")) => {
+                    let (usable, lanes, unusable_reason) =
+                        amd_gpu_disposition(rocm_gfx, kfd, render_node.is_some());
+                    gpus.push(DeviceRecord {
+                        device_class: "gpu".to_string(),
+                        vendor: "amd".to_string(),
+                        name: pci_device_name_via_lspci(&pci_addr)
+                            .unwrap_or_else(|| "AMD GPU (amdgpu)".to_string()),
+                        device_node: render_node,
+                        fw_version: None,
+                        driver: Some("amdgpu".to_string()),
+                        usable,
+                        unusable_reason,
+                        lanes,
+                        memory_bandwidth_gbps: None,
+                        memory_bandwidth_source: "unknown".to_string(),
+                        cpu_flags: None,
+                        cpu_cores: None,
+                        system_ram_gb: None,
+                    });
                 }
+                // Order 855-wrr3: Intel now has a disposition of its own
+                // instead of falling to the last-resort `usable: true` arm.
+                ("0x8086", Some("i915")) | ("0x8086", Some("xe")) => {
+                    let (usable, lanes, unusable_reason) =
+                        intel_gpu_disposition(intel_rt, render_node.is_some());
+                    gpus.push(DeviceRecord {
+                        device_class: "gpu".to_string(),
+                        vendor: "intel".to_string(),
+                        name: pci_device_name_via_lspci(&pci_addr)
+                            .unwrap_or_else(|| "Intel GPU".to_string()),
+                        device_node: render_node,
+                        fw_version: None,
+                        driver,
+                        usable,
+                        unusable_reason,
+                        lanes,
+                        memory_bandwidth_gbps: None,
+                        memory_bandwidth_source: "unknown".to_string(),
+                        cpu_flags: None,
+                        cpu_cores: None,
+                        system_ram_gb: None,
+                    });
+                }
+                // Any other vendor keeps the old last-resort shape — but only
+                // when nothing else was found, and with the REAL vendor
+                // instead of the old hardcoded "amd".
+                (vid, _) if gpus.is_empty() => {
+                    gpus.push(DeviceRecord {
+                        device_class: "gpu".to_string(),
+                        vendor: match vid {
+                            "0x8086" => "intel".to_string(),
+                            "0x1002" => "amd".to_string(),
+                            _ => "unknown".to_string(),
+                        },
+                        name: pci_device_name_via_lspci(&pci_addr)
+                            .unwrap_or_else(|| "Vulkan GPU".to_string()),
+                        device_node: render_node
+                            .or_else(|| Some(format!("/sys/bus/pci/devices/{pci_addr}"))),
+                        fw_version: None,
+                        driver,
+                        usable: true,
+                        unusable_reason: None,
+                        lanes: vec!["container".to_string(), "host-native".to_string()],
+                        memory_bandwidth_gbps: None,
+                        memory_bandwidth_source: "unknown".to_string(),
+                        cpu_flags: None,
+                        cpu_cores: None,
+                        system_ram_gb: None,
+                    });
+                }
+                _ => {}
             }
-            if gpus.is_empty() {
-                gpus.push(DeviceRecord {
-                    device_class: "gpu".to_string(),
-                    vendor: "amd".to_string(), // Or intel/generic drm
-                    name: "Vulkan GPU".to_string(),
-                    device_node: Some(dri_name),
-                    fw_version: None,
-                    driver: None,
-                    usable: true,
-                    unusable_reason: None,
-                    lanes: vec!["container".to_string(), "host-native".to_string()],
-                    memory_bandwidth_gbps: None,
-                    memory_bandwidth_source: "unknown".to_string(),
-                    cpu_flags: None,
-                    cpu_cores: None,
-                    system_ram_gb: None,
-                });
-            }
+        }
+
+        if wsl2_paravirtual_gpu(
+            Path::new("/dev/dxg").exists(),
+            Path::new("/dev/dri").exists(),
+            !gpus.is_empty(),
+        ) {
+            gpus.push(DeviceRecord {
+                device_class: "gpu".to_string(),
+                // /dev/dxg is vendor-AGNOSTIC: Intel, AMD and NVIDIA all present
+                // through it under WSL2 (measured on two Windows hosts, an Intel
+                // UHD and an AMD Radeon 860M). Naming a vendor here would be a
+                // guess, and a wrong vendor in the fleet matrix is worse than an
+                // honest "unknown".
+                vendor: "unknown".to_string(),
+                name: "WSL2 paravirtual GPU (/dev/dxg)".to_string(),
+                device_node: Some("/dev/dxg".to_string()),
+                fw_version: None,
+                driver: None,
+                usable: false,
+                unusable_reason: Some("wsl2-no-dri-render-node".to_string()),
+                // No lane: unreachable from the container AND from host-native
+                // code in the guest, because there is no render node to open.
+                lanes: vec![],
+                memory_bandwidth_gbps: None,
+                memory_bandwidth_source: "unknown".to_string(),
+                cpu_flags: None,
+                cpu_cores: None,
+                system_ram_gb: None,
+            });
         }
     }
 
@@ -458,19 +991,184 @@ fn enumerate_host() -> HostInfo {
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
         .unwrap_or_else(|| "unknown".to_string());
 
+    let (host_id, host_id_source) = resolve_host_id();
+
     HostInfo {
         is_battery_present: battery,
         kernel_release: kernel,
+        host_id,
+        host_id_source,
+        host_kind: host_kind().to_string(),
     }
 }
 
 // @trace spec:accel-capability-probe
+/// Map the compile target onto the fleet's host vocabulary (order 808-43mw).
+///
+/// The ledger already speaks `linux` / `windows` / `macos`, so the matrix uses
+/// those rather than Rust's `macos`-vs-`darwin` spelling of the same idea.
+fn host_kind() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "macos"
+    } else if cfg!(target_os = "windows") {
+        "windows"
+    } else if cfg!(target_os = "linux") {
+        "linux"
+    } else {
+        std::env::consts::OS
+    }
+}
+
+// @trace spec:accel-capability-probe
+/// Normalise a node name the way the fleet's shell probe does (order 808-43mw).
+///
+/// Strip the domain and lowercase — the same two steps `tillandsias_node_name`
+/// applies with bash builtins. Kept as a pure function so the agreement with
+/// the shell chain is testable without a matching hostname.
+fn normalize_node_name(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    let short = trimmed.split('.').next().unwrap_or("");
+    if short.is_empty() {
+        return None;
+    }
+    Some(short.to_ascii_lowercase())
+}
+
+// @trace spec:accel-capability-probe
+/// Resolve `(host_id, host_id_source)` — the input first, then the fleet chain.
+///
+/// The fallback order mirrors `scripts/agent-identity.sh` deliberately:
+/// `hostname` -> `uname -n` -> `/etc/hostname`. It is NOT a fresh guess at how
+/// to name a machine; agreeing with the shell probe is the point, because the
+/// matrix key and the attestation ledger's filename must be the same string.
+///
+/// Returns `unknown` rather than an empty string when nothing answers. An empty
+/// host_id would fold as a legitimate key and silently collect every
+/// unidentifiable host into one row — the exact collision this field exists to
+/// prevent, reintroduced through the error path.
+fn resolve_host_id() -> (String, String) {
+    if let Ok(v) = std::env::var(HOST_ID_ENV)
+        && let Some(id) = normalize_node_name(&v)
+    {
+        return (id, "input".to_string());
+    }
+
+    // `hostname -s` is deliberately NOT tried: order 743-mgf3 measured it
+    // rejected under MSYS, and the shell probe dropped it for that reason.
+    for (prog, args) in [("hostname", &[][..]), ("uname", &["-n"][..])] {
+        if let Ok(out) = Command::new(prog).args(args).output()
+            && out.status.success()
+            && let Some(id) = normalize_node_name(&String::from_utf8_lossy(&out.stdout))
+        {
+            return (id, "node-name".to_string());
+        }
+    }
+
+    if let Ok(content) = fs::read_to_string("/etc/hostname")
+        && let Some(id) = normalize_node_name(&content)
+    {
+        return (id, "node-name".to_string());
+    }
+
+    ("unknown".to_string(), "unknown".to_string())
+}
+
+fn is_binary_executable(path: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(meta) = fs::metadata(path) {
+            return meta.is_file() && (meta.permissions().mode() & 0o111 != 0);
+        }
+        false
+    }
+    #[cfg(not(unix))]
+    {
+        path.is_file()
+    }
+}
+
+fn is_binary_available(binary: &str) -> bool {
+    if let Ok(path_var) = std::env::var("PATH") {
+        for dir in std::env::split_paths(&path_var) {
+            let full = dir.join(binary);
+            if is_binary_executable(&full) {
+                return true;
+            }
+        }
+    }
+    for std_path in ["/usr/local/bin", "/usr/bin", "/bin", "/opt/homebrew/bin"] {
+        let full = Path::new(std_path).join(binary);
+        if is_binary_executable(&full) {
+            return true;
+        }
+    }
+    false
+}
+
+// @trace order:803-825k, order:850-bif2, spec:accel-capability-probe
 fn enumerate_engines() -> Vec<EngineRecord> {
-    vec![EngineRecord {
-        name: "ollama".to_string(),
-        backend: "llama-server".to_string(),
-        supported_device_classes: vec!["cpu".to_string(), "gpu".to_string()],
-    }]
+    enumerate_engines_with(is_binary_available, inference_image_present)
+}
+
+/// Is the fleet's inference image (`localhost/tillandsias-inference`) present
+/// in the local podman store? That image ships ollama, so its presence is the
+/// container-lane engine the host-PATH scan is structurally blind to
+/// (order 850-bif2). `podman` absent or failing reads as "no image" — an
+/// engine we cannot prove is an engine we do not claim.
+fn inference_image_present() -> bool {
+    tillandsias_podman::podman_cmd_sync()
+        .args(["images", "--format", "{{.Repository}}"])
+        .output_bounded(tillandsias_podman::OperationKind::Inspect.default_budget())
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| {
+            String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .any(|l| l.trim().ends_with("/tillandsias-inference"))
+        })
+        .unwrap_or(false)
+}
+
+fn enumerate_engines_with<F, G>(mut binary_check: F, mut container_check: G) -> Vec<EngineRecord>
+where
+    F: FnMut(&str) -> bool,
+    G: FnMut() -> bool,
+{
+    let mut engines = Vec::new();
+
+    if binary_check("ollama") {
+        engines.push(EngineRecord {
+            name: "ollama".to_string(),
+            backend: "llama-server".to_string(),
+            supported_device_classes: vec!["cpu".to_string(), "gpu".to_string()],
+            lanes: None,
+        });
+    }
+
+    if binary_check("llama-server") {
+        engines.push(EngineRecord {
+            name: "llama-server".to_string(),
+            backend: "llama.cpp".to_string(),
+            supported_device_classes: vec!["cpu".to_string(), "gpu".to_string()],
+            lanes: None,
+        });
+    }
+
+    // Order 850-bif2: the containerized engine. Recorded only when the host
+    // has no host-PATH ollama already covering every lane, and scoped to the
+    // container lane — claiming host-native reach for a binary inside an
+    // image would be the same over-claim in the other direction.
+    if !engines.iter().any(|e| e.name == "ollama") && container_check() {
+        engines.push(EngineRecord {
+            name: "ollama".to_string(),
+            backend: "llama-server".to_string(),
+            supported_device_classes: vec!["cpu".to_string(), "gpu".to_string()],
+            lanes: Some(vec!["container".to_string()]),
+        });
+    }
+
+    engines
 }
 
 fn num_cpus() -> u32 {
@@ -662,17 +1360,50 @@ fn slug(raw: &str) -> String {
 mod tests {
     use super::*;
 
+    /// ORDER 880-tdwn: pin the podman seam to /bin/false for a test's
+    /// lifetime, under a module lock, restoring the prior value on drop.
+    /// `run_probe` reaches `inference_image_present()` → real podman
+    /// resolution; /bin/false makes that read a deterministic "no image"
+    /// (the function's own documented degraded answer) instead of a
+    /// live-daemon read — or, under the CI tripwire, a panic. Every test
+    /// that walks run_probe MUST hold this guard.
+    fn podman_seam() -> PodmanSeamGuard {
+        static SEAM_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let lock = SEAM_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let prev = std::env::var_os("TILLANDSIAS_PODMAN_BIN");
+        unsafe { std::env::set_var("TILLANDSIAS_PODMAN_BIN", "/bin/false") };
+        PodmanSeamGuard { _lock: lock, prev }
+    }
+    struct PodmanSeamGuard {
+        _lock: std::sync::MutexGuard<'static, ()>,
+        prev: Option<std::ffi::OsString>,
+    }
+    impl Drop for PodmanSeamGuard {
+        fn drop(&mut self) {
+            unsafe {
+                match self.prev.take() {
+                    Some(v) => std::env::set_var("TILLANDSIAS_PODMAN_BIN", v),
+                    None => std::env::remove_var("TILLANDSIAS_PODMAN_BIN"),
+                }
+            }
+        }
+    }
+
     /// Build a document with exactly the devices a case needs.
     fn doc_with(devices: Vec<DeviceRecord>) -> CapabilityDocument {
         CapabilityDocument {
             schema_version: SCHEMA_VERSION,
             legacy_tier: "cpu".to_string(),
+            probe_identity: Some(probe_identity()),
             devices,
             engines: Vec::new(),
             measurements: Vec::new(),
             host: HostInfo {
                 is_battery_present: false,
                 kernel_release: "test".to_string(),
+                host_id: "test-host".to_string(),
+                host_id_source: "input".to_string(),
+                host_kind: "linux".to_string(),
             },
             timestamp: "1970-01-01T00:00:00Z".to_string(),
         }
@@ -846,8 +1577,82 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
+    // @trace spec:accel-capability-probe
+    fn wsl2_paravirtual_gpu_fires_only_on_the_unambiguous_wsl2_shape() {
+        // The whole decision table. The one true case: /dev/dxg present, no DRI
+        // render node, nothing better already found.
+        assert!(wsl2_paravirtual_gpu(true, false, false), "the WSL2 shape");
+
+        // Bare-metal Linux has no /dev/dxg — this must never manufacture a
+        // phantom device there, which is what
+        // envelope_on_a_bare_cpu_host_is_cpu_only_with_no_phantom_devices pins.
+        assert!(!wsl2_paravirtual_gpu(false, false, false), "no dxg, no dri");
+        assert!(
+            !wsl2_paravirtual_gpu(false, true, false),
+            "bare-metal with DRI"
+        );
+        assert!(
+            !wsl2_paravirtual_gpu(false, true, true),
+            "bare-metal, gpu found"
+        );
+        assert!(
+            !wsl2_paravirtual_gpu(false, false, true),
+            "no dxg, gpu found"
+        );
+
+        // A WSL2 host that DOES expose a render node is the /dev/dri arm's job;
+        // emitting here too would double-count one GPU.
+        assert!(
+            !wsl2_paravirtual_gpu(true, true, false),
+            "dxg with a DRI node"
+        );
+        assert!(
+            !wsl2_paravirtual_gpu(true, true, true),
+            "dxg, DRI, gpu found"
+        );
+
+        // nvidia-smi answered first (a WSL2 host with a CUDA passthrough), so a
+        // better record already exists and this must defer to it.
+        assert!(
+            !wsl2_paravirtual_gpu(true, false, true),
+            "defers to a found gpu"
+        );
+    }
+
+    #[test]
+    // @trace spec:accel-capability-probe
+    fn a_wsl2_paravirtual_gpu_renders_as_present_unusable_never_as_none() {
+        // The point of 806-2r4s: this host has a healthy AMD Radeon 860M that
+        // WSL2 exposes only as /dev/dxg. Before the probe emitted this record
+        // the envelope read `accel_gpu=none accel_reason=-`, which is
+        // indistinguishable from a machine with no GPU at all — and the fleet
+        // capability matrix cannot be built on that.
+        let mut gpu = device(
+            "gpu",
+            "WSL2 paravirtual GPU (/dev/dxg)",
+            &[],
+            Some("wsl2-no-dri-render-node"),
+        );
+        gpu.usable = false;
+
+        let env = accel_envelope(&doc_with(vec![
+            device("cpu", "CPU", &["container"], None),
+            gpu,
+        ]));
+
+        assert!(env.contains("accel_gpu=present-unusable"), "{env}");
+        assert!(!env.contains("accel_gpu=none"), "{env}");
+        assert!(env.contains("wsl2-no-dri-render-node"), "{env}");
+        // Capacity is still cpu-only — an unreachable GPU must not inflate the
+        // class, or a scheduler would place GPU work on a host that cannot run it.
+        assert!(env.contains("accel_class=cpu-only"), "{env}");
+    }
+
+    #[test]
     // @trace spec:accel-capability-probe
     fn test_probe_produces_valid_document() {
+        let _seam = podman_seam();
         let doc = run_probe("gpu-cuda");
         assert_eq!(doc.schema_version, SCHEMA_VERSION);
         assert_eq!(doc.legacy_tier, "gpu-cuda");
@@ -864,6 +1669,7 @@ mod tests {
     #[test]
     // @trace spec:accel-capability-probe
     fn test_serialization_roundtrip() {
+        let _seam = podman_seam();
         let doc = run_probe("cpu");
         let json = serde_json::to_string_pretty(&doc).expect("serialize");
         let deserialized: CapabilityDocument = serde_json::from_str(&json).expect("deserialize");
@@ -933,5 +1739,462 @@ mod tests {
         };
         assert!(!metal_device.lanes.contains(&"container".to_string()));
         assert!(metal_device.lanes.contains(&"host-native".to_string()));
+    }
+
+    // ---- order 808-43mw: host identity and measurement labelling ----
+
+    /// THE COMPATIBILITY GUARD, and the reason the new fields are optional.
+    ///
+    /// This is byte-for-byte the payload `scripts/bench-accel-lane.sh` pipes
+    /// into `--record-measurement` today (its `jq -nc` object, same key order).
+    /// That script belongs to another host. If widening this struct made the
+    /// current payload unparseable, the first host to run a new binary against
+    /// the unchanged script would stop recording measurements — and would do it
+    /// QUIETLY, because the script's own `|| echo note:...record-failed` arm
+    /// keeps the bench exiting 0.
+    #[test]
+    fn todays_bench_payload_still_deserializes() {
+        let payload = r#"{"device":"cpu","engine":"ollama","prefill_tps":1024.5,
+            "decode_tps":87.2,"joules_per_token":null,"degraded":false,
+            "degraded_reason":null}"#;
+
+        let rec: MeasurementRecord =
+            serde_json::from_str(payload).expect("the CURRENT bench payload must still parse");
+
+        assert_eq!(rec.device, "cpu");
+        assert_eq!(rec.engine, "ollama");
+        assert_eq!(
+            rec.workload_suite, None,
+            "an unlabelled record must read as UNLABELLED, never as a default suite"
+        );
+        assert_eq!(rec.locus, None, "same for locus: absent is not a value");
+    }
+
+    /// And a labelled payload round-trips, so the writer has something to aim at.
+    #[test]
+    fn a_labelled_measurement_round_trips() {
+        let rec = MeasurementRecord {
+            device: "cpu".to_string(),
+            engine: "ollama".to_string(),
+            prefill_tps: Some(1024.5),
+            decode_tps: Some(87.2),
+            joules_per_token: None,
+            degraded: false,
+            degraded_reason: None,
+            workload_suite: Some("802-2536-v1".to_string()),
+            locus: Some("in-guest".to_string()),
+        };
+        let json = serde_json::to_string(&rec).expect("serializes");
+        let back: MeasurementRecord = serde_json::from_str(&json).expect("round-trips");
+        assert_eq!(back, rec);
+    }
+
+    /// A v1 document has no host_id, so it must be REJECTED rather than read
+    /// as a host whose name happens to be empty. `load_or_probe` treats a parse
+    /// failure as "re-probe", which is the correct outcome: a document that
+    /// cannot name itself is not a row the matrix can accept.
+    #[test]
+    fn a_v1_document_without_host_identity_is_refused() {
+        let v1 = r#"{"schema_version":1,"legacy_tier":"cpu","devices":[],
+            "engines":[],"measurements":[],
+            "host":{"is_battery_present":false,"kernel_release":"6.18.33.2-microsoft-standard-WSL2"},
+            "timestamp":"1970-01-01T00:00:00Z"}"#;
+        assert!(
+            serde_json::from_str::<CapabilityDocument>(v1).is_err(),
+            "a document with no host_id must not deserialize into one with a blank host_id"
+        );
+    }
+
+    /// Two WSL2 guests share a kernel release EXACTLY — measured, not assumed:
+    /// this host's guest reports `6.18.33.2-microsoft-standard-WSL2`, and so
+    /// does any other guest on the same WSL kernel. This test states why
+    /// `kernel_release` could not have been the fold key.
+    #[test]
+    fn kernel_release_does_not_distinguish_two_wsl2_hosts() {
+        let shared = "6.18.33.2-microsoft-standard-WSL2".to_string();
+        let a = HostInfo {
+            is_battery_present: false,
+            kernel_release: shared.clone(),
+            host_id: "yolanda".to_string(),
+            host_id_source: "node-name".to_string(),
+            host_kind: "linux".to_string(),
+        };
+        let b = HostInfo {
+            host_id: "esmeraldinha".to_string(),
+            ..a.clone()
+        };
+        assert_eq!(a.kernel_release, b.kernel_release, "the collision is real");
+        assert_ne!(a.host_id, b.host_id, "and host_id is what separates them");
+    }
+
+    #[test]
+    fn node_names_are_shortened_and_lowercased() {
+        assert_eq!(normalize_node_name("Yolanda").as_deref(), Some("yolanda"));
+        assert_eq!(
+            normalize_node_name("YOGA.localdomain\n").as_deref(),
+            Some("yoga"),
+            "the domain is stripped, matching the shell probe"
+        );
+        assert_eq!(normalize_node_name("  \n ").as_deref(), None);
+        assert_eq!(normalize_node_name(".leading-dot").as_deref(), None);
+    }
+
+    /// The INPUT wins over the derived chain, and is normalised on the way in —
+    /// otherwise `TILLANDSIAS_HOST_ID=Yolanda` and a derived `yolanda` would be
+    /// two keys for one machine, which is the defect this field exists to fix.
+    #[test]
+    fn the_input_overrides_the_derived_name_and_is_normalised() {
+        let prev = std::env::var_os(HOST_ID_ENV);
+        unsafe { std::env::set_var(HOST_ID_ENV, "Esmeraldinha.LOCAL") };
+        let (id, source) = resolve_host_id();
+        match prev {
+            Some(v) => unsafe { std::env::set_var(HOST_ID_ENV, v) },
+            None => unsafe { std::env::remove_var(HOST_ID_ENV) },
+        }
+        assert_eq!(id, "esmeraldinha");
+        assert_eq!(source, "input");
+    }
+
+    /// Whatever this machine is, the probe must produce a usable key: never
+    /// empty, always lowercase, and always with a source that says how it was
+    /// obtained.
+    #[test]
+    fn the_probe_always_yields_a_foldable_key() {
+        let prev = std::env::var_os(HOST_ID_ENV);
+        unsafe { std::env::remove_var(HOST_ID_ENV) };
+        let (id, source) = resolve_host_id();
+        if let Some(v) = prev {
+            unsafe { std::env::set_var(HOST_ID_ENV, v) }
+        }
+        assert!(
+            !id.is_empty(),
+            "an empty key would fold every unknown host into one row"
+        );
+        assert_eq!(id, id.to_ascii_lowercase());
+        assert!(
+            ["input", "node-name", "unknown"].contains(&source.as_str()),
+            "unexpected host_id_source {source}"
+        );
+    }
+
+    /// `host_kind` speaks the ledger's vocabulary, not Rust's — the ledger says
+    /// `macos`, `std::env::consts::OS` says `macos` too but only by luck of
+    /// spelling, and a consumer folding the matrix must not have to know which.
+    #[test]
+    fn host_kind_uses_the_ledgers_vocabulary() {
+        assert!(
+            ["linux", "windows", "macos"].contains(&host_kind()),
+            "host_kind() returned {} which is not a fleet host vocabulary term",
+            host_kind()
+        );
+    }
+
+    /// PINS THE KNOWN GAP so it cannot be mistaken for a bug later, and so the
+    /// day someone fixes it the test says what changed.
+    ///
+    /// A document produced inside a WSL2 guest carries `host_kind: "linux"`
+    /// while describing a machine whose spec is a Windows laptop's. The pair
+    /// (kernel_release says WSL2, host_kind says linux) is currently the ONLY
+    /// in-document signal that a row was observed from a guest — it is not a
+    /// substitute for the host-side contribution 809-7e4m specifies, and this
+    /// test asserts the gap rather than pretending it is closed.
+    #[test]
+    fn a_wsl2_row_cannot_yet_say_its_machine_is_windows() {
+        let guest_row = HostInfo {
+            is_battery_present: true,
+            kernel_release: "6.18.33.2-microsoft-standard-WSL2".to_string(),
+            host_id: "yolanda".to_string(),
+            host_id_source: "node-name".to_string(),
+            host_kind: "linux".to_string(),
+        };
+        assert!(
+            guest_row.kernel_release.contains("microsoft-standard-WSL2"),
+            "the kernel is the only hint the context is a guest"
+        );
+        assert_eq!(
+            guest_row.host_kind, "linux",
+            "KNOWN GAP (809-7e4m): the context is linux, the machine is windows"
+        );
+    }
+
+    /// 808-43mw's `verifiable_closure`, executed rather than asserted:
+    /// "a capability document round-trips a host_id, and a measurement carries
+    /// suite + locus; two documents from different loci are machine-
+    /// distinguishable without reading any prose".
+    #[test]
+    fn closure_808_43mw_documents_are_machine_distinguishable_by_host_and_locus() {
+        let measured_at = |host: &str, locus: &str| CapabilityDocument {
+            schema_version: SCHEMA_VERSION,
+            legacy_tier: "cpu".to_string(),
+            probe_identity: Some(probe_identity()),
+            devices: Vec::new(),
+            engines: Vec::new(),
+            measurements: vec![MeasurementRecord {
+                device: "cpu".to_string(),
+                engine: "ollama".to_string(),
+                prefill_tps: Some(1024.0),
+                decode_tps: Some(87.0),
+                joules_per_token: None,
+                degraded: false,
+                degraded_reason: None,
+                workload_suite: Some("802-2536-v1".to_string()),
+                locus: Some(locus.to_string()),
+            }],
+            host: HostInfo {
+                is_battery_present: true,
+                kernel_release: "6.18.33.2-microsoft-standard-WSL2".to_string(),
+                host_id: host.to_string(),
+                host_id_source: "node-name".to_string(),
+                host_kind: "linux".to_string(),
+            },
+            timestamp: "1970-01-01T00:00:00Z".to_string(),
+        };
+
+        // (a) the document round-trips its host_id through JSON
+        let yolanda = measured_at("yolanda", "in-guest");
+        let json = serde_json::to_string(&yolanda).expect("serializes");
+        let back: CapabilityDocument = serde_json::from_str(&json).expect("round-trips");
+        assert_eq!(back, yolanda);
+        assert_eq!(back.host.host_id, "yolanda");
+
+        // (b) the measurement carries suite AND locus
+        let m = &back.measurements[0];
+        assert_eq!(m.workload_suite.as_deref(), Some("802-2536-v1"));
+        assert_eq!(m.locus.as_deref(), Some("in-guest"));
+
+        // (c) two documents at different loci differ in a MACHINE-READABLE
+        //     field — not merely in a comment a human has to notice.
+        let mirrored = measured_at("yolanda", "host-side-via-mirror");
+        assert_eq!(
+            yolanda.host.host_id, mirrored.host.host_id,
+            "same machine, so the fold key must agree"
+        );
+        assert_ne!(
+            yolanda.measurements[0].locus, mirrored.measurements[0].locus,
+            "and the locus is what tells a consumer these are not comparable"
+        );
+
+        // (d) and two machines sharing a kernel remain separable
+        let esmeraldinha = measured_at("esmeraldinha", "in-guest");
+        assert_eq!(
+            yolanda.host.kernel_release,
+            esmeraldinha.host.kernel_release
+        );
+        assert_ne!(yolanda.host.host_id, esmeraldinha.host.host_id);
+    }
+
+    #[test]
+    // @trace order:803-825k, spec:accel-capability-probe
+    fn test_enumerate_engines_empty_when_no_engine_available() {
+        let engines = enumerate_engines_with(|_| false, || false);
+        assert!(
+            engines.is_empty(),
+            "a host with no inference engine installed must not advertise any engine records"
+        );
+    }
+
+    #[test]
+    // @trace order:803-825k, spec:accel-capability-probe
+    fn test_enumerate_engines_detects_ollama_and_llama_server() {
+        let only_ollama = enumerate_engines_with(|bin| bin == "ollama", || false);
+        assert_eq!(only_ollama.len(), 1);
+        assert_eq!(only_ollama[0].name, "ollama");
+        assert_eq!(only_ollama[0].backend, "llama-server");
+        assert_eq!(only_ollama[0].supported_device_classes, vec!["cpu", "gpu"]);
+        assert_eq!(
+            only_ollama[0].lanes, None,
+            "host-PATH engines cover every lane"
+        );
+
+        let only_llama = enumerate_engines_with(|bin| bin == "llama-server", || false);
+        assert_eq!(only_llama.len(), 1);
+        assert_eq!(only_llama[0].name, "llama-server");
+        assert_eq!(only_llama[0].backend, "llama.cpp");
+        assert_eq!(only_llama[0].supported_device_classes, vec!["cpu", "gpu"]);
+
+        let both = enumerate_engines_with(|bin| bin == "ollama" || bin == "llama-server", || false);
+        assert_eq!(both.len(), 2);
+        assert_eq!(both[0].name, "ollama");
+        assert_eq!(both[1].name, "llama-server");
+    }
+
+    #[test]
+    // @trace order:850-bif2, spec:accel-capability-probe
+    fn test_containerized_engine_is_container_lane_only_and_never_shadows_host_ollama() {
+        // The inference image present with no host binaries: one ollama
+        // record, scoped to the container lane. This is the record whose
+        // absence made a usable RTX A5000 read "schedulable: none".
+        let containerized = enumerate_engines_with(|_| false, || true);
+        assert_eq!(containerized.len(), 1);
+        assert_eq!(containerized[0].name, "ollama");
+        assert_eq!(
+            containerized[0].lanes,
+            Some(vec!["container".to_string()]),
+            "an engine inside an image must not claim host-native reach"
+        );
+
+        // Host ollama present too: the host record (all lanes) wins and the
+        // container record is not duplicated.
+        let host_wins = enumerate_engines_with(|bin| bin == "ollama", || true);
+        assert_eq!(host_wins.len(), 1);
+        assert_eq!(host_wins[0].lanes, None);
+    }
+
+    #[test]
+    // @trace order:850-bif2, spec:accel-capability-probe
+    fn test_amd_gpu_disposition_fails_closed_without_rocm_runtime() {
+        // rocm-smi presence alone is not evidence; without a gfx agent the
+        // device is present-unusable with the reason named.
+        let (usable, lanes, reason) = amd_gpu_disposition(false, true, true);
+        assert!(!usable);
+        assert_eq!(lanes, vec!["host-native"]);
+        assert_eq!(reason.as_deref(), Some("rocm-runtime-missing"));
+
+        let (usable, _, reason) = amd_gpu_disposition(true, false, true);
+        assert!(!usable);
+        assert_eq!(reason.as_deref(), Some("kfd-missing"));
+
+        let (usable, lanes, reason) = amd_gpu_disposition(true, true, false);
+        assert!(!usable);
+        assert!(lanes.is_empty(), "no render node = no lane to reach it on");
+        assert_eq!(reason.as_deref(), Some("render-node-missing"));
+
+        let (usable, lanes, reason) = amd_gpu_disposition(true, true, true);
+        assert!(usable);
+        assert_eq!(lanes, vec!["container", "host-native"]);
+        assert_eq!(reason, None);
+    }
+
+    #[test]
+    // @trace order:855-wrr3, spec:accel-capability-probe
+    fn test_intel_gpu_disposition_fails_closed_without_a_compute_runtime() {
+        // A render node is a DISPLAY driver, not a compute lane. Without an
+        // Intel compute runtime the device is present-unusable, reason named.
+        let (usable, lanes, reason) = intel_gpu_disposition(false, true);
+        assert!(!usable);
+        assert_eq!(lanes, vec!["host-native"]);
+        assert_eq!(reason.as_deref(), Some("intel-compute-runtime-missing"));
+
+        let (usable, lanes, reason) = intel_gpu_disposition(true, false);
+        assert!(!usable);
+        assert!(lanes.is_empty(), "no render node = no lane to reach it on");
+        assert_eq!(reason.as_deref(), Some("render-node-missing"));
+
+        let (usable, lanes, reason) = intel_gpu_disposition(true, true);
+        assert!(usable);
+        assert_eq!(lanes, vec!["container", "host-native"]);
+        assert_eq!(reason, None);
+    }
+
+    #[test]
+    // @trace order:852-dk9z, spec:accel-capability-probe
+    fn test_cache_from_different_probe_code_is_reprobed_not_served() {
+        let _seam = podman_seam();
+        // The 852-dk9z regression, measured twice for real: a rebuilt binary
+        // served its predecessor's document because schema_version and
+        // legacy_tier both still matched. Stamp a cache with a FOREIGN probe
+        // identity and it must be re-probed.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let cache = dir.path().join("capabilities.json");
+
+        let mut stale = run_probe("cpu");
+        stale.probe_identity = Some("0.0.0+deadbeefdeadbeef".to_string());
+        stale.legacy_tier = "cpu".to_string();
+        // A marker the real probe can never produce, so "served from cache" is
+        // distinguishable from "re-probed and happened to look the same".
+        stale.host.host_id = "STALE-CACHE-MARKER".to_string();
+        fs::write(&cache, serde_json::to_string_pretty(&stale).unwrap()).unwrap();
+
+        let got = load_or_probe_at(&cache, "cpu", Freshness::Cached);
+        assert_ne!(
+            got.host.host_id, "STALE-CACHE-MARKER",
+            "a document from different probe code must never be served"
+        );
+        assert_eq!(
+            got.probe_identity.as_deref(),
+            Some(probe_identity().as_str())
+        );
+
+        // And a pre-852-dk9z cache (no identity at all) is likewise refused.
+        let mut legacy = run_probe("cpu");
+        legacy.probe_identity = None;
+        legacy.host.host_id = "LEGACY-CACHE-MARKER".to_string();
+        fs::write(&cache, serde_json::to_string_pretty(&legacy).unwrap()).unwrap();
+        let got = load_or_probe_at(&cache, "cpu", Freshness::Cached);
+        assert_ne!(got.host.host_id, "LEGACY-CACHE-MARKER");
+    }
+
+    #[test]
+    // @trace order:852-dk9z, spec:accel-capability-probe
+    fn test_negative_control_unchanged_binary_still_serves_its_own_cache() {
+        let _seam = podman_seam();
+        // The cache must keep working for the server's hot path — this fix is
+        // an invalidation rule, not a removal.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let cache = dir.path().join("capabilities.json");
+
+        let mut mine = run_probe("cpu");
+        mine.host.host_id = "MY-OWN-CACHE".to_string();
+        assert_eq!(
+            mine.probe_identity.as_deref(),
+            Some(probe_identity().as_str())
+        );
+        fs::write(&cache, serde_json::to_string_pretty(&mine).unwrap()).unwrap();
+
+        let got = load_or_probe_at(&cache, "cpu", Freshness::Cached);
+        assert_eq!(
+            got.host.host_id, "MY-OWN-CACHE",
+            "same probe identity must still hit the cache"
+        );
+
+        // ...and Freshness::Force ignores it, which is what publication uses.
+        let got = load_or_probe_at(&cache, "cpu", Freshness::Force);
+        assert_ne!(got.host.host_id, "MY-OWN-CACHE");
+    }
+
+    #[test]
+    // @trace order:855-wrr3, spec:accel-capability-probe
+    fn test_intel_igpu_with_only_a_render_node_is_not_a_workstation_gpu() {
+        // The live regression from order 855-wrr3: host pirria, a 4-core
+        // Alder Lake-N N150 that is the fleet's declared LOWER BOUND, published
+        // accel_class=workstation-gpu because /dev/dri/renderD128 exists — while
+        // the same binary's --inference-tier answered `tier:cpu` and the engine
+        // reported initial_count=0 devices, total_vram=0 B.
+        let mut d = device(
+            "gpu",
+            "Alder Lake-N [Intel Graphics]",
+            &["host-native"],
+            Some("intel-compute-runtime-missing"),
+        );
+        d.usable = false;
+        let env = accel_envelope(&doc_with(vec![d]));
+        assert!(env.contains("accel_class=cpu-only"), "{env}");
+        assert!(env.contains("accel_gpu=present-unusable"), "{env}");
+        assert!(
+            env.contains("accel_reason=intel-compute-runtime-missing"),
+            "{env}"
+        );
+    }
+
+    #[test]
+    // @trace order:850-bif2, spec:accel-capability-probe
+    // EXIT CRITERION 4 (negative control): a host with no accelerator still
+    // produces a VALID document — a CPU device and a named host — rather
+    // than an empty or absent one. Silence and "nothing here" must stay
+    // distinguishable; this runs on every host that gates a push.
+    fn test_cpu_only_probe_yields_a_valid_document_not_silence() {
+        let _seam = podman_seam();
+        let doc = run_probe("cpu");
+        assert_eq!(doc.schema_version, 2);
+        assert!(
+            doc.devices.iter().any(|d| d.device_class == "cpu"),
+            "even an accelerator-less host records its CPU"
+        );
+        assert!(
+            !doc.host.host_id.is_empty() && doc.host.host_id != "unknown",
+            "a row without a host_id folds to nothing in the matrix"
+        );
+        let json = serde_json::to_string(&doc).expect("document serializes");
+        assert!(json.contains("\"schema_version\":2"));
     }
 }

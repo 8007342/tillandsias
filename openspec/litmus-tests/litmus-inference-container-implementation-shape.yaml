@@ -1,4 +1,5 @@
 # @trace spec:inference-container
+# freshness: auditor=linux-yoga-opus5-20260824T193300Z date=2026-08-24 verdict=updated scope=identity + security steps moved from fixed -A 60 window to enclosing-function extraction (fn body measured 202 lines); negative controls 2/2 and suite green on linux-next
 #
 # Drift-protection for the inference container AS-LAUNCHED via
 # `build_inference_run_args` + entrypoint.sh. spec:inference-
@@ -55,18 +56,23 @@ critical_path:
     # path observed). Pin name=tillandsias-inference, hostname=
     # inference, network-alias=inference so a refactor breaking
     # enclave discovery surfaces.
-    # Window widened 30 -> 60 (order 313): the uid-1000 chown_tree ownership
-    # block (5a5b9a37) now precedes the base args.
-    command: "grep -A 60 'fn build_inference_run_args' crates/tillandsias-headless/src/main.rs | grep -F 'tillandsias-inference' && grep -A 60 'fn build_inference_run_args' crates/tillandsias-headless/src/main.rs | grep -F '\"inference\".into()' | head -1"
+    # Window widened 30 -> 60 (order 313), then the fixed window was
+    # REPLACED by enclosing-function extraction (order 622-rmit
+    # class): the uid-1000 chown_tree block (5a5b9a37) and later the
+    # identity args themselves grew past any fixed line count, so
+    # the assertion now scopes to the whole function body — from its
+    # signature line to its closing column-0 brace — instead of a
+    # distance proxy that breaks whenever the function grows.
+    command: "awk '/^fn build_inference_run_args/{f=1} f{print} f&&/^}/{exit}' crates/tillandsias-headless/src/main.rs | grep -F 'tillandsias-inference' && awk '/^fn build_inference_run_args/{f=1} f{print} f&&/^}/{exit}' crates/tillandsias-headless/src/main.rs | grep -F '\"inference\".into()' | head -1"
     timeout_ms: 3000
     expected_behavior: "inference"
 
   - step: "Req inference security: --cap-drop=ALL + --security-opt=no-new-privileges + --userns=keep-id + --pids-limit=128"
     # Container security flags are non-negotiable per the work-loop
     # guardrails. Pin all 4 on the inference launch path.
-    # Window widened 30 -> 60 (order 313): the uid-1000 chown_tree ownership
-    # block (5a5b9a37) now precedes the base args.
-    command: "B=$(grep -A 60 'fn build_inference_run_args' crates/tillandsias-headless/src/main.rs); for p in 'cap-drop=ALL' 'security-opt=no-new-privileges' 'userns=keep-id' 'pids-limit=128'; do echo \"$B\" | grep -Fq \"$p\" || { echo \"FAIL: $p missing\"; exit 1; }; done && echo \"ok: 4 security flags pinned\""
+    # Enclosing-function extraction (order 622-rmit class), same as
+    # the identity step: a fixed -A window is a distance proxy.
+    command: "B=$(awk '/^fn build_inference_run_args/{f=1} f{print} f&&/^}/{exit}' crates/tillandsias-headless/src/main.rs); for p in 'cap-drop=ALL' 'security-opt=no-new-privileges' 'userns=keep-id' 'pids-limit=128'; do echo \"$B\" | grep -Fq \"$p\" || { echo \"FAIL: $p missing\"; exit 1; }; done && echo \"ok: 4 security flags pinned\""
     timeout_ms: 3000
     expected_behavior: "ok:"
 

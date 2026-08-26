@@ -1,31 +1,71 @@
+# freshness: auditor=linux-yoga-20260825t0047z date=2026-08-25 verdict=updated scope=repaired — two of the four steps pinned expressions that moved to exec_allowlist.rs in 795-zshi's first slice (2026-08-17) and had been silently wrong since; the spec was also bound to no litmus at all, so nothing ran them (837-et6t)
 name: litmus:pty-open-argv-allowlisted
 spec: vsock-exec-authz
 phase: pre-build
-description: "Verify that the PtyOpen handler explicitly allowlists command executions and sets proxy-exemption variables."
+description: >
+  The exec wire's authorization boundary: the guest MUST allowlist argv before
+  fork+exec, and MUST hand every admitted child the proxy exemption.
+
+  REPAIRED 2026-08-25. Two steps grepped pty_handler.rs for
+  `let is_allowed = match argv[0].as_str()` and for the project-name character
+  test. Both moved into `crates/tillandsias-headless/src/exec_allowlist.rs` on
+  2026-08-17, when 795-zshi's first slice extracted the decision into a pure,
+  unconditionally-compiled function precisely so it could be unit-tested. The
+  assertions have been false ever since and nobody noticed, because
+  `vsock-exec-authz` carried NO entry in openspec/litmus-bindings.yaml — the
+  file existed and the runner never selected it.
+
+  The allowlist legs are now bound to the unit tests rather than to how the
+  source is currently spelled (634-39ik): the decision is pure, so its
+  behaviour can be asserted directly instead of pinned as text. The proxy-
+  exemption legs stay as source assertions because `child_env` has no pure
+  test seam yet — that gap is the residual worth closing next.
 severity: critical
-size: instant
+size: quick
 
 preconditions:
   - workspace contains crates/tillandsias-headless/src/pty_handler.rs
+  - workspace contains crates/tillandsias-headless/src/exec_allowlist.rs
+  - a cargo toolchain is available
   - shell utilities (grep) are available in PATH
 
 critical_path:
-  - step: "pty_handler.rs validates argv against an allowlist"
-    command: "grep -F 'let is_allowed = match argv[0].as_str()' crates/tillandsias-headless/src/pty_handler.rs"
-    expected_behavior: "let is_allowed = match argv[0].as_str()"
+  - step: "pty_handler.rs delegates the admission decision to the pure allowlist"
+    # A property, not a spelling: whatever the call looks like, the handler must
+    # not re-implement the boundary inline where it cannot be tested.
+    command: "grep -qF 'crate::exec_allowlist::exec_argv_is_allowed(' crates/tillandsias-headless/src/pty_handler.rs && echo 'ok: handler delegates'"
+    expected_behavior: "ok: handler delegates"
     timeout_ms: 3000
 
-  - step: "pty_handler.rs restricts project names to alphanumeric + hyphens"
-    command: "grep -F 'project.chars().all(|c| c.is_ascii_alphanumeric() || c == '\\''-'\\'')' crates/tillandsias-headless/src/pty_handler.rs"
-    expected_behavior: "is_ascii_alphanumeric"
+  - step: "the allowlist admits exactly today's shapes and no others"
+    command: "cargo test -p tillandsias-headless exec_allowlist::exec_allowlist_tests::accepted_shapes_are_exactly_todays_shapes -- --exact"
+    expected_behavior: "test result: ok"
+    timeout_ms: 240000
+
+  - step: "NEGATIVE CONTROL: refused shapes stay refused"
+    command: "cargo test -p tillandsias-headless exec_allowlist::exec_allowlist_tests::refused_shapes_stay_refused -- --exact"
+    expected_behavior: "test result: ok"
+    timeout_ms: 240000
+
+  - step: "the podman arm validates the project name (spec vsock-exec-authz §3)"
+    command: "cargo test -p tillandsias-headless exec_allowlist::exec_allowlist_tests::podman_arm_validates_the_project_name -- --exact"
+    expected_behavior: "test result: ok"
+    timeout_ms: 240000
+
+  - step: "child_env sets no_proxy for every admitted child"
+    # NO DOUBLE QUOTES IN THIS COMMAND, deliberately. This runner falls back to
+    # grep-based YAML parsing when yq is absent (it is, on Silverblue hosts
+    # outside the builder toolbox), and that fallback does not unescape `\"` —
+    # it hands the backslashes to the shell and to the comparison. The two
+    # proxy steps carried `\"` from the day the file was written and were
+    # therefore guaranteed red; nobody saw it because vsock-exec-authz was
+    # bound to no litmus at all until 837-et6t. A quote-free regex is the shape
+    # that survives BOTH parse paths.
+    command: "grep -qE 'out[.]push[(][(].no_proxy..to_string[(][)], crate::enclave_no_proxy' crates/tillandsias-headless/src/pty_handler.rs && echo 'ok: no_proxy set'"
+    expected_behavior: "ok: no_proxy set"
     timeout_ms: 3000
 
-  - step: "child_env function in pty_handler.rs sets no_proxy"
-    command: "grep -F 'out.push((\"no_proxy\".to_string(), crate::enclave_no_proxy()));' crates/tillandsias-headless/src/pty_handler.rs"
-    expected_behavior: "out.push((\"no_proxy\".to_string(), crate::enclave_no_proxy()));"
-    timeout_ms: 3000
-
-  - step: "child_env function in pty_handler.rs sets NO_PROXY"
-    command: "grep -F 'out.push((\"NO_PROXY\".to_string(), crate::enclave_no_proxy()));' crates/tillandsias-headless/src/pty_handler.rs"
-    expected_behavior: "out.push((\"NO_PROXY\".to_string(), crate::enclave_no_proxy()));"
+  - step: "child_env sets NO_PROXY for every admitted child"
+    command: "grep -qE 'out[.]push[(][(].NO_PROXY..to_string[(][)], crate::enclave_no_proxy' crates/tillandsias-headless/src/pty_handler.rs && echo 'ok: NO_PROXY set'"
+    expected_behavior: "ok: NO_PROXY set"
     timeout_ms: 3000

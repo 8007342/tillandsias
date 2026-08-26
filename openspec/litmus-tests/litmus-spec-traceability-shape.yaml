@@ -25,6 +25,14 @@ critical_path:
     command: "test -f cheatsheets/observability/cheatsheet-metrics.md && test -f docs/cheatsheets/openspec-methodology.md && echo SPEC_TRACEABILITY_SUPPORT_OK"
     timeout_ms: 3000
 
+  # ORDER 867-vd4z. The ghost gate now scans YAML, where 979 of the tree's
+  # ~4,200 annotations live and none were previously gated. A BEHAVIOURAL
+  # fixture, not a grep of trace-coverage.sh: a text pin breaks on any correct
+  # refactor and passes any regression that keeps the string.
+  - step: "verify the ghost-trace gate reads YAML annotations and ignores prose that merely discusses one"
+    command: "scripts/test-ghost-trace-yaml-anchoring.sh"
+    timeout_ms: 180000
+
 observability:
   traces:
     - "@trace spec:spec-traceability"

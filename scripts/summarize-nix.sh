@@ -1,5 +1,7 @@
 #!/bin/bash
 # @trace spec:project-summarizers
+# freshness: auditor=linux-lenovinha-fable5-20260823t235308z date=2026-08-24 verdict=refreshed scope=full file, 52 lines, exercised. Correct on both paths: against this repo's flake.nix it emits the three sections and exits 0; against a directory with no flake.nix it exits 2, which its own comment defines as skip-not-error and which is the contract a summarizer dispatcher needs. Still meaningful — one of six sibling summarizers that give a cold-start agent a project's shape without reading its build files.
+# freshness-notes, neither acted on: (1) its litmus (project-summarizers-shape) pins all six siblings by GREPPING FOR SOURCE STRINGS — the annotation line and `set -euo pipefail` — so it constrains text rather than behaviour; nothing executes these scripts in CI. Same weakness recorded on resolve-smoke-release.sh 2026-08-23; it is a family pattern across the shape-litmus suite rather than a defect in this file. (2) shebang is `#!/bin/bash` where the repo's convention is `#!/usr/bin/env bash`; harmless on macOS and Fedora, but it is the one shape that breaks on NixOS, which is a pointed place for the NIX summarizer to break. Left alone because changing it is a behaviour change to all six or to none.
 
 set -euo pipefail
 
