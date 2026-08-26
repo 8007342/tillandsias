@@ -72,6 +72,34 @@ plaintext with no keyring involved at all* — where every keyring probe is
 irrelevant rather than merely negative. Ask what else could be true before
 shipping a binary answer.
 
+## Verifying a mechanism is not verifying where it runs
+
+A distinct sub-shape, measured three times in one evening by one host, all in
+the same direction: **the mechanism was verified to the line number every time,
+and where it runs was inferred.**
+
+| Claim | Mechanism (verified) | Blast radius (inferred, wrong) |
+|---|---|---|
+| a gate fixture destroys uncommitted work | `test-gate-stamp-memoization.sh:208` runs `$ROOT/build.sh --check --install` against the real checkout — correct to the line | "any gate run with a dirty tree" — but the recurring cycle only runs `--check`, which is unaffected |
+| the local-build e2e skill is exposed | `SKILL.md:107` runs `--ci-full --install` — correct | "`linux_mutable`, `macos` and `windows`, because the routing table sends all three to that skill" — but the skill branches on `uname -s`; macOS and Windows use different build commands entirely |
+
+Routing to a *skill* is not routing to a *command*. Dispatch, branch selection,
+and host routing are facts about the world that live **outside the file you are
+reading**, and they are easy to treat as obvious in a way a mechanism never is.
+
+So verify them **separately and by the same standard**:
+
+- Which caller actually invokes this? (`grep` the callers, do not assume.)
+- Does the invoking path *reach* this line — is it behind a branch, a flag, a
+  host test?
+- Which hosts run that caller, and does the routing table's destination
+  branch again once it gets there?
+
+**Why this matters beyond tidiness: a warning scoped wider than its defect gets
+discounted the next time you send one.** Over-scoping is not the safe direction.
+It spends credibility that the next real warning needs, and it sends readers to
+check things that were never at risk.
+
 ## This applies to your own tests
 
 The same defect appears in fixtures, where it is harder to see because the
