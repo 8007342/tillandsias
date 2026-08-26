@@ -146,6 +146,37 @@ else
     ok "no \$JQ inside any heredoc — generated scripts keep bare jq"
 fi
 
+# ── 4d. rg and openssl callers take the same dispatch. ─────────────────────
+for f in scripts/check-cheatsheet-refs.sh scripts/test-forge-config-trust-cross-platform-parity.sh; do
+    grep -q 'resolve_tool rg' "$ROOT/$f" || bad "$f does not resolve rg through the dispatch"
+    grep -nE '(^|[^$])\brg ' "$ROOT/$f" | grep -vE ':[[:space:]]*#' | grep -vE 'resolve_tool|RG=|ripgrep' | grep -q . \
+        && bad "$f still calls rg bare"
+done
+ok "the rg callers take the dispatch"
+
+for f in scripts/diagnose-proxy.sh scripts/run-forge-project.sh scripts/orchestrate-enclave.sh; do
+    grep -q 'resolve_tool openssl' "$ROOT/$f" || bad "$f does not resolve openssl through the dispatch"
+    grep -nE '^[[:space:]]*openssl |\| openssl |\$\(openssl ' "$ROOT/$f" | grep -vE ':[[:space:]]*#' | grep -q . \
+        && bad "$f still calls openssl bare"
+done
+ok "the openssl callers take the dispatch"
+
+# ── 4e. THE openssl WRITE-PATH CAVEAT, recorded where a converter will hit it. ─
+# jq is a pure filter: stdin in, stdout out, namespace-agnostic. openssl WRITES
+# FILES, so a toolbox fallback only works where the container shares the write
+# path. VERIFIED on lenovinha 2026-08-26 that /tmp is shared bidirectionally,
+# and every CERTS_DIR in the three converted callers is under /tmp. This arm
+# fails if one of them starts writing somewhere else, because that silently
+# lands the cert where the caller cannot find it.
+for f in scripts/diagnose-proxy.sh scripts/run-forge-project.sh scripts/orchestrate-enclave.sh; do
+    _cd="$(grep -oE 'CERTS_DIR="?[^"]*"?' "$ROOT/$f" | head -1)"
+    case "$_cd" in
+        *mktemp*|*/tmp/*) ;;
+        *) bad "$f writes certs to a path that may not be shared with the toolbox: $_cd" ;;
+    esac
+done
+ok "every converted openssl caller writes under /tmp (shared with the toolbox)"
+
 # ── 5. THE DELIBERATE EXCEPTION, guarded so it does not read as an oversight. ─
 # The shipped diagnostics keep INLINE copies on purpose: they run on end-user
 # machines where a sibling lib may not exist, and a shipped diagnostic that

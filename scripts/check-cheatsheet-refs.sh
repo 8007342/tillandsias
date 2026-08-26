@@ -41,8 +41,22 @@ if [[ ! -d "${CHEATSHEETS_DIR}" ]]; then
     exit 2
 fi
 
-if ! command -v rg >/dev/null 2>&1; then
-    echo "error: ripgrep (rg) is required but not on PATH" >&2
+# ORDER 799-tb7q — host rg, else the toolbox's, else refuse. This used to exit 2
+# with "ripgrep (rg) is required but not on PATH", which is the mis-shaped
+# hard-fail-with-a-host-instruction the packet was filed against: the toolbox
+# carries rg (ripgrep 15.2.0), so refusing without asking it is refusing work we
+# can do.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/tool-dispatch.sh" 2>/dev/null || true
+if command -v resolve_tool >/dev/null 2>&1; then
+    RG="$(resolve_tool rg || printf '')"
+else
+    RG="$(command -v rg >/dev/null 2>&1 && printf 'rg' || printf '')"
+fi
+if [ -z "$RG" ]; then
+    echo "error: ripgrep (rg) is available neither on this host nor in the" >&2
+    echo "       tillandsias-builder toolbox. Install rg, or add it to the" >&2
+    echo "       toolbox init set in scripts/with-tillandsias-builder.sh." >&2
     exit 2
 fi
 
@@ -82,7 +96,7 @@ collect_refs() {
     # `--only-matching` so the printed line is just the captured paths — not
     # the whole prose line. Without -o, ripgrep --replace leaves the rest of
     # the line intact and our comma-split treats the prose as bad refs.
-    rg --no-heading --line-number --no-messages --only-matching \
+    $RG --no-heading --line-number --no-messages --only-matching \
         --glob 'cheatsheets/**/*.md' \
         --glob 'src-tauri/src/**/*.rs' \
         --glob 'images/default/**/*.sh' \
