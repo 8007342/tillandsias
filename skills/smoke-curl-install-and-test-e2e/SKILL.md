@@ -89,6 +89,36 @@ download cache.
    ```
    Note the tag — every filed finding cites it so issues are attributable to a
    specific published artifact AND channel.
+2b. **Read the release's own ledger row BEFORE testing it** (order 380).
+   `README.md` carries a RELEASE / INTENDED FEATURES / BUGFIXES table, and the
+   row for `$SMOKE_TAG` is the release stating **what it claims to have fixed**:
+
+   ```bash
+   awk -v tag="${SMOKE_TAG}" '
+       $0 ~ "^\\| " tag "( |\\()" { print; found=1 }
+       END { if (!found) print "NO LEDGER ROW for " tag }
+   ' README.md | tee target/smoke-e2e/00-ledger-row.txt
+   ```
+
+   **Why this is a step and not a courtesy.** Without it the smoke validates a
+   generic property — it installs, it destroys, it re-provisions — against
+   *any* release, and cannot tell whether the specific thing this release says
+   it repaired actually got repaired. The row names orders; those are checkable.
+   On 2026-08-26 the macOS lane verified that `--version` reports the workspace
+   VERSION rather than `0.1.0`, which is precisely what that row claims for
+   635-bhkb — **but by coincidence, because the runbook had just been changed,
+   not because anything directed the run at the claim.**
+
+   Cite the row in the §5 report and state which of its claims this lane
+   exercised, which it could not, and which it did not look at. A claim the
+   lane cannot reach (a Windows fix on the macOS lane) is a legitimate
+   *not-applicable*; a claim it could have checked and did not is a gap in the
+   run, and only naming them separately makes that visible.
+
+   **A MISSING ROW IS A FINDING, NOT A SKIP.** `NO LEDGER ROW for <tag>` means
+   either the release skill's append step did not run for this release, or the
+   smoke is testing an artifact nobody described. Both are worth a packet, and
+   both are invisible if this step silently proceeds.
 3. **Record sibling heads** (`main`, `linux-next`, `windows-next`, `osx-next`)
    per multi-host discipline.
 4. **Create a findings log dir** the smoke will append to:
@@ -481,6 +511,17 @@ Rules for good findings:
 - **No silent passes.** If the smoke ran clean end-to-end, still write a one-line
   PASS entry to the report (release tag + "init clean, forge run clean") so the
   convergence record shows the release was exercised.
+- **Cite the release's ledger row and account for its claims** (order 380). The
+  report carries a short `## Ledger claims` section listing each claim from the
+  row read in §0.2b under exactly one of three headings:
+  **EXERCISED** (this lane checked it — say how),
+  **NOT APPLICABLE** (the claim is another platform's, or another lane's), or
+  **NOT CHECKED** (this lane could have and did not).
+  The third heading is the one that earns this section. A report with no
+  NOT-CHECKED list reads as though the run covered everything the release
+  claimed, and a reader has no way to tell that from a run that simply never
+  looked. Naming the gaps is what makes a PASS mean something narrower and
+  truer than "the release works".
 
 Commit the report (and any forge-pushed findings) to the appropriate host branch (`linux-next`, `osx-next`, or `windows-next`) and push. **DO NOT push directly to `main` or open PRs against `main`.** Update the host work-queue
 ledger with a one-line outcome, exactly as `/advance-work-from-plan` §6
