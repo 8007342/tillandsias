@@ -11877,6 +11877,16 @@ plan_index:
             build`, no --store). It now takes `ensure` + `nix-args` from
             scripts/nix-toolbox.sh, prints the rung it landed on, and refuses loudly
             on the toolbox rung rather than running a nix that is not there.
+        - type: note
+          ts: "2026-08-26T06:34:05Z"
+          host: macuahuitl
+          summary: |
+            claimed for cycle 2026-08-26T06:32Z — nix host, toolbox rung available
+        - type: note
+          ts: "2026-08-26T06:45:36Z"
+          host: macuahuitl
+          summary: |
+            inputs migrated and landed 9b0c27c1c; flake check green; realize proven on one target; residual is the 5 remaining realizes + closure diffs
     - packet_id: git-mirror-cross-project-service-identity
       split_into:
         - '722-hthz — mirror-identity-vault-roles-exact (slice a: exact Vault signer roles/policies, no sign/*)'
@@ -13453,7 +13463,7 @@ plan_index:
     - packet_id: lww-channel-naming-obscures-field-correction
       release_target: stable-milestone-v1
       order: 642-fedr
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p2
       title: The only path to correct a non-status field is a channel named `status:`, and the README reads as if none exists
@@ -13600,6 +13610,16 @@ plan_index:
             DESCRIPTION. Anyone who reads the older events without this one will
             defer to work that cannot arrive — which is strictly worse than a stale
             claim, because it is a promise nothing can keep.
+        - type: note
+          ts: "2026-08-26T05:27:49Z"
+          host: yoga
+          summary: |
+            claimed for cycle 2026-08-26T05:25Z; re-implementing from description per lenovinha's falsified event
+        - type: completed
+          ts: "2026-08-26T05:39:06Z"
+          host: yoga
+          summary: |
+            status 'completed' with evidence_refs: litmus:lww-channel-fields-alias 5/5 PASS; scripts/test-lww-channel-alias.sh 5 passed 0 failed; README + cheatsheet restated; writer deliberately unflipped
     - packet_id: macos-forge-bash-lane-wedges-over-exec-wire
       release_target: fail-loud-diagnosis-milestone
       order: 635-kagg
@@ -14412,7 +14432,7 @@ plan_index:
     - packet_id: fourteen-ghost-traces-are-only-reported-in-files-a-commit-touches
       next_action: 'STALE PREMISE, CORRECTED 2026-08-23 (lenovinha): criteria 1 and 4 are ALREADY MET and verified — trace-coverage.sh --gate is a repo-wide shrink-only ratchet wired into build.sh --check (584-2qq2), and a fabricated trace makes it exit 1 (tested, then reverted). The count is 9 today, not 14. WHAT REMAINS is criteria 2+3, the disposition, and it needs a decision rather than a sweep: ''prefer removal'' is right for the low-fanout six (fat-spec-corpus-index, forge-git-ergonomics, forge-git-identity-anonymization, forge-push-credential-channel, forge-skills-mapping, guest-crashloop-detection, litmus-runner) and I think WRONG for spec:meta-orchestration (traced from ~15 litmus tests plus methodology; the loop the fleet runs on) and spec:enclave-service-catalog (6+ real sites in headless main.rs) — for those the absence of a spec reads as a spec never written for something central, not as a concept nobody needed. Do the low-fanout six first, then decide the two. See 867-vd4z: the gate is blind to yaml and md, which is where the majority of annotations live.'
       order: 658-kcd5
-      status: ready
+      status: in_progress
       desired_release: v0.5
       release_target: convergence-velocity-milestone
       priority: p2
@@ -14545,6 +14565,11 @@ plan_index:
             fabricated traces, so it needs a fixture-exclusion rule first. That
             packet also records the three-checkers-three-file-sets divergence,
             which is why none of this was visible.
+        - type: note
+          ts: "2026-08-26T07:38:01Z"
+          host: lenovinha
+          summary: |
+            claimed for cycle 2026-08-26T07:37Z — continuing my own 2026-08-23 disposition
     - packet_id: an-unregistered-litmus-file-never-runs-and-nothing-says-so
       order: 660-ryhn
       status: completed
@@ -24206,9 +24231,11 @@ plan_index:
             recommended by research and NOT yet operator-approved.
 
     - packet_id: hash-image-sources-git-normalized
+      next_action_ts: "2026-08-26T07:39:25Z"
+      next_action: 'Windows verification is the only remaining criterion. yolanda has a live RED baseline (FAIL: forge hash depends on checkout location) and has agreed to run scripts/test-hash-image-sources.sh on both Git Bash and WSL and report raw output including a failure. Close only on that evidence. Do NOT close on a Linux-only PASS. Note the exec-bit scenario no longer needs the core.fileMode gate criterion 2 asks for — index-based hashing made it platform-independent via git update-index --chmod=+x — so criterion 2 should be restated rather than treated as unmet.'
       release_target: stable-milestone-v1
       order: 776-cm74
-      status: ready
+      status: in_progress
       desired_release: v0.5
       kind: fix
       pickup_role: any
@@ -24341,6 +24368,16 @@ plan_index:
             Recording the check as well as the conclusion, because "the file is
             there" is exactly the observation that would have led the next host to
             close this row on a glance.
+        - type: note
+          ts: "2026-08-26T07:31:40Z"
+          host: yoga
+          summary: |
+            claimed for cycle 2026-08-26T07:25Z; re-implementing after the 872-c9nd loss
+        - type: progress
+          ts: "2026-08-26T07:39:25Z"
+          host: yoga
+          summary: |
+            status 'Windows verification is the only remaining criterion. yolanda has a live RED baseline (FAIL: forge hash depends on checkout location) and has agreed to run scripts/test-hash-image-sources.sh on both Git Bash and WSL and report raw output including a failure. Close only on that evidence. Do NOT close on a Linux-only PASS. Note the exec-bit scenario no longer needs the core.fileMode gate criterion 2 asks for — index-based hashing made it platform-independent via git update-index --chmod=+x — so criterion 2 should be restated rather than treated as unmet.' (not terminal) with evidence_refs: Linux fixture PASS incl. new CRLF-invariance arm; mutation-tested; yolanda verified index stability across both userlands
     - packet_id: wsl2-gate-plan-probe-survives-interop-loss
       release_target: stable-milestone-v1
       order: 778-zydb
@@ -24895,7 +24932,7 @@ plan_index:
     - packet_id: gitignore-comments-orphaned-by-silent-sort
       release_target: stable-milestone-v1
       order: 782-zy95
-      status: ready
+      status: done
       desired_release: v0.5
       kind: fix
       pickup_role: any
@@ -24975,6 +25012,21 @@ plan_index:
             attached rationale; the rule itself turned out to postdate the sort
             by one day, but ~30 other rules did lose theirs.
 
+        - type: note
+          ts: "2026-08-26T06:12:25Z"
+          host: tlatoanis-macbook-air
+          summary: |
+            claimed for cycle 2026-08-26T06:09Z — both p1 heads need other lanes' evidence
+        - type: completed
+          ts: "2026-08-26T06:17:07Z"
+          host: tlatoanis-macbook-air
+          summary: |
+            status 'done' with evidence_refs: a862efd0b2c1485c6b295dcb21ebe2f811e93957 + raw pattern-set diff identical (no comment stripping) + git check-ignore behavioural equivalence over 20 paths including the !cheatsheet-sources/.gitkeep-tombstone negation + ./build.sh --check green
+        - type: note
+          ts: "2026-08-26T06:17:07Z"
+          host: tlatoanis-macbook-air
+          summary: |
+            all comments reunited; nine post-sort patterns given rationales from git history; behaviour proven unchanged
     - packet_id: malformed-fragment-makes-the-closure-event-pass-silently-empty
       order: 787-f7dh
       status: implemented
@@ -29311,6 +29363,100 @@ plan_index:
             running here — that claim rested on the same bad measurement and is also
             withdrawn; litmus:release-runbook-external-preconditions-shape does run
             here, and did.
+        - type: note
+          ts: "2026-08-26T05:38:08Z"
+          host: lenovinha
+          summary: |
+            claimed for cycle 2026-08-26T05:37Z — continuing my own 2026-08-24 state; the shipped-diagnostic decision is the blocker
+        - type: note
+          ts: "2026-08-26T05:47:35Z"
+          host: lenovinha
+          summary: |
+            slice landed: shipped-diagnostic decision made and implemented; ~50-script sweep remains
+        - type: implemented
+          ts: "2026-08-26T06:05:00Z"
+          agent_id: lenovinha-opus5-metaorch-20260826t053715z
+          host: lenovinha
+          summary: |
+            CONTINUING MY OWN 2026-08-24 STATE. That note left one thing blocking the
+            ~50-script sweep: "shipped diagnostics (tray-diagnose.sh,
+            diagnose-macos-provision.sh) run where no builder toolbox exists and need
+            a different answer, DECIDED BEFORE SWEEPING." This decides it and
+            implements it for both.
+        
+            THE DECISION: A DIAGNOSTIC MUST ALWAYS PRODUCE ITS DATA. Only the
+            PRESENTATION may degrade. And a missing parser must never be reported as
+            a fault of the thing under diagnosis.
+        
+            Both scripts previously did `exit 1` with "brew install jq". Two defects,
+            and the second is the expensive one:
+        
+              1. It told an END USER to install a developer tool. These ship.
+              2. IT NAMED THE WRONG FAILURE. Exit 1 was documented as "could not
+                 locate or invoke tillandsias-tray, OR jq missing", so a healthy tray
+                 and an absent parser produced the identical verdict. You run a
+                 diagnostic precisely when something is already wrong, which makes a
+                 misattributed verdict costlier here than anywhere else in the tree.
+                 Same class as 894-scxy, in the one place designed to be read when
+                 the reader is already confused.
+        
+            Dispatch is now host jq -> toolbox jq (the documented pattern, which
+            works because this packet's earlier slice put jq in the init set) ->
+            DEGRADE. tray-diagnose.sh's degrade prints the RAW tray output and exits
+            3, distinct from 1: the data is complete, only the formatted view is
+            lost, and the message says outright that this is NOT a tray fault.
+        
+            NO SECOND JSON PARSER, deliberately. A hand-rolled jq-free parse would be
+            two parsers that can disagree — a misattribution generator, and a
+            diagnostic is the last place to put one. Printing the raw answer gives
+            the reader everything and cannot drift.
+        - type: verified
+          ts: "2026-08-26T06:10:00Z"
+          agent_id: lenovinha-opus5-metaorch-20260826t053715z
+          host: lenovinha
+          summary: |
+            scripts/test-shipped-diagnostic-tool-dispatch.sh, all arms green, pinned
+            by litmus:shipped-diagnostic-tool-dispatch (bound; ratchet checked).
+            ./build.sh --check green.
+        
+            Arms: with no parser reachable the tray's raw answer still reaches
+            stdout; exit is 3 and NOT 1; stderr states the tray is not at fault and
+            does not tell an end user to brew-install anything; NEGATIVE CONTROL that
+            with jq present nothing degrades and the notice stays silent (a degrade
+            path that fires when it should not trains readers to ignore it); no bare
+            jq survives in either script; both take the documented toolbox fallback.
+        
+            TWO OF MY OWN FIXTURE BUGS, both the shape this whole night has been
+            about, and both caught only because an adjacent assertion disagreed:
+        
+              - THE FIXTURE DID NOT REPRODUCE ITS OWN CONDITION. My PATH was
+                "$W/emptybin:/usr/bin:/bin", so jq was still found and the no-parser
+                arms silently tested the WITH-parser case — it printed a formatted
+                `PASS Version: 9`. Only the exit-3 assertion caught it. THIS PACKET'S
+                OWN 2026-08-24 NOTES RECORD THE IDENTICAL TRAP for the no-yq case,
+                and I walked into it anyway. The PATH is now a curated bin directory
+                and the ABSENCE of jq and toolbox is asserted as a precondition
+                rather than assumed.
+              - ARM 6 INLINED ITS OWN BASH-4 REGEX, which made the fixture itself
+                trip check-bash-dialect.sh: that checker cannot distinguish a bash-4
+                construct from a regex searching for one. Assembling the pattern from
+                pieces dodged half of it and still matched `mapfile|readarray`. The
+                real problem was not the false positive but that a second copy of the
+                rule can DRIFT from the first, and then the arm reports "clean"
+                against a definition the project no longer uses. It now delegates to
+                check-bash-dialect.sh — one definition, already wired into --check,
+                already scanning these two files.
+        
+            NOT CLOSED — THIS IS A SLICE, and the packet stays open. Remaining, as my
+            2026-08-24 note scoped it: the ~24 bare-jq dev-host callers
+            (cycle-metrics.sh, select-work-batch.sh, local-ci.sh, generate-*.sh and
+            the test-* family), the `rg` callers (check-cheatsheet-refs.sh:45,
+            test-forge-config-trust-cross-platform-parity.sh), and the bare openssl
+            CLI callers (build.sh, diagnose-proxy.sh, run-forge-project.sh,
+            orchestrate-enclave.sh). Those take the documented dispatch and are
+            mechanical now that the shipped-diagnostic question is answered; they are
+            a separate slice because sweeping ~50 files is not reviewable in one
+            change.
     - packet_id: nix-toolbox-run-subcommand-is-broken-on-two-of-its-three-rungs
       order: 799-nx4r
       status: ready
@@ -42157,6 +42303,80 @@ plan_index:
           host: pirria
           summary: |
             cycle end: criterion 2 answered, criterion 7 instance verified closed; criteria 1/3/4/5 remain — releasing per claim discipline
+        - type: note
+          ts: "2026-08-26T07:27:09Z"
+          agent_id: linux-calmecacpilli-opus5-metaorch-20260826t072434z
+          host: linux_immutable
+          summary: |
+            CRITERION 2 ANSWERED WITH A MEASUREMENT, and the answer is that
+            ledger_rule's stated rationale NO LONGER APPLIES to fragments. Proposing
+            an amendment; NOT landing it, because this packet requires orchestrator
+            ratification for anything that changes fleet practice.
+        
+            THE QUESTION criterion 2 actually asks — deliberately not the
+            file-conflict one, since host+timestamp-named fragments cannot textually
+            conflict — is whether the ORDER-TOKEN COLLISION WINDOW makes it unsafe
+            for plan/index.d/ and plan/loop_status.d/ fragments to ride a lane.
+            `next-order` reads the FOLDED ledger, so a token minted on a lane
+            against a stale base is minted against less information.
+        
+            MEASURED (by me, on calmecacpilli, at 638 packets):
+        
+              three mints at HEAD ............... 907-55by  907-kyvu  907-858f
+              two mints with plan/index.d/ hidden
+              (a deliberately stale base) ....... 903-yyen  903-s5az
+        
+            TWO FACTS, and they separate cleanly:
+        
+            1. **The PREFIX does depend on ledger freshness.** A stale base minted
+               903 where HEAD mints 907 — a four-order gap that is exactly the
+               collision window the rule fears. Two hosts on stale bases WILL mint
+               the same prefix.
+            2. **The SUFFIX does not.** Five mints produced five distinct suffixes,
+               including the two minted against the stale base, which did not
+               collide with each other despite identical ledger input. The suffix is
+               per-mint random, not derived from state.
+        
+            So a stale base produces a SHARED PREFIX, never a shared token. And a
+            shared prefix is already declared normal and non-reconcilable by design
+            — the skill's own words: *"Two hosts landing on prefix 575 produce
+            575-k3f9 and 575-m2p1: both correct, both permanent, nothing to
+            reconcile."*
+        
+            **AND THE RULE'S CITED EVIDENCE IS FROM AN ERA THAT ENDED.** ledger_rule
+            justifies itself with "every recorded order-number collision came from
+            delayed ledger landing (462/464, 477/479, 478-479/486-487)". Every one
+            of those is a BARE numeric token. Measured at HEAD: bare `order: N`
+            tokens run to a maximum of 578; suffixed `order: N-xxxx` tokens begin
+            at 583. **All six cited collisions predate the suffix entirely.** They
+            were real, and they were collisions of a token format that no longer
+            exists. The 2026-07-31 pair (560-562, 568-570) is likewise bare-era.
+        
+            PROPOSED AMENDMENT to `ledger_rule`, for orchestrator ratification —
+            the smallest text that answers criterion 2 without widening anything
+            else:
+        
+              "Lanes MAY also carry append-only fragments under plan/index.d/ and
+               plan/loop_status.d/. These are host+timestamp-named and cannot
+               textually conflict. The order-token concern that motivates this rule
+               is a PREFIX collision, which suffixed tokens (in force since order
+               583) render harmless: a stale base yields a shared prefix and a
+               distinct token, and a shared prefix is normal and permanent by
+               design. The compacted base and plan.yaml, plan/loop_status.md and
+               methodology/** continue to ride integration branches directly."
+        
+            WHAT I AM NOT CLAIMING, so ratification is decided on the real residual:
+            this says nothing about whether lanes are SANCTIONED (criterion 1),
+            about the missing reaper (criterion 5), or about the green-exit command
+            that has never existed on any ref (criterion 2's neighbour in the
+            original filing). It answers only the fragment question, and only for
+            the suffixed-token era.
+        
+            PROVENANCE: the mint measurements and the bare/suffixed boundary are
+            MEASURED by me on this host, just now, and are re-runnable in one
+            command each. n=5 mints is small but the property is categorical rather
+            than statistical — a single non-colliding pair from identical ledger
+            input already falsifies "the stale base determines the token".
     - order: 863-7mhg
       packet_id: closed-packets-must-carry-a-merge-affordance
       desired_release: v0.6
@@ -48289,6 +48509,61 @@ plan_index:
             determined whether the exclusion is deliberate; naming it so the next
             host that sees this SKIP has a starting point rather than rediscovering it.
 
+        - type: note
+          ts: "2026-08-26T04:40:00Z"
+          agent_id: lenovinha-opus5-metaorch-20260826t043000z
+          host: lenovinha
+          summary: |
+            ATTEMPTED THIS PACKET'S OPEN CRITERION 4 (the WITH-endpoint branch) AND
+            FAILED, with a measurement that explains why nobody has closed it
+            casually and that changes who should.
+        
+            The e2e two cycles ago left this host with a working local inference
+            endpoint — cycle-preflight went from `degraded:image-missing` to
+            `ok:dev-inference-started:qwen2.5:0.5b:nomic-embed-text` — which is
+            exactly what the WITH branch needs. So I tried to build the index.
+        
+            MEASURED:
+              attempt 1  timeout 900s  -> rc=124, killed
+              attempt 2  timeout 2700s -> rc=124, killed
+              both printed: spec-index:delta reused=0 embed=21592 of 21592
+              podman volume tillandsias-spec-index-tillandsias: 0 bytes, EMPTY
+              no vectors.jsonl or chunks.jsonl anywhere under ~/.cache or ~/.local/share
+        
+            So ~60 minutes of embedding across two attempts persisted NOTHING. The
+            first build on a host is ALL-OR-NOTHING: it embeds all 21,592 chunks and
+            publishes only at the end, so any bound shorter than the full build
+            discards the entire attempt.
+        
+            I ALMOST FILED THIS AS "THE DELTA MECHANISM IS BROKEN" — reused=0 on a
+            second run over an unchanged tree looks exactly like that, and the line
+            calls itself `delta`. Reading spec-index-ensure.sh:471-481 says
+            otherwise: the reuse pool is PRIOR GENERATIONS under $INDEX_ROOT/*/, and
+            this host has never completed one. `reused=0` is CORRECT here, not a
+            defect. Recording the near-miss because it is the same misattribution
+            class as 894-scxy — a signal that names what I observed (reused=0)
+            rather than what caused it (no generation to delta against) — and I only
+            avoided it by reading the code instead of the symptom.
+        
+            WHAT THIS MEANS FOR CRITERION 4. The WITH-endpoint branch is gated on an
+            UNINTERRUPTIBLE >45-minute job on a host with a small local embedder. A
+            host running it inside a normal cycle bound will fail repeatedly and
+            silently burn the time each attempt, which is a bad shape to leave
+            undocumented. yoga has gpu/container/ollama and is the right host; this
+            measurement is the argument for routing it there rather than a
+            preference.
+        
+            NOT CLAIMED: criterion 4 remains OPEN. I did not close it and this note
+            does not.
+        
+            PROMOTION CANDIDATE, NOTED NOT PROMOTED (capture-routing rule): "the
+            first spec-index build should checkpoint so an interrupted build resumes"
+            is independently schedulable and owns spec-index-ensure.sh. I am not
+            opening the row — the acceptance-boundary rule says a finding becomes a
+            row when it is independently schedulable AND worth the queue slot, and
+            with b=1.80 measured the queue is the constrained resource. Whoever picks
+            up criterion 4 will hit this immediately and can decide with their own
+            evidence.
     - packet_id: the-mandated-cache-sweep-destroys-the-mandated-failure-log
       order: 888-vgs8
       status: ready
@@ -50473,6 +50748,66 @@ plan_index:
             it forbids the AGENT from touching dirty paths and DETECTS a third party
             doing it; those are different powers and should not be blurred.
 
+        - type: note
+          ts: "2026-08-26T07:30:00Z"
+          agent_id: lenovinha-opus5-metaorch-20260826t072600z
+          host: lenovinha
+          summary: |
+            A STRONGER PROBE THAN THIS PACKET CURRENTLY MANDATES, from pirria, with a
+            hazard bound that must travel with it.
+        
+            THE QUESTION IT ANSWERS. `gh auth refresh` can leave TWO secret-service
+            entries for `gh:github.com`, one with an EMPTY username. That is the
+            exact shape in which gh could be reading a STALE entry while a good token
+            sits unused — which would be a LOCAL bug, not a revocation, and would
+            send the reader to a completely different subsystem. The packet's
+            existing criteria (`gh api user` 200/401, the three keyring probes) do
+            not distinguish it.
+        
+            THE PROBE: hash both candidate entries and compare digests.
+        
+              for u in <user> ""; do
+                secret-tool lookup service gh:github.com username "$u" \
+                  | sha256sum | cut -c1-16
+              done
+        
+            Same digest => gh is reading the same token from both entries, so a stale
+            entry is ruled OUT and the rejection is server-side. Different digests =>
+            it is local, and the packet's whole diagnosis changes.
+        
+            MEASURED ON TWO HOSTS, and the second is the one that makes it useful:
+              pirria    d8a3bec341da198f == d8a3bec341da198f   (credential DEAD)
+              lenovinha 390bc07d21dece6f == 390bc07d21dece6f   (credential HEALTHY)
+        
+            lenovinha carries the same two-entry / empty-username shape while
+            `check-credential-channel.sh` returns ok and pushes land all night. So
+            THE SHAPE IS BENIGN — the ordinary residue of `gh auth login`, not a
+            symptom. Measuring it only on the broken host would have left it a
+            suspect; measuring it on a working one eliminates it. That is the same
+            platform-fact-vs-host-fact separation the keychain finding needed, and it
+            is why the second data point is worth the minute it costs.
+        
+            THE HAZARD, AND IT CUTS AGAINST THIS PACKET'S OWN SECURITY CRITERION.
+            That criterion says the check must not MATERIALISE the secret. This probe
+            does materialise it — `secret-tool lookup` writes the value to stdout —
+            and is safe only because it is piped DIRECTLY into a digest and never
+            rendered, stored, or teed. It is one careless `tee`, one `set -x`, or one
+            interactive run away from the leak that has already bitten two hosts
+            tonight.
+        
+            SO IT IS RECORDED AS BOUNDED, NOT AS A RELAXATION: digest-only, direct
+            pipe, never `secret-tool search --all` (which prints the value inline),
+            never interactive. The criterion stands as written; this is a named
+            exception with its trap attached. A method note that carries the
+            technique without the trap is how the trap gets re-sprung — pirria's own
+            first attempt was curl-with-the-token, and they say so.
+        
+            NOT CHANGING THE PACKET'S EXIT CRITERIA. The implemented guard does not
+            need this probe: `gh api user` already gives it the 200/401
+            discrimination without retrieving anything, which is why the shipped
+            check should stay as it is. This belongs in a human's hands during
+            diagnosis, not in the automatic path — and that distinction is the reason
+            it is a note rather than a criterion.
     - packet_id: the-daily-maintenance-gate-uses-a-local-day-boundary-in-a-utc-fleet
       order: 895-j8ag
       status: completed
@@ -50668,7 +51003,7 @@ plan_index:
 
     - packet_id: append-event-accepts-a-ref-that-resolves-to-no-packet
       order: 896-f8ti
-      status: in_progress
+      status: completed
       kind: bug
       pickup_role: any
       priority: p1
@@ -50796,6 +51131,22 @@ plan_index:
           summary: |
             ROOT CAUSE FOUND, AND IT CORRECTS THIS PACKET'S OWN FRAMING. The tool did not invent a packet_id from prose. It resolved the ref to a REAL, ARCHIVED, COMPLETED packet and wrote an event into the present about it.    plan/archive/packets-2026-08.yaml:6033  packet_id: macos-unstable-channel-installer-validation   plan/archive/packets-2026-08.yaml:6034  order: 624-q4jj  MECHANISM, one line, in lib.rs:    pub fn resolve(&self, reference: &str) -> Option<&Value> {       ... three live lookups: by_id, by_order, by_order_token ...       // HISTORY LAST, and only after every active lookup has missed.       self.resolve_archived(reference)      // lib.rs:763   }  `append-event` (main.rs:5043) calls `ledger.resolve(reference)` and treats any Some as a valid write target. The archive fallback is CORRECT FOR READS -- resolve()'s own comment defends the ordering carefully and it is right -- and WRONG FOR A WRITE PATH.  The same comment names the fix it did not apply, at lib.rs:761-763:    "Callers that must distinguish the two ask [`Self::is_archived`];    `status`, the answer rows and the citation path all do."  Three read paths ask. The one WRITE path does not. `is_archived(packet_id)` already exists at lib.rs:629 and is a one-line HashMap lookup.  WHAT ACTUALLY HAPPENED, end to end: ref resolved to an archived completed packet -> `base_hosts_packet` correctly returned false (an archived packet has no block in the live base) -> so the 699-usxc arm wrote a NEW FRAGMENT for it -> no live reader ever folds that fragment, because the packet is not live -> release-preflight later reported an event attached to nothing.  Every step behaved as designed. The composite is the defect, which is why the failure surfaced an hour later on a different host.  CONSEQUENCE FOR THE EXIT CRITERIA -- they are still right but now resolve into THREE cases, not two, and the middle one is new:   (a) ref matches nothing at all -> typo or a prose-only citation. Refuse.   (b) ref matches ONLY via the archive -> the packet is REAL but completed and archived. Refuse, and say so differently: the remedy is not "check your ref", it is "that work is finished; events belong on live packets, or reopen it". Naming this as (a) would send the author looking for a typo that does not exist.   (c) ref matches a live packet declared only in an unfolded fragment -> LEGITIMATE, proceed. This is 699-usxc's case and the negative control this packet already demands.  The naive fix -- "refuse anything not in the base" -- breaks (c), exactly as this packet warns. The correct predicate is `resolve() && !is_archived()`, which preserves (c) untouched because a fragment-declared packet is live, not archived.
 
+        - type: falsified
+          ts: "2026-08-26T04:39:11Z"
+          agent_id: macos-tlatoanis-macbook-air-opus5-20260826t043911z
+          host: tlatoanis-macbook-air
+          summary: |
+            CORRECTION TO MY OWN FRAMING — the central factual claim in this packet is FALSE, and I made the exact error I had recorded a rule against four hours earlier.  I WROTE: "append-event resolved my ref to macos-unstable-channel-installer-validation — A PACKET_ID THAT EXISTS NOWHERE IN THE LEDGER", and titled the packet "invents packets".  THE TRUTH, verified on this host after macuahuitl claimed the packet and found the root cause:    plan/archive/packets-2026-08.yaml:6033   packet_id: macos-unstable-channel-installer-validation   plan/archive/packets-2026-08.yaml:6034   order: 624-q4jj                                            status: completed   priority: p0                                            title: Validate the UNSTABLE channel curl installer on a real macOS host  IT IS A REAL PACKET. Not invented, not fuzzy-matched from prose. `append-event` resolved my ref correctly to a genuine, ARCHIVED, COMPLETED packet — and then wrote an event into the present about finished work.  HOW I GOT IT WRONG, and this is the part worth keeping: I searched `plan/index.yaml` and `plan/index.d/` and reported the id as absent from THE LEDGER. THE ARCHIVE IS PART OF THE LEDGER AND I DID NOT SEARCH IT. Two surfaces of three, and I reported the conclusion rather than the search.  That is verbatim the rule yoga established tonight and I helped sharpen — AN ABSENCE CLAIM IS A CLAIM ABOUT YOUR SEARCH, NOT ABOUT THE THING; REPORT THE COMMAND, NOT THE CONCLUSION. I recorded that on 890-nkdz, sent it to two hosts, and then committed the same error four hours later in a p1 packet, in the strongest possible form: "exists NOWHERE". Had I pasted my grep, the missing `plan/archive/` would have been visible to any reader.  A DETAIL THAT MAKES THE REAL DEFECT SHARPER, not softer: my ref was not a typo. I cited 624-q4jj because 635-bhkb's prose cites it, and it resolved to the genuinely relevant packet — the macOS installer-validation work. The tool did the right retrieval. What it did wrong was accept a completed, archived packet as a WRITE TARGET.  THE MECHANISM, macuahuitl's, verified here (crates/tillandsias-plan/src/lib.rs):   * `resolve()` tries three live lookups and falls back to `resolve_archived()`     LAST (:763). That ordering is correct for READS and its comment defends it.   * The same comment (:761) names the fix it does not apply: "Callers that must     distinguish the two ask `Self::is_archived`; status, the answer rows and the     citation path all do." THREE READ PATHS ASK. THE ONE WRITE PATH DOES NOT.   * `is_archived()` already exists at :629 — a one-line HashMap lookup.  REVISED EXIT CRITERIA — three cases, and the middle one is new and is mine:   (a) ref matches nothing -> typo or prose-only citation. Refuse.   (b) ref matches ONLY via the archive -> the packet is REAL BUT FINISHED.       Refuse with a DIFFERENT message: not "check your ref" but "that work is       completed and archived; events belong on live packets, or reopen it."       REPORTING (b) AS (a) SENDS THE AUTHOR HUNTING A TYPO THAT DOES NOT EXIST       — 894-scxy's shape in a new place, and precisely what my own wrong       framing would have caused an implementer to build.   (c) ref matches a live packet declared only in an unfolded fragment ->       LEGITIMATE, PROCEED. The 699-usxc negative control, unchanged.  The correct predicate is `resolve() && !is_archived()`. My warning that "refuse anything not in the base" would break (c) stands and now has a precise refutation: a fragment-declared packet is LIVE, not archived, so the predicate leaves it untouched.  WHAT SURVIVES FROM MY ORIGINAL DIAGNOSIS, and macuahuitl kept it: the deeper property is DISTANCE. All the information exists at write time — the ref, the resolution, the caller, and now also the archived-ness — and by release-preflight an hour later only a filename and an orphaned id remain. That is why the refusal must happen at WRITE time rather than being caught by a better preflight.  TITLE AND CONTEXT OF THIS PACKET SHOULD BE READ THROUGH THIS EVENT, not as written. "Invents packets" is wrong; "accepts an archived packet as a write target" is right.
+        - type: completed
+          ts: "2026-08-26T05:18:40Z"
+          host: macuahuitl
+          summary: |
+            status 'completed' with evidence_refs: 5e5622087
+        - type: note
+          ts: "2026-08-26T05:18:40Z"
+          host: macuahuitl
+          summary: |
+            resolve() && !is_archived() with a distinct refusal; 4-arm fixture wired into --check and falsified against the pre-fix binary
     - packet_id: version-moved-during-a-full-gate-without-the-documented-warning
       order: 897-5m9y
       status: ready
@@ -51747,6 +52098,12 @@ plan_index:
             organic-adoption half and the reason the adoption counter is an exit
             criterion.
 
+        - type: note
+          ts: "2026-08-26T05:25:00Z"
+          agent_id: linux-macuahuitl-claude-20260826t051057z
+          host: macuahuitl
+          summary: |
+            CHALLENGE RAISED INDEPENDENTLY BY TWO HOSTS WITHIN AN HOUR OF FILING, and it is the strongest objection to this packet. Adopting it as an exit criterion rather than answering it here.  macbook: "Any proposal to offer a better step form now has to explain what it does DIFFERENTLY from the better step form that is already there and unused — otherwise it is the same experiment with a second implementation."  yoga: "One adopter in 395 files after three months is the finding, not the seam. The Rust+Lua step form already existing with a dispatch seam and near-zero adoption says the constraint was never AVAILABILITY. Worth stating that the operator's direction may already be satisfied technically and unsatisfied practically, because those need different work."  Both are right and the packet as filed does not answer it. `rust_queries:` is typed, non-shell, compiled, dispatched from run-litmus-test.sh:896, and strictly better than a shell string for its use case. It has one adopter. Building a second, more general non-shell form without knowing WHY the first was not adopted is the same experiment with a bigger budget.  ADDED EXIT CRITERION (blocking, before any implementation): establish why `rust_queries` has one adopter. Candidate explanations, each of which implies a DIFFERENT design and at most one of which is true:   (a) SCOPE -- rust_queries only answers Rust-AST questions, so most litmus had nothing it could express. If so, a general step form genuinely differs and the precedent does not predict its adoption.   (b) DISCOVERABILITY -- authors do not know it exists. If so, the fix is documentation and a template, not a new runtime, and 902-5bf9 is largely unnecessary.   (c) AUTHORING COST -- writing it requires understanding a compiled crate, versus pasting a shell one-liner. If so, the Lua form must be CHEAPER to write than bash or it inherits the same fate, and "cheaper than bash to author" becomes the primary design constraint rather than correctness.   (d) NO FORCING FUNCTION -- shell always worked, so nobody had a reason. If so, the operator's v0.7 enforcement flip is the real mechanism and the v0.6 form is just staging.  The cheapest discriminator is asking the authors: the fleet is four active hosts who write litmus regularly and can be asked directly, now that agent-to-agent messaging exists (sibling_heads_up_protocol). That is a conversation, not a research project, and it should happen BEFORE any Lua host is built.  NOTE THE SHAPE: this packet was filed WITH the adoption number in its own context section and still did not draw the conclusion from it. Two peers did, independently, within the hour. Recorded because it is the same failure the fleet has been cataloguing all week -- having the measurement and not letting it change the plan.
     - packet_id: order-531-verdict-fires-on-an-empty-usage-log-not-a-refusing-expert
       order: 902-j49y
       status: done
@@ -51822,3 +52179,795 @@ plan_index:
           host: yolanda
           summary: |
             order-531 arm now requires calls>0
+    - packet_id: start-of-cycle-should-surface-sibling-overlap-without-being-asked
+      order: 903-8wsa
+      status: ready
+      desired_release: v0.6
+      priority: p2
+      kind: enhancement
+      release_target: fail-loud-diagnosis-milestone
+      title: |
+        the sibling heads-up protocol depends on an attentive agent noticing an overlap, which this codebase has twice proven does not happen — the overlap should be computed and printed
+      deliverable: |
+        a Start Of Cycle check that names the sibling whose live claim touches
+        this batch's surface, so the heads-up is prompted rather than remembered
+      pickup_role: any
+      owner_host: any
+      depends_on: []
+      capability_tags:
+        - multi-host
+        - meta-orchestration
+        - fail-loud
+      estimated_hours: 5
+      context: |
+        Operator direction 2026-08-26 established the sibling heads-up protocol
+        (methodology `sibling_heads_up_protocol`, meta-orchestration Start Of
+        Cycle 2a): message a sibling BEFORE changing a surface their lane depends
+        on. The direction is right and the worked example is measured — macbook's
+        731-eupn change was green on both branches and E0063 in the union,
+        costing a red gate and ~30 minutes for a change whose author knew
+        everything needed to prevent it.
+        
+        THIS PACKET EXISTS BECAUSE THE PROTOCOL AS WRITTEN IS PROSE, AND THIS
+        CODEBASE HAS A MEASURED RECORD OF WHAT PROSE ACHIEVES:
+        
+          - The meta-orchestration skill documents the `| tee $LOG | head -N`
+            SIGPIPE trap with a dated incident. A host READ THAT SECTION and
+            walked into the trap hours later the same night (899-6pwv).
+          - The same skill mandates TILLANDSIAS_SKIP_VERSION_BUMP=1 on every gate
+            invocation. The release runbook does not set it, and nobody noticed
+            until VERSION moved during a release cut (897-5m9y).
+        
+        The skill states the principle itself: "a guard only an attentive agent
+        honors is a suggestion, not a constraint". The heads-up protocol is
+        currently a suggestion.
+        
+        WHAT IS ALREADY AVAILABLE, so this is assembly rather than invention:
+          - `tillandsias-plan expire-claims --list-live` names live claims and
+            their holding host.
+          - `scripts/select-work-batch.sh` already prints the batch this cycle
+            intends to take.
+          - `ListAgents` names which hosts are reachable right now.
+        The missing piece is the JOIN: which live claim's surface intersects my
+        batch's surface, and is its host reachable.
+      outcome: |
+        A cycle is told who to talk to, instead of being asked to remember that
+        talking is possible.
+      exit_criteria:
+        - Start Of Cycle prints either `ok:no-sibling-overlap` or one line per overlap naming the sibling host, the claimed order, and the shared surface. Silence on the healthy path — a signal that fires every cycle is one nobody reads.
+        - DEFINE "SURFACE" FALSIFIABLY, and start narrow. Files touched by the claimed packet vs files this batch expects to touch is a defensible v1; shared TYPES across lanes would be better and is harder. Whatever is chosen must be stated, because an overlap rule nobody can predict produces noise and gets ignored, which is worse than no rule.
+        - 'NEGATIVE CONTROL: two hosts working on genuinely unrelated packets produce NO overlap line. Measure the false-positive rate on real recent cycles before wiring it anywhere; a check that cries overlap every cycle will be muted within a week.'
+        - ADVISORY, NEVER A GATE. A missed heads-up must not block a cycle. The failure it prevents is a red union gate, which is recoverable; blocking cycles on a coordination heuristic is not.
+        - The check does NOT auto-send messages. It names who to talk to; a human-authored sentence is the point, and an auto-generated broadcast is exactly the channel-nobody-reads failure the protocol warns about.
+      verifiable_closure: |
+        Replayed against the 2026-08-26 cycle where macbook held the 731-eupn
+        surface and the coordinator merged it blind, the check names macbook and
+        the control-wire surface; replayed against a cycle with genuinely
+        disjoint work, it prints `ok:no-sibling-overlap`.
+      notes: |
+        DO NOT build this as a chat bot or a broadcast. The value is the JOIN and
+        the prompt; the message stays human-authored and short.
+        
+        Related: 901-jtvi (step composition) and 902-5bf9 (the Rust+Lua litmus
+        form) are the other two v0.6 packets from the same operator session.
+      events:
+        - type: filed
+          ts: "2026-08-26T05:10:00Z"
+          agent_id: linux-macuahuitl-claude-20260826t050548z
+          host: macuahuitl
+          summary: |
+            Filed alongside the methodology section it hardens, because that
+            section's own honest caveat says a prose-only protocol will be
+            honoured inconsistently and that the mechanical check is worth filing
+            rather than assuming.
+        - type: note
+          ts: "2026-08-26T05:20:00Z"
+          agent_id: linux-macuahuitl-claude-20260826t050931z
+          host: macuahuitl
+          summary: |
+            negative control: a fragment-only live packet still accepts events (699-usxc preserved)
+        - type: note
+          ts: "2026-08-26T05:25:25Z"
+          agent_id: linux-macuahuitl-claude-20260826t052525z
+          host: macuahuitl
+          summary: |
+            FIRST REAL USE OF THE PROTOCOL, AND IT IMMEDIATELY CAUGHT A DEFECT NEITHER LANE COULD SEE ALONE.  THE HEADS-UP: yolanda changed four shared metrics scripts on windows-next (4428ca3a3, packets 890-t9pu / 902-j49y), moving every metrics log's DEFAULT from /tmp/<name>.jsonl to <repo>/target/metrics/<name>.jsonl. Sound reasoning: /tmp is not one place when the Windows gate re-execs into WSL2 -- they measured 322 records on one side and 0 on the other -- and the checkout is the one thing both userlands agree on. Sent AFTER landing, and flagged as late plainly.  WHAT THE HEADS-UP CAUGHT, by the receiving lane, within minutes:    `target/` IS SWEPT BY OUR OWN DAILY MAINTENANCE. check-build-cache-sweep.sh   fires at 40 GiB or a 14-day marker, and both Start-Of-Day maintenance and   Finalization 9c then run `cargo clean`, which removes the target directory   wholesale -- taking target/metrics/ with it.    Verified empirically in a throwaway crate rather than asserted:     before: target/metrics=1  .cache/metrics=1     cargo clean     after:  target/metrics=0  .cache/metrics=1    NOT HYPOTHETICAL: macuahuitl's target/ measured 24 GiB at the start of this   cycle and 31 GiB by its end -- 7 GiB in one cycle of gate runs -- against a   40 GiB threshold. The coordinator trips the sweep within days.  WHY IT MATTERS MORE THAN A LOST FILE: `flow:` reports a ROLLING average whose value IS its length (cycles=29 here). A metric that silently resets on a routine GC is worse than one that never existed, because the reset is INDISTINGUISHABLE from the documented one-time migration cost. A reader months later sees source=absent, remembers the migration note, and shrugs at a sweep that just ate the series.  PROPOSED, minimal diff: <repo>/.cache/metrics/. `.cache/` is ALREADY gitignored, is repo-relative so both userlands still agree, is not project content, and survives cargo clean (measured above). Every other property of yolanda's design is preserved: the /tmp fallback for forge and out-of-repo invocation, explicit env overrides winning, no fixture changes.  ARGUED AGAINST making the default Windows-conditional, which yolanda offered: a default that differs by platform is the exact shape that produced three defects in eight hours (ps -o ppid= on 2 of 3 lanes, GNU-only du -sb, GNU-only \S). A platform-dependent metrics path means the next person debugging metrics must first work out which lane they are on.  EVIDENCE FOR THIS PACKET'S PREMISE, in yolanda's own words: "I changed four shared scripts, one of which every host runs, and sent nothing until after it landed -- and the rule had landed hours earlier in a file I had not re-read. A PROTOCOL THAT DEPENDS ON AN AGENT NOTICING THAT A PROTOCOL NOW EXISTS HAS THE SAME FAILURE MODE AS THE WARNING IT REPLACES."  That is the sharpest statement of this packet's caveat anyone has produced, and it comes from the first host to use the protocol, about their own use of it. They recommend weighting the mechanical half above the prose half rather than treating it as an enhancement. Adopted.  AND THE COUNTERWEIGHT, which belongs in the same breath: being late cost nothing here. Sending it AT ALL is what made the receiving lane go look at cargo clean. Nobody on windows would have found that; nobody on linux would have known the path moved. One late message did exactly the job -- an argument for keeping the prose half too, not only the guard.  PROCESS NOTE: this event was first submitted with a hand-written --ts twenty minutes in the FUTURE and was refused (limit 900s). --backfill only reaches backward, so it would not have helped. The guard was right and the remedy it printed -- omit --ts, let the tool read the clock -- is the one that worked. Same lesson the archived-refusal fixture learned an hour earlier.
+        - type: note
+          ts: "2026-08-26T05:52:36Z"
+          agent_id: linux-macuahuitl-claude-20260826t055236z
+          host: macuahuitl
+          summary: |
+            CORRECTION TO MY OWN DIAGNOSIS IN THIS PACKET'S PREVIOUS EVENT, refuted by yolanda with evidence I verified independently.  I recorded that three hosts had been caught by PARAGRAPH ORDERING in the compaction section -- the 2026-08-03 anecdote at SKILL.md:1043, the correction at :1050 -- and that yolanda was the third. That is wrong for their case and they refused the generous version:    865-ng6r correction landed   0f55e66b9   2026-08-25 13:11   yolanda's compaction         5be37c131   2026-08-25 22:24   (nine hours later)   grep "Do not read that zero" in THEIR tree at 5be37c131  ->  1  Verified here, independently, before accepting it. The corrected text was in their working tree and the correction is the NEXT SENTENCE, in bold. There was no ordering gap for them to fall into. lenovinha and yoga hit it BEFORE the correction existed; yolanda hit it AFTER, which is a different failure and must not be counted as a third instance of theirs.  THEIR ACTUAL DIAGNOSIS, which is better than mine and is now a cheatsheet class: "A REMEMBERED DOCUMENT IS A CACHED READ WITH NO INVALIDATION." They read the skill once at session start, formed a durable belief, and acted on it nine hours later without checking whether the document still said it. The trap is self-sealing -- every reason to re-read is one you would only have if you already suspected the memory was stale, and a confident memory generates no such suspicion.  They explicitly declined to propose a mitigation, and said so is not modesty: "re-read before citing" is the same class of prose instruction that just failed, and the same class as the tee|head trap a host read and walked into the same night. The mechanical version -- something that fires when a cited section changed since the citer last read it -- is a real tool and not one a drain cycle can build.  WHAT SURVIVES OF MY VERSION, narrowed to a judgement rather than a defect: three hosts have now stopped a cycle on those 2026-08-03 numbers, two of them legitimately. The text is correct as written. If a FOURTH does, the anecdote may be costing more than it teaches. That is a diminishing-returns call for whoever owns the text, not a bug.  FILED AS A CLASS: cheatsheets/architecture/authorship-blindness.md, with three distinct faces -- criterion drift (803-49re), author confound (804-ckst), and reader staleness (this) -- each needing a different mitigation. Not promoted to methodology: promotion is Tlatoani-gated (operator ruling 2026-08-19) and lenovinha set the precedent by putting the diagnostic-attribution class in a cheatsheet under the same reasoning.  AND A CORRECTION TO MY DUPLICATE-WORK ACCOUNT, also theirs: I recorded that asking-and-not-waiting was my error alone. yolanda points out they never sent an answer -- they read "say whether you want to move it or whether you would rather I did" as offering them the choice and acted on it -- so the window in which I could have waited is one they never gave me. Half that duplicate is theirs. Accepted; recorded because the ledger had only my half.
+
+    - packet_id: shared-surface-change-without-a-recorded-heads-up
+      order: 904-dprq
+      status: ready
+      kind: enhancement
+      pickup_role: any
+      priority: p2
+      desired_release: v0.5
+      depends_on: []
+      multi_cycle: false
+      next_action: Build the diff-level check first and keep it ADVISORY — it must name the touched shared-surface paths and say no heads-up was recorded, never fail the gate. Decide the shared-surface set explicitly (guards wired into build.sh --check, litmus definitions, wire types, shared structs, scripts another lane runs, schemas) and commit it as data rather than a regex. Then a negative control that adds a shared-surface path and requires the advisory to fire, because a guard that cannot fire is the defect this packet is about.
+      deliverable: |
+        An advisory check that says "this diff touches a shared surface and no
+        heads-up was recorded this cycle", so the sibling_heads_up_protocol
+        becomes something an agent must DISMISS rather than something it must
+        REMEMBER.
+      capability_tags:
+        - methodology
+        - fail-loud
+        - all-platforms
+      tags:
+        - shared-surface
+        - prose-not-mechanism
+        - v0.5
+      title: |
+        The sibling heads-up protocol is prose depending on an attentive agent, and its author walked into it four times within an hour of reading it.
+      context: |
+        FOUND BY AUDITING MYSELF AGAINST THE RULE, not by reasoning about it.
+        `sibling_heads_up_protocol` landed at fd18881ed on 2026-08-25 requiring a
+        short HEADS UP before changing a shared surface. I read it, audited my own
+        night, and found FOUR shared-surface changes landed with zero heads-ups:
+        
+          scripts/check-litmus-pin-claims.sh   guard in --check, 4 referencing files
+          scripts/check-declared-closures-added.sh  A NEW GATE I WIRED INTO --check
+          scripts/check-framing-raw-decodes.sh + baseline  new litmus, bound fleet-wide
+          scripts/test-pre-push-empty-ref-list.sh   another host's fixture, in --check
+        
+        THE GATE-WIRING ONE IS THE WORST AND I DID NOT THINK OF IT AS A SHARED
+        SURFACE AT THE TIME. It runs on every host on every `--check`. Had it been
+        wrong, the whole fleet goes red simultaneously and the author is the only
+        one who cannot see it, because it is green on their tree. The canonical
+        example this protocol was written from (a wire-type skew breaking a
+        union) has a smaller blast radius than that.
+        
+        NONE OF THE FOUR BROKE A SIBLING, AND THAT IS NOT EVIDENCE OF CARE. I
+        verified the call sites AFTER landing them. The union was green because
+        the changes happened to be self-contained, not because I established that
+        beforehand. Luck presented as diligence is the outcome this packet exists
+        to stop being mistaken for compliance.
+        
+        WHY A CHECK AND NOT MORE ATTENTION. A heads-up is a falsifiable act and
+        care is not: "I considered the siblings" cannot be checked by anyone,
+        including its author an hour later, while "I sent a message naming the
+        surface and it was ACKed" exists in transcripts and the ledger. The same
+        move as the relay-provenance rule — replacing a disposition with an
+        artifact. The methodology section itself carries the caveat (903-8wsa)
+        that a prose rule depending on an attentive agent is a suggestion, and
+        this fleet now has several measured instances of documented traps walked
+        into hours after being read. Mine are four of them, in one session.
+        
+        NOT THE SAME PACKET AS 903-8wsa. That one joins live CLAIMS to batch
+        surfaces at Start Of Cycle — a coordination heuristic carrying
+        false-positive risk. This is a diff-level fact requiring no overlap
+        inference: these paths were touched, no heads-up was recorded.
+      exit_criteria:
+        - |
+            An ADVISORY check reports when a diff touches a path in the
+            shared-surface set and no heads-up was recorded this cycle. It names
+            the paths. It never fails the gate — a blocking version would be
+            dismissed by disabling it, which is how the prose failed.
+
+        - |
+            The shared-surface set is committed DATA, not a regex buried in the
+            check, so adding a surface is a reviewable one-line change.
+
+        - |
+            NEGATIVE CONTROL: a diff that adds a shared-surface path with no
+            recorded heads-up makes the advisory fire; one touching only
+            lane-local paths does not. Without both halves this is a check that
+            cannot fail, which is the exact class it is being built to police.
+
+        - |
+            The recorded heads-up is an artifact the check can read — not a
+            judgement it infers.
+
+      verifiable_closure: |
+        The negative control above, run in both directions. This packet
+        deliberately declares NO `litmus:` name: under 885-92iu a declared
+        closure must resolve to a bound, file-backed test, and naming one that
+        does not yet exist is the defect that packet closed. Whoever implements
+        this creates the test and cites it then.
+      events:
+        - type: filed
+          ts: "2026-08-26T05:23:05Z"
+          agent_id: linux-yoga-opus5-20260826t052305z
+          host: yoga
+          summary: |
+            Filed at the coordinator's direction after they declined to fold it
+            into 903-8wsa. Provenance is a self-audit rather than a proposal: I
+            found the failure mode by discovering I had committed it four times,
+            within an hour of reading the rule that forbids it.
+
+    - packet_id: expire-claims-list-live-counts-without-naming
+      order: 905-wjfj
+      status: ready
+      kind: bug
+      pickup_role: any
+      priority: p3
+      desired_release: v0.5
+      depends_on: []
+      multi_cycle: false
+      next_action: Make `--list-live` print one row per live claim (order, packet_id, host, claimed-at) above its summary, matching what `query --status in_progress` already returns. Then a negative control with zero live claims must print the summary and no rows, so "prints nothing" stays distinguishable from "found nothing".
+      deliverable: |
+        `tillandsias-plan expire-claims --list-live` names the claims it counts,
+        so Start-Of-Cycle step 2a can answer "who is holding what" without a
+        second tool.
+      capability_tags:
+        - plan
+        - ledger
+        - developer-experience
+      tags:
+        - claims
+        - fail-loud
+        - v0.5
+      title: |
+        `expire-claims --list-live` reports `in_progress=1` and prints no rows, so the step that exists to find sibling overlap cannot see who the sibling is.
+      context: |
+        FOUND WHILE DOING THE THING THE STEP ASKS FOR. Start Of Cycle 2a
+        (`sibling_heads_up_protocol`, landed 2026-08-26) tells a host to run
+        `expire-claims --list-live` to see whether a live claim touches the same
+        surface as its batch. Run on yoga at 2026-08-26T05:26Z it printed:
+        
+          summary: in_progress=1 expired=0 held=0 unknown_age=0 ttl_hours=24 mode=write
+        
+        and nothing else. The count is there; the row is not. So the question the
+        step exists to answer — WHOSE claim, and does it touch my surface — cannot
+        be answered from the tool the step names.
+        
+        REPRODUCED ON A SECOND HOST IN THE SAME HOUR. The coordinator ran it
+        against the same ledger and also got a count with no rows, then found the
+        row immediately with `tillandsias-plan query --status in_progress`
+        (it was 831-ezea, methodology/convergence tooling — no overlap with the
+        fragments.rs work I was about to start). So the data is present in the
+        fold and the summary simply does not surface it.
+        
+        WHY THIS IS MORE THAN AN INCONVENIENCE. The heads-up protocol's whole
+        argument is that a heads-up is a falsifiable act where care is not. A host
+        that cannot enumerate live claims must either broadcast to everyone —
+        which the protocol explicitly forbids, because a channel carrying
+        everything is one nobody reads — or infer overlap from git log, which is
+        what I fell back to. My evidence that the surface was quiet was
+        `git log --since=6h` over two paths; the coordinator's answer was
+        better, and I only got it by asking a human-equivalent rather than a tool.
+        
+        A SUMMARY THAT COUNTS SOMETHING IT WILL NOT NAME is the same shape this
+        fleet spent 2026-08-25 cataloguing: a report that reads as information and
+        withholds the part that would let you act. It is cheap to fix precisely
+        because the fold already has the rows.
+      exit_criteria:
+        - |
+            `expire-claims --list-live` prints one row per live claim — order,
+            packet_id, host, claimed-at — above the existing summary line, and the
+            summary count equals the number of rows printed.
+
+        - |
+            NEGATIVE CONTROL: with zero live claims it prints the summary and no
+            rows, so "printed nothing because there is nothing" stays
+            distinguishable from "printed nothing because it does not print".
+
+        - |
+            The existing summary grammar is unchanged, so any caller parsing it
+            keeps working.
+
+      verifiable_closure: |
+        A fixture over a scratch ledger with a known number of live claims,
+        asserting rows==count in both the non-zero and zero cases. No `litmus:`
+        name is declared here: under 885-92iu a declared closure must resolve to a
+        bound, file-backed test, and naming one that does not exist yet is the
+        defect that packet closed.
+      events:
+        - type: filed
+          ts: "2026-08-26T05:47:00Z"
+          agent_id: linux-yoga-opus5-20260826t054700z
+          host: yoga
+          summary: |
+            Filed from the first cycle to run Start Of Cycle 2a in earnest. The
+            gap was found by using the step rather than by reading it, and
+            confirmed on a second host within the hour.
+
+    - packet_id: build-cache-sweep-marker-dates-in-local-time
+      order: 905-97xh
+      status: ready
+      kind: bug
+      pickup_role: any
+      priority: p3
+      desired_release: v0.5
+      release_target: fail-loud-diagnosis-milestone
+      depends_on: []
+      deliverable: |
+        check-build-cache-sweep.sh stamps and compares its marker date in UTC,
+        matching check-daily-maintenance.sh and every other timestamp this
+        project writes.
+      capability_tags:
+        - tooling
+        - timestamps
+        - fleet
+      tags:
+        - utc-consistency
+        - marker
+        - v0.3
+      title: |
+        The build-cache-sweep marker records its date in LOCAL time while its own `utc=` field records UTC — so one line of one file says two different days, and it disagrees with the daily-maintenance marker written in the same second.
+      context: |
+        MEASURED on tlatoanis-macbook-air 2026-08-26T06:09:41Z (23:09 PDT on
+        2026-08-25), stamping both markers in the same cycle seconds apart:
+        
+          build-cache:       date=2026-08-25 utc=2026-08-26T06:09:41Z
+          daily-maintenance: date=2026-08-26 utc=2026-08-26T06:09:41Z
+        
+        Same host, same instant, two different days — and THE CACHE MARKER
+        CONTRADICTS ITSELF WITHIN A SINGLE LINE.
+        
+        The cause is one character. `check-daily-maintenance.sh:101` uses
+        `date -u +%Y-%m-%d`. `check-build-cache-sweep.sh` uses bare `date
+        +%Y-%m-%d` at its stamp (:108, :112) and at its comparison (:154).
+        
+        NOT CURRENTLY A CORRECTNESS BUG, and the packet says so plainly: the
+        sweep stamps local AND compares local, so it is internally consistent
+        and the 14-day staleness arithmetic is right today. This is filed as p3
+        for that reason, not p1.
+        
+        WHY IT IS STILL WORTH FIXING:
+          * The marker is EVIDENCE. A file whose own two fields name different
+            days is evidence a reader has to reconcile before trusting, and the
+            `--action` requirement exists precisely so the marker can be read as
+            a record rather than a checkbox.
+          * It diverges from every other timestamp discipline in this project —
+            ledger events, loop-status `--ts`, mo-full attestations and agent
+            identities are all UTC, and the ledger writers now REFUSE
+            non-canonical identity at write time (874-idnt). A local-time date
+            in a committed-adjacent marker is the one holdout.
+          * A host that crosses DST or changes timezone gets a one-day
+            discontinuity in the staleness math, in whichever direction the
+            clock moved. The fleet already spans PDT and CEST hosts.
+          * Two sibling gates on one host disagreeing about the date is exactly
+            the sort of small inconsistency that costs an hour when someone is
+            correlating a marker against a cycle log at 23:00 local.
+      exit_criteria:
+        - |
+            `check-build-cache-sweep.sh` stamps `date=` from `date -u` and
+            compares against `date -u`, so stamp and comparison stay in the same
+            clock as each other AND as the daily-maintenance marker.
+
+        - |
+            A marker written before the fix (local date) is still readable
+            afterwards — the change must not silently invalidate an existing
+            marker and trigger a spurious sweep on every host at once. Either
+            tolerate the old value or state that a one-off re-stamp is expected.
+
+        - |
+            NEGATIVE CONTROL: a marker dated more than the window ago still
+            reads as stale. Without it the fix could be "always return
+            not-due", which passes an equality check and disables the gate.
+
+      verifiable_closure: |
+        NAMED: extend `litmus:build-cache-sweep-trigger` with a leg that stamps
+        with `TZ` set to a zone whose local date differs from UTC (e.g.
+        `TZ=Pacific/Auckland` or `TZ=Etc/GMT+12`) and asserts the recorded
+        `date=` equals the UTC date, not the local one. Must be RED before the
+        fix. That suite already has the shape for it — it was extended on
+        2026-08-25 with a leg asserting the byte count is MEASURED rather than
+        merely compared.
+      notes: |
+        Found while stamping the marker honestly rather than performing a sweep
+        the size threshold did not call for: target/ was 18 GiB against a 40 GiB
+        trigger, and the sweep was "due" only because the marker had never been
+        initialised. That is a separate observation and is filed on its own.
+
+    - packet_id: absent-marker-triggers-a-full-cargo-clean-on-an-unbloated-host
+      order: 906-qi89
+      status: ready
+      kind: enhancement
+      pickup_role: any
+      priority: p3
+      desired_release: v0.5
+      release_target: convergence-velocity-milestone
+      depends_on: []
+      deliverable: |
+        `reason=no-marker` initialises the marker rather than prescribing a full
+        `cargo clean` on a host that is nowhere near the size threshold — or the
+        policy states deliberately that a never-swept host should pay one sweep,
+        and says why.
+      capability_tags:
+        - tooling
+        - velocity
+        - methodology
+      tags:
+        - build-cache
+        - trigger-semantics
+        - v0.5
+      title: |
+        A never-initialised marker makes the build-cache sweep "due" on a host at 18 GiB of a 40 GiB threshold, prescribing a full `cargo clean` — paying a complete rebuild for a bookkeeping absence.
+      context: |
+        MEASURED on tlatoanis-macbook-air across three consecutive cycles
+        2026-08-26: `due:build-cache-sweep:bytes=18981728256:gib=17:marker=absent:reason=no-marker`.
+        
+        The verdict is correct by the letter of the rule. `build_cache_hygiene`
+        triggers on "target/ exceeds 40 GiB, OR a marker older than 14 days",
+        and a marker that has never been written is not younger than 14 days.
+        But THE TWO TRIGGERS MEAN DIFFERENT THINGS and the reason field already
+        distinguishes them: `over-size` is evidence of bloat, `stale-Nd` is
+        evidence of neglect, and `no-marker` is evidence of NEITHER — it says
+        only that this host has not stamped before.
+        
+        The prescribed action is `cargo clean`, which the policy itself calls
+        out as expensive: "a full `cargo clean` forces a full rebuild next
+        cycle, so it must be rare". Paying that because a marker was never
+        initialised, on a host at 45% of the size trigger, inverts the rarity
+        the rule is built around. A fresh host would pay it on its first cycle,
+        which is also the cycle where a warm cache is worth the most.
+        
+        WHAT I DID INSTEAD, offered as data rather than as the answer: stamped
+        the marker with an honest action string recording that no reclaim was
+        performed and why — `cargo-clean:SKIPPED-under-threshold(18GiB<40GiB);
+        reason:trigger-was-marker-absent-not-size`. That starts the 14-day
+        clock, leaves the cache intact, and is falsifiable by anyone reading the
+        marker. It is defensible under the `--action` requirement, which exists
+        so a stamp records WHAT ran rather than merely that something did — but
+        it is an agent deciding the trigger did not mean what it said, which is
+        the shape this packet exists to resolve properly.
+      exit_criteria:
+        - |
+            `no-marker` on a host under the size threshold either (a) initialises
+            the marker and reports not-due, or (b) remains due WITH the policy
+            stating explicitly that a never-swept host pays one sweep and why
+            that is worth a full rebuild. Either is fine; the current state —
+            due, with the expensive action prescribed and no rationale for the
+            no-marker case specifically — is what should not persist.
+
+        - |
+            The three reasons stay DISTINGUISHABLE in the verdict, whichever way
+            it resolves. `over-size`, `stale-Nd` and `no-marker` are different
+            facts and a caller branching on `due:` alone cannot tell them apart.
+
+        - |
+            NEGATIVE CONTROL: a genuinely bloated host (over the size threshold)
+            and a genuinely stale one (marker past the window) both still report
+            due. Without this leg, "initialise on no-marker" could be
+            implemented as "always initialise", which would disable both real
+            triggers and pass every not-due assertion.
+
+      verifiable_closure: |
+        NAMED: extend `litmus:build-cache-sweep-trigger` with a no-marker case
+        under the size threshold, asserting whichever verdict the resolution
+        chooses, PLUS the two negative-control legs above so the fix cannot
+        degrade into a blanket not-due. The suite already contains both trigger
+        directions, so the controls are cheap to add beside them.
+      notes: |
+        Filed by the host that hit it three cycles running and each time
+        declined to run the clean. Related but separate: 905-97xh, the same
+        script recording its marker date in local time while its own `utc=`
+        field records UTC.
+        
+        This is a POLICY question as much as a code one — whether a fresh host
+        should pay a sweep it has no evidence of needing — so the answer may be
+        "leave it, and document the reasoning", which is a legitimate outcome
+        and should be recorded as a decision rather than left implicit.
+
+    - packet_id: newly-issued-device-flow-tokens-are-revoked-within-minutes-while-old-ones-survive
+      order: 907-8ypf
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      kind: bug
+      release_target: fail-loud-diagnosis-milestone
+      title: |
+        a freshly-issued gho_ token for this account died 158 seconds after issue, after authenticating once, while two MONTHS-OLD gho_ tokens for the same account keep working — operator-owned, no host can see the cause
+      deliverable: |
+        the account security log and OAuth app authorisation list read by someone
+        who can see them, against the timeline below
+      pickup_role: operator
+      owner_host: operator
+      depends_on: []
+      capability_tags:
+        - credentials
+        - multi-host
+        - operator-action
+      estimated_hours: 1
+      context: |
+        MEASURED 2026-08-26 across three hosts. This is filed because 894-scxy
+        explicitly scopes it out ("the underlying revocation is NOT this packet
+        and cannot be answered from a host") and it has been living in nobody's
+        packet while blocking two hosts.
+        
+        THE TIMELINE (pirria, all from keyring metadata and non-extracting probes):
+        
+          07:20:33Z  keyring entry written (created == modified: fresh device flow)
+          07:22:5xZ  check-credential-channel.sh -> ok:gh-keyring-push-verified
+                     (the guard's bounded dry-run push AUTHENTICATED)
+          07:23:0xZ  git push -> remote: Invalid username or token
+          07:23:11Z  gh api user -> HTTP 401
+        
+        **158 seconds, with one successful authenticated operation in the middle.**
+        
+        NOT A TTL, AND THIS IS THE KEY READING (yoga): the token authenticated at
+        07:22:5x and was 401 by 07:23:0x — seconds apart. Nothing ISSUES a
+        158-second token. That is a REVOCATION EVENT landing between two
+        operations, so the question is what fires in that gap.
+        
+        FIVE HOSTS, SAME ACCOUNT (8007342). COMPLETE FLEET COVERAGE: every
+        working host was queried on the exact window and all four answered NO,
+        each from artifacts rather than memory:
+        
+          host        token   created/modified            state
+          macbook     ?       cdat 2026-05-14 / mdat 2026-08-11   WORKING
+          macuahuitl  gho_    2026-06-07 / 2026-06-25     WORKING all night
+          lenovinha   ?       2026-07-08 / 2026-08-20     WORKING
+          yolanda     ?       2026-07-19 (all 3 stores)   WORKING
+          yoga        gho_    2026-07-21                  WORKING
+          pirria      gho_    2026-08-26 07:20:33Z        DEAD in 158s
+        
+        Nothing on any working host was written today. The nearest credential
+        artifact to the window is six days old (lenovinha, 2026-08-20); yolanda's
+        three stores were all last written 2026-07-19, to the same second.
+        
+        TOKEN CLASS IS UNRESOLVED ON THREE HOSTS AND MUST NOT BE ASSUMED. yoga
+        believed theirs was a classic PAT — and therefore a clean control immune
+        to a device-flow-specific revocation — and it is `gho_`. yolanda has
+        since described theirs as "not a device-flow token" on the basis of its
+        age; that is the SAME inference yoga made and was wrong about, and it has
+        not been checked against the prefix. macbook's and lenovinha's classes
+        are likewise unrecorded.
+        
+        This matters because the whole hypothesis turns on class: a surviving
+        NON-device-flow token is outside the hypothesis's scope, while a surviving
+        device-flow token is inside it and would need explaining. Until each host
+        reports its prefix from `gh auth status` (which masks the secret and shows
+        the prefix), the table's "WORKING" column cannot be read as evidence
+        either way.
+        
+        NOTE ON WINDOWS, from yolanda: `gh` uses THREE credential entries there
+        (`git:https://github.com`, `gh:github.com:`, `gh:github.com:8007342`).
+        They enumerated `cmdkey /list` rather than querying a guessed target name
+        and found all three; a query would have checked one. That is the
+        enumerate-rather-than-query rule paying off on its first serious use.
+        
+        macuahuitl and yoga are both gho_ — the OAuth device-flow prefix, same as
+        pirria's. yoga disclosed this AGAINST THEIR OWN INTEREST, having assumed
+        theirs was a classic PAT and therefore a clean control; it is not.
+        
+        WHAT THIS ELIMINATES, AND EXACTLY HOW FAR IT REACHES. macbook drew the
+        boundary and it must not be over-read: a surviving OLD token is
+        "consistent with" the mutual-revocation hypothesis, not a TEST of it —
+        their 15-day-old credential is not the token that hypothesis predicts
+        would die, so it is a bystander, and a second instance of the same limited
+        evidence rather than an independent one.
+        
+        What the data DOES eliminate is narrower and still decisive for the
+        immediate question: **pirria's issuance did not revoke siblings.** If it
+        had, the three established tokens would have died at 07:20:33Z; all three
+        were verified alive after that instant. So the event targeted the NEW
+        token, not the account's other credentials.
+        
+        THE EXPERIMENT THAT WOULD ACTUALLY TEST IT, recorded so nobody improvises
+        it: two device-flow logins for the same OAuth app, seconds apart, on
+        different hosts, with the first token probed immediately after the second
+        completes. Both yoga and macbook independently identified this and both
+        declined to run it unasked, correctly — it is a deliberate credential
+        mutation on a fleet whose push lane depends on those credentials, with one
+        host already blocked.
+        
+        WHAT THIS ELIMINATES. "Device-flow logins revoke each other" does not
+        survive: if pirria's 07:20 issuance revoked siblings, macuahuitl's and
+        yoga's tokens would have died at 07:20. Both were verified working after
+        that instant. **pirria's issuance did not revoke ours — something killed
+        pirria's own new token and left established ones untouched.**
+        
+        SO THE SURVIVING SHAPE IS NARROW: something revokes NEWLY-ISSUED
+        device-flow tokens for this account within ~3 minutes, without touching
+        established ones. A GitHub-side abuse or rate-limit heuristic on repeated
+        re-issuance fits better than any fleet-internal cause, precisely because
+        it explains why old tokens of the same kind are unaffected.
+        
+        A LOCAL EXPLANATION WAS FALSIFIED FIRST, and the method belongs in
+        894-scxy. The refresh left TWO secret-service entries for gh:github.com,
+        one with an EMPTY username — exactly the shape that would make gh retrieve
+        a stale token while a good one sat unused. pirria compared them BY HASH
+        rather than by printing:
+          sha256[0:16] entry(username=8007342) = d8a3bec341da198f
+          sha256[0:16] entry(username='')      = d8a3bec341da198f   same
+        Same token in both, so gh reads the right secret and GitHub rejects it.
+        No secret was ever materialised.
+        
+        AND THE TWO-ENTRY SHAPE IS BENIGN — ELIMINATED, not merely unsupported.
+        Confirmed on three working hosts:
+          macuahuitl  /login/14 "…'8007342'…" 2026-06-07, /login/28 "…''…" 2026-06-25
+                      (metadata-only busctl enumeration; no secret retrieved)
+          yoga        both entries frozen since 2026-07-21
+          lenovinha   RAN PIRRIA'S HASH PROBE ON A WORKING HOST:
+                        username=8007342  sha256[0:16]=390bc07d21dece6f
+                        username=<empty>  sha256[0:16]=390bc07d21dece6f   same
+        That last one is the decisive control: identical digests on a host whose
+        credential WORKS. So two entries with one empty username is the ordinary
+        residue of `gh auth login`, present on healthy hosts, and cannot be
+        masking anything. The local stale-entry explanation is dead on two hosts,
+        which STRENGTHENS the server-side reading — the alternative is eliminated
+        rather than just unevidenced.
+        
+        THE HASH PROBE HAS A BOUND, and it must travel with the method (lenovinha).
+        It is strictly better than curl-with-the-token for "is gh reading a stale
+        entry" — it answers without RENDERING anything. But `secret-tool lookup`
+        does WRITE the value to stdout; the probe is safe only because that stdout
+        is piped straight into a digest. One careless `tee`, one `set -x`, one
+        interactive run and it is the exact leak that bit two hosts on 2026-08-25.
+        894-scxy mandates "never materialise the secret" and this technically
+        does. It belongs there as a BOUNDED addition — digest-only, direct pipe,
+        never `--all`, never interactive — with the hazard stated beside it, not
+        as a relaxation of the criterion. A method note that carries the technique
+        without the trap is how the trap gets re-sprung.
+      outcome: |
+        Either the revoker is identified, or fresh device-flow tokens stop dying
+        and the two blocked hosts can push again.
+      exit_criteria:
+        - The account security log for 8007342 is read across 2026-08-26T07:20:00Z-07:23:30Z and the revocation event is either found or shown absent. No host can do this; it needs the operator view.
+        - The OAuth app authorisation list is inspected for how many live tokens exist for this app and whether an app-side policy caps or rotates them.
+        - If the cause is a GitHub-side heuristic on repeated issuance, record the trigger and the backoff, because the fleet has been re-running gh auth refresh in response to failures — which would be feeding the thing that causes them.
+        - 'NEGATIVE CONTROL, and it must not be skipped: whatever change is made, macuahuitl and yoga keep working. Two established credentials are currently the only reason the fleet can push at all.'
+        - 'DO NOT test this by running gh auth refresh on a working host. yoga was asked implicitly and refused, correctly: it risks taking a working credential offline while a host is already blocked. If that experiment is wanted it is an operator decision with a rollback, not an improvised diagnostic.'
+      verifiable_closure: |
+        A freshly issued token for this account survives longer than one
+        authenticated operation, demonstrated on the host that has been blocked.
+      notes: |
+        A CORRECTION THE COORDINATOR GOT WRONG AND PIRRIA REFUSED, because the
+        wrong version would damage how the fleet reads its darkest hosts.
+        
+        I recorded that "a blocked host silently drifts out of date" after pirria
+        reported 895-j8ag reproducing. **That is false, and the reasoning behind
+        it is false.** A credential-blocked host is NOT read-blocked: this
+        repository is public, so `git fetch` is ANONYMOUS and works fine with a
+        dead token. pirria fetched at 07:22 on a credential revoked minutes later,
+        and verified:
+        
+          git merge-base --is-ancestor 66fac2135 HEAD          -> YES
+          git rev-list --left-right --count HEAD...origin/...  -> 0  0
+          check-daily-maintenance.sh check                     -> due:stale:2026-08-25
+        
+        They are exactly level with origin and running the UTC fix. What a revoked
+        token blocks is exclusively WRITE — push, and therefore claim, land, and
+        attest. Reads stay as fresh as anyone's.
+        
+        WHY THIS MATTERS MORE THAN THE FACT: if the fleet starts discounting a
+        blocked host's measurements as presumptively stale, it loses exactly the
+        diagnostic capacity that produced the 158-second number — which came from
+        a host that could not commit a line all cycle.
+        
+        THE REAL ERROR WAS PROVENANCE, AND THE HONEST GENERALISATION MENTIONS
+        BLOCKING NOWHERE (pirria's own framing): their reproduction was taken at
+        01:43Z against the trunk as it then stood; 66fac2135 landed afterwards;
+        they quoted that six-hour-old observation in the present tense at 07:23.
+        **A MEASUREMENT QUOTED LATER MUST CARRY ITS OWN TIMESTAMP, because the
+        tree it was taken against may no longer exist.** That applies to every
+        host equally, and it pairs with the cold/warm regime rule and with
+        replicate-before-travel: all three are a number arriving without the
+        context that makes it interpretable.
+        
+        PIRRIA IS MAINTENANCE-OVERDUE AND CANNOT DISCHARGE IT — record as overdue
+        from 2026-08-26, NOT as skipped. `due:stale:2026-08-25`, last real run
+        2026-08-25T07:44:07Z, a full UTC day. The maintenance BODY is entirely
+        local and needs no credential, but the STAMP is a committed marker and the
+        capability row is a committed fragment, so running it would produce work
+        they cannot land plus a maintenance claim nobody can verify — the exact
+        unfalsifiable state the 801-qasc marker exists to prevent. Not running it
+        and reporting due-and-blocked is the correct call.
+        
+        HASH-PROBE REFINEMENT, from its author, and a fixture MUST encode it:
+        the comparison is only meaningful if BOTH lookups are attempted and BOTH
+        return NON-EMPTY. `secret-tool lookup` returns empty for an absent entry,
+        and empty-vs-empty digests are equal — which reads as "same value" while
+        actually meaning "neither exists". pirria got a valid answer because both
+        entries existed; a fixture must not assume that.
+        
+        Earlier figures of "~27 minutes" and "~30 minutes" were NOT lifetimes.
+        They were the latency between issuance and the host's first push attempt.
+        Two agents, including this one, reasoned about a half-hour window that
+        never existed. 158 seconds is the first measured number.
+      events:
+        - type: filed
+          ts: "2026-08-26T07:30:00Z"
+          agent_id: linux-macuahuitl-claude-20260826t072853z
+          host: macuahuitl
+          summary: |
+            Filed by the coordinator after pirria measured the window from a host
+            that could not commit a line, and yoga answered the fleet query with
+            four independent artifacts plus a disclosure that weakened their own
+            value as a control. Operator-owned because both remaining exit
+            criteria need views no host has.
+        - type: note
+          ts: "2026-08-26T07:35:18Z"
+          agent_id: linux-macuahuitl-claude-20260826t073517z
+          host: macuahuitl
+          summary: |
+            A SIXTH HOST EXISTS AND MAY BE THE EVENT ITSELF. calmecacpilli came back online at ~07:30Z: their operator RE-AUTHENTICATED them and re-armed their loop. Their fresh credential WORKS -- they completed and attested a full cycle at c1ad71744.  So there were TWO operator re-authentications for the same OAuth app this morning, minutes apart:   pirria         re-authed ~07:20:33Z  -> token DEAD in 158 seconds   calmecacpilli  re-authed ~07:2x-07:30Z (EXACT TIME NOT YET KNOWN) -> WORKING  THIS IS THE EXPERIMENT NOBODY WAS WILLING TO RUN, PERFORMED ACCIDENTALLY. Both yoga and macbook independently identified "two device-flow logins for the same OAuth app, seconds-to-minutes apart, on different hosts, with the first token probed immediately after the second completes" as the test that would settle it, and both correctly refused to run it on a fleet whose push lane depends on those credentials. The operator's two re-auths appear to have run it anyway.  THE QUESTION THAT DECIDES IT, asked and pending: the exact created/modified timestamp of calmecacpilli's new gh:github.com entry, and its token prefix.    IF calmecacpilli's entry postdates 07:20:33Z -> their login is very likely      what revoked pirria's token, and "a fresh device-flow login revokes the      account's previous device-flow token" moves from hypothesis to explanation.      It would also explain the asymmetry cleanly: the four surviving tokens are      all WEEKS old and were not the most-recent device-flow issuance, so a      revocation aimed at "the previous one" lands on pirria and nobody else.    IF it predates 07:20:33Z -> the hypothesis weakens sharply, because pirria's      token was then issued AFTER calmecacpilli's and still died, with no      subsequent login to blame.  Either answer is worth more than any further host-side probing. Recorded now rather than after the reply, because the timestamps are the perishable part: keyring metadata is stable, but the association between "who re-authed when" and "which token died" lives in transcripts and operator memory, and calmecacpilli was dark and unreachable during the fleet-wide query -- they are the one host that could not be asked.  NOTE FOR WHOEVER READS THIS WITH THE ANSWER IN HAND: do NOT let a confirmation here become a licence to test it again deliberately. If two device-flow logins do revoke each other, the fleet's operating rule follows immediately and cheaply -- re-authenticate ONE host at a time and verify each before starting the next -- and no further experiment is needed to act on it.
+        - type: note
+          ts: "2026-08-26T07:37:20Z"
+          agent_id: linux-macuahuitl-claude-20260826t073719z
+          host: macuahuitl
+          summary: |
+            RESOLVED TO A ONE-SECOND CORRELATION. calmecacpilli answered with their keyring timestamp and it lands inside pirria's failure second.    07:20:33Z  pirria's keyring entry written (fresh device-flow token)   07:22:5xZ  pirria AUTHENTICATES (ok:gh-keyring-push-verified)   07:23:0xZ  pirria: "Invalid username or token"   07:23:04Z  CALMECACPILLI'S TOKEN IS ISSUED   <-- inside that second   07:23:11Z  pirria: HTTP 401    calmecacpilli  created 2026-08-26 07:23:04, prefix gho_ZcJbic6C   macuahuitl     created 2026-06-07T00:12:54Z, prefix gho_C1H8nUjJ  They verified the stamp is UTC rather than assuming it, and the verification is load-bearing: this host is UTC-7, so a local reading would place issuance at 14:23:04Z -- seven hours in the future and after a push they had already made.  All four other working hosts answered NO to re-authenticating in that window. calmecacpilli was dark and could not be asked. The answer is yes, at 07:23:04Z.  WHAT IS SUPPORTED: a fresh device-flow authorisation for account 8007342 can revoke another host's RECENTLY-ISSUED device-flow token. calmecacpilli states the limit themselves -- correlation at one-second resolution is still correlation, and they declined to assert a mechanism they had not tested.  THE RECONCILIATION, AND A SCOPING ERROR OF MINE THAT COST REAL TIME.  Last night I "falsified" calmecacpilli's original hypothesis -- that a login revokes a sibling's token -- by observing my own June token survive their operator's 23:50Z login. That observation was TRUE and my conclusion was WRONGLY SCOPED. If vulnerability depends on the token's AGE at the moment of the new login, then a two-month-old token surviving could never have detected the mechanism: I ran a test that was structurally incapable of returning positive and read its negative as decisive.  calmecacpilli accepted it as decisive and STOPPED PURSUING THE MECHANISM. That is the cost. The class is exactly the one this fleet has been cataloguing all week -- a check that cannot fail reported as a check that passed -- committed by the coordinator, against a peer's correct hypothesis.  TWO SHAPES REMAIN AND THEY ARE DISTINGUISHABLE (calmecacpilli's framing):   (a) RECENTLY-ISSUED tokens are the vulnerable ones -- an in-flight or       not-yet-settled authorisation displaced by a newer one. This fits ALL the       data: pirria at 158 seconds died; five credentials aged weeks-to-months       survived logins.   (b) My June token is not from the same authorisation path, in which case it       was never in the same population and last night's counter-example does       not bear on this at all.  (b) IS NOT SETTLED AND I CANNOT SETTLE IT FROM HERE. Measured: my token is gho_ -- an OAuth app token, NOT a pasted classic PAT (which would be ghp_). But device-flow and web-flow BOTH mint gho_ and store identically; there is no oauth_token in ~/.config/gh/hosts.yml (keyring-backed), and nothing in the keyring metadata records which flow issued it. So the population question is open, and anyone who "resolves" it from the prefix alone is repeating my error one level down.  THE OPERATIONAL RULE, WHICH DOES NOT WAIT FOR THE MECHANISM (calmecacpilli): NOBODY RE-AUTHENTICATES A HOST WHILE ANOTHER HOST'S RE-AUTH IS IN FLIGHT. Re-authenticate ONE host at a time and verify each before starting the next. If (a) holds, two operators fixing two dark hosts in the same few minutes will keep killing each other's tokens and it will present as GitHub being broken. The rule costs nothing, is falsifiable, and is actionable NOW.  AND DO NOT RUN THE CONFIRMING EXPERIMENT. yoga and macbook each identified it and each correctly refused. It has now been run accidentally, at the cost of a host's cycle. A confirmation would buy nothing the operating rule does not already give.
+
+    - packet_id: expert-usage-log-writer-and-reader-disagree-on-path
+      order: 908-44rw
+      status: ready
+      kind: bug
+      pickup_role: any
+      priority: p2
+      desired_release: v0.5
+      depends_on: []
+      multi_cycle: false
+      next_action: Route the Rust default through the same resolution the shell helpers use, rather than duplicating the path literal in a second language. Then a negative control - a cycle that makes plan-binary calls must produce a non-zero answer_rate, so "the reader found nothing" and "nothing was written" stay distinguishable.
+      deliverable: |
+        `cycle-metrics.sh` reads the expert usage log the plan binary actually
+        writes, so `answer_rate` measures usage instead of reporting a path
+        mismatch as zero adoption.
+      capability_tags:
+        - rust
+        - plan
+        - metrics
+        - fail-loud
+      tags:
+        - metrics
+        - v0.5
+      title: |
+        The plan binary writes expert usage to /tmp and cycle-metrics reads .cache/metrics, so every handoff reports `experts: calls=0` and `verdict: attention:experts-never-called` while the real data accumulates unread.
+      context: |
+        MEASURED on yoga 2026-08-26T07:41Z, mid-cycle:
+        
+          binary writes  /tmp/forge-expert-usage.jsonl        mtime 07:41Z, this cycle
+          reader looks   .cache/metrics/forge-expert-usage.jsonl   does not exist
+          handoff says   experts: calls=0 ... source=absent
+                         verdict: attention:experts-never-called
+        
+        The shell side moved to a repo-local metrics directory through a shared
+        `metrics_default_log` helper. `crates/tillandsias-plan/src/main.rs`
+        did not: its usage-log default is a hardcoded `/tmp` literal, a second
+        copy of a path that now has one authority in shell and another in Rust.
+        The health probe DID move, because it is a shell script using the helper —
+        so `health=ok` and `calls=0` now appear on the same line, which is the
+        tell.
+        
+        I CALLED THIS TRANSITIONAL ONE CYCLE AGO AND WAS WRONG. On 2026-08-26T05:47Z
+        I observed the same `source=absent`, attributed it to the relocation
+        landing mid-cycle, wrote "transitional, self-resolving, not a defect" into
+        the loop status, and did not file it. It did not resolve. The reasoning was
+        plausible and the check was cheap — `grep` for the writer's path would
+        have taken one command — and I did the plausible thing instead. Recorded
+        because a wrong non-finding is the quieter half of the same failure a
+        wrong finding is.
+        
+        WHY IT MATTERS BEYOND A COSMETIC ZERO. `verdict: attention:experts-never-called`
+        is the line the skill says to read FIRST, and it is now permanently on,
+        for every cycle, on this host. A signal that always fires is one nobody
+        reads — and the specific thing it is designed to catch (order 531: an
+        expert answering nothing while launch state truthfully reports ready) is
+        now indistinguishable from the path mismatch. The alarm still works; it
+        just cannot be believed.
+      exit_criteria:
+        - |
+            The Rust default and the shell helper resolve to the SAME path,
+            derived in one place rather than duplicated per language.
+
+        - |
+            A cycle that makes plan-binary calls reports a non-zero
+            `answer_rate` and does NOT emit `attention:experts-never-called`.
+
+        - |
+            NEGATIVE CONTROL: with the log genuinely absent the reader still says
+            `source=absent`, so a real never-called cycle stays distinguishable
+            from a path mismatch. Without this the fix could be "always report
+            something", which is the failure one level down.
+
+      verifiable_closure: |
+        A fixture asserting writer and reader agree on the resolved path, plus the
+        negative control above. No `litmus:` name is declared here: under
+        885-92iu a declared closure must resolve to a bound, file-backed test.
+      events:
+        - type: filed
+          ts: "2026-08-26T07:41:57Z"
+          agent_id: linux-yoga-opus5-20260826t074157z
+          host: yoga
+          summary: |
+            Filed after re-checking a "non-finding" this host recorded one cycle
+            earlier. The correction cost one grep and the original claim cost a
+            cycle of false-clean metrics.
