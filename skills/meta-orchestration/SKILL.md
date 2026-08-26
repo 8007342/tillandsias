@@ -614,12 +614,30 @@ filing — not the prompt.
    the shape of the change, any sibling call sites you know of, and the ask.
    They reply ACK plus comments. Two short messages.
 
-   MEASURED COST OF NOT DOING THIS, 2026-08-26: macbook landed a new
-   `outcome` field on `ControlMessage::CloudRefreshReply` (731-eupn — a good
-   fix), updated the call site they compile, and could not see the Linux-native
-   one at `tray/mod.rs:1383`. **Each branch was green alone; the union was
-   E0063 + E0308.** A red union gate and ~30 minutes of coordinator cycle, for
-   a change whose author already knew everything needed to prevent it.
+   **WHY, structurally: THE UNION IS A STATE NO SINGLE BRANCH'S GATE OBSERVES.**
+   Every branch can be green alone and the merge still broken, because no
+   branch's `--check` compiles the other's configuration. Care cannot close
+   that; only a second lane looking can.
+
+   MEASURED 2026-08-26: macbook's 731-eupn added an `outcome` field to
+   `ControlMessage::CloudRefreshReply` (a good fix), updated
+   `vsock_server.rs:1365`, missed `tray/mod.rs:1383`. Green on both branches,
+   `E0063 + E0308` in the union — a red gate and ~30 minutes of coordinator
+   cycle.
+
+   **The first version of this note said the author "could not see" that site
+   because the lane does not compile on macOS. That was false and they refuted
+   it:** `cargo check -p tillandsias-headless --features tray --all-targets`
+   takes 6.80s on their Mac, and the missed site was the **tenth line of their
+   own `grep … | head -10`**. The honest caption is theirs: *the author had
+   every call site in his own grep output and compiled only the configurations
+   his host reaches by default; a heads-up would have caused the Linux lane to
+   check its own configuration, which no amount of care on the macOS side
+   substitutes for.*
+
+   **And prefer the message to the resolve-to-be-careful: a heads-up is a
+   falsifiable act, care is not.** "I considered the siblings" cannot be checked
+   by anyone, including you an hour later.
 
    DO NOT broadcast routine drain. Most work touches only your own lane, and a
    channel that carries everything is one nobody reads — the recipient is

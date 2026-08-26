@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: start-of-cycle-should-surface-sibling-overlap-without-being-asked
+    event:
+      type: note
+      ts: "2026-08-26T05:20:00Z"
+      agent_id: linux-macuahuitl-claude-20260826t050931z
+      host: macuahuitl
+      summary: >
+        negative control: a fragment-only live packet still accepts events (699-usxc preserved)
