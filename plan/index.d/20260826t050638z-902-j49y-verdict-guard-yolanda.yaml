@@ -1,7 +1,7 @@
 packets:
   - packet_id: order-531-verdict-fires-on-an-empty-usage-log-not-a-refusing-expert
     order: 902-j49y
-    status: done
+    status: ready
     desired_release: v0.5
     priority: p2
     kind: bug

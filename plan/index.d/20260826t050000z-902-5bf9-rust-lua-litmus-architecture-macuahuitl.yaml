@@ -1,0 +1,132 @@
+packets:
+  - packet_id: a-rust-hosted-lua-step-form-for-litmus-offered-beside-shell-not-replacing-it
+    order: 902-5bf9
+    status: ready
+    desired_release: v0.6
+    priority: p1
+    kind: enhancement
+    release_target: fail-loud-diagnosis-milestone
+    title: |
+      offer a Rust-hosted Lua step form for litmus alongside `command:`, adopted opportunistically — with adoption MEASURED, because the identical experiment has been running since 2026-05-22 and has one adopter in 395 files
+    deliverable: |
+      a `steps:` key litmus authors may use instead of a shell string, plus the
+      counter that tells us whether anyone is using it
+    pickup_role: any
+    owner_host: any
+    depends_on: []
+    capability_tags:
+      - testing
+      - architecture
+      - fail-loud
+      - multi-host
+    estimated_hours: 20
+    context: |
+      OPERATOR DIRECTION, 2026-08-26: design a RUST+LUA approach, let the fleet
+      adopt it opportunistically as things break, `available` at v0.6, `enforced`
+      at v0.7, no migration — "we just keep going, things will converge."
+
+      THE SHAPE IS RIGHT AND WE ARE NOT STARTING FROM ZERO. Measured:
+
+        crates/tillandsias-litmus-rust          750 lines, a workspace member
+        litmus YAML already carries `rust_queries:` — a TYPED, NON-SHELL
+          assertion key
+        scripts/run-litmus-test.sh:896 run_rust_queries_for_litmus() already
+          DISPATCHES to that compiled binary, gated on `grep -qE '^rust_queries:'`
+
+      So "offer a non-shell step form beside `command:`" is not a new
+      architecture. It is a SECOND INSTANCE of a move this repo already made,
+      reusing an existing dispatch seam. That removes most of the risk the
+      operator was right to worry about.
+
+      THE MEASURED WARNING, AND IT IS THE WHOLE REASON THIS PACKET EXISTS:
+
+        `rust_queries` landed 2026-05-22 (dd8432548).
+        Litmus files using it today: 1.
+        Litmus files total:        395.
+
+      **We have already run the organic-adoption experiment, for three months,
+      and it produced 0.25% adoption.** The mechanism was available, strictly
+      better for its use case, and required no migration. Nobody used it.
+
+      That does NOT make the operator's plan wrong — opportunistic adoption is
+      still the right way to avoid a big-bang rewrite of the only trunk gate.
+      It makes ONE HALF of the plan unsupported: "organically adopted over time"
+      has a counterexample in this codebase, so v0.6-available -> v0.7-enforced
+      needs a forcing function and, before that, needs adoption to be OBSERVABLE.
+      Otherwise v0.7 arrives with three converted tests and a flip that breaks
+      the other 392.
+
+      This is the same lesson as everything else this week: an unobservable
+      property is indistinguishable from one that is not happening.
+
+      WHAT THE SHELL FORM COSTS TODAY, measured:
+
+        litmus `command:` fields                      2679
+        containing `;` or `&&` (programs, not commands) 1910  (71%)
+        containing a pipe                             1248
+        exact duplicates (the dedup case)               56  (2%)
+        set -o pipefail across scripts             346 files
+        PIPESTATUS references                            39
+
+      The 2% duplication is why this packet does NOT propose a composition/DAG
+      engine: there is no measurable redundancy to reclaim. The 71% is the real
+      finding — two thirds of our assertions are shell PROGRAMS embedded in YAML
+      strings, unlintable and yielding one exit status at the end.
+
+      WHY LUA RATHER THAN MORE BASH, and the argument is not taste. POSIX shell
+      HAS NO ANSWER HERE: `pipefail` is not POSIX, `PIPESTATUS` is bash-only,
+      zsh spells it `pipestatus`, MSYS and dash have neither. Every workaround we
+      reach for is a non-portable extension, which is exactly why the same defect
+      keeps landing on a different lane each time.
+    outcome: |
+      A litmus author can express a multi-stage assertion with per-stage exit
+      codes and explicit error handling, and we can see how many have.
+    exit_criteria:
+      - 'A `steps:` key is accepted in litmus YAML beside `command:` and `rust_queries:`, dispatched from run-litmus-test.sh by the SAME pattern run_rust_queries_for_litmus() already uses. `command:` behaviour is byte-identical for every file that does not opt in — this is additive or it is nothing.'
+      - 'The Lua host exposes a DELIBERATELY SMALL stdlib and nothing else: `sh.run(argv...)` returning `{code, stdout, stderr}` (argv only, NEVER a shell string), `fs.read` rooted at the repo, and `expect.*`. `os.execute`, `io.popen` and unrooted `io.open` are NOT exposed. That sandbox is a load-bearing feature, not hardening theatre — it structurally prevents a fixture running `build.sh --install` against the live checkout, which is what destroyed a sibling''s uncommitted work on 2026-08-26.'
+      - 'ACCEPTANCE IS THE FIVE, NOT AESTHETICS. Demonstrate that the step form makes each of these unrepresentable or loud: (1) `| tee $LOG | head -30` truncating evidence via SIGPIPE; (2) `$?` after a pipeline returning `tail`''s status; (3) `${PIPESTATUS[0]}` empty under zsh; (4) `2>/dev/null` swallowing `ps: unknown option -- o`; (5) a captured log destroyed by the producing step''s own EXIT trap. A design that cannot show all five is not worth two systems.'
+      - 'PORTABILITY IS AN EXIT CRITERION, NOT A FOLLOW-UP. mlua with the `vendored` feature builds Lua from source and needs a working C toolchain — verified GREEN on linux, darwin AND msys before it is wired into `--check`. Three defects in eight hours on 2026-08-26 were primitives that worked only where they were authored; this is the guard-primitive rule (899-q9di) applied before landing rather than after.'
+      - 'ADOPTION IS COUNTED AND PRINTED. The gate emits `litmus-form: steps=<n> command=<n> rust_queries=<n>` every run. Without this, "organically adopted" is an assumption, and the rust_queries precedent says the assumption is wrong. The v0.7 enforcement decision is made against that number, by the operator, not inferred.'
+      - 'NEGATIVE CONTROL: a genuinely passing shell `command:` still passes, and a litmus file mixing `command:` and `steps:` runs both. No file is rewritten by this packet.'
+    verifiable_closure: |
+      One real existing litmus suite is expressed in `steps:` form, passes on
+      all three lanes, fails correctly when its producer fails mid-stage, and
+      the gate prints a form-adoption count that starts at 1.
+    notes: |
+      DO NOT MIGRATE ANYTHING under this packet. The operator was explicit and
+      is right: the gate is the only trunk protection since push CI was removed,
+      arrival is b=1.80 so mass conversion would flood the queue, and each
+      opportunistic conversion gets paid for by a real failure that gives someone
+      a reason to touch the file.
+
+      DO NOT BUILD A COMPOSITION/DAG ENGINE YET. The `A = B + C` reduction the
+      operator described is a real idea but 2% textual duplication does not
+      justify it. Textual overlap bounds only the textual case; if someone
+      demonstrates SEMANTIC overlap, that is a separate packet with its own
+      evidence.
+
+      SCOPE NOTE ON "TESTING INFRASTRUCTURE IS NOT A CRITICAL PATH": the operator
+      framed interpreted languages as acceptable in testing but never on an
+      end-user runtime or critical path. Worth stating plainly that the litmus
+      harness IS our most critical non-shipping path — `./build.sh --check` is
+      the only thing standing between a bad commit and the trunk. That does not
+      block this, but it means the Lua host earns the same portability and
+      fail-loud scrutiny as shipped code, not test-code latitude.
+
+      Go was considered and set aside: it adds a toolchain to every host,
+      including 4-core Silverblue boxes and the builder toolbox, for benefits a
+      Rust-hosted Lua already provides, and its test bodies would need
+      recompiling — which is the property that makes agent-authored tests cheap.
+    events:
+      - type: filed
+        ts: "2026-08-26T05:00:00Z"
+        agent_id: linux-macuahuitl-claude-20260826t041222z
+        host: macuahuitl
+        summary: |
+          Filed from operator direction after investigating rather than agreeing.
+          The investigation found the precedent already exists
+          (tillandsias-litmus-rust + rust_queries + the dispatch seam at
+          run-litmus-test.sh:896) and that it has ONE adopter in 395 files after
+          three months — which is the measured counterexample to the plan's
+          organic-adoption half and the reason the adoption counter is an exit
+          criterion.
