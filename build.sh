@@ -37,6 +37,14 @@ source "$_BUILDER_DIR/scripts/with-tillandsias-builder.sh"
 # overhead. PLEASE REVIEW: linux — shared-scope hook added from the
 # windows lane.
 source "$_BUILDER_DIR/scripts/with-wsl2-builder.sh"
+
+# When NIX_BUILD_LANE=container is set, transparently re-exec inside a
+# nix-enabled container backed by the persistent host nix store and the
+# enclave binary cache (order 917-zkge). The container provides nix with
+# flakes; builds pull from the enclave cache instead of cold-compiling.
+# When unset, byte-identical current behaviour (exit criterion 3).
+source "$_BUILDER_DIR/scripts/with-nix-builder.sh"
+
 unset _BUILDER_DIR
 
 # @trace spec:linux-native-portable-executable, spec:dev-build, spec:build-script-architecture, spec:windows-cross-build

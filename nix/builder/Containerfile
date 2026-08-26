@@ -1,0 +1,76 @@
+# nix/builder/Containerfile — minimal nix-enabled builder for crane builds
+#
+# Provides nix with flakes so the host can run `nix build` inside a container,
+# backed by the persistent host nix store and the enclave binary cache.
+#
+# The host store is mounted at /host-store at runtime (not /nix/store — the
+# container's own /nix holds the nix installation; see with-nix-builder.sh).
+# Substituter args (URL, public key, TLS CA) are passed at runtime.
+#
+# Build:  podman build -t tillandsias-nix-builder -f nix/builder/Containerfile .
+# Run:    scripts/with-nix-builder.sh nix build .#tillandsias-x86_64-musl
+
+FROM registry.fedoraproject.org/fedora-minimal:44
+
+# Install basic tools needed by the nix installer and runtime.
+RUN microdnf install -y --setopt=install_weak_deps=0 \
+    bash \
+    ca-certificates \
+    coreutils \
+    curl \
+    findutils \
+    gzip \
+    jq \
+    xz \
+    tar \
+    && microdnf clean all
+
+# Install nix by extracting the official binary tarball directly.
+# The official installer tries sudo even as root, so we bypass it.
+# The tarball contains /nix/store/... and /nix/var/... — strip one
+# component so they land at /nix/store and /nix/var respectively.
+RUN mkdir -m 0755 /nix && \
+    curl -L https://releases.nixos.org/nix/nix-2.35.2/nix-2.35.2-x86_64-linux.tar.xz \
+    | tar xJf - -C /nix --strip-components=1
+
+# Create the nix profile so `nix` is on PATH.
+# The tarball has store paths but no profile links; we create them manually.
+RUN mkdir -p /nix/var/nix/profiles && \
+    ln -s /nix/store/irfrbndi76zhkvqsfhmsn4a99iafck29-nix-2.35.2 /nix/var/nix/profiles/default && \
+    mkdir -p /root/.nix-profile && \
+    ln -s /nix/var/nix/profiles/default /root/.nix-profile
+
+# Put nix on PATH for all shells.
+ENV PATH="/nix/var/nix/profiles/default/bin:/root/.nix-profile/bin:${PATH}"
+
+# Configure nix: enable flakes, the nix-command feature, and the CA bundle.
+# Nix's bundled OpenSSL needs an explicit ssl-cert-file path — it doesn't
+# inherit the system's default on Fedora.
+RUN mkdir -p /root/.config/nix && \
+    { echo "experimental-features = nix-command flakes"; \
+      echo "store = /host-store"; \
+      echo "ssl-cert-file = /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"; \
+      echo "build-users-group ="; \
+    } > /root/.config/nix/nix.conf && \
+    mkdir -p /etc/ssl/certs && \
+    ln -sf /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem /etc/ssl/certs/ca-certificates.crt
+
+# The host store, TLS CA, and source tree are mounted at runtime:
+#   -v ~/.local/share/tillandsias/nix-store:/host-store
+#   -v /tmp/tillandsias-ca:/tmp/tillandsias-ca:ro
+#   -v $REPO_ROOT:/work
+#
+# The entry point is bash; the wrapper script execs commands inside.
+ENTRYPOINT ["/bin/bash"]
+
+# Neutralize the enclave-only proxy that containers.conf injects. GitHub
+# downloads fail with SSL mismatches when the proxy intercepts TLS.
+ENV http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY=""
+
+# Force nix's bundled libcurl/openssl to find the system CA bundle.
+# The nix binary's libcurl is compiled with a default CA path that doesn't
+# exist on Fedora; these env vars override it at every layer.
+ENV SSL_CERT_FILE=/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem \
+    CURL_CA_BUNDLE=/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem \
+    GIT_SSL_CAINFO=/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem \
+    NIX_SSL_CERT_FILE=/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem
