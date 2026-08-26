@@ -1,0 +1,70 @@
+events:
+  - packet_id: a-mode-only-regression-reached-the-trunk-past-the-only-gate
+    event:
+      type: verified
+      ts: "2026-08-26T01:00:00Z"
+      agent_id: lenovinha-opus5-metaorch-20260826t0055z
+      host: lenovinha
+      summary: |
+        THE TWO CRITERIA I DECLINED TO SELF-CERTIFY ARE NOW MEASURED, by yolanda
+        on real drvfs — the only host that could produce them. Reported to me
+        directly with full output rather than a verdict.
+
+        IDENTICAL DIGESTS, one Windows worktree, both sides of the WSL boundary:
+          Git Bash: f7e9c5e3a873235e613494b1f831e54bb9eafc72c58119281f604ee7bef83e73
+          WSL:      f7e9c5e3a873235e613494b1f831e54bb9eafc72c58119281f604ee7bef83e73
+        Byte-identical. The two pre-fix numbers on one tree were 8ca8074b… and
+        83e63835…, which is the deadlock.
+
+        PUSHES WITH THE HOOK ENFORCING, no --no-verify at any point:
+        40b5648e8..c17ce056a and c17ce056a..52e9978bb, both printing
+        ok:linux-next-merged:1 and a clean local-gate line.
+
+        FIXTURE PASSES BY WORKING, NOT BY GOING QUIET —
+        ok:mode-only-regression-fixture:all, rc=0, with case 2 a REAL pass and
+        exactly two arms skipping, both named, both the two I predicted. That
+        distinction is what the `git update-index --chmod` change bought: under
+        core.fileMode=false, `chmod` + `git add` records nothing, so the arm
+        would have failed for a reason having nothing to do with the stamp — and
+        would have looked like the fix not working.
+
+        My own clone was core.fileMode=false on ext4: it simulates the
+        DECLARATION, not drvfs. Not claiming those two was correct.
+  - packet_id: a-mode-only-regression-reached-the-trunk-past-the-only-gate
+    event:
+      type: note
+      ts: "2026-08-26T01:05:00Z"
+      agent_id: lenovinha-opus5-metaorch-20260826t0055z
+      host: lenovinha
+      summary: |
+        A LOAD-BEARING NUMBER IN gate-stamp.sh WAS A GHOST, and it is corrected.
+
+        The file budgeted "~100-150 ms per spawn on a Windows/MSYS host" — the
+        figure that justified 675-dkif's batching design. Inherited, never
+        measured. yolanda measured it, 1000 iterations:
+
+          Git Bash     /bin/true 17.58 ms   sha256sum 18.51 ms
+          WSL          /bin/true  0.69 ms   sha256sum  1.33 ms
+          yoga native  /bin/true  0.32 ms   sha256sum  0.80 ms
+
+        The real MSYS floor is 17.6 ms — 6-9x lower — and it was stale IN THE
+        DIRECTION THAT MADE IT SCARIER, which is the direction that quietly
+        justifies whatever it is cited for. It was also aimed at the wrong
+        process: `./build.sh --check` runs inside WSL at 0.69 ms, 2.2x yoga's
+        native floor rather than 55x, so Windows spawn cost was never what made
+        the gate slow there. The filesystem bridge is (macbook: a no-op cargo
+        probe at 11.4 s over /mnt/c against ~165 ms on two native hosts).
+
+        THE DESIGN SURVIVES, ONLY ITS ARITHMETIC WAS FICTION. The pre-push hook
+        runs in Git Bash at 17.6 ms a spawn, so thousands of per-file spawns is
+        still tens of seconds of pure overhead on every push, and batching still
+        wins comfortably. The comment now carries the measured figures, the date
+        and the measuring host, so the next person designs against data.
+
+        Worth stating as a pattern, because tonight produced three of these: an
+        unmeasured number in a comment is indistinguishable from a measured one
+        at reading time, and this class of ghost always errs toward justifying
+        the status quo. Same shape as yoga's symlink hypothesis (falsified here:
+        both of yolanda's lanes report 77 index symlinks and 0 materialised,
+        core.symlinks=false on both) and as the spawn hypothesis for the slow
+        gate (falsified — it is the filesystem).
