@@ -1,0 +1,89 @@
+packets:
+  - packet_id: the-daily-maintenance-gate-uses-a-local-day-boundary-in-a-utc-fleet
+    order: 895-j8ag
+    status: ready
+    desired_release: v0.5
+    priority: p3
+    kind: bug
+    release_target: fail-loud-diagnosis-milestone
+    title: |
+      check-daily-maintenance.sh compares against the LOCAL date while every other cycle timestamp is UTC, so hosts west of UTC keep reading "current" for hours after the day has rolled over
+    deliverable: |
+      one day boundary for the fleet, or a marker that says which boundary it used
+    pickup_role: any
+    owner_host: any
+    depends_on: []
+    capability_tags:
+      - meta-orchestration
+      - multi-host
+      - fail-loud
+      - time
+    estimated_hours: 1
+    context: |
+      MEASURED on macuahuitl 2026-08-26T00:32:37Z, at Start Of Cycle.
+
+        scripts/check-daily-maintenance.sh check
+          -> ok:daily-maintenance-current:2026-08-25
+
+      The marker is dated 2026-08-25 and the UTC date is 2026-08-26, so the gate
+      should have read `due:stale:2026-08-25` and asked the cycle to run the
+      maintenance body. It did not, because:
+
+        check-daily-maintenance.sh:72
+          TODAY="${TILLANDSIAS_DAILY_MAINTENANCE_TODAY:-$(date +%Y-%m-%d ...)}"
+
+      `date` without `-u` is the HOST-LOCAL date. This host is UTC-7, so locally
+      it was still 2026-08-25 17:32 and the marker matched.
+
+      The stamp writer already knows better — line 123 records BOTH
+      `date=<local>` and `utc=<utc>` — so the file carries the ambiguity and the
+      comparison resolves it the other way.
+
+      WHY IT MATTERS IN A FLEET RATHER THAN ON ONE HOST. Every other timestamp in
+      this loop is UTC by convention: cycle identity, loop-status `--ts`, the
+      attestation ledger, fragment filenames. So the day boundary is the one
+      clock in the cycle that is host-local, and hosts in different offsets
+      disagree about which day it is. THE SAME MARKER READS `current` ON ONE HOST
+      AND `stale` ON ANOTHER AT THE SAME INSTANT. On this fleet the practical
+      effect is a host west of UTC skipping the maintenance body for up to its
+      offset in hours after the day rolls; on a fleet spanning more offsets it
+      would also mean two hosts each believing the other has already run it.
+
+      SMALL, AND REAL. p3 because the consequence is a delayed maintenance body
+      rather than a wrong verdict about the tree, and because the fleet is
+      currently one operator in one region so the offsets do not yet diverge
+      between hosts. Filed rather than fixed unilaterally because changing the
+      day boundary changes WHEN the gate fires on every host, and that is a
+      fleet-timing change rather than a bug fix — the same reason a stamp-format
+      change (887-bz88) forced one re-run per host.
+    outcome: |
+      The fleet agrees on when a day starts, or a reader can tell which boundary
+      a marker used.
+    exit_criteria:
+      - 'The comparison and the stamp use the SAME boundary, and it is named in the file rather than implied. Either is defensible — UTC matches every other cycle timestamp; local matches operator working days — but it must be one, chosen once, and stated.'
+      - 'A fixture proves the boundary: with TILLANDSIAS_DAILY_MAINTENANCE_TODAY pinned either side of the chosen rollover, the verdict flips exactly once and at the right instant.'
+      - 'NEGATIVE CONTROL: the existing verdict grammar is unchanged — ok:daily-maintenance-current / due:stale / due:no-marker / skip:forge-exempt all still emit as today, since callers branch on those tokens.'
+      - 'Whichever is chosen, the marker keeps recording BOTH date= and utc= (it already does), so a host reading an old marker can tell which boundary produced it.'
+    verifiable_closure: |
+      On a host at a non-zero UTC offset, the gate's verdict changes at the
+      chosen boundary and not at the other one, demonstrated by pinning
+      TILLANDSIAS_DAILY_MAINTENANCE_TODAY either side of it.
+    notes: |
+      Do NOT fix this by making the stamp local-only and calling it consistent.
+      The value of `utc=` on the line is that it lets a future reader resolve an
+      ambiguity like this one; removing it to make the file self-consistent
+      destroys the evidence that made the defect findable.
+
+      Related in shape, not in cause: 864-t4nq (a host that never armed a
+      scheduler reads identically to one that stopped) is the other place where
+      the loop's sense of time is ambiguous from outside.
+    events:
+      - type: filed
+        ts: "2026-08-26T00:36:00Z"
+        agent_id: linux-macuahuitl-fable5-20260825t224835z
+        host: macuahuitl
+        summary: |
+          Found at Start Of Cycle by noticing that a gate reported `current`
+          against a marker dated yesterday, and reading the comparison rather
+          than assuming a stale marker. The stamp writer already records both
+          boundaries, which is what made the diagnosis a one-line read.
