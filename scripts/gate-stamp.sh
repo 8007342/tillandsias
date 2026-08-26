@@ -219,11 +219,27 @@ compute() {
     # Hash the link target text instead. Refuse any other non-file entry rather
     # than silently claiming that an unmeasured tree was validated.
     # PROCESS COUNT IS THE BUDGET (order 675-dkif, 2026-08-10). The original loop
-    # spawned sha256sum once (twice, with the $() subshell) PER FILE. On Linux
-    # that is the advertised ~60ms; on a Windows/MSYS host a process spawn
-    # costs ~100-150ms, so ~4000 files became a ~20-MINUTE pre-push hook —
-    # which is precisely the "multi-minute hook gets --no-verify'd" failure
-    # this stamp exists to avoid. Classification uses bash builtins (no
+    # spawned sha256sum once (twice, with the $() subshell) PER FILE, which is
+    # precisely the "multi-minute hook gets --no-verify'd" failure this stamp
+    # exists to avoid.
+    #
+    # SPAWN FLOORS, MEASURED 2026-08-26 (order 895-bkrn), 1000 iterations of
+    # `/bin/true` per lane — this replaces an earlier "~100-150ms on a
+    # Windows/MSYS host" figure that nobody had re-measured and that was too
+    # high by 6-9x:
+    #
+    #   Git Bash / MSYS   17.58 ms      (PE32+ coreutils)
+    #   WSL2 guest         0.69 ms      (ELF coreutils)
+    #   bare-metal Linux   0.32 ms      (yoga, ELF)
+    #   macOS              1.00 ms      (macbook, Mach-O)
+    #
+    # The batching below is still right — 17.58 ms x ~4000 files is ~70s in a
+    # pre-push hook, and that alone justifies it. But note WHERE the cost is:
+    # the Windows GATE re-execs into WSL2, where spawning is near-native, so it
+    # is the Git-Bash-side hook that pays the MSYS floor, not the gate. Anyone
+    # re-deriving this should re-measure rather than inherit these numbers too.
+    #
+    # Classification uses bash builtins (no
     # forks), regular files are batch-hashed by xargs in a handful of
     # sha256sum invocations, and only symlinks (rare) pay a per-entry spawn.
     # The emitted frames were BYTE-IDENTICAL to the per-file implementation,
