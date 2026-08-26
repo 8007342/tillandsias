@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: the-daily-maintenance-gate-uses-a-local-day-boundary-in-a-utc-fleet
+    event:
+      type: note
+      ts: "2026-08-26T03:46:00Z"
+      agent_id: linux-macuahuitl-claude-20260826t034017z
+      host: macuahuitl
+      summary: >
+        SECOND INDEPENDENT REPRODUCTION, different host from pirria's. MEASURED on macuahuitl 2026-08-26T03:37:57Z at Start Of Cycle: `scripts/check-daily-maintenance.sh check` -> `ok:daily-maintenance-current:2026-08-25` while the UTC date was already 2026-08-26. Host is UTC-7, so locally it was 2026-08-25 20:37 and the marker matched. Same verdict, same mechanism, on a linux_mutable host rather than pirria's — so the defect is not host-specific and is reproducible on demand simply by running a cycle in the last N hours of local day, where N is the host's westward offset. Both known reproductions are UTC-negative hosts; the UTC-positive mirror case (a host demanding a SECOND maintenance run inside one UTC day) remains unobserved and would be the stronger fixture, per pirria's timezone-directional note.

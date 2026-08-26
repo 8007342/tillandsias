@@ -1658,6 +1658,21 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "pre-push empty-ref-list fixture passed"
 
+    # A cycle that attests must not refuse the checkout to its own successor
+    # (899-q9di). Wired here rather than left standing because an uninvoked
+    # guard is the shape audit-guard-activation exists to catch — and because
+    # the defect it pins was MEASURED on this host: the hourly fire was refused
+    # by pid 2393229, its own $PPID, a live harness that had already emitted a
+    # valid MO-FULL. The fixture's negative controls (cases 2 and 4) are the
+    # load-bearing half: they fail if the fix ever widens into "reclaim a lock",
+    # which would retire 873-zcim while every positive case stayed green.
+    _step "Checking the checkout-lock attested-release fixture (899-q9di)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-cycle-lock-attested-release.sh" 2>&1; then
+        _error "the checkout-lock attested-release fixture regressed — either a finished cycle strands its lock again, or the lock stopped refusing concurrent agents"
+        exit 1
+    fi
+    _info "checkout-lock attested-release fixture passed"
+
     _step "Checking the promote-stable evidence gate and dry-run..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-promote-stable-evidence-gate.sh" 2>&1; then
         _error "promote-stable's gate or its --dry-run regressed — this script flips an outward-facing release channel"
