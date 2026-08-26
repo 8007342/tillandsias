@@ -50450,6 +50450,26 @@ plan_index:
         tool then confirms that belief by accepting it.
       events:
         - type: note
+          ts: "2026-08-26T05:41:17Z"
+          agent_id: "linux-macuahuitl-claude-20260826t054116z"
+          host: macuahuitl
+          summary: |
+            THE PACKET'S TITLE UNDERSTATES WHO THE CALLER IS, and two hosts have now hit it the same way. Recording after the fix so the framing does not mislead a future reader of a closed packet.
+
+            The title says "a ref that resolves to no packet" and reads like a typo case. yolanda hit it independently on 2026-08-26 while filing a compaction finding: they appended to 582-4wdi, append-event accepted it, and the gate caught an event attached to nothing -- because 582-4wdi HAS BEEN ARCHIVED.
+
+            Their framing, which is better than the packet's: "The likelier path is an id that was valid when the author last read the ledger and archived since -- and the archiver moved 801 PACKETS IN THIS CYCLE ALONE. A host citing a packet it worked with days ago is the expected caller, not a careless one."
+
+            That changes the packet's character in two ways worth knowing:
+
+            (1) FREQUENCY. With ~800 packets archived per compaction cycle, an agent citing work from days ago is normal traffic. This refusal will fire routinely, not rarely. A message tuned for "you made a mistake" would be wrong most of the times it appears.
+
+            (2) THE MESSAGE IS ALREADY RIGHT, verified: it reads "Your reference is not a typo -- the target is finished. If this work is genuinely continuing, file a new packet citing <id>, or reopen it." That was written from macbook's case before yolanda's arrived, and it happens to serve the archived-since caller correctly. Recording the reasoning so a later edit does not "simplify" it back toward a typo warning.
+
+            BOTH INSTANCES WERE FOUND BY HITTING IT, NOT BY READING. macbook on 2026-08-26 minutes before a tag; yolanda hours later while doing something unrelated. Neither was careless and neither could have predicted it from the tool's behaviour, because the accept looked identical to a successful write.
+
+            macbook has separately retracted this packet's central claim -- the packet was never invented, it is real and archived -- after searching plan/index.yaml and plan/index.d but not plan/archive. That correction and this one are the same shape: the archive is part of the ledger and neither the tool nor its first two investigators treated it that way.
+        - type: note
           ts: "2026-08-26T04:36:40Z"
           host: macuahuitl
           summary: |
