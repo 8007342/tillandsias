@@ -78,7 +78,14 @@ download cache.
    read -r RES < <(scripts/resolve-smoke-release.sh "$CHANNEL")
    echo "$RES"   # channel:<c> tag:<vX> base:<url>
    SMOKE_TAG="$(printf '%s' "$RES" | sed -E 's/.* tag:([^ ]+) .*/\1/')"
-   SMOKE_BASE="$(printf '%s' "$RES" | sed -E 's/.* base:(\S+)$/\1/')"
+   # `[^ ]+`, NOT `\S`. `\S` is a GNU sed extension: BSD sed does not match it,
+   # so on macOS this substitution silently fails and SMOKE_BASE becomes the
+   # WHOLE line — `channel:daily tag:… base:https://…` — and every curl below
+   # is built from a malformed URL. The TAG line directly above already uses the
+   # portable form; the two were written at different times and only one lane
+   # ever ran them. Caught by dry-running step 0 on macOS before the first real
+   # macOS smoke, 2026-08-26.
+   SMOKE_BASE="$(printf '%s' "$RES" | sed -E 's/.* base:([^ ]+)$/\1/')"
    ```
    Note the tag — every filed finding cites it so issues are attributable to a
    specific published artifact AND channel.

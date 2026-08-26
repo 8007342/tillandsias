@@ -68,6 +68,27 @@ GNUDATE_EXEMPT='# gnu-date: ok'
 # Same exemption convention as the date rule: `# gnu-du: ok (<reason>)`.
 PAT_GNUDU='(^|[^A-Za-z0-9_])du( +-[A-Za-z-]+)* +-[A-Za-z]*b|(^|[^A-Za-z0-9_])du[^|;&()]* --bytes'
 GNUDU_EXEMPT='# gnu-du: ok'
+# GNU-sed-only PERL CHARACTER CLASSES (\S \s \w \W \b \B \d \D). BSD sed does
+# not implement them, and — this is the dangerous part — it does not error
+# either: the pattern simply fails to match, so a substitution silently leaves
+# the input UNCHANGED and whatever consumed it gets the whole line instead of
+# the captured field.
+#
+# This is the family behind 803-bqte, the GNU-sed `\b` extension that made
+# three markers write-only on macOS while every self-test passed on Linux —
+# cited in the comments of this very file and, until now, not guarded by it.
+# Measured again 2026-08-26 on tlatoanis-macbook-air: the curl-install e2e
+# runbook parsed SMOKE_BASE with `sed -E 's/.* base:(\S+)$/\1/'` while the
+# line directly above it used the portable `[^ ]+`. On macOS SMOKE_BASE became
+# the entire `channel:… tag:… base:…` line and every release URL built from it
+# was malformed. Two adjacent lines, one portable, one not, and only one lane
+# ever ran them.
+#
+# Use a bracket expression (`[^ ]`, `[[:space:]]`, `[[:alnum:]_]`) instead.
+# Scoped to sed invocations so a `\d` in an awk or grep -P call elsewhere does
+# not trip it. Line-level exemption: `# gnu-sed: ok (<reason>)`.
+PAT_GNUSED='(^|[^A-Za-z0-9_])sed[^|;&()]*\\[SsWwBbDd]'
+GNUSED_EXEMPT='# gnu-sed: ok'
 
 in_allowlist() {
   case " $ALLOWLIST " in
@@ -216,6 +237,29 @@ for f in $SCAN_FILES; do
   if [ -n "$gnudu_bad" ]; then
     echo "[check-bash-dialect] UNEXEMPTED GNU-du-ism in '$f' (BSD du REFUSES -b, so the substitution is empty and a '|| n=0' fallback silently becomes the answer):" >&2
     printf '%s' "$gnudu_bad" | head -3 >&2
+    unguarded=$((unguarded + 1))
+  fi
+
+  # GNU-sed perl classes. Judged per line like the date and du rules. No
+  # following-window escape here: unlike `du`, there is no portable sed arm you
+  # can put beside a non-portable one — the substitution either uses a bracket
+  # expression or it does not. Exempt only via the raw-line marker.
+  gnused_bad=""
+  _gs="$(code_of "$f" | grep -nE "$PAT_GNUSED" || true)"
+  if [ -n "$_gs" ]; then
+    while IFS= read -r _h; do
+      [ -n "$_h" ] || continue
+      _ln="${_h%%:*}"
+      if sed -n "${_ln}p" "$f" | grep -qF "$GNUSED_EXEMPT"; then
+        continue
+      fi
+      gnused_bad="${gnused_bad}${_h}
+"
+    done <<< "$_gs"
+  fi
+  if [ -n "$gnused_bad" ]; then
+    echo "[check-bash-dialect] UNEXEMPTED GNU-sed class in '$f' (BSD sed does not implement \\S \\s \\w \\b \\d and does NOT error — the substitution silently leaves the input unchanged, so the consumer gets the whole line; see 803-bqte):" >&2
+    printf '%s' "$gnused_bad" | head -3 >&2
     unguarded=$((unguarded + 1))
   fi
 done
