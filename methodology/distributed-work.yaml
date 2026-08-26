@@ -1987,3 +1987,103 @@ distributed_work:
     consumers:
       - "skills/advance-work-from-plan/SKILL.md §1.4 (Create Agent ID) and §3 (claim events)"
       - "scripts/mo-full-attest.sh (shares tillandsias_node_name for its ledger host label)"
+
+  sibling_heads_up_protocol:
+    rationale: >
+      Hosts can message each other directly (ListAgents / SendMessage over
+      Remote Control). The capability is NEW and agents do not discover it on
+      their own — the coordinator stumbled onto it on 2026-08-25 after months
+      of the fleet coordinating exclusively through the ledger and the trunk.
+      A ledger is an excellent record and a terrible way to say "I am about to
+      change a thing you depend on", because it is read AFTER work, not before.
+    the_defect_this_prevents: >
+      THE STRUCTURAL ARGUMENT, which holds regardless of anyone's diligence:
+      THE UNION IS A STATE NO SINGLE BRANCH'S GATE OBSERVES. Every branch can be
+      green alone and the merge still broken, because no branch's `--check` ever
+      compiles the other's configuration. Care does not close that gap; only a
+      second lane looking does.
+    worked_example: >
+      MEASURED 2026-08-26. macbook landed 731-eupn on osx-next: CloudRefreshReply
+      gained an `outcome` discriminator so an empty project list from a FAILED
+      fetch stops being indistinguishable from a confirmed-empty account. Good
+      fix. They updated vsock_server.rs:1365 and missed tray/mod.rs:1383. Each
+      branch was green alone; the union was E0063 + E0308, costing a red gate
+      and ~30 minutes of coordinator cycle.
+
+      THE CAPTION MATTERS AND THE FIRST VERSION OF IT HERE WAS FALSE. This
+      section originally said the author "could not see" the Linux site because
+      that lane does not compile on macOS. macbook checked and refuted both
+      halves: `cargo check -p tillandsias-headless --features tray --all-targets`
+      finishes in 6.80s on their Mac (the `tray` feature's deps — image, zbus,
+      zvariant — are cross-platform and nothing target-gates the file), and the
+      missed call site was THE TENTH LINE of their own
+      `grep -rn CloudRefreshReply ... | head -10`. They had it on screen and let
+      a `head` boundary decide where the survey ended.
+
+      So the accurate caption, in their words: the author had every call site in
+      his own grep output and compiled only the configurations his host reaches
+      by default; a heads-up would have caused the LINUX LANE to check its own
+      configuration, which no amount of care on the macOS side substitutes for.
+
+      Kept in this form deliberately. An exculpatory example teaches a reader
+      that the defect was unavoidable, which is both false and demotivating; the
+      protocol does not need it, because the structural argument above is enough.
+    why_a_message_and_not_more_care: >
+      A HEADS-UP IS A FALSIFIABLE ACT AND CARE IS NOT (yoga, 2026-08-26).
+      "I considered the siblings" cannot be checked by anyone, including its
+      author an hour later. "I sent a message naming the surface, and lenovinha
+      ACKed" exists in two transcripts and a ledger. Same reason
+      `cross_host_relay_provenance` works: it replaced a disposition with an
+      artifact.
+
+      Evidence that care is the wrong lever, self-audited: within an hour of
+      this section landing, yoga reviewed their own night and found FOUR
+      shared-surface changes shipped with zero heads-ups — including wiring a
+      NEW GATE into `build.sh --check` (build.sh:2016), which every host then
+      runs on every gate. Had it been wrong, the whole fleet goes red at once
+      and the author is the only one who cannot see it. None of the four broke a
+      sibling, and yoga's own summary of that is the point: "the union was green
+      because the changes happened to be self-contained, not because I
+      established that before landing them — that is luck presented as
+      diligence."
+    when_to_send:
+      - >
+        BEFORE changing a SHARED SURFACE: a wire type or shared struct, a
+        script another lane executes, a litmus/YAML schema, a methodology rule,
+        or any guard wired into `./build.sh --check`. These are the changes
+        whose blast radius leaves your lane.
+      - >
+        BEFORE taking a packet whose live claim overlaps a sibling's. At Start
+        Of Cycle run `tillandsias-plan expire-claims --list-live`; if a live
+        claim touches the surface your batch touches, message that host BEFORE
+        implementing, not after.
+      - >
+        WHEN YOU LAND something a sibling is waiting on — "pull when you are
+        done" — so a blocked host stops guessing whether it is blocked.
+    when_NOT_to_send:
+      - >
+        Routine drain confined to your own lane. Most work is this. A channel
+        that carries everything is one nobody reads, and interrupting a working
+        agent has a real cost — it is mid-cycle, holding a checkout lock, and
+        its context is expensive.
+      - >
+        Anything already unambiguous in the ledger. The heads-up is for what the
+        ledger CANNOT carry in time: intent, before the fact.
+    shape: >
+      Low ceremony, deliberately. HEADS UP: the surface you are touching, the
+      shape of the change, any sibling call sites you already know of, and the
+      ask. The recipient replies ACK plus comments — either "no sites on this
+      lane" or "site at <path>; I will take it" / "you take it". Two messages,
+      under a minute each. This is not a design review and must not become one.
+    the_honest_caveat: >
+      A prose rule that depends on an attentive agent is a suggestion, not a
+      constraint — this file says so elsewhere and the fleet proved it twice in
+      one night (a documented `tee | head` trap walked into hours after being
+      read; a documented skip-flag missed by the release runbook). So the
+      forcing function is the Start Of Cycle live-claim check above, which is
+      mechanical, and the honest expectation is that THIS SECTION ALONE WILL BE
+      HONOURED INCONSISTENTLY until a check surfaces the overlap without being
+      asked. That check is worth filing rather than assuming.
+    consumers:
+      - "skills/meta-orchestration/SKILL.md (Start Of Cycle 2a) — note .claude/skills is a SYMLINK to this path; cite the real one"
+      - "skills/coordinate-multihost-work/SKILL.md"

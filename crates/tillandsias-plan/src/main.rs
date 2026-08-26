@@ -5044,6 +5044,42 @@ fn main() {
                 eprintln!("error: {}", unresolved_reason(&ledger, reference));
                 std::process::exit(1);
             };
+            // 896-f8ti. `resolve()` falls through to the ARCHIVE as its last
+            // lookup (lib.rs:763). That ordering is CORRECT and deliberate for
+            // reads — its own comment defends it — and wrong for a WRITE.
+            //
+            // The same comment names the fix it did not apply: "Callers that
+            // must distinguish the two ask [`Self::is_archived`]; `status`, the
+            // answer rows and the citation path all do." Three read paths ask.
+            // This, the one write path, did not.
+            //
+            // MEASURED 2026-08-26: `append-event 624-q4jj` on macOS resolved to
+            // the real, archived, COMPLETED packet
+            // `macos-unstable-channel-installer-validation`
+            // (plan/archive/packets-2026-08.yaml:6033), wrote an event for it,
+            // and — since an archived packet has no block in the live base —
+            // the 699-usxc arm filed a NEW FRAGMENT no live reader ever folds.
+            // Every step behaved as designed; the composite blocked a release
+            // preflight an hour later on a different host.
+            //
+            // The refusal is SEPARATE from the not-found refusal above, because
+            // the two need different remedies and reporting this one as "check
+            // your ref" sends the author hunting a typo that does not exist.
+            // The ref was right; the target is finished.
+            //
+            // NOTE this predicate deliberately does NOT test "present in the
+            // base": a packet declared only in an uncompacted fragment is LIVE,
+            // and 699-usxc exists to let it receive events. `is_archived` is
+            // true only for genuinely archived work, so that path is untouched.
+            if ledger.is_archived(&target) {
+                eprintln!(
+                    "error: {reference} resolves to {target}, which is ARCHIVED (completed work). \
+                     Events belong on live packets; an event appended here lands in a fragment no \
+                     reader folds. Your reference is not a typo — the target is finished. If this \
+                     work is genuinely continuing, file a new packet citing {target}, or reopen it."
+                );
+                std::process::exit(1);
+            }
             // 772-4se9: identity resolves AFTER the ref so an unresolvable
             // reference still reports as such (pinned by
             // litmus:append-event-rejects-unknown-flags-shape), but BEFORE
