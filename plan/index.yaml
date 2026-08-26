@@ -25903,6 +25903,30 @@ plan_index:
 
       events:
         - type: note
+          ts: "2026-08-26T16:13:22Z"
+          agent_id: "macos-tlatoanis-macbook-air-opus5-20260826t161322z"
+          host: tlatoanis-macbook-air
+          summary: |
+            CORRECTION TO MY OWN NOTE OF ~4h AGO. I listed THREE collapsed facts on this host. ONE OF THEM IS NOT A COLLAPSE — it is the design working, and it is the very engine-qualification this packet proposes, already implemented for the GPU. Retracting it, and the two that survive turn out to share a single root cause I did not name.
+
+            RETRACTED: `accel_gpu=present-unusable` IS CORRECT BY DESIGN.
+            accel_probe.rs documents it explicitly: "The device is real and present; it is only unreachable by the engines we ship today. That is exactly the present-unusable state `accel_envelope` already renders." The same comment names the alternative as the bug — reporting `accel_gpu=none` would make "a machine with a healthy GPU indistinguishable from one that has none", and those are different engineering problems ("buy hardware" versus "ship a lane").
+
+            So the GPU is the ONE device on this host that already has the side/engine qualification this packet is asking for. I read a correct answer as a defect because it was adjacent to two real ones. Found by reading 657-zm2n (macos-accel-probe-truthfulness), which states it plainly and which I should have found before writing the note rather than after.
+
+            WHAT SURVIVES, AND THE ROOT CAUSE IS ONE THING, NOT TWO:
+              accel_npu=none      — enumerate_npus reads /sys/class/accel
+              accel_ram_gb=-      — ram_gb reads /proc/meminfo (accel_probe.rs:421)
+            NEITHER PATH EXISTS ON DARWIN. Both produce an answer that reads as a fact about the hardware and is actually a fact about the probe's filesystem assumptions. This machine has a Neural Engine and 16 GiB of unified memory; `sysctl hw.memsize` returns 17179869184 and `ioreg` returns 314 ANE matches.
+
+            So the sharper statement is: THE PROBE HAS EXACTLY ONE DARWIN-AWARE DEVICE ARM — the Metal GPU, given explicit host-native-lane treatment under PROBE-7 — AND EVERY OTHER FACT IT REPORTS ON macOS COMES FROM A LINUX-ONLY PATH THAT SILENTLY YIELDS ABSENCE. That is a better finding than the three-collapses framing it replaces, because it names why the GPU is right and the others are wrong, rather than treating them as three instances of one thing.
+
+            It also sharpens what this packet needs: `unobservable-from-this-side` does not fit either survivor. The ANE and the RAM are both observable from this side, by a mechanism the probe does not implement. The missing distinction is not about SIDES at all — it is "the probe has no arm for this platform", which is a fourth state alongside exists/visible/drivable.
+
+            ALSO SUPERSEDED, and I repeated it from this packet's own context into my 793-qc6q note: "measurements: Vec<MeasurementRecord> ... has NEVER been populated". 805-wgbb added `merge_measurement` (accel_probe.rs:~315, `doc.measurements.push(m)`) as exactly the on-demand path that did not exist. `run_probe` still starts `measurements = Vec::new()` at :329, so the field is empty until something calls the merge — but the claim "nothing writes it" is now stale, and 793-qc6q's home for per-host crossovers already exists.
+
+            FOR WHOEVER PICKS THIS UP: 657-zm2n (pickup_role: macos, v0.6) already owns the macOS half of this territory and depends on macos-metal-sidecar-bringup. My measurements belong beside it, not as a reason to widen this packet.
+        - type: note
           ts: "2026-08-26T12:12:27Z"
           agent_id: "macos-tlatoanis-macbook-air-opus5-20260826t121227z"
           host: tlatoanis-macbook-air
@@ -26302,6 +26326,27 @@ plan_index:
             since order 480), not from a constant that happens to fit windows/Yolanda.
 
 
+      events:
+        - type: note
+          ts: "2026-08-26T16:10:27Z"
+          agent_id: "macos-tlatoanis-macbook-air-opus5-20260826t161027z"
+          host: tlatoanis-macbook-air
+          summary: |
+            WHY macOS IS THE MOST VALUABLE MISSING MEASUREMENT HERE, and why this host cannot supply it today. INFERENCE, not measurement — labelled as such because this packet is entirely about measured crossovers and an unmeasured contribution to it would be worse than none.
+
+            THIS PACKET'S CENTRAL CLAIM TURNS ON UNIFIED MEMORY: "decode is memory-bandwidth-bound and on UNIFIED memory the iGPU reads the same DRAM as the CPU — no bandwidth advantage, only compute". The measured evidence is one host — Yolanda, a Radeon iGPU sharing DRAM with the CPU — and the decode 0.5B crossover (CPU 78.68 vs GPU 63.75 t/s) is the single result the routing policy is built on.
+
+            APPLE SILICON IS A SECOND UNIFIED-MEMORY ARCHITECTURE THAT IS NOT A VARIANT OF THE FIRST. Same premise, different implementation: one physical pool, but with much higher memory bandwidth than a typical iGPU platform and a GPU that is not a bolted-on block. If the crossover is a PROPERTY OF UNIFIED MEMORY it should reappear here. If it is a property of that particular iGPU's compute-to-bandwidth ratio, it should NOT — and the routing policy would then be conditioned on the wrong thing, since it would be reading a hardware-specific number as an architectural law.
+
+            THAT IS A FALSIFIABLE PREDICTION AND IT IS THE REASON TO WANT THE MEASUREMENT, rather than "more data is better".
+
+            AND THIS HOST HAS AN NPU, which the Yolanda measurements do not cover at all: the M-series Neural Engine is present and CoreML-drivable (see my 793-qr4t note — the probe reports accel_npu=none because it looks for /sys/class/accel). A per-PHASE routing policy that names NPU as a target has no measured NPU numbers anywhere in the packet yet.
+
+            WHY I AM NOT SUPPLYING IT: there is no inference runtime on this host — ollama, llama-cli, llama-server and mlx_lm are all absent, and nothing in scripts/ wires one for Darwin. Installing one is a host mutation that pulls GB-scale model weights, which is not something to do unprompted on a machine whose substrate the fleet relies on. If the operator or a coordinator wants this leg, say so and I will set it up deliberately; it is a decision, not a step.
+
+            WHAT I WOULD MEASURE IF ASKED, so the request is cheap to make: the same four cells the packet already has for Yolanda — prefill and decode at 0.5B and 3B, CPU vs GPU — plus an embed row, medians not means, under the quiescence rule (record the commit before and after; discard if it moved) and the replication rule (n>=3, report the spread) that this fleet landed on 2026-08-25. Those two rules matter here specifically: tonight showed a heavy-tailed distribution where the mean sat at the 75th percentile, and a crossover reported as a single ratio is exactly the shape that hides.
+
+            accel_probe.rs's `measurements: Vec<MeasurementRecord>` (prefill_tps/decode_tps, never populated) is the right home, as 793-qr4t already notes.
     - packet_id: mcp-json-launcher-host-kind-compatibility
       order: 793-rb9u
       status: ready
