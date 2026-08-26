@@ -131,11 +131,39 @@ macOS:
 ```bash
 curl -fsSL "${SMOKE_BASE}/install-macos.sh" | TILLANDSIAS_RELEASE_BASE="${SMOKE_BASE}" bash 2>&1 \
   | tee target/smoke-e2e/01-install-macos.log
-# install-macos.sh extracts to /Applications (NOT ~/Applications; a stale
-# copy there would "verify" the wrong binary — live mixup 2026-07-16).
+INSTALL_RC=${PIPESTATUS[0]}; printf 'install_exit=%s\n' "$INSTALL_RC" \
+  | tee target/smoke-e2e/01-install-macos-exit.txt
+test "$INSTALL_RC" -eq 0
+
+# install-macos.sh extracts to /Applications — but FALLS BACK to
+# ~/Applications when /Applications is not writable, and this runbook then
+# verifies /Applications unconditionally. Assert which branch it took rather
+# than assuming: a stale ~/Applications copy plus a silent fallback is the
+# live mixup of 2026-07-16, and it "verifies" the wrong binary.
+test -d "/Applications/Tillandsias.app"
+! grep -q "not writable; using" target/smoke-e2e/01-install-macos.log
+
 "/Applications/Tillandsias.app/Contents/MacOS/tillandsias-tray" --version 2>&1 \
-  | tee target/smoke-e2e/01-version.txt || true
+  | tee target/smoke-e2e/01-version.txt
+test "${PIPESTATUS[0]}" -eq 0
+# EXACT, not `>=` and not "contains 0.4". Assertable at all only since
+# 635-bhkb: every macOS build answered `0.1.0` before it, so this lane could
+# not confirm which release it was testing even in principle.
+grep -qF "tillandsias-tray ${SMOKE_TAG#v} " target/smoke-e2e/01-version.txt
 ```
+
+> The same three assertions the Linux lane got in 727-kmks, plus two the macOS
+> lane needs and Linux does not. The install ran through `| tee` with no
+> `PIPESTATUS` capture and the version check ended in `|| true` — so a
+> curl-install that failed outright, and a `--version` that failed after it,
+> both exited 0 and the smoke walked on. That is the identical defect 727-kmks
+> fixed one lane over, left standing here, in the lane that had never once been
+> run against a published release.
+>
+> The two extra assertions are the `/Applications`-vs-`~/Applications`
+> fallback (the installer chooses, this runbook does not, and only one of them
+> is the path verified below) and the exact-tag match, which was not expressible
+> before 635-bhkb.
 
 Windows PowerShell (daily-channel pinned — the release publishes
 `install-windows.ps1` + the x64 tray zip since v0.3.260721.1; the installer
