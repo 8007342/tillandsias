@@ -19375,6 +19375,48 @@ plan_index:
         - 'Tests for: confirmed-empty renders (no repos); failed-fetch does NOT.'
 
       events:
+        - type: note
+          ts: "2026-08-26T05:22:04Z"
+          agent_id: "macos-tlatoanis-macbook-air-opus5-20260826t052204z"
+          host: tlatoanis-macbook-air
+          summary: |
+            I BROKE THE LINUX TRAY LANE WITH THIS CHANGE, AND THE EXCULPATION OFFERED TO ME IS FALSE — recording the accurate cause, because the coordinator cited this as the worked example for a new methodology section, and a wrong example teaches the wrong lesson.
+
+            WHAT HAPPENED: the outcome discriminator updated vsock_server.rs but not crates/tillandsias-headless/src/tray/mod.rs:1383, the Linux-native handler. Green on osx-next alone, green on linux-next alone, E0063+E0308 in the union. Fixed by macuahuitl at 21a3d4804.
+
+            THE OFFERED FRAMING was "you could not have caught it — that lane does not compile on your host". BOTH HALVES ARE FALSE, verified on this host:
+
+                $ cargo check -p tillandsias-headless --features tray --all-targets
+                Finished `dev` profile ... in 6.80s
+
+            tray/mod.rs sits behind `feature = "tray"`, whose deps are image/zbus/zvariant — all cross-platform, nothing target-gated. IT COMPILES ON DARWIN. I ran `--workspace --all-targets` and `--features listen-vsock --all-targets`, and never ran `--features tray`. That is a gap in WHAT I CHOSE TO COMPILE, not in what this host can compile.
+
+            AND I HAD THE CALL SITE ON SCREEN. Mapping construction sites I ran
+
+                grep -rn "CloudRefreshReply" --include='*.rs' crates/ | head -10
+
+            and the TENTH AND FINAL line of output was
+
+                crates/tillandsias-headless/src/tray/mod.rs:1387:  body: ControlMessage::CloudRefreshReply {
+
+            I read that output, chased the vsock_server site, and never returned to the last line. I TRUNCATED TO TEN AND TREATED THE TENTH AS THE END.
+
+            So: I found every call site, fixed the ones a compiler I happened to invoke complained about, and let a `head -10` boundary decide the rest. That is carelessness, not a structural blind spot, and it belongs on the record as such.
+
+            TWO MECHANICAL RULES I OWE THIS, both cheap, neither requiring a protocol:
+              * Changing a shared WIRE TYPE means `--workspace --all-targets` is NOT
+                sufficient. Enumerate the crate's features and compile each. A
+                feature-gated module is invisible to the default target set and is still
+                my code.
+              * Do not pipe a call-site survey through `head`. A truncated enumeration
+                reads exactly like a complete one and the boundary is invisible in the
+                output — tonight's own class, arrived at from the direction of my tooling:
+                `head -10` produces identical-looking output whether or not it saw
+                everything.
+
+            WHAT macuahuitl DID BETTER, and it is not a courtesy: they PROPAGATED the outcome to the Linux handler rather than substituting Unknown. Unknown would have compiled, passed every gate, and RESTORED four-outcomes-one-representation on Linux while macOS reported it correctly — reintroducing the exact defect this packet exists to end, on the lane I had not checked.
+
+            THE SECTION THEY WROTE IS STILL RIGHT and should keep a truthful example. The genuine argument needs no help from my case: THE UNION IS A STATE NO SINGLE BRANCH'S GATE OBSERVES, true regardless of anyone's care. My case supports it only in the accurate form — a heads-up would have caused the Linux lane to check ITS OWN configuration, which no amount of care on the macOS side substitutes for.
         - type: progress
           ts: "2026-08-26T04:22:56Z"
           agent_id: "macos-tlatoanis-macbook-air-opus5-20260826t042256z"
