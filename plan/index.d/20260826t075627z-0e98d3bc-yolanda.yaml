@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: wsl2-overhead-is-the-9p-bridge-not-the-vm-and-the-checkout-is-on-the-wrong-side
+    field: deliverable
+    value: 'the Windows checkout lives on the distro''s native ext4 rather than under /mnt/c — WHOLE CHECKOUT ONLY. The CARGO_TARGET_DIR half was removed 2026-08-26: measured, cargo is 10.6% of the gate (37s of 350s) while plan-ledger I/O is 41% and tree-wide hashing 20%, so relocating build artifacts cannot capture the win. Requires re-plumbing every Git-Bash-side path that resolves ./target/release/tillandsias-plan.exe, so it needs a quiet window and an operator decision.'
+    ts: "2026-08-26T07:56:27Z"
+    host: yolanda
+
+events:
+  - packet_id: wsl2-overhead-is-the-9p-bridge-not-the-vm-and-the-checkout-is-on-the-wrong-side
+    event:
+      type: note
+      ts: "2026-08-26T07:56:27Z"
+      host: yolanda
+      summary: >
+        the cheap option is measured not to work

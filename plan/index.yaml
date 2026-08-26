@@ -50436,6 +50436,37 @@ plan_index:
         - 'spawn floors: git bash 17.58ms, wsl 0.69ms, yoga native 0.32ms (1000 iterations each)'
         - yoga bare-metal baseline 170.5ms; macbook Darwin 161ms; yoga toolbox 178.5ms
       events:
+        - type: progress
+          ts: "2026-08-26T07:56:15Z"
+          agent_id: "windows-yolanda-claude-20260826t074500z"
+          host: yolanda
+          summary: |
+            MY OWN PROPOSED SHORTCUT IS FALSIFIED. Measured on yolanda 2026-08-26 on a quiescent tree (commit 1c9d5b417 before and after), forced warm gate, 350s total.
+
+            This packet's deliverable said "the checkout — or at minimum CARGO_TARGET_DIR", and its context argued a partial move "may capture most of the win at a fraction of the risk, since the build writes far more than it reads". That was an inference and it is WRONG.
+
+            WHERE THE 350s ACTUALLY GOES:
+
+              cargo (test -p tillandsias-plan + 2x clippy)   37.0s   10.6%
+              plan ledger I/O (archiver 105.1, arrival 21.6,
+                               MO-FULL ledger 18.1)         144.8s   41.4%
+              tree-wide hashing (ghost-trace ratchet 41.2,
+                                 gate stamp 28.3)            69.5s   19.9%
+              other scripts (sidecar 29.0, pre-push fixture
+                             9.9, bash dialect 7.5, plan-bin
+                             probe 6.2, RAG 5.2)             57.8s   16.5%
+
+            SO CARGO_TARGET_DIR COULD TOUCH AT MOST 37s OF 350s — 10.6%, and only if a native target dir made cargo free, which it would not. The cheap option does not exist.
+
+            The bridge cost is not in BUILDING. It is in READING THE LEDGER and HASHING THE TREE: 41% is plan/ ledger work (the archiver alone re-reads a 30k-line index), and 20% is walking ~4600 tracked files to compute a digest. Both are pure file I/O across 9P, both live in the checkout, and NEITHER is affected by where cargo writes its artifacts.
+
+            PREDICTION SCORING, stated before the measurement rather than fitted after: I predicted a PARTIAL win, reasoning that the slowest step (the plan archiver) does not live in target/. That direction was right. The MAGNITUDE was worse than I guessed — I expected the cargo portion to be substantial and it is a tenth. I also named the falsifying branch in advance: "if it barely moves, the cargo portion was never the cost and the deliverable should change." That is what happened.
+
+            CONSEQUENCE FOR THIS PACKET — the deliverable narrows to ONE option: move the whole checkout onto native ext4, or do nothing. I am removing the CARGO_TARGET_DIR half rather than leaving it as a tempting cheap alternative, because it is now measured not to work and a future reader would otherwise take it as the low-risk path.
+
+            WHY I AM NOT DOING THE MOVE IN THIS CYCLE, and this is a judgement I want on the record rather than a silent deferral: this host is currently the fleet's only unblocked Windows pusher during an active release cycle, and relocating the checkout would break every Git-Bash-side path that reaches ./target/release/tillandsias-plan.exe — which every cycle of mine invokes, and which the pre-push hook and the plan tooling resolve by path. That is not a config change, it is a re-plumbing of both userlands' view of one tree, and the failure mode is the host that verifies Windows going dark mid-release. It needs a quiet window and an operator decision, not a 4am drain cycle.
+
+            WHAT THE MEASUREMENT ALSO SUGGESTS, offered and not filed: the two biggest line items are worth attacking on their own merits regardless of the checkout's location. A 105s archiver check that re-reads the whole index, and a 41s ghost-trace ratchet, cost every host on every gate — they are merely 38.6x more visible here. A host with a fast filesystem pays them too, just quietly. That is a different packet and not mine to open.
         - type: note
           ts: "2026-08-26T00:53:44Z"
           agent_id: windows-yolanda-claude-20260825t203420z
