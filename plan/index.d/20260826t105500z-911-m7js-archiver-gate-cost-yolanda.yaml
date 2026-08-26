@@ -1,0 +1,78 @@
+packets:
+  - packet_id: plan-archiver-check-is-thirty-percent-of-every-gate
+    order: 911-m7js
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: optimization
+    title: the plan-archiver ready-set check is 105s of a 350s `./build.sh --check` — 30% of the gate, on every run, on at least one host
+    deliverable: either the archiver check gets cheaper (incremental, cached, or scoped to changed packets) or it moves off the per-commit gate onto a less frequent lane — plus a measurement showing what it costs on a native-filesystem host
+    pickup_role: any
+    release_target: convergence-velocity-milestone
+    capability_tags:
+      - build
+      - performance
+      - plan-ledger
+    estimated_hours: 4
+    context: |
+      MEASURED on yolanda 2026-08-26, quiescent tree (commit 1c9d5b417 before and
+      after), forced warm `./build.sh --check`, total 350s. Step profile:
+
+        105.1s  Checking the plan archiver preserves the ready set (831-ezea)
+         41.2s  Ratcheting ghost traces for the gate stamp (584-2qq2)
+         29.0s  Staging router sidecar
+         28.3s  Writing the gate stamp
+         21.9s  Running plan ledger tests (cargo test -p tillandsias-plan)
+         21.6s  Checking newly filed rows are independently schedulable (advisory)
+         18.1s  Checking the durable MO-FULL attestation ledger
+         (six more, all under 10s)
+
+      **The archiver check alone is 30% of the gate**, and it is the single
+      largest line item by a factor of 2.5 over the next one. It runs
+      `scripts/archive-plan-packets.sh --check`, which re-derives the ready set
+      across the whole folded ledger — `ok:archive-answerability:226/226 after
+      archiving 801 packets, ready set unchanged at 392` — on every commit, on
+      every host, whether or not the change touched `plan/`.
+
+      IT IS NOT THE `cargo run` ROOT CAUSE. Checked before filing, because a
+      neighbouring open row describes the pre-push gate burning 1050s of 1072s in
+      `cargo run -p tillandsias-plan -- check` — a cold debug build of a binary
+      that already exists in release. This is a different step: the archiver
+      resolves its binary through the shared probe
+      (`scripts/plan-binary-probe.sh`, `ensure_fresh_plan_binary`) and uses the
+      prebuilt release binary. Same symptom, different cause; do not fold them.
+
+      WHAT IS NOT MEASURED, AND A NEAR-MISS WORTH RECORDING. This host's gate
+      runs inside WSL2 over the 9P bridge, so the obvious hypothesis is that the
+      105s is bridge-attributable and would be far cheaper natively. **I could
+      not establish that, and I nearly reported a fabricated ratio for it.**
+
+      Running the same script standalone from Git Bash returned in 12.2s, which
+      against 105s looks like an 8.6x bridge penalty. It is not: the run
+      **bailed at line 33** with `toolbox: command not found` and produced two
+      lines of output, having done none of the work. 12.2s measured a failed
+      startup. The standalone WSL run (84.9s) also failed, with
+      `fail:archive-answerability:ready-listing-failed-before-sweep`, so it is
+      not a complete run either.
+
+      So: the 105s in-gate figure is real, complete and reproducible. Whether it
+      is bridge cost, ledger size, or algorithmic, is **UNMEASURED**, and a host
+      with a native filesystem should report its own number before anyone
+      optimises for the wrong cause. That comparison is the first exit criterion
+      precisely because this host cannot produce it.
+
+      WHY IT IS WORTH SOMEONE'S TIME REGARDLESS OF THE ANSWER: at 30% of a gate
+      that every host runs before every push, and with the ledger growing (801
+      packets archived in one sweep, 392 ready), this is a cost that scales with
+      the ledger rather than with the change. A one-line plan fragment pays the
+      same 105s as a workspace-wide refactor.
+    verifiable_closure: |
+      A native-filesystem host reports its own `./build.sh --check` step profile
+      for the archiver check, establishing whether the cost is filesystem or
+      ledger-size bound; and if it is ledger-bound, the check's duration stops
+      scaling with total packet count on an unchanged `plan/`.
+    evidence:
+      - 'forced warm gate 350s, quiescent tree 1c9d5b417, archiver step 105.1s'
+      - 'archiver resolves the prebuilt binary via plan-binary-probe.sh, not cargo run'
+      - 'standalone Git Bash run 12.2s is INVALID — bailed at line 33, no work done'
+      - 'standalone WSL run 84.9s is INVALID — fail:archive-answerability before sweep'

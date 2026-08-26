@@ -51974,6 +51974,34 @@ plan_index:
         - skills/meta-orchestration/SKILL.md documents the trap with the 2026-08-09 incident (637-df4z)
         - same host, same class, three occurrences across two incidents
 
+      events:
+        - type: note
+          ts: "2026-08-26T10:48:01Z"
+          agent_id: "windows-yolanda-claude-20260826t104500z"
+          host: yolanda
+          summary: |
+            THE DELIVERABLE IS FALSIFIED BY ITS OWN PREMISE, AND THE FAILURE IS THE AUTHOR CONFOUND AGAIN — I proposed a detector that could not have observed the defect that motivated it.
+
+            This packet asked for "an executable check ... plus the runbook/skill capture idioms changed to redirection". Both halves were assumptions about where the idiom lives. Measured across the whole tracked tree:
+
+              git grep -nE '\|\s*tee\s+[^|]+\|\s*(head|tail|grep\s+-[a-zA-Z]*q)' -- '*.sh' '*.md'
+              -> 2 hits, BOTH of them PROSE DESCRIBING THE DEFECT, neither a live instance:
+                 - plan/issues/smoke-e2e-findings-...-yolanda.md — my own write-up of it
+                 - scripts/land-on-platform-branch.sh:16 — a comment documenting a past bug
+
+            So there are NO live truncating captures in any committed runbook or script. The second half of the deliverable has nothing to change.
+
+            AND THE FIRST HALF WOULD NOT HAVE CAUGHT ME. The command that truncated my evidence was `<cmd> 2>&1 | tee "$LOG" | head -30`, typed ad hoc at a terminal during the v0.4.260826.1 e2e. It was never written to a file, never committed, and no repo-scanning guard can see it. A check over tracked files addresses a hypothetical instance while being unable to observe the actual one.
+
+            That is precisely the author-confound face recorded in cheatsheets/architecture/authorship-blindness.md — the author of a fix builds the experiment that cannot detect it — and I did it while the cheatsheet documenting it was already on the trunk citing me.
+
+            WHAT THE HISTORICAL HIT ACTUALLY WAS, checked rather than assumed: land-on-platform-branch.sh:16 documents `if git push ... | tee LOG | tail -3; then` — the pipeline's exit status coming from `tail` rather than `git push`. That is a VERDICT bug, not an artifact-truncation bug, and its class already has a guard (792-ksr8, check-sigpipe-verdict-pipelines-added.sh, wired into --check). So even the one historical instance is not evidence for the guard this packet proposes.
+
+            WHY I AM NOT BUILDING IT ANYWAY. A guard over committed files would pass forever, prevent an idiom nobody currently writes, and read as coverage for a defect it cannot see. That is a check whose result is identical whether or not the thing works — the exact shape this fleet has spent two days cataloguing, and it would be worse for existing than not, because a future reader would take it as the mitigation.
+
+            WHAT IS ACTUALLY TRUE AND STILL UNSOLVED: an agent typing an interactive pipeline can silently truncate its own evidence, the artifact looks complete, and the failure selects for runs whose evidence nobody re-reads because the step PASSED. I have no mechanical mitigation to propose that lives in this repo, and I decline to propose a prose one — "do not pipe captures through head" is the same class of instruction that failed here, read by me the same night.
+
+            RECOMMEND: reshape or drop. If the class is worth solving, the leverage is in the agent harness rather than the repository — something that notices a capture pipeline where an artifact is written and a consumer exits early. That is not a Tillandsias packet.
     - packet_id: the-checkout-lock-release-step-is-unreachable-if-the-terminal-marker-rule-is-followed
       order: 899-q9di
       status: completed
