@@ -289,8 +289,8 @@ if [ -z "$SEED" ]; then
     if [ -n "$_identity" ]; then
         SEED="${_identity}-$(date -u +%Y%m%d)"
     else
-        SEED="${TILLANDSIAS_HOST_KIND:-host}-$(date -u +%Y%m%d)"
-        echo "note: derive-host-identity.sh unavailable — seeding by host KIND, which COLLIDES across same-kind hosts" >&2
+        SEED="$(hostname -s 2>/dev/null || echo host)-$(date -u +%Y%m%d)"
+        echo "note: derive-host-identity.sh unavailable — seeding by hostname, which COLLIDES across same-named hosts" >&2
     fi
 fi
 
@@ -810,8 +810,16 @@ chosen_score="$(printf '%s\n' "$scored" | sed -n "${pick}p" | cut -f1)"
 [ -n "$chosen" ] || { echo "refused:no-eligible-work:could not choose an epic"; exit 1; }
 
 batch="$(printf '%s\n' "$rows" \
-    | awk -F'\t' -v e="$chosen" '$2==e' \
-    | sort -t"$(printf '\t')" -k1,1n -k3,3 -k4,4 \
+    | awk -F'\t' -v e="$chosen" -v maxo="$maxorder" '
+        $2==e {
+            urgency = 3 - $1;
+            onum = $3; gsub(/[^0-9].*$/, "", onum); onum = onum + 0;
+            neglect = maxo > 0 ? (10.0 * (maxo - onum) / maxo) : 0;
+            score = (2.0 * urgency) + neglect;
+            printf "%.3f\t%s\n", score, $0;
+        }' \
+    | sort -t"$(printf '\t')" -k1,1nr -k4,4 \
+    | cut -f2- \
     | head -n "$BUDGET")"
 
 # URGENCY OVERRIDE (order 645-n3h6). Reserve slot 1 for the globally
