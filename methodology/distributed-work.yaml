@@ -1368,6 +1368,59 @@ distributed_work:
         Stalling a cycle because MCP is down. "'Tis broken? keep goin'" — fall
         back, note it, continue.
 
+  the_lane_and_the_stamp_have_opposite_preconditions:
+    purpose: >
+      A host under push contention must choose which of the two acceptance paths
+      it is aiming for, because they cannot both be satisfied. THE LANE needs the
+      remote base present locally — a FRESH fetch. THE STAMP needs the tree
+      UNCHANGED since `./build.sh --check` passed — and a fetch+rebase changes the
+      tree and voids it. Fetching buys the lane and costs the stamp; not fetching
+      keeps the stamp and forfeits the lane.
+    authority: >
+      Derived by calmecacpilli 2026-08-26 from the hook itself, after yolanda
+      measured that the opposite advice was correct on a slow-gate host. Both
+      halves measured on the hosts that live in each regime.
+    which_regime_am_i_in: >
+      Decided by GATE DURATION against the contention interval, not by preference.
+      A cheap gate re-gates freely and should chase the lane. A gate longer than
+      the interval between sibling pushes cannot afford to void a stamp it already
+      holds, and should protect it — gate against the last fetch and push without
+      re-fetching. The crossover is roughly where gate duration exceeds the
+      inter-push interval; during the 2026-08-25 release burst that interval was
+      about three minutes.
+    the_evidence: >
+      FAST SIDE (calmecacpilli, 1.8-2.0 min gate): 4.0 gate re-runs for one landed
+      commit against 0 for fragment-only commits that rode the lane. Fetching late
+      minimises the staleness window and wins.
+      SLOW SIDE (yolanda, 276.5s gate, n=20): three lost races before landing, at
+      429s, 442s and 453s per re-gate, with trunk moving again during each. What
+      broke the treadmill was gating and pushing with NO fetch in between, because
+      the hook compares against the origin/linux-next the last fetch recorded.
+    it_narrows_the_window_it_does_not_close_it: >
+      Not fetching does NOT make a moved remote go away. If trunk actually
+      advanced, the push is rejected as non-fast-forward regardless of how fresh
+      the stamp is. The discipline buys a SHORTER INTERVAL between gate-end and
+      push. A host on a slow gate will still lose races; losing one is consistent
+      with this rule rather than a refutation of it. Sold as a guarantee it would
+      teach its user to distrust a correct rule the first time it loses.
+    path_eligibility_is_necessary_not_sufficient: >
+      The merge that pull_merge_cadence.pre_push_gate REQUIRES imports non-plan
+      paths — yolanda's refusal named scripts/check-credential-channel.sh, a file
+      they had never touched — so a plan-only commit stops qualifying for the lane
+      the moment its host obeys the merge rule. THE LANE IS THEREFORE
+      STRUCTURALLY UNAVAILABLE TO EVERY PLATFORM-BRANCH HOST on any push that
+      follows a merge, which is most of them. Widening WHICH paths qualify
+      (889-twhe) does not touch this. A platform-branch host's lever is the stamp,
+      not the lane.
+    anti_patterns:
+      - >
+        Broadcasting one host's push discipline fleet-wide without naming the
+        regime it was measured in. Done on 2026-08-25; it was a free win on three
+        hosts and an active trap on the fourth.
+      - >
+        Assuming the fast lane is available whenever the PATHS qualify. Path
+        eligibility is necessary and not sufficient.
+
   cross_host_relay_provenance:
     purpose: >
       A relay carries its provenance, and a relay is NEVER corroboration. Every
