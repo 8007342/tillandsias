@@ -146,6 +146,104 @@ else
     ok "no \$JQ inside any heredoc — generated scripts keep bare jq"
 fi
 
+# ── 4d. rg and openssl callers take the same dispatch. ─────────────────────
+for f in scripts/check-cheatsheet-refs.sh scripts/test-forge-config-trust-cross-platform-parity.sh; do
+    grep -q 'resolve_tool rg' "$ROOT/$f" || bad "$f does not resolve rg through the dispatch"
+    grep -nE '(^|[^$])\brg ' "$ROOT/$f" | grep -vE ':[[:space:]]*#' | grep -vE 'resolve_tool|RG=|ripgrep' | grep -q . \
+        && bad "$f still calls rg bare"
+done
+ok "the rg callers take the dispatch"
+
+for f in scripts/diagnose-proxy.sh scripts/run-forge-project.sh scripts/orchestrate-enclave.sh; do
+    grep -q 'resolve_tool openssl' "$ROOT/$f" || bad "$f does not resolve openssl through the dispatch"
+    grep -nE '^[[:space:]]*openssl |\| openssl |\$\(openssl ' "$ROOT/$f" | grep -vE ':[[:space:]]*#' | grep -q . \
+        && bad "$f still calls openssl bare"
+done
+ok "the openssl callers take the dispatch"
+
+# ── 4e. THE openssl WRITE-PATH CAVEAT, recorded where a converter will hit it. ─
+# jq is a pure filter: stdin in, stdout out, namespace-agnostic. openssl WRITES
+# FILES, so a toolbox fallback only works where the container shares the write
+# path. VERIFIED on lenovinha 2026-08-26 that /tmp is shared bidirectionally,
+# and every CERTS_DIR in the three converted callers is under /tmp. This arm
+# fails if one of them starts writing somewhere else, because that silently
+# lands the cert where the caller cannot find it.
+for f in scripts/diagnose-proxy.sh scripts/run-forge-project.sh scripts/orchestrate-enclave.sh; do
+    _cd="$(grep -oE 'CERTS_DIR="?[^"]*"?' "$ROOT/$f" | head -1)"
+    case "$_cd" in
+        *mktemp*|*/tmp/*) ;;
+        *) bad "$f writes certs to a path that may not be shared with the toolbox: $_cd" ;;
+    esac
+done
+ok "every converted openssl caller writes under /tmp (shared with the toolbox)"
+
+# ── 4f. DEPTH: a caller ONE LEVEL DOWN must still resolve the lib (914-ahsy). ─
+# THE FAILURE MODE HERE IS "LOOKING DONE", which is why it gets a constructed
+# test rather than an assertion over the current tree. The old header resolved
+# lib/tool-dispatch.sh at a FIXED depth relative to the caller. From scripts/ it
+# is right; from scripts/refusal-calibration/ it points at a lib that does not
+# exist, the `|| true` swallows the miss, and the tool variable falls back to the
+# bare name. A conversion there passes review, passes this suite, and changes
+# nothing — the exact class of artifact-standing-in-for-work this fleet has spent
+# the week killing, and 4 of the 17 scripts on 914-ahsy sit at that depth.
+#
+# NOTE THIS ARM WOULD PASS VACUOUSLY IF IT ONLY SCANNED THE TREE: every converted
+# caller today lives directly in scripts/, so there is nothing at depth to check.
+# It builds one instead, and carries a mutation control proving the OLD header
+# fails the same construction.
+_depth_root="$W/depthrepo"
+mkdir -p "$_depth_root/scripts/lib" "$_depth_root/scripts/sub"
+cp "$ROOT/scripts/lib/tool-dispatch.sh" "$_depth_root/scripts/lib/"
+
+# The header as callers now carry it: walk up until lib/tool-dispatch.sh is found.
+cat >"$_depth_root/scripts/sub/caller.sh" <<'DEPTHEOF'
+#!/usr/bin/env bash
+set -euo pipefail
+_td_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_td_dir" ] && [ "$_td_dir" != "/" ] && [ ! -f "$_td_dir/lib/tool-dispatch.sh" ]; do
+    _td_dir="$(dirname "$_td_dir")"
+done
+if [ -f "$_td_dir/lib/tool-dispatch.sh" ]; then
+    . "$_td_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+fi
+command -v resolve_tool >/dev/null 2>&1 && echo RESOLVER-PRESENT || echo RESOLVER-ABSENT
+DEPTHEOF
+chmod +x "$_depth_root/scripts/sub/caller.sh"
+if [ "$(bash "$_depth_root/scripts/sub/caller.sh" 2>/dev/null)" = "RESOLVER-PRESENT" ]; then
+    ok "a caller one level down resolves the lib (walk-up header)"
+else
+    bad "a subdirectory caller did NOT resolve the lib — conversions at depth are silent no-ops"
+fi
+
+# MUTATION CONTROL: the OLD fixed-depth header must FAIL this same construction.
+# Without it, the arm above could pass for reasons unrelated to the walk-up.
+cat >"$_depth_root/scripts/sub/old-caller.sh" <<'OLDEOF'
+#!/usr/bin/env bash
+set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/lib/tool-dispatch.sh" 2>/dev/null || true
+command -v resolve_tool >/dev/null 2>&1 && echo RESOLVER-PRESENT || echo RESOLVER-ABSENT
+OLDEOF
+if [ "$(bash "$_depth_root/scripts/sub/old-caller.sh" 2>/dev/null)" = "RESOLVER-ABSENT" ]; then
+    ok "MUTATION: the old fixed-depth header silently fails at depth — arm 4f has teeth"
+else
+    bad "the old header resolved at depth; arm 4f is not testing what it claims"
+fi
+
+# And no caller in the tree may carry the fixed-depth form again.
+# EXCLUDE THIS FILE. It legitimately contains the old form inside the mutation
+# control above, and the first version of this check matched its own control —
+# a guard tripped by the evidence that the guard works. Ninth instance of that
+# shape in this suite's history; the rule stays "assert the behaviour, not the
+# string", and where a string check is genuinely wanted it must exclude the
+# place the string is a specimen rather than a defect.
+if grep -rn 'dirname "${BASH_SOURCE\[0\]}")/lib/tool-dispatch\.sh' "$ROOT/scripts" 2>/dev/null \
+   | grep -v 'test-tool-dispatch-lib\.sh' \
+   | grep -vE ':[[:space:]]*#' | grep -q .; then
+    bad "a caller reintroduced the fixed-depth source path"
+else
+    ok "no caller carries the fixed-depth source path"
+fi
+
 # ── 5. THE DELIBERATE EXCEPTION, guarded so it does not read as an oversight. ─
 # The shipped diagnostics keep INLINE copies on purpose: they run on end-user
 # machines where a sibling lib may not exist, and a shipped diagnostic that

@@ -1,0 +1,90 @@
+packets:
+  - packet_id: never-build-a-rust-workspace-in-the-agent-scratchpad
+    order: 915-wkm2
+    release_target: fail-loud-diagnosis-milestone
+    status: ready
+    desired_release: v0.5
+    role: tooling
+    priority: p2
+    kind: enhancement
+    title: |
+      An agent wedged its own host by running Rust builds inside a RAM-backed, quota'd scratchpad — 18.9 GB of tmpfs, every write EDQUOT, and `df` would not have shown it.
+    deliverable: |
+      the prohibition stated where an agent will read it before building, plus a
+      check that surfaces scratchpad quota headroom rather than filesystem free
+      space
+    depends_on: []
+    pickup_role: any
+    owner_host: any
+    capability_tags:
+      - agent-environment
+      - fail-loud
+      - multi-host
+    estimated_hours: 2
+    problem: |
+      FINDING AND NUMBERS ARE macuahuitl's, recorded by lenovinha because
+      macuahuitl's shell cannot write — which is the incident itself. Their
+      words on why the specific version matters are kept below verbatim.
+
+      MEASURED on macuahuitl 2026-08-26, at the moment of the wedge:
+
+        Shmem resident in tmpfs .... 18.9 GB
+        lane-wt/target ............. 4.1 GB   (one cold gate)
+        shared-target .............. ~2.6 GB  (one workspace build)
+        shared-target2 ............. ~2.6 GB+ (two CONCURRENT workspace builds)
+        plus intermediate target/ states rm-ed and rebuilt four times over
+
+      The agent scratchpad on that host is tmpfs under a usrquota. Rust build
+      artifacts went into it, repeatedly, in a single cycle. The quota was
+      exhausted and every subsequent Bash call and file write returned EDQUOT.
+      The HOST stayed healthy; only the agent's tooling died — so the failure
+      presents as "my shell is broken", not as "I filled a disk".
+
+      `df` DOES NOT SHOW THIS. A usrquota is exhausted long before the
+      filesystem is, so free-space checks report plenty while writes fail.
+      `quota -s` is the check that sees it.
+    why_it_matters: |
+      The wedged agent could not file its own findings, could not push, and could
+      not record the rulings it owed the fleet — they had to be carried by
+      another host. An agent that cannot write is an agent whose work is one
+      teardown from lost (872-c9nd's shape, reached by a different route).
+    exit_criteria:
+      - |
+          The prohibition is stated where an agent reads it BEFORE building — never build a Rust workspace, run a gate, or create a worktree inside the agent scratchpad; use the checkout or an explicit path outside it.
+      - |
+          A check reports scratchpad QUOTA headroom, not filesystem free space, and is wired somewhere a cycle will see it. `df` reporting free space while writes fail is the whole trap.
+      - |
+          NEGATIVE CONTROL: the check must distinguish "quota nearly exhausted" from "disk nearly full" — they have different remedies and only one of them is what happened here.
+    notes: |
+      macuahuitl was firm about scope and was right, in their words:
+
+        "The diffuse version is worse than the specific one. 'Scratch usage grew
+        where nobody was watching' is a systemic story with no owner and no fix;
+        'an agent ran three Rust builds in a RAM-backed quota'd scratchpad' is
+        one correctable behaviour with a one-line rule."
+
+      RECORDED BECAUSE lenovinha GOT THIS WRONG FIRST. I offered, unprompted and
+      unmeasured, that a sibling's scripts/metrics-log-path.sh change "may be
+      part of why scratch usage grew where nobody was watching it". That was
+      wrong three ways: the arithmetic above closes without it; the metrics logs
+      are KB-scale against 18.9 GB; and the change moved logs OUT of /tmp INTO
+      the checkout, which REDUCES tmpfs pressure — if anything it bought headroom
+      that was then spent. It never reached the ledger, only a message, and is
+      corrected here so it cannot be inherited.
+
+      That error is the exact class the diagnostic-attribution cheatsheet
+      documents — naming a plausible contributor instead of the measured cause —
+      committed about another host's incident, in the session where that pattern
+      was being catalogued. A diffuse cause reads as a monitoring gap; the next
+      agent then does what this one did.
+    events:
+      - type: filed
+        ts: "2026-08-26T17:10:00Z"
+        agent_id: lenovinha-opus5-metaorch-20260826t170000z
+        host: lenovinha
+        summary: |
+          macuahuitl's finding, their measurements, their rule. Filed by
+          lenovinha because macuahuitl physically cannot write (EDQUOT) — they
+          were explicit that nothing was permission-blocked. An unfiled finding
+          held on a host that cannot push is one teardown from lost, which is why
+          this is a row rather than a note in a transcript.

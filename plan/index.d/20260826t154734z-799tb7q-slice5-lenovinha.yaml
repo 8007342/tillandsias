@@ -1,0 +1,63 @@
+events:
+  - packet_id: builder-toolbox-init-set-too-small-for-the-dispatch-pattern
+    event:
+      type: implemented
+      ts: "2026-08-26T16:00:00Z"
+      agent_id: lenovinha-opus5-metaorch-20260826t153721z
+      host: lenovinha
+      summary: |
+        FIFTH SLICE — the `rg` and `openssl` callers, which the packet named at
+        filing. Verified the toolbox actually carries both before converting
+        anything (ripgrep 15.2.0, OpenSSL 3.5.7): the dispatch pattern is only
+        valid for tools the toolbox HAS, and writing the line for a tool it lacks
+        makes things worse than the host failure it replaces.
+
+        rg: check-cheatsheet-refs.sh replaced its
+        `exit 2 "ripgrep (rg) is required but not on PATH"` — the mis-shaped
+        hard-fail-with-a-host-instruction this packet was filed against — with
+        the dispatch, refusing only when NEITHER host nor toolbox has it.
+        test-forge-config-trust-cross-platform-parity.sh converted.
+
+        openssl: diagnose-proxy.sh, run-forge-project.sh, orchestrate-enclave.sh.
+
+        A NEW HAZARD CLASS, distinct from the heredoc trap and worth stating
+        because it does not apply to jq at all: OPENSSL WRITES FILES. jq is a
+        pure filter — stdin in, stdout out, namespace-agnostic — so a toolbox
+        fallback is transparent. openssl here generates a CA cert INTO a
+        directory, so the fallback only works where the container shares the
+        write path. A caller whose path is not shared would have the cert land
+        where the caller cannot find it: a SILENT break, not an error.
+
+        MEASURED before converting, rather than assumed: /tmp is shared
+        bidirectionally with the toolbox (a file the host wrote is readable in
+        the container and vice versa), and all three CERTS_DIR values are under
+        /tmp — two literal `/tmp/tillandsias-ca`, one `mktemp -d`. A fixture arm
+        now FAILS if any of them starts writing elsewhere.
+  - packet_id: builder-toolbox-init-set-too-small-for-the-dispatch-pattern
+    event:
+      type: verified
+      ts: "2026-08-26T16:05:00Z"
+      agent_id: lenovinha-opus5-metaorch-20260826t153721z
+      host: lenovinha
+      summary: |
+        Three new fixture arms (rg callers, openssl callers, openssl write-path),
+        each MUTATION-TESTED rather than assumed: pointing a CERTS_DIR at
+        /var/lib fires the write-path arm, and reverting one openssl call to bare
+        fires the openssl arm. Clean tree silent. Full suite
+        ok:tool-dispatch-lib:all, ./build.sh --check green.
+
+        BEHAVIOUR VERIFIED BY STASH-COMPARE, which mattered: on first run
+        check-cheatsheet-refs.sh appeared to hang past a 300s bound. Comparing
+        before and after showed BOTH complete in ~1s with rc=1 and byte-identical
+        output — the apparent hang was a cold-cache artifact of the first
+        invocation, not the conversion. Recording it because "the script I just
+        touched now hangs" is exactly the shape that gets a good change reverted.
+        test-forge-config-trust parity fixture re-runs PASS.
+
+        REMAINING, and it is now only the hard part: the 7 LOOP callers
+        (bench-inference-floor.sh 9 sites, measure-bands.sh 9, claude-mcp.sh 8,
+        generate-evidence-bundle.sh, judge-support.sh, loop-success-probe.sh,
+        bench-semantic-budget.sh). Those want restructuring to a single jq pass,
+        not conversion — at ~264 ms per toolbox invocation, one call per
+        iteration turns milliseconds into minutes. That is a different kind of
+        work from this sweep and should be scoped as such.

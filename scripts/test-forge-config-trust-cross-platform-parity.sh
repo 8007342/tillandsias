@@ -2,6 +2,29 @@
 # @trace spec:git-mirror-service
 set -euo pipefail
 
+
+# ORDER 799-tb7q — resolve `rg` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has it.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+# Resolve the lib by WALKING UP, not by a fixed depth (order 914-ahsy). The
+# fixed form `dirname "${BASH_SOURCE[0]}"/lib/...` is correct only for a caller
+# sitting directly in scripts/. From scripts/refusal-calibration/ it points at a
+# lib that does not exist, the `|| true` swallows the miss, and the tool variable
+# silently falls back to the bare name — a conversion that passes review, passes
+# the suite, and changes nothing.
+_td_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_td_dir" ] && [ "$_td_dir" != "/" ] && [ ! -f "$_td_dir/lib/tool-dispatch.sh" ]; do
+    _td_dir="$(dirname "$_td_dir")"
+done
+if [ -f "$_td_dir/lib/tool-dispatch.sh" ]; then
+    . "$_td_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+fi
+if command -v resolve_tool >/dev/null 2>&1; then
+    RG="$(resolve_tool rg || printf 'rg')"
+else
+    RG="rg"
+fi
+
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 
@@ -16,7 +39,7 @@ require_source() {
 
 forbid_host_override() {
     local surface="$1"
-    if rg -n 'GIT_CONFIG_GLOBAL|GIT_SSL_CAINFO|SSL_CERT_FILE|REQUESTS_CA_BUNDLE|NODE_EXTRA_CA_CERTS|CURL_CA_BUNDLE|/home/forge/\.gitconfig|ca-chain\.crt' "$surface"; then
+    if $RG -n 'GIT_CONFIG_GLOBAL|GIT_SSL_CAINFO|SSL_CERT_FILE|REQUESTS_CA_BUNDLE|NODE_EXTRA_CA_CERTS|CURL_CA_BUNDLE|/home/forge/\.gitconfig|ca-chain\.crt' "$surface"; then
         echo "FAIL: host-specific Git/trust override found in $surface" >&2
         exit 1
     fi

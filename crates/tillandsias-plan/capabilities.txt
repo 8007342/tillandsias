@@ -72,7 +72,9 @@ status
 # the litmus asserts the manifest covers the documented command surface too.
 # tillandsias-plan CAPABILITY MANIFEST — order 569
 # Two DIFFERENT readers need the same list, and they cannot both run Rust:
+validate-yaml
 verify-answer
+yaml-get
 # WHY THIS IS A DATA FILE AND NOT A RUST ARRAY
 #      with no build and no cargo.
 #      wrapper and lib-common.sh read THIS FILE from the checkout directly,
