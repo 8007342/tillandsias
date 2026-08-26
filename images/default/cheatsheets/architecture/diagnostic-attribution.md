@@ -115,6 +115,31 @@ result is green:
 A green fixture that could not have gone red is a diagnostic naming the wrong
 layer: it says "the property holds" when it means "I did not test the property".
 
+## The specimen trap: a guard fired by the proof that it works
+
+A string-matching guard will eventually match its own mutation control — the
+deliberately-broken specimen you keep in the fixture to prove the guard is real.
+
+**It has a nasty property: it appears at the exact moment you prove the guard
+works**, so the instinct is to *weaken the guard* rather than scope it. That is
+backwards. The specimen is evidence, not a defect; exclude the file where the
+string is a specimen, and leave the guard's teeth alone.
+
+Measured instances, all in one week and all in guards written to catch
+misattribution:
+
+| Guard | Fired on |
+|---|---|
+| "the diagnosis must not send readers to the keyring" | the sentence *"Do NOT go looking at secret-service"* |
+| `check-bash-dialect` (bash-4 constructs) | a regex that *searches for* bash-4 constructs |
+| "shipped diagnostics must not source the lib" | the comment explaining why they deliberately don't |
+| "no caller may use the fixed-depth source path" | the mutation control demonstrating that it fails |
+
+The order matters: **scope the check, then re-run the mutation and confirm it
+still fails.** A scoping change is one keystroke away from a guard that no longer
+catches anything, and the mutation control is the only thing that tells the two
+apart.
+
 ## When you are relayed a diagnosis
 
 **N endorsements are not N evidence.** A relayed claim arrives carrying the
