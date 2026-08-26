@@ -2115,6 +2115,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Bash dialect gate passed"
 
+    _step "Checking user-visible terminology against the dictionary (629-t6bx)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-terminology.sh" 2>&1; then
+        # The script names the file, the variant and the offending string, and
+        # says the two remedies (fix the string, or add the variant to the
+        # dictionary if it is correct). Do not restate a cause here — its
+        # verdict distinguishes a violation from a blocked/unreadable
+        # dictionary, and a wrapper that collapses those sends the reader to
+        # the wrong fix.
+        exit 1
+    fi
+    _info "Terminology gate passed"
+
     _step "Checking plan/schema status-vocab divergence (440)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-plan-schema-divergence.sh" 2>&1; then
         # Do NOT restate the cause here: the script emits one of three verdicts

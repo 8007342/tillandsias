@@ -13151,6 +13151,90 @@ plan_index:
       notes: |
         Adds a gate and a data file, not a string. No UX-curation approval needed for the mechanism. Applying a correction to any specific user-visible string still needs the operator's ruling for that string — the "GitHub" ruling is recorded and is the first such entry.
       events:
+        - type: completed
+          ts: "2026-08-26T10:19:07Z"
+          agent_id: "macos-tlatoanis-macbook-air-opus5-20260826t101907z"
+          host: tlatoanis-macbook-air
+          summary: |
+            TIER 1 DELIVERED: dictionary + gate, wired into `./build.sh --check`, with the tier-2 decision surfaced and its blast radius MEASURED rather than estimated.
+
+              locales/terminology.toml     11 terms, seeded with the operator's "GitHub"
+                                           ruling plus Podman, WSL, Fedora, Vault,
+                                           OpenCode, Codex, Claude, Antigravity,
+                                           Tillandsias, Observatorium.
+              scripts/check-terminology.sh POSIX sh + awk. No ruby (order 63), no yq —
+                                           neither exists on every host and this must run
+                                           on all of them (order 261). Verdict grammar:
+                                           ok:terminology-clean:terms=N:files=N /
+                                           violation:terminology:N / blocked:<reason>.
+              build.sh                     runs it in the --check gate.
+              Current corpus: ok:terminology-clean:terms=11:files=17.
+
+            THE SCOPING IS THE DESIGN, AND IT WAS MEASURED BEFORE IT WAS WRITTEN. Tier 1 is
+            user-visible text, which here means the VALUES in locales/*.toml and never the
+            keys. A naive `grep -rn podman locales/` returns 170 hits, of which the
+            overwhelming majority are KEYS — `no_podman`, `images_no_podman`,
+            `[menu.github]`. A gate that flagged those would have been unusable on its first
+            run and switched off rather than fixed. Values-only reduces it to something a
+            human can act on.
+
+            THE FINDING THE PACKET DID NOT HAVE. It states tier 1 has "exactly one known
+            offender (the Linux missing space)". Measured over locale VALUES:
+              lowercase `podman`  128 occurrences
+              capital  `Podman`    28
+            Same product, two spellings in user-visible text — a genuine tier-1
+            inconsistency an order of magnitude larger than the known one.
+
+            AND WHY IT IS NOT A DEFECT, WHICH IS THE MORE USEFUL HALF. en.toml contains, in
+            a SINGLE string:
+                podman_note = "(Podman image storage is managed by podman — see 'podman system df')"
+            The capital is the product; the lowercase is the executable. BOTH ARE CORRECT
+            IN THAT SENTENCE. A dictionary asserting "Podman is canonical, podman is wrong"
+            would flag 128 legitimate uses and be disabled within a day. So the dictionary
+            carries a `lower_ok` flag and the gate exempts the all-lowercase form where it
+            reads as a command. THAT FLAG EXISTS BECAUSE OF A MEASUREMENT, NOT AS A
+            DEFENSIVE GUESS — and this is the same shape as tonight's other findings: the
+            raw count was real and the conclusion it invited was wrong.
+
+            Genuine residual, separated from the false one: `"Podman is not available"`
+            versus `"(podman not available)"` are the SAME concept spelled two ways in
+            adjacent strings. That IS an inconsistency, it is a UX-curation call on specific
+            strings, and per this packet's own note applying a correction to any specific
+            user-visible string needs the operator's ruling for that string. Recorded, not
+            silently "fixed".
+
+            HAND-FALSIFIED, one positive and three negative controls, all four measured:
+              POSITIVE  a wrong variant in a VALUE          -> violation:terminology:1
+              NEGATIVE  the same variant in a KEY           -> ok  (keys are tier 2)
+              NEGATIVE  the real dual-form Podman string    -> ok  (the lower_ok case)
+              NEGATIVE  canonical term inside TRANSLATED
+                        strings ("Iniciar sesión en GitHub",
+                        "GitHub-Anmeldung")                 -> ok
+            The third and fourth are the load-bearing ones: without them "make the gate
+            pass" is satisfiable by requiring whole strings to match en, which the packet
+            explicitly forbids and which would break every translation.
+
+            TIER 2 DECISION, SURFACED WITH COST AS THE EXIT CRITERION REQUIRES — and the
+            measurement changes what is being asked:
+                16 files, 206 occurrences, 4 distinct identifiers
+                GithubLoginState 106, GithubLogin 52,
+                GithubLoginStatusRequest 28, GithubLoginStatusReply 20
+                ELEVEN ARE kind() STRINGS THAT CROSS THE CONTROL WIRE, including
+                crates/tillandsias-control-wire/src/lib.rs:696-697 where
+                ControlMessage::GithubLoginStatusRequest renders as the literal
+                "GithubLoginStatusRequest".
+            So tier 2 is NOT a rename — it is a WIRE MIGRATION, needing the same
+            mixed-version handling as CAP_EXEC_ARGV_VECTOR (795-zshi) and
+            CloudRefreshOutcome (731-eupn): an old peer sends the old kind string and a new
+            peer must still understand it. That is the fact the operator needs, and it is
+            why bundling the two tiers would have turned a data file into a protocol change.
+            The gate is scoped to tier 1 and stays there unless the operator rules
+            otherwise.
+
+            ONE VOCABULARY, NOT TWO: locales/terminology.toml is the single input. 628-h4nx
+            compares platforms against each other, so two platforms can agree byte-for-byte
+            and both be wrong; this file names what is CORRECT. Adding a term is a one-file
+            change — append a [[term]] block, nothing else edits.
         - type: filed
           ts: "2026-08-09T09:04:25Z"
           agent_id: windows-claude-fable-metaorch-20260809t063000z
