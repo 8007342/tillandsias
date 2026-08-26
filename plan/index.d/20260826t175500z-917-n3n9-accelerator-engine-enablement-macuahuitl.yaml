@@ -1,0 +1,100 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: no-accelerator-in-the-fleet-is-schedulable-by-any-engine
+    order: 917-n3n9
+    status: ready
+    desired_release: v0.6
+    priority: p2
+    kind: enhancement
+    release_target: convergence-velocity-milestone
+    title: |
+      every GPU and NPU in the fleet reports present-unscheduled or engine-missing — the hardware is there and no runtime claims it, on all seven hosts
+    deliverable: |
+      at least one accelerator moves to schedulable in the capability matrix,
+      through a container-lane engine rather than a host install
+    pickup_role: linux
+    owner_host: any
+    depends_on: []
+    capability_tags:
+      - gpu
+      - npu
+      - toolbox
+      - capability-matrix
+    estimated_hours: 12
+    context: |
+      SPLIT OUT OF 917-6iwv, which was retargeted to v0.5 once it was measured
+      that the local expert system already runs on CPU. The accelerator is an
+      optimisation, not a prerequisite, and bundling it made a tractable v0.5
+      packet look blocked on unbounded work.
+
+      MEASURED from `tillandsias-plan capability-matrix`, 2026-08-26 — the whole
+      fleet, every accelerator:
+
+        macuahuitl  gpu/NVIDIA RTX A5000 ....... usable; NO ENGINE covers
+                                                 lanes [container,host-native]
+                    npu/Intel NPU .............. engine-missing
+        lenovinha   gpu/NVIDIA RTX 3070 Laptop . usable; no engine [host-native]
+                    gpu/Cezanne Radeon Vega .... rocm-runtime-missing
+        yoga        gpu/Krackan Radeon 840M/860M usable; no engine
+                                                 [container,host-native]
+                    npu/AMD XDNA NPU ........... engine-missing
+        macbook     gpu/Apple Metal GPU ........ usable; no engine [host-native]
+        pirria      gpu/Alder Lake-N ........... intel-compute-runtime-missing
+        yolanda     gpu/AMD Radeon 860M ........ wsl2-no-dri-render-node
+                    npu/NPU Compute Accelerator  wsl2-npu-not-exposed
+        esmeraldinha gpu/WSL2 paravirtual ...... wsl2-no-dri-render-node
+
+      NOT ONE schedulable accelerator across seven hosts. Note the distinction
+      the matrix already draws and that any fix must respect:
+
+        - `usable; no engine covers lanes` — the DEVICE is fine and nothing
+          claims it. This is a software gap and is what this packet targets.
+        - `*-runtime-missing` / `engine-missing` — a named runtime is absent.
+        - `wsl2-*` — a passthrough limitation of the guest, NOT a missing
+          runtime. The WSL2 hosts are OUT OF SCOPE here; conflating them with
+          the first category would send someone to install a runtime that
+          cannot help.
+
+      WHY THE CONTAINER LANE IS THE RIGHT TARGET. Four of the affected hosts are
+      immutable Silverblue, where installing a GPU runtime onto the host is
+      precisely what the base system is designed to prevent. The toolbox model
+      was validated on 2026-08-26 (a full `podman system reset --force` followed
+      by a green cold build in 208 s), so an engine inside a container is both
+      installable and disposable. macuahuitl's A5000 explicitly lists
+      `[container,host-native]` as the uncovered lanes — the container lane is
+      exactly the one to solve.
+
+      THE HONEST UNKNOWN, stated so nobody sizes this from the estimate alone:
+      rootless podman GPU passthrough is not one problem. NVIDIA needs CDI and
+      the container toolkit; AMD needs ROCm and the right device nodes; Intel
+      NPU needs a driver stack that may not exist in a container at all. These
+      may have very different costs and one may be impossible. Whoever picks
+      this up should scope ONE vendor first and report the cost before
+      committing to the others.
+    outcome: |
+      At least one accelerator is schedulable, through a lane an immutable host
+      can actually use.
+    exit_criteria:
+      - 'One accelerator moves from present-unscheduled/engine-missing to SCHEDULABLE in `tillandsias-plan capability-matrix` on at least one host. The matrix is the verdict, not a local claim — if the matrix does not show it, it did not land.'
+      - 'The engine runs in a CONTAINER, installed idempotently by a script, not onto the host. NEGATIVE CONTROL: an immutable host must reach the same result without any rpm-ostree layering.'
+      - 'SCOPE ONE VENDOR AND REPORT ITS COST BEFORE STARTING A SECOND. NVIDIA/CDI, AMD/ROCm and Intel NPU are three different problems and the estimate here covers one of them at best.'
+      - 'The WSL2 hosts stay explicitly out of scope and the matrix keeps distinguishing `wsl2-*` from `engine-missing`. A fix that makes them look the same would send the next reader to install a runtime that cannot help.'
+      - 'NEGATIVE CONTROL: a host with no accelerator, or one whose device is genuinely unusable, still reports so. Making everything look schedulable is the failure this packet is the inverse of.'
+    verifiable_closure: |
+      `tillandsias-plan capability-matrix` shows a schedulable gpu or npu triple
+      on a host where today it shows present-unscheduled, and a workload
+      actually runs on it.
+    notes: |
+      Do NOT block 917-6iwv on this. That packet is v0.5 and runs on CPU; this
+      one makes it faster later. If this proves expensive or impossible for a
+      vendor, that is a legitimate close with the numbers — the expert system
+      does not depend on it.
+    events:
+      - type: filed
+        ts: "2026-08-26T17:55:00Z"
+        agent_id: linux-macuahuitl-claude-20260826t114259z
+        host: macuahuitl
+        summary: |
+          Split out of 917-6iwv when that packet was retargeted to v0.5. Filed
+          because "no engine covers lanes" is a real fleet-wide gap, but not
+          one the expert system has to wait for.

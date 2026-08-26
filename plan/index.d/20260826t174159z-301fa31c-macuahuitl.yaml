@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: local-expert-system-in-toolboxes-on-accelerated-hosts
+    field: desired_release
+    value: v0.5
+    ts: "2026-08-26T17:41:59Z"
+    host: macuahuitl
+
+events:
+  - packet_id: local-expert-system-in-toolboxes-on-accelerated-hosts
+    event:
+      type: note
+      ts: "2026-08-26T17:41:59Z"
+      host: macuahuitl
+      summary: >
+        operator direction: the expert scaffolding already exists, so the toolbox+metadata+accuracy slice is v0.5; the accelerator-engine slice splits out to v0.6

@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: local-expert-system-in-toolboxes-on-accelerated-hosts
+    event:
+      type: note
+      ts: "2026-08-26T17:41:59Z"
+      agent_id: linux-macuahuitl-claude-20260826t174159z
+      host: macuahuitl
+      summary: >
+        RETARGETED v0.6 -> v0.5 AT OPERATOR DIRECTION, AND MY OWN FRAMING WAS WRONG IN A WAY THAT MATTERS.  I wrote criterion 1 as "AN ENGINE EXISTS ... until this is true nothing else in this packet can be measured, so it is the first slice." That is too pessimistic and I did not check before asserting it. Measured this cycle:    - scripts/dev-host-experts.sh exists and the preflight refreshes it     (ok:cycle-preflight:rebuilt+expert-refreshed+services-ok)   - .cache/metrics/forge-expert-health.jsonl records forge-plan and     project-info both state=up   - cycle-metrics already reports an expert_accuracy series with a     groundtruth source  So a local expert system ALREADY RUNS on CPU. The accelerator is an OPTIMISATION, not a prerequisite, and the operator is right that the valuable part is not difficult. What is actually new here is: (a) hosting the expert in a toolbox the way builds now are, (b) RAG over the local checkout across CODE / CHEATSHEETS / SPECS / METHODOLOGY / PLAN with retrain-on-commit, (c) model metadata plus estimated-vs-validated accuracy recorded per host.  None of (a)(b)(c) needs a GPU. All three are v0.5-shaped.  I am recording the error rather than quietly editing the criterion, because it is the same shape this fleet has been cataloguing all week: I asserted a blocking dependency from the capability matrix without checking whether the thing it supposedly blocked was already running. The matrix says "no engine covers lanes" — true, and it says nothing about whether a CPU expert works. Reading a real signal as answering a question it was not asked.  SCOPE NOW: criterion 1 (engine exists) is REMOVED from this packet and filed separately as 917-n3n9 for v0.6. Everything else stands, and the accuracy criteria matter MORE without a GPU, not less: a CPU-sized model makes the question "is this model good enough for this task" immediate rather than theoretical, which is exactly what the metadata is for.  The never-called negative control is unchanged and is the one I would defend hardest: this codebase has shipped `expert_accuracy rate=100%` in the same run as `verdict:attention:expert-answered-nothing`. A host that was never asked must report never-called, not a rate.
