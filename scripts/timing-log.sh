@@ -88,7 +88,28 @@ timing_emit() {
         if [ "$_dur" -ge 86400000 ] 2>/dev/null; then
             return 0
         fi
-        _host="${TILLANDSIAS_HOST_ID:-$(hostname 2>/dev/null || echo unknown)}"
+        # ORDER 890-t9pu — `hostname` IS NOT ALWAYS PRESENT, and its absence was
+        # silently renaming every record on this lane.
+        #
+        # MEASURED on yolanda 2026-08-25: 2977 records carrying host="unknown".
+        # The cause is not a misconfiguration — the WSL2 build distro is a
+        # Fedora *container image*, and minimal container images ship no
+        # `hostname` binary at all (`command -v hostname` -> NONE). So the
+        # substitution failed, `|| echo unknown` fired, and a rolling fleet-wide
+        # view lost the one field it needs most: which machine produced the
+        # number.
+        #
+        # `/etc/hostname` DOES read `Yolanda` inside that same distro, so the
+        # information was there the whole time behind a probe that could not
+        # reach it. Try the cheap in-shell answer first ($HOSTNAME, a bash
+        # builtin), then the binary, then the file. "unknown" now means genuinely
+        # unknown rather than "the tool was missing".
+        _host="${TILLANDSIAS_HOST_ID:-}"
+        [ -n "$_host" ] || _host="${HOSTNAME:-}"
+        [ -n "$_host" ] || _host="$(hostname 2>/dev/null || true)"
+        [ -n "$_host" ] || _host="$(cat /etc/hostname 2>/dev/null || true)"
+        _host="$(printf '%s' "$_host" | tr -d '[:space:]')"
+        [ -n "$_host" ] || _host="unknown"
         if [ -x "$_cm" ] || [ -r "$_cm" ]; then
             bash "$_cm" --emit-timing \
                 step="$_step" phase="$_phase" duration_ms="$_dur" exit="$_rc" \
