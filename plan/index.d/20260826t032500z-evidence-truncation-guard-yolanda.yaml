@@ -1,0 +1,97 @@
+packets:
+  - packet_id: evidence-capture-truncated-by-its-own-pipeline-needs-a-guard-not-a-paragraph
+    order: 899-6pwv
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: enhancement
+    title: a documented trap that a careful agent walks into hours after reading it is a case for a guard — evidence captured through `| tee FILE | head -N` is silently truncated by SIGPIPE, and only prose currently prevents it
+    deliverable: an executable check (or a capture helper the runbooks call) that makes a truncated evidence file detectable, plus the runbook/skill capture idioms changed to redirection
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags:
+      - testing
+      - observability
+      - fail-loud
+      - developer-experience
+    estimated_hours: 3
+    context: |
+      OBSERVED on yolanda during the v0.4.260826.1 Windows curl-install e2e,
+      2026-08-26, by the agent who had read the warning against it earlier the
+      same night.
+
+      The capture was `<cmd> 2>&1 | tee "$LOG" | head -30`. `head` exits after
+      30 lines, SIGPIPEs `tee`, and `tee` dies mid-write — so `$LOG` stopped at
+      75 lines with no RESULT line, while the command itself completed
+      successfully. **The evidence file for a passing step was silently
+      incomplete, and the terminal output looked fine.**
+
+      THIS IS ALREADY DOCUMENTED AND THE DOCUMENTATION DID NOT WORK.
+      `skills/meta-orchestration/SKILL.md` says it plainly, with a dated
+      incident: "If you pipe the gate through `tail -N` or a grep filter, you
+      will cut that block off and lose the names — this host did exactly that
+      twice on 2026-08-09, spent two cycles calling an intermittent failure
+      'unexplained', and filed a packet on the false premise that the names were
+      unrecoverable (637-df4z, closed mis-diagnosed)."
+
+      So the score is now: the same host, the same class of mistake, three
+      times, across two independent incidents, with a paragraph in between that
+      was READ and then not applied. That is the argument for this packet. A
+      warning whose compliance depends on an agent remembering it at the moment
+      of composing a shell pipeline is not a control; it is a hope. The skill
+      itself makes exactly this argument about other guards — "a guard only an
+      attentive agent honors is a suggestion, not a constraint; reduce it to
+      something that fails loud on its own" — and then relies on attentiveness
+      for this one.
+
+      WHY IT MATTERS MORE THAN IT SOUNDS. The truncation is silent at capture
+      time and only discoverable by reading the artifact afterwards, which is
+      precisely what nobody does when the step PASSED. A failing step gets its
+      log read; a passing step's log is filed as evidence unread. So the
+      failure mode selects for the runs whose evidence is least likely to be
+      checked — and on this run the truncated file was the primary evidence for
+      803-49re Part A, the release-relevant half.
+
+      This is the same family as the other findings of 2026-08-25/26 and the
+      shape is worth stating once: **an artifact standing in for a measurement
+      that was never completed.** The gate stamp reading a bit drvfs cannot
+      represent (889-8tcb), timing records written to a `/tmp` the reader cannot
+      open (890-t9pu), a `grep` filter that could not match its own target
+      (recorded on the e2e findings file), a word-absence test that fired on the
+      sentence telling the reader not to look there (lenovinha), a bump warning
+      written into a log then deleted by its own `trap` (897-5m9y). Six in one
+      night, five subsystems, one shape.
+
+      SHAPES WORTH CONSIDERING, none of them prescribed — the implementer should
+      pick:
+
+      - A capture helper the runbooks call (`scripts/capture.sh <file> -- cmd`)
+        that redirects rather than pipes, records the exit code beside the log,
+        and appends a terminator line. Absence of the terminator then means
+        truncation, checkably.
+      - A check that scans committed evidence files for a missing terminator or
+        a byte count inconsistent with a recorded exit code.
+      - Changing the idioms in the e2e runbooks and the meta-orchestration skill
+        from `| tee X | head -N` to `> X 2>&1` followed by a separate `tail`,
+        so the displayed excerpt and the stored artifact are decoupled. This is
+        the cheapest half and could land alone.
+
+      RELATED, SAME ROOT, DIFFERENT SURFACE — recorded here because it has
+      nowhere else to live yet: the author of a fix is uniquely positioned to
+      build the experiment that cannot detect it. On this run the credential
+      attribution had to route around a confound the same agent had created
+      hours earlier in 804-ckst (the runbook step that clears the credentials
+      manually, which would have produced an uninformative green). That is a
+      sibling of the criterion-drift finding on 803-49re — a criterion authored
+      early in an investigation encodes the author's early model, and the author
+      is the person least likely to notice it has been superseded.
+    verifiable_closure: |
+      A fixture that captures a long-running command through the sanctioned
+      idiom and asserts the stored artifact is complete — red against
+      `| tee FILE | head -N`, green against redirection — plus a grep of the
+      e2e runbooks and the meta-orchestration skill finding no
+      `| tee ... | head`/`| tail` capture idiom remaining.
+    evidence:
+      - '02a-reset-guest.log truncated at 75 lines, no RESULT line, command exit 0'
+      - 'skills/meta-orchestration/SKILL.md documents the trap with the 2026-08-09 incident (637-df4z)'
+      - 'same host, same class, three occurrences across two incidents'
