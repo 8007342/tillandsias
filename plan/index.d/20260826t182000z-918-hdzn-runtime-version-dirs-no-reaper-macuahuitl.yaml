@@ -1,0 +1,85 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: runtime-version-directories-accumulate-forever-with-no-reaper
+    order: 918-hdzn
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    release_target: fail-loud-diagnosis-milestone
+    title: |
+      ~/.local/share/tillandsias/runtime holds 169 per-version directories and 6.0 GB going back to 2026-06-08 — the code removes only the CURRENT version's dir before re-materializing, and nothing reaps the other 168
+    deliverable: |
+      old runtime version directories are reclaimed on some stated policy, or
+      their unbounded growth is a declared and measured decision
+    pickup_role: any
+    owner_host: any
+    depends_on: []
+    capability_tags:
+      - runtime
+      - disk
+      - fail-loud
+      - lifecycle
+    estimated_hours: 3
+    context: |
+      MEASURED on macuahuitl 2026-08-26:
+
+        ~/.local/share/tillandsias/runtime
+          169 version directories
+          6.0 GB total (~36 MB each)
+          oldest: 0.3.260609.3, dated 2026-06-08 — 79 days
+          ~2.1 directories/day, ~70 MB/day
+
+      `runtime_assets.rs:170` calls `remove_dir_all` on the CURRENT version's
+      root before re-materializing it. That makes a single version idempotent,
+      which is correct and is presumably why it looked complete. It does nothing
+      about previous versions, and no other code path in the tree reaps them.
+
+      This host builds a new version most cycles, so the directory count tracks
+      cycle count and grows without bound.
+
+      WHY THIS IS THE SAME STORY AS THE REST OF THE WEEK, and why it is filed
+      rather than quietly deleted: nothing reaps agent- or build-created state,
+      and the failure surfaces as whichever resource runs out first. On
+      2026-08-26 that was a tmpfs quota (915-wkm2) which took the tooling down;
+      here it is 6.0 GB of disk on a 952 GB device, which is why nobody has
+      noticed in 79 days. Same absent reaper, different resource, far more
+      patience.
+
+      SCOPE HONESTLY: on this host 6.0 GB is not urgent. It matters because
+      (a) the fleet includes hosts with far less headroom — lenovinha's whole
+      scratch quota is 5525 MB, less than this one directory — and (b) 79 days
+      of growth with nobody noticing is the property worth fixing, not the
+      current number.
+    outcome: |
+      Runtime versions are reclaimed on a stated policy, or their growth is a
+      decision someone made on purpose.
+    exit_criteria:
+      - 'Old runtime version directories are reclaimed on a STATED policy — keep-N-newest, or age-based, or tied to the installed VERSION. Name the policy and the number; "clean up sometimes" is what produced 169 directories.'
+      - 'NEGATIVE CONTROL, and it is the one that matters: the CURRENTLY INSTALLED version is never reaped, and neither is a version a running process is using. Deleting the runtime assets out from under a live tillandsias is a worse failure than the disk growth.'
+      - 'NEGATIVE CONTROL: a host with only one version directory reaps nothing and reports so. A reaper that always finds something to delete has not been tested against the healthy case.'
+      - 'The reaper REPORTS what it reclaimed in the daily-maintenance verdict grammar, so the reclaim is observable rather than silent. A silent reaper and an absent one look identical the day someone asks where the space went.'
+    verifiable_closure: |
+      On a host with more than N runtime version directories, the reaper leaves
+      exactly the retained set, never removes the installed version, and prints
+      what it reclaimed. Verified against a fixture with a fabricated set of
+      version dirs, including a one-directory case that must reap nothing.
+    notes: |
+      Do NOT fix this by adding `rm -rf` to a maintenance script without the
+      installed-version guard. The whole point of runtime_assets is that a
+      running binary materialises assets it then depends on.
+
+      Related: 915-wkm2 (scratchpad quota, same absent-reaper shape),
+      916-ijxa (forge cache exempt on a false ephemerality premise),
+      906-qi89 / 905-97xh (the build-cache sweep triggers).
+    events:
+      - type: filed
+        ts: "2026-08-26T18:20:00Z"
+        agent_id: linux-macuahuitl-claude-20260826t114259z
+        host: macuahuitl
+        summary: |
+          Found by an adversarial infrastructure audit and verified by direct
+          measurement: 169 directories, 6.0 GB, oldest 2026-06-08. The audit's
+          original grep evidence for "no reaper exists" was a false negative
+          (the path is composed at runtime_assets.rs:58-59), but the conclusion
+          held on re-checking.

@@ -77,4 +77,23 @@ observability:
 
 rollback:
   on_failure: "forcefully unmount and cleanup"
-  command: "mount | grep tillandsias | awk '{print $3}' | xargs -I {} umount -l {} 2>/dev/null; podman system prune --volumes -f 2>/dev/null; systemctl --user restart tillandsias 2>/dev/null || true"
+  # `podman system prune --volumes -f` WAS HERE AND IT DESTROYS NAMED VOLUMES.
+  #
+  # `--volumes` prunes every volume with no running container attached, which
+  # includes tillandsias-forge-cache-tillandsias — the forge's persistent
+  # CARGO_TARGET_DIR (images/default/lib-common.sh:1520). That volume is
+  # unattached by design: the forge container is --rm and the cache is the thing
+  # meant to outlive it. So a rollback whose stated job is "unmount stale
+  # mounts" would silently delete the forge's entire build cache, costing a full
+  # cold rebuild, on the failure path where someone is already debugging
+  # something else.
+  #
+  # SCOPED TO THIS TEST'S OWN RESOURCES. Containers are removed by the label
+  # this suite sets; volumes are left alone entirely, because this test creates
+  # none. A rollback must not be able to destroy more than the test created —
+  # that is what makes it a rollback rather than a reset.
+  #
+  # Related: 916-ijxa, where the build-cache sweep exempts forges on the false
+  # premise that their target/ dies with the container. It does not; this is
+  # the other end of the same misconception.
+  command: "mount | grep tillandsias | awk '{print $3}' | xargs -I {} umount -l {} 2>/dev/null; podman rm -f $(podman ps -aq -f 'label=tillandsias-litmus-mount-test' 2>/dev/null) 2>/dev/null; systemctl --user restart tillandsias 2>/dev/null || true"
