@@ -1666,6 +1666,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # valid MO-FULL. The fixture's negative controls (cases 2 and 4) are the
     # load-bearing half: they fail if the fix ever widens into "reclaim a lock",
     # which would retire 873-zcim while every positive case stayed green.
+    # append-event must not write into the ARCHIVE (896-f8ti). Arms 3 and 4 are
+    # the load-bearing pair: the naive fix ("refuse anything not in the base")
+    # passes the refusal arms and breaks 699-usxc, the case that lets a packet
+    # filed THIS cycle receive events. Falsified against the pre-fix binary —
+    # arm 1 catches the acceptance, arm 3 catches the fragment it wrote.
+    _step "Checking the append-event archived-refusal fixture (896-f8ti)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-append-event-archived-refusal.sh" 2>&1; then
+        _error "append-event's archive guard regressed — either events are landing on completed work again, or legitimate writes to fragment-only packets are being refused"
+        exit 1
+    fi
+    _info "append-event archived-refusal fixture passed"
+
     _step "Checking the checkout-lock attested-release fixture (899-q9di)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-cycle-lock-attested-release.sh" 2>&1; then
         _error "the checkout-lock attested-release fixture regressed — either a finished cycle strands its lock again, or the lock stopped refusing concurrent agents"
