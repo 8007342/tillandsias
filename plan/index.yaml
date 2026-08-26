@@ -51878,6 +51878,26 @@ plan_index:
         bug with a known fix. They were found in the same cut and are otherwise
         unrelated.
       events:
+        - type: completed
+          ts: "2026-08-26T11:43:15Z"
+          agent_id: "linux-macuahuitl-claude-20260826t114315z"
+          host: macuahuitl
+          summary: |
+            CLOSED on macuahuitl. Release runbook step 5 reordered: create tag -> back-merge -> push both. Commit 8b2e1d0cc.
+
+            The old order was UNEXECUTABLE, not merely awkward: `git tag` creating the tag LOCALLY is enough for verify-version-monotonic.sh to resolve it as "latest release" and refuse the branch's still-pre-release VERSION, and the back-merge that fixes that was prescribed AFTER the tag push. Every host with scripts/install-hooks.sh deadlocks there, and the pressure is toward `git push --no-verify` on the one ref where bypassing the gate publishes.
+
+            EXIT CRITERIA:
+            1. Reordered to tag-create / back-merge / push-tag / push-branch. DONE. Not the exemption alternative.
+            2. Preserved constraint stated with its real justification, and VERIFIED not argued: the runbook now prescribes `git rev-list -n1 "${new_tag}"`, which returned 341ab0010 both sides of the back-merge during the v0.4.260826.1 cut.
+            3. Fixture: scripts/test-release-runbook-tag-order.sh, wired into --check between the attested-release and promote-stable steps. Proven to RUN, not merely to exist -- gate log line 108, "4 passed, 0 failed", real exit 0 captured without a pipe.
+            4. NEGATIVE CONTROL, the one that mattered: the fix must not be "exempt tags from release-preflight". No guard was touched (git diff HEAD on verify-version-monotonic.sh, pre-push-version-guard.sh, release-preflight.sh, .githooks/ is empty), and the guard still refuses LIVE: given a tag newer than this branch's VERSION it exits 1 with the 800-vk2p remedy; given an older one it exits 0.
+
+            TWO DEFECTS THIS CYCLE FOUND IN ITS OWN WORK, both by running things rather than reading them:
+            (a) The fixture's negative control used a plain substring and the original text read "**after**" -- it PASSED against the very sentence it was written to catch. Only running it against the pre-fix file from git exposed that. Now tolerates markdown emphasis; 3 of 4 arms fail against the old text.
+            (b) I first ran the gate as ./build.sh --check piped into tail -40 and read exit 0 -- which was TAIL's status, and the 40-line window hid every step I needed to see, including my own. Re-ran without the pipe. This is 899-6pwv's exact shape, committed by the host that documents it, one cycle after filing about it.
+
+            Also corrected the 800-vk2p comment from "the moment the tag is PUSHED" to "the moment the tag EXISTS" -- the guard reads the local ref, which is precisely why the old order deadlocks. And added TILLANDSIAS_SKIP_VERSION_BUMP=1 to the runbook's back-merge gate call; it was the last unguarded ./build.sh --check in that file (897-5m9y's runbook surface).
         - type: filed
           ts: "2026-08-26T02:08:00Z"
           agent_id: linux-macuahuitl-claude-20260826t015805z
@@ -52684,6 +52704,32 @@ plan_index:
         Related: 901-jtvi (step composition) and 902-5bf9 (the Rust+Lua litmus
         form) are the other two v0.6 packets from the same operator session.
       events:
+        - type: note
+          ts: "2026-08-26T11:43:44Z"
+          agent_id: "linux-macuahuitl-claude-20260826t114344z"
+          host: macuahuitl
+          summary: |
+            MEASURED CONSTRAINT for whoever implements this, found on macuahuitl 2026-08-26 while running the manual 5a overlap step this packet automates.
+
+            `expire-claims --list-live` -- which the context names as the available enumeration -- DOES NOT COVER ALL in_progress WORK. Live, today:
+
+              $ tillandsias-plan expire-claims --list-live
+              live-claim  799-tb7q  ...  lenovinha  2026-08-26T11:37:42Z
+              live-claim  898-zhf3  ...  macuahuitl 2026-08-26T11:33:25Z
+              summary: in_progress=3 expired=0 held=0 unknown_age=0
+
+            Three in_progress, two rows. The missing one is 831-ezea -- and it is not a stale or exotic packet: it has a gate step wired into ./build.sh --check ("Checking the plan archiver preserves the ready set (831-ezea)"), so it is exactly the kind of live, code-touching work an overlap check exists to warn about.
+
+            MECHANISM, read not guessed (crates/tillandsias-plan/src/main.rs, fn live_claims ~5726): a packet yields a row only if some event's `summary` starts with the literal string "claimed for cycle". No such event, no row -- the `let ... else { continue }` at ~5776 drops it silently. There is an existing unit test asserting this on purpose ("in_progress with events but NO claim-convention event: no row").
+
+            SO THE OMISSION IS CORRECT FOR 833-fpe7 AND INVERTED FOR THIS PACKET. `--list-live` was built for the resumable-claim-dirt detector, where you must not resume work whose owner you cannot name -- fail-closed is right there. For "who else is touching my surface", an in_progress packet with NO identifiable claimant is MORE dangerous to collide with, not less: nobody to send the heads-up to, and no claim timestamp to reason about. Fail-closed becomes fail-silent.
+
+            CONSEQUENCE FOR THE EXIT CRITERIA:
+            - Enumerate from `query --status in_progress` (3 rows) and JOIN claim metadata onto it, rather than enumerating from `--list-live` (2 rows). Otherwise the check prints `ok:no-sibling-overlap` while a claimless in_progress packet sits on the same files, which is the "gate that announces success and names its own blind spot" shape this milestone exists to kill.
+            - The unclaimed-but-in_progress case needs its OWN output line, distinct from an overlap: there is no host to talk to, so the actionable advice is different ("831-ezea is in_progress with no claimant -- nobody to warn; check the surface yourself"). Collapsing it into the overlap line produces advice that cannot be followed.
+            - This does NOT argue for changing `--list-live`. Its contract is right for its caller. The join belongs in the new check.
+
+            NOT A CLAIM ON THIS PACKET -- 903-8wsa remains ready. Filed as a note so the implementer does not build on the two-row view and inherit the blind spot.
         - type: filed
           ts: "2026-08-26T05:10:00Z"
           agent_id: linux-macuahuitl-claude-20260826t050548z
