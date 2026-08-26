@@ -351,6 +351,22 @@ On a durable bare-metal DEVELOPMENT host (not an ephemeral forge):
    ```bash
    scripts/check-capability-row.sh   # ok:capability-row-reported:<host> | due:no-capability-row:<host>
    ```
+   Report scratchpad headroom in the same breath (order 915-wkm2) — one line,
+   ADVISORY, exits 0 on every path:
+   ```bash
+   scripts/check-scratchpad-headroom.sh   # ok:/warn:scratchpad-headroom-low:/skip:
+   ```
+   The agent scratchpad is tmpfs; systemd sizes /tmp at 50% of RAM but a
+   usrquota can sit far below that, so `df` reports gigabytes free while every
+   write returns EDQUOT — the host stays healthy and only the agent's tooling
+   dies. That wedged macuahuitl for several cycles: it presents as "my shell is
+   broken", not "I filled a disk". On `warn:` do NOT build in the scratchpad;
+   build in the checkout. The threshold is absolute (one cold Rust `target/`,
+   2.6-4.4 GB) rather than a percentage, because the fleet's quotas span 4.6x —
+   lenovinha warns at 29% used while macuahuitl is fine at 62%, so any
+   "warn above N%" rule passes the host that will wedge and warns the one that
+   will not.
+
    On `due:`, publish the row THIS cycle — the matrix was silent for 5 of 7
    hosts because nothing ever asked, and capability routing (847-wgy4) cannot
    route to hardware it cannot see:

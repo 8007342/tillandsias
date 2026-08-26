@@ -1,0 +1,86 @@
+events:
+  - packet_id: never-build-a-rust-workspace-in-the-agent-scratchpad
+    event:
+      type: implemented
+      ts: "2026-08-26T18:10:00Z"
+      agent_id: lenovinha-opus5-metaorch-20260826t173725z
+      host: lenovinha
+      summary: |
+        CRITERION 2 LANDED — scripts/check-scratchpad-headroom.sh, wired into the
+        skill's Start-Of-Day maintenance block and pinned by
+        litmus:scratchpad-headroom.
+
+        THE THRESHOLD IS ABSOLUTE, AND THE TWO HOSTS' NUMBERS ARE WHY. A
+        percentage was the obvious design and is exactly wrong:
+
+          lenovinha   1620M of  5525M =  29% used -> WARN (3.9 GiB, cannot build)
+          macuahuitl 15900M of 25564M =  62% used -> ok   (9.6 GiB, can build)
+
+        A "warn above N%" rule PASSES THE HOST THAT WILL WEDGE and WARNS THE ONE
+        THAT WILL NOT. The bar is instead what the work costs — one cold Rust
+        target/ at 2.6-4.4 GB (macuahuitl's measurement), overridable via
+        TILLANDSIAS_SCRATCH_NEED_MB for a host with a different build profile.
+        That inversion is now a fixture arm rather than a comment.
+
+        ADVISORY, EXITS 0 ON EVERY PATH, and a fixture arm plus a litmus step
+        both assert it. A cycle must not fail because a host is low on scratch;
+        it must be TOLD while it can still choose where to build. Gating on a
+        capacity condition is the 888-miiy shape.
+
+        LIVE ON THIS HOST IT ALREADY EARNS ITS KEEP:
+          warn:scratchpad-headroom-low:3905m-of-5525m
+          NOTE: df reports 5286M free, which OVERSTATES what you can use.
+        The trap demonstrated on the machine rather than described.
+
+        QUOTA IS QUERIED WITH `quota -s -f <path>`, not a bare `quota -s`. On
+        this host /dev/shm, /run/user/1000 and /tmp ALL report as "tmpfs", so
+        parsing by device name picks an arbitrary mount — and only one of them is
+        the scratchpad.
+
+        WIRED, NOT MERELY WRITTEN. audit-guard-activation.sh reported
+        `orphan=1 orphans: check-scratchpad-headroom.sh` before wiring and
+        `orphan=0 verdict=ok` after. Per 865-n8vq an orphaned guard is fixed by
+        invoking it, not by mentioning it — and the auditor greps for the NAME,
+        so a mention would have cleared the verdict while leaving the guard as
+        dead as it was. A heads-up went to macuahuitl before landing, since the
+        maintenance block runs on every host.
+  - packet_id: never-build-a-rust-workspace-in-the-agent-scratchpad
+    event:
+      type: verified
+      ts: "2026-08-26T18:15:00Z"
+      agent_id: lenovinha-opus5-metaorch-20260826t173725z
+      host: lenovinha
+      summary: |
+        scripts/test-scratchpad-headroom.sh, all arms green, hermetic with
+        stubbed quota and df. ./build.sh --check green.
+
+        Arms: quota-derived numbers when a quota exists; the tight case
+        reproducing this host's live shape (3905m of 5525m) AND asserting the
+        stderr names df as OVERSTATING; the 4.6x spread classified correctly by
+        one absolute threshold; the percentage inversion demonstrated
+        arithmetically; quota-exhausted and disk-full as DISTINCT verdicts (the
+        amended criteria asked for this explicitly, since the two have different
+        remedies); the no-quota-tool path saying outright it is filesystem space
+        and NOT a quota headroom; no-quota-configured skipping rather than false-
+        alarming; every path exiting 0; and the grammar pinned.
+
+        TWO FIXTURE BUGS OF MY OWN, both caught before landing and both the shape
+        this session keeps producing:
+
+          - THE NO-QUOTA ARMS FOUND THE SYSTEM `quota`. Omitting my stub does not
+            hide /usr/bin/quota, because PREPENDING a bin dir cannot mask a
+            system binary — so those arms silently tested the WITH-quota path and
+            returned skip:no-quota instead of the disk verdict. Same trap as
+            masking jq two cycles ago. Fixed with a curated PATH whose absence of
+            `quota` is ASSERTED as a precondition rather than assumed.
+          - I ASSERTED THE PERCENTAGE POINT BACKWARDS, claiming the warned host
+            was FULLER by percent. It is emptier — 29% against 62% — which is the
+            stronger form of the argument and the one that actually shows a
+            percentage rule inverting both verdicts. The arm failed, which is how
+            I found out; had I written it the loose way it would have passed
+            while asserting something false.
+
+        NOT DONE THIS CYCLE: criteria 3-4, the reaper and its live-session
+        negative control. Deliberately left — landing the check with a real
+        fixture beats half of both, and the reaper needs its own care given a
+        LIVE scratchpad here is 627 MB of active evidence.

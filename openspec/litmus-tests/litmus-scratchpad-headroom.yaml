@@ -1,0 +1,59 @@
+# @trace spec:ci-release
+# @trace order:915-wkm2
+#
+# Pins that scratchpad headroom is reported from the QUOTA, not from `df`.
+#
+# The agent scratchpad is tmpfs. systemd sizes /tmp at 50% of RAM but a usrquota
+# can sit far below it, so df reports gigabytes free while writes return EDQUOT.
+# The host stays healthy and only the agent's tooling dies — it presents as "my
+# shell is broken" rather than "I filled a disk", which is how it wedged a host
+# for several cycles.
+#
+# THE THRESHOLD IS ABSOLUTE AND THAT IS THE LOAD-BEARING CHOICE. Measured
+# 2026-08-26: macuahuitl 25564 MB limit, lenovinha 5525 MB — a 4.6x spread. At
+# 29% used lenovinha cannot fit a cold Rust target/; at 62% used macuahuitl can.
+# A "warn above N%" rule passes the host that will wedge and warns the one that
+# will not, so the bar is what the work costs, not what fraction is gone.
+name: litmus:scratchpad-headroom
+spec: ci-release
+phase: pre-build
+description: >
+  Pin scripts/check-scratchpad-headroom.sh: quota-derived numbers when a quota
+  exists, a distinct verdict when only filesystem space is knowable, an explicit
+  statement that df OVERSTATES usable space, quota-exhausted and disk-full as
+  different verdicts, correct classification of both fleet hosts under one
+  absolute threshold, and exit 0 on every path because it is advisory.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains scripts/check-scratchpad-headroom.sh
+  - workspace contains scripts/test-scratchpad-headroom.sh
+  - bash and coreutils are available in PATH
+
+critical_path:
+  - step: "guard and fixture parse, and the fixture is executable"
+    command: "bash -n scripts/check-scratchpad-headroom.sh && bash -n scripts/test-scratchpad-headroom.sh && test -x scripts/test-scratchpad-headroom.sh && echo 'ok: parses'"
+    timeout_ms: 5000
+    expected_behavior: "ok: parses"
+
+  - step: "all arms pass (quota vs df, the 4.6x spread, quota-vs-disk distinction, advisory exit 0, grammar)"
+    command: "bash scripts/test-scratchpad-headroom.sh 2>&1 | tail -1"
+    timeout_ms: 60000
+    expected_behavior: "ok:scratchpad-headroom-fixture:all"
+
+  - step: "the check is ADVISORY — it must never gate a cycle"
+    command: "bash scripts/check-scratchpad-headroom.sh >/dev/null 2>&1 && echo 'ok: exits 0' || echo 'FAIL: a capacity condition gated the cycle'"
+    timeout_ms: 15000
+    expected_behavior: "ok: exits 0"
+
+evidence:
+  artifact: "scripts/check-scratchpad-headroom.sh + scripts/test-scratchpad-headroom.sh"
+  measured_on: >
+    lenovinha (Fedora Silverblue) 2026-08-26 — live verdict
+    warn:scratchpad-headroom-low:3905m-of-5525m with the stderr note that df
+    reports 5286M free and OVERSTATES what is usable. Fixture green. Two fixture
+    bugs found while writing it: the no-quota-tool arms found the SYSTEM quota
+    because prepending a bin dir cannot hide a system binary (curated PATH now
+    asserted), and the percentage-trap assertion was stated backwards — the
+    warned host is emptier by percent, not fuller, which is the stronger form.

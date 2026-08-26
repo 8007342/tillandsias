@@ -167,6 +167,7 @@ specs:
   - litmus:fold-incompleteness-typed-shape
   - litmus:release-runbook-external-preconditions-shape
   - litmus:script-exec-bit-shape
+  - litmus:scratchpad-headroom
   - litmus:tool-dispatch-lib
   - litmus:shipped-diagnostic-tool-dispatch
   - litmus:daily-maintenance-day-boundary
