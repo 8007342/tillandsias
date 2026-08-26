@@ -264,6 +264,7 @@ mod tests {
                 ControlMessage::CloudRefreshReply {
                     seq_in_reply_to: 1,
                     projects: vec![],
+                    outcome: tillandsias_control_wire::CloudRefreshOutcome::Ok,
                 },
                 "CloudRefreshReply",
             ),
@@ -547,6 +548,7 @@ mod tests {
             ControlMessage::CloudRefreshReply {
                 seq_in_reply_to: 1,
                 projects: vec![],
+                outcome: tillandsias_control_wire::CloudRefreshOutcome::Ok,
             },
             ControlMessage::DeliverCredentialsReply {
                 seq_in_reply_to: 1,

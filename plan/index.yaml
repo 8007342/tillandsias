@@ -19375,6 +19375,69 @@ plan_index:
         - 'Tests for: confirmed-empty renders (no repos); failed-fetch does NOT.'
 
       events:
+        - type: progress
+          ts: "2026-08-26T04:22:56Z"
+          agent_id: "macos-tlatoanis-macbook-air-opus5-20260826t042256z"
+          host: tlatoanis-macbook-air
+          summary: |
+            WIRE DISCRIMINATOR LANDED. The macOS lane and both guest fetchers are done; the Windows tray half remains and needs Windows-lane evidence.
+
+            THE DEFECT, restated as the code showed it: four outcomes shared one representation. `cloud_projects.rs` returned a bare `Vec` documented as "always well-formed — empty on missing binary, missing auth, non-zero exit, malformed JSON", and an account with genuinely zero repos produced the identical value. `CloudRefreshReply` carried no ok/err field, so the tray inferred "confirmed empty" from a message that only ever meant "here is a list". Well-formed is not the same as informative, and that doc line was the defect written down as a feature.
+
+            WIRE (exit criterion 1):
+              * `CloudRefreshOutcome { Ok, Failed { reason }, Unknown }` in control-wire.
+              * `CloudRefreshReply` gains `#[serde(default)] outcome`.
+              * `is_confirmed()` is the single predicate consumers branch on, so `Unknown`
+                cannot be forgotten at a call site the way `matches!(.., Failed{..})` invites.
+
+            UNKNOWN IS THE DEFAULT AND THAT IS THE MIXED-VERSION HALF. A guest predating this field serializes no `outcome`; serde fills `Unknown`; the host treats the list as unconfirmed. Defaulting to `Ok` would make an OLD guest's every reply — including its failures — read as a confirmed answer, which is exactly the bug. FAIL CLOSED: an absent discriminator is not a success discriminator. Same reasoning as CAP_EXEC_ARGV_VECTOR's feature-detect in 795-zshi.
+
+            GUEST — all four collapsed outcomes now report themselves:
+              * `cloud_projects.rs`: non-zero exit -> Failed(exit code); gh unrunnable ->
+                Failed(io error); gh OK but output did not parse -> Failed. The fourth,
+                a real empty JSON array, is the ONLY empty list that reports Ok — separated
+                by a new `is_empty_json_array` helper, without which "empty" would still
+                have been ambiguous after all the other work.
+              * `vsock_server::fetch_cloud_projects` — THE WRAPPER THAT ACTUALLY RUNS IN
+                THE VM, and the one I nearly missed by fixing only the shared module. Its
+                `Err(e)` arm already HAD the discriminator and was discarding it one line
+                before the host needed it.
+              * `spawn_blocking(...).unwrap_or_default()` now defaults to (empty, Unknown),
+                so a panicked or cancelled fetch also fails closed rather than announcing
+                a confirmed-empty account.
+
+            EXIT CRITERION 2 — neither tray latches on a failed fetch:
+              * `apply_login_transition` only calls `set_cloud_projects` when the outcome is
+                confirmed. This is the post-login fetch, i.e. the exact moment the tray first
+                renders the cloud submenu, and publishing an empty list here because `gh` was
+                not ready yet is what showed "(no repos)" to accounts with hundreds.
+              * macOS `apply_cloud_projects` takes `confirmed: bool` and returns early on
+                false — no rebuild, no latch, previous list untouched.
+
+            EXIT CRITERION 3 — a failed fetch renders something truthful: it renders the
+            PREVIOUS list, and the submenu keeps saying "(loading repos…)" if there has
+            never been an answer. Doing nothing is the truthful response to being told
+            nothing. This is the defensive position Linux already took (stamp last_fetched
+            only on success) now enforced on macOS.
+
+            EXIT CRITERION 4 — the tests, HAND-FALSIFIED IN BOTH DIRECTIONS:
+              * failed_fetch_does_not_render_no_repos_but_confirmed_empty_does — both arms
+                in ONE test deliberately, because the pair IS the property: either arm alone
+                passes for an implementation that ignores the discriminator entirely, in one
+                direction or the other.
+              * failed_fetch_preserves_a_previously_confirmed_list — the mid-session break
+                the operator reported; a failure must not replace a good list with an empty
+                one, nor un-latch a flag a real answer earned.
+              Removing the `if !confirmed` guard turns BOTH red; restoring returns both
+              green. 2/2, and 5/5 across the pre-existing cloud tests, which were updated to
+              pass `true` explicitly rather than inherit the old implicit "every reply is an
+              answer" assumption.
+
+            VERIFIED: `cargo check --workspace --all-targets` clean, `-p tillandsias-headless --features listen-vsock --all-targets` clean, `./build.sh --check` green with TILLANDSIAS_FORCE_CHECK=1.
+
+            STILL OPEN, deliberately not attempted: the WINDOWS tray carries the identical LoggedOut-only condition in `notify_icon::apply_github_login` and the same unconditional latch in its `apply_cloud_projects`. The wire now gives it everything it needs; the change needs Windows-lane evidence, exactly as this packet's own note and 635-bhkb's scope correction both say. The macOS crate cannot verify it.
+
+            A NOTE FOR WHOEVER TAKES THE WINDOWS HALF: the pair-in-one-test shape above is worth copying rather than splitting into two tests. Two tests can drift apart and one can be deleted as redundant; a single test asserting BOTH directions cannot pass an implementation that ignores the discriminator.
         - type: note
           ts: "2026-08-16T21:56:37Z"
           agent_id: "windows-yolanda-fable5-20260816T2130Z-mirror-fix"
