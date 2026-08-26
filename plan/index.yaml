@@ -24266,6 +24266,32 @@ plan_index:
             scripts/test-hash-image-sources.sh passes on Windows (a core.autocrlf=true host config) and on Linux; the exec-bit scenario is gated on core.fileMode=true with a loud skip verdict where false, per the issue's second question.
 
       events:
+        - type: verified
+          ts: "2026-08-26T07:44:53Z"
+          agent_id: "linux-yoga-opus5-20260826t074453z"
+          host: yoga
+          summary: |
+            CLOSED. Windows verified by yolanda on both userlands, and the packet's core claim is now proven ACROSS HOSTS — which neither of us had done and which is stronger than either host's own evidence.
+
+            THE CROSS-HOST MEASUREMENT, at trunk ef244da05:
+              yoga (Linux, core.autocrlf unset, core.fileMode=true)   8acbb11aee6fc1e7764f269af24b17544fb687224a33415beed118348d26aecf
+              yolanda Git Bash (core.autocrlf=true,  fileMode=false)  8acbb11aee6fc1e7764f269af24b17544fb687224a33415beed118348d26aecf
+              yolanda WSL      (core.autocrlf empty, fileMode=false)  8acbb11aee6fc1e7764f269af24b17544fb687224a33415beed118348d26aecf
+            Byte-identical on three checkouts across two operating systems and three distinct autocrlf/fileMode regimes. That IS exit criterion 1, measured rather than argued.
+
+            I ALMOST REPORTED A DISCREPANCY THAT DID NOT EXIST. yolanda's hash did not match the 2355af50 I recorded earlier, and my first reading was that git-normalized hashing should make two clones of the same commit agree — so a mismatch would falsify the fix. It was not a mismatch: 2355af50 is the `default` image and 8acbb11a is `forge`. Different image names, different source sets, different hashes by design. I had compared two different things. Checking before reporting cost one command; reporting it would have sent a working lane hunting a defect that was my own bookkeeping.
+
+            yolanda's flip, same command same host: FAIL: forge hash depends on checkout location (baseline, four hours earlier) -> PASS on both sides. A flip from a known red, not a fresh green of unknown provenance.
+
+            AND THEY REFUSED TO ACCEPT THEIR OWN GREEN ON THE PASS LINE. The fixture has a `SKIP: no tracked file under images/default to test CRLF invariance` path, and a terse PASS cannot distinguish "the CRLF arm held" from "the CRLF arm never ran". Rather than infer from an absent SKIP line they checked positively: 326 tracked files under images/default (so the skip precondition is false), and `bash -x | grep -c` showing 3 arm markers on EACH side. Both the CRLF arm and the update-index exec arm executed on both userlands, unskipped and ungated. That is the standard they had previously made lenovinha's fixture meet, applied to mine.
+
+            EXIT CRITERION 2 IS RESTATED, NOT UNMET, AND THE LANE OWNER RULED ON IT. The criterion asked for the exec-bit scenario to be gated on core.fileMode=true with a loud skip where false, because it assumed a worktree chmod. Index-based hashing removes the PREMISE rather than the symptom: `git update-index --chmod=+x` writes the index directly and behaves identically where core.fileMode=false — verified running unskipped on both of yolanda's lanes. Their ruling, and I would not have made it unilaterally: "a platform-gated scenario is strictly worse than a platform-independent one; adding the gate now would mean my lane never exercises the exec arm — trading real coverage for the appearance of caution." Same trade lenovinha declined on the stamp.
+
+            BOTH DESIGN DECISIONS CONFIRMED ON THE LANE THAT COULD HAVE BROKEN THEM. No logic branches on core.autocrlf — confirmed by the hashes agreeing across two sides that disagree about autocrlf. And the tracked/untracked arms are exclusive PER INVOCATION via `git rev-parse --is-inside-work-tree`, which yolanda accepted as a better answer than the disjointness assertion they had asked for: their 77 unmaterialized symlinks go down the index arm and get mode 120000 regardless of core.symlinks=false.
+
+            WHAT MADE THE GREEN BELIEVABLE, in their words rather than mine: the mutation test. Reverting the hasher makes the CRLF arm fail with its own message, and the negative control requires a genuinely staged change to move the hash — so the arm cannot pass on a hasher that ignores content. They called it the standard they would want on anything gating an image cache key.
+
+            COST ACCEPTED: cache key moves once, bb2bd5ea -> 2355af50 for `default` and correspondingly for every image. Every host rebuilds forge images once on its next --init. yolanda has the slowest lane and explicitly declined to have it held on their account.
         - type: progress
           ts: "2026-08-26T07:39:25Z"
           agent_id: "linux-yoga-opus5-20260826t073925z"
