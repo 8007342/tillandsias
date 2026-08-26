@@ -425,6 +425,116 @@ credential_channel_verdict() {
         return 1
         ;;
     esac
+    # ORDER 894-scxy — NAME THE LAYER THAT FAILED, NOT THE LAYER WE OBSERVED.
+    #
+    # gh prints "The token in keyring is invalid". The keyring is the layer it
+    # OBSERVED; GitHub is the layer that FAILED. MEASURED on pirria 2026-08-25:
+    # the secret-service entry was present (service=gh:github.com, created
+    # 08-18, modified 23:17:35 by the operator's own refresh), the login
+    # collection was UNLOCKED (`Locked` -> `b false`), the token came back
+    # intact at 40 chars — and GitHub answered 401 on it 27 minutes later. The
+    # keyring was healthy in every component.
+    #
+    # THREE HOSTS DIAGNOSED THE WRONG SUBSYSTEM FROM THAT ONE STRING. One built
+    # a mechanism on the premise; another relayed a keyring direction
+    # fleet-wide. A missing signal leaves a reader searching; a MISATTRIBUTED
+    # one leaves them searching confidently, in the wrong place, and stopping
+    # when they find nothing there. That is why this is worse than silence.
+    #
+    # We cannot reword gh's output — it is upstream. What we can do is refuse to
+    # inherit its misattribution and pass it on, since THIS guard runs on every
+    # host before any committable work.
+    #
+    # NEVER MATERIALISE THE SECRET TO DECIDE THIS. `secret-tool search --all`
+    # prints the value inline; two hosts put live gho_ tokens into their own
+    # transcripts learning that. `gh api user` gives the same 200/401
+    # discrimination and prints no secret: 200 means GitHub ACCEPTED the stored
+    # credential, 401 means it REJECTED it. Every keyring probe below is
+    # read-only and touches only metadata.
+    _ccc_gh_failure_layer() {
+      # THE PLAINTEXT-FALLBACK STATE FIRST, because it makes every keyring probe
+      # irrelevant rather than merely negative — pirria's third state, which
+      # neither the filing host nor the coordinator had named, and which a
+      # two-state classifier silently mis-buckets into "keyring healthy".
+      if [ -r "${HOME:-}/.config/gh/hosts.yml" ] \
+         && grep -q '^[[:space:]]*oauth_token:' "${HOME}/.config/gh/hosts.yml" 2>/dev/null; then
+        printf 'plaintext'
+        return 0
+      fi
+      # Does GitHub accept the stored credential? This is the discriminator and
+      # nothing else is.
+      local _api_err _api_rc=0
+      _api_err="$(GH_PROMPT_DISABLED=1 timeout 20 gh api user 2>&1 >/dev/null)" || _api_rc=$?
+      if [ "$_api_rc" -eq 0 ]; then
+        printf 'accepted'
+        return 0
+      fi
+      case "$_api_err" in
+        *401*|*"Bad credentials"*|*"Requires authentication"*)
+          printf 'rejected'
+          return 0 ;;
+      esac
+      # Not accepted, not a clean 401. Now — and only now — is the keyring worth
+      # asking about, because "could not retrieve" is the remaining shape.
+      if ! busctl --user list 2>/dev/null | grep -q 'org\.freedesktop\.secrets'; then
+        printf 'unretrievable-no-service'
+        return 0
+      fi
+      local _locked
+      _locked="$(busctl --user get-property org.freedesktop.secrets \
+                   /org/freedesktop/secrets/collection/login \
+                   org.freedesktop.Secret.Collection Locked 2>/dev/null)"
+      case "$_locked" in
+        *true*) printf 'unretrievable-locked'; return 0 ;;
+      esac
+      printf 'indeterminate'
+    }
+
+    case "$(_ccc_gh_failure_layer)" in
+      rejected)
+        echo "[check-credential-channel] THE TOKEN WAS REJECTED BY GITHUB — the keyring is not the problem." >&2
+        echo "  \`gh api user\` returned 401 against the stored credential. The secret was" >&2
+        echo "  retrieved fine; GitHub refused it. Look at the ACCOUNT, not the keyring:" >&2
+        echo "  the token is expired, revoked, or had its scopes/SSO authorisation withdrawn." >&2
+        echo "  gh's own message says \"The token in keyring is invalid\", which names the" >&2
+        echo "  layer it OBSERVED rather than the one that FAILED (894-scxy). Three hosts" >&2
+        echo "  diagnosed the keyring from that string on 2026-08-25; the keyring was healthy." >&2
+        echo "  REMEDY:  gh auth refresh   # or: gh auth login" >&2
+        echo "  Then re-run this guard. Do NOT go looking at secret-service." >&2
+        echo "blocked:credential-rejected-by-github"
+        return 1 ;;
+      unretrievable-no-service)
+        echo "[check-credential-channel] THE CREDENTIAL COULD NOT BE RETRIEVED — org.freedesktop.secrets is not on the session bus." >&2
+        echo "  This is a LOCAL retrieval failure, not an account problem. gh cannot reach" >&2
+        echo "  the secret store at all, so nothing has been presented to GitHub yet." >&2
+        echo "  Common in a headless/cron/ssh session with no session keyring." >&2
+        echo "  REMEDY: run inside a session with a keyring, or inject GH_TOKEN for this run." >&2
+        echo "blocked:credential-unretrievable-no-keyring-service"
+        return 1 ;;
+      unretrievable-locked)
+        echo "[check-credential-channel] THE CREDENTIAL COULD NOT BE RETRIEVED — the login keyring collection is LOCKED." >&2
+        echo "  A LOCAL retrieval failure. The token may be perfectly valid; nothing has" >&2
+        echo "  been presented to GitHub. Unlock the collection and re-run." >&2
+        echo "blocked:credential-unretrievable-keyring-locked"
+        return 1 ;;
+      plaintext)
+        echo "[check-credential-channel] gh is using a PLAINTEXT token in ~/.config/gh/hosts.yml, not the keyring." >&2
+        echo "  Reported because it changes where to look: keyring probes say nothing about" >&2
+        echo "  this host, and a keyring-shaped diagnosis would be misattribution (894-scxy)." >&2
+        echo "  The push probe still failed, so the stored token is bad or lacks push rights." >&2
+        echo "  REMEDY: gh auth login  (and consider moving off the plaintext fallback)" >&2
+        echo "blocked:credential-plaintext-token-rejected"
+        return 1 ;;
+      accepted)
+        echo "[check-credential-channel] GitHub ACCEPTS this credential (\`gh api user\` 200), but the PUSH probe failed." >&2
+        echo "  So this is neither a keyring fault nor a dead token: the identity is good and" >&2
+        echo "  something about the PUSH is not. Usually repository push permission, SSO" >&2
+        echo "  authorisation not granted for this org, or a scope missing from the token." >&2
+        echo "  REMEDY: check the token's repo scope and any org SSO authorisation." >&2
+        echo "blocked:credential-accepted-but-push-refused"
+        return 1 ;;
+    esac
+
     # gh has a token, git cannot push with it, and no interactive helper
     # explains it: a distinct verdict the cycle must RESOLVE before any
     # committable work, never a bare ok (exit criterion 1).
