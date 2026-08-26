@@ -38,10 +38,35 @@ Measured on calmecacpilli:
 host declares `size=`, so `df` shows the 50%-of-RAM default in both cases, and
 in both cases the usrquota sits BELOW it. The hosts differ only in margin:
 
-| | `df` claims | real wall | gap |
+| | `df` claims | real wall (`quota -s`) | gap |
 |---|---|---|---|
-| calmecacpilli | 3.9 GB | 3148 MiB (`quota -s`) | ~19% overstated |
-| macuahuitl | ~31 GB, ~13 GB free | at or below ~18 GB (inferred) | enough to invite the build |
+| calmecacpilli | 3.9 GB (3934 MiB) | 3148 MiB | ~20% overstated |
+| macuahuitl | ~31 GB (31744 MiB) | 25564 MiB | ~20% overstated |
+
+**BOTH NUMBERS ARE NOW MEASURED.** macuahuitl's wall was originally recorded
+here as "at or below ~18 GB (inferred)"; their shell recovered and `quota -s`
+returned **25564 MB**. The inference was confidently reasoned and wrong by
+~7 GB, which is why it was recorded as an inference. Replaced.
+
+**AND IT IS A SYSTEMD DEFAULT, NOT LOCAL POLICY** — verified independently on
+both hosts. `/usr/lib/systemd/system/tmp.mount` ships:
+
+    Options=mode=1777,strictatime,nosuid,nodev,size=50%,nr_inodes=1m,x-systemd.graceful-option=usrquota
+
+Nobody restricted these machines; stock systemd did. **So this is fleet-wide by
+construction**, on every host whose `/tmp` comes from systemd, and the small
+scratchpad here is not a local quirk.
+
+**THE QUOTA APPEARS TO BE ~80% OF THE MOUNT SIZE**, which makes the wall
+predictable from `df` even without `quota -s`:
+
+    calmecacpilli:  3148 / 3934  = 0.8002
+    macuahuitl:    25564 / 31744 = 0.8053
+
+n=2 hosts, so treat the ratio as a rule of thumb rather than a constant — the
+0.5% spread may be rounding in the RAM figure or may be real. **`quota -s`
+stays the authoritative check**; the ratio is useful only for predicting
+whether a planned write is anywhere near the wall before bothering.
 
 **A cold `./build.sh --check` in a fresh worktree costs 4.4 GB** (macuahuitl's
 measurement). Against a 3148 MiB quota, a lane built in this host's scratchpad
@@ -56,6 +81,30 @@ therefore sits at or below ~18 GB, since 18 GB against a ~31 GB mount cannot
 produce `ENOSPC` and the kernel returned the quota error specifically. `quota
 -s`, or `repquota` for an operator, would settle it; they cannot run either
 from a shell that is already dead.
+
+## The builds were the TRIGGER, not the cause
+
+macuahuitl initially reported — and this file initially recorded — that their
+own concurrent builds filled the quota. With a shell back, they measured it and
+corrected themselves: after deleting their ~9.6 GB, `/tmp/claude-1000` still
+held **12 GB from a DEAD session**, idle since 2026-08-25 — a 4.4 GB
+`warm-store`, a 2.5 GB cargo `ctarget`, and 545 MB `proto-store` across 114
+directories. With ~3 GB of other `/tmp` residue: 12 + 3 + 9.6 ≈ 24.6 GiB
+against a 24.96 GiB quota.
+
+**So the scratchpad was already at ~95% before the builds started.** Any
+moderately large write would have wedged that session; the builds merely got
+there first.
+
+That changes the remedy's shape. A rule of "do not build in the scratchpad" is
+necessary and **not sufficient** — a host can be one careless write from EDQUOT
+with no build involved, because *dead sessions do not clean up after
+themselves*. The 4.4 GB `warm-store` in that residue was nix-cache staging: a
+sibling doing legitimate work, unreaped for a day.
+
+This is the same unreaped-state shape as the 13 agent worktrees at 60 GB
+recorded on order 863-iicc criterion 4 — different directory, same absence of a
+reaper.
 
 ## The memory signals actively confirm the WRONG hypothesis
 
