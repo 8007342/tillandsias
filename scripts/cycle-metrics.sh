@@ -103,6 +103,17 @@
 
 set -uo pipefail
 
+
+# ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has it.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/tool-dispatch.sh" 2>/dev/null || true
+if command -v resolve_tool >/dev/null 2>&1; then
+    JQ="$(resolve_tool jq || printf 'jq')"
+else
+    JQ="jq"   # lib unavailable: preserve the previous behaviour exactly
+fi
+
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 
@@ -344,7 +355,7 @@ if [ -r "$USAGE_LOG" ]; then
     errors=$(printf '%s\n' "$PLAN_STREAM" | grep -c '"outcome":"error"' 2>/dev/null) || errors=0
     # `jq -r` renders a missing key as the literal string "null", which would be
     # reported as a tool name. Drop those rather than print a word no tool has.
-    t=$(printf '%s\n' "$PLAN_STREAM" | jq -r '.tool // empty' 2>/dev/null | sort -u | paste -sd, - 2>/dev/null || true)
+    t=$(printf '%s\n' "$PLAN_STREAM" | "$JQ" -r '.tool // empty' 2>/dev/null | sort -u | paste -sd, - 2>/dev/null || true)
     [ -n "$t" ] && tools="$t"
 fi
 
@@ -583,7 +594,7 @@ flow_avg_completed="-"; flow_avg_commits="-"; flow_overhead="-"
 flow_source="absent"
 if [ -r "$FLOW_LOG" ]; then
     flow_source="$FLOW_LOG"
-    flow_stats="$(jq -R 'fromjson?' "$FLOW_LOG" 2>/dev/null | jq -s -r '
+    flow_stats="$("$JQ" -R 'fromjson?' "$FLOW_LOG" 2>/dev/null | "$JQ" -s -r '
         map(select(type=="object")) as $r
         | ($r | length) as $n
         | if $n == 0 then "0 - - -"
@@ -632,7 +643,7 @@ timing_build_check_avg="-"; timing_litmus_avg="-"; timing_slowest="-:-"
 timing_source="absent"
 if [ -r "$TIMING_LOG" ]; then
     timing_source="$TIMING_LOG"
-    timing_stats="$(jq -R 'fromjson?' "$TIMING_LOG" 2>/dev/null | jq -s -r '
+    timing_stats="$("$JQ" -R 'fromjson?' "$TIMING_LOG" 2>/dev/null | "$JQ" -s -r '
         # 693-tf79: reject implausible durations (negative, or >= 24h in ms).
         # A record whose duration_ms is really an absolute epoch (~1.78e12,
         # from a zero start time) must never enter the averages or the slowest

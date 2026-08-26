@@ -26,6 +26,17 @@
 
 set -uo pipefail
 
+
+# ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has it.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/tool-dispatch.sh" 2>/dev/null || true
+if command -v resolve_tool >/dev/null 2>&1; then
+    JQ="$(resolve_tool jq || printf 'jq')"
+else
+    JQ="jq"   # lib unavailable: preserve the previous behaviour exactly
+fi
+
 # On Fedora Silverblue (immutable), transparently re-exec inside the
 # tillandsias-builder toolbox where Rust/gcc/ruby/etc are available.
 # Non-Silverblue hosts skip with zero overhead. Sourced first so the
@@ -487,7 +498,7 @@ write_convergence_artifacts() {
             residual_cc=$((residual_cc + weight))
             failed_specs+=("$(check_spec_ref "$check_id")")
             failed_weights+=("$weight")
-            jq -nc \
+            "$JQ" -nc \
                 --arg reason "$(failed_reason_for_check "$check_id")" \
                 --arg spec "$(check_spec_ref "$check_id")" \
                 --argjson cc "$weight" \
@@ -500,7 +511,7 @@ write_convergence_artifacts() {
 
     local failed_reasons_json
     if [[ -s "$failed_reasons_file" ]]; then
-        failed_reasons_json="$(jq -sc '.' "$failed_reasons_file")"
+        failed_reasons_json="$("$JQ" -sc '.' "$failed_reasons_file")"
     else
         failed_reasons_json='[]'
     fi
@@ -554,7 +565,7 @@ write_convergence_artifacts() {
 
     local signature_tmp
     signature_tmp="$(mktemp)"
-    jq -nc \
+    "$JQ" -nc \
         --arg timestamp "$CI_TIMESTAMP" \
         --arg version "$VERSION_VALUE" \
         --arg source_commit "$SOURCE_COMMIT" \
@@ -626,10 +637,10 @@ write_convergence_artifacts() {
     signature_history_file="$(mktemp)"
     signature_latest_file="$(mktemp)"
     trap 'rm -f "$failed_reasons_file" "$failed_checks_file" "$failed_reasons_list_file" "$signature_history_file" "$signature_latest_file"' RETURN
-    jq -s '.' "$SIGNATURE_JSONL" >"$signature_history_file"
-    jq '.[-1]' "$signature_history_file" >"$signature_latest_file"
+    "$JQ" -s '.' "$SIGNATURE_JSONL" >"$signature_history_file"
+    "$JQ" '.[-1]' "$signature_history_file" >"$signature_latest_file"
 
-    jq -nc \
+    "$JQ" -nc \
         --arg generated_at "$CI_TIMESTAMP" \
         --arg source_file "target/convergence/centicolon-signature.jsonl" \
         --argjson record_count "$(wc -l < "$SIGNATURE_JSONL")" \
@@ -651,7 +662,7 @@ write_convergence_artifacts() {
         delta_hash="$(shasum -a 256 "$DELTA_JSON" | awk '{print $1}')"
     fi
 
-    jq -nc \
+    "$JQ" -nc \
         --arg timestamp "$CI_TIMESTAMP" \
         --arg version "$VERSION_VALUE" \
         --arg source_commit "$SOURCE_COMMIT" \
@@ -809,7 +820,7 @@ archive_check_log() {
     fi
     _CHECK_ANCHOR_MS="$_acl_now"
 
-    jq -nc \
+    "$JQ" -nc \
         --arg ci_run_id "$CI_RUN_ID" \
         --arg ci_phase "$CI_PHASE" \
         --arg check_id "$check_id" \
@@ -971,7 +982,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         coverage_output=$(bash scripts/validate-traces.sh --coverage-threshold 2>&1 | tee /tmp/trace-coverage.log)
         if [[ $? -eq 0 ]]; then
             # Extract coverage percentage from JSON output
-            coverage_pct=$(echo "$coverage_output" | jq -r '.coverage_percentage // 0' 2>/dev/null || echo "unknown")
+            coverage_pct=$(echo "$coverage_output" | "$JQ" -r '.coverage_percentage // 0' 2>/dev/null || echo "unknown")
             log_pass "Spec trace coverage: $coverage_pct% (≥ 90%)"
             archive_check_log "spec-trace-coverage" "pass" /tmp/trace-coverage.log
         else
