@@ -33,6 +33,17 @@
 
 set -eu
 
+
+# ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has it.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/tool-dispatch.sh" 2>/dev/null || true
+if command -v resolve_tool >/dev/null 2>&1; then
+    JQ="$(resolve_tool jq || printf 'jq')"
+else
+    JQ="jq"   # lib unavailable: preserve the previous behaviour exactly
+fi
+
 usage() {
     cat <<'USAGE'
 usage: windows-host-capability-probe.sh [--fragment] [--host-id ID] [--ts ISO8601]
@@ -134,7 +145,7 @@ fi
 # engineering problems ("buy hardware" versus "ship a lane").
 #
 # The two reason strings are the fleet's existing vocabulary, not new terms.
-DOC="$(printf '%s' "$PS_JSON" | jq -c \
+DOC="$(printf '%s' "$PS_JSON" | "$JQ" -c \
     --arg host_id "$HOST_ID" \
     --arg ts "$TS" \
     '
@@ -180,7 +191,7 @@ DOC="$(printf '%s' "$PS_JSON" | jq -c \
     }')"
 
 if [ "$EMIT_FRAGMENT" -eq 0 ]; then
-    printf '%s\n' "$DOC" | jq .
+    printf '%s\n' "$DOC" | "$JQ" .
     exit 0
 fi
 
@@ -201,4 +212,4 @@ capabilities:
     locus: windows-host
     document:
 HEADER
-printf '%s\n' "$DOC" | jq . | sed 's/^/      /'
+printf '%s\n' "$DOC" | "$JQ" . | sed 's/^/      /'

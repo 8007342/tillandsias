@@ -54,6 +54,17 @@
 
 set -uo pipefail
 
+
+# ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has it.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/tool-dispatch.sh" 2>/dev/null || true
+if command -v resolve_tool >/dev/null 2>&1; then
+    JQ="$(resolve_tool jq || printf 'jq')"
+else
+    JQ="jq"   # lib unavailable: preserve the previous behaviour exactly
+fi
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 2
 
@@ -94,9 +105,9 @@ _nix store ping >/dev/null 2>&1 || { echo "skip:nix-deps-stability:nix-unusable"
 probe() { # <output> -> "<top>\t<deps>"
     local out="$1" json top deps
     json="$(_nix derivation show ".#${out}" 2>/dev/null)" || return 1
-    top="$(printf '%s' "$json" | jq -r '
+    top="$(printf '%s' "$json" | "$JQ" -r '
         (if has("derivations") then .derivations else . end) | keys[0]' 2>/dev/null)"
-    deps="$(printf '%s' "$json" | jq -r '
+    deps="$(printf '%s' "$json" | "$JQ" -r '
         (if has("derivations") then .derivations else . end)
         | to_entries[0].value
         | ((.inputs.drvs // {}) + (.inputDrvs // {}))

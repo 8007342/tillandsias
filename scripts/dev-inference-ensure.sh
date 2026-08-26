@@ -65,6 +65,17 @@
 
 set -uo pipefail
 
+
+# ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has it.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/tool-dispatch.sh" 2>/dev/null || true
+if command -v resolve_tool >/dev/null 2>&1; then
+    JQ="$(resolve_tool jq || printf 'jq')"
+else
+    JQ="jq"   # lib unavailable: preserve the previous behaviour exactly
+fi
+
 ENDPOINT_HOST="127.0.0.1"
 ENDPOINT_PORT="${TILLANDSIAS_DEV_INFERENCE_PORT:-11434}"
 ENDPOINT="http://${ENDPOINT_HOST}:${ENDPOINT_PORT}"
@@ -101,7 +112,7 @@ api_up() { curl -fsS --max-time 2 "$ENDPOINT/api/version" >/dev/null 2>&1; }
 
 have_model() { # <model>
     curl -fsS --max-time 5 "$ENDPOINT/api/tags" 2>/dev/null \
-        | jq -e --arg m "$1" '.models[]?.name | select(. == $m or startswith($m + ":"))' \
+        | "$JQ" -e --arg m "$1" '.models[]?.name | select(. == $m or startswith($m + ":"))' \
             >/dev/null 2>&1
 }
 
@@ -113,7 +124,7 @@ pull_model() { # <model> — native binary when present, else the serve API.
         "$BIN" pull "$1" >>"$LOG" 2>&1
     else
         curl -fsS --max-time 1800 -X POST "$ENDPOINT/api/pull" \
-            -d "$(jq -cn --arg m "$1" '{name: $m}')" >>"$LOG" 2>&1
+            -d "$("$JQ" -cn --arg m "$1" '{name: $m}')" >>"$LOG" 2>&1
     fi
 }
 

@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+
+# ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has it.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/tool-dispatch.sh" 2>/dev/null || true
+if command -v resolve_tool >/dev/null 2>&1; then
+    JQ="$(resolve_tool jq || printf 'jq')"
+else
+    JQ="jq"   # lib unavailable: preserve the previous behaviour exactly
+fi
+
 # Portable SHA-256 (851-28b5): coreutils sha256sum on Linux/forge/WSL; stock
 # macOS before 13 ships only `shasum`. Identical "<hex>  <name>" output.
 if command -v sha256sum >/dev/null 2>&1; then
@@ -115,7 +126,7 @@ SOURCE=/dev/null \
     bash "$DASHBOARD_SCRIPT" >/dev/null
 
 test -s "$fixture_dir/centicolon-dashboard.md"
-jq -e . "$fixture_dir/centicolon-dashboard.json" >/dev/null
+"$JQ" -e . "$fixture_dir/centicolon-dashboard.json" >/dev/null
 test "$("${PORTABLE_SHA256[@]}" "$tracked_md")" = "$tracked_md_before"
 test "$("${PORTABLE_SHA256[@]}" "$tracked_json")" = "$tracked_json_before"
 

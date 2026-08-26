@@ -25,6 +25,17 @@
 # payloads), no network, no ollama, no repo writes. Everything under mktemp.
 set -uo pipefail
 
+
+# ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has it.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/tool-dispatch.sh" 2>/dev/null || true
+if command -v resolve_tool >/dev/null 2>&1; then
+    JQ="$(resolve_tool jq || printf 'jq')"
+else
+    JQ="jq"   # lib unavailable: preserve the previous behaviour exactly
+fi
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SUT="$ROOT/scripts/bench-inference-floor.sh"
 
