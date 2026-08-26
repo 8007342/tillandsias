@@ -12535,6 +12535,54 @@ plan_index:
         Order 270 (macos-attach-first-use-materialization-blackout, status ready) already owns "materialization emits a progress signal the tray can render" for the IMAGE-BUILD half. This packet is the same defect one layer out — container lifecycle and the sign-in preflight — and cross-platform. Whoever claims either should read both; they may merge.
       events:
         - type: note
+          ts: "2026-08-26T09:35:28Z"
+          agent_id: "linux-macuahuitl-claude-20260826t093528z"
+          host: macuahuitl
+          summary: |
+            THIS PACKET IS HALF DONE AND STILL ADVERTISES ITSELF AS READY AT THE URGENT HEAD OF THE BATCH. Verified before taking it, not after.
+
+            SURFACE (a) -- SIGN-IN PREFLIGHT SILENCE -- IS ALREADY FIXED, and has been since 9a244471c (2026-08-09 01:20 PDT, "fix(login,tray): the GitHub Login terminal is kernel-STOPPED, not slow (627-sgtt/627-wtrp)"). crates/tillandsias-headless/src/main.rs now carries, in run_provider_login:
+
+                // Without `--debug` this whole preflight was SILENT, and on a cold guest it
+                // loads a ~580MB image and brings up Vault + the enclave proxy -- minutes of
+                // a terminal that shows literally nothing, which reads to an operator as a
+                // hung window (v0.4.260809.2 field report).  Progress is therefore
+                // unconditional; `--debug` still adds the full command-level trace.
+                // @trace plan/issues/windows-github-login-blank-terminal-2026-08-09.md
+                let interactive = matches!(config.input_mode, LoginInputMode::Terminal);
+                let step = |msg: &str| { if interactive { println!("[tillandsias] {msg}"); } };
+                step(&format!("{provider_name} login -- preparing; the first run can take a few minutes"));
+
+            That first message is materially THIS PACKET'S PROPOSED TEXT for (a): "Getting things ready -- this can take a few minutes the first time." Different wording, same shape, same placement, and it is gated to Terminal mode so the --with-token automation lane stays clean -- which is a refinement the packet did not propose.
+
+            SURFACE (b) -- CONTAINER BRING-UP -- IS STILL OPEN, verified: emit_launch_event still opens with `if !enabled { return; }`, so the well-shaped starting/running/failed events remain invisible by default.
+
+            THE PACKET'S "VERIFIED" CLAIMS HAVE BOTH AGED, IN DIFFERENT WAYS:
+
+              (a) "run_provider_login has exactly ONE unconditional println!" -- now THREE.
+                  One is the new `step()` emitter; two are the completion line in
+                  with-username and without-username forms. The claim was true when
+                  written and is false now, and the thing that falsified it is the fix.
+
+              (b) "VERIFIED at crates/tillandsias-podman/src/client.rs:1849" -- the
+                  BEHAVIOUR is still there, but at line 2001-2010. Line 1849 is now an
+                  unrelated `cmd.args([...])` block. The citation drifted ~152 lines.
+
+            That second one is 881-29me exactly -- cite code by SYMBOL, not line -- and it is the more dangerous of the two, because a reader who checks 1849, finds unrelated code, and concludes the packet is wrong would discard a claim that is actually still true.
+
+            WHAT THE NEXT TAKER SHOULD DO, and it is now much smaller than 5 hours:
+              - Do NOT re-implement (a). It landed two weeks ago.
+              - (b) alone remains, and the packet's own alternative for it -- "promote the
+                EXISTING emit_launch_event lines" -- is the cheap path, since
+                run_container_observed already produces well-shaped events.
+              - Re-scope the estimate and the blocked_on. `blocked_on: operator UX
+                approval` may be partly discharged: (a)'s user-facing text shipped, so
+                either approval was granted for that surface or the gate was not applied
+                to it. Worth resolving before (b)'s strings are written, since (b) is the
+                same kind of end-user terminal output.
+
+            NOT CLAIMED BY ME. I verified rather than implemented because (b)'s deliverable is user-facing terminal text under spec:tray-ux UX curation governance, which is Tlatoani-gated, and half a packet's premise being stale is worth recording before anyone spends five hours on it.
+        - type: note
           ts: "2026-08-23T08:57:55Z"
           agent_id: "linux-yoga-fable5-20260823T081315Z"
           host: yoga
