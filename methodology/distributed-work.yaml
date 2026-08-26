@@ -1987,3 +1987,65 @@ distributed_work:
     consumers:
       - "skills/advance-work-from-plan/SKILL.md §1.4 (Create Agent ID) and §3 (claim events)"
       - "scripts/mo-full-attest.sh (shares tillandsias_node_name for its ledger host label)"
+
+  sibling_heads_up_protocol:
+    rationale: >
+      Hosts can message each other directly (ListAgents / SendMessage over
+      Remote Control). The capability is NEW and agents do not discover it on
+      their own — the coordinator stumbled onto it on 2026-08-25 after months
+      of the fleet coordinating exclusively through the ledger and the trunk.
+      A ledger is an excellent record and a terrible way to say "I am about to
+      change a thing you depend on", because it is read AFTER work, not before.
+    the_defect_this_prevents: >
+      MEASURED 2026-08-26, and it is the canonical example. macbook landed
+      731-eupn on osx-next: CloudRefreshReply gained an `outcome` discriminator
+      so an empty project list from a FAILED fetch stops being indistinguishable
+      from a confirmed-empty account. Correct fix, well reasoned. They updated
+      the call site they compile (vsock_server.rs:1365) and could not see the
+      one they do not (tray/mod.rs:1383, the Linux-native handler).
+      Each branch was GREEN ALONE. The union was E0063 + E0308.
+      Cost: a red union gate and ~30 minutes of the coordinator's cycle to
+      bisect, diagnose and repair — for a change whose author knew everything
+      needed to prevent it. One sentence — "I am changing the CloudRefreshReply
+      shape, who has call sites?" — would have cost thirty seconds.
+    when_to_send:
+      - >
+        BEFORE changing a SHARED SURFACE: a wire type or shared struct, a
+        script another lane executes, a litmus/YAML schema, a methodology rule,
+        or any guard wired into `./build.sh --check`. These are the changes
+        whose blast radius leaves your lane.
+      - >
+        BEFORE taking a packet whose live claim overlaps a sibling's. At Start
+        Of Cycle run `tillandsias-plan expire-claims --list-live`; if a live
+        claim touches the surface your batch touches, message that host BEFORE
+        implementing, not after.
+      - >
+        WHEN YOU LAND something a sibling is waiting on — "pull when you are
+        done" — so a blocked host stops guessing whether it is blocked.
+    when_NOT_to_send:
+      - >
+        Routine drain confined to your own lane. Most work is this. A channel
+        that carries everything is one nobody reads, and interrupting a working
+        agent has a real cost — it is mid-cycle, holding a checkout lock, and
+        its context is expensive.
+      - >
+        Anything already unambiguous in the ledger. The heads-up is for what the
+        ledger CANNOT carry in time: intent, before the fact.
+    shape: >
+      Low ceremony, deliberately. HEADS UP: the surface you are touching, the
+      shape of the change, any sibling call sites you already know of, and the
+      ask. The recipient replies ACK plus comments — either "no sites on this
+      lane" or "site at <path>; I will take it" / "you take it". Two messages,
+      under a minute each. This is not a design review and must not become one.
+    the_honest_caveat: >
+      A prose rule that depends on an attentive agent is a suggestion, not a
+      constraint — this file says so elsewhere and the fleet proved it twice in
+      one night (a documented `tee | head` trap walked into hours after being
+      read; a documented skip-flag missed by the release runbook). So the
+      forcing function is the Start Of Cycle live-claim check above, which is
+      mechanical, and the honest expectation is that THIS SECTION ALONE WILL BE
+      HONOURED INCONSISTENTLY until a check surfaces the overlap without being
+      asked. That check is worth filing rather than assuming.
+    consumers:
+      - "skills/meta-orchestration/SKILL.md (Start Of Cycle 2a) — note .claude/skills is a SYMLINK to this path; cite the real one"
+      - "skills/coordinate-multihost-work/SKILL.md"
