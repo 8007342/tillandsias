@@ -24239,6 +24239,38 @@ plan_index:
             scripts/test-hash-image-sources.sh passes on Windows (a core.autocrlf=true host config) and on Linux; the exec-bit scenario is gated on core.fileMode=true with a loud skip verdict where false, per the issue's second question.
 
       events:
+        - type: progress
+          ts: "2026-08-26T07:39:25Z"
+          agent_id: "linux-yoga-opus5-20260826t073925z"
+          host: yoga
+          summary: |
+            LINUX HALF IMPLEMENTED AND VERIFIED. WINDOWS HALF EXPLICITLY NOT CLAIMED — exit criterion 2 requires a Windows PASS and this host cannot produce one. Leaving the packet OPEN pending yolanda's run rather than closing on a Linux-only green, which is the accounting error that opened 2026-08-25.
+
+            Re-built from the description after 872-c9nd, same as 642-fedr. Verified the loss first: the implementation exists in no worktree, no stash, no commit on any branch, no dangling object.
+
+            WHAT LANDED. Tracked entries now take BOTH mode and content id from `git ls-files -s` — the index blob OID is post-clean-filter and post-autocrlf, the index mode is 100644/100755/120000. No file is read from disk for a tracked entry. The untracked-directory branch keeps find/stat unchanged; it is the non-git fallback and cannot co-occur, because the selector is `git rev-parse --is-inside-work-tree` and the two arms are per-INVOCATION exclusive, not per-path. yolanda asked for an assertion that the branches are disjoint; they are disjoint by construction, which is better than an assertion, and the reason is recorded here rather than left to be re-derived.
+
+            MEASURED, this host: old key bb2bd5ea..., new key 2355af50... — the cache key changes ONCE and every host rebuilds its forge images once. That is the cost of the fix, not a regression. Deterministic across repeated runs.
+
+            THE FIXTURE WAS TESTING THE OLD SEMANTICS AND I NEARLY MISREAD ITS FAILURE. Its exec-bit scenario did `chmod +x` on the WORKTREE and expected the hash to move. Under index-based hashing it correctly does not — the commit's content has not changed. The scenario now stages the mode with `git update-index --chmod=+x`.
+
+            THAT SUPERSEDES EXIT CRITERION 2's STATED REMEDY, and I am recording the substitution rather than making it quietly. The criterion asks for the exec-bit scenario to be "gated on core.fileMode=true with a loud skip where false". Index-based hashing removes the need for a gate at all: `update-index --chmod=+x` works identically where core.fileMode=false, so the scenario is platform-independent instead of platform-gated. Better than asked; still a deviation from the written criterion, so it is named.
+
+            I ADDED THE SCENARIO THE FIXTURE WAS MISSING, which is the one the packet exists for: rewrite a tracked file's worktree bytes to CRLF WITHOUT staging — byte-for-byte the state an autocrlf checkout is in — and assert the hash does NOT move. Plus a NEGATIVE CONTROL: a genuinely staged content change MUST move it, or the CRLF arm would pass on a hasher that ignores content entirely.
+
+            MUTATION-TESTED, because a new arm that cannot fail is worse than no arm. Reverting the hasher to the HEAD version and re-running gives exactly:
+              FAIL: a CRLF working tree moved the hash — it is still hashing worktree bytes, not git-normalized content
+            and restoring the fix returns it to PASS. The arm also demonstrably RUNS rather than taking its SKIP path (0 skips observed).
+
+            yolanda VERIFIED THE LOAD-BEARING ASSUMPTION ON THE LANE THAT MATTERS, before I implemented, rather than agreeing with it:
+              git ls-files -s | sha256   Git Bash 471d3a3d7b87556b == WSL 471d3a3d7b87556b
+            The index blob OID and mode agree across the boundary that breaks everything else on that host. That is the second independent confirmation of the same property — lenovinha's index-always exec-bit fix rests on it too.
+
+            AND THEY CORRECTED A PREMISE OF MINE. I assumed core.autocrlf=true on both their sides. Measured: Git Bash true, WSL empty, because it is set in the Windows git's GLOBAL config which the WSL git does not read. Same repo, same .git, two autocrlf regimes. It does not affect the fix — the index is stable regardless, which is precisely why sourcing from the index is right — but their warning was that any branch on core.autocrlf would read differently from their two sides. Checked: `autocrlf` appears twice in the script and both are COMMENTS. No logic branches on it.
+
+            THEIR LIVE RED BASELINE IS WHAT MAKES THIS VERIFIABLE RATHER THAN INSPECTABLE. Before any change, on their host: `FAIL: forge hash depends on checkout location` — the exact divergence this packet describes, reproducing. So the Windows verification is a flip from a known red, not a fresh green of unknown provenance.
+
+            REMAINING: yolanda runs the fixture on both their sides and reports raw output including a failure. Until then this packet stays in_progress on this host, not completed.
         - type: filed
           ts: "2026-08-16T21:10:00Z"
           agent_id: windows-fable5-attended-20260816
