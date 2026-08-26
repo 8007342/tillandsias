@@ -12,7 +12,7 @@ RESULT: PASS — promoted release 0.4.260826.1 installs through the STABLE-chann
 
 `promote-stable.sh`'s own NEXT records a stable-channel e2e as owed after promotion. The coordinator verified the **URL layer** — all seven `/releases/latest/download/` assets HTTP 200, stable Linux binary byte-identical to `SHA256SUMS`. **That is artifact identity, not the installer's channel resolution.** The daily run earlier tonight pinned `TILLANDSIAS_RELEASE_BASE`, which overrides channel selection entirely, so no run so far had exercised the code path a real operator takes.
 
-**This run is UNPINNED.** No `TILLANDSIAS_RELEASE_BASE`. The installer was fetched from `/releases/latest/download/install-macos.sh` and left to resolve the channel itself (`CHANNEL="${TILLANDSIAS_CHANNEL:-stable}"`, install-macos.sh:34).
+**This run is UNPINNED.** No `TILLANDSIAS_RELEASE_BASE`. The installer was fetched from `/releases/latest/download/install-macos.sh` and left to resolve the channel itself — `install-macos.sh` defaults its `CHANNEL` variable to `${TILLANDSIAS_CHANNEL:-stable}`.
 
 **Finding 3 of the daily report is exactly why this distinction cannot be checked from a log**: `install-macos.sh` prints `channel: stable` whether or not a pin is in effect, so the log is identical in both runs and cannot distinguish them. The only way to establish that the stable path resolves correctly is to run it unpinned. Now that stable is real again, that ambiguity is live rather than theoretical.
 

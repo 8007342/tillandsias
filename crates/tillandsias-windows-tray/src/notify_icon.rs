@@ -1995,6 +1995,7 @@ fn local_entry_to_menu(entry: &tillandsias_control_wire::LocalProjectEntry) -> P
         name: entry.label.clone(),
         path: entry.guest_path.clone(),
         ready: false,
+        full_name: None,
     }
 }
 
@@ -2114,6 +2115,7 @@ fn cloud_entry_to_menu(entry: &tillandsias_control_wire::CloudProjectEntry) -> P
         name: entry.label.clone(),
         path: format!("{}/{}", entry.owner, entry.repo),
         ready: false,
+        full_name: None,
     }
 }
 
@@ -3652,6 +3654,7 @@ fn apply_project_event_to(state: &mut MenuState, ev: &ProjectEvent) {
                 name: name.to_string(),
                 path: path.to_string_lossy().into_owned(),
                 ready: false,
+                full_name: None,
             });
             state.local_projects.sort_by(|a, b| a.name.cmp(&b.name));
         }
@@ -4030,6 +4033,7 @@ mod tests {
                 name: "hello-world".into(),
                 path: "octocat/hello-world".into(),
                 ready: false,
+                full_name: None,
             }],
         );
 
