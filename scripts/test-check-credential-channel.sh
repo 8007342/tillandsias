@@ -72,10 +72,15 @@ grep -q "credential-store --file" "$D/.stderr" && ok "remedy names the repo-loca
 D="$(scratch b)"
 out="$(run_guard "$D" "false")"; rc=$?
 case "$out" in
-    *blocked:gh-cli-only*) ok "gh-green + unexplained probe failure -> blocked:gh-cli-only" ;;
+    # ORDER 894-scxy replaced the generic blocked:gh-cli-only with a verdict
+    # that names the layer that FAILED. Here the stub's `gh api user` succeeds,
+    # so GitHub accepts the identity and only the PUSH is refused — which is a
+    # different remedy (repo permission / SSO / scope) than a dead token.
+    *blocked:credential-accepted-but-push-refused*)
+        ok "gh-green + push refused -> names the push, not the keyring" ;;
     *) bad "no-helper shape returned: $out" ;;
 esac
-[ "$rc" -ne 0 ] || bad "gh-cli-only must exit non-zero"
+[ "$rc" -ne 0 ] || bad "a push-refused verdict must exit non-zero"
 
 # ── 3. gh green + probe SUCCEEDS -> the verified ok ─────────────────────────
 D="$(scratch c)"
@@ -180,8 +185,10 @@ D="$(with_remote mutation 'echo refused >&2; exit 1')"
 out="$( cd "$D" && env -u GH_TOKEN -u GITHUB_TOKEN -u TILLANDSIAS_CRED_PROBE_CMD \
         PATH="$W/bin:$PATH" bash "$PRE" 2>/dev/null )"
 case "$out" in
-    blocked:gh-cli-only)
-        ok "MUTATION: the pre-fix guard calls our own hook a credential fault — arm 6 has teeth" ;;
+    # Asserts the pre-fix guard REFUSES; the exact token is incidental to that
+    # claim and moved when 894-scxy made the verdicts specific.
+    blocked:*)
+        ok "MUTATION: the pre-fix guard calls our own hook a credential fault — arm 6 has teeth ($out)" ;;
     *) bad "mutation reconstruction unexpected: $out" ;;
 esac
 
@@ -238,8 +245,8 @@ D2="$(behind_repo two)"
 out="$( cd "$D2" && env -u GH_TOKEN -u GITHUB_TOKEN -u TILLANDSIAS_CRED_PROBE_CMD \
         PATH="$W/bin:$PATH" bash "$PRE2" 2>/dev/null )"
 case "$out" in
-    blocked:gh-cli-only)
-        ok "MUTATION: the pre-fix guard calls a behind branch a credential fault — arm 8b has teeth" ;;
+    blocked:*)
+        ok "MUTATION: the pre-fix guard calls a behind branch a credential fault — arm 8b has teeth ($out)" ;;
     *) bad "mutation reconstruction unexpected: $out" ;;
 esac
 
@@ -320,6 +327,166 @@ probes="$(grep -nE 'timeout [0-9]+ +git push --dry-run|_probe_cmd=' "$GUARD" \
 [ "$probes" -le 3 ] \
     && ok "reverify added no probe to the hot path ($probes invocation sites)" \
     || bad "reverify added probes to the hot path ($probes invocation sites)"
+
+# ═══ ORDER 894-scxy: name the layer that FAILED, not the one we OBSERVED ═════
+# gh prints "The token in keyring is invalid". MEASURED on pirria 2026-08-25:
+# secret-service entry present, login collection UNLOCKED (`b false`), token
+# retrieved intact at 40 chars — and GitHub answered 401 on it. The keyring was
+# healthy in every component. THREE HOSTS diagnosed the wrong subsystem from
+# that one string; one built a mechanism on the premise.
+#
+# The packet requires BOTH directions proven by fixture, because one direction
+# is an assertion. All four states below are driven by a stubbed `gh` so they
+# are hermetic and never touch a real credential — and none of them extracts a
+# secret, which is the security constraint two hosts learned the hard way.
+
+# Helper: a repo whose push always fails, with a scripted `gh` on PATH.
+layer_case() { # layer_case <name> <gh-api-user-rc> <gh-api-user-stderr>
+    local name="$1" apirc="$2" apierr="$3"
+    local d="$W/layer-$name" bin="$W/layerbin-$name"
+    rm -rf "$d" "$bin"; mkdir -p "$bin"
+    git init -q -b main "$d"
+    git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m x
+    git -C "$d" remote add origin "$W/does-not-exist.git"   # push always fails
+    cat >"$bin/gh" <<GHEOF
+#!/usr/bin/env bash
+case "\$1 \${2:-}" in
+    "auth status") echo "Logged in to github.com"; exit 0 ;;
+    "api user")    printf '%s\n' "$apierr" >&2; exit $apirc ;;
+esac
+exit 0
+GHEOF
+    chmod +x "$bin/gh"
+    printf '%s' "$d|$bin"
+}
+
+run_layer() { # run_layer <dir> <bin> [extra-env...]
+    local d="$1" bin="$2"; shift 2
+    ( cd "$d" && env -u GH_TOKEN -u GITHUB_TOKEN -u TILLANDSIAS_CRED_PROBE_CMD \
+      "$@" PATH="$bin:$PATH" bash "$GUARD" 2>"$d/.err" )
+}
+
+# ── 14. DIRECTION ONE: healthy keyring, token REJECTED by GitHub. ────────────
+# The pirria state. Must name the ACCOUNT, and must NOT send the reader to the
+# keyring — that misdirection is the entire defect.
+IFS='|' read -r LD LB <<<"$(layer_case rejected 1 'HTTP 401: Bad credentials')"
+out="$(run_layer "$LD" "$LB" HOME="$W/nohome-rejected")"; rc=$?
+case "$out" in
+    blocked:credential-rejected-by-github)
+        ok "healthy keyring + 401 -> names GitHub, not the keyring (rc=$rc)" ;;
+    *)  bad "rejected direction returned: $out (rc=$rc)" ;;
+esac
+[ "$rc" -ne 0 ] || bad "a rejected credential must exit non-zero"
+grep -q 'keyring is not the problem' "$LD/.err" \
+    && ok "the diagnosis says outright that the keyring is not the problem" \
+    || bad "must state the keyring is not the problem"
+# PIN THE NEGATION, NOT THE ABSENCE OF THE WORD. The first version of this
+# assertion grepped for "secret-service" and fired on the sentence
+# "Do NOT go looking at secret-service" — a warning against the misdirection,
+# read as the misdirection itself. A bare word-absence test cannot tell an
+# imperative from its negation, which is the same incidental-match defect this
+# suite exists to catch, committed inside the suite. Assert the sentence that
+# actually does the work.
+grep -q 'Do NOT go looking at secret-service' "$LD/.err" \
+    && ok "explicitly steers the reader AWAY from the secret store" \
+    || bad "must actively redirect off the keyring, not merely omit it"
+grep -qi 'unlock\|secret-tool' "$LD/.err" \
+    && bad "prescribed a keyring action on a server-side rejection" \
+    || ok "prescribes no keyring action on a rejection"
+
+# ── 15. DIRECTION TWO: the credential cannot be RETRIEVED at all. ────────────
+# No secret-service on the bus — the headless/cron shape. Nothing has been
+# presented to GitHub, so naming the account here would be the mirror-image
+# misattribution of the one this packet fixes.
+IFS='|' read -r LD LB <<<"$(layer_case noservice 1 'connection refused')"
+cat >"$LB/busctl" <<'BEOF'
+#!/usr/bin/env bash
+[ "${1:-}" = "--user" ] && [ "${2:-}" = "list" ] && { echo "org.freedesktop.DBus"; exit 0; }
+exit 1
+BEOF
+chmod +x "$LB/busctl"
+out="$(run_layer "$LD" "$LB" HOME="$W/nohome-noservice")"; rc=$?
+case "$out" in
+    blocked:credential-unretrievable-no-keyring-service)
+        ok "no secret-service on the bus -> unretrievable, not rejected (rc=$rc)" ;;
+    *)  bad "no-service direction returned: $out (rc=$rc)" ;;
+esac
+grep -qi 'LOCAL retrieval failure' "$LD/.err" \
+    && ok "names it a LOCAL retrieval failure" \
+    || bad "must distinguish local retrieval from an account problem"
+grep -qi 'gh auth refresh' "$LD/.err" \
+    && bad "told the reader to refresh a token that was never presented" \
+    || ok "does not prescribe a token refresh for a retrieval failure"
+
+# ── 16. DIRECTION TWO(b): the collection exists but is LOCKED. ───────────────
+IFS='|' read -r LD LB <<<"$(layer_case locked 1 'connection refused')"
+cat >"$LB/busctl" <<'BEOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--user" ] && [ "${2:-}" = "list" ]; then
+    echo "org.freedesktop.secrets"; exit 0
+fi
+if [ "${1:-}" = "--user" ] && [ "${2:-}" = "get-property" ]; then
+    echo "b true"; exit 0
+fi
+exit 1
+BEOF
+chmod +x "$LB/busctl"
+out="$(run_layer "$LD" "$LB" HOME="$W/nohome-locked")"; rc=$?
+case "$out" in
+    blocked:credential-unretrievable-keyring-locked)
+        ok "locked collection -> unretrievable-keyring-locked (rc=$rc)" ;;
+    *)  bad "locked direction returned: $out (rc=$rc)" ;;
+esac
+
+# ── 17. THE THIRD STATE pirria NAMED: a PLAINTEXT token, no keyring at all. ──
+# The absence of an oauth_token key in ~/.config/gh/hosts.yml is what proves gh
+# is on secret-service; its PRESENCE means keyring probes say nothing about this
+# host. A two-state classifier silently buckets this as "keyring healthy", which
+# is the same misattribution one layer over.
+IFS='|' read -r LD LB <<<"$(layer_case plaintext 1 'HTTP 401: Bad credentials')"
+PH="$W/home-plaintext"; mkdir -p "$PH/.config/gh"
+printf 'github.com:\n    oauth_token: REDACTED\n' > "$PH/.config/gh/hosts.yml"
+out="$(run_layer "$LD" "$LB" HOME="$PH")"; rc=$?
+case "$out" in
+    blocked:credential-plaintext-token-rejected)
+        ok "plaintext fallback is its own state, not 'keyring healthy' (rc=$rc)" ;;
+    *)  bad "plaintext direction returned: $out (rc=$rc)" ;;
+esac
+grep -qi 'keyring probes say nothing' "$LD/.err" \
+    && ok "says outright that keyring probes are irrelevant here" \
+    || bad "must state why keyring probes do not apply"
+
+# ── 18. NEGATIVE CONTROL: GitHub ACCEPTS the identity, only the push fails. ──
+# Neither a keyring fault nor a dead token. Naming either would be a third
+# misattribution, so this gets its own verdict pointing at push permission.
+IFS='|' read -r LD LB <<<"$(layer_case accepted 0 '')"
+out="$(run_layer "$LD" "$LB" HOME="$W/nohome-accepted")"; rc=$?
+case "$out" in
+    blocked:credential-accepted-but-push-refused)
+        ok "GitHub accepts but push refused -> names the push (rc=$rc)" ;;
+    *)  bad "accepted direction returned: $out (rc=$rc)" ;;
+esac
+grep -qi 'neither a keyring fault nor a dead token' "$LD/.err" \
+    && ok "rules out BOTH previously-conflated causes explicitly" \
+    || bad "must rule out keyring and token explicitly"
+
+# ── 19. SECURITY: no arm above ever materialises a secret. ───────────────────
+# Two hosts printed live gho_ values into transcripts learning this. The guard
+# must decide 401-vs-200 without extracting anything.
+grep -n 'secret-tool' "$GUARD" | grep -vE ':[[:space:]]*#' \
+    && bad "the guard calls secret-tool, which prints the secret inline" \
+    || ok "the guard never calls secret-tool — discrimination is via gh api user"
+
+# ── 20. All five verdicts are single pinned tokens. ──────────────────────────
+for v in blocked:credential-rejected-by-github \
+         blocked:credential-unretrievable-no-keyring-service \
+         blocked:credential-unretrievable-keyring-locked \
+         blocked:credential-plaintext-token-rejected \
+         blocked:credential-accepted-but-push-refused; do
+    printf '%s\n' "$v" | grep -qE '^(ok:[a-z0-9-]+|blocked:[a-z0-9-]+|missing:no-credential-channel)$' \
+        || bad "verdict breaks litmus:credential-channel-check-shape: $v"
+done
+ok "all five 894-scxy verdicts match the pinned grammar"
 
 # ── 9. Grammar: every verdict this suite produced is a single pinned token. ──
 grammar='^(ok:[a-z0-9-]+|blocked:[a-z0-9-]+|missing:no-credential-channel)$'
