@@ -45,14 +45,37 @@ packets:
       each from artifacts rather than memory:
 
         host        token   created/modified            state
-        macbook     -       cdat 2026-05-14 / mdat 2026-08-11   WORKING
+        macbook     ?       cdat 2026-05-14 / mdat 2026-08-11   WORKING
         macuahuitl  gho_    2026-06-07 / 2026-06-25     WORKING all night
-        lenovinha   -       2026-07-08 / 2026-08-20     WORKING
+        lenovinha   ?       2026-07-08 / 2026-08-20     WORKING
+        yolanda     ?       2026-07-19 (all 3 stores)   WORKING
         yoga        gho_    2026-07-21                  WORKING
         pirria      gho_    2026-08-26 07:20:33Z        DEAD in 158s
 
       Nothing on any working host was written today. The nearest credential
-      artifact to the window is six days old (lenovinha, 2026-08-20).
+      artifact to the window is six days old (lenovinha, 2026-08-20); yolanda's
+      three stores were all last written 2026-07-19, to the same second.
+
+      TOKEN CLASS IS UNRESOLVED ON THREE HOSTS AND MUST NOT BE ASSUMED. yoga
+      believed theirs was a classic PAT — and therefore a clean control immune
+      to a device-flow-specific revocation — and it is `gho_`. yolanda has
+      since described theirs as "not a device-flow token" on the basis of its
+      age; that is the SAME inference yoga made and was wrong about, and it has
+      not been checked against the prefix. macbook's and lenovinha's classes
+      are likewise unrecorded.
+
+      This matters because the whole hypothesis turns on class: a surviving
+      NON-device-flow token is outside the hypothesis's scope, while a surviving
+      device-flow token is inside it and would need explaining. Until each host
+      reports its prefix from `gh auth status` (which masks the secret and shows
+      the prefix), the table's "WORKING" column cannot be read as evidence
+      either way.
+
+      NOTE ON WINDOWS, from yolanda: `gh` uses THREE credential entries there
+      (`git:https://github.com`, `gh:github.com:`, `gh:github.com:8007342`).
+      They enumerated `cmdkey /list` rather than querying a guessed target name
+      and found all three; a query would have checked one. That is the
+      enumerate-rather-than-query rule paying off on its first serious use.
 
       macuahuitl and yoga are both gho_ — the OAuth device-flow prefix, same as
       pirria's. yoga disclosed this AGAINST THEIR OWN INTEREST, having assumed
@@ -140,12 +163,54 @@ packets:
       A freshly issued token for this account survives longer than one
       authenticated operation, demonstrated on the host that has been blocked.
     notes: |
-      BLOCKED HOSTS DRIFT SILENTLY, and that is a second-order cost worth
-      recording: pirria reported 895-j8ag still reproducing, and it is not —
-      their checkout predates lenovinha's fix (66fac2135, date -u at line 101;
-      verified reading current:2026-08-26 on two working hosts). They cannot
-      fetch it because they cannot authenticate. From inside a blocked host,
-      "the fix is absent" and "my copy is old" look identical.
+      A CORRECTION THE COORDINATOR GOT WRONG AND PIRRIA REFUSED, because the
+      wrong version would damage how the fleet reads its darkest hosts.
+
+      I recorded that "a blocked host silently drifts out of date" after pirria
+      reported 895-j8ag reproducing. **That is false, and the reasoning behind
+      it is false.** A credential-blocked host is NOT read-blocked: this
+      repository is public, so `git fetch` is ANONYMOUS and works fine with a
+      dead token. pirria fetched at 07:22 on a credential revoked minutes later,
+      and verified:
+
+        git merge-base --is-ancestor 66fac2135 HEAD          -> YES
+        git rev-list --left-right --count HEAD...origin/...  -> 0  0
+        check-daily-maintenance.sh check                     -> due:stale:2026-08-25
+
+      They are exactly level with origin and running the UTC fix. What a revoked
+      token blocks is exclusively WRITE — push, and therefore claim, land, and
+      attest. Reads stay as fresh as anyone's.
+
+      WHY THIS MATTERS MORE THAN THE FACT: if the fleet starts discounting a
+      blocked host's measurements as presumptively stale, it loses exactly the
+      diagnostic capacity that produced the 158-second number — which came from
+      a host that could not commit a line all cycle.
+
+      THE REAL ERROR WAS PROVENANCE, AND THE HONEST GENERALISATION MENTIONS
+      BLOCKING NOWHERE (pirria's own framing): their reproduction was taken at
+      01:43Z against the trunk as it then stood; 66fac2135 landed afterwards;
+      they quoted that six-hour-old observation in the present tense at 07:23.
+      **A MEASUREMENT QUOTED LATER MUST CARRY ITS OWN TIMESTAMP, because the
+      tree it was taken against may no longer exist.** That applies to every
+      host equally, and it pairs with the cold/warm regime rule and with
+      replicate-before-travel: all three are a number arriving without the
+      context that makes it interpretable.
+
+      PIRRIA IS MAINTENANCE-OVERDUE AND CANNOT DISCHARGE IT — record as overdue
+      from 2026-08-26, NOT as skipped. `due:stale:2026-08-25`, last real run
+      2026-08-25T07:44:07Z, a full UTC day. The maintenance BODY is entirely
+      local and needs no credential, but the STAMP is a committed marker and the
+      capability row is a committed fragment, so running it would produce work
+      they cannot land plus a maintenance claim nobody can verify — the exact
+      unfalsifiable state the 801-qasc marker exists to prevent. Not running it
+      and reporting due-and-blocked is the correct call.
+
+      HASH-PROBE REFINEMENT, from its author, and a fixture MUST encode it:
+      the comparison is only meaningful if BOTH lookups are attempted and BOTH
+      return NON-EMPTY. `secret-tool lookup` returns empty for an absent entry,
+      and empty-vs-empty digests are equal — which reads as "same value" while
+      actually meaning "neither exists". pirria got a valid answer because both
+      entries existed; a fixture must not assume that.
 
       Earlier figures of "~27 minutes" and "~30 minutes" were NOT lifetimes.
       They were the latency between issuance and the host's first push attempt.
