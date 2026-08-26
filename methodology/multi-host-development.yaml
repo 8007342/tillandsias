@@ -838,10 +838,18 @@ multi_host_development:
       agent MAY (and SHOULD) run `sudo dnf install` — and `dnf copr enable`,
       etc. — for ANY package it needs inside ANY toolbox (`tools`,
       `tillandsias-builder`, or a fresh `toolbox create`) WITHOUT asking the
-      operator. The sanctioned validators and build deps (ruby for the
-      `ruby -ryaml` YAML fallback, shellcheck, gcc/cmake/make, cross
-      toolchains, …) are all one toolbox `dnf install` away. Net effect: an
-      immutable Linux host is effectively MORE flexible than a mutable one —
+      operator. Build deps (shellcheck, gcc/cmake/make, cross toolchains, …)
+      are all one toolbox `dnf install` away. NOTE the YAML validator is NOT
+      among them any more: ORDER 746-htj9 retired the per-environment reader,
+      because no interpreter is present in all three environments the gates
+      run in, and two locally-correct fixes caused two outages in one day
+      picking different ones. The sanctioned path is `tillandsias-plan
+      validate-yaml` / `yaml-get`, built from this repo and rebuilt by
+      scripts/cycle-preflight.sh, so availability is a property we own rather
+      than one the environment has to provide. Prove it with
+      scripts/check-yaml-reader-availability.sh, do not assert it.
+      Net effect: an immutable Linux host is effectively MORE flexible than a
+      mutable one —
       it gets a clean, disposable, per-need build/validate sandbox without
       ever mutating /usr. Do not surface "tool X absent on the bare host" as a
       gap; install it in a toolbox and proceed.
@@ -894,7 +902,7 @@ multi_host_development:
       - "the canonical gate itself: ./build.sh --check before EVERY push (now mandatory-cheap on Windows; a cargo-only substitute already let one broken merge through, 2026-07-15)"
       - "linux-universe compile/clippy/test verification of any crate (targeted `with-wsl2-builder.sh cargo test -p <crate>`)"
       - "shell/git-shaped scripts and fixture tests (scripts/test-*.sh, litmus command steps, hook/relay fixtures)"
-      - "ruby YAML validation + shellcheck (the sanctioned validators, absent from stock Windows)"
+      - "YAML validation via `tillandsias-plan validate-yaml`/`yaml-get` (order 746-htj9; the ONE sanctioned reader, present wherever this repo is built) + shellcheck (absent from stock Windows)"
       - "unblock-with-NOOP class repairs in sibling scope (cfg gates, dead-code allows) — verify with the wrapped gate, mark PLEASE REVIEW: <sibling>"
       - "research packets whose probes are plain git/bash mechanics (order 238 precedent)"
     file_a_linux_packet_instead:

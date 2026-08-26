@@ -115,6 +115,58 @@ result is green:
 A green fixture that could not have gone red is a diagnostic naming the wrong
 layer: it says "the property holds" when it means "I did not test the property".
 
+## The specimen trap: a guard fired by the proof that it works
+
+A string-matching guard will eventually match its own mutation control — the
+deliberately-broken specimen you keep in the fixture to prove the guard is real.
+
+**It has a nasty property: it appears at the exact moment you prove the guard
+works**, so the instinct is to *weaken the guard* rather than scope it. That is
+backwards. The specimen is evidence, not a defect; exclude the file where the
+string is a specimen, and leave the guard's teeth alone.
+
+Measured instances, all in one week and all in guards written to catch
+misattribution:
+
+| Guard | Fired on |
+|---|---|
+| "the diagnosis must not send readers to the keyring" | the sentence *"Do NOT go looking at secret-service"* |
+| `check-bash-dialect` (bash-4 constructs) | a regex that *searches for* bash-4 constructs |
+| "shipped diagnostics must not source the lib" | the comment explaining why they deliberately don't |
+| "no caller may use the fixed-depth source path" | the mutation control demonstrating that it fails |
+
+The order matters: **scope the check, then re-run the mutation and confirm it
+still fails.** A scoping change is one keystroke away from a guard that no longer
+catches anything, and the mutation control is the only thing that tells the two
+apart.
+
+## Rejecting a true mechanism because its cause is wrong
+
+The ordinary error is naming a plausible contributor without measuring. There is
+a rarer inverse, and it is more dangerous because refuting the cause *feels* like
+refuting the claim — and the refutation is usually well-evidenced, which makes it
+convincing.
+
+Measured instance, 2026-08-26:
+
+- One host offered "scratch usage grew where nobody was watching it," attributing
+  it to a specific sibling change. **The attribution was wrong** — the arithmetic
+  closed without it and the change moved data *out* of the pressured filesystem.
+- The other host rejected the whole claim: *"it is fully accounted for by my own
+  action"* — stated as fact while its shell could not run `quota -s`.
+- On recovery, measurement showed **both wrong**. Their own builds were ~9.6 GB
+  against a 24.96 GiB quota; a dead session from the previous day held 12 GB. The
+  mechanism — unreaped scratchpads accumulating until any ordinary session tips
+  it over — **was real**. Only the named contributor was not.
+
+The packet filed from that exchange was a full scope too narrow, because the
+mechanism went out along with the bad attribution.
+
+**Split the two before you reject either.** "Your cause is wrong" and "your
+mechanism is wrong" are different claims needing different evidence. And a
+counter-claim you cannot measure is an inference too — label it as one, in the
+same breath you demand that of someone else.
+
 ## When you are relayed a diagnosis
 
 **N endorsements are not N evidence.** A relayed claim arrives carrying the

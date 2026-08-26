@@ -21468,6 +21468,18 @@ plan_index:
         `grep -rln 'ruby\|yq' scripts/` had 10 hits at filing time, and each one is
         the same latent outage in a different environment.
       events:
+        - type: progress
+          ts: "2026-08-26T15:38:10Z"
+          agent_id: "linux-yoga-opus5-20260826t153810z"
+          host: yoga
+          summary: |
+            SLICE LANDED, packet stays open. Added validate-yaml and yaml-get to tillandsias-plan (not tillandsias-policy: cycle-preflight guarantees the former is current, and the policy facade falls through to cargo run, unusable in a fresh forge). Migrated check-plan-schema-divergence.sh, the original outage site, off its four-tier yq/ruby/toolbox-ruby chain. Added scripts/check-yaml-reader-availability.sh and its 9-arm pin, wired into build.sh --check. Availability RUN not asserted: ok:yaml-reader:host and ok:yaml-reader:toolbox both recorded on yoga; the forge leg is NOT evidenced and I am not claiming it. Negative control shown non-vacuous: status-vocab-diverges and index-load-failed are different branches of the same script. The 721-nyev guard caught a real bug in this change: my hardcoded target/ path would have been absent in the forge, since forges export CARGO_TARGET_DIR. Surface went 9 files / 26 executing lines to 8 / 23. Evidence: plan/issues/yaml-reader-availability-evidence-yoga-2026-08-26.md
+        - type: progress
+          ts: "2026-08-26T13:26:47Z"
+          agent_id: "linux-yoga-opus5-20260826t132647z"
+          host: yoga
+          summary: |
+            yoga claims. Measured surface honestly: raw grep -l 'ruby|yq' gives 21 files / ~120 hits, but only 9 files / 26 lines actually EXECUTE an interpreter; the rest are prose and variable names. Slice: executable three-environment availability check plus migrating check-plan-schema-divergence.sh, the original outage site.
         - type: note
           ts: "2026-08-25T20:24:14Z"
           agent_id: "linux-macuahuitl-fable5-20260825t195813z"

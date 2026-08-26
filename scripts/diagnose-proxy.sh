@@ -4,6 +4,37 @@
 
 set -euo pipefail
 
+
+# ORDER 799-tb7q — resolve `openssl` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has the CLI.
+#
+# UNLIKE jq, OPENSSL WRITES FILES. The conversion is only safe because the
+# toolbox shares /tmp with the host bidirectionally — VERIFIED on lenovinha
+# 2026-08-26: a file the host wrote to /tmp is readable inside the container and
+# vice versa, and every CERTS_DIR here is under /tmp (mktemp -d, or
+# /tmp/tillandsias-ca). A caller whose write path is NOT shared would have the
+# cert land where the caller cannot find it — a silent break, not an error.
+# Re-check the path before converting any further openssl site.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+# Resolve the lib by WALKING UP, not by a fixed depth (order 914-ahsy). The
+# fixed form `dirname "${BASH_SOURCE[0]}"/lib/...` is correct only for a caller
+# sitting directly in scripts/. From scripts/refusal-calibration/ it points at a
+# lib that does not exist, the `|| true` swallows the miss, and the tool variable
+# silently falls back to the bare name — a conversion that passes review, passes
+# the suite, and changes nothing.
+_td_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_td_dir" ] && [ "$_td_dir" != "/" ] && [ ! -f "$_td_dir/lib/tool-dispatch.sh" ]; do
+    _td_dir="$(dirname "$_td_dir")"
+done
+if [ -f "$_td_dir/lib/tool-dispatch.sh" ]; then
+    . "$_td_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+fi
+if command -v resolve_tool >/dev/null 2>&1; then
+    OPENSSL="$(resolve_tool openssl || printf 'openssl')"
+else
+    OPENSSL="openssl"
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 require_podman
@@ -32,7 +63,7 @@ CERTS_DIR=$(mktemp -d)
 trap "rm -rf $CERTS_DIR" EXIT
 
 log_step "Generating self-signed CA certificates..."
-openssl req -x509 -newkey rsa:2048 -keyout "$CERTS_DIR/intermediate.key" \
+"$OPENSSL" req -x509 -newkey rsa:2048 -keyout "$CERTS_DIR/intermediate.key" \
     -out "$CERTS_DIR/intermediate.crt" -days 30 -nodes \
     -subj "/CN=tillandsias-proxy" 2>&1 | grep -v "Generating\|Can't load"
 

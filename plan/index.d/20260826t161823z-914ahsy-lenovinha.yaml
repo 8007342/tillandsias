@@ -1,0 +1,138 @@
+packets:
+  - packet_id: jq-loop-callers-need-restructuring-not-dispatch-conversion
+    order: 914-ahsy
+    release_target: convergence-velocity-milestone
+    status: ready
+    desired_release: v0.5
+    role: tooling
+    priority: p2
+    kind: enhancement
+    title: |
+      The 17 remaining jq callers all invoke jq inside a loop, so the toolbox dispatch would cost ~264 ms per iteration — they need restructuring to a single pass, which is different work from the sweep that converted the other 23.
+    deliverable: |
+      the 17 loop-invoking jq callers either restructured to one jq pass and
+      converted, or explicitly exempted with the reason recorded at the call site
+    depends_on:
+      - builder-toolbox-init-set-too-small-for-the-dispatch-pattern
+    pickup_role: linux
+    owner_host: any
+    capability_tags:
+      - toolbox
+      - portability
+      - scripts
+      - performance
+    estimated_hours: 8
+    problem: |
+      799-tb7q converted 23 flat callers onto scripts/lib/tool-dispatch.sh across
+      four slices. What is left is not more of the same.
+
+      MEASURED 2026-08-26 on lenovinha, and it is the whole reason this is a
+      separate packet: a single `toolbox run --container tillandsias-builder jq`
+      costs ~264 ms against ~1 ms for host jq. For a flat caller with 7-9 sites
+      that is ~2 s on a jq-less host — acceptable. Every remaining caller invokes
+      jq INSIDE A LOOP, so the same conversion costs one round trip per
+      iteration: a script iterating ledger rows would go from milliseconds to
+      minutes on exactly the host the dispatch exists to serve.
+
+      AUTHORITATIVE INVENTORY, measured rather than recalled — 17 scripts, 102
+      call sites:
+
+        bench-accel-lane.sh                            11
+        measure-recall-at-k.sh (refusal-calibration/)  12
+        inject-negatives.sh    (refusal-calibration/)  10
+        update-convergence-dashboard.sh                10
+        bench-inference-floor.sh                        9
+        measure-bands.sh       (refusal-calibration/)   9
+        claude-mcp.sh                                   8
+        test-convergence-dashboard.sh                   7
+        spec-index-ensure.sh                            6
+        bench-semantic-budget.sh                        4
+        generate-evidence-bundle.sh                     3
+        judge-support.sh       (refusal-calibration/)   3
+        loop-success-probe.sh                           3
+        query-traces.sh                                 3
+        test-ssh-lane-sidecar.sh                        2
+        nix-deps-drv-paths.sh                           1
+        test-shipped-diagnostic-tool-dispatch.sh        1
+
+      CORRECTING MY OWN EARLIER FIGURE: four previous slices recorded "7 loop
+      callers remain". That was wrong — it came from a truncated listing that
+      also missed scripts/refusal-calibration/ entirely. The number is 17. It is
+      corrected here rather than quietly, because three of my own loop-status
+      entries carry the wrong figure and a planner reading them would size this
+      at less than half.
+    why_it_matters: |
+      Left unconverted, these are the callers that still assume the host has jq —
+      and several are the benchmark and calibration lanes, which is where a
+      jq-less host would be most confused by a bare command-not-found. Converted
+      naively, they become unusably slow on that same host. Neither outcome is
+      acceptable, so the work is real and it is not mechanical.
+    exit_criteria:
+      - |
+          Each of the 17 is either restructured so jq is invoked ONCE (or a bounded number of times) outside the loop and then converted, or explicitly exempted with the reason recorded AT THE CALL SITE, not only in this packet.
+      - |
+          For every converted script, the jq-less path is MEASURED, not reasoned about: record wall-clock with host jq and with host jq masked, and show the toolbox path is within a stated bound.
+      - |
+          NEGATIVE CONTROL: behaviour is unchanged with host jq present. Stash-compare each script before and after and require byte-identical output — three separate cycles of this sweep produced a script that looked broken and was not, and two that looked fine and were.
+      - |
+          The four scripts under scripts/refusal-calibration/ resolve the lib correctly (see notes) and a fixture arm proves it, since the failure mode is a SILENT fallback rather than an error.
+    verifiable_closure: |
+      litmus:tool-dispatch-lib passes with the 17 either converted or listed as
+      exempt, and no script under scripts/ calls jq bare except the five guarded
+      exclusions.
+    notes: |
+      FOUR HAZARD CLASSES THIS SWEEP ALREADY PAID FOR. Read them before starting;
+      each cost a cycle to find and none is visible from the packet's framing.
+
+      1. EXCLUSION CLASSES — never convert these, and all three are guarded by
+         fixture arms because each reads as an oversight:
+           * curl-piped installers (install-macos.sh is fetched from a release
+             URL and piped into bash — there is no checkout and no sibling file
+             to source);
+           * bootstrap wrappers (with-tillandsias-builder.sh CREATES the toolbox
+             and cannot use it to decide how to make it);
+           * shipped diagnostics (tray-diagnose.sh, diagnose-macos-provision.sh
+             run where a sibling lib may not exist).
+
+      2. HEREDOC SCOPE — `$JQ` must never go inside a heredoc that generates
+         another script. Broke two fixtures in OPPOSITE ways: an unset $JQ in a
+         generated stub ran the pipeline with an empty command; and in an
+         UNQUOTED heredoc $JQ expands at generation time and bakes
+         `toolbox run ... jq` into the stub, breaking on exactly the jq-less
+         host the sweep serves. Guarded by an arm in
+         scripts/test-tool-dispatch-lib.sh.
+
+      3. WRITE-PATH NAMESPACE — applies to openssl, not jq. jq is a pure filter
+         and namespace-agnostic; a tool that WRITES FILES only works through the
+         toolbox where the container shares the write path. /tmp is shared
+         bidirectionally (verified); anything else must be re-checked.
+
+      4. DEPTH-SENSITIVE SOURCE PATH, and this one is unguarded and bites this
+         packet specifically. The header used by all 23 converted callers is
+         `. "$(dirname "${BASH_SOURCE[0]}")/lib/tool-dispatch.sh" 2>/dev/null || true`,
+         which resolves relative to the CALLER. From scripts/foo.sh that is
+         scripts/lib/tool-dispatch.sh and correct; from
+         scripts/refusal-calibration/foo.sh it is
+         scripts/refusal-calibration/lib/tool-dispatch.sh, which does not exist —
+         so the `|| true` arm swallows it and JQ falls back to literal `jq`.
+         VERIFIED. The conversion would appear to succeed and change nothing,
+         which is worse than not converting. Four of the 17 are at that depth.
+         Fix the path resolution before converting them, and add the fixture arm
+         exit criterion 4 asks for.
+
+      AND THE PROCESS RULE, paid for twice: run the converted scripts, do not
+      trust `bash -n`. Syntax was valid in both cases where a conversion broke
+      behaviour.
+    events:
+      - type: filed
+        ts: "2026-08-26T16:20:00Z"
+        agent_id: lenovinha-opus5-metaorch-20260826t153721z
+        host: lenovinha
+        summary: |
+          Split out of 799-tb7q after five slices converted the 23 flat callers.
+          Filed as its own row because it is independently schedulable and a
+          different KIND of work: the flat sweep was mechanical, this is
+          restructuring with a measured performance constraint. Inventory and all
+          four hazard classes are measured, not recalled — including a correction
+          to my own "7 loop callers" figure, which was wrong and appears in three
+          of my loop-status entries.

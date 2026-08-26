@@ -1,0 +1,35 @@
+events:
+  - packet_id: builder-toolbox-init-set-too-small-for-the-dispatch-pattern
+    event:
+      type: note
+      ts: "2026-08-26T16:25:00Z"
+      agent_id: lenovinha-opus5-metaorch-20260826t153721z
+      host: lenovinha
+      summary: |
+        THE REMAINDER IS SPLIT OUT AS 914-ahsy, and this packet's own scope is now
+        the 23 FLAT callers, which are done.
+
+        Five slices landed: the toolbox init set (jq/yq/rg/openssl), the
+        shipped-diagnostic decision, scripts/lib/tool-dispatch.sh plus the three
+        hottest callers, 15 more flat callers, and the rg + openssl families.
+
+        WHAT IS LEFT IS A DIFFERENT KIND OF WORK, which is why it is a row rather
+        than a next_action: every remaining caller invokes jq inside a LOOP, and
+        at the measured ~264 ms per toolbox round trip a mechanical conversion
+        makes them unusably slow on exactly the jq-less host the dispatch exists
+        to serve. They need restructuring to a single pass first.
+
+        A CORRECTION I OWE THE LEDGER: four earlier events on this packet, and
+        three loop-status entries, say "7 loop callers remain". THE NUMBER IS 17,
+        across 102 call sites. My figure came from a truncated listing that also
+        missed scripts/refusal-calibration/ entirely. 914-ahsy carries the
+        authoritative inventory. Correcting it loudly because a planner sizing
+        the remainder from my earlier number would budget less than half the
+        work.
+
+        Also recorded in 914-ahsy and NOT previously known: the source-path header
+        used by all 23 converted callers is depth-relative, so a caller under
+        scripts/refusal-calibration/ resolves to a lib that does not exist, the
+        `|| true` arm swallows it, and JQ silently falls back to literal jq.
+        Four of the 17 sit at that depth. A conversion there would appear to
+        succeed and change nothing.
