@@ -66,5 +66,12 @@ mkdir -p "$W/empty"
 run reader-absent-is-named 'blocked:index-load-failed:*sanctioned YAML reader*' \
     env TILLANDSIAS_PLAN_BIN="$W/no-such-binary" scripts/check-plan-schema-divergence.sh
 
+# 9/10/11. yaml-type, in yq's own spelling — the pre-push lane compares
+#          against '!!map' literally, so the vocabulary must match yq's.
+run type-of-fragment-is-map '!!map' "$READER" yaml-type "$(ls -t plan/index.d/*.yaml | head -1)"
+printf -- '- a\n- b\n' > "$W/seq.yaml"
+run type-of-sequence '!!seq' "$READER" yaml-type "$W/seq.yaml"
+run type-of-broken-is-load-failed 'blocked:yaml-load-failed:*' "$READER" yaml-type "$W/bad.yaml"
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

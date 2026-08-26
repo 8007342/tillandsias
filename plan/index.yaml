@@ -21561,6 +21561,12 @@ plan_index:
         the same latent outage in a different environment.
       events:
         - type: progress
+          ts: "2026-08-26T17:32:23Z"
+          agent_id: "linux-yoga-opus5-20260826t173223z"
+          host: yoga
+          summary: |
+            SECOND TRANCHE. yaml-get learned numeric path segments; added yaml-type in yq's own !!map spelling. Migrated test-set-field-yaml-shapes.sh off ruby: it previously exited 2 on this host because neither ruby nor yq is installed, and now runs 14/14 here. Converged pre-push-local-gate.sh: it enforced parse AND type==!!map under yq but its no-yq fallback could not express the second check, so the trunk's only gate was STRICTER ON SOME HOSTS THAN OTHERS; both tiers now enforce both. Surface 8 files/23 lines to 7/20. Remaining run-litmus-test.sh (9) and local-ci.sh (1) use select() filters that yaml-get deliberately does not implement — needs a decision on a richer query before more code. Three other matches are package lists and a printf label, not YAML reads.
+        - type: progress
           ts: "2026-08-26T15:38:10Z"
           agent_id: "linux-yoga-opus5-20260826t153810z"
           host: yoga

@@ -90,3 +90,64 @@ Remaining: `run-litmus-test.sh` (9), `hooks/pre-push-local-gate.sh` (4),
 `archive-plan-packets.sh` (2), `with-wsl2-builder.sh` (1),
 `test-litmus-diff-scope.sh` (1), `local-ci.sh` (1). The `with-*-builder.sh` hits
 are toolbox provisioning, not YAML reads, and should be triaged before migration.
+
+---
+
+## Second tranche (yoga, cycle 9, same day)
+
+`yaml-get` learned numeric path segments (`status.0.value`), and
+`yaml-type <file>` was added, printing yq's own spelling (`!!map`, `!!seq`, …)
+so call sites that already compare against `!!map` need no edit. Both verified
+against the tools they replace on the same inputs:
+
+```
+status.0.value  ->  in_progress     (tillandsias-plan)
+                ->  in_progress     (ruby -ryaml)
+yaml-type       ->  !!map / !!seq   (tillandsias-plan)
+                ->  !!map / !!seq   (yq eval 'type')
+```
+
+### `test-set-field-yaml-shapes.sh` — a gate that could not run here at all
+
+Its precondition refused unless `ruby` was on PATH. Confirmed on this host:
+**neither `ruby` nor `yq` is installed**, so the fixture exited 2 rather than
+checking anything. It now runs on the host: **14 passed, 0 failed**.
+
+Still non-vacuous — with no binary it refuses loudly rather than passing:
+`fail:set-field-yaml-shapes:no-runnable-plan-binary`.
+
+The fixture now validates with the same binary that wrote the fragments. That
+is deliberate and not circular for what it asserts: the claim is that the
+*writer* emits YAML that round-trips, and the reader is serde_yaml — the
+library the ledger's real consumers use. The independent ruby cross-check above
+was run by hand at migration time and agreed.
+
+### The trunk's only gate was stricter on some hosts than others
+
+`pre-push-local-gate.sh` ran two checks under yq — parse, and `type == !!map` —
+and when yq was absent it delegated to `tillandsias-plan check` with a note.
+**The delegation could not express the second check.** So the map-shape
+assertion was enforced on hosts with yq and silently skipped on hosts without,
+including this one. That is this packet's defect one level up, in the gate that
+protects the trunk.
+
+Both tiers now enforce **both** checks. The yq tier is retained only for a host
+with yq and no built binary, and is no longer the weaker path.
+
+### Surface
+
+| | at cycle-8 claim | after cycle 8 | after cycle 9 |
+|---|---|---|---|
+| files | 9 | 8 | 7 |
+| executing lines | 26 | 23 | 20 |
+
+`pre-push-local-gate.sh` still counts 4 yq lines — deliberately. They are the
+transitional equal-strength tier described above, not a remaining gap.
+
+Of the rest, three are **not YAML reads** and should not be migrated blind:
+`with-tillandsias-builder.sh` / `with-wsl2-builder.sh` are toolbox package
+lists (`ruby perl-FindBin`, `jq yq ripgrep`), and `test-litmus-diff-scope.sh`
+is a `printf` label. The real remaining work is `run-litmus-test.sh` (9 sites,
+several using `select(...)` filters that `yaml-get` deliberately does not
+implement) and `local-ci.sh` (1, same shape). Those need either a richer query
+or restructuring, and are worth a decision before more code.

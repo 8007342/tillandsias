@@ -104,6 +104,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "validate-yaml",
     "verify-answer",
     "yaml-get",
+    "yaml-type",
 ];
 
 /// ORDER 583-dv9n. The dispatch arms an arbitrary declared set omits. Split out
@@ -296,6 +297,9 @@ const USAGE: &str = concat!(
     "           yaml-get <file> <path>    ORDER 746-htj9. Read a dotted path and print the\n",
     "                                     sequence space-joined. Missing key is EMPTY, not an\n",
     "                                     error; unparseable stays its own verdict (720-24u6).\n",
+    "           yaml-type <file>          ORDER 746-htj9. Top-level node kind in yq spelling\n",
+    "                                     (!!map, !!seq, !!str, …), so pre-push can assert\n",
+    "                                     fragment shape without yq.\n",
     "           verify-answer [--root D]  read an envelope on stdin; exit 1 if any citation\n",
     "                                     does not resolve or its span does not contain the claim.\n",
     "                                     ORDER 801-g9nn: also derives caller-relation\n",
@@ -4326,9 +4330,19 @@ fn main() {
             };
             let mut cur = &doc;
             let mut missing = false;
+            // A NUMERIC segment indexes a sequence. Real callers need this:
+            // the set-field shapes test reads `status.0.value`, which under the
+            // ruby it replaces was `((d["status"] || [])[0] || {})["value"]`.
+            // Keys win over indices — a mapping whose key is literally "0" is
+            // still reachable — so this only ever ADDS reach.
             for key in path.split('.').filter(|s| !s.is_empty()) {
-                match cur.get(key) {
-                    Some(next) => cur = next,
+                let next = cur.get(key).or_else(|| {
+                    key.parse::<usize>()
+                        .ok()
+                        .and_then(|i| cur.as_sequence().and_then(|s| s.get(i)))
+                });
+                match next {
+                    Some(v) => cur = v,
                     None => {
                         missing = true;
                         break;
@@ -4346,6 +4360,49 @@ fn main() {
                 }
                 other => println!("{}", scalar_to_string(other)),
             }
+        }
+        // ORDER 746-htj9. The last thing the trunk's own gate needed yq for.
+        //
+        // scripts/hooks/pre-push-local-gate.sh validated each pushed fragment
+        // with `yq eval '.'` AND `yq eval 'type' == '!!map'`. It had a fallback
+        // for hosts without yq — but the fallback could not express the second
+        // check, so the map-shape assertion silently existed on some hosts and
+        // not others. A gate whose strictness depends on which tools happen to
+        // be installed is the same defect this packet is about, one level up.
+        //
+        // Names are yq's, deliberately: this replaces yq at call sites that
+        // already compare against `!!map`, and inventing a new vocabulary would
+        // mean editing every comparison for no gain.
+        "yaml-type" => {
+            if args.len() < 2 {
+                eprintln!("usage: tillandsias-plan yaml-type <file>");
+                std::process::exit(2);
+            }
+            let file = &args[1];
+            let text = match std::fs::read_to_string(file) {
+                Ok(t) => t,
+                Err(err) => {
+                    println!("blocked:yaml-unreadable:{file}: {err}");
+                    std::process::exit(1);
+                }
+            };
+            let doc: serde_yaml::Value = match serde_yaml::from_str(&text) {
+                Ok(v) => v,
+                Err(err) => {
+                    println!("blocked:yaml-load-failed:{file}: {err}");
+                    std::process::exit(1);
+                }
+            };
+            let kind = match doc {
+                serde_yaml::Value::Mapping(_) => "!!map",
+                serde_yaml::Value::Sequence(_) => "!!seq",
+                serde_yaml::Value::String(_) => "!!str",
+                serde_yaml::Value::Bool(_) => "!!bool",
+                serde_yaml::Value::Number(_) => "!!float",
+                serde_yaml::Value::Null => "!!null",
+                _ => "!!unknown",
+            };
+            println!("{kind}");
         }
         // ORDER 746-htj9. THE YAML READ PATH THAT EXISTS EVERYWHERE.
         //
