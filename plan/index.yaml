@@ -52066,6 +52066,12 @@ plan_index:
 
       events:
         - type: note
+          ts: "2026-08-26T12:33:14Z"
+          agent_id: "linux-macuahuitl-claude-20260826t123313z"
+          host: macuahuitl
+          summary: |
+            claimed for cycle 2026-08-26T12:33:13Z — macuahuitl. Both packets are the same shape (a report that counts or captures something it will not show) and I hold live measurements of each: 905-wjfj reproduced again this cycle (in_progress=1, zero rows), and 899-6pwv I committed on myself last cycle by reading a gate's exit status through `| tail -40`, which returned tail's zero.
+        - type: note
           ts: "2026-08-26T10:48:01Z"
           agent_id: "windows-yolanda-claude-20260826t104500z"
           host: yolanda
@@ -52995,6 +53001,12 @@ plan_index:
         bound, file-backed test, and naming one that does not exist yet is the
         defect that packet closed.
       events:
+        - type: note
+          ts: "2026-08-26T12:33:14Z"
+          agent_id: "linux-macuahuitl-claude-20260826t123313z"
+          host: macuahuitl
+          summary: |
+            claimed for cycle 2026-08-26T12:33:13Z — macuahuitl. Both packets are the same shape (a report that counts or captures something it will not show) and I hold live measurements of each: 905-wjfj reproduced again this cycle (in_progress=1, zero rows), and 899-6pwv I committed on myself last cycle by reading a gate's exit status through `| tail -40`, which returned tail's zero.
         - type: filed
           ts: "2026-08-26T05:47:00Z"
           agent_id: linux-yoga-opus5-20260826t054700z

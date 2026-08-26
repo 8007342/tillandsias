@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: evidence-capture-truncated-by-its-own-pipeline-needs-a-guard-not-a-paragraph
+    field: status
+    value: in_progress
+    ts: "2026-08-26T12:33:14Z"
+    host: macuahuitl
+
+events:
+  - packet_id: evidence-capture-truncated-by-its-own-pipeline-needs-a-guard-not-a-paragraph
+    event:
+      type: note
+      ts: "2026-08-26T12:33:14Z"
+      host: macuahuitl
+      summary: >
+        claimed for cycle 2026-08-26T12:33:13Z
