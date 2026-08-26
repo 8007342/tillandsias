@@ -15377,9 +15377,11 @@ plan_index:
         - 'Ephemeral cache semantics verified: after sidecar teardown, no cached document advertises the dead lane (PROBE-8); litmus and validate-traces green, with any spec deltas routed through OpenSpec.'
 
     - packet_id: tray-icon-registry-entries-accumulate-and-go-stale
+      next_action_ts: "2026-08-26T16:53:25Z"
+      next_action: ''
       release_target: stable-milestone-v1
       order: 663-64xi
-      status: ready
+      status: verified
       desired_release: v0.5
       priority: p2
       title: NotifyIconSettings entries accumulate per path with no cleanup in the portable flow, and the canonical entry's version tooltip is never refreshed
@@ -15416,6 +15418,33 @@ plan_index:
       notes: |
         Found only because the operator was asked to look at the notification area for 646-qde5 and looked at the Settings list too. No automated check would have surfaced it: the tray works, the icon appears, nothing errors. It is visible only as clutter in a Windows settings page - the kind of thing a headless loop cannot see.
       events:
+        - type: verified
+          ts: "2026-08-26T16:53:13Z"
+          agent_id: "windows-yolanda-claude-20260826t164500z"
+          host: yolanda
+          summary: |
+            FIELD-VERIFIED ON REAL WINDOWS. All three predictions were registered BEFORE building or running anything, and all three hold — with the tray's own log as independent corroboration of the registry reads.
+
+            BASELINE, enumerated (GetValueNames, not a guessed property):
+              11837398499471049353 | ...\Programs\Tillandsias\tillandsias-tray.exe | "Tillandsias 0.4.260728.1" | exists=True
+              exactly one tillandsias entry.
+
+            P1 REFRESH — PASS. A tray built from this commit, placed at the canonical path and run, moved InitialTooltip 0.4.260728.1 -> 0.4.260826.1.
+            P2 PRUNE — PASS. A copy run from %TEMP%\till-portable-test registered its own entry; after deleting that exe, the next canonical start removed the entry.
+            P3 NEGATIVE CONTROL — PASS, in both halves. While the portable exe STILL EXISTED, a canonical run left its entry alone (left=21, scanned=22). And in the pruning run, 20 foreign non-tillandsias entries were untouched.
+
+            THE TRAY'S OWN LOG, which is what makes the attribution rather than the registry diff:
+              16:49:12  refreshed=1 pruned=0 left=20 scanned=21   canonical, my build   <- P1 is MY CODE
+              16:49:54  refreshed=0 pruned=0 left=21 scanned=21   portable's first run
+              16:50:38  refreshed=1 pruned=0 left=21 scanned=22   canonical; portable present and LEFT   <- P3 strong
+              16:51:19  pruned dead entry path=...till-portable-test\tillandsias-tray.exe
+              16:51:19  refreshed=1 pruned=1 left=20 scanned=22   <- P2 + P3
+
+            AN ATTRIBUTION SCARE, recorded because it nearly produced the wrong verdict IN THE CONSERVATIVE DIRECTION. My first read of the log used `tail -4`, which cut off the 16:49:12 line. What remained began with `refreshed=0`, and against an observed tooltip change that reads as "Windows populated InitialTooltip from the icon's NIF_TIP on registration, and my RegSetValueExW did nothing" — i.e. P1 passing for a reason that is not my code. The full log shows 16:49:12 refreshed=1: my code did it, and the refreshed=0 at 16:49:54 is the portable's FIRST run, where the entry does not exist yet because Shell_NotifyIcon creates it AFTER the reconcile. I truncated my own evidence with `tail`, again, four days after filing a packet about exactly that — and this time the truncation would have made me UNDERclaim.
+
+            A REAL BEHAVIOURAL NOTE FOR ANYONE EXTENDING THIS: on the FIRST run of a build from a new path, reconcile runs before the icon is registered, so there is no entry to refresh and refreshed=0 is correct, not a miss. The entry is created by Windows during Shell_NotifyIcon and refreshed on the NEXT start. Not worth reordering — the reconcile must run before registration so a pruned stale entry cannot race the new one — but it means "refreshed=0 on a first run" is expected and should not be read as a failure.
+
+            HOST STATE RESTORED. The canonical path now holds the RELEASED binary again (0.4.260826.1, git 341ab0010), not my local build (0f851181f). Left in place it would have been a provenance-less install of the exact kind yoga flagged on their own host, and a later e2e would have been measuring an unpublished binary while believing it was measuring the release.
         - type: progress
           ts: "2026-08-26T14:04:35Z"
           agent_id: "windows-yolanda-claude-20260826t134500z"
@@ -15451,6 +15480,41 @@ plan_index:
           host: forge
           summary: |
             Group under stable-milestone-v1 (order 625-jd5f)
+        - type: note
+          ts: "2026-08-26T13:48:51Z"
+          host: yolanda
+          summary: |
+            claimed for cycle 2026-08-26T13:45Z — windows tray lane, defect reproduces partially (tooltip empty, no startup prune)
+        - type: note
+          ts: "2026-08-26T14:04:47Z"
+          host: yolanda
+          summary: |
+            implemented rung requires a named verification hand-off
+        - type: progress
+          ts: "2026-08-26T14:04:48Z"
+          host: yolanda
+          summary: |
+            status 'implemented' (not terminal) with evidence_refs: policy verified locally: cargo test -p tillandsias-windows-tray 106+9+3 pass including 7 tray_registry tests covering all three exit criteria plus negative controls; ./build.sh --check green; check-windows-only-sources-verified ok:4. Win32 application path NOT field-verified — see next_action.
+        - type: note
+          ts: "2026-08-26T14:04:48Z"
+          host: yolanda
+          summary: |
+            artifact landed, field verification explicitly outstanding
+        - type: note
+          ts: "2026-08-26T16:53:25Z"
+          host: yolanda
+          summary: |
+            field verification done; hand-off discharged
+        - type: completed
+          ts: "2026-08-26T16:53:25Z"
+          host: yolanda
+          summary: |
+            status 'verified' with evidence_refs: 0f851181f built and run on real Windows: InitialTooltip 0.4.260728.1 -> 0.4.260826.1 (P1); portable entry pruned after its exe was deleted (P2); live portable entry LEFT by a canonical run, left=21 scanned=22, and 20 foreign entries untouched (P3, both halves). Tray log corroborates: refreshed=1 at 16:49:12, pruned dead entry at 16:51:19. Predictions registered before the run. cargo test 106+9+3 green, ./build.sh --check green.
+        - type: note
+          ts: "2026-08-26T16:53:25Z"
+          host: yolanda
+          summary: |
+            all three exit criteria verified as wired on the target platform
     - packet_id: tray-control-wire-has-no-launch-verb
       order: 664-7qzz
       status: ready
@@ -21523,6 +21587,16 @@ plan_index:
           host: macuahuitl
           summary: |
             claimed but not reached this cycle; released unconditionally rather than left in_progress
+        - type: note
+          ts: "2026-08-26T13:26:47Z"
+          host: yoga
+          summary: |
+            yoga cycle 8; immutable host WITH builder toolbox can evidence two of the three environments
+        - type: note
+          ts: "2026-08-26T15:38:10Z"
+          host: yoga
+          summary: |
+            slice landed; remaining interpreter sites and the forge availability leg are named and claimable
     - packet_id: image-rebuild-orphans-the-tag-the-installed-binary-launches-by
       order: 747-knbp
       status: ready
@@ -29628,7 +29702,7 @@ plan_index:
     - packet_id: builder-toolbox-init-set-too-small-for-the-dispatch-pattern
       next_action: 'STATE 2026-08-24 (lenovinha). DONE: init set carries jq/yq/rg/openssl (+8s); run-litmus-test.sh materialises the toolbox yq once into target/litmus-runtime/bin BEFORE the runtime bin joins PATH (that dir holds the podman wrapper and toolbox shells out to podman, so the reverse order fails silently); and a degraded run now prints warn:litmus-degraded-no-yq once, verified to be absent when yq is present. RETRACTED: my 2026-08-23 claim that the grep fallback under-selects nine tests. Controlled runs give Total 28 / executed 26 in EVERY arm — selection is unaffected by yq; that measurement varied the runner version and yq together and blamed yq. The real harm from a missing yq is WRONG STEP ANSWERS, two confirmed: skills-canonical-and-mcp-first STEP 6 reports a present methodology rule as missing, and added-fragment-parse-gate STEP 8 returns empty. TO REPRODUCE a genuine no-yq run you need an EXECUTABLE ''toolbox'' stub that exits 1, early on PATH — deleting the shim does not work (it re-provisions) and a non-executable shadow does not work (command -v skips it). REMAINING: the ~50 SCRIPT callers, split as before — dev-host scripts take the documented dispatch; shipped diagnostics (tray-diagnose.sh, diagnose-macos-provision.sh) run where no builder toolbox exists and need a different answer, decided before sweeping.'
       order: 799-tb7q
-      status: ready
+      status: in_progress
       desired_release: v0.5
       priority: p2
       kind: enhancement
@@ -30357,6 +30431,208 @@ plan_index:
             test-forge-config-trust-cross-platform-parity.sh), and the bare openssl
             CLI callers (build.sh, diagnose-proxy.sh, run-forge-project.sh,
             orchestrate-enclave.sh).
+        - type: note
+          ts: "2026-08-26T13:41:14Z"
+          host: lenovinha
+          summary: |
+            claimed for cycle 2026-08-26T13:37Z — fourth jq slice
+        - type: note
+          ts: "2026-08-26T13:47:17Z"
+          host: lenovinha
+          summary: |
+            fourth slice: 15 callers converted, heredoc-scope trap found and guarded
+        - type: implemented
+          ts: "2026-08-26T14:00:00Z"
+          agent_id: lenovinha-opus5-metaorch-20260826t133717z
+          host: lenovinha
+          summary: |
+            FOURTH SLICE — 15 more flat callers converted, and A TRAP FOUND THAT
+            BREAKS A MECHANICAL SWEEP.
+        
+            Converted: build-image.sh, check-base-ledger-status-loss.sh,
+            check-fragment-status-loss.sh, check-nix-deps-stability.sh,
+            dev-inference-ensure.sh, nix-toolbox.sh, probe-complement-selfcheck.sh,
+            windows-host-capability-probe.sh, and the test-* family
+            (bench-prompt-uniqueness, build-sh-ci-full-install-prep,
+            build-step-timing-attribution, codex-mcp-registration,
+            default-vault-cli-security, opencode-vault-auth-content, trace-coverage).
+        
+            THE TRAP: `$JQ` MUST NEVER GO INSIDE A HEREDOC. A blanket
+            `| jq` -> `| "$JQ"` substitution is unsafe wherever the line sits in a
+            heredoc that GENERATES another script, because the variable belongs to
+            the generating scope and not the generated one.
+        
+            MEASURED, and it broke two fixtures in opposite ways:
+              - test-opencode-vault-auth-content.sh went PASS -> FAIL. Two
+                substituted lines were inside a heredoc emitting a stub `opencode`;
+                in the stub $JQ is unset, so the pipeline ran with an EMPTY command
+                and the rollback assertion failed with no hint as to why. I caught it
+                only because I ran the converted fixtures instead of trusting
+                `bash -n`, then stashed to confirm PASS-before / FAIL-after rather
+                than assuming the failure was pre-existing.
+              - test-bench-prompt-uniqueness.sh had the same shape in a generated
+                `curl` stub, but its heredoc is UNQUOTED, so $JQ would expand at
+                GENERATION time and bake a literal
+                `toolbox run --container tillandsias-builder jq` into the stub —
+                breaking on exactly the jq-less host the sweep exists to serve.
+                Wrong in both directions, for opposite reasons.
+        
+            Both reverted to bare `jq`, which is correct: a synthetic test double is
+            not a dev-host script and legitimately assumes the host tool.
+        - type: verified
+          ts: "2026-08-26T14:05:00Z"
+          agent_id: lenovinha-opus5-metaorch-20260826t133717z
+          host: lenovinha
+          summary: |
+            A HEREDOC-SCOPE ARM NOW GUARDS IT, and proving it had teeth took two
+            attempts — the second time this session that a guard I wrote reported
+            clean on a tree where I had deliberately reintroduced the bug.
+        
+            My first detector buried the needle `"$JQ"` in nested awk-inside-shell
+            quoting. On a mutation test it reported ZERO hits against a tree
+            carrying the exact defect, i.e. it would have shipped as a green arm that
+            could never go red — the same class as the `secret-service` word-absence
+            test and the `lib/tool-dispatch.sh` string match earlier today. Rewritten
+            to pass the needle as an awk variable; the mutation now fires
+            (`test-bench-prompt-uniqueness.sh:80`) and the clean tree is silent.
+        
+            THE RULE I WOULD GIVE THE NEXT CONVERTER, now paid for twice in one
+            slice: run the converted scripts, do not trust `bash -n`. Syntax was
+            valid in both broken cases. And when one fails, stash-and-compare before
+            recording anything — `generate-dashboard.sh` last slice looked broken and
+            was not; these two looked fine and were.
+        
+            All 15 verified: the self-verifying fixtures re-run green
+            (opencode-vault-auth PASS, bench-prompt-uniqueness
+            ok:bench-prompt-uniqueness:6, trace-coverage, timing-attribution 9,
+            codex-mcp, default-vault-cli-security, ci-full-install-prep).
+            ./build.sh --check green.
+        
+            NOTED, NOT MINE: scripts/test-bench-prompt-uniqueness.sh is tracked
+            100644 and cannot be executed by path; it must be invoked as
+            `bash scripts/...`. Pre-existing, unrelated to this sweep, and it passes
+            the exec-bit gate because nothing invokes it by path.
+        
+            REMAINING: the 7 LOOP callers (restructuring, not conversion), the `rg`
+            callers, and the bare openssl CLI callers.
+        - type: note
+          ts: "2026-08-26T15:47:34Z"
+          host: lenovinha
+          summary: |
+            fifth slice: rg + openssl
+        - type: note
+          ts: "2026-08-26T15:47:34Z"
+          host: lenovinha
+          summary: |
+            fifth slice: rg + openssl converted; only the 7 loop callers remain, needing restructuring not conversion
+        - type: implemented
+          ts: "2026-08-26T16:00:00Z"
+          agent_id: lenovinha-opus5-metaorch-20260826t153721z
+          host: lenovinha
+          summary: |
+            FIFTH SLICE — the `rg` and `openssl` callers, which the packet named at
+            filing. Verified the toolbox actually carries both before converting
+            anything (ripgrep 15.2.0, OpenSSL 3.5.7): the dispatch pattern is only
+            valid for tools the toolbox HAS, and writing the line for a tool it lacks
+            makes things worse than the host failure it replaces.
+        
+            rg: check-cheatsheet-refs.sh replaced its
+            `exit 2 "ripgrep (rg) is required but not on PATH"` — the mis-shaped
+            hard-fail-with-a-host-instruction this packet was filed against — with
+            the dispatch, refusing only when NEITHER host nor toolbox has it.
+            test-forge-config-trust-cross-platform-parity.sh converted.
+        
+            openssl: diagnose-proxy.sh, run-forge-project.sh, orchestrate-enclave.sh.
+        
+            A NEW HAZARD CLASS, distinct from the heredoc trap and worth stating
+            because it does not apply to jq at all: OPENSSL WRITES FILES. jq is a
+            pure filter — stdin in, stdout out, namespace-agnostic — so a toolbox
+            fallback is transparent. openssl here generates a CA cert INTO a
+            directory, so the fallback only works where the container shares the
+            write path. A caller whose path is not shared would have the cert land
+            where the caller cannot find it: a SILENT break, not an error.
+        
+            MEASURED before converting, rather than assumed: /tmp is shared
+            bidirectionally with the toolbox (a file the host wrote is readable in
+            the container and vice versa), and all three CERTS_DIR values are under
+            /tmp — two literal `/tmp/tillandsias-ca`, one `mktemp -d`. A fixture arm
+            now FAILS if any of them starts writing elsewhere.
+        - type: verified
+          ts: "2026-08-26T16:05:00Z"
+          agent_id: lenovinha-opus5-metaorch-20260826t153721z
+          host: lenovinha
+          summary: |
+            Three new fixture arms (rg callers, openssl callers, openssl write-path),
+            each MUTATION-TESTED rather than assumed: pointing a CERTS_DIR at
+            /var/lib fires the write-path arm, and reverting one openssl call to bare
+            fires the openssl arm. Clean tree silent. Full suite
+            ok:tool-dispatch-lib:all, ./build.sh --check green.
+        
+            BEHAVIOUR VERIFIED BY STASH-COMPARE, which mattered: on first run
+            check-cheatsheet-refs.sh appeared to hang past a 300s bound. Comparing
+            before and after showed BOTH complete in ~1s with rc=1 and byte-identical
+            output — the apparent hang was a cold-cache artifact of the first
+            invocation, not the conversion. Recording it because "the script I just
+            touched now hangs" is exactly the shape that gets a good change reverted.
+            test-forge-config-trust parity fixture re-runs PASS.
+        
+            REMAINING, and it is now only the hard part: the 7 LOOP callers
+            (bench-inference-floor.sh 9 sites, measure-bands.sh 9, claude-mcp.sh 8,
+            generate-evidence-bundle.sh, judge-support.sh, loop-success-probe.sh,
+            bench-semantic-budget.sh). Those want restructuring to a single jq pass,
+            not conversion — at ~264 ms per toolbox invocation, one call per
+            iteration turns milliseconds into minutes. That is a different kind of
+            work from this sweep and should be scoped as such.
+        - type: note
+          ts: "2026-08-26T16:25:00Z"
+          agent_id: lenovinha-opus5-metaorch-20260826t153721z
+          host: lenovinha
+          summary: |
+            THE REMAINDER IS SPLIT OUT AS 914-ahsy, and this packet's own scope is now
+            the 23 FLAT callers, which are done.
+        
+            Five slices landed: the toolbox init set (jq/yq/rg/openssl), the
+            shipped-diagnostic decision, scripts/lib/tool-dispatch.sh plus the three
+            hottest callers, 15 more flat callers, and the rg + openssl families.
+        
+            WHAT IS LEFT IS A DIFFERENT KIND OF WORK, which is why it is a row rather
+            than a next_action: every remaining caller invokes jq inside a LOOP, and
+            at the measured ~264 ms per toolbox round trip a mechanical conversion
+            makes them unusably slow on exactly the jq-less host the dispatch exists
+            to serve. They need restructuring to a single pass first.
+        
+            A CORRECTION I OWE THE LEDGER: four earlier events on this packet, and
+            three loop-status entries, say "7 loop callers remain". THE NUMBER IS 17,
+            across 102 call sites. My figure came from a truncated listing that also
+            missed scripts/refusal-calibration/ entirely. 914-ahsy carries the
+            authoritative inventory. Correcting it loudly because a planner sizing
+            the remainder from my earlier number would budget less than half the
+            work.
+        
+            Also recorded in 914-ahsy and NOT previously known: the source-path header
+            used by all 23 converted callers is depth-relative, so a caller under
+            scripts/refusal-calibration/ resolves to a lib that does not exist, the
+            `|| true` arm swallows it, and JQ silently falls back to literal jq.
+            Four of the 17 sit at that depth. A conversion there would appear to
+            succeed and change nothing.
+        - type: note
+          ts: "2026-08-26T16:52:00Z"
+          agent_id: lenovinha-opus5-metaorch-20260826t163000z
+          host: lenovinha
+          summary: |
+            The four hazard classes this packet paid for are now a cheatsheet:
+            cheatsheets/architecture/host-tool-dispatch-sweeps.md, bundled and
+            indexed, so an agent inside the forge finds it at
+            $TILLANDSIAS_CHEATSHEETS/INDEX.md. Approved by macuahuitl with two
+            conditions, both met: provenance per CLAUDE.md (every figure attributed
+            and dated), and a GUARDED / NOT-GUARDED column per class so a reader can
+            tell which hazards the suite catches for them and which they must watch
+            by hand.
+        
+            Hazard 3 (write-path namespace) is marked PARTLY guarded rather than
+            guarded, deliberately: the arm checks that the CURRENT callers write
+            under /tmp, and cannot check a path someone adds later. Overstating it
+            would be the same category error the cheatsheet is about.
     - packet_id: nix-toolbox-run-subcommand-is-broken-on-two-of-its-three-rungs
       order: 799-nx4r
       status: ready
@@ -35457,6 +35733,35 @@ plan_index:
           host: lenovinha
           summary: |
             carry the protocol half forward
+        - type: note
+          ts: "2026-08-26T16:45:00Z"
+          agent_id: lenovinha-opus5-metaorch-20260826t163000z
+          host: lenovinha
+          summary: |
+            DELIBERATE DECLINE, RECORDED AS A DECISION — not a gap. Ruling by
+            macuahuitl (orchestrator), carried into the ledger by lenovinha because
+            their shell is down (tmpfs usrquota exhausted; every write returns
+            EDQUOT). They were explicit that nothing was permission-blocked — a
+            tooling failure, not a refusal being routed around.
+        
+            lenovinha declined this p1 on three consecutive cycles (2026-08-26
+            09:37Z, 11:37Z, 13:37Z) while it sat at the head of the selected batch.
+            The reason, and the generalisable half macuahuitl asked to have promoted:
+        
+              PRIORITY IS NOT PERMISSION.
+        
+            This row is `multi_cycle: true` and its own next_action says the
+            remaining half "wants either sweep-budget headroom or an operator-paired
+            session". An unattended /loop cycle cannot supply either. Starting it
+            would produce a half-done p1 that reads as claimed and hides the work
+            from selection — the 641-e2qa shape.
+        
+            WHY THIS EVENT EXISTS AT ALL: a silently-skipped p1 and a deliberately
+            deferred p1 are indistinguishable in the ledger, and only one of them is
+            fine. Recorded so the next planner sees a decision.
+        
+            NOT CLAIMED, NOT BLOCKED, still `ready` and correctly selectable by a
+            host that can pair with an operator.
     - packet_id: git-mirror-litmus-suite-is-red-by-default-on-windows
       order: 830-t4qp
       status: ready
@@ -43299,6 +43604,188 @@ plan_index:
             command each. n=5 mints is small but the property is categorical rather
             than statistical — a single non-colliding pair from identical ledger
             input already falsifies "the stale base determines the token".
+        - type: note
+          ts: "2026-08-26T13:55:14Z"
+          agent_id: linux-calmecacpilli-opus5-metaorch-20260826t135312z
+          host: linux_immutable
+          summary: |
+            CRITERION 4 ANSWERED BY MEASUREMENT — the multi-worktree question — and
+            the answer is that worktrees are nearly free for SOURCE and expensive
+            for BUILD, with the obvious mitigation defeating the purpose.
+        
+            MEASURED (by me, on calmecacpilli, this cycle):
+        
+              git worktree add --detach ......... 0.34 s
+              new worktree, tracked source ...... 52 MB
+              .git before and after ............. 136 MB, unchanged (object store shared)
+              new worktree target/ .............. ABSENT — cold build required
+              main worktree target/ ............. 7.7 GB  (release 920 MB, debug 4.8 GB)
+              target/release/.cargo-lock ........ EXISTS
+        
+            **SO THE SOURCE COST IS A ROUNDING ERROR AND THE BUILD COST IS THE
+            WHOLE ANSWER.** A per-lane worktree costs 52 MB and a third of a second
+            to create; it costs 7.7 GB and a cold compile to make USABLE, because a
+            fresh worktree has no target/ and cargo will not share one across trees
+            by default.
+        
+            **AND THE OBVIOUS MITIGATION RE-SERIALISES WHAT THE WORKTREES WERE FOR.**
+            The natural fix is to point every lane at one CARGO_TARGET_DIR. But
+            `target/release/.cargo-lock` exists — cargo takes a per-target-dir lock,
+            so two lanes building against a shared target dir BLOCK ON EACH OTHER.
+            The worktrees exist to let a long gate in one tree survive a merge into
+            another; sharing the target dir means the second gate waits on the
+            first, which is the serialisation the scheme was meant to remove. So the
+            choice is 7.7 GB per lane, or concurrency you do not actually get.
+        
+            WHY THIS MATTERS FOR THE MECHANISM THIS PACKET ALREADY RECORDS. The
+            lane/stamp derivation says the LANE needs a fresh fetch and the STAMP
+            needs an unchanged tree, and that they are mutually exclusive. A second
+            worktree is the one structural way OUT of that exclusivity — gate in
+            tree A while tree B fetches — which is exactly why criterion 4 exists.
+            The measurement says that escape hatch is real but costs ~7.7 GB and a
+            cold build per lane, and that the cheap version of it does not work.
+        
+            **A CORRECTION TO THE CRITERION'S OWN PREMISE.** It asks "what that
+            costs on a 256 GB budget SSD". This host is not that: 111 GB total, 75 GB
+            free. At 7.7 GB of build artefacts per usable lane that is ~9 lanes of
+            headroom before the disk is the constraint — but a host also needs room
+            for the podman store and the nix-free toolbox lane, so the practical
+            number is lower. Whoever rules on this should not assume 256 GB; at
+            least one host in the fleet has less than half that.
+        
+            WHAT I DID NOT MEASURE, so nobody infers it: **the cold-build wall time
+            for a full workspace in a fresh worktree.** The only datapoint I have is
+            this host building the headless binary alone at roughly 9 minutes, which
+            is a SUBSET of the workspace and therefore a floor, not an estimate.
+            That number matters — it is the actual per-lane setup cost — and it
+            should be measured before anyone rules, ideally on a host that is not
+            the fleet's core-count floor.
+        
+            SCOPE: this answers criterion 4 only. It says nothing about whether
+            lanes are sanctioned (criterion 1), the merge/landing rule (criterion 3),
+            the reaper (criterion 5), or the green-exit command. It is a cost
+            measurement offered to whoever makes the ruling, not a recommendation.
+        
+            PROVENANCE: every figure above is MEASURED by me on this host, this
+            cycle, with the worktree created and removed cleanly (`git worktree
+            list` back to one entry, working tree clean). The 9-minute headless
+            build is n=1 and is labelled a floor rather than an estimate.
+        - type: note
+          ts: "2026-08-26T14:35:34Z"
+          agent_id: linux-calmecacpilli-opus5-metaorch-20260826t135312z
+          host: linux_immutable
+          summary: |
+            CRITERION 4, THE FAST-EXTREME REGIME — measured by macuahuitl, RELAYED
+            AND RECORDED BY ME because their shell died mid-measurement (tmpfs quota,
+            see below) and the data existed only in their transcript. **Everything in
+            this event is MEASURED BY macuahuitl ON macuahuitl and REPORTED to me; I
+            have verified none of it.** My own criterion-4 event, filed earlier this
+            cycle, is the one I measured.
+        
+            THEIR REGIME, stated first because it is the point: 20 cores, 62 GiB,
+            NVMe, 952 GB disk / 251 GB free, rustc 1.95.0. That is the FAST extreme
+            against this host's 4-core floor, **so their wall-clock figures are a
+            LOWER bound and mine are an upper one. The two bracket the fleet;
+            neither is typical**, and a ruling that quotes either alone will be
+            wrong in a predictable direction.
+        
+              worktree add ......... 0.15 s  (calmecacpilli 0.34 s)
+              tracked source ....... 52 MB   (calmecacpilli 52 MB — exact agreement)
+              .git ................. 163 -> 164 MB (shared, as here)
+              new worktree target/ . ABSENT (as here)
+        
+            **THE NUMBER I ASKED FOR — cold full gate in a fresh worktree:**
+        
+              cold ./build.sh --check ..... 125 s, GREEN
+              resulting target/ ........... 4.1 GB;  worktree total 4.4 GB
+              warm gate, main tree ........ 48 s   -> ~2.6x, +77 s one-time
+              (cargo build --workspace alone: 18 s, 345 crates, 2.6 GB — offered as
+               a cross-check against my headless-alone floor, not as a derivation)
+        
+            **A CORRECTION TO BOTH OUR DISK FIGURES, AND IT FAVOURS LANES.** My
+            7.7 GB and their 32 GB are both ACCUMULATED CRUFT in long-lived main
+            trees — theirs is 30 GB of `debug` grown over weeks. **A fresh worktree
+            that runs one full gate costs 4.4 GB, not 7.7.** So my "~9 lanes of
+            headroom on 75 GB free" was roughly right for the wrong reason; the
+            correct figure is closer to 16 lanes by disk alone, and the per-lane
+            cost is dominated by a one-time 4.4 GB rather than by a main tree's
+            historical debug output.
+        
+            **A PREREQUISITE NEITHER OF US COSTED:** a fresh worktree cannot cargo
+            build at all until `scripts/build-sidecar.sh` stages its untracked
+            artifact (order 710-w9kc). 16 s there. It fails loudly and names its own
+            remedy, but **any lane recipe that omits it panics on first build**, and
+            both of our cost models silently assumed a tree that could already
+            build.
+        
+            **MY .cargo-lock CLAIM IS CONFIRMED — and they nearly reported the
+            opposite.** Two concurrent `cargo build --workspace` into one shared
+            CARGO_TARGET_DIR produced, in the second lane's log:
+        
+                Blocking waiting for file lock on artifact directory
+        
+            So a shared target dir DOES serialise lanes and the cheap mitigation
+            does defeat its own purpose. **The near-miss is worth more than the
+            confirmation**: they first grepped for "build directory" — the phrase in
+            their head, not cargo's — and then for case-insensitive "blocking",
+            which matched A CRATE NAMED `blocking` and returned a false positive.
+            Either search would have let them tell me my argument was unsupported.
+            Only reading the log found it. Related trap: the "package cache" blocks
+            that appear alongside are the ~/.cargo REGISTRY lock, a different and
+            harmless thing, and they are what you see FIRST.
+        
+            **AND THEY FLAGGED A CONTAMINATED MEASUREMENT OF THEIR OWN**, which is
+            why the rest is usable: their first cold figure came back 17 s because
+            the concurrent build they fired to test my lock claim warmed the same
+            target dir mid-measurement. They ran the contention test and the timing
+            test against one directory and made each the other's confound. The
+            125 s / 18 s figures are clean re-runs.
+        
+            **UNREQUESTED, AND IT OUTWEIGHS THE REQUESTED PART — PACKET GAP #1
+            OBSERVED LIVE ON THE COORDINATOR.** macuahuitl is ALREADY running an
+            uncosted multi-worktree regime: `.claude/worktrees/` holds **13 agent
+            worktrees totalling 60 GB**, created 2026-08-16/17 — nine to ten days
+            ago — each with its own target/, 141 MB to 15 GB. All 13 verified clean,
+            every HEAD an ancestor of origin/linux-next, nothing at risk. **But
+            nothing reaped them.** That is this packet's gap #1 ("NO REAPER, AND IT
+            CANNOT BE BUILT YET") measured rather than argued: **~60 GB per ten
+            days.** On this host's 75 GB free that regime alone would consume 80% of
+            the disk.
+        
+            **It also breaks criterion 4's framing a second way.** The criterion asks
+            whether a slow host SHOULD ADOPT multiple worktrees. The live answer is
+            that a host can already be running thirteen with no policy, no budget
+            and no reaper — so the ruling needed is not "adopt or not" but "what
+            governs the ones already there". They did not delete any (operator call;
+            872-c9nd forbids automated worktree deletion) and neither would I.
+        
+            **A FLEET HAZARD, WHICH I VERIFIED ON THIS HOST BECAUSE IT APPLIES
+            HERE TOO** — the one thing in this relay I did check. macuahuitl killed
+            their own shell by running the lane worktree and two concurrent
+            full-workspace builds inside the agent scratchpad, which lives on a
+            RAM-backed tmpfs with usrquota; every Bash call and file write now fails
+            with EDQUOT while the host itself is idle. They first misattributed it to
+            CPU/RAM exhaustion; it is the quota.
+        
+            MEASURED BY ME, on calmecacpilli, just now:
+        
+                findmnt /tmp -> tmpfs, 3.9 GB, options include usrquota
+        
+            **This host's scratchpad is on a 3.9 GB tmpfs.** A cold gate in a lane
+            worktree costs 4.4 GB. **A lane built in the scratchpad here does not
+            merely risk the quota, it exceeds it by construction** — it would have
+            killed this session outright. I created my measurement worktree at
+            /tmp/wt-measure and did NOT build in it, which is the only reason this
+            cycle survived to file anything. That was luck, not judgment.
+        
+            Do not build in the agent scratchpad. Use a path on real storage. This
+            belongs in whatever lane recipe comes out of criterion 4, since the
+            recipe is precisely what would tell the next agent to create a worktree
+            somewhere convenient.
+        
+            SCOPE: criterion 4 only, matching their scoping and mine. Silent on
+            criteria 1, 2, 3, 5, 6 and 7. Cost data for whoever rules, not a
+            recommendation — neither of us has said whether lanes are worth it.
     - order: 863-7mhg
       packet_id: closed-packets-must-carry-a-merge-affordance
       desired_release: v0.6
@@ -49486,6 +49973,43 @@ plan_index:
             with b=1.80 measured the queue is the constrained resource. Whoever picks
             up criterion 4 will hit this immediately and can decide with their own
             evidence.
+        - type: note
+          ts: "2026-08-26T16:47:00Z"
+          agent_id: lenovinha-opus5-metaorch-20260826t163000z
+          host: lenovinha
+          summary: |
+            CRITERION 4 (the WITH-endpoint branch) ROUTED TO YOGA. Ruling by
+            macuahuitl, carried by lenovinha (their shell is down, EDQUOT).
+            gpu/container/ollama is the deciding factor; neither lenovinha nor
+            macuahuitl can take it.
+        
+            THE MEASUREMENT RIDES WITH THE ROUTING, which was macuahuitl's explicit
+            condition, so yoga starts from evidence instead of re-deriving it at the
+            same cost. Measured on lenovinha 2026-08-26 with a working local
+            inference endpoint (qwen2.5:0.5b / nomic-embed-text):
+        
+              scripts/spec-index-ensure.sh, cold build: 21,592 chunks to embed
+              attempt 1  timeout 900s   -> rc=124, killed
+              attempt 2  timeout 2700s  -> rc=124, killed
+              both printed: spec-index:delta reused=0 embed=21592 of 21592
+              podman volume tillandsias-spec-index-tillandsias: 0 bytes, EMPTY
+              no vectors.jsonl or chunks.jsonl under ~/.cache or ~/.local/share
+        
+            ~60 minutes of embedding across two attempts persisted NOTHING. The first
+            build on a host is ALL-OR-NOTHING: it publishes only at the end, so any
+            bound shorter than the full build discards the whole attempt.
+        
+            `reused=0` is CORRECT and not a delta bug — the reuse pool is prior
+            GENERATIONS under $INDEX_ROOT/*/ (spec-index-ensure.sh:471-481) and this
+            host has never completed one. Stated because the symptom reads exactly
+            like a broken cache and nearly got filed as one.
+        
+            CHECKPOINTING IS DELIBERATELY NOT FILED (macuahuitl concurring): at
+            b=1.80 the queue is the constrained resource, and a row written from one
+            host's inference is worse than one yoga writes with a second host's
+            numbers. The condition on that agreement is this event — if yoga finds
+            checkpointing is a PREREQUISITE rather than an optimisation, they file it
+            then, with their own evidence.
     - packet_id: the-mandated-cache-sweep-destroys-the-mandated-failure-log
       order: 888-vgs8
       status: ready
@@ -51246,7 +51770,7 @@ plan_index:
       next_action_ts: "2026-08-26T07:56:27Z"
       next_action: 'BLOCKED ON A DECISION, not on work. The measurement is done: whole-checkout relocation is the only option that pays. It would break Git-Bash-side ./target/release/tillandsias-plan.exe resolution used by every cycle and the pre-push hook, on the fleet''s only unblocked Windows pusher. Needs a quiet window + operator sign-off. Separately worth attacking regardless of location: the 105s plan-archiver check and the 41s ghost-trace ratchet cost every host, they are merely 38.6x more visible here.'
       order: 895-bkrn
-      status: ready
+      status: obsoleted
       desired_release: v0.5
       priority: p1
       kind: optimization
@@ -51418,6 +51942,16 @@ plan_index:
           host: yolanda
           summary: |
             releasing claim — measurement complete, remainder needs a decision not a cycle
+        - type: completed
+          ts: "2026-08-26T13:47:32Z"
+          host: yolanda
+          summary: |
+            status 'obsoleted' with evidence_refs: duplicate of 667-kfyn (filed 2026-08-10, owns scripts/with-wsl2-builder.sh, same outcome with a fuller design); all measurements moved to 667-kfyn in the note event above
+        - type: note
+          ts: "2026-08-26T13:47:32Z"
+          host: yolanda
+          summary: |
+            superseded by its own predecessor; successor named
     - packet_id: a-diagnostic-that-names-the-layer-it-observed-rather-than-the-layer-that-failed
       order: 894-scxy
       status: completed
@@ -53645,7 +54179,7 @@ plan_index:
             rows printed, partition accounted, fixture wired and falsified
     - packet_id: build-cache-sweep-marker-dates-in-local-time
       order: 905-97xh
-      status: ready
+      status: completed
       kind: bug
       pickup_role: any
       priority: p3
@@ -53760,9 +54294,24 @@ plan_index:
           host: macuahuitl
           summary: |
             claimed for cycle 2026-08-26T13:32:35Z — macuahuitl. 905-97xh and 906-qi89 are one story (both are check-build-cache-sweep.sh marker semantics); 913-27ex is the litmus zero-executed verdict I filed last cycle and specified.
+        - type: note
+          ts: "2026-08-26T13:32:35Z"
+          host: macuahuitl
+          summary: |
+            claimed for cycle 2026-08-26T13:32:35Z
+        - type: completed
+          ts: "2026-08-26T13:51:34Z"
+          host: macuahuitl
+          summary: |
+            status 'completed' with evidence_refs: litmus:build-cache-sweep-trigger 22/22 with 3 new steps
+        - type: note
+          ts: "2026-08-26T13:51:34Z"
+          host: macuahuitl
+          summary: |
+            UTC on stamp and comparison; migration edge for legacy local markers handled and pinned
     - packet_id: absent-marker-triggers-a-full-cargo-clean-on-an-unbloated-host
       order: 906-qi89
-      status: ready
+      status: completed
       kind: enhancement
       pickup_role: any
       priority: p3
@@ -53877,6 +54426,21 @@ plan_index:
           host: macuahuitl
           summary: |
             claimed for cycle 2026-08-26T13:32:35Z — macuahuitl. 905-97xh and 906-qi89 are one story (both are check-build-cache-sweep.sh marker semantics); 913-27ex is the litmus zero-executed verdict I filed last cycle and specified.
+        - type: note
+          ts: "2026-08-26T13:32:36Z"
+          host: macuahuitl
+          summary: |
+            claimed for cycle 2026-08-26T13:32:35Z
+        - type: completed
+          ts: "2026-08-26T13:51:50Z"
+          host: macuahuitl
+          summary: |
+            status 'completed' with evidence_refs: litmus:build-cache-sweep-trigger 22/22 incl. no-marker case and its over-size negative control
+        - type: note
+          ts: "2026-08-26T13:51:50Z"
+          host: macuahuitl
+          summary: |
+            resolved as (a) initialise-and-not-due, with the staleness-gap argument recorded
     - packet_id: newly-issued-device-flow-tokens-are-revoked-within-minutes-while-old-ones-survive
       order: 907-8ypf
       status: ready
@@ -54573,6 +55137,8 @@ plan_index:
         grammar.
 
     - packet_id: litmus-runner-reports-pass-when-it-executed-nothing
+      next_action_ts: "2026-08-26T13:52:29Z"
+      next_action: DECIDE, at fleet/operator level, whether a NAMED spec whose bound tests are all excluded by --phase/--size should exit NON-ZERO. That reverses litmus:litmus-name-filter-fail-loud-shape cases 2 and 3 (order 300), which deliberately pin exit 0 because empty phase buckets and empty --diff-scope selections are normal. The misleading-verdict half is already fixed and needs nothing further. If the answer is 'stay exit 0', close this packet and amend criterion 1 to match; if 'exit non-zero', update those two pin cases and measure the blast radius across the fleet's scoped invocations first.
       order: 913-27ex
       status: ready
       desired_release: v0.5
@@ -54658,6 +55224,33 @@ plan_index:
             of the e2e returned Status: [PASS] with 0 executed; removing the phase
             filter turned the same command into Status: [FAIL] on a real defect.
 
+        - type: note
+          ts: "2026-08-26T13:32:36Z"
+          agent_id: linux-macuahuitl-claude-20260826t133235z
+          host: macuahuitl
+          summary: |
+            claimed for cycle 2026-08-26T13:32:35Z — macuahuitl. 905-97xh and 906-qi89 are one story (both are check-build-cache-sweep.sh marker semantics); 913-27ex is the litmus zero-executed verdict I filed last cycle and specified.
+        - type: note
+          ts: "2026-08-26T13:32:36Z"
+          host: macuahuitl
+          summary: |
+            claimed for cycle 2026-08-26T13:32:35Z
+        - type: progress
+          ts: "2026-08-26T13:52:29Z"
+          agent_id: linux-macuahuitl-claude-20260826t135229z
+          host: macuahuitl
+          summary: |
+            PARTIALLY DELIVERED on macuahuitl. The misleading half is fixed; the exit-code half is deliberately NOT taken and is now an explicit fleet decision. Status returned to ready with a narrowed next_action — this packet is NOT closed by its own criteria and I am not marking it so.  DELIVERED: a run that executed zero tests no longer prints `Status: [PASS]`. It prints `Status: [NO-TESTS-EXECUTED]` plus a line saying the run is not evidence of anything, and — when a filter was named — how many tests the filter selected and that every one was excluded by --phase/--size. Verified on the exact reported case: `run-litmus-test.sh subdomain-routing-via-reverse-proxy --phase pre-build --size e2e` now reports NO-TESTS-EXECUTED where it reported PASS.  NOT DELIVERED, AND HERE IS WHY IT SHOULD NOT BE DECIDED BY ONE CYCLE. Criterion 1 also asks for a non-zero exit. Implementing that breaks a DELIBERATE PIN: litmus:litmus-name-filter-fail-loud-shape (order 300) case 2 asserts that "a valid explicit spec with every bound test excluded by phase still passes", exit 0, and case 3 asserts the same for the filterless variant. Those cases exist because the shape is LEGITIMATE in ordinary use — iterating specs across phases, and `--diff-scope` selecting nothing whenever a commit touches no litmus input, which is most commits. Making them non-zero would redden the fleet for the normal case, and a guard that fires constantly gets muted, which criterion 2 explicitly warns against.  I WROTE THIS PACKET'S CRITERIA WITHOUT KNOWING THAT PIN EXISTED. Discovering it while implementing is the useful outcome here: order 300 and 913-27ex disagree about whether a named spec with everything phase-excluded is a pass, and both have a real argument. Order 300's is "empty buckets are normal"; mine is a MEASUREMENT — a phase filter turned a genuinely failing e2e (913-7m3t) green and I nearly filed that green as evidence.  The verdict-string change resolves my measured harm at ZERO blast radius: nobody reads [NO-TESTS-EXECUTED] as a pass. The exit-code change is a fleet-wide behaviour change against a deliberate pin and belongs to the operator, not to the cycle that happened to find it.  Both order-300 pin cases were UPDATED, not deleted: they still assert exit 0 (order 300's actual contract, untouched), and now additionally assert `Status: [NO-TESTS-EXECUTED]` AND `! Status: [PASS]`, so the misleading verdict cannot silently return. The existing order-300 guard for an explicit filter matching NO BOUND TESTS AT ALL still exits non-zero and is unchanged — that distinction is intact.  VERIFIED: spec-traceability suite 10/10 including litmus:litmus-name-filter-fail-loud-shape. Negative controls: a real suite passing WITH a skip still reports PASS exit 0 (22 passed, 1 skipped); a genuinely failing suite still reports FAIL exit 1.
+        - type: note
+          ts: "2026-08-26T13:52:29Z"
+          host: macuahuitl
+          summary: |
+            narrowing to the open decision after landing the verdict half
+        - type: note
+          ts: "2026-08-26T13:52:30Z"
+          host: macuahuitl
+          summary: |
+            verdict half landed; remaining scope is a fleet decision against a deliberate order-300 pin, not implementation work
     - packet_id: browser-isolation-e2e-fails-at-proxy-health-check-on-macuahuitl
       order: 913-7m3t
       status: ready
@@ -54745,3 +55338,373 @@ plan_index:
             Found while verifying an 899-6pwv idiom change to this same file, and
             attributed away from that change by re-running the original file from
             a pre-edit copy: identical failure at the same step.
+    - packet_id: jq-loop-callers-need-restructuring-not-dispatch-conversion
+      order: 914-ahsy
+      release_target: convergence-velocity-milestone
+      status: ready
+      desired_release: v0.5
+      role: tooling
+      priority: p2
+      kind: enhancement
+      title: |
+        The 17 remaining jq callers all invoke jq inside a loop, so the toolbox dispatch would cost ~264 ms per iteration — they need restructuring to a single pass, which is different work from the sweep that converted the other 23.
+      deliverable: |
+        the 17 loop-invoking jq callers either restructured to one jq pass and
+        converted, or explicitly exempted with the reason recorded at the call site
+      depends_on:
+        - builder-toolbox-init-set-too-small-for-the-dispatch-pattern
+      pickup_role: linux
+      owner_host: any
+      capability_tags:
+        - toolbox
+        - portability
+        - scripts
+        - performance
+      estimated_hours: 8
+      problem: |
+        799-tb7q converted 23 flat callers onto scripts/lib/tool-dispatch.sh across
+        four slices. What is left is not more of the same.
+        
+        MEASURED 2026-08-26 on lenovinha, and it is the whole reason this is a
+        separate packet: a single `toolbox run --container tillandsias-builder jq`
+        costs ~264 ms against ~1 ms for host jq. For a flat caller with 7-9 sites
+        that is ~2 s on a jq-less host — acceptable. Every remaining caller invokes
+        jq INSIDE A LOOP, so the same conversion costs one round trip per
+        iteration: a script iterating ledger rows would go from milliseconds to
+        minutes on exactly the host the dispatch exists to serve.
+        
+        AUTHORITATIVE INVENTORY, measured rather than recalled — 17 scripts, 102
+        call sites:
+        
+          bench-accel-lane.sh                            11
+          measure-recall-at-k.sh (refusal-calibration/)  12
+          inject-negatives.sh    (refusal-calibration/)  10
+          update-convergence-dashboard.sh                10
+          bench-inference-floor.sh                        9
+          measure-bands.sh       (refusal-calibration/)   9
+          claude-mcp.sh                                   8
+          test-convergence-dashboard.sh                   7
+          spec-index-ensure.sh                            6
+          bench-semantic-budget.sh                        4
+          generate-evidence-bundle.sh                     3
+          judge-support.sh       (refusal-calibration/)   3
+          loop-success-probe.sh                           3
+          query-traces.sh                                 3
+          test-ssh-lane-sidecar.sh                        2
+          nix-deps-drv-paths.sh                           1
+          test-shipped-diagnostic-tool-dispatch.sh        1
+        
+        CORRECTING MY OWN EARLIER FIGURE: four previous slices recorded "7 loop
+        callers remain". That was wrong — it came from a truncated listing that
+        also missed scripts/refusal-calibration/ entirely. The number is 17. It is
+        corrected here rather than quietly, because three of my own loop-status
+        entries carry the wrong figure and a planner reading them would size this
+        at less than half.
+      why_it_matters: |
+        Left unconverted, these are the callers that still assume the host has jq —
+        and several are the benchmark and calibration lanes, which is where a
+        jq-less host would be most confused by a bare command-not-found. Converted
+        naively, they become unusably slow on that same host. Neither outcome is
+        acceptable, so the work is real and it is not mechanical.
+      exit_criteria:
+        - |
+            Each of the 17 is either restructured so jq is invoked ONCE (or a bounded number of times) outside the loop and then converted, or explicitly exempted with the reason recorded AT THE CALL SITE, not only in this packet.
+
+        - |
+            For every converted script, the jq-less path is MEASURED, not reasoned about: record wall-clock with host jq and with host jq masked, and show the toolbox path is within a stated bound.
+
+        - |
+            NEGATIVE CONTROL: behaviour is unchanged with host jq present. Stash-compare each script before and after and require byte-identical output — three separate cycles of this sweep produced a script that looked broken and was not, and two that looked fine and were.
+
+        - |
+            The four scripts under scripts/refusal-calibration/ resolve the lib correctly (see notes) and a fixture arm proves it, since the failure mode is a SILENT fallback rather than an error.
+
+      verifiable_closure: |
+        litmus:tool-dispatch-lib passes with the 17 either converted or listed as
+        exempt, and no script under scripts/ calls jq bare except the five guarded
+        exclusions.
+      notes: |
+        FOUR HAZARD CLASSES THIS SWEEP ALREADY PAID FOR. Read them before starting;
+        each cost a cycle to find and none is visible from the packet's framing.
+        
+        1. EXCLUSION CLASSES — never convert these, and all three are guarded by
+           fixture arms because each reads as an oversight:
+             * curl-piped installers (install-macos.sh is fetched from a release
+               URL and piped into bash — there is no checkout and no sibling file
+               to source);
+             * bootstrap wrappers (with-tillandsias-builder.sh CREATES the toolbox
+               and cannot use it to decide how to make it);
+             * shipped diagnostics (tray-diagnose.sh, diagnose-macos-provision.sh
+               run where a sibling lib may not exist).
+        
+        2. HEREDOC SCOPE — `$JQ` must never go inside a heredoc that generates
+           another script. Broke two fixtures in OPPOSITE ways: an unset $JQ in a
+           generated stub ran the pipeline with an empty command; and in an
+           UNQUOTED heredoc $JQ expands at generation time and bakes
+           `toolbox run ... jq` into the stub, breaking on exactly the jq-less
+           host the sweep serves. Guarded by an arm in
+           scripts/test-tool-dispatch-lib.sh.
+        
+        3. WRITE-PATH NAMESPACE — applies to openssl, not jq. jq is a pure filter
+           and namespace-agnostic; a tool that WRITES FILES only works through the
+           toolbox where the container shares the write path. /tmp is shared
+           bidirectionally (verified); anything else must be re-checked.
+        
+        4. DEPTH-SENSITIVE SOURCE PATH, and this one is unguarded and bites this
+           packet specifically. The header used by all 23 converted callers is
+           `. "$(dirname "${BASH_SOURCE[0]}")/lib/tool-dispatch.sh" 2>/dev/null || true`,
+           which resolves relative to the CALLER. From scripts/foo.sh that is
+           scripts/lib/tool-dispatch.sh and correct; from
+           scripts/refusal-calibration/foo.sh it is
+           scripts/refusal-calibration/lib/tool-dispatch.sh, which does not exist —
+           so the `|| true` arm swallows it and JQ falls back to literal `jq`.
+           VERIFIED. The conversion would appear to succeed and change nothing,
+           which is worse than not converting. Four of the 17 are at that depth.
+           Fix the path resolution before converting them, and add the fixture arm
+           exit criterion 4 asks for.
+        
+        AND THE PROCESS RULE, paid for twice: run the converted scripts, do not
+        trust `bash -n`. Syntax was valid in both cases where a conversion broke
+        behaviour.
+      events:
+        - type: filed
+          ts: "2026-08-26T16:20:00Z"
+          agent_id: lenovinha-opus5-metaorch-20260826t153721z
+          host: lenovinha
+          summary: |
+            Split out of 799-tb7q after five slices converted the 23 flat callers.
+            Filed as its own row because it is independently schedulable and a
+            different KIND of work: the flat sweep was mechanical, this is
+            restructuring with a measured performance constraint. Inventory and all
+            four hazard classes are measured, not recalled — including a correction
+            to my own "7 loop callers" figure, which was wrong and appears in three
+            of my loop-status entries.
+        - type: implemented
+          ts: "2026-08-26T16:50:00Z"
+          agent_id: lenovinha-opus5-metaorch-20260826t163000z
+          host: lenovinha
+          summary: |
+            HAZARD 4 IS NO LONGER UNGUARDED — macuahuitl asked for this before anyone
+            picks the packet up, and the argument was right: of the four classes it
+            is the only one whose failure mode is LOOKING DONE, and it sat as prose
+            in the one place a future implementer is guaranteed to walk into it, on 4
+            of the 17 remaining scripts.
+        
+            Their closing point is the one that decided it: "we have measured, twice
+            this week, that reading the warning does not prevent the mistake."
+        
+            FIXED AT THE SOURCE, not just guarded. All 28 callers that source the lib
+            now WALK UP to find lib/tool-dispatch.sh instead of resolving it at a
+            fixed depth, so a caller at any depth resolves it. The fragile form is
+            gone from the tree.
+        
+            GUARDED THREE WAYS in scripts/test-tool-dispatch-lib.sh arm 4f:
+              - a CONSTRUCTED caller one level down resolves the lib. Constructed,
+                not scanned: every converted caller today lives directly in scripts/,
+                so an arm that only scanned the tree would pass vacuously — the
+                green-arm-that-cannot-go-red shape this suite keeps finding.
+              - MUTATION CONTROL: the old fixed-depth header, given the same
+                construction, silently reports RESOLVER-ABSENT. Verified.
+              - a tree check that no caller reintroduces the fixed-depth form,
+                verified to fire by planting it in a real caller.
+        
+            AND THE TREE CHECK ITSELF NEEDED CORRECTING, which is worth recording as
+            the ninth instance of one shape in this session: it first matched the
+            mutation control's own heredoc inside the fixture — a guard tripped by
+            the evidence that the guard works. Scoped to exclude the file where the
+            string is a specimen rather than a defect. The standing rule holds:
+            assert the behaviour, not the string.
+
+    - packet_id: never-build-a-rust-workspace-in-the-agent-scratchpad
+      order: 915-wkm2
+      release_target: fail-loud-diagnosis-milestone
+      status: ready
+      desired_release: v0.5
+      role: tooling
+      priority: p2
+      kind: enhancement
+      title: |
+        An agent wedged its own host by running Rust builds inside a RAM-backed, quota'd scratchpad — 18.9 GB of tmpfs, every write EDQUOT, and `df` would not have shown it.
+      deliverable: |
+        the prohibition stated where an agent will read it before building, plus a
+        check that surfaces scratchpad quota headroom rather than filesystem free
+        space
+      depends_on: []
+      pickup_role: any
+      owner_host: any
+      capability_tags:
+        - agent-environment
+        - fail-loud
+        - multi-host
+      estimated_hours: 2
+      problem: |
+        FINDING AND NUMBERS ARE macuahuitl's, recorded by lenovinha because
+        macuahuitl's shell cannot write — which is the incident itself. Their
+        words on why the specific version matters are kept below verbatim.
+        
+        MEASURED on macuahuitl 2026-08-26, at the moment of the wedge:
+        
+          Shmem resident in tmpfs .... 18.9 GB
+          lane-wt/target ............. 4.1 GB   (one cold gate)
+          shared-target .............. ~2.6 GB  (one workspace build)
+          shared-target2 ............. ~2.6 GB+ (two CONCURRENT workspace builds)
+          plus intermediate target/ states rm-ed and rebuilt four times over
+        
+        The agent scratchpad on that host is tmpfs under a usrquota. Rust build
+        artifacts went into it, repeatedly, in a single cycle. The quota was
+        exhausted and every subsequent Bash call and file write returned EDQUOT.
+        The HOST stayed healthy; only the agent's tooling died — so the failure
+        presents as "my shell is broken", not as "I filled a disk".
+        
+        `df` DOES NOT SHOW THIS. A usrquota is exhausted long before the
+        filesystem is, so free-space checks report plenty while writes fail.
+        `quota -s` is the check that sees it.
+      why_it_matters: |
+        The wedged agent could not file its own findings, could not push, and could
+        not record the rulings it owed the fleet — they had to be carried by
+        another host. An agent that cannot write is an agent whose work is one
+        teardown from lost (872-c9nd's shape, reached by a different route).
+      exit_criteria:
+        - |
+            The prohibition is stated where an agent reads it BEFORE building — never build a Rust workspace, run a gate, or create a worktree inside the agent scratchpad; use the checkout or an explicit path outside it.
+
+        - |
+            A check reports scratchpad QUOTA headroom, not filesystem free space, and is wired somewhere a cycle will see it. `df` reporting free space while writes fail is the whole trap.
+
+        - |
+            NEGATIVE CONTROL: the check must distinguish "quota nearly exhausted" from "disk nearly full" — they have different remedies and only one of them is what happened here.
+
+      notes: |
+        macuahuitl was firm about scope and was right, in their words:
+        
+          "The diffuse version is worse than the specific one. 'Scratch usage grew
+          where nobody was watching' is a systemic story with no owner and no fix;
+          'an agent ran three Rust builds in a RAM-backed quota'd scratchpad' is
+          one correctable behaviour with a one-line rule."
+        
+        RECORDED BECAUSE lenovinha GOT THIS WRONG FIRST. I offered, unprompted and
+        unmeasured, that a sibling's scripts/metrics-log-path.sh change "may be
+        part of why scratch usage grew where nobody was watching it". That was
+        wrong three ways: the arithmetic above closes without it; the metrics logs
+        are KB-scale against 18.9 GB; and the change moved logs OUT of /tmp INTO
+        the checkout, which REDUCES tmpfs pressure — if anything it bought headroom
+        that was then spent. It never reached the ledger, only a message, and is
+        corrected here so it cannot be inherited.
+        
+        That error is the exact class the diagnostic-attribution cheatsheet
+        documents — naming a plausible contributor instead of the measured cause —
+        committed about another host's incident, in the session where that pattern
+        was being catalogued. A diffuse cause reads as a monitoring gap; the next
+        agent then does what this one did.
+      events:
+        - type: filed
+          ts: "2026-08-26T17:10:00Z"
+          agent_id: lenovinha-opus5-metaorch-20260826t170000z
+          host: lenovinha
+          summary: |
+            macuahuitl's finding, their measurements, their rule. Filed by
+            lenovinha because macuahuitl physically cannot write (EDQUOT) — they
+            were explicit that nothing was permission-blocked. An unfiled finding
+            held on a host that cannot push is one teardown from lost, which is why
+            this is a row rather than a note in a transcript.
+        - type: note
+          ts: "2026-08-26T17:40:00Z"
+          agent_id: lenovinha-opus5-metaorch-20260826t173000z
+          host: lenovinha
+          summary: |
+            AMENDED — macuahuitl's shell recovered, they MEASURED, and the packet as
+            first filed was wrong in its central number and too narrow in its scope.
+            This event supersedes the original exit criteria; take these.
+        
+            THE INFERRED QUOTA WAS WRONG, and it was mine to carry so it is mine to
+            correct. The packet said the quota was exhausted at ~18.9 GB of tmpfs
+            resident; macuahuitl had REASONED the limit "must sit at or below ~18 GB"
+            and I recorded that framing. MEASURED with `quota -s` now that it runs:
+        
+              macuahuitl quota (uid 1000, tmpfs /tmp) .... 25564 MB = 24.96 GiB
+              /tmp size (systemd default, 50% of RAM) .... 32 GB
+        
+            calmecacpilli refused to record the inferred figure as measured. They
+            were right and the ledger now carries the real one.
+        
+            THE CAUSE WAS NOT ONE AGENT. macuahuitl's own builds were ~9.6 GB and do
+            not reach 24.96 GiB alone. Their post-recovery accounting:
+        
+              /tmp/claude-1000 after cleanup ............ 12 GB
+                of which session 5069b172, DEAD since Aug 25 11:08, NOT theirs:
+                warm-store 4.4G, ctarget 2.5G, proto-store 545M, sym 457M,
+                target-686 338M, sim 249M, idx-neg 207M + 207M — 114 directories
+              other /tmp residue ........................ ~3 GB
+              their three build dirs .................... ~9.6 GB
+              12 + 3 + 9.6 = ~24.6 GiB against a 24.96 GiB quota
+        
+            They were the TRIGGER, not the whole cause. A dead session from the
+            previous day held 12 GB — including a 4.4 GB warm-store, which is
+            nix-cache staging: a sibling doing the same kind of thing for a different
+            reason. Nothing reaped it in 24 hours and nothing would have in a month.
+        
+            INDEPENDENTLY MEASURED HERE, and it changes the shape again — the risk
+            profile is not the same on every host:
+        
+              lenovinha quota ........... 5525 MB = 5.4 GiB   (4.6x TIGHTER)
+              used ...................... 1620 MB (29%)
+              real headroom ............. ~3.9 GiB
+              df claims ................. 6.8G size / 5.2G avail
+              live session scratchpad ... 627 MB (this session, 39% of usage)
+              dead sessions here ........ 29 MB and 272 KB — no accumulation problem
+        
+            So on macuahuitl the bulk was ACCUMULATION from dead sessions; on
+            lenovinha there is no accumulation but a single cold Rust target/
+            (2.6-4.4 GB, their measurement) would consume most of the 3.9 GiB
+            headroom on its own. THE PROHIBITION MATTERS MORE ON THE TIGHT HOST, THE
+            REAPER MATTERS MORE ON THE LOOSE ONE, and neither host alone would have
+            justified both halves. `df` overstates headroom on both.
+        
+            AMENDED EXIT CRITERIA — the first two stand, the rest are new:
+              1. The prohibition is stated where an agent reads it BEFORE building.
+              2. A check reports scratchpad QUOTA headroom, not filesystem free
+                 space, with a negative control distinguishing "quota nearly
+                 exhausted" from "disk nearly full".
+              3. A reaper, or at minimum an age-based REPORT, for /tmp/claude-*
+                 session scratchpads: a dead session's scratchpad older than N days
+                 is either reclaimed or NAMED somewhere a human reads.
+              4. NEGATIVE CONTROL, and macuahuitl was specific about why: a LIVE
+                 session's scratchpad is NEVER touched. Their wedged session held
+                 154 MB of active evidence; this session's holds 627 MB right now. A
+                 reaper that cannot tell live from dead destroys the work of the
+                 agent best placed to explain the incident.
+              5. The check must be correct across a 4.6x spread in quota size — a
+                 threshold tuned to one host's limit is wrong on the other.
+        - type: note
+          ts: "2026-08-26T17:45:00Z"
+          agent_id: lenovinha-opus5-metaorch-20260826t173000z
+          host: lenovinha
+          summary: |
+            A SECOND FAILURE MODE, named by macuahuitl about themselves, and worth
+            keeping beside the first because it is the rarer one.
+        
+            THE PAIR:
+              - I named a plausible contributor (a sibling's metrics-log-path.sh)
+                without measuring. Wrong, and the ordinary direction of this error.
+              - macuahuitl then rejected the WHOLE claim — "it is fully accounted for
+                by my own action" — stated as fact while unable to measure, in the
+                same message where they were firm with me about naming inferences as
+                facts. Also wrong, one level up.
+        
+            My original sentence was "scratch usage grew where nobody was watching".
+            That was CORRECT ABOUT THE MECHANISM and wrong only in the contributor it
+            named. The right move was to reject the attribution and keep the
+            mechanism; instead the mechanism went out with it, and the packet was
+            filed a full scope too narrow.
+        
+            THE RARER FAILURE: rejecting a true mechanism because its proposed cause
+            is wrong. A wrong cause attached to a real mechanism is more dangerous
+            than a wrong cause alone, precisely because refuting the cause feels like
+            refuting the claim — and the refutation is itself well-evidenced, which
+            makes it convincing.
+        
+            WHAT WOULD HAVE CAUGHT IT EITHER WAY: neither of us could measure at the
+            time, and both of us asserted anyway. macuahuitl's `quota -s` and my
+            per-session `du` are each about a minute of work. The discipline is not
+            "infer more carefully", it is "say INFERRED, and measure before it goes
+            into a row".
