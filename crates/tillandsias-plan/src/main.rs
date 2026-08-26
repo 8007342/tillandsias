@@ -5702,7 +5702,9 @@ fn main() {
                     // both; `-` where a claim would name a host and a time,
                     // because there is no host to warn and no lease to reason
                     // about. That absence is the actionable part of the row.
-                    emit(&format!("unclaimed-in-progress\t{order}\t{pid}\t-\t-\t{last}"));
+                    emit(&format!(
+                        "unclaimed-in-progress\t{order}\t{pid}\t-\t-\t{last}"
+                    ));
                     unclaimed += 1;
                 }
                 // THE PARTITION, STATED SO IT CAN BE FALSIFIED. Every in_progress
