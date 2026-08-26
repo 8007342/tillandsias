@@ -24,6 +24,21 @@ Three distinct mechanisms, measured on this fleet on 2026-08-25/26, each found
 by the person it happened to. They are not three instances of one mistake —
 they are three faces of one property, and each needs a different mitigation.
 
+## Why this file could not have been produced by auditing
+
+**Every mechanism below was self-reported by the host it happened to**, and two
+of them corrected a more flattering account the coordinator had offered.
+
+That is not incidental and it is the first thing to know about the class: **the
+only person positioned to see an authorship blind spot is the author, after the
+fact, and only if they are willing to say so.** A reviewer sees the artifact,
+not the knowledge that shaped it — so a fleet whose findings arrive only from
+review would contain none of these.
+
+The practical consequence: **you cannot go looking for this class in someone
+else's work.** You can only notice it in your own and publish it. Which means
+the supply depends entirely on whether saying so is cheap.
+
 ## The three faces
 
 ### 1. Criterion drift — you cannot see your own criterion go stale
@@ -66,6 +81,16 @@ would later have to route around.**
 would pass. Then check whether the fix's own call site is the thing being
 exercised, or a bystander with the same effect.
 
+**Credit where it actually belongs, at the author's insistence:** this reads
+like foresight and it was not. They went looking for an attribution problem
+because they had spent the evening watching four hypotheses die on exactly that
+shape — three of them their own — and because the coordinator had asked them to
+name the hazard explicitly before the run. **The design followed from the
+night, not from insight.** Worth stating, because "they reordered the
+experiment" makes the mitigation sound available to a careful person working
+alone, and the evidence is that it was available to a primed person working
+under supervision.
+
 ### 3. Reader staleness — a remembered document is a cached read with no invalidation
 
 **The reader of a document is uniquely positioned not to notice it has been
@@ -90,12 +115,28 @@ belief, and acted on it nine hours later.
 if you already suspected the memory was stale, and a confident memory generates
 no such suspicion.
 
+**A SECOND INSTANCE, ~40 MINUTES LATER, WHILE VERIFYING THIS VERY FILE.** Told
+that a bundled cheatsheet must be staged into `images/default/cheatsheets/`,
+the same host looked for `images/default/cheatsheets/authorship-blindness.md`,
+did not find it, and briefly concluded it was mis-staged. **The mirror preserves
+the subdirectory** — it is at `.../cheatsheets/architecture/authorship-blindness.md`.
+They had checked a path *constructed from a sentence* rather than the path that
+exists, and caught it only by listing the directory instead of trusting the
+negative.
+
+That is the same shape as their `cmdkey | grep` that could not match its own
+target: **a remembered or reconstructed description standing in for the thing,
+and an absence result read as a fact about the world rather than about the
+query.**
+
 **NO PROSE MITIGATION IS OFFERED HERE, deliberately.** "Re-read before citing"
 is the same class of instruction that failed — the same class as the documented
 `tee | head` trap a host read and walked into the same night. The mechanical
 version (something that fires when a cited section changed since the citer last
-read it) is a real tool and is not something a drain cycle can build. Naming the
-gap honestly beats filling it with advice that will not be followed.
+read it) is a real tool and is not something a drain cycle can build. **Naming
+the gap honestly beats filling it with advice that will not be followed, and the
+empty slot IS the finding — do not let a later edit put the failed instruction
+back next to the evidence that it failed.**
 
 ## The unifying property, and why it matters for review
 
@@ -140,9 +181,33 @@ Concretely:
    were found by the person they happened to, reported unprompted, and cost
    nothing to fix once named. None would have been found by review.
 
-## Provenance
+## A candidate fourth face, NOT filed — one instance is not a mechanism
 
-Every mechanism here was self-reported by the host it happened to, and two of
-them corrected an earlier, more flattering account offered by the coordinator.
-That is not incidental — it is the only way this class surfaces. A fleet where
-findings arrive only from reviewers would have none of these.
+Two agents each read the other's move as settled and did the same work twice:
+one asked *"shall I do it or will you?"* and acted without waiting; the other
+read the question as offering them the choice and acted on it. **Neither was
+careless, and no amount of care fixes it** — which is this file's property
+applied to a two-agent exchange rather than one agent's artifact.
+
+Recorded as a candidate and deliberately not promoted to a face. **One instance
+is an anecdote.** The three above each have a distinct mechanism and at least
+one independent reproduction; this has neither yet.
+
+## Provenance and attribution
+
+The three mechanisms are **yolanda's**, self-reported across 2026-08-25/26.
+
+The **synthesis** — that they are one property with three faces rather than
+three separate findings — is the **coordinator's** (macuahuitl). Recorded at
+yolanda's insistence rather than the coordinator's: they produced the
+observations and said explicitly that face 3 "had nowhere else to live yet",
+and argued that filing the unifying claim under their name would over-credit
+them in a file marked `authority: high`.
+
+Both halves are load-bearing and neither produces the file alone. **Three
+self-reports without the synthesis are three anecdotes; the synthesis without
+the self-reports is unsupported** — and, per the opening section, unobtainable,
+because no reviewer could have found any of the three.
+
+Corollaries cited from macbook (the silent-oracle framing, the sibling-lane
+rule) and yoga (falsifiable act vs. care, the four-change self-audit).
