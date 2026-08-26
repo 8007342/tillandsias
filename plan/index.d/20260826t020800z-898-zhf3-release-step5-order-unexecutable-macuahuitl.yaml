@@ -1,0 +1,108 @@
+packets:
+  - packet_id: the-release-runbook-prescribes-a-tag-push-order-the-pre-push-guard-forbids
+    order: 898-zhf3
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    release_target: fail-loud-diagnosis-milestone
+    title: |
+      merge-to-main-and-release step 5 says push the tag THEN back-merge, and says "never before" — but the pre-push hook refuses the tag push until the back-merge exists
+    deliverable: |
+      a release step order that can actually be executed on a host with the
+      pre-push gate installed
+    pickup_role: any
+    owner_host: any
+    depends_on: []
+    capability_tags:
+      - release
+      - gates
+      - runbook
+    estimated_hours: 1
+    context: |
+      MEASURED on macuahuitl 2026-08-26 while cutting v0.4.260826.1.
+
+      `skills/merge-to-main-and-release/SKILL.md` step 5 reads:
+
+        git tag -a "${new_tag}" -m "..."
+        git push origin "${new_tag}"
+        ...
+        # Run this AFTER the tag push, never before: the tag must keep
+        # pointing at main's bump-merge commit.
+        git merge origin/main
+
+      Executed exactly as written, the tag push is REFUSED:
+
+        ✗ pre-push refused: release preflight says blocked:version-not-monotonic
+          ERROR: Version 0.4.260817.1 is LESS than latest release v0.4.260826.1
+          REMEDY: git fetch origin && git merge origin/main
+          A release was just cut: tag v0.4.260826.1 moved while this branch
+          still carries 0.4.260817.1.
+
+      **THE GUARD IS CORRECT.** `blocked:version-not-monotonic` is exactly the
+      right verdict for a branch whose VERSION is behind a tag that exists. The
+      moment `git tag` creates the tag LOCALLY, `verify-version-monotonic.sh`
+      resolves it as "latest release" and compares it against the branch's
+      VERSION, which is still the pre-release value because the back-merge is
+      the very thing step 5 defers until after this push.
+
+      So the ordering is circular on any host with the hook installed:
+        tag push  requires  the back-merge to have happened
+        the back-merge  is prescribed to happen  after the tag push
+
+      RESOLVED IN THIS CUT by inverting the two: create the tag, back-merge,
+      then push both. **The runbook's stated concern is preserved and was
+      verified rather than assumed** — the tag must keep pointing at main's
+      bump-merge commit, and `git rev-list -n1 v0.4.260826.1` returned
+      341ab0010 both before and after the back-merge. Back-merging into
+      linux-next cannot move a tag that points at a commit on main.
+
+      WHY THIS MATTERS BEYOND ONE CUT. The runbook's own comment asserts a
+      constraint ("never before") that is not merely unnecessary but
+      unsatisfiable, and it asserts it in the imperative, so a careful agent
+      following it exactly arrives at a refused push during a release, at the
+      point where the fleet is frozen on `version-not-monotonic` waiting for
+      the back-merge the agent has just been told not to do yet. The pressure
+      at that moment is toward `git push --no-verify` — which is the one exit
+      the hook's own text warns against, and which would push the release tag
+      past the only remaining gate.
+
+      **A RUNBOOK STEP THAT HAS NEVER BEEN EXECUTED IS NOT A TESTED PATH.** The
+      prescribed order cannot have been run on a host with this hook, or it
+      would have been found. Same family as macbook's finding tonight that the
+      macOS install block ended in `|| true` while its Linux sibling asserted
+      exit codes — the note between them explained the Linux fix, so the file
+      read as covered.
+    outcome: |
+      Following the release runbook exactly produces a release.
+    exit_criteria:
+      - 'Step 5 is reordered to tag-create, back-merge, push-tag, push-branch — or the tag push is explicitly exempted from the monotonicity gate with a stated reason. Either is defensible; the current text is not executable.'
+      - 'The preserved constraint is stated with its actual justification: the tag must point at main''s bump-merge commit, and a back-merge into linux-next cannot move it. Say why it is safe, not merely that the order is fixed.'
+      - 'A fixture or a litmus pin walks the corrected order against a fake remote and a live hook, so the next edit to this step cannot silently reintroduce the deadlock.'
+      - 'NEGATIVE CONTROL: the guard still refuses a branch that genuinely carries a stale VERSION with no back-merge in progress. The fix must not be "exempt tags from release-preflight", which would let a tag be pushed from a branch that never caught up.'
+    verifiable_closure: |
+      A cut executed verbatim from the runbook on a host with the pre-push hook
+      installed reaches a published tag with no refused push and no --no-verify.
+    notes: |
+      The 800-vk2p remedy line did its job here and is worth recording as a
+      success rather than only as a defect report: the refusal named the
+      back-merge as the fix on stderr line 2, and the fix was applied without
+      diagnosis. The guard told the coordinator who cut the release exactly what
+      to do, on the one branch where getting it wrong would have frozen five
+      hosts. Whatever changes in step 5, do not weaken that message.
+
+      Do NOT fold this into 897-5m9y. That packet is an unexplained observation
+      with an unidentified writer; this one is a plainly established ordering
+      bug with a known fix. They were found in the same cut and are otherwise
+      unrelated.
+    events:
+      - type: filed
+        ts: "2026-08-26T02:08:00Z"
+        agent_id: linux-macuahuitl-claude-20260826t015805z
+        host: macuahuitl
+        summary: |
+          Hit while cutting v0.4.260826.1 by following the runbook literally.
+          yoga reviewed and confirmed it as unambiguous, in the same exchange
+          in which they falsified my other finding — this one they told me to
+          file as written. macbook contributed the framing that the guard was
+          correct and the runbook described a sequence the guard forbids.
