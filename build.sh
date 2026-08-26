@@ -1602,6 +1602,55 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # it decides activation by `grep -Rl <basename>`, which cannot tell an
     # invocation from a mention. 6.2s, and it guards the plan-only fast lane —
     # the path a widening is about to make busier (889-twhe).
+    # RE-WIRED 2026-08-26 after the fixture was made parity-independent
+    # (d678058ea). Verified here before restoring the call, in BOTH parities:
+    # ambient stamp PRESENT 11/11, ambient stamp ABSENT 11/11, stamp restored
+    # afterwards. The history below is kept because the failure mode is subtle
+    # and the next author should not have to rediscover it.
+    #
+    # WAS UNWIRED BRIEFLY, by the same host that wired it in at b5f6399cc, because
+    # the fixture was NOT HERMETIC and wiring it exposed that to the trunk's only
+    # gate.
+    #
+    # MEASURED on macuahuitl: with a valid .git/tillandsias-gate-stamp present the
+    # fixture reports 8 passed / 2 failed; with the stamp removed, 10 passed / 0
+    # failed. Arm 7 pipes a synthetic outgoing ref through the REAL
+    # pre-push-local-gate.sh against a scratch bare repo and asserts a refusal —
+    # but the hook resolves the stamp from the AMBIENT repository, finds this
+    # checkout's valid stamp, and correctly accepts. The arm then reports "a real
+    # outgoing ref was accepted without gating" while observing nothing but its
+    # own contamination. Independently found and isolated by yoga.
+    #
+    # WHY THIS MATTERS MORE THAN A FLAKY TEST: the gate WRITES its stamp at the
+    # END of a run, so a tree whose last gate was RED runs green and a tree whose
+    # last gate was GREEN runs red. A gate that alternates on an unchanged tree
+    # makes "re-run it and see" return whichever answer the parity lands on, and
+    # a single green stops being evidence of anything.
+    #
+    # THE DEFECT IS LATENT AND PREDATES ME — the fixture landed 292ff7607
+    # (877-mynm, pirria) on 2026-08-25 and was orphaned, invoked by nothing.
+    # calmecacpilli was right that a negative control nobody executes cannot
+    # protect the hole it names, and I was right to wire it; I was wrong not to
+    # check that it was safe to EXERCISE first. Making an unexercised thing
+    # exercised without verifying it is hermetic is its own instance of tonight's
+    # class.
+    #
+    # AND THE OBVIOUS FIX WAS WRONG — recorded because it nearly shipped. Both
+    # yoga and I proposed isolating the guard into the scratch repo via
+    # GIT_DIR/GIT_WORK_TREE. yoga implemented it and found it makes arms 7 and 8
+    # pass VACUOUSLY: in a hermetic scratch repo the guard finds no gate
+    # machinery, takes its nothing-to-gate path, and accepts everything, so the
+    # arms assert nothing at all. The gate would have gone green with two arms
+    # measuring nothing. They reverted it.
+    #
+    # The arms invoke a real checkout DELIBERATELY — that is what makes them mean
+    # anything. The contamination was never the real checkout; it was that the
+    # STAMP's presence varies with what the host last did. So the landed fix makes
+    # that variable a constant rather than hiding from it: hold the ambient stamp
+    # aside for the arms that need its absence, and restore it on every exit path
+    # including INT/TERM. Arm 9 (pirria's design) asserts arm 7's verdict is
+    # IDENTICAL whichever way the stamp happens to be, so a future leak fails
+    # loudly instead of flipping silently.
     _step "Checking the pre-push empty-ref-list fixture (877-mynm)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-pre-push-empty-ref-list.sh" 2>&1; then
         _error "the empty-ref-list lane fixture regressed — the plan-only fast lane's acceptance path is unproven"
