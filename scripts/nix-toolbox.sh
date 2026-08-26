@@ -398,8 +398,17 @@ case "$cmd" in
         store_gc "${1:-}"
         exit $?
         ;;
+    substituter-args)
+        # Delegate to nix-cache-service.sh — emits nix flags only when the
+        # cache is actually answering (same semantics as nix-cache-service.sh
+        # substituter-args: empty output means "no cache, build as before").
+        _nix_cache_script="${TILLANDSIAS_NIX_CACHE_SCRIPT:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/nix-cache-service.sh}"
+        if [[ -x "$_nix_cache_script" ]]; then
+            "$_nix_cache_script" substituter-args 2>/dev/null || true
+        fi
+        ;;
     *)
-        echo "usage: $0 [ensure|nix-args|run -- <command...>|store-path|store-status [--deps]|pin|gc [--dry-run]]" >&2
+        echo "usage: $0 [ensure|nix-args|run -- <command...>|store-path|store-status [--deps]|pin|gc [--dry-run]|substituter-args]" >&2
         exit 2
         ;;
 esac
