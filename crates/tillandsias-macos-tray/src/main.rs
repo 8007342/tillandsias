@@ -35,6 +35,80 @@ mod status_item;
 mod menu_disabled_v2;
 mod terminal_attach;
 
+/// The `--version` / `-V` line: release version, git SHA and build time from
+/// one source (635-bhkb).
+///
+/// Extracted from `main` so it is TESTABLE — and deliberately NOT target-gated,
+/// for the same reason `build_exec_guest_shell_cmd` below is not: its pin must
+/// compile and run on every host, or the fleet-wide test run stops guarding it
+/// and only a Mac can catch a regression. Named to match the Windows tray's
+/// `version_line` / `version_line_uses_workspace_version_and_commit` pair
+/// rather than inventing a second convention, so the cross-tray pattern of
+/// identically-named pins extends to versioning.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn version_line() -> String {
+    format!(
+        "tillandsias-tray {} (git {}, built {})",
+        env!("WORKSPACE_VERSION"),
+        env!("TILLANDSIAS_GIT_SHA"),
+        env!("TILLANDSIAS_BUILD_TIME"),
+    )
+}
+
+#[cfg(test)]
+mod version_line_tests {
+    use super::version_line;
+
+    /// 635-bhkb. `--version` must report the WORKSPACE_VERSION the diagnose
+    /// JSON's `version` field uses, plus the build SHA, so an operator who
+    /// runs `--version` and then `--diagnose --json` sees one identifier in
+    /// both. Same assertions and same name as the Windows tray's pin.
+    #[test]
+    fn version_line_uses_workspace_version_and_commit() {
+        let line = version_line();
+        assert!(
+            line.contains(env!("WORKSPACE_VERSION")),
+            "version line missing WORKSPACE_VERSION: {line}"
+        );
+        assert!(
+            line.contains(env!("TILLANDSIAS_GIT_SHA")),
+            "version line missing TILLANDSIAS_GIT_SHA: {line}"
+        );
+        assert!(
+            line.starts_with("tillandsias-tray "),
+            "version line should start with binary name: {line}"
+        );
+        // Guard against the static-Cargo.toml regression class: this is the
+        // exact shape the packet was filed from, observed live on an installed
+        // app reporting `tillandsias-tray 0.1.0 (git 0548ee1f2, …)` while its
+        // Info.plist carried 0.4.
+        assert!(
+            !line.contains("0.1.0 ("),
+            "version line still reporting CARGO_PKG_VERSION shape: {line}"
+        );
+    }
+
+    /// The reason this was not merely cosmetic. `pty_vsock_bridge` compares the
+    /// guest's reported build_version against the tray's own version and warns
+    /// on mismatch; while that read CARGO_PKG_VERSION it compared real guest
+    /// versions against the literal "0.1.0", so the skew warning fired on EVERY
+    /// connection to a healthy guest. A warning that is always true is one an
+    /// operator learns to scroll past — and build-version skew is precisely the
+    /// signal 648-772y needed legible when an older tray wedged a newer guest.
+    ///
+    /// Pinning the VALUE, not the call site: any future edit that reintroduces
+    /// a hardcoded version here fails, whether or not it spells it the old way.
+    #[test]
+    fn workspace_version_is_not_the_frozen_crate_version() {
+        assert_ne!(
+            env!("WORKSPACE_VERSION"),
+            "0.1.0",
+            "WORKSPACE_VERSION resolved to the frozen crate version — the \
+             VERSION file was unreadable at build time and build.rs fell back"
+        );
+    }
+}
+
 /// Order 277: true iff a live tray process holds the app singleton.
 /// The one-shot CLI modes boot their own VZ VM against the same root
 /// disk the tray's VM has attached, so VZ fails with the opaque
@@ -81,14 +155,12 @@ fn main() {
     // packet macos-tray/version-help-flags-boot-vm).
     if args.iter().any(|a| a == "--version" || a == "-V") {
         // Include git SHA + build time (embedded by build.rs) so freshness is
-        // verifiable — the crate version and VERSION file alone can't tell a
-        // stale artifact from a HEAD build.
-        println!(
-            "tillandsias-tray {} (git {}, built {})",
-            env!("CARGO_PKG_VERSION"),
-            env!("TILLANDSIAS_GIT_SHA"),
-            env!("TILLANDSIAS_BUILD_TIME"),
-        );
+        // verifiable — the VERSION file alone can't tell a stale artifact from
+        // a HEAD build. The version itself is WORKSPACE_VERSION, read from the
+        // repo-root VERSION file at build time (635-bhkb); it was
+        // CARGO_PKG_VERSION, which is never bumped per release and so printed
+        // "0.1.0" on every build this project has ever shipped.
+        println!("{}", version_line());
         std::process::exit(0);
     }
     if args.iter().any(|a| a == "--help" || a == "-h") {
@@ -127,7 +199,7 @@ fn main() {
              sessions; owns the window tty and forwards resize events\n    \
              -V, --version Print version and exit\n    \
              -h, --help    Print this help and exit",
-            env!("CARGO_PKG_VERSION")
+            env!("WORKSPACE_VERSION")
         );
         std::process::exit(0);
     }
