@@ -32,7 +32,7 @@ critical_path:
 observability:
   traces:
     - "@trace spec:enclave-network"
-    - "@trace spec:enclave-network-isolation"
+    - "@trace spec:enclave-network"
   expected_log: "Enclave network and proxy wiring stay aligned"
   log_fields:
     spec: "enclave-network"

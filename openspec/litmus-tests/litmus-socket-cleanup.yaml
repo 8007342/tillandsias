@@ -30,7 +30,7 @@ critical_path:
 observability:
   traces:
     - "@trace spec:enclave-network"
-    - "@trace spec:control-socket"
+    - "@trace spec:tray-host-control-socket"
     - "@trace spec:ephemeral-guarantee"
   expected_log: "Sockets cleaned after representative stack run"
   log_fields:

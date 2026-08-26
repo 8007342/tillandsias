@@ -1,4 +1,4 @@
-# @trace spec:cross-platform-compilation
+# @trace spec:cross-platform
 #
 # Order 365's exit criterion: prevent un-gated unix-only APIs from breaking
 # Windows (and other non-unix) workspace compiles. linux ./build.sh --check
@@ -42,7 +42,7 @@ critical_path:
 
 observability:
   traces:
-    - "@trace spec:cross-platform-compilation"
+    - "@trace spec:cross-platform"
   expected_log: "cross-target cfg gate check passed"
   log_fields:
     spec: "cross-platform-compilation"
