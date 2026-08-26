@@ -18,12 +18,18 @@
 //! nameWithOwner,defaultBranchRef` output via the shared
 //! `parse_gh_repo_list` function. Tolerant: skips entries missing
 //! `nameWithOwner`; a repo with no `defaultBranchRef` (e.g. empty
-//! repo) gets `default_branch=""` rather than being dropped;
-//! malformed JSON yields an empty list. Failure to invoke `gh`
-//! (binary missing, exit non-zero, no auth) also yields an empty
-//! list — `CloudRefreshReply` is always well-formed.
+//! repo) gets `default_branch=""` rather than being dropped.
+//!
+//! 731-eupn: the list is accompanied by a `CloudRefreshOutcome`. This module
+//! previously ended "malformed JSON yields an empty list. Failure to invoke
+//! `gh` (binary missing, exit non-zero, no auth) also yields an empty list —
+//! `CloudRefreshReply` is always well-formed", which was true and was the
+//! defect: well-formed is not the same as informative. Four distinct outcomes
+//! shared one representation, so the tray could not tell a repo-less account
+//! from a broken `gh` and rendered a confident `(no repos)` for both. Each
+//! failure now reports itself.
 
-use tillandsias_control_wire::CloudProjectEntry;
+use tillandsias_control_wire::{CloudProjectEntry, CloudRefreshOutcome};
 use tracing::{debug, warn};
 
 /// Fetch the user's cloud (GitHub) project list via `gh`.
@@ -33,14 +39,19 @@ use tracing::{debug, warn};
 /// lets `gh` use its own auth config search path — used by the unix
 /// (Linux native) path.
 ///
-/// Always returns a well-formed `Vec` — empty on missing binary,
-/// missing auth, non-zero exit, malformed JSON, or any other
-/// transient failure. Callers reply with a `CloudRefreshReply`
-/// carrying whatever this returns.
+/// Returns the list AND whether it is an ANSWER (731-eupn). It used to
+/// return a bare `Vec` that was "always well-formed" — empty on missing
+/// binary, missing auth, non-zero exit, malformed JSON, OR a genuinely
+/// repo-less account. Four outcomes, one representation, and the tray had no
+/// way to tell the last one from the first three, so it rendered a confident
+/// `(no repos)` for a broken `gh`.
 ///
-/// @trace spec:host-shell-architecture, spec:tillandsias-vault
+/// The list is still always well-formed; what is new is that an empty list now
+/// arrives with the reason it is empty.
+///
+/// @trace spec:host-shell-architecture, spec:tillandsias-vault, order:731-eupn
 #[allow(dead_code)]
-pub fn fetch_cloud_projects(token: Option<&str>) -> Vec<CloudProjectEntry> {
+pub fn fetch_cloud_projects(token: Option<&str>) -> (Vec<CloudProjectEntry>, CloudRefreshOutcome) {
     let mut cmd = std::process::Command::new("gh");
     cmd.args([
         "repo",
@@ -64,18 +75,34 @@ pub fn fetch_cloud_projects(token: Option<&str>) -> Vec<CloudProjectEntry> {
                 status = ?out.status.code(),
                 stderr = %String::from_utf8_lossy(&out.stderr).trim(),
                 token_kind = if token.is_some() { "explicit" } else { "host-auth" },
-                "CloudRefreshRequest: gh repo list failed; returning empty cloud list"
+                "CloudRefreshRequest: gh repo list failed; reporting FAILED, not empty"
             );
-            return Vec::new();
+            return (
+                Vec::new(),
+                CloudRefreshOutcome::Failed {
+                    reason: format!(
+                        "gh repo list exited {}",
+                        out.status
+                            .code()
+                            .map(|c| c.to_string())
+                            .unwrap_or_else(|| "by signal".to_string())
+                    ),
+                },
+            );
         }
         Err(e) => {
             warn!(
                 spec = "host-shell-architecture",
                 error = %e,
                 token_kind = if token.is_some() { "explicit" } else { "host-auth" },
-                "CloudRefreshRequest: gh not available; returning empty cloud list"
+                "CloudRefreshRequest: gh not available; reporting FAILED, not empty"
             );
-            return Vec::new();
+            return (
+                Vec::new(),
+                CloudRefreshOutcome::Failed {
+                    reason: format!("gh could not be run: {e}"),
+                },
+            );
         }
     };
 
@@ -90,7 +117,37 @@ pub fn fetch_cloud_projects(token: Option<&str>) -> Vec<CloudProjectEntry> {
         },
         "CloudRefreshRequest: gh repo list parsed"
     );
-    parsed
+    // THE THIRD COLLAPSED OUTCOME. A successful `gh` whose output did not
+    // parse is not a confirmed empty account either — parse_gh_repo_list
+    // returns an empty Vec for malformed JSON. Only an actual empty JSON array
+    // is an answer of "zero repos".
+    if parsed.is_empty() && !is_empty_json_array(&String::from_utf8_lossy(&stdout)) {
+        warn!(
+            spec = "host-shell-architecture",
+            "CloudRefreshRequest: gh succeeded but its output did not parse as a repo list; \
+             reporting FAILED, not empty"
+        );
+        return (
+            Vec::new(),
+            CloudRefreshOutcome::Failed {
+                reason: "gh output did not parse as a repo list".to_string(),
+            },
+        );
+    }
+    (parsed, CloudRefreshOutcome::Ok)
+}
+
+/// True when `gh` legitimately reported zero repos — an empty JSON array.
+///
+/// This is what separates the FOURTH outcome (an account that genuinely has no
+/// visible repos, which IS an answer) from the third (output that merely
+/// parses to nothing). Without it, "empty list" would still be ambiguous after
+/// all the other work in this change.
+fn is_empty_json_array(s: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(s)
+        .ok()
+        .and_then(|v| v.as_array().map(|a| a.is_empty()))
+        .unwrap_or(false)
 }
 
 /// Pure parser for `gh repo list --json nameWithOwner,defaultBranchRef`

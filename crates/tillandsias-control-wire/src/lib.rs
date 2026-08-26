@@ -266,6 +266,14 @@ pub enum ControlMessage {
     CloudRefreshReply {
         seq_in_reply_to: u64,
         projects: Vec<CloudProjectEntry>,
+        /// 731-eupn: whether `projects` is an ANSWER or the residue of a
+        /// failed fetch. `#[serde(default)]` yields
+        /// [`CloudRefreshOutcome::Unknown`] for a guest that predates this
+        /// field, so an old guest's empty list is never mistaken for a
+        /// confirmed zero. See [`CloudRefreshOutcome`] for why the default
+        /// fails closed.
+        #[serde(default)]
+        outcome: CloudRefreshOutcome,
     },
     /// Host → guest: start a PTY-attached subprocess inside the VM.
     /// `session_id` is allocated by the host from a per-connection monotonic
@@ -512,6 +520,52 @@ pub struct LocalProjectEntry {
     pub label: String,
     pub guest_path: String,
     pub last_seen_unix: u64,
+}
+
+/// Whether a `CloudRefreshReply`'s project list is an ANSWER or an ARTIFACT
+/// of a failed fetch (731-eupn).
+///
+/// Before this existed, `cloud_projects.rs` returned an empty `Vec` for a
+/// non-zero `gh` exit, a missing `gh` binary, missing auth, AND for an account
+/// that genuinely has no repos — four outcomes, one representation. The tray
+/// then latched "confirmed empty" and rendered `(no repos)` with the tooltip
+/// "no GitHub repos visible to the in-VM gh client": a confirmation nobody
+/// made, from a message that only ever meant "here is a list".
+///
+/// `Unknown` IS THE DEFAULT ON PURPOSE, and it is the mixed-version half of
+/// this fix. A guest predating this field serializes no `outcome`, so serde
+/// fills `Unknown` and the host treats the list as unconfirmed rather than
+/// authoritative. Defaulting to `Ok` would make an old guest's every reply —
+/// including its failures — read as a confirmed answer, which is the exact bug
+/// this type exists to end. Fail closed: an absent discriminator is not a
+/// success discriminator.
+///
+/// @trace spec:host-shell-architecture, order:731-eupn
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum CloudRefreshOutcome {
+    /// The guest ran the query and this list is what it found. An empty list
+    /// under `Ok` means the account genuinely has no visible repos.
+    Ok,
+    /// The guest could not complete the query. `projects` carries no
+    /// information — it is empty because there is nothing to say, not because
+    /// the answer is zero. `reason` is a short operator-facing phrase.
+    Failed { reason: String },
+    /// No discriminator was carried: a guest older than 731-eupn. Treat
+    /// exactly as `Failed` for display purposes — the list is not an answer —
+    /// but distinguishable in logs so a version skew is not misread as a
+    /// broken `gh`.
+    #[default]
+    Unknown,
+}
+
+impl CloudRefreshOutcome {
+    /// True only when the list may be presented as an authoritative answer.
+    /// The one predicate every consumer should branch on, so `Unknown` cannot
+    /// be forgotten at a call site the way a bare `matches!(.., Failed { .. })`
+    /// invites.
+    pub fn is_confirmed(&self) -> bool {
+        matches!(self, CloudRefreshOutcome::Ok)
+    }
 }
 
 /// A single cloud-side project entry returned by `CloudRefreshReply`.
@@ -2045,6 +2099,7 @@ mod tests {
                 ControlMessage::CloudRefreshReply {
                     seq_in_reply_to: 1,
                     projects: vec![],
+                    outcome: CloudRefreshOutcome::Ok,
                 },
                 "CloudRefreshReply",
             ),

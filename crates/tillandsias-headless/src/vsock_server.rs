@@ -27,9 +27,9 @@ use tillandsias_control_wire::transport::{
 };
 use tillandsias_control_wire::{
     CAP_PTY_ATTACH_V1, CAP_PTY_HEARTBEAT_V1, CAP_PTY_HEARTBEAT_V2, CloudProjectEntry,
-    ContainerMetricWire, ControlEnvelope, ControlMessage, ErrorCode, LocalProjectEntry,
-    MAX_MESSAGE_BYTES, MetricsSnapshotWire, MountIoMetricWire, VmPhase, WIRE_VERSION, decode,
-    encode,
+    CloudRefreshOutcome, ContainerMetricWire, ControlEnvelope, ControlMessage, ErrorCode,
+    LocalProjectEntry, MAX_MESSAGE_BYTES, MetricsSnapshotWire, MountIoMetricWire, VmPhase,
+    WIRE_VERSION, decode, encode,
 };
 use tillandsias_secure_channel::{HopId, channel_psk, server_handshake_or_reclaim};
 #[cfg(test)]
@@ -413,12 +413,27 @@ impl VmStateHandle {
     /// contract is unit-testable without podman.
     pub async fn apply_login_transition<F>(&self, logged_in: bool, handle: Option<String>, fetch: F)
     where
-        F: FnOnce() -> Vec<CloudProjectEntry> + Send + 'static,
+        F: FnOnce() -> (Vec<CloudProjectEntry>, CloudRefreshOutcome) + Send + 'static,
     {
         let flipped_in = self.set_login_state(logged_in, handle);
         if flipped_in {
-            let projects = tokio::task::spawn_blocking(fetch).await.unwrap_or_default();
-            self.set_cloud_projects(projects);
+            let (projects, outcome) = tokio::task::spawn_blocking(fetch).await.unwrap_or_default();
+            // 731-eupn: a login transition must not publish an UNCONFIRMED
+            // list. This is the post-login fetch, and it is exactly the moment
+            // the tray first renders the cloud submenu — so pushing an empty
+            // list here because `gh` was not ready yet is what produced
+            // "(no repos)" for accounts with hundreds of them. On a failed
+            // fetch, leave the previous list alone; the periodic refresh will
+            // publish once it has something to say.
+            if outcome.is_confirmed() {
+                self.set_cloud_projects(projects);
+            } else {
+                debug!(
+                    spec = "host-shell-architecture",
+                    ?outcome,
+                    "login transition: cloud fetch unconfirmed; keeping previous list"
+                );
+            }
         }
     }
 
@@ -1342,7 +1357,12 @@ async fn serve_ready_stream(
                 //
                 // @trace spec:host-shell-architecture, spec:tillandsias-vault,
                 //        plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q4)
-                let projects = tokio::task::spawn_blocking(fetch_cloud_projects)
+                // A panicked/cancelled blocking task defaults to
+                // (empty, Unknown) — NOT (empty, Ok). The tuple's Default
+                // derives from CloudRefreshOutcome's, which is Unknown by
+                // design (731-eupn), so a join failure also fails closed
+                // rather than announcing a confirmed-empty account.
+                let (projects, outcome) = tokio::task::spawn_blocking(fetch_cloud_projects)
                     .await
                     .unwrap_or_default();
                 // Order 231: an explicit refresh is also a push source — fan
@@ -1357,6 +1377,7 @@ async fn serve_ready_stream(
                     body: ControlMessage::CloudRefreshReply {
                         seq_in_reply_to: seq,
                         projects,
+                        outcome,
                     },
                 };
                 if write_envelope_with_shutdown(&mut write_half, &reply, &mut shutdown).await.is_err() {
@@ -1847,24 +1868,41 @@ pub(crate) fn login_transition_sentinel_path() -> std::path::PathBuf {
     std::env::temp_dir().join("tillandsias-login-transition")
 }
 
-pub(crate) fn fetch_cloud_projects() -> Vec<CloudProjectEntry> {
+/// 731-eupn: returns the list AND whether it is an ANSWER.
+///
+/// This is the wrapper the vsock server actually calls in the VM, and the
+/// `Err` arm below already had the discriminator — it was being thrown away
+/// one line before the host needed it. `Err` became `Vec::new()`, identical on
+/// the wire to an account with no repos, and the tray rendered a confident
+/// `(no repos)` for a containerized `gh` that had failed outright.
+pub(crate) fn fetch_cloud_projects() -> (Vec<CloudProjectEntry>, CloudRefreshOutcome) {
     match crate::remote_projects::discover_github_projects_result_with_debug(false) {
-        Ok(projects) => projects
-            .into_iter()
-            .map(|p| CloudProjectEntry {
-                label: format!("{}/{}", p.owner, p.name),
-                owner: p.owner,
-                repo: p.name,
-                default_branch: String::new(),
-            })
-            .collect(),
+        Ok(projects) => (
+            projects
+                .into_iter()
+                .map(|p| CloudProjectEntry {
+                    label: format!("{}/{}", p.owner, p.name),
+                    owner: p.owner,
+                    repo: p.name,
+                    default_branch: String::new(),
+                })
+                .collect(),
+            // An Ok with zero entries IS an answer: the account has no visible
+            // repos. That is the one case where an empty list means something.
+            CloudRefreshOutcome::Ok,
+        ),
         Err(e) => {
             debug!(
                 spec = "host-shell-architecture",
                 error = %e,
-                "CloudRefreshRequest (in-VM): containerized gh fetch failed; returning empty cloud list"
+                "CloudRefreshRequest (in-VM): containerized gh fetch failed; reporting FAILED, not empty"
             );
-            Vec::new()
+            (
+                Vec::new(),
+                CloudRefreshOutcome::Failed {
+                    reason: format!("in-VM gh fetch failed: {e}"),
+                },
+            )
         }
     }
 }
@@ -2665,12 +2703,15 @@ mod tests {
 
         state
             .apply_login_transition(true, Some("octocat".to_string()), || {
-                vec![CloudProjectEntry {
-                    label: "octocat/tillandsias".to_string(),
-                    owner: "octocat".to_string(),
-                    repo: "tillandsias".to_string(),
-                    default_branch: "main".to_string(),
-                }]
+                (
+                    vec![CloudProjectEntry {
+                        label: "octocat/tillandsias".to_string(),
+                        owner: "octocat".to_string(),
+                        repo: "tillandsias".to_string(),
+                        default_branch: "main".to_string(),
+                    }],
+                    CloudRefreshOutcome::Ok,
+                )
             })
             .await;
 
