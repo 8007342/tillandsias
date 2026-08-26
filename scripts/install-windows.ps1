@@ -126,6 +126,26 @@ if ($Uninstall -or $Purge) {
         foreach ($d in @('cache', 'logs', 'wsl') | ForEach-Object { Join-Path $DataRoot $_ }) {
             if (Test-Path $d) { Remove-Item $d -Recurse -Force -ErrorAction SilentlyContinue; Say "  removed $d" }
         }
+        # 803-49re: unregistering the distro destroys the guest Vault, which
+        # makes the host's copy of THAT vault's identity worse than useless
+        # -- the tray delivers it into the next guest unconditionally, the
+        # stale share fails to authenticate, and GitHub login is permanently
+        # broken. Purging the distro without these is not a purge.
+        #
+        # 'tillandsias-vm-uuid' is deliberately PRESERVED: it anchors the
+        # INSTALLATION, not the guest, and the in-VM Vault derives its master
+        # key from it.
+        foreach ($cred in @('vault-shamir-share-v1', 'vault-root-token-v1')) {
+            $listed = & cmdkey.exe /list:$cred 2>$null
+            if ($listed -match [regex]::Escape($cred)) {
+                & cmdkey.exe /delete:$cred > $null 2>&1
+                if ($LASTEXITCODE -eq 0) {
+                    Say "  cleared Credential Manager entry '$cred'"
+                } else {
+                    Say "  WARNING: could not clear Credential Manager entry '$cred'"
+                }
+            }
+        }
         # Event Log source registration (HKLM) -- removable only from an
         # elevated shell; best-effort, silent skip otherwise. Already-logged
         # events stay in the Application log by design (they are the record).

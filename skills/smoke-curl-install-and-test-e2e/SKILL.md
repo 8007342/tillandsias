@@ -26,7 +26,7 @@ become `plan/issues/` work packets so they flow through the normal
 | immutable Linux | `scripts/install.sh` via release curl URL | `podman system reset --force` | `tillandsias --debug --init` |
 | mutable Linux | `scripts/install.sh` via release curl URL | `podman system reset --force` | `tillandsias --debug --init` |
 | macOS | `scripts/install-macos.sh` via release curl URL | remove Tillandsias app state/cache VM dirs | installed tray `--provision` + `--diagnose --json` |
-| Windows | `scripts/install-windows.ps1` release path when available | `wsl --unregister tillandsias` plus cache purge | installed tray provision/diagnose |
+| Windows | `scripts/install-windows.ps1` release path when available | `wsl --unregister tillandsias`, cache purge, plus `vault-shamir-share-v1` + `vault-root-token-v1` cleared from Credential Manager (keeping `tillandsias-vm-uuid`) | installed tray provision/diagnose |
 
 This is the only e2e install skill allowed on immutable Linux.
 
@@ -195,6 +195,33 @@ and `~/Library/Caches/tillandsias`.
 
 On Windows, stop the tray, then run `wsl --terminate tillandsias` followed by
 `wsl --unregister tillandsias`, tolerating an already-absent distro.
+
+**Then clear the host credential store, or the run is not a clean room (order
+804-ckst).** Unregistering the distro and purging the cache leave Windows
+Credential Manager untouched, and the tray treats it as authoritative:
+
+```powershell
+# 'tillandsias-vm-uuid' is deliberately PRESERVED -- it anchors the
+# INSTALLATION, not the guest, and the in-VM Vault derives its master key
+# from it. Only the two guest-vault entries go.
+foreach ($cred in @('vault-shamir-share-v1', 'vault-root-token-v1')) {
+    $listed = & cmdkey.exe /list:$cred 2>$null
+    if ($listed -match [regex]::Escape($cred)) { & cmdkey.exe /delete:$cred > $null 2>&1 }
+}
+$stillThere = @('vault-shamir-share-v1', 'vault-root-token-v1') | Where-Object {
+    (& cmdkey.exe /list:$_ 2>$null) -match [regex]::Escape($_)
+}
+if ($stillThere) { throw "host vault credentials survived the reset: $($stillThere -join ', ')" }
+```
+
+This is not hygiene, it is the difference between a valid result and an
+invalid one. The 2026-08-17 run on v0.4.260817.1 claimed a "truly cold" run
+because it purged the 34.9 GB `ext4.vhdx` AND the rootfs cache — both true,
+both irrelevant to this store. The stale share survived, the tray delivered it
+into the fresh guest unconditionally, and the release looked healthy in the
+smoke and then broke for the operator forty minutes later on the first GitHub
+login (803-49re). A "cold" claim without this step is a claim the run cannot
+support.
 
 **Use `--terminate`, NOT `wsl --shutdown` (order 802-bajv).** `--shutdown` stops
 EVERY WSL2 distro on the host, while `--unregister` only requires the target

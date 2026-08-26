@@ -15,7 +15,7 @@ gate in order and **stop at the first failure**.
 | ------- | -------------- | ------------------- | -------------------------------------------------------------------------- | ------------------------ | ---------- |
 | Linux   | `linux-next`   | `./build.sh --ci-full --install` | `podman system reset --force`                                 | `tillandsias --init`     | yes        |
 | macOS   | `osx-next`     | `scripts/build-macos-tray.sh`    | `rm -rf ~/Library/Application Support/tillandsias` + `~/Library/Caches/tillandsias` | `…tillandsias-tray --provision` | no (N/A)   |
-| Windows | `windows-next` | `scripts/build-windows-tray.ps1` | `wsl --unregister tillandsias` (+ cached rootfs)              | tray cold launch / `--provision` | no (N/A)   |
+| Windows | `windows-next` | `scripts/build-windows-tray.ps1` | `wsl --unregister tillandsias` (+ cached rootfs + `vault-shamir-share-v1` / `vault-root-token-v1` from Credential Manager, keeping `tillandsias-vm-uuid`) | tray cold launch / `--provision` | no (N/A)   |
 
 This skill is for local-build install testing. On immutable Linux
 (`/run/ostree-booted` or `rpm-ostree` present), do not run this skill; use
@@ -50,7 +50,10 @@ the environment explicitly sets `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0`.
   next `--provision` re-downloads the Fedora cloud rootfs (multi-GB) and
   re-materializes the ext4 disk from scratch — this can take many minutes.
 - **Windows** — `wsl --unregister tillandsias` deletes the WSL2 distro and its
-  backing VHDX irreversibly.
+  backing VHDX irreversibly. It does NOT touch Windows Credential Manager, so
+  the step must also clear `vault-shamir-share-v1` and `vault-root-token-v1`
+  (preserving `tillandsias-vm-uuid`) or the run is not a clean room — see
+  order 804-ckst and §2·Windows below.
 
 These wipes are acceptable on Tillandsias smoke hosts. For a non-smoke host,
 set `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0` before invoking this skill; the skill
@@ -272,6 +275,22 @@ test ! -e "$VM_DIR"   # the whole VM state dir (rootfs.img lives at its top leve
 $registered = (& wsl --list --quiet 2>$null) -contains 'tillandsias'
 if ($registered) { throw "WSL distro 'tillandsias' still registered after --unregister" }
 # Also clear the cached downloaded rootfs so re-provision is truly cold.
+
+# CREDENTIAL MANAGER IS PART OF THE CLEAN ROOM (order 804-ckst). Wiping the
+# distro and the cache does NOT touch the host credential store the tray
+# treats as authoritative, so without this the run silently carries the
+# previous install's vault identity forward — and then reproduces 803-49re
+# on purpose, forty minutes later, on the first real GitHub login.
+# 'tillandsias-vm-uuid' is deliberately PRESERVED: it anchors the
+# INSTALLATION, not the guest.
+foreach ($cred in @('vault-shamir-share-v1', 'vault-root-token-v1')) {
+    $listed = & cmdkey.exe /list:$cred 2>$null
+    if ($listed -match [regex]::Escape($cred)) { & cmdkey.exe /delete:$cred > $null 2>&1 }
+}
+$stillThere = @('vault-shamir-share-v1', 'vault-root-token-v1') | Where-Object {
+    (& cmdkey.exe /list:$_ 2>$null) -match [regex]::Escape($_)
+}
+if ($stillThere) { throw "host vault credentials survived the reset: $($stillThere -join ', ')" }
 ```
 
 Any residue (a listed container/volume/image on Linux, a surviving `rootfs.img`
