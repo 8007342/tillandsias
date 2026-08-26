@@ -12879,6 +12879,24 @@ plan_index:
       notes: |
         Linux-owned because the Linux builder is the one being retired or reconciled. Can run in parallel with 628-c7qd.
       events:
+        - type: verified
+          ts: "2026-08-26T09:36:34Z"
+          agent_id: "linux-yoga-opus5-20260826t093634z"
+          host: yoga
+          summary: |
+            CLOSED. Criterion 4 landed; 1-3 were already met (convergence at 3500e6485/3500e6301, id sequence pinned and mutation-tested this cycle).
+
+            CRITERION 4 WAS NOT AN ADDITION, IT WAS A CORRECTION — the surviving layer's own docs still described the pre-convergence world. `menu_state.rs`'s module header opened with "Portable menu state model shared by the Windows and macOS trays" and "Mirrors the Linux tray's TrayUiState", and its parity section ended "so the Windows + macOS trays render identical menus". All three sentences were true before 3500e6301 and false after it. A developer editing the shared builder would have read that Linux was a separate thing they were mirroring, which is exactly the assumption criterion 4 exists to prevent: "so the next login-state change is not assumed to be shared when it is not."
+
+            The header now opens with the sole-builder claim, names the direction that matters (changes here reach ALL THREE trays), and carries the measured reason rather than an assertion: 626-r7kq landed HERE on 2026-08-09, Windows and macOS inherited it, Linux did not, because Linux had its own builder gating on a bool where this module used the GithubLoginState tri-state (627-m3vp). Parity is now structural rather than maintained.
+
+            IT ALSO NAMES THE DIVISION, because "one builder" alone does not tell the next editor where their change belongs: anything deciding WHAT appears belongs here; anything deciding how a toolkit renders it belongs in that platform's converter. Linux's `build_menu` is now a CONVERTER — it calls `build()` and translates to DBus — and the header says so, so nobody reads that function's name as a second builder.
+
+            AND IT POINTS AT THE GUARD, closing the loop with criterion 3: the top-level id sequence is pinned by `top_level_id_sequence_is_pinned_for_all_platforms` in this file's tests, and because all three platforms derive from `build()` that one test guards all three.
+
+            WHAT MADE THIS FINDABLE was macuahuitl's retroactive heads-up. They relocated the `## Convergence with the shared builder (order 628-p5tj)` block onto `build_menu` two cycles ago — clippy's `empty_line_after_doc_comments` was pointing at real misattribution, where rustdoc would have published a menu-shape contract as the docs for `tray_ui_state_to_menu_state`. Reading their note sent me to check whether my own `next_action` had misdirected the next host. It had not — the CONSUMER documenting "logic lives in the shared build()" and the SURVIVING LAYER documenting "I am the only builder" are opposite directions, and criterion 4 asks for the second. But checking is what surfaced that the module header was stale, which I would not have looked at otherwise.
+
+            88 host-shell tests pass. No behaviour changed — this slice is documentation, which is the whole of criterion 4 and is the criterion most likely to be skipped precisely because nothing breaks when it is.
         - type: progress
           ts: "2026-08-26T09:31:18Z"
           agent_id: "linux-yoga-opus5-20260826t093118z"

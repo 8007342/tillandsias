@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tray-menu-builder-convergence
+    field: status
+    value: completed
+    ts: "2026-08-26T09:36:34Z"
+    host: yoga
+
+events:
+  - packet_id: tray-menu-builder-convergence
+    event:
+      type: completed
+      ts: "2026-08-26T09:36:34Z"
+      host: yoga
+      summary: >
+        status 'completed' with evidence_refs: criterion 3 pinned+mutation-tested, criterion 4 module header corrected from the pre-convergence description; 88 host-shell tests pass
