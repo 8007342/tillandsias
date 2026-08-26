@@ -2,6 +2,17 @@
 # @trace spec:git-mirror-service
 set -euo pipefail
 
+
+# ORDER 799-tb7q — resolve `rg` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has it.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/tool-dispatch.sh" 2>/dev/null || true
+if command -v resolve_tool >/dev/null 2>&1; then
+    RG="$(resolve_tool rg || printf 'rg')"
+else
+    RG="rg"
+fi
+
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 
@@ -16,7 +27,7 @@ require_source() {
 
 forbid_host_override() {
     local surface="$1"
-    if rg -n 'GIT_CONFIG_GLOBAL|GIT_SSL_CAINFO|SSL_CERT_FILE|REQUESTS_CA_BUNDLE|NODE_EXTRA_CA_CERTS|CURL_CA_BUNDLE|/home/forge/\.gitconfig|ca-chain\.crt' "$surface"; then
+    if $RG -n 'GIT_CONFIG_GLOBAL|GIT_SSL_CAINFO|SSL_CERT_FILE|REQUESTS_CA_BUNDLE|NODE_EXTRA_CA_CERTS|CURL_CA_BUNDLE|/home/forge/\.gitconfig|ca-chain\.crt' "$surface"; then
         echo "FAIL: host-specific Git/trust override found in $surface" >&2
         exit 1
     fi

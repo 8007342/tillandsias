@@ -4,6 +4,25 @@
 
 set -euo pipefail
 
+
+# ORDER 799-tb7q — resolve `openssl` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has the CLI.
+#
+# UNLIKE jq, OPENSSL WRITES FILES. The conversion is only safe because the
+# toolbox shares /tmp with the host bidirectionally — VERIFIED on lenovinha
+# 2026-08-26: a file the host wrote to /tmp is readable inside the container and
+# vice versa, and every CERTS_DIR here is under /tmp (mktemp -d, or
+# /tmp/tillandsias-ca). A caller whose write path is NOT shared would have the
+# cert land where the caller cannot find it — a silent break, not an error.
+# Re-check the path before converting any further openssl site.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/tool-dispatch.sh" 2>/dev/null || true
+if command -v resolve_tool >/dev/null 2>&1; then
+    OPENSSL="$(resolve_tool openssl || printf 'openssl')"
+else
+    OPENSSL="openssl"
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 require_podman
@@ -32,7 +51,7 @@ CERTS_DIR=$(mktemp -d)
 trap "rm -rf $CERTS_DIR" EXIT
 
 log_step "Generating self-signed CA certificates..."
-openssl req -x509 -newkey rsa:2048 -keyout "$CERTS_DIR/intermediate.key" \
+"$OPENSSL" req -x509 -newkey rsa:2048 -keyout "$CERTS_DIR/intermediate.key" \
     -out "$CERTS_DIR/intermediate.crt" -days 30 -nodes \
     -subj "/CN=tillandsias-proxy" 2>&1 | grep -v "Generating\|Can't load"
 
