@@ -72,6 +72,37 @@ lock_as() {  # lock_as <pid> [attested]
 run() { ( cd "$REPO" && TILLANDSIAS_CYCLE_STATE_DIR="$WORK/state" \
           TILLANDSIAS_CYCLE_HOLDER_PID="$1" ./scripts/cycle-checkout-lock.sh "${@:2}" 2>&1 ); }
 
+# ── 0. THE PRIMITIVE ITSELF, tested directly and FIRST ─────────────────────
+# Every arm below rides on ancestry resolution, so if the ppid mechanism does
+# not work on this host they all fail with ownership verdicts that say nothing
+# about the real cause. That is not hypothetical: the first version of this
+# guard used `ps -o ppid=`, which MSYS does not implement, and landed RED on
+# windows while green on linux and darwin — surfacing as
+# `fail:checkout-lock:held-by-other` about the caller's OWN lock, with the
+# underlying "unknown option -- o" swallowed by a 2>/dev/null.
+#
+# Found by yolanda within minutes of the merge, on the one lane that could see
+# it. This arm exists so the NEXT such defect is reported as "the probe does not
+# work here" instead of as a wrong answer about lock ownership.
+out="$(run "$$" ppid-probe --pid "$$")"
+case "$out" in
+    ok:ppid-probe:*)
+        # Cross-check against a second, independent mechanism where one exists,
+        # so a probe that returns a confident WRONG number is caught too.
+        got="${out#ok:ppid-probe:}"
+        truth=""
+        [ -r "/proc/$$/stat" ] && truth="$(awk '{print $4}' "/proc/$$/stat" 2>/dev/null)"
+        [ -n "$truth" ] || truth="$(ps -o ppid= -p $$ 2>/dev/null | tr -d '[:space:]')"
+        if [ -z "$truth" ]; then
+            ok "ppid probe resolves ($got); no independent mechanism here to cross-check against"
+        elif [ "$got" = "$truth" ]; then
+            ok "ppid probe resolves and agrees with an independent mechanism ($got)"
+        else
+            bad "ppid probe returned $got but an independent mechanism says $truth"
+        fi ;;
+    *) bad "ppid probe has no working mechanism on this host: $out" ;;
+esac
+
 # ── 1. THE DEFECT: an attested holder must not refuse its own successor ──────
 # Pre-fix this returns skip:overlap-lock-held — the live-pid test passes and
 # nothing else is consulted. This case is the reproduction of the measured bug.
