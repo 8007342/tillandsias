@@ -80,6 +80,23 @@ printf 'base\n' > plan/issues/existing.md
 G add -A >/dev/null; G commit -q -m base
 git push -q -u origin linux-next
 
+# PRECONDITION, not an arm (lenovinha, 889-twhe): the fix above made the arms
+# depend on this base staying foldable. If it ever stops being, every
+# acceptance arm fails for a reason that has nothing to do with the lane — and
+# the next reader debugs the lane. Assert the base FIRST so a broken base
+# reports as a broken base. Skipped when no plan binary is resolvable, because
+# then the lane skips ledger validation too and the base is not load-bearing.
+_probe_bin="${TILLANDSIAS_PLAN_BIN:-$ROOT/target/release/tillandsias-plan}"
+if [ -x "$_probe_bin" ]; then
+    if ( cd "$W/wc" && "$_probe_bin" --index plan/index.yaml check >/dev/null 2>&1 ); then
+        ok "PRECONDITION: the scratch base ledger folds"
+    else
+        echo "FAIL: PRECONDITION — the scratch base ledger does not fold; the arms below would fail for an environment reason, not a lane defect" >&2
+        echo "issue-capture-lane: 0 passed, 1 failed"
+        exit 1
+    fi
+fi
+
 # Drive the guard the way git does: one "<lref> <lsha> <rref> <rsha>" line on
 # stdin. No stamp exists in this scratch tree, so the lane is the ONLY thing
 # that can accept a push here — which is exactly what makes each arm decisive.
