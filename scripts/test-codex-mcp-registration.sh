@@ -2,6 +2,17 @@
 # @trace order:605-u9g5, spec:forge-environment-discoverability
 set -euo pipefail
 
+
+# ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has it.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/tool-dispatch.sh" 2>/dev/null || true
+if command -v resolve_tool >/dev/null 2>&1; then
+    JQ="$(resolve_tool jq || printf 'jq')"
+else
+    JQ="jq"   # lib unavailable: preserve the previous behaviour exactly
+fi
+
 # Behavioral fixture for images/default/config-overlay/codex/register-experts.sh
 # (order 605-u9g5). Exercises empty and pre-populated CODEX_HOME roots, applies
 # the helper TWICE in each, and asserts:
@@ -58,7 +69,7 @@ apply_helper() {
 names_from() {
     local home="$1"
     HOME="$home" CODEX_HOME="$home/.codex" CODEX_BIN="$BIN" \
-        "$BIN" mcp list --json 2>/dev/null | jq -r '.[].name' | sort
+        "$BIN" mcp list --json 2>/dev/null | "$JQ" -r '.[].name' | sort
 }
 
 count_named() {

@@ -27,19 +27,26 @@ critical_path:
     expected_behavior: "ok: explicit zero-match filter fails loud"
 
   - step: "a valid explicit spec with every bound test excluded by phase still passes"
-    command: "output=$(NO_COLOR=1 scripts/run-litmus-test.sh spec-traceability --phase order-300-empty-phase --size instant --compact 2>&1); rc=$?; [ \"$rc\" -eq 0 ] && grep -Fq 'executed: 0' <<<\"$output\" && grep -Fq 'Status: [PASS]' <<<\"$output\" && echo 'ok: named empty phase bucket passes'"
+    # ORDER 913-27ex. The EXIT CODE contract of order 300 is unchanged and is
+    # still asserted here: an empty phase bucket is not a failure. What changed
+    # is the verdict STRING — it no longer says PASS, because a run that
+    # executed nothing was being read as evidence that something passed
+    # (measured: a phase filter turned a genuinely failing e2e green).
+    # Asserting `! Status: [PASS]` as well as the new string is what stops this
+    # from silently reverting.
+    command: "output=$(NO_COLOR=1 scripts/run-litmus-test.sh spec-traceability --phase order-300-empty-phase --size instant --compact 2>&1); rc=$?; [ \"$rc\" -eq 0 ] && grep -Fq 'executed: 0' <<<\"$output\" && grep -Fq 'Status: [NO-TESTS-EXECUTED]' <<<\"$output\" && ! grep -Fq 'Status: [PASS]' <<<\"$output\" && echo 'ok: named empty phase bucket is not-a-failure but is not called PASS'"
     timeout_ms: 5000
-    expected_behavior: "ok: named empty phase bucket passes"
+    expected_behavior: "ok: named empty phase bucket is not-a-failure but is not called PASS"
 
   - step: "a filterless phase bucket with every bound test excluded still passes"
-    command: "output=$(NO_COLOR=1 scripts/run-litmus-test.sh --phase order-300-empty-phase --size instant --compact 2>&1); rc=$?; [ \"$rc\" -eq 0 ] && grep -Fq '(executed: 0,' <<<\"$output\" && ! grep -Fq 'Total: 0 ' <<<\"$output\" && grep -Fq 'Status: [PASS]' <<<\"$output\" && echo 'ok: filterless empty phase bucket passes'"
+    command: "output=$(NO_COLOR=1 scripts/run-litmus-test.sh --phase order-300-empty-phase --size instant --compact 2>&1); rc=$?; [ \"$rc\" -eq 0 ] && grep -Fq '(executed: 0,' <<<\"$output\" && ! grep -Fq 'Total: 0 ' <<<\"$output\" && grep -Fq 'Status: [NO-TESTS-EXECUTED]' <<<\"$output\" && ! grep -Fq 'Status: [PASS]' <<<\"$output\" && echo 'ok: filterless empty phase bucket is not-a-failure but is not called PASS'"
     timeout_ms: 10000
-    expected_behavior: "ok: filterless empty phase bucket passes"
+    expected_behavior: "ok: filterless empty phase bucket is not-a-failure but is not called PASS"
 
 observability:
   traces:
     - "@trace spec:spec-traceability"
-  expected_log: "explicit zero-match fails loud; named and filterless empty phase buckets pass"
+  expected_log: "explicit zero-match fails loud; empty phase buckets are non-fatal but are never reported as PASS (913-27ex)"
   log_fields:
     spec: "spec-traceability"
     test: "litmus-name-filter-fail-loud-shape"

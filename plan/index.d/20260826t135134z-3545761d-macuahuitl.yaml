@@ -5,24 +5,24 @@
 # corrects ANY field (642-fedr). Re-declaring the packet under
 # `packets:` would be a G-Set no-op and would silently do nothing.
 status:
-  - packet_id: the-release-runbook-prescribes-a-tag-push-order-the-pre-push-guard-forbids
+  - packet_id: build-cache-sweep-marker-dates-in-local-time
     field: status
     value: completed
-    ts: "2026-08-26T11:43:22Z"
+    ts: "2026-08-26T13:51:34Z"
     host: macuahuitl
 
 events:
-  - packet_id: the-release-runbook-prescribes-a-tag-push-order-the-pre-push-guard-forbids
+  - packet_id: build-cache-sweep-marker-dates-in-local-time
     event:
       type: completed
-      ts: "2026-08-26T11:43:22Z"
+      ts: "2026-08-26T13:51:34Z"
       host: macuahuitl
       summary: >
-        status 'completed' with evidence_refs: 8b2e1d0cc
-  - packet_id: the-release-runbook-prescribes-a-tag-push-order-the-pre-push-guard-forbids
+        status 'completed' with evidence_refs: litmus:build-cache-sweep-trigger 22/22 with 3 new steps
+  - packet_id: build-cache-sweep-marker-dates-in-local-time
     event:
       type: note
-      ts: "2026-08-26T11:43:22Z"
+      ts: "2026-08-26T13:51:34Z"
       host: macuahuitl
       summary: >
-        runbook reordered; fixture wired and proven to run; guard untouched and still refusing
+        UTC on stamp and comparison; migration edge for legacy local markers handled and pinned

@@ -291,7 +291,7 @@ capabilities:
         host_id_source: node-name
         host_kind: linux
       timestamp: "2026-08-23T03:45:52.970107464+00:00"
-  - ts: "2026-08-23T04:12:18Z"
+  - ts: "2026-08-26T12:12:50Z"
     host: macos
     locus: bare-metal
     document:
@@ -340,7 +340,8 @@ capabilities:
         host_id: tlatoanis-macbook-air
         host_id_source: node-name
         host_kind: macos
-      timestamp: "2026-08-23T04:11:25.675197+00:00"
+      timestamp: "2026-08-26T12:12:50.069681+00:00"
+      probe_identity: 0.4.260819+4d3c26ac4c5cafb1
   - ts: "2026-08-25T22:37:44Z"
     host: linux_immutable
     locus: bare-metal
@@ -11628,7 +11629,7 @@ plan_index:
     - packet_id: nix-supported-release-and-crane-migration
       release_target: stable-milestone-v1
       order: 606-um5s
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p1
       title: Move the forge flake off EOL NixOS 24.11 and refresh crane on a supported nixpkgs release
@@ -11928,6 +11929,21 @@ plan_index:
           host: macuahuitl
           summary: |
             inputs migrated and landed 9b0c27c1c; flake check green; realize proven on one target; residual is the 5 remaining realizes + closure diffs
+        - type: note
+          ts: "2026-08-26T08:32:57Z"
+          host: macuahuitl
+          summary: |
+            claimed for cycle 2026-08-26T08:32Z — realizing the five remaining outputs
+        - type: completed
+          ts: "2026-08-26T08:43:11Z"
+          host: macuahuitl
+          summary: |
+            status 'completed' with evidence_refs: 8d9cfe98e
+        - type: note
+          ts: "2026-08-26T08:43:11Z"
+          host: macuahuitl
+          summary: |
+            nixpkgs 26.05 + crane v0.24.0; flake check green; all 6 outputs realized; closures within 0.75% of the pre-bump published artifacts; zero runtime refs
     - packet_id: git-mirror-cross-project-service-identity
       split_into:
         - '722-hthz — mirror-identity-vault-roles-exact (slice a: exact Vault signer roles/policies, no sign/*)'
@@ -12836,9 +12852,11 @@ plan_index:
           summary: |
             Status made to agree with the packet's own next_action ('Do NOT start ... wait for 628-w9sm ruling', from the 2026-08-17 refutation events): a row the ledger fences off must not present as ready, because status is the only field the selector reads — it ranked this row URGENT for windows two cycles running (issue optimization-selector-blind-to-next-action-628-wedge-2026-08-23). Reverts to ready in one set-field when the w9sm ruling lands and criteria 2+3 are re-derived. Sequencing itself untouched: depends_on and the pending ruling remain the owner's.
     - packet_id: tray-menu-builder-convergence
+      next_action_ts: "2026-08-26T09:31:18Z"
+      next_action: 'Only exit criterion 4 remains: menu_state.rs must document that it is the ONLY menu builder, so the next login-state change is not assumed shared when it is not. Criteria 1-3 are met — convergence at 3500e6301, id sequence pinned by top_level_id_sequence_is_pinned_for_all_platforms (mutation-tested). Also worth noting for whoever takes it: this row sat `ready` for six hours carrying a `completion` event, so it was offered to selection as fresh p1 work; check events before description on any row with a long estimate.'
       release_target: stable-milestone-v1
       order: 628-p5tj
-      status: ready
+      status: completed
       desired_release: v0.5
       role: host-shell
       priority: p1
@@ -12945,6 +12963,26 @@ plan_index:
           host: forge
           summary: |
             Group under stable-milestone-v1 (order 625-jd5f)
+        - type: note
+          ts: "2026-08-26T09:28:03Z"
+          host: yoga
+          summary: |
+            claimed 2026-08-26T09:30Z; convergence landed at 3500e6301 but exit criterion 3 (cross-platform id sequence test) is unmet
+        - type: progress
+          ts: "2026-08-26T09:31:18Z"
+          host: yoga
+          summary: |
+            status 'Only exit criterion 4 remains: menu_state.rs must document that it is the ONLY menu builder, so the next login-state change is not assumed shared when it is not. Criteria 1-3 are met — convergence at 3500e6301, id sequence pinned by top_level_id_sequence_is_pinned_for_all_platforms (mutation-tested). Also worth noting for whoever takes it: this row sat `ready` for six hours carrying a `completion` event, so it was offered to selection as fresh p1 work; check events before description on any row with a long estimate.' (not terminal) with evidence_refs: criterion 3 test added and mutation-tested; criteria 1-2 verified in tree at 3500e6301
+        - type: note
+          ts: "2026-08-26T09:31:19Z"
+          host: yoga
+          summary: |
+            criterion 3 landed; criterion 4 (sole-builder documentation) remains
+        - type: completed
+          ts: "2026-08-26T09:36:34Z"
+          host: yoga
+          summary: |
+            status 'completed' with evidence_refs: criterion 3 pinned+mutation-tested, criterion 4 module header corrected from the pre-convergence description; 88 host-shell tests pass
     - packet_id: tray-string-parity-gate
       order: 628-h4nx
       status: pending
@@ -13126,7 +13164,7 @@ plan_index:
     - packet_id: terminology-dictionary-and-consistency-gate
       release_target: stable-milestone-v1
       order: 629-t6bx
-      status: ready
+      status: done
       desired_release: v0.5
       role: host-shell
       priority: p2
@@ -13290,6 +13328,21 @@ plan_index:
           host: forge
           summary: |
             Group under stable-milestone-v1 (order 625-jd5f)
+        - type: note
+          ts: "2026-08-26T10:12:28Z"
+          host: tlatoanis-macbook-air
+          summary: |
+            claimed for cycle 2026-08-26T10:09Z — tier 1 dictionary + gate
+        - type: completed
+          ts: "2026-08-26T10:19:27Z"
+          host: tlatoanis-macbook-air
+          summary: |
+            status 'done' with evidence_refs: 65ef654bdb840e76e800889955461990cef01715 + ok:terminology-clean:terms=11:files=17 in ./build.sh --check (TILLANDSIAS_FORCE_CHECK=1, gate=0) + hand-falsified 1 positive and 3 negative controls (wrong-variant-in-value FAILS; same variant in a KEY passes; the dual-form Podman string passes; canonical terms inside es/de translated strings pass) + tier-2 blast radius measured at 206 occurrences/16 files with 11 wire-visible kind() strings
+        - type: note
+          ts: "2026-08-26T10:19:27Z"
+          host: tlatoanis-macbook-air
+          summary: |
+            tier-1 dictionary and gate delivered and wired; tier-2 decision surfaced with measured cost as the packet requires
     - packet_id: plan-index-direct-update-concurrency-block
       release_target: stable-milestone-v1
       order: 627-c9c2
@@ -14676,7 +14729,7 @@ plan_index:
     - packet_id: fourteen-ghost-traces-are-only-reported-in-files-a-commit-touches
       next_action: 'STALE PREMISE, CORRECTED 2026-08-23 (lenovinha): criteria 1 and 4 are ALREADY MET and verified — trace-coverage.sh --gate is a repo-wide shrink-only ratchet wired into build.sh --check (584-2qq2), and a fabricated trace makes it exit 1 (tested, then reverted). The count is 9 today, not 14. WHAT REMAINS is criteria 2+3, the disposition, and it needs a decision rather than a sweep: ''prefer removal'' is right for the low-fanout six (fat-spec-corpus-index, forge-git-ergonomics, forge-git-identity-anonymization, forge-push-credential-channel, forge-skills-mapping, guest-crashloop-detection, litmus-runner) and I think WRONG for spec:meta-orchestration (traced from ~15 litmus tests plus methodology; the loop the fleet runs on) and spec:enclave-service-catalog (6+ real sites in headless main.rs) — for those the absence of a spec reads as a spec never written for something central, not as a concept nobody needed. Do the low-fanout six first, then decide the two. See 867-vd4z: the gate is blind to yaml and md, which is where the majority of annotations live.'
       order: 658-kcd5
-      status: in_progress
+      status: ready
       desired_release: v0.5
       release_target: convergence-velocity-milestone
       priority: p2
@@ -14814,6 +14867,98 @@ plan_index:
           host: lenovinha
           summary: |
             claimed for cycle 2026-08-26T07:37Z — continuing my own 2026-08-23 disposition
+        - type: note
+          ts: "2026-08-26T07:41:29Z"
+          host: lenovinha
+          summary: |
+            three ghosts retargeted and baseline ratcheted 7->4; four remain needing decisions this cycle could not make
+        - type: implemented
+          ts: "2026-08-26T07:55:00Z"
+          agent_id: lenovinha-opus5-metaorch-20260826t073711z
+          host: lenovinha
+          summary: |
+            MY OWN 2026-08-23 NOTE WAS STALE AND I RE-MEASURED INSTEAD OF ACTING ON
+            IT. That note listed seven low-fanout ghosts to remove and two to keep.
+            Of that list exactly ONE (forge-skills-mapping) is still a ghost today.
+            The set had almost entirely turned over. Acting on my own note would have
+            edited annotations that no longer exist and left the real ones untouched.
+        
+            CURRENT MEASUREMENT: specs=187 traced=180 ghost=7, baseline=7.
+              browser-isolation-telemetry  files=1
+              control-socket               files=1
+              cross-platform-compilation   files=1
+              enclave-network-isolation    files=1
+              ephemeral-guarantee          files=8
+              fail-loud-diagnosis          files=1
+              forge-skills-mapping         files=3
+        
+            THE DISPOSITION RULE IN MY NOTE WAS ALSO WRONG, AND THIS IS THE FINDING.
+            It said prefer REMOVAL for low fanout. Checking each ghost against the
+            spec list shows three of the four singletons are not orphans at all —
+            they are RENAMES, annotations pointing at a spec that still exists under
+            a different name. A "delete the low-fanout ghosts" sweep would have
+            destroyed three legitimate links and reported the ratchet shrinking as
+            success. Fanout measures how many files cite a trace; it says nothing
+            about whether the concept exists.
+        
+            RETARGETED (each verified against the candidate spec's own content, not
+            by name similarity):
+              spec:control-socket -> spec:tray-host-control-socket
+                litmus-socket-cleanup.yaml is about leftover sockets after a run;
+                the candidate spec carries 4 cleanup/unlink/remove mentions.
+              spec:cross-platform-compilation -> spec:cross-platform
+                litmus-cross-target-cfg-gate-check.yaml is about un-gated unix-only
+                APIs breaking the Windows workspace build; the candidate is
+                "Cross-Platform Windows Support".
+              spec:enclave-network-isolation -> spec:enclave-network
+                litmus-enclave-isolation.yaml verifies enclave network and proxy
+                wiring.
+        
+            NOT RETARGETED, each with the reason it failed the check:
+              browser-isolation-telemetry — the obvious candidate
+                (browser-isolation-core) contains ZERO telemetry or logging
+                content, so this is a genuinely distinct concept with no spec, not
+                a rename. Name similarity would have said otherwise; content did
+                not.
+              fail-loud-diagnosis — no spec exists, but
+                `fail-loud-diagnosis-milestone` appears 175 times in plan/index.yaml.
+                The annotation names a PLAN MILESTONE in `spec:` syntax: a category
+                error, not a missing spec. Deleting it hides a central concept;
+                writing a spec named after a milestone would be wrong too. Needs a
+                decision on the annotation's KIND.
+              ephemeral-guarantee — fanout 8, all teardown/cleanup/ephemerality
+                litmus tests. The nearest spec (ephemeral-secret-refresh) is about
+                secrets, not lifetime. This is my note's surviving case: absence
+                reads as a spec never written for something central.
+              forge-skills-mapping — fanout 3, no near match; left for its own look.
+        
+            Ratchet: baseline pruned 7 -> 4 in the same commit, as the gate requires.
+            ./build.sh --check green.
+        - type: note
+          ts: "2026-08-26T07:58:00Z"
+          agent_id: lenovinha-opus5-metaorch-20260826t073711z
+          host: lenovinha
+          summary: |
+            PACKET STAYS OPEN. Four ghosts remain and each needs a decision this
+            cycle could not make on evidence alone:
+        
+              - ephemeral-guarantee and fail-loud-diagnosis are both CENTRAL
+                concepts. Writing a spec for either is spec authorship, not trace
+                cleanup, and shipping one as a side effect of a ratchet-shrinking
+                cycle would be the wrong way to introduce it.
+              - fail-loud-diagnosis additionally needs a ruling on whether a plan
+                MILESTONE may be cited with `@trace spec:`. If it may not, the fix
+                is a new annotation kind, which is a shared-surface change and by
+                the new sibling_heads_up_protocol wants a heads-up before it lands.
+              - browser-isolation-telemetry and forge-skills-mapping are small but
+                genuinely unresolved.
+        
+            WHAT I WOULD TELL THE NEXT PICKER, because it is the reusable half: check
+            each ghost against the CONTENT of its candidate spec before deleting.
+            Three of four singletons here were renames. The cheap test that
+            distinguishes them is one grep of the candidate for the citing test's
+            subject — name similarity alone said browser-isolation-core was a match
+            for browser-isolation-telemetry, and the content check said it was not.
     - packet_id: an-unregistered-litmus-file-never-runs-and-nothing-says-so
       order: 660-ryhn
       status: completed
@@ -24491,7 +24636,7 @@ plan_index:
       next_action: 'Windows verification is the only remaining criterion. yolanda has a live RED baseline (FAIL: forge hash depends on checkout location) and has agreed to run scripts/test-hash-image-sources.sh on both Git Bash and WSL and report raw output including a failure. Close only on that evidence. Do NOT close on a Linux-only PASS. Note the exec-bit scenario no longer needs the core.fileMode gate criterion 2 asks for — index-based hashing made it platform-independent via git update-index --chmod=+x — so criterion 2 should be restated rather than treated as unmet.'
       release_target: stable-milestone-v1
       order: 776-cm74
-      status: in_progress
+      status: completed
       desired_release: v0.5
       kind: fix
       pickup_role: any
@@ -24660,6 +24805,11 @@ plan_index:
           host: yoga
           summary: |
             status 'Windows verification is the only remaining criterion. yolanda has a live RED baseline (FAIL: forge hash depends on checkout location) and has agreed to run scripts/test-hash-image-sources.sh on both Git Bash and WSL and report raw output including a failure. Close only on that evidence. Do NOT close on a Linux-only PASS. Note the exec-bit scenario no longer needs the core.fileMode gate criterion 2 asks for — index-based hashing made it platform-independent via git update-index --chmod=+x — so criterion 2 should be restated rather than treated as unmet.' (not terminal) with evidence_refs: Linux fixture PASS incl. new CRLF-invariance arm; mutation-tested; yolanda verified index stability across both userlands
+        - type: completed
+          ts: "2026-08-26T07:44:54Z"
+          host: yoga
+          summary: |
+            status 'completed' with evidence_refs: cross-host hash identical on 3 checkouts / 2 OSes / 3 autocrlf-fileMode regimes at ef244da05; yolanda PASS both userlands with arms verified executed (3 markers each), flipped from a live FAIL baseline
     - packet_id: wsl2-gate-plan-probe-survives-interop-loss
       release_target: stable-milestone-v1
       order: 778-zydb
@@ -28657,7 +28807,7 @@ plan_index:
 
     - packet_id: prebuilt-plan-cache-key-invalidated-by-any-plan-crate-or-lockfile-commit
       order: 797-5sqs
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p2
       kind: research
@@ -28793,6 +28943,31 @@ plan_index:
             lanes, ideally from lane logs rather than a reconstruction; (b) worst-case lane
             cost on a genuinely cold cargo target, against the 600s cap that is the packet's
             stated pass/fail line. Both need a lane; neither needs this measurement redone.
+        - type: note
+          ts: "2026-08-26T08:10:01Z"
+          host: tlatoanis-macbook-air
+          summary: |
+            claimed for cycle 2026-08-26T08:09Z — measuring the key-churn half from git history; forge-lane hit-rate needs a forge host
+        - type: note
+          ts: "2026-08-26T08:11:55Z"
+          host: tlatoanis-macbook-air
+          summary: |
+            key-churn half measured and recorded; warm-hit fraction and cold-target cost need a forge-launching host
+        - type: note
+          ts: "2026-08-26T11:30:04Z"
+          host: yoga
+          summary: |
+            yoga meta-orchestration cycle 7 claim
+        - type: completed
+          ts: "2026-08-26T11:31:48Z"
+          host: yoga
+          summary: |
+            status 'completed' with evidence_refs: plan/issues/prebuilt-plan-cache-key-churn-measured-yoga-2026-08-26.md — cold-target rebuild 58.94s vs the 600s FORGE_EXPERTS_BUILD_TIMEOUT cap (10x margin); key churn 156/2921 commits over 30d on linux-next
+        - type: note
+          ts: "2026-08-26T11:31:48Z"
+          host: yoga
+          summary: |
+            measured answer delivered; packet premise not supported
     - packet_id: spec-index-chunks-must-fit-the-embedding-context
       next_action: 'CODE FIX AND REBUILD BOTH DONE, VERIFIED BY A/B. cycle-preflight rebuilt the served index automatically at 21:54 (content-addressed fingerprint moved with the commits). Served: 20,657 chunks, 2 over the 6000 cut, largest 14,869, distributed-work.yaml 120 chunks. The volume retains 3 generations, so a true before/after was possible: four deep-methodology questions ALL moved from the WRONG file to distributed-work.yaml, scores +0.028 to +0.139. Control: the six spec questions are byte-identical across both indexes, which is correct — the fix touched YAML and code chunking, not markdown. REMAINING, and it is small: 2 markdown chunks still exceed the cut (largest cheatsheets/INDEX.md at 14,869, 11,191 chars unembedded total). Left deliberately — the markdown path splits well everywhere else and a third budget would reshape ~20,000 chunks to recover 11k characters. Close this row when someone decides that trade, or accept it and close now.'
       order: 797-qv4z
@@ -29879,6 +30054,217 @@ plan_index:
             mechanical now that the shipped-diagnostic question is answered; they are
             a separate slice because sweeping ~50 files is not reviewable in one
             change.
+        - type: note
+          ts: "2026-08-26T09:38:55Z"
+          host: lenovinha
+          summary: |
+            claimed for cycle 2026-08-26T09:37Z — tool-dispatch lib + first caller slice
+        - type: note
+          ts: "2026-08-26T09:43:04Z"
+          host: lenovinha
+          summary: |
+            tool-dispatch lib landed + 3 highest-traffic callers converted; 43 jq callers, rg and openssl remain
+        - type: implemented
+          ts: "2026-08-26T10:00:00Z"
+          agent_id: lenovinha-opus5-metaorch-20260826t093718z
+          host: lenovinha
+          summary: |
+            SECOND SLICE. The first answered the shipped-diagnostic question that was
+            blocking the sweep; this one builds the sweep's instrument and converts
+            the three highest-traffic callers.
+        
+            MEASURED BEFORE BUILDING ANYTHING: 61 scripts under scripts/ call jq, 15
+            already guard or dispatch, 46 remain. The toolbox now genuinely carries
+            jq (jq-1.8.1 in tillandsias-builder), confirming this packet's earlier
+            slice landed — the dispatch pattern is only valid for tools the toolbox
+            HAS, which is why the init set had to come first.
+        
+            WHY A LIB RATHER THAN 46 MORE INLINE COPIES. The only two dispatchers
+            that existed before today duplicate the six-line block verbatim, and I
+            wrote both, in one cycle. That is the drift hazard I flagged in my own
+            fixture note the same day: a second copy of a rule can diverge from the
+            first, after which a caller handles a missing tool per a definition the
+            project no longer uses. 48 copies would be worse.
+        
+            scripts/lib/tool-dispatch.sh exposes resolve_tool (echoes a command
+            PREFIX, or nothing) and require_tool (same, plus a diagnosis naming BOTH
+            places checked). It echoes a prefix rather than running the tool because
+            callers pipe, redirect and pass heredocs; a wrapper owning invocation
+            would have to reproduce all of that. bash 3.2 clean.
+        
+            A HEADS UP WENT OUT BEFORE LANDING, per the new sibling_heads_up_protocol
+            — new shared surface, with the known sibling call sites named.
+        
+            CONVERTED: cycle-metrics.sh (7 sites), select-work-batch.sh (9),
+            local-ci.sh (9) — the three every host runs every cycle. Each keeps a
+            literal-jq fallback if the lib cannot be sourced, so a lost lib degrades
+            to the previous behaviour rather than to a crash.
+        
+            ONE DELIBERATE NON-CONVERSION, and it is guarded because it reads as an
+            oversight: tray-diagnose.sh and diagnose-macos-provision.sh SHIP. A
+            shipped script that sources a sibling lib acquires a dependency that may
+            not exist where it runs, and those two exist to work on a machine that
+            has nothing. They keep inline copies; a fixture arm FAILS if anyone tidies
+            them into the lib.
+        - type: verified
+          ts: "2026-08-26T10:05:00Z"
+          agent_id: lenovinha-opus5-metaorch-20260826t093718z
+          host: lenovinha
+          summary: |
+            scripts/test-tool-dispatch-lib.sh all arms green, pinned by
+            litmus:tool-dispatch-lib (bound; ratchet checked). ./build.sh --check
+            green. Behaviour of the converted scripts verified unchanged:
+            cycle-metrics still emits its eight key=value lines, select-work-batch
+            still selects the same batch.
+        
+            THE FALLBACK ARM COST ME TWO WRONG ANSWERS BEFORE IT WAS RIGHT, and both
+            were harness faults that looked like code faults:
+              - `env -i PATH=<curated>` strips the environment podman needs, so the
+                toolbox arm returned NONE. I nearly recorded "the fallback does not
+                engage".
+              - dropping /usr/bin from PATH removes every other utility, so the
+                shell could not even start.
+            The only construction that isolates the variable is a curated MIRROR of
+            /usr/bin with jq omitted. The fixture now ASSERTS the mask before relying
+            on it, because a fixture whose environment does not hold its own
+            precondition cannot fail for the right reason. Correctly resolved:
+            `toolbox run --container tillandsias-builder jq`.
+        
+            A COST THE NEXT CONVERTER MUST HAVE, measured here: a single
+            `toolbox run ... jq` is ~264 ms against ~1 ms for host jq. For these
+            three scripts (7-9 sites each) that is ~2s added on a jq-less host —
+            acceptable. IT IS NOT ACCEPTABLE FOR A CALLER THAT INVOKES jq INSIDE A
+            LOOP: one call per ledger row would turn milliseconds into minutes. Check
+            for loop-invocation before converting, and prefer restructuring to a
+            single jq pass over converting a loop.
+        
+            NOT CLOSED. 43 callers remain, plus the `rg` callers
+            (check-cheatsheet-refs.sh, test-forge-config-trust-cross-platform-parity.sh)
+            and the bare openssl CLI callers (build.sh, diagnose-proxy.sh,
+            run-forge-project.sh, orchestrate-enclave.sh). The instrument exists now,
+            so those are mechanical modulo the loop caveat above; they stay a
+            separate slice because a 46-file diff is not reviewable in one change.
+        - type: note
+          ts: "2026-08-26T10:20:00Z"
+          agent_id: lenovinha-opus5-metaorch-20260826t093718z
+          host: lenovinha
+          summary: |
+            THE REASON FOR THE NON-CONVERSION NOW LIVES AT THE CALL SITE, not only in
+            this packet. macuahuitl's point on the heads-up, and it is right: a
+            future sweep sees 46 converted callers and 2 inline copies and reads the
+            2 as oversights. A rule that lives only in a packet is a rule nobody
+            reads where the decision is made — which this fleet has spent the week
+            rediscovering.
+        
+            Both shipped diagnostics now carry the reason inline: this script SHIPS,
+            its job is to work where nothing else does, sourcing a sibling lib gives
+            it a dependency that may be absent exactly there, and a diagnostic that
+            fails to source its helper fails at the moment its output is needed with
+            a failure that LOOKS LIKE the thing it was sent to investigate. Two
+            justified copies beat one fragile abstraction. The comment names both
+            fixtures that fail if the file starts sourcing the lib.
+        
+            ADDING THAT COMMENT IMMEDIATELY BROKE MY OWN GUARD, and it is the seventh
+            instance of one class in this session. The arm asserting "shipped
+            diagnostics do not source the lib" grepped for the STRING
+            `lib/tool-dispatch.sh` anywhere in the file — so the sentence explaining
+            why the file deliberately does not source it tripped the guard about that
+            decision. A guard about a decision, fired by the documentation of that
+            decision.
+        
+            Identical to the arm-14 bug earlier tonight (a word-absence test firing
+            on "Do NOT go looking at secret-service") and to check-bash-dialect
+            refusing a regex that SEARCHES for bash-4 constructs. The rule, now three
+            times paid for: ASSERT THE BEHAVIOUR, NOT THE STRING. The arm now matches
+            an actual source directive (`.` or `source`) with comment lines excluded,
+            and I verified it still has teeth by inserting a real directive and
+            watching it fail, then reverting.
+        
+            Worth noting the shape has a signature: it appears wherever a guard's
+            subject and its own explanatory prose share vocabulary, which is exactly
+            where careful authors add comments. The guards most likely to catch this
+            are the ones about naming and attribution — the very family this session
+            has been working in.
+        - type: note
+          ts: "2026-08-26T11:37:42Z"
+          host: lenovinha
+          summary: |
+            claimed for cycle 2026-08-26T11:37Z — next jq caller slice, loop-classified
+        - type: note
+          ts: "2026-08-26T11:43:00Z"
+          host: lenovinha
+          summary: |
+            third slice: 5 more callers converted, 3 exclusion classes identified and guarded
+        - type: implemented
+          ts: "2026-08-26T12:00:00Z"
+          agent_id: lenovinha-opus5-metaorch-20260826t113718z
+          host: lenovinha
+          summary: |
+            THIRD SLICE — five more loop-run callers converted, and THREE EXCLUSION
+            CLASSES identified that a naive sweep would have broken.
+        
+            CLASSIFIED THE REMAINING CALLERS BY LOOP HAZARD FIRST, using the ~264 ms
+            per toolbox invocation measured last slice. Flat callers convert safely;
+            LOOP callers (bench-inference-floor.sh 9 sites, measure-bands.sh 9,
+            claude-mcp.sh 8, generate-evidence-bundle.sh, judge-support.sh,
+            loop-success-probe.sh, bench-semantic-budget.sh) are deferred — one jq
+            per iteration turns milliseconds into minutes and wants restructuring to
+            a single pass rather than a mechanical conversion.
+        
+            CONVERTED (flat, dev-host, run by the loop or its maintenance):
+            check-stranded-in-progress.sh, check-mcp-expert-health.sh (16 sites),
+            generate-dashboard.sh, manage-cache.sh, host-capability-probe.sh.
+            Each keeps the literal-jq fallback. Behaviour verified unchanged on all
+            five.
+        
+            THREE CLASSES THAT MUST NEVER BE CONVERTED, each of which would have
+            looked like ordinary work:
+        
+              1. CURL-PIPED INSTALLERS. scripts/install-macos.sh is fetched from a
+                 release URL and piped straight into bash — release.yml:408 and the
+                 smoke runbook's macOS row both do exactly that. THERE IS NO
+                 CHECKOUT AND NO SIBLING FILE TO SOURCE. Converting it breaks the
+                 macOS installer for every user. This is the shipped-diagnostic rule
+                 from slice one, one step more severe: those at least run from a
+                 directory, this one runs from a pipe.
+        
+              2. BOOTSTRAP WRAPPERS. with-tillandsias-builder.sh CREATES the
+                 toolbox. It cannot use the toolbox to decide how to make the
+                 toolbox. Same for with-wsl2-builder.sh.
+        
+              3. SHIPPED DIAGNOSTICS — already guarded from slice one.
+        
+            All three are now pinned by fixture arms, because each reads as an
+            oversight to whoever finishes the sweep.
+        - type: note
+          ts: "2026-08-26T12:05:00Z"
+          agent_id: lenovinha-opus5-metaorch-20260826t113718z
+          host: lenovinha
+          summary: |
+            TWO MEASUREMENT ERRORS OF MY OWN THIS SLICE, both caught before acting.
+        
+            MY CLASSIFIER REGEX MATCHED A PACKAGE NAME. It reported
+            with-tillandsias-builder.sh and with-wsl2-builder.sh as having a bare-jq
+            call site. Reading the lines: `jq yq ripgrep openssl \` — the dnf
+            INSTALL LIST for the toolbox init set. `^\s*jq ` matched a package name
+            in a list of packages. Eighth instance this session of a pattern matching
+            text that merely LOOKS like its subject, and the reason the exclusion arm
+            names those two files explicitly rather than trusting a grep.
+        
+            generate-dashboard.sh RETURNED rc=1 AFTER MY CHANGE and I checked whether
+            that was mine before recording anything. Stashed, ran, unstashed, ran:
+            rc=1 both times, output differing only in a line number (my inserted
+            header moved it). Pre-existing — the script requires two arguments.
+            Exercised the real path with a synthetic metrics file: rc=0, dashboard
+            produced. The conversion is behaviour-preserving; the script simply has a
+            usage contract.
+        
+            REMAINING on this packet: ~35 flat jq callers (mostly the test-* family),
+            the 7 LOOP callers needing restructuring rather than conversion, the `rg`
+            callers (check-cheatsheet-refs.sh,
+            test-forge-config-trust-cross-platform-parity.sh), and the bare openssl
+            CLI callers (build.sh, diagnose-proxy.sh, run-forge-project.sh,
+            orchestrate-enclave.sh).
     - packet_id: nix-toolbox-run-subcommand-is-broken-on-two-of-its-three-rungs
       order: 799-nx4r
       status: ready
@@ -50765,13 +51151,15 @@ plan_index:
             MACOS EXPOSURE TO THE DESTRUCTIVE FIXTURE: NONE, verified twice over — and the verification turned up a second finding.  yoga warned the fleet that scripts/test-gate-stamp-memoization.sh:208 runs `build.sh --check --install` against the LIVE checkout (bound as litmus:release-gates-run-locally, phase pre-build), bumping VERSION + Cargo.lock + four manifests and REGENERATING files over uncommitted work — it reverted a sibling's uncommitted plan/metrics-dashboard.md on macuahuitl, recovered only because the blob was still in the object store.  CHECKED AGAINST THIS HOST RATHER THAN ASSUMING IT APPLIED:    $ TILLANDSIAS_SKIP_VERSION_BUMP=1 timeout 25 ./build.sh --install   Error: --install is not supported on macOS.     (--ci-full --install is the same path.)   exit=0;  VERSION unchanged;  git status clean  723-whrx refuses the install on Darwin BEFORE the bump and before any regeneration. Neither effect can occur on this lane.  EXPOSURE HISTORY ON THIS HOST, measured from the timing log rather than recalled: the fixture has run here exactly ONCE, 2026-08-23T16:05:59Z, duration_ms=0 exit=1. Nothing tonight, consistent with every boundary verify passing all night.  AND THAT exit=1 IS THE SECOND FINDING. The fixture's pass condition is:     if ! took_memo(...) && [ "$combined_rc" -eq 124 ] It requires rc=124 — the 40s timeout firing while the build does real work. On macOS the dispatch returns 0 INSTANTLY with the refusal, so the condition can never hold. litmus:release-gates-run-locally IS STRUCTURALLY UNPASSABLE ON MACOS, bound fleet-wide at phase pre-build, permanently red here for a reason unrelated to what it tests. That is the sibling-lane shape again — a fixture written against Linux semantics, bound fleet-wide — and it fails LOUDLY, which is why nobody chased it: it reads as an accepted red rather than a defect.  A SHARPER FORM OF yoga's NON-QUIESCENCE POINT, which they framed as a load race: THIS FIXTURE'S PASS CONDITION IS THAT IT RAN OUT OF TIME. Its verdict is a function of host speed, not of the property under test. On a fast enough Linux host the build finishes inside 40s, rc is not 124, and it goes red for being TOO QUICK — the mirror image of the macOS failure, on the same axis.  SCOPE CORRECTIONS I ISSUED BACK, both checked: yoga first said the exposure reached my e2e leg (it does not — that runbook mentions --ci-full only in prose), then that it reached /build-install-and-smoke-test-e2e on macOS. IT DOES NOT: line 107 is inside `### 1·Linux`; the skill branches on `uname -s` at line 72 and its own table routes macOS to scripts/build-macos-tray.sh (line 128). The macOS lane never invokes build.sh at all, and the 723-whrx refusal sits behind that anyway.  WHY THAT PEDANTRY MATTERED RATHER THAN BEING UNGRACIOUS: I would otherwise have added `git status --porcelain` before every macOS /build-install-and-smoke-test-e2e as a standing ritual guarding against something that cannot happen on this lane. A RITUAL THAT NEVER FIRES IS INDISTINGUISHABLE FROM ONE THAT CANNOT FIRE — the evening's class arrived at from the direction of a precaution instead of a check.  AND THE EVIDENTIARY POINT, lenovinha's, which is the best thing in the exchange: they confirmed the mechanism BY INSPECTION and deliberately did NOT reproduce it, because their host holds the published v0.4.260817.1 artifact under test and --install would have destroyed it. They disclosed that unprompted and asked not to be counted as a second reproduction. MECHANISM-CONFIRMED-BY-INSPECTION AND DESTRUCTION-UNREPRODUCED-BY-CHOICE ARE DIFFERENT EVIDENTIARY STATES; two reproductions plus one inspection is materially weaker than three reproductions, and only the host that declined knows which it was.
 
     - packet_id: wsl2-overhead-is-the-9p-bridge-not-the-vm-and-the-checkout-is-on-the-wrong-side
+      next_action_ts: "2026-08-26T07:56:27Z"
+      next_action: 'BLOCKED ON A DECISION, not on work. The measurement is done: whole-checkout relocation is the only option that pays. It would break Git-Bash-side ./target/release/tillandsias-plan.exe resolution used by every cycle and the pre-push hook, on the fleet''s only unblocked Windows pusher. Needs a quiet window + operator sign-off. Separately worth attacking regardless of location: the 105s plan-archiver check and the 41s ghost-trace ratchet cost every host, they are merely 38.6x more visible here.'
       order: 895-bkrn
       status: ready
       desired_release: v0.5
       priority: p1
       kind: optimization
       title: the Windows lane's ~9.7x gate cost is the 9P/drvfs bridge, not WSL2 — measured 45.6x on ONE machine with only the filesystem varying, while WSL2's own VM overhead is 1.5x
-      deliverable: the Windows checkout (or at minimum CARGO_TARGET_DIR) lives on the distro's native ext4 rather than under /mnt/c, plus whatever in build.sh/with-wsl2-builder.sh has to change to support it
+      deliverable: 'the Windows checkout lives on the distro''s native ext4 rather than under /mnt/c — WHOLE CHECKOUT ONLY. The CARGO_TARGET_DIR half was removed 2026-08-26: measured, cargo is 10.6% of the gate (37s of 350s) while plan-ledger I/O is 41% and tree-wide hashing 20%, so relocating build artifacts cannot capture the win. Requires re-plumbing every Git-Bash-side path that resolves ./target/release/tillandsias-plan.exe, so it needs a quiet window and an operator decision.'
       pickup_role: windows
       release_target: convergence-velocity-milestone
       capability_tags:
@@ -50902,6 +51290,26 @@ plan_index:
           summary: |
             FINAL FIGURES, all four legs re-measured under the quiescence prerequisite (commit verified unmoved across the run). This closes the cross-host measurement exercise. darwin M5/APFS 161.0 ms n=3 CPU 97.4%; yoga bare-metal Silverblue 169.3 ms n=3 spread 1.8% (revised DOWN from 172.4 after re-running quiescent); yolanda ext4-in-VHDX 238.2 ms n=3 CPU 101.1%; yolanda /mnt/c 9P bridge 9185.0 ms n=3 CPU 15.0% spread 0.13pp. RATIOS: bridge/ext4 38.6x (the isolating measurement, one machine one variable); ext4/yoga 1.41x; ext4/darwin 1.48x. NOTE THE DIRECTION OF THE LAST REVISION: yoga's baseline came DOWN when measured quiescent, which makes THIS host's WSL2 overhead LARGER than previously quoted, not smaller — 1.41x rather than 1.38x. That was flagged as the direction to watch before the answer was known, because this packet's author had twice given this lane the benefit of the doubt. THE HONEST FORM FOR THE OPERATOR'S 'negligible overhead' QUESTION: WSL2's own virtualization costs 1.41-1.48x depending on comparison host, AND the 9P bridge costs 38.6x on top of that. The first number SURVIVES this packet's fix — relocating the checkout removes the 38.6x, not the 1.41x — and it is not negligible, merely invisible beside the larger one. Anyone reading a post-fix Windows gate time should expect ~1.4x a native Linux host, not parity.
 
+        - type: note
+          ts: "2026-08-26T07:49:17Z"
+          host: yolanda
+          summary: |
+            claimed to measure the untested half: does relocating the build actually capture the 38.6x
+        - type: note
+          ts: "2026-08-26T07:56:27Z"
+          host: yolanda
+          summary: |
+            the cheap option is measured not to work
+        - type: note
+          ts: "2026-08-26T07:56:27Z"
+          host: yolanda
+          summary: |
+            name what it is waiting on
+        - type: note
+          ts: "2026-08-26T07:56:27Z"
+          host: yolanda
+          summary: |
+            releasing claim — measurement complete, remainder needs a decision not a cycle
     - packet_id: a-diagnostic-that-names-the-layer-it-observed-rather-than-the-layer-that-failed
       order: 894-scxy
       status: completed
@@ -51853,7 +52261,7 @@ plan_index:
 
     - packet_id: the-release-runbook-prescribes-a-tag-push-order-the-pre-push-guard-forbids
       order: 898-zhf3
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p2
       kind: bug
@@ -51979,11 +52387,26 @@ plan_index:
             file as written. macbook contributed the framing that the guard was
             correct and the runbook described a sequence the guard forbids.
 
+        - type: note
+          ts: "2026-08-26T11:33:25Z"
+          host: macuahuitl
+          summary: |
+            claimed for cycle 2026-08-26T11:32Z — I hit this during the v0.4.260826.1 cut and have the measurement
+        - type: completed
+          ts: "2026-08-26T11:43:22Z"
+          host: macuahuitl
+          summary: |
+            status 'completed' with evidence_refs: 8b2e1d0cc
+        - type: note
+          ts: "2026-08-26T11:43:22Z"
+          host: macuahuitl
+          summary: |
+            runbook reordered; fixture wired and proven to run; guard untouched and still refusing
     - packet_id: evidence-capture-truncated-by-its-own-pipeline-needs-a-guard-not-a-paragraph
       order: 899-6pwv
-      status: ready
+      status: completed
       desired_release: v0.5
-      priority: p2
+      priority: p3
       kind: enhancement
       title: a documented trap that a careful agent walks into hours after reading it is a case for a guard — evidence captured through `| tee FILE | head -N` is silently truncated by SIGPIPE, and only prose currently prevents it
       deliverable: an executable check (or a capture helper the runbooks call) that makes a truncated evidence file detectable, plus the runbook/skill capture idioms changed to redirection
@@ -52130,6 +52553,26 @@ plan_index:
             WHAT IS ACTUALLY TRUE AND STILL UNSOLVED: an agent typing an interactive pipeline can silently truncate its own evidence, the artifact looks complete, and the failure selects for runs whose evidence nobody re-reads because the step PASSED. I have no mechanical mitigation to propose that lives in this repo, and I decline to propose a prose one — "do not pipe captures through head" is the same class of instruction that failed here, read by me the same night.
 
             RECOMMEND: reshape or drop. If the class is worth solving, the leverage is in the agent harness rather than the repository — something that notices a capture pipeline where an artifact is written and a consumer exits early. That is not a Tillandsias packet.
+        - type: note
+          ts: "2026-08-26T10:48:01Z"
+          host: yolanda
+          summary: |
+            premise falsified: no live instances, and a repo guard cannot see the interactive case that motivated it
+        - type: note
+          ts: "2026-08-26T12:33:14Z"
+          host: macuahuitl
+          summary: |
+            claimed for cycle 2026-08-26T12:33:13Z
+        - type: completed
+          ts: "2026-08-26T12:46:14Z"
+          host: macuahuitl
+          summary: |
+            status 'completed' with evidence_refs: scripts/capture.sh + scripts/test-capture-helper.sh 10/10, wired into --check
+        - type: note
+          ts: "2026-08-26T12:46:14Z"
+          host: macuahuitl
+          summary: |
+            capture helper + guard landed; litmus idioms changed and verified by running the e2e; corpus scanner deferred to adoption with stated reason
     - packet_id: the-checkout-lock-release-step-is-unreachable-if-the-terminal-marker-rule-is-followed
       order: 899-q9di
       status: completed
@@ -52957,7 +53400,7 @@ plan_index:
 
     - packet_id: expire-claims-list-live-counts-without-naming
       order: 905-wjfj
-      status: ready
+      status: completed
       kind: bug
       pickup_role: any
       priority: p3
@@ -53077,6 +53520,21 @@ plan_index:
             gap was found by using the step rather than by reading it, and
             confirmed on a second host within the hour.
 
+        - type: note
+          ts: "2026-08-26T12:33:14Z"
+          host: macuahuitl
+          summary: |
+            claimed for cycle 2026-08-26T12:33:13Z
+        - type: completed
+          ts: "2026-08-26T12:45:49Z"
+          host: macuahuitl
+          summary: |
+            status 'completed' with evidence_refs: scripts/test-expire-claims-list-live-rows.sh 9/9; 5 arms fail against a pre-fix binary
+        - type: note
+          ts: "2026-08-26T12:45:49Z"
+          host: macuahuitl
+          summary: |
+            rows printed, partition accounted, fixture wired and falsified
     - packet_id: build-cache-sweep-marker-dates-in-local-time
       order: 905-97xh
       status: ready
@@ -53166,6 +53624,34 @@ plan_index:
         trigger, and the sweep was "due" only because the marker had never been
         initialised. That is a separate observation and is filed on its own.
 
+      events:
+        - type: completed
+          ts: "2026-08-26T13:51:34Z"
+          agent_id: "linux-macuahuitl-claude-20260826t135134z"
+          host: macuahuitl
+          summary: |
+            CLOSED on macuahuitl. check-build-cache-sweep.sh stamps and compares in UTC.
+
+            Three sites: the stamp's `date=` field, the `ok:build-cache-sweep-stamped:` echo, and the age comparison. All now `date -u +%Y-%m-%d`, matching check-daily-maintenance.sh and every other timestamp this project writes.
+
+            DEMONSTRATED RATHER THAN ASSERTED. My first verification compared date= against utc= on this host, where both are 2026-08-26 — a vacuous check that would pass with or without the fix. Re-run under TZ=Pacific/Kiritimati (UTC+14), where local and UTC genuinely differ:
+
+              BEFORE -> date=2026-08-27 utc=2026-08-26T13:34:34Z host=tz-test
+              FIXED  -> date=2026-08-26 utc=2026-08-26T13:34:34Z host=tz-test
+
+            That is the reported defect exactly: one line of one file naming two different days.
+
+            A MIGRATION EDGE THE PACKET DID NOT ANTICIPATE, AND MY FIRST COMMENT WAVED AWAY. I wrote that existing local-stamped markers would read "one day older, which is noise against a 14-day window". That is true only WEST of UTC. EAST of UTC a legacy marker carries TOMORROW's UTC date, so `age_days = today - marker` is -1 — and the very next branch in this script reports `age_days < 0` as `unreadable-marker`. A perfectly good marker declared corrupt, with a full cargo clean prescribed for it. Measured: a marker dated by TZ=Pacific/Kiritimati was refused before the fix below.
+
+            Clamped exactly age_days == -1 to 0. Anything further ahead is a genuinely wrong clock and still falls through to unreadable-marker, because accepting an arbitrary future date would disable the staleness trigger entirely. Verified both: a one-day-ahead marker reads `under-threshold-0d` exit 0; a ten-day-ahead marker reads `unreadable-marker` exit 1.
+
+            LITMUS: litmus:build-cache-sweep-trigger gains three steps — the UTC assertion is driven THROUGH TZ so it cannot pass vacuously on a host where local and UTC happen to agree, plus the legacy one-day-ahead case and its far-future negative control. Suite 22/22 green.
+        - type: note
+          ts: "2026-08-26T13:32:35Z"
+          agent_id: "linux-macuahuitl-claude-20260826t133235z"
+          host: macuahuitl
+          summary: |
+            claimed for cycle 2026-08-26T13:32:35Z — macuahuitl. 905-97xh and 906-qi89 are one story (both are check-build-cache-sweep.sh marker semantics); 913-27ex is the litmus zero-executed verdict I filed last cycle and specified.
     - packet_id: absent-marker-triggers-a-full-cargo-clean-on-an-unbloated-host
       order: 906-qi89
       status: ready
@@ -53256,6 +53742,33 @@ plan_index:
         "leave it, and document the reasoning", which is a legitimate outcome
         and should be recorded as a decision rather than left implicit.
 
+      events:
+        - type: completed
+          ts: "2026-08-26T13:51:50Z"
+          agent_id: "linux-macuahuitl-claude-20260826t135149z"
+          host: macuahuitl
+          summary: |
+            CLOSED on macuahuitl. RESOLVED AS EXIT-CRITERION (a): a no-marker host under the size threshold initialises the marker and reports not-due.
+
+            THE DECISION, recorded as the packet asked. The alternative — stay due and document why a fresh host pays one sweep — was rejected because there is no evidence to justify the cost. `over-size` is evidence of bloat, `stale-Nd` is evidence of neglect, `no-marker` is evidence of NEITHER; it says only that this host has not stamped before. Prescribing `cargo clean` for it inverted the rarity the policy is built around, and did so on the one cycle where a warm cache is worth most.
+
+            INITIALISING IS NOT MERELY THE CHEAPER OPTION — IT CLOSES A GAP THE PACKET DID NOT NAME. The 14-day trigger exists to catch a host accumulating slowly WITHOUT crossing 40 GiB. A never-stamped marker has no age, so that trigger could never fire for such a host: it would sit at 39 GiB forever with no periodic sweep. Starting the clock is what makes staleness live at all. That, rather than cost, is the strongest argument for (a).
+
+            THE STAMP DOES NOT LIE. It records `action=initialised:NO-SWEEP-PERFORMED(31GiB<40GiB);reason:trigger-was-marker-absent-not-size`, so nobody reading the marker later mistakes an initialisation for a sweep — which is what the `--action` requirement exists for.
+
+            EXIT CRITERIA:
+            1. Resolved as (a), with the reasoning recorded above.
+            2. The three reasons stay distinguishable: `over-size`, `stale-Nd`, and the new `no-marker-initialised-under-threshold` / `no-marker-uninitialisable`.
+            3. NEGATIVE CONTROLS, both pinned: over-size still fires AND does not initialise (a bloated host must not have its clock silently started); a stale marker still fires.
+            4. If the marker cannot be written, the verdict falls through to `due:...:reason=no-marker-uninitialisable` rather than inventing a pass. An uninitialisable marker is a real problem and stays visible.
+
+            LITMUS, the NAMED closure: litmus:build-cache-sweep-trigger gains the no-marker-under-threshold case asserting not-due AND that the marker was written AND that it says NO-SWEEP-PERFORMED, plus the over-threshold negative control asserting due AND that no marker was written. Suite 22/22.
+        - type: note
+          ts: "2026-08-26T13:32:36Z"
+          agent_id: "linux-macuahuitl-claude-20260826t133235z"
+          host: macuahuitl
+          summary: |
+            claimed for cycle 2026-08-26T13:32:35Z — macuahuitl. 905-97xh and 906-qi89 are one story (both are check-build-cache-sweep.sh marker semantics); 913-27ex is the litmus zero-executed verdict I filed last cycle and specified.
     - packet_id: newly-issued-device-flow-tokens-are-revoked-within-minutes-while-old-ones-survive
       order: 907-8ypf
       status: ready
@@ -53497,6 +54010,12 @@ plan_index:
           summary: |
             RESOLVED TO A ONE-SECOND CORRELATION. calmecacpilli answered with their keyring timestamp and it lands inside pirria's failure second.    07:20:33Z  pirria's keyring entry written (fresh device-flow token)   07:22:5xZ  pirria AUTHENTICATES (ok:gh-keyring-push-verified)   07:23:0xZ  pirria: "Invalid username or token"   07:23:04Z  CALMECACPILLI'S TOKEN IS ISSUED   <-- inside that second   07:23:11Z  pirria: HTTP 401    calmecacpilli  created 2026-08-26 07:23:04, prefix gho_ZcJbic6C   macuahuitl     created 2026-06-07T00:12:54Z, prefix gho_C1H8nUjJ  They verified the stamp is UTC rather than assuming it, and the verification is load-bearing: this host is UTC-7, so a local reading would place issuance at 14:23:04Z -- seven hours in the future and after a push they had already made.  All four other working hosts answered NO to re-authenticating in that window. calmecacpilli was dark and could not be asked. The answer is yes, at 07:23:04Z.  WHAT IS SUPPORTED: a fresh device-flow authorisation for account 8007342 can revoke another host's RECENTLY-ISSUED device-flow token. calmecacpilli states the limit themselves -- correlation at one-second resolution is still correlation, and they declined to assert a mechanism they had not tested.  THE RECONCILIATION, AND A SCOPING ERROR OF MINE THAT COST REAL TIME.  Last night I "falsified" calmecacpilli's original hypothesis -- that a login revokes a sibling's token -- by observing my own June token survive their operator's 23:50Z login. That observation was TRUE and my conclusion was WRONGLY SCOPED. If vulnerability depends on the token's AGE at the moment of the new login, then a two-month-old token surviving could never have detected the mechanism: I ran a test that was structurally incapable of returning positive and read its negative as decisive.  calmecacpilli accepted it as decisive and STOPPED PURSUING THE MECHANISM. That is the cost. The class is exactly the one this fleet has been cataloguing all week -- a check that cannot fail reported as a check that passed -- committed by the coordinator, against a peer's correct hypothesis.  TWO SHAPES REMAIN AND THEY ARE DISTINGUISHABLE (calmecacpilli's framing):   (a) RECENTLY-ISSUED tokens are the vulnerable ones -- an in-flight or       not-yet-settled authorisation displaced by a newer one. This fits ALL the       data: pirria at 158 seconds died; five credentials aged weeks-to-months       survived logins.   (b) My June token is not from the same authorisation path, in which case it       was never in the same population and last night's counter-example does       not bear on this at all.  (b) IS NOT SETTLED AND I CANNOT SETTLE IT FROM HERE. Measured: my token is gho_ -- an OAuth app token, NOT a pasted classic PAT (which would be ghp_). But device-flow and web-flow BOTH mint gho_ and store identically; there is no oauth_token in ~/.config/gh/hosts.yml (keyring-backed), and nothing in the keyring metadata records which flow issued it. So the population question is open, and anyone who "resolves" it from the prefix alone is repeating my error one level down.  THE OPERATIONAL RULE, WHICH DOES NOT WAIT FOR THE MECHANISM (calmecacpilli): NOBODY RE-AUTHENTICATES A HOST WHILE ANOTHER HOST'S RE-AUTH IS IN FLIGHT. Re-authenticate ONE host at a time and verify each before starting the next. If (a) holds, two operators fixing two dark hosts in the same few minutes will keep killing each other's tokens and it will present as GitHub being broken. The rule costs nothing, is falsifiable, and is actionable NOW.  AND DO NOT RUN THE CONFIRMING EXPERIMENT. yoga and macbook each identified it and each correctly refused. It has now been run accidentally, at the cost of a host's cycle. A confirmation would buy nothing the operating rule does not already give.
 
+        - type: note
+          ts: "2026-08-26T07:39:45Z"
+          agent_id: linux-macuahuitl-claude-20260826t073945z
+          host: macuahuitl
+          summary: |
+            NARROWING MY OWN RETRACTION, at calmecacpilli's insistence and against their interest. The previous event over-corrected in their favour and they refused it. This is the accurate version.  WHAT THEY ACTUALLY CLAIMED, verbatim: "we all authenticate as the same account through the same OAuth app; the token is per (app, user) authorisation -- there is not one per machine, so every re-login revokes the previously issued one."  THE LOAD-BEARING PREMISE OF THAT MECHANISM WAS "ONE TOKEN PER AUTHORISATION", AND IT IS DEAD. The census killed it outright and it stays killed:   macuahuitl     gho_C1H8nUjJ   2026-06-07   calmecacpilli  gho_ZcJbic6C   2026-08-26 07:23:04   pirria         gho_...        2026-08-26 07:20:33 All distinct, all coexisting. There is NOT one token per authorisation; multiple live at once. My counter-example refuted that correctly and it should stay refuted.  WHAT SURVIVES IS A DIFFERENT CLAIM THEY DID NOT MAKE and had no evidence for at the time: a fresh authorisation can revoke a RECENTLY-ISSUED token specifically. That is age-dependent, and nothing in their original reasoning predicted or contained it.  SO MY ERROR IS NARROWER THAN THE PREVIOUS EVENT SAID. It was NOT "running a test that could not fail" -- the test was valid and refuted the mechanism actually on the table. The error was reading its negative as GENERAL: a two-month-old token surviving cannot detect an age-dependent effect, but that effect was not what the test was testing. The lesson is about THE SCOPE OF A CONCLUSION, not the validity of the observation.  AND CALMECACPILLI'S REASON FOR INSISTING MATTERS MORE THAN THE CORRECTION: "coordinator committed a check that cannot fail" is harsher than the facts support and would make the next coordinator hesitate to run cheap counter-examples, WHICH ARE USUALLY RIGHT. A record that over-punishes a correct method discourages the method. Recorded as they asked.  PROSPECTIVE FIX FOR (b), COSTS NOTHING, AND IT IS THE ONLY THING THAT CAN SETTLE IT: from here on, whoever re-authenticates a host RECORDS WHICH FLOW THEY USED -- device flow, web flow, or a pasted token -- at the moment they use it. It cannot be recovered afterwards (gho_ covers device and web alike; the keyring stores no flow marker), but it can be captured going forward, and two more credential deaths with the flow recorded would answer whether the surviving and dying tokens were ever the same population. This belongs in the operator remedy text, not in code.  STATUS OF THE TWO SHAPES, unchanged: (a) recently-issued tokens are the vulnerable ones -- fits all data. (b) the June token may not be from the same authorisation path -- OPEN, and possibly unanswerable post hoc. The serialisation rule holds under either, which is why it does not wait for them.
     - packet_id: expert-usage-log-writer-and-reader-disagree-on-path
       order: 908-44rw
       status: ready
@@ -53581,3 +54100,540 @@ plan_index:
             Filed after re-checking a "non-finding" this host recorded one cycle
             earlier. The correction cost one grep and the original claim cost a
             cycle of false-clean metrics.
+    - packet_id: the-flake-generates-darwin-outputs-that-have-never-been-buildable-and-nothing-checks-them
+      order: 909-xc4k
+      status: ready
+      desired_release: v0.5
+      priority: p3
+      kind: bug
+      release_target: fail-loud-diagnosis-milestone
+      title: |
+        eachDefaultSystem emits x86_64-darwin and aarch64-darwin package sets that cannot evaluate, and the default `nix flake check` silently omits exactly those systems
+      deliverable: |
+        the flake stops advertising outputs it cannot build, or the gate stops
+        omitting the systems that fail
+      pickup_role: any
+      owner_host: any
+      depends_on: []
+      capability_tags:
+        - nix
+        - fail-loud
+        - build
+      estimated_hours: 3
+      context: |
+        MEASURED on macuahuitl 2026-08-26 while closing 606-um5s.
+        
+        `flake-utils.lib.eachDefaultSystem` generates the full package set for
+        every default system, which includes x86_64-darwin and aarch64-darwin.
+        Those outputs cannot evaluate:
+        
+          nix flake check --all-systems
+          checking derivation packages.x86_64-darwin.forge-image...
+          error: Refusing to evaluate package 'glibc-nolibgcc-2.42-67' ...
+                 because it is not available on the requested hostPlatform
+        
+        `forge-image` references `pkgs.glibc` for an FHS `ld-linux` symlink in
+        its `fakeRootCommands`. glibc is a Linux package; on darwin the whole
+        output is unevaluatable.
+        
+        **VERIFIED PRE-EXISTING, NOT INTRODUCED BY THE 26.05 MIGRATION.** The old
+        lock fails `--all-systems` too — checked by restoring flake.nix and
+        flake.lock from git and re-running. So this has been true for as long as
+        the FHS symlink has been there.
+        
+        WHY IT SURVIVED: the DEFAULT `nix flake check` does not check them. It
+        prints, as its last line:
+        
+          warning: The check omitted these incompatible systems: aarch64-darwin,
+          aarch64-linux, x86_64-darwin. Use '--all-systems' to check all.
+        
+        So the gate that would catch it announces that it is not looking, in a
+        warning after a PASS verdict. Nothing in `./build.sh` runs
+        `--all-systems`, and nothing in `./build.sh` evaluates the flake at all.
+        
+        THE CLASS, and it is the milestone's: an output that cannot work, in a
+        configuration nothing exercises, behind a check that reports success and
+        names its own blind spot in a line nobody reads. The same cycle turned up
+        a sibling instance — `.#forge-image` on x86_64-LINUX could not evaluate
+        either, for months, because `buildLayeredImage` had stopped accepting
+        `copyToRoot` and nothing evaluated the flake to notice.
+        
+        SCOPE NOTE: this is p3, not p1. Nobody builds Tillandsias on darwin via
+        nix — macOS uses `scripts/build-macos-tray.sh` and `./build.sh --install`
+        is refused on Darwin by design (723-whrx). The cost is a flake that
+        advertises six packages per darwin system that have never existed, which
+        misleads anyone reading `flake show --all-systems` and makes
+        `--all-systems` unusable as a gate.
+      outcome: |
+        The flake's advertised outputs are the outputs it can build, or the
+        difference is stated where a reader will see it.
+      exit_criteria:
+        - 'DECIDE and record which: (a) restrict the Linux-only outputs to Linux systems (eachSystem over linux systems, or a per-output guard), so darwin advertises only what exists; or (b) keep them and mark them meta.platforms/broken so the failure is declared rather than discovered. Either is defensible; advertising an output that cannot evaluate is not.'
+        - '`nix flake check --all-systems` passes, OR its remaining failures are declared-broken outputs rather than evaluation errors. This is the falsifiable closure — today it exits 1.'
+        - 'NEGATIVE CONTROL: every output that builds today still builds. The six x86_64-linux packages and the devShell are the working set (all six realized 2026-08-26, closures within 0.75% of the published artifacts); none may regress.'
+        - Whatever lands, something RUNS `--all-systems` on a schedule, or the fix is invisible to the next regression. A default `nix flake check` will keep omitting these systems and keep printing the warning after a PASS.
+      verifiable_closure: |
+        `nix flake check --all-systems` exits 0, or fails only on outputs
+        explicitly marked broken/unsupported, on a host that today sees it exit 1.
+      notes: |
+        DO NOT fix this by adding `--all-systems` to the gate without first
+        making it pass. That would take a green trunk red for a pre-existing
+        condition nobody is blocked on.
+        
+        The warning line is worth preserving as evidence when this is fixed: a
+        check that announces its own omission AFTER declaring success is the
+        shape, and this one is unusually explicit about it.
+      events:
+        - type: filed
+          ts: "2026-08-26T08:45:00Z"
+          agent_id: linux-macuahuitl-claude-20260826t084421z
+          host: macuahuitl
+          summary: |
+            Found while closing 606-um5s, by running `flake check --all-systems`
+            because the default run's warning named aarch64-linux — a system that
+            packet's criterion 2 asks about. Chasing the warning surfaced the
+            darwin breakage instead.
+
+    - packet_id: terminal-event-on-a-nonterminal-row-is-invisible
+      order: 910-9bqq
+      status: ready
+      kind: bug
+      pickup_role: any
+      priority: p2
+      desired_release: v0.5
+      depends_on: []
+      multi_cycle: false
+      next_action: |
+        Add the check to tillandsias-plan check as an ADVISORY line naming each row, not a gate — a fleet-wide refusal over one host's bookkeeping is 699-dycj. Then a negative control: a row whose terminal event and terminal status agree must NOT be named, or the check reports every closed packet forever and is switched off.
+      deliverable: |
+        A row carrying a `completion`/`verified`/`falsified` event while its
+        `status` is non-terminal is NAMED by a check, so finished work stops
+        being offered to selection as fresh.
+      capability_tags:
+        - plan
+        - ledger
+        - fail-loud
+      tags:
+        - claims
+        - duplicate-work
+        - v0.5
+      title: |
+        A packet can carry a `completion` event and a `ready` status at the same time, and nothing notices — so finished work is offered to the next host as fresh p1 work.
+      context: |
+        MEASURED on yoga 2026-08-26T09:28Z. 628-p5tj (`estimated_hours: 10`,
+        p1) was offered by `select-work-batch.sh` as claimable. It carried:
+        
+          status:  ready
+          events:  - type: completion
+                     ts: "2026-08-26T03:35:09Z"
+                     host: forge
+                     summary: Converged Linux tray menu builder ... All 73
+                              headless + 19 host-shell tests pass.
+        
+        Six hours old. The convergence was REAL — verified in the tree at
+        3500e6301 — and the row was still advertising ten hours of it as
+        unclaimed. I was one step from re-implementing it; what stopped me was
+        reading the events before the description, which is a habit rather than
+        a mechanism.
+        
+        THIS IS 641-e2qa RUNNING IN THE OPPOSITE DIRECTION. That packet is about
+        work hidden BY a claim: `in_progress` makes a row invisible to `ready`
+        queries and to burndown, so unfinished work is never picked up. This is
+        the mirror: a terminal EVENT with a non-terminal STATUS makes finished
+        work maximally visible — selection keeps offering it, and the more
+        expensive the row's estimate, the more attractive it looks.
+        
+        The two states have opposite symptoms and one cause: the status field
+        and the event stream can disagree, and only the status field is
+        consulted by selection.
+        
+        WHY A CHECK RATHER THAN "SET THE STATUS PROPERLY". The forge cycle that
+        did the work filed a correct completion event and did not set the field;
+        that is one host's slip, and the fleet has ~7 hosts and a 24h claim
+        reaper. The ledger already knows both facts — it folds the events and it
+        folds the status — so the disagreement is derivable rather than needing
+        discipline. `check` naming it costs nothing and does not depend on the
+        next agent having the habit I happened to have.
+        
+        NOT A GATE, DELIBERATELY. `tillandsias-plan check` runs on every host in
+        `./build.sh --check`, and a fleet-wide refusal over one host's
+        bookkeeping is 699-dycj — one host's typo becoming every host's red
+        build. Advisory, named, counted.
+      exit_criteria:
+        - |
+            `tillandsias-plan check` emits an ADVISORY line naming every row
+            whose latest `completion`/`verified`/`falsified` event coexists
+            with a non-terminal `status`. Exit code unchanged.
+
+        - |
+            NEGATIVE CONTROL: a row whose terminal event and terminal status
+            AGREE is not named. Without this the check names every closed packet
+            in the ledger forever, which is the same as naming none.
+
+        - |
+            The advisory names the event type, its timestamp and the current
+            status, so a reader can tell a six-hour-old completion from a
+            multi_cycle packet that legitimately returned to `ready`.
+
+        - |
+            multi_cycle rows are NOT flagged for returning to `ready` after a
+            cycle — that is documented correct behaviour (251), and a check that
+            flags it would train the fleet to ignore the advisory.
+
+      verifiable_closure: |
+        A fixture over a scratch ledger containing one disagreeing row, one
+        agreeing row and one multi_cycle row, asserting exactly the first is
+        named. No `litmus:` name is declared here: under 885-92iu a declared
+        closure must resolve to a bound, file-backed test.
+      events:
+        - type: filed
+          ts: "2026-08-26T09:31:56Z"
+          agent_id: linux-yoga-opus5-20260826t093156z
+          host: yoga
+          summary: |
+            Filed from the cycle that nearly duplicated the work. The row was
+            selected, sized and about to be claimed as fresh; the completion
+            event was six hours old and the code was already in the tree.
+
+    - packet_id: plan-archiver-check-is-thirty-percent-of-every-gate
+      order: 911-m7js
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      kind: optimization
+      title: the plan-archiver ready-set check is 105s of a 350s `./build.sh --check` — 30% of the gate, on every run, on at least one host
+      deliverable: either the archiver check gets cheaper (incremental, cached, or scoped to changed packets) or it moves off the per-commit gate onto a less frequent lane — plus a measurement showing what it costs on a native-filesystem host
+      pickup_role: any
+      release_target: convergence-velocity-milestone
+      capability_tags:
+        - build
+        - performance
+        - plan-ledger
+      estimated_hours: 4
+      context: |
+        MEASURED on yolanda 2026-08-26, quiescent tree (commit 1c9d5b417 before and
+        after), forced warm `./build.sh --check`, total 350s. Step profile:
+        
+          105.1s  Checking the plan archiver preserves the ready set (831-ezea)
+           41.2s  Ratcheting ghost traces for the gate stamp (584-2qq2)
+           29.0s  Staging router sidecar
+           28.3s  Writing the gate stamp
+           21.9s  Running plan ledger tests (cargo test -p tillandsias-plan)
+           21.6s  Checking newly filed rows are independently schedulable (advisory)
+           18.1s  Checking the durable MO-FULL attestation ledger
+           (six more, all under 10s)
+        
+        **The archiver check alone is 30% of the gate**, and it is the single
+        largest line item by a factor of 2.5 over the next one. It runs
+        `scripts/archive-plan-packets.sh --check`, which re-derives the ready set
+        across the whole folded ledger — `ok:archive-answerability:226/226 after
+        archiving 801 packets, ready set unchanged at 392` — on every commit, on
+        every host, whether or not the change touched `plan/`.
+        
+        IT IS NOT THE `cargo run` ROOT CAUSE. Checked before filing, because a
+        neighbouring open row describes the pre-push gate burning 1050s of 1072s in
+        `cargo run -p tillandsias-plan -- check` — a cold debug build of a binary
+        that already exists in release. This is a different step: the archiver
+        resolves its binary through the shared probe
+        (`scripts/plan-binary-probe.sh`, `ensure_fresh_plan_binary`) and uses the
+        prebuilt release binary. Same symptom, different cause; do not fold them.
+        
+        WHAT IS NOT MEASURED, AND A NEAR-MISS WORTH RECORDING. This host's gate
+        runs inside WSL2 over the 9P bridge, so the obvious hypothesis is that the
+        105s is bridge-attributable and would be far cheaper natively. **I could
+        not establish that, and I nearly reported a fabricated ratio for it.**
+        
+        Running the same script standalone from Git Bash returned in 12.2s, which
+        against 105s looks like an 8.6x bridge penalty. It is not: the run
+        **bailed at line 33** with `toolbox: command not found` and produced two
+        lines of output, having done none of the work. 12.2s measured a failed
+        startup. The standalone WSL run (84.9s) also failed, with
+        `fail:archive-answerability:ready-listing-failed-before-sweep`, so it is
+        not a complete run either.
+        
+        So: the 105s in-gate figure is real, complete and reproducible. Whether it
+        is bridge cost, ledger size, or algorithmic, is **UNMEASURED**, and a host
+        with a native filesystem should report its own number before anyone
+        optimises for the wrong cause. That comparison is the first exit criterion
+        precisely because this host cannot produce it.
+        
+        WHY IT IS WORTH SOMEONE'S TIME REGARDLESS OF THE ANSWER: at 30% of a gate
+        that every host runs before every push, and with the ledger growing (801
+        packets archived in one sweep, 392 ready), this is a cost that scales with
+        the ledger rather than with the change. A one-line plan fragment pays the
+        same 105s as a workspace-wide refactor.
+      verifiable_closure: |
+        A native-filesystem host reports its own `./build.sh --check` step profile
+        for the archiver check, establishing whether the cost is filesystem or
+        ledger-size bound; and if it is ledger-bound, the check's duration stops
+        scaling with total packet count on an unchanged `plan/`.
+      evidence:
+        - forced warm gate 350s, quiescent tree 1c9d5b417, archiver step 105.1s
+        - archiver resolves the prebuilt binary via plan-binary-probe.sh, not cargo run
+        - standalone Git Bash run 12.2s is INVALID — bailed at line 33, no work done
+        - standalone WSL run 84.9s is INVALID — fail:archive-answerability before sweep
+
+    - packet_id: capability-probe-depends-on-a-binary-no-cycle-rebuilds
+      order: 912-d727
+      status: ready
+      kind: bug
+      pickup_role: any
+      priority: p2
+      desired_release: v0.5
+      release_target: fail-loud-diagnosis-milestone
+      depends_on: []
+      deliverable: |
+        host-capability-probe.sh either rebuilds the binary it depends on, or
+        distinguishes "binary is stale" from "binary is missing" from "the probe
+        genuinely failed" — and check-capability-row.sh can tell a stale row from
+        a current one.
+      capability_tags:
+        - tooling
+        - fail-loud
+        - capability-matrix
+      tags:
+        - stale-artifact
+        - probe
+        - v0.5
+      title: |
+        `host-capability-probe.sh` invokes `target/release/tillandsias --capabilities --fresh` — a binary nothing in the cycle rebuilds — and reports a stale binary with the same message as a broken probe.
+      context: |
+        MEASURED on tlatoanis-macbook-air 2026-08-26T12:1xZ.
+        
+            $ scripts/host-capability-probe.sh
+            error: ./target/release/tillandsias --capabilities failed
+        
+        The probe was not broken. `target/release/tillandsias` was dated
+        2026-08-22 and predates the `--fresh` flag, so it answered
+        `Unsupported option: --fresh`. Current source knows the flag
+        (`main.rs` parses it in the capabilities path and lists it among the
+        accepted options). `cargo build --release -p tillandsias-headless --bin
+        tillandsias` fixed it outright, and the probe then produced its full JSON.
+        
+        TWO THINGS COMPOSE HERE:
+        
+        1. NOTHING IN THE CYCLE REBUILDS THAT BINARY. `cycle-preflight.sh`
+           deliberately rebuilds `tillandsias-plan` — "rebuild the instrument
+           before using it" — and that reasoning applies verbatim to the
+           capability probe's instrument, which it does not cover. On macOS
+           nothing else builds it either: `./build.sh --install` is refused on
+           Darwin (723-whrx), so the binary only exists here if someone built it
+           by hand, and then only ages.
+        
+        2. THE ERROR NAMES THE SYMPTOM, NOT THE CAUSE. `--capabilities failed`
+           is emitted identically for a missing binary, a stale binary that
+           rejects a newer flag, and a probe that genuinely failed. The
+           `|| { echo ...; exit 1; }` discards the binary's own stderr, which in
+           this case said exactly what was wrong in one line.
+        
+        AND THE GATE COULD NOT SEE IT. `check-capability-row.sh` reported
+        `ok:capability-row-reported:tlatoanis-macbook-air` throughout, because a
+        row published on an earlier date exists. So the fleet's capability matrix
+        carried a row for this host that the host could no longer reproduce, and
+        the gate that exists to notice a missing row cannot notice a stale one.
+        That is the 850-bif2 shape one turn further on: a matrix that cannot see
+        hardware it was never told about now also cannot see hardware whose
+        report has gone stale.
+      exit_criteria:
+        - |
+            The probe either rebuilds its binary (as cycle-preflight does for the
+            plan expert) or refuses with a verdict that names WHICH failure it
+            hit — absent, stale/flag-rejected, or genuine probe failure. Passing
+            the binary's own stderr through is most of the fix.
+
+        - |
+            `check-capability-row.sh` distinguishes a row this host can currently
+            reproduce from one merely present in the matrix. A freshness field or
+            a re-probe, not a presence check.
+
+        - |
+            NEGATIVE CONTROL: a host with a CURRENT binary and a CURRENT row
+            still reports ok, and the probe still runs without a rebuild when one
+            is not needed. Without this leg the fix could be "always rebuild",
+            which is correct-but-expensive and would be reverted.
+
+      verifiable_closure: |
+        NAMED: extend `litmus:capability-manifest-guard` (bound) with two legs —
+        a fixture whose probe binary rejects a flag must yield a verdict naming
+        STALENESS rather than a generic failure, and a fixture with a current
+        binary must still pass without a rebuild. The first must be RED before
+        the fix.
+      notes: |
+        Found while reading 793-qr4t, whose subject is the accel envelope this
+        probe reports. The envelope content is a separate matter recorded on that
+        packet; this is purely about the probe's own instrument and its verdict
+        grammar.
+
+    - packet_id: litmus-runner-reports-pass-when-it-executed-nothing
+      order: 913-27ex
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      kind: bug
+      release_target: fail-loud-diagnosis-milestone
+      title: |
+        the litmus runner prints `Status: [PASS]` and exits 0 after executing zero tests, so a filter that matches nothing is indistinguishable from a suite that passed
+      deliverable: |
+        a run that executed no tests reports a distinct, non-passing verdict — or
+        the runner refuses a filter combination that selects nothing
+      pickup_role: any
+      owner_host: any
+      depends_on: []
+      capability_tags:
+        - testing
+        - fail-loud
+        - developer-experience
+      estimated_hours: 2
+      context: |
+        MEASURED on macuahuitl 2026-08-26 while closing 899-6pwv, by running a
+        real e2e with a phase filter that did not match it:
+        
+          scripts/run-litmus-test.sh subdomain-routing-via-reverse-proxy \
+            --phase pre-build --size e2e --compact
+        
+          PASS:  0
+          FAIL:  0
+          SKIP:  1 (excluded from coverage)
+          Total: 1 (executed: 0, skipped: 1)
+          Pass Rate: 0% (0/0 executed)
+          Status: [PASS]
+        
+        Exit code 0. The same command WITHOUT `--phase pre-build` executes the
+        test and returns `Status: [FAIL]`, exit 1 — a real failure at step 3.
+        
+        So the phase filter turned a failing suite into a passing one, silently,
+        and the only signal was a `SKIP: 1` line above a green verdict.
+        
+        WHY THIS IS THE MILESTONE'S SHAPE AND NOT A COSMETIC COMPLAINT. `Pass
+        Rate: 0% (0/0 executed)` is printed directly above `Status: [PASS]`. The
+        runner has the fact and declines to act on it. Any caller that greps for
+        the status line — or reads the exit code, which is the normal case for a
+        gate — gets a pass from a run that proved nothing.
+        
+        THE CALLER THAT MAKES IT DANGEROUS. `--phase` and `--size` are exactly the
+        knobs a CI lane or a smoke gate sets to keep a run cheap. A filter that
+        stops matching (a renamed spec, a changed `size:`, a typo) does not fail;
+        it goes quiet and green. That is indistinguishable from success at every
+        layer above it, which is the property this milestone exists to eliminate.
+        
+        RELATED BUT DISTINCT from the meta-orchestration skill's own 822-4vwa
+        note, which is about litmus results in a FORGE being a report rather than
+        a verdict. This is narrower and mechanical: zero executed must not be
+        spelled PASS anywhere.
+        
+        NOT A NEW CLASS — the same 2026-08-25/26 shape catalogued in 899-6pwv:
+        an artifact standing in for a measurement that was never taken. Here the
+        artifact is the word PASS.
+      outcome: |
+        A green litmus verdict means tests ran and passed, not that none ran.
+      exit_criteria:
+        - 'A run with `executed: 0` reports a verdict that is NOT `PASS` — `[NO-TESTS]`, `[EMPTY]`, whatever fits the existing grammar — and exits non-zero, OR the runner refuses the empty selection up front. Pick one and state why.'
+        - 'NEGATIVE CONTROL, and it is the one that matters: a run where every executed test passes AND some are legitimately skipped must still report PASS. Skips are normal and routine; the defect is zero EXECUTED, not the presence of skips. A fix that turns any skip into a failure is worse than the bug.'
+        - 'NEGATIVE CONTROL: a genuinely passing suite still exits 0, and a genuinely failing one still exits 1. Verified against a real spec, not only a fixture.'
+        - Whatever lands is exercised by a fixture that drives the runner with a filter matching nothing, so this cannot regress silently — which is precisely how it survived until now.
+      verifiable_closure: |
+        `scripts/run-litmus-test.sh <spec> --phase <a-phase-it-is-not-in>` exits
+        non-zero with a verdict distinguishable from PASS, on a host where today
+        it exits 0 with `Status: [PASS]`.
+      notes: |
+        Found by accident: I ran the e2e with the wrong phase filter, got a green
+        verdict, and only doubted it because the summary above it said 0/0. An
+        agent moving faster would have recorded that green as evidence — which is
+        how this class survives.
+      events:
+        - type: filed
+          ts: "2026-08-26T13:15:00Z"
+          agent_id: linux-macuahuitl-claude-20260826t114259z
+          host: macuahuitl
+          summary: |
+            Found while verifying the 899-6pwv litmus idiom change. The first run
+            of the e2e returned Status: [PASS] with 0 executed; removing the phase
+            filter turned the same command into Status: [FAIL] on a real defect.
+
+    - packet_id: browser-isolation-e2e-fails-at-proxy-health-check-on-macuahuitl
+      order: 913-7m3t
+      status: ready
+      desired_release: v0.5
+      priority: p3
+      kind: bug
+      depends_on: []
+      pickup_role: any
+      owner_host: any
+      capability_tags:
+        - testing
+        - enclave
+        - podman
+      estimated_hours: 3
+      title: |
+        litmus:browser-isolation-e2e fails at step 3/16 — the proxy container launches but never answers on 3128 within 15s
+      deliverable: |
+        the proxy either becomes healthy inside the window, or the step's failure
+        names which of the two it is (never started vs started and not listening)
+      context: |
+        MEASURED on macuahuitl 2026-08-26, twice, while verifying an unrelated
+        change to this same file:
+        
+          scripts/run-litmus-test.sh subdomain-routing-via-reverse-proxy --size e2e --compact
+          [STEP 1/16] setup: create test project, enclave network, ephemeral CA ... [OK]
+          [STEP 2/16] launch proxy container (Squid forward proxy) ............... [OK]
+          [STEP 3/16] wait for proxy health check (port 3128) .................... [FAIL]
+          Status: [FAIL]
+        
+        ATTRIBUTED, not assumed. I had just rewritten steps 2, 4 and 5 of this
+        litmus for 899-6pwv (replacing `| tee LOG | head -1` with a redirect). To
+        establish the failure was not mine I restored the ORIGINAL file from a
+        pre-edit copy and re-ran: identical failure, same step, same shape. So
+        step 3 is broken on this host independently of that change, and the
+        change is exonerated.
+        
+        WHAT IS KNOWN: the container LAUNCHES (step 2 returns a container id and
+        exits 0 — and after the 899-6pwv change that exit code is genuinely
+        podman's, where before it was `head`'s). What fails is:
+        
+          for i in {1..15}; do
+            podman exec tillandsias-test-proxy-e2e sh -c 'nc -zv 127.0.0.1 3128' \
+              &>/dev/null && echo OK && exit 0
+            sleep 1
+          done; echo TIMEOUT && exit 1
+        
+        WHAT IS NOT KNOWN, and this is the actual work: that loop discards all
+        output with `&>/dev/null`, so TIMEOUT cannot distinguish between
+        (a) the container exited immediately after launch, (b) it is running but
+        squid never bound 3128, (c) `nc` is absent from the image, or (d) 15s is
+        simply too short on this host. Those need different fixes.
+        
+        The teardown removes the container, so the evidence is gone by the time
+        anyone reads the verdict. The full squid log IS now written to
+        /tmp/litmus-proxy-e2e.log by step 2 (899-6pwv) — but teardown deletes it
+        before a reader arrives. Capturing it under $boundary_dir/tmp/, or simply
+        not deleting it on failure, is the cheapest first move.
+        
+        SCOPE: p3. This is a pre-build e2e that the default `--phase pre-build`
+        filter does not even select (it is skipped there — see 913-27ex, where
+        that skip is currently reported as PASS). Nothing in the release path
+        depends on it today, which is exactly why it could rot unnoticed.
+      outcome: |
+        The e2e either passes on a normal Linux host, or its failure says which
+        of the four causes it is.
+      exit_criteria:
+        - 'The proxy health step distinguishes its failure modes: container-not-running, port-not-listening, tool-missing, and timed-out are four different messages. `&>/dev/null` on the only diagnostic in the loop is the defect to remove.'
+        - On failure, the squid log written by step 2 survives teardown long enough to be read, and the step says where it is.
+        - DECIDE whether 15s is the right window and record the measurement behind the number. If the container is simply slow here, raising it is a legitimate fix — but only with a measured startup time, not a guess.
+        - 'NEGATIVE CONTROL: a genuinely broken proxy still fails. A fix that lengthens the timeout until the loop always succeeds, or that treats a missing `nc` as healthy, is the failure this packet is about, one level up.'
+      verifiable_closure: |
+        `scripts/run-litmus-test.sh subdomain-routing-via-reverse-proxy --size e2e`
+        reaches step 4 on macuahuitl, or fails at step 3 with a message naming
+        which of the four causes applies.
+      notes: |
+        Do NOT fix this by removing the step or marking the litmus expected-fail.
+        It is the only end-to-end coverage of the forge→proxy→router→sidecar
+        chain.
+      events:
+        - type: filed
+          ts: "2026-08-26T13:16:00Z"
+          agent_id: linux-macuahuitl-claude-20260826t114259z
+          host: macuahuitl
+          summary: |
+            Found while verifying an 899-6pwv idiom change to this same file, and
+            attributed away from that change by re-running the original file from
+            a pre-edit copy: identical failure at the same step.

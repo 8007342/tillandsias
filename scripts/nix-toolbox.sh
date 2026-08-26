@@ -81,6 +81,17 @@
 
 set -uo pipefail
 
+
+# ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has it.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/tool-dispatch.sh" 2>/dev/null || true
+if command -v resolve_tool >/dev/null 2>&1; then
+    JQ="$(resolve_tool jq || printf 'jq')"
+else
+    JQ="jq"   # lib unavailable: preserve the previous behaviour exactly
+fi
+
 TOOLBOX_NAME="${TILLANDSIAS_NIX_TOOLBOX:-tillandsias-nix}"
 TOOLBOX_IMAGE="${TILLANDSIAS_NIX_TOOLBOX_IMAGE:-registry.fedoraproject.org/fedora-toolbox:44}"
 CHROOT_STORE="${TILLANDSIAS_NIX_CHROOT_STORE:-$HOME/.local/share/tillandsias/nix-store}"
@@ -221,14 +232,14 @@ deps_out_path() { # <flake-output>
     local out="$1" json depsdrv djson outpath
     json="$(cd "$REPO_ROOT" && _store_nix derivation show ".#${out}" 2>/dev/null)" || return 1
     [ -n "$json" ] || return 1
-    depsdrv="$(printf '%s' "$json" | jq -r '
+    depsdrv="$(printf '%s' "$json" | "$JQ" -r '
         (if has("derivations") then .derivations else . end)
         | to_entries[0].value
         | ((.inputs.drvs // {}) + (.inputDrvs // {}))
         | keys[] | select(test("-deps-"))' 2>/dev/null | head -n 1)"
     [ -n "$depsdrv" ] || return 1
     djson="$(cd "$REPO_ROOT" && _store_nix derivation show "$(_logical "$depsdrv")" 2>/dev/null)" || return 1
-    outpath="$(printf '%s' "$djson" | jq -r '
+    outpath="$(printf '%s' "$djson" | "$JQ" -r '
         (if has("derivations") then .derivations else . end)
         | to_entries[0].value | .outputs.out.path' 2>/dev/null)"
     [ -n "$outpath" ] && [ "$outpath" != "null" ] || return 1

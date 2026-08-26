@@ -32,6 +32,17 @@
 
 set -uo pipefail
 
+
+# ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has it.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/tool-dispatch.sh" 2>/dev/null || true
+if command -v resolve_tool >/dev/null 2>&1; then
+    JQ="$(resolve_tool jq || printf 'jq')"
+else
+    JQ="jq"   # lib unavailable: preserve the previous behaviour exactly
+fi
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 2
 
@@ -309,7 +320,7 @@ fi
 status_map=""
 if plan_binary_has "$PLAN" query && command -v jq >/dev/null 2>&1; then
     status_map="$("$PLAN" query --json --limit 0 2>/dev/null \
-        | jq -r '.[] | select((.packet_id // "") != "") | [.packet_id, (.status // "")] | @tsv' 2>/dev/null)"
+        | "$JQ" -r '.[] | select((.packet_id // "") != "") | [.packet_id, (.status // "")] | @tsv' 2>/dev/null)"
 fi
 if [ -z "$status_map" ]; then
     echo "  note: batched fold unavailable ($PLAN query --json); falling back to per-packet status lookups" >&2

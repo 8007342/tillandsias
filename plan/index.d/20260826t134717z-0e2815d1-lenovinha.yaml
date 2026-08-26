@@ -5,17 +5,17 @@
 # corrects ANY field (642-fedr). Re-declaring the packet under
 # `packets:` would be a G-Set no-op and would silently do nothing.
 status:
-  - packet_id: fourteen-ghost-traces-are-only-reported-in-files-a-commit-touches
+  - packet_id: builder-toolbox-init-set-too-small-for-the-dispatch-pattern
     field: status
     value: ready
-    ts: "2026-08-26T07:41:29Z"
+    ts: "2026-08-26T13:47:17Z"
     host: lenovinha
 
 events:
-  - packet_id: fourteen-ghost-traces-are-only-reported-in-files-a-commit-touches
+  - packet_id: builder-toolbox-init-set-too-small-for-the-dispatch-pattern
     event:
       type: note
-      ts: "2026-08-26T07:41:29Z"
+      ts: "2026-08-26T13:47:17Z"
       host: lenovinha
       summary: >
-        three ghosts retargeted and baseline ratcheted 7->4; four remain needing decisions this cycle could not make
+        fourth slice: 15 callers converted, heredoc-scope trap found and guarded

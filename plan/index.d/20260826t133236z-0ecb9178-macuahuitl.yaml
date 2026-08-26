@@ -5,17 +5,17 @@
 # corrects ANY field (642-fedr). Re-declaring the packet under
 # `packets:` would be a G-Set no-op and would silently do nothing.
 status:
-  - packet_id: builder-toolbox-init-set-too-small-for-the-dispatch-pattern
+  - packet_id: absent-marker-triggers-a-full-cargo-clean-on-an-unbloated-host
     field: status
     value: in_progress
-    ts: "2026-08-26T09:38:55Z"
-    host: lenovinha
+    ts: "2026-08-26T13:32:36Z"
+    host: macuahuitl
 
 events:
-  - packet_id: builder-toolbox-init-set-too-small-for-the-dispatch-pattern
+  - packet_id: absent-marker-triggers-a-full-cargo-clean-on-an-unbloated-host
     event:
       type: note
-      ts: "2026-08-26T09:38:55Z"
-      host: lenovinha
+      ts: "2026-08-26T13:32:36Z"
+      host: macuahuitl
       summary: >
-        claimed for cycle 2026-08-26T09:37Z — tool-dispatch lib + first caller slice
+        claimed for cycle 2026-08-26T13:32:35Z

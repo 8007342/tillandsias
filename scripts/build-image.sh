@@ -25,6 +25,17 @@
 
 set -euo pipefail
 
+
+# ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has it.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/tool-dispatch.sh" 2>/dev/null || true
+if command -v resolve_tool >/dev/null 2>&1; then
+    JQ="$(resolve_tool jq || printf 'jq')"
+else
+    JQ="jq"   # lib unavailable: preserve the previous behaviour exactly
+fi
+
 # @trace spec:default-image, spec:dev-build, spec:podman-orchestration, spec:nix-builder
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -616,7 +627,7 @@ _extract_build_telemetry() {
     [[ -s "$progress_log" ]] || { echo "0|0|0"; return 0; }
     command -v jq &>/dev/null || { echo "0|0|0"; return 0; }
 
-    parsed="$(jq -r '
+    parsed="$("$JQ" -r '
         if .progressDetail and .progressDetail.total and .id then
             "BYTES\t\(.id)\t\(.progressDetail.total)"
         elif .stream then

@@ -5,17 +5,17 @@
 # corrects ANY field (642-fedr). Re-declaring the packet under
 # `packets:` would be a G-Set no-op and would silently do nothing.
 status:
-  - packet_id: builder-toolbox-init-set-too-small-for-the-dispatch-pattern
+  - packet_id: build-cache-sweep-marker-dates-in-local-time
     field: status
-    value: ready
-    ts: "2026-08-26T09:43:04Z"
-    host: lenovinha
+    value: in_progress
+    ts: "2026-08-26T13:32:35Z"
+    host: macuahuitl
 
 events:
-  - packet_id: builder-toolbox-init-set-too-small-for-the-dispatch-pattern
+  - packet_id: build-cache-sweep-marker-dates-in-local-time
     event:
       type: note
-      ts: "2026-08-26T09:43:04Z"
-      host: lenovinha
+      ts: "2026-08-26T13:32:35Z"
+      host: macuahuitl
       summary: >
-        tool-dispatch lib landed + 3 highest-traffic callers converted; 43 jq callers, rg and openssl remain
+        claimed for cycle 2026-08-26T13:32:35Z

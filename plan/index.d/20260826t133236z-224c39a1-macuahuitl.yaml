@@ -5,17 +5,17 @@
 # corrects ANY field (642-fedr). Re-declaring the packet under
 # `packets:` would be a G-Set no-op and would silently do nothing.
 status:
-  - packet_id: wsl2-overhead-is-the-9p-bridge-not-the-vm-and-the-checkout-is-on-the-wrong-side
+  - packet_id: litmus-runner-reports-pass-when-it-executed-nothing
     field: status
-    value: ready
-    ts: "2026-08-26T07:56:27Z"
-    host: yolanda
+    value: in_progress
+    ts: "2026-08-26T13:32:36Z"
+    host: macuahuitl
 
 events:
-  - packet_id: wsl2-overhead-is-the-9p-bridge-not-the-vm-and-the-checkout-is-on-the-wrong-side
+  - packet_id: litmus-runner-reports-pass-when-it-executed-nothing
     event:
       type: note
-      ts: "2026-08-26T07:56:27Z"
-      host: yolanda
+      ts: "2026-08-26T13:32:36Z"
+      host: macuahuitl
       summary: >
-        releasing claim — measurement complete, remainder needs a decision not a cycle
+        claimed for cycle 2026-08-26T13:32:35Z
