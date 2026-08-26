@@ -17,7 +17,19 @@ set -euo pipefail
 # cert land where the caller cannot find it — a silent break, not an error.
 # Re-check the path before converting any further openssl site.
 # shellcheck source=scripts/lib/tool-dispatch.sh
-. "$(dirname "${BASH_SOURCE[0]}")/lib/tool-dispatch.sh" 2>/dev/null || true
+# Resolve the lib by WALKING UP, not by a fixed depth (order 914-ahsy). The
+# fixed form `dirname "${BASH_SOURCE[0]}"/lib/...` is correct only for a caller
+# sitting directly in scripts/. From scripts/refusal-calibration/ it points at a
+# lib that does not exist, the `|| true` swallows the miss, and the tool variable
+# silently falls back to the bare name — a conversion that passes review, passes
+# the suite, and changes nothing.
+_td_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_td_dir" ] && [ "$_td_dir" != "/" ] && [ ! -f "$_td_dir/lib/tool-dispatch.sh" ]; do
+    _td_dir="$(dirname "$_td_dir")"
+done
+if [ -f "$_td_dir/lib/tool-dispatch.sh" ]; then
+    . "$_td_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+fi
 if command -v resolve_tool >/dev/null 2>&1; then
     OPENSSL="$(resolve_tool openssl || printf 'openssl')"
 else
