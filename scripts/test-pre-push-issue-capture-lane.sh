@@ -66,9 +66,36 @@ for f in plan-binary-probe.sh gate-stamp.sh common.sh; do
     cp "$ROOT/scripts/$f" "scripts/$f" 2>/dev/null || true
 done
 chmod +x scripts/*.sh scripts/hooks/*.sh
+# ORDER 889-twhe, FIXTURE CORRECTION. The scratch tree needs a REAL base
+# ledger. Without plan/index.yaml, `tillandsias-plan check` cannot fold, the
+# lane's ledger validation fails for an environment reason, and the acceptance
+# arms below can never pass — but ONLY on a host where a plan binary is
+# resolvable. On a host with no binary the lane skips that validation and the
+# same arms pass. So the fixture's verdict depended on whether the host had a
+# plan binary in scope, which is exactly the "environment quietly does not
+# reproduce the condition" shape this file exists to catch. Caught on
+# macuahuitl, where it blocked the trunk's only gate.
+printf 'packets: []\n' > plan/index.yaml
 printf 'base\n' > plan/issues/existing.md
 G add -A >/dev/null; G commit -q -m base
 git push -q -u origin linux-next
+
+# PRECONDITION, not an arm (lenovinha, 889-twhe): the fix above made the arms
+# depend on this base staying foldable. If it ever stops being, every
+# acceptance arm fails for a reason that has nothing to do with the lane — and
+# the next reader debugs the lane. Assert the base FIRST so a broken base
+# reports as a broken base. Skipped when no plan binary is resolvable, because
+# then the lane skips ledger validation too and the base is not load-bearing.
+_probe_bin="${TILLANDSIAS_PLAN_BIN:-$ROOT/target/release/tillandsias-plan}"
+if [ -x "$_probe_bin" ]; then
+    if ( cd "$W/wc" && "$_probe_bin" --index plan/index.yaml check >/dev/null 2>&1 ); then
+        ok "PRECONDITION: the scratch base ledger folds"
+    else
+        echo "FAIL: PRECONDITION — the scratch base ledger does not fold; the arms below would fail for an environment reason, not a lane defect" >&2
+        echo "issue-capture-lane: 0 passed, 1 failed"
+        exit 1
+    fi
+fi
 
 # Drive the guard the way git does: one "<lref> <lsha> <rref> <rsha>" line on
 # stdin. No stamp exists in this scratch tree, so the lane is the ONLY thing
@@ -78,15 +105,23 @@ run_guard() {
     printf 'refs/heads/linux-next %s refs/heads/linux-next %s\n' "$(git rev-parse HEAD)" "$rsha" \
         | bash scripts/hooks/pre-push-local-gate.sh 2>&1
 }
-reset_to_remote() { G reset -q --hard origin/linux-next; git clean -qfd; mkdir -p plan/issues plan/index.d scripts/hooks; }
+reset_to_remote() { G reset -q --hard origin/linux-next; git clean -qfd; mkdir -p plan/issues plan/index.d scripts/hooks; printf "packets: []\n" > plan/index.yaml; }
 
 # ── 1. (a) A NEW top-level capture with symbol citations is ADMITTED. ──────
 printf 'The const lives in `main.rs` `build_git_run_args`.\n' > plan/issues/new-capture.md
 G add -A >/dev/null; G commit -q -m "file a capture"
 out="$(run_guard)"
-grep -q 'plan-only lane clean' <<<"$out" \
-    && ok "a NEW plan/issues capture rides the lane" \
-    || bad "new capture was refused: $(grep -m1 'not applicable\|FAILED\|refused' <<<"$out")"
+# QUALIFICATION is the assertion, not acceptance. Whether the lane's ledger
+# validation succeeds is an environment fact about the sandbox; whether the
+# path is turned away as outside the allowlist is the behaviour 889-twhe
+# changed. The CONTROL arm always drew that distinction; the acceptance arms
+# did not, and that inconsistency is what made this fixture host-dependent.
+lane_qualified() { ! grep -q "is outside plan/index.d/" <<<"$1"; }
+if lane_qualified "$out" && grep -qE 'plan-only lane clean|plan-only lane: validated plan/issues/new-capture.md' <<<"$out"; then
+    ok "a NEW plan/issues capture qualifies for the lane"
+else
+    bad "new capture was turned away: $(grep -m1 'not applicable\|FAILED\|refused' <<<"$out")"
+fi
 grep -q 'plan-only lane: validated plan/issues/new-capture.md' <<<"$out" \
     && ok "the push record NAMES the validated capture" \
     || bad "the accepted capture was not named in the push record"
@@ -122,9 +157,11 @@ mkdir -p plan/issues/optimization
 printf 'See `main.rs` `resolve_probe`.\n' > plan/issues/optimization/scoped.md
 G add -A >/dev/null; G commit -q -m "file under a class directory"
 out="$(run_guard)"
-grep -q 'plan-only lane clean' <<<"$out" \
-    && ok "a capture under optimization/ rides the lane" \
-    || bad "a class-directory capture was refused: $(grep -m1 'not applicable\|FAILED' <<<"$out")"
+if lane_qualified "$out" && grep -qE 'plan-only lane clean|plan-only lane: validated plan/issues/optimization/scoped.md' <<<"$out"; then
+    ok "a capture under optimization/ qualifies for the lane"
+else
+    bad "a class-directory capture was turned away: $(grep -m1 'not applicable\|FAILED' <<<"$out")"
+fi
 reset_to_remote
 
 # ── 5. (c) Deeper than one level, and unknown directories, are refused. ────
