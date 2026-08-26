@@ -1,0 +1,112 @@
+packets:
+  - packet_id: gate-stamp-exec-bit-deadlocks-every-windows-push
+    order: 889-8tcb
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    title: the gate stamp's worktree exec-bit field cannot be computed identically on both sides of the WSL boundary, so no Windows host can push at all — and 887-bz88's own fixture is red at HEAD there for the same reason
+    deliverable: scripts/gate-stamp.sh exec-bit source + scripts/test-mode-only-regression-887-bz88.sh + scripts/with-wsl2-builder.sh env forwarding
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags:
+      - windows
+      - build
+      - hooks
+      - wsl
+      - fail-loud
+    estimated_hours: 3
+    context: |
+      MEASURED on yolanda 2026-08-25, blocking a release-prep push.
+
+      887-bz88 (b0d2b2b70) added the executable bit to the gate-stamp frame as
+      a WORKTREE test (`[[ -x "$absolute" ]]`, gate-stamp.sh:244, emitted at
+      :307). A worktree test assumes the filesystem can REPRESENT the bit.
+      Windows drvfs cannot: every file under /mnt/c reports executable.
+
+      That is fatal rather than coarse, because the stamp is a contract between
+      two processes that sit on OPPOSITE sides of that boundary on this host:
+      `./build.sh --check` dispatches into WSL and stamps the tree as drvfs
+      sees it; the pre-push hook runs in Git Bash and recomputes with real
+      per-file bits. Same tree, same moment:
+
+        Git Bash:   - README.md   x build.sh   - install-windows.ps1   - Cargo.toml
+        WSL /mnt/c: x README.md   x build.sh   x install-windows.ps1   x Cargo.toml
+
+      THE FAILURE IS A DEADLOCK, NOT A SLOW PATH. The two halves refuse each
+      other: the hook refuses the push (`stale:tree-changed-since-gate`) while
+      the gate refuses to re-run because ITS memo — computed on the WSL side —
+      says `ok:gate-fresh`. A green 287s gate is immediately followed by a
+      stale verdict, indefinitely.
+
+      887-bz88's comment predicted "every existing stamp goes stale once ...
+      self-healing, one re-run per host". On a POSIX host that holds. Here it
+      never heals: each re-run re-stamps from the wrong side.
+
+      TIMELINE: three clean pushes from this host earlier the same day
+      (ed0db6f15, 7dc4e423c, 40b5648e8); the first failure is the first push
+      after the merge carrying scripts/test-mode-only-regression-887-bz88.sh.
+
+      SECOND FINDING, and the one that should shape the fix: 887-bz88's OWN
+      FIXTURE IS RED AT CLEAN HEAD ON WINDOWS, for the same root cause. `chmod
+      -x` is a no-op on drvfs, so the fixture's own setup cannot happen:
+
+        FAIL: REGRESSION: the gate stamp is blind to st_mode - the 887-bz88 hole is open
+        FAIL: REGRESSION: a worktree-only mode regression passed the guard
+        FAIL: a violation must exit non-zero
+        FAIL: remedy must name chmod +x for a worktree-only regression
+        fail:mode-only-regression-fixture
+
+      So case 2's assertion ("chmod -x moves the gate stamp") is not merely
+      awkward on a core.fileMode=false worktree — it is UNRUNNABLE there, and
+      `litmus:mode-only-regression-gate` binds it. Any design that keeps a
+      worktree-sourced bit leaves this litmus permanently red on Windows.
+
+      THIRD FINDING, same bug at a second boundary: TILLANDSIAS_FORCE_CHECK=1 —
+      the documented escape hatch for exactly this situation — does not cross
+      into WSL. scripts/with-wsl2-builder.sh:231 exports only
+      TILLANDSIAS_SKIP_WSL2=1, while scripts/with-tillandsias-builder.sh:232-235
+      re-exports the whole TILLANDSIAS_* namespace and its comment names the
+      precedent verbatim ("on Silverblue, TILLANDSIAS_FORCE_CHECK=1 could not
+      bypass the gate memo"). The Windows dispatch never got the same
+      treatment, so the one lever that could break the deadlock is silently
+      inert. Setting WSLENV by hand does work, which is the proof.
+
+      DESIGN NOTE FROM A REJECTED ATTEMPT, recorded so nobody repeats it. A
+      capability PROBE (create a 0644 file in the repo, ask whether it reports
+      executable) is the obvious fix and it does not work, wherever it lives:
+      it answers honestly PER ENVIRONMENT — Git Bash on NTFS honours the chmod
+      and concludes "bits work", WSL on drvfs concludes "bits do not" — so the
+      two sides select different sources and diverge exactly as before.
+      Measured digests on one tree: 8ca8074b... (Git Bash) vs 83e63835... (WSL).
+      The test must be a property of the REPOSITORY, not of the asker.
+      `core.fileMode` is that property: it lives in .git/config, both sides read
+      the same value (verified `false` from Git Bash and from WSL on this
+      checkout), and it is git's own recorded answer to the question. A local
+      patch sourcing the bit from `git ls-files -s` when core.fileMode=false
+      made the two sides agree (68b6a93b... from both). It was NOT landed,
+      because it turns fixture case 2 red and that assertion is the author's to
+      change, not a second host's under time pressure.
+
+      The coordinator's stronger option is worth weighing in the same
+      conversation: derive the exec bit from the INDEX ALWAYS. It is
+      cross-platform consistent by construction, it still closes 887-bz88's
+      blind spot 2 (the `git add` that writes 100644 moves the index and
+      therefore the stamp), and blind spot 1 is already closed independently —
+      check-script-exec-bits.sh now reads the worktree as well as the index, so
+      a dropped exec bit is caught AT GATE TIME regardless of the stamp. The
+      cost is that case 2's assertion becomes "staging a mode change moves the
+      stamp", which is a weaker literal claim but a more honest one, since a
+      bare chmod on a filesystem that cannot represent modes is not an event.
+    verifiable_closure: |
+      scripts/gate-stamp.sh compute prints the SAME digest from Git Bash and
+      from inside WSL on one unchanged Windows worktree; a Windows host
+      completes a normal push with the hook enforcing (never --no-verify); and
+      scripts/test-mode-only-regression-887-bz88.sh passes on a
+      core.fileMode=false worktree instead of failing its own setup.
+    evidence:
+      - 'exec-bit divergence table, Git Bash vs WSL /mnt/c, same tree'
+      - 'green 287s gate immediately followed by stale:tree-changed-since-gate'
+      - 'fixture red at clean HEAD on windows: 4 FAIL lines, fail:mode-only-regression-fixture'
+      - 'probe-based fix diverges: 8ca8074b (git bash) vs 83e63835 (wsl)'
+      - 'core.fileMode-sourced fix converges: 68b6a93b from both sides'

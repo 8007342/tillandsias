@@ -918,6 +918,36 @@ pub fn reset_guest_once() -> i32 {
             return 1;
         }
         reset_crashloop_state();
+        // The wipe just invalidated the host's copy of THIS guest's vault
+        // identity. Clearing it is what makes the reset actually reset:
+        // left in place, the tray delivers the stale share into the fresh
+        // guest unconditionally and GitHub login is permanently broken
+        // (803-49re). Non-fatal — a reprovisioned guest is still better
+        // than an aborted reset, and the operator can clear it by hand.
+        match crate::installation_uuid::clear_guest_vault_credentials() {
+            Ok(cleared) if cleared.is_empty() => {
+                println!("[reset-guest] no host-side vault credentials to clear");
+            }
+            Ok(cleared) => {
+                println!(
+                    "[reset-guest] cleared host-side vault credentials: {} \
+                     (installation UUID preserved)",
+                    cleared.join(", ")
+                );
+                tracing::info!(?cleared, "reset-guest cleared host vault credentials");
+            }
+            Err(err) => {
+                eprintln!(
+                    "[reset-guest] WARNING: could not clear host-side vault credentials: {err}"
+                );
+                eprintln!(
+                    "[reset-guest] GitHub login may fail against the fresh guest. \
+                     Clear vault-shamir-share-v1 and vault-root-token-v1 by hand \
+                     (keep tillandsias-vm-uuid) and relaunch the tray."
+                );
+                tracing::warn!(%err, "reset-guest could not clear host vault credentials");
+            }
+        }
         println!("[reset-guest] guest wiped \u{2014} reprovisioning from scratch\u{2026}");
         match lifecycle
             .provision_via_recipe(std::sync::Arc::new(ConsoleProgress))

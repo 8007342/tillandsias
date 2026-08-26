@@ -28,6 +28,19 @@ use windows::core::{PCWSTR, PWSTR};
 /// shares this constant for cross-platform tests.
 pub const TARGET_NAME: &str = "tillandsias-vm-uuid";
 
+/// Credential Manager target holding the host's copy of the guest Vault's
+/// Shamir unseal share.
+pub const VAULT_SHARE_TARGET: &str = "vault-shamir-share-v1";
+
+/// Credential Manager target holding the host's copy of the guest Vault's
+/// root token.
+pub const VAULT_ROOT_TOKEN_TARGET: &str = "vault-root-token-v1";
+
+/// The two credentials that describe a SPECIFIC guest Vault's identity, and
+/// therefore the two that a guest wipe invalidates. `TARGET_NAME` is
+/// deliberately NOT here — see [`clear_guest_vault_credentials`].
+pub const GUEST_VAULT_TARGETS: [&str; 2] = [VAULT_SHARE_TARGET, VAULT_ROOT_TOKEN_TARGET];
+
 /// `HRESULT` for `ERROR_NOT_FOUND` (1168) — returned by Credential Manager
 /// reads/deletes when no credential is registered under the target.
 const HRESULT_ERROR_NOT_FOUND: u32 = 0x8007_0490;
@@ -150,6 +163,65 @@ pub fn delete_installation_uuid_for(target: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Clear the host's copy of the guest Vault's identity — the Shamir unseal
+/// share and the root token — from Credential Manager. Returns the targets
+/// that were actually present and removed, so a caller can report what it
+/// did rather than claiming a clear it did not perform.
+///
+/// **Every path that wipes the guest must call this** (`--reset-guest`, the
+/// installer's `-Purge`, the destructive-reset step of the e2e runbooks).
+/// The two credentials describe a specific guest Vault's identity, so a wipe
+/// invalidates them by construction — but nothing in the product deleted
+/// them, and `deliver_credentials_and_check_handover` sends them into the
+/// fresh guest unconditionally, before `GetVaultHandover` reads the guest's
+/// real values back. The stale share then loses to the guest's own unseal
+/// secret with "cipher: message authentication failed", the self-heal
+/// aborts, and GitHub login is permanently broken — so the product's own
+/// advertised reset bricked its own login (803-49re, operator-reported on a
+/// freshly installed v0.4.260817.1 whose guest had been re-provisioned 40
+/// minutes earlier).
+///
+/// Deleting is the whole fix, and it works because absence is already
+/// handled everywhere: [`read_credential_string`] returns `Ok(None)` on
+/// NOT_FOUND, so the tray delivers `None` and `GetVaultHandover`
+/// re-populates Credential Manager from the guest's real state. That is
+/// exactly the manual repair the operator performed and verified on
+/// 2026-08-17.
+///
+/// `tillandsias-vm-uuid` is deliberately PRESERVED. It is the installation
+/// anchor the in-VM Vault derives its master key from; it identifies the
+/// INSTALL, not the guest, and clearing it would rotate the installation
+/// identity on every reset.
+///
+/// Do NOT repair these entries with `cmdkey`: [`read_credential_string`]
+/// parses the blob as UTF-8 and `cmdkey` stores UTF-16, so a hand-written
+/// credential fails with "credential blob is not UTF-8". Deleting and
+/// letting the handover re-populate is the only correct manual path.
+///
+/// @trace order:803-49re
+pub fn clear_guest_vault_credentials() -> Result<Vec<&'static str>, String> {
+    clear_credentials(&GUEST_VAULT_TARGETS)
+}
+
+/// The body of [`clear_guest_vault_credentials`], parameterised over the
+/// targets so a test can exercise it against unique throwaway targets. A test
+/// must NEVER call the public wrapper: its targets are the operator's real
+/// credentials, and deleting those on a developer's machine breaks their
+/// running install.
+fn clear_credentials(targets: &[&'static str]) -> Result<Vec<&'static str>, String> {
+    let mut cleared = Vec::new();
+    for target in targets {
+        // Read first so the return value reports what was actually there;
+        // the delete itself is idempotent on NOT_FOUND either way.
+        let was_present = read_credential_string(target)?.is_some();
+        delete_installation_uuid_for(target)?;
+        if was_present {
+            cleared.push(*target);
+        }
+    }
+    Ok(cleared)
+}
+
 /// Connects to the in-VM agent, delivers the host Credential Manager-backed `vault-shamir-share-v1`
 /// and `tillandsias-vm-uuid` on connection startup, and retrieves any pending handover credentials.
 pub async fn deliver_credentials_and_check_handover(
@@ -238,6 +310,74 @@ mod tests {
         fn drop(&mut self) {
             let _ = delete_installation_uuid_for(&self.0);
         }
+    }
+
+    /// 803-49re, the half that decides the bug: a host-side share that
+    /// survives a guest wipe is delivered into the fresh guest unconditionally
+    /// and permanently breaks GitHub login. The wipe must clear it.
+    ///
+    /// Exercised against unique throwaway targets — never the public
+    /// [`clear_guest_vault_credentials`], whose targets are the operator's
+    /// real credentials.
+    ///
+    /// Red against the pre-fix product, where nothing outside tests ever
+    /// deleted these two credentials.
+    ///
+    /// @trace order:803-49re
+    #[test]
+    fn a_guest_wipe_clears_the_host_side_vault_credentials() {
+        let run = Uuid::new_v4();
+        let share: &'static str =
+            Box::leak(format!("vault-shamir-share-v1-test-{run}").into_boxed_str());
+        let token: &'static str =
+            Box::leak(format!("vault-root-token-v1-test-{run}").into_boxed_str());
+        let _c1 = CredCleanup(share.to_string());
+        let _c2 = CredCleanup(token.to_string());
+
+        // The state a guest wipe leaves behind today: the host still holds
+        // the dead guest's vault identity.
+        write_credential_string(share, "stale-share-from-the-wiped-guest").unwrap();
+        write_credential_string(token, "stale-root-token-from-the-wiped-guest").unwrap();
+
+        let cleared = clear_credentials(&[share, token]).unwrap();
+
+        assert_eq!(
+            cleared,
+            vec![share, token],
+            "both present credentials must be reported as cleared"
+        );
+        // This is the property the delivery path depends on: read returns
+        // None, so the tray delivers None and GetVaultHandover re-populates
+        // from the guest's own state.
+        assert_eq!(read_credential_string(share).unwrap(), None);
+        assert_eq!(read_credential_string(token).unwrap(), None);
+
+        // Idempotent: a second wipe is not an error, and reports nothing
+        // cleared because nothing was there.
+        assert!(
+            clear_credentials(&[share, token]).unwrap().is_empty(),
+            "clearing an already-clear store must report nothing cleared"
+        );
+    }
+
+    /// The installation UUID is NOT a guest credential. It anchors the
+    /// install and the in-VM Vault derives its master key from it, so a
+    /// reset that took it would rotate the installation identity every time.
+    /// The operator's 2026-08-17 manual repair preserved it deliberately;
+    /// this pins that choice against a future "clear everything" edit.
+    ///
+    /// @trace order:803-49re
+    #[test]
+    fn clearing_guest_vault_credentials_never_touches_the_installation_uuid() {
+        assert!(
+            !GUEST_VAULT_TARGETS.contains(&TARGET_NAME),
+            "tillandsias-vm-uuid must never be in the guest-wipe target list"
+        );
+        assert_eq!(
+            GUEST_VAULT_TARGETS,
+            [VAULT_SHARE_TARGET, VAULT_ROOT_TOKEN_TARGET],
+            "the wipe clears exactly the two guest-vault credentials"
+        );
     }
 
     /// Round-trip proof against the *real* Windows Credential Manager: a value

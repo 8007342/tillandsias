@@ -24,6 +24,18 @@ use uuid::Uuid;
 /// composes a file path under `$TMPDIR/<TARGET_NAME>`.
 pub const TARGET_NAME: &str = "tillandsias-vm-uuid";
 
+/// Stub store key holding the host's copy of the guest Vault's Shamir
+/// unseal share. Mirrors the Windows Credential Manager target.
+pub const VAULT_SHARE_TARGET: &str = "vault-shamir-share-v1";
+
+/// Stub store key holding the host's copy of the guest Vault's root token.
+/// Mirrors the Windows Credential Manager target.
+pub const VAULT_ROOT_TOKEN_TARGET: &str = "vault-root-token-v1";
+
+/// The two credentials a guest wipe invalidates. `TARGET_NAME` is
+/// deliberately NOT here — see [`clear_guest_vault_credentials`].
+pub const GUEST_VAULT_TARGETS: [&str; 2] = [VAULT_SHARE_TARGET, VAULT_ROOT_TOKEN_TARGET];
+
 fn stub_path_for(target: &str) -> PathBuf {
     let dir = std::env::var_os("TILLANDSIAS_TRAY_TEST_DIR")
         .map(PathBuf::from)
@@ -85,6 +97,35 @@ pub fn delete_installation_uuid_for(target: &str) -> Result<(), String> {
         std::fs::remove_file(&path).map_err(|e| format!("remove {}: {e}", path.display()))?;
     }
     Ok(())
+}
+
+/// Clear the host's copy of the guest Vault's identity — the Shamir unseal
+/// share and the root token — from the stub store, returning the targets
+/// that were actually present and removed.
+///
+/// Mirrors the Windows implementation, including the part that matters most:
+/// `tillandsias-vm-uuid` is deliberately PRESERVED. It anchors the
+/// installation, not the guest. See the Windows module for the full
+/// 803-49re rationale.
+///
+/// @trace order:803-49re
+pub fn clear_guest_vault_credentials() -> Result<Vec<&'static str>, String> {
+    clear_credentials(&GUEST_VAULT_TARGETS)
+}
+
+/// The body of [`clear_guest_vault_credentials`], parameterised over the
+/// targets so a test can exercise it against unique throwaway targets.
+/// Mirrors the Windows implementation.
+pub fn clear_credentials(targets: &[&'static str]) -> Result<Vec<&'static str>, String> {
+    let mut cleared = Vec::new();
+    for target in targets {
+        let was_present = read_credential_string(target)?.is_some();
+        delete_installation_uuid_for(target)?;
+        if was_present {
+            cleared.push(*target);
+        }
+    }
+    Ok(cleared)
 }
 
 /// Connects to the in-VM agent, delivers the host Credential Manager-backed `vault-shamir-share-v1`
