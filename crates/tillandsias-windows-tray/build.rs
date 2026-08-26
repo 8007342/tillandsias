@@ -79,19 +79,26 @@ fn main() {
     // its commit (observed 2026-07-09: rebuild at 8797003f still reported
     // a68c9825), which would also make the e2e freshness gate (embedded SHA
     // == HEAD) spuriously fail on a genuinely fresh binary.
-    println!("cargo:rerun-if-changed=../../.git/HEAD");
-    let git_dir = manifest_dir_path.join("../../.git");
-    if let Ok(head) = std::fs::read_to_string(git_dir.join("HEAD"))
-        && let Some(ref_path) = head.trim().strip_prefix("ref: ")
-    {
-        println!("cargo:rerun-if-changed=../../.git/{ref_path}");
-    }
-    // Refs can also live packed (git gc/pack-refs); only track the file when
-    // it exists — cargo re-runs unconditionally for a tracked-but-missing path.
-    if git_dir.join("packed-refs").exists() {
-        println!("cargo:rerun-if-changed=../../.git/packed-refs");
-    }
+    // 765-evbt: when BUILD_COMMIT_SHA_OVERRIDE is set, suppress .git rerun
+    // directives — the SHA is fixed by the caller and git activity must not
+    // bust the fingerprint. The env-changed directive is placed first so
+    // cargo tracks the override for the re-run decision.
     println!("cargo:rerun-if-env-changed=BUILD_COMMIT_SHA_OVERRIDE");
+    let override_mode = std::env::var("BUILD_COMMIT_SHA_OVERRIDE").is_ok();
+    if !override_mode {
+        println!("cargo:rerun-if-changed=../../.git/HEAD");
+        let git_dir = manifest_dir_path.join("../../.git");
+        if let Ok(head) = std::fs::read_to_string(git_dir.join("HEAD"))
+            && let Some(ref_path) = head.trim().strip_prefix("ref: ")
+        {
+            println!("cargo:rerun-if-changed=../../.git/{ref_path}");
+        }
+        // Refs can also live packed (git gc/pack-refs); only track the file when
+        // it exists — cargo re-runs unconditionally for a tracked-but-missing path.
+        if git_dir.join("packed-refs").exists() {
+            println!("cargo:rerun-if-changed=../../.git/packed-refs");
+        }
+    }
     let build_commit = std::env::var("BUILD_COMMIT_SHA_OVERRIDE").unwrap_or_else(|_| {
         std::process::Command::new("git")
             .args(["rev-parse", "--short", "HEAD"])
