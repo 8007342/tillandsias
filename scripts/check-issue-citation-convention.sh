@@ -58,7 +58,12 @@ base_ref="${TILLANDSIAS_ISSUE_CITATION_BASE:-origin/linux-next}"
 EXT_RE='(rs|sh|toml|conf|py|js|ts|c|h|cpp|go)'
 CITE_RE="[A-Za-z0-9_./-]+\.${EXT_RE}:[0-9]+"
 
-if [ ! -d "$ISSUE_DIR" ]; then
+# Order 889-twhe: when a HEAD ref is named, the REF decides what exists, not the
+# worktree — and ISSUE_DIR may legitimately be a single file pathspec, so the
+# caller can scope a verdict to one document. The worktree existence test below
+# is therefore skipped in that mode; without a HEAD ref it is unchanged, and an
+# absent directory is still a clean zero rather than an error.
+if [ -z "${TILLANDSIAS_ISSUE_CITATION_HEAD:-}" ] && [ ! -e "$ISSUE_DIR" ]; then
     echo "ok:issue-citation-convention:0 checked"
     exit 0
 fi
@@ -73,7 +78,31 @@ fi
 
 # Added lines only (`+` in the unified diff, excluding the +++ header), across
 # tracked changes and wholly-untracked new documents alike.
+# Order 889-twhe: an optional HEAD ref, so a caller can judge the bytes a PUSH
+# will deliver rather than the bytes in the worktree. The pre-push plan-only
+# lane needs exactly that — it vouches for what the remote receives, and the
+# worktree can differ from the pushed commit (a rebase mid-cycle, a later edit).
+# Unset, the behaviour is the pre-889 one: diff the base against the worktree
+# and also read wholly-untracked new documents. SET, the untracked scan is
+# skipped deliberately: a ref has no untracked files, and reading the worktree's
+# would judge bytes that are not in the push.
+head_ref="${TILLANDSIAS_ISSUE_CITATION_HEAD:-}"
+if [ -n "$head_ref" ] && ! git rev-parse --verify "$head_ref" >/dev/null 2>&1; then
+    # Fail CLOSED here, unlike the base-ref case above. An unavailable base is
+    # a fresh-clone unknown; an unavailable HEAD was named explicitly by a
+    # caller that believes it is validating something, and silently checking
+    # nothing would hand it a pass it did not earn.
+    echo "  error: head ref '$head_ref' unavailable — refusing to report a pass" >&2
+    echo "violation:issue-citation-head-unavailable:1"
+    exit 1
+fi
+
 added_lines() {
+    if [ -n "$head_ref" ]; then
+        git diff --unified=0 "$base_ref" "$head_ref" -- "$ISSUE_DIR" 2>/dev/null \
+            | grep -E '^\+' | grep -Ev '^\+\+\+' | sed 's/^+//'
+        return
+    fi
     git diff --unified=0 "$base_ref" -- "$ISSUE_DIR" 2>/dev/null \
         | grep -E '^\+' | grep -Ev '^\+\+\+' | sed 's/^+//'
     # A brand-new document is usually untracked at the moment it is written.

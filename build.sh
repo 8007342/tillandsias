@@ -2144,6 +2144,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Issue-citation convention check passed"
 
+    # Order 889-twhe. The plan-only fast lane admits NEW plan/issues captures,
+    # which WIDENS what may bypass this gate — so the fixture proving each
+    # boundary of that admission runs INSIDE the gate. Half a second, and a
+    # negative control nothing executes cannot protect the hole it names.
+    _step "Checking the issue-capture fast lane keeps its boundaries (889-twhe)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-pre-push-issue-capture-lane.sh" 2>&1; then
+        _error "the plan-only lane's plan/issues admission lost a boundary (889-twhe) — see the verdict line above"
+        exit 1
+    fi
+    _info "Issue-capture lane fixture passed"
+
     # Order 251 criterion LM-04. `plan/long-running.md` is declared a filtered
     # view of the ledger's active multi_cycle packets and nothing enforced it.
     # It drifted in July (caught by a human verifier, repaired by hand, bought

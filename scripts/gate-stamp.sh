@@ -220,26 +220,32 @@ compute() {
     # than silently claiming that an unmeasured tree was validated.
     # PROCESS COUNT IS THE BUDGET (order 675-dkif, 2026-08-10). The original loop
     # spawned sha256sum once (twice, with the $() subshell) PER FILE, which is
-    # precisely the "multi-minute hook gets --no-verify'd" failure this stamp
-    # exists to avoid.
+    # the "multi-minute hook gets --no-verify'd" failure this stamp exists to
+    # avoid. The batching below is still the right call — but the NUMBER that
+    # justified it was a ghost, and it is corrected here.
     #
-    # SPAWN FLOORS, MEASURED 2026-08-26 (order 895-bkrn), 1000 iterations of
-    # `/bin/true` per lane — this replaces an earlier "~100-150ms on a
-    # Windows/MSYS host" figure that nobody had re-measured and that was too
-    # high by 6-9x:
+    # MEASURED by yolanda on yolanda (Windows), 2026-08-26, 1000 iterations:
     #
-    #   Git Bash / MSYS   17.58 ms      (PE32+ coreutils)
-    #   WSL2 guest         0.69 ms      (ELF coreutils)
-    #   bare-metal Linux   0.32 ms      (yoga, ELF)
-    #   macOS              1.00 ms      (macbook, Mach-O)
+    #   Git Bash     /bin/true 17.58 ms    sha256sum 18.51 ms
+    #   WSL          /bin/true  0.69 ms    sha256sum  1.33 ms
+    #   yoga native  /bin/true  0.32 ms    sha256sum  0.80 ms
     #
-    # The batching below is still right — 17.58 ms x ~4000 files is ~70s in a
-    # pre-push hook, and that alone justifies it. But note WHERE the cost is:
-    # the Windows GATE re-execs into WSL2, where spawning is near-native, so it
-    # is the Git-Bash-side hook that pays the MSYS floor, not the gate. Anyone
-    # re-deriving this should re-measure rather than inherit these numbers too.
+    # This comment used to claim "~100-150 ms per spawn on a Windows/MSYS host",
+    # inherited and never measured. The real MSYS floor is 17.6 ms — 6-9x lower
+    # — and the figure was stale in the direction that made it scarier, which is
+    # the direction that quietly justifies whatever it is cited for.
     #
-    # Classification uses bash builtins (no
+    # It was also aimed at the wrong process. `./build.sh --check` runs INSIDE
+    # WSL, where a spawn costs 0.69 ms — 2.2x yoga's native floor, not 55x — so
+    # Windows spawn cost was never what made the gate slow there. The 9P/drvfs
+    # filesystem bridge is (macbook measured a no-op cargo probe at 11.4 s over
+    # /mnt/c against ~165 ms on two native hosts).
+    #
+    # WHAT SURVIVES, and it is why the batching stays: the pre-push HOOK runs in
+    # Git Bash, at 17.6 ms a spawn. Thousands of per-file spawns there is still
+    # tens of seconds of pure overhead on every push. A handful of batched
+    # invocations beats that comfortably. The design was right; only its
+    # arithmetic was fiction. Classification uses bash builtins (no
     # forks), regular files are batch-hashed by xargs in a handful of
     # sha256sum invocations, and only symlinks (rare) pay a per-entry spawn.
     # The emitted frames were BYTE-IDENTICAL to the per-file implementation,

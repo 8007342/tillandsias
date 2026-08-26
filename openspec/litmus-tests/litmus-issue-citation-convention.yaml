@@ -31,7 +31,7 @@ preconditions:
 
 critical_path:
   - step: "Req: the gate exists, is executable, and emits its pinned verdict grammar"
-    command: "test -x scripts/check-issue-citation-convention.sh && scripts/check-issue-citation-convention.sh | grep -qE '^(ok:issue-citation-convention:[0-9]+ checked|violation:issue-citation-line-numbers:[0-9]+)$' && echo 'ok: grammar pinned'"
+    command: "test -x scripts/check-issue-citation-convention.sh && scripts/check-issue-citation-convention.sh | grep -qE '^(ok:issue-citation-convention:[0-9]+ checked|violation:issue-citation-line-numbers:[0-9]+|violation:issue-citation-head-unavailable:[0-9]+)$' && echo 'ok: grammar pinned'"
     expected_behavior: "ok: grammar pinned"
     timeout_ms: 30000
 
@@ -67,4 +67,21 @@ critical_path:
     # disabled the same day (699-dycj).
     command: "d=$(mktemp -d); mkdir -p \"$d/plan/issues\" \"$d/scripts\"; cp scripts/check-issue-citation-convention.sh \"$d/scripts/\"; ( cd \"$d\" && git init -q . && printf 'Old: `main.rs:1136-1145`.\\n' > plan/issues/old.md && git add -A && git -c user.email=t@t -c user.name=t commit -q -m base && git branch -q -f testbase && out=$(TILLANDSIAS_ISSUE_CITATION_BASE=testbase bash scripts/check-issue-citation-convention.sh 2>/dev/null); rc=$?; [ \"$rc\" -eq 0 ] && echo 'ok: pre-existing citations are not judged' ); rm -rf \"$d\""
     expected_behavior: "ok: pre-existing citations are not judged"
+    timeout_ms: 30000
+  - step: "HEAD REF: a named-but-unavailable HEAD fails CLOSED, it does not report a pass"
+    # Order 889-twhe. The pre-push plan-only lane judges the bytes a PUSH will
+    # deliver, via TILLANDSIAS_ISSUE_CITATION_HEAD. An absent BASE is a
+    # fresh-clone unknown and stays a clean zero; an absent HEAD was named by a
+    # caller that believes it is validating something, and a silent pass there
+    # would hand the lane a verdict it did not earn.
+    command: "d=$(mktemp -d); mkdir -p \"$d/plan/issues\" \"$d/scripts\"; cp scripts/check-issue-citation-convention.sh \"$d/scripts/\"; ( cd \"$d\" && git init -q . && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m base && git branch -q -f testbase && out=$(TILLANDSIAS_ISSUE_CITATION_BASE=testbase TILLANDSIAS_ISSUE_CITATION_HEAD=nosuchref bash scripts/check-issue-citation-convention.sh 2>/dev/null); rc=$?; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -qE '^violation:issue-citation-head-unavailable:[0-9]+$' && echo 'ok: unavailable head fails closed' ); rm -rf \"$d\""
+    expected_behavior: "ok: unavailable head fails closed"
+    timeout_ms: 30000
+
+  - step: "HEAD REF: a citation added ONLY in the worktree is not judged when a HEAD ref is named"
+    # The lane vouches for pushed bytes, so a later worktree edit must not
+    # change its verdict — and must not be able to sneak past it either, since
+    # those bytes are not in the push.
+    command: "d=$(mktemp -d); mkdir -p \"$d/plan/issues\" \"$d/scripts\"; cp scripts/check-issue-citation-convention.sh \"$d/scripts/\"; ( cd \"$d\" && git init -q . && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m base && git branch -q -f testbase && printf 'Clean: `main.rs` `resolve_probe`.\\n' > plan/issues/new.md && git add -A && git -c user.email=t@t -c user.name=t commit -q -m pushed && git rev-parse HEAD > /tmp/.head.$$ && printf 'Dirty: `main.rs:99`.\\n' >> plan/issues/new.md && out=$(TILLANDSIAS_ISSUE_CITATION_BASE=testbase TILLANDSIAS_ISSUE_CITATION_HEAD=$(cat /tmp/.head.$$) bash scripts/check-issue-citation-convention.sh 2>/dev/null); rc=$?; rm -f /tmp/.head.$$; [ \"$rc\" -eq 0 ] && echo 'ok: head ref judges pushed bytes, not the worktree' ); rm -rf \"$d\""
+    expected_behavior: "ok: head ref judges pushed bytes, not the worktree"
     timeout_ms: 30000
