@@ -29,30 +29,31 @@
 # bare invocation, a read-only tree), so a forge or an out-of-repo call keeps
 # working exactly as before.
 #
-# NOT `target/metrics/`, which this shipped as and which OUR OWN MAINTENANCE
-# DESTROYS. `check-build-cache-sweep.sh` fires at 40 GiB or a 14-day marker, and
-# both Start-Of-Day maintenance and Finalization 9c then run `cargo clean` —
-# which removes the target directory wholesale. Measured in a throwaway crate
-# rather than assumed:
+# NOT `target/`, AND THIS IS LOAD-BEARING (macuahuitl, 2026-08-26). `target/`
+# was the first choice and it is wrong: daily maintenance runs `cargo clean`
+# (`check-build-cache-sweep.sh` fires above 40 GiB or a 14-day-old marker, from
+# Finalization 9c and Start-Of-Day), and `cargo clean` removes the target
+# directory WHOLESALE — taking `target/metrics/` with it. Measured in a
+# throwaway crate: `target/metrics` 1 -> 0 across a clean, `.cache/metrics`
+# 1 -> 1. And it is not hypothetical: that host's `target/` went 24 GiB -> 31
+# GiB in a single cycle against a 40 GiB threshold.
 #
-#     before: target/metrics=1  .cache/metrics=1
-#     cargo clean
-#     after:  target/metrics=0  .cache/metrics=1
+# The failure would have been near-undetectable, which is why it is pinned:
+# a routine GC silently resets every rolling series, and the reset looks
+# EXACTLY like the documented one-time migration cost below. Someone would see
+# `source=absent` months later, remember the migration note, and shrug at a
+# sweep that had just eaten the history.
 #
-# Not hypothetical: macuahuitl's `target/` went 24 GiB -> 31 GiB inside ONE
-# cycle of gate runs, against that 40 GiB threshold.
-#
-# The cost is worse than a deleted file. `flow:` reports a ROLLING average whose
-# value IS its length, and a reset on routine GC is INDISTINGUISHABLE from the
-# documented one-time migration below — so a reader months from now sees
-# `source=absent`, remembers the migration note, and shrugs at a sweep that just
-# ate the series.
+# A repo-relative path also fixes something `/tmp` never could: two worktrees
+# on one host share `/tmp` and collide there, and do not collide here.
 #
 # The default deliberately does NOT vary by platform, though the bug it fixes is
 # Windows-only. A path that differs by lane is the shape that produced three
 # defects in eight hours on 2026-08-26 (`ps -o ppid=` absent on MSYS, GNU-only
 # `du -sb`, GNU-only `\S`), and it would mean the next person debugging metrics
-# must first work out which lane they are on.
+# must first work out which lane they are on. It also kept 902-j49y findable:
+# that defect surfaced because a log reset on a path EVERY host shares, and a
+# Windows-only path would have hidden it from everyone else.
 #
 # An explicit `TILLANDSIAS_*_LOG` env var always wins — every fixture that names
 # its own log keeps working untouched.

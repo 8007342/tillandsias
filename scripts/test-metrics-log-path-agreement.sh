@@ -42,34 +42,17 @@ fi
 
 # ── arm 2: inside a checkout the default is repo-relative, not /tmp ───────────
 case "$probe_path" in
-    "$ROOT/"*) ok "in-checkout default is repo-relative: ${probe_path#"$ROOT"/}" ;;
+    "$ROOT/.cache/metrics/"*) ok "in-checkout default is repo-relative: ${probe_path#"$ROOT"/}" ;;
     /tmp/*) bad "still defaulting to /tmp inside a checkout — the boundary split is back" ;;
     *) bad "unexpected default path: $probe_path" ;;
 esac
 
-# ── arm 2b: and it must NOT live under target/, which our own GC destroys ─────
-# This arm asserts a PROPERTY, not a literal path, deliberately: arm 2 used to
-# pin "$ROOT/target/metrics/" and would have gone green on a location that our
-# own daily maintenance deletes.
-#
-# `check-build-cache-sweep.sh` fires at 40 GiB or a 14-day marker, and both
-# Start-Of-Day maintenance and Finalization 9c then run `cargo clean`, which
-# removes the target directory wholesale. Measured in a throwaway crate:
-#   before: target/metrics=1  .cache/metrics=1 ; cargo clean ;
-#   after:  target/metrics=0  .cache/metrics=1
-# And macuahuitl's target/ went 24 -> 31 GiB inside one cycle of gate runs.
-#
-# Why it matters more than a deleted file: `flow:` is a ROLLING average whose
-# value IS its length, and a reset on routine GC is indistinguishable from the
-# documented one-time /tmp migration — so the loss reads as expected.
-case "$probe_path" in
-    "$ROOT/target/"*)
-        bad "default lives under target/, which \`cargo clean\` removes — a routine build-cache sweep would silently reset every rolling metric: $probe_path" ;;
-    *)
-        ok "default is outside target/, so the build-cache sweep cannot eat the series" ;;
-esac
+# NOTE: the "must not be under target/" assertion lives at ARM 7, not here.
+# Two hosts wrote it independently within the same hour — see arm 7's header for
+# the measurement. One copy is enough; a duplicated arm inflates the pass count
+# without adding coverage.
 
-# ── arm 2c: whatever the location, git must ignore it ────────────────────────
+# ── arm 2b: whatever the location, git must ignore it ────────────────────────
 # Repo-relative machine state must never become project content.
 if git -C "$ROOT" check-ignore -q "$probe_path" 2>/dev/null; then
     ok "the default path is gitignored (machine state, not project content)"
@@ -146,6 +129,21 @@ if [ "$resolved_none" = "unknown" ]; then
 else
     bad "expected unknown with no source available, got '$resolved_none'"
 fi
+
+# ── arm 7: the log must survive `cargo clean` ────────────────────────────────
+# `target/` was the first choice and it is wrong: daily maintenance runs
+# `cargo clean`, which removes the target directory WHOLESALE and would take the
+# metrics with it. Measured by macuahuitl in a throwaway crate — target/metrics
+# 1 -> 0 across a clean, .cache/metrics 1 -> 1 — on a host whose target/ grew
+# 24 -> 31 GiB in one cycle against a 40 GiB sweep threshold.
+#
+# Pinned because the failure is near-undetectable: a routine GC silently resets
+# every rolling series, and the reset looks exactly like the documented one-time
+# migration. This arm is what stops someone moving it back into target/.
+case "$probe_path" in
+    */target/*) bad "metrics log is under target/ — cargo clean will delete it (see macuahuitl 2026-08-26)" ;;
+    *) ok "metrics log is outside target/, so daily-maintenance cargo clean cannot eat it" ;;
+esac
 
 printf 'metrics-log-path-agreement: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1
