@@ -235,13 +235,31 @@ multi_host_development:
         that nothing will ever reap. "Push freely" is a licence about
         FREQUENCY and CONFIDENCE, not about namespace.
     ledger_rule: >
-      Lane branches are code-only for shared ledger state: plan/index.yaml,
-      plan.yaml, plan/loop_status.md, and methodology/** ride integration
-      branches directly (claims land on the base ref mid-cycle, recording
-      lane name + tip SHA). Lanes MAY add new append-only files under
-      plan/issues/. Mechanical enforcement is rung 4; until then this is
-      binding convention. Rationale: every recorded order-number collision
-      came from delayed ledger landing (462/464, 477/479, 478-479/486-487).
+      Lane branches are code-only for shared ledger state: the COMPACTED BASE
+      plan/index.yaml, plus plan.yaml, plan/loop_status.md, and methodology/**
+      ride integration branches directly (claims land on the base ref
+      mid-cycle, recording lane name + tip SHA). Lanes MAY add new append-only
+      files under plan/issues/, and MAY carry append-only fragments under
+      plan/index.d/ and plan/loop_status.d/ (order 863-iicc criterion 2,
+      ratified 2026-08-26). Those fragments are host+timestamp-named and
+      cannot textually conflict; the concern that motivates this rule is an
+      ORDER-TOKEN collision, and a stale base shifts only the token PREFIX,
+      never the token. A shared prefix is normal and permanent by design.
+      Mechanical enforcement is rung 4; until then this is binding convention.
+      Rationale, and its LIMIT: every order-number collision this rule cites
+      (462/464, 477/479, 478-479/486-487, and the 2026-07-31 pair at 560-562
+      and 568-570) is a BARE numeric token. Bare `order: N` tokens run to a
+      maximum of 578 in the committed ledger; suffixed `order: N-xxxx` tokens
+      begin at 583. All of them therefore predate the suffix entirely — they
+      were real collisions of a token format that no longer exists. Measured
+      on two hosts, ten mints, two ledger states: calmecacpilli 907 at HEAD
+      versus 903 from a hidden-fragment base, macuahuitl 908 versus 903, and
+      ZERO suffix collisions including the four drawn from identical stale
+      input. The prefix window is real and its width varies with base drift;
+      the token is suffix-disambiguated and packet_id remains the identity.
+      This admits fragments ONLY, for the suffixed-token era, and says nothing
+      about whether lanes are sanctioned (criterion 1), the missing reaper
+      (criterion 5), or the green-exit command.
     pre_push_gate_amendment: >
       pull_merge_cadence.pre_push_gate.applies_to EXCLUDES agent/* and
       salvage/* refs (mid-cycle lane checkpoints need no trunk merge). The
