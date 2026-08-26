@@ -159,6 +159,47 @@ Corollaries the fleet has measured:
   written one cycle was placed before the branch merge and silently reported
   "no overlap" because it read a stale ledger (903-8wsa).
 
+## The portable rule: a negative result is a fact about your query
+
+**When a negative result would be surprising, enumerate rather than query — a
+query can only fail the way you spelled it.**
+
+It covers three instances across three subsystems, which none of the
+face-specific framings did:
+
+| the query | how it was spelled wrong |
+| --- | --- |
+| `cmdkey /list \| grep "tillandsias\|vault-shamir"` | pattern could not match `vault-root-token-v1`, its own target |
+| `ls images/default/cheatsheets/<name>.md` | path constructed from a sentence, not from the tree (the mirror keeps the subdirectory) |
+| `ps -o ppid= -p $$` | spelled in a dialect MSYS does not implement; `2>/dev/null` ate the error |
+
+Each returned a clean, confident, wrong negative. **In all three the fix is the
+same move: stop asking, and list.**
+
+### The limit, and the half that applies when enumeration cannot
+
+**Enumeration is only available when the space is small and local** (yolanda,
+who supplied this limit against their own generalisation). You can `ls` a
+directory and `cmdkey /list` a credential store. You cannot enumerate *"every
+way this host reports a parent pid"* — that space has no listing.
+
+So the rule has two halves, and the second is what you reach for when the first
+is unavailable:
+
+1. **When the space is enumerable, enumerate.** A negative from a query is a
+   fact about the query, not about the world.
+2. **When it is not, make the probe report "I CANNOT ANSWER" distinctly from
+   "no".** This is what `cycle-checkout-lock.sh ppid-probe` and its `return 2`
+   do (899-q9di): a host with no working ppid mechanism gets
+   `fail:ppid-probe:no-mechanism`, never a confident "not your lock".
+
+The second half is the more general fix and the harder one to remember, because
+the first half is what a careful person reaches for and it silently does not
+apply.
+
+**Neither half helps face 3.** A reader who does not know the document changed
+has no reason to enumerate anything. That slot stays empty on purpose.
+
 ## What to do with it
 
 **Prefer disclosure to care. A heads-up is a falsifiable act; care is not.**
@@ -180,6 +221,13 @@ Concretely:
 4. **When you find one of these in yourself, publish it.** All three faces above
    were found by the person they happened to, reported unprompted, and cost
    nothing to fix once named. None would have been found by review.
+5. **Check where being wrong would be EXPENSIVE, not generally.** "Check more"
+   is unfollowable advice of exactly the kind this file refuses elsewhere. The
+   host who caught two of these described their own behaviour precisely: *"I do
+   not check generally more than anyone; I checked where being wrong would have
+   been expensive — a claim about my own work, and a claim someone else had
+   made about theirs."* Both times the comfortable answer was load-bearing.
+   That is a usable trigger; diligence is not.
 
 ## A candidate fourth face, NOT filed — one instance is not a mechanism
 
