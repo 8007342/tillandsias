@@ -597,6 +597,35 @@ filing — not the prompt.
    Expert Health Probe here too — it is advisory and never blocks, but it must
    run BEFORE the cycle's first expert read, or an outage during that read has
    no recorded baseline to be visible against.
+2a. **Check for sibling overlap, and say hello if there is any** (methodology
+   `sibling_heads_up_protocol`). Hosts can message each other directly —
+   `ListAgents` to see who is live, `SendMessage` to reach them. **The
+   capability is new and you will not discover it on your own**; the fleet
+   coordinated exclusively through the ledger and the trunk for months before
+   anyone noticed it existed.
+
+   ```bash
+   tillandsias-plan expire-claims --list-live   # who is holding what, right now
+   ```
+
+   If a live claim touches the SAME SURFACE your batch touches — a wire type,
+   a shared struct, a script another lane runs, a schema, a guard wired into
+   `--check` — send one HEADS UP before implementing: what you are touching,
+   the shape of the change, any sibling call sites you know of, and the ask.
+   They reply ACK plus comments. Two short messages.
+
+   MEASURED COST OF NOT DOING THIS, 2026-08-26: macbook landed a new
+   `outcome` field on `ControlMessage::CloudRefreshReply` (731-eupn — a good
+   fix), updated the call site they compile, and could not see the Linux-native
+   one at `tray/mod.rs:1383`. **Each branch was green alone; the union was
+   E0063 + E0308.** A red union gate and ~30 minutes of coordinator cycle, for
+   a change whose author already knew everything needed to prevent it.
+
+   DO NOT broadcast routine drain. Most work touches only your own lane, and a
+   channel that carries everything is one nobody reads — the recipient is
+   mid-cycle, holding a checkout lock, with expensive context. The heads-up is
+   for what the ledger cannot carry in time: **intent, before the fact.**
+
 2b. **Acquire the checkout lock — EVERY lane, before the boundary snapshot**
    (order 873-zcim):
 
