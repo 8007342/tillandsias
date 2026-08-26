@@ -175,3 +175,47 @@ provenance-less and was NOT counted as coverage. The install asserted the versio
 from it, which is the only role it played.
 
 This report inherits nothing. It names one tag, one platform, one host, and one run.
+
+---
+
+## Addendum 2026-08-26T03:34Z — stable-channel one-shot, **PASS** (v0.4.260826.1)
+
+`promote-stable.sh`'s own NEXT calls for a one-shot `SMOKE_CHANNEL=stable` install after a
+promotion, to prove the promoted artifact installs *through the stable channel path*. The
+coordinator recorded it as owed; this closes it.
+
+**What was actually untested before this run, and why the daily leg did not cover it.**
+`scripts/install.sh`'s channel dispatch sets `CHANNEL_BASE` to `/releases/latest/download` in its
+`stable)` case arm, and the following assignment reads
+`RELEASE_BASE="${TILLANDSIAS_RELEASE_BASE:-$CHANNEL_BASE}"`. The daily leg **overrode** that env
+var to pin the tag URL — which is correct for testing a prerelease and means the stable
+`CHANNEL_BASE` branch had never executed. This run sets no env var at all: the operator default.
+
+```
+curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install.sh | bash
+stable_install_exit=0
+installer reported:  Channel: stable
+version after:       Tillandsias v0.4.260826.1
+panic / Error: lines: 0
+```
+
+**Guarded against the no-op it would otherwise have been.** The host was already on
+`0.4.260826.1` before this run, so an exact-tag assertion alone **could not fail** — the same trap
+as falsifier 1, arriving with no differing pre-install version to lean on. Positive evidence of
+real work was required and obtained:
+
+- the installer downloaded `14.58M` at 16.17M/s and reported `Verifying SHA256 checksum... Réussi`
+- `~/.local/bin/tillandsias` mtime is `2026-08-26T03:34:00Z`, i.e. rewritten by this run
+- `--init` re-bootstrapped Vault, which `--status-check` had killed (see the finding above): from
+  `Exited (137)` back to `vault healthy (initialized=true sealed=false v=1.18.5)`
+
+**SCOPE — this is deliberately narrower than the daily leg.** It proves the stable channel's
+resolution path delivers the promoted artifact and that `--init` succeeds over an existing
+install. It is **NOT a clean room**: every image reported `SKIP (digest present)`, so no image was
+rebuilt, and no reset was performed. Idempotence from a wiped substrate is evidenced by the daily
+leg above, on a byte-identical artifact — not by this addendum.
+
+**It also reproduces the keychain finding a second time**, independently of the reset:
+`preserving existing data volume (Shamir share present in keychain)` and `recovered root token
+from host keychain or fallback`. Two runs, thirty minutes apart, both re-using host-keychain
+material — so the behaviour is the code path, not an artefact of the reset ordering.

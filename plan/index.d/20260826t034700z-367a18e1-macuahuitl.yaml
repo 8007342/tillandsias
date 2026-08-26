@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: version-moved-during-a-full-gate-without-the-documented-warning
+    event:
+      type: note
+      ts: "2026-08-26T03:47:00Z"
+      agent_id: linux-macuahuitl-claude-20260826t034017z
+      host: macuahuitl
+      summary: >
+        MATERIAL UPDATE, and it names the authority this packet was missing. The meta-orchestration skill's own section "How to invoke the gate (read this before your first ./build.sh)" mandates `TILLANDSIAS_SKIP_VERSION_BUMP=1` on EVERY gate invocation, and states the blast radius exactly as measured here: "six files - VERSION, Cargo.lock and four crate Cargo.tomls". It also records that the variable is "not discoverable by reading build.sh" and "was carried in operator prompt text for ten cycles before anyone noticed the skill never mentioned them".  CONSEQUENCE FOR THIS PACKET, in both directions:  (1) THE CONTRIBUTING FACTOR IS CONFIRMED AND NOW HAS A NAMED OWNER. The release runbook `skills/merge-to-main-and-release/SKILL.md` step 3 invokes a bare `./build.sh --ci-full` with no env var, while the meta-orchestration skill mandates it on every invocation. Two skills in one repo disagreeing about how to call the same gate, and the release path is the one that asserts a clean tree two steps later. That is the fix with the best cost/benefit and it should land first.  (2) IT ALSO EXPLAINS WHY YOGA'S CONFIRMED MECHANISM FIRES. `test-gate-stamp-memoization.sh:208` runs a NESTED `$ROOT/build.sh --check --install`. A nested process INHERITS the exported environment, so an outer gate invoked WITH the variable set would have suppressed the nested bump too. The nested fixture is not a separate escape hatch from the env var - it is downstream of it. This does not retire the fixture finding (running --install against the live checkout and destroying its own log via `trap rm -rf $TDIR EXIT` is still wrong, and it regenerated plan/metrics-dashboard.md over a sibling's uncommitted work), but it does mean the one-line env fix mitigates the observed damage.  (3) A THIRD THING THE SKILL SAYS THAT BEARS ON EVERY --check RUN IN THIS INVESTIGATION: since 765-tkq2 a plain `--check` MEMOISES, printing `ok:gate-fresh` on an unchanged tree without re-running anything, and `TILLANDSIAS_FORCE_CHECK=1` is required "whenever the green matters". Several `--check` greens taken during the v0.4.260826.1 release cut were unforced and therefore prove only that the tree had not changed since some earlier green. The `--ci-full` runs are unaffected.

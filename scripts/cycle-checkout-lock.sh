@@ -82,6 +82,7 @@ STALE_S=10800
 
 lane="prompt"
 source_desc="unspecified"
+probe_pid=""
 
 now() { date +%s; }
 
@@ -93,8 +94,80 @@ dir_holder_desc() {
         "$(cat "$LOCKD/source" 2>/dev/null || echo '?')"
 }
 
+# Parent pid of $1, or empty if this host offers no way to ask.
+#
+# THREE LANES, TWO MECHANISMS, AND THE ONE THAT LOOKS PORTABLE IS NOT.
+# Measured 2026-08-26, the day the first version of this shipped red:
+#   linux   /proc present;  `ps -o ppid=` works
+#   msys    /proc present;  `ps` REFUSES -o entirely ("unknown option -- o")
+#   darwin  /proc ABSENT;   `ps -o ppid=` works
+# So `/proc` first and `ps -o` second covers all three, and neither alone does.
+#
+# DO NOT "simplify" this to `ps -p <pid> | awk 'NR==2{print $2}'`. Column 2 is
+# PPID on MSYS but TTY on Linux (measured: prints `?`), so that form returns a
+# confident wrong answer on the lane where the current code happens to work —
+# the exact trade this function was already caught making once.
+_ppid_of() {
+    local p="$1" v=""
+    if [ -r "/proc/$p/stat" ]; then
+        # `comm` (field 2) may contain spaces and parens, so split after the
+        # LAST ')' rather than tokenising the whole line: state, then ppid.
+        v="$(sed -e 's/^.*) //' "/proc/$p/stat" 2>/dev/null | awk '{print $2}')"
+    fi
+    if [ -z "$v" ]; then
+        v="$(ps -o ppid= -p "$p" 2>/dev/null | tr -d '[:space:]')"
+    fi
+    case "$v" in *[!0-9]*|"") v="" ;; esac
+    printf '%s' "$v"
+}
+
+# Is $1 this process, or any ancestor of it? Used by `mark-attested`, which is
+# invoked BY the holding cycle and therefore runs strictly below the harness pid
+# the lock records. Bounded depth so a malformed /proc or a pid-namespace
+# surprise cannot spin.
+#
+# Exit 0 = yes. Exit 1 = no. Exit 2 = COULD NOT DETERMINE — distinct on purpose.
+# The first version returned plain "no" when the probe failed, which on MSYS
+# meant every ownership test answered `held-by-other` about the caller's own
+# lock, with nothing in the output saying the walk had failed. A probe that
+# cannot answer must say so rather than pick the answer that looks like data.
+pid_is_self_or_ancestor() {
+    local target="$1" p=$$ depth=0 next
+    [ -n "$target" ] || return 1
+    while [ "$depth" -lt 40 ] && [ -n "$p" ] && [ "$p" != "0" ] && [ "$p" != "1" ]; do
+        [ "$p" = "$target" ] && return 0
+        next="$(_ppid_of "$p")"
+        # Depth 0 failing means the host has no working mechanism at all; deeper
+        # failures are a normal walk terminus (reaped parent, namespace edge).
+        if [ -z "$next" ]; then
+            [ "$depth" -eq 0 ] && return 2
+            return 1
+        fi
+        p="$next"
+        depth=$(( depth + 1 ))
+    done
+    return 1
+}
+
 dir_lock_live() {
     [ -d "$LOCKD" ] || return 1
+    # A holder that has ALREADY ATTESTED is finished, whatever its pid is still
+    # doing (order 899-q9di). Finalization step 9 states four times that the
+    # MO-FULL marker is the cycle's FINAL OUTPUT LINE; step 9b then asks for a
+    # release AFTER it. An agent that obeys the more emphatic rule ends at the
+    # marker and never releases, so the lock outlives the cycle.
+    #
+    # On a host whose harness process spans many cycles — an agent session
+    # rather than a cron that exits — the "dead holder" escape never fires, so
+    # the stale bound is the FULL 3h. MEASURED on macuahuitl 2026-08-26T03:38Z:
+    # the hourly fire was refused `skip:overlap-lock-held` by pid 2393229, which
+    # was its own $PPID, a live `claude` 07:56:39 old that had emitted a valid
+    # MO-FULL an hour earlier after promoting v0.4.260826.1 to stable.
+    #
+    # `record` writes this marker and runs exactly ONCE per cycle, which is why
+    # it is the hook rather than `self` (callable any number of times mid-cycle,
+    # so releasing on it would free the checkout while work continues).
+    [ -f "$LOCKD/attested" ] && return 1
     local pid born age
     pid="$(cat "$LOCKD/pid" 2>/dev/null || true)"
     born="$(cat "$LOCKD/epoch" 2>/dev/null || echo 0)"
@@ -123,6 +196,9 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --lane)   shift; lane="${1:-prompt}" ;;
         --source) shift; source_desc="${1:-unspecified}" ;;
+        # ppid-probe only: ask about a pid the CALLER knows the parent of, so a
+        # test can cross-check the answer instead of taking it on faith.
+        --pid)    shift; probe_pid="${1:-}" ;;
         *) echo "fail:checkout-lock:unknown-arg:$1"; exit 2 ;;
     esac
     shift || true
@@ -175,6 +251,61 @@ case "$cmd" in
             rm -rf "$LOCKD" 2>/dev/null || true
         fi
         echo "ok:checkout-lock:released"
+        ;;
+    mark-attested)
+        # Called by `mo-full-attest.sh record` once the verified marker is in
+        # the ledger (order 899-q9di). Marks the cycle finished so the NEXT
+        # acquire reclaims the lock instead of refusing to the holder's own
+        # successor. Best-effort and never fatal: a cycle that attested but
+        # could not mark simply falls back to the pre-existing stale bound.
+        #
+        # Refuses for a lock held by a DIFFERENT live pid, for the same reason
+        # `release` does — marking someone else's in-flight cycle "done" would
+        # hand their checkout away, which is precisely what 873-zcim prevents.
+        if [ -d "$LOCKD" ]; then
+            held_pid="$(cat "$LOCKD/pid" 2>/dev/null || true)"
+            # OWNERSHIP HERE IS ANCESTRY, NOT EQUALITY, and that is the whole
+            # reason this is a subcommand rather than an inline `[ = ]`.
+            # `record` is invoked BY the holding cycle, so it runs one or more
+            # levels BELOW the harness process the lock names — the same depth
+            # problem the HOLDER_PID comment above documents for `acquire`.
+            # An equality test would call the holder "someone else" and refuse
+            # to mark every lock it was written to mark.
+            if [ -n "$held_pid" ]; then
+                pid_is_self_or_ancestor "$held_pid"; anc=$?
+                if [ "$anc" -eq 2 ]; then
+                    # No working ppid mechanism on this host. Say THAT, rather
+                    # than reporting the lock as someone else's — which is what
+                    # the first version did on MSYS, silently and every time.
+                    echo "fail:checkout-lock:ancestry-unavailable:no-ppid-mechanism"
+                    exit 3
+                fi
+                if [ "$anc" -ne 0 ] && kill -0 "$held_pid" 2>/dev/null; then
+                    echo "fail:checkout-lock:held-by-other:$(dir_holder_desc)"
+                    exit 1
+                fi
+            fi
+            now > "$LOCKD/attested" 2>/dev/null || true
+            echo "ok:checkout-lock:marked-attested"
+        else
+            echo "ok:checkout-lock:no-lock-held"
+        fi
+        ;;
+    ppid-probe)
+        # Exposes the ancestry PRIMITIVE so every lane can test it directly,
+        # instead of discovering it is broken through a guard built on top of it.
+        # This subcommand exists because the first version of pid_is_self_or_ancestor
+        # shipped green on linux/darwin and red on msys, and the failure surfaced
+        # as a WRONG OWNERSHIP VERDICT rather than as "the probe does not work
+        # here". A guard that reads host state needs its state-reading primitive
+        # tested on every lane BEFORE the guard lands (yolanda, 2026-08-26).
+        _pp="$(_ppid_of "${probe_pid:-$$}")"
+        if [ -n "$_pp" ]; then
+            echo "ok:ppid-probe:$_pp"
+        else
+            echo "fail:ppid-probe:no-mechanism"
+            exit 1
+        fi
         ;;
     status)
         if dir_lock_live; then
