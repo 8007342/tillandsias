@@ -2053,10 +2053,29 @@ distributed_work:
         or any guard wired into `./build.sh --check`. These are the changes
         whose blast radius leaves your lane.
       - >
-        BEFORE taking a packet whose live claim overlaps a sibling's. At Start
-        Of Cycle run `tillandsias-plan expire-claims --list-live`; if a live
-        claim touches the surface your batch touches, message that host BEFORE
-        implementing, not after.
+        BEFORE taking a packet whose live claim overlaps a sibling's. Run
+        `tillandsias-plan query --status in_progress` — AFTER the branch merge,
+        never before it — and if a live claim touches the surface your batch
+        touches, message that host BEFORE implementing.
+    the_ordering_is_the_step: >
+      MEASURED 2026-08-26, one cycle after this section landed, by its own
+      author running it. The check first shipped as meta-orchestration step 2a,
+      placed before the branch update, and it MISSED the very claim it existed
+      to find:
+
+        before the merge:  831-ezea only          (yoga's claim invisible)
+        after the merge:   642-fedr + 831-ezea    (yoga, on fragments.rs)
+
+      `git fetch` updates remote-tracking refs; it does NOT update the worktree
+      ledger `tillandsias-plan` reads. A check placed before the merge sees
+      claims as of your LAST merge — and a stale ledger always shows FEWER
+      claims, never more, so it FAILS SILENTLY TOWARD "no overlap", which is
+      the answer that looks safe. Moved to step 5a, after the merge.
+
+      Use `query --status in_progress`, NOT `expire-claims --list-live`: the
+      latter prints `in_progress=N` and no rows — it counts what it will not
+      name. Two hosts hit that on the same day, one of them while performing
+      this exact step.
       - >
         WHEN YOU LAND something a sibling is waiting on — "pull when you are
         done" — so a blocked host stops guessing whether it is blocked.
@@ -2085,5 +2104,5 @@ distributed_work:
       HONOURED INCONSISTENTLY until a check surfaces the overlap without being
       asked. That check is worth filing rather than assuming.
     consumers:
-      - "skills/meta-orchestration/SKILL.md (Start Of Cycle 2a) — note .claude/skills is a SYMLINK to this path; cite the real one"
+      - "skills/meta-orchestration/SKILL.md (Start Of Cycle 5a — AFTER the merge; note .claude/skills is a SYMLINK to this path, cite the real one)"
       - "skills/coordinate-multihost-work/SKILL.md"
