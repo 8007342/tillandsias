@@ -53678,6 +53678,37 @@ plan_index:
         initialised. That is a separate observation and is filed on its own.
 
       events:
+        - type: note
+          ts: "2026-08-26T17:15:09Z"
+          agent_id: "linux-macuahuitl-claude-20260826t171508z"
+          host: macuahuitl
+          summary: |
+            DEFECT I INTRODUCED IN THIS PACKET'S OWN LITMUS, FOUND BY AN INFRASTRUCTURE AUDIT HOURS LATER, NOW FIXED.
+
+            The UTC step I added (litmus-build-cache-sweep-trigger, step 9) opened with a STRAY FIRST INVOCATION carrying no TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER override:
+
+              TZ=Pacific/Kiritimati scripts/check-build-cache-sweep.sh stamp --host t \
+                --action 'cargo-clean:done' >/dev/null 2>&1 || true
+
+            It served no purpose — the second, hermetic invocation is the actual test — and it wrote the REAL production marker at ~/.cache/tillandsias/.last-build-cache-sweep on every run of the suite.
+
+            MEASURED CONSEQUENCE on macuahuitl, same day:
+              marker: date=2026-08-26 utc=2026-08-26T13:48:17Z host=t action=cargo-clean:done
+              verdict: ok:build-cache-sweep-not-due:bytes=40136421376:gib=37:marker=2026-08-26:reason=under-threshold-0d
+
+            `host=t` is the literal fixture value. So the marker recorded A SWEEP THAT NEVER HAPPENED, and every litmus run reset the 14-day staleness trigger to 0. With target/ at 37 GiB against a 40 GiB size trigger, the sweep could not fire by EITHER path, and the host reported green while carrying ~106 GB of build state.
+
+            WHY THIS CLASS IS THE WORST ONE. A fixture that writes production state fails SILENTLY AND IN THE SAFE-LOOKING DIRECTION: the gate it disables goes GREEN. Nothing in the suite's own results can reveal it — 22/22 passed throughout — and no amount of re-running the suite would have surfaced it. It took an infrastructure audit reading the live marker on disk. This is the same shape as 899-6pwv's truncated evidence and 913-27ex's PASS-with-zero-executed: an artifact standing in for work that never happened, except here the artifact actively disables a real guard.
+
+            It is also, precisely, the defect 906-qi89's `--action` requirement exists to prevent — a stamp recording that something happened when it did not — committed by the cycle that closed 906-qi89.
+
+            FIXED: stray invocation removed; every invocation in the file is now hermetic.
+
+            MARKER REPAIRED: the false `action=cargo-clean:done` was deleted, and 906-qi89's own initialise path rewrote it honestly as `action=initialised:NO-SWEEP-PERFORMED(37GiB<40GiB);reason:trigger-was-marker-absent-not-size`. The two fixes composed exactly as designed.
+
+            NEW NEGATIVE CONTROL, because a review habit would not have caught this: a step that snapshots the real marker, runs every stamping scenario in the file, and asserts the marker is byte-identical afterwards. VERIFIED: full suite run, 22/22, production marker unchanged before and after.
+
+            Filed against 905-97xh rather than a new packet because it is this packet's own regression. The generalisable rule belongs with 915-wkm2 / diagnostic-attribution: a fixture that can write outside its temp dir must be pinned by an arm that says so, since its failure mode is invisible to the suite that contains it.
         - type: completed
           ts: "2026-08-26T13:51:34Z"
           agent_id: "linux-macuahuitl-claude-20260826t135134z"

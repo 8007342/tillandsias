@@ -98,20 +98,88 @@ if [[ ! -f /etc/os-release ]]; then
     return 0 2>/dev/null || exit 0
 fi
 
+# ── Gate on CAPABILITY, not on OS IDENTITY (operator direction 2026-08-26) ──
+#
+# This used to read: `VARIANT_ID != silverblue && ! command -v rpm-ostree` ->
+# skip. That is an IDENTITY test, and it excluded the one host in the fleet that
+# most needed the toolbox — macuahuitl, mutable Fedora 44, which has `toolbox`
+# installed and rootless podman working but is not Silverblue and has no
+# rpm-ostree. So the coordinator built bare on the host while every immutable
+# sibling built inside a container.
+#
+# MEASURED CONSEQUENCE, 2026-08-26: that host accumulated 12 GB of a dead agent
+# session in tmpfs and 60 GB across 13 abandoned worktrees, wedged its own
+# tooling against a tmpfs quota, and needed an operator with a terminal to
+# recover. Silverblue siblings reported no comparable accumulation. That is a
+# correlation with a mechanism behind it, not proof — see the caveat below.
+#
+# WHAT CHANGES: a host that CAN run a toolbox now does, regardless of what
+# /etc/os-release calls it.
+#
+# WHAT DELIBERATELY DOES NOT CHANGE, because widening a gate is where this kind
+# of edit goes wrong:
+#   - A host with NO toolbox still passes straight through, exactly as before.
+#     It must, or every plain container and CI runner that reached this line
+#     harmlessly would start failing.
+#   - On an ostree host a missing toolbox is still a hard ERROR, because there
+#     it means a broken install rather than a different kind of machine.
+#   - Every earlier skip-guard is untouched: already-inside-toolbox,
+#     container=oci/podman, and TILLANDSIAS_SKIP_TOOLBOX=1 all still win. The
+#     last of those is the escape hatch if this misbehaves on a host mid-cycle.
+#
+# THE CAVEAT WORTH KEEPING: .claude/worktrees is created by the Claude Code
+# harness, not by this build system, so the 60 GB half of that accumulation may
+# follow the WORKLOAD rather than the host variant. This change addresses the
+# build-state half, which is the half it can actually reach.
 VARIANT_ID="$(grep -oP '^VARIANT_ID=\K.*' /etc/os-release 2>/dev/null || true)"
-if [[ "$VARIANT_ID" != "silverblue" ]] && ! command -v rpm-ostree &>/dev/null; then
-    [[ "$_TB_DIRECT" == 1 && $# -gt 0 ]] && exec "$@"
-    ! declare -F _tb_restore_caller_opts >/dev/null || _tb_restore_caller_opts
-    return 0 2>/dev/null || exit 0
+_TB_OSTREE=0
+if [[ "$VARIANT_ID" == "silverblue" ]] || command -v rpm-ostree &>/dev/null; then
+    _TB_OSTREE=1
 fi
 
-# ── Guard: toolbox binary must be installed ──────────────────────────────
+# ── NO SILENT FALLBACK TO A HOST-NATIVE BUILD (operator ruling 2026-08-26) ──
+#
+# The operator owns every development host and guarantees the invariant: EVERY
+# Linux builder has podman and toolbox. Given that, a fallback to building on
+# the host is not resilience — it is the failure mode this milestone exists to
+# kill. A host-native build that "worked" is indistinguishable from a
+# containerised one until something diverges, and then the divergence is
+# attributed to the code rather than to the environment it was never built in.
+#
+# THE RULE: entering the toolbox ALWAYS succeeds, or this FAILS HARD AND
+# IMMEDIATELY. On a healthy Silverblue fleet the failure branch never runs; if
+# it does, something is wrong that a silent fallback would hide.
+#
+# THIS REPLACES a pass-through I wrote an hour earlier, on the reasoning that
+# "a host that cannot containerise should still be able to compile". That is
+# exactly backwards under an owned fleet: the machine that cannot containerise
+# is the one whose build you should trust least, and letting it proceed
+# converts an environment fault into a silent behavioural difference.
+#
+# macOS and Windows are the sanctioned exceptions and are handled ABOVE by the
+# /etc/os-release guard — they have their own build paths (build-macos-tray.sh,
+# the tillandsias-build WSL2 distro). Reaching here means Linux.
 if ! command -v toolbox &>/dev/null; then
-    echo "[tillandsias-builder] ERROR: 'toolbox' not found on Silverblue." >&2
+    echo "[tillandsias-builder] FATAL: 'toolbox' is not installed on this Linux host." >&2
+    echo "[tillandsias-builder] Every Linux builder in this fleet is required to have it;" >&2
+    echo "[tillandsias-builder] there is deliberately NO host-native fallback, because a" >&2
+    echo "[tillandsias-builder] build that silently escapes its container is worse than no" >&2
+    echo "[tillandsias-builder] build at all." >&2
     echo "[tillandsias-builder] Install it:" >&2
-    echo "    rpm-ostree install toolbox" >&2
-    echo "    (or: sudo dnf install --skip-broken toolbox)" >&2
-    echo "[tillandsias-builder] Then reboot and retry." >&2
+    echo "    rpm-ostree install toolbox      # immutable hosts" >&2
+    echo "    sudo dnf install toolbox        # mutable hosts" >&2
+    echo "[tillandsias-builder] To override for a one-off, set TILLANDSIAS_SKIP_TOOLBOX=1" >&2
+    echo "[tillandsias-builder] — deliberately explicit, never automatic." >&2
+    exit 1
+fi
+
+# toolbox(1) is a thin wrapper over podman. Without podman it cannot create or
+# enter anything, so this is the same fault one layer down and gets the same
+# treatment: fail, do not degrade.
+if ! command -v podman &>/dev/null; then
+    echo "[tillandsias-builder] FATAL: 'toolbox' is present but podman is not." >&2
+    echo "[tillandsias-builder] toolbox is a wrapper over podman and cannot work without it." >&2
+    echo "[tillandsias-builder] No host-native fallback by design (see above)." >&2
     exit 1
 fi
 
