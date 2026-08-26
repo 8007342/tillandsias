@@ -18,34 +18,53 @@ fn git(args: &[&str]) -> Option<String> {
 }
 
 fn main() {
-    let sha = git(&["rev-parse", "--short", "HEAD"]).unwrap_or_else(|| "unknown".into());
-    // Dirty if there are staged/unstaged tracked changes (untracked ignored).
-    let dirty = Command::new("git")
-        .args(["status", "--porcelain", "--untracked-files=no"])
-        .output()
-        .ok()
-        .map(|o| !o.stdout.is_empty())
-        .unwrap_or(false);
-    let sha_full = if dirty { format!("{sha}-dirty") } else { sha };
+    // 765-evbt: When TILLANDSIAS_GIT_SHA_OVERRIDE is set, the binary is being
+    // built in a non-artifact lane (--check, pre-build CI) where provenance
+    // doesn't matter but build fingerprint stability does. Use the override
+    // SHA, a constant build time, and suppress .git rerun directives to
+    // prevent every commit from busting the fingerprint and forcing a
+    // recompile of every downstream crate.
+    println!("cargo:rerun-if-env-changed=TILLANDSIAS_GIT_SHA_OVERRIDE");
+    let override_mode = std::env::var("TILLANDSIAS_GIT_SHA_OVERRIDE").ok();
 
-    // Build time: prefer SOURCE_DATE_EPOCH (reproducible builds) else `date -u`.
-    let build_time = std::env::var("SOURCE_DATE_EPOCH")
-        .ok()
-        .and_then(|epoch| {
-            Command::new("date")
-                .args(["-u", "-r", &epoch, "+%Y-%m-%dT%H:%M:%SZ"])
-                .output()
-                .ok()
-        })
-        .or_else(|| {
-            Command::new("date")
-                .args(["-u", "+%Y-%m-%dT%H:%M:%SZ"])
-                .output()
-                .ok()
-        })
-        .filter(|o| o.status.success())
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .unwrap_or_else(|| "unknown".into());
+    let sha_full = if let Some(ref override_sha) = override_mode {
+        override_sha.clone()
+    } else {
+        let sha = git(&["rev-parse", "--short", "HEAD"]).unwrap_or_else(|| "unknown".into());
+        // Dirty if there are staged/unstaged tracked changes (untracked ignored).
+        let dirty = Command::new("git")
+            .args(["status", "--porcelain", "--untracked-files=no"])
+            .output()
+            .ok()
+            .map(|o| !o.stdout.is_empty())
+            .unwrap_or(false);
+        if dirty { format!("{sha}-dirty") } else { sha }
+    };
+
+    // Build time: SOURCE_DATE_EPOCH for reproducible builds, constant
+    // "non-artifact" sentinel in override mode (avoids `date -u` which
+    // changes every second and busts fingerprints), else `date -u`.
+    let build_time = if override_mode.is_some() {
+        "non-artifact".to_string()
+    } else {
+        std::env::var("SOURCE_DATE_EPOCH")
+            .ok()
+            .and_then(|epoch| {
+                Command::new("date")
+                    .args(["-u", "-r", &epoch, "+%Y-%m-%dT%H:%M:%SZ"])
+                    .output()
+                    .ok()
+            })
+            .or_else(|| {
+                Command::new("date")
+                    .args(["-u", "+%Y-%m-%dT%H:%M:%SZ"])
+                    .output()
+                    .ok()
+            })
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_else(|| "unknown".into())
+    };
 
     // 635-bhkb: the repo-root VERSION file is the single source of truth for
     // the release version. Crate versions are never bumped per release, so
@@ -79,8 +98,11 @@ fn main() {
     // `git add`/`status` refresh, and since this crate compiles (as a
     // cfg-gated stub) on every host, index churn was forcing a rebuild into
     // every gate run fleet-wide. Cost: the -dirty suffix can lag until the
-    // next HEAD move — provenance for any COMMITTED state is unchanged, and
-    // the full fingerprint redesign (BUILD_TIME fallback included) belongs to
-    // the tray-fingerprint packet, 765-evbt.
-    println!("cargo:rerun-if-changed=../../.git/HEAD");
+    // next HEAD move — provenance for any COMMITTED state is unchanged.
+    //
+    // 765-evbt: suppress .git rerun directives in override mode — the SHA is
+    // fixed by the caller and git activity must not bust the fingerprint.
+    if override_mode.is_none() {
+        println!("cargo:rerun-if-changed=../../.git/HEAD");
+    }
 }

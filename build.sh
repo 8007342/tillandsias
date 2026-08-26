@@ -1237,6 +1237,15 @@ fi
 # ---------------------------------------------------------------------------
 
 if [[ "$FLAG_INSTALL" == true ]]; then
+    # 765-evbt: a staged artifact must never carry false provenance. Refuse
+    # loudly if a non-artifact lane's fingerprint overrides leaked into the
+    # environment.
+    if [[ -n "${TILLANDSIAS_GIT_SHA_OVERRIDE:-}" ]] || [[ -n "${BUILD_COMMIT_SHA_OVERRIDE:-}" ]]; then
+        _error "Fingerprint overrides must not be set during --install (TILLANDSIAS_GIT_SHA_OVERRIDE=${TILLANDSIAS_GIT_SHA_OVERRIDE:-}, BUILD_COMMIT_SHA_OVERRIDE=${BUILD_COMMIT_SHA_OVERRIDE:-})"
+        _error "A staged artifact must carry real provenance. Unset the overrides and retry."
+        exit 1
+    fi
+
     _step "Building portable launcher (musl-static) with tray support for install..."
     _bump_build_version
     _check_trace_coverage
@@ -1484,6 +1493,14 @@ if [[ "$FLAG_CHECK" == true ]]; then
                 ;;
         esac
     fi
+
+    # 765-evbt: export tray-crate build fingerprint overrides for non-artifact
+    # lanes. These stabilize the build fingerprint across git activity during
+    # --check, preventing unnecessary recompilations of downstream crates.
+    # NEVER export in --install or --release — a staged artifact must carry
+    # real provenance (guarded below).
+    export TILLANDSIAS_GIT_SHA_OVERRIDE="non-artifact"
+    export BUILD_COMMIT_SHA_OVERRIDE="non-artifact"
 
     _step "Checking Rust formatting..."
     if ! _run cargo fmt --check --all --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1; then
@@ -2413,6 +2430,13 @@ fi
 
 # Release build
 if [[ "$FLAG_RELEASE" == true ]]; then
+    # 765-evbt: a release artifact must never carry false provenance.
+    if [[ -n "${TILLANDSIAS_GIT_SHA_OVERRIDE:-}" ]] || [[ -n "${BUILD_COMMIT_SHA_OVERRIDE:-}" ]]; then
+        _error "Fingerprint overrides must not be set during --release (TILLANDSIAS_GIT_SHA_OVERRIDE=${TILLANDSIAS_GIT_SHA_OVERRIDE:-}, BUILD_COMMIT_SHA_OVERRIDE=${BUILD_COMMIT_SHA_OVERRIDE:-})"
+        _error "A release artifact must carry real provenance. Unset the overrides and retry."
+        exit 1
+    fi
+
     _bump_build_version
     _check_trace_coverage
     if ! _run_local_ci_gate --fast "${CI_ARG_LIST[@]}"; then
