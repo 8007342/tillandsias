@@ -1,7 +1,34 @@
-//! Portable menu state model shared by the Windows and macOS trays.
+//! Portable menu state model — **the ONLY menu builder in the tree.**
 //!
-//! Mirrors the Linux tray's `TrayUiState` but emits a backend-agnostic
-//! `MenuStructure`. The Windows tray turns this into Win32 `MENUITEMINFO`
+//! ## This is the sole builder (order 628-p5tj). Changes here reach ALL THREE trays.
+//!
+//! Windows, macOS AND Linux all render from `build()` in this module. If you
+//! are changing what items appear, their order, their labels, or the
+//! auth-gated structure, you are changing every platform at once — including
+//! Linux, which many of these docs predate.
+//!
+//! **There is no second builder to keep in sync, and that is recent.** Linux
+//! used to carry its own `build_menu` implementation, gating on a plain
+//! `is_authenticated: bool` while this module used the `GithubLoginState`
+//! tri-state. The consequence was measured on 2026-08-09: the 626-r7kq fix
+//! landed HERE, Windows and macOS inherited it, and Linux did not — it kept
+//! the same defect through a different mechanism (627-m3vp). That was not a
+//! one-off; it was the structural consequence of two builders, which is why
+//! there is now one.
+//!
+//! Linux's `build_menu` (`tillandsias-headless/src/tray/mod.rs`) is now a
+//! CONVERTER, not a builder: it calls `build()` and translates the result to
+//! DBus (`String` ids to integers, `MenuItem` to `MenuNode`). Anything that
+//! decides WHAT appears belongs here; anything that decides how a toolkit
+//! renders it belongs in that platform's converter.
+//!
+//! The top-level id sequence is pinned by
+//! `top_level_id_sequence_is_pinned_for_all_platforms` in this file's tests.
+//! Because all three platforms derive from `build()`, that one test guards all
+//! three — a reorder fails there once rather than diverging silently in one
+//! tray.
+//!
+//! Emits a backend-agnostic `MenuStructure`. The Windows tray turns this into Win32 `MENUITEMINFO`
 //! entries; the macOS tray turns it into `NSMenuItem` instances.
 //!
 //! The structure is intentionally toolkit-agnostic: no `HMENU`, no
@@ -11,12 +38,13 @@
 //!
 //! ## Parity with the Linux tray
 //!
-//! The Linux tray's `build_menu` (see
+//! Linux's converter, `build_menu` (see
 //! `crates/tillandsias-headless/src/tray/mod.rs::build_menu`) surfaces a
 //! status header, then the `~/src` and `Cloud` submenus when authenticated.
 //! Agents (`Seedlings`), Observatorium and OpenCode Web also live in that
-//! tree. The portable menu reproduces this shape in a stable order so the
-//! Windows + macOS trays render identical menus.
+//! tree. All three trays render this shape in a stable order because all
+//! three call `build()` — the parity is structural now rather than
+//! maintained, which is what 628-p5tj was for.
 //!
 //! @trace spec:host-shell-architecture, spec:windows-native-tray, spec:macos-native-tray
 
