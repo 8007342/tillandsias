@@ -1,0 +1,199 @@
+packets:
+  - packet_id: version-moved-during-a-full-gate-without-the-documented-warning
+    order: 897-5m9y
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    release_target: fail-loud-diagnosis-milestone
+    title: |
+      VERSION and four crate manifests changed during ./build.sh --ci-full with no "VERSION bumped" line in the log, and did NOT change during an identical invocation 40 minutes earlier — writer unidentified
+    deliverable: |
+      the writer is named, or the observation is shown to be something else
+    pickup_role: any
+    owner_host: any
+    depends_on: []
+    capability_tags:
+      - gates
+      - release
+      - versioning
+    estimated_hours: 3
+    context: |
+      MEASURED on macuahuitl 2026-08-26 during the v0.4.260826.1 release cut.
+
+      THIS PACKET WAS FILED ONCE ALREADY WITH A CONFIDENT MECHANISM AND THAT
+      VERSION WAS WRONG. yoga challenged it with a falsifiable test before it
+      had been pushed, the test came back against me, and this is the rewrite.
+      The original claim was "--ci-full silently rewrites VERSION via
+      bump-version.sh". Read the whole of this section before re-asserting it.
+
+      WHAT IS MEASURED AND NOT IN DOUBT:
+
+        boundary at Start Of Cycle    ` M plan/metrics-dashboard.md` only
+        after ./build.sh --ci-full    VERSION      0.4.260817.1 -> 0.4.260826.1
+                                      4 crate Cargo.toml  0.4.260819 -> 0.4.260826
+                                      Cargo.lock
+        VERSION mtime                 01:46:14
+        that gate run started         01:39:14
+        gate verdict                  exit 0, 2014 checks, zero failures
+
+      The diff is preserved. The six paths were restored with an explicit
+      `git checkout --` naming each one; `plan/metrics-dashboard.md` was NOT
+      touched, and the worktree diff was then byte-identical to the startup
+      boundary snapshot.
+
+      WHAT FALSIFIED THE FIRST FRAMING. yoga read build.sh statically and
+      established three things, all correct:
+
+        1. The bump is DELIBERATE and documented at build.sh:745-763. VERSION
+           previously sat at 0.4.260728.1 through days of local builds while the
+           tag moved, and the monotonicity gate was red the whole time. The rule
+           is explicit: `--check` and `--test` produce no artifact, so they must
+           not move the counter. My "narrowing" that `--check` is clean and
+           `--ci-full` is not IS THAT RULE WORKING AS DESIGNED, not a scope bug.
+        2. It IS guarded: `TILLANDSIAS_SKIP_VERSION_BUMP=1` (build.sh:769-772),
+           which the meta-orchestration skill mandates on gate invocations.
+           macbook and yolanda both use it and their trees stayed clean.
+        3. It IS loud: a 5-7 line warning block at build.sh:809-824 printing the
+           before/after values, the branch-specific refusal, the exact revert
+           command, and the skip flag.
+
+      SO THE REMAINING ANOMALY IS NARROW, AND IT IS THE WHOLE PACKET:
+
+        grep 'VERSION bumped'            -> 0 hits   (release gate log)
+        grep 'Skipping build-counter'    -> 0 hits
+        grep '\[build\]'                 -> 10 hits  (so _warn IS captured;
+                                                      _warn writes stdout, and
+                                                      stdout+stderr were logged)
+        same three greps on the union --ci-full log, 40 min earlier
+                                         -> 0, 0, 10 — AND that run left VERSION CLEAN.
+
+      Two invocations of the same command on the same host produced identical
+      log shape and different worktree effects, and neither printed the line
+      that build.sh prints whenever `before != after`.
+
+      WRITER SEARCH, so the next person does not repeat it:
+        - `scripts/bump-version.sh` is the only thing that writes VERSION in
+          this format. The ONLY executable invocation of it in the tree is
+          build.sh:776. Every other hit is a grep-based litmus assertion that
+          reads the file rather than running it.
+        - `litmus-build-cache-transparent.yaml` and
+          `litmus-build-clean-from-scratch-works.yaml` DO run `./build.sh
+          --install` (a build-producing dispatch, which would bump), and their
+          output is captured by the litmus harness rather than the top-level
+          log — which would explain a missing warning. **Neither executed in
+          either gate run.** Checked; this hypothesis is dead.
+        - `scripts/test-version-bump-isolation-scope.sh` uses `mktemp -d` and
+          is correctly isolated.
+
+      ELIMINATED CANDIDATES, recorded WITH their disproof because an eliminated
+      candidate plus evidence is worth more to the next investigator than a
+      shorter packet. Both were proposed by other hosts, both were good, both
+      are dead:
+
+        (a) NESTED build.sh IN A RETIRED-PHASE LITMUS (yoga).
+            `litmus:toolbox-isolation` runs `./build.sh --install` and
+            `--clean --install`, `litmus:ci-unchanged-behavior` runs
+            `CI=true ./build.sh --release` — all build-PRODUCING dispatches,
+            all piping `2>&1 | tee /tmp/{cached,clean,ci}_build.log`. Since
+            `_BUILD_VERSION_BUMPED` is a shell variable, a nested build.sh
+            starts `false` and bumps regardless of the outer run; and the
+            warning would land in the tee target rather than the gate log.
+            It explained all three observations at once, including the clean
+            run (retired/quick tests execute or skip depending on container
+            availability, and the two runs differed exactly there).
+            DISPROVED on this host:
+              ls /tmp/cached_build.log /tmp/clean_build.log /tmp/ci_build.log
+                -> No such file or directory, all three
+              grep -l 'VERSION bumped' /tmp/*_build.log  -> no match
+              build.sh:1203  CI_ARGS=(--phase pre-build)   — `--ci-full`
+                dispatches pre-build only; no retired-phase dispatch exists.
+            Those tests have never run here, so they cannot be the writer.
+
+        (b) `git merge` WRITING VERSION AS ORDINARY FILE CONTENT (macbook).
+            A back-merge of main rewrites VERSION with no build.sh
+            involvement, no warning, and no skip-flag interaction — which
+            would explain the missing warning by the code path never having
+            executed at all. macbook demonstrated the identical
+            0.4.260817.1 -> 0.4.260826.1 transition arriving on their own
+            host through `git merge origin/linux-next`, with build.sh
+            provably never having run the bump path there.
+            DISPROVED, by the falsifier macbook themselves named: the change
+            here was UNSTAGED, not committed. `git status --porcelain` showed
+            ` M VERSION` alongside ` M Cargo.lock` and four ` M crates/*/
+            Cargo.toml`. A merge produces a committed change and a clean
+            worktree; this was a dirty worktree against an unchanged HEAD.
+
+      So: mechanism UNIDENTIFIED, with two strong candidates eliminated by
+      direct observation rather than argument. That is the finding.
+
+      A CONTRIBUTING FACTOR THAT IS SEPARATELY TRUE AND SMALLER: the release
+      runbook's step 3 invokes a bare `./build.sh --ci-full`, without the
+      `TILLANDSIAS_SKIP_VERSION_BUMP=1` the meta-orchestration skill mandates.
+      Whatever the writer turns out to be, the runbook should set it, because a
+      release cut asserts a clean tree two steps later.
+
+      WHAT I WITHDRAW. I told four hosts that this explained yoga's installed
+      `v0.4.260823.1` — a version published as no release. yoga withdrew that
+      inference themselves before I could: `git log -- VERSION` on their
+      checkout shows only release commits by the operator and the bot, no host
+      bumps. The mechanism is PLAUSIBLE and UNPROVEN on that host. Their
+      original statement stands unchanged — provenance-less, not counted as
+      release coverage — and it is not established as the gate's doing.
+
+      RELATED, ALREADY OPEN: 643-64bx owns the boundary-violation half — a local
+      build writes a tracked file, so `--install` followed by a normal push
+      needs a manual revert. build.sh:795-801 says so in comments and names the
+      unresolved question as that packet's own first exit criterion: whether the
+      local build counter should touch tracked files at all. Do NOT duplicate
+      that here. If this packet's investigation concludes the writer IS the
+      documented bump after all, close this and add an event to 643-64bx.
+    outcome: |
+      Either the writer is named and fixed, or this is shown to be the
+      documented bump and folded into 643-64bx.
+    exit_criteria:
+      - 'Name the writer. Reproduce by setting VERSION to a prior date and running ./build.sh --ci-full with the six paths under observation (inotify, or a wrapper on bump-version.sh that logs its caller). Do not conclude from source reading alone — source reading is what produced the wrong first version of this packet.'
+      - 'Explain the DIFFERENCE, which is the real evidence: two --ci-full runs on the same host 40 minutes apart, identical log shape, one bumped and one did not. A mechanism that cannot account for the clean run has not been established.'
+      - 'If the writer is the documented bump at build.sh:776, then the defect is that its warning did not print, and THAT is the p1 — a guard that is loud in source and silent in practice is worse than one that never claimed to be loud. Prove the warning fires with a fixture.'
+      - 'The release runbook sets TILLANDSIAS_SKIP_VERSION_BUMP=1 on its step-3 gate invocation regardless of the outcome above, since it asserts a clean tree two steps later.'
+      - 'NEGATIVE CONTROL: whatever changes, ./build.sh --install on main still bumps the counter as designed. The bump exists because VERSION once sat static for days while the tag moved; do not fix this by disabling it.'
+    verifiable_closure: |
+      A run that reproduces the mutation names the writing process, and a run
+      with the fix in place leaves `git status --porcelain` empty after
+      `--ci-full` on a clean tree.
+    notes: |
+      DETECTION IS CHEAP AND ASYMMETRIC, from yolanda, and belongs in whatever
+      fix lands: a LEGITIMATE bump leaves `git status VERSION` empty and
+      `git log -1 -- VERSION` naming a release commit; an untracked rewrite
+      leaves VERSION DIRTY and the last commit touching it stale. One command
+      distinguishes them and it works RETROACTIVELY on an inherited tree.
+      The failure is silent at the time; only the residue is loud.
+
+      macbook established that the three-platform e2e version assertions are
+      structurally immune to this: `SMOKE_TAG` resolves against the GitHub
+      releases API and the compared version comes from the DOWNLOADED release
+      binary, so neither side reads the local VERSION file. Their tree read
+      0.4.260817.1, stale relative to the tag, and the assertion would still
+      have been correct. The exposure is to LOCALLY BUILT artifacts only.
+
+      PROCESS NOTE, recorded because it is the point. This packet's first
+      version asserted a mechanism from a log absence plus a plausible reading
+      of one script. yoga gave me a three-outcome test — "VERSION bumped" present,
+      neither present, or "Skipping" present with VERSION moved anyway — each
+      pointing at a different packet, and asked me to run it before filing. It
+      came back "neither present", which is the outcome I had not considered and
+      which invalidated my framing while leaving the observation intact. A
+      coordinator filing a confident p1 that four hosts have already been told
+      about is exactly the arrival the Reduction Engine exists to bound.
+    events:
+      - type: filed
+        ts: "2026-08-26T02:05:00Z"
+        agent_id: linux-macuahuitl-claude-20260826t015805z
+        host: macuahuitl
+        summary: |
+          Filed after yoga falsified the first framing pre-push. Observation
+          preserved, mechanism withdrawn, priority dropped p1 -> p2 because the
+          documented bump is deliberate, guarded and loud, and the anomaly is
+          now narrow: a missing warning and an unexplained difference between
+          two runs. The yoga-phantom-binary explanation is withdrawn as
+          plausible-and-unproven, by yoga's own measurement.
