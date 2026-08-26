@@ -11654,6 +11654,81 @@ plan_index:
 
       events:
         - type: note
+          ts: "2026-08-26T06:39:30Z"
+          agent_id: "linux-macuahuitl-claude-20260826t063930z"
+          host: macuahuitl
+          summary: |
+            MIGRATION DONE AND EVALUATING; TWO REAL API BREAKS FOUND, BOTH FIXED. Progress record while the full realize runs.
+
+            TARGET, chosen by ENUMERATING rather than assuming a numbering scheme:
+              git ls-remote --heads .../nixpkgs 'refs/heads/nixos-2[5-6]*'
+                -> nixos-25.05, nixos-25.11, nixos-26.05   (26.05 = current supported stable)
+              git ls-remote --tags .../crane   -> latest v0.24.0
+
+              nixpkgs  nixos-24.11 (EOL) -> nixos-26.05   locked 2026-08-25
+              crane    v0.20.3           -> v0.24.0       locked 2026-08-21
+              rust-overlay                                locked 2026-08-26
+
+            BREAK 1 -- dockerTools.buildLayeredImage no longer accepts `copyToRoot`:
+              error: function 'anonymous lambda' called with unexpected argument 'copyToRoot'
+              at .../pkgs/build-support/docker/default.nix:1000 (streamLayeredImage)
+
+              These are TWO DIFFERENT BUILDERS with two different parameter names, and
+              nixpkgs-24.11 happened to accept the wrong one:
+                buildImage        -> copyToRoot   (`contents` is DEPRECATED there)
+                buildLayeredImage -> contents
+              Confirmed by reading streamLayeredImage's actual formals in the locked
+              nixpkgs and the dockertools.section.md docs -- enumerated the accepted
+              arguments rather than guessing the new name. Fixed at both sites
+              (forge-image, web-image).
+
+            BREAK 2 -- `nodePackages` REMOVED entirely:
+              error: nodePackages has been removed. Many packages are now available at the
+              top level
+
+              And there is no `pkgs.npm` to move to. Enumerated: npm ABSENT; nodejs,
+              nodejs_22, nodejs_24 present. Fix is to DROP the line, because npm comes from
+              nodejs itself -- VERIFIED rather than assumed, since dropping a line would
+              otherwise silently remove a tool and criterion 3 forbids that:
+                nix build nixpkgs#nodejs_22 -> bin/ = corepack, node, NPM, npx
+              Two sites (forge image root, devShell).
+
+            WORTH NOTING FOR THE NEXT MIGRATION: `nix flake show` SUCCEEDED with break 2
+            still present. Listing a devShell does not force its inputs, so the tool-set
+            break was invisible to the check that looked like it had passed. Found only by
+            evaluating nativeBuildInputs explicitly. A flake that `show`s clean is not a
+            flake that evaluates.
+
+            CRITERION 1 -- SATISFIED. Inputs pin a security-supported nixpkgs (26.05) and
+            the current maintained crane (v0.24.0). The pair is COUPLED by construction:
+            crane v0.21+ requires >= nixpkgs-25.11, which is why this sat for months as
+            "bump two inputs" and is not a two-line change.
+
+            CRITERION 3, TOOL HALF -- SATISFIED, MEASURED. devShell tool sets compared by
+            evaluating BOTH locks (old lock restored from git for the baseline, then the
+            new one put back):
+                old 64 tools -> new 63
+              Name-level diff, versions stripped:
+                bash            -> bash-interactive   (pkgs.bash IS bash-interactive on
+                                                       26.05; pname confirms -- a nixpkgs
+                                                       rename, not a substitution)
+                python3.12-pip  -> python3.13-pip     (version bump)
+                nodePackages.npm dropped              (npm verified present via nodejs_22)
+              NOTHING DISAPPEARED. All 63 resolve on 26.05.
+
+            Output set unchanged: 6 packages + 1 devShell before and after, same names
+            (forge-image, web-image, tillandsias-x86_64-musl,
+            tillandsias-headless-x86_64-musl, tillandsias-headless-aarch64-musl,
+            tillandsias-router-sidecar-x86_64-musl).
+
+            STILL OPEN, stated rather than implied: criterion 2's full realize
+            (`nix flake check` running; a cold ~1,000-crate compile per target is the known
+            unknown, 790-mbk9) and criterion 3's CLOSURE SIZE half, which needs realized
+            outputs to measure. Also worth flagging an ambiguity in criterion 2's wording:
+            "builds for x86_64-linux and aarch64-linux" -- this flake exposes aarch64 as
+            pkgsCross MUSL TARGETS built on x86_64, not as a separate aarch64-linux host
+            system, and there is no aarch64 host in the fleet to build the latter.
+        - type: note
           ts: "2026-08-18T03:28:12Z"
           agent_id: "linux-yoga-claude-20260818t032812z"
           host: linux-immutable

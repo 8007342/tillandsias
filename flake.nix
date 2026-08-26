@@ -2,15 +2,23 @@
   description = "Tillandsias container images";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
+    # nixos-26.05 — the current security-supported stable line (606-um5s).
+    # Was nixos-24.11, which went EOL. Branch chosen by ENUMERATING what exists
+    # (`git ls-remote --heads .../nixpkgs 'refs/heads/nixos-2[5-6]*'` ->
+    # 25.05, 25.11, 26.05) rather than by assuming a numbering scheme.
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
     flake-utils.url = "github:numtide/flake-utils";
     rust-overlay.url = "github:oxalica/rust-overlay";
     # crane: build the Rust release binaries via the flake with the
-    # edition-2024-capable rust-overlay toolchain. nixpkgs-24.11's own rust is
-    # too old for edition 2024, so buildRustPackage can't be used directly.
-    # Pinned to v0.20.3 — the latest crane that targets nixpkgs-24.11; v0.21+
-    # require nixpkgs-25.11 (crane-utils fails to build otherwise).
-    crane.url = "github:ipetkov/crane/v0.20.3";
+    # edition-2024-capable rust-overlay toolchain. nixpkgs' own rust may lag
+    # edition 2024, so buildRustPackage can't be relied on directly.
+    #
+    # THE BUMP IS A COUPLED PAIR, NOT TWO INDEPENDENT UPDATES. crane v0.20.3
+    # was the latest targeting nixpkgs-24.11; v0.21+ needs >= nixpkgs-25.11
+    # (crane-utils fails to build otherwise). So the nixpkgs move and the crane
+    # move have to land together or neither builds — which is why this packet
+    # sat at "bump two inputs" for months and is not a two-line change.
+    crane.url = "github:ipetkov/crane/v0.24.0";
   };
 
   outputs = { self, nixpkgs, flake-utils, rust-overlay, crane }:
@@ -255,8 +263,17 @@
             iproute2
             procps
             # Node.js + npm (for OpenSpec deferred install)
+            # npm comes FROM nodejs_22, not from a separate attribute (606-um5s).
+            # nixpkgs-26.05 removed `nodePackages` entirely ("nodePackages has
+            # been removed. Many packages are now available at the top level"),
+            # and there is no `pkgs.npm` to move to — enumerated: npm ABSENT,
+            # nodejs/nodejs_22/nodejs_24 present.
+            #
+            # VERIFIED rather than assumed, because dropping a line here would
+            # otherwise silently remove a tool and this packet's exit criteria
+            # forbid that: nodejs-22.23.2's bin/ contains corepack, node, NPM,
+            # npx. So npm survives the removal of the line that named it.
             nodejs_22
-            nodePackages.npm
             # Nix itself (for build-time developer workflows inside the image)
             nix
             # TLS certificates and shell support
@@ -292,7 +309,17 @@
             maxLayers = 100;
 
             # @trace spec:forge-shell-tools
-            copyToRoot = forgeImageRoot;
+            #
+            # `contents`, NOT `copyToRoot` (606-um5s). These are two different
+            # builders with two different parameter names, and nixpkgs-24.11
+            # happened to accept the wrong one here:
+            #   buildImage        -> copyToRoot   (`contents` deprecated)
+            #   buildLayeredImage -> contents
+            # nixpkgs-26.05 stopped accepting the alias and evaluation fails with
+            # `function 'anonymous lambda' called with unexpected argument
+            # 'copyToRoot'`. Confirmed by ENUMERATING streamLayeredImage's actual
+            # formals in the locked nixpkgs rather than guessing the new name.
+            contents = forgeImageRoot;
 
             fakeRootCommands = ''
               # FHS compatibility: pre-built binaries (OpenCode, etc.) expect
@@ -412,7 +439,8 @@
             tag = "latest";
             maxLayers = 20;
 
-            copyToRoot = webImageRoot;
+            # `contents`, not `copyToRoot` — see the forge-image site above (606-um5s).
+            contents = webImageRoot;
 
             fakeRootCommands = ''
               mkdir -p ./var/www
@@ -495,8 +523,17 @@
             librsvg
             glib
             # Miscellaneous language/tooling support
+            # npm comes FROM nodejs_22, not from a separate attribute (606-um5s).
+            # nixpkgs-26.05 removed `nodePackages` entirely ("nodePackages has
+            # been removed. Many packages are now available at the top level"),
+            # and there is no `pkgs.npm` to move to — enumerated: npm ABSENT,
+            # nodejs/nodejs_22/nodejs_24 present.
+            #
+            # VERIFIED rather than assumed, because dropping a line here would
+            # otherwise silently remove a tool and this packet's exit criteria
+            # forbid that: nodejs-22.23.2's bin/ contains corepack, node, NPM,
+            # npx. So npm survives the removal of the line that named it.
             nodejs_22
-            nodePackages.npm
             python3
             python3Packages.pip
             perl
