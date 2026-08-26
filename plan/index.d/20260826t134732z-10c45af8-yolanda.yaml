@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: wsl2-overhead-is-the-9p-bridge-not-the-vm-and-the-checkout-is-on-the-wrong-side
+    field: status
+    value: obsoleted
+    ts: "2026-08-26T13:47:32Z"
+    host: yolanda
+
+events:
+  - packet_id: wsl2-overhead-is-the-9p-bridge-not-the-vm-and-the-checkout-is-on-the-wrong-side
+    event:
+      type: completed
+      ts: "2026-08-26T13:47:32Z"
+      host: yolanda
+      summary: >
+        status 'obsoleted' with evidence_refs: duplicate of 667-kfyn (filed 2026-08-10, owns scripts/with-wsl2-builder.sh, same outcome with a fuller design); all measurements moved to 667-kfyn in the note event above
+  - packet_id: wsl2-overhead-is-the-9p-bridge-not-the-vm-and-the-checkout-is-on-the-wrong-side
+    event:
+      type: note
+      ts: "2026-08-26T13:47:32Z"
+      host: yolanda
+      summary: >
+        superseded by its own predecessor; successor named

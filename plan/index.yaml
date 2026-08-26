@@ -15780,6 +15780,42 @@ plan_index:
             Before/after wall time for ./build.sh --check on a Windows host is measured and recorded in the closing event.
 
       events:
+        - type: note
+          ts: "2026-08-26T13:46:45Z"
+          agent_id: "windows-yolanda-claude-20260826t134500z"
+          host: yolanda
+          summary: |
+            MEASUREMENTS FOR THIS PACKET, plus a correction to its rationale that makes it MORE valuable than it claims — and a duplicate of it that I filed without checking.
+
+            I filed 895-bkrn on 2026-08-26 asking for the Windows checkout to live on native ext4. THIS PACKET HAS ASKED FOR THAT SINCE 2026-08-10, with a better design. That is my error: the capture rule says a new ROW only if independently schedulable — naming owned files no open row already owns — and 667-kfyn owns scripts/with-wsl2-builder.sh, which is exactly the file. I have spent two days telling other hosts to check before filing and did not.
+
+            THE MEASUREMENTS, from a quiescent tree on yolanda (commit 1c9d5b417 before and after), which this packet's exit criteria ask for:
+
+              Isolating measurement, one machine, one variable — same kernel, distro,
+              commit, toolchain, 20 no-op cargo checks after two warm discards:
+                  native ext4 (in the distro's VHDX)   250 -> 238 ms/check (n=3, 1.1% spread)
+                  /mnt/c via the 9P bridge            9185 ms/check       (n=3, 0.13pp CPU spread)
+                  RATIO 38.6x, with CPU at 15.0% across the bridge vs ~101% on ext4 —
+                  85% of wall time is waiting, not computing.
+
+              WSL2's own virtualization cost, for contrast: ext4 238ms against yoga's
+              bare-metal Linux 169.3ms = 1.41x, and macbook's Darwin 161.0ms = 1.48x.
+              So the VM is nearly free; the BRIDGE is the whole story.
+
+            THE CORRECTION, AND IT CUTS TOWARD THIS PACKET RATHER THAN AGAINST IT. This packet's title and rationale are about "cargo source I/O". Measured on a forced warm ./build.sh --check totalling 350s:
+
+                cargo (test -p tillandsias-plan + 2x clippy)   37.0s   10.6%
+                plan ledger I/O (archiver 105.1, arrival 21.6,
+                                 MO-FULL ledger 18.1)         144.8s   41.4%
+                tree-wide hashing (ghost-trace 41.2,
+                                   gate stamp 28.3)            69.5s   19.9%
+                other scripts                                  57.8s   16.5%
+
+            CARGO IS A TENTH OF THE GATE. If this packet were only about cargo source I/O its ceiling would be ~37s. But a distro-native MIRROR of the whole checkout does not only serve cargo — the plan-ledger reads and the tree-wide hashing walk the same files, and they are 61% of the gate between them. So the mirror addresses six times more than its stated rationale claims. The rationale understates the packet; the design is right for a reason it does not name.
+
+            AND THIS PACKET'S DESIGN IS STRICTLY BETTER THAN MINE, which is the part I want on the record. I had set 895-bkrn to "blocked on a decision" because relocating the checkout would re-plumb every Git-Bash-side path that resolves ./target/release/tillandsias-plan.exe — the pre-push hook, the plan tooling, every cycle. A MIRROR does not relocate anything: the /mnt/c checkout stays exactly where Git Bash expects it, and only the build reads from ext4. The blocker I described does not exist for this design. It is not blocked; it is unclaimed.
+
+            The TILLANDSIAS_WSL2_SRC_IN_TREE escape hatch and the mechanical fidelity check in the exit criteria are also both things my version lacked, and the fidelity check is the one that matters — a mirror that silently drifts from the source would build the wrong tree and pass.
         - ts: "2026-08-10T22:30:00Z"
           event: filed
           summary: |
@@ -22033,6 +22069,36 @@ plan_index:
         than that field — every child filed in the split carries an estimate too,
         and they already sum past the parent's.
       events:
+        - type: note
+          ts: "2026-08-26T13:48:15Z"
+          agent_id: "windows-yolanda-claude-20260826t134500z"
+          host: yolanda
+          summary: |
+            A SECOND, DIFFERENT INSTANCE OF THE SAME SHAPE, measured on yolanda across three consecutive cycles 2026-08-26 — and this one is not a split-parent, so it widens the packet beyond its current diagnosis.
+
+            OBSERVED. `scripts/select-work-batch.sh windows --seed yolanda` returned a byte-identical batch on three consecutive cycles (07:44Z, 10:44Z, 13:45Z):
+
+              batch: epic=harness-mcp-expert-validation role=windows ... pick=5/7 route=rank:7/7:width=7
+                     urgent=macos-terminal-attach-renders-corrupt-from-launch
+              packet 702-6jza  macos-terminal-attach-renders-corrupt-from-launch   p1
+              packet 317       brew-aarch64-harness-strategy                       kind:enhancement
+              packet 468       forge-claude-transparent-oauth-token-vault-inject   unscored
+
+            ZERO of the three are windows work. The urgent= head is a macOS p1 this host cannot claim, and the other two are an unscored row and a `kind:enhancement` with no priority, both years-old order numbers.
+
+            MEANWHILE, `plan_query pickup_role=windows status=ready` returns FIFTEEN-PLUS ready windows packets, including several p1/p2 with named deliverables: 722-ksnk + 722-qvqb + 722-f86z (Authenticode signing, p1/p1/p2), 667-kfyn (the wsl2 source mirror, p2), 663-64xi (tray registry entries, p2), 756-dwkm (WSL2 remediation, p2), 776-drwr (accel envelope, p2), 778-zydb (gate probe survives interop loss, p2).
+
+            SO THE HOST WITH THE LOWEST ORDINAL RANK WAS OFFERED AN EPIC CONTAINING NO WORK FOR ITS ROLE, THREE TIMES, WHILE ITS ROLE'S QUEUE HELD FIFTEEN CLAIMABLE ROWS.
+
+            WHY THIS WIDENS 750-zrt4 RATHER THAN DUPLICATING IT. This packet currently diagnoses ONE cause — a split parent staying `ready` so the selector keeps offering it. That is not what happened here: 702-6jza is not a split parent, and the batch's emptiness for my role comes from a different mechanism. Two candidates, and I have NOT determined which (or whether both):
+
+              (a) THE URGENT OVERRIDE IS ROLE-BLIND. The skill already documents that urgency is a property of the PACKET, so it is host-independent by construction and preempts the epic pick on every host at once. When the globally-urgent packet's pickup_role does not match the requesting role, the head of the batch is unclaimable by the caller — every cycle, for as long as it stays urgent.
+
+              (b) ORDINAL EPIC ROUTING CAN LAND A HOST ON AN EMPTY EPIC. `route=rank:7/7:width=7` gives this host the 5th-ranked epic; `harness-mcp-expert-validation` has `packets=2`. A low-ranked host can be routed to a small epic that happens to contain nothing for its role, and nothing re-routes it.
+
+            WHAT I DID NOT DO, deliberately: I did not read select-work-batch.sh to decide between (a) and (b), and I am not proposing a fix. This is a report from the consuming end — three identical batches and a fifteen-row queue — and the diagnosis belongs with whoever owns the selector. Reporting it as "role-blind urgent" when it might be "empty epic" would be the confident-wrong-cause shape.
+
+            PRACTICAL EFFECT ON THIS HOST, since it bears on the drain>file directive: I have taken my own story's packets for three cycles rather than the selector's batch. That has worked, but it means the selector is not currently routing this lane, and a host with no open packets of its own would have been offered nothing claimable three times running and might reasonably have concluded its queue was dry.
         - type: filed
           ts: "2026-08-15T02:50:00Z"
           host: linux_immutable
@@ -51234,6 +51300,22 @@ plan_index:
         - 'spawn floors: git bash 17.58ms, wsl 0.69ms, yoga native 0.32ms (1000 iterations each)'
         - yoga bare-metal baseline 170.5ms; macbook Darwin 161ms; yoga toolbox 178.5ms
       events:
+        - type: note
+          ts: "2026-08-26T13:47:04Z"
+          agent_id: "windows-yolanda-claude-20260826t134500z"
+          host: yolanda
+          summary: |
+            SUPERSEDED BY 667-kfyn, WHICH PREDATES IT BY SIXTEEN DAYS. This packet is a duplicate I filed without checking the ledger for an existing owner.
+
+            667-kfyn ("with-wsl2-builder: mirror the checkout into the build distro's ext4 filesystem so cargo source I/O stops crossing 9p onto NTFS", filed 2026-08-10, p2, windows, ready) owns scripts/with-wsl2-builder.sh and asks for the same outcome with a fuller design: a distro-native git mirror synced per invocation, a mechanical fidelity check before the build runs, a TILLANDSIAS_WSL2_SRC_IN_TREE escape hatch mirroring the existing TARGET_IN_TREE contract, and a before/after wall-time measurement as an exit criterion.
+
+            MY PROCESS FAILURE, stated plainly: the capture rule is "a new ROW only if INDEPENDENTLY SCHEDULABLE — it names owned files no open row already owns". 667-kfyn owns exactly the file. I have spent two days telling other hosts to check before filing and did not do it myself when filing this.
+
+            AND 667-kfyn'S DESIGN DISSOLVES THIS PACKET'S STATED BLOCKER. I had set next_action to "BLOCKED ON A DECISION", reasoning that relocating the checkout would re-plumb every Git-Bash-side path resolving ./target/release/tillandsias-plan.exe. That is true of MOVING and false of MIRRORING: 667-kfyn leaves the /mnt/c checkout exactly where Git Bash expects it and only the build reads from ext4. The operator decision I said was required is an artifact of my framing, not of the problem.
+
+            WHAT WAS GENUINELY NEW HERE AND HAS BEEN MOVED TO 667-kfyn RATHER THAN LOST: the isolating 38.6x measurement (one machine, one variable), the 1.41-1.48x figure for WSL2's own cost, and the gate profile showing cargo is only 10.6% of ./build.sh --check while plan-ledger reads and tree-wide hashing are 61%. That last one corrects 667-kfyn's rationale in its own favour — a whole-checkout mirror serves six times more than the "cargo source I/O" it claims.
+
+            Closing as a duplicate rather than leaving it open beside its original, because two rows for one change is how the ready queue grows against a fixed service rate, and because a future host reading both would have to work out which is authoritative.
         - type: progress
           ts: "2026-08-26T07:56:15Z"
           agent_id: "windows-yolanda-claude-20260826t074500z"

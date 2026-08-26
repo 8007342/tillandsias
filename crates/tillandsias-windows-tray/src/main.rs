@@ -32,6 +32,12 @@ mod notify_icon;
 #[cfg(target_os = "windows")]
 mod wsl_lifecycle;
 mod wsl_probe_policy;
+// Pure NotifyIconSettings reconciliation policy (order 663-64xi). Deliberately
+// NOT cfg-gated and deliberately free of Win32: the decision is what needs
+// pinning, and keeping it platform-independent means its three exit criteria —
+// including the negative control that a live portable build survives — are
+// exercised on every host rather than only where a registry exists.
+mod tray_registry;
 
 // Linux stub modules so unit tests + portable code paths compile cleanly.
 #[cfg(not(target_os = "windows"))]

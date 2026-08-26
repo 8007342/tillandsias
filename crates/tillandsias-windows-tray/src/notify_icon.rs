@@ -257,6 +257,176 @@ fn update_status_text(text: &str, hwnd: HWND) {
     }
 }
 
+/// Apply [`crate::tray_registry::classify_entry`] across
+/// `HKCU\Control Panel\NotifyIconSettings` at startup (order 663-64xi).
+///
+/// Windows keys this hive by executable path, so the tray accumulates one
+/// permanent entry per location it has ever run from, and the installer's prune
+/// only runs at install — never in the portable flow. The surviving entry's
+/// `InitialTooltip` was also written once and never refreshed, so the one entry
+/// guaranteed to survive was the one guaranteed to go stale (measured on
+/// yolanda: `Tillandsias 0.4.260728.1` against an `0.4.260826.1` binary).
+///
+/// BEST-EFFORT AND SILENT ON FAILURE, deliberately. This tidies a cosmetic
+/// Settings list; a permissions problem or a hive that does not exist must not
+/// stop a tray from starting. Every outcome is logged so the reconciliation is
+/// observable in `tray.log` without being load-bearing.
+///
+/// @trace order:663-64xi
+fn reconcile_notify_icon_settings() {
+    use crate::tray_registry::{EntryAction, classify_entry, settings_tooltip};
+    use windows::Win32::System::Registry::{
+        HKEY, HKEY_CURRENT_USER, KEY_ALL_ACCESS, REG_SZ, RegCloseKey, RegDeleteTreeW,
+        RegEnumKeyExW, RegOpenKeyExW, RegSetValueExW,
+    };
+    use windows::core::PCWSTR;
+
+    let current_exe = match std::env::current_exe() {
+        Ok(p) => p.to_string_lossy().to_string(),
+        Err(err) => {
+            tracing::debug!(%err, "notify-icon reconcile: current_exe unavailable; skipping");
+            return;
+        }
+    };
+    let tooltip = settings_tooltip(env!("WORKSPACE_VERSION"));
+
+    let root_w = to_utf16(r"Control Panel\NotifyIconSettings");
+    let mut root: HKEY = HKEY::default();
+    let opened = unsafe {
+        RegOpenKeyExW(
+            HKEY_CURRENT_USER,
+            PCWSTR(root_w.as_ptr()),
+            0,
+            KEY_ALL_ACCESS,
+            &mut root,
+        )
+    };
+    if opened.is_err() {
+        tracing::debug!("notify-icon reconcile: hive absent or unreadable; skipping");
+        return;
+    }
+
+    // Collect subkey names first: deleting while enumerating renumbers the
+    // indices underneath the walk and silently skips entries.
+    let mut names: Vec<String> = Vec::new();
+    let mut idx: u32 = 0;
+    loop {
+        let mut buf = [0u16; 256];
+        let mut len = buf.len() as u32;
+        let rc = unsafe {
+            RegEnumKeyExW(
+                root,
+                idx,
+                windows::core::PWSTR(buf.as_mut_ptr()),
+                &mut len,
+                None,
+                windows::core::PWSTR::null(),
+                None,
+                None,
+            )
+        };
+        if rc.is_err() {
+            break;
+        }
+        names.push(String::from_utf16_lossy(&buf[..len as usize]));
+        idx += 1;
+    }
+
+    let (mut refreshed, mut pruned, mut left) = (0u32, 0u32, 0u32);
+    for name in &names {
+        let sub_w = to_utf16(name);
+        let mut sub: HKEY = HKEY::default();
+        if unsafe { RegOpenKeyExW(root, PCWSTR(sub_w.as_ptr()), 0, KEY_ALL_ACCESS, &mut sub) }
+            .is_err()
+        {
+            continue;
+        }
+        let entry_path = read_reg_string(sub, "ExecutablePath").unwrap_or_default();
+        let target_exists = !entry_path.is_empty() && std::path::Path::new(&entry_path).exists();
+
+        match classify_entry(&entry_path, &current_exe, target_exists) {
+            EntryAction::RefreshTooltip => {
+                let tip_w = to_utf16(&tooltip);
+                let bytes = unsafe {
+                    std::slice::from_raw_parts(
+                        tip_w.as_ptr() as *const u8,
+                        tip_w.len() * std::mem::size_of::<u16>(),
+                    )
+                };
+                let name_w = to_utf16("InitialTooltip");
+                let _ =
+                    unsafe { RegSetValueExW(sub, PCWSTR(name_w.as_ptr()), 0, REG_SZ, Some(bytes)) };
+                refreshed += 1;
+            }
+            EntryAction::Prune => {
+                let _ = unsafe { RegCloseKey(sub) };
+                let name_w = to_utf16(name);
+                let _ = unsafe { RegDeleteTreeW(root, PCWSTR(name_w.as_ptr())) };
+                tracing::info!(path = %entry_path, "notify-icon reconcile: pruned dead entry");
+                pruned += 1;
+                continue;
+            }
+            EntryAction::Leave => left += 1,
+        }
+        let _ = unsafe { RegCloseKey(sub) };
+    }
+    let _ = unsafe { RegCloseKey(root) };
+    tracing::info!(
+        refreshed,
+        pruned,
+        left,
+        scanned = names.len(),
+        tooltip = %tooltip,
+        "notify-icon reconcile complete"
+    );
+}
+
+/// Read a `REG_SZ` value as a Rust string. Returns `None` for any other type,
+/// an absent value, or an unreadable key — every caller treats absence as
+/// "not ours", which is the safe direction.
+#[cfg(target_os = "windows")]
+fn read_reg_string(key: windows::Win32::System::Registry::HKEY, value: &str) -> Option<String> {
+    use windows::Win32::System::Registry::{REG_SZ, RegQueryValueExW};
+    use windows::core::PCWSTR;
+
+    let name_w = to_utf16(value);
+    let mut kind = windows::Win32::System::Registry::REG_VALUE_TYPE::default();
+    let mut size: u32 = 0;
+    let rc = unsafe {
+        RegQueryValueExW(
+            key,
+            PCWSTR(name_w.as_ptr()),
+            None,
+            Some(&mut kind),
+            None,
+            Some(&mut size),
+        )
+    };
+    if rc.is_err() || kind != REG_SZ || size == 0 {
+        return None;
+    }
+    let mut buf = vec![0u8; size as usize];
+    let rc = unsafe {
+        RegQueryValueExW(
+            key,
+            PCWSTR(name_w.as_ptr()),
+            None,
+            None,
+            Some(buf.as_mut_ptr()),
+            Some(&mut size),
+        )
+    };
+    if rc.is_err() {
+        return None;
+    }
+    let wide: Vec<u16> = buf
+        .chunks_exact(2)
+        .map(|c| u16::from_le_bytes([c[0], c[1]]))
+        .take_while(|&c| c != 0)
+        .collect();
+    Some(String::from_utf16_lossy(&wide))
+}
+
 /// Severity of a tray balloon notification — maps to the Win11 toast icon.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum BalloonSeverity {
@@ -367,6 +537,16 @@ pub fn run() -> ! {
     // Route tracing to a file before anything logs — a GUI tray has no console.
     init_tracing();
     tracing::info!(log = %log_file_path().display(), "tillandsias tray starting");
+
+    // 663-64xi: reconcile this build's NotifyIconSettings entry BEFORE the icon
+    // is registered, so the Settings list reflects the running version rather
+    // than the first build ever to register from this path — and so entries
+    // whose executable is gone stop accumulating in the portable flow, which
+    // never runs the installer's prune.
+    //
+    // Best-effort by construction: a tray that cannot tidy a cosmetic registry
+    // hive must still start. Every failure is logged and swallowed.
+    reconcile_notify_icon_settings();
 
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
