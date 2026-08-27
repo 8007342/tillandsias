@@ -88,6 +88,44 @@ tillandsias_dev_env_hook() {
         export TILLANDSIAS_EMBED_MODEL="nomic-embed-text"
     fi
 
+    # ── PER-HOST MODEL TIER TABLE (order 902-5bf9) ──────────────────────────
+    #
+    # Selects the inference model based on available hardware:
+    #   GPU (CUDA/ROCm)  → 12-15B model (best quality, needs VRAM)
+    #   NPU              → 0.6b model (fast, low quality)
+    #   CPU only         → 0.5b model (fallback, minimal quality)
+    #
+    # TILLANDSIAS_INFERENCE_MODEL always wins (CLI override).
+    # TILLANDSIAS_MODEL_TIER forces a specific tier: "gpu", "npu", "cpu".
+    if [ -z "${TILLANDSIAS_INFERENCE_MODEL:-}" ]; then
+        _deh_tier="${TILLANDSIAS_MODEL_TIER:-}"
+        if [ -z "$_deh_tier" ]; then
+            # Auto-detect hardware
+            if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then
+                _deh_tier="gpu"
+            elif [ -d /dev/accel ] || [ -d /dev/npu ] || ls /dev/accel_* >/dev/null 2>&1; then
+                _deh_tier="npu"
+            else
+                _deh_tier="cpu"
+            fi
+        fi
+        case "$_deh_tier" in
+            gpu)
+                # 12-15B on GPU — needs ≥16GB VRAM for quantized models
+                export TILLANDSIAS_INFERENCE_MODEL="qwen2.5:14b"
+                ;;
+            npu)
+                # 0.6b on NPU — fast, fits in NPU memory
+                export TILLANDSIAS_INFERENCE_MODEL="qwen2.5:0.6b"
+                ;;
+            cpu|*)
+                # 0.5b CPU fallback — always available
+                export TILLANDSIAS_INFERENCE_MODEL="qwen2.5:0.5b"
+                ;;
+        esac
+        printf '[lib-dev-env] model tier: %s -> %s\n' "$_deh_tier" "$TILLANDSIAS_INFERENCE_MODEL" >&2
+    fi
+
     # Operator kill switch (620-ca7g): honored here too, loudly.
     _deh_state_dir="${XDG_RUNTIME_DIR:-/tmp}"
     _deh_verdict="$_deh_state_dir/tillandsias-dev-inference.verdict"

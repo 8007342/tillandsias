@@ -1022,6 +1022,8 @@ while IFS= read -r line; do
                 {"name":"methodology_path","description":"METHODOLOGY EXPERT (L0). Look up a YAML path in methodology.yaml and methodology/**/*.yaml and return the matched block plus a resolvable file:line, in the same CITED envelope as plan_answer. Query by full dotted path (methodology.runtime_language_policy.tlatoani_hard_no_python.rule), by path suffix (forge_cycle_budget.rule), or with * wildcards. An unknown path returns confidence=unsupported with zero citations — never the nearest key, never a guess.","inputSchema":{"type":"object","properties":{"path":{"type":"string","description":"e.g. \"forge_cycle_budget.rule\", \"bar_raise_governance.authority\", \"multi_host_development.pull_merge_cadence.pre_push_gate.rule\""}},"required":["path"]}},
                 {"name":"methodology_ask","description":"METHODOLOGY EXPERT (L0). Route a canonical discipline question to its YAML path and answer it in the CITED envelope. Deterministic routing only: a question matching no route, or two routes, is refused as confidence=unsupported and the refusal lists the routed forms so you can re-ask methodology_path directly.","inputSchema":{"type":"object","properties":{"question":{"type":"string","description":"e.g. \"may a forge cycle drain two packets?\", \"may I embed a script in base64?\", \"who may raise the scan bar?\", \"what happens to a dead mechanism with a live intent?\", \"which branch does macOS checkpoint to?\""}},"required":["question"]}},
                 {"name":"spec_answer","description":"FAT SPEC EXPERT (L1 RAG, orders 547/548). Answer a cross-cutting question about the whole spec corpus (openspec/specs + cheatsheets + methodology, ~950k tokens — too big for any context) as the same CITED envelope {answer, citations[], freshness, confidence=retrieved}. Retrieves the top spec sections (cosine over a local embedding index), synthesizes prose grounded ONLY in them, and keeps ONLY citations the answer actually used — verify with `tillandsias-plan verify-answer`. Use for JOIN-across-specs questions the deterministic plan/methodology experts refuse; those single-node lookups still go to plan_answer/methodology_ask. Fail-soft: returns confidence=unsupported (never a guess) when the index or an inference endpoint is unavailable.","inputSchema":{"type":"object","properties":{"question":{"type":"string","description":"e.g. \"how does the forge stay isolated from the host and control outbound network access?\", \"which specs govern async inference launch?\", \"how do the browser isolation specs interact with the enclave CA?\""}},"required":["question"]}},
+                {"name":"plan_decompose","description":"ADVERSARIAL DECOMPOSITION (order 902-5bf9). Decompose a natural-language query into adversarial prompt variants for concurrent hallucination-reducing dispatch. Returns a JSON array of {prompt, kind} pairs. Consumer is unaware this happens — transparent black box.","inputSchema":{"type":"object","properties":{"query":{"type":"string","description":"The natural-language query to decompose, e.g. \"how does the plan expert work\""}},"required":["query"]}},
+                {"name":"plan_collect","description":"CRDT COLLECTION (order 902-5bf9). Collect and deduplicate validated adversarial inference responses. Reads a JSON array of response objects from stdin, returns the collected envelope. All validated responses survive — no confidence threshold, no merging.","inputSchema":{"type":"object","properties":{"responses":{"type":"array","description":"Array of validated response objects with answer, citations, confidence, query_kind, source_prompt, why, affordances, why_not fields"}},"required":["responses"]}},
                 {"name":"expert_capability","description":"ORDER 569. Answer three questions about this session's expert WITHOUT reading source: what can I use RIGHT NOW, what would be available if this forge were RELAUNCHED (i.e. what the mounted checkout's sources provide), and is my current work therefore BLOCKED pending a relaunch. Returns the pinned machine line `expert_capability: now=<csv|none|stale-binary> after_relaunch=<csv|none> skew=<none|pending-build|relaunch-required|relaunch-regresses> blocked_capabilities=<csv|-> lost_on_relaunch=<csv|->` plus the one-sentence action. Read `skew` first: `pending-build` means WAIT AND RETRY (the async launch build will deliver it in this session); `relaunch-required` means retrying is FUTILE and you must relaunch the forge or rebuild by hand. Call this whenever an expert tool returns confidence=unsupported — it distinguishes 'the plan has no answer' from 'this binary cannot answer'.","inputSchema":{"type":"object","properties":{}}}
 ]
 TOOLS_JSON
@@ -1148,6 +1150,54 @@ TOOLS_JSON
                     # every path, including the degraded ones.
                     question=$(echo "$args" | jq -r '.question // ""')
                     result=$(plan_answer_envelope "$question")
+                    ;;
+                "plan_decompose")
+                    # ORDER 902-5bf9. Adversarial decomposition via Lua runtime.
+                    # Same binary/resolution chain as plan_answer.
+                    [ -n "$PLAN_BIN" ] || PLAN_BIN="$(resolve_plan_bin)"
+                    [ -n "$PLAN_INDEX" ] || PLAN_INDEX="$(resolve_plan_index)"
+                    state="$(experts_state_line)"
+                    query=$(echo "$args" | jq -r '.query // ""')
+                    if [ -z "$query" ]; then
+                        unsupported_envelope "no query was supplied to plan_decompose"
+                    elif [ -z "$PLAN_BIN" ]; then
+                        unsupported_envelope "the plan expert cannot decompose — experts state: ${state}"
+                    else
+                        hint="$(capability_gap "decompose")"
+                        if [ -n "$hint" ]; then
+                            unsupported_envelope "the plan expert cannot decompose — ${hint}"
+                        else
+                            out="$("$PLAN_BIN" --index "$PLAN_INDEX" decompose "$query" 2>/dev/null || true)"
+                            if printf '%s' "$out" | jq -e 'type == "array"' >/dev/null 2>&1; then
+                                result="$out"
+                            else
+                                unsupported_envelope "the plan expert returned no decomposition — experts state: ${state}"
+                            fi
+                        fi
+                    fi
+                    ;;
+                "plan_collect")
+                    # ORDER 902-5bf9. CRDT collection via Lua runtime.
+                    # Reads responses from the arguments, pipes to stdin.
+                    [ -n "$PLAN_BIN" ] || PLAN_BIN="$(resolve_plan_bin)"
+                    [ -n "$PLAN_INDEX" ] || PLAN_INDEX="$(resolve_plan_index)"
+                    state="$(experts_state_line)"
+                    responses_json=$(echo "$args" | jq -c '.responses // []')
+                    if [ -z "$PLAN_BIN" ]; then
+                        unsupported_envelope "the plan expert cannot collect — experts state: ${state}"
+                    else
+                        hint="$(capability_gap "collect")"
+                        if [ -n "$hint" ]; then
+                            unsupported_envelope "the plan expert cannot collect — ${hint}"
+                        else
+                            out="$(printf '%s' "$responses_json" | "$PLAN_BIN" --index "$PLAN_INDEX" collect 2>/dev/null || true)"
+                            if printf '%s' "$out" | jq -e 'type == "array"' >/dev/null 2>&1; then
+                                result="$out"
+                            else
+                                unsupported_envelope "the plan expert returned no collection — experts state: ${state}"
+                            fi
+                        fi
+                    fi
                     ;;
                 "plan_next")
                     # Order 606-xu52. Envelope on every path like plan_answer;

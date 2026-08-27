@@ -377,6 +377,88 @@ impl SemanticExplainer {
             freshness.clone(),
         ))
     }
+
+    /// Explain query using the adversarial decomposition pipeline.
+    ///
+    /// This is the v0.5+ path: decompose the question into adversarial
+    /// variants, dispatch all concurrently to the inference endpoint, collect
+    /// validated responses, and pick the best one. Consumer is unaware this
+    /// happens — transparent black box producing a standard citation envelope.
+    ///
+    /// Falls back to the single-shot `explain_query` if the pipeline is
+    /// unavailable (no Lua runtime, no inference endpoint).
+    pub fn explain_query_pipeline<P: SemanticSectionProvider>(
+        &self,
+        provider: &P,
+        question: &str,
+        freshness: &Freshness,
+    ) -> Option<Envelope> {
+        let section = provider.find_section(question)?;
+
+        let mut authority = BTreeMap::new();
+        authority.insert("section".to_string(), section.section_title.clone());
+        authority.insert("key".to_string(), section.section_title.clone());
+
+        let citation = Citation::new(
+            section.file_rel.clone(),
+            section.line_start,
+            section.line_end,
+            CitationKind::Plan,
+            authority,
+        );
+
+        let prompt = format!(
+            "Based on this excerpt from '{}':\n\n{}\n\nQuestion: {}\nAnswer concisely:",
+            section.section_title, section.content, question
+        );
+
+        // Try the adversarial pipeline first
+        let config = crate::pipeline::InferenceConfig::default();
+        let root = std::env::current_dir().unwrap_or_default();
+        let lua_dir = root.join("crates").join("tillandsias-plan").join("lua");
+
+        if let Ok(runtime) = crate::lua_runtime::LuaRuntime::new(&lua_dir, &root) {
+            let shared_rt = std::sync::Arc::new(tokio::sync::Mutex::new(runtime));
+            if let Ok(rt_handle) = tokio::runtime::Runtime::new()
+                && let Ok((responses, _tier)) =
+                    rt_handle.block_on(crate::pipeline::run_pipeline(&shared_rt, &prompt, &config))
+            {
+                // Pick the best response from the collected set
+                if let Some(best) = responses.iter().max_by(|a, b| {
+                    a.confidence
+                        .partial_cmp(&b.confidence)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                }) && !best.answer.is_empty()
+                {
+                    return Some(Envelope::supported(
+                        best.answer.clone(),
+                        vec![citation],
+                        Confidence::Retrieved,
+                        freshness.clone(),
+                    ));
+                }
+            }
+        }
+
+        // Fallback: single-shot inference (existing behavior)
+        let answer_text = if let Some(synthesized) = self.query_inference(&prompt) {
+            let trimmed = synthesized.trim();
+            if !trimmed.is_empty() {
+                trimmed.to_string()
+            } else {
+                section.content.clone()
+            }
+        } else {
+            section.content.clone()
+        };
+
+        Some(Envelope::supported(
+            answer_text,
+            vec![citation],
+            Confidence::Retrieved,
+            freshness.clone(),
+        ))
+    }
 }
 
 #[cfg(test)]

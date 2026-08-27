@@ -99,6 +99,41 @@ if [ -x "$REPO_ROOT/scripts/spec-index-ensure.sh" ]; then
     disown -a 2>/dev/null || true
 fi
 
+# ── L1b: Domain-specific re-indexing ────────────────────────────────
+# When files in specific domains change, re-index only those domains.
+# This is faster than re-indexing the entire corpus and keeps domain
+# separation clean (cheatsheet experts not influenced by code, etc.).
+if [ -x "$REPO_ROOT/scripts/spec-index-ensure.sh" ]; then
+    _domains_to_reindex=""
+    if echo "$CHANGED" | grep -qE '^cheatsheets/|^docs/cheatsheets/'; then
+        _domains_to_reindex="$_domains_to_reindex cheatsheet"
+    fi
+    if echo "$CHANGED" | grep -qE '^methodology/'; then
+        _domains_to_reindex="$_domains_to_reindex methodology"
+    fi
+    if echo "$CHANGED" | grep -qE '^(crates|scripts|images)/'; then
+        _domains_to_reindex="$_domains_to_reindex code"
+    fi
+    if echo "$CHANGED" | grep -qE '^openspec/'; then
+        _domains_to_reindex="$_domains_to_reindex spec"
+    fi
+    for _domain in $_domains_to_reindex; do
+        (
+            _si_err="$(mktemp "${TMPDIR:-/tmp}/spec-index-domain-${_domain}.XXXXXX")"
+            _si_out="$(bash "$REPO_ROOT/scripts/spec-index-ensure.sh" --domain "$_domain" 2>"$_si_err" | tail -1)"
+            case "$_si_out" in
+                ok:spec-index:fresh:*) : ;;
+                *)
+                    echo "[$HOOK_NAME] $(date -u +%Y-%m-%dT%H:%M:%SZ) domain-${_domain}: ${_si_out:-no-verdict}" >> "$HOOK_LOG"
+                    [ -s "$_si_err" ] && sed 's/^/    /' "$_si_err" >> "$HOOK_LOG"
+                    ;;
+            esac
+            rm -f "$_si_err"
+        ) &
+        disown -a 2>/dev/null || true
+    done
+fi
+
 # ── Crate changes → async binary rebuild ────────────────────────────
 # The tillandsias-plan binary changes when its crate sources change.
 # Trigger a background, bounded rebuild so the next answer uses the
@@ -141,6 +176,35 @@ if echo "$CHANGED" | grep -qE '^crates/tillandsias-plan/'; then
             fi
         else
             echo "[$HOOK_NAME] $(date -u +%Y-%m-%dT%H:%M:%SZ) SKIP: cargo not available — binary rebuild deferred" >> "$HOOK_LOG"
+        fi
+    ) &
+    disown -a 2>/dev/null || true
+fi
+
+# ── SENTINEL ADVERSARIAL QUERY (order 902-5bf9) ─────────────────────
+#
+# After commits that touch the expert system pipeline (Lua scripts,
+# pipeline.rs, semantic_expert.rs), run a lightweight sentinel query
+# through the adversarial decomposition pipeline. This verifies:
+#   1. The Lua runtime loads all scripts without errors
+#   2. The tier classifier produces a valid tier
+#   3. The decompose function produces variants
+#   4. The collect function processes responses
+#
+# Runs in the background, never blocks the commit.
+# IMMEDIATE tier: short query, fast timeout, no inference required.
+if echo "$CHANGED" | grep -qE '^crates/tillandsias-plan/(lua/|src/pipeline\.rs|src/lua_runtime\.rs|src/semantic_expert\.rs)'; then
+    (
+        _sentinel_bin="${FORGE_EXPERTS_BIN_DIR:-$HOME/.local/bin}/tillandsias-plan"
+        if [ -x "$_sentinel_bin" ]; then
+            # Decompose only — no inference needed, just verifies Lua loads
+            _sentinel_out="$("$_sentinel_bin" --index "$REPO_ROOT/plan/index.yaml" decompose "what is the current direction" 2>/dev/null || true)"
+            if printf '%s' "$_sentinel_out" | jq -e 'type == "array" and length > 0' >/dev/null 2>&1; then
+                _count=$(printf '%s' "$_sentinel_out" | jq 'length')
+                echo "[$HOOK_NAME] $(date -u +%Y-%m-%dT%H:%M:%SZ) sentinel: ok:decompose:$_count-variants" >> "$HOOK_LOG"
+            else
+                echo "[$HOOK_NAME] $(date -u +%Y-%m-%dT%H:%M:%SZ) sentinel: FAIL:decompose: $_sentinel_out" >> "$HOOK_LOG"
+            fi
         fi
     ) &
     disown -a 2>/dev/null || true

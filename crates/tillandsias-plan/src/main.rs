@@ -71,11 +71,13 @@ const DISPATCH_ARMS: &[&str] = &[
     "carry-forward-check",
     "check",
     "closure-evidence-check",
+    "collect",
     "compact",
     "corpus-coverage",
     "declared-closures",
     "declared-closures-check",
     "dependencies-of",
+    "decompose",
     "expire-claims",
     "plan-events",
     "fragment-event-packets",
@@ -94,6 +96,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "next",
     "next-order",
     "parked-blocks",
+    "pipeline",
     "query",
     "ready",
     "select-rows",
@@ -289,6 +292,15 @@ const USAGE: &str = concat!(
     "                                     emits the plan_query projection array.\n",
     "           burndown <milestone>      release-target children with statuses\n",
     "           answer <question...>      the CITED answer envelope as JSON (order 394b)\n",
+    "           decompose <query...>      adversarial query decomposition via Lua runtime\n",
+    "                                     (order 902-5bf9). Returns a JSON array of\n",
+    "                                     {prompt, kind} variants for concurrent dispatch.\n",
+    "           pipeline <query...>       full adversarial pipeline: decompose -> tier trim\n",
+    "                                     -> concurrent dispatch -> CRDT collect (902-5bf9).\n",
+    "                                     Returns collected responses as JSON.\n",
+    "           collect                   CRDT collection of validated adversarial responses\n",
+    "                                     via Lua runtime (order 902-5bf9). Reads JSON array\n",
+    "                                     from stdin, returns collected envelope on stdout.\n",
     "           validate-yaml <file>...   ORDER 746-htj9. Load each file with serde_yaml and\n",
     "                                     report ok:yaml-loads / blocked:yaml-load-failed /\n",
     "                                     blocked:yaml-unreadable. THE sanctioned YAML reader:\n",
@@ -5099,6 +5111,126 @@ fn main() {
             // was observed — an index reached through a probe path yielded
             // confidence=exact with a citation `verify-answer` refused.
             emit_verified_envelope(envelope, &root, ledger.skipped_fragments());
+        }
+        "decompose" => {
+            // ORDER 902-5bf9. LLM-based adversarial query decomposition.
+            // The model generates the adversarial variants — no regex.
+            // --domain <name> sets the RAG domain context.
+            let mut domain: Option<String> = None;
+            let mut query_parts = Vec::new();
+            let mut i = 1;
+            while i < args.len() {
+                if args[i] == "--domain" && i + 1 < args.len() {
+                    domain = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    query_parts.push(args[i].clone());
+                    i += 1;
+                }
+            }
+            let query = query_parts.join(" ");
+            if query.trim().is_empty() {
+                usage();
+            }
+            let config = tillandsias_plan::pipeline::InferenceConfig {
+                domain,
+                ..Default::default()
+            };
+            let prompts = tillandsias_plan::pipeline::decompose_with_llm(&config, &query);
+            let json = serde_json::to_string(&prompts)
+                .unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"));
+            println!("{json}");
+        }
+        "collect" => {
+            // ORDER 902-5bf9. CRDT collection of validated adversarial
+            // responses. Reads a JSON array from stdin, returns the collected
+            // envelope on stdout.
+            let mut raw = String::new();
+            if let Err(e) = std::io::Read::read_to_string(&mut std::io::stdin(), &mut raw) {
+                eprintln!("error: read stdin: {e}");
+                std::process::exit(1);
+            }
+            let root = root_for(&index);
+            let lua_dir = root.join("crates").join("tillandsias-plan").join("lua");
+            let rt = match tillandsias_plan::lua_runtime::LuaRuntime::new(&lua_dir, &root) {
+                Ok(rt) => rt,
+                Err(e) => {
+                    eprintln!("error: lua runtime init failed: {e}");
+                    std::process::exit(1);
+                }
+            };
+            match rt.call_collect("collect", &raw) {
+                Ok(responses) => {
+                    let json = serde_json::to_string(&responses)
+                        .unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"));
+                    println!("{json}");
+                }
+                Err(e) => {
+                    eprintln!("error: collect failed: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        "pipeline" => {
+            // ORDER 902-5bf9. Full adversarial pipeline: decompose -> tier
+            // trim -> concurrent dispatch -> CRDT collect. Returns collected
+            // responses as JSON.
+            // --domain <name> sets the RAG domain context.
+            let mut domain: Option<String> = None;
+            let mut query_parts = Vec::new();
+            let mut i = 1;
+            while i < args.len() {
+                if args[i] == "--domain" && i + 1 < args.len() {
+                    domain = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    query_parts.push(args[i].clone());
+                    i += 1;
+                }
+            }
+            let query = query_parts.join(" ");
+            if query.trim().is_empty() {
+                usage();
+            }
+            let root = root_for(&index);
+            let lua_dir = root.join("crates").join("tillandsias-plan").join("lua");
+            let rt = match tillandsias_plan::lua_runtime::LuaRuntime::new(&lua_dir, &root) {
+                Ok(rt) => rt,
+                Err(e) => {
+                    eprintln!("error: lua runtime init failed: {e}");
+                    std::process::exit(1);
+                }
+            };
+            let config = tillandsias_plan::pipeline::InferenceConfig {
+                domain,
+                ..Default::default()
+            };
+            let shared_rt = std::sync::Arc::new(tokio::sync::Mutex::new(rt));
+            let rt_handle = tokio::runtime::Runtime::new().unwrap_or_else(|e| {
+                eprintln!("error: tokio runtime init failed: {e}");
+                std::process::exit(1);
+            });
+            match rt_handle.block_on(tillandsias_plan::pipeline::run_pipeline(
+                &shared_rt, &query, &config,
+            )) {
+                Ok((responses, tier)) => {
+                    // Compute RAG freshness from corpus root
+                    let freshness = tillandsias_plan::answer::Freshness::for_corpus(&root, &[]);
+                    let rag_freshness = freshness.rag_timestamp_with_staleness(3600);
+                    let output = serde_json::json!({
+                        "tier": format!("{:?}", tier).to_lowercase(),
+                        "domain": config.domain.as_deref().unwrap_or("all"),
+                        "rag_freshness": rag_freshness,
+                        "rag_source_commit": freshness.source_commit(),
+                        "responses": responses,
+                    });
+                    println!("{}", serde_json::to_string(&output).unwrap_or_default());
+                }
+                Err(e) => {
+                    eprintln!("error: pipeline failed: {e}");
+                    std::process::exit(1);
+                }
+            }
         }
         "next" => {
             // ORDER 606-xu52. The cold-start selector: at most five cited,

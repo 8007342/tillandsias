@@ -28,5 +28,13 @@ serde_yaml = { workspace = true }
 serde_json = { workspace = true }
 # Order 879-gidx: the spec-index resolution ladder's podman-volume rung. The
 # 714-4r6w gate forbids raw synchronous podman anywhere — this workspace crate
-# is the one bounded surface, and the rung inherits its budget discipline.
+# is the one bounded surface, and the rung inherits its discipline.
 tillandsias-podman = { path = "../tillandsias-podman" }
+# Lua runtime for the adversarial decomposition pipeline (order 902-5bf9
+# extends to the expert system). Sandboxed, hot-reloadable, type-checked
+# middle layer between Rust and Shell. `vendored` builds Lua from source;
+# `send` enables Send-bound across tokio tasks for concurrent dispatch.
+mlua = { version = "0.10", features = ["vendored", "lua54", "send", "serialize"] }
+tokio = { workspace = true }
+toml = { workspace = true }
+chrono = { workspace = true }

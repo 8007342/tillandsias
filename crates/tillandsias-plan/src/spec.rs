@@ -110,6 +110,28 @@ pub const CORPUS_ROOTS: &[(&str, &str)] = &[
     ("images", "code"),
 ];
 
+/// Maps each corpus root to its domain name. Domains enable per-domain RAG
+/// indexes so that, e.g., a cheatsheet expert is not influenced by code and
+/// vice versa. Used by `--domain` filtering in spec-index and spec-retrieve.
+pub const CORPUS_DOMAINS: &[(&str, &str)] = &[
+    ("cheatsheets", "cheatsheet"),
+    ("docs/cheatsheets", "cheatsheet"),
+    ("openspec/specs", "spec"),
+    ("methodology", "methodology"),
+    ("crates", "code"),
+    ("scripts", "code"),
+    ("images", "code"),
+];
+
+/// Resolve a corpus root to its domain name.
+pub fn domain_of_root(root: &str) -> &'static str {
+    CORPUS_DOMAINS
+        .iter()
+        .find(|(r, _)| *r == root)
+        .map(|(_, d)| *d)
+        .unwrap_or("unknown")
+}
+
 /// Paths pruned from the corpus even though they sit under a root.
 ///
 /// `images/default/cheatsheets/` is a BYTE-IDENTICAL copy of `cheatsheets/`
@@ -314,6 +336,23 @@ pub fn chunk_corpus(root: &Path) -> Vec<Chunk> {
         }
     }
     chunks
+}
+
+/// Walk the corpus under `root` and return only chunks whose domain matches
+/// `domain`. When `domain` is None, returns all chunks (backward compatible).
+pub fn chunk_corpus_filtered(root: &Path, domain: Option<&str>) -> Vec<Chunk> {
+    let all = chunk_corpus(root);
+    match domain {
+        None => all,
+        Some(d) => all
+            .into_iter()
+            .filter(|c| {
+                CORPUS_DOMAINS
+                    .iter()
+                    .any(|(r, dom)| *dom == d && c.path.starts_with(r))
+            })
+            .collect(),
+    }
 }
 
 /// Collect files under `dir` matching either an extension in `exts` or an exact

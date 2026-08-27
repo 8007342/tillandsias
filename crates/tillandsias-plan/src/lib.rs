@@ -47,7 +47,13 @@ pub mod groundtruth;
 /// and every other section is base-only. See the module doc for the full
 /// justification and the fail-closed guards.
 pub mod loop_status;
+/// Lua runtime for the adversarial decomposition pipeline. Sandboxed,
+/// hot-reloadable, type-checked middle layer between Rust and Shell.
+pub mod lua_runtime;
 pub mod methodology;
+/// Adversarial decomposition pipeline: decompose → tier trim → concurrent
+/// dispatch → CRDT collection.
+pub mod pipeline;
 /// ORDER 706-f7mq — modular semantic explanation and fallback for documentation & plan corpora.
 pub mod semantic_expert;
 /// ORDER 547 — network-free RAG index over the whole-spec corpus (chunking,

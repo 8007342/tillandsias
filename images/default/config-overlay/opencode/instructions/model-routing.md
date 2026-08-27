@@ -34,6 +34,23 @@ Do **not** rely on local ollama models to follow tool-call protocols
 yet — that pathway is being prepared but is not in scope for the
 current setup. Tool calling stays with the Zen models.
 
+## Local Experts mode: domain-separated RAG with de-hallucination
+
+The `local-experts` agent routes ALL queries through the local Ollama
+expert system with domain-separated RAG and adversarial decomposition.
+
+Switch to this mode when you need:
+- Domain-isolated answers (cheatsheets, methodology, code, specs)
+- Adversarial stress-testing of retrieval quality
+- Offline expert analysis without Zen dependency
+
+The pipeline output includes:
+- `rag_freshness`: `"RAG(hh:mm:ss)"` or `"RAG(hh:mm:ss stale)"` — local-time
+  freshness of the RAG corpus. Stale means older than 1 hour.
+- `rag_source_commit`: the git SHA the RAG index was built from.
+
+Cross-check stale RAG responses against MCP experts or the plan ledger.
+
 ## Fleet naming (Zen siblings)
 
 Coordination ledgers name in-forge agents after their Zen model:

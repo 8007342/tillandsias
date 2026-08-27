@@ -28,10 +28,12 @@ carry-forward-check
 check
 # close: order 531 ran a forge whose checkout was a pre-expert `main` snapshot,
 closure-evidence-check
+collect
 compact
 corpus-coverage
 declared-closures
 declared-closures-check
+decompose
 dependencies-of
 expire-claims
 # does not remove the capability — it makes the expert UNDER-report itself, and
@@ -57,6 +59,7 @@ next-order
 # One filename, two readers, so the "available now" and "available after a
 # ONE token per line: the subcommands this expert can answer. Sorted, unique,
 parked-blocks
+pipeline
 plan-events
 query
 # reader.
