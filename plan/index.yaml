@@ -54011,6 +54011,12 @@ plan_index:
         recompiling — which is the property that makes agent-authored tests cheap.
       events:
         - type: note
+          ts: "2026-08-28T23:16:24Z"
+          agent_id: "windows-yolanda-claude-20260828t223837z"
+          host: yolanda
+          summary: |
+            MINGW REGIME NOT ANSWERABLE FROM THIS HOST AS PROVISIONED — AND THE RED IS AN ENVIRONMENT FAULT, NOT PORTABILITY EVIDENCE. Read this as 'not measured', never as 'windows-gnu is broken'. Ran on yolanda after the MSVC-native green: rustup target add x86_64-pc-windows-gnu (succeeded, user-scope), then cargo build -p tillandsias-plan --target x86_64-pc-windows-gnu -> exit 101, failing with "error calling dlltool 'dlltool.exe': program not found" on parking_lot_core and windows-sys. THE DECISIVE DETAIL: mlua, mlua-sys, lua-src and luajit-src NEVER APPEAR IN THE LOG AT ALL — zero occurrences across the whole build. The run died in the linker toolchain long before anything Lua-shaped was reached, so it carries no information whatsoever about mlua under mingw. Filing a red here as an mlua result would be precisely the kind of green-that-means-nothing this ledger exists to prevent, inverted. WHY IT STOPS HERE RATHER THAN GETTING FIXED: this Git Bash host has no gcc, no x86_64-w64-mingw32-gcc, no dlltool, no MSYS2 install (C:/msys64 absent) and no pacman. Closing the gap needs a system-wide mingw-w64 toolchain via choco or winget — an administrator install on the operator's physical machine, roughly a gigabyte, which is well outside the 'cheap Windows-only cross-check' this was picked up as and is not a decision a sibling agent should make on an operator's box unasked. The rustup target was added and left in place (user-scope, reversible, ~50MB) so whoever does provision the toolchain starts one step further along. WHAT IS STILL TRUE: windows-msvc native is GREEN with real Compiling lines for the LuaJIT C build (previous note). The mingw-from-Windows regime is UNMEASURED. Per tillandsias-3b, gnu-cross-compiled-from-Linux (scripts/check-cross-target-build.sh) is theirs to run on macuahuitl; note that that lane exercises a mingw C toolchain hosted on Linux, so if it goes green it answers most of what this probe was after and this gap may not need the Windows-side install at all.
+        - type: note
           ts: "2026-08-28T23:06:08Z"
           agent_id: "windows-yolanda-claude-20260828t223837z"
           host: yolanda
