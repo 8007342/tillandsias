@@ -1,0 +1,71 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: three-litmus-tests-standing-red-predating-the-260828-window
+    order: 921-vtf4
+    status: ready
+    title: |
+      litmus:tool-dispatch-lib, litmus:image-build-convergence-shape and
+      litmus:nix-builder-shape are red at every commit checked back to
+      af745f3fd — standing debt no gate surfaces, found only because a full
+      instant pre-build suite ran during the 2026-08-28 audit drain
+    kind: bug
+    pickup_role: any
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags:
+      - litmus
+      - fail-loud
+      - ci
+    estimated_hours: 3
+    deliverable: |
+      Each of the three tests either passes, is re-cut to match current
+      reality (with the spec delta recorded), or fails loud with a named
+      host-capability skip — and whichever applies is recorded per test.
+    context: |
+      OBSERVED on macuahuitl (Fedora 44, podman present, host nix absent),
+      2026-08-28, identical at worktree checkouts of af745f3fd and 687eb6d57
+      and at the repaired tree — so none of the 2026-08-26..28 commits caused
+      them; first-red commit unknown:
+      (1) litmus:tool-dispatch-lib step 3/3: 'FAIL: a shipped diagnostic now
+          sources a sibling lib' — a deterministic static scan; some shipped
+          diagnostic regressed against the self-contained rule.
+      (2) litmus:image-build-convergence-shape step 1/4: 'context change
+          builds once expected 2 podman builds, saw 1' — the convergence
+          harness expected a rebuild on context change and did not get one;
+          a generate-dashboard REFUSED line (766-7zqf) interleaves in its
+          output.
+      (3) litmus:nix-builder-shape step 1/3: 'assert flake uses copyToRoot
+          for forge and web images' produced EMPTY output — on a host
+          without nix this may be a missing-capability skip surfacing as a
+          bare FAIL, itself a fail-loud gap.
+      INFERRED: this is a live instance of 748-tkjx (nothing tells an editor
+      which litmus specs cover the files they touch, so per-spec reds persist
+      unseen behind green ./build.sh --check).
+    exit_criteria:
+      - |
+        Per test: root cause named with the first-red commit (git bisect or
+        equivalent evidence), and a fix, a recorded spec re-cut, or a named
+        capability-skip lands
+      - |
+        NEGATIVE CONTROL: after repair, deliberately re-introducing one
+        violation (e.g. a diagnostic sourcing a sibling lib) turns the
+        respective test red
+    verifiable_closure: |
+      bash scripts/run-litmus-test.sh <spec> --phase pre-build --size instant
+      --compact is green (or emits the named skip) for ci-release,
+      forge-staleness and nix-builder on both a podman-capable host and a
+      nix-less host.
+events:
+  - packet_id: three-litmus-tests-standing-red-predating-the-260828-window
+    event:
+      type: filed
+      ts: "2026-08-28T20:34:03Z"
+      agent_id: linux-macuahuitl-claude-20260828t203403z
+      host: linux
+      summary: |
+        Filed during the 2026-08-28 audit drain: full instant pre-build
+        litmus suite ran to verify the BigPickle-window repairs and surfaced
+        three reds that reproduce unchanged at af745f3fd, before the window
+        began. Regime: macuahuitl, Fedora 44, podman present, host nix
+        absent. n=1 host — verify the regime before treating as fleet-wide.

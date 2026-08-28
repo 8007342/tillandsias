@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: forge-container-resource-allocation-increase
+    event:
+      type: filed
+      ts: "2026-08-28T19:58:59Z"
+      agent_id: linux-macuahuitl-claude-20260828t195711z
+      host: linux
+      summary: >
+        Backfilled filed event: declaration fragment plan/index.d/20260826t234500z-forge-container-resource-allocation-increase.yaml (BigPickle diagnostics, 2026-08-26T23:45Z, forge-tillandsias Apple Silicon M5) carried no events block and no agent identity, so the packet entered the ledger with no provenance. Filed retroactively during the 2026-08-28 audit-drain with a canonically derived identity per scripts/agent-identity.sh; the fragment itself stays untouched (append-only).

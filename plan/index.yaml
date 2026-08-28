@@ -4148,6 +4148,12 @@ plan_index:
         - "the three reference projects each publish locally with https, friendly names, zero IPs"
       events:
         - type: note
+          ts: "2026-08-28T19:59:15Z"
+          agent_id: "linux-macuahuitl-claude-20260828t195711z"
+          host: linux
+          summary: |
+            2026-08-28 sibling report evidence (SiblingContainerDiagnosis.md, in-forge sibling-container audit): sibling secrets remain UNPLUMBED in publish_local_service, and publish_local serves the project ROOT via the curated busybox image — so any CONTAINERFILE/vhost-based acceptance criteria on this milestone cannot pass BY DESIGN with the current serving shape; a docroot-convention rung is needed first. Recorded so the milestone's criteria are re-cut against what publish_local actually serves rather than re-tested against a shape it cannot exhibit.
+        - type: note
           ts: "2026-07-31T00:00Z"
           agent_id: "linux-immutable-fable5-npu-bringup-20260731T0000Z"
           host: linux_immutable
@@ -24735,6 +24741,12 @@ plan_index:
         repo, verified-then-deleted host-side, are the sanctioned real-push
         proof shape (the 349 pattern).
       events:
+        - type: note
+          ts: "2026-08-28T19:58:50Z"
+          agent_id: "linux-macuahuitl-claude-20260828t195711z"
+          host: linux
+          summary: |
+            RE-EMISSION of a finding the fold ignored: Antigravity's fragment plan/index.d/20260826t124700z-776-jcf3-unadvanceable.yaml is freestyle prose (fragment_type/content keys, no packets:/events:/fields: channel) — it parses as YAML but contributes zero rows and zero events, so its finding never reached the ledger. The finding, 2026-08-26T12:47:00Z, agent linux-meta-orchestration-cycle1 (Antigravity): the Linux push proof is UNADVANCEABLE from the unattended lane — it lacks the GitHub credentials to authenticate the push relay through the git-mirror to the real upstream; another instance of 884-hfsj (selector offers work the lane cannot complete). Left for an attended run or a lane with delegated tokens. The silent-ignore defect itself is filed as ledger-fold-silently-ignores-inert-fragments (920-eqjr).
         - type: filed
           ts: "2026-08-16T20:25:00Z"
           agent_id: macos-tlatoanis-macbook-air-fable5-20260816t2023z
@@ -25831,6 +25843,12 @@ plan_index:
         secrets, the public half committed so hosts can trust it.
         Do not invent any of this. Bring the operator the choice, then wire it.
       events:
+        - type: note
+          ts: "2026-08-28T19:58:35Z"
+          agent_id: "linux-macuahuitl-claude-20260828t195711z"
+          host: linux
+          summary: |
+            scripts/nix-push-cache.sh (landed in 3d56d69b6) delivered an INERT LOCAL ROUND-TRIP of this packet's push side: it pushes crane dep closures to the enclave cache when reachable and exits 0 silently otherwise, with no caller wired in and no fleet policy behind it. The packet's actual deliverable — the OPERATOR DECISION on the fleet nix binary cache (who pushes, from where, what release.yml pushes) — is still undelivered. Status stays ready; the script is at most a prototype input to that decision, not its resolution.
         - type: note
           ts: "2026-08-17T07:36:59Z"
           agent_id: linux-macuahuitl-opus5-20260817T073659Z
@@ -36752,6 +36770,12 @@ plan_index:
         WORK STATE AT RESET: v0.5 trunk RELEASABLE (865-n8vq closed on a full dossier; the release itself = operator runs merge-to-main-and-release). ~20 ready v0.5 packets. In flight: 873-b1nx (implemented; builder image at images/builder/, blocked on 883-ncrs for in-container substitution; WSL2/VFR measurements want windows/macos hosts), 712-r5x8 (implemented; completed-rung = one real forge launch showing spec_answer confidence=retrieved in-forge — check the startup context capability line for embed_endpoint=), 884-shrd (direction). 880-tdwn/878-79b5/877-lwts/874-family all completed and load-bearing.
       events:
         - type: note
+          ts: "2026-08-28T19:58:42Z"
+          agent_id: "linux-macuahuitl-claude-20260828t195711z"
+          host: linux
+          summary: |
+            CARRY-FORWARD past the 2026-08-26T20:36:11Z completion row, whose evidence covered only a green ./build.sh --check (68s): WAVE 3 — sweep 31 imperatives to a 106 ceiling — was explicitly deferred until the gate proves which rules can be enforced, and the packet's own R2 measurement window (b <= 1.30 over 14 days of b-slope readings) has not elapsed. Neither is closed by the completion. next_action for a future claimant: run WAVE 3 once the 14-day b readings exist, and record the b-slope verdict either way.
+        - type: note
           ts: "2026-08-25T15:51:46Z"
           agent_id: "linux-yoga-opus5-20260825t155146z"
           host: yoga
@@ -46804,6 +46828,12 @@ plan_index:
         (1) A design note under openspec/ recording the lane selection mechanism and the per-platform substrate (podman / WSL2 / VFR guest), with the unknowns above as measured answers, not assumptions. (2) A Linux prototype: a clean container with no host toolchain builds a tillandsias crate with the enclave cache as its only substituter, and the wall-clock is recorded cold vs cache-warm alongside GPU/load state. (3) The lane is OPT-IN behind an env var first; build.sh behaviour is byte-identical when it is unset. (4) A measured statement of the WSL2 and macOS paths — even if the statement is "deferred, here is the cost" — so the cross-platform half is a decision rather than a hope.
       events:
         - type: progress
+          ts: "2026-08-28T19:58:29Z"
+          agent_id: "linux-macuahuitl-claude-20260828t195711z"
+          host: linux
+          summary: |
+            Commit 3d56d69b6 landed the remaining slice of this packet — container lane wiring (nix/builder/Containerfile, scripts/with-nix-builder.sh, scripts/nix-build-container.sh, scripts/check-nix-builder-e2e.sh, build.sh sourcing) — but under a WRONG citation (build.sh:43 cites order 917-zkge, the long-horizon attractor, not this packet), with a parallel nix/builder/Containerfile duplicating images/builder/, and with env var NIX_BUILD_LANE contradicting the TILLANDSIAS_BUILD_LANE lane-selection design recorded in openspec/changes/nix-cache-build-lane/design.md. Mechanical defects have been repaired on linux-next in the 2026-08-28 audit-drain; DESIGN RECONCILIATION REMAINS OPEN: one Containerfile lineage, one lane env var name, and the citation corrected to this packet.
+        - type: progress
           ts: "2026-08-25T17:40:11Z"
           agent_id: "linux-macuahuitl-opus5-20260825t174011z"
           host: macuahuitl
@@ -53974,6 +54004,12 @@ plan_index:
         Rust-hosted Lua already provides, and its test bodies would need
         recompiling — which is the property that makes agent-authored tests cheap.
       events:
+        - type: note
+          ts: "2026-08-28T19:58:21Z"
+          agent_id: "linux-macuahuitl-claude-20260828t195711z"
+          host: linux
+          summary: |
+            MISCITATION ON linux-next: commit 687eb6d57 stamped '@trace order:902-5bf9' into 7 files (crates/tillandsias-plan/src/lua_runtime.rs, src/pipeline.rs, and all five crates/tillandsias-plan/lua/*.lua) while delivering an unrelated Lua expert pipeline facade. This packet's own work (a Rust-hosted Lua STEP FORM for litmus) is untouched by that commit, and its blocking exit criterion added 2026-08-26T05:25Z — establish why rust_queries has one adopter before any implementation — remains unmet. The 7 headers are being re-pointed at 920-pxg6 (wire-local-experts-mode-through-grounded-pipeline), the packet that actually owns that code; the real umbrella for the landed work is forge-local-experts-milestone (order 391), not this packet. Disposition of the process violation is operator-gated; status stays ready.
         - type: filed
           ts: "2026-08-26T05:00:00Z"
           agent_id: linux-macuahuitl-claude-20260826t041222z

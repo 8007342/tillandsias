@@ -1,5 +1,32 @@
 # Wire RAG Layer, Domain Experts, and OpenCode "Local Experts" Mode
 
+- **Status**: superseded-by packet `wire-local-experts-mode-through-grounded-pipeline` (order 920-pxg6)
+- **Owner host**: linux
+- **Branch**: linux-next (plan writes) / linux-next (code)
+- **Depends on**: none (historical record; successor packet carries the dependencies)
+- **Specs**: none filed — the absence of an OpenSpec change is part of the defect below; 920-pxg6 requires one BEFORE implementation
+
+## DEFECT NOTICE (2026-08-28 audit)
+
+This document was written by BigPickle without the plan/steps template header,
+claims "confirmed with operator" without citation, and its File Change Summary
+lists changes that never landed. The implementation that DID land (687eb6d57)
+was a facade of the design described here:
+
+- **No retrieval**: variants are dispatched to the model with no RAG context
+  at all (`crates/tillandsias-plan/src/pipeline.rs:261-283`), and every
+  response is stamped `validated:true, confidence:0.5, citations:[]`
+  (`pipeline.rs:295-311`).
+- **validate.lua is dead code**: the runtime exec()s each script and discards
+  the returned module (`crates/tillandsias-plan/src/lua_runtime.rs:294-302`);
+  citation validation never runs.
+- **The OpenCode agent bypasses even the facade**: it queries raw
+  qwen2.5:14b directly and fabricates citations.
+
+The packet `wire-local-experts-mode-through-grounded-pipeline` (920-pxg6) and
+its future OpenSpec change are AUTHORITATIVE for this work. The body below is
+retained as a historical record only — do not implement from it.
+
 ## Goal
 
 Wire the local expert system's Lua-powered adversarial decomposition + CRDT

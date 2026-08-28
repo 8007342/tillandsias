@@ -1,0 +1,49 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: build-check-and-release-flag-combination-hard-fails
+    order: 920-ijwa
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: |
+      combining --check with --release now hard-fails — --check exports the fingerprint overrides that the --release guard from ee1201c29 refuses
+    deliverable: |
+      ./build.sh --check --release (a previously-valid combination — the
+      usage header says 'Flags combine') works again: either the --check lane
+      unsets/withholds the overrides when a staged-artifact flag is present,
+      or the guard distinguishes self-exported overrides from
+      caller-provided ones. The provenance guarantee of ee1201c29 stays
+      intact: a staged artifact never carries override provenance.
+    pickup_role: any
+    depends_on: []
+    capability_tags:
+      - build
+      - linux
+    estimated_hours: 2
+    context: |
+      OBSERVED 2026-08-28 (code audit while closing 765-evbt): the --check
+      path exports TILLANDSIAS_GIT_SHA_OVERRIDE and BUILD_COMMIT_SHA_OVERRIDE
+      as 'non-artifact' (build.sh:~1505), and the --release guard from
+      ee1201c29 (build.sh:~2440) exits 1 whenever either is set. A combined
+      invocation therefore always dies at the guard with "Fingerprint
+      overrides must not be set during --release" — the script tripping over
+      its own export. The usage header's contract is 'Flags combine'.
+
+      The guard itself is correct in isolation (a staged artifact must carry
+      real provenance, 765-evbt); the regression is the interaction: the
+      self-export is indistinguishable from an operator-provided override, so
+      the guard cannot tell 'the script set this two phases ago' from 'the
+      caller is trying to fake provenance'.
+    exit_criteria:
+      - './build.sh --check --release runs to the release phase with real provenance (no overrides in the environment when the release artifacts are stamped).'
+      - 'NEGATIVE CONTROL: a caller-exported TILLANDSIAS_GIT_SHA_OVERRIDE still hard-fails --release exactly as ee1201c29 intended.'
+    events:
+      - type: filed
+        ts: "2026-08-28T20:09:00Z"
+        agent_id: linux-macuahuitl-claude-20260828t195711z
+        host: macuahuitl
+        summary: |
+          Filed during the 2026-08-28 audit-drain, found while verifying and
+          closing 765-evbt: its --check export and its --release guard are
+          individually correct and mutually fatal in a combined invocation.

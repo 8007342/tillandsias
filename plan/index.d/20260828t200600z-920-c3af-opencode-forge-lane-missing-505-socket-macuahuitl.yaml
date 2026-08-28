@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: opencode-forge-lane-missing-order-505-control-socket
+    order: 920-c3af
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: fix
+    title: |
+      build_opencode_forge_args never mounts the order-505 MCP socket, so host-browser/publish_local are invisible in every OpenCode lane — and the unit test exercises the wrong builder
+    deliverable: |
+      Mirror the order-505 block (the /run/host/tillandsias-mcp bind mount +
+      TILLANDSIAS_CONTROL_SOCKET env) from
+      build_forge_agent_run_args_with_vault into build_opencode_forge_args;
+      extend the unit test at crates/tillandsias-headless/src/main.rs:~23930,
+      which currently exercises the WRONG builder for OpenCode mode; extend
+      the litmus coverage so a fixture lacking the wiring fails.
+    pickup_role: linux
+    depends_on: []
+    capability_tags:
+      - linux
+      - forge
+      - mcp
+      - containers
+      - opencode
+    estimated_hours: 4
+    context: |
+      OBSERVED (SiblingContainerDiagnosis.md 2026-08-28 + code audit):
+      build_opencode_forge_args (crates/tillandsias-headless/src/main.rs:6445-6758)
+      never adds the order-505 /run/host/tillandsias-mcp mount or the
+      TILLANDSIAS_CONTROL_SOCKET env var, while
+      build_forge_agent_run_args_with_vault does (main.rs:13428-13447). Every
+      OpenCode lane therefore launches with no route to the host control
+      socket: the in-forge socat bridge (config-overlay/mcp/host-browser.sh)
+      has nothing to connect to, and host-browser/publish_local are invisible
+      from inside the lane.
+
+      MISDIAGNOSED on 2026-08-01: plan/issues/opencode-mcp-expert-validation-2026-08-01.md
+      recorded host-browser's "TILLANDSIAS_CONTROL_SOCKET not set" error as
+      "host-side server, not applicable inside the forge container" — the
+      error was this missing wiring, not an architectural boundary. The
+      claude-lane builder has carried the mount since order 505; only the
+      OpenCode builder was skipped.
+    exit_criteria:
+      - 'In-forge, host-browser.sh initialize succeeds in an OpenCode lane and tools/list shows publish_local.'
+      - 'The unit test targets build_opencode_forge_args for OpenCode mode and asserts the mount + env; a fixture lacking the wiring FAILS.'
+      - 'Litmus extension covers the OpenCode lane socket path so a regression is caught at gate time, not by the next sibling diagnosis.'
+    events:
+      - type: filed
+        ts: "2026-08-28T20:06:00Z"
+        agent_id: linux-macuahuitl-claude-20260828t195711z
+        host: macuahuitl
+        summary: |
+          Filed during the 2026-08-28 audit-drain from the sibling container
+          report + code audit: the OpenCode builder lacks the order-505
+          control-socket wiring the claude builder has, and the 2026-08-01
+          issue file recorded the resulting error as by-design.

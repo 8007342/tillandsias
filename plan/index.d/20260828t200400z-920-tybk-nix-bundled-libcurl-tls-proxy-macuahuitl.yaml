@@ -1,0 +1,60 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: nix-bundled-libcurl-cannot-verify-tls-behind-transparent-proxy
+    order: 920-tybk
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: |
+      nix's bundled glibc/libcurl/OpenSSL cannot verify github.com behind the transparent proxy while system curl succeeds — the container lane routes around it with a 100-line prefetch dance
+    deliverable: |
+      Reproduce (or bound) the defect beyond n=1, test NIX_SSL_CERT_FILE /
+      ssl-cert-file pointed at the host CA bundle in the affected regime, and
+      either retire the prefetch + --override-input layer of
+      scripts/nix-build-container.sh or document with measurements why it must
+      stay. Full record: plan/issues/nix-bundled-libcurl-ssl-transparent-proxy-2026-08-28.md
+    pickup_role: any
+    depends_on: []
+    capability_tags:
+      - nix
+      - network
+      - tls
+      - forge
+    estimated_hours: 3
+    context: |
+      OBSERVED by BigPickle on lenovinha (n=1 — REGIME ATTACHED, do not relay
+      as a fleet rule): the nix binary tarball's bundled glibc + libcurl +
+      OpenSSL cannot verify github.com's certificate behind the transparent
+      proxy's TLS interception, while system curl on the same host succeeds
+      against the same URLs — the proxy CA lives in the system trust store,
+      which nix's bundled OpenSSL never consults. Regime: Linux, tarball-
+      installed nix 2.35.2 (nix/builder/Containerfile), ayahuitlcalpan
+      transparent proxy. Untested: second host, distro-packaged nix
+      (expected unaffected), off-proxy.
+
+      WORKAROUND landed in 3d56d69b6: scripts/nix-build-container.sh
+      prefetches every flake.lock input with system curl and passes
+      --override-input so nix never touches github.com; cache.nixos.org
+      substitution works throughout (the failure is verification against the
+      intercepted github.com endpoint, not TLS generally).
+
+      SMALLEST FIX candidate: NIX_SSL_CERT_FILE / ssl-cert-file at the host CA
+      bundle — the same pitfall already recorded in
+      openspec/changes/nix-cache-build-lane/design.md. If it works in the
+      affected regime, the prefetch layer is dead weight.
+    exit_criteria:
+      - 'The defect is reproduced or falsified on a second host in the same regime — the n=1 caveat is discharged either way.'
+      - 'NIX_SSL_CERT_FILE (or ssl-cert-file) pointed at the host CA bundle is tested ON THE AFFECTED REGIME, and the result recorded in the issue file.'
+      - 'The prefetch + --override-input layer in scripts/nix-build-container.sh is retired if the direct fix works, or its retention is justified with the measurement if it does not.'
+    events:
+      - type: filed
+        ts: "2026-08-28T20:04:00Z"
+        agent_id: linux-macuahuitl-claude-20260828t195711z
+        host: macuahuitl
+        summary: |
+          Filed during the 2026-08-28 audit-drain of 3d56d69b6: the container
+          lane's prefetch workaround encodes an undiagnosed TLS trust defect
+          as permanent infrastructure. Issue file with symptom, regime,
+          workaround, blast radius and smallest fix:
+          plan/issues/nix-bundled-libcurl-ssl-transparent-proxy-2026-08-28.md
