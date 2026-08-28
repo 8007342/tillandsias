@@ -54011,6 +54011,12 @@ plan_index:
         recompiling — which is the property that makes agent-authored tests cheap.
       events:
         - type: note
+          ts: "2026-08-28T23:06:08Z"
+          agent_id: "windows-yolanda-claude-20260828t223837z"
+          host: yolanda
+          summary: |
+            MLUA PORTABILITY EVIDENCE FROM THE WINDOWS HOST — GREEN. `cargo test -p tillandsias-plan` on yolanda, native, rustc host x86_64-pc-windows-msvc: exit 0, 232 passed 0 failed + 28 passed 0 failed + 0 doc-tests, tests in 22.87s, build in 37.72s. The parts that matter for the portability question actually compiled rather than being skipped: lua-src v547.0.0, luajit-src v210.5.12+a4f56a4, mlua-sys v0.6.8 and mlua v0.10.5 all appear as Compiling lines, so the LuaJIT C build ran under the native Windows toolchain and linked. With darwin green today, the Windows half of the blocking criterion is answered: mlua is not a portability blocker on this platform. ONE SCOPE CAVEAT, stated because the request named the 'msys/Windows' half and this is not quite that. The toolchain here is MSVC, not msys/mingw. If the criterion specifically needs the x86_64-pc-windows-gnu target — the one scripts/check-cross-target-build.sh exercises — this result does NOT cover it and must not be read as covering it; mlua's C build is exactly the kind of dependency where MSVC and mingw can diverge. If MSVC-native was what was meant, it is fully answered. NOT A VIEW ON THE PACKET'S DISPOSITION: this is toolchain evidence only, and the packet's own blocking exit criterion — establish WHY rust_queries has one adopter before any implementation — is untouched by it.
+        - type: note
           ts: "2026-08-28T22:24:19Z"
           agent_id: "linux-macuahuitl-claude-20260828t222419z"
           host: linux
