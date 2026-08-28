@@ -40,9 +40,11 @@ source "$_BUILDER_DIR/scripts/with-wsl2-builder.sh"
 
 # When NIX_BUILD_LANE=container is set, transparently re-exec inside a
 # nix-enabled container backed by the persistent host nix store and the
-# enclave binary cache (order 917-zkge). The container provides nix with
-# flakes; builds pull from the enclave cache instead of cold-compiling.
-# When unset, byte-identical current behaviour (exit criterion 3).
+# enclave binary cache — the remaining slice of in-flight packet 873-b1nx
+# (openspec/changes/nix-cache-build-lane), converging toward the 917-zkge
+# long-horizon attractor. The container provides nix with flakes; builds
+# pull from the enclave cache instead of cold-compiling. When unset,
+# byte-identical current behaviour (exit criterion 3).
 source "$_BUILDER_DIR/scripts/with-nix-builder.sh"
 
 unset _BUILDER_DIR
@@ -726,7 +728,11 @@ _require_host_build_tools() {
             _error "Install rustup, initialize it, then add x86_64-unknown-linux-musl."
             exit 1
         fi
-        if ! rustup target list --installed | grep -qx 'x86_64-unknown-linux-musl'; then
+        # PIPESTATUS[1] (grep's verdict), not the pipeline's: with pipefail, a
+        # SIGPIPE'd rustup would red this guard even when grep matched (795-imz3).
+        _musl_target_rc=0
+        rustup target list --installed | grep -qx 'x86_64-unknown-linux-musl' || _musl_target_rc="${PIPESTATUS[1]}"
+        if [[ "$_musl_target_rc" -ne 0 ]]; then
             _error "Missing Rust target: x86_64-unknown-linux-musl"
             _error "Run: rustup target add x86_64-unknown-linux-musl"
             exit 1
@@ -2141,6 +2147,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "MO-FULL attestation ledger check passed"
+
+    # Order 795-imz3. `if ! <pipeline>` verdicts invert under pipefail when the
+    # consumer exits early (grep -q SIGPIPEs its producer), so the gate refuses
+    # the shape outright across scripts/ and build.sh. The gate shipped in
+    # 3b71b105a but was invoked by nothing here; wiring it activates it as a
+    # real --check gate (same activation shape as 599-4wzr below).
+    _step "Checking for if-not pipeline verdict guards (795-imz3)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-no-spawn-in-if-not.sh" 2>&1; then
+        _error "a script uses 'if ! <pipeline>' as a verdict — pipefail + SIGPIPE can invert the guard; capture the exit into a variable first or mark '# sigpipe-ok: <reason>' (795-imz3)"
+        exit 1
+    fi
+    _info "If-not pipeline guard check passed"
 
     # Order 680-zphp. Fail loud if an expert-groundtruth case pins `status:` on a
     # packet whose LIVE status is non-terminal — such a pin reds the 4-verifier
