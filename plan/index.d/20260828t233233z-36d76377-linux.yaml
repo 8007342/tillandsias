@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: three-litmus-tests-standing-red-predating-the-260828-window
+    event:
+      type: progress
+      ts: "2026-08-28T23:32:33Z"
+      agent_id: linux-macuahuitl-claude-20260828t233233z
+      host: linux
+      summary: >
+        Partial slice in 56e0cd796: litmus:nix-builder-shape re-cut and GREEN — first-red 9b0c27c1c (nixpkgs-26.05 rejects copyToRoot in buildLayeredImage; flake.nix uses contents= deliberately); now pins contents= for both image roots + a no-copyToRoot regression step; every step emits a named FAIL line instead of empty stdout; spec.md re-worded. EC2 negative control RUN in scratch: flipped contents->copyToRoot, both steps red with named lines. Bonus second silent red found+fixed: the git-ls-files step pinned 'ls-files -z --' which no longer exists in hash-image-sources.sh (now 'ls-files -s --'). The nix-absence hypothesis for this test is DISPROVEN (pure grep). tool-dispatch-lib and image-build-convergence-shape reds remain, out of this slice.

@@ -25867,6 +25867,12 @@ plan_index:
         secrets, the public half committed so hosts can trust it.
         Do not invent any of this. Bring the operator the choice, then wire it.
       events:
+        - type: progress
+          ts: "2026-08-28T23:32:33Z"
+          agent_id: "linux-macuahuitl-claude-20260828t233233z"
+          host: linux
+          summary: |
+            Per-host half WIRED in 56e0cd796 (operator 2026-08-28: per-host until a shared cache is designed): topology (A) — /nix on named volume tillandsias-builder-nix, chroot store rw at /host-store, post-build in-container nix copy --to /host-store --no-check-sigs (ok:nix-populate:copied=N) then host-side nix-toolbox.sh pin. Topology (B) store=/host-store recorded as a measured follow-up. nix-push-cache.sh re-cut to the local mechanism (https push against serve-only harmonia removed); exercised ok:nix-push:local:served=0:copied=0:total=0. litmus:nix-container-lane-shape pins the lane (6/6 green, bound under dev-build). REMAINS: e2e verdict on a live cache (blocked:nix-cache:no-enclave on macuahuitl today — stack down since reboot), (A)vs(B) measurement, WSL2/VFR lanes, shared-cache design.
         - type: note
           ts: "2026-08-28T22:24:19Z"
           agent_id: "linux-macuahuitl-claude-20260828t222419z"
@@ -46891,6 +46897,12 @@ plan_index:
       exit_criteria: |
         (1) A design note under openspec/ recording the lane selection mechanism and the per-platform substrate (podman / WSL2 / VFR guest), with the unknowns above as measured answers, not assumptions. (2) A Linux prototype: a clean container with no host toolchain builds a tillandsias crate with the enclave cache as its only substituter, and the wall-clock is recorded cold vs cache-warm alongside GPU/load state. (3) The lane is OPT-IN behind an env var first; build.sh behaviour is byte-identical when it is unset. (4) A measured statement of the WSL2 and macOS paths — even if the statement is "deferred, here is the cost" — so the cross-platform half is a decision rather than a hope.
       events:
+        - type: note
+          ts: "2026-08-28T23:32:33Z"
+          agent_id: "linux-macuahuitl-claude-20260828t233233z"
+          host: linux
+          summary: |
+            Design reconciliation RESOLVED in 56e0cd796: ONE builder lineage — images/builder (distro nix 2.34.8, +curl/jq, bash entrypoint) survives per the recorded design; nix/builder tarball prototype deleted. Lane var is TILLANDSIAS_BUILD_LANE=container (design.md wins; zero stragglers after rename). Byte-identical-when-unset re-verified live post-rename. design.md carries the reconciliation section; tasks.md created.
         - type: progress
           ts: "2026-08-28T19:58:29Z"
           agent_id: "linux-macuahuitl-claude-20260828t195711z"
@@ -48274,6 +48286,12 @@ plan_index:
         by a litmus that runs a REAL sibling probe. (3) The 873-b1nx builder
         prototype re-run in-container completes its cache-first build.
       events:
+        - type: progress
+          ts: "2026-08-28T23:32:33Z"
+          agent_id: "linux-macuahuitl-claude-20260828t233233z"
+          host: linux
+          summary: |
+            Routed around for the per-host case in 56e0cd796: substituter wiring lives INSIDE the lane (substituter-args single authority; empty = degrade-to-cold; CA bundle mounted ro at /run/tillandsias/ca-bundle.crt with --ssl-cert-file rewritten to the mount; --network host reaches 127.0.0.1:5111). Sibling probe state 2026-08-28T23:00Z: nix-cache-service.sh ensure -> blocked:nix-cache:no-enclave (enclave absent since reboot); check-nix-builder-e2e.sh names ok:nix-e2e:skip:cache-unreachable. The enclave-internal RST question stays open with its recorded post-reset probe.
         - type: filed
           ts: "2026-08-25T17:39:35Z"
           agent_id: linux-macuahuitl-opus5-20260825t173935z
@@ -54068,6 +54086,12 @@ plan_index:
         Rust-hosted Lua already provides, and its test bodies would need
         recompiling — which is the property that makes agent-authored tests cheap.
       events:
+        - type: note
+          ts: "2026-08-28T23:32:33Z"
+          agent_id: "linux-macuahuitl-claude-20260828t233233z"
+          host: linux
+          summary: |
+            mlua portability matrix at 2026-08-28T23:32Z: linux native GREEN (daily builds), darwin native GREEN (tillandsias-91, M5), windows-msvc native GREEN (yolanda, real Compiling lines for the LuaJIT C build), gnu-from-windows UNMEASURED (dlltool absent — died before any Lua crate; scored not-measured, correctly), gnu-cross-from-linux UNMEASURED on macuahuitl (check-cross-target-build.sh -> skip:cross-target:no-c-toolchain:x86_64-w64-mingw32-gcc — the check names its skip fleet-wide wherever mingw is absent). Disposition: the retained Lua surface (tier/trim/collect, post-920-pxg6) is deliberately thin enough to port to Rust in one sitting if mingw evidence ever fails; closing the mingw gap needs a toolbox mingw-w64 install on a Linux host or an operator-approved MSYS2 install on yolanda. This packet's litmus-step form and rust_queries-adoption entry gate remain untouched and open.
         - type: note
           ts: "2026-08-28T22:42:00Z"
           agent_id: "macos-tlatoanis-macbook-air-claude-20260828t223811z"
