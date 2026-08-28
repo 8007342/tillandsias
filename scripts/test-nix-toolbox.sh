@@ -199,8 +199,15 @@ EOF11
 printf 'podman %s\n' "\$*" >> "$LOG11"
 exit 1
 EOF11
-    chmod +x "$B11/toolbox" "$B11/podman"
-    # A PATH with the fakes and the POSIX baseline, but deliberately no `nix`.
+    # "No nix" must be CONSTRUCTED, not assumed: /usr/bin stays on PATH for the
+    # POSIX baseline, and on hosts with distro nix (/usr/bin/nix — e.g.
+    # macuahuitl) the real binary would leak into the fake world and honestly
+    # detect the throwaway chroot store. A failing stub shadows it.
+    cat > "$B11/nix" <<'EOF11'
+#!/usr/bin/env bash
+exit 127
+EOF11
+    chmod +x "$B11/toolbox" "$B11/podman" "$B11/nix"
     c11="$(env PATH="$B11:/usr/bin:/bin" HOME="$TMPROOT/h11" \
              TILLANDSIAS_NIX_CHROOT_STORE="$TMPROOT/s11" \
              bash "$SCRIPT" capability 2>/dev/null)"
@@ -252,7 +259,13 @@ case "\$1" in
     *) exit 1 ;;
 esac
 EOF12H
-    chmod +x "$B12H/toolbox"
+    # Same construction rule as arm 11: shadow any real /usr/bin/nix so the
+    # "no HOST nix" premise holds on distro-nix hosts too.
+    cat > "$B12H/nix" <<'EOF12H'
+#!/usr/bin/env bash
+exit 127
+EOF12H
+    chmod +x "$B12H/toolbox" "$B12H/nix"
     c12="$(env PATH="$B12H:/usr/bin:/bin" HOME="$TMPROOT/h12" \
              TILLANDSIAS_NIX_CHROOT_STORE="$TMPROOT/s12" \
              bash "$SCRIPT" capability 2>/dev/null)"

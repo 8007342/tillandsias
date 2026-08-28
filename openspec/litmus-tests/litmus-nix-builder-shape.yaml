@@ -36,6 +36,14 @@ critical_path:
     timeout_ms: 10000
     expected_behavior: "ok: no-copyToRoot-attribute"
 
+  - step: "NEGATIVE CONTROL: a flake whose image root reverts to copyToRoot must FAIL the contents pin"
+    # Proves steps 1-2 distinguish "property violated" from "text drifted":
+    # the exact regression (contents -> copyToRoot, first red 9b0c27c1c) is
+    # constructed in a scratch copy and the same grep pair must go red on it.
+    command: "d=$(mktemp -d) && sed 's/contents = forgeImageRoot;/copyToRoot = forgeImageRoot;/' flake.nix > \"$d/flake.nix\" && if grep -Fq 'contents = forgeImageRoot;' \"$d/flake.nix\"; then echo 'FAIL: negative control blind — mutated flake still matched the contents pin'; else echo 'ok: negative-control-detects-copyToRoot-regression'; fi; rm -rf \"$d\""
+    timeout_ms: 10000
+    expected_behavior: "ok: negative-control-detects-copyToRoot-regression"
+
   - step: "assert build-image uses git ls-files for tracked source hashing"
     command: "if grep -Fq 'hash-image-sources.sh' scripts/build-image.sh && grep -Fq 'ls-files --others --exclude-standard' scripts/hash-image-sources.sh && grep -Fq 'ls-files -s --' scripts/hash-image-sources.sh; then echo 'ok: git-tracked-hash-present'; else echo 'FAIL: git-tracked source hashing shape missing from build-image.sh or hash-image-sources.sh'; fi"
     timeout_ms: 10000
