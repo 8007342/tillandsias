@@ -6,12 +6,21 @@
 # cold-compiling. Gates on the cache being reachable — if it is not, exits 0
 # silently (a missing push is not a build failure).
 #
+# SCOPE — LOCAL ROUND-TRIP PLACEHOLDER. "Other hosts" above is aspiration, not
+# implementation: the target is this host's own harmonia cache
+# (nix-cache-service.sh), and harmonia is SERVE-ONLY — it exposes no upload
+# endpoint, so `nix copy --to https://...` against it can only fail or no-op.
+# Cross-host push (a writable shared cache and how hosts trust it) is 790-6n2k
+# work gated on an operator decision; until that lands this script exists to
+# exercise the flag/closure plumbing locally and to fail loudly rather than
+# pretend a push happened.
+#
 # GRAMMAR (exactly one line on stdout)
 #   ok:nix-push:<pushed=<n>>:total=<n>
 #   ok:nix-push:skip:cache-unreachable
 #   ok:nix-push:skip:no-nix
 #   ok:nix-push:skip:no-store
-#   blocked:nix-push:<eval-failed|push-failed>
+#   blocked:nix-push:<eval-failed|push-failed|no-ca-bundle>
 #
 # Exit 0 on ok/skip, 1 on blocked.
 #
@@ -83,11 +92,13 @@ have_nix || { echo "ok:nix-push:skip:no-nix"; exit 0; }
 store_present || { echo "ok:nix-push:skip:no-store"; exit 0; }
 cache_reachable || { echo "ok:nix-push:skip:cache-unreachable"; exit 0; }
 
-# Get the cache endpoint and TLS CA for nix copy.
-CACHE_URL="$(printf '%s\n' "https://127.0.0.1:5111")"
-CA_BUNDLE="$HOME/.local/share/tillandsias/nix-cache/ca-bundle.crt"
+# Get the cache endpoint and TLS CA for nix copy. Port and state dir mirror
+# nix-cache-service.sh — honor the same env overrides instead of hardcoding.
+CACHE_URL="https://127.0.0.1:${TILLANDSIAS_NIX_CACHE_HOST_PORT:-5111}"
+CA_BUNDLE="${TILLANDSIAS_NIX_CACHE_STATE:-$HOME/.local/share/tillandsias/nix-cache}/ca-bundle.crt"
 if [[ ! -s "$CA_BUNDLE" ]]; then
-    echo "blocked:nix-push:no-ca-bundle" >&2
+    echo "  [push] CA bundle missing or empty at $CA_BUNDLE" >&2
+    echo "blocked:nix-push:no-ca-bundle"
     exit 1
 fi
 
