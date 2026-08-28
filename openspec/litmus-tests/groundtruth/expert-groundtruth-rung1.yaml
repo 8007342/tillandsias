@@ -571,6 +571,12 @@ cases:
       a citation whose span really contains it — span_contains re-reads the
       span at grading time, so the case survives the section moving as
       plan/loop_status.md grows.
+      ALSO not pinned (2026-08-29): the answer's RENDERING. A synthesis-active
+      host answers with a sentence, a retrieval-only host echoes the section;
+      both cite the same span. Asserting the "## Direction" heading in the
+      answer BODY made the verdict flip on ambient inference availability —
+      red on lenovinha, green on macuahuitl, same commit. The heading stays
+      pinned where it is invariant: the citation's span.
     expect:
       confidence: retrieved
       citation_kind: plan
@@ -582,4 +588,4 @@ cases:
             - "## Direction"
             - "Operator-owned thematic direction"
       answer_contains:
-        - "## Direction"
+        - "Direction"
