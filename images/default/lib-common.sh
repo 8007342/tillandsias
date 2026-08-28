@@ -1248,7 +1248,62 @@ start_forge_experts_async() {
     (
         discover_generic_project >>/tmp/forge-lifecycle.log 2>&1 || true
         ensure_forge_experts >>/tmp/forge-lifecycle.log 2>&1 || true
+        # ORDER 920-pxg6: the grounded OpenAI-compatible endpoint the
+        # local-experts OpenCode agent talks to. AFTER ensure_forge_experts,
+        # so the capabilities probe sees the freshly installed binary.
+        start_expert_serve_fail_soft >>/tmp/forge-lifecycle.log 2>&1 || true
     ) &
+    return 0
+}
+
+# start_expert_serve_fail_soft — ORDER 920-pxg6. Launch the grounded
+# `expert-serve` loopback endpoint beside the MCP servers. FAIL-SOFT on every
+# rung: a missing binary, a pre-920-pxg6 binary (no `expert-serve` token in
+# its capabilities manifest — the relaunch-skew shape order 569 names), or an
+# already-bound port each log one line to the lane log and return 0. Launch
+# is NEVER blocked on this.
+start_expert_serve_fail_soft() {
+    local bin port caps project_dir
+    bin="$FORGE_EXPERTS_BIN_DIR/tillandsias-plan"
+    port="${TILLANDSIAS_EXPERT_SERVE_PORT:-11436}"
+    project_dir=""
+    if [ -n "${TILLANDSIAS_PROJECT:-}" ]; then
+        project_dir="/home/forge/src/${TILLANDSIAS_PROJECT}"
+    fi
+    [ -n "$project_dir" ] || project_dir="$PWD"
+
+    if [ ! -x "$bin" ]; then
+        trace_lifecycle "expert-serve" "skipped (no-binary): ${bin} is not installed"
+        return 0
+    fi
+    # Capability probe, not a version guess: a binary without the token
+    # predates the subcommand and would die on an unknown arm (order 569's
+    # skew line already tells the agent a relaunch delivers it).
+    caps="$("$bin" capabilities 2>/dev/null || true)"
+    case "$caps" in
+        *expert-serve*) : ;;
+        *)
+            trace_lifecycle "expert-serve" "skipped (stale-binary): installed tillandsias-plan predates expert-serve — relaunch after the async build lands"
+            return 0
+            ;;
+    esac
+    # Something already on the port (an earlier lane, a manual server) is a
+    # working endpoint, not an error.
+    if (exec 3<>"/dev/tcp/127.0.0.1/${port}") 2>/dev/null; then
+        # fd 3 lived only in the probe subshell; nothing leaks here.
+        trace_lifecycle "expert-serve" "skipped (already-listening): 127.0.0.1:${port} is already served"
+        return 0
+    fi
+    # The server's lifetime is stdin EOF (deliberate: `</dev/null` keeps the
+    # capability-sweep litmus fast), so the lane holds its stdin open with a
+    # silent pipe that dies with the container. The embed endpoint defaults
+    # from the enclave inference service the profile already injects
+    # (OLLAMA_HOST); an explicit operator value always wins, and with neither
+    # the server refuses typed per request — same discipline as spec_answer.
+    TILLANDSIAS_EMBED_ENDPOINT="${TILLANDSIAS_EMBED_ENDPOINT:-${OLLAMA_HOST:+${OLLAMA_HOST%/}/v1}}" \
+        nohup bash -c "tail -f /dev/null | '$bin' expert-serve --port '$port' --root '$project_dir'" \
+        >>/tmp/forge-lifecycle.log 2>&1 &
+    trace_lifecycle "expert-serve" "starting: ${bin} expert-serve on 127.0.0.1:${port} (root ${project_dir}, pid $!)"
     return 0
 }
 

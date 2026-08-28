@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: gate-stamp-exec-bit-deadlocks-every-windows-push
+    field: status
+    value: completed
+    ts: "2026-08-28T22:53:44Z"
+    host: windows
+
+events:
+  - packet_id: gate-stamp-exec-bit-deadlocks-every-windows-push
+    event:
+      type: completed
+      ts: "2026-08-28T22:53:44Z"
+      host: windows
+      summary: >
+        status 'completed' with evidence_refs: 12f6e9178 — ./build.sh --check exit 0 (643s, gate stamp recorded); push to windows-next SUCCEEDED with the pre-push hook enforcing (ok:linux-next-merged, 'local gate: current for this tree'), never --no-verify; cross-boundary digest agreement bc3fc75ddd5e13ed... identical from Git Bash and from inside the tillandsias-build WSL2 distro on one unchanged worktree; scripts/test-mode-only-regression-887-bz88.sh ok:mode-only-regression-fixture:all (10/10 on a core.fileMode=false worktree); TILLANDSIAS_FORCE_CHECK=1 now reads [1] inside the distro. NOTE: a SECOND, newer total Windows blocker was found and fixed in the same commit — the 2026-08-26 no-host-native-fallback ruling killed every Windows gate at 'FATAL: toolbox is not installed' INSIDE the WSL2 distro, because its /etc/os-release Windows exception only fires on the Git Bash side; fixed by setting TILLANDSIAS_SKIP_TOOLBOX=1 at the WSL boundary.

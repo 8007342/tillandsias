@@ -1,10 +1,23 @@
 # @trace spec:nix-builder
+#
+# RE-CUT 2026-08-28 (921-vtf4 slice). The previous cut pinned `copyToRoot =`
+# in flake.nix; nixpkgs-26.05 REJECTS copyToRoot in buildLayeredImage (the
+# builder takes `contents`; only buildImage takes copyToRoot). First red:
+# commit 9b0c27c1c (the 24.11 -> 26.05 + crane bump), where flake.nix moved
+# to `contents =` deliberately and this litmus pinned the stale parameter.
+# Every step now emits a named FAIL line instead of empty stdout on a miss.
 name: litmus:nix-builder-shape
 spec: nix-builder
-description: Verify the live Nix build contract uses git-tracked files and copyToRoot
+description: Verify the live Nix build contract uses git-tracked files and the contents attribute buildLayeredImage actually declares
 severity: medium
 size: instant
 phase: pre-build
+
+inputs:
+  - flake.nix
+  - scripts/build-image.sh
+  - scripts/hash-image-sources.sh
+  - openspec/specs/nix-builder/spec.md
 
 preconditions:
   - workspace contains flake.nix
@@ -13,29 +26,42 @@ preconditions:
   - workspace contains openspec/specs/nix-builder/spec.md
 
 critical_path:
-  - step: "assert flake uses copyToRoot for forge and web images"
-    command: "grep -Fq 'copyToRoot = forgeImageRoot;' flake.nix && grep -Fq 'copyToRoot = webImageRoot;' flake.nix && echo 'nix builder copyToRoot present'"
+  - step: "assert flake passes both image roots via contents (the buildLayeredImage parameter)"
+    command: "if grep -Fq 'contents = forgeImageRoot;' flake.nix && grep -Fq 'contents = webImageRoot;' flake.nix; then echo 'ok: layered-images-use-contents'; else echo 'FAIL: buildLayeredImage image roots not passed via contents (nixpkgs-26.05 rejects copyToRoot in buildLayeredImage; first red 9b0c27c1c)'; fi"
     timeout_ms: 10000
-    expected_behavior: "nix builder copyToRoot present"
+    expected_behavior: "ok: layered-images-use-contents"
+
+  - step: "assert no copyToRoot attribute regression in flake.nix"
+    command: "if grep -Eq '^[[:space:]]*copyToRoot[[:space:]]*=' flake.nix; then echo 'FAIL: copyToRoot attribute reappeared in flake.nix (buildImage-only parameter; buildLayeredImage rejects it on nixpkgs-26.05)'; else echo 'ok: no-copyToRoot-attribute'; fi"
+    timeout_ms: 10000
+    expected_behavior: "ok: no-copyToRoot-attribute"
+
+  - step: "NEGATIVE CONTROL: a flake whose image root reverts to copyToRoot must FAIL the contents pin"
+    # Proves steps 1-2 distinguish "property violated" from "text drifted":
+    # the exact regression (contents -> copyToRoot, first red 9b0c27c1c) is
+    # constructed in a scratch copy and the same grep pair must go red on it.
+    command: "d=$(mktemp -d) && sed 's/contents = forgeImageRoot;/copyToRoot = forgeImageRoot;/' flake.nix > \"$d/flake.nix\" && if grep -Fq 'contents = forgeImageRoot;' \"$d/flake.nix\"; then echo 'FAIL: negative control blind — mutated flake still matched the contents pin'; else echo 'ok: negative-control-detects-copyToRoot-regression'; fi; rm -rf \"$d\""
+    timeout_ms: 10000
+    expected_behavior: "ok: negative-control-detects-copyToRoot-regression"
 
   - step: "assert build-image uses git ls-files for tracked source hashing"
-    command: "grep -Fq 'hash-image-sources.sh' scripts/build-image.sh && grep -Fq 'ls-files --others --exclude-standard' scripts/hash-image-sources.sh && grep -Fq 'ls-files -z --' scripts/hash-image-sources.sh && echo 'nix builder git-tracked hash present'"
+    command: "if grep -Fq 'hash-image-sources.sh' scripts/build-image.sh && grep -Fq 'ls-files --others --exclude-standard' scripts/hash-image-sources.sh && grep -Fq 'ls-files -s --' scripts/hash-image-sources.sh; then echo 'ok: git-tracked-hash-present'; else echo 'FAIL: git-tracked source hashing shape missing from build-image.sh or hash-image-sources.sh'; fi"
     timeout_ms: 10000
-    expected_behavior: "nix builder git-tracked hash present"
+    expected_behavior: "ok: git-tracked-hash-present"
 
-  - step: "assert the spec states the build-time-only boundary"
-    command: "grep -Fq 'Build-time Nix only' openspec/specs/nix-builder/spec.md && grep -Fq 'copyToRoot' openspec/specs/nix-builder/spec.md && echo 'nix builder spec tightened'"
+  - step: "assert the spec states the build-time-only boundary and the builder/attribute pairing"
+    command: "if grep -Fq 'Build-time Nix only' openspec/specs/nix-builder/spec.md && grep -Fq 'dockerTools builder/attribute pairing' openspec/specs/nix-builder/spec.md; then echo 'ok: spec-states-pairing'; else echo 'FAIL: spec missing the build-time-only boundary or the dockerTools builder/attribute pairing requirement'; fi"
     timeout_ms: 10000
-    expected_behavior: "nix builder spec tightened"
+    expected_behavior: "ok: spec-states-pairing"
 
 observability:
   traces:
     - "@trace spec:nix-builder"
-  expected_log: "Nix builder contract remains build-time only and uses copyToRoot plus git-tracked sources"
+  expected_log: "Nix builder contract remains build-time only, uses contents for buildLayeredImage roots, and git-tracked sources for staleness hashing"
   log_fields:
     spec: "nix-builder"
     test: "nix-builder-shape"
 
 rollback:
-  on_failure: "inspect flake.nix, scripts/build-image.sh, and openspec/specs/nix-builder/spec.md for stale Nix build semantics"
-  command: "grep -F 'copyToRoot' flake.nix && grep -F 'git ls-files' scripts/build-image.sh && grep -F 'Build-time Nix only' openspec/specs/nix-builder/spec.md"
+  on_failure: "inspect flake.nix, scripts/build-image.sh, and openspec/specs/nix-builder/spec.md for stale Nix build semantics; a copyToRoot reappearance means someone re-applied the pre-26.05 preference the 9b0c27c1c bump disproved"
+  command: "grep -F 'contents = ' flake.nix && grep -F 'git ls-files' scripts/build-image.sh && grep -F 'Build-time Nix only' openspec/specs/nix-builder/spec.md"

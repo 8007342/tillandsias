@@ -1,0 +1,92 @@
+# @trace spec:dev-build
+#
+# Pins the TILLANDSIAS_BUILD_LANE=container nix build lane (873-b1nx design,
+# 790-6n2k per-host reconciliation, 2026-08-28): scripts/with-nix-builder.sh
+# is the nix-lane sibling of with-tillandsias-builder (toolbox) and
+# with-wsl2-builder (WSL2). The lane serves nix invocations only, keeps ONE
+# builder lineage (images/builder — distro nix; the nix/builder tarball
+# prototype is deleted), injects per-host substituter flags from
+# nix-cache-service.sh substituter-args with the --ssl-cert-file value
+# rewritten to the in-container CA mount, and stays byte-identical when the
+# lane variable is unset.
+name: litmus:nix-container-lane-shape
+spec: dev-build
+phase: pre-build
+description: >
+  Pin scripts/with-nix-builder.sh's lane contract: all three build wrappers
+  parse and build.sh sources them; an unset lane is a byte-identical
+  pass-through that leaves the sourcer's shell options untouched; an explicit
+  lane refuses non-nix commands loudly; the in-container nesting guard names
+  itself; images/builder is the one builder lineage; and the per-host
+  substituter wiring (substituter-args, ssl-cert-file rewrite, populate
+  grammar, prefetch fallback flag) is present.
+severity: high
+size: instant
+
+inputs:
+  - scripts/with-nix-builder.sh
+  - scripts/with-tillandsias-builder.sh
+  - scripts/with-wsl2-builder.sh
+  - scripts/check-nix-builder-e2e.sh
+  - scripts/nix-build-container.sh
+  - build.sh
+  - images/builder/Containerfile
+
+preconditions:
+  - workspace contains scripts/with-nix-builder.sh
+  - workspace contains build.sh
+  - workspace contains images/builder/Containerfile
+  - shell utilities (grep, awk, bash) are available in PATH
+
+critical_path:
+  - step: "all three build wrappers parse and build.sh sources them"
+    command: "if bash -n scripts/with-tillandsias-builder.sh && bash -n scripts/with-wsl2-builder.sh && bash -n scripts/with-nix-builder.sh && grep -q 'with-tillandsias-builder.sh' build.sh && grep -q 'with-wsl2-builder.sh' build.sh && grep -q 'with-nix-builder.sh' build.sh; then echo 'ok: three-wrappers-wired'; else echo 'FAIL: a build wrapper fails to parse or build.sh does not source all three'; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok: three-wrappers-wired"
+
+  - step: "lane unset: sourcing is silent, caller shell options untouched, direct call is byte-identical pass-through"
+    command: "out=$(env -u TILLANDSIAS_BUILD_LANE bash -c 'before=$-; pb=0; [[ -o pipefail ]] && pb=1; source scripts/with-nix-builder.sh; after=$-; pa=0; [[ -o pipefail ]] && pa=1; [ \"$before\" = \"$after\" ] && [ \"$pb\" = \"$pa\" ] && [ -z \"${_NB_CALLER_FLAGS+x}\" ] && echo clean'); bare=$(env -u TILLANDSIAS_BUILD_LANE bash scripts/with-nix-builder.sh echo bare-run); if [ \"$out\" = \"clean\" ] && [ \"$bare\" = \"bare-run\" ]; then echo 'ok: unset-lane-byte-identical'; else echo \"FAIL: lane-unset path not inert (source=$out direct=$bare)\"; fi"
+    timeout_ms: 10000
+    expected_behavior: "ok: unset-lane-byte-identical"
+
+  - step: "explicit lane + non-nix command refuses loudly (linux; elsewhere the lane is a designed pass-through)"
+    command: "case \"$(uname -s)\" in Linux) out=$(env -u container TILLANDSIAS_BUILD_LANE=container bash scripts/with-nix-builder.sh /bin/true 2>&1) && rc=0 || rc=$?; if [ \"$rc\" -eq 0 ]; then echo 'FAIL: lane ran a non-nix command'; else case \"$out\" in *FATAL*) echo 'ok: refuses-loudly' ;; *) echo \"FAIL: refusal not named: $out\" ;; esac; fi ;; *) echo 'ok: refuses-loudly (lane is linux-only pass-through elsewhere)' ;; esac"
+    timeout_ms: 10000
+    expected_behavior: "ok: refuses-loudly"
+
+  - step: "in-container nesting guard names itself instead of silently no-oping"
+    command: "out=$(container=oci TILLANDSIAS_BUILD_LANE=container bash scripts/with-nix-builder.sh echo guarded-pass 2>&1) || true; case \"$out\" in *\"cannot nest\"*\"guarded-pass\"*) echo 'ok: nesting-guard-names-itself' ;; *) echo \"FAIL: nesting guard silent or swallowed the command: $out\" ;; esac"
+    timeout_ms: 10000
+    expected_behavior: "ok: nesting-guard-names-itself"
+
+  - step: "one builder lineage: images/builder referenced by wrapper and e2e, nix/builder absent"
+    command: "if grep -q 'images/builder/Containerfile' scripts/with-nix-builder.sh && grep -q 'images/builder/Containerfile' scripts/check-nix-builder-e2e.sh && [ -f images/builder/Containerfile ] && [ ! -e nix/builder/Containerfile ]; then echo 'ok: one-lineage'; else echo 'FAIL: two builder lineages (or the surviving one unreferenced) — images/builder is the one lineage, nix/builder is deleted'; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok: one-lineage"
+
+  - step: "per-host substituter wiring present: substituter-args consult, ssl-cert-file rewrite, populate grammar, prefetch fallback flag"
+    command: "if grep -q 'substituter-args' scripts/with-nix-builder.sh && grep -q 'ssl-cert-file' scripts/with-nix-builder.sh && grep -q 'ok:nix-populate:copied=' scripts/with-nix-builder.sh && grep -q 'TILLANDSIAS_NIX_PREFETCH' scripts/with-nix-builder.sh; then echo 'ok: per-host-cache-wired'; else echo 'FAIL: per-host substituter wiring incomplete in with-nix-builder.sh (substituter-args, ssl-cert-file rewrite, populate grammar, or prefetch fallback missing)'; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok: per-host-cache-wired"
+
+observability:
+  traces:
+    - "@trace spec:dev-build"
+  expected_log: "nix container lane guard chain, one lineage, and per-host substituter wiring intact"
+  log_fields:
+    spec: "dev-build"
+    test: "nix-container-lane-shape"
+    artifact: "scripts/with-nix-builder.sh"
+
+rollback:
+  on_failure: >
+    Step 2 red means with-nix-builder.sh mutates the sourcer's options or
+    stopped being inert when the lane is unset — restore the guarded capture
+    block and the explicit _nb_restore_caller_opts call at every sourced
+    return site (the 731-pc5r/764-sunk shape). Step 3 or 4 red means a guard
+    went silent: the lane must refuse non-nix commands with a FATAL line and
+    name the nesting pass-through. Step 5 red means a second builder lineage
+    reappeared — images/builder/Containerfile (distro nix) is the only one.
+    Step 6 red means the per-host cache wiring (790-6n2k) was removed from
+    the lane.
+  command: "grep -n 'TILLANDSIAS_BUILD_LANE\\|images/builder\\|substituter-args' scripts/with-nix-builder.sh"

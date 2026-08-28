@@ -2,7 +2,7 @@
 tags: [macos, virtualization-framework, vz, guest-boot, vm-sizing, boot-latency, performance-baseline]
 languages: []
 since: 2026-08-18
-last_verified: 2026-08-18
+last_verified: 2026-08-28
 sources:
   - https://developer.apple.com/documentation/virtualization/vzvirtualmachineconfiguration
   - https://developer.apple.com/documentation/virtualization/vzvirtualmachineconfiguration/3656714-cpucount
@@ -21,12 +21,13 @@ bundled_into_image: true
 committed_for_project: true
 ---
 
-# macOS VZ guest: boot baseline and why the sizing is pinned
+# macOS VZ guest: boot baseline and host-proportional sizing
 
-@trace order:689-eux9, spec:vsock-transport
+@trace order:689-eux9, order:919-jii2, spec:vsock-transport
 
 What a Virtualization.framework guest boot actually costs on this project's
-macOS lane, and the measurement behind the hardcoded 4 GiB / 4-vCPU guest.
+macOS lane, and the measurement behind the host-headroom-aware guest sizing
+that replaced the pinned 4 GiB / 4-vCPU default.
 
 **Provenance note**: the Apple URLs above are the authority for what
 `cpuCount` / `memorySize` MEAN. The NUMBERS below are project-local
@@ -78,34 +79,54 @@ question of 2026-08-11 — *is the 4 GiB ceiling behind the slowness; would 8 Gi
 help?* — is answered **no** on both halves: no pressure, and the slowness had a
 different cause entirely.
 
-## The sizing decision: PINNED
+## The sizing decision: HOST-HEADROOM-AWARE (919-jii2, 2026-08-28)
 
-`crates/tillandsias-vm-layer/src/vz.rs` sets `cpu_count:
-available_parallelism().min(4)` and `memory_bytes: 4 GiB`. Both stay pinned.
+`crates/tillandsias-vm-layer/src/vz.rs` derives the size from the host with the
+pure function `guest_sizing(host_cores, host_memory)`, fed by
+`available_parallelism()` and `sysctl -n hw.memsize`:
 
-1. **No measured pressure to relieve** — the swap figure above.
-2. **Scaling to the host would make every cross-host measurement
-   incomparable.** This is the reason that is easy to miss and is the stronger
-   one. "The guest" has to mean the same thing on every machine, or the fleet
-   cannot compare numbers taken on different ones. Concretely: 798-q4m9's exit
-   criteria demand a bind-latency measurement on a guest constrained to **one**
-   vCPU and explicitly refuse a multi-vCPU pass as evidence; 807-bjjv exists
-   because a shared benchmark is worthless when hosts do not run the same
-   workload. A host-derived guest size silently reintroduces that variance into
-   every future measurement.
+| | policy | 10c / 16 GiB (the 919-jii2 host) |
+|---|---|---|
+| vCPU | 80% of logical cores, never below 4 (or the host's count if smaller) | 8 |
+| memory | `min(host/2, host - 6 GiB)`, clamped to `[4 GiB, 32 GiB]`, rounded down to a whole GiB | 8 GiB |
+
+Worked cases: an 8 GiB host gets the 4 GiB floor (half is 4, but the 6 GiB host
+reserve allows only 2); a 12 GiB host gets 6 GiB; a 128 GiB host is capped at
+32 GiB, since past that the fraction buys nothing a forge uses.
+
+### Why the pin was right and is now wrong
+
+689-eux9's idle swap figure still stands *for the workload it measured*. The
+workload changed. 919-jii2 records, on that same M5 host: qwen2.5:0.5b and 1.5b
+load but fabricate on 6/6 spec queries; 3b has under 1 GiB of headroom for OS +
+KV cache; 7b — the size sibling GPU hosts report as the accuracy sweet spot —
+cannot load at all. The pin did not make the guest slow; it made a whole class
+of work impossible.
+
+### What the prior pinned rationale still buys
+
+1. **Cross-host comparability** (798-q4m9, 807-bjjv) is preserved without
+   re-pinning: `guest_sizing` is *pure*, so a measurement that names the host's
+   cores and RAM is reproducible from those two numbers, and
+   `TILLANDSIAS_VZ_CPU_COUNT_FOR_MEASUREMENT` still constrains the guest to a
+   fixed vCPU count for any benchmark that demands one (it can only ever
+   constrain, never grow past the host-derived count).
+2. **The floor is what keeps a small host working** — the policy never hands
+   out less than the 4 GiB / 4 vCPU every macOS host already ran.
+3. **80% CPU, not 100%**, and a 6 GiB host memory reserve — a VM that boots by
+   swapping its host is worse than a smaller VM.
 
 ### Honest limit
 
-Every memory figure here is **idle**. Nothing measures the guest under a full
-forge + container-stack load. This justifies keeping the default; it is **not**
-a claim that 4 GiB suffices for every workload. Revisit with a loaded
-measurement, not an opinion.
+The 8 GiB figure comes from model arithmetic (a 7B quantized model + OS + forge
+stack), **not** from a loaded measurement of this guest at 8 GiB — every memory
+number on this page is still idle. 919-jii2's closure asks for that loaded
+measurement; this is the allocation it will be measured at.
 
 ## Gotchas worth knowing before you measure
 
-- **`.min(4)` caps a 10-core host at 4 vCPU.** That is why the guest's
-  capability envelope reports `accel_cpu_cores=4` on a 10-core Mac — the
-  envelope describes the VM, not the machine.
+- **80% of host cores, not 100%.** On a 10-core Mac this yields 8 vCPU. The
+  remaining 20% keeps the host OS, tray app, and macOS compositor responsive.
 - **Boot from `dist/`, not `target/release` or `/Applications`.**
   `target/release/tillandsias-tray` lacks the
   `com.apple.security.virtualization` entitlement and cannot start a VM at all

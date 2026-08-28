@@ -1,41 +1,44 @@
 #!/usr/bin/env bash
-# nix-push-cache.sh — push crane dep closures to the enclave nix binary cache
+# nix-push-cache.sh — populate the per-host cache store with crane dep closures
 #
-# After a successful crane build, pushes the 4 deps closures (the expensive
-# artifacts) to the enclave cache so other hosts can substitute them instead of
-# cold-compiling. Gates on the cache being reachable — if it is not, exits 0
-# silently (a missing push is not a build failure).
+# RE-CUT 2026-08-28 (790-6n2k reconciliation). The previous shape ran
+# `nix copy --to https://127.0.0.1:5111` — an UPLOAD against harmonia, which
+# is serve-only and exposes no upload endpoint, so the push could only fail.
+# Publication on this host is LOCAL: harmonia serves the chroot store
+# directly, so a closure is published the moment it is valid there.
 #
-# SCOPE — LOCAL ROUND-TRIP PLACEHOLDER. "Other hosts" above is aspiration, not
-# implementation: the target is this host's own harmonia cache
-# (nix-cache-service.sh), and harmonia is SERVE-ONLY — it exposes no upload
-# endpoint, so `nix copy --to https://...` against it can only fail or no-op.
-# Cross-host push (a writable shared cache and how hosts trust it) is 790-6n2k
-# work gated on an operator decision; until that lands this script exists to
-# exercise the flag/closure plumbing locally and to fail loudly rather than
-# pretend a push happened.
+# The build lane already populates the store itself (with-nix-builder.sh runs
+# in-container `nix copy --to /host-store --no-check-sigs <closure>` after a
+# successful build, then `nix-toolbox.sh pin`). This script is the HOST-SIDE
+# re-drive of that same mechanism: it copies the deps closures from the host's
+# default store into the chroot store when they are missing there, and pins.
+# --no-check-sigs matches the lane: harmonia signs at SERVE time
+# (sign_key_paths in nix-cache-service.sh), store paths carry no signatures.
+# Cross-host publication (a shared writable cache) is deliberately absent —
+# the cache is PER-HOST until a shared cache is designed (operator 2026-08-28).
 #
 # GRAMMAR (exactly one line on stdout)
-#   ok:nix-push:<pushed=<n>>:total=<n>
-#   ok:nix-push:skip:cache-unreachable
+#   ok:nix-push:local:served=<n>:copied=<n>:total=<n>
 #   ok:nix-push:skip:no-nix
 #   ok:nix-push:skip:no-store
-#   blocked:nix-push:<eval-failed|push-failed|no-ca-bundle>
+#   blocked:nix-push:copy-failed:served=<n>:copied=<n>:failed=<n>:total=<n>
+#
+# served  = deps closures already valid in the chroot store harmonia serves
+# copied  = closures this run copied in from the host default store
+# total   = flake outputs whose deps closure exists somewhere locally
 #
 # Exit 0 on ok/skip, 1 on blocked.
 #
 # USAGE
-#   scripts/nix-push-cache.sh             # push all 4 deps closures
-#   scripts/nix-push-cache.sh --dry-run   # show what would be pushed
+#   scripts/nix-push-cache.sh             # populate + pin all 4 deps closures
+#   scripts/nix-push-cache.sh --dry-run   # show what would be copied
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CHROOT_STORE="${TILLANDSIAS_NIX_CHROOT_STORE:-$HOME/.local/share/tillandsias/nix-store}"
-NIX_CACHE_SCRIPT="${TILLANDSIAS_NIX_CACHE_SCRIPT:-$SCRIPT_DIR/nix-cache-service.sh}"
 NIX_FEATURES=(--extra-experimental-features "nix-command flakes")
-CA_DIR="${TILLANDSIAS_CA_DIR:-/tmp/tillandsias-ca}"
 
 DRY_RUN=0
 [[ "${1:-}" == "--dry-run" ]] && DRY_RUN=1
@@ -52,6 +55,7 @@ have_nix() { command -v nix >/dev/null 2>&1; }
 store_present() { [ -d "$CHROOT_STORE/nix/store" ]; }
 
 _nix() { nix "${NIX_FEATURES[@]}" --store "$CHROOT_STORE" "$@"; }
+_host_nix() { nix "${NIX_FEATURES[@]}" "$@"; }
 
 _logical() {
     case "$1" in
@@ -79,62 +83,56 @@ deps_out_path() {
     _logical "$outpath"
 }
 
-# Check cache is reachable.
-cache_reachable() {
-    [[ -x "$NIX_CACHE_SCRIPT" ]] || return 1
-    local status
-    status="$("$NIX_CACHE_SCRIPT" status 2>/dev/null)" || return 1
-    [[ "$status" == *"running"* ]]
-}
-
 # ── Main ──────────────────────────────────────────────────────────────────
 have_nix || { echo "ok:nix-push:skip:no-nix"; exit 0; }
 store_present || { echo "ok:nix-push:skip:no-store"; exit 0; }
-cache_reachable || { echo "ok:nix-push:skip:cache-unreachable"; exit 0; }
 
-# Get the cache endpoint and TLS CA for nix copy. Port and state dir mirror
-# nix-cache-service.sh — honor the same env overrides instead of hardcoding.
-CACHE_URL="https://127.0.0.1:${TILLANDSIAS_NIX_CACHE_HOST_PORT:-5111}"
-CA_BUNDLE="${TILLANDSIAS_NIX_CACHE_STATE:-$HOME/.local/share/tillandsias/nix-cache}/ca-bundle.crt"
-if [[ ! -s "$CA_BUNDLE" ]]; then
-    echo "  [push] CA bundle missing or empty at $CA_BUNDLE" >&2
-    echo "blocked:nix-push:no-ca-bundle"
-    exit 1
-fi
-
-PUSHED=0
+SERVED=0
+COPIED=0
 FAILED=0
 
 for out in "${FLAKE_OUTPUTS[@]}"; do
-    p="$(deps_out_path "$out")" || { echo "  [push] skip $out (eval failed)" >&2; FAILED=$((FAILED + 1)); continue; }
+    p="$(deps_out_path "$out")" || { echo "  [push] skip $out (eval failed)" >&2; continue; }
 
-    # Check if the closure is present in the local store.
-    if ! _nix path-info "$p" >/dev/null 2>&1; then
-        echo "  [push] skip $out (not in local store)" >&2
+    if _nix path-info "$p" >/dev/null 2>&1; then
+        echo "  [push] $out already in the served store ($p)" >&2
+        SERVED=$((SERVED + 1))
+        continue
+    fi
+
+    if ! _host_nix path-info "$p" >/dev/null 2>&1; then
+        echo "  [push] skip $out (in neither the served nor the host store)" >&2
         continue
     fi
 
     if [[ "$DRY_RUN" == 1 ]]; then
-        echo "  [push] would push $out ($p)" >&2
-        PUSHED=$((PUSHED + 1))
+        echo "  [push] would copy $out ($p) host-store -> $CHROOT_STORE" >&2
+        COPIED=$((COPIED + 1))
         continue
     fi
 
-    echo "  [push] pushing $out ($p)..." >&2
-    if _nix copy --to "$CACHE_URL" "$p" \
-        --ssl-cert-file "$CA_BUNDLE" 2>/dev/null; then
-        PUSHED=$((PUSHED + 1))
+    echo "  [push] copying $out ($p) into the served store..." >&2
+    if _host_nix copy --to "$CHROOT_STORE" --no-check-sigs "$p" 2>/dev/null; then
+        COPIED=$((COPIED + 1))
     else
         echo "  [push] FAILED $out" >&2
         FAILED=$((FAILED + 1))
     fi
 done
 
-TOTAL=$((PUSHED + FAILED))
+TOTAL=$((SERVED + COPIED + FAILED))
 if [[ "$FAILED" -gt 0 ]]; then
-    echo "blocked:nix-push:push-failed:pushed=${PUSHED}:failed=${FAILED}:total=${TOTAL}"
+    echo "blocked:nix-push:copy-failed:served=${SERVED}:copied=${COPIED}:failed=${FAILED}:total=${TOTAL}"
     exit 1
 fi
 
-echo "ok:nix-push:pushed=${PUSHED}:total=${TOTAL}"
+# Root whatever is now in the served store so GC keeps it — the same follow-up
+# the build lane runs. Advisory: a pin failure leaves closures served but
+# unrooted, which the next successful pin repairs.
+if [[ "$DRY_RUN" == 0 && $((SERVED + COPIED)) -gt 0 ]]; then
+    "$SCRIPT_DIR/nix-toolbox.sh" pin >&2 \
+        || echo "  [push] warning: nix-toolbox.sh pin failed; closures unrooted until the next pin" >&2
+fi
+
+echo "ok:nix-push:local:served=${SERVED}:copied=${COPIED}:total=${TOTAL}"
 exit 0

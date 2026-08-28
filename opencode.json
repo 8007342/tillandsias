@@ -8,12 +8,33 @@
   "instructions": [
     ".opencode/instructions/local-experts.md"
   ],
+  "provider": {
+    "tillandsias-experts": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Tillandsias grounded experts (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:11436/v1"
+      },
+      "models": {
+        "all": { "name": "Grounded expert (all domains)" },
+        "spec": { "name": "Grounded expert (openspec specs)" },
+        "code": { "name": "Grounded expert (code)" },
+        "methodology": { "name": "Grounded expert (methodology)" },
+        "cheatsheet": { "name": "Grounded expert (cheatsheets)" }
+      }
+    }
+  },
   "agent": {
     "local-experts": {
-      "model": "ollama/qwen2.5:14b",
-      "description": "EXPERIMENTAL: raw local-model answers with no retrieval or validation — not yet wired through the grounded pipeline (packet wire-local-experts-mode-through-grounded-pipeline).",
+      "model": "tillandsias-experts/all",
+      "description": "Grounded local experts: retrieval from the published spec index, citations kept only if used, typed unsupported: refusals — served by `tillandsias-plan expert-serve` on 127.0.0.1:11436 (order 920-pxg6).",
       "mode": "primary",
-      "prompt": "You are running in Local Experts mode. This mode is EXPERIMENTAL and NOT yet wired through the grounded pipeline (packet wire-local-experts-mode-through-grounded-pipeline): your answers are raw local-model output with NO retrieval, NO domain-separated RAG, and NO validation.\n\nRules:\n- When asked about project specifics, say plainly that this mode is ungrounded and your answer may be wrong.\n- Direct grounded questions to the forge-plan MCP tools (spec_answer, plan_answer, methodology_ask) where available.\n- NEVER fabricate file paths, section names, or citations. Do not cite sources you did not read.\n- If you cannot answer confidently, say so."
+      "tools": {
+        "write": false,
+        "edit": false,
+        "bash": false
+      },
+      "prompt": "You are running in Local Experts mode, backed by the grounded pipeline (tillandsias-plan expert-serve, order 920-pxg6). Every answer you relay is either (a) grounded in retrieved spec/code/methodology/cheatsheet sections with citations that were verified against the published index, or (b) a typed refusal beginning 'unsupported: ' naming exactly what is missing (no index, no embedding endpoint, no coverage in the domain). There is no third state — the endpoint never falls back to raw model prose.\n\nRules:\n- Relay refusals honestly: an 'unsupported: ...' completion means the corpus cannot ground the answer. Say so; do not fill the gap from your own knowledge.\n- Pick the domain by model id: all, spec, code, methodology, cheatsheet.\n- For deterministic single-node lookups (packet status, one methodology path), prefer the forge-plan MCP tools (plan_answer, methodology_ask, spec_answer) where available.\n- NEVER fabricate file paths, section names, or citations beyond what the endpoint returned.\n- If the endpoint is unreachable (connection refused), say that expert-serve is not running and fall back to the forge-plan MCP tools."
     }
   },
   "lsp": true

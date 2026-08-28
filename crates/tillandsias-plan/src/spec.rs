@@ -1113,7 +1113,22 @@ pub fn top_k(query: &[f32], vectors: &[Vec<f32>], k: usize) -> Vec<(usize, f32)>
 /// report and keep using the unscored form, which omits the field rather than
 /// inventing 1.0.
 pub fn build_envelope_scored(answer: &str, scored: &[ScoredChunk], source: &Path) -> Envelope {
-    let freshness = Freshness::for_source(source);
+    build_envelope_scored_with_freshness(answer, scored, Freshness::for_source(source))
+}
+
+/// The scored builder with an EXPLICIT freshness frame (order 920-pxg6).
+///
+/// The grounded pipeline answers from a published index entry, whose frame is
+/// the entry's own `.commit` + `chunks.jsonl` mtime (801-g9nn) — NOT anything
+/// derivable from a path in this process's checkout, which is what
+/// [`Freshness::for_source`] reports. Same only-if-used citation filter, same
+/// downgrade-to-unsupported; the two builders cannot drift because the
+/// path-taking form above delegates here.
+pub fn build_envelope_scored_with_freshness(
+    answer: &str,
+    scored: &[ScoredChunk],
+    freshness: Freshness,
+) -> Envelope {
     let mut citations = Vec::new();
     for sc in scored {
         let c = &sc.chunk;
@@ -1369,6 +1384,56 @@ pub fn corpus_coverage(root: &Path) -> Vec<(String, usize, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Order 920-pxg6 (R4/R5). The explicit-freshness builder keeps ONLY the
+    /// citations the prose used — subset usage strips the rest — and the
+    /// supplied frame passes through untouched (never a HEAD derived here).
+    #[test]
+    fn with_freshness_builder_keeps_only_used_citations_and_the_given_frame() {
+        let chunk = |id: usize, key: &str| Chunk {
+            id,
+            path: "openspec/specs/x/spec.md".into(),
+            line_start: 1,
+            line_end: 2,
+            kind: "spec".into(),
+            key: key.into(),
+            content_hash: "h".into(),
+            text: format!("{key}\nbody"),
+        };
+        let scored = vec![
+            ScoredChunk {
+                chunk: chunk(0, "Requirement: used"),
+                score: 0.9,
+            },
+            ScoredChunk {
+                chunk: chunk(1, "Requirement: decorative"),
+                score: 0.8,
+            },
+        ];
+        let frame = Freshness::new(
+            "abcdef1234567890abcdef1234567890abcdef12".to_string(),
+            "2026-08-28T00:00:00Z".to_string(),
+        );
+        let env = build_envelope_scored_with_freshness(
+            "the answer leans on Requirement: used",
+            &scored,
+            frame.clone(),
+        );
+        assert_eq!(env.citations().len(), 1, "only the used citation survives");
+        assert_eq!(
+            env.citations()[0]
+                .authority()
+                .get("key")
+                .map(String::as_str),
+            Some("Requirement: used")
+        );
+        assert_eq!(env.freshness(), &frame, "the supplied frame passes through");
+
+        // Zero usage downgrades — prose that used nothing ships no citations.
+        let env = build_envelope_scored_with_freshness("free-floating prose", &scored, frame);
+        assert_eq!(env.confidence(), Confidence::Unsupported);
+        assert!(env.citations().is_empty());
+    }
 
     /// Order 821-73es. The score has to reach the CITATION, not just the
     /// retrieval output — a number that stops at the CLI is a number no

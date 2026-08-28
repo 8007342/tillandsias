@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
 # nix-build-container.sh — nix build with pre-fetched flake inputs
 #
-# Works around the SSL verification bug in nix's bundled libcurl by
-# downloading all flake inputs with system curl (which works) and then
-# passing --override-input to nix so it never touches github.com.
+# EXPLICIT FALLBACK, NOT THE DEFAULT (operator 2026-08-28): the lane's default
+# is a direct in-container nix build; with-nix-builder.sh routes through this
+# script only when TILLANDSIAS_NIX_PREFETCH=1 is set. It exists for hosts
+# where nix's bundled libcurl cannot verify github.com: it downloads all flake
+# inputs with system curl (which works) and passes --override-input to nix so
+# it never touches github.com.
 #
 # This script runs INSIDE the builder container (via with-nix-builder.sh).
-# It expects nix, curl, jq to be on PATH.
+# It expects nix, curl, jq to be on PATH. Extra args — flake output refs and
+# any substituter flags the wrapper injects — are forwarded verbatim to the
+# final nix build.
 #
 # Usage (host):
-#   NIX_BUILD_LANE=container scripts/with-nix-builder.sh \
-#       bash scripts/nix-build-container.sh .#tillandsias-x86_64-musl
+#   TILLANDSIAS_BUILD_LANE=container TILLANDSIAS_NIX_PREFETCH=1 \
+#       scripts/with-nix-builder.sh nix build .#tillandsias-x86_64-musl
 
 set -euo pipefail
 

@@ -21,6 +21,14 @@ TIER_MAX_VARIANTS = {
     non_usable = 0,
 }
 
+-- All three servable tiers are REACHABLE (920-pxg6). The previous form's
+-- first branch (short -> quick) was subsumed by its second, so "immediate"
+-- was only reachable for the empty query no caller ever sends — one tier
+-- wearing three names. Short queries now classify immediate: their budget
+-- is the deterministic floor (synthesis inside 500ms is a fantasy on the
+-- CPU tier), so the pipeline serves them the cited retrieval-only digest.
+-- "non_usable" stays a budget-overrun verdict (LatencyTier::from_ms), never
+-- a classification.
 function tier_classify(query)
     if not query or #query == 0 then
         return "immediate"
@@ -28,7 +36,7 @@ function tier_classify(query)
     local len = #query
     local word_count = select(2, query:gsub("%S+", ""))
     if len < 30 or word_count < 5 then
-        return "quick"
+        return "immediate"
     end
     if len < 100 or word_count < 15 then
         return "quick"

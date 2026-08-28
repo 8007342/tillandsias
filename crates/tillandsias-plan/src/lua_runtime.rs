@@ -1,27 +1,29 @@
-//! Sandboxed Lua runtime for the adversarial decomposition pipeline.
+//! Lua runtime for the grounded pipeline's tier/trim/collect scripts.
 //!
 //! @trace spec:spec-traceability
 //! @trace order:920-pxg6
 //!
-//! The Lua layer sits between Rust (concurrent dispatch, RAG retrieval,
-//! citation verification) and Shell (MCP transport, inference endpoint).
-//! It is hot-reloadable at runtime: `reload()` re-reads all `.lua` files
-//! from disk without restarting the VM. Type-checked at load time against
-//! a schema the Rust side enforces.
+//! Hot-reloadable at runtime: `reload()` re-reads all `.lua` files from disk
+//! without restarting the VM.
 //!
-//! SECURITY SURFACE, as actually implemented — NOT a sandbox. The VM is a
-//! stock `mlua::Lua`: the standard library is fully available to scripts,
-//! including `os.remove` and the `io.*` table. The `expert` bridge table
-//! exposes exactly two functions: `expert.log_info` and `expert.now_ms`.
-//! There is no `fs.read`, no repo-rooting, and no `expert.query` subprocess
-//! surface. Closing that gap (a restricted stdlib or a replacement for the
-//! Lua layer) is part of order 920-pxg6's work; until it lands, treat every
-//! script in `lua/` as trusted code.
+//! SECURITY SURFACE, exactly as implemented — a PARTIAL stdlib restriction,
+//! not a sandbox. `new()` nils out `os.execute`/`os.exit`/`os.getenv`,
+//! `io.open`/`io.popen`/`io.close`/`io.output`/`io.input`, the `debug`
+//! library, `loadfile`/`dofile`, and `require`; everything else in the
+//! stdlib (including `os.remove`, `os.rename`, string/table/math) remains
+//! available. The `expert` bridge table exposes exactly two functions —
+//! `expert.log_info` and `expert.now_ms` — and NOTHING else: there is no
+//! `expert.query`, no `fs.read`, no repo-rooting. Treat every script in
+//! `lua/` as TRUSTED CODE; do not point this runtime at scripts from
+//! outside the checkout. (Do not re-promise a stronger sandbox here without
+//! implementing one — that phantom claim is what the 920-pxg6 audit
+//! removed.)
 //!
-//! Design: the Lua scripts own DECOMPOSITION STRATEGY and COLLECTION
-//! SEMANTICS. Rust owns CONCURRENT DISPATCH, INFERENCE ENDPOINT, and
-//! CITATION VERIFICATION. The boundary is clean: Lua returns data,
-//! Rust executes it.
+//! Division of labor after 920-pxg6: Lua owns TIER CLASSIFICATION, VARIANT
+//! TRIMMING, and COLLECTION DEDUP — deterministic data-in/data-out scripts.
+//! Rust owns everything with consequences: dispatch, endpoints, retrieval,
+//! envelope construction, and citation VALIDATION (`answer::verify` in
+//! `pipeline::run_grounded`; the dead `validate.lua` is deleted).
 
 use mlua::prelude::*;
 use std::path::{Path, PathBuf};
@@ -152,21 +154,23 @@ impl FromLua for LatencyTier {
     }
 }
 
-/// The Lua runtime — a sandboxed VM that loads and executes decomposition,
-/// validation, and collection scripts.
+/// The Lua runtime — loads and executes the tier/trim/collect scripts under
+/// the partial stdlib restriction described in the module doc.
 pub struct LuaRuntime {
     lua: Lua,
     /// Path to the directory containing `.lua` scripts.
     lua_dir: PathBuf,
-    /// The repo root (for `fs.read` rooting).
+    /// The repo root. Informational (surfaced via [`Self::repo_root`]); no
+    /// bridge function roots file access to it — none exists.
     repo_root: PathBuf,
 }
 
 impl LuaRuntime {
     /// Create a new Lua runtime, loading scripts from `lua_dir`.
     ///
-    /// The sandbox blocks dangerous operations: `os.execute`, `io.popen`,
-    /// unrooted `io.open`, and the `debug` library.
+    /// Blocks exactly: `os.execute`/`os.exit`/`os.getenv`, `io.open`/
+    /// `io.popen`/`io.close`/`io.output`/`io.input`, the `debug` library,
+    /// `loadfile`/`dofile`, and `require`. Nothing else is restricted.
     pub fn new(lua_dir: &Path, repo_root: &Path) -> Result<Self, LuaError> {
         let lua = Lua::new();
 
@@ -174,14 +178,16 @@ impl LuaRuntime {
         {
             let globals = lua.globals();
 
-            // Remove os.execute, os.exit, os.getenv (use expert.query instead)
+            // Remove os.execute, os.exit, os.getenv — scripts get data from
+            // Rust arguments, never from the process environment
             if let Ok(os_table) = globals.get::<LuaTable>("os") {
                 let _ = os_table.set("execute", LuaValue::Nil);
                 let _ = os_table.set("exit", LuaValue::Nil);
                 let _ = os_table.set("getenv", LuaValue::Nil);
             }
 
-            // Remove io.open, io.popen, io.close (use expert.fs_read instead)
+            // Remove io.open, io.popen, io.close — the scripts transform
+            // data handed to them by Rust; they read no files themselves
             if let Ok(io_table) = globals.get::<LuaTable>("io") {
                 let _ = io_table.set("open", LuaValue::Nil);
                 let _ = io_table.set("popen", LuaValue::Nil);
@@ -210,9 +216,9 @@ impl LuaRuntime {
             repo_root: repo_root.to_path_buf(),
         };
 
-        // Load all .lua files in the directory (sorted for determinism).
-        // Scripts are loaded in alphabetical order: init.lua first, then
-        // collect.lua, decompose.lua, tier.lua, validate.lua.
+        // Load all .lua files in the directory (sorted for determinism:
+        // collect.lua, decompose.lua, tier.lua — then init.lua LAST, see
+        // load_all_scripts).
         rt.load_all_scripts()?;
 
         Ok(rt)
@@ -567,6 +573,52 @@ mod tests {
         assert!(rt.is_err(), "debug library should be blocked");
         let _ = fs::remove_dir_all(&dir);
         let _ = fs::remove_dir_all(&repo);
+    }
+
+    /// 920-pxg6 regression: a response with NO answer field used to crash
+    /// collect.lua ("attempt to index a nil value") and take the whole
+    /// collection — good responses included — down with it.
+    #[test]
+    fn collect_survives_a_nil_answer_response() {
+        let lua_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("lua");
+        let rt = LuaRuntime::new(&lua_dir, Path::new(env!("CARGO_MANIFEST_DIR")))
+            .expect("the crate's own lua scripts load");
+        let json = concat!(
+            "[",
+            r#"{"validated":true,"query_kind":"original","source_prompt":"p"},"#,
+            r#"{"answer":"real answer","validated":true,"citations":[],"confidence":0.5,"#,
+            r#""query_kind":"negation","source_prompt":"p2","why":"","affordances":[],"why_not":""}"#,
+            "]"
+        );
+        let out = rt
+            .call_collect("collect", json)
+            .expect("a nil answer must be dropped, never fatal");
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].answer, "real answer");
+    }
+
+    /// 920-pxg6: every servable tier must be REACHABLE from classification —
+    /// the pre-fix classifier returned "immediate" only for the empty query
+    /// no caller sends, so one tier wore three names.
+    #[test]
+    fn every_servable_tier_is_reachable_from_classification() {
+        let lua_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("lua");
+        let rt = LuaRuntime::new(&lua_dir, Path::new(env!("CARGO_MANIFEST_DIR")))
+            .expect("the crate's own lua scripts load");
+        assert_eq!(rt.classify_tier("what is ready?").unwrap(), "immediate");
+        assert_eq!(
+            rt.classify_tier("how does the forge stay isolated from the host machine?")
+                .unwrap(),
+            "quick"
+        );
+        assert_eq!(
+            rt.classify_tier(
+                "how do the browser isolation specs interact with the enclave certificate \
+                 authority across the launcher and the tray and the daemon lifecycles?"
+            )
+            .unwrap(),
+            "fine"
+        );
     }
 
     #[test]

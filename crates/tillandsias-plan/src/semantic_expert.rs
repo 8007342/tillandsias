@@ -5,8 +5,6 @@
 
 use crate::answer::{Citation, CitationKind, Confidence, Envelope, Freshness};
 use std::collections::BTreeMap;
-use std::io::{Read, Write};
-use std::net::{TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -283,54 +281,17 @@ impl SemanticExplainer {
         }
     }
 
-    /// Dispatch prompt to local Ollama inference service with bounded timeout.
+    /// Dispatch prompt to the local inference service with bounded timeout.
+    ///
+    /// ORDER 920-pxg6 (D6): routed through the crate's ONE HTTP client —
+    /// `pipeline::chat_completion` over `{base}/chat/completions` — which is
+    /// hostname-resolving (the enclave DNS name `inference:11434` works; the
+    /// pre-718-nkm2 literal-IP parse made this path dead code), bounded, and
+    /// `Connection: close`. The former ollama-native `/api/generate` body is
+    /// gone: one protocol, one client, zero divergent copies.
     pub fn query_inference(&self, prompt: &str) -> Option<String> {
-        let addr = format!("{}:{}", self.inference_host, self.inference_port);
-        // Resolve HOSTNAMES, not just numeric IPs. The previous
-        // `addr.parse::<SocketAddr>()` accepted only literal IPs, so the
-        // default enclave DNS name `inference:11434` (and any localhost
-        // spelling) short-circuited to None on EVERY call — the synthesis
-        // path was dead code in both environments (order 718-nkm2's design
-        // notes flagged exactly this; observed live 2026-08-15 when every
-        // open-ended bare-metal query degraded to unsupported).
-        let resolved = (self.inference_host.as_str(), self.inference_port)
-            .to_socket_addrs()
-            .ok()?;
-        let mut stream = resolved
-            .into_iter()
-            .find_map(|a| TcpStream::connect_timeout(&a, self.timeout).ok())?;
-
-        let _ = stream.set_read_timeout(Some(self.timeout));
-        let _ = stream.set_write_timeout(Some(self.timeout));
-
-        let body = serde_json::json!({
-            "model": self.model,
-            "prompt": prompt,
-            "stream": false
-        });
-        let body_str = serde_json::to_string(&body).ok()?;
-
-        let request = format!(
-            "POST /api/generate HTTP/1.1\r\n\
-             Host: {}\r\n\
-             Content-Type: application/json\r\n\
-             Content-Length: {}\r\n\
-             Connection: close\r\n\r\n{}",
-            addr,
-            body_str.len(),
-            body_str
-        );
-
-        stream.write_all(request.as_bytes()).ok()?;
-        let mut resp = String::new();
-        stream.read_to_string(&mut resp).ok()?;
-
-        let (_, json_part) = resp.split_once("\r\n\r\n")?;
-        let parsed: serde_json::Value = serde_json::from_str(json_part).ok()?;
-        parsed
-            .get("response")
-            .and_then(|r| r.as_str())
-            .map(str::to_string)
+        let base = format!("http://{}:{}/v1", self.inference_host, self.inference_port);
+        crate::pipeline::chat_completion(&base, &self.model, None, prompt, None, self.timeout)
     }
 
     /// Explain query using section provider + optional inference fallback.
@@ -378,87 +339,10 @@ impl SemanticExplainer {
         ))
     }
 
-    /// Explain query using the adversarial decomposition pipeline.
-    ///
-    /// This is the v0.5+ path: decompose the question into adversarial
-    /// variants, dispatch all concurrently to the inference endpoint, collect
-    /// validated responses, and pick the best one. Consumer is unaware this
-    /// happens — transparent black box producing a standard citation envelope.
-    ///
-    /// Falls back to the single-shot `explain_query` if the pipeline is
-    /// unavailable (no Lua runtime, no inference endpoint).
-    pub fn explain_query_pipeline<P: SemanticSectionProvider>(
-        &self,
-        provider: &P,
-        question: &str,
-        freshness: &Freshness,
-    ) -> Option<Envelope> {
-        let section = provider.find_section(question)?;
-
-        let mut authority = BTreeMap::new();
-        authority.insert("section".to_string(), section.section_title.clone());
-        authority.insert("key".to_string(), section.section_title.clone());
-
-        let citation = Citation::new(
-            section.file_rel.clone(),
-            section.line_start,
-            section.line_end,
-            CitationKind::Plan,
-            authority,
-        );
-
-        let prompt = format!(
-            "Based on this excerpt from '{}':\n\n{}\n\nQuestion: {}\nAnswer concisely:",
-            section.section_title, section.content, question
-        );
-
-        // Try the adversarial pipeline first
-        let config = crate::pipeline::InferenceConfig::default();
-        let root = std::env::current_dir().unwrap_or_default();
-        let lua_dir = root.join("crates").join("tillandsias-plan").join("lua");
-
-        if let Ok(runtime) = crate::lua_runtime::LuaRuntime::new(&lua_dir, &root) {
-            let shared_rt = std::sync::Arc::new(tokio::sync::Mutex::new(runtime));
-            if let Ok(rt_handle) = tokio::runtime::Runtime::new()
-                && let Ok((responses, _tier)) =
-                    rt_handle.block_on(crate::pipeline::run_pipeline(&shared_rt, &prompt, &config))
-            {
-                // Pick the best response from the collected set
-                if let Some(best) = responses.iter().max_by(|a, b| {
-                    a.confidence
-                        .partial_cmp(&b.confidence)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                }) && !best.answer.is_empty()
-                {
-                    return Some(Envelope::supported(
-                        best.answer.clone(),
-                        vec![citation],
-                        Confidence::Retrieved,
-                        freshness.clone(),
-                    ));
-                }
-            }
-        }
-
-        // Fallback: single-shot inference (existing behavior)
-        let answer_text = if let Some(synthesized) = self.query_inference(&prompt) {
-            let trimmed = synthesized.trim();
-            if !trimmed.is_empty() {
-                trimmed.to_string()
-            } else {
-                section.content.clone()
-            }
-        } else {
-            section.content.clone()
-        };
-
-        Some(Envelope::supported(
-            answer_text,
-            vec![citation],
-            Confidence::Retrieved,
-            freshness.clone(),
-        ))
-    }
+    // `explain_query_pipeline` was deleted by order 920-pxg6: it rode the
+    // facade `run_pipeline` (no retrieval, hardcoded validation) and had no
+    // callers. The grounded path is `pipeline::run_grounded`; this module
+    // keeps only the deterministic section provider + single-shot fallback.
 }
 
 #[cfg(test)]
