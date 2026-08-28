@@ -97,16 +97,37 @@ case "${1:-}" in
     *) echo "usage: $(basename "$0") [--all]" >&2; exit 2 ;;
 esac
 
-command -v nix >/dev/null 2>&1 || { echo "skip:nix-deps-stability:no-nix"; exit 0; }
+# CAPABILITY, NOT `command -v nix` (order 799-tb7q, second criterion). Asking
+# the HOST for the binary declared a toolbox-capable host nix-incapable and
+# skipped this gate on it entirely — a green skip, which is the worst kind.
+# scripts/nix-toolbox.sh answers the question properly across all three rungs.
+#
+# `capability`, NOT `ensure`: this runs inside ./build.sh --check, and `ensure`
+# may `podman pull` a 400 MiB image and create a toolbox. A pre-push gate reads
+# its environment; it does not provision one. So a host that has no nix on any
+# rung TODAY still skips, exactly as before — the change is that a host whose
+# nix lives in an existing toolbox no longer does.
+NIX_RUNG="$(bash "$ROOT/scripts/nix-toolbox.sh" capability 2>/dev/null)" \
+    || { echo "skip:nix-deps-stability:no-nix"; exit 0; }
+NIX_RUNG="${NIX_RUNG#ok:nix-capability:}"
 
 NIX_ARGS=()
 while IFS= read -r line; do
     [ -n "$line" ] && NIX_ARGS+=("$line")
 done < <(bash "$ROOT/scripts/nix-toolbox.sh" nix-args 2>/dev/null)
 
+# On daemon/chroot the host binary is the one to call and NIX_ARGS carries the
+# rung's flags. On the toolbox rung there is no host `nix` at all, so every
+# invocation goes through the script's `run` — which is also why `nix-args`
+# legitimately printed nothing above (it refuses that rung by design).
 _nix() {
-    nix --extra-experimental-features "nix-command flakes" \
-        ${NIX_ARGS[0]+"${NIX_ARGS[@]}"} "$@"
+    if [ "$NIX_RUNG" = "toolbox" ]; then
+        bash "$ROOT/scripts/nix-toolbox.sh" run -- \
+            nix --extra-experimental-features "nix-command flakes" "$@"
+    else
+        nix --extra-experimental-features "nix-command flakes" \
+            ${NIX_ARGS[0]+"${NIX_ARGS[@]}"} "$@"
+    fi
 }
 
 _nix store ping >/dev/null 2>&1 || { echo "skip:nix-deps-stability:nix-unusable"; exit 0; }
