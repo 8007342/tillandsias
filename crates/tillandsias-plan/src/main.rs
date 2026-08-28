@@ -78,6 +78,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "declared-closures-check",
     "dependencies-of",
     "decompose",
+    "expert-serve",
     "expire-claims",
     "plan-events",
     "fragment-event-packets",
@@ -295,9 +296,26 @@ const USAGE: &str = concat!(
     "           decompose <query...>      adversarial query decomposition via LLM\n",
     "                                     (order 920-pxg6). Returns a JSON array of\n",
     "                                     {prompt, kind} variants for concurrent dispatch.\n",
-    "           pipeline <query...>       decompose -> tier trim -> concurrent dispatch ->\n",
-    "                                     collect (920-pxg6). NO retrieval or validation\n",
-    "                                     yet — answers are ungrounded until 920-pxg6 lands.\n",
+    "           pipeline <query...> [--domain D]\n",
+    "                                     ORDER 920-pxg6. THE grounded pipeline, CLI front-end:\n",
+    "                                     tier -> decompose -> per-variant domain-filtered\n",
+    "                                     retrieval from the published spec index -> synthesis\n",
+    "                                     over retrieved context -> only-if-used citations ->\n",
+    "                                     Rust validation -> collect merge. Emits the ratified\n",
+    "                                     answer envelope: cited, or the typed unsupported:\n",
+    "                                     refusal — never raw model prose. Same function as\n",
+    "                                     expert-serve (one pipeline, two front-ends).\n",
+    "           expert-serve [--port N] [--root D]\n",
+    "                                     ORDER 920-pxg6. OpenAI-compatible loopback front-end\n",
+    "                                     over the SAME grounded pipeline: 127.0.0.1:11436 by\n",
+    "                                     default, POST /v1/chat/completions (non-stream and\n",
+    "                                     stream:true SSE ending 'data: [DONE]'; the model id\n",
+    "                                     IS the domain: all|spec|code|methodology|cheatsheet),\n",
+    "                                     GET /v1/models, 404 JSON otherwise. Refusals are\n",
+    "                                     rendered VERBATIM as completion content (HTTP 200,\n",
+    "                                     finish_reason stop). Serves until stdin EOF —\n",
+    "                                     </dev/null exits immediately. One pinned stderr line\n",
+    "                                     on start; nothing on stdout.\n",
     "           collect                   first-wins dedup of responses via Lua runtime\n",
     "                                     (order 920-pxg6). Reads JSON array from stdin,\n",
     "                                     returns collected envelope on stdout.\n",
@@ -2832,6 +2850,51 @@ fn main() {
         std::process::exit(run_grade(&args[1..], &index));
     }
 
+    // ORDER 920-pxg6. `expert-serve` runs BEFORE the ledger load for the same
+    // reason `verify-answer` does: it serves the SPEC-INDEX corpus, not the
+    // plan ledger, and a long-lived endpoint must come up in a checkout whose
+    // plan/index.yaml is broken or absent.
+    if args[0] == "expert-serve" {
+        let mut port: u16 = tillandsias_plan::expert_serve::DEFAULT_PORT;
+        let mut root = root_for(&index);
+        let mut i = 1;
+        while i < args.len() {
+            match args[i].as_str() {
+                "--port" => {
+                    i += 1;
+                    let raw = args.get(i).cloned().unwrap_or_default();
+                    match raw.parse::<u16>() {
+                        Ok(p) => port = p,
+                        Err(_) => {
+                            eprintln!("error: --port must be a u16 (got {raw:?})");
+                            std::process::exit(2);
+                        }
+                    }
+                }
+                "--root" => {
+                    i += 1;
+                    if let Some(r) = args.get(i) {
+                        root = PathBuf::from(r);
+                    }
+                }
+                other => {
+                    eprintln!(
+                        "error: unknown option {other:?} for `expert-serve` (known: --port <n>, --root <dir>)"
+                    );
+                    std::process::exit(2);
+                }
+            }
+            i += 1;
+        }
+        let cfg = tillandsias_plan::expert_serve::ServeConfig {
+            port,
+            root: root.clone(),
+            grounded: tillandsias_plan::pipeline::GroundedConfig::from_env(root),
+            index_dir: None,
+        };
+        std::process::exit(tillandsias_plan::expert_serve::run_blocking(cfg));
+    }
+
     // ORDER 394c. The methodology corpus is a DIFFERENT corpus from the plan
     // ledger, so these subcommands run before (and independently of) the
     // ledger load — a checkout with a broken or absent plan/index.yaml must
@@ -5172,10 +5235,15 @@ fn main() {
             }
         }
         "pipeline" => {
-            // ORDER 920-pxg6. Pipeline skeleton: decompose -> tier trim ->
-            // concurrent dispatch -> collect. No retrieval/validation yet;
-            // grounding is 920-pxg6's deliverable. Returns responses as JSON.
-            // --domain <name> sets the RAG domain context.
+            // ORDER 920-pxg6. The grounded pipeline's CLI front-end — the
+            // SAME `run_grounded` expert-serve calls (one pipeline, two
+            // front-ends). Emits the ratified envelope: cited, or the typed
+            // refusal. The pre-920-pxg6 skeleton — no retrieval, hardcoded
+            // validated:true/confidence:0.5/citations:[], and a
+            // Freshness::for_corpus stamp that presented this process's HEAD
+            // as the frame of an index it never read — is deleted; freshness
+            // now comes from the resolved index entry itself (801-g9nn).
+            // --domain <name> filters retrieval to one corpus domain.
             let mut domain: Option<String> = None;
             let mut query_parts = Vec::new();
             let mut i = 1;
@@ -5193,44 +5261,43 @@ fn main() {
                 usage();
             }
             let root = root_for(&index);
-            let lua_dir = root.join("crates").join("tillandsias-plan").join("lua");
-            let rt = match tillandsias_plan::lua_runtime::LuaRuntime::new(&lua_dir, &root) {
-                Ok(rt) => rt,
-                Err(e) => {
-                    eprintln!("error: lua runtime init failed: {e}");
-                    std::process::exit(1);
+            // EXIT 0 EVEN WHEN UNSUPPORTED, like `answer`: the MCP wrapper
+            // runs under `set -e` and the envelope IS the signal. Only the
+            // runtime substrate failing to come up is a hard error.
+            let unknown_freshness = || {
+                tillandsias_plan::answer::Freshness::new(
+                    "unknown".to_string(),
+                    "unknown".to_string(),
+                )
+            };
+            let envelope = match tillandsias_plan::spec_index::SpecIndexEntry::load() {
+                Err(e) => tillandsias_plan::answer::Envelope::unsupported(e, unknown_freshness()),
+                Ok(entry) => {
+                    match tillandsias_plan::lua_runtime::create_shared_runtime(&root) {
+                        Err(e) => tillandsias_plan::answer::Envelope::unsupported(
+                            format!("the Lua tier/trim/collect scripts failed to load: {e}"),
+                            unknown_freshness(),
+                        ),
+                        Ok(shared_rt) => {
+                            let rt_handle = tokio::runtime::Runtime::new().unwrap_or_else(|e| {
+                                eprintln!("error: tokio runtime init failed: {e}");
+                                std::process::exit(1);
+                            });
+                            let mut cfg = tillandsias_plan::pipeline::GroundedConfig::from_env(
+                                root.clone(),
+                            );
+                            cfg.inference.domain = domain;
+                            rt_handle.block_on(tillandsias_plan::pipeline::run_grounded(
+                                &shared_rt, &entry, &cfg, &query,
+                            ))
+                        }
+                    }
                 }
             };
-            let config = tillandsias_plan::pipeline::InferenceConfig {
-                domain,
-                ..Default::default()
-            };
-            let shared_rt = std::sync::Arc::new(tokio::sync::Mutex::new(rt));
-            let rt_handle = tokio::runtime::Runtime::new().unwrap_or_else(|e| {
-                eprintln!("error: tokio runtime init failed: {e}");
-                std::process::exit(1);
-            });
-            match rt_handle.block_on(tillandsias_plan::pipeline::run_pipeline(
-                &shared_rt, &query, &config,
-            )) {
-                Ok((responses, tier)) => {
-                    // Compute RAG freshness from corpus root
-                    let freshness = tillandsias_plan::answer::Freshness::for_corpus(&root, &[]);
-                    let rag_freshness = freshness.rag_timestamp_with_staleness(3600);
-                    let output = serde_json::json!({
-                        "tier": format!("{:?}", tier).to_lowercase(),
-                        "domain": config.domain.as_deref().unwrap_or("all"),
-                        "rag_freshness": rag_freshness,
-                        "rag_source_commit": freshness.source_commit(),
-                        "responses": responses,
-                    });
-                    println!("{}", serde_json::to_string(&output).unwrap_or_default());
-                }
-                Err(e) => {
-                    eprintln!("error: pipeline failed: {e}");
-                    std::process::exit(1);
-                }
-            }
+            // Envelope-level frame stamps (default citation commit = the
+            // entry frame) were already applied inside run_grounded, BEFORE
+            // this emit path's HEAD default — spec-envelope's 801-g9nn rule.
+            emit_verified_envelope(envelope, &root, &[]);
         }
         "next" => {
             // ORDER 606-xu52. The cold-start selector: at most five cited,

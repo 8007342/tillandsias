@@ -35,6 +35,7 @@ declared-closures
 declared-closures-check
 decompose
 dependencies-of
+expert-serve
 expire-claims
 # does not remove the capability — it makes the expert UNDER-report itself, and
 # file are checked against each other BEHAVIOURALLY by

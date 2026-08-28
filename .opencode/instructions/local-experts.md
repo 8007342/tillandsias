@@ -1,38 +1,46 @@
-# Local Experts Mode (EXPERIMENTAL — not yet grounded)
+# Local Experts Mode (grounded — order 920-pxg6)
 
-The `local-experts` agent talks to a local Ollama model directly. It is NOT
-yet wired through the grounded pipeline — that work is the filed packet
-`wire-local-experts-mode-through-grounded-pipeline`. Until it lands, answers
-in this mode are raw-model output: no retrieval, no domain separation, no
-validation, no citations.
+The `local-experts` agent talks to the grounded loopback endpoint
+`tillandsias-plan expert-serve` (provider `tillandsias-experts`, baseURL
+`http://127.0.0.1:11436/v1`), NOT to a raw model. Every completion is one of
+exactly two things:
 
-## What exists today
+- a **cited answer**: prose grounded in sections retrieved from the
+  published content-addressed spec index, keeping ONLY the citations the
+  prose actually used, validated in Rust before serving; or
+- a **typed refusal**: content beginning `unsupported: ` naming what is
+  missing (no built index, no embedding endpoint, no coverage in the
+  requested domain).
 
-- A CLI arm: `tillandsias-plan pipeline "<query>" [--domain <d>]`. It runs
-  LLM decomposition of the query, tier trimming, concurrent dispatch to the
-  local inference endpoint, and deduplication of the responses. It does NO
-  retrieval and NO validation: each `responses[].answer` is unvalidated
-  local-model text and its `citations` array is always empty.
-- MCP introspection arms on forge-plan: `plan_decompose` (adversarial
-  variants of a query) and `plan_collect` (deduplication of supplied
-  responses). These expose the pipeline's pieces; they do not ground answers.
-- The CLI arm's output shape is `{tier, domain, rag_freshness,
-  rag_source_commit, responses}`. The `rag_freshness` / `rag_source_commit`
-  fields are index-freshness metadata; the pipeline does not retrieve from
-  any index yet.
+There is no third state. The endpoint never falls back to raw model prose —
+when retrieval cannot ground an answer it refuses, verbatim, as a normal
+HTTP 200 completion with `finish_reason: stop`.
 
-## What is planned (not built)
+## The surface
 
-Domain-separated retrieval, validation of responses against retrieved
-context, and cited answer envelopes are the scope of
-`wire-local-experts-mode-through-grounded-pipeline`. Do not present pipeline
-output as routed, validated, grounded, or cited before that packet is done.
+- `POST /v1/chat/completions` — the model id IS the retrieval domain:
+  `all`, `spec`, `code`, `methodology`, `cheatsheet`. Non-stream and
+  `stream: true` (SSE terminated by `data: [DONE]`) both work.
+- `GET /v1/models` — the five domain ids.
+- Non-stream responses carry `rag_source_commit` (the commit the index
+  entry was built at — the frame the citations mean, 801-g9nn) and
+  `tillandsias_envelope` (the full ratified envelope; pipe it into
+  `tillandsias-plan verify-answer` to audit the citations yourself).
+
+Start it on a dev host with `tillandsias-plan expert-serve` (default port
+11436; serves until stdin EOF). The same pipeline is available as a CLI:
+`tillandsias-plan pipeline "<query>" [--domain <d>]` emits the envelope
+directly. Both front-ends call ONE function — there are no divergent
+grounding paths.
 
 ## Rules
 
-- When asked about project specifics, say plainly that this mode is
-  experimental and ungrounded, and that the answer may be wrong.
-- Direct grounded questions to the forge-plan MCP tools (`spec_answer`,
-  `plan_answer`, `methodology_ask`) where available.
-- NEVER fabricate file paths, section names, or citations.
-- If the local model cannot answer confidently, say so.
+- Relay refusals honestly. `unsupported: ...` means the corpus cannot
+  ground the answer; do not fill the gap from model memory.
+- Deterministic single-node lookups (packet status, one methodology path)
+  still belong to the forge-plan MCP tools (`plan_answer`,
+  `methodology_ask`, `spec_answer`).
+- NEVER fabricate file paths, section names, or citations beyond what the
+  endpoint returned.
+- Connection refused means `expert-serve` is not running — say so and use
+  the forge-plan MCP tools instead.

@@ -34,20 +34,28 @@ Do **not** rely on local ollama models to follow tool-call protocols
 yet — that pathway is being prepared but is not in scope for the
 current setup. Tool calling stays with the Zen models.
 
-## Local Experts mode: EXPERIMENTAL, not yet grounded
+## Local Experts mode: grounded (order 920-pxg6)
 
-The `local-experts` agent talks to a local Ollama model directly. It is
-NOT yet wired through the grounded pipeline — no retrieval, no
-domain-separated RAG, no validation (that wiring is packet
-wire-local-experts-mode-through-grounded-pipeline). Treat its answers as
-raw-model output: ungrounded and uncited. For grounded project questions
+The `local-experts` agent talks to the grounded loopback endpoint served
+by `tillandsias-plan expert-serve` beside these MCP servers (provider
+`tillandsias-experts`, `http://127.0.0.1:11436/v1`; the model backend
+stays `inference:11434` via env). Every completion is either a CITED
+answer — retrieval from the published spec index, citations kept only if
+the prose used them, Rust-validated — or a TYPED refusal whose content
+begins `unsupported: ` naming the missing capability. There is no
+raw-model fallback. The model id selects the retrieval domain: `all`,
+`spec`, `code`, `methodology`, `cheatsheet`.
+
+Non-stream responses carry `rag_source_commit` (the index entry's own
+build commit, 801-g9nn — not this checkout's HEAD) and
+`tillandsias_envelope`, the full ratified envelope, which
+`tillandsias-plan verify-answer` audits. The `tillandsias-plan pipeline`
+CLI arm is the SAME pipeline's second front-end and emits that envelope
+directly. If the endpoint refuses connections, expert-serve is not
+running in this forge (a pre-920-pxg6 binary, or the port was taken) —
 use the forge-plan MCP tools (`spec_answer`, `plan_answer`,
-`methodology_ask`) instead.
-
-The `tillandsias-plan pipeline` CLI arm emits `{tier, domain,
-rag_freshness, rag_source_commit, responses}`; the freshness fields are
-index metadata the pipeline does not yet retrieve from, and each
-`responses[].answer` is unvalidated local-model text.
+`methodology_ask`) instead; deterministic single-node lookups belong to
+those tools regardless.
 
 ## Fleet naming (Zen siblings)
 

@@ -1,145 +1,229 @@
-//! Adversarial decomposition pipeline: LLM decompose → tier trim → concurrent
-//! dispatch → CRDT collection.
+//! The grounded expert pipeline — ONE function, two front-ends.
 //!
+//! @trace spec:expert-serve-grounded-pipeline
 //! @trace order:920-pxg6
 //!
-//! The pipeline is the core of the expert system's hallucination reduction.
-//! It takes a natural-language query, uses the LLM to decompose it into
-//! adversarial variants, trims to fit the latency tier, dispatches all variants
-//! concurrently to the inference endpoint, and collects the validated responses.
+//! [`run_grounded`] is the only path from a natural-language query to an
+//! answer envelope for the local-experts surface: tier classify → LLM
+//! decomposition (fallback-to-original) → tier trim → per-variant embed /
+//! domain-filtered retrieval from the PUBLISHED index entry / synthesis over
+//! the retrieved context → per-variant envelope keeping ONLY citations the
+//! prose used (cited retrieval-only digest on synthesis failure) → Rust
+//! validation → collect merge → best cited envelope, or the typed
+//! [`Envelope::unsupported`] refusal. There is NO code path that returns raw
+//! model prose without citations — the dichotomy 687eb6d57's facade lacked.
 //!
-//! Consumer is unaware this happens — it's a transparent black box that
-//! produces a standard citation envelope.
+//! Both front-ends — the `pipeline` CLI arm and the `expert-serve` HTTP
+//! endpoint — call this function; neither carries grounding logic of its own.
+//!
+//! All model calls (decomposition and synthesis) converge on ONE HTTP client
+//! posting `{base}/chat/completions`; embeddings post `{base}/embeddings` —
+//! the in-process twin of forge-plan.sh's spec_answer curl.
 
-use crate::lua_runtime::{AdversarialPrompt, LatencyTier, LuaRuntime, ValidatedResponse};
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-use tokio::sync::Mutex;
+use crate::answer::{self, Confidence, Envelope};
+use crate::lua_runtime::{AdversarialPrompt, LatencyTier, SharedLuaRuntime};
+use crate::spec::{self, Chunk, ScoredChunk};
+use crate::spec_index::SpecIndexEntry;
+use std::path::PathBuf;
+use std::time::Duration;
 
-/// A raw inference response from a single adversarial query.
-#[derive(Debug, Clone)]
-pub struct InferenceResponse {
-    pub prompt: String,
-    pub kind: String,
-    pub response_text: String,
-    pub success: bool,
-}
+/// Retrieval width per variant. The same k=6 the shell spec_answer path uses.
+const RETRIEVE_K: usize = 6;
 
-/// Configuration for the inference endpoint.
+/// Endpoint + model configuration for the converged OpenAI-compatible
+/// protocol (D6). Bases are `/v1` bases, exactly as the endpoint envs are
+/// documented ("set TILLANDSIAS_EMBED_ENDPOINT to a /v1 base").
 #[derive(Debug, Clone)]
 pub struct InferenceConfig {
-    pub host: String,
-    pub port: u16,
+    /// Chat-completions base for decomposition AND synthesis.
+    /// TILLANDSIAS_SPEC_EXPERT_ENDPOINT, defaulting to the embed base, then
+    /// to TILLANDSIAS_INFERENCE_ENDPOINT + "/v1", then to the enclave DNS
+    /// default `http://inference:11434/v1` (the `inference` host restored —
+    /// 687eb6d57 had rewritten it to 127.0.0.1, killing the enclave path).
+    pub synth_base: String,
+    /// Embeddings base. None = the grounded pipeline refuses typed:
+    /// retrieval is impossible and the raw model is not a fallback.
+    pub embed_base: Option<String>,
+    /// Synthesis/decomposition model. Empty = omit the field and let the
+    /// endpoint's default answer (forge-plan.sh's synth_model behavior).
     pub model: String,
+    /// Embedding-model FALLBACK. The index entry's `.model` marker is
+    /// preferred — embedding a query with a different model than wrote the
+    /// vectors compares apples to hashes (order 552's model-key lesson).
+    pub embed_model: Option<String>,
+    /// Socket-level budget per request. The tier budget (enforced with
+    /// `tokio::time::timeout` around dispatch) is usually tighter.
     pub timeout: Duration,
-    /// Domain filter for RAG: "cheatsheet", "methodology", "code", "spec", or None.
+    /// Domain filter: "cheatsheet" | "methodology" | "code" | "spec";
+    /// None or "all" = the whole corpus.
     pub domain: Option<String>,
 }
 
 impl Default for InferenceConfig {
     fn default() -> Self {
-        let host = std::env::var("TILLANDSIAS_INFERENCE_ENDPOINT")
+        let embed_base = std::env::var("TILLANDSIAS_EMBED_ENDPOINT")
             .ok()
-            .and_then(|ep| {
-                ep.strip_prefix("http://").map(|s| {
-                    s.split_once(':')
-                        .map(|(h, _)| h.to_string())
-                        .unwrap_or(s.to_string())
-                })
-            })
-            .unwrap_or_else(|| "127.0.0.1".to_string());
-        let port = std::env::var("TILLANDSIAS_INFERENCE_ENDPOINT")
+            .map(|s| s.trim_end_matches('/').to_string())
+            .filter(|s| !s.is_empty());
+        let synth_base = std::env::var("TILLANDSIAS_SPEC_EXPERT_ENDPOINT")
             .ok()
-            .and_then(|ep| {
-                ep.strip_prefix("http://")
-                    .and_then(|s| s.split_once(':'))
-                    .and_then(|(_, p)| p.trim_end_matches('/').parse().ok())
+            .map(|s| s.trim_end_matches('/').to_string())
+            .filter(|s| !s.is_empty())
+            .or_else(|| embed_base.clone())
+            .or_else(|| {
+                std::env::var("TILLANDSIAS_INFERENCE_ENDPOINT")
+                    .ok()
+                    .map(|ep| format!("{}/v1", ep.trim_end_matches('/')))
             })
-            .unwrap_or(11434);
-        let model = std::env::var("TILLANDSIAS_INFERENCE_MODEL")
-            .unwrap_or_else(|_| "qwen2.5:0.5b".to_string());
-        let domain = std::env::var("TILLANDSIAS_EXPERT_DOMAIN").ok();
+            .unwrap_or_else(|| "http://inference:11434/v1".to_string());
         Self {
-            host,
-            port,
-            model,
+            synth_base,
+            embed_base,
+            model: std::env::var("TILLANDSIAS_INFERENCE_MODEL")
+                .unwrap_or_else(|_| "qwen2.5:0.5b".to_string()),
+            embed_model: std::env::var("TILLANDSIAS_EMBED_MODEL")
+                .ok()
+                .filter(|s| !s.is_empty()),
             timeout: Duration::from_secs(120),
-            domain,
+            domain: std::env::var("TILLANDSIAS_EXPERT_DOMAIN").ok(),
         }
     }
 }
 
-/// Send a prompt to the inference endpoint and return the raw response text.
-/// Synchronous — call from `spawn_blocking`.
-fn query_inference_raw(config: &InferenceConfig, prompt: &str) -> Option<String> {
+/// [`run_grounded`]'s full configuration: the endpoints plus the checkout
+/// root citations are validated against (D3 — validation is Rust).
+#[derive(Debug, Clone)]
+pub struct GroundedConfig {
+    pub inference: InferenceConfig,
+    pub root: PathBuf,
+}
+
+impl GroundedConfig {
+    pub fn from_env(root: PathBuf) -> Self {
+        Self {
+            inference: InferenceConfig::default(),
+            root,
+        }
+    }
+}
+
+// ── the ONE http client (D6) ────────────────────────────────────────────────
+
+/// Parse an `http://host[:port][/path]` base into (host, port, path).
+/// Only plain http: the endpoints are loopback or enclave-internal.
+pub fn parse_base(url: &str) -> Option<(String, u16, String)> {
+    let rest = url.strip_prefix("http://")?;
+    let (hostport, path) = match rest.find('/') {
+        Some(i) => (&rest[..i], rest[i..].trim_end_matches('/').to_string()),
+        None => (rest, String::new()),
+    };
+    let (host, port) = match hostport.rsplit_once(':') {
+        Some((h, p)) => (h.to_string(), p.parse().ok()?),
+        None => (hostport.to_string(), 80),
+    };
+    if host.is_empty() {
+        return None;
+    }
+    Some((host, port, path))
+}
+
+/// The one raw HTTP POST every model call goes through. Resolves HOSTNAMES,
+/// not just numeric IPs (the enclave default `inference:11434` — the exact
+/// defect that made the 706-f7mq synthesis path dead code until 718-nkm2
+/// flagged it), sets read/write timeouts, `Connection: close`. Synchronous —
+/// call from `spawn_blocking`.
+pub fn http_post_json(
+    base: &str,
+    route: &str,
+    body: &serde_json::Value,
+    timeout: Duration,
+) -> Option<serde_json::Value> {
     use std::io::{Read, Write};
     use std::net::{TcpStream, ToSocketAddrs};
 
-    let addr = format!("{}:{}", config.host, config.port);
-    let resolved = (config.host.as_str(), config.port).to_socket_addrs().ok()?;
+    let (host, port, path) = parse_base(base)?;
+    let addr = format!("{host}:{port}");
+    let resolved = (host.as_str(), port).to_socket_addrs().ok()?;
     let mut stream = resolved
         .into_iter()
-        .find_map(|a| TcpStream::connect_timeout(&a, config.timeout).ok())?;
+        .find_map(|a| TcpStream::connect_timeout(&a, timeout).ok())?;
+    let _ = stream.set_read_timeout(Some(timeout));
+    let _ = stream.set_write_timeout(Some(timeout));
 
-    let _ = stream.set_read_timeout(Some(config.timeout));
-    let _ = stream.set_write_timeout(Some(config.timeout));
-
-    let body = serde_json::json!({
-        "model": config.model,
-        "prompt": prompt,
-        "stream": false
-    });
-    let body_str = serde_json::to_string(&body).ok()?;
-
+    let body_str = serde_json::to_string(body).ok()?;
     let request = format!(
-        "POST /api/generate HTTP/1.1\r\n\
-         Host: {}\r\n\
+        "POST {path}{route} HTTP/1.1\r\n\
+         Host: {addr}\r\n\
          Content-Type: application/json\r\n\
          Content-Length: {}\r\n\
-         Connection: close\r\n\r\n{}",
-        addr,
-        body_str.len(),
-        body_str
+         Connection: close\r\n\r\n{body_str}",
+        body_str.len()
     );
-
     stream.write_all(request.as_bytes()).ok()?;
     let mut resp = String::new();
     stream.read_to_string(&mut resp).ok()?;
 
-    let (_, json_part) = resp.split_once("\r\n\r\n")?;
-    let parsed: serde_json::Value = serde_json::from_str(json_part).ok()?;
-    parsed
-        .get("response")
-        .and_then(|r| r.as_str())
-        .map(str::to_string)
+    let (_, payload) = resp.split_once("\r\n\r\n")?;
+    if let Ok(v) = serde_json::from_str(payload) {
+        return Some(v);
+    }
+    // Chunked transfer framing survives a naive read; the JSON object is
+    // still contiguous between its outermost braces.
+    let start = payload.find('{')?;
+    let end = payload.rfind('}')?;
+    if start > end {
+        return None;
+    }
+    serde_json::from_str(&payload[start..=end]).ok()
 }
 
-/// Send a prompt to the inference endpoint as an InferenceResponse.
-fn query_inference_sync(config: &InferenceConfig, prompt: &str, kind: &str) -> InferenceResponse {
-    let response_text = query_inference_raw(config, prompt).unwrap_or_else(|| {
-        eprintln!("[pipeline] inference returned None for kind={kind}");
-        String::new()
-    });
-    let success = !response_text.is_empty();
-    if success {
-        eprintln!(
-            "[pipeline] dispatch kind={kind} response_len={}",
-            response_text.len()
-        );
+/// One chat completion over `{base}/chat/completions`. `model` empty = omit
+/// the field. Returns the assistant content, None on any failure or an empty
+/// answer — the caller owns the typed degradation.
+pub fn chat_completion(
+    base: &str,
+    model: &str,
+    system: Option<&str>,
+    user: &str,
+    max_tokens: Option<u32>,
+    timeout: Duration,
+) -> Option<String> {
+    let mut messages: Vec<serde_json::Value> = Vec::new();
+    if let Some(s) = system {
+        messages.push(serde_json::json!({"role": "system", "content": s}));
     }
-    InferenceResponse {
-        prompt: prompt.to_string(),
-        kind: kind.to_string(),
-        response_text,
-        success,
+    messages.push(serde_json::json!({"role": "user", "content": user}));
+    let mut payload = serde_json::json!({"messages": messages, "temperature": 0.2});
+    if !model.is_empty() {
+        payload["model"] = serde_json::json!(model);
     }
+    if let Some(mt) = max_tokens {
+        payload["max_tokens"] = serde_json::json!(mt);
+    }
+    let resp = http_post_json(base, "/chat/completions", &payload, timeout)?;
+    resp.pointer("/choices/0/message/content")
+        .and_then(|c| c.as_str())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
 }
+
+/// One query embedding over `{base}/embeddings` — the in-process twin of
+/// forge-plan.sh's spec_answer curl (same payload shape: `{model, input}`).
+pub fn embed_query(base: &str, model: &str, input: &str, timeout: Duration) -> Option<Vec<f32>> {
+    let payload = serde_json::json!({"model": model, "input": input});
+    let resp = http_post_json(base, "/embeddings", &payload, timeout)?;
+    resp.pointer("/data/0/embedding")?
+        .as_array()?
+        .iter()
+        .map(|v| v.as_f64().map(|f| f as f32))
+        .collect()
+}
+
+// ── decomposition ───────────────────────────────────────────────────────────
 
 /// LLM-based decomposition: ask the model to generate adversarial variants.
-///
-/// This is the v0.5+ approach — the LLM itself decomposes the query into
-/// components, alternatives, and adversaries. No regex, no text parsing.
-/// When a domain is set, the decomposition prompt is domain-aware.
+/// Falls back to the original query as the only variant on ANY failure —
+/// decomposition adds recall, never availability risk.
 pub fn decompose_with_llm(config: &InferenceConfig, query: &str) -> Vec<AdversarialPrompt> {
     let domain_context = match config.domain.as_deref() {
         Some("cheatsheet") => {
@@ -174,49 +258,168 @@ pub fn decompose_with_llm(config: &InferenceConfig, query: &str) -> Vec<Adversar
          - Return ONLY the JSON array, no other text"
     );
 
-    let raw = match query_inference_raw(config, &decompose_prompt) {
-        Some(r) => r,
-        None => {
-            // Fallback: use the original query as the only variant
-            return vec![AdversarialPrompt {
-                prompt: query.to_string(),
-                kind: "original".to_string(),
-            }];
-        }
+    let original_only = || {
+        vec![AdversarialPrompt {
+            prompt: query.to_string(),
+            kind: "original".to_string(),
+        }]
     };
 
-    // Parse the LLM's JSON response
+    let Some(raw) = chat_completion(
+        &config.synth_base,
+        &config.model,
+        None,
+        &decompose_prompt,
+        None,
+        config.timeout,
+    ) else {
+        return original_only();
+    };
+
+    // Find the JSON array in the response (may have surrounding text). The
+    // pre-920-pxg6 form sliced unguarded and PANICKED when the model emitted
+    // `]` before `[` (e.g. prose containing "] and [") — checked now.
     let cleaned = raw.trim();
-    // Find the JSON array in the response (may have surrounding text)
-    let json_start = cleaned.find('[').unwrap_or(0);
-    let json_end = cleaned.rfind(']').map(|i| i + 1).unwrap_or(cleaned.len());
-    let json_str = &cleaned[json_start..json_end];
+    let json_str = match (cleaned.find('['), cleaned.rfind(']')) {
+        (Some(s), Some(e)) if s <= e => &cleaned[s..=e],
+        _ => cleaned,
+    };
 
     match serde_json::from_str::<Vec<AdversarialPrompt>>(json_str) {
         Ok(prompts) if !prompts.is_empty() => prompts,
-        _ => {
-            // Fallback if parsing fails
-            vec![AdversarialPrompt {
-                prompt: query.to_string(),
-                kind: "original".to_string(),
-            }]
-        }
+        _ => original_only(),
     }
 }
 
-/// The full pipeline: LLM decompose → tier trim → concurrent dispatch → collect.
-pub async fn run_pipeline(
-    runtime: &Arc<Mutex<LuaRuntime>>,
-    query: &str,
-    inference_config: &InferenceConfig,
-) -> Result<(Vec<ValidatedResponse>, LatencyTier), PipelineError> {
-    let start = Instant::now();
+// ── the grounded pipeline (D5) ──────────────────────────────────────────────
 
-    // Step 1: Classify the query tier (deterministic, fast)
+/// Char-boundary-safe truncation for log lines. The pre-920-pxg6 form sliced
+/// `&query[..50]` and panicked on a multi-byte character at the boundary.
+fn truncate_chars(s: &str, n: usize) -> String {
+    if s.chars().count() <= n {
+        return s.to_string();
+    }
+    s.chars().take(n).collect()
+}
+
+/// The indices of the entry's chunks that belong to `domain` (None/"all" =
+/// every chunk). Chunk kinds and domain ids share one vocabulary:
+/// spec | cheatsheet | methodology | code.
+pub fn domain_indices(chunks: &[Chunk], domain: Option<&str>) -> Vec<usize> {
+    let filter = domain.filter(|d| *d != "all");
+    chunks
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| filter.is_none_or(|d| c.kind == d))
+        .map(|(i, _)| i)
+        .collect()
+}
+
+/// Domain-filtered cosine top-k: [`spec::top_k`]'s ranking over a subset of
+/// the entry's vectors, without cloning the index. Returns entry indices.
+fn top_k_filtered(
+    query: &[f32],
+    vectors: &[Vec<f32>],
+    selected: &[usize],
+    k: usize,
+) -> Vec<(usize, f32)> {
+    let mut scored: Vec<(usize, f32)> = selected
+        .iter()
+        .map(|&i| (i, spec::cosine(query, &vectors[i])))
+        .collect();
+    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    scored.truncate(k);
+    scored
+}
+
+/// D3 — validation is Rust. Re-verifies a candidate envelope's citations
+/// against the checkout root (the same `answer::verify` the CLI's emit path
+/// runs) and downgrades failures to the typed refusal. Deterministic and
+/// testable — the role the dead `validate.lua` only claimed.
+fn rust_validated(envelope: Envelope, root: &std::path::Path) -> Envelope {
+    if envelope.confidence() == Confidence::Unsupported {
+        return envelope;
+    }
+    let envelope = envelope.with_citation_root(root);
+    let violations = answer::verify(&envelope, root);
+    if violations.is_empty() {
+        return envelope;
+    }
+    let freshness = envelope.freshness().clone();
+    Envelope::unsupported(
+        format!(
+            "this answer FAILED its citation check against {} and was withheld ({} violation(s)): {}",
+            root.display(),
+            violations.len(),
+            violations.join("; ")
+        ),
+        freshness,
+    )
+}
+
+/// One variant's surviving, validated envelope plus its provenance.
+struct VariantOutcome {
+    envelope: Envelope,
+    kind: String,
+    prompt: String,
+}
+
+/// The grounded pipeline (D5): used by BOTH the `expert-serve` endpoint and
+/// the `pipeline` CLI arm. Returns an envelope that either carries citations
+/// that verifiably support it, or is the typed refusal — no third state.
+///
+/// Freshness and the citation frame come from the ENTRY (D2/801-g9nn): its
+/// `.commit` + `chunks.jsonl` mtime, completed with
+/// `with_default_citation_commit` here, BEFORE any emit-path HEAD stamp.
+pub async fn run_grounded(
+    runtime: &SharedLuaRuntime,
+    entry: &SpecIndexEntry,
+    cfg: &GroundedConfig,
+    query: &str,
+) -> Envelope {
+    let freshness = entry.freshness();
+
+    // ── preflight refusals: every one fires BEFORE any model request ──────
+    let Some(embed_base) = cfg.inference.embed_base.clone() else {
+        let reason = "no embedding endpoint — set TILLANDSIAS_EMBED_ENDPOINT to a /v1 base; the grounded pipeline cannot retrieve, and the raw model is not a fallback";
+        eprintln!("[grounded] refuse-before-dispatch: {reason}");
+        return Envelope::unsupported(reason, freshness);
+    };
+    let Some(embed_model) = entry
+        .model
+        .clone()
+        .or_else(|| cfg.inference.embed_model.clone())
+    else {
+        let reason = format!(
+            "no embedding model — the index entry at {} records no .model marker and TILLANDSIAS_EMBED_MODEL is unset",
+            entry.dir.display()
+        );
+        eprintln!("[grounded] refuse-before-dispatch: {reason}");
+        return Envelope::unsupported(reason, freshness);
+    };
+    let domain = cfg.inference.domain.clone().filter(|d| d != "all");
+    let selected = domain_indices(&entry.chunks, domain.as_deref());
+    if selected.is_empty() {
+        let reason = format!(
+            "the index at {} holds no chunks in domain {} — retrieval cannot ground an answer, and the raw model is not a fallback",
+            entry.dir.display(),
+            domain.as_deref().unwrap_or("all"),
+        );
+        eprintln!("[grounded] refuse-before-dispatch: {reason}");
+        return Envelope::unsupported(reason, freshness);
+    }
+
+    // ── tier classify (Lua, deterministic) ────────────────────────────────
     let tier_name = {
         let rt = runtime.lock().await;
-        rt.classify_tier(query)
-            .map_err(|e| PipelineError::DecomposeFailed(e.to_string()))?
+        match rt.classify_tier(query) {
+            Ok(t) => t,
+            Err(e) => {
+                let reason = format!("the Lua tier classifier failed: {e}");
+                eprintln!("[grounded] refuse-before-dispatch: {reason}");
+                return Envelope::unsupported(reason, freshness);
+            }
+        }
     };
     let tier = match tier_name.as_str() {
         "immediate" => LatencyTier::Immediate,
@@ -225,129 +428,268 @@ pub async fn run_pipeline(
         "non_usable" => LatencyTier::NonUsable,
         _ => LatencyTier::Fine,
     };
+    let budget = Duration::from_millis(tier.budget_ms());
 
-    // Step 2: LLM-based decomposition (the model generates adversarial variants)
-    let decompose_start = Instant::now();
-    let all_prompts = {
-        let config = inference_config.clone();
-        let query_owned = query.to_string();
-        tokio::task::spawn_blocking(move || decompose_with_llm(&config, &query_owned))
+    // ── decompose (skipped on the immediate tier: its budget is the
+    //    deterministic floor, and a decompose round-trip would blow it
+    //    before dispatch even starts) ───────────────────────────────────────
+    let original_only = vec![AdversarialPrompt {
+        prompt: query.to_string(),
+        kind: "original".to_string(),
+    }];
+    let all_prompts = if tier == LatencyTier::Immediate {
+        original_only.clone()
+    } else {
+        let inference = cfg.inference.clone();
+        let q = query.to_string();
+        tokio::task::spawn_blocking(move || decompose_with_llm(&inference, &q))
             .await
             .unwrap_or_else(|e| {
-                eprintln!("[pipeline] decompose task failed: {e}");
-                vec![AdversarialPrompt {
-                    prompt: query.to_string(),
-                    kind: "original".to_string(),
-                }]
+                eprintln!("[grounded] decompose task failed: {e}");
+                original_only.clone()
             })
     };
 
-    // Step 3: Trim variants to fit the tier budget (deterministic)
+    // ── trim to the tier's variant budget (Lua, deterministic CPU floor) ──
     let trimmed = {
         let rt = runtime.lock().await;
         rt.trim_variants(&all_prompts, &tier_name)
-            .map_err(|e| PipelineError::DecomposeFailed(e.to_string()))?
+            .unwrap_or_else(|e| {
+                eprintln!("[grounded] tier_trim failed ({e}); dispatching the original only");
+                original_only.clone()
+            })
+    };
+    let trimmed = if trimmed.is_empty() {
+        original_only
+    } else {
+        trimmed
     };
 
     eprintln!(
-        "[pipeline] query={} tier={} variants={}/{} ({}ms decompose)",
-        &query[..query.len().min(50)],
+        "[grounded] query={} tier={} variants={}/{} domain={}",
+        truncate_chars(query, 50),
         tier_name,
         trimmed.len(),
         all_prompts.len(),
-        decompose_start.elapsed().as_millis()
+        domain.as_deref().unwrap_or("all"),
     );
 
-    // Step 4: Concurrent dispatch — send all variants in parallel
-    let dispatch_start = Instant::now();
-    let mut handles = Vec::new();
-
-    for prompt in &trimmed {
-        let config = inference_config.clone();
-        let prompt_text = prompt.prompt.clone();
-        let kind = prompt.kind.clone();
-
-        let handle =
-            tokio::task::spawn_blocking(move || query_inference_sync(&config, &prompt_text, &kind));
-        handles.push(handle);
+    // ── per-variant embed (concurrent, bounded) ───────────────────────────
+    let mut embed_tasks = tokio::task::JoinSet::new();
+    for (i, p) in trimmed.iter().enumerate() {
+        let base = embed_base.clone();
+        let model = embed_model.clone();
+        // 864-p2rk: the matching query prefix iff the entry was embedded
+        // with a doc prefix. (Divergence-from-history recorded in the
+        // change's design.md: the shell harness applied no query prefix.)
+        let input = if entry.prefix.is_some() {
+            format!("search_query: {}", p.prompt)
+        } else {
+            p.prompt.clone()
+        };
+        let timeout = cfg.inference.timeout;
+        embed_tasks.spawn_blocking(move || (i, embed_query(&base, &model, &input, timeout)));
+    }
+    let mut qvecs: Vec<Option<Vec<f32>>> = (0..trimmed.len()).map(|_| None).collect();
+    while let Some(res) = embed_tasks.join_next().await {
+        if let Ok((i, v)) = res {
+            qvecs[i] = v;
+        }
+    }
+    if qvecs.iter().all(Option::is_none) {
+        return Envelope::unsupported(
+            format!(
+                "the embedding endpoint {embed_base} did not answer for model {embed_model} — the grounded pipeline cannot retrieve"
+            ),
+            freshness,
+        );
     }
 
-    let mut inference_responses = Vec::new();
-    for handle in handles {
-        match handle.await {
-            Ok(resp) => inference_responses.push(resp),
-            Err(e) => {
-                eprintln!("[pipeline] dispatch task failed: {e}");
-            }
+    // ── per-variant retrieve + synthesize (concurrent; the tier budget is
+    //    REAL: tokio::time::timeout around each synthesis dispatch) ─────────
+    let mut synth_tasks = tokio::task::JoinSet::new();
+    let mut retrieved: Vec<Option<Vec<ScoredChunk>>> = (0..trimmed.len()).map(|_| None).collect();
+    for (i, p) in trimmed.iter().enumerate() {
+        let Some(qv) = &qvecs[i] else { continue };
+        let top = top_k_filtered(qv, &entry.vectors, &selected, RETRIEVE_K);
+        let scored: Vec<ScoredChunk> = top
+            .iter()
+            .map(|(idx, score)| ScoredChunk {
+                chunk: entry.chunks[*idx].clone(),
+                score: *score,
+            })
+            .collect();
+        if scored.is_empty() {
+            continue;
+        }
+        let ctx: String = scored
+            .iter()
+            .map(|sc| {
+                format!(
+                    "=== {} ({}) ===\n{}\n",
+                    sc.chunk.key, sc.chunk.path, sc.chunk.text
+                )
+            })
+            .collect();
+        let keys: String = scored
+            .iter()
+            .map(|sc| sc.chunk.key.as_str())
+            .collect::<Vec<_>>()
+            .join("; ");
+        let system = domain_synthesis_prompt(domain.as_deref().unwrap_or(""), &ctx, &keys);
+        retrieved[i] = Some(scored);
+
+        let base = cfg.inference.synth_base.clone();
+        let model = cfg.inference.model.clone();
+        let user = p.prompt.clone();
+        let timeout = cfg.inference.timeout;
+        synth_tasks.spawn(async move {
+            let dispatched = tokio::task::spawn_blocking(move || {
+                chat_completion(&base, &model, Some(&system), &user, Some(320), timeout)
+            });
+            // The budget is enforced HERE — a synthesis that overruns its
+            // tier degrades to the cited retrieval-only digest below.
+            let answer = match tokio::time::timeout(budget, dispatched).await {
+                Ok(Ok(a)) => a,
+                _ => None,
+            };
+            (i, answer)
+        });
+    }
+    let mut synths: Vec<Option<String>> = (0..trimmed.len()).map(|_| None).collect();
+    while let Some(res) = synth_tasks.join_next().await {
+        if let Ok((i, a)) = res {
+            synths[i] = a;
         }
     }
 
-    eprintln!(
-        "[pipeline] dispatch completed: {}/{} succeeded ({}ms)",
-        inference_responses.iter().filter(|r| r.success).count(),
-        inference_responses.len(),
-        dispatch_start.elapsed().as_millis()
-    );
+    // ── per-variant envelope: only-if-used citations, cited fallback,
+    //    entry frame, then Rust validation ─────────────────────────────────
+    let mut outcomes: Vec<VariantOutcome> = Vec::new();
+    let mut withheld: Vec<String> = Vec::new();
+    for (i, p) in trimmed.iter().enumerate() {
+        let Some(scored) = &retrieved[i] else { continue };
+        let mut env = match &synths[i] {
+            Some(prose) => spec::build_envelope_scored_with_freshness(
+                prose,
+                scored,
+                freshness.clone(),
+            ),
+            None => Envelope::unsupported("synthesis unavailable", freshness.clone()),
+        };
+        if env.confidence() == Confidence::Unsupported {
+            // The cited fallback: keys are present in the digest by
+            // construction, so good retrieval still yields a verifiable
+            // cited answer instead of refusing — and model prose that used
+            // no key is DISCARDED here, never shipped uncited.
+            let chunks: Vec<Chunk> = scored.iter().map(|sc| sc.chunk.clone()).collect();
+            let digest = spec::retrieval_only_answer(&chunks);
+            env = spec::build_envelope_scored_with_freshness(&digest, scored, freshness.clone());
+        }
+        // D2: the entry's frame on every citation BEFORE any HEAD stamp.
+        if let Some(c) = &entry.commit {
+            env = env.with_default_citation_commit(c);
+        }
+        let env = rust_validated(env, &cfg.root);
+        if env.confidence() == Confidence::Unsupported {
+            withheld.push(env.answer().to_string());
+            continue;
+        }
+        outcomes.push(VariantOutcome {
+            envelope: env,
+            kind: p.kind.clone(),
+            prompt: p.prompt.clone(),
+        });
+    }
 
-    // Step 5: Collect via CRDT (deduplication, all validated responses kept)
-    let collect_start = Instant::now();
+    if outcomes.is_empty() {
+        let detail = withheld
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "no variant produced a retrievable, verifiable answer".to_string());
+        return Envelope::unsupported(
+            format!("the grounded pipeline produced no cited answer: {detail}"),
+            freshness,
+        );
+    }
 
-    let responses_for_lua: Vec<serde_json::Value> = inference_responses
+    // ── collect merge (the retained Lua dedup), then best-cited pick ──────
+    let records: Vec<serde_json::Value> = outcomes
         .iter()
-        .filter(|r| r.success)
-        .map(|r| {
+        .map(|o| {
+            let best_score = o
+                .envelope
+                .citations()
+                .iter()
+                .filter_map(|c| serde_json::to_value(c).ok())
+                .filter_map(|v| v.get("score").and_then(|s| s.as_f64()))
+                .fold(0.0f64, f64::max);
             serde_json::json!({
-                "answer": r.response_text,
-                "citations": [],
-                "confidence": 0.5,
+                "answer": o.envelope.answer(),
+                "citations": o.envelope.citations().iter().map(|c| serde_json::json!({
+                    "path": c.path(),
+                    "line_start": c.line_start(),
+                    "line_end": c.line_end(),
+                    "claimed_text": "",
+                })).collect::<Vec<_>>(),
+                // Earned, not hardcoded: only envelopes that PASSED the Rust
+                // validation above reach this record set.
                 "validated": true,
-                "query_kind": r.kind,
-                "source_prompt": r.prompt,
-                "why": "",
-                "affordances": [],
-                "why_not": "",
+                "confidence": best_score,
+                "query_kind": o.kind,
+                "source_prompt": o.prompt,
+                "why": "", "affordances": [], "why_not": "",
             })
         })
         .collect();
-
-    let responses_json = serde_json::to_string(&responses_for_lua)
-        .map_err(|e| PipelineError::CollectFailed(e.to_string()))?;
-
-    let collected = {
+    let surviving_answers: Vec<String> = {
+        let records_json = serde_json::to_string(&records).unwrap_or_else(|_| "[]".to_string());
         let rt = runtime.lock().await;
-        rt.call_collect("collect", &responses_json)
-            .map_err(|e| PipelineError::CollectFailed(e.to_string()))?
+        match rt.call_collect("collect", &records_json) {
+            Ok(collected) => collected.iter().map(|r| r.answer.clone()).collect(),
+            Err(e) => {
+                // Fail-soft: dedup is an optimization, the cited work is not
+                // discarded over it.
+                eprintln!("[grounded] collect failed ({e}); keeping all validated variants");
+                outcomes.iter().map(|o| o.envelope.answer().to_string()).collect()
+            }
+        }
     };
 
-    eprintln!(
-        "[pipeline] collected {} responses ({}ms collect, {}ms total)",
-        collected.len(),
-        collect_start.elapsed().as_millis(),
-        start.elapsed().as_millis()
-    );
-
-    Ok((collected, tier))
-}
-
-#[derive(Debug)]
-pub enum PipelineError {
-    DecomposeFailed(String),
-    CollectFailed(String),
-}
-
-impl std::fmt::Display for PipelineError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PipelineError::DecomposeFailed(msg) => write!(f, "decompose failed: {msg}"),
-            PipelineError::CollectFailed(msg) => write!(f, "collect failed: {msg}"),
+    // Best cited response among the survivors: most citations, then best
+    // retrieval score, then trim order (the original variant leads).
+    let mut best: Option<&VariantOutcome> = None;
+    let mut best_rank = (0usize, f32::MIN);
+    for o in &outcomes {
+        if !surviving_answers.iter().any(|a| a == o.envelope.answer()) {
+            continue;
         }
+        let score = o
+            .envelope
+            .citations()
+            .iter()
+            .filter_map(|c| serde_json::to_value(c).ok())
+            .filter_map(|v| v.get("score").and_then(|s| s.as_f64()))
+            .fold(f32::MIN as f64, f64::max) as f32;
+        let rank = (o.envelope.citations().len(), score);
+        if best.is_none() || rank.0 > best_rank.0 || (rank.0 == best_rank.0 && rank.1 > best_rank.1)
+        {
+            best = Some(o);
+            best_rank = rank;
+        }
+    }
+    match best.or_else(|| outcomes.first()) {
+        Some(o) => o.envelope.clone(),
+        None => Envelope::unsupported(
+            "the grounded pipeline produced no cited answer after collection",
+            freshness,
+        ),
     }
 }
 
-impl std::error::Error for PipelineError {}
-
-/// Domain-specific synthesis system prompts. Each domain gets a distinct prompt
-/// that constrains the LLM to cite only domain-appropriate sources.
+/// Domain-specific synthesis system prompts. Each domain gets a distinct
+/// prompt that constrains the LLM to cite only domain-appropriate sources;
+/// the echoed keys are what lets the only-if-used filter keep citations.
 pub fn domain_synthesis_prompt(domain: &str, retrieved_ctx: &str, source_keys: &str) -> String {
     match domain {
         "cheatsheet" => format!(
@@ -397,12 +739,199 @@ pub fn domain_label(domain: Option<&str>) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::lua_runtime::LuaRuntime;
+    use std::path::{Path, PathBuf};
+    use std::sync::Arc;
+
+    fn chunk(id: usize, key: &str, kind: &str, path: &str) -> Chunk {
+        Chunk {
+            id,
+            path: path.to_string(),
+            line_start: 1,
+            line_end: 2,
+            kind: kind.to_string(),
+            key: key.to_string(),
+            content_hash: "0".to_string(),
+            text: format!("{key} body"),
+        }
+    }
 
     #[test]
-    fn inference_config_defaults_from_env() {
+    fn inference_config_default_is_complete() {
         let config = InferenceConfig::default();
-        assert!(!config.host.is_empty());
-        assert!(config.port > 0);
+        assert!(!config.synth_base.is_empty());
+        assert!(config.synth_base.starts_with("http://"));
         assert!(!config.model.is_empty());
+    }
+
+    #[test]
+    fn parse_base_handles_host_port_and_path() {
+        assert_eq!(
+            parse_base("http://inference:11434/v1"),
+            Some(("inference".to_string(), 11434, "/v1".to_string()))
+        );
+        assert_eq!(
+            parse_base("http://127.0.0.1:9"),
+            Some(("127.0.0.1".to_string(), 9, String::new()))
+        );
+        assert_eq!(parse_base("https://x/v1"), None);
+        assert_eq!(parse_base("http://"), None);
+    }
+
+    #[test]
+    fn domain_indices_filters_by_kind_and_all_passes_everything() {
+        let chunks = vec![
+            chunk(0, "a", "spec", "openspec/specs/x/spec.md"),
+            chunk(1, "b", "code", "crates/x/src/lib.rs"),
+            chunk(2, "c", "spec", "openspec/specs/y/spec.md"),
+            chunk(3, "d", "methodology", "methodology/x.yaml"),
+        ];
+        assert_eq!(domain_indices(&chunks, Some("spec")), vec![0, 2]);
+        assert_eq!(domain_indices(&chunks, Some("code")), vec![1]);
+        assert_eq!(domain_indices(&chunks, Some("cheatsheet")), Vec::<usize>::new());
+        assert_eq!(domain_indices(&chunks, None), vec![0, 1, 2, 3]);
+        assert_eq!(domain_indices(&chunks, Some("all")), vec![0, 1, 2, 3]);
+    }
+
+    // ── run_grounded fixtures ───────────────────────────────────────────────
+
+    fn crate_lua_dir() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("lua")
+    }
+
+    fn shared_runtime(root: &Path) -> SharedLuaRuntime {
+        let rt = LuaRuntime::new(&crate_lua_dir(), root).expect("lua runtime loads");
+        Arc::new(tokio::sync::Mutex::new(rt))
+    }
+
+    fn fixture_root(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("tilland-grounded-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("fixture root");
+        dir
+    }
+
+    fn entry_with(dir: &Path, chunks: Vec<Chunk>, commit: Option<&str>) -> SpecIndexEntry {
+        std::fs::create_dir_all(dir).expect("entry dir");
+        let mut chunk_lines = String::new();
+        let mut vec_lines = String::new();
+        for c in &chunks {
+            chunk_lines.push_str(&serde_json::to_string(c).unwrap());
+            chunk_lines.push('\n');
+            vec_lines.push_str("[1.0,0.0]\n");
+        }
+        std::fs::write(dir.join("chunks.jsonl"), chunk_lines).unwrap();
+        std::fs::write(dir.join("vectors.jsonl"), vec_lines).unwrap();
+        if let Some(c) = commit {
+            std::fs::write(dir.join(".commit"), format!("{c}\n")).unwrap();
+        }
+        std::fs::write(dir.join(".model"), "stub-embed\n").unwrap();
+        SpecIndexEntry::load_dir(dir).expect("fixture entry loads")
+    }
+
+    /// A listener that counts CONNECTIONS and answers nothing useful — the
+    /// probe that proves a refusal path made zero model requests.
+    fn counting_listener() -> (String, Arc<std::sync::atomic::AtomicUsize>) {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+        let port = listener.local_addr().unwrap().port();
+        let count = Arc::new(AtomicUsize::new(0));
+        let count2 = count.clone();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                count2.fetch_add(1, Ordering::SeqCst);
+                drop(stream);
+            }
+        });
+        (format!("http://127.0.0.1:{port}/v1"), count)
+    }
+
+    fn cfg_with(embed: Option<String>, synth: String, root: PathBuf) -> GroundedConfig {
+        GroundedConfig {
+            inference: InferenceConfig {
+                synth_base: synth,
+                embed_base: embed,
+                model: "stub".to_string(),
+                embed_model: Some("stub-embed".to_string()),
+                timeout: Duration::from_millis(300),
+                domain: None,
+            },
+            root,
+        }
+    }
+
+    /// R2/R3 + exit criterion 2: an empty-domain miss refuses TYPED, with
+    /// zero citations — and provably contacts NO model endpoint. The
+    /// dichotomy: confidence!=unsupported implies citations, and the refusal
+    /// carries the pinned prefix.
+    #[test]
+    fn refusal_not_fallback_makes_zero_model_requests() {
+        let root = fixture_root("refusal");
+        let entry = entry_with(
+            &root.join("entry"),
+            vec![chunk(0, "code-key", "code", "src/x.rs")],
+            None,
+        );
+        let (base, count) = counting_listener();
+        let mut cfg = cfg_with(Some(base.clone()), base, root.clone());
+        cfg.inference.domain = Some("spec".to_string());
+        let runtime = shared_runtime(&root);
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let env = rt.block_on(run_grounded(&runtime, &entry, &cfg, "what governs specs?"));
+        assert_eq!(env.confidence(), Confidence::Unsupported);
+        assert!(env.answer().starts_with("unsupported: "), "{}", env.answer());
+        assert!(env.citations().is_empty());
+        assert_eq!(
+            count.load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "a refusal path must never contact a model endpoint"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// The unset-embed-endpoint preflight is a typed refusal too.
+    #[test]
+    fn missing_embed_endpoint_refuses_typed() {
+        let root = fixture_root("noembed");
+        let entry = entry_with(
+            &root.join("entry"),
+            vec![chunk(0, "k", "spec", "openspec/specs/x/spec.md")],
+            None,
+        );
+        let cfg = cfg_with(None, "http://127.0.0.1:9/v1".to_string(), root.clone());
+        let runtime = shared_runtime(&root);
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let env = rt.block_on(run_grounded(&runtime, &entry, &cfg, "anything at all here"));
+        assert_eq!(env.confidence(), Confidence::Unsupported);
+        assert!(env.answer().contains("TILLANDSIAS_EMBED_ENDPOINT"));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// R5 / freshness honesty: the entry's .commit propagates into the
+    /// envelope frame — refusals included — and a frameless entry reports
+    /// the literal `unknown`, never this process's HEAD.
+    #[test]
+    fn freshness_comes_from_the_entry_frame() {
+        let root = fixture_root("fresh");
+        let sha = "abcdef1234567890abcdef1234567890abcdef12";
+        let framed = entry_with(
+            &root.join("framed"),
+            vec![chunk(0, "k", "code", "src/x.rs")],
+            Some(sha),
+        );
+        let frameless = entry_with(
+            &root.join("frameless"),
+            vec![chunk(0, "k", "code", "src/x.rs")],
+            None,
+        );
+        let mut cfg = cfg_with(None, "http://127.0.0.1:9/v1".to_string(), root.clone());
+        cfg.inference.domain = Some("spec".to_string());
+        let runtime = shared_runtime(&root);
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let env = rt.block_on(run_grounded(&runtime, &framed, &cfg, "q"));
+        assert_eq!(env.freshness().source_commit(), sha);
+        let env = rt.block_on(run_grounded(&runtime, &frameless, &cfg, "q"));
+        assert_eq!(env.freshness().source_commit(), "unknown");
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

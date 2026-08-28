@@ -60,6 +60,14 @@ pub mod semantic_expert;
 /// cosine retrieval, verifiable envelope construction). Embedding and synthesis
 /// happen outside the crate; see `spec.rs`.
 pub mod spec;
+/// ORDER 920-pxg6 — the published spec-index entry as public infrastructure:
+/// the 879-gidx resolution ladder plus the 394d arity-refusing loader, hoisted
+/// from groundtruth.rs so the grader and the grounded pipeline read the SAME
+/// entry.
+pub mod spec_index;
+/// ORDER 920-pxg6 — the OpenAI-compatible loopback front-end over
+/// `pipeline::run_grounded`. One grounded pipeline, two front-ends.
+pub mod expert_serve;
 
 pub struct Ledger {
     /// Raw packet mappings in file order (open-world: everything survives).
