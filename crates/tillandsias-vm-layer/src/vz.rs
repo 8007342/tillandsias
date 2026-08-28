@@ -848,7 +848,9 @@ systemctl start --no-block tillandsias-headless-ready.service
     .replace("__READY_UNIT__", &crate::readiness::ready_unit(42420))
 }
 
-#[cfg(test)]
+// `provision_user_data` is macos-gated, so its test shim must be too — an
+// ungated #[cfg(test)] here breaks every Linux/Windows `cargo test` build.
+#[cfg(all(test, target_os = "macos"))]
 pub(crate) fn provision_user_data_for_test() -> String {
     provision_user_data("off")
 }

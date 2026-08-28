@@ -296,10 +296,16 @@ mod tests {
     /// a test rather than by review, per the packet's fourth exit criterion.
     #[test]
     fn start_limit_is_a_unit_section_directive() {
-        for unit in [
-            crate::vz::provision_user_data_for_test(),
+        // The VZ user-data only compiles on macos; its half of this assertion
+        // runs on the darwin lane (740-3k4s measured it on hardware there).
+        #[cfg(target_os = "macos")]
+        let units = vec![
             crate::wsl::headless_unit_for_test(42420),
-        ] {
+            crate::vz::provision_user_data_for_test(),
+        ];
+        #[cfg(not(target_os = "macos"))]
+        let units = vec![crate::wsl::headless_unit_for_test(42420)];
+        for unit in units {
             let unit_section = unit
                 .split("[Unit]")
                 .find(|s| s.contains("StartLimitIntervalSec"))
