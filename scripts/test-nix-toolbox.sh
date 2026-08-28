@@ -158,9 +158,127 @@ if [ -n "$TMPROOT" ] && command -v nix >/dev/null 2>&1; then
     fi
 fi
 
+# --- capability, non-creating (order 799-tb7q, second criterion) -----------
+#
+# WHY THESE ARE CONSTRUCTED RATHER THAN SCANNED. The defect being fixed is a
+# host whose nix lives ONLY in a toolbox being reported nix-incapable, and no
+# host in the fleet is in that state on demand. An arm that ran `capability`
+# here and checked the answer would assert whatever this machine happens to
+# be — green on every host, red on none. So arms 11 and 12 build both worlds
+# out of fake `toolbox`/`podman`/`nix` binaries on PATH.
+
+# 10. GRAMMAR + EXIT-CODE AGREEMENT, on the real host, whatever it is.
+cap="$("$SCRIPT" capability 2>/dev/null)"
+caprc=$?
+capl="$(printf '%s' "$cap" | grep -c '')"
+[ "$capl" = 1 ] || failures+=("capability printed $capl lines, expected 1: $cap")
+printf '%s' "$cap" | grep -qE '^(ok:nix-capability:(daemon|chroot|toolbox)|none:nix-capability:no-nix-and-no-toolbox)$' \
+    || failures+=("capability verdict outside the pinned grammar: $cap")
+case "$cap" in
+    ok:*)   [ "$caprc" -eq 0 ] || failures+=("capability ok verdict with non-zero exit $caprc") ;;
+    none:*) [ "$caprc" -ne 0 ] || failures+=("capability none verdict with exit 0 — a caller reads that as capable") ;;
+esac
+
+# 11. IT MUST NEVER CREATE. This is the whole reason `capability` exists rather
+#     than callers using `ensure`: a pre-push gate and the work selector ask the
+#     question, and `ensure` answers it by pulling a 400 MiB image and creating a
+#     toolbox. Fake toolbox/podman record every call; nix is absent from PATH.
+if [ -n "$TMPROOT" ]; then
+    B11="$TMPROOT/bin11"; mkdir -p "$B11"
+    LOG11="$TMPROOT/calls11"; : > "$LOG11"
+    cat > "$B11/toolbox" <<EOF11
+#!/usr/bin/env bash
+printf 'toolbox %s\n' "\$*" >> "$LOG11"
+case "\$1" in
+    list) printf 'CONTAINER ID  CONTAINER NAME  CREATED\n' ;;   # no containers
+    *) exit 1 ;;
+esac
+EOF11
+    cat > "$B11/podman" <<EOF11
+#!/usr/bin/env bash
+printf 'podman %s\n' "\$*" >> "$LOG11"
+exit 1
+EOF11
+    chmod +x "$B11/toolbox" "$B11/podman"
+    # A PATH with the fakes and the POSIX baseline, but deliberately no `nix`.
+    c11="$(env PATH="$B11:/usr/bin:/bin" HOME="$TMPROOT/h11" \
+             TILLANDSIAS_NIX_CHROOT_STORE="$TMPROOT/s11" \
+             bash "$SCRIPT" capability 2>/dev/null)"
+    [ "$c11" = "none:nix-capability:no-nix-and-no-toolbox" ] \
+        || failures+=("capability on a host with no nix and no toolbox should be none, got: $c11")
+    if grep -qE '^(podman .*pull|toolbox .*create)' "$LOG11"; then
+        failures+=("capability PROVISIONED: it pulled or created infrastructure while answering a question — $(grep -E '^(podman .*pull|toolbox .*create)' "$LOG11" | head -1)")
+    fi
+    # NEGATIVE CONTROL for the arm itself: `ensure`, given the identical fake
+    # world, DOES reach for the pull. Without this the arm above could pass
+    # because the fakes are never consulted at all.
+    : > "$LOG11"
+    env PATH="$B11:/usr/bin:/bin" HOME="$TMPROOT/h11" \
+        TILLANDSIAS_NIX_CHROOT_STORE="$TMPROOT/s11" \
+        bash "$SCRIPT" ensure >/dev/null 2>&1
+    grep -qE '^podman .*pull' "$LOG11" \
+        || failures+=("negative control failed: ensure did not attempt a pull in the fake world, so arm 11 proves nothing")
+fi
+
+# 12. THE DEFECT, POSITIVELY. A host with NO host nix but an EXISTING nix
+#     toolbox that carries nix is nix-CAPABLE. Before 799-tb7q both callers
+#     judged by `command -v nix` on the host and declared this host incapable:
+#     check-nix-deps-stability.sh skipped green and select-work-batch.sh
+#     subtracted every nix-tagged packet from the pool.
+if [ -n "$TMPROOT" ]; then
+    B12="$TMPROOT/bin12"; mkdir -p "$B12"
+    cat > "$B12/toolbox" <<'EOF12'
+#!/usr/bin/env bash
+case "$1" in
+    list) printf 'CONTAINER ID  CONTAINER NAME  CREATED\n0000  tillandsias-nix  now\n' ;;
+    run)  shift; [ "$1" = "-c" ] && shift 2; exec "$@" ;;   # the container HAS nix
+    *) exit 1 ;;
+esac
+EOF12
+    cat > "$B12/nix" <<'EOF12'
+#!/usr/bin/env bash
+exit 0
+EOF12
+    chmod +x "$B12/toolbox" "$B12/nix"
+    # `nix` lives in $B12 but is reachable only THROUGH the fake toolbox run:
+    # PATH for the script itself excludes it, so a host-binary probe finds none.
+    B12H="$TMPROOT/bin12host"; mkdir -p "$B12H"
+    cp "$B12/toolbox" "$B12H/toolbox"
+    cat > "$B12H/toolbox" <<EOF12H
+#!/usr/bin/env bash
+case "\$1" in
+    list) printf 'CONTAINER ID  CONTAINER NAME  CREATED\n0000  tillandsias-nix  now\n' ;;
+    run)  shift; [ "\$1" = "-c" ] && shift 2; exec env PATH="$B12:/usr/bin:/bin" "\$@" ;;
+    *) exit 1 ;;
+esac
+EOF12H
+    chmod +x "$B12H/toolbox"
+    c12="$(env PATH="$B12H:/usr/bin:/bin" HOME="$TMPROOT/h12" \
+             TILLANDSIAS_NIX_CHROOT_STORE="$TMPROOT/s12" \
+             bash "$SCRIPT" capability 2>/dev/null)"
+    [ "$c12" = "ok:nix-capability:toolbox" ] \
+        || failures+=("a host whose nix lives in an existing toolbox must report ok:nix-capability:toolbox, got: $c12 — this is the 799-tb7q defect")
+fi
+
+# 13. NEITHER CALLER JUDGES NIX BY THE HOST BINARY ANY MORE. Asserted as a
+#     BEHAVIOUR-adjacent source check on the two specific decision points,
+#     because reproducing the selector's whole ledger query hermetically costs
+#     more than it proves — and scoped to a `command -v nix` used as the
+#     VERDICT, which is what was wrong. nix-toolbox.sh's own rung probes still
+#     use `command -v nix`, correctly: there it is one input among three.
+for caller in check-nix-deps-stability.sh select-work-batch.sh; do
+    f="$ROOT/scripts/$caller"
+    [ -f "$f" ] || { failures+=("arm 13 caller missing: $caller"); continue; }
+    if grep -vE '^\s*#' "$f" | grep -q 'command -v nix'; then
+        failures+=("$caller still decides nix capability from the host binary (command -v nix) — 799-tb7q")
+    fi
+    grep -q 'nix-toolbox.sh' "$f" \
+        || failures+=("$caller does not consult nix-toolbox.sh for nix capability")
+done
+
 if [ "${#failures[@]}" -gt 0 ]; then
     printf 'FAIL: %s\n' "${failures[@]}" >&2
     echo "nix-toolbox: FAIL ${#failures[@]} scenario(s)"
     exit 1
 fi
-echo "PASS: nix-toolbox fixture 9/9 (grammar, exit-code agreement, idempotence, store-probe-not-pure-eval, nix-args usable, store-path override, delete-and-rebuild, pinned-survives-gc, gc-refuses-when-deps-unresolved) rung=${out#ok:nix-toolbox:}"
+echo "PASS: nix-toolbox fixture 13/13 (grammar, exit-code agreement, idempotence, store-probe-not-pure-eval, nix-args usable, store-path override, delete-and-rebuild, pinned-survives-gc, gc-refuses-when-deps-unresolved, capability-grammar, capability-never-creates, toolbox-only-nix-is-capable, callers-off-host-binary) rung=${out#ok:nix-toolbox:}"

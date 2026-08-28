@@ -1,0 +1,90 @@
+# @trace spec:nix-builder
+# @trace order:799-tb7q
+#
+# Pins the SECOND criterion of 799-tb7q: the two probes that decide "is this
+# host nix-capable" must stop judging by the host binary alone, and the answer
+# they consult must never provision the thing that would make it true.
+#
+# THE DEFECT. `command -v nix` on the host was the verdict in
+# scripts/check-nix-deps-stability.sh and scripts/select-work-batch.sh. nix runs
+# here on three rungs — host daemon, host chroot store, containerized nix — and
+# scripts/nix-toolbox.sh is the script that knows which. A toolbox-capable host
+# whose nix lived only in the toolbox was declared nix-INCAPABLE: the gate
+# skipped green and the selector subtracted every nix-tagged packet from that
+# host's pool. Both failures are silent, which is why they need a gate rather
+# than a comment.
+#
+# WHY `capability` AND NOT `ensure`. `ensure` may `podman pull` a 400 MiB image
+# and create a toolbox. Both callers here — a pre-push gate and the work
+# selector — merely ASK. A question that answers itself by provisioning changes
+# the gate's cost, and that cost is exactly why 777-amku left these two on the
+# host binary instead of converting them. `capability` is a strict READ of the
+# same preference order. Step 3 is the arm that keeps it that way.
+name: litmus:nix-capability-probe
+spec: nix-builder
+phase: pre-build
+description: >
+  Pin scripts/nix-toolbox.sh `capability`: one line from a closed vocabulary
+  with an exit code that agrees with it; a host whose nix exists ONLY inside an
+  already-created toolbox reports capable; a host with neither nix nor a toolbox
+  reports none WITHOUT pulling an image or creating a container; and neither
+  check-nix-deps-stability.sh nor select-work-batch.sh decides nix capability
+  from `command -v nix` on the host any more.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/nix-toolbox.sh
+  - workspace contains scripts/test-nix-toolbox.sh
+  - bash and coreutils are available in PATH
+
+critical_path:
+  - step: "script and fixture parse"
+    command: "bash -n scripts/nix-toolbox.sh && bash -n scripts/test-nix-toolbox.sh && echo 'ok: parses'"
+    timeout_ms: 5000
+    expected_behavior: "ok: parses"
+
+  - step: "capability answers in one line from the closed vocabulary, on whatever host this is"
+    command: "bash scripts/nix-toolbox.sh capability 2>/dev/null | grep -cE '^(ok:nix-capability:(daemon|chroot|toolbox)|none:nix-capability:no-nix-and-no-toolbox)$'"
+    timeout_ms: 30000
+    expected_behavior: "1"
+
+  - step: "capability is listed in usage — a subcommand callers cannot discover is one they will keep working around with command -v"
+    command: "bash scripts/nix-toolbox.sh --bogus 2>&1 | grep -q 'capability' && echo 'ok: discoverable'"
+    timeout_ms: 5000
+    expected_behavior: "ok: discoverable"
+
+  - step: "neither caller decides nix capability from the host binary"
+    command: "if grep -vE '^[[:space:]]*#' scripts/check-nix-deps-stability.sh scripts/select-work-batch.sh | grep -q 'command -v nix'; then echo 'FAIL: a caller is back on the host binary'; else echo 'ok: callers off the host binary'; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok: callers off the host binary"
+
+  - step: "all fixture arms pass, including the constructed toolbox-only-nix host and the never-provisions arm with its negative control"
+    command: "bash scripts/test-nix-toolbox.sh 2>&1 | tail -1 | grep -q '^PASS: nix-toolbox fixture' && echo 'ok:nix-toolbox:all'"
+    timeout_ms: 300000
+    expected_behavior: "ok:nix-toolbox:all"
+
+evidence:
+  artifact: "scripts/nix-toolbox.sh (capability) + scripts/test-nix-toolbox.sh arms 10-13"
+  measured_on: >
+    lenovinha (Fedora Silverblue) 2026-08-28 — 13/13 green, rung
+    blocked:nix-toolbox:no-nix-and-no-toolbox (no host nix, no tillandsias-nix
+    toolbox), so `capability` honestly reports none here.
+
+    ARMS 11 AND 12 ARE CONSTRUCTED, NOT SCANNED, and deliberately so: no host in
+    the fleet is in the toolbox-only-nix state on demand, so an arm that read
+    this machine's real answer would be green everywhere and red nowhere — the
+    green-arm-that-cannot-go-red shape this suite keeps finding. Both worlds are
+    built from fake toolbox/podman/nix binaries on PATH.
+
+    MUTATION-TESTED rather than assumed. Deleting the toolbox rung from
+    capability_rung fires arm 12 ("must report ok:nix-capability:toolbox, got:
+    none"); putting `command -v nix` back as the verdict in select-work-batch.sh
+    fires arm 13. Arm 11 carries its own negative control in-file: `ensure`,
+    given the identical fake world, DOES attempt the pull, so "capability did
+    not pull" is not passing merely because the fakes are never consulted.
+
+    BEHAVIOUR UNCHANGED ON THIS HOST, verified by stash-compare rather than
+    reasoned about: check-nix-deps-stability.sh prints skip:nix-deps-stability:no-nix
+    with rc=0 before and after, and select-work-batch.sh --role linux is
+    byte-identical before and after.

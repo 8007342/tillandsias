@@ -29933,6 +29933,40 @@ plan_index:
         set rather than paying it on every fresh host.
 
       events:
+        - type: verified
+          ts: "2026-08-28T22:48:08Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            GUARDED AND MUTATION-TESTED, because two of the four arms are the shape that passes vacuously.
+
+            scripts/test-nix-toolbox.sh grows arms 10-13 (fixture now 13/13) and openspec/litmus-tests/litmus-nix-capability-probe.yaml pins them, registered under spec nix-builder in litmus-bindings.yaml. 5/5 steps green.
+
+            ARMS 11 AND 12 ARE CONSTRUCTED, NOT SCANNED. No host in the fleet is in the toolbox-only-nix state on demand, so an arm that read this machine's real answer would be green on every host and red on none — the green-arm-that-cannot-go-red shape this suite keeps finding. Both worlds are built from fake toolbox/podman/nix binaries on PATH.
+
+              arm 11 (never provisions): fake toolbox/podman log every call, nix absent from PATH. capability must answer 'none' with no 'podman pull' and no 'toolbox create' in the log. ITS OWN NEGATIVE CONTROL is in-file: 'ensure', given the identical fake world, DOES attempt the pull — so the arm cannot pass merely because the fakes are never consulted. That control was worth writing; it is the only thing separating 'capability did not provision' from 'nothing ran'.
+              arm 12 (the defect, positively): a host with NO host nix and an EXISTING toolbox that carries nix must report ok:nix-capability:toolbox.
+              arm 13: neither caller carries a non-comment 'command -v nix'. Scoped to the VERDICT — nix-toolbox.sh's own rung probes still use it correctly, as one input among three.
+
+            MUTATION-TESTED, and the first attempt at the mutation did not apply, which is worth recording since a mutation that silently no-ops reads exactly like an arm with no teeth: my python replacement string contained a literal backslash-n that the shell had already expanded, so the pattern never matched and arm 12 reported clean against a tree I believed was broken. Redone with sed against the file: deleting the toolbox rung from capability_rung fires arm 12; restoring 'command -v nix' as the verdict in select-work-batch.sh fires arm 13. Clean tree silent.
+
+            BEHAVIOUR UNCHANGED ON THIS HOST, by stash-compare rather than reasoning: check-nix-deps-stability.sh prints skip:nix-deps-stability:no-nix rc=0 before and after; select-work-batch.sh --role linux is BYTE-IDENTICAL before and after. lenovinha has no host nix and no tillandsias-nix toolbox, so capability honestly reports none here — the positive rung is exercised only by arm 12's constructed host, which is precisely why that arm is constructed.
+
+            ./build.sh --check GREEN (245s). litmus:nix-builder-shape is red in the same spec run; PRE-EXISTING and not mine — it is the standing red already filed as 921-vtf4 (step 1/3, 'assert flake uses copyToRoot').
+        - type: implemented
+          ts: "2026-08-28T22:47:47Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            SECOND CRITERION CLOSED — the two nix CAPABILITY probes no longer judge by host binary alone, which was the last open piece of this packet's deliverable. The sweep half closed 2026-08-26 (23 flat callers + the rg/openssl families); the loop callers are 914-ahsy.
+
+            THE DEFECT, restated because it is silent in both directions. check-nix-deps-stability.sh:100 and select-work-batch.sh's TOOL_CAP_TAGS probe both asked 'command -v nix' on the HOST. nix runs here on three rungs — host daemon, host chroot store, containerized nix — and scripts/nix-toolbox.sh is the script that knows which. A toolbox-capable host whose nix lived only in the toolbox was declared nix-INCAPABLE: the gate skipped GREEN and the selector SUBTRACTED every nix-tagged packet from that host's pool. Neither failure announces itself.
+
+            WHY THIS WAS NOT DONE IN 777-amku, and the thing that unblocks it: routing the callers through 'nix-toolbox.sh ensure' would let a pre-push gate 'podman pull' a 400 MiB image and create a toolbox — a change to the gate's COST, not a refactor, and the packet's own context flags it as needing a decision first. THE DECISION: a check reads its environment, it does not provision one. So this adds 'nix-toolbox.sh capability', a strict READ of the same preference order that NEVER pulls and NEVER creates: daemon_live, then chroot_works, then an ALREADY-EXISTING nix toolbox that carries nix. Grammar ok:nix-capability:<daemon|chroot|toolbox> / none:nix-capability:no-nix-and-no-toolbox, exit code agreeing with the verdict.
+
+            A host that COULD have a nix toolbox but does not yet still reports none, deliberately: capability is what is true now, not what an ensure could make true. Answering otherwise hands a selector work whose first action is a 400 MiB pull.
+
+            CALLERS: check-nix-deps-stability.sh gates on 'capability' and, on the toolbox rung, routes _nix through 'nix-toolbox.sh run --' (nix-args legitimately refuses that rung, so the previous code would have called a host nix that is not there). select-work-batch.sh grows a _host_has_tool indirection with a per-tool case; only nix is enrolled, and adding another is as deliberate an act as TOOL_CAP_TAGS enrollment itself.
         - type: note
           ts: "2026-08-26T17:36:04Z"
           agent_id: "linux-macuahuitl-claude-20260826t173604z"
