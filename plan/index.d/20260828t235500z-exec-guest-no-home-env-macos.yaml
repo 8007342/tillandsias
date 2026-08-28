@@ -1,0 +1,72 @@
+packets:
+  - packet_id: exec-guest-shell-has-no-home-breaking-tools-that-require-it
+    order: 922-hm3n
+    status: ready
+    title: |
+      `--exec-guest` runs the guest shell with no $HOME, and any tool that requires it dies at startup
+    kind: fix
+    pickup_role: any
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags:
+      - macos
+      - control-wire
+      - guest-environment
+      - fail-loud
+    estimated_hours: 2
+    deliverable: |
+      The control-wire exec preamble exports HOME (and the rest of the minimum
+      viable environment) for `--exec-guest` shell commands, or refuses with a
+      named error instead of handing tools an environment they cannot run in.
+    context: |
+      FOUND while measuring 919-jii2 EC2/EC3 in the macOS VZ guest, 2026-08-28.
+
+      `tillandsias-tray --exec-guest 'ollama pull qwen2.5:3b'` failed instantly
+      with exit 2 and this on stderr:
+
+        panic: $HOME is not defined
+        goroutine 1 [running]:
+        github.com/ollama/ollama/envconfig/config.go:329
+        github.com/ollama/ollama/cmd.NewCLI()
+
+      The ollama SERVER was healthy the whole time — `/api/version` returned
+      `{"version":"0.33.2"}` on the same shell — so this is not a networking,
+      install, or resource problem. Only the CLI died, and it died before doing
+      any work, because the shell `--exec-guest` provides has no HOME.
+
+      WHY THIS IS WORTH A PACKET RATHER THAN A WORKAROUND. ollama is not
+      special. `$HOME` is where a Go/Rust/Node CLI looks for its config, cache
+      and credentials, so this breaks an open-ended set of guest tooling in the
+      same way, at startup, with a message that names the tool rather than the
+      environment. The measurement that hit this could route around it (drive
+      the server's HTTP API directly and skip the CLI), but a diagnostic path
+      that silently hands every tool a broken environment is exactly the shape
+      735-ewzp/740-3k4s exist to remove: the failure is loud in the tool and
+      invisible at the layer that caused it.
+
+      NOTE the systemd units DO pin this and have since order 259/274 —
+      `Environment=HOME=/root` and `XDG_RUNTIME_DIR=/run/user/0` appear in
+      tillandsias-headless.service on all three provisioning paths, with a
+      comment explaining that a mismatch splits the resource-lock namespace.
+      The exec path did not inherit that lesson.
+    exit_criteria:
+      - |
+        `--exec-guest 'echo $HOME'` prints a real path rather than empty.
+      - |
+        MEASURED: a CLI that reads HOME at startup (ollama is the reproducer to
+        hand) runs under `--exec-guest` instead of panicking.
+      - |
+        The exec preamble's environment is pinned by a test, not by review, so
+        it cannot drift back apart from the systemd units' HOME/XDG pins.
+    verifiable_closure: |
+      On a macOS host: `tillandsias-tray --exec-guest 'ollama pull qwen2.5:3b'`
+      completes, where today it panics with `$HOME is not defined`.
+    evidence:
+      - 'panic: $HOME is not defined — ollama CLI under --exec-guest, macOS VZ guest, 2026-08-28'
+      - 'same shell, same moment: curl /api/version -> {"version":"0.33.2"} (server healthy)'
+      - 'workaround used by the 919-jii2 measurement: POST /api/pull directly, bypassing the CLI'
+    notes: |
+      Filed by the macOS host while measuring 919-jii2. Not fixed there because
+      it is a control-wire environment defect, not a VM-sizing one, and folding
+      it into that packet would have hidden it.
