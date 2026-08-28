@@ -1,0 +1,15 @@
+{
+  "scope": "windows-only",
+  "host": "windows",
+  "attested_at": "2026-08-28T23:05:43Z",
+  "commit": "4c22d6ca2a48aed338bd89fafbaef1b83cc87142",
+  "command": "cargo test -p tillandsias-windows-tray --bins",
+  "result": "test result: ok. 106 passed; 0 failed; 7 ignored; 0 measured; 0 filtered out; finished in 31.59s",
+  "sources": {
+    "crates/tillandsias-windows-tray/src/hvsocket.rs": "fd7788072fafa8622cd67c2cd354c0b9202219f1",
+    "crates/tillandsias-windows-tray/src/installation_uuid.rs": "8c75223416466ff92e19b8d1bf881e5b5030cae1",
+    "crates/tillandsias-windows-tray/src/notify_icon.rs": "e408a9e358bdc42409e65db8ded7bdf5ae3a7d8f",
+    "crates/tillandsias-windows-tray/src/wsl_lifecycle.rs": "3761ebe12afc6ac0cb10fa3c007cc172ddfb463d"
+  },
+  "known_red": ["# Tests allowed to be red when stamping Windows-only sources (order 716-f5kc).", "# Each entry needs a filed issue; an unexplained name here is how a stamp stops", "# meaning anything.", "#", "# Fails whenever the build counter moves without the committed guest asset being", "# rebuilt. Filed:", "# plan/issues/research-windows-tray-embedded-guest-binary-staleness-2026-08-13.md", "embedded_guest_headless_matches_workspace_version"]
+}
