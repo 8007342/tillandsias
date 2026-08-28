@@ -139,6 +139,21 @@ fi
 # else — no outage line from cycle-metrics.sh, no ledger artifact. A signal that
 # fires every cycle is one nobody reads.
 #
+# ── WHAT THIS PROBE STILL CANNOT SEE (order 823-u3k9) ───────────────────────
+#
+# It launches its OWN instance from the registration, so the process it measures
+# always reflects the CURRENT file. The long-lived process the agent's tool calls
+# actually reach is never contacted, and a server running pre-fix code therefore
+# reads `ok:experts-healthy` here BY CONSTRUCTION — measured on macuahuitl
+# 2026-08-18, where 799-j4xd's fix was in the file and not in the process.
+#
+# That is not a gap to harden: hardening this probe measures the fresh instance
+# harder. It is closed next door, by the same MEASURED/ATTESTED split 801-m9tk
+# used for the tool surface — see scripts/check-mcp-live-build.sh. Read all
+# three verdicts together; they answer three orthogonal questions (does the
+# registered command serve MCP / did this session get the tools / is the server
+# it reaches running current code).
+#
 # VERDICT GRAMMAR (pinned by litmus:mcp-expert-health-probe-shape):
 #   ^(ok:experts-healthy|down:[a-z0-9-]+(,[a-z0-9-]+)*|absent:not-registered|skip:[a-z0-9-]+)$
 #

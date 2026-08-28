@@ -1837,6 +1837,31 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Capability-row host-resolution fixture passed"
 
+    # Order 889-ewvt. The guard above proves the host can NAME itself. This one
+    # proves the row it publishes is still TRUE: check-capability-row.sh printed
+    # `ok:capability-row-reported:yoga` all night over a row advertising an
+    # ollama engine the host did not have, and that false row routed the
+    # authoritative release gate to a host that could not run it. A missing row
+    # routes nothing; a false row routes confidently and wrongly.
+    _step "Checking capability-row truth dimension (889-ewvt)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-capability-row.sh" fixture 2>&1; then
+        _error "the capability-row truth fixture broke — a stale row can be consumed as a current fact again"
+        exit 1
+    fi
+    _info "Capability-row truth fixture passed"
+
+    # Order 823-u3k9. check-mcp-expert-health.sh launches its OWN server from
+    # the registration, so it validates the FILE and reads green by construction
+    # over a long-lived process running pre-fix code — measured on macuahuitl
+    # 2026-08-18, where 799-j4xd's fix was in the file and not in the server the
+    # session actually reached. This fixture pins the join that can see it.
+    _step "Checking the live MCP server build join (823-u3k9)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-mcp-live-build.sh" fixture 2>&1; then
+        _error "the live-build join broke — a stale MCP server can read healthy again"
+        exit 1
+    fi
+    _info "Live MCP server build fixture passed"
+
     # Order 858-ihcb. A benchmark that measures a warm prompt cache reports a
     # number that is wrong by 10x and looks plausible. This fixture inspects
     # the payloads the harness's REAL call sites put on the wire, because the
