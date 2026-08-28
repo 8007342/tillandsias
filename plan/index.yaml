@@ -22041,6 +22041,30 @@ plan_index:
         - 'NEGATIVE CONTROL per host: the probe FAILS against a port with no listener — demonstrate it, because two of the three candidate forms silently passed on Windows.'
         - The start-limit directives sit in [Unit] on both, pinned by a test rather than by review.
       events:
+        - type: note
+          ts: "2026-08-28T23:26:27Z"
+          agent_id: "macos-tlatoanis-macbook-air-claude-20260828t223811z"
+          host: macos
+          summary: |
+            WINDOWS AND LINUX-HOST RUNTIME VERIFICATION REMAINS. wsl.rs is compile-probed only on darwin (it builds on every target by design; cargo build/test -p tillandsias-vm-layer green here), so EC2/EC3 for the WSL unit are NOT closed by this host and need a real provision on a Windows host — route to yolanda. The socat-presence defect above is a direct warning for that run: check the WSL image actually has socat rather than inheriting the claim.
+        - type: note
+          ts: "2026-08-28T23:26:27Z"
+          agent_id: "macos-tlatoanis-macbook-air-claude-20260828t223811z"
+          host: macos
+          summary: |
+            DEFECT FOUND BY THE LOADED RUN, and fixed before completion. First run reported 'vsock_listener=NOT-BOUND port=42420' WHILE THE HOST WAS EXEC'ING OVER 42420 — a false alarm about a working system, 757-4hdt's shape by a different route. Cause: socat is NOT installed in the macOS VZ guest. This packet's own context states 'socat ships in the Fedora guest image built WITH_VSOCK; no new dependency is needed' — true of the WINDOWS image, false for the VZ guest, which is plain Fedora Cloud. An inherited claim about a sibling platform's image is not evidence about this one. Two-part fix: (1) 'dnf install -y podman socat' in VZ provisioning; (2) the probe now checks its own dependency BEFORE the retry loop and reports a fourth verdict UNVERIFIABLE (exit 3) — a broken check and an unbound port are different facts, and a missing tool no longer burns the full 900s window looping on a condition that cannot change. Unit tests alone would NOT have caught this: every source scan passed.
+        - type: note
+          ts: "2026-08-28T23:26:27Z"
+          agent_id: "macos-tlatoanis-macbook-air-claude-20260828t223811z"
+          host: macos
+          summary: |
+            DIVERGENCE FROM EC1 AS WRITTEN, deliberate. The criterion says 'reference it from ExecStartPost, matching the Windows path'. The Windows path no longer uses ExecStartPost: 757-4hdt moved the probe off it because a failing control process STOPS the service it measures — it killed clean-room provisioning of v0.4.260815.1 and Restart=on-failure then looped the same minutes-long work forever. Implemented as a separate oneshot unit (Wants= not Requires=, no Before=, After=systemd-modules-load.service), which is the current Windows mechanism. Mirroring the criterion's letter would have reproduced a known bug.
+        - type: evidence
+          ts: "2026-08-28T23:26:26Z"
+          agent_id: "macos-tlatoanis-macbook-air-claude-20260828t223811z"
+          host: macos
+          summary: |
+            MACOS (VZ) HOST MEASUREMENT, tlatoanis-macbook-air / M5 / 10c / 16 GiB, 2026-08-28, fresh --reset-guest reprovision. EC1: crate::readiness installs /usr/local/lib/tillandsias/headless-ready.sh + tillandsias-headless-ready.service. EC2 (unit's own journal, not a source diff): 'Starting tillandsias-headless-ready.service' / '[tillandsias-ready] vsock_loopback before=loaded after=loaded' / '[tillandsias-ready] vsock_listener=bound port=42420' / 'Finished tillandsias-headless-ready.service'; systemctl is-active = active. before=loaded proves the declared After=systemd-modules-load.service ordering held rather than the backstop modprobe winning a race. EC3 NEGATIVE CONTROL: headless-ready.sh 42999 (no listener) -> 'vsock_listener=NOT-BOUND port=42999 ... Connection reset by peer', exit 1; POSITIVE control same script port 42420 -> 'vsock_listener=bound', exit 0. EC4: 'systemctl show tillandsias-headless.service' returns StartLimitIntervalUSec=2min StartLimitBurst=3 — systemd PARSED them, so unit-section placement is verified at runtime, not only by a source scan.
         - type: filed
           ts: "2026-08-14T23:00:00Z"
           host: windows
@@ -54044,6 +54068,12 @@ plan_index:
         Rust-hosted Lua already provides, and its test bodies would need
         recompiling — which is the property that makes agent-authored tests cheap.
       events:
+        - type: note
+          ts: "2026-08-28T22:42:00Z"
+          agent_id: "macos-tlatoanis-macbook-air-claude-20260828t223811z"
+          host: macos
+          summary: |
+            mlua vendored build on darwin (M5, macOS Mac17,3, Apple clang): GREEN. cargo test -p tillandsias-plan compiled mlua 0.10 with features vendored+lua54+send+serialize from source and passed all tests (28 lib + integration, 0 failed, exit 0). No C toolchain patching or feature gating needed.
         - type: note
           ts: "2026-08-28T22:24:19Z"
           agent_id: "linux-macuahuitl-claude-20260828t222419z"
