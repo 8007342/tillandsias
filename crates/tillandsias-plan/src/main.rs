@@ -5272,27 +5272,24 @@ fn main() {
             };
             let envelope = match tillandsias_plan::spec_index::SpecIndexEntry::load() {
                 Err(e) => tillandsias_plan::answer::Envelope::unsupported(e, unknown_freshness()),
-                Ok(entry) => {
-                    match tillandsias_plan::lua_runtime::create_shared_runtime(&root) {
-                        Err(e) => tillandsias_plan::answer::Envelope::unsupported(
-                            format!("the Lua tier/trim/collect scripts failed to load: {e}"),
-                            unknown_freshness(),
-                        ),
-                        Ok(shared_rt) => {
-                            let rt_handle = tokio::runtime::Runtime::new().unwrap_or_else(|e| {
-                                eprintln!("error: tokio runtime init failed: {e}");
-                                std::process::exit(1);
-                            });
-                            let mut cfg = tillandsias_plan::pipeline::GroundedConfig::from_env(
-                                root.clone(),
-                            );
-                            cfg.inference.domain = domain;
-                            rt_handle.block_on(tillandsias_plan::pipeline::run_grounded(
-                                &shared_rt, &entry, &cfg, &query,
-                            ))
-                        }
+                Ok(entry) => match tillandsias_plan::lua_runtime::create_shared_runtime(&root) {
+                    Err(e) => tillandsias_plan::answer::Envelope::unsupported(
+                        format!("the Lua tier/trim/collect scripts failed to load: {e}"),
+                        unknown_freshness(),
+                    ),
+                    Ok(shared_rt) => {
+                        let rt_handle = tokio::runtime::Runtime::new().unwrap_or_else(|e| {
+                            eprintln!("error: tokio runtime init failed: {e}");
+                            std::process::exit(1);
+                        });
+                        let mut cfg =
+                            tillandsias_plan::pipeline::GroundedConfig::from_env(root.clone());
+                        cfg.inference.domain = domain;
+                        rt_handle.block_on(tillandsias_plan::pipeline::run_grounded(
+                            &shared_rt, &entry, &cfg, &query,
+                        ))
                     }
-                }
+                },
             };
             // Envelope-level frame stamps (default citation commit = the
             // entry frame) were already applied inside run_grounded, BEFORE

@@ -1421,7 +1421,10 @@ mod tests {
         );
         assert_eq!(env.citations().len(), 1, "only the used citation survives");
         assert_eq!(
-            env.citations()[0].authority().get("key").map(String::as_str),
+            env.citations()[0]
+                .authority()
+                .get("key")
+                .map(String::as_str),
             Some("Requirement: used")
         );
         assert_eq!(env.freshness(), &frame, "the supplied frame passes through");

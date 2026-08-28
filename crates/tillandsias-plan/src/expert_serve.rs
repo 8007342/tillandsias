@@ -314,10 +314,7 @@ async fn route(
                 )
                 .await;
             }
-            let stream_requested = req
-                .get("stream")
-                .and_then(|s| s.as_bool())
-                .unwrap_or(false);
+            let stream_requested = req.get("stream").and_then(|s| s.as_bool()).unwrap_or(false);
             let Some(query) = last_user_content(&req) else {
                 return write_response(
                     stream,
@@ -549,7 +546,10 @@ mod tests {
             .iter()
             .map(|m| m["id"].as_str().unwrap())
             .collect();
-        assert_eq!(ids, vec!["all", "spec", "code", "methodology", "cheatsheet"]);
+        assert_eq!(
+            ids,
+            vec!["all", "spec", "code", "methodology", "cheatsheet"]
+        );
     }
 
     #[test]

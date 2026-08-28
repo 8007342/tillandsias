@@ -163,8 +163,9 @@ impl SpecIndexEntry {
                 continue;
             }
             vectors.push(
-                serde_json::from_str::<Vec<f32>>(line)
-                    .map_err(|e| format!("{}:{}: not a float vector: {e}", vpath.display(), n + 1))?,
+                serde_json::from_str::<Vec<f32>>(line).map_err(|e| {
+                    format!("{}:{}: not a float vector: {e}", vpath.display(), n + 1)
+                })?,
             );
         }
 
@@ -177,8 +178,9 @@ impl SpecIndexEntry {
                 continue;
             }
             chunks.push(
-                serde_json::from_str(line)
-                    .map_err(|e| format!("{}:{}: not a chunk record: {e}", cpath.display(), n + 1))?,
+                serde_json::from_str(line).map_err(|e| {
+                    format!("{}:{}: not a chunk record: {e}", cpath.display(), n + 1)
+                })?,
             );
         }
 
@@ -251,7 +253,11 @@ mod tests {
         )
         .unwrap();
         std::fs::write(dir.join("vectors.jsonl"), "[0.1,0.2]\n").unwrap();
-        std::fs::write(dir.join(".commit"), "abcdef1234567890abcdef1234567890abcdef12\n").unwrap();
+        std::fs::write(
+            dir.join(".commit"),
+            "abcdef1234567890abcdef1234567890abcdef12\n",
+        )
+        .unwrap();
         std::fs::write(dir.join(".model"), "nomic-embed-text\n").unwrap();
         std::fs::write(dir.join(".prefix"), "search_document: \n").unwrap();
         let entry = SpecIndexEntry::load_dir(&dir).expect("loads");

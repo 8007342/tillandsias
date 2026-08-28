@@ -568,13 +568,13 @@ pub async fn run_grounded(
     let mut outcomes: Vec<VariantOutcome> = Vec::new();
     let mut withheld: Vec<String> = Vec::new();
     for (i, p) in trimmed.iter().enumerate() {
-        let Some(scored) = &retrieved[i] else { continue };
+        let Some(scored) = &retrieved[i] else {
+            continue;
+        };
         let mut env = match &synths[i] {
-            Some(prose) => spec::build_envelope_scored_with_freshness(
-                prose,
-                scored,
-                freshness.clone(),
-            ),
+            Some(prose) => {
+                spec::build_envelope_scored_with_freshness(prose, scored, freshness.clone())
+            }
             None => Envelope::unsupported("synthesis unavailable", freshness.clone()),
         };
         if env.confidence() == Confidence::Unsupported {
@@ -651,7 +651,10 @@ pub async fn run_grounded(
                 // Fail-soft: dedup is an optimization, the cited work is not
                 // discarded over it.
                 eprintln!("[grounded] collect failed ({e}); keeping all validated variants");
-                outcomes.iter().map(|o| o.envelope.answer().to_string()).collect()
+                outcomes
+                    .iter()
+                    .map(|o| o.envelope.answer().to_string())
+                    .collect()
             }
         }
     };
@@ -788,7 +791,10 @@ mod tests {
         ];
         assert_eq!(domain_indices(&chunks, Some("spec")), vec![0, 2]);
         assert_eq!(domain_indices(&chunks, Some("code")), vec![1]);
-        assert_eq!(domain_indices(&chunks, Some("cheatsheet")), Vec::<usize>::new());
+        assert_eq!(
+            domain_indices(&chunks, Some("cheatsheet")),
+            Vec::<usize>::new()
+        );
         assert_eq!(domain_indices(&chunks, None), vec![0, 1, 2, 3]);
         assert_eq!(domain_indices(&chunks, Some("all")), vec![0, 1, 2, 3]);
     }
@@ -805,7 +811,8 @@ mod tests {
     }
 
     fn fixture_root(tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("tilland-grounded-{tag}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("tilland-grounded-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("fixture root");
         dir
@@ -879,7 +886,11 @@ mod tests {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let env = rt.block_on(run_grounded(&runtime, &entry, &cfg, "what governs specs?"));
         assert_eq!(env.confidence(), Confidence::Unsupported);
-        assert!(env.answer().starts_with("unsupported: "), "{}", env.answer());
+        assert!(
+            env.answer().starts_with("unsupported: "),
+            "{}",
+            env.answer()
+        );
         assert!(env.citations().is_empty());
         assert_eq!(
             count.load(std::sync::atomic::Ordering::SeqCst),

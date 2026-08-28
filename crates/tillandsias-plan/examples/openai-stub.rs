@@ -22,9 +22,7 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 
 fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    haystack
-        .windows(needle.len())
-        .position(|w| w == needle)
+    haystack.windows(needle.len()).position(|w| w == needle)
 }
 
 fn read_request(stream: &mut TcpStream) -> Option<String> {

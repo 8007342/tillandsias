@@ -28,6 +28,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 pub mod answer;
+/// ORDER 920-pxg6 — the OpenAI-compatible loopback front-end over
+/// `pipeline::run_grounded`. One grounded pipeline, two front-ends.
+pub mod expert_serve;
 /// CRDT fragment overlay — conflict-free ADDITIVE writes to the ledger, so
 /// concurrent hosts never produce a merge a human must adjudicate. Implements
 /// `methodology/distributed-work.yaml` → `crdt_principles.append_only_history`,
@@ -65,9 +68,6 @@ pub mod spec;
 /// from groundtruth.rs so the grader and the grounded pipeline read the SAME
 /// entry.
 pub mod spec_index;
-/// ORDER 920-pxg6 — the OpenAI-compatible loopback front-end over
-/// `pipeline::run_grounded`. One grounded pipeline, two front-ends.
-pub mod expert_serve;
 
 pub struct Ledger {
     /// Raw packet mappings in file order (open-world: everything survives).
