@@ -787,6 +787,74 @@ fn model_cache_dir() -> std::path::PathBuf {
         .join("Library/Caches/tillandsias/models")
 }
 
+/// Guest floor — never allocate less than the 689-eux9 pinned policy gave.
+/// A 4 GiB / 4 vCPU guest is what every macOS host ran until 919-jii2, so a
+/// host too small for the headroom policy keeps exactly the behaviour it had
+/// rather than being handed a guest smaller than any previously shipped.
+const GUEST_FLOOR_MEMORY_BYTES: u64 = 4 * 1024 * 1024 * 1024;
+const GUEST_FLOOR_CPU_COUNT: usize = 4;
+
+/// RAM left to the host: macOS itself, the tray, WindowServer, and whatever the
+/// operator is actually doing on the machine they are also running a forge on.
+/// A VM that boots by swapping its host is worse than a smaller VM.
+const HOST_RESERVED_MEMORY_BYTES: u64 = 6 * 1024 * 1024 * 1024;
+
+/// Above this the fraction stops buying anything a forge uses — a 7B model plus
+/// the container stack fits many times over — and the unused pages are better
+/// left to the host.
+const GUEST_MAX_MEMORY_BYTES: u64 = 32 * 1024 * 1024 * 1024;
+
+fn host_logical_cores() -> usize {
+    std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(2)
+}
+
+/// Host physical RAM in bytes, via `sysctl hw.memsize`.
+///
+/// On failure this returns 8 GiB rather than 0: 0 would drive `guest_sizing`
+/// to the floor, which is the correct SHAPE of the fallback, and 8 GiB reaches
+/// the same floor while keeping the reported number plausible in the log line.
+/// Read once per VM start, not per frame, so a subprocess is the right cost for
+/// avoiding a `libc`/`sysctlbyname` dependency in this crate.
+#[cfg(target_os = "macos")]
+fn host_memory_bytes() -> u64 {
+    std::process::Command::new("/usr/sbin/sysctl")
+        .args(["-n", "hw.memsize"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .and_then(|s| s.trim().parse::<u64>().ok())
+        .filter(|n| *n > 0)
+        .unwrap_or(8 * 1024 * 1024 * 1024)
+}
+
+/// Host-headroom-aware guest sizing — a PURE function of the host's shape, so a
+/// measurement taken on any host is reproducible from the two numbers it names
+/// (798-q4m9 / 807-bjjv comparability, preserved without re-pinning the size).
+///
+/// MEMORY: half the host, less whatever `HOST_RESERVED_MEMORY_BYTES` demands,
+/// clamped into `[GUEST_FLOOR_MEMORY_BYTES, GUEST_MAX_MEMORY_BYTES]` and
+/// rounded down to a whole GiB. On the 16 GiB M5 of 919-jii2 that is 8 GiB —
+/// the allocation the packet asks for, reached by policy rather than hardcoded.
+///
+/// CPU: 80% of logical cores, never below the 4 the pinned policy gave (or the
+/// host's core count if it has fewer than 4). On a 10-core host that is 8.
+fn guest_sizing(host_cores: usize, host_memory: u64) -> (usize, u64) {
+    let half = host_memory / 2;
+    let after_reserve = host_memory.saturating_sub(HOST_RESERVED_MEMORY_BYTES);
+    let memory = half
+        .min(after_reserve)
+        .clamp(GUEST_FLOOR_MEMORY_BYTES, GUEST_MAX_MEMORY_BYTES);
+    let memory = memory / (1024 * 1024 * 1024) * (1024 * 1024 * 1024);
+
+    let scaled = host_cores * 8 / 10;
+    let floor = GUEST_FLOOR_CPU_COUNT.min(host_cores.max(1));
+    let cpus = scaled.max(floor).max(1);
+    (cpus, memory)
+}
+
 #[cfg(target_os = "macos")]
 fn guest_binary_fingerprint() -> Result<String, String> {
     use sha2::{Digest, Sha256};
@@ -1513,72 +1581,61 @@ impl VmRuntime for VzRuntime {
             None
         };
 
-        // GUEST SIZING: PINNED ON PURPOSE, and here is the measurement (689-eux9).
+        // GUEST SIZING: HOST-HEADROOM-AWARE (order 919-jii2, operator decision
+        // 2026-08-28), superseding the pinned 4 GiB / 4-vCPU policy of 689-eux9.
         //
-        // MEASURED on macOS Mac17,3 / Apple M5 / 10 logical cores / 16 GiB,
-        // 2026-08-18, two cold `--exec-guest` runs (full cycle: stage, start,
-        // phase Ready, guest exec, stop):
+        // WHY THE PIN WAS RIGHT AND IS NOW WRONG. 689-eux9 measured, on a
+        // Mac17,3 / Apple M5 / 10 cores / 16 GiB, an IDLE guest at 4 GiB with
+        // SWAP USED = 0, and concluded there was no pressure to relieve. That
+        // measurement was honest and it still stands — for the workload it
+        // measured. The workload changed: 919-jii2 records a forge running
+        // local inference in which 4 GiB is not a comfort question but a
+        // capability wall. Measured in-guest on that same host: qwen2.5:0.5b
+        // and 1.5b load but fabricate on 6/6 spec queries, 3b has under 1 GiB
+        // of headroom for OS + KV cache, and 7b — the size sibling GPU hosts
+        // report as the accuracy sweet spot — cannot load at all. The pin did
+        // not make the guest slow; it made a whole class of work impossible.
         //
-        //     VZ start          0.008 / 0.021 s
-        //     phase Ready       8.444 / 8.454 s
-        //     total wall        9.562 / 9.573 s
+        // WHAT REPLACES IT, AND WHAT SURVIVES. `guest_sizing` below is a pure
+        // function of (host cores, host RAM), so the second pinned-policy
+        // rationale — that a host-derived size makes cross-host measurements
+        // incomparable (798-q4m9, 807-bjjv) — is answered without reverting:
+        // a measurement names the host's cores and RAM and the size is then
+        // reproducible from them, and TILLANDSIAS_VZ_CPU_COUNT_FOR_MEASUREMENT
+        // still constrains the guest to a fixed vCPU count for any benchmark
+        // that needs one. The floor is what keeps a small host working: the
+        // policy never hands the guest less than the 4 GiB / 4 vCPU it had.
         //
-        // In-guest at idle: nproc=4, Mem 3889 MiB total / 3240 MiB available,
-        // and SWAP 3888 MiB total with 0 USED. That zero is the decisive number:
-        // the guest has never touched swap, so it has never been under memory
-        // pressure. The operator question of 2026-08-11 — "is the 4 GiB ceiling
-        // behind the slowness, would 8 GiB help?" — is answered NO by that,
-        // twice over: boot is ~9.5 s end to end, and the slowness had a wholly
-        // different cause (two unbounded waits; in the wedged runs the VM
-        // process did not exist at all — 689-stig).
-        //
-        // WHY PINNED RATHER THAN SCALED TO THE HOST. Two reasons, and the second
-        // is the one that would not be obvious:
-        //   1. No measured pressure to relieve — see the swap figure above.
-        //   2. SCALING WOULD MAKE EVERY CROSS-HOST MEASUREMENT INCOMPARABLE.
-        //      "The guest" has to mean the same thing on every machine or the
-        //      fleet cannot compare numbers taken on different ones. This is not
-        //      hypothetical: 798-q4m9's exit criteria demand a bind-latency
-        //      measurement on a guest constrained to ONE vCPU and explicitly
-        //      refuse a multi-vCPU pass as evidence, and 807-bjjv exists because
-        //      a shared benchmark is worthless when hosts do not run the same
-        //      workload. A host-derived guest size would silently reintroduce
-        //      exactly that variance into every future measurement.
-        //
-        // HONEST LIMIT of the evidence: the memory figures are IDLE. Nothing
-        // here measures the guest under a full forge + container-stack load, so
-        // this justifies keeping the default, not a claim that 4 GiB suffices
-        // for every workload. Revisit with a loaded measurement, not an opinion.
-        //
-        // The `.min(4)` also caps a 10-core host at 4 vCPU, which is what makes
-        // `accel_cpu_cores=4` appear in the guest's capability envelope on a
-        // 10-core Mac — see the 2026-08-17 note on that discrepancy.
+        // HONEST LIMIT: the 8 GiB figure comes from model arithmetic (a 7B
+        // quantized model plus OS plus the forge stack), not from a loaded
+        // measurement of this guest at 8 GiB. 919-jii2's closure asks for that
+        // measurement; this is the allocation it will be measured at.
         //
         // Baseline record: cheatsheets/runtime/macos-vz-guest-boot-baseline.md
+        let (pinned_cpu_count, guest_memory_bytes) =
+            guest_sizing(host_logical_cores(), host_memory_bytes());
+        eprintln!(
+            "[tillandsias-vz] guest sizing: {pinned_cpu_count} vCPU / {} GiB (host: {} cores / {} \
+             GiB) — order 919-jii2 host-headroom-aware allocation",
+            guest_memory_bytes / (1024 * 1024 * 1024),
+            host_logical_cores(),
+            host_memory_bytes() / (1024 * 1024 * 1024),
+        );
+
         // MEASUREMENT SEAM — NOT a scaling knob (798-q4m9 criterion 3).
         //
-        // The sizing above stays PINNED; this does not reopen that. It exists
-        // because criterion 3 demands a bind-latency measurement on a guest
-        // constrained to ONE vCPU and explicitly refuses a multi-vCPU pass as
-        // evidence — and without a seam, producing that number requires a full
-        // signed-bundle rebuild for every measurement, which is enough friction
-        // that the honest answer becomes "not measured".
-        //
         // Deliberately NOT read from a config file or a menu: it is unset in
-        // every normal launch, and a value outside 1..=the pinned count is
+        // every normal launch, and a value outside 1..=the derived count is
         // ignored rather than honoured, so it can only ever CONSTRAIN the guest
-        // for a measurement — never grow it, and never make the default
-        // host-dependent (which is the property the pinned decision protects).
-        let pinned_cpu_count = std::thread::available_parallelism()
-            .map(|n| n.get().min(4))
-            .unwrap_or(2);
+        // for a measurement — never grow it past what the host-headroom policy
+        // already allowed.
         let cpu_count = std::env::var("TILLANDSIAS_VZ_CPU_COUNT_FOR_MEASUREMENT")
             .ok()
             .and_then(|v| v.parse::<usize>().ok())
             .filter(|n| (1..=pinned_cpu_count).contains(n))
             .inspect(|n| {
                 eprintln!(
-                    "[tillandsias-vz] MEASUREMENT OVERRIDE: cpu_count={n} (pinned default is \
+                    "[tillandsias-vz] MEASUREMENT OVERRIDE: cpu_count={n} (host-derived default is \
                      {pinned_cpu_count}). This is a 798-q4m9 measurement seam, not a supported \
                      configuration."
                 );
@@ -1613,7 +1670,7 @@ impl VmRuntime for VzRuntime {
 
         let spec = boot::VzBootConfig {
             cpu_count,
-            memory_bytes: 4 * 1024 * 1024 * 1024,
+            memory_bytes: guest_memory_bytes,
             root_disk: Some(rootfs),
             cidata_iso: Some(cidata_iso_path),
             shares,
@@ -2328,27 +2385,71 @@ mod tests {
     /// anchor EXISTS before scanning — otherwise a future rename turns this
     /// back into a test that passes while checking nothing.
     #[test]
-    fn live_boot_spec_caps_cpu_at_4_and_carries_4gib_memory() {
+    fn live_boot_spec_derives_sizing_from_the_host_not_a_literal() {
         let source = include_str!("vz.rs");
-        let anchor = "let pinned_cpu_count = std::thread::available_parallelism()";
+        let anchor = "let (pinned_cpu_count, guest_memory_bytes) =";
         assert!(
             source.contains(anchor),
-            "the cpu_count derivation moved or was renamed — this scan is \
-             anchored to it and would otherwise silently stop checking anything"
+            "the sizing derivation moved or was renamed — this scan is \
+             checking nothing until it is repointed"
         );
         let window = source
-            .split(anchor)
+            .split("async fn start(&self)")
             .nth(1)
             .and_then(|t| t.split("let cfg = boot::build_vm_configuration").next())
-            .expect("start() must derive cpu_count then build the spec");
+            .expect("start() must derive the sizing then build the spec");
         assert!(
-            window.contains(".min(4)"),
-            "boot spec must cap cpu_count at 4 (host-starvation guard)"
+            window.contains("guest_sizing(host_logical_cores(), host_memory_bytes())"),
+            "boot spec must size the guest from the host's shape (919-jii2)"
         );
         assert!(
-            window.contains("memory_bytes: 4 * 1024 * 1024 * 1024"),
-            "boot spec must carry the 4 GiB guest memory default"
+            window.contains("memory_bytes: guest_memory_bytes"),
+            "boot spec must carry the host-derived guest memory, not a literal"
         );
+    }
+
+    /// The floor is the whole reason a small host is safe under 919-jii2: it
+    /// must never hand out less than the 4 GiB / 4 vCPU every macOS host ran
+    /// under the pinned policy.
+    #[test]
+    fn guest_sizing_never_drops_below_the_pinned_floor() {
+        for (cores, gib) in [(2usize, 4u64), (4, 8), (8, 8), (1, 2)] {
+            let (cpus, mem) = guest_sizing(cores, gib * 1024 * 1024 * 1024);
+            assert!(
+                mem >= GUEST_FLOOR_MEMORY_BYTES,
+                "{cores}c/{gib}GiB host must not go below the 4 GiB floor, got {mem}"
+            );
+            assert!(
+                cpus >= GUEST_FLOOR_CPU_COUNT.min(cores.max(1)),
+                "{cores}c host must not go below the vCPU floor, got {cpus}"
+            );
+        }
+    }
+
+    /// The host of 919-jii2 — Mac17,3 / M5 / 10 cores / 16 GiB — is the case
+    /// the packet was filed about, so it is pinned here by name: 8 GiB / 8 vCPU.
+    #[test]
+    fn guest_sizing_gives_the_919_jii2_host_8gib_and_8_vcpu() {
+        let (cpus, mem) = guest_sizing(10, 16 * 1024 * 1024 * 1024);
+        assert_eq!(cpus, 8, "10-core host should yield 8 vCPU (80%)");
+        assert_eq!(
+            mem,
+            8 * 1024 * 1024 * 1024,
+            "16 GiB host should yield 8 GiB"
+        );
+    }
+
+    #[test]
+    fn guest_sizing_leaves_the_host_its_reserve_and_caps_large_hosts() {
+        // 12 GiB: half is 6, but the host reserve allows only 6 — both agree.
+        let (_, mem) = guest_sizing(8, 12 * 1024 * 1024 * 1024);
+        assert_eq!(mem, 6 * 1024 * 1024 * 1024);
+        // 8 GiB: half is 4, reserve allows 2 — the floor wins, host is small.
+        let (_, mem) = guest_sizing(8, 8 * 1024 * 1024 * 1024);
+        assert_eq!(mem, GUEST_FLOOR_MEMORY_BYTES);
+        // 128 GiB: half is 64, well past what a forge uses — capped.
+        let (_, mem) = guest_sizing(24, 128 * 1024 * 1024 * 1024);
+        assert_eq!(mem, GUEST_MAX_MEMORY_BYTES);
     }
 
     /// @trace spec:vm-provisioning-lifecycle.provision.idempotency@v1

@@ -54011,6 +54011,12 @@ plan_index:
         recompiling — which is the property that makes agent-authored tests cheap.
       events:
         - type: note
+          ts: "2026-08-28T22:42:00Z"
+          agent_id: "macos-tlatoanis-macbook-air-claude-20260828t223811z"
+          host: macos
+          summary: |
+            mlua vendored build on darwin (M5, macOS Mac17,3, Apple clang): GREEN. cargo test -p tillandsias-plan compiled mlua 0.10 with features vendored+lua54+send+serialize from source and passed all tests (28 lib + integration, 0 failed, exit 0). No C toolchain patching or feature gating needed.
+        - type: note
           ts: "2026-08-28T22:24:19Z"
           agent_id: "linux-macuahuitl-claude-20260828t222419z"
           host: linux
