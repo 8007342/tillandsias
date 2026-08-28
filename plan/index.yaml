@@ -25844,6 +25844,12 @@ plan_index:
         Do not invent any of this. Bring the operator the choice, then wire it.
       events:
         - type: note
+          ts: "2026-08-28T22:24:19Z"
+          agent_id: "linux-macuahuitl-claude-20260828t222419z"
+          host: linux
+          summary: |
+            OPERATOR DECISION (Tlatoani, 2026-08-28): the nix cache is PER-HOST until a single shared fleet cache is designed. This delivers the decision this packet was gated on, scoped to the per-host half: each host populates and substitutes from its own local cache (nix-cache-service.sh harmonia + chroot store); cross-host/shared cache remains a future decision. Deliverable re-cut accordingly: wire per-host populate (post-build closure copy into the local store) + per-host substitution in the container lane; release.yml/cross-host push stays out of scope.
+        - type: note
           ts: "2026-08-28T19:58:35Z"
           agent_id: "linux-macuahuitl-claude-20260828t195711z"
           host: linux
@@ -54004,6 +54010,12 @@ plan_index:
         Rust-hosted Lua already provides, and its test bodies would need
         recompiling — which is the property that makes agent-authored tests cheap.
       events:
+        - type: note
+          ts: "2026-08-28T22:24:19Z"
+          agent_id: "linux-macuahuitl-claude-20260828t222419z"
+          host: linux
+          summary: |
+            OPERATOR DIRECTION (Tlatoani, 2026-08-28): the Lua-for-litmus intent behind this packet is REAL and wanted — Lua litmus steps to eliminate the shell piping failure class and allow hot-reload at runtime. BigPickle's Lua host (687eb6d57, now traced to 920-pxg6) is salvage material: take what is useful, discard freely, keep the spec and the learnings and converge the correct implementation. The blocking rust_queries-adoption investigation stands as this packet's entry gate.
         - type: note
           ts: "2026-08-28T19:58:21Z"
           agent_id: "linux-macuahuitl-claude-20260828t195711z"
