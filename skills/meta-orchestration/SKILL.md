@@ -349,7 +349,9 @@ On a durable bare-metal DEVELOPMENT host (not an ephemeral forge):
    the same ephemeral RAG experts + commit-hook RAG retraining the forge runs),
    and confirm this host is visible in the capability matrix (order 850-bif2):
    ```bash
-   scripts/check-capability-row.sh   # ok:capability-row-reported:<host> | due:no-capability-row:<host>
+   scripts/check-capability-row.sh   # ok:capability-row-current:<host> | due:no-capability-row:<host>
+                                     # | stale:capability-row-drifted:<host>:row-only=…,probe-only=…
+                                     # | stale:capability-row-expired:<host>:age=<n>s
    ```
    Report scratchpad headroom in the same breath (order 915-wkm2) — one line,
    ADVISORY, exits 0 on every path:
@@ -535,10 +537,14 @@ outage, per `mcp_first_read_path`. And like every joining host, pass your
 hostname as `--seed` to `select-work-batch.sh`.
 
 **Publish your capability row before you drain anything** (order 850-bif2).
-`scripts/check-capability-row.sh` answers whether the matrix can see you; on
-`due:` generate and commit a row with
+`scripts/check-capability-row.sh` answers whether the matrix can see you AND
+whether what it sees is still true (order 889-ewvt); on `due:`, `stale:…drifted`
+or `stale:…expired` generate and commit a row with
 `scripts/host-capability-probe.sh --fragment` (Linux/macOS/forge loci; the
-windows-host locus keeps its own generator). A joining host that drains work
+windows-host locus keeps its own generator). `drifted` is the urgent one: the
+committed row disagrees with a live probe, and routing that consumes it will
+send work to hardware this host does not have — that is how the release gate
+was routed to yoga for a `gpu/container/ollama` engine yoga never had. A joining host that drains work
 while publishing nothing is how the matrix went silent for 5 of 7 hosts —
 and capability-aware routing (847-wgy4) cannot route to hardware the matrix
 cannot see.
@@ -1011,6 +1017,36 @@ the degraded read path reaches the ledger without anyone choosing to write it
 down. An `exposed` attestation leaves `health=ok` unchanged, and a claim older
 than the freshness window labels nothing: a previous cycle's marker never
 vouches for this one.
+
+**And the third question: is the server you reach running current code?**
+(order 823-u3k9). The handshake probe launches its OWN instance from the
+registration, so it validates the FILE. It cannot see that your session's
+long-lived MCP process was started before a fix landed and is still serving the
+old text — measured on macuahuitl 2026-08-18, where 799-j4xd's fix was in the
+file, the index was fine, L0 was fine, and the expert answered with prose the
+fix had deleted while every signal read green. A fix in a file does not reach a
+process that already read it.
+
+Like the surface, only **you** can observe this, and for the same reason: a
+subprocess cannot reach your server, and launching one is the defect. Call the
+live tool, read the build line out of its answer, attest it:
+
+```bash
+# 1. mcp__forge-plan__expert_capability   (through YOUR tool surface, not a shell)
+# 2. read its `server_build: forge-plan=<id> source=<path>` line
+scripts/check-mcp-live-build.sh attest forge-plan=<id> --source <path>
+scripts/check-mcp-live-build.sh check            # the joined verdict
+```
+
+If the answer carries **no** `server_build:` line, that is the finding, not a
+reason to skip: the running server predates the emitter. Attest
+`forge-plan=unreported` and it reads `stale:live-server-build-unreported:…`.
+`check` prints `ok:live-build-current:<server>` /
+`stale:live-server-build:<server>:<attested>!=<ondisk>` /
+`stale:live-server-build-unreported:<server>` / `unattested:*` /
+`unavailable:*`. Advisory, never a gate. On any `stale:`, relaunch the forge (or
+the session's MCP servers) before trusting an expert answer — and record the
+fallback, per `mcp_first_read_path`.
 
 Do NOT substitute `test -x` or a registration-file check for the handshake. A
 server that exists but wedges on startup is precisely the outage worth catching,
