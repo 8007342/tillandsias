@@ -292,15 +292,15 @@ const USAGE: &str = concat!(
     "                                     emits the plan_query projection array.\n",
     "           burndown <milestone>      release-target children with statuses\n",
     "           answer <question...>      the CITED answer envelope as JSON (order 394b)\n",
-    "           decompose <query...>      adversarial query decomposition via Lua runtime\n",
-    "                                     (order 902-5bf9). Returns a JSON array of\n",
+    "           decompose <query...>      adversarial query decomposition via LLM\n",
+    "                                     (order 920-pxg6). Returns a JSON array of\n",
     "                                     {prompt, kind} variants for concurrent dispatch.\n",
-    "           pipeline <query...>       full adversarial pipeline: decompose -> tier trim\n",
-    "                                     -> concurrent dispatch -> CRDT collect (902-5bf9).\n",
-    "                                     Returns collected responses as JSON.\n",
-    "           collect                   CRDT collection of validated adversarial responses\n",
-    "                                     via Lua runtime (order 902-5bf9). Reads JSON array\n",
-    "                                     from stdin, returns collected envelope on stdout.\n",
+    "           pipeline <query...>       decompose -> tier trim -> concurrent dispatch ->\n",
+    "                                     collect (920-pxg6). NO retrieval or validation\n",
+    "                                     yet — answers are ungrounded until 920-pxg6 lands.\n",
+    "           collect                   first-wins dedup of responses via Lua runtime\n",
+    "                                     (order 920-pxg6). Reads JSON array from stdin,\n",
+    "                                     returns collected envelope on stdout.\n",
     "           validate-yaml <file>...   ORDER 746-htj9. Load each file with serde_yaml and\n",
     "                                     report ok:yaml-loads / blocked:yaml-load-failed /\n",
     "                                     blocked:yaml-unreadable. THE sanctioned YAML reader:\n",
@@ -5113,7 +5113,7 @@ fn main() {
             emit_verified_envelope(envelope, &root, ledger.skipped_fragments());
         }
         "decompose" => {
-            // ORDER 902-5bf9. LLM-based adversarial query decomposition.
+            // ORDER 920-pxg6. LLM-based adversarial query decomposition.
             // The model generates the adversarial variants — no regex.
             // --domain <name> sets the RAG domain context.
             let mut domain: Option<String> = None;
@@ -5142,9 +5142,9 @@ fn main() {
             println!("{json}");
         }
         "collect" => {
-            // ORDER 902-5bf9. CRDT collection of validated adversarial
-            // responses. Reads a JSON array from stdin, returns the collected
-            // envelope on stdout.
+            // ORDER 920-pxg6. First-wins dedup of adversarial responses
+            // (real validated-filtering arrives with 920-pxg6). Reads a JSON
+            // array from stdin, returns the collected envelope on stdout.
             let mut raw = String::new();
             if let Err(e) = std::io::Read::read_to_string(&mut std::io::stdin(), &mut raw) {
                 eprintln!("error: read stdin: {e}");
@@ -5172,9 +5172,9 @@ fn main() {
             }
         }
         "pipeline" => {
-            // ORDER 902-5bf9. Full adversarial pipeline: decompose -> tier
-            // trim -> concurrent dispatch -> CRDT collect. Returns collected
-            // responses as JSON.
+            // ORDER 920-pxg6. Pipeline skeleton: decompose -> tier trim ->
+            // concurrent dispatch -> collect. No retrieval/validation yet;
+            // grounding is 920-pxg6's deliverable. Returns responses as JSON.
             // --domain <name> sets the RAG domain context.
             let mut domain: Option<String> = None;
             let mut query_parts = Vec::new();

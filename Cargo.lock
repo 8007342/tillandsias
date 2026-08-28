@@ -3378,7 +3378,6 @@ dependencies = [
  "serde_yaml",
  "tillandsias-podman",
  "tokio",
- "toml 0.8.2",
 ]
 
 [[package]]

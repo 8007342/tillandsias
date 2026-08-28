@@ -6,7 +6,7 @@
 --
 -- The collection is CRDT: commutative (order doesn't matter), idempotent
 -- (re-adding the same response is a no-op), and additive (never removes).
--- @trace order:902-5bf9
+-- @trace order:920-pxg6
 
 local function deduplicate(responses)
     local seen = {}

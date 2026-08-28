@@ -1,7 +1,7 @@
 //! Adversarial decomposition pipeline: LLM decompose → tier trim → concurrent
 //! dispatch → CRDT collection.
 //!
-//! @trace order:902-5bf9
+//! @trace order:920-pxg6
 //!
 //! The pipeline is the core of the expert system's hallucination reduction.
 //! It takes a natural-language query, uses the LLM to decompose it into

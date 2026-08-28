@@ -30,11 +30,11 @@ serde_json = { workspace = true }
 # 714-4r6w gate forbids raw synchronous podman anywhere — this workspace crate
 # is the one bounded surface, and the rung inherits its discipline.
 tillandsias-podman = { path = "../tillandsias-podman" }
-# Lua runtime for the adversarial decomposition pipeline (order 902-5bf9
-# extends to the expert system). Sandboxed, hot-reloadable, type-checked
-# middle layer between Rust and Shell. `vendored` builds Lua from source;
-# `send` enables Send-bound across tokio tasks for concurrent dispatch.
+# Lua runtime for the adversarial decomposition pipeline (order 920-pxg6;
+# 687eb6d57 originally miscited 902-5bf9, whose mlua-portability exit
+# criterion is still open). `vendored` builds Lua from C source — a C
+# toolchain cost every platform lane pays; `send` enables Send-bound
+# across tokio tasks for concurrent dispatch.
 mlua = { version = "0.10", features = ["vendored", "lua54", "send", "serialize"] }
 tokio = { workspace = true }
-toml = { workspace = true }
 chrono = { workspace = true }

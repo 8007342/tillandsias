@@ -2,7 +2,7 @@
 --
 -- Classifies queries into IMMEDIATE/QUICK/FINE/NON_USABLE based on
 -- query complexity and host capability.
--- @trace order:902-5bf9
+-- @trace order:920-pxg6
 -- @trace spec:inference-policy-router
 
 -- Latency tier definitions (milliseconds)

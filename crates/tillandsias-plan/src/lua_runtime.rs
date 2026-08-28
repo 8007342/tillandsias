@@ -1,7 +1,7 @@
 //! Sandboxed Lua runtime for the adversarial decomposition pipeline.
 //!
 //! @trace spec:spec-traceability
-//! @trace order:902-5bf9
+//! @trace order:920-pxg6
 //!
 //! The Lua layer sits between Rust (concurrent dispatch, RAG retrieval,
 //! citation verification) and Shell (MCP transport, inference endpoint).
@@ -9,11 +9,14 @@
 //! from disk without restarting the VM. Type-checked at load time against
 //! a schema the Rust side enforces.
 //!
-//! Security constraints (matching `openspec/specs/security-privacy-isolation`):
-//! - No `os.execute`, no `io.popen`, no unrooted `io.open`
-//! - No `debug` library
-//! - `fs.read` is repo-rooted (cannot escape the checkout)
-//! - All subprocess execution through `expert.query` (bounded, logged)
+//! SECURITY SURFACE, as actually implemented — NOT a sandbox. The VM is a
+//! stock `mlua::Lua`: the standard library is fully available to scripts,
+//! including `os.remove` and the `io.*` table. The `expert` bridge table
+//! exposes exactly two functions: `expert.log_info` and `expert.now_ms`.
+//! There is no `fs.read`, no repo-rooting, and no `expert.query` subprocess
+//! surface. Closing that gap (a restricted stdlib or a replacement for the
+//! Lua layer) is part of order 920-pxg6's work; until it lands, treat every
+//! script in `lua/` as trusted code.
 //!
 //! Design: the Lua scripts own DECOMPOSITION STRATEGY and COLLECTION
 //! SEMANTICS. Rust owns CONCURRENT DISPATCH, INFERENCE ENDPOINT, and
@@ -234,7 +237,9 @@ impl LuaRuntime {
                 .map_err(|e| LuaError::VmError(format!("failed to set log_info: {e}")))?;
         }
 
-        // expert.now_ms() — monotonic timestamp in milliseconds
+        // expert.now_ms() — wall-clock milliseconds since the Unix epoch
+        // (SystemTime, NOT monotonic: it can jump backwards on clock
+        // adjustment, so scripts must not use deltas as durations)
         {
             let now_ms = lua
                 .create_function(|_, ()| {

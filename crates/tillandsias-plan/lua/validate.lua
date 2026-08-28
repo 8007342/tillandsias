@@ -7,7 +7,7 @@
 --
 -- Extends the existing verify() from answer.rs — this is the Lua-side
 -- validation that calls back into Rust for citation resolution.
--- @trace order:902-5bf9
+-- @trace order:920-pxg6
 
 local validate = {}
 

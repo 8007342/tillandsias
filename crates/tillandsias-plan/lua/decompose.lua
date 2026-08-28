@@ -7,7 +7,7 @@
 -- Large Numbers.
 --
 -- Consumer is unaware this happens — it's a transparent black box.
--- @trace order:902-5bf9
+-- @trace order:920-pxg6
 
 -- Query shape detection patterns.
 local shape_detectors = {
