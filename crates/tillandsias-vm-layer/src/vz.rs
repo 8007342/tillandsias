@@ -525,7 +525,85 @@ impl VzRuntime {
         });
 
         // 1. Write user-data
-        let user_data_content = r#"#!/bin/bash
+        let user_data_content = provision_user_data(secure_control_wire);
+
+        std::fs::write(temp_dir.join("user-data"), user_data_content)
+            .map_err(|e| format!("failed to write user-data: {e}"))?;
+
+        // 2. Write meta-data
+        let meta_data_content = format!(
+            "instance-id: tillandsias-vm-secure-{secure_control_wire}-{guest_binary_fingerprint}\n\
+local-hostname: tillandsias-vm
+"
+        );
+
+        std::fs::write(temp_dir.join("meta-data"), meta_data_content)
+            .map_err(|e| format!("failed to write meta-data: {e}"))?;
+
+        // 3. run hdiutil makehybrid -o <dest> -joliet -iso -default-volume-name CIDATA <temp_dir>
+        if dest.exists() {
+            let _ = std::fs::remove_file(dest);
+        }
+
+        let output = std::process::Command::new("hdiutil")
+            .arg("makehybrid")
+            .arg("-o")
+            .arg(dest)
+            .arg("-joliet")
+            .arg("-iso")
+            .arg("-default-volume-name")
+            .arg("CIDATA")
+            .arg(&temp_dir)
+            .output()
+            .map_err(|e| format!("failed to run hdiutil: {e}"))?;
+
+        // Clean up temp dir
+        let _ = std::fs::remove_dir_all(&temp_dir);
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("hdiutil failed: {stderr}"));
+        }
+
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn home_src_dir() -> std::path::PathBuf {
+    std::env::var_os("HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+        .join("src")
+}
+
+/// Host-side home for the guest's model cache and ollama engine payload.
+///
+/// DELIBERATELY OUTSIDE `image_root()`. On macOS the install, data and config
+/// directories all collapse onto `~/Library/Application Support/tillandsias`,
+/// which IS the VM directory (order 804-bpke found `uninstall.sh` deleting
+/// 11.83 GiB of it while printing "Cache preserved"). Anything stored there —
+/// or inside `rootfs.img`, which lives there — dies with the VM. `~/Library/
+/// Caches` is the idiomatic macOS home for large, re-downloadable state and is
+/// untouched by `--reset-guest` and by any rootfs rebuild, which are the
+/// frequent operations. A deliberate full-wipe e2e still clears it, and that
+/// is correct: that flow is asking for a from-scratch install.
+///
+/// What lives here is ~2.47 GB at the CURRENT model size — a 1.44 GiB ollama
+/// arm64 engine, a 379 MiB qwen2.5:0.5b blob, and the `.tools` payload whose
+/// absence makes `/api/version` answer while every `/api/generate` returns
+/// HTTP 500 (the order-406 root cause).
+///
+/// @trace order:804-deux, order:804-bpke
+#[cfg(target_os = "macos")]
+/// The cloud-init `user-data` provisioning script for the macOS VZ guest.
+///
+/// Hoisted out of `provision` (order 740-3k4s) so the units it installs can be
+/// asserted by a test WITHOUT booting a VM. The readiness work this packet adds
+/// is about not trusting signals nobody verified; a systemd unit that only ever
+/// gets read by a human is one of those signals.
+fn provision_user_data(secure_control_wire: &str) -> String {
+    r#"#!/bin/bash
 set -euo pipefail
 
 # Order 272 (guest-ssh-backdoor-closure): the secure control wire is the
@@ -680,6 +758,17 @@ Description=Tillandsias headless (in-VM vsock control wire)
 After=network-online.target podman.socket tillandsias-headless-fetch.service
 Wants=network-online.target podman.socket
 Requires=tillandsias-headless-fetch.service
+# Bound the restart loop (735-ewzp): a daemon that can never start should end
+# in `failed`, loudly and once, not restart every two seconds forever. These
+# two directives belong to the unit section, NOT the service section -- systemd
+# silently ignores them in the latter, which is the same
+# looks-configured-does-nothing shape 740-3k4s exists to remove. The section
+# names are spelled out here rather than bracketed on purpose: a bracketed
+# token in a comment is indistinguishable from a real section header to the
+# scans that check this file, and the windows unit was bitten by exactly that
+# (601-462g).
+StartLimitIntervalSec=120
+StartLimitBurst=3
 [Service]
 Type=exec
 ExecStartPre=/usr/local/lib/tillandsias/headless-preflight.sh
@@ -704,82 +793,58 @@ StandardError=journal+console
 WantedBy=multi-user.target
 EOF
 
+# Write headless-ready.sh -- the BOUND-LISTENER assertion (order 740-3k4s).
+#
+# Everything above this point tests proxies. `headless-preflight.sh` reports
+# `vsock_device=present` from /dev/vsock, which vsock_loopback alone provides;
+# systemd reports `active (running)` from a process that is alive. 735-ewzp
+# found a guest where both were green, `--listen-vsock 42420` was on the
+# command line, and NOTHING WAS BOUND -- the host saw a seven-and-a-half minute
+# timeout. This connects to the port and sees whether anything accepts.
+cat > /usr/local/lib/tillandsias/headless-ready.sh << 'READYEOF'
+__READY_SCRIPT__
+READYEOF
+chmod 0755 /usr/local/lib/tillandsias/headless-ready.sh
+
+# The probe reaches CID 1 (VMADDR_CID_LOCAL), which needs vsock_loopback. Load
+# it and SAY which way it went: `modprobe` alone can no-op on a kernel that
+# lacks the module and leave a silent gap for the probe to find minutes later.
+# An unavailable module does NOT fail provisioning -- the host wire does not use
+# loopback, so the honest verdict is the probe's INDETERMINATE, not a dead VM.
+__VSOCK_LOOPBACK_SNIPPET__
+
+# Write tillandsias-headless-ready.service -- deliberately its OWN oneshot unit
+# and NOT an ExecStartPost on the daemon (order 757-4hdt). As an ExecStartPost
+# this same script stopped a healthy daemon on every cold boot: a control
+# process that fails there STOPS the service it was measuring, and
+# Restart=on-failure then began the same minutes-long work again. A probe that
+# can kill the process it measures is not a check. Failing here leaves the
+# daemon untouched and still shows up in `systemctl --failed` and the journal.
+cat > /etc/systemd/system/tillandsias-headless-ready.service << 'EOF'
+__READY_UNIT__EOF
+
 # Reload and enable services
 systemctl daemon-reload
-systemctl enable tillandsias-headless-fetch.service tillandsias-headless.service
+systemctl enable tillandsias-headless-fetch.service tillandsias-headless.service tillandsias-headless-ready.service
 systemctl start tillandsias-headless-fetch.service tillandsias-headless.service
+# Started last and NOT waited on: it is an assertion about the daemon, so it
+# must not gate the provisioning that produced the daemon.
+systemctl start --no-block tillandsias-headless-ready.service
 "#
-        .replace("__SECURE_CONTROL_WIRE__", secure_control_wire);
-
-        std::fs::write(temp_dir.join("user-data"), user_data_content)
-            .map_err(|e| format!("failed to write user-data: {e}"))?;
-
-        // 2. Write meta-data
-        let meta_data_content = format!(
-            "instance-id: tillandsias-vm-secure-{secure_control_wire}-{guest_binary_fingerprint}\n\
-local-hostname: tillandsias-vm
-"
-        );
-
-        std::fs::write(temp_dir.join("meta-data"), meta_data_content)
-            .map_err(|e| format!("failed to write meta-data: {e}"))?;
-
-        // 3. run hdiutil makehybrid -o <dest> -joliet -iso -default-volume-name CIDATA <temp_dir>
-        if dest.exists() {
-            let _ = std::fs::remove_file(dest);
-        }
-
-        let output = std::process::Command::new("hdiutil")
-            .arg("makehybrid")
-            .arg("-o")
-            .arg(dest)
-            .arg("-joliet")
-            .arg("-iso")
-            .arg("-default-volume-name")
-            .arg("CIDATA")
-            .arg(&temp_dir)
-            .output()
-            .map_err(|e| format!("failed to run hdiutil: {e}"))?;
-
-        // Clean up temp dir
-        let _ = std::fs::remove_dir_all(&temp_dir);
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("hdiutil failed: {stderr}"));
-        }
-
-        Ok(())
-    }
+    .replace("__SECURE_CONTROL_WIRE__", secure_control_wire)
+    .replace("__READY_SCRIPT__", crate::readiness::READY_SCRIPT)
+    .replace(
+        "__VSOCK_LOOPBACK_SNIPPET__",
+        crate::readiness::vsock_loopback_provision_snippet(),
+    )
+    .replace("__READY_UNIT__", &crate::readiness::ready_unit(42420))
 }
 
-#[cfg(target_os = "macos")]
-fn home_src_dir() -> std::path::PathBuf {
-    std::env::var_os("HOME")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
-        .join("src")
+#[cfg(test)]
+pub(crate) fn provision_user_data_for_test() -> String {
+    provision_user_data("off")
 }
 
-/// Host-side home for the guest's model cache and ollama engine payload.
-///
-/// DELIBERATELY OUTSIDE `image_root()`. On macOS the install, data and config
-/// directories all collapse onto `~/Library/Application Support/tillandsias`,
-/// which IS the VM directory (order 804-bpke found `uninstall.sh` deleting
-/// 11.83 GiB of it while printing "Cache preserved"). Anything stored there —
-/// or inside `rootfs.img`, which lives there — dies with the VM. `~/Library/
-/// Caches` is the idiomatic macOS home for large, re-downloadable state and is
-/// untouched by `--reset-guest` and by any rootfs rebuild, which are the
-/// frequent operations. A deliberate full-wipe e2e still clears it, and that
-/// is correct: that flow is asking for a from-scratch install.
-///
-/// What lives here is ~2.47 GB at the CURRENT model size — a 1.44 GiB ollama
-/// arm64 engine, a 379 MiB qwen2.5:0.5b blob, and the `.tools` payload whose
-/// absence makes `/api/version` answer while every `/api/generate` returns
-/// HTTP 500 (the order-406 root cause).
-///
-/// @trace order:804-deux, order:804-bpke
-#[cfg(target_os = "macos")]
 fn model_cache_dir() -> std::path::PathBuf {
     std::env::var_os("HOME")
         .map(std::path::PathBuf::from)
@@ -2903,9 +2968,19 @@ mod tests {
         // this very test), then fail loud if key injection returns or the
         // sshd surfaces (NAT daemon + systemd-ssh-generator's AF_VSOCK
         // socket) lose their masks.
+        // Repointed by 740-3k4s: the template moved out of `provision` into
+        // `provision_user_data` so the units it installs could be asserted
+        // without booting a VM. The anchor is checked to EXIST before the
+        // window is taken, so a future move fails this test loudly instead of
+        // silently scanning an empty string.
+        assert!(
+            source.contains("fn provision_user_data(secure_control_wire: &str) -> String {"),
+            "the user-data template moved or was renamed — repoint this scan"
+        );
         let user_data = source
-            .split("let user_data_content = r#\"")
+            .split("fn provision_user_data(secure_control_wire: &str) -> String {")
             .nth(1)
+            .and_then(|tail| tail.split("r#\"").nth(1))
             .and_then(|tail| tail.split("\"#").next())
             .expect("user-data template window");
         assert!(

@@ -78,6 +78,42 @@ pub enum WslPlatformVerdict {
     VirtualizationDisabled,
 }
 
+/// The `tillandsias-headless.service` unit installed on the WSL path.
+///
+/// Hoisted out of `provision` (order 740-3k4s) so its `[Unit]`-section
+/// start-limit placement can be asserted by a test rather than by review —
+/// under `[Service]` these directives are silently ignored, which is the exact
+/// looks-configured-does-nothing shape that packet exists to remove.
+///
+/// HOME + XDG_RUNTIME_DIR must match what the exec'd login/satisfier lanes
+/// resolve; see the call site's note for why (order 232/259/274).
+fn headless_unit(port: u32) -> String {
+    let start_limit = crate::readiness::START_LIMIT_DIRECTIVES;
+    format!(
+        "[Unit]\n\
+         Description=Tillandsias in-VM headless (vsock control wire)\n\
+         After=network-online.target\n\
+         Wants=network-online.target\n\
+         {start_limit}\n\
+         [Service]\n\
+         Type=simple\n\
+         ExecStartPre=/usr/bin/mkdir -p /run/user/0\n\
+         ExecStartPre=/usr/bin/chmod 0700 /run/user/0\n\
+         Environment=HOME=/root\n\
+         Environment=XDG_RUNTIME_DIR=/run/user/0\n\
+         ExecStart=/usr/local/bin/tillandsias-headless --listen-vsock {port}\n\
+         Restart=always\n\
+         RestartSec=1s\n\
+         [Install]\n\
+         WantedBy=multi-user.target\n"
+    )
+}
+
+#[cfg(test)]
+pub(crate) fn headless_unit_for_test(port: u32) -> String {
+    headless_unit(port)
+}
+
 impl WslPlatformVerdict {
     /// Stable machine-readable token for `--diagnose --json` (`wsl_platform`).
     pub fn as_diagnose_str(&self) -> &'static str {
@@ -880,27 +916,43 @@ impl VmRuntime for WslRuntime {
         // nothing else creates it before logind sees a root session.
         let unit = format!(
             "cat > /etc/systemd/system/tillandsias-headless.service << 'EOF'\n\
-             [Unit]\n\
-             Description=Tillandsias in-VM headless (vsock control wire)\n\
-             After=network-online.target\n\
-             Wants=network-online.target\n\
-             [Service]\n\
-             Type=simple\n\
-             ExecStartPre=/usr/bin/mkdir -p /run/user/0\n\
-             ExecStartPre=/usr/bin/chmod 0700 /run/user/0\n\
-             Environment=HOME=/root\n\
-             Environment=XDG_RUNTIME_DIR=/run/user/0\n\
-             ExecStart=/usr/local/bin/tillandsias-headless --listen-vsock {port}\n\
-             Restart=always\n\
-             RestartSec=1s\n\
-             [Install]\n\
-             WantedBy=multi-user.target\n\
-             EOF\n\
+             {headless_unit}EOF\n\
              systemctl daemon-reload || true\n\
              systemctl enable tillandsias-headless.service",
-            port = manifest.vsock_port
+            headless_unit = headless_unit(manifest.vsock_port)
         );
         self.wsl_root_sh_stdin(&unit).await?;
+
+        // Step 4b: the BOUND-LISTENER assertion (order 740-3k4s).
+        //
+        // Everything this path checked until now was a proxy: a `/dev/vsock`
+        // node (which `vsock_loopback` alone provides) and a systemd `active`
+        // status (which a live process with nothing bound satisfies). 735-ewzp
+        // found a guest where every such signal was green, `--listen-vsock` was
+        // on the command line, and no host could ever connect. This connects to
+        // the port and sees whether anything accepts.
+        //
+        // Installed as its OWN oneshot unit, never as an ExecStartPost: as an
+        // ExecStartPost the identical script stopped a healthy daemon on every
+        // cold boot of the Windows path (757-4hdt), because a control process
+        // that fails there stops the service it was measuring.
+        self.wsl_root_sh_stdin(&format!(
+            "mkdir -p /usr/local/lib/tillandsias\n\
+             cat > {script_path} << 'READYEOF'\n\
+             {script}\n\
+             READYEOF\n\
+             chmod 0755 {script_path}\n\
+             {loopback}\n\
+             cat > /etc/systemd/system/tillandsias-headless-ready.service << 'EOF'\n\
+             {ready_unit}EOF\n\
+             systemctl daemon-reload || true\n\
+             systemctl enable tillandsias-headless-ready.service",
+            script_path = crate::readiness::READY_SCRIPT_PATH,
+            script = crate::readiness::READY_SCRIPT,
+            loopback = crate::readiness::vsock_loopback_provision_snippet(),
+            ready_unit = crate::readiness::ready_unit(manifest.vsock_port),
+        ))
+        .await?;
 
         // Step 5: terminate so the next start picks up the new wsl.conf
         // and systemd.
@@ -1157,10 +1209,18 @@ mod tests {
     #[test]
     fn wsl_provision_unit_pins_lock_namespace_env() {
         let source = include_str!("wsl.rs");
+        // Repointed by 740-3k4s: the unit body moved out of `provision` into
+        // `headless_unit` so its start-limit placement could be asserted. The
+        // anchor is checked to EXIST first, so a future move fails loudly here
+        // rather than quietly scanning nothing.
+        assert!(
+            source.contains("fn headless_unit(port: u32) -> String {"),
+            "the headless unit body moved or was renamed — repoint this scan"
+        );
         let unit_window = source
-            .split("cat > /etc/systemd/system/tillandsias-headless.service << 'EOF'")
+            .split("fn headless_unit(port: u32) -> String {")
             .nth(1)
-            .and_then(|tail| tail.split("systemctl daemon-reload").next())
+            .and_then(|tail| tail.split("\n}").next())
             .expect("headless unit window");
 
         assert!(

@@ -37,6 +37,12 @@ pub use tillandsias_core::wsl::{
 pub mod vz;
 pub mod wsl;
 
+// The bound-listener readiness assertion both of those paths install
+// (order 740-3k4s). Shared rather than copied: the probe's discriminating form
+// was measured, not reasoned, and two hand-written variants of it silently
+// passed against a dead port before the surviving one was found.
+mod readiness;
+
 /// Self-contained control-wire client for non-interactive guest exec (the wire
 /// half of `VmRuntime::exec` on vsock backends). Cross-platform / unit-testable
 /// — see `vsock_exec::exec_over_stream`.
