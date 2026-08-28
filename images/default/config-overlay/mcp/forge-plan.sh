@@ -77,6 +77,35 @@ if [ -n "$EXPERT_CAPABILITY_LIB" ]; then
     . "$EXPERT_CAPABILITY_LIB"
 fi
 
+# ── ORDER 823-u3k9: WHICH BUILD OF THIS FILE AM I? ──────────────────────────
+#
+# Captured ONCE, here, at process start — never re-read per request. That is the
+# entire point: this value must describe the file AS THIS PROCESS READ IT, so
+# that a checker comparing it against the file on disk NOW can tell that a fix
+# has landed in the file without reaching this process. Recomputing it per call
+# would make it agree with disk always and detect nothing, which is exactly the
+# shape of the health probe that spawns its own server.
+MCP_SERVER_BUILD_ID_LIB=""
+for _bid_candidate in \
+    "${TILLANDSIAS_MCP_BUILD_ID_LIB:-}" \
+    "${BASH_SOURCE[0]%/*}/../../lib-mcp-build-id.sh" \
+    "/usr/local/lib/tillandsias/lib-mcp-build-id.sh"; do
+    if [ -n "$_bid_candidate" ] && [ -r "$_bid_candidate" ]; then
+        MCP_SERVER_BUILD_ID_LIB="$_bid_candidate"
+        break
+    fi
+done
+if [ -n "$MCP_SERVER_BUILD_ID_LIB" ]; then
+    # shellcheck source=/dev/null
+    . "$MCP_SERVER_BUILD_ID_LIB"
+fi
+MCP_SERVER_SOURCE="${BASH_SOURCE[0]}"
+if command -v tillandsias_mcp_build_id >/dev/null 2>&1; then
+    MCP_SERVER_BUILD_ID="$(tillandsias_mcp_build_id "$MCP_SERVER_SOURCE")"
+else
+    MCP_SERVER_BUILD_ID="unknown"
+fi
+
 # The checkout whose sources a relaunch would build. Derived from the resolved
 # plan index (…/plan/index.yaml -> …), never assumed: answering "which checkout?"
 # wrongly would report another tree's capability set as this session's future.
@@ -914,6 +943,12 @@ expert_capability_report() {
     expert_capability_refresh
     printf '%s\n' "${TILLANDSIAS_EXPERT_CAPABILITY_LINE:-expert_capability: now=none after_relaunch=none skew=none blocked_capabilities=- lost_on_relaunch=- probe=helper-missing}"
     printf 'experts state: %s\n' "$(experts_state_line)"
+    # ORDER 823-u3k9. The one fact only the RUNNING process can supply. A caller
+    # that compares this against the id of the file on disk can distinguish "the
+    # server is current" from "the server predates a fix that already landed" —
+    # a distinction no probe that spawns its own instance can ever make.
+    printf 'server_build: forge-plan=%s source=%s\n' \
+        "${MCP_SERVER_BUILD_ID:-unknown}" "${MCP_SERVER_SOURCE:--}"
     tillandsias_expert_capability_advice "${TILLANDSIAS_EXPERT_CAP_SKEW:-none}" 2>/dev/null || \
         printf 'The capability probe helper is not present, so the fields above are placeholders — treat expert capability as UNVERIFIED.\n'
     return 0
