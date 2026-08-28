@@ -147,8 +147,14 @@ if [ -z "$_mt" ]; then
 else
     _mtbin="${_mt##* }"
     _mtlib="$CACHE/tillandsias-builder/lib/jq"
-    if ! printf '{"a":1}' | env LD_LIBRARY_PATH="$_mtlib" "$_mtbin" -r .a >/dev/null 2>&1; then
-        bad "the materialized jq does not actually run"
+    # Exit captured into a variable, never `if ! <pipeline>` (795-imz3): jq may
+    # exit before draining stdin, printf then takes SIGPIPE, and under pipefail
+    # the pipeline reports failure although jq succeeded — the guard inverts and
+    # the arm reports a working materialization as broken.
+    printf '{"a":1}' | env LD_LIBRARY_PATH="$_mtlib" "$_mtbin" -r .a >/dev/null 2>&1
+    _rc4=$?
+    if [ "$_rc4" -ne 0 ]; then
+        bad "the materialized jq does not actually run (exit $_rc4)"
     else
         _loaded="$(LD_LIBRARY_PATH="$_mtlib" ldd "$_mtbin" 2>/dev/null | awk '/libjq/{print $3}')"
         case "$_loaded" in
@@ -184,7 +190,14 @@ _m5="$(env PATH="$W/bin" TILLANDSIAS_TOOL_CACHE="$CACHE" bash -c '
     materialize_tool jq' 2>/dev/null)"
 if [ -z "$_m5" ]; then
     bad "materialize_tool gave up on a corrupt cache entry instead of re-extracting"
-elif ! printf '{"a":1}' | env LD_LIBRARY_PATH="$_c5/lib/jq" "${_m5##* }" -r .a >/dev/null 2>&1; then
+else
+    # Same 795-imz3 capture as arm 4, for the same SIGPIPE reason.
+    printf '{"a":1}' | env LD_LIBRARY_PATH="$_c5/lib/jq" "${_m5##* }" -r .a >/dev/null 2>&1
+    _rc5=$?
+fi
+if [ -z "$_m5" ]; then
+    :
+elif [ "${_rc5:-1}" -ne 0 ]; then
     bad "materialize_tool returned a path from a CORRUPT cache entry — it trusted the cache instead of verifying it"
 else
     ok "a corrupt cache entry is re-extracted and verified, not trusted"
