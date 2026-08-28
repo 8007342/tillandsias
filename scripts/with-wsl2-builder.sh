@@ -228,7 +228,45 @@ for arg in "$@"; do
     ARGS_QUOTED="$ARGS_QUOTED$(printf '%q ' "$arg")"
 done
 
-_ENV_PREFIX="export TILLANDSIAS_SKIP_WSL2=1; . /root/.cargo/env 2>/dev/null || true;"
+# ORDER 889-8tcb — `wsl.exe` does NOT forward the caller's environment, so
+# every TILLANDSIAS_* control flag died silently at this boundary. The one
+# that mattered: TILLANDSIAS_FORCE_CHECK=1, the documented escape hatch for a
+# stale gate memo, was inert on Windows — measured on yolanda while the
+# exec-bit deadlock made it the only lever left. Setting WSLENV by hand did
+# work, which is the proof the value simply never crossed.
+#
+# This is the same fix scripts/with-tillandsias-builder.sh:299 already carries
+# for the toolbox boundary, with the same precedent in its comment. The Windows
+# dispatch was the outlier, and a control flag that works on one platform's
+# dispatch and not the other's is worse than one that works on neither, because
+# only one of those gets noticed.
+#
+# TILLANDSIAS_SKIP_WSL2 is exported AFTER this string, so the recursion guard
+# always wins over anything forwarded here.
+_ENV_FORWARD=""
+while IFS= read -r _w2_var; do
+    _ENV_FORWARD="${_ENV_FORWARD}export $(printf '%q' "$_w2_var")=$(printf '%q' "${!_w2_var}"); "
+done < <(compgen -v | grep '^TILLANDSIAS_' || true)
+
+# ── The WSL2 distro IS this lane's container, and must say so ─────────────
+# scripts/with-tillandsias-builder.sh (2026-08-26 operator ruling) FAILS HARD
+# on any Linux host that has /etc/os-release but no `toolbox`, with no
+# host-native fallback. Its comment names Windows a sanctioned exception
+# "handled ABOVE by the /etc/os-release guard" — but that guard only fires
+# where the file is ABSENT, which is Git Bash. Once we dispatch INTO the
+# distro the file exists, the exception evaporates, and the gate dies at
+# `FATAL: 'toolbox' is not installed` before running a single check. Measured
+# on yolanda 2026-08-28: /etc/os-release present, `container` unset,
+# /run/.containerenv absent, toolbox absent — the distro is indistinguishable
+# from a bare Fedora builder to every guard that script has.
+#
+# TILLANDSIAS_SKIP_TOOLBOX=1 is the escape hatch that ruling itself names, and
+# this is the one place entitled to set it: the ruling's objection is to a
+# build that SILENTLY escapes its container, and this build is not escaping
+# one — it is already inside the container this platform sanctions. Set at the
+# boundary, explicitly, rather than inside the toolbox script, so no Linux host
+# inherits it.
+_ENV_PREFIX="${_ENV_FORWARD}export TILLANDSIAS_SKIP_WSL2=1 TILLANDSIAS_SKIP_TOOLBOX=1; . /root/.cargo/env 2>/dev/null || true;"
 if [[ "${TILLANDSIAS_WSL2_TARGET_IN_TREE:-}" != "1" ]]; then
     _ENV_PREFIX="$_ENV_PREFIX export CARGO_TARGET_DIR=\"/root/.cache/tillandsias-wsl2-target/$REPO_BASENAME\";"
 fi
