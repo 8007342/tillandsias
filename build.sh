@@ -38,13 +38,14 @@ source "$_BUILDER_DIR/scripts/with-tillandsias-builder.sh"
 # windows lane.
 source "$_BUILDER_DIR/scripts/with-wsl2-builder.sh"
 
-# When NIX_BUILD_LANE=container is set, transparently re-exec inside a
-# nix-enabled container backed by the persistent host nix store and the
-# enclave binary cache — the remaining slice of in-flight packet 873-b1nx
-# (openspec/changes/nix-cache-build-lane), converging toward the 917-zkge
-# long-horizon attractor. The container provides nix with flakes; builds
-# pull from the enclave cache instead of cold-compiling. When unset,
-# byte-identical current behaviour (exit criterion 3).
+# When TILLANDSIAS_BUILD_LANE=container is set, route nix invocations through
+# the tillandsias-builder container (images/builder/Containerfile — the one
+# lineage; distro nix): /nix on a named volume so a relaunch lands warm, the
+# per-host cache chroot store mounted at /host-store, and a post-build
+# populate + pin (openspec/changes/nix-cache-build-lane/design.md, 790-6n2k).
+# The wrapper injects per-host substituter flags when nix-cache-service.sh
+# answers; a cache that is down degrades to cold, never to failure. When
+# unset, byte-identical current behaviour (873-b1nx exit criterion 3).
 source "$_BUILDER_DIR/scripts/with-nix-builder.sh"
 
 unset _BUILDER_DIR

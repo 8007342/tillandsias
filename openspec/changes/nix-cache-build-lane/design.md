@@ -76,11 +76,66 @@ against this host later.
   the lane falls through to upstream substituters + local build, and the
   878-79b5 supervisor restarts the cache within a cycle.
 
+## Reconciliation (2026-08-28, orders 873-b1nx + 790-6n2k)
+
+Two builder lineages had grown in parallel: `images/builder/` (this design's
+recorded shape — distro nix from Fedora, `/etc/nix/nix.conf` baked) and
+`nix/builder/` (a tarball-nix prototype that BigPickle's lane wrapper
+actually referenced). Resolved to ONE lineage: **`images/builder/` survives**
+(distro nix 2.34.x lives under `/usr`, which frees `/nix` to be a build-store
+volume — the tarball lineage could not do that); `nix/builder/` is deleted
+and `with-nix-builder.sh` / `check-nix-builder-e2e.sh` repointed.
+
+Decisions folded in (operator 2026-08-28):
+
+- **The cache is PER-HOST until a shared cache is designed.** Cross-host
+  publication is out of scope; `nix-push-cache.sh` was re-cut accordingly —
+  its https push targeted serve-only harmonia and could only fail.
+- **Lane variable is `TILLANDSIAS_BUILD_LANE=container`** (this document's
+  original shape wins; the wrapper's `NIX_BUILD_LANE` was renamed). It rides
+  the wrapper's existing `TILLANDSIAS_*` env-forwarding loop into the
+  container, so no separate lane flag is forwarded.
+- **Store topology (A), adopted:** `/nix` inside the builder container is the
+  named volume `tillandsias-builder-nix` (warm across relaunches); the
+  per-host cache chroot store mounts read-write at `/host-store`; after a
+  successful `nix build` the lane runs in-container
+  `nix copy --to /host-store --no-check-sigs <closure>` (grammar
+  `ok:nix-populate:copied=<n>`; `--no-check-sigs` because harmonia signs at
+  SERVE time via `sign_key_paths` — store paths carry no signatures by
+  design), then host-side `scripts/nix-toolbox.sh pin`. A populate copy
+  failure is loud (`blocked:nix-populate:copy-failed`): a mounted rw store
+  rejecting a local copy is breakage, not a degraded cache.
+- **Topology (B) — `store = /host-store` structural sharing** (build directly
+  into the chroot store, no copy step) — is a MEASURED FOLLOW-UP, not
+  adopted: it would remove the copy but funnels every build write through
+  the bind mount, and the with-wsl2-builder history says IO through mount
+  boundaries must be measured before it is declared. Measure (A) vs (B) on
+  the 96 s shape before switching.
+- **Per-host substituter wiring lives in the wrapper**, not the image:
+  `nix-cache-service.sh substituter-args` is the single authority; empty
+  output = cache down = degrade-to-cold with NO flags added. The emitted
+  `--ssl-cert-file` value is a host path, so the bundle is mounted read-only
+  at `/run/tillandsias/ca-bundle.crt` — the exact path `images/builder/
+  nix.conf` pins — and the flag value rewritten to the mount. The baked
+  host-specific public key and `https://nix-cache:5000` substituter were
+  REMOVED from the image's nix.conf: a baked key/endpoint is one host's
+  state shipped to every host.
+- **BigPickle's prefetch (`nix-build-container.sh`) is kept as an explicit
+  fallback** behind `TILLANDSIAS_NIX_PREFETCH=1`, not the default: direct
+  in-container nix build with substituter flags is the lane. (Reconciliation
+  also fixed the route: it passed the HOST-absolute script path into the
+  container, where the repo mounts at `/work`.)
+
 ## What remains
 
-1. The builder container itself (long-lived tier, nix + the substituter
-   config above baked in, enclave network, store on a named volume).
-2. `build.sh` lane selection behind `TILLANDSIAS_BUILD_LANE` with the
-   byte-identical-default guarantee and a litmus pinning both branches.
+1. ~~The builder container itself~~ — delivered (one lineage,
+   `images/builder/`, named `/nix` volume, populate + pin).
+2. ~~`build.sh` lane selection behind `TILLANDSIAS_BUILD_LANE` with the
+   byte-identical-default guarantee and a litmus pinning both branches~~ —
+   delivered (`litmus:nix-container-lane-shape` pins the guard chain,
+   byte-identical unset path, one-lineage, and substituter wiring).
 3. The WSL2 and VFR measurements (or their recorded deferral with cost) —
    exit criterion 4.
+4. The (A) vs (B) store-topology measurement above.
+5. A shared (cross-host) cache design — blocked on an operator decision;
+   the per-host lane deliberately does not preempt it.

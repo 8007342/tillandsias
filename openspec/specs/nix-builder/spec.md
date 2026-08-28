@@ -33,12 +33,13 @@ Nix flake builds MUST only see files that are tracked by git. The staleness chec
 - **WHEN** `build-image.sh` runs outside a git repository (e.g., from a source tarball)
 - **THEN** the staleness check MUST fall back to `find`-based enumeration with a warning that untracked file detection is unavailable
 
-### Requirement: Preferred dockerTools API usage
-The flake.nix image definitions MUST use `copyToRoot` instead of the legacy `contents` attribute in `dockerTools.buildLayeredImage`.
+### Requirement: dockerTools builder/attribute pairing
+The flake.nix image definitions MUST pass the image root through the parameter the builder actually declares: `dockerTools.buildLayeredImage` (a wrapper over `streamLayeredImage`) takes `contents`; only `dockerTools.buildImage` takes `copyToRoot`. nixpkgs-26.05 rejects `copyToRoot` in `buildLayeredImage` outright (first red: commit 9b0c27c1c, the 24.11 → 26.05 bump), so the previous requirement here — prefer `copyToRoot` in `buildLayeredImage` — pinned a parameter the builder does not accept.
 
-#### Scenario: Image definition uses copyToRoot
+#### Scenario: Layered image definition uses contents
 - **WHEN** an image is defined in `flake.nix` using `dockerTools.buildLayeredImage`
-- **THEN** the `copyToRoot` attribute MUST be used to specify packages to include. The `contents` attribute is a legacy alias that still works but is deprecated in favor of `copyToRoot`.
+- **THEN** the `contents` attribute MUST be used to specify the image root
+- **AND** `copyToRoot` MUST NOT appear in the definition — it is a `buildImage`-only parameter and nixpkgs-26.05 fails evaluation on it
 
 ## Litmus Tests
 
@@ -47,7 +48,7 @@ Bind to tests in `openspec/litmus-bindings.yaml`:
 
 Gating points:
 - Nix flake evaluates without errors and produces valid image tarballs
-- `flake.nix` uses `dockerTools.buildLayeredImage` with `copyToRoot` (not legacy `contents`)
+- `flake.nix` uses `dockerTools.buildLayeredImage` with `contents` (`copyToRoot` is `buildImage`-only; nixpkgs-26.05 rejects it in `buildLayeredImage`)
 - `nix build` inside tillandsias-builder toolbox produces .tar.gz at expected output path
 - Image tarball can be loaded into podman via `podman load`
 - Image passes `podman inspect` and shows correct layer structure

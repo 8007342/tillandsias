@@ -62,7 +62,7 @@ fi
 # (`local` is only legal inside a function — at top level it errors and, under
 # set -u, left $containerfile unbound so the cold path could never build.)
 if ! image_exists; then
-    containerfile="$REPO_ROOT/nix/builder/Containerfile"
+    containerfile="$REPO_ROOT/images/builder/Containerfile"
     if [[ ! -f "$containerfile" ]]; then
         echo "[nix-e2e] Containerfile not found at $containerfile" >&2
         echo "blocked:nix-e2e:image-failed"
@@ -84,11 +84,14 @@ fi
 
 # substituter-args emits one token per line, and its --ssl-cert-file value is
 # a HOST path (the cache state dir's ca-bundle.crt) that does not exist inside
-# the builder container. Mount the bundle read-only at a fixed in-container
-# path and rewrite the flag to point there — without the rewrite, nix inside
-# the container fails TLS verification against a path it cannot see.
+# the builder container. Mount the bundle read-only at the fixed in-container
+# path images/builder/nix.conf pins and rewrite the flag to point there —
+# without the rewrite, nix inside the container fails TLS verification against
+# a path it cannot see. The cold path (no substituter) mounts the host SYSTEM
+# bundle at the same path: the image's nix.conf ssl-cert-file setting must
+# resolve for upstream TLS, and Fedora's nix ignores the CA env vars.
 CA_BUNDLE_HOST=""
-CA_BUNDLE_MOUNT="/tmp/nix-cache-ca-bundle.crt"
+CA_BUNDLE_MOUNT="/run/tillandsias/ca-bundle.crt"
 if [[ -n "$SUB_ARGS" ]]; then
     CA_BUNDLE_HOST="$(printf '%s\n' "$SUB_ARGS" \
         | awk 'prev == "--ssl-cert-file" { print; exit } { prev = $0 }')"
@@ -100,6 +103,16 @@ if [[ -n "$SUB_ARGS" ]]; then
         SUB_ARGS=""
         CA_BUNDLE_HOST=""
     fi
+fi
+if [[ -z "$CA_BUNDLE_HOST" ]]; then
+    for _sys_ca in /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem \
+                   /etc/ssl/certs/ca-certificates.crt \
+                   /etc/ssl/cert.pem; do
+        if [[ -r "$_sys_ca" ]]; then
+            CA_BUNDLE_HOST="$_sys_ca"
+            break
+        fi
+    done
 fi
 
 # ── Build nix command with store and substituter flags ────────────────────

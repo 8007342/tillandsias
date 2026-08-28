@@ -3,10 +3,20 @@
 # The forge image is nix-free BY DESIGN (801-x1nx: the ephemeral tier stays
 # cheap to launch and destroy); builds that want nix artifacts run HERE, a
 # durable sibling of nix-cache/vault/proxy, with /nix on a named volume so a
-# relaunch lands warm. The toolchain closure arrives from the enclave cache:
+# relaunch lands warm. The toolchain closure arrives from the per-host cache:
 # measured 2026-08-25, a fresh store builds the full musl target cache-only
 # in 96s versus hours from source.
+#
+# ONE LINEAGE (790-6n2k reconciliation, 2026-08-28): this file is the only
+# builder Containerfile; nix/builder/ was the tarball-nix prototype and is
+# deleted. Distro nix (2.34.x from Fedora) lives under /usr, so /nix is free
+# to be a named build-store volume — the tarball lineage could not do that.
 FROM registry.fedoraproject.org/fedora-minimal:44
-RUN microdnf -y install nix git && microdnf clean all
+# curl + jq: required by the prefetch fallback (scripts/nix-build-container.sh,
+# TILLANDSIAS_NIX_PREFETCH=1) which downloads flake inputs with system curl.
+RUN microdnf -y install nix git curl jq && microdnf clean all
 COPY nix.conf /etc/nix/nix.conf
-WORKDIR /src
+# with-nix-builder.sh drives every run as: <image> -c "cd /work && ...", so the
+# entrypoint must be a bash that accepts -c.
+ENTRYPOINT ["/bin/bash"]
+WORKDIR /work
