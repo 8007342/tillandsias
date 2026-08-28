@@ -22,7 +22,8 @@ controlled.
 - https://wiki.squid-cache.org/Features/SslBump — SSL bump with intercept port
 - https://github.com/containers/common/blob/main/docs/containers.conf.5.md — containers.conf `[engine] env`
 - https://www.kernel.org/doc/html/latest/networking/tproxy.html — kernel TPROXY docs
-- **Last updated:** 2026-06-26
+- `images/proxy/squid.conf` + `images/proxy/allowlist.txt` — live proxy policy (TCP_RESET denial signature)
+- **Last updated:** 2026-08-28
 
 ## Quick reference: three proxy approaches
 
@@ -178,6 +179,18 @@ namespace. To set iptables NAT rules:
 
 - **Proxy env vars in the proxy container itself**: The Squid container should
   NOT have `HTTP_PROXY` set — it is the proxy, not a client.
+
+- **`Connection reset by peer` from `proxy:3128` is the allowlist denial, not
+  a network fault**: the strict runtime port answers denied traffic with a TCP
+  reset instead of an HTTP 403 (`acl strict_deny_acl localport 3128` +
+  `deny_info TCP_RESET strict_deny_acl`, `images/proxy/squid.conf:92-109`),
+  deliberately, so denied connections cannot be tunneled over. A CONNECT to a
+  domain missing from `images/proxy/allowlist.txt` therefore dies as a reset
+  that looks exactly like infrastructure failure. Observed live 2026-08-28:
+  `curl -x http://proxy:3128 https://example.com` → `Connection reset by peer`
+  with every enclave-internal service healthy (SiblingContainerDiagnosis.md,
+  sibling lane `forge-tillandsias-org`). Check the allowlist before suspecting
+  the network.
 
 ## See also
 

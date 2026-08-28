@@ -26,7 +26,8 @@ committed_for_project: false
 - https://github.com/8007342/tillandsias/blob/main/openspec/specs/enclave-network/spec.md — Enclave isolation design
 - https://github.com/8007342/tillandsias/blob/main/openspec/specs/proxy-container/spec.md — Proxy container allowlist
 - https://squid-cache.org/Doc/config/ — Squid proxy configuration
-- **Last updated:** 2026-04-27
+- `images/proxy/squid.conf` + `images/proxy/allowlist.txt` — live proxy policy (TCP_RESET denial signature)
+- **Last updated:** 2026-08-28
 
 ## Quick reference
 
@@ -110,6 +111,8 @@ curl https://example.com  # Depends on allowlist
 ## Common pitfalls
 
 ❌ **Trying to access external services without proxy**: Forge has no external network. `curl https://api.example.com` fails. → Use the proxy via `curl -x http://proxy:3128 https://api.example.com`, or rely on pre-configured env vars (which apply to curl, wget, pip, npm, etc.).
+
+❌ **Reading `Connection reset by peer` from `proxy:3128` as a network fault**: On the strict runtime port, squid answers denied traffic with a TCP reset instead of an HTTP 403 (`acl strict_deny_acl localport 3128` + `deny_info TCP_RESET strict_deny_acl`, `images/proxy/squid.conf:92-109`) — deliberately, to prevent tunneling/exfiltration over denied connections. So a reset on CONNECT from `proxy:3128` is the squid allowlist **denial signature**, not a flaky network: the destination domain is simply not in `images/proxy/allowlist.txt`. Observed live: `curl -x http://proxy:3128 https://example.com` → `Connection reset by peer` while every enclave-internal service (git mirror, inference, CA) stayed healthy (SiblingContainerDiagnosis.md 2026-08-28, sibling lane `forge-tillandsias-org`). → Check the allowlist before filing a network defect; to get a domain added, write a RUNTIME_LIMITATIONS report as above. **Last updated: 2026-08-28.**
 
 ❌ **Assuming `localhost` reaches the host**: The forge cannot reach host services on `127.0.0.1`. → Use the enclave-internal service names: `proxy`, `git`, `inference`.
 
