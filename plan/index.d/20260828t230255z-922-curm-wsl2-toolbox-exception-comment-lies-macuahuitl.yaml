@@ -1,0 +1,75 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-windows-toolbox-exception-evaporates-inside-the-wsl2-distro
+    order: 922-curm
+    status: ready
+    title: |
+      with-tillandsias-builder.sh claims Windows is "handled ABOVE by the
+      /etc/os-release guard" — but inside the WSL2 distro that file EXISTS,
+      the exception evaporates, and every Windows gate died at FATAL:
+      'toolbox' is not installed until a boundary-side escape hatch was set
+    kind: bug
+    pickup_role: any
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags:
+      - windows
+      - wsl
+      - toolbox
+      - build
+    estimated_hours: 2
+    deliverable: |
+      with-tillandsias-builder.sh expresses the Windows exception truthfully:
+      either it detects the WSL2 regime natively (e.g. microsoft in
+      /proc/version) as a sanctioned in-container substrate, or its comment
+      and refusal text stop claiming the /etc/os-release guard covers
+      Windows and name the boundary-export contract instead. The 2026-08-26
+      no-host-native-fallback ruling's intent (no silent bare-host builds on
+      Linux) must be preserved byte-identically for every Linux host.
+    context: |
+      OBSERVED on yolanda (Windows, 2026-08-28, during 889-8tcb): after the
+      linux-next merge brought the 2026-08-26 "no host-native fallback"
+      ruling, every Windows gate died inside the tillandsias-build WSL2
+      distro at "FATAL: 'toolbox' is not installed" BEFORE any check ran.
+      The comment (scripts/with-tillandsias-builder.sh:159-160) says Windows
+      is handled ABOVE by the /etc/os-release guard (:95), but that guard
+      fires only where the file is ABSENT — i.e. Git Bash. Inside the WSL2
+      distro: /etc/os-release present, `container` unset, /run/.containerenv
+      absent, toolbox absent — indistinguishable from a bare Fedora builder
+      to every guard in the script.
+      MITIGATED at the WSL boundary by 12f6e9178 (with-wsl2-builder.sh
+      exports TILLANDSIAS_SKIP_TOOLBOX=1 with the forwarded namespace — the
+      escape hatch the ruling itself names, set boundary-side so no Linux
+      host inherits it). The lane WORKS; what remains wrong is the source's
+      claim about WHY, which will mislead the next reader exactly as the
+      2026-08-01 host-browser misdiagnosis did.
+      INFERRED: native WSL detection in with-tillandsias-builder.sh would
+      remove the boundary flag dependency; a comment-only fix is the
+      smallest truthful change. Owner of the 2026-08-26 ruling should pick.
+    exit_criteria:
+      - |
+        Inside the tillandsias-build WSL2 distro, the dispatcher's Windows
+        disposition is reached by an explicit, commented mechanism — not by
+        an env flag whose necessity the source denies
+      - |
+        NEGATIVE CONTROL: on a Linux host with toolbox absent and
+        TILLANDSIAS_SKIP_TOOLBOX unset, the FATAL refusal still fires
+    verifiable_closure: |
+      On Windows: gates run inside the distro with the chosen mechanism and
+      TILLANDSIAS_SKIP_TOOLBOX removed from the boundary export (or retained
+      with a truthful comment). On Linux: scripts/test-* toolbox guards stay
+      green; no behavior change with the lane env unset.
+events:
+  - packet_id: the-windows-toolbox-exception-evaporates-inside-the-wsl2-distro
+    event:
+      type: filed
+      ts: "2026-08-28T23:02:55Z"
+      agent_id: linux-macuahuitl-claude-20260828t230255z
+      host: linux
+      summary: |
+        Filed by the coordinator from yolanda's 889-8tcb handoff (evidence:
+        12f6e9178, 4c22d6ca2 on windows-next; digest parity and 887-bz88
+        fixture 10/10 verified there). The behavioral blocker is mitigated;
+        this packet is the truthfulness/robustness residue for whoever owns
+        the 2026-08-26 no-host-native-fallback ruling.

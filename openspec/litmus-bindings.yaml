@@ -254,6 +254,7 @@ specs:
   - litmus:build-ci-dispatch-shape
   - litmus:wsl2-builder-wrapper-shape
   - litmus:wsl2-builder-shell-options-shape
+  - litmus:nix-container-lane-shape
   - litmus:cross-target-cfg-gate-check
   - litmus:no-tracked-binaries-shape
   - litmus:ensure-toolbox-include-shape
@@ -1192,3 +1193,11 @@ specs:
   - litmus:one-length-delimited-framing-impl
   coverage_ratio: 100
   last_verified: '2026-07-14'
+- spec_id: expert-serve-grounded-pipeline
+  status: active
+  litmus_tests:
+  - litmus:expert-serve-refusal-not-fallback
+  - litmus:expert-serve-citations-only-if-used
+  - litmus:expert-serve-endpoint-shape
+  coverage_ratio: 100
+  last_verified: '2026-08-28'
