@@ -45,6 +45,13 @@
 ///   * socat ships in the Fedora guest image built WITH_VSOCK — no new
 ///     dependency.
 ///
+/// FOUR VERDICTS, NOT TWO. `bound` (0), `NOT-BOUND` (1), `INDETERMINATE` (2,
+/// no loopback transport), and `UNVERIFIABLE` (3, the probe tool is missing so
+/// nothing was observed). Every one of these is a different fact and folding
+/// any of them together produces a lie: the macOS guest's first loaded run
+/// reported NOT-BOUND on a port the host was actively exec'ing over, purely
+/// because socat was absent.
+///
 /// THE THIRD STATE IS NOT AN ERROR. Reaching CID 1 requires `vsock_loopback`.
 /// Without it the connect fails ENETUNREACH, and reporting that as NOT-BOUND is
 /// a false alarm about a working system — 757-4hdt shipped exactly that alarm
@@ -77,6 +84,24 @@ fi
 after="$(vsock_loopback_state)"
 echo "[tillandsias-ready] vsock_loopback before=${before} after=${after}"
 
+# socat is this probe's ONLY external dependency, and a missing one is NOT a
+# missing listener. MEASURED on the macOS VZ guest, 2026-08-28: socat was
+# absent, every connect failed with "No such file or directory", and the probe
+# reported NOT-BOUND against port 42420 WHILE THE HOST WAS EXEC'ING OVER IT.
+# That is a false alarm about a working system -- the same shape as 757-4hdt,
+# reached by a different route -- and it also burned the full retry window
+# looping on a condition that can never change.
+#
+# The inherited claim was "socat ships in the guest image built WITH_VSOCK, so
+# no new dependency is needed". True of the Windows image; not of this one. A
+# prerequisite that is asserted rather than checked is exactly the kind of
+# unverified readiness signal this packet family exists to remove, so it is now
+# checked, once, up front, with its own verdict and its own exit code.
+if ! command -v socat >/dev/null 2>&1; then
+  echo "[tillandsias-ready] vsock_listener=UNVERIFIABLE port=${PORT} -- socat is not installed in this guest, so this probe cannot observe the listener at all. This says NOTHING about whether the control wire works; it says the CHECK is broken. Install socat in the guest image." >&2
+  exit 3
+fi
+
 # The 900s is NOT a bind-latency budget: the listener is the first await in the
 # vsock task and answers in 61-255 ms (measured over four cold boots, 795-jeym).
 # What this window covers is the module load racing the probe. Shorten it only
@@ -96,6 +121,13 @@ while :; do
       *"Network is unreachable"*)
         echo "[tillandsias-ready] vsock_listener=INDETERMINATE port=${PORT} -- no vsock loopback transport in this guest (vsock_loopback absent), so a guest-local probe cannot observe the listener; this says NOTHING about host reachability, which does not use loopback." >&2
         exit 2
+        ;;
+      *"No such file or directory"*|*"command not found"*)
+        # Belt and braces for the up-front check: if socat vanishes mid-window
+        # (a dnf transaction, a read-only remount) the verdict must still not
+        # be NOT-BOUND. A broken check and an unbound port are different facts.
+        echo "[tillandsias-ready] vsock_listener=UNVERIFIABLE port=${PORT} -- the probe tool could not be run, so nothing was observed. Last error: ${last}" >&2
+        exit 3
         ;;
       *)
         echo "[tillandsias-ready] vsock_listener=NOT-BOUND port=${PORT} -- the transport works but nothing accepts on the control-wire port; the host cannot reach this guest. Last error: ${last}" >&2
@@ -216,6 +248,27 @@ mod tests {
             "INDETERMINATE needs its own exit code — folding it into 0 or 1 \
              loses a true and distinct verdict"
         );
+    }
+
+    /// A missing probe tool is not a missing listener. Measured the hard way:
+    /// the macOS guest reported NOT-BOUND on port 42420 while the host was
+    /// exec'ing over that very port, because socat was not installed.
+    #[test]
+    fn a_missing_probe_tool_is_not_reported_as_an_unbound_listener() {
+        assert!(
+            READY_SCRIPT.contains("command -v socat"),
+            "the probe must check its own dependency before drawing conclusions \
+             from that dependency failing"
+        );
+        assert!(
+            READY_SCRIPT.contains("vsock_listener=UNVERIFIABLE"),
+            "a broken check needs its own verdict, distinct from NOT-BOUND"
+        );
+        let preflight = READY_SCRIPT.split("while :; do").next().expect(
+            "the dependency check must run BEFORE the retry loop — \
+                     otherwise a missing tool burns the whole window",
+        );
+        assert!(preflight.contains("command -v socat"));
     }
 
     /// The negative control the packet demands: a port with no listener must

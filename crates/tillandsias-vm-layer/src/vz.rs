@@ -625,7 +625,15 @@ until curl -sI https://mirrors.fedoraproject.org >/dev/null 2>&1; do
   sleep 1
 done
 
-dnf install -y podman
+# socat is the readiness probe's only external dependency (order 740-3k4s).
+#
+# MEASURED, and the reason this line exists: the packet recorded "socat ships
+# in the Fedora guest image built WITH_VSOCK; no new dependency is needed".
+# That is true of the WINDOWS image and NOT of this one -- the VZ guest is
+# plain Fedora Cloud, and the first loaded run of the probe here reported
+# `socat: No such file or directory`. Inherited claims about a sibling
+# platform's image are not evidence about this one.
+dnf install -y podman socat
 systemctl enable podman.socket
 systemctl start podman.socket
 
