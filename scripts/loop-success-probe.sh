@@ -35,6 +35,39 @@ if [[ -z "$PROJECT" ]]; then
     exit 2
 fi
 
+# TOOL RESOLUTION, ONCE, OUTSIDE EVERY LOOP (order 914-ahsy).
+#
+# This probe is the archetype the packet was filed about, and it is worse than
+# a plain loop: an OUTER poll loop re-scans the whole event log until the
+# deadline, and the inner loop ran THREE jq invocations per line. Under the
+# 799-tb7q per-call toolbox dispatch that is 3 x 265 ms = 795 ms PER LINE PER
+# PASS on a jq-less host — a probe with a 90 s timeout would spend its entire
+# budget in container round trips and report `timeout` for a stack that came up
+# fine. A false failure verdict, from the tool meant to detect failure.
+#
+# fast_tool resolves ONCE here: host jq if present; else the toolbox's jq
+# materialized onto the host (~1.0 s once, then 2 ms/call — identical to host
+# jq, because it is the same binary); else the per-call toolbox prefix; else
+# empty. Resolving inside the loop would defeat the entire point.
+#
+# The libs are sourced by WALKING UP (order 914-ahsy hazard 4): a fixed-depth
+# `dirname "${BASH_SOURCE[0]}"/lib/...` silently resolves to nothing from a
+# caller one directory down, the `|| true` swallows it, and JQ falls back to
+# the bare name — a conversion that passes review and changes nothing.
+_lsp_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_lsp_dir" ] && [ "$_lsp_dir" != "/" ] && [ ! -f "$_lsp_dir/lib/tool-dispatch.sh" ]; do
+    _lsp_dir="$(dirname "$_lsp_dir")"
+done
+if [ -f "$_lsp_dir/lib/tool-dispatch.sh" ]; then
+    . "$_lsp_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+    . "$_lsp_dir/lib/tool-materialize.sh" 2>/dev/null || true
+fi
+if command -v fast_tool >/dev/null 2>&1; then
+    JQ="$(fast_tool jq || printf 'jq')"
+else
+    JQ="jq"   # libs unavailable: preserve the previous behaviour exactly
+fi
+
 if [[ -n "${XDG_RUNTIME_DIR:-}" ]]; then
     EVENT_LOG="$XDG_RUNTIME_DIR/tillandsias/logs/opencode-web/$PROJECT.jsonl"
 else
@@ -87,9 +120,16 @@ while (( $(date +%s) < deadline )); do
     # Read every line currently in the file (idempotent re-scan).
     while IFS= read -r line; do
         [[ -z "$line" ]] && continue
-        stage=$(printf '%s' "$line" | jq -r '.stage // empty' 2>/dev/null || true)
-        state=$(printf '%s' "$line" | jq -r '.state // empty' 2>/dev/null || true)
-        detail=$(printf '%s' "$line" | jq -r '.detail // empty' 2>/dev/null || true)
+        # ONE invocation per line, not three (order 914-ahsy). The three
+        # fields come from the SAME object, so three parses of one line was
+        # pure waste even with host jq — and under any toolbox dispatch it is
+        # three container round trips where one would do. Tab-separated
+        # because `detail` is free text that may contain spaces; @tsv would
+        # also escape it, but these are single-line values and read -r with
+        # IFS=$'\t' is the bash-3.2-clean reader (761-g36m).
+        IFS="$(printf '\t')" read -r stage state detail < <(
+            printf '%s' "$line" | $JQ -r '[.stage // "", .state // "", .detail // ""] | @tsv' 2>/dev/null || true
+        )
         [[ -z "$stage" || -z "$state" ]] && continue
         LAST_STAGE="$stage"
         LAST_DETAIL="$detail"

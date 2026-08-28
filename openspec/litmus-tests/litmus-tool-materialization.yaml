@@ -1,0 +1,90 @@
+# @trace spec:ci-release
+# @trace order:914-ahsy
+#
+# Pins the DESIGN SLICE of 914-ahsy: materialize a toolbox tool once instead of
+# paying a container round trip per call, and the pilot caller that proves it.
+#
+# THE PACKET'S PREMISE WAS WRONG, AND THIS IS THE GATE THAT KEEPS THE CORRECTION
+# HONEST. 914-ahsy was filed saying the 17 remaining jq callers need
+# RESTRUCTURING to a single jq pass, because per-call toolbox dispatch costs
+# ~265 ms and each invokes jq inside a loop. Measured on lenovinha 2026-08-28:
+# materializing the toolbox's jq costs ~1.0 s once and then runs at 2 ms/call —
+# identical to host jq, because it is the same binary. 102 call sites across 17
+# scripts do not need rewriting; they need one resolution line each.
+#
+# The gate exists because that claim is a MEASUREMENT, and a measurement that
+# nothing re-runs decays into a comment.
+name: litmus:tool-materialization
+spec: ci-release
+phase: pre-build
+description: >
+  Pin scripts/lib/tool-materialize.sh and scripts/lib/no-tool-path.sh: a curated
+  PATH genuinely lacks the tool and every entry in it resolves; materialize_tool
+  declines when the host has the tool; on a tool-less host it produces a native
+  binary that loads its PRIVATE library closure rather than the host's; a
+  corrupt cache entry is re-extracted rather than trusted; and the pilot caller
+  loop-success-probe.sh returns an IDENTICAL verdict on all three tool paths
+  while the materialized path beats per-call dispatch by a measured margin.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/lib/tool-materialize.sh
+  - workspace contains scripts/lib/no-tool-path.sh
+  - workspace contains scripts/test-tool-materialize.sh
+  - bash and coreutils are available in PATH
+
+critical_path:
+  - step: "libs and fixture parse, and the fixture is executable"
+    command: "bash -n scripts/lib/tool-materialize.sh && bash -n scripts/lib/no-tool-path.sh && bash -n scripts/test-tool-materialize.sh && test -x scripts/test-tool-materialize.sh && echo 'ok: parses'"
+    timeout_ms: 5000
+    expected_behavior: "ok: parses"
+
+  - step: "the pilot resolves its tool ONCE outside every loop — resolving inside a loop is the mistake the whole packet is about"
+    command: "awk '/^[[:space:]]*(for|while|until)[[:space:]]/{d++} /^[[:space:]]*done([[:space:]]|;|$)/{if(d>0)d--} /fast_tool[[:space:]]+jq/{if(d>0){print \"FAIL: fast_tool called at loop depth \" d; found=1}} END{if(!found) print \"ok: resolved once, outside the loops\"}' scripts/loop-success-probe.sh"
+    timeout_ms: 5000
+    expected_behavior: "ok: resolved once, outside the loops"
+
+  - step: "the pilot walks UP to find the lib rather than resolving it at a fixed depth (hazard 4)"
+    command: "if grep -q 'while \\[ -n \"$_lsp_dir\" \\]' scripts/loop-success-probe.sh; then echo 'ok: walk-up resolver'; else echo 'FAIL: fixed-depth lib resolution reintroduced'; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok: walk-up resolver"
+
+  - step: "all materialization arms pass (curated PATH, no self-symlinks, decline-when-host-has-it, private library closure, corrupt-cache re-extraction, identical pilot verdict on three tool paths, measured margin)"
+    command: "bash scripts/test-tool-materialize.sh 2>&1 | tail -1"
+    timeout_ms: 900000
+    expected_behavior: "ok:tool-materialize:all"
+
+evidence:
+  artifact: "scripts/lib/tool-materialize.sh + scripts/lib/no-tool-path.sh + scripts/test-tool-materialize.sh + the pilot scripts/loop-success-probe.sh"
+  measured_on: >
+    lenovinha (Fedora Silverblue) 2026-08-28 — 8/8 arms green.
+
+    THE NUMBERS, measured rather than recalled, warm container, 20 calls each:
+    host jq 2 ms/call; `toolbox run … jq` 265 ms/call (cold first call 460 ms);
+    materialized jq 2 ms/call after a ~1.0 s one-off extraction. The packet's
+    filed figure of ~264 ms is independently confirmed.
+
+    END TO END on the pilot over a 200-line event log: host jq 595 ms,
+    materialized 2306 ms (cold, extraction included), per-call dispatch
+    51520 ms. 22x. Over the fixture's 66-line log the same three arms measure
+    202 / 1838 / 17467 ms.
+
+    AND THE STRONGER FINDING, which is not about speed: the UNCONVERTED pilot on
+    a jq-less host does not merely run slowly, it reports `{"status":"timeout"}`
+    for a stack that came up fine — a false failure verdict from the tool whose
+    job is detecting failure. Measured at 80 s against a 30 s timeout budget.
+
+    FOUR ARMS MUTATION-TESTED, each verified to FIRE against a deliberately
+    broken tree and to be silent on a clean one: deleting the library-closure
+    extraction makes arm 4 report the HOST's libjq is loaded; reverting
+    _ntp_binpath to `command -v` fires arm 2b with the self-symlink it caused;
+    removing the cache-hit re-verification fires arm 5.
+
+    THREE MEASUREMENT TRAPS PAID FOR IN THE BUILDING, all recorded at the call
+    site: `command -v` answers for shell FUNCTIONS and produced a dangling
+    self-symlink in the curated bin; a copy tested on a host that HAS the tool
+    proves nothing about a host that does not, because PATH does not govern
+    shared-library resolution; and overriding XDG_RUNTIME_DIR to relocate a
+    fixture log breaks podman's session socket, so toolbox fails and the
+    measurement silently becomes the thing it was controlling for.

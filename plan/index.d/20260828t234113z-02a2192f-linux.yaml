@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: jq-loop-callers-need-restructuring-not-dispatch-conversion
+    field: next_action
+    value: |-
+      STATE 2026-08-28 (lenovinha). DESIGN SLICE LANDED; 19 of 20 callers remain and the work is now MECHANICAL. Status returned to ready deliberately — any host can pick this up.
+
+      THE PREMISE IN THIS PACKET'S TITLE AND problem: FIELD IS WRONG AND IS SUPERSEDED. These callers do NOT need restructuring to a single jq pass. Measured 2026-08-28: host jq 2 ms/call, per-call toolbox dispatch 265 ms/call (cold 460 ms), materialized 2 ms/call after a one-off ~1.0 s extraction. Materializing the binary once beats per-call dispatch 22x end-to-end on the pilot (200-line log: 2306 ms vs 51520 ms) and needs ONE line per script instead of rewriting 102 call sites.
+
+      DO THIS, per caller (inventory and per-caller shapes are in the 2026-08-28 note event): add the walk-up lib source header, then resolve ONCE outside every loop with JQ="$(fast_tool jq || printf 'jq')" and substitute the bare jq call sites. scripts/loop-success-probe.sh is the worked example. Optionally fold consecutive jq calls that parse the same input into one @tsv invocation — a further 3x, worth taking only where the fold is obvious, never as a precondition for converting.
+
+      REMAINING (19): bench-accel-lane.sh, refusal-calibration/measure-recall-at-k.sh, update-convergence-dashboard.sh, refusal-calibration/inject-negatives.sh, refusal-calibration/measure-bands.sh, bench-inference-floor.sh, claude-mcp.sh, test-convergence-dashboard.sh, spec-index-ensure.sh, query-traces.sh, bench-semantic-budget.sh, refusal-calibration/judge-support.sh, generate-evidence-bundle.sh, test-ssh-lane-sidecar.sh, nix-deps-drv-paths.sh, nix-push-cache.sh, nix-build-container.sh, check-local-expert-health.sh, hooks/post-commit-expert-refresh.sh.
+
+      TOOLS YOU ALREADY HAVE: scripts/lib/tool-materialize.sh (materialize_tool, fast_tool), scripts/lib/no-tool-path.sh (build a PATH that genuinely lacks a tool, precondition asserted), scripts/test-tool-materialize.sh (8 arms, 4 mutation-verified), litmus:tool-materialization under ci-release. Extend the fixture's pilot arms to each caller you convert rather than writing a new harness.
+
+      RE-PRIORITIZE WHEN YOU PICK THIS UP: this is filed p2 as a performance packet and it is really a CORRECTNESS one. The unconverted pilot on a jq-less host does not run slowly, it returns {"status":"timeout"} for a stack that came up fine — measured at 80 s against a 30 s budget. Several of the 19 are benchmark and calibration lanes whose wrong answers would be read as data.
+
+      FIVE OF THE 19 HAVE NO LOOP AT ALL (test-convergence-dashboard.sh, nix-push-cache.sh, nix-build-container.sh, check-local-expert-health.sh, hooks/post-commit-expert-refresh.sh) and could equally have gone through the ordinary 799-tb7q sweep. Nothing is lost by converting them the same way here.
+    ts: "2026-08-28T23:41:13Z"
+    host: linux
+
+events:
+  - packet_id: jq-loop-callers-need-restructuring-not-dispatch-conversion
+    event:
+      type: note
+      ts: "2026-08-28T23:41:13Z"
+      host: linux
+      summary: >
+        design slice landed; premise superseded and the remainder is mechanical
