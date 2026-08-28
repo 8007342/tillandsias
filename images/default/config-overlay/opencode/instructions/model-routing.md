@@ -34,22 +34,20 @@ Do **not** rely on local ollama models to follow tool-call protocols
 yet — that pathway is being prepared but is not in scope for the
 current setup. Tool calling stays with the Zen models.
 
-## Local Experts mode: domain-separated RAG with de-hallucination
+## Local Experts mode: EXPERIMENTAL, not yet grounded
 
-The `local-experts` agent routes ALL queries through the local Ollama
-expert system with domain-separated RAG and adversarial decomposition.
+The `local-experts` agent talks to a local Ollama model directly. It is
+NOT yet wired through the grounded pipeline — no retrieval, no
+domain-separated RAG, no validation (that wiring is packet
+wire-local-experts-mode-through-grounded-pipeline). Treat its answers as
+raw-model output: ungrounded and uncited. For grounded project questions
+use the forge-plan MCP tools (`spec_answer`, `plan_answer`,
+`methodology_ask`) instead.
 
-Switch to this mode when you need:
-- Domain-isolated answers (cheatsheets, methodology, code, specs)
-- Adversarial stress-testing of retrieval quality
-- Offline expert analysis without Zen dependency
-
-The pipeline output includes:
-- `rag_freshness`: `"RAG(hh:mm:ss)"` or `"RAG(hh:mm:ss stale)"` — local-time
-  freshness of the RAG corpus. Stale means older than 1 hour.
-- `rag_source_commit`: the git SHA the RAG index was built from.
-
-Cross-check stale RAG responses against MCP experts or the plan ledger.
+The `tillandsias-plan pipeline` CLI arm emits `{tier, domain,
+rag_freshness, rag_source_commit, responses}`; the freshness fields are
+index metadata the pipeline does not yet retrieve from, and each
+`responses[].answer` is unvalidated local-model text.
 
 ## Fleet naming (Zen siblings)
 

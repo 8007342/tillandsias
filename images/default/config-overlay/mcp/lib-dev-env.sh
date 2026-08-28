@@ -91,8 +91,8 @@ tillandsias_dev_env_hook() {
     # ── PER-HOST MODEL TIER TABLE (order 902-5bf9) ──────────────────────────
     #
     # Selects the inference model based on available hardware:
-    #   GPU (CUDA/ROCm)  → 12-15B model (best quality, needs VRAM)
-    #   NPU              → 0.6b model (fast, low quality)
+    #   GPU (CUDA/ROCm)  → 14b with ≥16GB VRAM, else 7b (measured, not assumed)
+    #   NPU              → 0.5b model (fast, low quality)
     #   CPU only         → 0.5b model (fallback, minimal quality)
     #
     # TILLANDSIAS_INFERENCE_MODEL always wins (CLI override).
@@ -111,12 +111,23 @@ tillandsias_dev_env_hook() {
         fi
         case "$_deh_tier" in
             gpu)
-                # 12-15B on GPU — needs ≥16GB VRAM for quantized models
-                export TILLANDSIAS_INFERENCE_MODEL="qwen2.5:14b"
+                # 14b needs ≥16GB VRAM for quantized models, and low-end GPU
+                # hosts are fleet targets — measure before selecting, and fall
+                # back to 7b when the card (or the measurement) comes up short.
+                _deh_vram="$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -d '[:space:]')"
+                case "$_deh_vram" in
+                    '' | *[!0-9]*) _deh_vram=0 ;;
+                esac
+                if [ "$_deh_vram" -ge 16000 ]; then
+                    export TILLANDSIAS_INFERENCE_MODEL="qwen2.5:14b"
+                else
+                    export TILLANDSIAS_INFERENCE_MODEL="qwen2.5:7b"
+                fi
                 ;;
             npu)
-                # 0.6b on NPU — fast, fits in NPU memory
-                export TILLANDSIAS_INFERENCE_MODEL="qwen2.5:0.6b"
+                # 0.5b on NPU — fast, fits in NPU memory (the qwen2.5 family
+                # has no 0.6b tag; the earlier 0.6b pin could never pull)
+                export TILLANDSIAS_INFERENCE_MODEL="qwen2.5:0.5b"
                 ;;
             cpu|*)
                 # 0.5b CPU fallback — always available

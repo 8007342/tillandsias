@@ -2,7 +2,7 @@
   "$schema": "https://opencode.ai/config.json",
   "autoupdate": false,
   "default_agent": "build",
-  "permission": "allow",
+  "permission": "ask",
   "model": "opencode/big-pickle",
   "small_model": "opencode/gpt-5-nano",
   "instructions": [
@@ -11,30 +11,9 @@
   "agent": {
     "local-experts": {
       "model": "ollama/qwen2.5:14b",
-      "description": "Route all queries through the local expert system with domain-separated RAG and adversarial decomposition for de-hallucination.",
+      "description": "EXPERIMENTAL: raw local-model answers with no retrieval or validation — not yet wired through the grounded pipeline (packet wire-local-experts-mode-through-grounded-pipeline).",
       "mode": "primary",
-      "prompt": "You are running in Local Experts mode. ALL queries are routed through the local expert system with domain-separated RAG and adversarial decomposition.\n\nHow it works:\n1. Your query is decomposed into adversarial variants by the local LLM.\n2. Each variant is dispatched concurrently to the local inference endpoint.\n3. Domain-specific RAG retrieves relevant context from cheatsheets, methodology, code, or specs.\n4. Responses are collected via CRDT deduplication.\n5. The final answer is a cited envelope with domain-specific provenance.\n\nAvailable expert domains:\n- Cheatsheet Expert: Reference documentation, tool usage, syntax\n- Methodology Expert: Project discipline, rules, workflow\n- Code Expert: Source code, implementation details\n- Spec Expert: OpenSpec specifications, design decisions\n\nQuery routing:\n- Use spec_answer for cross-domain queries\n- Use plan_answer for plan/status queries\n- Use methodology_ask for methodology questions\n- Use plan_decompose + plan_collect for adversarial decomposition\n\nRules:\n- Always cite your sources with file paths and section names.\n- If the local model cannot answer confidently, say so — never hallucinate.\n- Domain separation is enforced: cheatsheet answers never cite code, and vice versa.\n- RAG freshness is shown as RAG(hh:mm:ss) where the timestamp is the last re-embedding commit time."
-    }
-  },
-  "provider": {
-    "ollama": {
-      "npm": "@ai-sdk/openai-compatible",
-      "name": "Ollama (local)",
-      "options": {
-        "baseURL": "http://127.0.0.1:11434/v1"
-      },
-      "models": {
-        "qwen2.5:0.5b": { "name": "Qwen 2.5 0.5B (local)" },
-        "qwen2.5:7b": { "name": "Qwen 2.5 7B (local)" },
-        "qwen2.5:14b": { "name": "Qwen 2.5 14B (local)" },
-        "qwen2.5-coder:7b": { "name": "Qwen 2.5 Coder 7B (local)" },
-        "qwen2.5-coder:14b": { "name": "Qwen 2.5 Coder 14B (local)" },
-        "qwen2.5-coder:32b": { "name": "Qwen 2.5 Coder 32B (local)" },
-        "llama3.2:1b": { "name": "LLaMA 3.2 1B (local)" },
-        "llama3.2:3b": { "name": "LLaMA 3.2 3B (local)" },
-        "llama3.1:8b": { "name": "LLaMA 3.1 8B (local)" },
-        "gpt-oss:20b": { "name": "GPT-OSS 20B (local)" }
-      }
+      "prompt": "You are running in Local Experts mode. This mode is EXPERIMENTAL and NOT yet wired through the grounded pipeline (packet wire-local-experts-mode-through-grounded-pipeline): your answers are raw local-model output with NO retrieval, NO domain-separated RAG, and NO validation.\n\nRules:\n- When asked about project specifics, say plainly that this mode is ungrounded and your answer may be wrong.\n- Direct grounded questions to the forge-plan MCP tools (spec_answer, plan_answer, methodology_ask) where available.\n- NEVER fabricate file paths, section names, or citations. Do not cite sources you did not read.\n- If you cannot answer confidently, say so."
     }
   },
   "lsp": true

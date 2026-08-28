@@ -1021,37 +1021,37 @@ healthy experts as `down` — a false outage is as bad as a missed one.)
 ## Local Expert System Probe (advisory — at cycle start, before work drain)
 
 Run at Start-Of-Cycle, AFTER the MCP Expert Health Probe and BEFORE worker
-drain. The local expert system provides domain-separated RAG with adversarial
-decomposition for de-hallucination. Probing it at cycle start surfaces
-infrastructure issues before they affect work quality.
+drain — and ONLY on hosts with `TILLANDSIAS_HOST_EXPERTS` set, the same gate
+the commit hooks use for host-expert work. On every other host skip this
+section entirely rather than paying a connection timeout probing an ollama
+that was never provisioned:
 
 ```bash
-scripts/check-local-expert-health.sh
+[ -n "${TILLANDSIAS_HOST_EXPERTS:-}" ] && scripts/check-local-expert-health.sh
 ```
 
 It pings the local Ollama inference endpoint and prints exactly one line matching
 `^(ok:local-experts-healthy|degraded:local-experts[^;]*|down:local-experts[^;]*|skip:not-applicable)$`.
 
-On `ok:local-experts-healthy`, query the local experts for a proactive "what is
-pending and neglected?" assessment before claiming work:
+On `ok:local-experts-healthy` you MAY ask the local pipeline for a triage hint:
 
 ```bash
 TILLANDSIAS_EXPERT_DOMAIN=methodology \
   ./target/release/tillandsias-plan pipeline "what is pending and neglected in the plan?" \
-    --domain methodology 2>/dev/null | jq -r '.output.text // empty'
+    --domain methodology 2>/dev/null | jq -r '.responses[0].answer // empty'
 ```
 
-This surfaces:
-- Neglected work items that no host has claimed
-- Stale work that may need re-evaluation
-- Blocked items waiting on external input
+The pipeline emits `{tier, domain, rag_freshness, rag_source_commit,
+responses}`, and each `responses[].answer` is RAW local-model text: no
+retrieval, no validation, no grounding (that wiring is packet
+wire-local-experts-mode-through-grounded-pipeline). Treat the output as an
+ungrounded hunch, never a directive — anything it claims about specific
+packets must be re-checked against `tillandsias-plan next <role>` and the
+plan ledger before acting.
 
-The response is ADVISORY — use it as a triage input, not a directive. Cross-check
-against `tillandsias-plan next <role>` and the plan ledger before claiming.
-
-On `down:*` or `degraded:*`, skip the proactive query and continue the cycle.
-The local expert system is a quality enhancement, not a gate — the deterministic
-expert tiers and MCP experts work without it.
+With the gate unset, or on `down:*` / `degraded:*`, skip the query and
+continue the cycle. The local expert system is a convenience, not a gate —
+the deterministic expert tiers and MCP experts work without it.
 
 ## Reduction Engine
 

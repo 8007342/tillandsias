@@ -1159,19 +1159,19 @@ TOOLS_JSON
                     state="$(experts_state_line)"
                     query=$(echo "$args" | jq -r '.query // ""')
                     if [ -z "$query" ]; then
-                        unsupported_envelope "no query was supplied to plan_decompose"
+                        result=$(unsupported_envelope "no query was supplied to plan_decompose")
                     elif [ -z "$PLAN_BIN" ]; then
-                        unsupported_envelope "the plan expert cannot decompose — experts state: ${state}"
+                        result=$(unsupported_envelope "the plan expert cannot decompose — experts state: ${state}")
                     else
                         hint="$(capability_gap "decompose")"
                         if [ -n "$hint" ]; then
-                            unsupported_envelope "the plan expert cannot decompose — ${hint}"
+                            result=$(unsupported_envelope "the plan expert cannot decompose — ${hint}")
                         else
                             out="$("$PLAN_BIN" --index "$PLAN_INDEX" decompose "$query" 2>/dev/null || true)"
                             if printf '%s' "$out" | jq -e 'type == "array"' >/dev/null 2>&1; then
                                 result="$out"
                             else
-                                unsupported_envelope "the plan expert returned no decomposition — experts state: ${state}"
+                                result=$(unsupported_envelope "the plan expert returned no decomposition — experts state: ${state}")
                             fi
                         fi
                     fi
@@ -1184,17 +1184,17 @@ TOOLS_JSON
                     state="$(experts_state_line)"
                     responses_json=$(echo "$args" | jq -c '.responses // []')
                     if [ -z "$PLAN_BIN" ]; then
-                        unsupported_envelope "the plan expert cannot collect — experts state: ${state}"
+                        result=$(unsupported_envelope "the plan expert cannot collect — experts state: ${state}")
                     else
                         hint="$(capability_gap "collect")"
                         if [ -n "$hint" ]; then
-                            unsupported_envelope "the plan expert cannot collect — ${hint}"
+                            result=$(unsupported_envelope "the plan expert cannot collect — ${hint}")
                         else
                             out="$(printf '%s' "$responses_json" | "$PLAN_BIN" --index "$PLAN_INDEX" collect 2>/dev/null || true)"
                             if printf '%s' "$out" | jq -e 'type == "array"' >/dev/null 2>&1; then
                                 result="$out"
                             else
-                                unsupported_envelope "the plan expert returned no collection — experts state: ${state}"
+                                result=$(unsupported_envelope "the plan expert returned no collection — experts state: ${state}")
                             fi
                         fi
                     fi

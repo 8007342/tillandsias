@@ -99,40 +99,7 @@ if [ -x "$REPO_ROOT/scripts/spec-index-ensure.sh" ]; then
     disown -a 2>/dev/null || true
 fi
 
-# ── L1b: Domain-specific re-indexing ────────────────────────────────
-# When files in specific domains change, re-index only those domains.
-# This is faster than re-indexing the entire corpus and keeps domain
-# separation clean (cheatsheet experts not influenced by code, etc.).
-if [ -x "$REPO_ROOT/scripts/spec-index-ensure.sh" ]; then
-    _domains_to_reindex=""
-    if echo "$CHANGED" | grep -qE '^cheatsheets/|^docs/cheatsheets/'; then
-        _domains_to_reindex="$_domains_to_reindex cheatsheet"
-    fi
-    if echo "$CHANGED" | grep -qE '^methodology/'; then
-        _domains_to_reindex="$_domains_to_reindex methodology"
-    fi
-    if echo "$CHANGED" | grep -qE '^(crates|scripts|images)/'; then
-        _domains_to_reindex="$_domains_to_reindex code"
-    fi
-    if echo "$CHANGED" | grep -qE '^openspec/'; then
-        _domains_to_reindex="$_domains_to_reindex spec"
-    fi
-    for _domain in $_domains_to_reindex; do
-        (
-            _si_err="$(mktemp "${TMPDIR:-/tmp}/spec-index-domain-${_domain}.XXXXXX")"
-            _si_out="$(bash "$REPO_ROOT/scripts/spec-index-ensure.sh" --domain "$_domain" 2>"$_si_err" | tail -1)"
-            case "$_si_out" in
-                ok:spec-index:fresh:*) : ;;
-                *)
-                    echo "[$HOOK_NAME] $(date -u +%Y-%m-%dT%H:%M:%SZ) domain-${_domain}: ${_si_out:-no-verdict}" >> "$HOOK_LOG"
-                    [ -s "$_si_err" ] && sed 's/^/    /' "$_si_err" >> "$HOOK_LOG"
-                    ;;
-            esac
-            rm -f "$_si_err"
-        ) &
-        disown -a 2>/dev/null || true
-    done
-fi
+# L1b domain fan-out removed: spec-index-ensure.sh parses no --domain flag, so each per-domain fork was a FULL-corpus ensure (12m19s CPU cold), 2-5 concurrent per commit — the single ensure above already covers everything.
 
 # ── Crate changes → async binary rebuild ────────────────────────────
 # The tillandsias-plan binary changes when its crate sources change.

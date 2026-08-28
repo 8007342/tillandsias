@@ -1,50 +1,38 @@
-# Local Experts Mode
+# Local Experts Mode (EXPERIMENTAL — not yet grounded)
 
-This instruction file is loaded when using the "Local Experts" agent. It routes
-all queries through the local Ollama expert system with domain-separated RAG and
-adversarial decomposition.
+The `local-experts` agent talks to a local Ollama model directly. It is NOT
+yet wired through the grounded pipeline — that work is the filed packet
+`wire-local-experts-mode-through-grounded-pipeline`. Until it lands, answers
+in this mode are raw-model output: no retrieval, no domain separation, no
+validation, no citations.
 
-## How It Works
+## What exists today
 
-1. **Adversarial Decomposition**: Your query is decomposed into adversarial
-   variants (negation, alternative framing) by the local LLM to stress-test
-   retrieval quality.
+- A CLI arm: `tillandsias-plan pipeline "<query>" [--domain <d>]`. It runs
+  LLM decomposition of the query, tier trimming, concurrent dispatch to the
+  local inference endpoint, and deduplication of the responses. It does NO
+  retrieval and NO validation: each `responses[].answer` is unvalidated
+  local-model text and its `citations` array is always empty.
+- MCP introspection arms on forge-plan: `plan_decompose` (adversarial
+  variants of a query) and `plan_collect` (deduplication of supplied
+  responses). These expose the pipeline's pieces; they do not ground answers.
+- The CLI arm's output shape is `{tier, domain, rag_freshness,
+  rag_source_commit, responses}`. The `rag_freshness` / `rag_source_commit`
+  fields are index-freshness metadata; the pipeline does not retrieve from
+  any index yet.
 
-2. **Domain-Separated RAG**: Each variant is dispatched to domain-specific
-   retrieval:
-   - `cheatsheet` — Reference documentation, tool usage, syntax
-   - `methodology` — Project discipline, rules, workflow
-   - `code` — Source code, implementation details
-   - `spec` — OpenSpec specifications, design decisions
+## What is planned (not built)
 
-3. **CRDT Collection**: All validated responses are kept (no merging, no
-   reduction). Confidence is advisory only.
-
-4. **Cited Envelope**: The final answer includes domain-specific provenance
-   with file paths and section names.
-
-## Query Routing
-
-- `spec_answer` — Cross-domain queries
-- `plan_answer` — Plan status queries
-- `methodology_ask` — Methodology questions
-- `plan_decompose` + `plan_collect` — Manual adversarial decomposition
-
-## RAG Freshness
-
-Responses include a freshness indicator in the `rag_freshness` field:
-- `RAG(hh:mm:ss)` — Last re-embedding commit time (local timezone)
-- `RAG(hh:mm:ss stale)` — Commit happened but RAG not yet ready (older than 1 hour)
-- `RAG(unknown)` — Cannot determine freshness
-
-The `rag_source_commit` field contains the git SHA the RAG index was built from.
-
-Staleness threshold: 1 hour (3600 seconds). When stale, the local expert system
-may be serving outdated context — cross-check with the MCP experts or plan
-ledger for critical decisions.
+Domain-separated retrieval, validation of responses against retrieved
+context, and cited answer envelopes are the scope of
+`wire-local-experts-mode-through-grounded-pipeline`. Do not present pipeline
+output as routed, validated, grounded, or cited before that packet is done.
 
 ## Rules
 
-- Always cite sources with file paths and section names
-- If the local model cannot answer confidently, say so — never hallucinate
-- Domain separation is enforced: cheatsheet answers never cite code, and vice versa
+- When asked about project specifics, say plainly that this mode is
+  experimental and ungrounded, and that the answer may be wrong.
+- Direct grounded questions to the forge-plan MCP tools (`spec_answer`,
+  `plan_answer`, `methodology_ask`) where available.
+- NEVER fabricate file paths, section names, or citations.
+- If the local model cannot answer confidently, say so.
