@@ -56,6 +56,8 @@
 # GRAMMAR (exactly one line on stdout)
 #   ok:nix-toolbox:<daemon|chroot|toolbox>
 #   blocked:nix-toolbox:<no-nix-and-no-toolbox|image-pull-failed|create-failed>
+#   ok:nix-capability:<daemon|chroot|toolbox>
+#   none:nix-capability:<no-nix-and-no-toolbox>
 #   ok:nix-store:<absent|empty|populated>:paths=<n>:size=<n>G:pinned=<n>
 #   ok:nix-store:<cold|warm>:deps=<present>/<resolved>:paths=<n>:size=<n>G:pinned=<n>
 #   ok:nix-store-pin:<pinned>/<resolved> of <total>
@@ -72,6 +74,7 @@
 #   scripts/nix-toolbox.sh ensure            # print the verdict, prepare the rung
 #   scripts/nix-toolbox.sh run -- <cmd...>   # run <cmd> with a working nix
 #   scripts/nix-toolbox.sh nix-args          # print the flags for the chosen rung
+#   scripts/nix-toolbox.sh capability        # is this host nix-capable? NEVER creates
 #   scripts/nix-toolbox.sh store-path        # print the persistent store root
 #   scripts/nix-toolbox.sh store-status      # cheap facts; --deps adds cold/warm
 #   scripts/nix-toolbox.sh pin               # root the CURRENT deps closures
@@ -190,6 +193,39 @@ resolve_rung() {
         2) printf 'blocked:image-pull-failed\n'; return 1 ;;
         *) printf 'blocked:create-failed\n'; return 1 ;;
     esac
+}
+
+# CAPABILITY, WITHOUT BUILDING THE THING THAT WOULD MAKE IT TRUE (order
+# 799-tb7q, second criterion).
+#
+# `resolve_rung` is an ENSURE: its toolbox arm may `podman pull` a 400 MiB
+# fedora-toolbox image and `toolbox create`. That is correct for `ensure` and
+# `run`, and wrong for the two callers this exists for — a pre-push gate
+# (check-nix-deps-stability.sh) and the work selector
+# (select-work-batch.sh) — which merely ASK whether nix work is runnable here.
+# A question that answers itself by provisioning infrastructure changes the
+# gate's cost, which is why 777-amku left both callers on host `command -v nix`
+# rather than routing them through this script.
+#
+# So this is a strict READ of the same preference order: daemon, chroot, then
+# an ALREADY-EXISTING nix toolbox. It never pulls and never creates. The cost
+# is bounded by two `nix store ping`s and, only on a host with no nix at all,
+# one `toolbox list` plus one `toolbox run command -v nix`.
+#
+# CONSEQUENCE, and it is the defect being fixed: a toolbox-capable host whose
+# nix lives only in the toolbox used to report "no nix" and had every
+# nix-tagged packet subtracted from its work pool. It now reports `toolbox`.
+# A host that COULD have a nix toolbox but does not yet still reports none —
+# deliberately: capability is what is true now, not what an ensure could make
+# true, and answering otherwise would hand a selector work whose first action
+# is a 400 MiB pull.
+capability_rung() {
+    if daemon_live; then printf 'daemon\n'; return 0; fi
+    if chroot_works; then printf 'chroot\n'; return 0; fi
+    if toolbox_exists && _toolbox run -c "$TOOLBOX_NAME" command -v nix >/dev/null 2>&1; then
+        printf 'toolbox\n'; return 0
+    fi
+    return 1
 }
 
 # ---------------------------------------------------------------------------
@@ -338,6 +374,14 @@ case "$cmd" in
             *) echo "ok:nix-toolbox:$rung"; exit 0 ;;
         esac
         ;;
+    capability)
+        if rung="$(capability_rung)"; then
+            echo "ok:nix-capability:$rung"
+            exit 0
+        fi
+        echo "none:nix-capability:no-nix-and-no-toolbox"
+        exit 1
+        ;;
     nix-args)
         rung="$(resolve_rung)"
         case "$rung" in
@@ -408,7 +452,7 @@ case "$cmd" in
         fi
         ;;
     *)
-        echo "usage: $0 [ensure|nix-args|run -- <command...>|store-path|store-status [--deps]|pin|gc [--dry-run]|substituter-args]" >&2
+        echo "usage: $0 [ensure|capability|nix-args|run -- <command...>|store-path|store-status [--deps]|pin|gc [--dry-run]|substituter-args]" >&2
         exit 2
         ;;
 esac

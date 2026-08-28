@@ -519,6 +519,33 @@ fi
 # Format: one tag per word, tag name == probed binary name.
 TOOL_CAP_TAGS="nix"
 
+# ASK THE TOOL'S OWN CAPABILITY ANSWER WHERE IT HAS ONE (order 799-tb7q,
+# second criterion). `command -v nix` on the HOST is not the question this
+# selector is asking. nix runs here on three rungs — host daemon, host chroot
+# store, or a containerized nix — and scripts/nix-toolbox.sh is the script that
+# knows which. Judging by the host binary alone declared a toolbox-capable host
+# nix-incapable and SUBTRACTED every nix-tagged packet from its pool, which is
+# the same defect as handing 723-sazx to a forge without nix, pointed the other
+# way: silently shrinking a capable host's work instead of overstating it.
+#
+# `capability`, NOT `ensure`: the selector must not provision. `ensure` would
+# `podman pull` a 400 MiB image and create a toolbox as a side effect of being
+# asked a question, and a host that has no nix rung today is honestly
+# nix-incapable today. Cost on a nix host is two `nix store ping`s; on a host
+# with no nix, one `toolbox list`.
+#
+# Tools with no such answer keep the plain probe. Adding a case here is a
+# deliberate act per tool, the same standard TOOL_CAP_TAGS enrollment carries.
+_host_has_tool() {
+    case "$1" in
+        nix)
+            bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/nix-toolbox.sh" \
+                capability >/dev/null 2>&1
+            ;;
+        *)  command -v "$1" >/dev/null 2>&1 ;;
+    esac
+}
+
 # TILLANDSIAS_HOST_CAPS, when SET (even empty), is the declared capability set
 # verbatim — a space-separated list of tool names — and replaces the probes.
 # That is the fixture seam and the escape hatch for a host whose probe lies.
@@ -527,7 +554,7 @@ if [ -n "${TILLANDSIAS_HOST_CAPS+x}" ]; then
 else
     HOST_CAPS=" "
     for tool in $TOOL_CAP_TAGS; do
-        command -v "$tool" >/dev/null 2>&1 && HOST_CAPS="${HOST_CAPS}${tool} "
+        if _host_has_tool "$tool"; then HOST_CAPS="${HOST_CAPS}${tool} "; fi
     done
 fi
 

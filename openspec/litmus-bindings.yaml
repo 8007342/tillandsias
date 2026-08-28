@@ -717,8 +717,9 @@ specs:
   litmus_tests:
   - litmus:nix-builder-shape
   - litmus:nix-cache-size-signal
+  - litmus:nix-capability-probe
   coverage_ratio: 100
-  last_verified: '2026-06-23'
+  last_verified: '2026-08-28'
 - spec_id: no-terminal-flicker
   status: active
   litmus_tests:
