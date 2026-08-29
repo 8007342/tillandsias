@@ -30,7 +30,41 @@ _ruby() {
     if command -v ruby >/dev/null 2>&1; then
         ruby -E UTF-8:UTF-8 "$@"
     else
-        toolbox run --container tillandsias-builder ruby -E UTF-8:UTF-8 "$@"
+        # ORDER 923-ws3r — FORWARD THE NAMESPACE ACROSS THIS BOUNDARY.
+        #
+        # `toolbox run` does NOT forward the caller's environment. This call
+        # site is a hand-rolled dispatch that never learned what
+        # scripts/with-tillandsias-builder.sh already says in as many words
+        # ("every TILLANDSIAS_* control flag silently died at this boundary"),
+        # and scripts/with-wsl2-builder.sh repeats for WSL. Same lesson, third
+        # boundary — the 704-zcgi shape.
+        #
+        # WHAT IT COST, measured on yoga 2026-08-29. The archiver's Ruby half
+        # reads `plan_bin = ENV['TILLANDSIAS_PLAN_BIN'] || 'target/release/…'`.
+        # Both this script and check-archive-answerability.sh export that var
+        # with an ABSOLUTE path, correctly — and it died here, so the .rb fell
+        # back to the RELATIVE default. Inside the answerability check's
+        # hermetic tree (which excludes ./target by design) that path does not
+        # exist, so `archive-plan-packets.sh --check` has been RED on a clean
+        # checkout, blocking nothing but reported by every host.
+        #
+        # It is worse in the ordinary case, where the relative path happens to
+        # exist: the .rb then silently runs a DIFFERENT binary than the caller
+        # resolved — the freshness probe's answer discarded, and a stale
+        # ./target artifact deciding which packets are terminal.
+        #
+        # `toolbox run` has no --env (checked), so the exports are built into
+        # the command string exactly as both precedents do it.
+        _ar_env=""
+        while IFS= read -r _ar_var; do
+            _ar_env="${_ar_env}export $(printf '%q' "$_ar_var")=$(printf '%q' "${!_ar_var}") ; "
+        done < <(compgen -v | grep '^TILLANDSIAS_' || true)
+        _ar_args=""
+        for _ar_a in "$@"; do
+            _ar_args="$_ar_args$(printf '%q ' "$_ar_a")"
+        done
+        toolbox run --container tillandsias-builder \
+            bash -lc "${_ar_env}cd $(printf '%q' "$PWD") && exec ruby -E UTF-8:UTF-8 $_ar_args"
     fi
 }
 
@@ -78,6 +112,20 @@ if [ "$1" == "--check" ]; then
     # of this block did exactly that and the build gate caught it, which is the
     # gate working as designed — three scripts had already written that same
     # wrong probe independently.
+    # ── ORDER 923-ws3r: EXIT 3 MEANS "COULD NOT RUN" ────────────────────────
+    #
+    # --check exits 1 when an INVARIANT IS VIOLATED (the ready set moved, events
+    # were orphaned, archived rows stopped answering, the sweep is not
+    # idempotent) and 3 when it COULD NOT EVALUATE one (no runnable binary, a
+    # stale one, an unreadable fragment, a harness that could not start).
+    #
+    # They were one exit code behind one caller message — "the plan archiver
+    # would change the ready set, or its check could not run" — which is a
+    # sentence nobody can act on. The two demand opposite responses: a violation
+    # means STOP, do not sweep; a could-not-run means the INSTRUMENT is broken
+    # and the sentence says nothing about the ledger. This check was red on a
+    # clean checkout for days for the second reason while its message invited
+    # every reader to assume the first.
     # 851-cduu: ensure, not resolve. On this exact call site the Windows gate
     # (executing in WSL against a CARGO_TARGET_DIR preflight never rebuilds)
     # consulted a 6-day-stale binary. Freshness is verified HERE, in the locus
@@ -88,12 +136,12 @@ if [ "$1" == "--check" ]; then
         echo "  could not be rebuilt in this locus (851-cduu). A stale instrument does"
         echo "  not fail; it answers wrong — refusing to evaluate the ready-set"
         echo "  invariant with a binary built for another checkout."
-        exit 1
+        exit 3
     elif [ "$_fresh_rc" -ne 0 ]; then
         echo "Check FAILED: no runnable tillandsias-plan, so the ready-set invariant"
         echo "  cannot be evaluated. Refusing to fall back to the idempotency-only"
         echo "  check — that is precisely the false green this assertion replaces."
-        exit 1
+        exit 3
     fi
     # The .rb resolves the same binary; hand it the probed answer rather than
     # letting it re-derive one.
@@ -125,7 +173,7 @@ if [ "$1" == "--check" ]; then
             echo "Check FAILED: cannot read fragment $_frag, so the orphan invariant"
             echo "  cannot be evaluated. Refusing."
             rm -rf plan_tmp plan_tmp_bak scripts/archive-plan-packets-check.rb plan_tmp_*.txt
-            exit 1
+            exit 3
         fi
     done
     sort -u plan_tmp_addressed_raw.txt > plan_tmp_addressed.txt
@@ -181,6 +229,16 @@ if [ "$1" == "--check" ]; then
     # cargo run — see the script's header for why it is a tree and not a plan/.
     echo "Checking the sweep does not break what the expert system can answer..."
     if ! _answerability="$("$DIR/check-archive-answerability.sh")"; then
+        # 923-ws3r. The sub-check names its own inability distinctly from a real
+        # regression, so relay the distinction instead of flattening it.
+        case "$_answerability" in
+            *:no-runnable-plan-binary*|*:cannot-create-workdir*|*:sweep-failed*|*:ready-listing-failed*|*:unknown-argument*)
+                echo "Check COULD NOT RUN: the answerability harness failed before it could"
+                echo "  judge the sweep, so this says NOTHING about the ledger — read its log."
+                echo "  $_answerability"
+                exit 3
+                ;;
+        esac
         echo "Check FAILED: the sweep leaves the plan expert unable to answer about"
         echo "  archived work. This is the 2026-08-20 regression; the ready set and"
         echo "  the orphan count above are both clean and cannot see it."
@@ -197,7 +255,7 @@ if ! PLAN_BIN="$(resolve_plan_binary)"; then
     echo "refused:no-plan-binary: the archiver decides closure from the FOLD, which"
     echo "  requires a runnable tillandsias-plan. Refusing rather than archiving from"
     echo "  the base index alone — that silently eats reopened rows."
-    exit 1
+    exit 3
 fi
 export TILLANDSIAS_PLAN_BIN="$PLAN_BIN"
 
