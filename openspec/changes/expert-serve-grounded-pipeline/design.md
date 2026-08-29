@@ -147,6 +147,23 @@ prefix }` plus `load()`. groundtruth.rs delegates to it, so grade behavior
 is byte-identical; the pipeline and the server read the SAME entry the
 grader grades against.
 
+### D8 — two retrieval floors, not one (darwin calibration, 2026-08-29)
+
+Coverage and citation-worthiness are different questions and one scalar
+cannot answer both. Measured on the darwin corpus (n=30 — calibrated for
+this corpus, not settled): covered best-scores span 0.65–0.87, real
+off-topic probes 0.48–0.60, so the original single 0.45 floor refused
+NOTHING while raising it alone to 0.62 would also drop ~8% of good
+covered citations. Decision: `TILLANDSIAS_RETRIEVE_REFUSAL_FLOOR`
+(default 0.62) gates the BEST score — below it the variant is out of
+coverage and never reaches synthesis; `TILLANDSIAS_RETRIEVE_MIN_SCORE`
+(default 0.45) remains the per-chunk inclusion floor above it. The
+retrieval-only digest additionally names WHICH of its three producers
+fired (endpoint failed / prose cited no key / synthesis timed out inside
+the tier budget) — the timed-out producer was measured wearing the
+no-endpoint message on a host whose contract-satisfying model exceeds
+the quick budget (927-2q4w owns the budget policy question).
+
 ## Risks / Trade-offs
 
 - **mlua portability is an OPEN 902-5bf9 exit criterion.** This change keeps

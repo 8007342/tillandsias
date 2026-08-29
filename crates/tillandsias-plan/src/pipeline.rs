@@ -329,6 +329,29 @@ fn retrieve_min_score() -> f32 {
         .unwrap_or(0.45)
 }
 
+/// The coverage floor, applied to the BEST retrieved score: below it the
+/// question is out of corpus coverage and the pipeline refuses, whatever
+/// the per-chunk inclusion floor above would keep. One scalar cannot answer
+/// both questions — measured on darwin 2026-08-29 (n=30, calibrated for
+/// this corpus, not settled): covered best-scores 0.65-0.87, off-topic
+/// probes 0.48-0.60, so the single 0.45 floor refused nothing while 0.62
+/// refuses every measured probe at ~8% cost in kept covered citations.
+fn refusal_floor() -> f32 {
+    std::env::var("TILLANDSIAS_RETRIEVE_REFUSAL_FLOOR")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0.62)
+}
+
+/// The three ways synthesis fails to produce usable prose — each owes its
+/// own message, or a model slower than the tier budget is misdiagnosed as
+/// a missing endpoint (927-2q4w).
+enum SynthOutcome {
+    Answered(String),
+    EndpointFailed,
+    TimedOut,
+}
+
 /// Domain-filtered cosine top-k: [`spec::top_k`]'s ranking over a subset of
 /// the entry's vectors, without cloning the index. Returns entry indices.
 fn top_k_filtered(
@@ -524,10 +547,19 @@ pub async fn run_grounded(
     let mut synth_tasks = tokio::task::JoinSet::new();
     let mut retrieved: Vec<Option<Vec<ScoredChunk>>> = (0..trimmed.len()).map(|_| None).collect();
     let floor = retrieve_min_score();
+    let refusal = refusal_floor();
     let mut best_floored: f32 = 0.0;
     for (i, p) in trimmed.iter().enumerate() {
         let Some(qv) = &qvecs[i] else { continue };
         let top = top_k_filtered(qv, &entry.vectors, &selected, RETRIEVE_K);
+        // Coverage is decided by the BEST score; citation-worthiness per
+        // chunk. A variant whose best hit is under the refusal floor is
+        // out of coverage and never reaches synthesis.
+        let best = top.first().map(|(_, s)| *s).unwrap_or(0.0);
+        if best < refusal {
+            best_floored = best_floored.max(best);
+            continue;
+        }
         let scored: Vec<ScoredChunk> = top
             .iter()
             .filter(|(_, score)| *score >= floor)
@@ -537,9 +569,7 @@ pub async fn run_grounded(
             })
             .collect();
         if scored.is_empty() {
-            if let Some((_, best)) = top.first() {
-                best_floored = best_floored.max(*best);
-            }
+            best_floored = best_floored.max(best);
             continue;
         }
         let ctx: String = scored
@@ -567,16 +597,19 @@ pub async fn run_grounded(
             let dispatched = tokio::task::spawn_blocking(move || {
                 chat_completion(&base, &model, Some(&system), &user, Some(320), timeout)
             });
-            // The budget is enforced HERE — a synthesis that overruns its
-            // tier degrades to the cited retrieval-only digest below.
-            let answer = match tokio::time::timeout(budget, dispatched).await {
-                Ok(Ok(a)) => a,
-                _ => None,
+            // The tier budget is enforced HERE — an overrun degrades to
+            // the cited retrieval-only digest below, NAMED as a timeout.
+            let outcome = match tokio::time::timeout(budget, dispatched).await {
+                Ok(Ok(Some(a))) => SynthOutcome::Answered(a),
+                Ok(_) => SynthOutcome::EndpointFailed,
+                Err(_) => SynthOutcome::TimedOut,
             };
-            (i, answer)
+            (i, outcome)
         });
     }
-    let mut synths: Vec<Option<String>> = (0..trimmed.len()).map(|_| None).collect();
+    let mut synths: Vec<SynthOutcome> = (0..trimmed.len())
+        .map(|_| SynthOutcome::EndpointFailed)
+        .collect();
     while let Some(res) = synth_tasks.join_next().await {
         if let Ok((i, a)) = res {
             synths[i] = a;
@@ -592,10 +625,10 @@ pub async fn run_grounded(
             continue;
         };
         let mut env = match &synths[i] {
-            Some(prose) => {
+            SynthOutcome::Answered(prose) => {
                 spec::build_envelope_scored_with_freshness(prose, scored, freshness.clone())
             }
-            None => Envelope::unsupported("synthesis unavailable", freshness.clone()),
+            _ => Envelope::unsupported("synthesis unavailable", freshness.clone()),
         };
         if env.confidence() == Confidence::Unsupported {
             // The cited fallback: keys are present in the digest by
@@ -609,11 +642,15 @@ pub async fn run_grounded(
             // ollama's log showing 14 healthy HTTP 200 syntheses).
             let chunks: Vec<Chunk> = scored.iter().map(|sc| sc.chunk.clone()).collect();
             let digest = match &synths[i] {
-                Some(_) => format!(
+                SynthOutcome::Answered(_) => format!(
                     "synthesis discarded: the model's prose cited none of the retrieved keys\n{}",
                     spec::retrieval_only_answer(&chunks)
                 ),
-                None => spec::retrieval_only_answer(&chunks),
+                SynthOutcome::TimedOut => format!(
+                    "synthesis timed out inside the tier budget — the model is slower than the budget allows, not missing (927-2q4w)\n{}",
+                    spec::retrieval_only_answer(&chunks)
+                ),
+                SynthOutcome::EndpointFailed => spec::retrieval_only_answer(&chunks),
             };
             env = spec::build_envelope_scored_with_freshness(&digest, scored, freshness.clone());
         }
@@ -640,10 +677,10 @@ pub async fn run_grounded(
         if withheld.is_empty() && best_floored > 0.0 {
             return Envelope::unsupported(
                 format!(
-                    "nothing in the {} corpus is similar enough to this question (best score {:.2} < floor {:.2}) — likely out of coverage; TILLANDSIAS_RETRIEVE_MIN_SCORE tunes the floor",
+                    "nothing in the {} corpus is similar enough to this question (best score {:.2} < refusal floor {:.2}) — likely out of coverage; TILLANDSIAS_RETRIEVE_REFUSAL_FLOOR (coverage) and TILLANDSIAS_RETRIEVE_MIN_SCORE (per-chunk) tune the floors",
                     domain.as_deref().unwrap_or("full"),
                     best_floored,
-                    floor,
+                    refusal,
                 ),
                 freshness,
             );
@@ -989,6 +1026,36 @@ mod tests {
         // Entry vectors are [1,0]; this query embeds nearly orthogonal, so
         // cosine ~0.10 sits under the 0.45 default floor.
         let base = embedding_stub("[0.1,0.995]");
+        let cfg = cfg_with(Some(base.clone()), base, root.clone());
+        let runtime = shared_runtime(&root);
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let env = rt.block_on(run_grounded(
+            &runtime,
+            &entry,
+            &cfg,
+            "how do I make sourdough starter?",
+        ));
+        assert_eq!(env.confidence(), Confidence::Unsupported);
+        assert!(env.answer().contains("out of coverage"), "{}", env.answer());
+        assert!(env.citations().is_empty());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// The sourdough regime measured on darwin: an off-topic probe scoring
+    /// ABOVE the per-chunk inclusion floor (0.45) but BELOW the coverage
+    /// refusal floor (0.62) must refuse — this is the band the single-knob
+    /// design answered wrongly (real probes scored 0.48-0.60).
+    #[test]
+    fn mid_band_score_refuses_out_of_coverage() {
+        let root = fixture_root("midband");
+        let entry = entry_with(
+            &root.join("entry"),
+            vec![chunk(0, "k", "spec", "openspec/specs/x/spec.md")],
+            None,
+        );
+        // Entry vectors are [1,0]; cos([0.5,0.866],[1,0]) = 0.5 — between
+        // the floors.
+        let base = embedding_stub("[0.5,0.8660254]");
         let cfg = cfg_with(Some(base.clone()), base, root.clone());
         let runtime = shared_runtime(&root);
         let rt = tokio::runtime::Runtime::new().unwrap();
