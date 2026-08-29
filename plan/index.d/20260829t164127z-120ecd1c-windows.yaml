@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 699-usxc).
+#
+# dev-host-spec-rag-index-never-built.status was ALREADY 'in_progress', so no field changed — but the caller
+# supplied a note, and discarding it silently is what this packet is about.
+events:
+  - packet_id: dev-host-spec-rag-index-never-built
+    event:
+      type: note
+      ts: "2026-08-29T16:41:27Z"
+      host: windows
+      summary: >
+        claimed for cycle 2026-08-29T16:4xZ by windows-yolanda-claude-20260828t223837z — windows provisioning step, re-scoped to the no-hosts per coordinator
