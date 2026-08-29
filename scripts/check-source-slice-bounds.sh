@@ -80,7 +80,29 @@ while IFS= read -r rs; do
         # is followed by a name-terminating character; the string literal never
         # is, because `.split("` precedes it.
         _needle_re="$(printf '%s' "$needle" | sed -e 's/[][\.*^$(){}?+|/]/\\&/g')"
-        if ! grep -rqE "^[[:space:]]*${_needle_re}[[:space:](<{]" "$crate_src" --include='*.rs' 2>/dev/null; then
+        # `unsafe ` (and `const `/`extern `) may precede the item keyword, so the
+        # declaration does not always BEGIN with the needle. Measured 2026-08-29
+        # (order 830-xsk2): a valid bound `fn listener_should_accept`, whose
+        # declaration reads `unsafe fn listener_should_accept(`, was reported as
+        # matching nothing — a FALSE accusation on a slice that resolves. The
+        # guard's own failure mode is the one it hunts, one level up: a checker
+        # that cannot see a declaration form reports a working bound as dead, and
+        # the fix for the accusation would have been to weaken the test.
+        # Modifier words may precede the item keyword (`unsafe fn`, `const fn`,
+        # `pub unsafe fn`), so the declaration does not always BEGIN with the
+        # needle. Measured 2026-08-29 (order 830-xsk2): a bound
+        # `fn listener_should_accept`, declared `unsafe fn listener_should_accept(`,
+        # was reported as matching nothing — a FALSE accusation against a slice
+        # that resolves. This guard's own failure mode, one level up: a checker
+        # blind to a declaration form calls working code dead, and the tempting
+        # "fix" is to weaken the test it was protecting.
+        #
+        # Written as a repeated word-class rather than an alternation ON PURPOSE:
+        # a `|` inside this quoted regex reads as a shell pipeline to
+        # check-no-spawn-in-if-not.sh, which then flags this very line. Two
+        # scanners, two false positives, same root — a pattern language embedded
+        # in a host language that another scanner parses by eye.
+        if ! grep -rqE "^[[:space:]]*([A-Za-z_]+ )*${_needle_re}[[:space:](<{]" "$crate_src" --include='*.rs' 2>/dev/null; then
             violations="${violations}  ${rs}: slice bound \"${needle}\" matches nothing in ${crate_src} — split() returns the WHOLE remainder, so this assertion has silently widened
 "
         fi

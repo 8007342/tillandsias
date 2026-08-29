@@ -455,3 +455,326 @@ mod tests {
         assert_read_write::<VsockStream>();
     }
 }
+
+// ── Host-side vsock LISTENER (order 830-xsk2) ────────────────────────────────
+//
+// The other direction, and until now the missing one. Everything above lets the
+// HOST reach into the guest; nothing let the guest reach out. That asymmetry is
+// what blocks an Apple-silicon inference lane: Metal is host-native only
+// (accel_probe.rs PROBE-7), the workload runs in a Linux guest that has no
+// Metal, and there was no transport between the accelerator and the work.
+//
+// MEASURED BEFORE THIS WAS WRITTEN, from inside the guest:
+//   connect to CID 2 (host) -> ETIMEDOUT after 2.0s, on every port tried.
+// Not ENETUNREACH, which would have meant no route and a different design
+// entirely; not ECONNREFUSED. The guest's stack ROUTES to the host and
+// transmits, and nothing answers — so the path exists and only a listener was
+// absent. The 2.0s is Linux's VSOCK_DEFAULT_CONNECT_TIMEOUT, measured against a
+// deliberate 45s budget so the bound could not have come from the probe itself,
+// which means a guest-side caller gets a fast errno rather than a stall when the
+// host is not listening.
+//
+// WHY A DELEGATE AT ALL. `setSocketListener:forPort:` takes a
+// VZVirtioSocketListener, and a listener without a delegate accepts nothing:
+// `listener:shouldAcceptNewConnection:fromSocketDevice:` IS the accept
+// decision. This is the first Objective-C protocol conformance in this crate
+// (vz.rs:1855 records VZVirtualMachineDelegate as deliberately unobserved), so
+// the `declare_class!` block below is the pattern any future delegate copies.
+use objc2::runtime::{NSObjectProtocol, ProtocolObject};
+use objc2::{ClassType, DeclaredClass, declare_class, msg_send_id, mutability};
+use objc2_foundation::NSObject;
+use objc2_virtualization::{VZVirtioSocketListener, VZVirtioSocketListenerDelegate};
+
+/// What the delegate needs to hand an accepted connection back to Rust.
+pub struct AcceptIvars {
+    /// Every accepted connection's fd, in arrival order. A channel rather than a
+    /// callback because the delegate method is invoked on VZ's queue and must
+    /// return a verdict promptly — doing real work there would block the
+    /// framework's socket handling.
+    tx: std::sync::mpsc::Sender<RawFd>,
+}
+
+declare_class!(
+    /// Accepts guest-initiated vsock connections on one port and forwards each
+    /// accepted fd to a channel.
+    ///
+    /// DUPLICATING THE FD IS NOT OPTIONAL. `VZVirtioSocketConnection` closes its
+    /// file descriptor when the object deallocates, and this delegate method is
+    /// the only place that object is alive — VZ hands it in, we return, it goes
+    /// away. Passing the raw fd onward would hand the reader a descriptor that
+    /// the framework closes underneath it, which is the shape of bug that
+    /// presents as an unexplained EBADF long after the accept.
+    struct VsockAcceptDelegate;
+
+    unsafe impl ClassType for VsockAcceptDelegate {
+        type Super = NSObject;
+        type Mutability = mutability::InteriorMutable;
+        const NAME: &'static str = "TillandsiasVsockAcceptDelegate";
+    }
+
+    impl DeclaredClass for VsockAcceptDelegate {
+        type Ivars = AcceptIvars;
+    }
+
+    unsafe impl NSObjectProtocol for VsockAcceptDelegate {}
+
+    unsafe impl VZVirtioSocketListenerDelegate for VsockAcceptDelegate {
+        #[method(listener:shouldAcceptNewConnection:fromSocketDevice:)]
+        unsafe fn listener_should_accept(
+            &self,
+            _listener: &VZVirtioSocketListener,
+            connection: &VZVirtioSocketConnection,
+            _device: &VZVirtioSocketDevice,
+        ) -> objc2::runtime::Bool {
+            use std::os::fd::{AsRawFd as _, BorrowedFd, IntoRawFd as _};
+            let raw = unsafe { connection.fileDescriptor() };
+            // SAFETY: `raw` is the fd VZ owns for the lifetime of this callback;
+            // we only borrow it long enough to duplicate it. `try_clone_to_owned`
+            // is std's dup(2) and keeps the CLOEXEC handling std guarantees, so
+            // this needs no libc dependency.
+            let borrowed = unsafe { BorrowedFd::borrow_raw(raw) };
+            let Ok(owned) = borrowed.try_clone_to_owned() else {
+                // Refusing is the honest answer: accepting and then failing to
+                // keep the fd would look like a working connection to the guest
+                // and deliver nothing.
+                return objc2::runtime::Bool::NO;
+            };
+            let fd = owned.as_raw_fd();
+            // The accept is otherwise invisible: it happens on VZ's queue, with
+            // no return path a caller can watch. This line IS the runtime proof
+            // that the guest reached the host, and it is the only evidence a
+            // probe can quote — so it names the port and the fd rather than
+            // saying "accepted".
+            eprintln!(
+                "[vz] host vsock: ACCEPTED a guest-initiated connection (fd {fd}) \
+                 — the guest reached the host"
+            );
+            match self.ivars().tx.send(fd) {
+                Ok(()) => {
+                    // Ownership has moved to the receiver; do not let `owned`
+                    // close it on drop.
+                    let _ = owned.into_raw_fd();
+                    objc2::runtime::Bool::YES
+                }
+                Err(_) => {
+                    // The receiver is gone — nobody will ever read this
+                    // connection, so do not pretend to accept it. Dropping
+                    // `owned` closes the duplicate.
+                    objc2::runtime::Bool::NO
+                }
+            }
+        }
+    }
+);
+
+impl VsockAcceptDelegate {
+    fn new(tx: std::sync::mpsc::Sender<RawFd>) -> Retained<Self> {
+        let this = Self::alloc().set_ivars(AcceptIvars { tx });
+        unsafe { msg_send_id![super(this), init] }
+    }
+}
+
+/// A live host-side vsock listener. Dropping it removes the listener from the
+/// port, so a caller cannot leave the VM accepting connections nobody reads.
+///
+/// ACCEPTANCE IS GATED ON THE HOST PUMPING ITS RUNLOOP — measured, and the
+/// single most important thing to know before building on this.
+/// Virtualization.framework RETAINS guest connection requests and delivers them
+/// to the delegate only when the host services CFRunLoop. It does not drop
+/// them, and it does not deliver them eagerly.
+///
+/// Measured 2026-08-29 (order 830-xsk2) under `--exec-guest`, which blocks on
+/// the control wire and pumps nothing while a guest command runs: six guest
+/// connects failed with ETIMEDOUT at 2.04-2.06s each — the kernel's
+/// VSOCK_DEFAULT_CONNECT_TIMEOUT, not a caller's patience — and then ALL SIX
+/// were accepted in a burst (fd 12 through 17) the moment the command returned
+/// and pumping resumed. The accepts were never lost; they arrived after the
+/// guest had already given up.
+///
+/// So a host path that blocks without pumping cannot serve this listener, no
+/// matter how correct the listener is. Tray mode drives NSApplication, whose
+/// main runloop runs continuously, and should not have the problem — that is
+/// REASONED, not measured, and needs its own proof before anything depends on
+/// it.
+pub struct HostVsockListener {
+    device: Retained<VZVirtioSocketDevice>,
+    port: u32,
+    rx: std::sync::mpsc::Receiver<RawFd>,
+    /// Held so the delegate outlives the listener registration. VZ does NOT
+    /// retain a listener's delegate strongly enough to rely on; dropping it
+    /// while the port is still registered would leave the framework calling
+    /// into freed memory.
+    _delegate: Retained<VsockAcceptDelegate>,
+    _listener: Retained<VZVirtioSocketListener>,
+}
+
+impl HostVsockListener {
+    /// Accept guest-initiated connections on `port` of the running VM.
+    ///
+    /// MUST be called on the thread that owns the VM, like every other VZ API
+    /// in this file — the framework is not thread-safe and the existing
+    /// connector already carries that constraint.
+    pub fn bind(vm: &VZVirtualMachine, port: u32) -> io::Result<Self> {
+        let devices = unsafe { vm.socketDevices() };
+        if devices.count() == 0 {
+            return Err(io::Error::other(
+                "no VZVirtioSocketDevice on this VM — the configuration added none",
+            ));
+        }
+        let first = unsafe { devices.objectAtIndex(0) };
+        // Same fail-closed downcast the connector performs: verify before
+        // casting so a future framework socket-device kind is refused rather
+        // than reinterpreted.
+        let is_virtio: bool = unsafe {
+            let cls = <VZVirtioSocketDevice as ClassType>::class();
+            let obj: &objc2::runtime::AnyObject = first.as_ref().as_ref();
+            objc2::msg_send![obj, isKindOfClass: cls]
+        };
+        if !is_virtio {
+            return Err(io::Error::other(
+                "first socket device is not a VZVirtioSocketDevice",
+            ));
+        }
+        // SAFETY: verified above via isKindOfClass.
+        let device: Retained<VZVirtioSocketDevice> = unsafe { Retained::cast(first) };
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        let delegate = VsockAcceptDelegate::new(tx);
+        let listener = unsafe { VZVirtioSocketListener::new() };
+        let proto: &ProtocolObject<dyn VZVirtioSocketListenerDelegate> =
+            ProtocolObject::from_ref(&*delegate);
+        unsafe { listener.setDelegate(Some(proto)) };
+        unsafe { device.setSocketListener_forPort(&listener, port) };
+
+        Ok(Self {
+            device,
+            port,
+            rx,
+            _delegate: delegate,
+            _listener: listener,
+        })
+    }
+
+    /// Next accepted connection's fd, or `None` if none has arrived yet.
+    ///
+    /// Non-blocking on purpose: the accept happens on VZ's own queue, so this
+    /// is a drain of what has already been accepted rather than a wait.
+    pub fn try_accept(&self) -> Option<RawFd> {
+        self.rx.try_recv().ok()
+    }
+
+    /// Block for the next accepted connection, bounded.
+    ///
+    /// The bound is the caller's, not the transport's: a guest that never
+    /// connects produces no event at all, so there is nothing for the framework
+    /// to time out. Contrast the guest side, where an absent host listener
+    /// fails in 2.0s on its own (Linux VSOCK_DEFAULT_CONNECT_TIMEOUT, measured).
+    pub fn accept_timeout(&self, budget: Duration) -> io::Result<RawFd> {
+        self.rx.recv_timeout(budget).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::TimedOut,
+                format!(
+                    "no guest connected to host vsock port {} within {budget:?}",
+                    self.port
+                ),
+            )
+        })
+    }
+
+    /// The port this listener is registered on.
+    pub fn port(&self) -> u32 {
+        self.port
+    }
+}
+
+impl Drop for HostVsockListener {
+    fn drop(&mut self) {
+        // Deregister explicitly. Without this the framework keeps accepting on
+        // a port whose delegate is about to be freed — the reader is gone, so
+        // every later connection would be accepted into nothing.
+        unsafe { self.device.removeSocketListenerForPort(self.port) };
+    }
+}
+
+#[cfg(test)]
+mod host_listener_tests {
+    //! ORDER 830-xsk2. These pin the SHAPE, not the runtime behaviour — a live
+    //! accept needs a booted VM and is the packet's runtime criterion, recorded
+    //! separately. What is checked here is the set of invariants that were
+    //! reasoned about while writing the unsafe code, so a later edit that breaks
+    //! one fails here instead of in a guest weeks later.
+
+    /// The duplicate is the point. `VZVirtioSocketConnection` closes its fd when
+    /// it deallocates, and that object lives only for the callback — handing the
+    /// raw fd onward yields an EBADF long after the accept, with nothing near
+    /// the failure to explain it.
+    #[test]
+    fn accepted_fd_is_duplicated_not_borrowed() {
+        let src = include_str!("transport_macos.rs");
+        let arm = src
+            .split("fn listener_should_accept")
+            .nth(1)
+            .and_then(|t| t.split("\n        }").next())
+            .expect("the delegate method moved — repoint this scan");
+        assert!(
+            arm.contains("try_clone_to_owned"),
+            "the accepted fd MUST be duplicated; VZ closes the original when the \
+             connection object deallocates at the end of this callback"
+        );
+        assert!(
+            !arm.contains("tx.send(raw)"),
+            "the RAW fd must never be sent onward — that is the borrowed-fd bug"
+        );
+    }
+
+    /// A refusal must be a refusal. Accepting and then dropping the fd would
+    /// look like a working connection to the guest and deliver nothing — the
+    /// silent-success shape this milestone exists to remove.
+    #[test]
+    fn a_failed_handoff_refuses_rather_than_accepting_into_nothing() {
+        let src = include_str!("transport_macos.rs");
+        let arm = src
+            .split("fn listener_should_accept")
+            .nth(1)
+            .and_then(|t| t.split("\n        }").next())
+            .expect("the delegate method moved — repoint this scan");
+        let err_branch = arm.split("Err(_)").nth(1).expect("receiver-gone branch");
+        assert!(
+            err_branch.contains("Bool::NO"),
+            "when the receiver is gone the connection must be REFUSED, not \
+             accepted into a channel nobody reads"
+        );
+    }
+
+    /// Dropping the listener must deregister the port. Otherwise the framework
+    /// keeps accepting onto a freed delegate.
+    #[test]
+    fn dropping_the_listener_removes_it_from_the_port() {
+        let src = include_str!("transport_macos.rs");
+        let drop_impl = src
+            .split("impl Drop for HostVsockListener")
+            .nth(1)
+            .expect("the Drop impl moved — repoint this scan");
+        assert!(
+            drop_impl.contains("removeSocketListenerForPort"),
+            "Drop must deregister, or VZ accepts into a delegate about to be freed"
+        );
+    }
+
+    /// The delegate is held by the listener struct. VZ's delegate reference is
+    /// not something to rely on for lifetime.
+    #[test]
+    fn the_listener_owns_its_delegate() {
+        let src = include_str!("transport_macos.rs");
+        let decl = src
+            .split("pub struct HostVsockListener")
+            .nth(1)
+            .and_then(|t| t.split("\n}").next())
+            .expect("the struct moved — repoint this scan");
+        assert!(
+            decl.contains("_delegate: Retained<VsockAcceptDelegate>"),
+            "the delegate must be owned here; a freed delegate with a live \
+             registration is a use-after-free in framework code"
+        );
+    }
+}
