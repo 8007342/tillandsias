@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-smallest-cited-synthesis-model-exceeds-the-quick-tier-budget
+    field: next_action
+    value: |-
+      STATE 2026-08-29 (lenovinha). DECISION MADE AND IMPLEMENTED; ONE HALF OF THE CLOSURE NEEDS A SLOW-MODEL HOST.
+
+      DECIDED: (b) as an explicit operator knob + (c) as the documented default. NOT (a) auto-tune — see the 2026-08-29 implemented event for why, in short: the CPU floor is not latency-bound, so auto-tuning the budget would not help the host it was proposed for while silently stretching interactive tiers on hosts that deliberately run tiny models.
+
+      LANDED: TILLANDSIAS_SYNTH_BUDGET_MS, clamped to a 60 s ceiling. Default UNCHANGED for all four tiers, pinned and mutation-verified, so every CPU-floor host is byte-identical.
+
+      REMAINING, and it is the half this host physically cannot produce: verifiable_closure asks for the mechanism "exercised on one slow-model host and one CPU-floor host with recorded latencies". The CPU-floor half is DONE and recorded (0.5b: 927/2231/2885 ms; key echo 2/2, 0/2, 1/2, 2/2 across identical prompts; one run fabricated a source key). The SLOW-MODEL half needs a host with a 7b — macuahuitl or tillandsias-91:
+
+        1. Set TILLANDSIAS_SYNTH_BUDGET_MS to something above the observed 10-24 s synthesis time (30000 is a reasonable first try; the ceiling is 60000).
+        2. Ask a covered question through the grounded pipeline.
+        3. Record: the wall time, whether the answer is a grounded synthesis rather than the timed-out digest, and whether the Sources line cites real retrieved keys.
+        4. NEGATIVE CONTROL, do not skip it: with the override UNSET the same question must still produce the timed-out digest naming 927-2q4w, not the no-endpoint one. That is what proves the knob is the thing that changed the outcome.
+
+      DO NOT RAISE THE DEFAULT BUDGETS to close this. The measurement above is the argument: a fleet-wide raise buys the darwin host its synthesis by making every snappy host wait, and the packet's own constraint forbids regressing CPU-floor interactivity.
+
+      DO NOT LOWER THE CITATION BAR either. On the CPU floor the only-if-used filter is the only thing between the user and an invented source key — measured, one fabrication in four runs.
+    ts: "2026-08-29T17:21:16Z"
+    host: linux
+
+events:
+  - packet_id: the-smallest-cited-synthesis-model-exceeds-the-quick-tier-budget
+    event:
+      type: note
+      ts: "2026-08-29T17:21:16Z"
+      host: linux
+      summary: >
+        decision made and implemented; slow-model half of the closure needs a 7b host

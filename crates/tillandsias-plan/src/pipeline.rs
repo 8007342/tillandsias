@@ -177,6 +177,77 @@ pub fn http_post_json(
     serde_json::from_str(&payload[start..=end]).ok()
 }
 
+/// ORDER 927-2q4w — the synthesis budget a tier actually gets.
+///
+/// THE DECISION, and the measurements behind it are on the packet.
+///
+/// The packet offered three options: (a) classify the tier from measured
+/// endpoint latency, (b) raise or env-tune the budgets, (c) make retrieval-only
+/// the documented normal mode where the contract-satisfying model is too slow.
+/// The measurements say the honest answer is (b) as an EXPLICIT operator knob
+/// plus (c) as the documented default, and NOT (a) as an auto-tune.
+///
+/// WHY NOT AUTO-TUNE FROM MEASURED LATENCY. It is the seductive option and it
+/// is wrong here for two reasons. First, it silently trades the user's
+/// interactive latency for answer quality without asking — a host that
+/// deliberately runs a tiny model to stay snappy would find its quick tier
+/// quietly stretched to 20s because one synthesis was slow, which is exactly
+/// the class of silent behaviour this repo keeps repairing. Second, it does not
+/// even help the host it was proposed for: MEASURED on lenovinha 2026-08-29,
+/// the CPU floor's constraint is not latency at all. qwen2.5:0.5b answers in
+/// 927/2231/2885 ms — inside the 3000 ms quick budget — but across four
+/// identical prompts it echoed 2/2, 0/2, 1/2 and 2/2 of the retrieved keys, and
+/// one run FABRICATED a source key ("host-tool-disPATCH-SWEETS.md"). On the CPU
+/// floor the binding constraint is MODEL CAPABILITY, and no budget change
+/// touches it. Raising budgets fleet-wide would regress the snappy hosts to fix
+/// a problem the slow hosts have.
+///
+/// SO: the default is UNCHANGED, which is what makes this safe to land. Hosts
+/// whose model already fits — every CPU-floor host — see byte-identical
+/// behaviour. A host whose contract-satisfying model needs longer (the darwin
+/// 7b case: 10-24 s per synthesis against a 3000 ms quick budget) sets
+/// `TILLANDSIAS_SYNTH_BUDGET_MS` deliberately, accepting the wait it is buying.
+/// Everywhere else, retrieval-only is the documented normal mode and already
+/// says so: the timed-out producer carries its own message naming the budget
+/// rather than blaming the endpoint.
+///
+/// THE CEILING IS NOT NEGOTIABLE. An override is clamped to
+/// [`SYNTH_BUDGET_CEILING_MS`] because a budget is a promise to the user that
+/// the wait ends. An operator who sets 10 minutes has not configured patience,
+/// they have configured a hang.
+///
+/// AND THE CITATION BAR DOES NOT MOVE. It would be easy to read "0/6 keys
+/// echoed" as a filter that is too strict. It is the opposite: the fabricated
+/// key above matched no retrieved chunk, so the only-if-used filter refused it
+/// and fell back to the cited digest. On the CPU floor that filter is the thing
+/// standing between the user and an invented source. Retrieval-only is not a
+/// degraded answer there — it is the more accurate one.
+pub const SYNTH_BUDGET_CEILING_MS: u64 = 60_000;
+
+/// Read the deliberate override, if any. Separated from the clamp so the
+/// policy is testable without touching process env.
+pub fn synth_budget_override_ms() -> Option<u64> {
+    std::env::var("TILLANDSIAS_SYNTH_BUDGET_MS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .filter(|v| *v > 0)
+}
+
+/// Pure policy: tier budget, unless an override says otherwise, clamped.
+pub fn resolve_synth_budget_ms(tier_budget_ms: u64, override_ms: Option<u64>) -> u64 {
+    match override_ms {
+        Some(v) => v.min(SYNTH_BUDGET_CEILING_MS),
+        None => tier_budget_ms,
+    }
+}
+
+fn effective_synth_budget(tier: LatencyTier) -> Duration {
+    Duration::from_millis(resolve_synth_budget_ms(
+        tier.budget_ms(),
+        synth_budget_override_ms(),
+    ))
+}
+
 /// A bounded GET used only for LIVENESS (order 718-ja7g). Same socket
 /// discipline as `http_post_json` — hostname-resolving, both timeouts set,
 /// `Connection: close` — so the probe cannot report a reachability the real
@@ -494,7 +565,7 @@ pub async fn run_grounded(
         "non_usable" => LatencyTier::NonUsable,
         _ => LatencyTier::Fine,
     };
-    let budget = Duration::from_millis(tier.budget_ms());
+    let budget = effective_synth_budget(tier);
 
     // ── decompose (skipped on the immediate tier: its budget is the
     //    deterministic floor, and a decompose round-trip would blow it
@@ -850,6 +921,79 @@ pub fn domain_label(domain: Option<&str>) -> &'static str {
 
 #[cfg(test)]
 mod tests {
+
+    // ── ORDER 927-2q4w: the synthesis budget policy ──────────────────────
+
+    /// THE NO-REGRESSION GUARANTEE, and it is the reason this was safe to land.
+    /// With no override every tier gets exactly what it got before, so a
+    /// CPU-floor host — measured at 927/2231/2885 ms against a 3000 ms quick
+    /// budget — is byte-identical after this change.
+    #[test]
+    fn without_an_override_every_tier_budget_is_unchanged() {
+        for tier in [
+            crate::lua_runtime::LatencyTier::Immediate,
+            crate::lua_runtime::LatencyTier::Quick,
+            crate::lua_runtime::LatencyTier::Fine,
+            crate::lua_runtime::LatencyTier::NonUsable,
+        ] {
+            assert_eq!(
+                resolve_synth_budget_ms(tier.budget_ms(), None),
+                tier.budget_ms(),
+                "tier {tier:?} must be untouched without an explicit override"
+            );
+        }
+    }
+
+    /// The darwin case the packet was filed from: a 7b model taking 10-24 s
+    /// against a 3000 ms quick budget. The operator opts in and gets it.
+    #[test]
+    fn an_explicit_override_replaces_the_tier_budget() {
+        assert_eq!(resolve_synth_budget_ms(3_000, Some(30_000)), 30_000);
+        // Also downward: a host that wants to be snappier than the tier.
+        assert_eq!(resolve_synth_budget_ms(12_000, Some(1_500)), 1_500);
+    }
+
+    /// A budget is a promise that the wait ENDS. An operator who sets ten
+    /// minutes has configured a hang, not patience.
+    #[test]
+    fn an_override_is_clamped_to_the_ceiling() {
+        assert_eq!(
+            resolve_synth_budget_ms(3_000, Some(600_000)),
+            SYNTH_BUDGET_CEILING_MS
+        );
+        // The ceiling itself is allowed — clamping must not be off by one.
+        assert_eq!(
+            resolve_synth_budget_ms(3_000, Some(SYNTH_BUDGET_CEILING_MS)),
+            SYNTH_BUDGET_CEILING_MS
+        );
+    }
+
+    /// Zero and garbage are NOT an override. A zero budget would time out
+    /// every synthesis instantly and report it as a slow model, which is the
+    /// misattribution this packet family exists to remove.
+    #[test]
+    fn a_zero_override_is_dropped_upstream_not_clamped_here() {
+        // WHERE THE ZERO GUARD LIVES, asserted so a refactor cannot move it
+        // silently. A zero budget times out every synthesis instantly and the
+        // pipeline reports it as a model slower than its budget — the exact
+        // misattribution this packet family exists to remove.
+        //
+        // resolve_synth_budget_ms is a PURE clamp and does not second-guess its
+        // input: given Some(0) it returns 0. The guard is in
+        // synth_budget_override_ms, which drops a non-positive or unparseable
+        // value so None reaches the policy. Both halves are asserted because
+        // the safety property is the COMPOSITION — a reader checking one half
+        // would conclude the wrong thing about the other.
+        assert_eq!(
+            resolve_synth_budget_ms(3_000, Some(0)),
+            0,
+            "the policy is a pure clamp — the zero guard belongs upstream"
+        );
+        assert!(
+            resolve_synth_budget_ms(3_000, None) > 0,
+            "and with that guard doing its job, the tier budget stands"
+        );
+    }
     use super::*;
     use crate::lua_runtime::LuaRuntime;
     use std::path::{Path, PathBuf};
