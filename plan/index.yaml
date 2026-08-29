@@ -54411,6 +54411,12 @@ plan_index:
         guard for one idiom cannot cover 1248 sites. 897-5m9y and 899-q9di both
         record instances.
       events:
+        - type: verified
+          ts: "2026-08-29T19:45:11Z"
+          agent_id: "linux-macuahuitl-claude-20260829t194511z"
+          host: linux
+          summary: |
+            12-ARM PORTABILITY: ALL FOUR FLEET REGIMES NOW MEASURED GREEN. linux/GNU closed on macuahuitl this hour: direct run 12/12 rc=0, runner-resolved grep verified as /usr/bin/grep = GNU grep 3.12 via bash -c (NOT the interactive shell's ugrep 7.8.4 alias — the same attribution trap macbook documented on darwin, present on this host too; regime checked at the raw tool: 'a+b' matches literally, BRE). Full matrix: darwin/BSD grep 2.6.0-FreeBSD + bash 3.2.57; MINGW64/GNU grep 3.0 + bash 5.3.15; WSL2/GNU grep 3.12 + bash 5.3.9; linux/GNU grep 3.12. The brace arm macbook flagged as the one to watch under a stricter grep passes under GNU 3.12 on two hosts. The 418-site conversion is unblocked on every dialect axis; the flag table governs.
         - type: evidence
           ts: "2026-08-29T19:37:43Z"
           agent_id: "linux-macuahuitl-claude-20260829t193742z"
