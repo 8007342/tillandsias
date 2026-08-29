@@ -54,7 +54,7 @@ critical_path:
     expected_behavior: "ok: non-shell caller surfaces covered"
 
   - step: "LIVE: every bare-invoked script in this tree is tracked executable"
-    command: "scripts/check-script-exec-bits.sh | grep -qE '^ok:script-exec-bits:[0-9]+ checked$' && echo 'ok: tree clean'"
+    command: "mf_stage prod 0 OUT -- scripts/check-script-exec-bits.sh && mf_holds_ere OUT '^ok:script-exec-bits:[0-9]+ checked$' && echo 'ok: tree clean'"
     timeout_ms: 30000
     expected_behavior: "ok: tree clean"
 

@@ -84,7 +84,7 @@ critical_path:
     # inference outage. The probe must also require llama-server to be present,
     # and it must be a RUNTIME check: the model cache is a forge-SHARED mounted
     # volume, so a concurrent prune must turn this container unhealthy.
-    command: "grep -A3 'HEALTHCHECK' images/inference/Containerfile | grep -q 'llama-server' && echo 'ok: healthcheck asserts llama-server'"
+    command: "mf_stage prod 0 OUT -- grep -A3 'HEALTHCHECK' images/inference/Containerfile && mf_holds OUT 'llama-server' && echo 'ok: healthcheck asserts llama-server'"
     timeout_ms: 3000
     expected_behavior: "ok: healthcheck asserts llama-server"
 

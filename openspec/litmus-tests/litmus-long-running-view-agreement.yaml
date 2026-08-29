@@ -30,7 +30,7 @@ preconditions:
 
 critical_path:
   - step: "Req: the view agrees with the ledger on this tree, in the pinned grammar"
-    command: "scripts/check-long-running-view.sh | grep -qE '^ok:long-running-view:[0-9]+ live packets listed$' && echo 'ok: view agrees'"
+    command: "mf_stage prod 0 OUT -- scripts/check-long-running-view.sh && mf_holds_ere OUT '^ok:long-running-view:[0-9]+ live packets listed$' && echo 'ok: view agrees'"
     expected_behavior: "ok: view agrees"
     timeout_ms: 30000
 

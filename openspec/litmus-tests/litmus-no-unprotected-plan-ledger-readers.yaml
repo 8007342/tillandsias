@@ -78,7 +78,7 @@ critical_path:
     expected_behavior: "ok: query-capability-declared-and-dispatchable"
 
   - step: "PIN: the query filter-semantics unit test is green"
-    command: "cargo test --quiet --release -p tillandsias-plan --bin tillandsias-plan query_packets_reproduces_plan_query_filter_semantics 2>&1 | grep -q 'test result: ok' && echo 'ok: query-filter-semantics-test-green'"
+    command: "mf_stage prod 0 OUT -- cargo test --quiet --release -p tillandsias-plan --bin tillandsias-plan query_packets_reproduces_plan_query_filter_semantics && mf_holds OUT 'test result: ok' && echo 'ok: query-filter-semantics-test-green'"
     timeout_ms: 300000
     expected_behavior: "ok: query-filter-semantics-test-green"
 

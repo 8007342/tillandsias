@@ -46,7 +46,7 @@ critical_path:
     expected_behavior: "ok: terminal status pin admitted"
 
   - step: "the REAL groundtruth corpus is clean (no live non-terminal status pins)"
-    command: "scripts/check-groundtruth-mutable-status-pins.sh | grep -qE '^ok:groundtruth-status-pins:[0-9]+ live-checked' && echo 'ok: real corpus clean'"
+    command: "mf_stage prod 0 OUT -- scripts/check-groundtruth-mutable-status-pins.sh && mf_holds_ere OUT '^ok:groundtruth-status-pins:[0-9]+ live-checked' && echo 'ok: real corpus clean'"
     timeout_ms: 20000
     expected_behavior: "ok: real corpus clean"
 
