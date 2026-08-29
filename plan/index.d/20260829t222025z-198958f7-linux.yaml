@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: guest-binaries-cargo-fallback-fails-late-and-blames-the-wrong-thing
+    event:
+      type: progress
+      ts: "2026-08-29T22:20:25Z"
+      agent_id: linux-macuahuitl-claude-20260829t222025z
+      host: linux
+      summary: >
+        TOOLBOX HALF LANDED AND ACCEPTED, plus three pre-existing host reds the acceptance exposed, all fixed. (1) Host-escape shims: with-tillandsias-builder.sh installs /usr/local/bin/{podman,nix} in the toolbox (flatpak-spawn --host; exit-code/cwd propagation VERIFIED before trusting: exit 7 -> 7, pwd identical; control env namespaces forwarded; initialized-probe regates so existing toolboxes re-init). Verified from inside: podman 5.8.4, nix 2.34.8, nix-toolbox ensure -> ok:nix-toolbox:chroot — the exact call that failed. ci-full run 5 then ran the litmus phase INSIDE the toolbox for the first time since 2026-08-26: podman-path-availability GREEN, pre-build 307/314. (2) Cargo fallback now preflights the aarch64 linker BEFORE compiling (was: 73s of x86_64 then a linker error). (3) blocked:nix-toolbox:* verdicts keep pinned grammar and emit detail:nix-toolbox:<rung>:<last-stderr-line>; negative control (skeletal PATH) shows detail:nix-toolbox:chroot:nix: command not found on PATH — the line that would have saved the evening; pin fixture 13/13. (4) THE EXPOSED HOST REDS, invisible to the instant tier's 249/249: two dependency-COUNT pins (methodology-path-query-citability, expert-groundtruth-harness) fired on the expert system's legitimate tokio/chrono additions — replaced with named-SET assertions that report which dep drifted; and capability-manifest-guard's clean-tree negative control was correctly red because dispatch arm split-parents (3a62d4099, 748-tkjx era) was never declared in capabilities.txt — declared, drift warning gone. Spec suite 24/24. RESIDUAL, named: four toolbox-context litmus reds from run 5 (forge-config-trust-cross-platform-parity, headless-least-privilege-delegation-shape, salvage-net-roundtrip [fail:salvage:commit-tree], forge-runtime-ca-trust) — the next slice; and shape-A/B fail-late criteria are met, stderr-capture criterion met, the one remaining exit criterion is a full-green ci-full on this host.

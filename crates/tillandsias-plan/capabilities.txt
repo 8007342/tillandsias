@@ -74,6 +74,7 @@ spec-envelope
 spec-floor
 spec-index
 spec-retrieve
+split-parents
 status
 # the litmus asserts the manifest covers the documented command surface too.
 # tillandsias-plan CAPABILITY MANIFEST — order 569
