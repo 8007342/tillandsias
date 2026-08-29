@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: approved-ux-strings-are-guarded-by-assertions-that-live-in-the-same-file
+    field: next_action
+    value: |-
+      STATE 2026-08-29 (lenovinha). THE GATE IS BUILT, MUTATION-VERIFIED AND WIRED; THE AUDIT IS DONE. ONE OPERATOR DECISION REMAINS AND IT IS NOT AN AGENT'S TO MAKE.
+
+      DONE: scripts/check-approved-ux-strings.sh is table-driven, scoped to `- type: operator_note` bodies (not the whole ledger), wired into ./build.sh --check, and verified against four mutations including this packet's stated bar — a clean-vocabulary reword — which now fails even though the reword string appears in ledger PROSE. Adding a future approved string is one table row.
+
+      DONE: the audit. locales/en.toml is the user-visible surface (168 strings); exactly 1 carries a post-governance operator approval and is gated. The other 167 predate the 2026-07-21 rule and deliberately are NOT demanded to have one — inventing approvals nobody gave, or going red on 167 strings, both end with the gate switched off.
+
+      REMAINING, FOR THE OPERATOR, NOT FOR AN AGENT: spec:tray-ux and locales/en.toml disagree on five strings (🌹/🥀 Unhealthy environment, 🔧/⛏️ Maintenance, "Environment OK"/"Environment ready", "GitHub login"/"GitHub Login", "☐ Verifying environment ..."/"Verifying environment …"). The shipped forms landed 2026-04-25 in ef212f2b0; the spec's list was last touched 2026-07-21, so the governance document enshrined already-superseded strings. Nobody violated anything — but the approval record does not describe what ships.
+
+      WHICH SIDE IS AUTHORITATIVE IS AN OPERATOR CALL. Enforcing the spec breaks working UX to satisfy a stale document; enforcing the code rubber-stamps whatever shipped. Once decided, the reconciled strings become table rows here and the drift is gated from then on.
+
+      DO NOT "FIX" THE DRIFT BY EDITING EITHER SIDE. Changing a UX string needs its own operator approval per surface (spec:tray-ux); changing the spec rewrites the approval record. Both are gated. The ungated move is to ASK.
+
+      ALSO WORTH A MINUTE WHEN SOMEONE IS IN THERE: the spec contradicts itself on its own string, writing `Verifying environment ...` at line 63 and `Verifying environment...` at 59 and 70. And a note for whoever builds the spec↔code gate after the operator decides — of 14 literal strings the spec pins, only ONE appears verbatim in en.toml, because the spec writes COMPOSED renderings (glyph + icon + text) while the locale stores bare text. A naive literal match reports 13 false violations; I measured it.
+    ts: "2026-08-29T17:33:07Z"
+    host: linux
+
+events:
+  - packet_id: approved-ux-strings-are-guarded-by-assertions-that-live-in-the-same-file
+    event:
+      type: note
+      ts: "2026-08-29T17:33:07Z"
+      host: linux
+      summary: >
+        gate built and mutation-verified; audit done; one operator adjudication remains

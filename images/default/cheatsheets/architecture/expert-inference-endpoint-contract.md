@@ -191,6 +191,34 @@ This case is also a correction to this probe's own first cut, which reported
 exists to expose in `lib-inference-state.sh`. A diagnostic is not exempt from
 the failure mode it diagnoses.
 
+### The synthesis budget, and why raising it is deliberate
+
+`TILLANDSIAS_SYNTH_BUDGET_MS` (order 927-2q4w) overrides the tier's synthesis
+budget. Unset, every tier gets exactly what it always got — pinned by test, so
+no host changes behaviour by upgrading.
+
+**A budget is a promise that the wait ENDS.** The override is clamped to 60 s:
+an operator who sets ten minutes has not configured patience, they have
+configured a hang.
+
+Raise it only on a host whose contract-satisfying model is genuinely slower than
+the tier — measured on darwin, a 7b answering in 10–24 s against a 3000 ms quick
+budget. It is **not** a fix for a model that cannot cite. Measured on lenovinha,
+`qwen2.5:0.5b` answers in 927–2885 ms (inside the budget) yet echoed 2/2, 0/2,
+1/2 and 2/2 of the retrieved keys across four *identical* prompts, and one run
+fabricated a source key. Those are two different problems wearing one symptom:
+
+| host | can cite? | fast enough? | the actual constraint |
+|------|-----------|--------------|-----------------------|
+| darwin 7b | yes | no | budget — raise it deliberately |
+| CPU floor 0.5b | not reliably | yes | model capability — no budget helps |
+
+On the CPU floor, retrieval-only is the **more accurate** answer, not a degraded
+one: the only-if-used citation filter rejected that fabricated key and fell back
+to the cited digest. Do not lower the citation bar to make a small model
+"work" — on that host the filter is the only thing between the user and an
+invented source.
+
 ## Recipes
 
 ```bash
