@@ -315,6 +315,20 @@ pub fn domain_indices(chunks: &[Chunk], domain: Option<&str>) -> Vec<usize> {
         .collect()
 }
 
+/// The similarity floor below which retrieval returns NOTHING, so the
+/// no-coverage refusal actually fires. Without it, k-NN always returns k
+/// chunks and the cited fallback dresses irrelevant-but-real citations as a
+/// confident answer — hallucination through the citation path, measured on
+/// darwin 2026-08-29 ("how do I make sourdough starter?" drew six confident
+/// spec citations). Default is a first cut pending calibration against real
+/// score distributions (recorded on 920-pxg6); tune per-host with the env.
+fn retrieve_min_score() -> f32 {
+    std::env::var("TILLANDSIAS_RETRIEVE_MIN_SCORE")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0.45)
+}
+
 /// Domain-filtered cosine top-k: [`spec::top_k`]'s ranking over a subset of
 /// the entry's vectors, without cloning the index. Returns entry indices.
 fn top_k_filtered(
@@ -499,7 +513,7 @@ pub async fn run_grounded(
     if qvecs.iter().all(Option::is_none) {
         return Envelope::unsupported(
             format!(
-                "the embedding endpoint {embed_base} did not answer for model {embed_model} — the grounded pipeline cannot retrieve"
+                "the embedding endpoint {embed_base} did not answer for model {embed_model} — the grounded pipeline cannot retrieve (if that is an ollama ROOT url, use its OpenAI-compatible /v1 base: TILLANDSIAS_EMBED_ENDPOINT=http://host:11434/v1)"
             ),
             freshness,
         );
@@ -509,17 +523,23 @@ pub async fn run_grounded(
     //    REAL: tokio::time::timeout around each synthesis dispatch) ─────────
     let mut synth_tasks = tokio::task::JoinSet::new();
     let mut retrieved: Vec<Option<Vec<ScoredChunk>>> = (0..trimmed.len()).map(|_| None).collect();
+    let floor = retrieve_min_score();
+    let mut best_floored: f32 = 0.0;
     for (i, p) in trimmed.iter().enumerate() {
         let Some(qv) = &qvecs[i] else { continue };
         let top = top_k_filtered(qv, &entry.vectors, &selected, RETRIEVE_K);
         let scored: Vec<ScoredChunk> = top
             .iter()
+            .filter(|(_, score)| *score >= floor)
             .map(|(idx, score)| ScoredChunk {
                 chunk: entry.chunks[*idx].clone(),
                 score: *score,
             })
             .collect();
         if scored.is_empty() {
+            if let Some((_, best)) = top.first() {
+                best_floored = best_floored.max(*best);
+            }
             continue;
         }
         let ctx: String = scored
@@ -581,9 +601,20 @@ pub async fn run_grounded(
             // The cited fallback: keys are present in the digest by
             // construction, so good retrieval still yields a verifiable
             // cited answer instead of refusing — and model prose that used
-            // no key is DISCARDED here, never shipped uncited.
+            // no key is DISCARDED here, never shipped uncited. The digest's
+            // first line names WHICH producer fired: "no synthesis" and
+            // "prose cited no key" send an operator to different knobs
+            // (a dead endpoint vs a model too small to echo keys — the
+            // second was misdiagnosed as the first on darwin 2026-08-29,
+            // ollama's log showing 14 healthy HTTP 200 syntheses).
             let chunks: Vec<Chunk> = scored.iter().map(|sc| sc.chunk.clone()).collect();
-            let digest = spec::retrieval_only_answer(&chunks);
+            let digest = match &synths[i] {
+                Some(_) => format!(
+                    "synthesis discarded: the model's prose cited none of the retrieved keys\n{}",
+                    spec::retrieval_only_answer(&chunks)
+                ),
+                None => spec::retrieval_only_answer(&chunks),
+            };
             env = spec::build_envelope_scored_with_freshness(&digest, scored, freshness.clone());
         }
         // D2: the entry's frame on every citation BEFORE any HEAD stamp.
@@ -603,6 +634,20 @@ pub async fn run_grounded(
     }
 
     if outcomes.is_empty() {
+        // Distinguish out-of-coverage (retrieval ran, nothing reached the
+        // floor) from every other empty outcome — this is the third refusal
+        // the local-experts contract promises, previously unreachable.
+        if withheld.is_empty() && best_floored > 0.0 {
+            return Envelope::unsupported(
+                format!(
+                    "nothing in the {} corpus is similar enough to this question (best score {:.2} < floor {:.2}) — likely out of coverage; TILLANDSIAS_RETRIEVE_MIN_SCORE tunes the floor",
+                    domain.as_deref().unwrap_or("full"),
+                    best_floored,
+                    floor,
+                ),
+                freshness,
+            );
+        }
         let detail = withheld
             .first()
             .cloned()
@@ -836,6 +881,35 @@ mod tests {
         SpecIndexEntry::load_dir(dir).expect("fixture entry loads")
     }
 
+    /// A listener that answers POST /embeddings with a fixed vector and 404s
+    /// everything else — retrieval runs for real, synthesis stays unreachable.
+    fn embedding_stub(vector: &'static str) -> String {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            let body = format!("{{\"data\":[{{\"embedding\":{vector}}}]}}");
+            for stream in listener.incoming() {
+                let Ok(mut s) = stream else { continue };
+                let mut buf = [0u8; 8192];
+                let _ = s.read(&mut buf);
+                let head = String::from_utf8_lossy(&buf);
+                let resp = if head.contains("/embeddings") {
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        body.len(),
+                        body
+                    )
+                } else {
+                    "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                        .to_string()
+                };
+                let _ = s.write_all(resp.as_bytes());
+            }
+        });
+        format!("http://127.0.0.1:{port}/v1")
+    }
+
     /// A listener that counts CONNECTIONS and answers nothing useful — the
     /// probe that proves a refusal path made zero model requests.
     fn counting_listener() -> (String, Arc<std::sync::atomic::AtomicUsize>) {
@@ -896,6 +970,69 @@ mod tests {
             count.load(std::sync::atomic::Ordering::SeqCst),
             0,
             "a refusal path must never contact a model endpoint"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// The third promised refusal actually fires: retrieval that runs but
+    /// falls below the similarity floor returns the typed out-of-coverage
+    /// refusal — never irrelevant-but-real citations dressed as an answer
+    /// (the darwin sourdough finding, 2026-08-29).
+    #[test]
+    fn below_floor_retrieval_refuses_out_of_coverage() {
+        let root = fixture_root("floor");
+        let entry = entry_with(
+            &root.join("entry"),
+            vec![chunk(0, "k", "spec", "openspec/specs/x/spec.md")],
+            None,
+        );
+        // Entry vectors are [1,0]; this query embeds nearly orthogonal, so
+        // cosine ~0.10 sits under the 0.45 default floor.
+        let base = embedding_stub("[0.1,0.995]");
+        let cfg = cfg_with(Some(base.clone()), base, root.clone());
+        let runtime = shared_runtime(&root);
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let env = rt.block_on(run_grounded(
+            &runtime,
+            &entry,
+            &cfg,
+            "how do I make sourdough starter?",
+        ));
+        assert_eq!(env.confidence(), Confidence::Unsupported);
+        assert!(env.answer().contains("out of coverage"), "{}", env.answer());
+        assert!(env.citations().is_empty());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// Positive control for the floor: an aligned query passes it, and with
+    /// synthesis unreachable the cited digest ships — proving the floor, not
+    /// the endpoint, separates coverage from no-coverage.
+    #[test]
+    fn above_floor_retrieval_yields_cited_digest() {
+        let root = fixture_root("floor-pos");
+        std::fs::create_dir_all(root.join("openspec/specs/x")).unwrap();
+        std::fs::write(root.join("openspec/specs/x/spec.md"), "k body\nline two\n").unwrap();
+        let entry = entry_with(
+            &root.join("entry"),
+            vec![chunk(0, "k", "spec", "openspec/specs/x/spec.md")],
+            None,
+        );
+        let base = embedding_stub("[0.999,0.01]");
+        let cfg = cfg_with(Some(base.clone()), base, root.clone());
+        let runtime = shared_runtime(&root);
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let env = rt.block_on(run_grounded(&runtime, &entry, &cfg, "what governs specs?"));
+        assert_ne!(
+            env.confidence(),
+            Confidence::Unsupported,
+            "{}",
+            env.answer()
+        );
+        assert!(!env.citations().is_empty());
+        assert!(
+            env.answer().contains("retrieval-only, no synthesis"),
+            "{}",
+            env.answer()
         );
         let _ = std::fs::remove_dir_all(&root);
     }
