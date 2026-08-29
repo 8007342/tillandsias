@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: exec-wire-silently-eats-control-bytes-from-binary-stdin
+    field: status
+    value: ready
+    ts: "2026-08-29T18:21:57Z"
+    host: macos
+
+events:
+  - packet_id: exec-wire-silently-eats-control-bytes-from-binary-stdin
+    event:
+      type: note
+      ts: "2026-08-29T18:21:57Z"
+      host: macos
+      summary: >
+        design slice complete: pipe-for-stdin-only chosen, via a new capability-gated variant rather than a field on PtyOpen — because postcard field skew is asymmetric and an old reader would SILENTLY ignore a session kind (measured both directions, test pinned). CAP_PTY_DATA_SESSION reserved with the full record. Implementation deliberately not done: it lands in the fork/exec path shared by attach and exec, and its correctness depends on a fallback that must stay loud. Released to ready so the implementation starts from a settled decision, with the nine-row harness as its first exit criterion.
