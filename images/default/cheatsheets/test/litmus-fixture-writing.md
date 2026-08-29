@@ -219,6 +219,26 @@ Corollary already in this file: the same discipline applied to assertions
 themselves — watch a new check FAIL against the defect it targets before
 trusting its green.
 
+## When a checker accuses correct code, fix the checker — with a mutation control
+
+Two guard false positives in one change (830-xsk2, macbook, 2026-08-29),
+same root: a guard parsing a PATTERN LANGUAGE EMBEDDED IN A HOST LANGUAGE
+(Rust declarations by regex; shell by regex) met a nesting level it does not
+model. `check-source-slice-bounds.sh` called a working slice dead because its
+declaration regex admitted `pub`/`async` but not `unsafe fn`;
+`check-no-spawn-in-if-not.sh` then read the `|` INSIDE that quoted regex as a
+shell pipeline.
+
+The tempting responses damage correct code or bury the gap: weaken the test
+the first guard protects, or drop a `# sigpipe-ok` marker — a comment
+asserting "I checked, it is fine" on a line the checker never understood.
+The right move both times: **fix the guard's model, then run the mutation
+control that proves the widened guard can still go red** (a genuinely absent
+slice bound must still exit 1). Widening a checker without proving it can
+still fail just relocates the vacuousness into the guard. Where alternation
+in a quoted regex trips a shell-parsing guard, prefer rewriting the pattern
+(a repeated word-class) over exempting the line.
+
 ## `check-litmus-pin-claims.sh` refuses bare litmus names (721-77yu)
 
 That guard greps every `*.sh` for `litmus:<name>` and refuses any name no test
