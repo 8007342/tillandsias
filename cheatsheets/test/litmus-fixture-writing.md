@@ -160,6 +160,15 @@ Writing a ledger event with an unquoted heredoc silently executed
 delimiter (`<<'EOF'`) whenever the body is prose you want verbatim, and prefer
 writing long ledger prose as a fragment file over passing it as an argument.
 
+The ARGUMENT variant is worse and was measured twice in one day (macuahuitl
+heredoc 2026-08-29 early; macbook double-quoted args 2026-08-29 late): a ledger
+event summary passed as a double-quoted shell argument command-substitutes
+every backticked span, and the prose STILL READS FLUENTLY while no longer
+naming a single command — "I ran the python check via a  heredoc". Append-only
+ledgers make the damage permanent. Remedy: write the body to a file and pass
+`"$(cat body.txt)"` — file content is not re-scanned — then grep the WRITTEN
+fragment for identifiers you know must be present before committing it.
+
 ## `check-litmus-pin-claims.sh` refuses bare litmus names (721-77yu)
 
 That guard greps every `*.sh` for `litmus:<name>` and refuses any name no test
