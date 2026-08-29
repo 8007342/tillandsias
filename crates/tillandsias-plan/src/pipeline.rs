@@ -365,33 +365,12 @@ pub fn domain_indices(chunks: &[Chunk], domain: Option<&str>) -> Vec<usize> {
         .collect()
 }
 
-/// The similarity floor below which retrieval returns NOTHING, so the
-/// no-coverage refusal actually fires. Without it, k-NN always returns k
-/// chunks and the cited fallback dresses irrelevant-but-real citations as a
-/// confident answer — hallucination through the citation path, measured on
-/// darwin 2026-08-29 ("how do I make sourdough starter?" drew six confident
-/// spec citations). Default is a first cut pending calibration against real
-/// score distributions (recorded on 920-pxg6); tune per-host with the env.
-fn retrieve_min_score() -> f32 {
-    std::env::var("TILLANDSIAS_RETRIEVE_MIN_SCORE")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(0.45)
-}
-
-/// The coverage floor, applied to the BEST retrieved score: below it the
-/// question is out of corpus coverage and the pipeline refuses, whatever
-/// the per-chunk inclusion floor above would keep. One scalar cannot answer
-/// both questions — measured on darwin 2026-08-29 (n=30, calibrated for
-/// this corpus, not settled): covered best-scores 0.65-0.87, off-topic
-/// probes 0.48-0.60, so the single 0.45 floor refused nothing while 0.62
-/// refuses every measured probe at ~8% cost in kept covered citations.
-fn refusal_floor() -> f32 {
-    std::env::var("TILLANDSIAS_RETRIEVE_REFUSAL_FLOOR")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(0.62)
-}
+// The similarity floors — the per-chunk inclusion floor and the best-score
+// coverage floor (one scalar cannot answer both questions; the darwin n=30
+// calibration and the sourdough finding are recorded on 920-pxg6) — moved to
+// `spec::retrieve_min_score` / `spec::refusal_floor` under order 821-73es, so
+// this pipeline and the shell spec_answer path (`spec-floor`) read the same
+// knobs and defaults.
 
 /// The three ways synthesis fails to produce usable prose — each owes its
 /// own message, or a model slower than the tier budget is misdiagnosed as
@@ -596,32 +575,31 @@ pub async fn run_grounded(
     //    REAL: tokio::time::timeout around each synthesis dispatch) ─────────
     let mut synth_tasks = tokio::task::JoinSet::new();
     let mut retrieved: Vec<Option<Vec<ScoredChunk>>> = (0..trimmed.len()).map(|_| None).collect();
-    let floor = retrieve_min_score();
-    let refusal = refusal_floor();
+    let floor = spec::retrieve_min_score();
+    let refusal = spec::refusal_floor();
     let mut best_floored: f32 = 0.0;
     for (i, p) in trimmed.iter().enumerate() {
         let Some(qv) = &qvecs[i] else { continue };
         let top = top_k_filtered(qv, &entry.vectors, &selected, RETRIEVE_K);
         // Coverage is decided by the BEST score; citation-worthiness per
         // chunk. A variant whose best hit is under the refusal floor is
-        // out of coverage and never reaches synthesis.
-        let best = top.first().map(|(_, s)| *s).unwrap_or(0.0);
-        if best < refusal {
-            best_floored = best_floored.max(best);
-            continue;
-        }
-        let scored: Vec<ScoredChunk> = top
+        // out of coverage and never reaches synthesis. ONE implementation
+        // of that decision — spec::apply_retrieval_floors — shared with
+        // the `spec-floor` arm the shell spec_answer path calls (821-73es).
+        let all_scored: Vec<ScoredChunk> = top
             .iter()
-            .filter(|(_, score)| *score >= floor)
             .map(|(idx, score)| ScoredChunk {
                 chunk: entry.chunks[*idx].clone(),
                 score: *score,
             })
             .collect();
-        if scored.is_empty() {
-            best_floored = best_floored.max(best);
-            continue;
-        }
+        let scored = match spec::apply_retrieval_floors(all_scored, floor, refusal) {
+            spec::FloorDecision::Keep(kept) => kept,
+            spec::FloorDecision::OutOfCoverage { best } => {
+                best_floored = best_floored.max(best);
+                continue;
+            }
+        };
         let ctx: String = scored
             .iter()
             .map(|sc| {
@@ -726,8 +704,7 @@ pub async fn run_grounded(
         // the local-experts contract promises, previously unreachable.
         if withheld.is_empty() && best_floored > 0.0 {
             return Envelope::unsupported(
-                format!(
-                    "nothing in the {} corpus is similar enough to this question (best score {:.2} < refusal floor {:.2}) — likely out of coverage; TILLANDSIAS_RETRIEVE_REFUSAL_FLOOR (coverage) and TILLANDSIAS_RETRIEVE_MIN_SCORE (per-chunk) tune the floors",
+                spec::out_of_coverage_reason(
                     domain.as_deref().unwrap_or("full"),
                     best_floored,
                     refusal,
