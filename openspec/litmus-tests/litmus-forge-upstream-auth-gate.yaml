@@ -100,6 +100,45 @@ critical_path:
     timeout_ms: 10000
     expected_behavior: "ok: guard-denied-blocks-before-drain"
 
+  # ORDER 809-w2xy. `denied` alone cost the last operator a two-hour
+  # rediscovery: three refusals needing three DIFFERENT actions look identical
+  # from the guard. The reason rides in a MIDDLE ref segment
+  # (denied/<reason>/<epoch>) precisely so the consumer's existing
+  # first-and-last-segment parse is unaffected — the steps below pin both that
+  # the reason reaches the operator AND that a mirror which publishes no reason
+  # still blocks exactly as before.
+  - step: "809-w2xy: a denied/permission verdict names the EXPIRED-TOKEN-FIRST remedy, and still blocks"
+    command: "d=$(mktemp -d); git init -q --bare \"$d/m\"; b=$(git -C \"$d/m\" hash-object -w --stdin </dev/null); git -C \"$d/m\" update-ref \"refs/tillandsias/upstream-auth/denied/permission/$(date +%s)\" \"$b\"; git init -q \"$d/repo\"; git -C \"$d/repo\" remote add origin https://github.com/8007342/tillandsias.git; git -C \"$d/repo\" config url.git://tillandsias-git/tillandsias.insteadOf https://github.com/8007342/tillandsias.git; cp scripts/check-credential-channel.sh \"$d/repo/\"; err=\"$d/err\"; out=$( cd \"$d/repo\" && env PATH=/usr/bin:/bin TILLANDSIAS_CRED_SKIP_GH=1 TILLANDSIAS_HOST_KIND=forge TILLANDSIAS_CRED_SKIP_MIRROR_PROBE=1 TILLANDSIAS_CRED_AUTH_PROBE_URL=\"$d/m\" bash check-credential-channel.sh 2>\"$err\" ); rc=$?; msg=$(grep -c 'REASON=permission' \"$err\"); rm -rf \"$d\"; [ \"$rc\" = 1 ] && [ \"$out\" = 'blocked:upstream-push-unauthorized' ] && [ \"$msg\" -ge 1 ] && echo 'ok: guard-denied-permission-names-remedy' || { echo \"FAIL: rc=$rc out=$out msg=$msg\"; exit 1; }"
+    timeout_ms: 10000
+    expected_behavior: "ok: guard-denied-permission-names-remedy"
+
+  - step: "809-w2xy: a denied/unauthenticated verdict says widening scopes will not help"
+    command: "d=$(mktemp -d); git init -q --bare \"$d/m\"; b=$(git -C \"$d/m\" hash-object -w --stdin </dev/null); git -C \"$d/m\" update-ref \"refs/tillandsias/upstream-auth/denied/unauthenticated/$(date +%s)\" \"$b\"; git init -q \"$d/repo\"; git -C \"$d/repo\" remote add origin https://github.com/8007342/tillandsias.git; git -C \"$d/repo\" config url.git://tillandsias-git/tillandsias.insteadOf https://github.com/8007342/tillandsias.git; cp scripts/check-credential-channel.sh \"$d/repo/\"; err=\"$d/err\"; out=$( cd \"$d/repo\" && env PATH=/usr/bin:/bin TILLANDSIAS_CRED_SKIP_GH=1 TILLANDSIAS_HOST_KIND=forge TILLANDSIAS_CRED_SKIP_MIRROR_PROBE=1 TILLANDSIAS_CRED_AUTH_PROBE_URL=\"$d/m\" bash check-credential-channel.sh 2>\"$err\" ); rc=$?; msg=$(grep -c 'REASON=unauthenticated' \"$err\"); rm -rf \"$d\"; [ \"$rc\" = 1 ] && [ \"$out\" = 'blocked:upstream-push-unauthorized' ] && [ \"$msg\" -ge 1 ] && echo 'ok: guard-denied-unauthenticated-names-remedy' || { echo \"FAIL: rc=$rc out=$out msg=$msg\"; exit 1; }"
+    timeout_ms: 10000
+    expected_behavior: "ok: guard-denied-unauthenticated-names-remedy"
+
+  - step: "809-w2xy: a denied/sso verdict says authorize-for-org, not renew"
+    command: "d=$(mktemp -d); git init -q --bare \"$d/m\"; b=$(git -C \"$d/m\" hash-object -w --stdin </dev/null); git -C \"$d/m\" update-ref \"refs/tillandsias/upstream-auth/denied/sso/$(date +%s)\" \"$b\"; git init -q \"$d/repo\"; git -C \"$d/repo\" remote add origin https://github.com/8007342/tillandsias.git; git -C \"$d/repo\" config url.git://tillandsias-git/tillandsias.insteadOf https://github.com/8007342/tillandsias.git; cp scripts/check-credential-channel.sh \"$d/repo/\"; err=\"$d/err\"; out=$( cd \"$d/repo\" && env PATH=/usr/bin:/bin TILLANDSIAS_CRED_SKIP_GH=1 TILLANDSIAS_HOST_KIND=forge TILLANDSIAS_CRED_SKIP_MIRROR_PROBE=1 TILLANDSIAS_CRED_AUTH_PROBE_URL=\"$d/m\" bash check-credential-channel.sh 2>\"$err\" ); rc=$?; msg=$(grep -c 'REASON=sso' \"$err\"); rm -rf \"$d\"; [ \"$rc\" = 1 ] && [ \"$out\" = 'blocked:upstream-push-unauthorized' ] && [ \"$msg\" -ge 1 ] && echo 'ok: guard-denied-sso-names-remedy' || { echo \"FAIL: rc=$rc out=$out msg=$msg\"; exit 1; }"
+    timeout_ms: 10000
+    expected_behavior: "ok: guard-denied-sso-names-remedy"
+
+  - step: "809-w2xy BACKWARD COMPAT: a mirror publishing the OLD denied/<epoch> shape still blocks, and says the reason is unavailable rather than inventing one"
+    # The field runs older mirror images. If the reason segment had broken the
+    # consumer's parse, the guard would have stopped seeing the verdict at all
+    # and failed OPEN on the one signal that stops worker drain.
+    command: "d=$(mktemp -d); git init -q --bare \"$d/m\"; b=$(git -C \"$d/m\" hash-object -w --stdin </dev/null); git -C \"$d/m\" update-ref \"refs/tillandsias/upstream-auth/denied/$(date +%s)\" \"$b\"; git init -q \"$d/repo\"; git -C \"$d/repo\" remote add origin https://github.com/8007342/tillandsias.git; git -C \"$d/repo\" config url.git://tillandsias-git/tillandsias.insteadOf https://github.com/8007342/tillandsias.git; cp scripts/check-credential-channel.sh \"$d/repo/\"; err=\"$d/err\"; out=$( cd \"$d/repo\" && env PATH=/usr/bin:/bin TILLANDSIAS_CRED_SKIP_GH=1 TILLANDSIAS_HOST_KIND=forge TILLANDSIAS_CRED_SKIP_MIRROR_PROBE=1 TILLANDSIAS_CRED_AUTH_PROBE_URL=\"$d/m\" bash check-credential-channel.sh 2>\"$err\" ); rc=$?; unavail=$(grep -c 'REASON is unavailable' \"$err\"); invented=$(grep -c 'REASON=' \"$err\"); rm -rf \"$d\"; [ \"$rc\" = 1 ] && [ \"$out\" = 'blocked:upstream-push-unauthorized' ] && [ \"$unavail\" -ge 1 ] && [ \"$invented\" = 0 ] && echo 'ok: guard-old-verdict-shape-still-blocks' || { echo \"FAIL: rc=$rc out=$out unavail=$unavail invented=$invented\"; exit 1; }"
+    timeout_ms: 10000
+    expected_behavior: "ok: guard-old-verdict-shape-still-blocks"
+
+  - step: "809-w2xy: the probe classifies the REAL captured 2026-08-15 403 as denied/permission"
+    # The exact upstream text this fleet recorded, replayed offline through the
+    # PUSH_PROBE seam. The operator later found the cause was an EXPIRED PAT, so
+    # this string is the evidence that `permission` must not be read as
+    # "the scope is wrong".
+    command: "d=$(mktemp -d); git init -q --bare \"$d/up\"; git init -q --bare \"$d/m\"; git -C \"$d/m\" remote add origin \"$d/up\"; t=$(git -C \"$d/m\" mktree </dev/null); c=$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t git -C \"$d/m\" commit-tree -m seed \"$t\"); git -C \"$d/m\" update-ref refs/heads/main \"$c\"; printf '%s\\n%s\\n%s\\n' '#!/bin/sh' 'echo \"remote: Permission to 8007342/tillandsias.git denied to 8007342.\" >&2; echo \"fatal: unable to access: The requested URL returned error: 403\" >&2' 'exit 128' > \"$d/mock\"; chmod +x \"$d/mock\"; PUSH_PROBE=\"$d/mock\" images/git/probe-upstream-auth.sh \"$d/m\" >/dev/null 2>&1; ref=$(git -C \"$d/m\" for-each-ref --format='%(refname)' refs/tillandsias/upstream-auth); rm -rf \"$d\"; case \"$ref\" in refs/tillandsias/upstream-auth/denied/permission/*) echo 'ok: probe-classifies-captured-403-as-permission';; *) echo \"FAIL: ref=$ref\"; exit 1;; esac"
+    timeout_ms: 15000
+    expected_behavior: "ok: probe-classifies-captured-403-as-permission"
+
   - step: "NEGATIVE CONTROL (yesterday's token epoch): an authorized verdict older than the freshness bound yields blocked:upstream-auth-stale, exit 1"
     command: "d=$(mktemp -d); git init -q --bare \"$d/m\"; b=$(git -C \"$d/m\" hash-object -w --stdin </dev/null); git -C \"$d/m\" update-ref \"refs/tillandsias/upstream-auth/authorized/$(( $(date +%s) - 86400 ))\" \"$b\"; git init -q \"$d/repo\"; git -C \"$d/repo\" remote add origin https://github.com/8007342/tillandsias.git; git -C \"$d/repo\" config url.git://tillandsias-git/tillandsias.insteadOf https://github.com/8007342/tillandsias.git; cp scripts/check-credential-channel.sh \"$d/repo/\"; out=$( cd \"$d/repo\" && env PATH=/usr/bin:/bin TILLANDSIAS_CRED_SKIP_GH=1 TILLANDSIAS_HOST_KIND=forge TILLANDSIAS_CRED_SKIP_MIRROR_PROBE=1 TILLANDSIAS_CRED_AUTH_PROBE_URL=\"$d/m\" bash check-credential-channel.sh 2>/dev/null ); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 1 ] && [ \"$out\" = 'blocked:upstream-auth-stale' ] && echo 'ok: guard-stale-verdict-blocks' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
     timeout_ms: 10000
