@@ -6,7 +6,7 @@ packets:
       When the nix lane is down, build-guest-binaries falls back to local cargo on hosts where that fallback CANNOT succeed — and the error names the linker, not the lane
     kind: bug
     pickup_role: linux
-    priority: p2
+    priority: p1
     desired_release: v0.5
     release_target: fail-loud-diagnosis-milestone
     capability_tags:
@@ -27,12 +27,38 @@ packets:
       apart), 0/4 OUTSIDE it (foreground, background task, and with
       build.sh's HTTP_PROXY=127.0.0.1:3129 env replicated — all
       ok:nix-toolbox:chroot; user tmpfs quota at 618M/25G when checked).
-      Something in the ci-full execution context breaks the chroot-rung
-      probe, and NOBODY CAN SAY WHAT, because ensure discards the probe's
-      stderr (`store ping >/dev/null 2>&1`, `pull >/dev/null 2>&1`): the
-      verdict names the rung that failed and swallows why. Diagnosing this
-      cost an evening of guesses (proxy, PATH, quota) that a captured
-      stderr line would have settled in one run. build-guest-binaries.sh then printed its honest DEGRADED
+      ROOT CAUSE, found the same evening and VERIFIED: since 2026-08-26
+      (operator direction, with-tillandsias-builder.sh:101 — gate on
+      CAPABILITY not OS identity), this host's local-ci/ci-full re-exec
+      INSIDE the tillandsias-builder toolbox — where podman and nix do not
+      exist (verified: `toolbox run --container tillandsias-builder
+      command -v podman nix` both empty, /usr/bin/podman absent). So
+      inside the toolbox: chroot rung fails (no nix), toolbox-image pull
+      fails (no podman) -> image-pull-failed; and local-ci's
+      podman-path-availability check fails three times per run, skipping
+      the pre-build litmus phase entirely. Every interactive reproduction
+      ran on the HOST, where both exist — the "context" was the container
+      boundary. CONSEQUENCE: the coordinator host's ci-full lane has been
+      structurally unable to run its litmus phase or the nix guest-binary
+      lane since 2026-08-26, while --check stayed green (--check does not
+      re-exec... verify that claim during pickup).
+
+      THE DIAGNOSIS COST remains a finding even with the cause found:
+      ensure discards the failing probe's stderr (`store ping >/dev/null
+      2>&1`, `pull >/dev/null 2>&1`), so the verdict names the rung and
+      swallows why. One captured stderr line ("bash: nix: command not
+      found") would have settled in one run what took an evening of
+      guesses (proxy, PATH, quota).
+
+      THE FIX IS THEREFORE TWO-HEADED and the second head grew: (1) the
+      original fail-late/fail-wrong shape below, still valid; (2) the
+      toolbox needs the tools its lanes require — per the fleet's
+      toolbox-first rule, either podman reaches the host socket from
+      inside (podman-remote/flatpak-spawn --host escape) and nix is
+      installed in the toolbox, or the podman/nix-dependent phases
+      explicitly escape to the host and SAY SO. A lane that silently
+      loses its container tooling at a container boundary is this
+      packet's title one level up. build-guest-binaries.sh then printed its honest DEGRADED
       line and proceeded with local cargo — which compiled the entire
       x86_64 target successfully (~73s) and only THEN failed:
       "ERROR: missing aarch64 musl linker." This host has no
