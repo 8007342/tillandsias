@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: guest-binaries-cargo-fallback-fails-late-and-blames-the-wrong-thing
+    field: status
+    value: completed
+    ts: "2026-08-29T23:25:46Z"
+    host: linux
+
+events:
+  - packet_id: guest-binaries-cargo-fallback-fails-late-and-blames-the-wrong-thing
+    event:
+      type: completed
+      ts: "2026-08-29T23:25:46Z"
+      host: linux
+      summary: >
+        status 'completed' with evidence_refs: ALL EXIT CRITERIA MET. (1) Fail-late: the cargo fallback preflights the aarch64 linker before compiling; refusal names the nix-lane verdict as the thing to fix. (2) DEGRADED path unchanged where the fallback can work. (3) Preflight refusal pinned (watched against the late-failure shape). (4) blocked:nix-toolbox:* verdicts carry captured stderr as detail: lines (pin fixture 13/13; negative control shows 'nix: command not found on PATH' — the line that would have saved the evening). (5) The ci-full-context failure's actual cause recorded, closing the 2/2-vs-0/4 matrix: the toolbox re-exec lost podman and nix at the container boundary; fixed with flatpak-spawn host-escape shims (exit-code/cwd propagation verified exact) plus nodejs and systemd carried in the toolbox per the toolbox-first rule; four toolbox-context litmus reds fixed with causes named (salvage git-identity fallback + captured stderr — the data-loss-prevention path itself failed only in containers; node for two trust fixtures; systemd-run reaching the host user manager through the shared /run/user socket, verified live). ACCEPTANCE: ci-full now RUNS its litmus phase inside the toolbox for the first time since 2026-08-26 — litmus 314/314, local-ci 26/26, both green in runs 6 and 7. The runs' process-level rc=143 is a DISTINCT defect (unattributed SIGTERM near install-validation, checks already green) filed as 936-kdev with the three-run evidence matrix and the ruled-out singleton — not glossed into this close.

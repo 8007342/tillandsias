@@ -2044,23 +2044,34 @@ distributed_work:
       confirm the cross-configuration build goes red, silent when reverted. A
       signature change whose stale callers build green is a build that did not
       look.
-    the_gated_module_rule_inverse: >
-      AND THE SAME GATE HIDES THE DAMAGE IN THE OTHER DIRECTION: CODE ADDED
-      UNDER ONE PLATFORM'S CFG CAN LEAVE TRUNK UNBUILDABLE ON ANOTHER, AND ONLY
-      THAT PLATFORM WILL EVER FIND OUT. The rule above is about a green build
-      that did not COMPILE the gated module. This is its inverse — a green build
-      that compiled everything it could see, while a sibling host cannot build
-      the tree at all.
 
-      Measured 2026-08-29 (macbook, order 935-6fzk, on yolanda's 793-zumy
-      commit 1bc890553). `wsl2_paravirtual_gpu_reason` was added with exactly
-      one production caller, `enumerate_gpus`, which is
-      `#[cfg(target_os = "linux")]`. On Linux the function is live and the gate
-      is green. On macOS that caller vanishes, the only remaining reference is
-      `#[cfg(test)]`, and the non-test build sees dead code — which `-D
-      warnings` turns into a HARD BUILD FAILURE. Trunk was unbuildable on darwin
-      from the moment it merged until a darwin host next compiled it, which
-      happened to be hours later and for an unrelated reason.
+      THE INVERSE INSTANCE, and the structural fact behind it (2026-08-29,
+      the same 793-zumy fn): a helper added on the Windows lane compiled
+      only in its target_os="linux" configuration there (the Windows gate
+      builds inside WSL2), was dead code off-Linux, and left trunk
+      UNBUILDABLE on darwin under -D dead-code until the fleet's one Apple
+      host happened to compile. The author's own gates could not catch it:
+      the Windows lane never compiles the non-Linux arm of files it edits,
+      check-cross-target-build.sh is single-target, and no Apple target is
+      reachable from a non-Apple host. STATE THE STRUCTURAL FACT PLAINLY:
+      for some platforms, ONE host is the sole detector of the entire
+      compile surface. The cheap mitigation is a review-time convention,
+      not a gate: in a file whose helpers carry cfg attributes, a NEW
+      helper inherits its neighbours' attribute unless there is a stated
+      reason not to — the convention was on the line directly above the
+      insertion point, which is exactly where the next author will not
+      look unless told to.
+
+    the_gated_module_rule_inverse: >
+      THE MECHANISM OF THE INVERSE INSTANCE ABOVE, from the host that found it
+      (macbook, 935-6fzk). `wsl2_paravirtual_gpu_reason` had exactly ONE
+      production caller, `enumerate_gpus`, which is
+      `#[cfg(target_os = "linux")]`. On Linux the function is live. On macOS
+      that caller vanishes, the only remaining reference is `#[cfg(test)]`, and
+      the NON-TEST build therefore sees dead code — which `-D warnings` turns
+      from a lint into a HARD BUILD FAILURE. The trigger is not the cfg alone;
+      it is a cfg-gated sole caller plus a test-only survivor plus deny-warnings,
+      and each is individually reasonable.
 
       WHAT MAKES IT INVISIBLE TO THE AUTHOR: nothing in their configuration is
       wrong, nothing they can run goes red, and the defect is not in the code
