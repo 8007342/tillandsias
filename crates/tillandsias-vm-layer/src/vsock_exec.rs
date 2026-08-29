@@ -723,7 +723,8 @@ where
     )
     .await?;
     let ack = read_setup_envelope(&mut stream, exec_idle_timeout()?, "the Hello handshake").await?;
-    match ack.body {
+    // Order 925-eofi: same feature-detect as the non-streaming entry point.
+    let peer_supports_stdin_eof = match ack.body {
         // `server_caps` is READ here, not destructured away (795-zshi): the
         // capability check has to happen between the ack and the PtyOpen, which
         // is the only window in which the host still knows what the guest can do
@@ -741,6 +742,7 @@ where
             if let Some(cap) = required_cap.filter(|c| !server_caps.iter().any(|s| s == c)) {
                 return Err(missing_cap_message(cap, &server_caps));
             }
+            server_caps.iter().any(|c| c == CAP_PTY_STDIN_EOF)
         }
         other => {
             return Err(format!(
@@ -748,7 +750,7 @@ where
                 other.kind()
             ));
         }
-    }
+    };
 
     seq += 1;
     let argv_owned: Vec<String> = argv.iter().map(|s| s.to_string()).collect();
@@ -784,6 +786,35 @@ where
             },
         )
         .await?;
+    }
+
+    // Order 925-eofi. THIS ENTRY POINT NEEDS IT TOO — and that is the whole
+    // lesson of the first attempt: the EOF was added only to
+    // `exec_over_stream_with_input`, its unit tests scanned that function and
+    // passed the gate, and the live run STILL HUNG, because `--exec-guest`
+    // comes through HERE. Two entry points, one of them fixed, green tests.
+    // `every_input_entry_point_sends_stdin_eof` now enumerates them instead of
+    // trusting anyone to remember, and fails on the day a third is added.
+    if !input.is_empty() {
+        if peer_supports_stdin_eof {
+            seq += 1;
+            write_envelope(
+                &mut stream,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq,
+                    body: ControlMessage::PtyStdinEof { session_id },
+                },
+            )
+            .await?;
+        } else {
+            eprintln!(
+                "[vsock_exec] WARNING: this guest does not advertise {CAP_PTY_STDIN_EOF}, so it \
+                 cannot be told that stdin is finished. Commands that read to EOF (a bare `cat`, \
+                 `gh auth login --with-token`) will HANG here rather than return; byte-exact \
+                 readers (`head -c N`) are unaffected. Update the staged guest binary to fix it."
+            );
+        }
     }
 
     // 772-qn6j observability: TILLANDSIAS_VSOCK_EXEC_TRACE=1 prints one
@@ -1384,6 +1415,50 @@ where
 
 #[cfg(test)]
 mod tests {
+
+    /// ORDER 925-eofi — THE TEST THAT WOULD HAVE CAUGHT THE FIRST ATTEMPT.
+    ///
+    /// The EOF was originally added to `exec_over_stream_with_input` only. Its
+    /// tests scanned that function, passed, and the live run still hung —
+    /// because `--exec-guest` goes through the STREAMING entry point, which is
+    /// a separate function with its own handshake and its own input loop. A
+    /// per-function assertion cannot see a sibling that forgot.
+    ///
+    /// So this enumerates every function that writes `PtyData{ToGuest}` from
+    /// an `input` argument and requires each to also send `PtyStdinEof`. A
+    /// third input-sending path will fail here on the day it is written.
+    #[test]
+    fn every_input_entry_point_sends_stdin_eof() {
+        let source = include_str!("vsock_exec.rs");
+        // Function bodies, split on the `async fn` boundary; the test module is
+        // excluded so its own quoted needles do not count as senders.
+        let code = source.split("#[cfg(test)]").next().expect("code region");
+        let mut checked = 0;
+        for chunk in code.split("async fn ").skip(1) {
+            let name = chunk.split('<').next().unwrap_or("");
+            let name = name.split('(').next().unwrap_or("").trim();
+            // Only functions that actually chunk an `input` onto the wire.
+            if !chunk.contains("for chunk in input.chunks(") {
+                continue;
+            }
+            checked += 1;
+            assert!(
+                chunk.contains("ControlMessage::PtyStdinEof"),
+                "{name} sends stdin but never tells the guest it ended — a child \
+                 reading to EOF will hang here. Every input-sending entry point \
+                 must send PtyStdinEof (order 925-eofi)."
+            );
+            assert!(
+                chunk.contains("peer_supports_stdin_eof"),
+                "{name} must gate the EOF on the advertised capability"
+            );
+        }
+        assert!(
+            checked >= 2,
+            "expected at least two input-sending entry points; found {checked} — \
+             if the shape changed, repoint this scan rather than deleting it"
+        );
+    }
 
     /// ORDER 925-eofi — the refusal must be reachable and NAMED. A peer that
     /// cannot be told stdin is finished must not be sent the frame (it would
