@@ -1,0 +1,90 @@
+packets:
+  - packet_id: litmus-covering-specs-multipath-returns-a-confident-zero-on-bsd-awk
+    order: 923-mp4w
+    status: ready
+    title: |
+      `litmus-covering-specs.sh` answers 0-spec(s) for ANY multi-path query on macOS — its primary call shape, failing silently
+    kind: fix
+    pickup_role: any
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags:
+      - macos
+      - cross-platform
+      - litmus
+      - fail-loud
+      - awk
+    estimated_hours: 1
+    deliverable: |
+      `scan()` stops passing multi-line target lists through `awk -v`, so a
+      multi-path query returns the union of covering specs on every host's awk.
+    context: |
+      FOUND by the pre-push gate on the macOS host, 2026-08-29, on a CLEAN
+      origin/linux-next worktree (reproduced with none of my commits applied),
+      immediately after the litmus falsifiability sweep (fa91e9a49/68e5b8688).
+
+      THE FIXTURE ALREADY CATCHES IT — case 8 fails:
+        FAIL: multi-path query expected 2-spec(s), got 'ok:litmus-coverage:0-spec(s)'
+
+      MEASURED ON THE REAL CORPUS, which is worse than the fixture shows:
+        litmus-covering-specs.sh images/default/lib-common.sh
+          -> ok:litmus-coverage:12-spec(s)
+        litmus-covering-specs.sh images/default/lib-common.sh docs/never-referenced.md
+          -> ok:litmus-coverage:0-spec(s)
+        litmus-covering-specs.sh docs/never-referenced.md images/default/lib-common.sh
+          -> ok:litmus-coverage:0-spec(s)
+
+      Adding ANY second path — in either order — collapses 12 covering specs
+      to zero. It is not last-wins; the whole answer is lost.
+
+      ROOT CAUSE. `scan()` passes the newline-separated target list into awk as
+      `awk -v targets="$1"`. A LITERAL NEWLINE inside a `-v` assignment is a
+      fatal error on BSD awk, which is what macOS ships:
+
+        $ awk -v t="$(printf 'a\nb')" 'BEGIN{print}'
+        awk: newline in string a
+        b... at source line 1
+
+      One path carries no newline, so the single-path case works and every
+      single-path fixture assertion passes. Two paths introduce the newline,
+      awk dies, `scan` emits nothing, and the counter honestly reports what it
+      received: zero.
+
+      WHY THIS IS p1 AND NOT COSMETIC. The script's own comment for case 8
+      says "the real call shape is 'the files I changed'" — a changeset is
+      almost always more than one file, and any changeset containing even one
+      uncovered file now reports that NOTHING covers it. It exits 0 and prints
+      the same `ok:litmus-coverage:` token a true empty answer uses, so an
+      editor is told, confidently, to run no litmus tests for a change that a
+      dozen specs cover. That is a confident wrong answer wearing the shape of
+      a correct one — the exact defect class this milestone exists to remove,
+      and the same shape as the 920-pxg6 irrelevant-citations finding.
+
+      WHY LINUX DID NOT SEE IT: gawk accepts a literal newline in a `-v`
+      assignment where BSD awk rejects it, so this is expected to pass on the
+      Linux hosts and fail only on macOS. That asymmetry is unverified from
+      here (no gawk on this host to A/B against) and should be confirmed by
+      whoever picks this up.
+    exit_criteria:
+      - |
+        `litmus-covering-specs.sh <covered-path> <uncovered-path>` returns the
+        same spec count as the covered path alone, on macOS and on Linux.
+      - |
+        The fixture's case 8 passes on BSD awk, verified by running it there.
+      - |
+        MEASURED on both awks, or explicitly recorded as measured on one and
+        reasoned on the other — no inherited claim about the sibling platform.
+    verifiable_closure: |
+      On macOS: `bash scripts/litmus-covering-specs.sh fixture` reports no
+      FAIL, and the real-corpus two-path query above returns 12-spec(s).
+    evidence:
+      - "FAIL: multi-path query expected 2-spec(s), got 'ok:litmus-coverage:0-spec(s)' (fixture, clean origin/linux-next worktree, macOS)"
+      - 'real corpus: lib-common.sh alone = 12-spec(s); with any second path = 0-spec(s), both orders'
+      - "awk: newline in string — BSD awk rejects a literal newline in a -v assignment (awk version 20200816, macOS 26.6.2)"
+    notes: |
+      Suggested fix shape: feed the target list to awk on stdin or via a temp
+      file / here-doc and read it in a `FILENAME == "-"`-style first pass,
+      rather than through `-v`. `-v` is for scalars; a list was never safe
+      there. Filed from the macOS host while blocked on the pre-push gate —
+      the gate did its job and refused the push, so nothing was bypassed.
