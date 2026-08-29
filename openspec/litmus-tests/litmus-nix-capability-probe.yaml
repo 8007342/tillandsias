@@ -54,8 +54,8 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok: discoverable"
 
-  - step: "neither caller decides nix capability from the host binary"
-    command: "if grep -vE '^[[:space:]]*#' scripts/check-nix-deps-stability.sh scripts/select-work-batch.sh | grep -q 'command -v nix'; then echo 'FAIL: a caller is back on the host binary'; else echo 'ok: callers off the host binary'; fi"
+  - step: "none of the four nix-lane callers decides capability from the host binary"
+    command: "if grep -vE '^[[:space:]]*#' scripts/check-nix-deps-stability.sh scripts/select-work-batch.sh scripts/check-nix-builder-e2e.sh scripts/nix-cache-service.sh | grep -q 'command -v nix'; then echo 'FAIL: a caller is back on the host binary'; else echo 'ok: callers off the host binary'; fi"
     timeout_ms: 5000
     expected_behavior: "ok: callers off the host binary"
 

@@ -35,7 +35,19 @@ DRY_RUN=0
 EXPECTED_WALL=96
 TOLERANCE_FACTOR=3
 
-have_nix() { command -v nix >/dev/null 2>&1; }
+# CAPABILITY, NOT `command -v nix` on the HOST (order 799-tb7q second criterion,
+# which fixed the same defect in check-nix-deps-stability.sh and
+# select-work-batch.sh; this script landed outside that sweep).
+#
+# WHY IT MATTERS HERE MORE THAN ANYWHERE ELSE. This e2e exists to prove the nix
+# builder lane works, and 790-6n2k asked lenovinha for SECOND-HOST evidence
+# precisely because its regime differs from macuahuitl's: no host nix, nix
+# reachable only through the tillandsias-nix toolbox. Judging by the host binary
+# made the script skip green on exactly the host whose coverage was the point —
+# `ok:nix-e2e:skip:no-nix` in 0 seconds, indistinguishable in any log from a
+# host that legitimately has no nix at all. A gate that excuses itself on the
+# one machine that would exercise it is not coverage.
+have_nix() { bash "$REPO_ROOT/scripts/nix-toolbox.sh" capability >/dev/null 2>&1; }
 store_present() { [ -d "$CHROOT_STORE/nix/store" ]; }
 
 cache_reachable() {
@@ -69,7 +81,10 @@ if ! image_exists; then
         exit 1
     fi
     echo "[nix-e2e] Building builder image..." >&2
-    podman build -t "$IMAGE_NAME" -f "$containerfile" "$(dirname "$containerfile")" \
+    # --http-proxy=false: containers.conf injects the enclave-only proxy:3128
+    # into every container; a host-network build cannot resolve it (precedent:
+    # build-image.sh).
+    podman build --http-proxy=false -t "$IMAGE_NAME" -f "$containerfile" "$(dirname "$containerfile")" \
         2>&1 | while IFS= read -r line; do printf '  [build] %s\n' "$line" >&2; done || {
         echo "blocked:nix-e2e:image-failed"
         exit 1
@@ -142,9 +157,21 @@ fi
 
 START_WALL=$(date +%s)
 
+# --http-proxy=false, the THIRD build site needing it (790-6n2k landed it on the
+# two `podman build` sites in this file and with-nix-builder.sh, but not here).
+# containers.conf's [engine] env bakes http_proxy=http://proxy:3128 into every
+# container, and `proxy` resolves only inside the enclave network — this run is
+# --network host. MEASURED on lenovinha 2026-08-28: without the flag the build
+# dies at the first source fetch with `curl: (5) Could not resolve proxy: proxy`
+# on cargo-src-bstr, then cascades through vendor-registry and
+# vendor-cargo-deps to `blocked:nix-e2e:build-failed` — a verdict that names the
+# build rather than the proxy. Same family as 923-rmtw, one layer out: there the
+# stale no_proxy list sent cache traffic through squid, here a live proxy var
+# points at a name the network cannot resolve at all.
 BUILD_OUTPUT=$(podman run --rm \
     --privileged \
     --network host \
+    --http-proxy=false \
     --security-opt label=disable \
     "${PODMAN_MOUNTS[@]}" \
     -e "container=podman" \
