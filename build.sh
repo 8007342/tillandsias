@@ -2542,6 +2542,35 @@ if [[ "$FLAG_CHECK" == true ]]; then
             ;;
     esac
 
+    # ORDER 739-6r6n. The macOS twin, reported in the SAME breath as the windows
+    # one — the asymmetry this closes was not a missing script, it was that one
+    # platform had a loud warning and the other had SILENCE, and the silent one
+    # read as healthy. Same gate, same vocabulary, same attestation format; only
+    # the scope differs.
+    _step "Reporting macOS-only source verification state (739-6r6n)..."
+    _macos_only_verdict="$(bash "$SCRIPT_DIR/scripts/check-macos-only-sources-verified.sh" 2>/dev/null || echo "stale:sources-check-failed:macos-only")"
+    case "$_macos_only_verdict" in
+        ok:* | skip:*)
+            _info "macOS-only sources: $_macos_only_verdict"
+            ;;
+        missing:*)
+            # Same distinction the windows arm draws, and for the same reason:
+            # this says the REPOSITORY holds no attestation, never that the
+            # sources are unverified.
+            _warn "macOS-only sources: $_macos_only_verdict"
+            _warn "  No host has committed an attestation for these yet — this is a fact about"
+            _warn "  the repository, NOT a claim that the sources are broken or unverified."
+            _warn "  On a macOS host: cargo test -p tillandsias-macos-tray --bins | \\"
+            _warn "    scripts/check-macos-only-sources-verified.sh attest --from -"
+            ;;
+        *)
+            _warn "macOS-only sources: $_macos_only_verdict"
+            _warn "  A Linux or Windows build compiles stubs for these — this gate did NOT read them."
+            _warn "  Verify natively (cargo test -p tillandsias-macos-tray --bins), then:"
+            _warn "    scripts/check-macos-only-sources-verified.sh attest --from <transcript>"
+            ;;
+    esac
+
     # Record that the gate passed against THIS exact tree. The pre-push hook
     # verifies this stamp instead of re-running the whole gate: a multi-minute
     # hook gets --no-verify'd on its second use and then enforces nothing, while

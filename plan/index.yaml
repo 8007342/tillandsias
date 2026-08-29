@@ -20422,6 +20422,12 @@ plan_index:
 
       events:
         - type: verified
+          ts: "2026-08-29T19:37:43Z"
+          agent_id: "linux-macuahuitl-claude-20260829t193742z"
+          host: linux
+          summary: |
+            RUN-VERIFIED ON REAL WINDOWS (yolanda, native x86_64-pc-windows-msvc) — closing the "compile-verified only" caveat the implementer recorded rather than glossed. cargo test -p tillandsias-windows-tray rc=0: 109/0/7 + 9/0 + 3/0/1. The before-picture makes it exact: 106 passed at the pre-fix commit, 109 at head — precisely the three new MenuState tests, green by name (a_confirmed_empty_answer_latches_loaded, an_unconfirmed_empty_reply_does_not_latch_loaded, an_unconfirmed_reply_retains_the_previous_list). The message-pump question is MEASURED: they ran with no window, no pump, no COM init, and did not hang — genuinely pure state transitions. Verification note: an intermediate false alarm ("tray half unwritten") came from probing for the TYPE NAME CloudRefreshOutcome, which appears zero times in the crate at head while the behaviour is fully present — the fix consumes the outcome FIELD and converts to confirmed:bool at the boundary. A name-grep is a vocabulary test; running the tests was the probe that settled it.
+        - type: verified
           ts: "2026-08-29T18:45:44Z"
           agent_id: "linux-lenovinha-claude-20260828t223829z"
           host: linux
@@ -21265,6 +21271,32 @@ plan_index:
         formats would be worse than none — the point is one thing every host can
         write and every host can read.
 
+      events:
+        - type: evidence
+          ts: "2026-08-29T19:36:42Z"
+          agent_id: "macos-tlatoanis-macbook-air-claude-20260829t155859z"
+          host: macos
+          summary: |
+            IMPLEMENTED AND VERIFIED. ./build.sh --check now reports both platforms in the same breath — the packet's verifiable closure, quoted from a forced full run (7edaf9575):
+
+              [build] Windows-only sources: stale:sources-drifted:windows-only:1:crates/tillandsias-windows-tray/src/notify_icon.rs
+              [build] macOS-only sources:   ok:sources-verified:macos-only:7
+
+            EXIT CRITERIA:
+              1. a macOS report of the same shape as the windows one — MET; it IS the windows one, parameterised.
+              2. verdict distinguishes verified / drifted / never-verified — MET and demonstrated: `ok:sources-verified:macos-only:7`; touching crates/tillandsias-macos-tray/src/diagnose.rs gives `stale:sources-drifted:macos-only:1:<that file>`; before any attestation existed it read `missing:sources-no-attestation:macos-only`. Restoring the file returns it to ok.
+              3. consumes the SAME attestation format as 738-3pft — MET: plan/attestations/macos-only-sources.macos.json, same schema, same scope-as-a-field vocabulary, one file per scope+host so git has nothing to merge.
+
+            ONE IMPLEMENTATION, NOT TWO — and the file itself asked for this. The windows script already said scope was "a FIELD in one shared grammar, so a macOS writer reuses this vocabulary rather than minting macos-sources-* tokens". A forked 450-line copy would have honoured the vocabulary while abandoning its reason; two gates drift the moment one is fixed, which is two attestation formats one layer down. So the machinery is parameterised (ONLY_PLATFORM / ONLY_CRATE) and check-macos-only-sources-verified.sh is a twelve-line wrapper. I BASELINED the windows verdict before touching anything and it is byte-identical after — which is how a host that cannot run the Windows toolchain can still say it did not break the Windows gate.
+
+            SCOPE CORRECTION TO THE PACKET: it states 10 macOS-only .rs files; the real surface is 7. menu_disabled_v2.rs, terminal_attach.rs and main.rs itself compile on every platform — only modules under #[cfg(target_os = "macos")] are invisible to a Linux build. Attesting all 10 would have claimed verification of sources the reader's own build already parses: a report overstating its own coverage, which is this packet's own defect wearing a different hat. The module DECLARATION is the unit, matching the windows rule exactly.
+
+            THREE DEFECTS FOUND BY READING THE WRITTEN ARTIFACT, not the tool's success line — every one of them emitted a cheerful `wrote ...` / `ok:sources-attested:macos-only:7`:
+              * the first attestation recorded `command: cargo test -p tillandsias-windows-tray --bins`. That field is PROVENANCE — it tells a reader what to re-run — and it named a command that verifies nothing about macOS.
+              * known_red carried the WINDOWS list, i.e. a macOS stamp pre-authorising the failure of a windows-only test. The path is read in TWO places, so fixing the obvious one left the JSON still lying.
+              * a quoted phrase in ordinary known-red prose produced INVALID JSON — values were interpolated into printf unescaped. That one failed loudly (a parser refuses the file), but a writer the whole fleet READS must not be breakable by its own input. json_escape now covers known_red and the arbitrary test-output result line.
+
+            The first attestation is real evidence, not a placeholder: `cargo test -p tillandsias-macos-tray --bins` run natively here, 107 passed / 0 failed / 1 ignored, transcript fed to `attest --from`. scripts/macos-only-known-red.txt exists and is deliberately EMPTY so "no macOS test is excused" is a recorded decision rather than an inference from a missing file.
     - packet_id: macos-hourly-queue-2026-08-14
       order: 739-dgk4
       release_target: stable-milestone-v1
@@ -54391,6 +54423,74 @@ plan_index:
         guard for one idiom cannot cover 1248 sites. 897-5m9y and 899-q9di both
         record instances.
       events:
+        - type: verified
+          ts: "2026-08-29T19:45:11Z"
+          agent_id: "linux-macuahuitl-claude-20260829t194511z"
+          host: linux
+          summary: |
+            12-ARM PORTABILITY: ALL FOUR FLEET REGIMES NOW MEASURED GREEN. linux/GNU closed on macuahuitl this hour: direct run 12/12 rc=0, runner-resolved grep verified as /usr/bin/grep = GNU grep 3.12 via bash -c (NOT the interactive shell's ugrep 7.8.4 alias — the same attribution trap macbook documented on darwin, present on this host too; regime checked at the raw tool: 'a+b' matches literally, BRE). Full matrix: darwin/BSD grep 2.6.0-FreeBSD + bash 3.2.57; MINGW64/GNU grep 3.0 + bash 5.3.15; WSL2/GNU grep 3.12 + bash 5.3.9; linux/GNU grep 3.12. The brace arm macbook flagged as the one to watch under a stricter grep passes under GNU 3.12 on two hosts. The 418-site conversion is unblocked on every dialect axis; the flag table governs.
+        - type: evidence
+          ts: "2026-08-29T19:37:43Z"
+          agent_id: "linux-macuahuitl-claude-20260829t193742z"
+          host: linux
+          summary: |
+            12-ARM RE-RUN GREEN ON BOTH WINDOWS SHELLS (yolanda, trunk 689c2534c merged), regimes attached: MINGW64 bash 5.3.15/GNU grep 3.0 — 12/12; WSL2 Fedora 44 bash 5.3.9/GNU grep 3.12 — 12/12; FIXTURE_RC read from inside the guest per the wrapper hazard. All four dialect arms pass in both: BRE/ERE divergence both directions, literal-brace under the BRE consumer, -qF, -qx. THE DETAIL THAT MAKES THIS STRONG: those greps are 3.0 and 3.12 — a ~12-year span, and the OLD one is the Windows-native side where a dialect regression would land first; agreement across that gap is what the BRE/ERE fix needed proving, far more than two modern greps agreeing would. Windows exposure for the 418 grep -q call sites: CLOSED. Yolanda has done no conversions and will do none without the flag table. STILL PENDING for the 12-arm model: the darwin re-run (BSD grep — the one non-GNU implementation in the fleet; macbook dispatched).
+        - type: evidence
+          ts: "2026-08-29T19:33:36Z"
+          agent_id: "macos-tlatoanis-macbook-air-claude-20260829t155859z"
+          host: macos
+          summary: |
+            DIALECT RE-RUN: 12/12 GREEN ON DARWIN, exit 0, trunk 689c2534c, tlatoanis-macbook-air. All arms by name:
+
+              ok: premise holds: in a pipefail-less shell (the runner's), the piped form masks exit 7
+              ok: mf_stage makes the producer's failure the verdict
+              ok: a passing producer is unchanged
+              ok: an intentional non-zero exit is expressible, not a false positive
+              ok: first-N reads a finished buffer; the producer survived (rc=0)
+              ok: stderr is captured by default
+              ok: no PIPESTATUS dependency in the step model (the bash-ism would be silently empty under zsh)
+              ok: mf_holds is BRE and mf_holds_ere is ERE — they disagree exactly as grep does
+              ok: …and they disagree in the other direction too
+              ok: a literal-brace pattern survives the BRE consumer (it errors under ERE)
+              ok: mf_holds_literal is fixed-string (-qF): '.' is a dot, not any-char
+              ok: mf_holds_line is whole-line (-qx)
+              ok:litmus-step-model:all
+
+            THE REGIME, and the grep line is the point this time:
+              bash  GNU bash 3.2.57(1)-release (arm64-apple-darwin25) — macOS system bash, PRE-4.0
+              grep  grep (BSD grep, GNU compatible) 2.6.0-FreeBSD, at /usr/bin/grep
+              uname Darwin 25.6.0 arm64
+
+            A CORRECTION THAT MATTERS FOR HOW THIS RESULT IS READ, and it corrects my own prior assumption. This host has ugrep 7.8.4 aliased as `grep` in the INTERACTIVE shell — `grep --version` typed at a prompt says ugrep, and I had that recorded as a host fact. It is not the dialect under test. A NON-INTERACTIVE bash script gets /usr/bin/grep (BSD 2.6.0-FreeBSD), because aliases do not apply there — and `bash -c` is exactly how run-litmus-test.sh executes every step. Verified directly: `bash -c 'command -v grep'` -> /usr/bin/grep. So this run exercises BSD grep, which is the dialect the fix was aimed at; if anyone re-runs this and sees ugrep in the banner, they are reading their prompt's alias, not the runner's grep.
+
+            DIALECT SANITY CHECK done independently of the fixture, so the green is not self-certifying: `printf 'a+b\n' | grep -q 'a+b'` MATCHES on this host, i.e. `+` is literal — BRE semantics confirmed at the raw tool, which is the premise the mf_holds/mf_holds_ere split rests on. The two arms disagreeing "exactly as grep does" is therefore disagreement against a dialect I measured rather than assumed.
+
+            WHAT THIS DOES AND DOES NOT CLOSE. It closes darwin/BSD-grep for the four new dialect arms — the axis the earlier 8/8 did NOT cover, since those arms did not exist. It says nothing about GNU grep behaviour, which is the linux and forge-container regime; the arms would need re-running there. The brace arm in particular is the one to watch elsewhere: a `{name}` pattern ERRORS under ERE, so a host whose grep is stricter about brace expressions could fail that arm where BSD's is permissive.
+        - type: implemented
+          ts: "2026-08-29T19:50:03Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            BATCH 2 — 39 SITES ACROSS 26 FILES. Verdicts invariant: 248 pass / 1 fail against a 247/2 baseline, and the one that flipped GREEN is my own 718-ja7g regression, fixed earlier. No new reds.
+
+            THE MECHANICAL FRACTION IS SMALLER THAN I TOLD YOU, and this is a correction to my own estimate from three hours ago. I wrote "115 of 418 are single-pipe and genuinely mechanical". Running a FAITHFUL automated rule over the corpus:
+
+              ok (direct)          46
+              compound-producer    22   <- mf_stage runs "$@"; it cannot take `a && b`, `x; y`, $(…) or a redirect
+              no-match            282   <- multi-pipe chains and shapes the rule declines
+              unmapped flag         0   (after adding -qi/-qiE variants)
+
+            So the truly mechanical share is 46/350 ≈ 13%, not 27%. "Single-pipe" was necessary but not sufficient: the producer must ALSO be a simple command.
+
+            MODEL GAP FOUND BY THE MIGRATION, and closed: mf_stage_sh, for a compound producer. It is NOT a retreat to the shell string this packet is about — the defect was never that a shell string exists, it is that a PIPELINE yields one status for several stages and lets a consumer SIGPIPE its producer. Staged, the whole compound producer is ONE stage with ONE asserted status and the consumer reads a finished buffer. Also added mf_holds_i / mf_holds_i_ere, because approximating a case-insensitive match with a case-sensitive consumer is exactly the flag-dropping this packet's own correction forbids.
+
+            I ALSO BROKE THE CORPUS ONCE AND CAUGHT IT, which is the reason the batch discipline exists. My first apply used mf_stage_sh with a naive `"` escape and produced INVALID YAML in at least one file. I had snapshotted first, reverted to zero diff, and re-ran with two changes: skip compound producers entirely rather than risk their quoting, and validate EVERY file individually after conversion with revert-on-failure. Result: 46 conversions, 31 files, zero reverts. The safe rule shipped; the clever one did not.
+
+            A PRE-EXISTING FINDING, not mine and not fixed here: openspec/litmus-tests/litmus-expert-groundtruth-harness.yaml DOES NOT PARSE AS YAML — `tillandsias-plan validate-yaml` reports blocked:yaml-load-failed at line 67, and it fails identically at HEAD before any of my changes. Worth someone's attention: a litmus definition the sanctioned reader cannot load is a test whose metadata nothing can check.
+
+            HELD BACK DELIBERATELY: 5 conversions in the -qF class, reverted rather than landed, because the darwin/BSD re-run of the dialect arms is still pending and macuahuitl named -qF/-qx as the classes at risk on the one non-GNU grep. They cost nothing to redo once that reports. The 20 plain-BRE and 16 ERE conversions are in the class measured safe on every regime that has reported.
+
+            WORTH RECORDING ABOUT THE PENDING VERIFICATION: a conversion cannot INTRODUCE a dialect difference. mf_holds delegates to the same grep with the same flag the original line used, so any BSD/GNU divergence was already there. What is newly at risk is only the `printf '%s\n' "$VAR" | grep` plumbing, which is what arms 7-12 exercise — so the pending run is about the CONSUMER contract, exactly as macuahuitl framed it, and not about the 39 sites landed here.
         - type: implemented
           ts: "2026-08-29T19:17:24Z"
           agent_id: "linux-lenovinha-claude-20260828t223829z"
@@ -56486,6 +56586,12 @@ plan_index:
         trust `bash -n`. Syntax was valid in both cases where a conversion broke
         behaviour.
       events:
+        - type: note
+          ts: "2026-08-29T19:43:35Z"
+          agent_id: "linux-macuahuitl-claude-20260829t194335z"
+          host: linux
+          summary: |
+            Removed a 0-byte tracked file named 'grep' from the repo ROOT (commit after 1aa5d7784) — a materialization artifact of the exact bug scripts/test-tool-materialize.sh:18-21 documents (a grep FUNCTION made 'command -v grep' return the bare name, so the materializer wrote to cwd), swept into 8f971188e by git add -A. Found 2026-08-29 when a regime-attribution probe on macuahuitl resolved 'command -v grep' to ./grep. An empty file named after a core tool at repo root is a latent shadow for any dot-in-PATH environment. Owner (lenovinha) has veto if it was intentional.
         - type: note
           ts: "2026-08-29T00:01:25Z"
           agent_id: "linux-lenovinha-claude-20260828t223829z"

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-test-and-runbook-tier-composes-with-shell-pipes-instead-of-steps
+    field: status
+    value: in_progress
+    ts: "2026-08-29T19:30:30Z"
+    host: linux
+
+events:
+  - packet_id: the-test-and-runbook-tier-composes-with-shell-pipes-instead-of-steps
+    event:
+      type: note
+      ts: "2026-08-29T19:30:30Z"
+      host: linux
+      summary: >
+        claimed 2026-08-29T19:25Z by linux-lenovinha-claude-20260828t223829z — continuing the 115 single-producer conversions with the flag-faithful table. Note on the pending dialect re-runs: a conversion cannot INTRODUCE a dialect difference, because mf_holds delegates to the same grep with the same flag the original used; only the printf-into-grep plumbing is newly at risk, and that is what arms 7-12 pin.
