@@ -346,6 +346,15 @@ named counterpart directly — one grep for the discriminator in the
 supposedly-mirroring crate (zero references to CloudRefreshOutcome) settled
 in one command what the comment had misdirected for days.
 
+The same probe has a false-negative mode, found by the host that used it
+(yolanda, same packet, hours later): a grep for a TYPE NAME is a test of
+vocabulary, not behaviour. After the fix landed, `CloudRefreshOutcome`
+STILL appeared zero times in the crate — the consumer destructures the
+field and converts at the boundary (`outcome` → `confirmed: bool`), so the
+callee's name never has to appear at the call site. Absence of the name
+proves nothing in either direction. When a runnable test exists, run it;
+it was always the stronger probe.
+
 ## Exit codes do not survive `wsl.exe -- bash -c '<quoted script>'`
 
 Measured on yolanda 2026-08-29 (740-3k4s WSL verification): three
