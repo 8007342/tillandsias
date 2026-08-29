@@ -1817,6 +1817,57 @@ Before exit:
 
    `--backfill` only reaches BACKWARD (a future `--ts` is still refused), so it
    waives nothing the limit exists to protect, and the refusal already names it.
+2b. **Ask which litmus specs cover the files you touched** (order 748-tkjx),
+   BEFORE the gate rather than after the next host finds the red:
+
+   ```bash
+   scripts/litmus-covering-specs.sh --run --changed      # the specs to re-run
+   scripts/litmus-covering-specs.sh <path>...            # one file, with detail
+   ```
+
+   `./build.sh --check` runs NO litmus (deliberate — the suite is minutes, and
+   a gate that slow gets bypassed with `--no-verify`), so a green gate plus the
+   spec you happened to be working in can both pass over another spec's broken
+   pin. That is measured, twice: on 2026-08-15 an edit to
+   `images/default/lib-common.sh` left `litmus:startup-context-addendum-shape`
+   red through a green `--check` and a passing 7/7 run of the agent's own spec;
+   on 2026-08-28 three tests were found red back to `af745f3fd` only because a
+   full suite happened to run (921-vtf4). `lib-common.sh` alone is covered by
+   twelve specs across four lanes.
+
+   ADVISORY and cheap (~90ms over the whole corpus, no build). It answers from
+   committed data — each test's declared `workspace contains` artifacts plus its
+   commands — so there is no second list to drift. `match:declared` is an
+   authored coverage claim, `match:command` is coverage the preconditions never
+   declared; `binding:unbound` means no spec binds that test, so it executes in
+   no suite (885-92iu) and is excluded from the count and from `--run`. A path
+   no litmus references answers `ok:litmus-coverage:0-spec(s)` and nothing
+   else — an editor of an uncovered file is not nagged.
+
+2c. **Report split parents still competing with their own children**
+   (order 750-zrt4):
+
+   ```bash
+   tillandsias-plan split-parents   # parent<TAB>status<TAB>child:status,...
+   ```
+
+   A packet whose work has been split keeps `ready` and gains a `split_into`
+   list, and only `ready` is claimable — so a fully-delegated parent stays in
+   the pool forever. Measured 2026-08-14/15: `select-work-batch.sh linux`
+   reported `urgent=mirror-identity-lane-sidecar-and-sshd` on four consecutive
+   cycles and no host claimed it (eleven design rungs behind a 3-hour
+   estimate), while one level up 606-bvnp ranked #1 claimable with all four
+   slices already spoken for. Both were fixed by hand, which depended on an
+   agent noticing a four-cycle stall.
+
+   REPORTS ONLY — it names the children and their statuses so you can see where
+   the work went, and changes nothing. Resolve one by setting the parent
+   `blocked` with an event naming the children (accurate: it cannot progress
+   without them), or, if it genuinely retains work of its own, declare
+   `retains_direct_work: true`. **Never `obsoleted`** — that status satisfies
+   dependents and would falsely unblock work that is still waiting on the
+   rungs.
+
 3. Validate touched YAML with a parser, using the one that EXISTS where you are:
    `tillandsias-policy validate-yaml <files>` where built, else
    `yq . <file> >/dev/null`, else `ruby -ryaml -e "YAML.load_file('<file>')"`.

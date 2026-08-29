@@ -259,6 +259,18 @@ pub fn is_parked_status(status: &str) -> bool {
     )
 }
 
+/// A packet whose work has been split into children and that is STILL in a
+/// claimable status, so the selector keeps offering it (750-zrt4). `children`
+/// carries each resolvable child with its own status, because a host told a
+/// parent is excluded needs to know where the work went — a packet that simply
+/// vanishes from the batch is a worse answer than one that is offered wrongly.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct SplitParent {
+    pub parent: String,
+    pub status: String,
+    pub children: Vec<(String, String)>,
+}
+
 /// One "invisibly blocked" edge: `dependent` waits on `dependency`, which sits
 /// in a parked `status` with `outstanding` naming the action that would free
 /// it (its `next_action`, first line). Ordered for deterministic reporting.
@@ -893,6 +905,68 @@ impl Ledger {
         }
         out.sort();
         out.dedup();
+        out
+    }
+
+    /// Every packet that has been SPLIT INTO children and is nevertheless still
+    /// claimable (750-zrt4).
+    ///
+    /// MEASURED 2026-08-14/15 on tlatoani: `select-work-batch.sh linux` reported
+    /// `urgent=mirror-identity-lane-sidecar-and-sshd` on four consecutive cycles
+    /// and no host claimed it — eleven design rungs behind a 3-hour estimate,
+    /// and the selector had no way to say so. One level up, 606-bvnp was ranked
+    /// #1 claimable with all four of its slices already spoken for. The
+    /// convention is the cause: a split parent keeps `ready` and gains a
+    /// `split_into` list, and only `ready` is claimable, so a fully-delegated
+    /// parent stays in the pool forever. Both were mitigated by hand, which
+    /// depended on an agent noticing a four-cycle stall.
+    ///
+    /// A child that does NOT resolve is skipped rather than counted: a typo in
+    /// `split_into` must not make a parent unclaimable, which would be a worse
+    /// failure than the one being fixed. A parent with no resolvable children
+    /// is therefore never reported.
+    ///
+    /// NEGATIVE CONTROL, and the reason this is a report rather than a rule:
+    /// splitting off one slice must not make the remainder unclaimable. Whether
+    /// a parent retains direct work of its own is not derivable from
+    /// `split_into` — so it is DECLARED, with `retains_direct_work: true`, and
+    /// such a parent is never reported. Nothing here mutates a status; the
+    /// packet's own notes are explicit that auto-setting split parents to
+    /// `obsoleted` would satisfy dependents and turn a selection nuisance into
+    /// a false green.
+    pub fn split_parents(&self) -> Vec<SplitParent> {
+        let mut out = Vec::new();
+        for packet in &self.packets {
+            let status = str_field(packet, "status").unwrap_or("").to_string();
+            // Only `ready` is claimable (status_transition_protocol.canonical_statuses).
+            if status != "ready" {
+                continue;
+            }
+            if matches!(packet.get("retains_direct_work"), Some(Value::Bool(true))) {
+                continue;
+            }
+            let mut children = Vec::new();
+            for child in str_list(packet, "split_into") {
+                if self.archived_ids.contains(&child) {
+                    continue;
+                }
+                if let Some(c) = self.resolve(&child) {
+                    let cs = str_field(c, "status").unwrap_or("").to_string();
+                    children.push((self.id_of(c), cs));
+                }
+            }
+            if children.is_empty() {
+                continue;
+            }
+            children.sort();
+            children.dedup();
+            out.push(SplitParent {
+                parent: self.id_of(packet),
+                status,
+                children,
+            });
+        }
+        out.sort();
         out
     }
 
@@ -2120,6 +2194,87 @@ steps:
             downstream,
             vec!["downstream"],
             "adding the upstream query must not change downstream semantics"
+        );
+    }
+
+    #[test]
+    fn split_parents_report_delegated_parents_and_spare_the_ones_that_keep_work() {
+        // 750-zrt4. A fully-delegated parent that stays `ready` keeps competing
+        // with its own children for a cycle. Every negative control the packet
+        // names is asserted here, because each of them, got wrong, is worse
+        // than the bug: a parent that keeps direct work must stay claimable, a
+        // typo in split_into must not make a parent unclaimable, and a terminal
+        // parent is not a selection problem at all.
+        let raw = r#"
+steps:
+  - packet_id: slice-a
+    order: 930
+    status: implemented
+  - packet_id: slice-b
+    order: 931
+    status: ready
+  - packet_id: fully-delegated
+    order: 932
+    status: ready
+    split_into: [slice-a, slice-b]
+  - packet_id: keeps-its-own-work
+    order: 933
+    status: ready
+    retains_direct_work: true
+    split_into: [slice-a]
+  - packet_id: already-terminal
+    order: 934
+    status: obsoleted
+    split_into: [slice-a]
+  - packet_id: typo-in-children
+    order: 935
+    status: ready
+    split_into: [no-such-child]
+  - packet_id: ordinary-ready
+    order: 936
+    status: ready
+"#;
+        let ledger = Ledger::parse(raw, Default::default()).expect("synthetic ledger parses");
+        let parents = ledger.split_parents();
+
+        assert_eq!(
+            parents.len(),
+            1,
+            "exactly one delegated-and-claimable parent expected, got {parents:?}"
+        );
+        let p = &parents[0];
+        assert_eq!(p.parent, "fully-delegated");
+        assert_eq!(p.status, "ready");
+        // Criterion 4: the children are NAMED with their statuses, so a host
+        // reading the exclusion learns where the work went instead of watching
+        // a packet vanish from the batch.
+        assert_eq!(
+            p.children,
+            vec![
+                ("slice-a".to_string(), "implemented".to_string()),
+                ("slice-b".to_string(), "ready".to_string()),
+            ],
+            "children must be named with their own statuses"
+        );
+
+        let named: Vec<&str> = parents.iter().map(|x| x.parent.as_str()).collect();
+        assert!(
+            !named.contains(&"keeps-its-own-work"),
+            "a parent declaring retains_direct_work must stay claimable — splitting \
+             off one slice must not make the remainder unclaimable"
+        );
+        assert!(
+            !named.contains(&"already-terminal"),
+            "a terminal parent is not offered by the selector, so it is not a finding"
+        );
+        assert!(
+            !named.contains(&"typo-in-children"),
+            "an unresolvable child must be skipped: a typo must not make a parent \
+             unclaimable, which would be worse than the bug being fixed"
+        );
+        assert!(
+            !named.contains(&"ordinary-ready"),
+            "a packet with no children is ordinary claimable work"
         );
     }
 

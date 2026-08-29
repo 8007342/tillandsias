@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: split-parents-stay-ready-and-keep-being-offered-as-claimable-work
+    field: status
+    value: completed
+    ts: "2026-08-29T00:18:26Z"
+    host: yoga
+
+events:
+  - packet_id: split-parents-stay-ready-and-keep-being-offered-as-claimable-work
+    event:
+      type: completed
+      ts: "2026-08-29T00:18:26Z"
+      host: yoga
+      summary: >
+        status 'completed' with evidence_refs: tillandsias-plan split-parents (new subcommand over the FOLDED ledger)
+  - packet_id: split-parents-stay-ready-and-keep-being-offered-as-claimable-work
+    event:
+      type: note
+      ts: "2026-08-29T00:18:26Z"
+      host: yoga
+      summary: >
+        split_into made machine-readable; split-parents detector added with negative controls
