@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: wire-local-experts-mode-through-grounded-pipeline
+    event:
+      type: note
+      ts: "2026-08-29T00:33:59Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260828t223811z
+      host: macos
+      summary: >
+        DARWIN LIVE VERIFICATION (2/3): index built host-side. scripts/spec-index-ensure.sh -> ok:spec-index:built:22069, published to ~/.cache/tillandsias/spec-index/<sha>/vectors.jsonl, embedding via host ollama 0.33.0 (brew, operator-approved) with nomic-embed-text. SETUP GOTCHA worth documenting: TILLANDSIAS_EMBED_ENDPOINT must be the OPENAI-COMPATIBLE BASE (http://127.0.0.1:11434/v1), not the ollama root — the script POSTs to $EMBED_EP/embeddings, so the root form yields 'blocked:spec-index:embed-endpoint-refused / HTTP 404 ... on a batch of 64 chunk(s)'. The refusal itself is well-behaved (typed, quotes the exact URL and code) but it attributes the 404 to batch size, which is the wrong cause for a wrong-path 404 and sends the reader to the wrong knob. Cheap fix: probe the base once and name a 404-on-path distinctly from a 404-on-batch.
