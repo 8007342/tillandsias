@@ -902,7 +902,7 @@ multi_host_development:
       - "the canonical gate itself: ./build.sh --check before EVERY push (now mandatory-cheap on Windows; a cargo-only substitute already let one broken merge through, 2026-07-15)"
       - "linux-universe compile/clippy/test verification of any crate (targeted `with-wsl2-builder.sh cargo test -p <crate>`)"
       - "shell/git-shaped scripts and fixture tests (scripts/test-*.sh, litmus command steps, hook/relay fixtures)"
-      - "YAML validation via `tillandsias-plan validate-yaml`/`yaml-get` (order 746-htj9; the ONE sanctioned reader, present wherever this repo is built) + shellcheck (absent from stock Windows)"
+      - "YAML validation via `tillandsias-plan validate-yaml`/`yaml-get`, rich queries via `tillandsias-plan yaml-json <file> | jq '<filter>'` (order 746-htj9; the ONE sanctioned read path — the binary exists wherever this repo is built and jq is the one query tool present in every gate environment; never name yq or ruby in committed automation) + shellcheck (absent from stock Windows)"
       - "unblock-with-NOOP class repairs in sibling scope (cfg gates, dead-code allows) — verify with the wrapped gate, mark PLEASE REVIEW: <sibling>"
       - "research packets whose probes are plain git/bash mechanics (order 238 precedent)"
     file_a_linux_packet_instead:
