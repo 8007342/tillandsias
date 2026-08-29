@@ -50,7 +50,14 @@ critical_path:
     expected_behavior: "1"
 
   - step: "capability is listed in usage — a subcommand callers cannot discover is one they will keep working around with command -v"
-    command: "bash scripts/nix-toolbox.sh --bogus 2>&1 | grep -q 'capability' && echo 'ok: discoverable'"
+    # ORDER 901-jtvi — the STAGED form. The old shape was
+    #   bash scripts/nix-toolbox.sh --bogus 2>&1 | grep -q 'capability' && echo …
+    # which hides two things. The usage probe exits 2 BY DESIGN, and `grep -q`
+    # exits on first match and SIGPIPEs it — so the step passed for reasons it
+    # never stated, and went red under pipefail as a FALSE positive. Staged, the
+    # step SAYS the producer is expected to exit 2, and the consumer reads a
+    # finished buffer instead of truncating a live one.
+    command: "mf_stage usage-probe 2 U -- bash scripts/nix-toolbox.sh --bogus && mf_holds U 'capability' && echo 'ok: discoverable'"
     timeout_ms: 5000
     expected_behavior: "ok: discoverable"
 

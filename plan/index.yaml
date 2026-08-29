@@ -54279,6 +54279,80 @@ plan_index:
         guard for one idiom cannot cover 1248 sites. 897-5m9y and 899-q9di both
         record instances.
       events:
+        - type: verified
+          ts: "2026-08-29T18:21:59Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            GUARDED, MUTATION-VERIFIED — and I found a regression of my own from two packets ago while measuring this one.
+
+            scripts/test-litmus-step-model.sh, six arms, wired into ./build.sh --check:
+              1. a failing producer becomes the verdict
+              2. NEGATIVE CONTROL — a passing producer is unchanged (this must not become "make everything red")
+              3. an INTENTIONAL non-zero is expressible — the case blanket pipefail cannot distinguish
+              4. first-N does not kill the producer (5000 lines, well past a pipe buffer)
+              5. stderr is captured, not silently dropped
+              6. no PIPESTATUS in the model (portable to zsh/BSD)
+
+            Arm 1 also asserts its own PREMISE — that the piped form still masks — so the fixture fails loudly if the hazard ever goes away, rather than passing forever on a stale assumption.
+
+            MUTATION-VERIFIED: nulling mf_stage's exit-code assertion fires arm 1; rewriting mf_run to truncate a live pipe fires arms 1, 3 and 6 together. Clean tree silent.
+
+            TWO SELF-INFLICTED ARM FAILURES, both instructive:
+              * Arm 1 first measured THE WRONG SHELL. The fixture sets `set -uo pipefail`, so my premise check ran under pipefail and reported that the piped form no longer masks — a premise about the RUNNER's shell, tested in a shell with different options. Now checked explicitly with `set +o pipefail`, which is the environment the premise is about.
+              * Arm 6 was TRIPPED BY ITS OWN DOCUMENTATION. It greps for PIPESTATUS in litmus-stdlib.sh; the step model's comment explains that it avoids PIPESTATUS; the comment tripped the guard about the decision. Roughly the twelfth instance of this shape recorded in this repo and at least the third by me personally. Fixed the same way every time: exclude comment lines, assert the BEHAVIOUR not the string.
+
+            A REGRESSION I SHIPPED IN 718-ja7g, FOUND HERE. The baseline suite showed litmus:project-answer-synthesis-refusal-typed already red, and it was mine. My 718-ja7g change added `experts_l1=/experts_l2=` to project-info.sh's synthesis refusal and INSERTED them mid-sentence, before the `;`. That litmus anchors on `…inference_reason=endpoint-unreachable; `, so the grammar change broke it. ./build.sh --check passed because it does not run the full pre-build litmus suite, so it shipped and sat there for two packets.
+
+            THE RULE I BROKE WAS ALREADY WRITTEN DOWN, in lib-expert-capability.sh, about its own line: "APPENDED, never inserted: the existing fields are matched by substring … so growing the line at the end is additive for every current reader." I did not look for it. Fixed by moving the two fields to the END of the refusal sentence; litmus:project-answer-synthesis-refusal-typed and its whole spec are green again (18/18). The comment at the call site now records why, so the next person adding a field there finds the rule at the point of temptation rather than in a sibling file.
+
+            WORTH SAYING PLAINLY: a gate that passes while a litmus test is red is the same "check that passes identically whether or not the thing works" this milestone is named for. --check not covering the litmus suite is a real gap; I am not fixing it in this slice because it is a scoping decision about gate runtime, not a defect I can settle alone.
+
+            PORTABILITY IS AN EXIT CRITERION AND I CAN ONLY HALF-SATISFY IT. lenovinha is linux. The model is written bash-3.2-clean and deliberately avoids PIPESTATUS, `${var,,}`, and GNU-only flags — but WRITTEN PORTABLE IS NOT MEASURED PORTABLE, and this packet's own list contains three defects that were exactly that mistake. scripts/test-litmus-step-model.sh must be run on darwin and msys before anyone treats the model as fleet-ready. Named in next_action rather than claimed.
+        - type: implemented
+          ts: "2026-08-29T18:21:35Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            DESIGN SLICE — the step model, plus a measurement that contradicts the obvious fix and corrects this packet's own surface count.
+
+            THE EXPOSED SURFACE IS 2.5x WHAT A HEAD/TAIL COUNT SUGGESTS, because `grep -q` IS A TRUNCATING CONSUMER and nobody counts it — including this packet's filing, and including my own first pass. It exits the instant it decides, closes the pipe, and SIGPIPEs its producer exactly as `head` does. Measured over the litmus corpus 2026-08-29:
+
+              piped `command:` lines                              1290   (packet said 1248; it has grown)
+              piping into an EARLY-EXIT consumer                   698   (54%)
+                into `grep -q`                                     418   <- the largest class by far
+                into head                                          235
+                into tail                                           93
+                into grep -m                                         3
+
+            MEASURED, not reasoned, on a real step from litmus:forge-plan-expert-build-shape:
+                sed -n '/^ensure_forge_experts() {/,/^}/p' … | grep -q 'cargo build' && echo ok
+                  without pipefail : "ok: no-python-cargo-only"  rc=0
+                  with    pipefail : (no output)                 rc=141   = 128+13, SIGPIPE
+            The producer was healthy. `grep -q` killed it on a successful match.
+
+            THE OBVIOUS FIX IS WRONG, AND THIS IS THE LOAD-BEARING RESULT. I enabled `set -o pipefail` in the runner's step shell (run-litmus-test.sh:1228, `bash -c` with no pipefail today) and re-ran the whole pre-build/instant suite:
+
+              baseline  : 247 pass, 2 fail   (431 total, 182 skipped)
+              pipefail  : 243 pass, 6 fail
+
+            FOUR TESTS FLIPPED. I classified each rather than counting them as wins, and ALL FOUR ARE FALSE POSITIVES:
+              forge-plan-expert-build-shape      `| grep -q` SIGPIPEd a healthy `sed`
+              inference-container-…-shape        `| head -1` SIGPIPEd a healthy `grep`
+              nix-capability-probe               producer exits 2 BY DESIGN (a usage probe)
+              installer-wsl-preflight-shape      `grep -q` non-match used as a boolean
+
+            ZERO MASKED PRODUCER FAILURES IN 249 EXECUTED TESTS. The exit criteria explicitly invite this answer — "If nothing turns red, say so plainly; that is a real and reportable outcome about how much the cluster actually cost" — so: the five field incidents were real, and THIS SUITE IS NOT WHERE THEY LIVE. Blanket pipefail would buy four red tests and no additional truth. That is also precisely why the packet's "step model with per-stage exit codes" is the right shape and a global shell option is not: pipefail cannot tell "the producer failed" from "the producer's non-zero is the point", and a step model can, because the step SAYS which it meant.
+
+            THE MODEL (scripts/litmus-stdlib.sh, in the existing mf_* idiom):
+              mf_run VAR -- CMD…            run to COMPLETION, capture stdout+stderr into $VAR and status into ${VAR}_rc
+              mf_stage NAME WANT VAR -- CMD…  the same with an ASSERTED exit code; `any` for an intentional non-zero
+              mf_holds / mf_lacks VAR RE    the `| grep -q` replacement, over a finished buffer
+              mf_first VAR N                the `| head -N` replacement, over a finished buffer
+
+            The design in one sentence: TRUNCATION BECOMES A PROPERTY OF THE CONSUMER READING A FINISHED BUFFER, never a signal delivered to the producer's throat — which is the exit criteria's own wording. stdout and stderr are captured TOGETHER by default because a dropped stderr is defect (4) in this packet's list; discarding it must be a decision the step records. No PIPESTATUS anywhere: it is bash-only and empty under zsh 5.9, which is defect (3).
+
+            MIGRATED ONE REAL STEP as proof in situ — litmus:nix-capability-probe step 3, deliberately the one pipefail false-positived on. Staged, it states that the usage probe exits 2 by design. It now passes under the normal runner AND under the pipefail runner: the model preserves the verdict and removes the false positive at once.
         - type: filed
           ts: "2026-08-26T04:15:00Z"
           agent_id: linux-macuahuitl-claude-20260826t041222z

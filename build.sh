@@ -2294,6 +2294,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Bash dialect gate passed"
 
+    _step "Checking the litmus step model (901-jtvi)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-step-model.sh" 2>&1; then
+        _error "the litmus step model regressed — a producer's failure or its stderr can go missing again (901-jtvi)"
+        exit 1
+    fi
+    _info "Litmus step-model fixture passed"
+
     _step "Checking end-user UX strings against recorded operator approval (626-w3fn)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-approved-ux-strings.sh" 2>&1; then
         # The script names the file, the string and the ledger it failed to

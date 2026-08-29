@@ -711,13 +711,25 @@ _pa_experts_tier() {
     return 0
 }
 
+# THE EXPERTS FIELDS ARE APPENDED, NEVER INSERTED, and I learned that the
+# expensive way: 718-ja7g first put them mid-sentence, right before the `;`,
+# which broke litmus:project-answer-synthesis-refusal-typed — its assertion
+# anchors on `…inference_reason=endpoint-unreachable; `. ./build.sh --check
+# passed because it does not run the full pre-build litmus suite, so the
+# regression shipped and was found two packets later while measuring 901-jtvi.
+#
+# lib-expert-capability.sh already states the rule for its own line ("APPENDED,
+# never inserted: the existing fields are matched by substring … so growing the
+# line at the end is additive for every current reader"). It applies here for
+# the same reason and I did not look for it. Growing this sentence at the END is
+# additive for every current reader; growing it in the middle is a grammar change.
 _pa_synthesis_refusal() {
     _pa_probe_inference
     _pa_experts_tier
     if [ "${TILLANDSIAS_INFERENCE_STATE:-unknown}" = "ready" ]; then
-        _pa_refusal "synthesis question — missing_capability=synthesis-tier inference_state=ready inference_reason=- experts_l1=${TILLANDSIAS_EXPERTS_L1:-unknown} experts_l2=${TILLANDSIAS_EXPERTS_L2:-unknown}; the deterministic layer holds no citable answer for it, and no synthesis tier is wired into project_answer yet (inference adds recall, never authority — citations stay deterministic-layer products). Deterministic questions (type, status, commands, layout, actions) still answer."
+        _pa_refusal "synthesis question — missing_capability=synthesis-tier inference_state=ready inference_reason=-; the deterministic layer holds no citable answer for it, and no synthesis tier is wired into project_answer yet (inference adds recall, never authority — citations stay deterministic-layer products). Deterministic questions (type, status, commands, layout, actions) still answer. experts_l1=${TILLANDSIAS_EXPERTS_L1:-unknown} experts_l2=${TILLANDSIAS_EXPERTS_L2:-unknown}"
     else
-        _pa_refusal "synthesis question — missing_capability=local-inference inference_state=${TILLANDSIAS_INFERENCE_STATE:-unknown} inference_reason=${TILLANDSIAS_INFERENCE_REASON:--} experts_l1=${TILLANDSIAS_EXPERTS_L1:-unknown} experts_l2=${TILLANDSIAS_EXPERTS_L2:-unknown}; the deterministic layer holds no citable answer for it and no local inference endpoint is available to add recall. Deterministic questions (type, status, commands, layout, actions) still answer from the index alone."
+        _pa_refusal "synthesis question — missing_capability=local-inference inference_state=${TILLANDSIAS_INFERENCE_STATE:-unknown} inference_reason=${TILLANDSIAS_INFERENCE_REASON:--}; the deterministic layer holds no citable answer for it and no local inference endpoint is available to add recall. Deterministic questions (type, status, commands, layout, actions) still answer from the index alone. experts_l1=${TILLANDSIAS_EXPERTS_L1:-unknown} experts_l2=${TILLANDSIAS_EXPERTS_L2:-unknown}"
     fi
 }
 
