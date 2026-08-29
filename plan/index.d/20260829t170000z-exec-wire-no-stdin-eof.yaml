@@ -1,0 +1,90 @@
+packets:
+  - packet_id: exec-wire-cannot-signal-stdin-eof-to-the-guest-child
+    order: 924-eof7
+    status: ready
+    title: |
+      The exec wire has no way to say "stdin is finished", so a guest child that waits for EOF waits forever
+    kind: fix
+    pickup_role: any
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags:
+      - control-wire
+      - exec-wire
+      - protocol
+      - fail-loud
+    estimated_hours: 4
+    deliverable: |
+      Either an explicit end-of-stdin signal on the control wire with the
+      mixed-version handling that implies, or a documented, opt-in in-band
+      convention — chosen deliberately, not defaulted into.
+    context: |
+      SPLIT OUT OF 635-kagg, 2026-08-29. That packet carried this as a
+      "SECONDARY FINDING ... document or fix alongside", and its primary is
+      now verified working, so this is the only live work left in it. It is
+      split rather than closed with the parent because it is a WIRE DESIGN
+      DECISION, not a bug fix, and burying a protocol choice inside a closed
+      bug packet is how it gets lost.
+
+      MECHANISM, established from the tree by the 2026-08-26 claimant and not
+      re-derived here:
+        * Host->guest stdin is `ControlMessage::PtyData { direction: ToGuest }`
+          and nothing else. Grepping tillandsias-control-wire for PtyEof / Eof
+          / CloseStdin returns only doc comments. There is no variant meaning
+          end-of-input.
+        * `exec_over_stream_with_input*` writes `input.chunks(...)` as ToGuest
+          frames then drains ToHost until PtyClose. It sends no terminator,
+          closes nothing, signals nothing.
+        * The child is on a PTY whose master stays open for the session's life,
+          so a reader blocks on a device that will never report EOF.
+
+      That predicts both halves of the observation exactly: `head -c N` returns
+      because it stops after N bytes and never needs EOF; `cat > file` blocks
+      forever because it waits for one. The symptom PAIR is the discriminator —
+      either alone would admit other explanations.
+
+      THE TWO CANDIDATES, with the tradeoff each carries:
+
+        A. IN-BAND VEOF — send 0x04 as a final ToGuest frame. No wire change,
+           works today, every lane. But it is only EOF in CANONICAL mode, it
+           corrupts binary stdin legitimately containing 0x04, and so it must
+           be opt-in per call — which means callers who forget it keep the bug.
+           It also silently does nothing in raw mode, which is the
+           looks-configured-does-nothing shape this milestone exists to remove.
+
+        B. AN EXPLICIT WIRE MESSAGE (PtyStdinEof / a ToGuest flag) — correct in
+           both modes, unambiguous. But it is a wire change needing the
+           mixed-version handling CAP_EXEC_ARGV_VECTOR (795-zshi) and
+           CloudRefreshOutcome (731-eupn) both required: an old guest that does
+           not understand it must not hang differently, and a new host talking
+           to an old guest must know which behaviour it is getting. Same
+           feature-detect-on-HelloAck shape.
+
+      NOT AN EXPLANATION FOR 635-kagg'S PRIMARY, and the parent packet says so
+      explicitly: the setsid-detached reproduction ran with stdin </dev/null —
+      already closed host-side — and produced ZERO output. If the wedge were an
+      stdin-EOF artifact, that is the case that should have WORKED. It is the
+      case that produced nothing at all.
+    exit_criteria:
+      - |
+        A guest child that reads stdin to EOF over the exec wire terminates:
+        `printf 'x' | <exec-wire> cat > /tmp/f` completes rather than hanging.
+      - |
+        MEASURED on a real wire, both directions of version skew if B is
+        chosen: new host / old guest and old host / new guest neither hang nor
+        silently truncate.
+      - |
+        The choice between A and B is recorded with its reason, so the next
+        reader inherits a decision rather than a preference.
+    verifiable_closure: |
+      The piped-stdin case above completes over a real exec-wire session on at
+      least one host, and the skew behaviour is demonstrated rather than argued.
+    evidence:
+      - 'observed in 635-kagg: piped `cat > file` blocks forever; byte-exact `head -c N` works'
+      - 'mechanism read out of tillandsias-control-wire (no EOF variant exists) — 635-kagg event 2026-08-26'
+      - '635-kagg primary verified working 2026-08-29 with this still unfixed, so the two are independent'
+    notes: |
+      Filed by the macOS host when 635-kagg's primary was verified working, so
+      that packet can close on its own evidence without silently dropping the
+      secondary it was asked to carry.

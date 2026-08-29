@@ -13996,6 +13996,46 @@ plan_index:
         closing run (--opencode lane shares the bring-up path), order 401's
         in-container measurements.
       events:
+        - type: note
+          ts: "2026-08-29T16:49:19Z"
+          agent_id: "macos-tlatoanis-macbook-air-claude-20260829t155859z"
+          host: macos
+          summary: |
+            THIRD CORRECTION — MY TWO PREVIOUS EVENTS ARE SILENTLY TRUNCATED; here are the identifiers they lost. I passed those summaries as double-quoted shell arguments containing backticks, so the shell COMMAND-SUBSTITUTED every backticked span and wrote the result. The prose still reads fluently, which is why it is worth flagging rather than leaving: nothing in those events looks damaged, they simply no longer name the commands.
+
+            Restored, in order:
+              * "I ran the python check via a __ heredoc" -> the heredoc was <<'PY' (quoted-delimiter heredoc on stdin).
+              * "Re-run with __ and stdin untouched" -> re-run with: python3 -c "import os;print(os.tcgetpgrp(0))"
+              * "__ inside a __ session" -> tillandsias-headless --debug --bash /home/forge/src/tillandsias, inside a tillandsias-tray --exec-guest session.
+              * "the foreground __ in state Sl on pts/0" -> the foreground podman run --interactive --tty --entrypoint /usr/local/bin/entrypoint-terminal.sh localhost/tillandsias-forge:v0.4.260826.1 (pid 4139, pgid 1415).
+
+            Nothing in the FINDINGS changes: the primary still does not reproduce, my SIGTTOU/T-state mechanism is still refuted, and the ENOTTY claim is still my own probe artifact. Only the command identifiers were lost.
+
+            NOTE FOR ANYONE SCRIPTING THIS LEDGER: pass event text through a file, e.g. --summary "$(cat body.txt)". Content read from a file is not re-scanned for substitution; a backtick inside a double-quoted literal on the command line is. Two of my three events tonight were damaged this way before I checked, and a truncated ledger entry that still reads well is worse than one that obviously broke.
+        - type: evidence
+          ts: "2026-08-29T16:48:20Z"
+          agent_id: "macos-tlatoanis-macbook-air-claude-20260829t155859z"
+          host: macos
+          summary: |
+            PRIMARY VERIFIED WORKING on this host (the host that filed all three original reproductions). 2026-08-29, tray built from a1ee0e97c+, guest v0.4.260826.1, 8 vCPU / 8 GiB, cold image build then warm rerun.  inside a  session: attach reached at t=20s; maintenance container tillandsias-tillandsias-forge-maintenance created and Up; the foreground  in state Sl on pts/0; zero processes in T state at two samples 20s apart; lane log 39127 bytes streaming the forge's own lifecycle output over the wire (git 'Resolving deltas: (54180)', prebuilt tool installs, 'claude curl-install OK (2.1.251)'). Every recorded primary symptom is absent: not silent, container created, output flows. CAVEAT ON CONDITIONS: this guest was reprovisioned 2026-08-28 for 919-jii2, so images built cold on the first run rather than being pre-built as the original reproductions had — the run nonetheless PASSED THROUGH the exact step that used to fail, which is what makes the result meaningful rather than a different experiment.
+        - type: note
+          ts: "2026-08-29T16:48:20Z"
+          agent_id: "macos-tlatoanis-macbook-air-claude-20260829t155859z"
+          host: macos
+          summary: |
+            SECOND CORRECTION, my own measurement bug — no reader should inherit it. Mid-cycle I reported 'the exec-wire hands the child a PTY where isatty() says yes but tcgetpgrp fails with ENOTTY', i.e. a terminal without controlling-terminal semantics. THAT WAS AN ARTIFACT OF MY PROBE. I ran the python check via a  heredoc, which replaces fd 0 with the heredoc pipe — so I measured the pipe, not the PTY. Re-run with  and stdin untouched: tcgetpgrp(0) = 1381, succeeds. The guest child DOES get a proper controlling terminal, exactly as pty_handler.rs intends with setsid + ioctl(TIOCSCTTY) in pre_exec (lines ~251-269). There is no controlling-terminal defect on the exec wire. Recording it because a false 'half a terminal' claim on a p1 packet about a terminal-attach wedge is precisely the kind of plausible-sounding artifact that costs the next reader a cycle.
+        - type: progress
+          ts: "2026-08-29T16:48:00Z"
+          agent_id: "macos-tlatoanis-macbook-air-claude-20260829t155859z"
+          host: macos
+          summary: |
+            CORRECTION — MY OWN MECHANISM EVENT EARLIER THIS CYCLE IS WRONG, AND THE PRIMARY DOES NOT REPRODUCE. I posted a confident 'PRIMARY MECHANISM ESTABLISHED FROM CODE' event arguing the --bash lane's --interactive --tty made podman claim the exec-wire PTY and get SIGTTOU-stopped (T state). MEASURED LIVE ON THIS HOST, 2026-08-29, guest v0.4.260826.1, 8 vCPU / 8 GiB: THAT IS NOT WHAT HAPPENS. The lane reached the foreground attach 20s after launch;  was in state Sl on pts/0 — SLEEPING, NOT STOPPED; an explicit scan for any process in T state found NONE, at the attach and 20s later; the container tillandsias-tillandsias-forge-maintenance was Up; and the lane log grew to 39127 bytes carrying the forge's OWN output over the wire — git 'Resolving deltas: (54180)', '[lifecycle] tools | installed prebuilt trunk/cargo-llvm-cov/cargo-semver-checks/actionlint', '[lifecycle] harness | claude curl-install OK (2.1.251)'. So the attach is not silent, the container is created, and output flows. The packet's primary symptom — silent wedge before container creation, no banner — does NOT reproduce on the current tree. Most plausible cause of the fix is cee23fb9 (the conmon-attach-on-null-stdin wedge) plus what landed after; I did not bisect. WHY MY ARGUMENT WAS SEDUCTIVE AND STILL WRONG: it explained the recorded SIGTERM-absorption and silence elegantly, and the codebase's own comments describe exactly that T-state hazard for OTHER lanes — but an explanation that fits the symptoms is not evidence that it is the operative one. The recorded SIGTERM-absorption was most likely the pre-cee23fb9 conmon attach wait, not job control.
+        - type: progress
+          ts: "2026-08-29T16:01:15Z"
+          agent_id: "macos-tlatoanis-macbook-air-claude-20260829t155859z"
+          host: macos
+          summary: |
+            PRIMARY MECHANISM ESTABLISHED FROM CODE — and the codebase already names it, twice, for OTHER lanes. The --bash lane reaches build args with prompt=None (--bash REJECTS --prompt, main.rs), so non_interactive_prompt=false and the spec takes .interactive().tty() — podman gets --interactive --tty. run_container_attached_observed then spawns it with Stdio::inherit() on all three fds, so in an exec-wire session podman inherits the vsock PTY and tries to CLAIM it. Two comments in this same file already state what that does: build_opencode_forge_args says 'Skip --interactive --tty so podman does not attempt to claim the terminal (which causes SIGTTIN/SIGTTOU / stopped T state when the parent is in a harness PTY)', and the agent-args builder says it 'must NOT claim a TTY, or podman refuses with input device is not a TTY / the child stops (T-state) when the parent is a background/e2e harness rather than a live terminal'. Both lanes that pass a prompt were fixed by skipping the TTY claim; --bash cannot pass a prompt, so it never took that branch and still claims. THIS PREDICTS EVERY RECORDED SYMPTOM, including the ones that looked strange: (1) permanently silent = STOPPED (T), not dead; (2) 'absorbs SIGTERM' = a stopped process leaves SIGTERM pending until continued, while SIGKILL is uncatchable — exactly the recorded 'timeout -s KILL DOES reap it (rc=137) where plain SIGTERM was absorbed'; (3) no output over the wire = stopped before the first write; (4) the setsid + stdin </dev/null variant producing ZERO output = no controlling terminal at all plus a null stdin under --tty; (5) the TRAY lane working = a real terminal emulator where the process genuinely owns the foreground process group, so no SIGTTOU; (6) plain exec-wire commands healthy = they never claim the terminal. NOT YET VERIFIED LIVE: predicted observable is the podman process in state T with its pgid != tcgetpgrp(PTY). That check takes SECONDS, not the 45m-3h the original open-ended reproductions took — the long wedges were the pre-cee23fb9 bring-up hang, which is already fixed.
         - type: progress
           ts: "2026-08-26T18:10:53Z"
           agent_id: "macos-tlatoanis-macbook-air-opus5-20260826t181053z"
