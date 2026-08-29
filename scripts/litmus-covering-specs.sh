@@ -84,11 +84,37 @@ BINDINGS="${TILLANDSIAS_LITMUS_BINDINGS:-$ROOT/openspec/litmus-bindings.yaml}"
 # names inside step blocks (a `size: 2` and a `phase: instant` are in there),
 # and reading the last match would attribute a step's field to the document.
 scan() {
-    awk -v targets="$1" '
-        BEGIN {
-            n = split(targets, ta, "\n")
-            for (i = 1; i <= n; i++) if (ta[i] != "") tgt[ta[i]] = 1
-        }
+    # THE TARGET LIST ARRIVES AS A FILE, NOT THROUGH -v (order 923-mp4w).
+    #
+    # It used to arrive as an awk command-line variable assignment holding the
+    # newline-separated list (the literal spelling is deliberately not written
+    # here: fixture case 9b greps this file for it, and a comment that answers
+    # a check about the code is the 601-462g shape). A literal
+    # newline inside a -v assignment is FATAL on BSD awk, which is what macOS
+    # ships: `awk: newline in string a\nb... at source line 1`. One path has no
+    # newline, so every single-path query worked and every single-path fixture
+    # assertion passed; TWO paths killed awk, this function emitted nothing, and
+    # the counter honestly reported what it received -- zero.
+    #
+    # Measured before the fix, on the real corpus: `lib-common.sh` alone -> 12
+    # specs; `lib-common.sh` plus ANY uncovered path, either order -> 0 specs.
+    # Since this tool's whole call shape is "the files I changed", and a
+    # changeset is normally more than one file, that made it answer
+    # `ok:litmus-coverage:0-spec(s)` -- the same token a true empty answer uses,
+    # exit 0, no warning -- for changes a dozen specs cover.
+    #
+    # gawk accepts the newline where BSD awk rejects it, which is why this
+    # shipped green from the Linux hosts and only the macOS gate caught it.
+    #
+    # `-v` is for scalars. A list goes in a file, read with the NR==FNR idiom.
+    # The file always holds at least one line (printf adds the newline even for
+    # an empty target list), so NR==FNR can never spill into the first corpus
+    # file and mistake it for targets.
+    _scan_tf="$(mktemp)" || return 2
+    _scan_ef="$(mktemp)" || { rm -f "$_scan_tf"; return 2; }
+    printf '%s\n' "$1" > "$_scan_tf"
+    awk '
+        NR == FNR { if ($0 != "") tgt[$0] = 1; next }
         FNR == 1 {
             flush()
             name = ""; spec = ""; phase = ""; size = ""; inpre = 0
@@ -122,7 +148,20 @@ scan() {
                 printf "%s\t%s\t%s\tdeclared\t%s\t%s\n", p, spec, name, phase, size
             }
         }
-    ' "$TESTS_DIR"/*.yaml 2>/dev/null
+    ' "$_scan_tf" "$TESTS_DIR"/*.yaml 2>"$_scan_ef"
+    _scan_rc=$?
+    # A DEAD AWK MUST NOT READ AS "NOTHING COVERS THIS" (923-mp4w). The old
+    # `2>/dev/null` is precisely what turned a fatal awk error into a confident
+    # empty answer: the caller cannot tell "I looked and found none" from "I
+    # could not look". This script already draws that distinction for an
+    # unreadable corpus (`unavailable:`, rc 2); the scan deserves the same.
+    if [ "$_scan_rc" != 0 ] || [ -s "$_scan_ef" ]; then
+        printf 'litmus-covering-specs: scan failed: %s\n' \
+            "$(tr '\n' ' ' < "$_scan_ef")" >&2
+        rm -f "$_scan_tf" "$_scan_ef"
+        return 2
+    fi
+    rm -f "$_scan_tf" "$_scan_ef"
 }
 
 # Which tests some spec actually BINDS. An unbound test executes in no suite.
@@ -137,7 +176,13 @@ query() {
     [ -r "$BINDINGS" ] || { echo "unavailable:litmus-bindings-unreadable"; return 2; }
 
     _q_bound="$(bound_tests)"
-    _q_rows="$(scan "$_q_targets" | sort -u)"
+    # Take scan's exit status BEFORE sorting: a pipeline would discard it and
+    # the `unavailable:` distinction above would be lost again (923-mp4w).
+    _q_rows="$(scan "$_q_targets")" || {
+        echo "unavailable:litmus-scan-failed"
+        return 2
+    }
+    _q_rows="$(printf '%s\n' "$_q_rows" | sort -u)"
 
     _q_specs=""
     _q_out=""
@@ -222,6 +267,7 @@ esac
 
 # ── fixture ──────────────────────────────────────────────────────────────────
 _fx_fail=0
+_fx_n=0
 _fx_dir="$(mktemp -d)"
 _fx_self="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 mkdir -p "$_fx_dir/tests"
@@ -286,10 +332,12 @@ _run() {
     TILLANDSIAS_LITMUS_BINDINGS="$_fx_dir/bindings.yaml" \
         bash "$_fx_self" "$@"
 }
+# Every passing case goes through this so the tally cannot drift from reality.
+_ok() { _fx_n=$((_fx_n + 1)); echo "ok: $1"; }
 _expect_line() {
     _n="$1"; _want="$2"; shift 2
     if _run "$@" 2>/dev/null | grep -qxF "$_want"; then
-        echo "ok: $_n"
+        _ok "$_n"
     else
         echo "FAIL: $_n — no line '$_want' in:"; _run "$@" 2>&1 | sed 's/^/    /'
         _fx_fail=1
@@ -326,7 +374,7 @@ _expect_line "the-count-counts-only-bound-specs" "ok:litmus-coverage:2-spec(s)" 
 #    empty, exit 0, and says nothing else. No nagging.
 _got="$(_run docs/never-referenced.md 2>/dev/null)"; _rc=$?
 if [ "$_got" = "ok:litmus-coverage:0-spec(s)" ] && [ "$_rc" = 0 ]; then
-    echo "ok: an-uncovered-path-is-silent-and-exits-zero"
+    _ok "an-uncovered-path-is-silent-and-exits-zero"
 else
     echo "FAIL: uncovered path expected the bare 0-spec verdict rc=0, got '$_got' rc=$_rc"
     _fx_fail=1
@@ -338,7 +386,7 @@ _expect_line "run-mode-emits-a-runnable-command" \
     "scripts/run-litmus-test.sh alpha --phase pre-build --size instant --compact" \
     --run images/shared/thing.sh
 _got="$(_run --run images/shared/thing.sh 2>/dev/null | grep -c 'gamma')"
-[ "$_got" = "0" ] && echo "ok: run-mode-omits-unbound-specs" \
+[ "$_got" = "0" ] && _ok "run-mode-omits-unbound-specs" \
     || { echo "FAIL: run-mode emitted an unbound spec"; _fx_fail=1; }
 
 # 7. A nested `size:`/`phase:` inside a step must not be read as the document's.
@@ -346,12 +394,12 @@ _got="$(_run --run images/shared/thing.sh 2>/dev/null | grep -c 'gamma')"
 #    `--size instant`, so this is already pinned — assert it explicitly so the
 #    reason survives a refactor.
 _got="$(_run --run images/shared/thing.sh 2>/dev/null | grep -c -- '--size 2')"
-[ "$_got" = "0" ] && echo "ok: a-steps-nested-size-is-not-the-documents-size" \
+[ "$_got" = "0" ] && _ok "a-steps-nested-size-is-not-the-documents-size" \
     || { echo "FAIL: a nested step field leaked into the document's fields"; _fx_fail=1; }
 
 # 8. Several paths at once — the real call shape is "the files I changed".
 _got="$(_run images/shared/thing.sh docs/never-referenced.md 2>/dev/null | tail -1)"
-[ "$_got" = "ok:litmus-coverage:2-spec(s)" ] && echo "ok: multiple-paths-answer-in-one-call" \
+[ "$_got" = "ok:litmus-coverage:2-spec(s)" ] && _ok "multiple-paths-answer-in-one-call" \
     || { echo "FAIL: multi-path query expected 2-spec(s), got '$_got'"; _fx_fail=1; }
 
 # 9. An unreadable corpus is `unavailable:`, never a confident empty answer —
@@ -360,17 +408,29 @@ _got="$(TILLANDSIAS_LITMUS_TESTS_DIR="$_fx_dir/nope" \
         TILLANDSIAS_LITMUS_BINDINGS="$_fx_dir/bindings.yaml" \
         bash "$_fx_self" images/shared/thing.sh 2>/dev/null)"; _rc=$?
 if [ "$_got" = "unavailable:litmus-corpus-unreadable" ] && [ "$_rc" = 2 ]; then
-    echo "ok: an-unreadable-corpus-is-unavailable-not-empty"
+    _ok "an-unreadable-corpus-is-unavailable-not-empty"
 else
     echo "FAIL: expected unavailable:litmus-corpus-unreadable rc=2, got '$_got' rc=$_rc"
     _fx_fail=1
 fi
 
+# 9b. REGRESSION PIN for 923-mp4w. Case 8 above catches the symptom, but only
+#     on an awk that rejects a newline in a -v assignment — on gawk it passed
+#     while the tool was broken for every macOS user. This pins the CAUSE, so
+#     the defect cannot come back green on the host that reintroduces it.
+# The needle is ASSEMBLED, never written literally — otherwise this very line
+# is the match and the check fails on a healthy file. Same reason the fixture
+# assembles the pin-claim prefix above (721-77yu).
+_needle="-v"; _needle="${_needle} targets="
+_got="$(grep -c -- "$_needle" "$_fx_self")"
+[ "$_got" = "0" ] && _ok "the-target-list-is-not-passed-through-awk-v" \
+    || { echo "FAIL: a list is being passed through awk -v again (923-mp4w): fatal on BSD awk"; _fx_fail=1; }
+
 # 10. THE REAL CASE from the packet, against the REAL corpus — verified by
 #     running it, not by reading the map (exit criterion 3).
 _got="$(bash "$_fx_self" --run images/default/lib-common.sh 2>/dev/null | grep -c 'meta-orchestration')"
 if [ "${_got:-0}" -ge 1 ]; then
-    echo "ok: the-real-lib-common.sh-case-returns-meta-orchestration"
+    _ok "the-real-lib-common.sh-case-returns-meta-orchestration"
 else
     echo "FAIL: images/default/lib-common.sh did not return the meta-orchestration spec"
     bash "$_fx_self" images/default/lib-common.sh 2>&1 | sed 's/^/    /' | head -5
@@ -378,5 +438,9 @@ else
 fi
 
 rm -rf "$_fx_dir"
-[ "$_fx_fail" = 0 ] && echo "ok:litmus-covering-specs-fixture:11"
+# The case count is DERIVED, not typed. It was the literal 11 and I added a
+# case (9b) without it changing -- a verification count that cannot notice new
+# verification is the same looks-checked-checks-nothing shape this script's own
+# subject matter is about (923-mp4w).
+[ "$_fx_fail" = 0 ] && echo "ok:litmus-covering-specs-fixture:${_fx_n}"
 exit "$_fx_fail"

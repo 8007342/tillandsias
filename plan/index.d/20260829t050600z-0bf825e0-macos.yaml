@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: wire-local-experts-mode-through-grounded-pipeline
+    event:
+      type: note
+      ts: "2026-08-29T05:06:00Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260828t223811z
+      host: macos
+      summary: >
+        BUT THE MODEL-SIZE FLOOR AND THE TIER BUDGET ARE IN DIRECT CONFLICT — this is the load-bearing consequence and it is why the through-the-pipeline 7b run looked like a failure. Through expert-serve, 7b returned retrieval_only=True with discarded=FALSE — a DIFFERENT path from 3b, which showed 'synthesis discarded'. 7b's prose never reached the citation filter: tier is classified from the QUERY by the Lua classifier (pipeline.rs:427, deterministic — not from endpoint latency), all four probes classified tier=quick, and Quick's budget is 3000ms (lua_runtime.rs:123). 7b's synthesis calls took 10-24s in-pipeline (ollama log, all HTTP 200), so every dispatch was timed out and dropped. Reporting '7b fails the filter' from that run would have been FALSE. CONSEQUENCE: the smallest model that satisfies the citation contract is too slow for the budget the pipeline gives it on this host — local-experts on darwin cannot currently have both grounded synthesis and the quick tier. Someone must give: raise the budget for the synthesis dispatch, classify tier from measured endpoint latency rather than query shape, or accept retrieval-only as the normal mode and say so. THIRD PRODUCER OF THE SAME STRING: 'retrieval-only, no synthesis' now covers (a) no endpoint configured AND (b) synthesis TIMED OUT, while 'synthesis discarded' covers (c) prose cited no keys. Your fix split (c) from (a); (b) is still folded into (a)'s wording, so an operator running any model slower than the tier budget is told their configuration is missing when their latency is the problem. Suggested: 'synthesis timed out after Nms (tier <t> budget)'.
