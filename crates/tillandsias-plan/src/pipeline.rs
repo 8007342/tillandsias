@@ -177,6 +177,56 @@ pub fn http_post_json(
     serde_json::from_str(&payload[start..=end]).ok()
 }
 
+/// A bounded GET used only for LIVENESS (order 718-ja7g). Same socket
+/// discipline as `http_post_json` — hostname-resolving, both timeouts set,
+/// `Connection: close` — so the probe cannot report a reachability the real
+/// dispatch path would not get. Returns true only on a 2xx status line.
+///
+/// Beside the POST rather than in a new module: D6 says one HTTP client, and a
+/// probe that reached the endpoint by some other route would be a second
+/// client with a second set of failure modes, which is exactly how a
+/// diagnostic starts disagreeing with the thing it diagnoses.
+pub fn http_get_ok(base: &str, route: &str, timeout: Duration) -> bool {
+    use std::io::{Read, Write};
+    use std::net::{TcpStream, ToSocketAddrs};
+
+    let Some((host, port, path)) = parse_base(base) else {
+        return false;
+    };
+    let addr = format!("{host}:{port}");
+    let Ok(resolved) = (host.as_str(), port).to_socket_addrs() else {
+        return false;
+    };
+    let Some(mut stream) = resolved
+        .into_iter()
+        .find_map(|a| TcpStream::connect_timeout(&a, timeout).ok())
+    else {
+        return false;
+    };
+    let _ = stream.set_read_timeout(Some(timeout));
+    let _ = stream.set_write_timeout(Some(timeout));
+
+    let request = format!(
+        "GET {path}{route} HTTP/1.1\r\n\
+         Host: {addr}\r\n\
+         Connection: close\r\n\r\n"
+    );
+    if stream.write_all(request.as_bytes()).is_err() {
+        return false;
+    }
+    let mut resp = String::new();
+    if stream.read_to_string(&mut resp).is_err() {
+        return false;
+    }
+    // Status line only. A 2xx is the whole question; the body is the
+    // endpoint's business.
+    resp.lines()
+        .next()
+        .and_then(|l| l.split_whitespace().nth(1))
+        .and_then(|c| c.parse::<u16>().ok())
+        .is_some_and(|c| (200..300).contains(&c))
+}
+
 /// One chat completion over `{base}/chat/completions`. `model` empty = omit
 /// the field. Returns the assistant content, None on any failure or an empty
 /// answer — the caller owns the typed degradation.

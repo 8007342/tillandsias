@@ -102,6 +102,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "ready",
     "select-rows",
     "split-parents",
+    "experts-probe",
     "spec-envelope",
     "spec-index",
     "spec-retrieve",
@@ -147,6 +148,16 @@ const USAGE: &str = concat!(
     "                                     schedulable (device_class, lane, engine) triples, and its\n",
     "                                     present-but-unusable devices. Distinct from `capabilities`\n",
     "                                     above, which reports THIS BINARY's subcommands.\n",
+    "           experts-probe             ORDER 718-ja7g. Which expert TIER is live on this host, as\n",
+    "                                     ONE line: l0 (file-backed, always ready) / l1 (retrieval —\n",
+    "                                     needs BOTH an embeddings endpoint and a built index) / l2\n",
+    "                                     (synthesis). Closed vocabulary per tier: ready | unset |\n",
+    "                                     unreachable | no-index | scheme-unsupported | malformed.\n",
+    "                                     `advice=` names ONE next action. Exit 0 when every\n",
+    "                                     configured tier answers, 1 otherwise — ADVISORY, not a\n",
+    "                                     gate: a dev host with no endpoint is a supported state and\n",
+    "                                     L0 still answers with citations. Both MCP servers consume\n",
+    "                                     this instead of each re-deriving reachability.\n",
     "           corpus-coverage           Which repository file types the spec/answer corpus indexes,\n",
     "                                     which it DECLINES and why. Read-only. The declined list is\n",
     "                                     explicit so an answer's absence can be attributed to a\n",
@@ -2285,6 +2296,35 @@ fn carry_forward_gaps(doc: &serde_yaml::Value) -> Vec<String> {
 
 fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
     match subcommand {
+        "experts-probe" => {
+            // ORDER 718-ja7g. Which expert TIER is actually live on this host,
+            // as one typed line. Replaces both MCP servers each re-deriving
+            // reachability from the same three env vars in their own idiom —
+            // three derivations that could and did disagree.
+            //
+            // EXIT CODE IS ADVISORY, NOT A GATE: 0 when every configured tier
+            // answers, 1 otherwise. A dev host with no endpoint is a normal,
+            // supported state (L0 still answers), so a caller that treats
+            // non-zero as "broken" is reading it wrong — the LINE is the
+            // answer, the code is a convenience for `if` in shell.
+            let timeout = std::time::Duration::from_millis(
+                std::env::var("TILLANDSIAS_EXPERTS_PROBE_TIMEOUT_MS")
+                    .ok()
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(3000),
+            );
+            let (line, all_ready) = tillandsias_plan::experts_probe::run(timeout);
+            println!("{line}");
+            if !all_ready {
+                std::process::exit(1);
+            }
+            // This dispatcher's arms return whether they handled the
+            // subcommand. experts-probe belongs on this LEDGER-FREE fast path:
+            // it reads env and one socket, never folds the plan, and a
+            // diagnostic that paid the ledger load to answer "is the endpoint
+            // up" would be the slowest tool in the box.
+            true
+        }
         "corpus-coverage" => {
             // ORDER 810-k8jy. Every file class under a corpus root, and how the
             // indexer treats it. The packet's complaint was not that HCL and

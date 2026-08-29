@@ -796,6 +796,36 @@ _tillandsias_spec_index_paths() {
 # 789-nc2s and 783-6rik both landed on.
 SPEC_INDEX_ROOT="$(_tillandsias_spec_index_paths | sed -n 1p)"
 SPEC_INDEX_DIR="$(_tillandsias_spec_index_paths | sed -n 2p)"
+# ORDER 718-ja7g. Ask the ONE tier probe and expose its advice sentence.
+# Sourced lazily and at most once per process: the probe opens a socket, and a
+# refusal path is not a place to pay that twice.
+FP_EXPERTS_ADVICE=""
+FP_EXPERTS_PROBED=""
+_fp_experts_advice() {
+    [ -n "$FP_EXPERTS_PROBED" ] && return 0
+    FP_EXPERTS_PROBED=1
+    FP_EXPERTS_ADVICE=""
+    for _fpe_lib in \
+        "${TILLANDSIAS_EXPERTS_PROBE_LIB:-}" \
+        "${BASH_SOURCE[0]%/*}/../../lib-experts-probe.sh" \
+        "/usr/local/lib/tillandsias/lib-experts-probe.sh"; do
+        if [ -n "$_fpe_lib" ] && [ -r "$_fpe_lib" ]; then
+            # shellcheck source=/dev/null
+            . "$_fpe_lib"
+            tillandsias_experts_probe "${PLAN_BIN:-}" || true
+            case "${TILLANDSIAS_EXPERTS_ADVICE:--}" in
+                -|"") FP_EXPERTS_ADVICE="" ;;
+                *)    FP_EXPERTS_ADVICE="TIER PROBE: ${TILLANDSIAS_EXPERTS_ADVICE}" ;;
+            esac
+            return 0
+        fi
+    done
+    # Absent helper is its own named fact, never a silent empty string that
+    # reads as "the probe had nothing to add".
+    FP_EXPERTS_ADVICE="TIER PROBE: unavailable (lib-experts-probe.sh not found) — tier liveness is UNKNOWN, not absent"
+    return 0
+}
+
 spec_answer_envelope() {
     SPEC_INDEX_ROOT="$(_tillandsias_spec_index_paths | sed -n 1p)"
     SPEC_INDEX_DIR="$(_tillandsias_spec_index_paths | sed -n 2p)"
@@ -859,7 +889,13 @@ spec_answer_envelope() {
         return 0
     fi
     if [ -z "$embed_ep" ]; then
-        unsupported_envelope "no embedding endpoint — set TILLANDSIAS_EMBED_ENDPOINT to a /v1 base that serves ${embed_model}"
+        # ORDER 718-ja7g: the refusal carries the SHARED probe's advice instead
+        # of this server's own sentence. Both MCP servers now answer "which
+        # tier is live" from tillandsias-plan experts-probe, so a reader cannot
+        # get two different diagnoses of one host depending on which tool they
+        # happened to call.
+        _fp_experts_advice
+        unsupported_envelope "no embedding endpoint — set TILLANDSIAS_EMBED_ENDPOINT to a /v1 base that serves ${embed_model}. ${FP_EXPERTS_ADVICE}"
         return 0
     fi
     local work qv top synth env
@@ -870,7 +906,14 @@ spec_answer_envelope() {
         -d "$(jq -nc --arg m "$embed_model" --arg q "$question" '{model:$m, input:$q}')" 2>/dev/null \
         | jq -c '.data[0].embedding' > "$qv" 2>/dev/null || [ ! -s "$qv" ]; then
         rm -rf "$work"
-        unsupported_envelope "the embedding endpoint ${embed_ep} did not answer for model ${embed_model} — the spec expert cannot retrieve"
+        # NAME THE /v1-VS-ROOT DISTINCTION (the macbook's finding, 718-ja7g).
+        # A live Ollama at its ROOT url is the single most common shape of this
+        # failure: /api/tags answers, so every other probe on the host says
+        # READY, while /embeddings 404s because the OpenAI-compatible surface
+        # lives under /v1. Saying only "did not answer" sends the reader to
+        # look at a server that is working.
+        _fp_experts_advice
+        unsupported_envelope "the embedding endpoint ${embed_ep} did not answer for model ${embed_model} — the spec expert cannot retrieve. ${FP_EXPERTS_ADVICE}"
         return 0
     fi
     # 2) retrieve (network-free)
