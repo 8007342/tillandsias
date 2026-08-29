@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: empty-cloud-reply-conflates-no-repos-with-failed-fetch
+    field: status
+    value: in_progress
+    ts: "2026-08-29T18:36:31Z"
+    host: linux
+
+events:
+  - packet_id: empty-cloud-reply-conflates-no-repos-with-failed-fetch
+    event:
+      type: note
+      ts: "2026-08-29T18:36:31Z"
+      host: linux
+      summary: >
+        claimed 2026-08-29T18:40Z by linux-lenovinha-claude-20260828t223829z — state verified before work: the wire discriminator and the macOS/Linux handlers already landed, but the WINDOWS tray still destructures CloudRefreshReply { projects, .. } and sets cloud_projects_loaded unconditionally, so exit criterion 2 is unmet on that platform. Verified cargo check -p tillandsias-windows-tray --all-targets builds on this Linux host.
