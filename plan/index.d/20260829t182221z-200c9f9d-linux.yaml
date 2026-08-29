@@ -1,0 +1,68 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-test-and-runbook-tier-composes-with-shell-pipes-instead-of-steps
+    field: next_action
+    value: |-
+      STATE 2026-08-29 (lenovinha). THE STEP MODEL EXISTS, IS GUARDED AND IS IN --check. ONE STEP MIGRATED AS PROOF. THE BULK MIGRATION AND TWO LANES REMAIN.
+
+      USE IT LIKE THIS (scripts/litmus-stdlib.sh, available in every litmus step):
+          mf_stage <name> <expected-rc|any> VAR -- <cmd…>   run to completion, assert ITS status
+          mf_holds VAR <regex>   /  mf_lacks VAR <regex>    replaces `| grep -q`
+          mf_first VAR <n>                                  replaces `| head -n`
+      Worked example in situ: litmus-nix-capability-probe.yaml step 3.
+
+      REMAINING, in the order I would do it:
+
+        1. PORTABILITY, and it is an EXIT CRITERION not a follow-up. Run
+           `bash scripts/test-litmus-step-model.sh` on DARWIN and on MSYS. It is green
+           on linux only. The model is written bash-3.2-clean and avoids PIPESTATUS
+           deliberately, but this packet's own list has three defects that were
+           "written portable, never measured portable". Do this BEFORE any bulk
+           migration — a model that needs changing after 600 conversions is 600
+           conversions of rework.
+
+        2. MIGRATE THE 698, opportunistically and by class, biggest first:
+           418 `| grep -q`   -> mf_stage + mf_holds
+           235 `| head`      -> mf_stage + mf_first
+            93 `| tail`      -> mf_stage + a tail consumer (not yet written; add mf_last)
+           Do NOT convert on faith. Convert a batch, re-run the suite, and confirm the
+           verdicts are unchanged — the model preserves verdicts by design and any
+           change is a bug in the conversion, not a discovery.
+
+        3. THE COUNTERPART SURFACES the packet names and this slice did not touch:
+           212 shell scripts with tee/head/tail pipelines, 57 SKILL.md runbook
+           snippets, 39 PIPESTATUS sites, and `2>/dev/null` on probes. The 39
+           PIPESTATUS sites are the highest value of these: each is a hand-rolled
+           workaround for exactly this defect, and each is broken under zsh.
+
+      WHAT NOT TO DO, measured rather than asserted:
+        * DO NOT turn on `set -o pipefail` in the runner. I measured it across the
+          whole pre-build/instant suite: 4 tests flip and ALL FOUR ARE FALSE
+          POSITIVES; zero masked producer failures exist in 249 executed tests. It
+          cannot distinguish "the producer failed" from "the producer's non-zero is
+          the point".
+        * DO NOT scope this as a lint banning `|`. The packet says so and the
+          measurement backs it: 592 of the 1290 piped steps pipe into something that
+          is NOT an early-exit consumer and are not exposed at all.
+
+      A GAP I FOUND BUT DID NOT CLOSE, because it is a scoping decision rather than a
+      defect I can settle alone: ./build.sh --check does not run the full pre-build
+      litmus suite, so a red litmus can sit on trunk behind a green gate. That is how
+      my own 718-ja7g regression survived two packets. Someone should decide whether
+      --check grows to cover it, or whether something else must.
+    ts: "2026-08-29T18:22:21Z"
+    host: linux
+
+events:
+  - packet_id: the-test-and-runbook-tier-composes-with-shell-pipes-instead-of-steps
+    event:
+      type: note
+      ts: "2026-08-29T18:22:21Z"
+      host: linux
+      summary: >
+        design slice landed; portability lanes and the bulk migration remain

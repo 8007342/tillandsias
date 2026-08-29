@@ -87,7 +87,15 @@ const PTY_WRITE_ENQUEUE_DEADLINE: Duration = Duration::from_millis(250);
 /// would reorder).
 enum PtyWriteCommand {
     Write(Vec<u8>),
-    Resize { rows: u16, cols: u16 },
+    Resize {
+        rows: u16,
+        cols: u16,
+    },
+    /// Host says its stdin for this child is finished (order 925-eofi).
+    /// Routed through this SAME queue as the input bytes, for the ordering
+    /// reason `Resize` documents: an EOF that overtook the bytes it follows
+    /// would truncate them.
+    StdinEof,
 }
 
 /// One active PTY session for a single connection.
@@ -356,6 +364,14 @@ impl PtySessionStore {
             .await;
     }
 
+    /// Handle a `PtyStdinEof`: the host has no more input for this child
+    /// (order 925-eofi). Enqueued on the same bounded queue as the bytes it
+    /// follows so it cannot overtake them.
+    pub async fn stdin_eof(&mut self, session_id: u32) {
+        self.enqueue_write_command(session_id, PtyWriteCommand::StdinEof)
+            .await;
+    }
+
     /// Handle a `PtyResize`: routed through the SAME per-session queue as
     /// `PtyData{ToGuest}` so `TIOCSWINSZ` is applied at its host-arrival
     /// position relative to input bytes (audit D6 ordering note).
@@ -386,6 +402,7 @@ impl PtySessionStore {
         let kind = match &cmd {
             PtyWriteCommand::Write(_) => "PtyData{ToGuest}",
             PtyWriteCommand::Resize { .. } => "PtyResize",
+            PtyWriteCommand::StdinEof => "PtyStdinEof",
         };
         let writer_tx = session.writer_tx.clone();
         match tokio::time::timeout(PTY_WRITE_ENQUEUE_DEADLINE, writer_tx.send(cmd)).await {
@@ -589,6 +606,28 @@ fn set_slave_iutf8(slave: &OwnedFd) -> nix::Result<()> {
     tcsetattr(slave, SetArg::TCSANOW, &t)
 }
 
+/// The canonical-mode end-of-input byte (^D). Not a constant anyone should
+/// reach for casually: it only MEANS end-of-input when the line discipline is
+/// interpreting it (order 924-eof7).
+const VEOF_BYTE: u8 = 0x04;
+
+/// Is this PTY currently in canonical (line) mode?
+///
+/// The whole EOF design turns on this answer: with `ICANON` set, VEOF ends the
+/// reader's current read; with it clear, the same byte is ordinary data. Asked
+/// at the moment of use rather than remembered, because an interactive child
+/// can flip the terminal into raw mode at any point in the session.
+fn termios_is_canonical(fd: std::os::fd::RawFd) -> nix::Result<bool> {
+    use std::os::fd::BorrowedFd;
+    // SAFETY: `fd` is the live PTY master owned by this session's Arc<AsyncFd>,
+    // borrowed only for the duration of this call.
+    let borrowed = unsafe { BorrowedFd::borrow_raw(fd) };
+    let attrs = nix::sys::termios::tcgetattr(borrowed)?;
+    Ok(attrs
+        .local_flags
+        .contains(nix::sys::termios::LocalFlags::ICANON))
+}
+
 fn set_winsize(fd: std::os::fd::RawFd, rows: u16, cols: u16) -> nix::Result<()> {
     use nix::libc;
     let winsize = libc::winsize {
@@ -707,6 +746,59 @@ fn spawn_writer_task(
                             );
                         }
                         return;
+                    }
+                }
+                PtyWriteCommand::StdinEof => {
+                    let fd = master.get_ref().as_raw_fd();
+                    // WHY TWO, ALWAYS. In canonical mode VEOF ends the CURRENT
+                    // read: on an empty buffer that is end-of-input, but after
+                    // unterminated bytes the first 0x04 only FLUSHES them and a
+                    // second is needed to signal EOF. Rather than track whether
+                    // the last write ended in a newline, send two — MEASURED
+                    // correct in all three buffer states (terminated,
+                    // unterminated, empty: child exits, every byte delivered,
+                    // nothing corrupted). A redundant EOF on an already-empty
+                    // buffer simply reports end-of-input again.
+                    //
+                    // WHY NOT IN RAW MODE. With ICANON off there is no line
+                    // discipline to interpret 0x04 — it is ordinary data, would
+                    // be INJECTED into the child's stdin, and would signal
+                    // nothing. That is the silent no-op 924-eof7 measured and
+                    // rejected, so this refuses loudly instead of writing a
+                    // byte that corrupts the stream while pretending to work.
+                    match termios_is_canonical(fd) {
+                        Ok(true) => {
+                            if !write_all_to_master(
+                                session_id,
+                                &master,
+                                &[VEOF_BYTE, VEOF_BYTE],
+                                &mut cancel_rx,
+                            )
+                            .await
+                            {
+                                return;
+                            }
+                        }
+                        Ok(false) => {
+                            warn!(
+                                spec = "vsock-transport",
+                                session_id,
+                                "PtyStdinEof: session is in RAW mode (ICANON \
+                                 clear), where 0x04 is data rather than \
+                                 end-of-input — refusing to write it. The \
+                                 child will not see EOF; a reader waiting for \
+                                 one will not return."
+                            );
+                        }
+                        Err(err) => {
+                            warn!(
+                                spec = "vsock-transport",
+                                session_id, error = ?err,
+                                "PtyStdinEof: tcgetattr failed; cannot tell \
+                                 whether VEOF would be interpreted, so writing \
+                                 nothing rather than guessing"
+                            );
+                        }
                     }
                 }
                 PtyWriteCommand::Resize { rows, cols } => {
@@ -948,6 +1040,66 @@ async fn reap_child(pid: Pid) -> PtyExit {
 
 #[cfg(test)]
 mod tests {
+
+    /// ORDER 925-eofi — the guest must refuse to write VEOF in raw mode rather
+    /// than injecting a byte that corrupts the stream while signalling nothing.
+    /// That silent no-op is exactly what 924-eof7 measured and rejected.
+    #[test]
+    fn stdin_eof_refuses_in_raw_mode_and_says_why() {
+        let source = include_str!("pty_handler.rs");
+        let arm = source
+            .split("PtyWriteCommand::StdinEof => {")
+            .nth(1)
+            .and_then(|t| t.split("PtyWriteCommand::Resize").next())
+            .expect("the StdinEof arm moved — repoint this scan");
+        assert!(
+            arm.contains("termios_is_canonical"),
+            "the arm must ASK whether the line discipline would interpret VEOF"
+        );
+        assert!(
+            arm.contains("Ok(false)") && arm.contains("RAW mode"),
+            "the raw-mode branch must exist and name itself"
+        );
+        let raw_branch = arm.split("Ok(false)").nth(1).expect("raw branch");
+        assert!(
+            !raw_branch.contains("write_all_to_master"),
+            "raw mode must write NOTHING: 0x04 there is data, not end-of-input"
+        );
+    }
+
+    /// Two VEOF bytes, always — measured correct for an empty, a terminated and
+    /// an unterminated input buffer. One is not enough after unterminated
+    /// input, and tracking the newline state would be a second source of truth.
+    #[test]
+    fn stdin_eof_writes_two_veof_bytes() {
+        let source = include_str!("pty_handler.rs");
+        let arm = source
+            .split("PtyWriteCommand::StdinEof => {")
+            .nth(1)
+            .and_then(|t| t.split("PtyWriteCommand::Resize").next())
+            .expect("the StdinEof arm moved — repoint this scan");
+        assert!(
+            arm.contains("&[VEOF_BYTE, VEOF_BYTE]"),
+            "must send TWO VEOF bytes; one only flushes an unterminated line"
+        );
+    }
+
+    /// The EOF rides the same bounded queue as the bytes it terminates. A
+    /// separate path could overtake them and truncate the input.
+    #[test]
+    fn stdin_eof_is_ordered_with_the_input_it_terminates() {
+        let source = include_str!("pty_handler.rs");
+        let f = source
+            .split("pub async fn stdin_eof(")
+            .nth(1)
+            .expect("stdin_eof entry point moved — repoint this scan");
+        let body = f.split("}").next().unwrap();
+        assert!(
+            body.contains("enqueue_write_command"),
+            "stdin_eof must go through the same per-session queue as writes"
+        );
+    }
+
     use super::*;
 
     fn store() -> (PtySessionStore, mpsc::Receiver<ControlEnvelope>) {

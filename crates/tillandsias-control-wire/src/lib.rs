@@ -203,6 +203,61 @@ pub const CAP_PROXY_CA_KEY_HEAL: &str = "ProxyCaKeyHeal";
 /// @trace spec:vsock-transport, spec:vsock-exec-authz
 pub const CAP_PTY_STDIN_EOF: &str = "pty.stdin.eof@v1";
 
+/// Capability a peer advertises when it can open a DATA session — one whose
+/// stdin is a PIPE rather than the PTY slave (order 926-bin4). RESERVED BY A
+/// DESIGN SLICE: the frame is deliberately not added yet, and this constant
+/// carries the decision the implementer inherits.
+///
+/// THE DEFECT. Exec stdin travels as `PtyData{ToGuest}` and is written to a PTY
+/// master whose line discipline INTERPRETS it. Measured on a live guest,
+/// `AB<byte>CD` per byte with md5 compared end to end: 0x13 WEDGES the session
+/// (unrecoverable, one data byte); 0x03 KILLS the child (rc 130); 0x04 and 0x11
+/// silently eat a byte; 0x15 and 0x1a silently discard EVERYTHING buffered
+/// before them; 0x7f additionally destroys the preceding byte. Six of nine
+/// bytes, five of them at rc=0 with the caller told it succeeded. 0x08 and a
+/// plain 0x41 arrive intact — the latter is the negative control that makes the
+/// rest of the table trustworthy.
+///
+/// WHY NOT JUST USE RAW MODE. Because canonical mode is simultaneously the
+/// corruption mechanism AND the only stdin-EOF mechanism a PTY has: a reader
+/// sees EOF when the master closes (which ends the session) or when the
+/// discipline interprets VEOF, which requires ICANON (924-eof7, 925-eofi).
+/// Switching the exec PTY to raw fixes all six bytes and reinstates the hang
+/// 925-eofi fixed. The two packets are two horns of one structural choice.
+///
+/// WHY NOT TOGGLE RAW AROUND WRITES. It is correct for data and silently wrong
+/// for terminals: on an interactive attach, 0x03 MUST raise SIGINT, because it
+/// is a user pressing Ctrl-C rather than a byte to preserve. Both kinds share
+/// the same guest path today.
+///
+/// THE SHAPE: A PIPE FOR STDIN ONLY. Wire the child's fd 0 to a pipe and leave
+/// fd 1/2 on the PTY slave. A pipe has no line discipline, so all six bytes
+/// arrive by construction; closing the write end is a REAL end-of-input, which
+/// makes `PtyStdinEof` on this path a pipe close rather than a VEOF injection
+/// and drops the canonical-mode dependency entirely. Output streaming, combined
+/// stdout/stderr ordering and `isatty(1)` are unchanged because fd 1/2 still
+/// point at the slave, and the interactive attach path is untouched.
+///
+/// WHY A NEW VARIANT AND NOT A FIELD ON `PtyOpen` — the part that is easy to
+/// get backwards, so it is measured
+/// (`postcard_field_skew_is_asymmetric_and_the_old_reader_fails_silently`).
+/// postcard field skew is ASYMMETRIC: an OLD decoder handed a frame with an
+/// extra trailing field DECODES IT FINE and ignores the surplus, while a NEW
+/// decoder handed an old frame errors on the missing field. So widening
+/// `PtyOpen` would not break an older guest loudly — it would make that guest
+/// silently ignore the session kind and treat a data session as a terminal one,
+/// which is exactly this packet's corruption, arriving with no error anywhere.
+/// A new variant is rejected by NAME instead
+/// (`unknown_future_variant_is_a_decode_error_not_a_silent_skip`), which is why
+/// the additive move here must be a variant gated on this capability.
+///
+/// FALLBACK, and it must stay loud: a peer without this capability keeps
+/// today's PTY-stdin behaviour, so a caller sending non-text stdin to it should
+/// be told the payload may be altered rather than discovering it downstream.
+///
+/// @trace spec:vsock-transport, spec:vsock-exec-authz
+pub const CAP_PTY_DATA_SESSION: &str = "pty.data-session@v1";
+
 /// Order 779-dqsv: this number OUTLIVED the transport it was written for.
 /// It was the per-variant cap on `McpFrame`, which order 505 retired (that
 /// path is now refused; see `host-browser-mcp` spec). The live MCP transport
@@ -504,6 +559,28 @@ pub enum ControlMessage {
         seq_in_reply_to: u64,
         snapshot: MetricsSnapshotWire,
     },
+    /// Host → guest: the host has no more stdin for this session's child
+    /// (order 925-eofi, implementing the 924-eof7 decision).
+    ///
+    /// IT CARRIES INTENT, NOT A BYTE, AND THAT IS THE WHOLE POINT. The child
+    /// runs on a PTY with the slave as its controlling tty and the master open
+    /// for the session, so there is no stdin handle to close — "EOF" on a PTY
+    /// means the line discipline seeing VEOF. 924-eof7 measured why the HOST
+    /// must not send that byte itself: in raw mode 0x04 is ordinary data and
+    /// the signal silently does nothing, and after unterminated input a single
+    /// 0x04 only FLUSHES (a second is needed). Both facts depend on termios
+    /// state and on what was last written — which the GUEST knows and the host
+    /// does not. So the host declares that input is finished and the guest,
+    /// which can be correct about it, decides what to write.
+    ///
+    /// New trailing variant: additive per the `WIRE_VERSION` doc. A guest
+    /// predating it rejects the frame with `Error::UnknownVariant`, which on
+    /// this wire ENDS THE SESSION — so a host MUST NOT send this without
+    /// having seen `CAP_PTY_STDIN_EOF` in `HelloAck.server_caps`. See that
+    /// constant for the full reasoning and the mandatory fallback.
+    ///
+    /// @trace spec:vsock-transport
+    PtyStdinEof { session_id: u32 },
 }
 
 /// What the guest established about a PTY session's foreground process.
@@ -765,6 +842,7 @@ impl ControlMessage {
             ControlMessage::LocalProjectsPush { .. } => "LocalProjectsPush",
             ControlMessage::MetricsSnapshotRequest { .. } => "MetricsSnapshotRequest",
             ControlMessage::MetricsSnapshotReply { .. } => "MetricsSnapshotReply",
+            ControlMessage::PtyStdinEof { .. } => "PtyStdinEof",
         }
     }
 }
@@ -1780,6 +1858,66 @@ pub mod crashloop {
 
 #[cfg(test)]
 mod tests {
+
+    /// ORDER 926-bin4 — HOW POSTCARD ACTUALLY BEHAVES UNDER FIELD SKEW, in
+    /// both directions, measured rather than assumed. I expected widening a
+    /// variant to break older decoders and wrote this to confirm it. It does
+    /// NOT, and the real behaviour is ASYMMETRIC, which is what the session-kind
+    /// design has to be built on:
+    ///
+    ///   OLD reader / NEW frame (extra trailing field) -> DECODES FINE. The
+    ///     surplus bytes are simply not consumed. An older guest would silently
+    ///     ignore a session kind it does not understand — and silently treat a
+    ///     data session as a terminal one, which is the corruption this packet
+    ///     is about, arriving without a single error.
+    ///   NEW reader / OLD frame (missing field) -> DECODE ERROR. It runs out of
+    ///     input for a field it requires.
+    ///
+    /// So widening `PtyOpen` is not a compile-time break but something worse: a
+    /// SILENT MISINTERPRETATION on exactly the peers a mixed-version fleet
+    /// produces. A new VARIANT is the safe additive move, because an older peer
+    /// rejects an unknown variant index by NAME (see
+    /// `unknown_future_variant_is_a_decode_error_not_a_silent_skip`) instead of
+    /// quietly mis-reading a frame it thinks it understands.
+    #[test]
+    fn postcard_field_skew_is_asymmetric_and_the_old_reader_fails_silently() {
+        let env = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 7,
+            body: ControlMessage::PtyResize {
+                session_id: 1,
+                rows: 24,
+                cols: 80,
+            },
+        };
+        let encoded = encode(&env).expect("encode");
+
+        // OLD reader, NEW frame: one extra trailing field.
+        let mut widened = encoded.clone();
+        widened.push(0x01);
+        let old_reads_new = decode(&widened);
+        assert!(
+            old_reads_new.is_ok(),
+            "expected postcard to ignore surplus trailing bytes; if this now \
+             ERRORS, widening a variant became a loud break and 926-bin4's \
+             new-variant argument can be revisited"
+        );
+        assert_eq!(
+            old_reads_new.unwrap(),
+            env,
+            "the surplus byte must not disturb the fields that WERE understood \
+             — this is precisely why the misinterpretation is silent"
+        );
+
+        // NEW reader, OLD frame: truncate a field's worth of input.
+        let mut narrowed = encoded.clone();
+        narrowed.pop();
+        assert!(
+            decode(&narrowed).is_err(),
+            "a decoder expecting more fields than the frame carries must fail, \
+             not invent a default"
+        );
+    }
 
     /// ORDER 924-eof7 — the skew fact the EOF design turns on, pinned by
     /// experiment rather than by reading postcard's docs.

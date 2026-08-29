@@ -175,3 +175,101 @@ mf_plan_binary() {
   . "$probe" || return 1
   resolve_plan_binary
 }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ORDER 901-jtvi — THE STEP MODEL: per-stage exit codes, no SIGPIPE.
+#
+# THE DEFECT, measured on lenovinha 2026-08-29 over the litmus corpus:
+#
+#   piped `command:` lines                                        1290
+#   of those, piping into an EARLY-EXIT consumer                   698  (54%)
+#     …into head                                                   235
+#     …into tail                                                    93
+#     …into `grep -q`                                              418   <- the largest class
+#
+# `grep -q` IS A TRUNCATING CONSUMER, and that is the part everyone (including
+# this packet's own filing, and my own first count) misses. It exits the instant
+# it decides, closes the pipe, and SIGPIPEs its producer — exactly like `head`.
+# Measured, on a real step from litmus:forge-plan-expert-build-shape:
+#
+#   sed -n '/^ensure_forge_experts() {/,/^}/p' … | grep -q 'cargo build' && echo ok
+#     without pipefail : "ok: no-python-cargo-only", rc=0
+#     with    pipefail : no output,                  rc=141   (128+13 = SIGPIPE)
+#
+# So the exposed population is not the 273 head/tail sites the head-count
+# suggests. It is 698, and the biggest slice is the idiom authors reach for
+# precisely BECAUSE it looks safe.
+#
+# WHY `set -o pipefail` IS NOT THE FIX, and this is the load-bearing result of
+# the 901-jtvi measurement. Enabling it in the step shell and re-running the
+# pre-build/instant suite moved 4 tests from PASS to FAIL — and ALL FOUR ARE
+# FALSE POSITIVES. Classified individually:
+#
+#   forge-plan-expert-build-shape   `| grep -q` SIGPIPEd a healthy `sed`
+#   inference-container-…-shape     `| head -1` SIGPIPEd a healthy `grep`
+#   nix-capability-probe            producer exits 2 BY DESIGN (a usage probe)
+#   installer-wsl-preflight-shape   `grep -q` non-match used as a boolean
+#
+# ZERO masked producer failures were found in 249 executed tests. That is a real
+# and reportable outcome about how much this cluster actually cost HERE, and it
+# is the opposite of what a reader would assume from five field incidents: the
+# incidents were real, and this suite is not where they live. Turning on
+# pipefail would have bought four red tests and no additional truth.
+#
+# THE ACTUAL FIX, which is the operator's shape: the consumer must read a
+# COMPLETE stream, never truncate a live one. Truncation becomes a property of
+# the consumer's input, not a signal delivered to the producer's throat. Then
+# the producer's status is its own, observable, and separate.
+#
+# BASH 3.2 CLEAN. No PIPESTATUS — it is bash-only and empty under zsh 5.9,
+# macOS's default shell, which is defect (3) in this packet's own list.
+
+# mf_run VAR -- CMD [ARGS...]
+#   Run CMD to COMPLETION, capturing stdout+stderr into $VAR and its exit code
+#   into ${VAR}_rc. Never truncates, so the producer can never be SIGPIPEd by
+#   its consumer. Returns the command's own status.
+#
+#   Both streams are captured together on purpose: a discarded stderr is the
+#   fourth defect in this packet's list (`2>/dev/null` on a probe hid
+#   `ps: unknown option`, and a broken primitive returned a confident wrong
+#   verdict). A step that genuinely wants stderr dropped must say so explicitly
+#   rather than get it by default.
+mf_run() {
+  _mfr_var="$1"; shift
+  [ "${1:-}" = "--" ] && shift
+  _mfr_out="$("$@" 2>&1)"; _mfr_rc=$?
+  eval "$_mfr_var=\$_mfr_out"
+  eval "${_mfr_var}_rc=\$_mfr_rc"
+  return "$_mfr_rc"
+}
+
+# mf_stage NAME EXPECTED_RC VAR -- CMD [ARGS...]
+#   mf_run with an ASSERTED exit code, and a diagnosis naming the stage when it
+#   disagrees. EXPECTED_RC of `any` accepts anything — for the usage-probe case
+#   (`script --bogus` exits 2 by design) that pipefail cannot distinguish from a
+#   real failure. THE POINT IS THAT THE STEP SAYS WHICH IT MEANT.
+mf_stage() {
+  _mfs_name="$1"; _mfs_want="$2"; _mfs_var="$3"; shift 3
+  [ "${1:-}" = "--" ] && shift
+  mf_run "$_mfs_var" -- "$@"
+  eval "_mfs_rc=\$${_mfs_var}_rc"
+  if [ "$_mfs_want" = "any" ] || [ "$_mfs_rc" = "$_mfs_want" ]; then
+    return 0
+  fi
+  echo "FAIL: stage '${_mfs_name}' exited ${_mfs_rc}, expected ${_mfs_want}" >&2
+  eval "printf '%s\\n' \"\$${_mfs_var}\"" | sed -n '1,20p' >&2
+  return 1
+}
+
+# mf_holds VAR PATTERN   — does the captured stream match PATTERN?
+# mf_lacks VAR PATTERN   — …or not?
+#   Consumers over an ALREADY-COMPLETE buffer. This is the `| grep -q`
+#   replacement: same question, no live pipe, so nothing upstream can be
+#   killed and the producer's status was already checked by its stage.
+mf_holds() { eval "printf '%s\\n' \"\$$1\"" | grep -qE "$2"; }
+mf_lacks() { ! mf_holds "$1" "$2"; }
+
+# mf_first VAR N — the first N lines of a captured stream.
+#   The `| head -N` replacement. Truncation is a property of the CONSUMER
+#   reading a finished buffer, which is the whole design in one function.
+mf_first() { eval "printf '%s\\n' \"\$$1\"" | sed -n "1,${2}p"; }

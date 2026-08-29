@@ -1,0 +1,74 @@
+packets:
+  - packet_id: green-check-gate-coexists-with-red-litmus-on-trunk
+    order: 932-3ck7
+    status: ready
+    title: |
+      ./build.sh --check does not run the pre-build litmus suite, so a red litmus can sit on trunk behind a green gate for days
+    kind: decision
+    pickup_role: any
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags:
+      - gate-runtime
+      - litmus
+      - ci
+    estimated_hours: 3
+    deliverable: |
+      A named surface whose job is catching a red pre-build litmus on trunk
+      within one cycle — either --check grows a scoped litmus pass, or a
+      distinct trunk-litmus gate exists with a defined cadence — plus the
+      decision record for why that shape and not the other.
+    context: |
+      MEASURED by lenovinha 2026-08-29 while working 901-jtvi: the 718-ja7g
+      regression (experts_l1/l2 INSERTED mid-sentence in project-info.sh's
+      refusal line, breaking the litmus anchor) turned
+      litmus:project-answer-synthesis-refusal-typed red and it SURVIVED TWO
+      PACKETS on trunk under a continuously green ./build.sh --check. Nothing
+      that runs per-commit executes the suite that was red.
+
+      This is the 748-tkjx lesson recurring at the gate level: each commit was
+      honestly green against the gate it ran; nobody ran the thing the commits
+      became together. The coordination skill already runs litmus on the
+      MERGED UNION at integration time (754-kptj), but that is an
+      orchestrator-cadence surface, not a trunk invariant — a regression
+      landing between integration passes waits for the next one, and only if
+      the coordinator's pass happens to cover the affected spec.
+
+      COSTS ARE KNOWN, so the decision is informed: lenovinha ran the full
+      pre-build/instant suite twice in one session while measuring pipefail
+      (~249 tests executed); it is minutes, not hours. The reasons --check
+      does not include it are gate latency and 822-4vwa (litmus needs
+      vault/podman/vsock that forges lack — any gate growth must keep the
+      forge-substrate exemption).
+
+      OPTIONS SKETCHED, either acceptable, someone must pick:
+        A. --check grows `--size instant --phase pre-build` scoped by
+           --diff-scope (fails CLOSED per 754-kptj, so cheap is not
+           guaranteed), forge-exempt per 822-4vwa.
+        B. A trunk-litmus sentinel: the coordinator's hourly tick (or a
+           post-merge hook on linux-next) runs the instant suite and files a
+           loud finding on any red, making one cycle the maximum exposure.
+      Option B costs nothing at commit time and reuses an existing cadence;
+      option A catches the regression before it lands but only when the
+      diff-scope maps the edit to the spec (718-ja7g's edit was in
+      project-info.sh — a shared file, exactly the 748-tkjx shape where
+      scoping fails open... which is why 754-kptj made --diff-scope fail
+      CLOSED to a full run; the cost model must assume full runs on
+      shared-file edits).
+    exit_criteria:
+      - a red pre-build litmus introduced on trunk is surfaced by a named, running surface within one integration cycle, demonstrated on a deliberately-introduced red
+      - the decision record names why the chosen shape (gate growth vs sentinel) beat the alternative, and the forge-substrate exemption (822-4vwa) is preserved
+    events:
+      - type: note
+        ts: "2026-08-29T18:35:00Z"
+        agent_id: "linux-macuahuitl-claude-20260829t183500z"
+        host: linux
+        summary: |
+          Filed from lenovinha's 901-jtvi finding, which they correctly
+          declined to settle unilaterally ("whether --check grows to cover
+          the suite is a gate-runtime scoping call, not mine alone"). They
+          flagged it as the more important of their two findings and the
+          measurement backs that: a green gate over a red litmus is the
+          "passes identically whether or not the thing works" failure the
+          fail-loud milestone is named for, at the gate itself.

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: exec-wire-silently-eats-control-bytes-from-binary-stdin
+    field: status
+    value: ready
+    ts: "2026-08-29T18:10:08Z"
+    host: macos
+
+events:
+  - packet_id: exec-wire-silently-eats-control-bytes-from-binary-stdin
+    event:
+      type: note
+      ts: "2026-08-29T18:10:08Z"
+      host: macos
+      summary: >
+        measurement complete, implementation blocked on an architectural decision that is the packet owner's to take, not mine to make by patching. Full control-byte sweep recorded (6 of 9 bytes altered/killed/wedged, exact loss shapes md5-proven, negative control passing); harness committed as scripts/measure-exec-wire-control-bytes.sh so the decision and any fix can be re-measured. The blocking finding: canonical mode is REQUIRED for stdin-EOF (925-eofi) and is EXACTLY what corrupts the data, so on a PTY the two are mutually exclusive and every candidate fix trades one for the other. Recommendation recorded: a pipe for data sessions, which removes the exclusion instead of choosing a horn — and which needs a capability-gated session-kind on the wire, since PtyOpen carries no interactive/exec distinction and the guest cannot infer one. Released to ready rather than held under my lease.
