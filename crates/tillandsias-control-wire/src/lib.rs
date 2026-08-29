@@ -504,6 +504,28 @@ pub enum ControlMessage {
         seq_in_reply_to: u64,
         snapshot: MetricsSnapshotWire,
     },
+    /// Host → guest: the host has no more stdin for this session's child
+    /// (order 925-eofi, implementing the 924-eof7 decision).
+    ///
+    /// IT CARRIES INTENT, NOT A BYTE, AND THAT IS THE WHOLE POINT. The child
+    /// runs on a PTY with the slave as its controlling tty and the master open
+    /// for the session, so there is no stdin handle to close — "EOF" on a PTY
+    /// means the line discipline seeing VEOF. 924-eof7 measured why the HOST
+    /// must not send that byte itself: in raw mode 0x04 is ordinary data and
+    /// the signal silently does nothing, and after unterminated input a single
+    /// 0x04 only FLUSHES (a second is needed). Both facts depend on termios
+    /// state and on what was last written — which the GUEST knows and the host
+    /// does not. So the host declares that input is finished and the guest,
+    /// which can be correct about it, decides what to write.
+    ///
+    /// New trailing variant: additive per the `WIRE_VERSION` doc. A guest
+    /// predating it rejects the frame with `Error::UnknownVariant`, which on
+    /// this wire ENDS THE SESSION — so a host MUST NOT send this without
+    /// having seen `CAP_PTY_STDIN_EOF` in `HelloAck.server_caps`. See that
+    /// constant for the full reasoning and the mandatory fallback.
+    ///
+    /// @trace spec:vsock-transport
+    PtyStdinEof { session_id: u32 },
 }
 
 /// What the guest established about a PTY session's foreground process.
@@ -765,6 +787,7 @@ impl ControlMessage {
             ControlMessage::LocalProjectsPush { .. } => "LocalProjectsPush",
             ControlMessage::MetricsSnapshotRequest { .. } => "MetricsSnapshotRequest",
             ControlMessage::MetricsSnapshotReply { .. } => "MetricsSnapshotReply",
+            ControlMessage::PtyStdinEof { .. } => "PtyStdinEof",
         }
     }
 }

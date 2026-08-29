@@ -1,0 +1,87 @@
+packets:
+  - packet_id: exec-wire-silently-eats-control-bytes-from-binary-stdin
+    order: 926-bin4
+    status: ready
+    title: |
+      Exec-wire stdin is silently corrupted: the guest's canonical-mode PTY eats 0x04 (and every other control byte) out of the payload
+    kind: bug
+    pickup_role: any
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags:
+      - control-wire
+      - exec-wire
+      - pty
+      - fail-loud
+      - data-integrity
+    estimated_hours: 4
+    deliverable: |
+      Either exec-wire stdin carries arbitrary bytes intact, or `with_stdin`
+      refuses or documents non-text payloads loudly — never silent truncation.
+    context: |
+      MEASURED on macOS 2026-08-29 while runtime-verifying 925-eofi, as a
+      CONTROL that was expected to pass and did not.
+
+        host sends:     AB \x04 CD \x04 EF        (8 bytes, md5 5a18aa5f)
+        guest receives: AB    CD    EF            (6 bytes, md5 8827a411)
+
+      md5("ABCDEF") == 8827a411 exactly, so precisely the two 0x04 bytes were
+      consumed and every other byte arrived intact. Nothing reported an error;
+      `cat` exited 0 and the caller saw success.
+
+      CAUSE, and it is not the EOF work. The guest execs the child on a PTY in
+      CANONICAL mode (`pty_handler` allocates the pair; the exec path never
+      clears ICANON). Host→guest stdin arrives as `PtyData{ToGuest}` and is
+      written to the PTY master, so the LINE DISCIPLINE interprets it on the
+      way in: 0x04 is VEOF and is consumed, never delivered. This predates
+      925-eofi and is independent of it — before that change the same payload
+      arrived as the same 6 bytes and THEN hung waiting for an EOF that never
+      came. 925-eofi fixed the hang; the truncation was already there and is
+      still there.
+
+      NOT LIMITED TO 0x04. Every canonical-mode special is in the same
+      position and none were measured here: 0x03 (VINTR — would signal the
+      child rather than arrive), 0x1a (VSUSP), 0x15 (VKILL, discards the line),
+      0x7f/0x08 (VERASE, deletes the previous byte), 0x11/0x13 (VSTOP/VSTART
+      flow control), plus ONLCR-style output mangling in the other direction.
+      A payload containing any of them is silently altered. The 0x04 case is
+      simply the one a neighbouring packet happened to point a control at.
+
+      WHY IT MATTERS DESPITE NO CURRENT VICTIM. `ExecRequest::with_stdin`'s own
+      doc names the intended use — "a token piped to gh auth login
+      --with-token". Tokens are base64/hex today and survive; a credential
+      format that ever contains a control byte would be corrupted into an
+      invalid credential with NO error, and the failure would surface as an
+      authentication problem far from its cause. That is the same
+      silent-success shape this milestone exists to remove.
+    outcome: |
+      Arbitrary stdin either arrives byte-identical, or is refused with a named
+      error — the caller is never told a truncated payload was delivered.
+    exit_criteria:
+      - |
+        MEASURED: a payload containing 0x04, 0x03, 0x15, 0x7f and 0x11 arrives
+        byte-identical (md5 match), or is refused by name before being sent.
+      - |
+        Whichever route is chosen, the behaviour is pinned by a test that FAILS
+        against today's code — demonstrated red before it is made green.
+      - |
+        `with_stdin`'s doc states the guarantee it actually provides.
+    verifiable_closure: |
+      Send the control-byte payload over a real exec-wire session and compare
+      md5 host-side and guest-side, quoted from the run.
+    evidence:
+      - 'sent AB\x04CD\x04EF (8 bytes, md5 5a18aa5f); guest received 6 bytes, md5 8827a411 == md5("ABCDEF")'
+      - 'cat exited 0 and the host saw success — the truncation is silent'
+      - 'independent of 925-eofi: the same corruption occurred before it, followed by the hang that packet fixed'
+    notes: |
+      CANDIDATE FIXES, none costed: give non-interactive exec sessions a raw
+      PTY (cfmakeraw before exec) so no byte is special; or use a pipe rather
+      than a PTY for exec stdin, which also gives a real EOF and would have
+      made 924-eof7/925-eofi unnecessary; or keep the PTY and refuse non-text
+      stdin loudly. The pipe option is the most principled and the most
+      invasive — the PTY exists so interactive attach and exec share one path.
+
+      Filed by the macOS host from a control that was supposed to confirm
+      925-eofi and instead found a different defect. Recorded rather than
+      folded into that packet, whose change neither caused nor fixed it.

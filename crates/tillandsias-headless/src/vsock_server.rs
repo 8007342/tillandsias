@@ -987,6 +987,13 @@ async fn serve_ready_stream(
                 // they shipped in different commits, so the argv cap does not
                 // imply the heal. See CAP_PROXY_CA_KEY_HEAL's doc comment.
                 tillandsias_control_wire::CAP_PROXY_CA_KEY_HEAL.into(),
+                // Order 925-eofi: advertise that this guest understands an
+                // explicit end-of-stdin frame. A host MUST feature-detect on
+                // this before sending PtyStdinEof — a guest predating it
+                // rejects the unknown variant and the SESSION dies, which is
+                // strictly worse than the hang the frame exists to fix
+                // (924-eof7).
+                tillandsias_control_wire::CAP_PTY_STDIN_EOF.into(),
                 CAP_PTY_ATTACH_V1.into(),
                 CAP_PTY_HEARTBEAT_V1.into(),
             ],
@@ -1520,6 +1527,14 @@ async fn serve_ready_stream(
                 // control-plane fairness deadline — a wedged session is
                 // killed by the store instead (kill-not-drop).
                 pty_store.write_to_guest(session_id, bytes).await;
+            }
+            #[cfg(unix)]
+            ControlMessage::PtyStdinEof { session_id } => {
+                // Order 925-eofi. Same bounded queue as the input bytes, so an
+                // EOF cannot overtake the data it terminates. What actually
+                // reaches the child is decided in the writer task, which can
+                // see the termios state — see PtyWriteCommand::StdinEof.
+                pty_store.stdin_eof(session_id).await;
             }
             #[cfg(unix)]
             ControlMessage::PtyData {
