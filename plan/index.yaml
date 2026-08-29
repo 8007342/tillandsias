@@ -54379,6 +54379,45 @@ plan_index:
         guard for one idiom cannot cover 1248 sites. 897-5m9y and 899-q9di both
         record instances.
       events:
+        - type: implemented
+          ts: "2026-08-29T19:17:24Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            MIGRATION BATCH 1 — AND A FINDING THAT MUST LAND BEFORE ANYONE CONVERTS THE OTHER 411: THE MODEL AS SHIPPED WOULD HAVE SILENTLY REINTERPRETED THE LARGEST CLASS.
+
+            I surveyed the shapes before converting, and the "mechanical" assumption did not survive it.
+
+              the grep -q* flag distribution, MEASURED over the corpus:
+                grep -q   321      grep -qE   85      grep -qF   46
+                grep -qx   18      grep -qiE  10      grep -qv/-qvE/-qi  7
+
+            `mf_holds` shipped using `grep -qE`. The MAJORITY of call sites are plain `grep -q`, which is BASIC regex. So the obvious rewrite
+                producer | grep -q 'X'   ->   mf_stage p 0 V -- producer && mf_holds V 'X'
+            would have quietly reinterpreted 321 assertions as EXTENDED regex.
+
+            THAT IS NOT PEDANTIC. BRE and ERE give OPPOSITE answers on the same pattern, verified both directions:
+                'a+b' on "a+b" :  BRE MATCH,    ERE no match
+                'a+b' on "aab" :  BRE no match, ERE MATCH
+            74 plain-`grep -q` patterns in this corpus carry ERE-significant metachars. And one does not merely mismatch — it ERRORS:
+                fail:enclave-service-dead:service={name}:state={state}:rc={exit_code}…
+                grep -qE  ->  "invalid repeat" at position 39
+            `{name}` is an interval expression in ERE and a literal brace in BRE.
+
+            FIXED BEFORE MIGRATING: mf_holds is now BRE, and there is one variant per grep flag — mf_holds_ere (-qE), mf_holds_literal (-qF), mf_holds_line (-qx), each with an mf_lacks_* negation. The flag is PART OF THE ASSERTION; a conversion that drops it is a conversion bug. Now whatever flag the original carried, there is a consumer with exactly those semantics and no judgement required at the call site.
+
+            Pinned by five new fixture arms (12 total, all green) using the REAL divergence rather than a synthetic one, including the brace pattern that errors under ERE.
+
+            THE SURVEY ALSO CORRECTS "MECHANICAL": only 115 of the ~418 are a single producer piped once into grep -q. 341 are MULTI-PIPE chains. Those need the whole chain staged or its intermediate stages preserved, and are not a one-line rewrite. The migration is 115 easy + ~300 that need reading.
+
+            BATCH 1: litmus-ledger-fragment-convergence.yaml, all 7 simple sites, converted and re-run. VERDICTS UNCHANGED (11/11 steps OK), which is the bar my own next_action set — any change would have been a conversion bug, not a discovery.
+
+            AND THESE SEVEN ARE A PERFECT SPECIMEN OF THE LATENT DEFECT, which sharpens my earlier suite-wide result. Each was
+                cargo test … 2>&1 | grep -q 'test result: ok' && echo 'ok: …'
+            MEASURED: that invocation emits TWO `test result:` lines (two test binaries). If one binary FAILS while the other passes, `grep -q 'test result: ok'` matches the passing line and the step reports success on a failing suite — and cargo's own non-zero exit is discarded entirely. Demonstrated:
+                printf 'test result: ok. 5 passed\ntest result: FAILED. 1 failed\n' | grep -q 'test result: ok'   -> PASS
+
+            So my earlier finding stands but must be read precisely: ZERO MASKED FAILURES **TODAY** is not "these pipelines cannot mask". These can, in an assertion about whether tests pass, which is the most consequential place to have one. The suite-wide pipefail measurement found nothing because everything currently passes. Converted, cargo's status IS the verdict.
         - type: evidence
           ts: "2026-08-29T18:52:59Z"
           agent_id: "linux-macuahuitl-claude-20260829t185259z"

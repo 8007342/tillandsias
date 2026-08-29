@@ -97,6 +97,50 @@ else
     ok "no PIPESTATUS dependency in the step model (the bash-ism would be silently empty under zsh)"
 fi
 
+# 7. THE FLAG IS PART OF THE ASSERTION (901-jtvi migration). A consumer variant
+#    must reproduce its grep flag's semantics exactly, or a "mechanical" rewrite
+#    of 418 call sites silently reinterprets them.
+#
+#    Pinned with the real divergence, not a synthetic one: 'a+b' means opposite
+#    things in BRE and ERE, and 74 plain-`grep -q` patterns in this corpus carry
+#    ERE-significant metachars.
+V="a+b"
+if mf_holds V 'a+b' && mf_lacks_ere V 'a+b'; then
+    ok "mf_holds is BRE and mf_holds_ere is ERE — they disagree exactly as grep does"
+else
+    bad "mf_holds/mf_holds_ere do not reproduce the BRE/ERE distinction"
+fi
+V2="aab"
+if mf_holds_ere V2 'a+b' && mf_lacks V2 'a+b'; then
+    ok "…and they disagree in the other direction too"
+else
+    bad "the BRE/ERE divergence is one-directional — one variant is wrong"
+fi
+
+#    The brace case is the one that does not merely mismatch under ERE, it
+#    ERRORS ("invalid repeat"). A migration that routed it through the ERE
+#    consumer would turn a passing assertion into a broken one.
+V3="fail:enclave-service-dead:service={name}:state={state}"
+if mf_holds V3 'service={name}'; then
+    ok "a literal-brace pattern survives the BRE consumer (it errors under ERE)"
+else
+    bad "the BRE consumer cannot handle a literal brace — the largest class breaks"
+fi
+
+#    Fixed-string and whole-line variants exist for -qF and -qx.
+V4="a.c"
+if mf_holds_literal V4 'a.c' && mf_lacks_literal V4 'abc'; then
+    ok "mf_holds_literal is fixed-string (-qF): '.' is a dot, not any-char"
+else
+    bad "mf_holds_literal is not behaving as a fixed-string match"
+fi
+V5="exact"
+if mf_holds_line V5 'exact' && mf_lacks_line V5 'exac'; then
+    ok "mf_holds_line is whole-line (-qx)"
+else
+    bad "mf_holds_line is not behaving as a whole-line match"
+fi
+
 if [ "$fail" -ne 0 ]; then
     echo "litmus-step-model: FAIL"
     exit 1
