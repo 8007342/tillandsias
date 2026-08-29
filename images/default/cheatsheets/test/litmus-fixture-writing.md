@@ -422,7 +422,20 @@ or worktree checkouts at the suspect and its parent.
 - [ ] Does a comment claim parity with a sibling? Grep the sibling, not the
       comment.
 
-## A comment claiming symmetry is not symmetry
+## Existence on the host is not correctness of the container path
+
+A verifier that checks "every path in the spec exists" is structurally
+blind on a host with a self-referential symlink. Measured on 935-jhh5
+(lenovinha, Silverblue, 2026-08-29): `/run/host` is a symlink to `/`, so
+TWO broken CDI specs — one mounting the GPU node at
+`/run/host/dev/nvidia0`, one at `/run/host/run/host/usr/bin/nvidia-smi` —
+both passed their own every-path-exists verification (0 missing) while the
+container got wrong in-container paths and the inference entrypoint's
+`[ -e /dev/nvidia0 ]` found nothing. Both wrong answers came from reaching
+for the "clever" immutable-host lever (`--driver-root=/run/host`) when the
+boring `--driver-root=/` was correct. The fix has two halves: verify the
+path AS THE CONSUMER WILL SEE IT (in-container, not on-host), and refuse
+known self-referential prefixes outright rather than resolving them.
 
 Measured on 731-eupn (2026-08-29): the macOS applier's comment said it
 "mirrors the Windows wiring in notify_icon::apply_cloud_projects" — while
