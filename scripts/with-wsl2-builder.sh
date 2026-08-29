@@ -248,25 +248,19 @@ while IFS= read -r _w2_var; do
     _ENV_FORWARD="${_ENV_FORWARD}export $(printf '%q' "$_w2_var")=$(printf '%q' "${!_w2_var}"); "
 done < <(compgen -v | grep '^TILLANDSIAS_' || true)
 
-# ── The WSL2 distro IS this lane's container, and must say so ─────────────
-# scripts/with-tillandsias-builder.sh (2026-08-26 operator ruling) FAILS HARD
-# on any Linux host that has /etc/os-release but no `toolbox`, with no
-# host-native fallback. Its comment names Windows a sanctioned exception
-# "handled ABOVE by the /etc/os-release guard" — but that guard only fires
-# where the file is ABSENT, which is Git Bash. Once we dispatch INTO the
-# distro the file exists, the exception evaporates, and the gate dies at
-# `FATAL: 'toolbox' is not installed` before running a single check. Measured
-# on yolanda 2026-08-28: /etc/os-release present, `container` unset,
-# /run/.containerenv absent, toolbox absent — the distro is indistinguishable
-# from a bare Fedora builder to every guard that script has.
-#
-# TILLANDSIAS_SKIP_TOOLBOX=1 is the escape hatch that ruling itself names, and
-# this is the one place entitled to set it: the ruling's objection is to a
-# build that SILENTLY escapes its container, and this build is not escaping
-# one — it is already inside the container this platform sanctions. Set at the
-# boundary, explicitly, rather than inside the toolbox script, so no Linux host
-# inherits it.
-_ENV_PREFIX="${_ENV_FORWARD}export TILLANDSIAS_SKIP_WSL2=1 TILLANDSIAS_SKIP_TOOLBOX=1; . /root/.cargo/env 2>/dev/null || true;"
+# ORDER 922-curm — the TILLANDSIAS_SKIP_TOOLBOX=1 that stood here is GONE, and
+# its removal is the point rather than a tidy-up. 889-8tcb set it at this
+# boundary as a same-hour mitigation for a total Windows blocker: the toolbox
+# script's FATAL fired inside the distro because its "Windows is handled by the
+# /etc/os-release guard" claim was false. 922-curm fixed that at the source —
+# with-tillandsias-builder.sh now detects WSL from /proc/version — so keeping
+# the flag here would leave TWO mechanisms for one fact, and the second would
+# be unexercised on every host that could notice it breaking. That is the
+# objection lenovinha raised against a core.fileMode conditional on 889-8tcb,
+# and it applies to my own mitigation. Verified live before removal: with the
+# flag cleared, with-tillandsias-builder.sh passes straight through inside the
+# tillandsias-build distro.
+_ENV_PREFIX="${_ENV_FORWARD}export TILLANDSIAS_SKIP_WSL2=1; . /root/.cargo/env 2>/dev/null || true;"
 if [[ "${TILLANDSIAS_WSL2_TARGET_IN_TREE:-}" != "1" ]]; then
     _ENV_PREFIX="$_ENV_PREFIX export CARGO_TARGET_DIR=\"/root/.cache/tillandsias-wsl2-target/$REPO_BASENAME\";"
 fi

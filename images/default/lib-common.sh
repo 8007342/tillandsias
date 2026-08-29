@@ -1002,6 +1002,32 @@ FORGE_EXPERTS_BIN_DIR="${FORGE_EXPERTS_BIN_DIR:-$HOME/.local/bin}"
 FORGE_EXPERTS_STATE_DIR="${FORGE_EXPERTS_STATE_DIR:-/dev/shm/tillandsias-experts}"
 export FORGE_EXPERTS_BIN_DIR FORGE_EXPERTS_STATE_DIR
 
+# ── Embedding env for the L1 spec RAG pipeline (order 919-vvyv) ──────────────
+# spec_answer (forge-plan.sh), the capability line's embed_endpoint= probe
+# (712-r5x8) and scripts/spec-index-ensure.sh all read these two variables.
+# Before this block a fresh forge left BOTH unset: `embed_endpoint=unset` was
+# 712-r5x8's own headline finding ("the launch never wired
+# TILLANDSIAS_EMBED_ENDPOINT — the fresh-forge gap itself"), and forge-plan.sh's
+# fallback model name is the lemonade/LM-Studio `nomic-embed-text-v1-GGUF`,
+# which the enclave ollama at inference:11434 404s — so the L1 tier was dead on
+# every cold forge (919-vvyv). Same split lib-dev-env.sh draws on the dev side:
+# the ENVIRONMENT names the endpoint and the model that matches it; an explicit
+# operator value always wins. Without OLLAMA_HOST (no enclave inference
+# service) the endpoint stays unset and spec_answer keeps its typed refusal.
+if [ -z "${TILLANDSIAS_EMBED_ENDPOINT:-}" ] && [ -n "${OLLAMA_HOST:-}" ]; then
+    # ollama's OpenAI-compatible surface, for /v1/embeddings — the same
+    # derivation start_expert_serve_fail_soft applies per-invocation below.
+    export TILLANDSIAS_EMBED_ENDPOINT="${OLLAMA_HOST%/}/v1"
+fi
+if [ -z "${TILLANDSIAS_EMBED_MODEL:-}" ]; then
+    # The OLLAMA name — what the inference entrypoint pulls at startup
+    # (919-vvyv D1) and what spec-index-ensure.sh embeds the corpus with.
+    # Keeping producer and query path on one name is load-bearing: an index
+    # embedded with one model and queried with another 404s, and the failure
+    # looks like a missing index (760-hzi4 scoping note, defect i).
+    export TILLANDSIAS_EMBED_MODEL="nomic-embed-text"
+fi
+
 # PINNED STATE GRAMMAR (litmus:forge-plan-expert-build-shape):
 #   experts: ready
 #   experts: building(<n>s)
@@ -1243,6 +1269,11 @@ start_forge_experts_async() {
         # Non-project session: nothing was cloned, so there is nothing to build.
         return 0
     fi
+    # Order 919-vvyv (D2): the spec-index root decision must run HERE, in the
+    # entrypoint shell, so the harness and every MCP server it spawns inherit
+    # the same FORGE_SPEC_INDEX_ROOT the backgrounded builder writes to. An
+    # export from the forked subshell below would reach nobody.
+    _forge_spec_index_root_for_session || true
     _forge_experts_set_state building
     _generic_project_set_state building
     (
@@ -1252,7 +1283,126 @@ start_forge_experts_async() {
         # local-experts OpenCode agent talks to. AFTER ensure_forge_experts,
         # so the capabilities probe sees the freshly installed binary.
         start_expert_serve_fail_soft >>/tmp/forge-lifecycle.log 2>&1 || true
+        # ORDER 919-vvyv (D2): LAST, because it can churn for a long time on
+        # CPU (measured: ~2min GPU, ~60min CPU cold; 0.05s warm) and nothing
+        # else in this lane depends on it. Needs the tillandsias-plan binary
+        # ensure_forge_experts just installed.
+        ensure_forge_spec_index >>/tmp/forge-lifecycle.log 2>&1 || true
     ) &
+    return 0
+}
+
+# _forge_spec_index_root_for_session — order 919-vvyv (D2), SYNCHRONOUS.
+#
+# The launcher injects FORGE_SPEC_INDEX_ROOT=/opt/tillandsias/spec-index, the
+# durable named volume, mounted READ-ONLY by design (801-a2by: the ephemeral
+# tier structurally cannot corrupt the durable tier). That is the right
+# authority whenever it already SERVES an index — but on a host that has never
+# built one (the cold CPU-only forge 919-vvyv observed) it is an empty
+# directory nothing in-forge can ever write, so spec_answer refuses forever
+# and the refusal names a directory no build here could fill.
+#
+# So: keep the durable root when it serves a complete entry (or is genuinely
+# writable); otherwise repoint the SESSION's root at the per-project cache —
+# the sanctioned persistent surface for expensive derived artifacts (the same
+# volume that carries the cargo cache), so the cold build is paid once per
+# host, not once per container. Every reader resolves the root from this env
+# per call (forge-plan.sh re-resolves on every spec_answer), so the moment the
+# backgrounded builder publishes `current`, answers start serving.
+#
+# An operator-pinned FORGE_SPEC_INDEX_DIR is an EXACT serving directory and
+# outranks the root in every reader; leave the whole decision alone then.
+_forge_spec_index_root_for_session() {
+    [ -z "${FORGE_SPEC_INDEX_DIR:-}" ] || return 0
+    local root fp dir cache_root
+    root="${FORGE_SPEC_INDEX_ROOT:-}"
+    if [ -n "$root" ]; then
+        fp="$(cat "$root/current" 2>/dev/null | tr -d '[:space:]')" || fp=""
+        dir="$root${fp:+/$fp}"
+        if [ -n "$fp" ] && [ -s "$dir/chunks.jsonl" ] && [ -s "$dir/vectors.jsonl" ]; then
+            # The durable tier serves. If the corpus has since moved, the entry
+            # is stale-but-announced (801-g9nn stamps each citation with the
+            # entry's own commit); refreshing it is the HOST builder's job.
+            return 0
+        fi
+        # A writable root can take the build where it stands (no launcher
+        # injection, or a future rw mount).
+        [ -w "$root" ] && return 0
+    fi
+    cache_root="${TILLANDSIAS_PROJECT_CACHE:-/home/forge/.cache/tillandsias-project}/spec-index"
+    if ! mkdir -p "$cache_root" 2>/dev/null; then
+        # Nowhere writable either — keep the env as it was; the ensure and
+        # spec_answer both name the state in their own typed vocabulary.
+        trace_lifecycle "spec-index" "root kept at ${root:-unset}: ${cache_root} is not creatable either"
+        return 0
+    fi
+    export FORGE_SPEC_INDEX_ROOT="$cache_root"
+    trace_lifecycle "spec-index" "root repointed to ${cache_root} (durable root ${root:-unset} is cold and read-only in-forge — 919-vvyv)"
+    return 0
+}
+
+# ensure_forge_spec_index — order 919-vvyv (D2). Build/refresh the spec RAG
+# index at forge launch, so a cold forge's spec_answer stops refusing for want
+# of a producer nobody ran (the 552 class: the system knew what it needed and
+# never provisioned it). FAIL-SOFT: always returns 0, never gates a launch —
+# the same contract as ensure_forge_experts, which must run first (the ensure
+# script resolves the tillandsias-plan binary that lane installs).
+#
+# The heavy machinery deliberately stays in the checkout's
+# scripts/spec-index-ensure.sh (760-hzi4): the fingerprint short-circuit
+# (0.05s warm), the mkdir build lock with dead-holder reclaim (one builder per
+# root, a burst of launches starts one build not six), delta re-embed, atomic
+# publish. This wrapper only decides whether to invoke it and records the
+# verdict in the lifecycle log. NO new status grammar: the honest surfaces
+# already exist — the capability line's spec_index=present|absent and
+# embed_endpoint= fields (712-r5x8/760-hzi4) and spec_answer's typed refusal.
+#
+# REMAINING RUNG, deliberately not attempted here: shipping the index as a
+# PRE-BUILT artifact. The cold build is still paid once per host (~60min on a
+# CPU-only host, 919-vvyv measured 21799 chunks at ~6 vectors/s) — making it
+# ~0 is a distribution design question (where does a trusted prebuilt index
+# come from, keyed how), recorded on the packet as the open half.
+ensure_forge_spec_index() {
+    local project_dir ensure ep model deadline models rc verdict
+    project_dir=""
+    if [ -n "${TILLANDSIAS_PROJECT:-}" ]; then
+        project_dir="/home/forge/src/${TILLANDSIAS_PROJECT}"
+    fi
+    [ -n "$project_dir" ] || project_dir="$PWD"
+    ensure="$project_dir/scripts/spec-index-ensure.sh"
+    if [ ! -r "$ensure" ]; then
+        # Most projects have no spec corpus — a named skip, same rule as
+        # degraded(no-plan-crate): never leave an agent guessing whether a
+        # build failed or was never applicable.
+        echo "[spec-index] skipped (no-ensure-script): ${ensure} absent — this project has no spec index producer"
+        return 0
+    fi
+    ep="${TILLANDSIAS_EMBED_ENDPOINT:-}"
+    if [ -z "$ep" ]; then
+        echo "[spec-index] skipped (no-embed-endpoint): TILLANDSIAS_EMBED_ENDPOINT is unset — spec_answer keeps its typed refusal (712-r5x8)"
+        return 0
+    fi
+    # A cold inference volume is still PULLING the embed model (the inference
+    # entrypoint backgrounds that pull — 919-vvyv D1), so give it a bounded
+    # window instead of failing the first launch's build on a 404. Bounded,
+    # not forever: on timeout the ensure still runs so the failure is typed
+    # by the producer, never silent here.
+    model="${TILLANDSIAS_EMBED_MODEL:-nomic-embed-text}"
+    deadline=$(( $(date +%s 2>/dev/null || echo 0) + ${FORGE_SPEC_INDEX_MODEL_WAIT:-600} ))
+    while :; do
+        models="$(curl -fsS -m 3 "${ep%/}/models" 2>/dev/null)" || models=""
+        case "$models" in
+            *"$model"*) break ;;
+        esac
+        if [ "$(date +%s 2>/dev/null || echo 0)" -ge "$deadline" ]; then
+            echo "[spec-index] embed model ${model} not served at ${ep} after ${FORGE_SPEC_INDEX_MODEL_WAIT:-600}s — running the ensure anyway so the refusal is typed, not silent"
+            break
+        fi
+        sleep 20
+    done
+    rc=0
+    verdict="$(bash "$ensure" 2>>/tmp/forge-lifecycle.log)" || rc=$?
+    echo "[spec-index] ${verdict:-no-verdict} (rc=${rc}, root=${FORGE_SPEC_INDEX_ROOT:-unset})"
     return 0
 }
 

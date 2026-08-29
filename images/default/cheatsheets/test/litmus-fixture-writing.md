@@ -160,6 +160,15 @@ Writing a ledger event with an unquoted heredoc silently executed
 delimiter (`<<'EOF'`) whenever the body is prose you want verbatim, and prefer
 writing long ledger prose as a fragment file over passing it as an argument.
 
+The ARGUMENT variant is worse and was measured twice in one day (macuahuitl
+heredoc 2026-08-29 early; macbook double-quoted args 2026-08-29 late): a ledger
+event summary passed as a double-quoted shell argument command-substitutes
+every backticked span, and the prose STILL READS FLUENTLY while no longer
+naming a single command — "I ran the python check via a  heredoc". Append-only
+ledgers make the damage permanent. Remedy: write the body to a file and pass
+`"$(cat body.txt)"` — file content is not re-scanned — then grep the WRITTEN
+fragment for identifiers you know must be present before committing it.
+
 ## `check-litmus-pin-claims.sh` refuses bare litmus names (721-77yu)
 
 That guard greps every `*.sh` for `litmus:<name>` and refuses any name no test
@@ -234,3 +243,15 @@ or worktree checkouts at the suspect and its parent.
 - [ ] Do you name a `litmus:` test that exists — suffix and all?
 - [ ] If you mutate tracked files: restored on every exit, repaired next run,
       and refused when the dirt is someone else's?
+
+## Exit codes do not survive `wsl.exe -- bash -c '<quoted script>'`
+
+Measured on yolanda 2026-08-29 (740-3k4s WSL verification): three
+consecutive EC runs reported exit 0 for a case that exits 1 — which reads
+exactly like a probe that reports failure and exits success. It was the
+HARNESS: `wsl.exe -d <distro> -- bash -c '<single-quoted script>'` returns
+0 regardless of the script's exit. The control that caught it is the one to
+copy: `bash -c 'exit 1'` and `bash -c 'exit 7'` through the same invocation
+ALSO returned 0. Piping the script to `wsl.exe ... -- bash` on stdin makes
+propagation exact. Any Windows-lane defect report resting on an exit code
+from the quoted form is unproven until that control has run.

@@ -2106,9 +2106,20 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # to a caller. 2.0s. Gating a tool nobody invokes yet is deliberate: the
     # sweep gets its call site under R3, and the gate must predate the sweep
     # rather than be added after the first bad run.
+    # ORDER 923-ws3r. The two outcomes are now separate exit codes, because the
+    # merged message ("would change the ready set, OR its check could not run")
+    # named both and pointed at neither — and the check spent days red on clean
+    # checkouts for the second reason while its wording invited the first
+    # reading. A violation means STOP. A could-not-run means the INSTRUMENT is
+    # broken and this step has learned nothing about the ledger.
     _step "Checking the plan archiver preserves the ready set (831-ezea)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/archive-plan-packets.sh" --check 2>&1; then
-        _error "the plan archiver would change the ready set, or its check could not run"
+    _archiver_rc=0
+    _run bash "$SCRIPT_DIR/scripts/archive-plan-packets.sh" --check 2>&1 || _archiver_rc=$?
+    if [ "$_archiver_rc" -eq 3 ]; then
+        _error "the plan archiver's check COULD NOT RUN (exit 3) — this says nothing about the ready set; the instrument is what needs repair (923-ws3r)"
+        exit 1
+    elif [ "$_archiver_rc" -ne 0 ]; then
+        _error "the plan archiver would CHANGE THE READY SET, orphan events, or leave archived rows unanswerable — do not sweep"
         exit 1
     fi
     _info "Plan archiver check passed"

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-windows-toolbox-exception-evaporates-inside-the-wsl2-distro
+    field: status
+    value: in_progress
+    ts: "2026-08-29T16:00:01Z"
+    host: windows
+
+events:
+  - packet_id: the-windows-toolbox-exception-evaporates-inside-the-wsl2-distro
+    event:
+      type: note
+      ts: "2026-08-29T16:00:01Z"
+      host: windows
+      summary: >
+        claimed for cycle 2026-08-29T00:0xZ by windows-yolanda-claude-20260828t223837z — filed from this host's 889-8tcb handoff

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-forge-bash-lane-wedges-over-exec-wire
+    field: status
+    value: completed
+    ts: "2026-08-29T16:49:58Z"
+    host: macos
+
+events:
+  - packet_id: macos-forge-bash-lane-wedges-over-exec-wire
+    event:
+      type: completed
+      ts: "2026-08-29T16:49:58Z"
+      host: macos
+      summary: >
+        status 'completed' with evidence_refs: verified working on the host that filed all three original reproductions: attach reached t=20s, maintenance container Up, foreground podman run in state Sl (not T), zero stopped processes across two samples, 39127 bytes of forge lifecycle output streaming over the wire. Primary symptom absent. Secondary (stdin EOF) split to 924-eof7 rather than dropped.
+  - packet_id: macos-forge-bash-lane-wedges-over-exec-wire
+    event:
+      type: note
+      ts: "2026-08-29T16:49:58Z"
+      host: macos
+      summary: >
+        primary not reproducible on current tree (most plausibly fixed by cee23fb9, not bisected); my SIGTTOU mechanism refuted by measurement; secondary split to 924-eof7

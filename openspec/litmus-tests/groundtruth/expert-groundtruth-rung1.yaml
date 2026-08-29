@@ -577,6 +577,23 @@ cases:
       answer BODY made the verdict flip on ambient inference availability —
       red on lenovinha, green on macuahuitl, same commit. The heading stays
       pinned where it is invariant: the citation's span.
+      AND THE THIRD RENDERING (2026-08-29, yolanda / windows), which is why
+      there is now no answer_contains at all. Relaxing the body assertion from
+      "## Direction" to "Direction" decoupled the heading but still pinned the
+      CAPITALISATION, and this host synthesises `The current direction is
+      "forge agents local EXPERTS."` — lowercase. Same correct answer, same
+      span, confidence=retrieved, third red. Betting on the other casing would
+      just invert the same fragility, so the rendering assertion is gone rather
+      than re-aimed: three hosts, three renderings, one substance.
+      NOTHING SUBSTANTIVE WAS GIVEN UP, and that is the test of this edit. What
+      the case pins is unchanged and is the part that would catch the defect it
+      was built for (764-p9w7's `unsupported` from a stale binary):
+      confidence=retrieved, a plan-kind citation, at least one citation, and a
+      citation into plan/loop_status.md whose span RE-READ AT GRADING TIME
+      really contains "## Direction" and "Operator-owned thematic direction".
+      A stale artifact answering `unsupported` still grades RED. What can no
+      longer turn it red is prose formatting, which no consumer depends on and
+      which three hosts render three ways.
     expect:
       confidence: retrieved
       citation_kind: plan
@@ -587,5 +604,3 @@ cases:
           span_contains:
             - "## Direction"
             - "Operator-owned thematic direction"
-      answer_contains:
-        - "Direction"
