@@ -2,7 +2,7 @@
 tags: [git, multi-host, agents, handoff, leases, crdt]
 languages: [bash]
 since: 2026-05-25
-last_verified: 2026-05-25
+last_verified: 2026-08-29
 sources:
   - methodology/distributed-work.yaml
   - plan/issues/branch-and-coordination-canon-2026-05-25.md
@@ -27,7 +27,7 @@ committed_for_project: true
 ## The 8-step self-assignment protocol
 
 ```
-0. orient            → read methodology + plan/index
+0. orient            → ask forge-plan (plan_answer / plan_next / methodology_ask); files are the fallback for the three mcp_first_read_path reasons only, named (unavailable/unsupported, verification, not exposed)
 1. identify self     → host, agent_id, capabilities
 2. fetch canonical   → git fetch + pull linux-next
 3. filter eligible   → owner_host ∈ {own_host, any}, status ∈ pending|blocked-resolved|failed-retryable, no live lease overlap

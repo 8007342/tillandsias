@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-landing-agents-ask-the-experts-for-project-status
+    field: status
+    value: completed
+    ts: "2026-08-29T01:27:56Z"
+    host: linux
+
+events:
+  - packet_id: forge-landing-agents-ask-the-experts-for-project-status
+    event:
+      type: completed
+      ts: "2026-08-29T01:27:56Z"
+      host: linux
+      summary: >
+        status 'completed' with evidence_refs: b0e0c6b99: ten surfaces landed; check-markdown-distillation green; litmus forge-environment-discoverability 18/18 incl. capability-manifest-guard and the single-forge-plan-mention pin; bash -n lib-common clean; jq-parse config.json clean; sed-bootstrap grep returns nothing; cheatsheet index regenerated
+  - packet_id: forge-landing-agents-ask-the-experts-for-project-status
+    event:
+      type: note
+      ts: "2026-08-29T01:27:56Z"
+      host: linux
+      summary: >
+        all Track-D surfaces delivered with the availability caveat and recorded fallback
