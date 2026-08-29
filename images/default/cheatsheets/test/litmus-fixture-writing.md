@@ -239,6 +239,14 @@ what it does cover, with a doc comment saying plainly it cannot pin
 production. When auditing, ask of any test: whose value is being asserted —
 the producer's, or the fixture's?
 
+Second measured instance, same evening (935-6fzk, macbook): a signing-seam
+fixture ran ITS OWN PlistBuddy derivation and asserted the result — proving
+the TECHNIQUE works rather than that the BUILD uses it — and stayed green
+when the build was mutated to skip the entitlement strip. Caught by the
+author running the mutation control before trusting the green; rewritten
+to assert the build performs the deletion. Two instances in one evening,
+two authors, both found only by control-first: assume the class is common.
+
 ## When a checker accuses correct code, fix the checker — with a mutation control
 
 Two guard false positives in one change (830-xsk2, macbook, 2026-08-29),

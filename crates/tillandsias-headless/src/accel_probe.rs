@@ -515,6 +515,13 @@ fn wsl2_paravirtual_gpu(dxg_present: bool, dri_present: bool, already_found: boo
 /// reason the TEST supplies and passes identically against a wrong production
 /// value — verified by reverting the literal and watching it stay green. A pure
 /// function is the smallest thing that makes the production value assertable.
+/// Gated to match its production caller, `enumerate_gpus`, which is
+/// `#[cfg(target_os = "linux")]` — plus `test` so the assertion 793-zumy added
+/// this function to make possible still runs on every host. Without the `test`
+/// arm the macOS gate fails on dead code; without the `linux` arm the Linux
+/// build loses the production value. Order 935-6fzk found this from macOS,
+/// where the Linux-only caller vanishes and nothing else references it.
+#[cfg(any(target_os = "linux", test))]
 fn wsl2_paravirtual_gpu_reason() -> &'static str {
     "engine-missing:no-vulkan-icd"
 }

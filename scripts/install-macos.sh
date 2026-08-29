@@ -4,10 +4,17 @@
 #
 # Curl-installs Tillandsias.app to /Applications/ (or ~/Applications/ if the
 # system path requires sudo). Verifies SHA-256, registers as a Login Item if
-# --login-item is passed, prints the Gatekeeper right-click-Open hint only
-# when the installed app actually carries com.apple.quarantine (the curl
-# path never does; the app is ad-hoc signed, not notarized), and opens the
-# app.
+# --login-item is passed, CLEARS com.apple.quarantine if the bundle arrived by
+# a route that tags downloads, and opens the app.
+#
+# The curl+tar path never tags: com.apple.quarantine is set by the DOWNLOADING
+# application via LaunchServices, and curl/tar are not LaunchServices clients.
+# Browsers, Mail, the .dmg and Archive Utility are — so the attribute appears
+# only when someone fetched the release by hand. On that route the app is
+# ad-hoc signed and not notarized, so Gatekeeper blocks the first launch;
+# stripping the attribute is what makes "install" mean install. Right-click ->
+# Open no longer bypasses it on macOS 15/26, so the fallback text points at
+# System Settings instead.
 #
 # Usage:
 #   curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install-macos.sh | bash
@@ -180,18 +187,53 @@ say "Installed: $DEST"
 # unavailable; in that unlikely case we stay quiet and Gatekeeper's own
 # dialog still guides the user.
 if xattr -p com.apple.quarantine "$DEST" >/dev/null 2>&1; then
-    cat <<EOF
+    # STRIP IT RATHER THAN LECTURE ABOUT IT. Reaching this branch means the
+    # bundle arrived by a route that tags downloads — a browser, the .dmg, or
+    # Archive Utility, which propagates the xattr to extracted contents where
+    # `tar(1)` does not. The user asked for an install; removing the attribute
+    # IS the install on that route.
+    #
+    # `-dr`, never `-cr`: the latter strips EVERY xattr from every bundle
+    # member, which is a much larger hammer than this problem needs.
+    #
+    # This changes nothing about the signature — quarantine is a filesystem
+    # attribute, not part of the code signature — which is why the verify
+    # below is a real check and not a formality.
+    xattr -dr com.apple.quarantine "$DEST" 2>/dev/null || true
 
-  This Tillandsias.app carries the com.apple.quarantine xattr, and
-  Tillandsias is ad-hoc signed - so on first launch macOS Gatekeeper
-  will block it with "Tillandsias is from an unidentified developer."
+    if xattr -p com.apple.quarantine "$DEST" >/dev/null 2>&1; then
+        # Still tagged: almost always a permissions problem in /Applications.
+        # Say the CURRENT recovery, not the old one — right-click->Open stopped
+        # bypassing this on macOS 15 Sequoia and 26 Tahoe, where the first
+        # dialog offers only Done / Move to Trash.
+        cat <<EOF
 
-  To bypass:
-      Finder -> $INSTALL_DIR -> right-click Tillandsias.app -> Open -> Open
+  Could not clear the quarantine attribute on:
+      $DEST
 
-  After the first bypass, double-clicking works normally.
+  Gatekeeper will block the first launch. Either re-run with sudo, or:
+
+      xattr -dr com.apple.quarantine "$DEST"
+
+  If macOS still refuses (it shows only "Done" / "Move to Trash"):
+      System Settings -> Privacy & Security -> scroll to Security
+      -> "Open Anyway" -> authenticate.
+  On macOS 15+ that button appears only for a short window after the
+  refusal, so open the app once first, then go looking for it.
 
 EOF
+    else
+        say "cleared com.apple.quarantine (arrived via a download that tags files)"
+    fi
+fi
+
+# The signature must still verify after any of the above. Quarantine removal
+# cannot damage it, so a failure here means something else is wrong with the
+# bundle — a truncated download, or a tarball that lost bits in transit — and
+# it is far better to say so now than to let the app fail obscurely at launch.
+if ! codesign --verify --deep --strict "$DEST" 2>/dev/null; then
+    say "WARNING: codesign --verify failed for $DEST"
+    say "         The bundle may be incomplete; re-run the installer."
 fi
 # ── post-install sanity check ───────────────────────────────────────────
 # Invoke the bundled `--diagnose --json` to confirm the install bits
