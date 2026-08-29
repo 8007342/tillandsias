@@ -61,15 +61,47 @@ pub fn is_sha256_hex(s: &str) -> bool {
 /// @trace spec:vm-provisioning-lifecycle
 #[cfg(feature = "download")]
 pub async fn decompress_xz(src: &Path, dest: &Path) -> Result<(), FetchError> {
-    use std::fs::File;
-    use std::io::BufReader;
-    let src_file = File::open(src).map_err(|e| format!("open xz source {}: {e}", src.display()))?;
-    let mut decoder = xz2::read::XzDecoder::new(BufReader::new(src_file));
-    let mut dest_file =
-        File::create(dest).map_err(|e| format!("create xz dest {}: {e}", dest.display()))?;
-    std::io::copy(&mut decoder, &mut dest_file)
-        .map_err(|e| format!("xz decompression error: {e}"))?;
-    Ok(())
+    // TWO defects lived here (order 690-pz68), and they are independent.
+    //
+    // 1. IT BLOCKED AN ASYNC WORKER. This is an `async fn` whose body was
+    //    entirely synchronous std::io: a multi-GB xz decompression pinned one
+    //    tokio worker thread, start to finish, doing no awaiting. On a runtime
+    //    sized to the core count that is one worker fewer for everything else
+    //    for the whole decompression — the classic blocking-in-async shape.
+    //    The work is CPU- and disk-bound with no async component to preserve,
+    //    so it belongs on `spawn_blocking` wholesale rather than being rewritten
+    //    into async I/O.
+    // 2. IT WAS UNBUFFERED WHERE IT MATTERED. The destination was a bare File,
+    //    so every write `io::copy` made went straight to a syscall, and the
+    //    source used BufReader's DEFAULT 8 KiB against a decoder that pulls in
+    //    small irregular reads.
+    //
+    // Sizes: 1 MiB in, 4 MiB out — the out side matches the buffer this file
+    // already uses on the download path, for the same reason.
+    let src = src.to_path_buf();
+    let dest = dest.to_path_buf();
+    tokio::task::spawn_blocking(move || -> Result<(), FetchError> {
+        use std::fs::File;
+        use std::io::{BufReader, BufWriter, Write as _};
+        let src_file =
+            File::open(&src).map_err(|e| format!("open xz source {}: {e}", src.display()))?;
+        let mut decoder =
+            xz2::read::XzDecoder::new(BufReader::with_capacity(1024 * 1024, src_file));
+        let dest_file =
+            File::create(&dest).map_err(|e| format!("create xz dest {}: {e}", dest.display()))?;
+        let mut dest_file = BufWriter::with_capacity(4 * 1024 * 1024, dest_file);
+        std::io::copy(&mut decoder, &mut dest_file)
+            .map_err(|e| format!("xz decompression error: {e}"))?;
+        // Explicit: BufWriter's Drop discards write errors, so a fault on the
+        // last partial buffer would be reported as a SUCCESSFUL decompression
+        // and only surface later as a corrupt image blamed elsewhere.
+        dest_file
+            .flush()
+            .map_err(|e| format!("flush xz dest {}: {e}", dest.display()))?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("xz decompression task panicked or was cancelled: {e}"))?
 }
 
 fn hex_lower(bytes: &[u8]) -> String {
@@ -326,6 +358,71 @@ pub async fn download_verified(
 
 #[cfg(test)]
 mod tests {
+    /// ORDER 690-pz68 — the before/after this packet demands, isolated.
+    ///
+    /// Run it: `cargo test -p tillandsias-vm-layer --features download \
+    ///          bench_unbuffered_vs_buffered -- --ignored --nocapture`
+    ///
+    /// WHY A BENCH AND NOT THE PROVISION TIMING. A real cold provision was
+    /// measured on macOS 2026-08-29 at 14.40s total, of which the download
+    /// phase was 13.56s for 528 MB (~39 MB/s) and the whole local convert was
+    /// 0.48s. That path is NETWORK-BOUND, so the syscall-count change this
+    /// packet is about is invisible end-to-end — a second provision would have
+    /// re-measured network variance and any "improvement" read off it would be
+    /// noise wearing a number's clothes. The cost being removed is specifically
+    /// that an unbuffered `tokio::fs::File` turns every ~16 KB chunk into its
+    /// own `spawn_blocking` round trip, so the honest measurement writes the
+    /// same bytes in the same chunk size both ways with no network in front.
+    #[tokio::test]
+    #[ignore = "timing bench; run explicitly with --ignored"]
+    async fn bench_unbuffered_vs_buffered_chunked_write() {
+        use tokio::io::AsyncWriteExt;
+        const CHUNK: usize = 16 * 1024;
+        const TOTAL: usize = 256 * 1024 * 1024;
+        let chunk = vec![0u8; CHUNK];
+        let dir = std::env::temp_dir().join("t690-bench");
+        let _ = std::fs::create_dir_all(&dir);
+
+        let p1 = dir.join("unbuffered.bin");
+        let t0 = std::time::Instant::now();
+        {
+            let mut f = tokio::fs::File::create(&p1).await.unwrap();
+            let mut w = 0;
+            while w < TOTAL {
+                f.write_all(&chunk).await.unwrap();
+                w += CHUNK;
+            }
+            f.flush().await.unwrap();
+        }
+        let unbuffered = t0.elapsed();
+
+        let p2 = dir.join("buffered.bin");
+        let t1 = std::time::Instant::now();
+        {
+            let f = tokio::fs::File::create(&p2).await.unwrap();
+            let mut w = tokio::io::BufWriter::with_capacity(4 * 1024 * 1024, f);
+            let mut n = 0;
+            while n < TOTAL {
+                w.write_all(&chunk).await.unwrap();
+                n += CHUNK;
+            }
+            w.flush().await.unwrap();
+        }
+        let buffered = t1.elapsed();
+
+        let _ = std::fs::remove_file(&p1);
+        let _ = std::fs::remove_file(&p2);
+        println!(
+            "BENCH690 bytes={} chunk={}KiB writes={} unbuffered={:.2}s buffered={:.2}s speedup={:.2}x",
+            TOTAL,
+            CHUNK / 1024,
+            TOTAL / CHUNK,
+            unbuffered.as_secs_f64(),
+            buffered.as_secs_f64(),
+            unbuffered.as_secs_f64() / buffered.as_secs_f64().max(1e-9),
+        );
+    }
+
     use super::*;
 
     fn noop_progress() -> impl Fn(u64, Option<u64>) + Send + Sync {

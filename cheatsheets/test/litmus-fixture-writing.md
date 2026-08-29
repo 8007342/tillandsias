@@ -190,6 +190,16 @@ Assemble the token at run time so the literal never appears in source:
 _LT="litmus"; _LT="${_LT}:"      # then use "${_LT}alpha-shape"
 ```
 
+## Scope an authority search to the AUTHORITY, not the document
+
+A guard that asks "does this approved string appear in the ledger?" approves
+anything anyone has ever QUOTED there — measured on 929-47u8 (2026-08-29): the
+counterexample string quoted in two prose events made the guard say YES to the
+exact unauthorized reword it existed to catch. Fail-open, the inverse of the
+comment-anchor family. Scope the search to the structure that confers
+authority (`- type: operator_note` bodies, per the spec's own words), then
+verify the reword still fails while remaining mentioned in prose.
+
 ## Constructed absence must SHADOW the real binary
 
 Order 921-vtf4 / commit `d013a6fc8`, found by lenovinha and macuahuitl. A

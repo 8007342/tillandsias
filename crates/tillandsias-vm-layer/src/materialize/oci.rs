@@ -11,7 +11,7 @@
 //! @trace spec:vm-provisioning-lifecycle
 
 use std::fs::File;
-use std::io::{self, BufReader, Read};
+use std::io::{self, BufReader, Read, Write as _};
 use std::path::Path;
 
 use serde::Deserialize;
@@ -101,9 +101,22 @@ pub fn flatten_to_tar<R: Read>(oci_reader: R, output_tar: &Path) -> Result<(), O
         if !layer_path.exists() {
             return Err(OciError::MissingLayer(layer_digest.to_string()));
         }
-        let mut layer = flate2::read::GzDecoder::new(File::open(layer_path)?);
-        let mut output = File::create(output_tar)?;
+        // Buffered on BOTH sides (order 690-pz68). `io::copy` carries only a
+        // small stack buffer, so an unbuffered File on either end turns a
+        // multi-hundred-MB layer into one syscall per 8 KB in each direction.
+        // The gzip reader is the more important of the two: a decoder pulls in
+        // small, irregular reads, and every one of them was hitting the kernel.
+        let mut layer = flate2::read::GzDecoder::new(io::BufReader::with_capacity(
+            1024 * 1024,
+            File::open(layer_path)?,
+        ));
+        // Explicit flush before the handle drops: BufWriter's Drop SWALLOWS
+        // write errors, so a failure on the final partial buffer would
+        // otherwise be reported as a successful materialization and surface
+        // later as a corrupt rootfs blamed on something else.
+        let mut output = io::BufWriter::with_capacity(4 * 1024 * 1024, File::create(output_tar)?);
         io::copy(&mut layer, &mut output)?;
+        output.flush()?;
         return Ok(());
     }
 

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-unbuffered-bulk-io-paths
+    field: status
+    value: completed
+    ts: "2026-08-29T17:06:06Z"
+    host: macos
+
+events:
+  - packet_id: macos-unbuffered-bulk-io-paths
+    event:
+      type: completed
+      ts: "2026-08-29T17:06:06Z"
+      host: macos
+      summary: >
+        status 'completed' with evidence_refs: sites 1-3 buffered (+ site 3 moved to spawn_blocking), each with explicit flush; measured 8.77x on the isolated write path (256 MB / 16 KiB chunks: 0.19s -> 0.02s, reproducible bench in fetch.rs); real cold provision 14.40s total with download 13.56s network-bound, so the saving is invisible end-to-end and no second provision was run rather than measure network variance. Site 4 left unchanged BY MEASUREMENT: 4.5 ms, 0.05% of boot, and caching it risks a fingerprint that does not describe the running guest. Criterion 2's materialize half is NOT satisfied here and cannot be: that path is Windows-only.
+  - packet_id: macos-unbuffered-bulk-io-paths
+    event:
+      type: note
+      ts: "2026-08-29T17:06:06Z"
+      host: macos
+      summary: >
+        three write paths fixed and measured; site 4 declined on measurement; materialize half re-routed to windows (recorded, not faked)
