@@ -39283,6 +39283,32 @@ plan_index:
         containers on the same side of the boundary as the workload; 397 is
         executable for them today and this packet does not gate that.
 
+      events:
+        - type: evidence
+          ts: "2026-08-29T19:50:40Z"
+          agent_id: "macos-tlatoanis-macbook-air-claude-20260829t155859z"
+          host: macos
+          summary: |
+            MEASURED BEFORE BUILDING, on the host that owns the packet, 2026-08-29.
+
+            THE PACKET'S CLAIMS STILL HOLD, ten days on — re-checked rather than inherited:
+              * `VZVirtioSocketListener` / `setSocketListener` appear NOWHERE in tree code. The only occurrence is the objc2-virtualization FEATURE FLAG in crates/tillandsias-vm-layer/Cargo.toml:90 — the binding is compiled in and used by nothing.
+              * transport_macos.rs exposes exactly one direction: `connect_to_vm_vsock`. There is no listener, no accept path.
+              * No Objective-C protocol is implemented anywhere in this crate. vz.rs:1855 notes VZVirtualMachineDelegate is deliberately NOT observed, so the host listener needs the FIRST delegate conformance in the codebase — that is the real content of the 8-hour estimate, not the wiring around it.
+
+            WHAT THE GUEST ACTUALLY SEES TODAY, which the packet did not record and which changes the design:
+
+              guest -> CID 2 (host), ports 42420 / 11434 / 9999:
+                ETIMEDOUT — "Connection timed out", errno 110
+
+            NOT `ENETUNREACH` and NOT `ECONNREFUSED`, and the difference is the whole finding:
+              * ENETUNREACH would mean no path — the guest's stack cannot route to the host at all, and the packet would need a different design entirely (host connects IN to a guest-side reverse channel, using the one primitive that exists).
+              * ECONNREFUSED would mean the path is live and the host actively rejects.
+              * ETIMEDOUT means the guest's vsock stack ROUTES to CID 2 and transmits, and nothing on the host side answers. The transport is there; only the listener is missing. So the packet is buildable as filed, and this is the confirming measurement it lacked.
+
+            AND THE FAILURE IS BOUNDED, WHICH I INITIALLY GOT WRONG. My first reading of "timed out" was that an absent host service would present as a HANG — the exact silent-stall shape this milestone exists to remove. Measured with a deliberate 45-SECOND budget so the bound could not come from my own probe: the connect failed after 2.0s. That is Linux's VSOCK_DEFAULT_CONNECT_TIMEOUT (2*HZ in af_vsock), not socat's -T and not my timeout. So a guest-side forwarder gets a fast, clean, errno-bearing failure when the host has no listener, and does NOT need to invent its own bound to avoid stalling an agent. Recording the correction because "it hangs" would have justified defensive machinery that the kernel already provides.
+
+            DESIGN CONSEQUENCE, now evidence-backed: the two halves are independent. The host listener is a pure macOS/objc2 problem (VZVirtioSocketListener + a VZVirtioSocketListenerDelegate conformance + setSocketListener:forPort:, all three present in objc2-virtualization 0.2.2 and already feature-enabled). The in-guest hop — something answering `inference:11434` inside the podman enclave and relaying to CID 2 — is a Linux-side problem that can be built and tested against ANY host listener, including a throwaway one, because the transport semantics are now known: connect succeeds or fails ETIMEDOUT in 2s.
     - packet_id: plan-compact-executes-on-help-and-ignores-every-flag
       order: 831-v9kt
       status: ready
