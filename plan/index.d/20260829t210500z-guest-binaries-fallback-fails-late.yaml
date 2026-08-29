@@ -22,10 +22,17 @@ packets:
     context: |
       MEASURED on macuahuitl 2026-08-29 during the day's closing
       ./build.sh --ci-full: scripts/nix-toolbox.sh ensure returned
-      blocked:nix-toolbox:image-pull-failed (TRANSIENT — unreproducible in
-      both foreground and background contexts 30 minutes later, where the
-      chroot rung answers ok; the moment's cause is unknown and is NOT this
-      packet). build-guest-binaries.sh then printed its honest DEGRADED
+      blocked:nix-toolbox:image-pull-failed — and the reproducibility
+      matrix is the second finding: 2/2 INSIDE ci-full (two runs, ~40min
+      apart), 0/4 OUTSIDE it (foreground, background task, and with
+      build.sh's HTTP_PROXY=127.0.0.1:3129 env replicated — all
+      ok:nix-toolbox:chroot; user tmpfs quota at 618M/25G when checked).
+      Something in the ci-full execution context breaks the chroot-rung
+      probe, and NOBODY CAN SAY WHAT, because ensure discards the probe's
+      stderr (`store ping >/dev/null 2>&1`, `pull >/dev/null 2>&1`): the
+      verdict names the rung that failed and swallows why. Diagnosing this
+      cost an evening of guesses (proxy, PATH, quota) that a captured
+      stderr line would have settled in one run. build-guest-binaries.sh then printed its honest DEGRADED
       line and proceeded with local cargo — which compiled the entire
       x86_64 target successfully (~73s) and only THEN failed:
       "ERROR: missing aarch64 musl linker." This host has no
@@ -50,3 +57,5 @@ packets:
       - on a host without an aarch64-musl linker and with the nix lane forced unavailable, the failure appears before any compilation starts and its first line carries the nix-lane verdict
       - on a host where the fallback can succeed, the DEGRADED path still builds (unchanged)
       - a test pins the preflight refusal, watched red against the current late-failure behavior first
+      - "the blocked:nix-toolbox:* verdicts carry the failing probe's captured stderr (last line at minimum) — a rung refusal that swallows its cause is this milestone's disease inside its own tooling"
+      - the ci-full-context failure is re-run ONCE with stderr captured and its actual cause recorded on this packet (closing the 2/2-vs-0/4 matrix)
