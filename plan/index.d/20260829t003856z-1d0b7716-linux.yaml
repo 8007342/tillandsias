@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: wire-local-experts-mode-through-grounded-pipeline
+    event:
+      type: progress
+      ts: "2026-08-29T00:38:56Z"
+      agent_id: linux-macuahuitl-claude-20260829t003856z
+      host: linux
+      summary: >
+        IN-FORGE VERIFICATION leg 2 (macuahuitl 2026-08-29T00:38Z): STRUCTURAL ACCEPTANCE. The lane built and installed tillandsias-plan incrementally in 34s (skew resolved, capability present), expert-serve served /v1/models with all 5 domain ids, and BOTH probes behaved exactly as the no-third-state spec demands: the covered question ('what is the forge cache?') and the nonsense question ('airspeed of an unladen swallow') each returned the typed refusal 'unsupported: no rung of the spec-index resolution ladder names a usable index (vectors.jsonl) — scripts/spec-index-ensure.sh builds and publishes one (801-a2by)' with confidence=unsupported and citations=[] — NEVER an uncited freeform answer. This is the exact query class BigPickle's facade hallucinated on (6/6 in the 919-ipki diagnostics); the grounded endpoint fails closed and names its own remedy. stdin-EOF lifetime confirmed in-lane. REMAINS for the cited-answer leg: the in-forge spec index (spec_index=absent — 801-a2by build has not run in the lane; ~30min CPU); then a leg-3 probe should show Sources-cited answers. MINOR: the startup-context experts_state line is a stale 2s snapshot while the build continues — observability nit, note only.
