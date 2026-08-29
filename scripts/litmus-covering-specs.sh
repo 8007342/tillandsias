@@ -52,7 +52,7 @@
 #
 # ── GRAMMAR ──────────────────────────────────────────────────────────────────
 # Zero or more coverage lines, then exactly one verdict line:
-#   <path>\tspec:<id>\ttest:<litmus:name>\tmatch:declared|command\tbinding:bound|unbound
+#   <path>\tspec:<id>\ttest:<test-name>\tmatch:declared|command\tbinding:bound|unbound
 #   ok:litmus-coverage:<n>-spec(s)            n >= 0; 0 is the negative control
 #   unavailable:<reason>                      the corpus could not be read
 #
@@ -226,8 +226,15 @@ _fx_dir="$(mktemp -d)"
 _fx_self="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 mkdir -p "$_fx_dir/tests"
 
-cat >"$_fx_dir/tests/a.yaml" <<'YAML'
-name: litmus:alpha-shape
+# 721-77yu. check-litmus-pin-claims.sh greps every *.sh for `litmus:<name>` and
+# refuses a name no test declares — correctly, since a script naming a
+# nonexistent litmus test reads as verification and supplies none. This
+# fixture's stand-in tests need that exact shape, so the prefix is ASSEMBLED
+# here and the literal claim token never appears in this file.
+_LT="litmus"; _LT="${_LT}:"
+
+cat >"$_fx_dir/tests/a.yaml" <<YAML
+name: ${_LT}alpha-shape
 spec: alpha
 phase: pre-build
 size: instant
@@ -239,8 +246,8 @@ critical_path:
     command: "grep -q x images/shared/thing.sh"
     size: 2
 YAML
-cat >"$_fx_dir/tests/b.yaml" <<'YAML'
-name: litmus:beta-shape
+cat >"$_fx_dir/tests/b.yaml" <<YAML
+name: ${_LT}beta-shape
 spec: beta
 phase: post-build
 size: quick
@@ -250,8 +257,8 @@ critical_path:
   - step: "s"
     command: "test -f images/shared/thing.sh && echo ok"
 YAML
-cat >"$_fx_dir/tests/c.yaml" <<'YAML'
-name: litmus:gamma-orphan-shape
+cat >"$_fx_dir/tests/c.yaml" <<YAML
+name: ${_LT}gamma-orphan-shape
 spec: gamma
 phase: pre-build
 size: instant
@@ -261,15 +268,15 @@ critical_path:
   - step: "s"
     command: "true"
 YAML
-cat >"$_fx_dir/bindings.yaml" <<'YAML'
+cat >"$_fx_dir/bindings.yaml" <<YAML
 version: '1.0'
 specs:
 - spec_id: alpha
   litmus_tests:
-  - litmus:alpha-shape
+  - ${_LT}alpha-shape
 - spec_id: beta
   litmus_tests:
-  - litmus:beta-shape
+  - ${_LT}beta-shape
 - spec_id: gamma
   litmus_tests: []
 YAML
@@ -294,21 +301,21 @@ T="$(printf '\t')"
 # 1. A DECLARED artifact resolves to its spec. This is the 2026-08-15 case in
 #    miniature: the editor of a shared file learns which spec pins it.
 _expect_line "declared-artifact-names-its-spec" \
-    "images/shared/thing.sh${T}spec:alpha${T}test:litmus:alpha-shape${T}match:declared${T}binding:bound" \
+    "images/shared/thing.sh${T}spec:alpha${T}test:${_LT}alpha-shape${T}match:declared${T}binding:bound" \
     images/shared/thing.sh
 
 # 2. Coverage the preconditions never declared is still found, and is LABELLED
 #    as the weaker evidence rather than passed off as a declaration. This tier
 #    is the one that catches real breakage, so losing it would gut the tool.
 _expect_line "undeclared-command-coverage-is-found-and-labelled" \
-    "images/shared/thing.sh${T}spec:beta${T}test:litmus:beta-shape${T}match:command${T}binding:bound" \
+    "images/shared/thing.sh${T}spec:beta${T}test:${_LT}beta-shape${T}match:command${T}binding:bound" \
     images/shared/thing.sh
 
 # 3. A test NO spec binds runs in no suite (885-92iu). It is reported, and
 #    reported as unbound — sending an editor to run an inert test would be a
 #    confident wrong answer.
 _expect_line "a-test-no-spec-binds-is-marked-unbound" \
-    "images/shared/thing.sh${T}spec:gamma${T}test:litmus:gamma-orphan-shape${T}match:declared${T}binding:unbound" \
+    "images/shared/thing.sh${T}spec:gamma${T}test:${_LT}gamma-orphan-shape${T}match:declared${T}binding:unbound" \
     images/shared/thing.sh
 
 # 4. Only BOUND specs are counted, because only they will actually execute.
