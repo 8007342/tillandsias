@@ -21918,6 +21918,12 @@ plan_index:
         the same latent outage in a different environment.
       events:
         - type: progress
+          ts: "2026-08-29T19:17:57Z"
+          agent_id: "linux-macuahuitl-claude-20260829t191756z"
+          host: linux
+          summary: |
+            THIRD TRANCHE (macuahuitl): the select() decision the packet was parked on is settled by COMPOSITION, not a query engine. New `tillandsias-plan yaml-json <file>` emits the document as JSON; rich reads become `yaml-json | jq`, and jq is the one query tool the packet's own availability table shows present in ALL THREE environments. The retired yq filters run under jq VERBATIM (yq eval mimics jq): proven byte-identical on the real bindings file. MIGRATED: run-litmus-test.sh's seven own reads (yaml_get, bindings queries, phase/host_kind/size/inputs, list_all_tests) and local-ci.sh's get_all_active_specs — sanctioned tier first, yq second, historical awk/grep last, so a fresh unbuilt clone still runs. A yq-less host now selects the SAME test set as a yq host instead of degrading to grep parsers; degraded-mode warning updated to say so. PERF: the four yaml subcommands moved to the ledger-free early dispatch (they are file-local; the ledger load cost 220ms of a 227ms invocation — now 2ms, measured). CONVERSION BUG CAUGHT BY THE SUITE, kept as evidence for the 901-jtvi rule: first conversion left empty-match rc=1 where the yq tier's `|| true` guaranteed rc=0; litmus-name-filter-fail-loud/hint went red (247/249), fixed, 249/249 — the verdict-invariance discipline works. EQUIVALENCE: 407 fixture files x 3 metadata fields, plan+jq vs yq, zero diffs. REMAINING for close: forge + builder-toolbox availability evidence for yaml-json (host leg recorded here), methodology criterion 3 wording, and the ledger-tooling doc note (set-field writes a fragment, append-event edits the folded base — yolanda's promotion request).
+        - type: progress
           ts: "2026-08-26T17:32:23Z"
           agent_id: "linux-yoga-opus5-20260826t173223z"
           host: yoga
@@ -54430,6 +54436,25 @@ plan_index:
           host: linux
           summary: |
             DARWIN PORTABILITY LEG GREEN — recorded by the coordinator from tlatoanis-macbook-air's report, regime attached: GNU bash 3.2.57(1)-release (macOS system bash, PRE-4.0 — no associative arrays, no declare -g, the oldest bash in the fleet), trunk 91d732751, scripts/test-litmus-step-model.sh 8/8 exit 0, /bin/sh (also bash) passes too. Passing on 3.2 is what makes the bulk migration safe on this axis, not "passing on a mac". NON-DEFECT recorded so nobody files it: `zsh scripts/test-litmus-step-model.sh` fails with "command not found: mf_stage" and that is EXPECTED — bash is the runner by construction (run-litmus-test.sh executes steps as `bash -c 'source "$LITMUS_STDLIB"; ...'`) and the PIPESTATUS arm is a static grep, not a zsh-load claim; assertion wording + header comment tightened to say so. REMAINING before bulk migration: the MSYS leg (queued on yolanda after their 760-hzi4 rung).
+        - type: evidence
+          ts: "2026-08-29T18:36:30Z"
+          agent_id: "macos-tlatoanis-macbook-air-claude-20260829t155859z"
+          host: macos
+          summary: |
+            DARWIN PORTABILITY: GREEN. scripts/test-litmus-step-model.sh run on tlatoanis-macbook-air (macOS 26.6.2, Apple M5) 2026-08-29 at trunk 91d732751: 8/8 assertions pass, exit 0, final line ok:litmus-step-model:all.
+
+              ok: premise holds: in a pipefail-less shell (the runner's), the piped form masks exit 7
+              ok: mf_stage makes the producer's failure the verdict
+              ok: a passing producer is unchanged
+              ok: an intentional non-zero exit is expressible, not a false positive
+              ok: first-N reads a finished buffer; the producer survived (rc=0)
+              ok: stderr is captured by default
+              ok: no PIPESTATUS in the step model (portable to zsh/BSD)
+              ok:litmus-step-model:all
+
+            THE SHELL THAT MATTERS: GNU bash 3.2.57(1)-release (arm64-apple-darwin25). That is macOS's system bash, PRE-4.0, and it is the strongest portability signal available here — it lacks associative arrays, `declare -g`, `${var^^}`, and the other post-3.2 conveniences a Linux-developed script picks up without noticing. Passing on 3.2 is what makes the bulk migration safe, not merely passing on darwin. `/bin/sh` is bash on this host and also passes.
+
+            ONE THING I CHECKED AND AM REPORTING AS A NON-DEFECT, because the opposite claim would have been easy to make and wrong. Running the script under zsh fails ("command not found: mf_stage", "BIG_rc: parameter not set"), which looks like a portability gap next to an assertion literally worded "portable to zsh/BSD". It is not one. run-litmus-test.sh:1228 executes every step as `bash -c 'source "$LITMUS_STDLIB"; ...'`, so bash is the execution context by construction and zsh is never the runner; and that assertion is a STATIC grep proving the stdlib contains no PIPESTATUS reference — a bash-ism that is empty under zsh — rather than a claim that the stdlib loads under zsh. The check is sound and its wording is about the bash-ism, not the interpreter. Recording it so the next person who runs `zsh scripts/test-litmus-step-model.sh` does not file the finding I nearly filed.
         - type: verified
           ts: "2026-08-29T18:21:59Z"
           agent_id: "linux-lenovinha-claude-20260828t223829z"

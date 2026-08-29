@@ -216,7 +216,20 @@ spec_in_list() {
 }
 
 get_all_active_specs() {
-    if command -v yq &>/dev/null; then
+    # ORDER 746-htj9: the compiled reader + jq first — both exist in every
+    # environment the gates run in; yq and the awk parser stay as fallbacks
+    # for a fresh clone that has never built the binary.
+    local _bin=""
+    if [[ -f "$REPO_ROOT/scripts/plan-binary-probe.sh" ]]; then
+        # shellcheck source=scripts/plan-binary-probe.sh
+        . "$REPO_ROOT/scripts/plan-binary-probe.sh" 2>/dev/null || true
+        command -v resolve_plan_binary &>/dev/null && _bin="$(resolve_plan_binary 2>/dev/null)" || _bin=""
+    fi
+    local v
+    if [[ -n "$_bin" ]] && command -v jq &>/dev/null \
+        && v="$("$_bin" yaml-json "$REPO_ROOT/openspec/litmus-bindings.yaml" 2>/dev/null | jq -r '.specs[] | select(.status=="active") | .spec_id' 2>/dev/null)"; then
+        [[ -n "$v" ]] && printf '%s\n' "$v"
+    elif command -v yq &>/dev/null; then
         yq eval '.specs[] | select(.status=="active") | .spec_id' "$REPO_ROOT/openspec/litmus-bindings.yaml" 2>/dev/null || true
     else
         awk '

@@ -24,9 +24,9 @@
 //!        plan/issues/optimization-macos-vz-idiomatic-exec-layer-2026-06-21.md
 
 use tillandsias_control_wire::{
-    CAP_PTY_HEARTBEAT_V1, CAP_PTY_HEARTBEAT_V2, CAP_PTY_STDIN_EOF, ControlEnvelope, ControlMessage,
-    MAX_MESSAGE_BYTES, MAX_PTY_FRAME_BYTES, PtyDirection, PtyExit, PtyInputState, VmPhase,
-    WIRE_VERSION, decode, encode,
+    CAP_PTY_DATA_SESSION, CAP_PTY_HEARTBEAT_V1, CAP_PTY_HEARTBEAT_V2, CAP_PTY_STDIN_EOF,
+    ControlEnvelope, ControlMessage, MAX_MESSAGE_BYTES, MAX_PTY_FRAME_BYTES, PtyDirection, PtyExit,
+    PtyInputState, VmPhase, WIRE_VERSION, decode, encode,
 };
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
@@ -422,6 +422,68 @@ where
     exec_over_stream_with_input(stream, argv, &[]).await
 }
 
+/// Choose the open frame for an EXEC session (order 926-bin4).
+///
+/// A data session puts the child's fd 0 on a pipe, so binary stdin survives:
+/// the line discipline never sees it. When the peer cannot do that we fall back
+/// to `PtyOpen` and SAY SO if the payload is at risk, because the alternative is
+/// the silent truncation this packet was filed for — measured as 0x15 discarding
+/// everything buffered before it while the caller was told rc=0.
+///
+/// The warning is conditioned on the payload, not on the capability alone: a
+/// text-only stdin is unaffected by the line discipline and warning about it
+/// every time would train readers to ignore the message that matters.
+fn exec_open_frame(
+    peer_supports_data_session: bool,
+    input: &[u8],
+    session_id: u32,
+    argv: Vec<String>,
+    env: Vec<(String, String)>,
+    cwd: Option<String>,
+) -> ControlMessage {
+    // Both exec entry points opened 24x80; it is a nominal size for a session
+    // whose output is piped, not rendered, so it lives here rather than being
+    // threaded through as two arguments that never vary.
+    const EXEC_ROWS: u16 = 24;
+    const EXEC_COLS: u16 = 80;
+    let (rows, cols) = (EXEC_ROWS, EXEC_COLS);
+    if peer_supports_data_session {
+        return ControlMessage::PtyOpenData {
+            session_id,
+            rows,
+            cols,
+            argv,
+            env,
+            cwd,
+        };
+    }
+    if input.iter().any(|b| LINE_DISCIPLINE_SPECIALS.contains(b)) {
+        eprintln!(
+            "[vsock_exec] WARNING: this guest does not advertise {CAP_PTY_DATA_SESSION}, so stdin \
+             crosses a terminal line discipline that INTERPRETS control bytes. This payload \
+             contains at least one of them, so it will be altered in transit: 0x04/0x11 lose a \
+             byte, 0x15/0x1a discard everything buffered before them, 0x7f deletes the preceding \
+             byte, 0x03 kills the child, and 0x13 wedges the session. Measured, order 926-bin4. \
+             Update the staged guest binary."
+        );
+    }
+    ControlMessage::PtyOpen {
+        session_id,
+        rows,
+        cols,
+        argv,
+        env,
+        cwd,
+    }
+}
+
+/// The bytes a canonical-mode line discipline does NOT deliver verbatim, as
+/// MEASURED on a live guest (926-bin4) rather than taken from a header. 0x08 is
+/// deliberately absent: it arrived intact, because VERASE is DEL here, and
+/// warning about bytes that are fine would dull the warning about bytes that
+/// are not.
+const LINE_DISCIPLINE_SPECIALS: &[u8] = &[0x03, 0x04, 0x11, 0x13, 0x15, 0x1a, 0x7f];
+
 /// Like [`exec_over_stream`] but first delivers `input` to the guest child's
 /// PTY (its stdin **and** `/dev/tty`) before draining output.
 ///
@@ -475,7 +537,7 @@ where
     // a host newer than the guest staged beside it, and a version comparison
     // would send a frame an older guest cannot decode (which kills the session
     // rather than degrading).
-    let peer_supports_stdin_eof = match ack.body {
+    let (peer_supports_stdin_eof, peer_supports_data_session) = match ack.body {
         ControlMessage::HelloAck {
             wire_version,
             ref server_caps,
@@ -486,7 +548,10 @@ where
                     "vsock_exec: wire_version mismatch (peer {wire_version}, self {WIRE_VERSION})"
                 ));
             }
-            server_caps.iter().any(|c| c == CAP_PTY_STDIN_EOF)
+            (
+                server_caps.iter().any(|c| c == CAP_PTY_STDIN_EOF),
+                server_caps.iter().any(|c| c == CAP_PTY_DATA_SESSION),
+            )
         }
         other => {
             return Err(format!(
@@ -506,14 +571,14 @@ where
         &ControlEnvelope {
             wire_version: WIRE_VERSION,
             seq,
-            body: ControlMessage::PtyOpen {
+            body: exec_open_frame(
+                peer_supports_data_session,
+                input,
                 session_id,
-                rows: 24,
-                cols: 80,
-                argv: argv_owned,
-                env: vec![("TERM".to_string(), "dumb".to_string())],
-                cwd: None,
-            },
+                argv_owned,
+                vec![("TERM".to_string(), "dumb".to_string())],
+                None,
+            ),
         },
     )
     .await?;
@@ -723,8 +788,10 @@ where
     )
     .await?;
     let ack = read_setup_envelope(&mut stream, exec_idle_timeout()?, "the Hello handshake").await?;
-    // Order 925-eofi: same feature-detect as the non-streaming entry point.
-    let peer_supports_stdin_eof = match ack.body {
+    // Order 925-eofi / 926-bin4: same feature-detect as the non-streaming entry
+    // point. Both capabilities are read in the SAME window, because both must be
+    // known before the open frame is chosen.
+    let (peer_supports_stdin_eof, peer_supports_data_session) = match ack.body {
         // `server_caps` is READ here, not destructured away (795-zshi): the
         // capability check has to happen between the ack and the PtyOpen, which
         // is the only window in which the host still knows what the guest can do
@@ -742,7 +809,10 @@ where
             if let Some(cap) = required_cap.filter(|c| !server_caps.iter().any(|s| s == c)) {
                 return Err(missing_cap_message(cap, &server_caps));
             }
-            server_caps.iter().any(|c| c == CAP_PTY_STDIN_EOF)
+            (
+                server_caps.iter().any(|c| c == CAP_PTY_STDIN_EOF),
+                server_caps.iter().any(|c| c == CAP_PTY_DATA_SESSION),
+            )
         }
         other => {
             return Err(format!(
@@ -759,14 +829,14 @@ where
         &ControlEnvelope {
             wire_version: WIRE_VERSION,
             seq,
-            body: ControlMessage::PtyOpen {
+            body: exec_open_frame(
+                peer_supports_data_session,
+                input,
                 session_id,
-                rows: 24,
-                cols: 80,
-                argv: argv_owned,
-                env: vec![("TERM".to_string(), "dumb".to_string())],
-                cwd: None,
-            },
+                argv_owned,
+                vec![("TERM".to_string(), "dumb".to_string())],
+                None,
+            ),
         },
     )
     .await?;
@@ -1415,6 +1485,70 @@ where
 
 #[cfg(test)]
 mod tests {
+
+    /// ORDER 926-bin4 — the same ENUMERATION discipline 925-eofi's failure
+    /// taught, applied to the open frame. Every exec entry point must choose
+    /// its open frame through `exec_open_frame`, never construct `PtyOpen`
+    /// inline: an entry point that hardcodes the terminal frame silently keeps
+    /// the line-discipline corruption while its neighbours are fixed, and a
+    /// per-function assertion would not see it.
+    #[test]
+    fn every_exec_entry_point_chooses_its_open_frame() {
+        let source = include_str!("vsock_exec.rs");
+        let code = source.split("#[cfg(test)]").next().expect("code region");
+        let mut checked = 0;
+        for chunk in code.split("async fn ").skip(1) {
+            let name = chunk
+                .split('<')
+                .next()
+                .unwrap_or("")
+                .split('(')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            // Only the entry points that deliver an `input` payload.
+            if !chunk.contains("for chunk in input.chunks(") {
+                continue;
+            }
+            checked += 1;
+            assert!(
+                chunk.contains("exec_open_frame("),
+                "{name} opens its session without exec_open_frame, so it cannot \
+                 use a data session and its stdin still crosses the line \
+                 discipline (order 926-bin4)"
+            );
+        }
+        assert!(
+            checked >= 2,
+            "expected at least two input-delivering entry points, found {checked}"
+        );
+    }
+
+    /// The warning must fire on a payload that WILL be altered and stay quiet on
+    /// one that will not — a warning that cries wolf on every text payload
+    /// trains readers to ignore the case that matters.
+    #[test]
+    fn the_specials_list_is_what_was_measured_not_the_whole_control_range() {
+        // Measured corrupting/killing/wedging on a live guest.
+        for b in [0x03u8, 0x04, 0x11, 0x13, 0x15, 0x1a, 0x7f] {
+            assert!(
+                LINE_DISCIPLINE_SPECIALS.contains(&b),
+                "0x{b:02x} was measured as altered and must be listed"
+            );
+        }
+        // Measured arriving INTACT: VERASE is DEL here, so 0x08 is ordinary
+        // data. Listing it would warn about a payload that is actually fine.
+        assert!(
+            !LINE_DISCIPLINE_SPECIALS.contains(&0x08),
+            "0x08 arrived intact in the 926-bin4 sweep; listing it would warn \
+             about bytes that are not broken"
+        );
+        assert!(
+            !LINE_DISCIPLINE_SPECIALS.contains(&0x41),
+            "0x41 is the sweep's negative control"
+        );
+    }
 
     /// ORDER 925-eofi — THE TEST THAT WOULD HAVE CAUGHT THE FIRST ATTEMPT.
     ///
