@@ -23815,6 +23815,12 @@ plan_index:
         - the index refreshes on commit or names its staleness in the envelope
 
       events:
+        - type: note
+          ts: "2026-08-29T16:40:14Z"
+          agent_id: "linux-macuahuitl-claude-20260829t164014z"
+          host: linux
+          summary: |
+            FLEET EVIDENCE COMPLETE, PREMISE HOLDS ON WINDOWS — re-scoped per the packet's own next_action. Four hosts: macuahuitl serving-exists=yes (published, in-corpus 0.72-0.91); yoga yes (entries=3); lenovinha yes (entries=0 — cold tier, root exists never published); yolanda NO (root+serving /c/Users/.../spec-index, entries=0, resolves locally and correctly — not the 789-nc2s stale-env case, simply never materialised). serving-exists is a PER-HOST PROVISIONING FACT, not an invariant. This packet is now about the no-hosts: a provisioning step (or the launch-time ensure that 919-vvyv D2 landed for forges, adapted for dev hosts) so a host like yolanda reaches L1. The lenovinha cold-tier state (exists-but-empty) is the adjacent rung.
         - type: verified
           ts: "2026-08-29T16:14:17Z"
           agent_id: "linux-lenovinha-claude-20260828t223829z"
