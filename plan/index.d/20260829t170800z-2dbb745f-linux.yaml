@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: first-run-long-work-is-silent-across-surfaces
+    field: status
+    value: completed
+    ts: "2026-08-29T17:08:00Z"
+    host: linux
+
+events:
+  - packet_id: first-run-long-work-is-silent-across-surfaces
+    event:
+      type: completed
+      ts: "2026-08-29T17:08:00Z"
+      host: linux
+      summary: >
+        status 'completed' with evidence_refs: 0f9d6b446: ./build.sh --check GREEN; bringup_progress 6/6 tests; check-approved-ux-strings gate green and mutation-verified. (a) was already done (9a244471c); (b) implemented under operator approval recorded as an operator_note on this packet 2026-08-29 BEFORE any code was written, per spec:tray-ux. Five stages announced on the default path in run_opencode_mode with the exact approved template. Exit criteria: (1) surface (a) unchanged and landed; (2) one line per stage, no --debug; (3) no-internals-vocabulary test asserts over every line the type can emit for totals 1..=12 against an 18-word ban list; (4) shared headless lane, module deliberately not feature-gated. The existing event:container_launch diagnostics stream is untouched and stays --debug-gated. Also fixed: the in-file approval assertion had no teeth (a clean-vocabulary reword left all six tests green, measured), so scripts/check-approved-ux-strings.sh anchors the string to the ledger and is wired into --check.
+  - packet_id: first-run-long-work-is-silent-across-surfaces
+    event:
+      type: note
+      ts: "2026-08-29T17:08:00Z"
+      host: linux
+      summary: >
+        surface (b) implemented under recorded operator approval; all four exit criteria met
