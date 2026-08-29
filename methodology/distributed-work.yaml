@@ -2044,6 +2044,40 @@ distributed_work:
       confirm the cross-configuration build goes red, silent when reverted. A
       signature change whose stale callers build green is a build that did not
       look.
+    the_gated_module_rule_inverse: >
+      AND THE SAME GATE HIDES THE DAMAGE IN THE OTHER DIRECTION: CODE ADDED
+      UNDER ONE PLATFORM'S CFG CAN LEAVE TRUNK UNBUILDABLE ON ANOTHER, AND ONLY
+      THAT PLATFORM WILL EVER FIND OUT. The rule above is about a green build
+      that did not COMPILE the gated module. This is its inverse — a green build
+      that compiled everything it could see, while a sibling host cannot build
+      the tree at all.
+
+      Measured 2026-08-29 (macbook, order 935-6fzk, on yolanda's 793-zumy
+      commit 1bc890553). `wsl2_paravirtual_gpu_reason` was added with exactly
+      one production caller, `enumerate_gpus`, which is
+      `#[cfg(target_os = "linux")]`. On Linux the function is live and the gate
+      is green. On macOS that caller vanishes, the only remaining reference is
+      `#[cfg(test)]`, and the non-test build sees dead code — which `-D
+      warnings` turns into a HARD BUILD FAILURE. Trunk was unbuildable on darwin
+      from the moment it merged until a darwin host next compiled it, which
+      happened to be hours later and for an unrelated reason.
+
+      WHAT MAKES IT INVISIBLE TO THE AUTHOR: nothing in their configuration is
+      wrong, nothing they can run goes red, and the defect is not in the code
+      they wrote but in the code that is MISSING on the other side of the cfg.
+      No amount of care at the keyboard surfaces it; only compiling the other
+      configuration does.
+
+      THE FIX SHAPE, when a helper exists for a platform-gated caller: gate it
+      the same way, plus `test` so the assertion it exists for still runs
+      everywhere — `#[cfg(any(target_os = "linux", test))]`. Gating on the
+      platform alone breaks the test on every other host, which is the same
+      defect wearing the opposite sign.
+
+      PROTOCOL: adding a helper whose only non-test caller is cfg-gated is a
+      SHARED-SURFACE change under `why_a_message_and_not_more_care` — the
+      sibling lane is the only party that can check it. Say so, or gate it at
+      the moment you write it.
     why_a_message_and_not_more_care: >
       A HEADS-UP IS A FALSIFIABLE ACT AND CARE IS NOT (yoga, 2026-08-26).
       "I considered the siblings" cannot be checked by anyone, including its
