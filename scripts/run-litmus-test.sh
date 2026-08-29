@@ -216,13 +216,41 @@ fi
 # suite, and the metadata fallbacks are real fallbacks. The point is only that
 # the reader can tell which kind of green they are holding.
 if ! command -v yq &>/dev/null && [[ ! -x "$LITMUS_RUNTIME_DIR/bin/yq" ]]; then
-    printf 'warn:litmus-degraded-no-yq — yq is not on PATH and could not be provisioned from the tillandsias-builder toolbox. Steps whose commands call yq will fail or return empty, and YAML metadata falls back to grep. Install yq on the host, or create the toolbox (see scripts/with-tillandsias-builder.sh), before trusting a verdict from this run.\n' >&2
+    printf 'warn:litmus-degraded-no-yq — yq is not on PATH and could not be provisioned from the tillandsias-builder toolbox. Steps whose commands call yq will fail or return empty. (The runner'\''s OWN metadata reads use the compiled tillandsias-plan reader when one resolves — order 746-htj9 — and fall back to grep only without it.) Install yq on the host, or create the toolbox (see scripts/with-tillandsias-builder.sh), before trusting a verdict from this run.\n' >&2
 fi
 
 # Now the runtime bin joins PATH — after the extraction above, and carrying the
 # shim it may just have written, so both this runner's own yaml_get and every
 # litmus step command resolve the same real yq.
 export PATH="$LITMUS_RUNTIME_DIR/bin:$PATH"
+
+# ── ORDER 746-htj9: the sanctioned YAML read path for the runner's OWN reads ─
+# Metadata reads (phase/host_kind/size/inputs, bindings queries) try
+# `tillandsias-plan yaml-json | jq` FIRST: the compiled reader exists in every
+# environment the gates run in, and jq is the one query tool present in all of
+# them — so a host without yq now selects the SAME test set as a host with it,
+# instead of silently degrading to the grep parsers. yq stays as the second
+# tier, the historical awk/grep parsers as the last; both remain because a
+# fresh clone that has never built the binary must still be able to run.
+# Step COMMANDS inside test files that call yq themselves are 799-tb7q's
+# territory (the toolbox shim above), not this block's.
+LITMUS_PLAN_BIN=""
+if [[ -f "$PROJECT_ROOT/scripts/plan-binary-probe.sh" ]]; then
+    # shellcheck source=scripts/plan-binary-probe.sh
+    . "$PROJECT_ROOT/scripts/plan-binary-probe.sh" 2>/dev/null || true
+    if command -v resolve_plan_binary &>/dev/null; then
+        LITMUS_PLAN_BIN="$(resolve_plan_binary 2>/dev/null)" || LITMUS_PLAN_BIN=""
+    fi
+fi
+# _yaml_jq <file> <jq-filter> — the first tier. Returns non-zero (and prints
+# nothing) when the tier is unavailable or the file does not load, so callers
+# fall through to the next tier. A `blocked:` verdict from yaml-json lands on
+# stdout INTO jq, which then fails — the fallback engages either way.
+_yaml_jq() {
+    [[ -n "$LITMUS_PLAN_BIN" ]] || return 1
+    command -v jq &>/dev/null || return 1
+    "$LITMUS_PLAN_BIN" yaml-json "$1" 2>/dev/null | jq -r "$2" 2>/dev/null
+}
 export TILLANDSIAS_NO_SINGLETON=1
 export LITMUS_PODMAN_CALLS_FILE="${LITMUS_PODMAN_CALLS_FILE:-$PROJECT_ROOT/target/litmus-podman/calls.log}"
 
@@ -408,7 +436,12 @@ yaml_get() {
     local file="$1"
     local path="$2"
 
-    if command -v yq &>/dev/null; then
+    # ORDER 746-htj9: yq's filter language is jq's, so the same path string
+    # feeds both tiers.
+    local v
+    if v="$(_yaml_jq "$file" "$path")"; then
+        echo "$v"
+    elif command -v yq &>/dev/null; then
         yq eval "$path" "$file" 2>/dev/null || echo ""
     elif command -v jq &>/dev/null; then
         # Simple fallback for yq-style paths (not perfect but functional)
@@ -423,7 +456,12 @@ yaml_get() {
 get_litmus_tests_for_spec() {
     local spec_id="$1"
 
-    if command -v yq &>/dev/null; then
+    local v
+    if v="$(_yaml_jq "$LITMUS_BINDINGS" ".specs[] | select(.spec_id==\"${spec_id}\") | .litmus_tests[]?")"; then
+        # An empty match is rc=0, exactly as the yq tier's `|| true` made it:
+        # callers treat non-zero as a runner failure, not as "no tests".
+        if [[ -n "$v" ]]; then printf '%s\n' "$v"; fi
+    elif command -v yq &>/dev/null; then
         yq eval ".specs[] | select(.spec_id==\"${spec_id}\") | .litmus_tests[]" \
             "$LITMUS_BINDINGS" 2>/dev/null || true
     else
@@ -452,7 +490,10 @@ get_litmus_tests_for_spec() {
 
 # Get all active spec IDs from bindings
 get_all_active_specs() {
-    if command -v yq &>/dev/null; then
+    local v
+    if v="$(_yaml_jq "$LITMUS_BINDINGS" '.specs[] | select(.status=="active") | .spec_id')"; then
+        if [[ -n "$v" ]]; then printf '%s\n' "$v"; fi
+    elif command -v yq &>/dev/null; then
         yq eval '.specs[] | select(.status=="active") | .spec_id' "$LITMUS_BINDINGS" 2>/dev/null || true
     else
         # Fallback: grep-based parsing
@@ -474,7 +515,10 @@ get_all_active_specs() {
 get_test_phase() {
     local file="$1"
 
-    if command -v yq &>/dev/null; then
+    local v
+    if v="$(_yaml_jq "$file" '.phase // "runtime"')"; then
+        echo "${v:-runtime}"
+    elif command -v yq &>/dev/null; then
         yq eval '.phase // "runtime"' "$file" 2>/dev/null || echo "runtime"
     else
         awk '
@@ -504,7 +548,10 @@ get_test_phase() {
 get_test_host_kind() {
     local file="$1"
 
-    if command -v yq &>/dev/null; then
+    local v
+    if v="$(_yaml_jq "$file" '.host_kind // "any"')"; then
+        echo "${v:-any}"
+    elif command -v yq &>/dev/null; then
         yq eval '.host_kind // "any"' "$file" 2>/dev/null || echo "any"
     else
         awk '
@@ -541,7 +588,10 @@ current_host_kind() {
 get_test_size() {
     local file="$1"
 
-    if command -v yq &>/dev/null; then
+    local v
+    if v="$(_yaml_jq "$file" '.size // "quick"')"; then
+        echo "${v:-quick}"
+    elif command -v yq &>/dev/null; then
         yq eval '.size // "quick"' "$file" 2>/dev/null || echo "quick"
     else
         awk '
@@ -569,7 +619,10 @@ get_test_size() {
 get_test_inputs() {
     local file="$1"
 
-    if command -v yq &>/dev/null; then
+    local v
+    if v="$(_yaml_jq "$file" '.inputs[]? // ""')"; then
+        [[ -n "$v" ]] && printf '%s\n' "$v" | grep -v '^$' || true
+    elif command -v yq &>/dev/null; then
         yq eval '.inputs[]? // ""' "$file" 2>/dev/null | grep -v '^$' || true
     else
         awk '
@@ -1695,8 +1748,9 @@ list_all_tests() {
     echo "" >&2
 
     # Get unique test names from bindings
-    if command -v yq &>/dev/null; then
-        yq eval '.specs[].litmus_tests[]' "$LITMUS_BINDINGS" 2>/dev/null | sort -u | while read -r test; do
+    if [[ -n "$LITMUS_PLAN_BIN" ]] || command -v yq &>/dev/null; then
+        { _yaml_jq "$LITMUS_BINDINGS" '.specs[].litmus_tests[]?' \
+            || yq eval '.specs[].litmus_tests[]' "$LITMUS_BINDINGS" 2>/dev/null; } | sort -u | while read -r test; do
             local test_file="${LITMUS_TESTS_DIR}/${test}.yaml"
             if [[ -f "$test_file" ]]; then
                 local desc

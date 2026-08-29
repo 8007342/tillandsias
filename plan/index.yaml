@@ -21918,6 +21918,12 @@ plan_index:
         the same latent outage in a different environment.
       events:
         - type: progress
+          ts: "2026-08-29T19:17:57Z"
+          agent_id: "linux-macuahuitl-claude-20260829t191756z"
+          host: linux
+          summary: |
+            THIRD TRANCHE (macuahuitl): the select() decision the packet was parked on is settled by COMPOSITION, not a query engine. New `tillandsias-plan yaml-json <file>` emits the document as JSON; rich reads become `yaml-json | jq`, and jq is the one query tool the packet's own availability table shows present in ALL THREE environments. The retired yq filters run under jq VERBATIM (yq eval mimics jq): proven byte-identical on the real bindings file. MIGRATED: run-litmus-test.sh's seven own reads (yaml_get, bindings queries, phase/host_kind/size/inputs, list_all_tests) and local-ci.sh's get_all_active_specs — sanctioned tier first, yq second, historical awk/grep last, so a fresh unbuilt clone still runs. A yq-less host now selects the SAME test set as a yq host instead of degrading to grep parsers; degraded-mode warning updated to say so. PERF: the four yaml subcommands moved to the ledger-free early dispatch (they are file-local; the ledger load cost 220ms of a 227ms invocation — now 2ms, measured). CONVERSION BUG CAUGHT BY THE SUITE, kept as evidence for the 901-jtvi rule: first conversion left empty-match rc=1 where the yq tier's `|| true` guaranteed rc=0; litmus-name-filter-fail-loud/hint went red (247/249), fixed, 249/249 — the verdict-invariance discipline works. EQUIVALENCE: 407 fixture files x 3 metadata fields, plan+jq vs yq, zero diffs. REMAINING for close: forge + builder-toolbox availability evidence for yaml-json (host leg recorded here), methodology criterion 3 wording, and the ledger-tooling doc note (set-field writes a fragment, append-event edits the folded base — yolanda's promotion request).
+        - type: progress
           ts: "2026-08-26T17:32:23Z"
           agent_id: "linux-yoga-opus5-20260826t173223z"
           host: yoga
