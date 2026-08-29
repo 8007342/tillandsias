@@ -144,11 +144,47 @@ build_guest_binary "x86_64-unknown-linux-musl" "tillandsias-headless-x86_64-unkn
 # ── 6. Ad-hoc codesign with entitlements ────────────────────────────────
 ENTITLEMENTS="$ROOT/crates/tillandsias-macos-tray/assets/Tillandsias.entitlements"
 [[ -f "$ENTITLEMENTS" ]] || die "Tillandsias.entitlements missing at $ENTITLEMENTS"
-say "codesign (ad-hoc) with $ENTITLEMENTS"
-codesign --force --sign - \
-    --entitlements "$ENTITLEMENTS" \
-    --options runtime \
-    "$APP" >&2
+# SIGNING IDENTITY. Ad-hoc by default — that is what a machine without a
+# Developer ID can do, and it is enough: com.apple.security.virtualization is
+# NOT a restricted entitlement, so an ad-hoc signature runs VZ fine (vfkit,
+# lima and Code-Hex/vz all ship this way). What ad-hoc CANNOT do is satisfy
+# Gatekeeper on a quarantined download, which is why install-macos.sh clears
+# the attribute instead of arguing with it.
+#
+# Set TILLANDSIAS_MACOS_SIGN_IDENTITY to a "Developer ID Application: NAME
+# (TEAMID)" string once enrollment completes and this becomes a real signature.
+# UNSET, EVERY BYTE OF THE OLD BEHAVIOUR IS PRESERVED — the release path must
+# not change shape on the day a credential appears in someone's keychain.
+SIGN_IDENTITY="${TILLANDSIAS_MACOS_SIGN_IDENTITY:--}"
+
+# get-task-allow lets a debugger attach; it is dev-only and NOTARIZATION
+# REJECTS ANY BUILD CARRYING IT. Rather than keep two entitlement files that
+# can drift, derive the release one by deleting that single key.
+SIGN_ENTITLEMENTS="$ENTITLEMENTS"
+if [[ "$SIGN_IDENTITY" != "-" ]]; then
+    SIGN_ENTITLEMENTS="$(mktemp -t tillandsias-entitlements).plist"
+    cp "$ENTITLEMENTS" "$SIGN_ENTITLEMENTS"
+    /usr/libexec/PlistBuddy -c "Delete :com.apple.security.get-task-allow" \
+        "$SIGN_ENTITLEMENTS" 2>/dev/null || true
+    say "codesign (Developer ID: $SIGN_IDENTITY), get-task-allow stripped"
+else
+    say "codesign (ad-hoc) with $ENTITLEMENTS"
+fi
+
+# --timestamp is required for notarization and harmless ad-hoc, EXCEPT that an
+# ad-hoc signature cannot carry one — so it is only added for a real identity.
+if [[ "$SIGN_IDENTITY" != "-" ]]; then
+    codesign --force --sign "$SIGN_IDENTITY" \
+        --entitlements "$SIGN_ENTITLEMENTS" \
+        --options runtime \
+        --timestamp \
+        "$APP" >&2
+else
+    codesign --force --sign - \
+        --entitlements "$SIGN_ENTITLEMENTS" \
+        --options runtime \
+        "$APP" >&2
+fi
 
 # Verify
 say "verify signature"
@@ -158,6 +194,43 @@ codesign --verify --deep --strict --verbose=2 "$APP" >&2
 ENTITLE_DUMP="$(codesign -d --entitlements - "$APP" 2>&1 || true)"
 echo "$ENTITLE_DUMP" | grep -q 'com.apple.security.virtualization' \
     || die "com.apple.security.virtualization entitlement NOT present after sign"
+
+# ── 6b. Notarize + staple (only with a real identity AND notary creds) ──
+#
+# Deliberately gated on BOTH: a Developer ID signature is necessary but not
+# sufficient — Gatekeeper wants a notarization ticket too, and a stapled ticket
+# is what makes the app open with no network. Absent either, this block is a
+# no-op and the build is exactly what it was before.
+#
+# The ticket is stapled to the .app BEFORE the tarball is made: `stapler`
+# cannot staple an archive, so stapling after packaging would silently produce
+# an un-stapled release that works only while Apple's notary service is
+# reachable — the kind of green that fails in someone else's airport lounge.
+if [[ "$SIGN_IDENTITY" != "-" && -n "${TILLANDSIAS_NOTARY_KEY:-}" \
+      && -n "${TILLANDSIAS_NOTARY_KEY_ID:-}" && -n "${TILLANDSIAS_NOTARY_ISSUER:-}" ]]; then
+    command -v xcrun >/dev/null || die "xcrun not in PATH (needed to notarize)"
+    NOTARY_ZIP="$DIST/Tillandsias-notarize.zip"
+    say "notarize: submitting (this waits for Apple's verdict)"
+    ditto -c -k --keepParent "$APP" "$NOTARY_ZIP"
+    if ! xcrun notarytool submit "$NOTARY_ZIP" \
+            --key "$TILLANDSIAS_NOTARY_KEY" \
+            --key-id "$TILLANDSIAS_NOTARY_KEY_ID" \
+            --issuer "$TILLANDSIAS_NOTARY_ISSUER" \
+            --wait >&2; then
+        rm -f "$NOTARY_ZIP"
+        die "notarization FAILED — run: xcrun notarytool log <submission-id> --key ... for the reason"
+    fi
+    rm -f "$NOTARY_ZIP"
+    say "notarize: stapling the ticket to the bundle"
+    xcrun stapler staple "$APP" >&2 || die "stapler staple failed"
+    # Prove it: this is the only check that distinguishes a notarized build
+    # from a signed-but-unnotarized one, and it is the whole point of the step.
+    spctl -a -vvv -t exec "$APP" >&2 || die "spctl assessment rejected the stapled app"
+    say "notarize: accepted and stapled"
+elif [[ "$SIGN_IDENTITY" != "-" ]]; then
+    say "notarize: SKIPPED (identity set, but TILLANDSIAS_NOTARY_KEY/_KEY_ID/_ISSUER not all set)"
+    say "          the app is Developer-ID signed but NOT notarized — Gatekeeper will still block a quarantined copy"
+fi
 
 # ── 7. Tarball + SHA256 ─────────────────────────────────────────────────
 TAR_NAME="tillandsias-tray-${VERSION}-macos-arm64.tar.gz"
