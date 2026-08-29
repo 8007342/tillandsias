@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: wire-local-experts-mode-through-grounded-pipeline
+    event:
+      type: evidence
+      ts: "2026-08-29T00:35:27Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260828t223811z
+      host: macos
+      summary: >
+        OPENCODE LEG GREEN on darwin — the shipped OpenCode build accepts the config as written. opencode 1.18.20 (brew, host-native), tlatoanis-macbook-air, 2026-08-28. The provider 'tillandsias-experts' (npm @ai-sdk/openai-compatible, baseURL http://127.0.0.1:11436/v1, 5 models) and the agent 'local-experts' (model tillandsias-experts/all, mode primary) both parse and load with NO schema warning or error. THE OPEN QUESTION THE PACKET SHIPPED WITH IS ANSWERED: the tools-disabled map {"write":false,"edit":false,"bash":false} is ACCEPTED by this OpenCode version's schema — it does not reject the boolean-map form. End-to-end: 'opencode run --agent local-experts "What is the vsock transport used for in Tillandsias?"' exits 0 and returns a grounded cited answer spanning both spec and cheatsheet corpora (openspec/specs/vsock-transport/spec.md:2-3, cheatsheets/runtime/vsock-transport.md:31-36, cheatsheets/architecture/transport-overhead.md:18-25), i.e. the 'all' domain fans across corpora correctly. The SSE Content-Length buffering noted earlier did not trouble this client.

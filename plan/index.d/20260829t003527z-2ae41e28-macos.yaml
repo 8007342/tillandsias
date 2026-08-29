@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: wire-local-experts-mode-through-grounded-pipeline
+    event:
+      type: note
+      ts: "2026-08-29T00:35:27Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260828t223811z
+      host: macos
+      summary: >
+        THE AGENT'S OWN ADVERTISED CONTRACT IS NOT MET FOR THE NO-COVERAGE CASE — the sharpest form of the relevance-floor finding. The local-experts agent prompt in opencode.json promises: 'a typed refusal beginning unsupported: naming exactly what is missing (no index, no embedding endpoint, NO COVERAGE IN THE DOMAIN)'. The first two fire; the third never does. Measured through the agent, not just the HTTP API: 'opencode run --agent local-experts "How do I make sourdough starter?"' returns six confident citations into docs/cheatsheets/tray-responsiveness.md, openspec/specs/no-terminal-flicker/spec.md, forge-opencode-onboarding, tray-minimal-ux and wsl2-provisioning — presented identically to a correct answer, with no confidence signal separating them. This is the failure mode the whole grounded design exists to prevent, arriving through the citation path rather than around it: the citations are REAL (the spans exist and are quoted correctly), they are just irrelevant, and nothing in the envelope says so. Suggested minimum fix: a similarity floor below which retrieval returns nothing, so the existing unsupported: path fires on no-coverage as the prompt already promises. Until then the prompt overstates the guarantee and should be reworded if the floor is not added.

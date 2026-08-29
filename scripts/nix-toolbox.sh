@@ -156,6 +156,31 @@ chroot_works() {
     nix "${NIX_FEATURES[@]}" --store "$CHROOT_STORE" store ping >/dev/null 2>&1
 }
 
+# EXERCISE THE STORE, not merely `command -v nix` (order 914-ahsy follow-on).
+#
+# The header above already states this rule for the daemon rung — `nix eval` is
+# pure and answers with the daemon dead, so the probe must touch the store. The
+# toolbox arm did NOT follow its own rule: it asked whether the binary was in
+# the container and stopped there.
+#
+# MEASURED on lenovinha 2026-08-28, and it is a live false green rather than a
+# theoretical one. After `dnf install nix` in the tillandsias-nix toolbox,
+# `command -v nix` succeeds, so the rung reported `toolbox` — but the container
+# runs as the user and /nix/store is root:nixbld, so the very next store
+# operation fails with `creating directory "/nix/store/.links": Permission
+# denied`. The rung was reported usable and could not build.
+#
+# THE STORE THAT WORKS IS THE ONE THE SCRIPT ALREADY HAS. $CHROOT_STORE lives
+# under $HOME, and toolbox shares $HOME with the host, so the same store is
+# visible on both sides — the container needs no privileges to write it and the
+# host keeps the cache when the toolbox is thrown away. Verified end to end: a
+# real `nix build nixpkgs#hello` inside the toolbox against that store
+# completes and prints its out-path.
+toolbox_nix_works() {
+    _toolbox run -c "$TOOLBOX_NAME" \
+        nix "${NIX_FEATURES[@]}" --store "$CHROOT_STORE" store info >/dev/null 2>&1
+}
+
 toolbox_exists() {
     command -v toolbox >/dev/null 2>&1 || return 1
     _toolbox list -c 2>/dev/null | awk '{print $2}' | grep -qx "$TOOLBOX_NAME"
@@ -186,7 +211,7 @@ resolve_rung() {
     fi
     ensure_toolbox
     case "$?" in
-        0) if _toolbox run -c "$TOOLBOX_NAME" command -v nix >/dev/null 2>&1; then
+        0) if toolbox_nix_works; then
                printf 'toolbox\n'; return 0
            fi
            printf 'blocked:no-nix-and-no-toolbox\n'; return 1 ;;
@@ -222,7 +247,12 @@ resolve_rung() {
 capability_rung() {
     if daemon_live; then printf 'daemon\n'; return 0; fi
     if chroot_works; then printf 'chroot\n'; return 0; fi
-    if toolbox_exists && _toolbox run -c "$TOOLBOX_NAME" command -v nix >/dev/null 2>&1; then
+    # toolbox_nix_works, NOT `command -v nix` inside the container — the same
+    # store-not-binary rule the daemon rung has always followed. Keeping the
+    # binary check here while resolve_rung exercised the store would make
+    # `capability` and `ensure` disagree about the same host, which is worse
+    # than either answer alone.
+    if toolbox_exists && toolbox_nix_works; then
         printf 'toolbox\n'; return 0
     fi
     return 1
@@ -387,6 +417,13 @@ case "$cmd" in
         case "$rung" in
             daemon)  printf '%s\n' "${NIX_FEATURES[@]}" ;;
             chroot)  printf '%s\n' "${NIX_FEATURES[@]}" --store "$CHROOT_STORE" ;;
+            # Same flags as chroot: $CHROOT_STORE is under $HOME, which toolbox
+            # shares with the host, so the rung addresses the identical store
+            # from inside the container. Before this the toolbox rung REFUSED
+            # to emit args, so a caller that asked for args and then went
+            # through `run` invoked nix against the container's root-owned
+            # /nix and failed at the first store write (914-ahsy follow-on).
+            toolbox) printf '%s\n' "${NIX_FEATURES[@]}" --store "$CHROOT_STORE" ;;
             *)       echo "blocked:nix-toolbox:${rung#blocked:}" >&2; exit 1 ;;
         esac
         ;;
@@ -396,7 +433,16 @@ case "$cmd" in
         rung="$(resolve_rung)"
         case "$rung" in
             daemon|chroot) exec "$@" ;;
-            toolbox)       exec _toolbox run -c "$TOOLBOX_NAME" "$@" ;;
+            # NOT `exec _toolbox …`: _toolbox is a shell FUNCTION and exec can
+            # only exec a BINARY, so that form died with
+            # `exec: _toolbox: not found` and the toolbox rung of `run` had
+            # never worked. Found 2026-08-28 the only way it could be — by
+            # running it on the one host that reaches this arm. The function's
+            # job (neutralising the enclave proxy env, which otherwise breaks
+            # registry traffic whenever the enclave is down) is inlined here so
+            # the behaviour is preserved rather than dropped.
+            toolbox)       exec env http_proxy= https_proxy= HTTP_PROXY= HTTPS_PROXY= \
+                                toolbox run -c "$TOOLBOX_NAME" "$@" ;;
             *)             echo "blocked:nix-toolbox:${rung#blocked:}" >&2; exit 1 ;;
         esac
         ;;
