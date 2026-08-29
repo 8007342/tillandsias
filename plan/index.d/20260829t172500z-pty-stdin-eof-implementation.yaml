@@ -1,0 +1,93 @@
+packets:
+  - packet_id: implement-pty-stdin-eof-frame-and-capability-gate
+    order: 925-eofi
+    status: ready
+    title: |
+      Implement CAP_PTY_STDIN_EOF: the frame, the gated send path, and the loud refusal — the guest injects VEOF because only it knows the termios state
+    kind: feature
+    pickup_role: macos
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags:
+      - control-wire
+      - exec-wire
+      - protocol
+      - pty
+      - fail-loud
+    estimated_hours: 6
+    deliverable: |
+      A `PtyStdinEof` ControlMessage variant, guest-side handling that makes a
+      reader see EOF, host-side sending gated on `CAP_PTY_STDIN_EOF` read from
+      `HelloAck.server_caps`, and a named refusal when the peer lacks it.
+    context: |
+      IMPLEMENTATION HALF of 924-eof7, whose design slice chose the explicit
+      capability-gated frame over in-band VEOF and recorded why. That decision
+      stands. This packet exists because implementing it surfaced a mechanism
+      question the decision record did not answer, and getting it wrong would
+      quietly rebuild the option that was rejected.
+
+      THE MECHANISM CORRECTION, found by reading the guest before coding.
+      `pty_handler` allocates a real PTY pair per session and execs the child
+      with the SLAVE as its controlling tty; the master stays open for the life
+      of the session. So there is no separate stdin handle to close: "deliver
+      EOF" on a PTY means exactly one of
+
+        (a) write VEOF (0x04) into the master, which the line discipline turns
+            into an end-of-input for the reader;
+        (b) close the master — which ends the WHOLE session, not just stdin;
+        (c) stop giving non-interactive exec sessions a PTY at all and use a
+            pipe for stdin, where closing the write end is a true EOF.
+
+      (b) is not a stdin signal, it is a session kill. So the frame's guest-side
+      action is (a) or the larger (c).
+
+      WHY THAT IS STILL NOT OPTION A. 924-eof7 rejected the HOST sending 0x04
+      in-band, and the measurements that killed it were all about information
+      the host does not have: whether the terminal is in canonical mode (in raw
+      mode 0x04 is an ordinary byte and the "EOF" silently does nothing), and
+      whether the pending input ends in a newline (after unterminated input the
+      first 0x04 only FLUSHES — a second is needed). The GUEST owns the termios
+      state and the write queue. It can query `tcgetattr`, know whether ICANON
+      is set, and know what it last wrote. So the same byte sent by the side
+      that can be correct about it is a different design, not a rebranding of
+      the rejected one — and it is why the frame must carry INTENT
+      ("input is finished") rather than a byte.
+
+      An implementer who skips this and simply forwards 0x04 on the host side
+      reintroduces every measured failure in 924-eof7 while appearing to
+      implement the accepted option.
+    outcome: |
+      A guest child that reads stdin to EOF over the exec wire terminates, on
+      peers that negotiate the capability; peers that do not get a named
+      refusal instead of a wait that never returns.
+    exit_criteria:
+      - |
+        `PtyStdinEof` appended to ControlMessage (existing variants unmoved),
+        guest advertises CAP_PTY_STDIN_EOF, and the host sends the frame ONLY
+        when that token is present in HelloAck.server_caps.
+      - |
+        MEASURED on a live guest: piping bytes to a stdin-reading command over
+        the exec wire completes instead of hanging.
+      - |
+        MEASURED, the raw-mode case: the same works, or refuses loudly, when
+        the session is not in canonical mode — the failure option A could not
+        detect.
+      - |
+        A peer that does NOT advertise the capability produces a NAMED refusal,
+        pinned by a test, never a silent hang.
+      - |
+        Version skew demonstrated both ways: an old guest never receives the
+        frame, and a new guest talking to an old host behaves as today.
+    verifiable_closure: |
+      On a macOS host with a booted guest: a piped stdin command over the exec
+      wire completes; the same against a capability-less peer refuses by name.
+      Both quoted from the run, not from a source diff.
+    evidence:
+      - '924-eof7 design slice: option A rejected by three PTY trials; postcard unknown-variant is a decode error (pinned by test)'
+      - 'pty_handler.rs: child execs with the PTY slave as controlling tty, master open for the session — so no stdin handle exists to close'
+      - 'pty_handler.rs:136 already records the same skew shape for heartbeat v2: a v1 host decodes the new variant as Error::UnknownVariant'
+    notes: |
+      Split from 924-eof7 rather than reopening it: the design decision is
+      closed and should stay closed, and the mechanism correction above belongs
+      with the implementation that has to honour it.

@@ -111,10 +111,29 @@ pub fn decide_route(msg: &ControlMessage, transport: TransportKind) -> DispatchO
         // PTY family is vsock-only — the in-VM headless is the PTY
         // producer (it owns the forge container's session). The unix
         // dispatcher would have nothing useful to do here.
-        (PtyOpen { .. } | PtyData { .. } | PtyResize { .. } | PtyClose { .. }, Vsock) => Handle,
-        (PtyOpen { .. } | PtyData { .. } | PtyResize { .. } | PtyClose { .. }, UnixSocket) => {
-            Unsupported
-        }
+        // PtyStdinEof joins the family (order 925-eofi). It is listed with the
+        // others rather than in its own row because it IS the same family: a
+        // host->guest signal about an open PTY session. Being absent from this
+        // matrix is not a silent no-op — the vsock loop answers Unsupported and
+        // the caller sees `variant PtyStdinEof not supported on the in-VM vsock
+        // transport`, which is how this omission was caught on the first live
+        // run rather than by reading the code.
+        (
+            PtyOpen { .. }
+            | PtyData { .. }
+            | PtyResize { .. }
+            | PtyClose { .. }
+            | PtyStdinEof { .. },
+            Vsock,
+        ) => Handle,
+        (
+            PtyOpen { .. }
+            | PtyData { .. }
+            | PtyResize { .. }
+            | PtyClose { .. }
+            | PtyStdinEof { .. },
+            UnixSocket,
+        ) => Unsupported,
 
         // DeliverCredentials and GetVaultHandover are vsock-only (for in-VM credential delivery/handover)
         (DeliverCredentials { .. } | GetVaultHandover { .. }, Vsock) => Handle,

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: implement-pty-stdin-eof-frame-and-capability-gate
+    field: status
+    value: completed
+    ts: "2026-08-29T17:58:53Z"
+    host: macos
+
+events:
+  - packet_id: implement-pty-stdin-eof-frame-and-capability-gate
+    event:
+      type: completed
+      ts: "2026-08-29T17:58:53Z"
+      host: macos
+      summary: >
+        status 'completed' with evidence_refs: RUNTIME-VERIFIED at 3110c50e4: piped `cat > file` over the exec wire returns with all 17 bytes and RC=0 — the exact command 924-eof7 recorded as blocking forever, and which hung at a 300s bound twice earlier today. Controls: byte-exact `head -c 4` still returns 4 bytes (unbroken); empty stdin sends no frame and still runs. Re-verified after a post-verification clippy refactor so the tested artifact matches the committed tree. Gate green; 4 host tests + 3 guest tests. Exit criteria 1, 2 and 4 met. NOT met and recorded, not hidden: criterion 3 (the raw-mode case) is source-tested only — every exec session is canonical, so the guest's refusal branch has no live evidence; and criterion 5's old-guest direction was observed only as its inverse (an unregistered variant produced a named refusal, proving the loud-failure path). A control also surfaced 926-bin4: binary stdin containing 0x04 is silently truncated by the line discipline on the DATA path — pre-existing, independent of this change.
+  - packet_id: implement-pty-stdin-eof-frame-and-capability-gate
+    event:
+      type: note
+      ts: "2026-08-29T17:58:53Z"
+      host: macos
+      summary: >
+        EOF frame implemented and runtime-verified on a live guest; raw-mode branch and old-guest skew left explicitly unverified

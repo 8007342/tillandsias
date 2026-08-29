@@ -190,6 +190,32 @@ Assemble the token at run time so the literal never appears in source:
 _LT="litmus"; _LT="${_LT}:"      # then use "${_LT}alpha-shape"
 ```
 
+## A per-function assertion cannot see the sibling that forgot
+
+Green gate, dead feature (925-eofi, 2026-08-29, macbook): a wire fix was
+patched into one of TWO functions that chunk input onto the wire; three tests
+passed because every test scanned the function just edited; the live run
+hung with no warning line — and that SILENCE was the diagnosis, since the
+patched path prints a named warning. When an invariant must hold at every
+member of a family (every input entry point, every dispatch arm, every
+transport), write ONE test that ENUMERATES the family and require each member
+to satisfy it — and watch it fail red against the unpatched member before
+making it green. **An assertion never seen red is not known to be able to
+catch anything.** The companion design rule, measured in the same incident: a
+route matrix that REFUSES what it does not know turned the next omission into
+a named error instead of a silent no-op — fail-loud registration means an
+unregistered variant cannot quietly do nothing.
+
+## Scope an authority search to the AUTHORITY, not the document
+
+A guard that asks "does this approved string appear in the ledger?" approves
+anything anyone has ever QUOTED there — measured on 929-47u8 (2026-08-29): the
+counterexample string quoted in two prose events made the guard say YES to the
+exact unauthorized reword it existed to catch. Fail-open, the inverse of the
+comment-anchor family. Scope the search to the structure that confers
+authority (`- type: operator_note` bodies, per the spec's own words), then
+verify the reword still fails while remaining mentioned in prose.
+
 ## Constructed absence must SHADOW the real binary
 
 Order 921-vtf4 / commit `d013a6fc8`, found by lenovinha and macuahuitl. A
@@ -208,6 +234,54 @@ chmod +x "$FAKEBIN/nix"
 
 A fixture whose premise holds only on the author's host is a fixture that
 reports on the host, not on the code.
+
+## Judge what your test could have CAUSED, not what the directory did
+
+A fixture asserting "this wrote nothing" by counting files in a shared
+directory makes every concurrent writer its own failure. Order 923-28js:
+`before=$(ls plan/index.d/ | wc -l)` around the code under test, and a
+`git stash push -u` / `pop` during a concurrent build moved it 62 -> 65 —
+reported as "a refusal still wrote a fragment: append-event's archive guard
+regressed". Nothing had regressed.
+
+A count is also the weakest observation available: it cannot say WHICH file
+appeared, so the message must guess a cause, and it guessed wrong. On a fleet
+running driver cycles beside agent cycles on one checkout (873-zcim), **a red
+whose own text denies its reason is worse than no check** — the honest reading
+sends someone to investigate working code.
+
+Take a SET difference and filter it to what your fixture could have written,
+using an identity it stamps on its own output:
+
+```bash
+before_set="$(ls "$DIR" | LC_ALL=C sort)"
+# ... exercise ...
+after_set="$(ls "$DIR" | LC_ALL=C sort)"
+new="$(comm -13 <(printf '%s\n' "$before_set") <(printf '%s\n' "$after_set"))"
+# red only for files carrying YOUR marker; name the path, never a count delta
+```
+
+Pick the identity carefully. `FIXTURE_AGENT` looked like the obvious marker and
+is wrong — it resolves to the host's real agent id, so it matches the operator's
+own fragments. The fixture's own summary string is the identity that is
+uniquely yours.
+
+## Environment dies at every hand-rolled boundary — test through the wrapper
+
+Order 923-ws3r, the third instance. `scripts/with-tillandsias-builder.sh`
+forwards `TILLANDSIAS_*` across the toolbox boundary and says in its own comment
+why it must; `scripts/with-wsl2-builder.sh` does the same for WSL (889-8tcb).
+A hand-rolled `toolbox run` inside `archive-plan-packets.sh` forwarded neither,
+so an absolute `TILLANDSIAS_PLAN_BIN` died there and the Ruby half fell back to a
+RELATIVE default — red inside a hermetic tree, and silently running a *different
+binary* in ordinary ones.
+
+The transferable half is how nearly-wrong the diagnosis was. Measuring raw
+`toolbox run` shows the env vanishing, which makes "the toolbox boundary" look
+like the cause. **Test through the project's own wrapper before blaming the
+boundary class**: the wrapper forwards fine, and the defect is the second,
+hand-rolled dispatch that never learned what the shared one knows. Blaming the
+class would have fixed the wrong line — 704-zcgi's shape, once more.
 
 ## A fixture that mutates tracked files owes restoration under every exit
 
@@ -251,6 +325,10 @@ or worktree checkouts at the suspect and its parent.
 - [ ] Do you name a `litmus:` test that exists — suffix and all?
 - [ ] If you mutate tracked files: restored on every exit, repaired next run,
       and refused when the dirt is someone else's?
+- [ ] Does your "nothing happened" assertion count a SHARED directory? Judge
+      only what your fixture could have caused, and name the file.
+- [ ] Crossing a container/distro boundary by hand? Forward the namespace, and
+      test through the project's wrapper before blaming the boundary.
 
 ## Exit codes do not survive `wsl.exe -- bash -c '<quoted script>'`
 

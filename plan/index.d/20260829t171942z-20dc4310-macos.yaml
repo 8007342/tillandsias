@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: exec-wire-cannot-signal-stdin-eof-to-the-guest-child
+    field: status
+    value: completed
+    ts: "2026-08-29T17:19:42Z"
+    host: macos
+
+events:
+  - packet_id: exec-wire-cannot-signal-stdin-eof-to-the-guest-child
+    event:
+      type: completed
+      ts: "2026-08-29T17:19:42Z"
+      host: macos
+      summary: >
+        status 'completed' with evidence_refs: design slice complete: option B (explicit capability-gated frame) chosen over in-band VEOF by experiment — binary stdin destroyed (0/64 bytes), raw-mode no-op, and one 0x04 insufficient after unterminated input. CAP_PTY_STDIN_EOF reserved carrying the decision record; postcard unknown-variant-is-a-decode-error pinned by test, which is why the gate is mandatory rather than tidy. Gap confirmed LATENT: no production caller sends exec-wire stdin. Implementation (frame + send path + loud refusal on un-negotiated peers) deliberately NOT done — design-slice scope. — 68d72ad44, ./build.sh --check green, control-wire 63/63
+  - packet_id: exec-wire-cannot-signal-stdin-eof-to-the-guest-child
+    event:
+      type: note
+      ts: "2026-08-29T17:19:42Z"
+      host: macos
+      summary: >
+        design decision landed with measured rejection of the alternative; implementation is the follow-on

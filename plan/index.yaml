@@ -17412,6 +17412,32 @@ plan_index:
         - the per-boot guest-binary hash is either cached against (path, mtime, len) or moved off the boot critical path, with the staleness argument written down
       events:
         - type: note
+          ts: "2026-08-29T17:03:16Z"
+          agent_id: "macos-tlatoanis-macbook-air-claude-20260829t155859z"
+          host: macos
+          summary: |
+            TWO OF THE FOUR SITES ARE NOT WHAT THE PACKET SAYS THEY ARE — checked by following the callers, not by reading the descriptions.
+
+            SITE 3 (fetch.rs decompress_xz) HAS ZERO CALLERS. It is dead code. Every mention of the name in the tree outside plan/archive is the function itself plus vz.rs's fetch_then_decompress_xz_then_verify, which is a DIFFERENT function that shells out to the xz subprocess (std::process::Command::new("xz") at vz.rs:1151). So the harm the packet describes for this site — "an async fn performing a multi-GB xz decompression with fully BLOCKING std::io ... it also occupies an async worker for the duration" — CANNOT OCCUR, because nothing invokes it. I fixed it anyway (spawn_blocking + 1 MiB reader + 4 MiB writer + explicit flush): it is now correct if anyone ever calls it, and the fix is cheap. But it must NOT be counted as a performance win, and I am not claiming one. Someone should decide whether a public, unused, previously-wrong decompression helper should exist at all; I did not delete it because that is a scope call, not a measurement.
+
+            SITE 2 (materialize/oci.rs flatten_oci_xz) IS A WINDOWS PATH, NOT A macOS ONE. Its only caller is crates/tillandsias-windows-tray/src/wsl_lifecycle.rs:727, and that caller ALREADY wraps it in tokio::task::spawn_blocking. So the async-worker concern does not apply there either, and the remaining defect was purely the unbuffered copy, which I fixed on both ends (1 MiB BufReader feeding the gzip decoder, 4 MiB BufWriter out, explicit flush because BufWriter's Drop discards write errors).
+
+            CONSEQUENCE FOR THIS PACKET'S ROUTING AND ITS CRITERIA. The 2026-08-25 re-route to pickup_role macos reasoned that "all four sites are macOS vm-layer code" and "a linux host cannot advance this packet". That is true of sites 1 and 4. It is not true of site 2, which only ever runs on Windows and can only be measured there — which also explains why criterion 2's demand for a materialize-path before/after was never satisfiable from macOS: the materialize path does not run on macOS at all. Criterion 2 should either be narrowed to the download path (measured above) or routed to the Windows host for its materialize half. I have recorded this rather than quietly satisfying the criterion with a number from a path that does not execute here.
+
+            WHAT I ACTUALLY CHANGED: sites 1, 2, 3 now use buffered I/O matching the fetch.rs precedent, each with an explicit flush before the writer drops (BufWriter's Drop SWALLOWS write errors, so without it an I/O fault on the final partial buffer is reported as SUCCESS and resurfaces later as corruption blamed on something else). Site 3 additionally moved wholesale onto spawn_blocking. Site 4 left unchanged by measurement. 98 vm-layer tests pass.
+        - type: evidence
+          ts: "2026-08-29T17:02:56Z"
+          agent_id: "macos-tlatoanis-macbook-air-claude-20260829t155859z"
+          host: macos
+          summary: |
+            MEASURED BEFORE CHANGING ANYTHING, and the measurements re-scope this packet. macOS, 2026-08-29, M5 / 10 cores / 16 GiB, operator approved the destructive reset.
+
+            SITE 4 (vz.rs guest_binary_fingerprint, the per-boot SHA-256) — the packet nominates this as the first landable slice, on the grounds it is "the only one of the four an operator feels on every launch". MEASURED: the staged binary is 13.2 MB; read-whole-file + SHA-256 is 4.5 ms, best of five, warm cache. Against the measured ~9.5 s warm boot (689-eux9) that is 0.05% of a boot. Even at a pessimistic 200 MB/s cold read the file is ~66 ms, still under 1% — that bound is an ARGUMENT, not a measurement, and is labelled as such because I could not drop the page cache without sudo. RECOMMENDATION: do NOT implement criterion 3 as written. Caching against (path, mtime, len) trades 4.5 ms for a staleness question with a far worse failure mode — mtime+len is not content identity, and a cache that says "unchanged" for a binary that did change boots a guest whose fingerprint does not describe the code inside it, on the very path other packets use to tell guest versions apart. If it ever must move, the honest fix is not a cache: have whatever STAGES the binary write the digest beside it, so the boot path reads 64 bytes and the value is produced by the step that knows the content changed. Left unchanged, with the measurement and the reasoning in the function's doc comment.
+
+            SITE 1 (vz.rs chunked rootfs download) — REAL, on the macOS cold-provision path, now buffered at 4 MiB matching the shape fetch.rs already established. BEFORE/AFTER, isolated: a new #[ignore]d bench in fetch.rs writes 256 MB in 16 KiB chunks both ways — unbuffered 0.19s, buffered 4 MiB 0.02s, 8.77x. Run it with: cargo test -p tillandsias-vm-layer --features download bench_unbuffered_vs_buffered -- --ignored --nocapture
+
+            END-TO-END HONESTY, and it is a negative result worth more than the speedup: a real cold provision on this host took 14.40s TOTAL, of which the download phase was 13.56s for 528 MB (about 39 MB/s) and the entire local convert phase was 0.48s. That path is NETWORK-BOUND. The 8.77x write-path saving is roughly 0.17s per 256 MB here and is INVISIBLE end-to-end. I deliberately did not run a second provision for a "before" number: at this variance it would have measured the network, and any improvement read off it would have been noise wearing a number's clothes — which is exactly how this packet's previous unblock (772-qn6j) came to be retracted as bogus. The Windows fix this packet is modelled on mattered so much because there the completion wake was tied to the tray's ~100 ms message-pump tick; macOS has no such tax, so the same defect costs far less here.
+        - type: note
           ts: "2026-08-25T19:58:13Z"
           agent_id: "linux-macuahuitl-fable5-20260825t195813z"
           host: macuahuitl

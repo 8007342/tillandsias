@@ -141,6 +141,68 @@ pub const CAP_EXEC_ARGV_VECTOR: &str = "ExecArgvVector";
 /// @trace spec:vsock-exec-authz
 pub const CAP_PROXY_CA_KEY_HEAL: &str = "ProxyCaKeyHeal";
 
+/// Capability a peer advertises when it understands an explicit end-of-stdin
+/// signal on the exec wire (order 924-eof7). RESERVED BY A DESIGN SLICE — the
+/// frame itself is deliberately NOT added yet; this constant and its reasoning
+/// are the decision record the implementer inherits.
+///
+/// THE DEFECT. Host->guest stdin is `PtyData { direction: ToGuest }` and
+/// nothing else; there is no variant meaning "input is finished".
+/// `exec_over_stream_with_input*` writes its chunks and goes straight to
+/// draining ToHost, sending no terminator. The child sits on a PTY whose
+/// master stays open for the session, so a reader that waits for EOF waits
+/// forever: piped `cat > file` hangs while byte-exact `head -c N` succeeds.
+/// The symptom PAIR is the discriminator — either alone admits other causes.
+///
+/// WHY NOT THE CHEAPER OPTION. The obvious alternative is to send VEOF (0x04)
+/// as a final ToGuest frame: no wire change, works today. It was rejected on
+/// MEASUREMENT, not taste — three trials on a real PTY, macOS 2026-08-29:
+///
+///   1. BINARY STDIN IS DESTROYED. A 64-byte payload legitimately containing
+///      0x04 (at offsets 4, 12, 20, ...) delivered ZERO bytes to the child,
+///      which exited at the first embedded 0x04. Any stdin that is not text is
+///      silently truncated at its first 0x04 byte.
+///   2. IT DOES NOTHING IN RAW MODE. The same payload in raw mode left the
+///      child running — 0x04 is just a byte there, so the "EOF" is a no-op and
+///      the hang this is meant to fix persists, silently.
+///   3. ONE 0x04 IS NOT ENOUGH, AND THE COUNT DEPENDS ON THE PAYLOAD. After
+///      unterminated input, the first 0x04 only FLUSHES the pending line; the
+///      child exited only on a second. So a correct in-band implementation must
+///      know whether its own payload ended in a newline to know whether to send
+///      one 0x04 or two — a caller obligation that will be got wrong.
+///
+/// Hazards 1 and 2 were recorded in the packet as reasoning; hazard 3 was found
+/// by running it and is the one that makes the option untenable rather than
+/// merely awkward.
+///
+/// WHY THIS SHAPE, AND THE RULE IT MUST FOLLOW. `ControlMessage` is
+/// `#[non_exhaustive]`, which buys forward compatibility for MATCH ARMS and
+/// nothing at all on the wire: postcard encodes a variant as a varint INDEX,
+/// and a decoder built before the variant exists returns an ERROR rather than
+/// skipping the frame — pinned by
+/// `unknown_future_variant_is_a_decode_error_not_a_silent_skip`. So an ungated
+/// new frame sent to an older guest does not degrade to today's hang; it fails
+/// the decode and takes the SESSION down, which is strictly worse than the bug
+/// being fixed. The frame must therefore be gated on this capability read from
+/// `HelloAck.server_caps`, exactly as `CAP_EXEC_ARGV_VECTOR` requires, and
+/// never on a wire-version comparison.
+///
+/// It is also a capability of its OWN, not a rider on a neighbouring one, per
+/// the rule `CAP_PROXY_CA_KEY_HEAL` states: a capability must name the
+/// behaviour a caller depends on, because reusing a nearby token as a proxy for
+/// "built after roughly then" is version comparison wearing a capability's
+/// clothes.
+///
+/// WHAT THE FALLBACK MUST DO, and this is the half most likely to be skipped:
+/// when the peer does NOT advertise this, the caller must not quietly send the
+/// input and hope. Today's silence is precisely the failure this milestone
+/// exists to remove, so the un-negotiated path should REFUSE a request whose
+/// semantics need EOF, and say that the guest is too old to be told when stdin
+/// ends — a loud, named refusal instead of a wait that never returns.
+///
+/// @trace spec:vsock-transport, spec:vsock-exec-authz
+pub const CAP_PTY_STDIN_EOF: &str = "pty.stdin.eof@v1";
+
 /// Order 779-dqsv: this number OUTLIVED the transport it was written for.
 /// It was the per-variant cap on `McpFrame`, which order 505 retired (that
 /// path is now refused; see `host-browser-mcp` spec). The live MCP transport
@@ -442,6 +504,28 @@ pub enum ControlMessage {
         seq_in_reply_to: u64,
         snapshot: MetricsSnapshotWire,
     },
+    /// Host → guest: the host has no more stdin for this session's child
+    /// (order 925-eofi, implementing the 924-eof7 decision).
+    ///
+    /// IT CARRIES INTENT, NOT A BYTE, AND THAT IS THE WHOLE POINT. The child
+    /// runs on a PTY with the slave as its controlling tty and the master open
+    /// for the session, so there is no stdin handle to close — "EOF" on a PTY
+    /// means the line discipline seeing VEOF. 924-eof7 measured why the HOST
+    /// must not send that byte itself: in raw mode 0x04 is ordinary data and
+    /// the signal silently does nothing, and after unterminated input a single
+    /// 0x04 only FLUSHES (a second is needed). Both facts depend on termios
+    /// state and on what was last written — which the GUEST knows and the host
+    /// does not. So the host declares that input is finished and the guest,
+    /// which can be correct about it, decides what to write.
+    ///
+    /// New trailing variant: additive per the `WIRE_VERSION` doc. A guest
+    /// predating it rejects the frame with `Error::UnknownVariant`, which on
+    /// this wire ENDS THE SESSION — so a host MUST NOT send this without
+    /// having seen `CAP_PTY_STDIN_EOF` in `HelloAck.server_caps`. See that
+    /// constant for the full reasoning and the mandatory fallback.
+    ///
+    /// @trace spec:vsock-transport
+    PtyStdinEof { session_id: u32 },
 }
 
 /// What the guest established about a PTY session's foreground process.
@@ -703,6 +787,7 @@ impl ControlMessage {
             ControlMessage::LocalProjectsPush { .. } => "LocalProjectsPush",
             ControlMessage::MetricsSnapshotRequest { .. } => "MetricsSnapshotRequest",
             ControlMessage::MetricsSnapshotReply { .. } => "MetricsSnapshotReply",
+            ControlMessage::PtyStdinEof { .. } => "PtyStdinEof",
         }
     }
 }
@@ -1718,6 +1803,36 @@ pub mod crashloop {
 
 #[cfg(test)]
 mod tests {
+
+    /// ORDER 924-eof7 — the skew fact the EOF design turns on, pinned by
+    /// experiment rather than by reading postcard's docs.
+    ///
+    /// postcard encodes an enum variant as a varint INDEX. A decoder built
+    /// before a variant existed has no case for that index, so it returns an
+    /// error — it does NOT skip the frame and carry on. `#[non_exhaustive]`
+    /// buys source-level forward compatibility for MATCH ARMS; it buys nothing
+    /// on the wire. That is why any new ControlMessage variant must be gated on
+    /// a capability the peer advertised, and never merely on "we are newer".
+    #[test]
+    fn unknown_future_variant_is_a_decode_error_not_a_silent_skip() {
+        // Hand-roll an envelope whose body names a variant index far beyond
+        // anything this build knows: wire_version(varint) seq(varint)
+        // variant_index(varint).
+        let bytes: Vec<u8> = vec![
+            1,   // wire_version = 1
+            0,   // seq = 0
+            200, // variant index, low 7 bits + continuation
+            1,   // ... second varint byte: comfortably past the real count
+        ];
+        let err = decode(&bytes);
+        assert!(
+            err.is_err(),
+            "an unknown variant index must FAIL to decode; if this ever starts \
+             succeeding, the EOF capability gate in 924-eof7 rests on a false \
+             premise and must be revisited"
+        );
+    }
+
     use super::*;
 
     fn roundtrip(envelope: &ControlEnvelope) {

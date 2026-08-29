@@ -931,6 +931,31 @@ fn guest_sizing(host_cores: usize, host_memory: u64) -> (usize, u64) {
 }
 
 #[cfg(target_os = "macos")]
+/// SHA-256 of the staged guest binary, recomputed on every VM start.
+///
+/// MEASURED AND DELIBERATELY LEFT ALONE (order 690-pz68, macOS 2026-08-29).
+/// This is the site that packet nominates as its first landable slice, on the
+/// grounds that it is "the only one of the four an operator feels on every
+/// launch". Measured on this host before changing anything: the staged binary
+/// is 13.2 MB and read-plus-hash takes 4.5 ms (best of five, warm cache),
+/// against a measured warm boot of ~9.5 s (689-eux9). That is 0.05% of a boot.
+/// Even at a pessimistic 200 MB/s cold read the whole file is ~66 ms, still
+/// under 1% — that bound is an argument, not a measurement, and is labelled so.
+///
+/// The packet's third criterion asks for this to be cached against
+/// (path, mtime, len) or moved off the boot path. Caching it would trade 4.5 ms
+/// for a staleness question with a much worse failure mode: mtime+len is not a
+/// content identity, and a cache that answers "unchanged" for a binary that DID
+/// change boots the guest with a fingerprint that does not describe the code
+/// running in it — on the very path other packets use to tell guest versions
+/// apart. Paying 4.5 ms for an always-correct answer is the right trade, so the
+/// recommendation is recorded on the packet rather than the code being changed
+/// to satisfy a criterion the measurement does not support.
+///
+/// If this ever does need to move, the honest fix is not a cache: it is to have
+/// whatever STAGES the binary write the digest beside it, so the boot path
+/// reads 64 bytes instead of 13.2 MB and the value is produced by the step that
+/// knows the content actually changed.
 fn guest_binary_fingerprint() -> Result<String, String> {
     use sha2::{Digest, Sha256};
 
@@ -1072,9 +1097,25 @@ async fn fetch_then_decompress_xz_then_verify(
         let total: Option<u64> = response.content_length();
         let mut downloaded: u64 = 0;
         let mut last_percent: i32 = -1;
-        let mut out = tokio::fs::File::create(xz_temp_dest)
+        let out_file = tokio::fs::File::create(xz_temp_dest)
             .await
             .map_err(|e| format!("create {}: {e}", xz_temp_dest.display()))?;
+        // Buffered, for the reason fetch.rs already records (order 690-pz68,
+        // and the windows-260722 download-throughput finding it cites): an
+        // UNBUFFERED tokio::fs::File sends every ~16 KB reqwest chunk through
+        // its own spawn_blocking write. For a multi-hundred-MB rootfs that is
+        // one blocking round trip per 16 KB — tens of thousands of them — and
+        // on the tray the completion wake is only observed on the next
+        // message-pump drain tick, which is what turned a 66 MB fetch into
+        // minutes there. Buffered at 4 MiB, chunk writes complete in memory
+        // and roughly one real write per 4 MiB goes pending.
+        //
+        // The flush below is NOT optional bookkeeping: BufWriter's Drop
+        // discards write errors, so without it a full disk or an I/O fault on
+        // the last partial buffer would be reported as a SUCCESSFUL download
+        // and the corruption would surface later as an xz or SHA-256 failure
+        // pointing at the wrong thing.
+        let mut out = tokio::io::BufWriter::with_capacity(4 * 1024 * 1024, out_file);
         use tokio::io::AsyncWriteExt;
         while let Some(chunk) = response
             .chunk()
