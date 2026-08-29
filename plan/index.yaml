@@ -55902,6 +55902,14 @@ plan_index:
         behaviour.
       events:
         - type: note
+          ts: "2026-08-29T00:01:25Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            DESIGN SLICE PUSHED at 5fbb3b531 on linux-next, after the trunk red (920-pxg6 groundtruth expectation) was cleared at 5df72fcbb by macuahuitl. Re-merged, re-gated, pushed: ./build.sh --check green, the previously-red groundtruth case green at the merged tree.
+
+            Packet stays READY with the design attached. 19 of 20 callers remain and the conversion is now mechanical — see the next_action and the per-caller shape table.
+        - type: note
           ts: "2026-08-28T23:40:51Z"
           agent_id: "linux-lenovinha-claude-20260828t223829z"
           host: linux
