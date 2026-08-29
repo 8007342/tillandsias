@@ -69,7 +69,10 @@ if ! image_exists; then
         exit 1
     fi
     echo "[nix-e2e] Building builder image..." >&2
-    podman build -t "$IMAGE_NAME" -f "$containerfile" "$(dirname "$containerfile")" \
+    # --http-proxy=false: containers.conf injects the enclave-only proxy:3128
+    # into every container; a host-network build cannot resolve it (precedent:
+    # build-image.sh).
+    podman build --http-proxy=false -t "$IMAGE_NAME" -f "$containerfile" "$(dirname "$containerfile")" \
         2>&1 | while IFS= read -r line; do printf '  [build] %s\n' "$line" >&2; done || {
         echo "blocked:nix-e2e:image-failed"
         exit 1

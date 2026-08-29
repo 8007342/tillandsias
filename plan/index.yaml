@@ -25868,6 +25868,12 @@ plan_index:
         Do not invent any of this. Bring the operator the choice, then wire it.
       events:
         - type: progress
+          ts: "2026-08-29T00:07:06Z"
+          agent_id: "linux-macuahuitl-claude-20260829t000706z"
+          host: linux
+          summary: |
+            LIVE E2E GREEN on macuahuitl 2026-08-29 after two environment fixes: (1) podman build inherited the enclave-only proxy from the stale containers.conf — --http-proxy=false added to both lane build sites (precedent build-image.sh:457); (2) the stale conf itself repaired + filed as 923-rmtw. Verdicts: run1 ok:nix-e2e:wall=109s:substituted=0:built=3; run2 wall=77s:substituted=0:built=2. The lane builds end-to-end against the reconciled images/builder image with the live cache up. FLYWHEEL UNPROVEN and now understood: the populate step lives in with-nix-builder.sh's post-build path, but check-nix-builder-e2e.sh drives its own podman run WITHOUT populate, so the cache never gains the outputs and substituted stays 0 (run2's speedup is /nix volume warmth). NEXT: either add the populate step to the e2e or prove the flywheel through the lane proper (with-nix-builder.sh twice, volume wiped between) — then the substituted>0 proof closes this half.
+        - type: progress
           ts: "2026-08-28T23:32:33Z"
           agent_id: "linux-macuahuitl-claude-20260828t233233z"
           host: linux
@@ -48286,6 +48292,12 @@ plan_index:
         by a litmus that runs a REAL sibling probe. (3) The 873-b1nx builder
         prototype re-run in-container completes its cache-first build.
       events:
+        - type: progress
+          ts: "2026-08-29T00:05:03Z"
+          agent_id: "linux-macuahuitl-claude-20260829t000503z"
+          host: linux
+          summary: |
+            ROOT CAUSE SOLVED on macuahuitl 2026-08-29: the cache was never resetting connections — the deployed ~/.config/containers/containers.conf [engine] env carried the PRE-801-kqme no_proxy list (nix-cache absent), so every enclave sibling routed https://nix-cache:5000 through squid: TCP_RESET when squid is up (allowlist denial — the signature documented in the cheatsheets 2026-08-28), DNS failure when down. Proof: sibling probe with proxy env stripped returned valid nix-cache-info (StoreDir:/nix/store, Priority:30) from a live harmonia; same probe with ambient env failed. The conf line is ORPHANED (no current writer; per-container proxy_env_args() is today's mechanism) and init does not converge it — filed as containers-conf-env-line-is-orphaned-and-never-converges (923-rmtw). This host repaired in place (backup kept); the 2026-08-25 hardening-suspect hypotheses are DISPROVEN for the per-host case. Remaining for closure: one fleet host with the stale conf converging via the 923-rmtw fix, then the original enclave-sibling substitution retest.
         - type: progress
           ts: "2026-08-28T23:32:33Z"
           agent_id: "linux-macuahuitl-claude-20260828t233233z"
