@@ -219,6 +219,26 @@ Corollary already in this file: the same discipline applied to assertions
 themselves — watch a new check FAIL against the defect it targets before
 trusting its green.
 
+## A test that constructs the struct it asserts about pins its own fixture
+
+A whole CLASS of vacuous test, distinct from the wrong-expectation kind
+(924-bwda): the test builds its own input (a `DeviceRecord` literal, a
+hand-rolled config, a synthetic envelope) and then asserts properties of
+what it built — so it renders whatever the TEST supplied and never reaches
+the production code path it appears to cover. Measured on 793-zumy
+(yolanda, 2026-08-29): a reason-string assertion counted as coverage since
+806-2r4s stayed GREEN with the production literal reverted to the wrong
+value, because the fixture never reaches `enumerate_gpus()`. Found only
+because the control ran FIRST — write green after your change and you
+report a criterion closed on a test that cannot fail for it.
+
+The fix is structural, not an assertion tweak: move the shipped value into
+a pure function so the PRODUCTION value is reachable from a unit test, then
+pin that — with the control run in both directions. Keep the old test for
+what it does cover, with a doc comment saying plainly it cannot pin
+production. When auditing, ask of any test: whose value is being asserted —
+the producer's, or the fixture's?
+
 ## When a checker accuses correct code, fix the checker — with a mutation control
 
 Two guard false positives in one change (830-xsk2, macbook, 2026-08-29),

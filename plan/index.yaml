@@ -35980,6 +35980,12 @@ plan_index:
         5 confirmed. Headlines recorded in the cycle's loop-status entry.
 
       events:
+        - type: note
+          ts: "2026-08-29T20:40:46Z"
+          agent_id: "linux-macuahuitl-claude-20260829t204046z"
+          host: linux
+          summary: |
+            NEW SWEEP TARGET CLASS from 793-zumy (yolanda, 2026-08-29): FIXTURE-BUILDS-ITS-OWN-INPUT — a test that constructs the struct it then asserts about (DeviceRecord literal, hand-rolled config, synthetic envelope) pins its own fixture and never reaches the production path it appears to cover; it reads exactly like producer coverage and is counted as such. Measured instance: a_wsl2_paravirtual_gpu_renders_as_present_unusable_never_as_none asserted a reason literal since 806-2r4s and stayed GREEN with the production literal reverted — found only because the mutation control ran FIRST. The (mutation, predicted-observable) pair for this class: revert a production literal the test appears to assert; predicted observable is the test staying green. Yolanda's structural remedy (hoist the shipped value into a pure fn so production is reachable, pin THAT, control both directions) is the fix template. They would not assume this file's instance is the only one in the tree; the sweep should not either. Cheatsheet entry added beside the falsifiability rules.
         - type: progress
           ts: "2026-08-23T11:43:13Z"
           agent_id: "linux-lenovinha-claude-20260823t114313z"
