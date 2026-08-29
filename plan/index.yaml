@@ -54417,6 +54417,55 @@ plan_index:
         guard for one idiom cannot cover 1248 sites. 897-5m9y and 899-q9di both
         record instances.
       events:
+        - type: note
+          ts: "2026-08-29T20:34:31Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            A THIRD GATE CAUGHT A THIRD THING, and narrowing was the right answer rather than arguing with it.
+
+            After the compound revert, ./build.sh --check refused one of the five -qF redos: litmus-observability-convergence-script-shape.yaml, under the 634-39ik expression-pinning rule — "a NEW litmus step must assert a PROPERTY, not pin how source is currently written".
+
+            THE GATE IS DIFF-SCOPED AND CANNOT TELL A REWORD FROM A NEW STEP. The assertion it flagged is pre-existing; I only changed its FORM, from `grep -cF ... | grep -qF ...` to the staged equivalent. But the gate sees a changed line as an added step, and it is not wrong to: from a diff there is no difference.
+
+            I REVERTED THAT FILE rather than adding a negative control to satisfy it. Growing an unrelated test to make my migration pass is scope creep, and the whole value of this migration is that it changes FORM and not MEANING — a conversion that forces a test to acquire new assertions has stopped being a conversion. Four of the five redos landed; that one waits for whoever is actually working on that test.
+
+            WORTH RECORDING FOR THE REMAINING ~300 SITES: every conversion must be verdict-invariant AND gate-neutral. Expect 634-39ik to fire on any conversion of a step that pins a source expression, and treat it as a signal to skip that site rather than to modify the test.
+
+            FOUR LAYERS HAVE NOW EACH CAUGHT SOMETHING THE OTHERS COULD NOT, on the same batch:
+              per-file YAML validation  -> the unescaped quote that broke 16 files
+              the suite verdict compare -> the dropped `!` that inverted an assertion
+              ./build.sh --check        -> the expression-pinning rule on a reworded step
+              and the snapshot          -> made all three recoveries free
+            That is the batch discipline earning its cost three times in one batch.
+        - type: implemented
+          ts: "2026-08-29T20:25:40Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            BATCH 3 — the five -qF redos landed; THE COMPOUND CLASS IS NOT AUTO-CONVERTIBLE AND I HAVE THE COUNTEREXAMPLE THAT PROVES IT.
+
+            LANDED: the 5 held -qF conversions, now that macbook's BSD grep 2.6.0 run put every consumer variant at 12/12 on all four regimes. 7 sites across 5 files (5 literal + 1 ere + 1 i_ere), verdicts invariant: 248 pass / 1 fail, the single red being the pre-existing freshness-inventory-shape.
+
+            ATTEMPTED AND REVERTED IN FULL: the 17 "safe-looking" compound producers via mf_stage_sh. They converted, they parsed, and THREE LITMUS TESTS WENT RED — 245/4 against 248/1. By my own rule a verdict change is a conversion bug, so I diagnosed rather than shipped, and both causes are the regex not understanding shell grammar.
+
+            THE SERIOUS ONE — A DROPPED NEGATION. litmus:git-mirror-no-anonymous-daemon-write was:
+
+                grep -Fq 'config --unset-all http.receivepack' F && ! grep -vE '^#' F | grep -qiE 'PATTERN' && echo ok
+
+            `|` binds tighter than `!`, so the shell parses that as
+
+                grep -Fq … F && ! ( grep -vE '^#' F | grep -qiE 'PATTERN' ) && echo ok
+
+            My converter split at the LAST pipe, swallowed `grep -Fq … && ! grep -vE …` into "the producer", and emitted a POSITIVE mf_holds_i_ere. IT INVERTED THE ASSERTION. It happened to go red here; a different pattern would have gone green while asserting the opposite of what the author wrote. That is worse than the defect this packet is fixing.
+
+            THE OTHER — A PRODUCER WHOSE NON-ZERO IS THE POINT. litmus:build-cache-sweep-trigger was `test -x F && F | grep -qE '^(ok:…|due:…)'`. Staged with an asserted 0, it fails whenever the script reports "due" with a non-zero status — the exact intentional-non-zero case mf_stage exists to let a step DECLARE, and which a mechanical rule cannot infer.
+
+            THE CONCLUSION, and it should go in the migration ordering: A REGEX CANNOT CONVERT COMPOUND PRODUCERS, because it cannot see `!`, operator precedence, or which stage's status the author meant. The 22 compound sites need HAND conversion at reading pace, one at a time, each with its own judgement about the expected exit code. mf_stage_sh is still the right tool for them; the automation around it is not.
+
+            THE DISCIPLINE PAID FOR ITSELF TWICE MORE. First: my initial apply forgot that adding `"` around the shell string terminates the YAML scalar — 16 files converted, ALL 16 caught by per-file validation, reverted, zero corpus damage. Second: after fixing the escaping, the suite caught the semantic inversion the validator could not see. Snapshot, convert, validate every file, re-run, require invariance — each layer caught something the previous one could not.
+
+            STANDING SCORE: 46 direct + 7 in this batch = 53 sites converted, verdicts invariant at every step. Remaining: 22 compound (hand), ~282 multi-pipe or declined (hand).
         - type: verified
           ts: "2026-08-29T19:45:11Z"
           agent_id: "linux-macuahuitl-claude-20260829t194511z"
