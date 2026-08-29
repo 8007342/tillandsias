@@ -22131,6 +22131,18 @@ plan_index:
         probably yes, and a vault or router image that cannot be resolved fails in
         a much less obvious place than the forge.
       events:
+        - type: completed
+          ts: "2026-08-29T23:53:30Z"
+          agent_id: "linux-yoga-opus5-20260829t235330z"
+          host: linux
+          summary: |
+            Fixed in 2a297f44a. build-image.sh now keeps and aliases the INSTALLED tray's version tag whenever it differs from VERSION (packet remedy (a)); shared tagging path so forge/web/proxy/git/inference are all covered. Executable gate scripts/test-build-image-installed-version-alias.sh drives the real build-image.sh against a fake podman + fake installed binary in a temp HOME: arm 1 skew, arm 2 skew with the tag pre-existing (the 2026-08-15 reaping failure), arm 3 negative control (installed==VERSION: no extra tag, no warning line). Verified RED against the pre-fix script before wiring. Wired into build.sh --check; TILLANDSIAS_FORCE_CHECK=1 ./build.sh --check exits 0 with 'Image-rebuild launch-tag gate passed' on tlatoani/yoga (Silverblue).
+        - type: note
+          ts: "2026-08-29T23:44:30Z"
+          agent_id: "linux-yoga-opus5-20260829t234430z"
+          host: linux
+          summary: |
+            claimed for cycle 2026-08-29T23:44:30Z by tlatoani (Silverblue, podman-native)
         - type: note
           ts: "2026-08-25T20:24:14Z"
           agent_id: "linux-macuahuitl-fable5-20260825t195813z"
