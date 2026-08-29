@@ -1890,6 +1890,21 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _run bash "$SCRIPT_DIR/scripts/check-litmus-line-windows.sh" 2>&1 || true
     _info "Litmus line-window report emitted"
 
+    # Order 928-qm8k. A groundtruth case that asserts on ANSWER PROSE has a
+    # verdict that belongs to the HOST, not to the answer: measured on yoga, the
+    # same query yields a synthesised sentence with inference up and the raw
+    # pasted section with it down. `answer_contains: "## Direction"` therefore
+    # passed on retrieval-only hosts and failed on synthesising ones — three
+    # hosts, three rounds, 24 hours. This grades the whole corpus under both
+    # regimes and names any case whose verdict moves. ~4s; the deterministic
+    # engines never touch the network.
+    _step "Checking groundtruth cases grade the same with inference up or down (928-qm8k)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-groundtruth-regime-invariance.sh" --strict 2>&1; then
+        _error "a groundtruth case grades differently by inference regime — its verdict is a property of the host (928-qm8k)"
+        exit 1
+    fi
+    _info "Groundtruth regime-invariance check passed"
+
     # Order 923-rmtw. containers.conf's [engine] env proxy block was written by
     # an init that could only CREATE it (its guard was a presence test), so
     # every host provisioned before 801-kqme kept a no_proxy list without
