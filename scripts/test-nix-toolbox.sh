@@ -279,7 +279,12 @@ fi
 #     more than it proves — and scoped to a `command -v nix` used as the
 #     VERDICT, which is what was wrong. nix-toolbox.sh's own rung probes still
 #     use `command -v nix`, correctly: there it is one input among three.
-for caller in check-nix-deps-stability.sh select-work-batch.sh; do
+# FOUR callers now, not two. check-nix-builder-e2e.sh and nix-cache-service.sh
+# carried the same defect and were found the only way it could be found — by
+# running the lane on a host whose nix lives in the toolbox (2026-08-28,
+# 790-6n2k second-host evidence). The e2e in particular skipped GREEN in 0s with
+# `ok:nix-e2e:skip:no-nix` on exactly the host whose coverage was the point.
+for caller in check-nix-deps-stability.sh select-work-batch.sh check-nix-builder-e2e.sh nix-cache-service.sh; do
     f="$ROOT/scripts/$caller"
     [ -f "$f" ] || { failures+=("arm 13 caller missing: $caller"); continue; }
     if grep -vE '^\s*#' "$f" | grep -q 'command -v nix'; then

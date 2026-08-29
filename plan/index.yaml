@@ -25867,6 +25867,39 @@ plan_index:
         secrets, the public half committed so hosts can trust it.
         Do not invent any of this. Bring the operator the choice, then wire it.
       events:
+        - type: verified
+          ts: "2026-08-29T00:24:49Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            SECOND-HOST E2E EVIDENCE FROM lenovinha — GREEN, and getting there took five defects that only this host's regime could surface.
+
+            VERDICTS (scripts/check-nix-builder-e2e.sh, toolbox rung, no host nix):
+              cold: ok:nix-e2e:wall=197s:substituted=0:built=35:total=35
+              warm: ok:nix-e2e:wall=4s:substituted=0:built=0:total=0
+            Against macuahuitl's 109s cold / 77s volume-warm. substituted=0 is the known limitation you flagged, unchanged.
+
+            HOST REGIME, recorded because it is the point of the second leg: no host nix, no host nix-store, nix reachable only inside the tillandsias-nix toolbox. I provisioned that with `dnf install -y nix` in the toolbox under the standing methodology authorization; nix 2.34.8, single-user, no daemon.
+
+            FIVE DEFECTS, each of which made the lane unrunnable here and NONE of which is visible from a host that has nix:
+
+            1. THE E2E EXCUSED ITSELF ON THE HOST IT WAS MEANT TO COVER. check-nix-builder-e2e.sh:38 gated on `command -v nix` on the HOST, so it printed ok:nix-e2e:skip:no-nix in 0 seconds — indistinguishable in any log from a host with no nix at all. Third instance of the 799-tb7q second-criterion defect. Converted to nix-toolbox.sh capability.
+
+            2. SAME DEFECT IN THE CACHE SERVICE, twice over. nix-cache-service.sh:118 gated on `command -v nix`, and ensure_keypair called bare `nix-store`. The lane could not even start its cache here. Both routed through the rung. The keypair failure also surfaced as `blocked:nix-cache:no-ca`, which names the wrong thing — the CA files were present and healthy.
+
+            3. THE TOOLBOX RUNG OF `nix-toolbox.sh run` HAD NEVER WORKED. It did `exec _toolbox run …`, but _toolbox is a shell FUNCTION and exec can only exec a BINARY, so every call died with `exec: _toolbox: not found`. Dead since 736-mcy3 and invisible until a host actually reached that arm. The function's proxy-neutralising job is now inlined so the behaviour survives.
+
+            4. THE TOOLBOX RUNG REPORTED USABLE WITHOUT EXERCISING THE STORE. resolve_rung asked only `command -v nix` inside the container — the exact false-green the file's own header forbids for the daemon rung ("the probe must exercise the STORE"). After installing nix the rung reported `toolbox` and the next store write failed: /nix/store is root:nixbld and the container runs as the user. Now probed with a real store operation against $CHROOT_STORE, and nix-args hands the toolbox rung that store instead of refusing to emit args. $CHROOT_STORE is under $HOME, which toolbox shares, so both sides address one store. Verified with a real `nix build nixpkgs#hello` inside the toolbox.
+
+            5. A THIRD BUILD SITE NEEDED --http-proxy=false. You landed it on the two `podman build` sites; the `podman run` at check-nix-builder-e2e.sh:160 — the one that performs the actual build — did not have it. containers.conf bakes http_proxy=http://proxy:3128 into every container and this run is --network host, so the build died at the first source fetch with `curl: (5) Could not resolve proxy: proxy` on cargo-src-bstr, cascading through vendor-registry and vendor-cargo-deps to blocked:nix-e2e:build-failed — a verdict naming the build rather than the proxy. Same family as 923-rmtw, one layer out: there a stale no_proxy sent cache traffic through squid, here a live proxy var points at a name the network cannot resolve.
+
+            AND ONE I INTRODUCED AND CAUGHT BY RUNNING IT: I cached the resolved rung in NIX_RUNG, but do_ensure calls do_prepare inside a COMMAND SUBSTITUTION, so the rung resolved there died with the subshell. do_ensure then re-derived an empty harmonia path, the entrypoint became /bin/harmonia-cache, and the verdict was blocked:nix-cache:start-failed — three layers from its cause. _cache_nix now re-resolves when unset. A subshell boundary is invisible in review.
+
+            923-rmtw ON THIS HOST: CONFIRMED AND REPAIRED. ~/.config/containers/containers.conf carried the pre-801-kqme list — nix-cache ABSENT, git-service and tillandsias-git PRESENT. Repaired in place to the value the current code produces (ENCLAVE_NO_PROXY_BASE + DEFAULT_ENCLAVE_SUBNET), backup at containers.conf.bak-923-rmtw-20260829T000921Z. Verified podman still healthy afterwards. I also confirmed your "nothing writes or converges it" reading: the only code touching containers.conf manages [network] pasta_options and dns_servers, so the repair sticks.
+
+            GUARDED: litmus:nix-capability-probe's caller arm now covers all FOUR nix-lane callers, not two; mutation-verified to fire when the e2e's host-binary gate is restored. test-nix-toolbox.sh 13/13 with rung=toolbox — this host now exercises the toolbox arm for real rather than skipping it. ./build.sh --check green.
+
+            NOT DONE, deliberately: the substituted>0 flywheel proof. It needs the populate step the e2e does not drive, and that is your lane's design decision rather than mine.
         - type: progress
           ts: "2026-08-29T00:07:06Z"
           agent_id: "linux-macuahuitl-claude-20260829t000706z"
