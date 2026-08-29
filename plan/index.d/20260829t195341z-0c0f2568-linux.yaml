@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-test-and-runbook-tier-composes-with-shell-pipes-instead-of-steps
+    field: next_action
+    value: |-
+      STATE 2026-08-29 (lenovinha). 46 SITES CONVERTED ACROSS TWO BATCHES (7 + 39), VERDICTS INVARIANT BOTH TIMES. The remainder is bigger than "the rest of the 418" sounds, and the shape is now measured rather than estimated.
+
+      WHAT IS ACTUALLY LEFT, from a faithful automated rule run over the corpus:
+        46   direct, single-pipe + simple producer     <- DONE (5 of them held, see below)
+        22   compound producer                          <- use mf_stage_sh; NOT auto-converted (quoting)
+       282   multi-pipe chains / declined shapes        <- read each; not a sed job
+         0   unmapped flags (after mf_holds_i/_i_ere)
+
+      MY OWN EARLIER "115 MECHANICAL" WAS OPTIMISTIC. Single-pipe was necessary but not sufficient: the producer must ALSO be a simple command, because mf_stage runs "$@". The mechanical share is ~13%, not ~27%.
+
+      HELD, NOT FORGOTTEN: 5 conversions in the -qF class are reverted in the tree pending the darwin/BSD run of fixture arms 7-12. BSD grep is the only non-GNU implementation in the fleet and -qF/-qx are the classes macuahuitl flagged. Redo them once that reports — they are a one-line change each and the files are named in the 2026-08-29 batch-2 event.
+
+      THE CONVERSION TABLE (flag fidelity is not optional — see the BRE/ERE event):
+          grep -q   -> mf_holds        grep -qE  -> mf_holds_ere
+          grep -qF  -> mf_holds_literal grep -qx -> mf_holds_line
+          grep -qi  -> mf_holds_i      grep -qiE -> mf_holds_i_ere
+          grep -qv* -> mf_lacks*
+        simple producer   -> mf_stage NAME 0 VAR -- <cmd>
+        compound producer -> mf_stage_sh NAME 0 VAR -- "<shell string>"
+        drop the original `2>&1` — mf_run captures both streams by design.
+
+      THE DISCIPLINE THAT MATTERS, and it caught a real break this batch: snapshot the tree, convert, VALIDATE EVERY FILE with `tillandsias-plan validate-yaml` (not PyYAML — see below), revert individually on failure, then re-run the suite and require verdicts UNCHANGED. My first apply produced invalid YAML via a naive quote escape in the shell form; the snapshot + per-file validation turned a corpus-wide break into a clean revert and a safer rule.
+
+      A PRE-EXISTING DEFECT SOMEONE SHOULD OWN, found while validating and NOT mine: openspec/litmus-tests/litmus-expert-groundtruth-harness.yaml does not parse — `tillandsias-plan validate-yaml` reports blocked:yaml-load-failed at line 67, identically at HEAD before any of my changes. A litmus definition the sanctioned reader cannot load is a test whose metadata nothing can check. Worth its own row.
+
+      ALSO STILL UNTOUCHED, from the packet's inventory: 212 shell scripts with tee/head/tail pipelines, 57 SKILL.md runbook snippets, 39 PIPESTATUS sites, `2>/dev/null` on probes. The PIPESTATUS sites remain the highest-value of those — each is a hand-rolled workaround for this defect and each is empty under zsh.
+    ts: "2026-08-29T19:53:41Z"
+    host: linux
+
+events:
+  - packet_id: the-test-and-runbook-tier-composes-with-shell-pipes-instead-of-steps
+    event:
+      type: note
+      ts: "2026-08-29T19:53:41Z"
+      host: linux
+      summary: >
+        two batches landed with verdict invariance; remainder measured and the conversion table recorded

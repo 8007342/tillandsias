@@ -15856,6 +15856,32 @@ plan_index:
             A launch failure after partial enclave provisioning leaves a durable one-line breadcrumb on the host (not only in a vanishing terminal window) naming the failed service and the inspect command.
 
       events:
+        - type: note
+          ts: "2026-08-29T23:27:23Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            A CORRECTION TO THIS PACKET'S RECORDED REMEDIATION, measured on lenovinha (Fedora Silverblue, podman with default config) 2026-08-29 while working 935-jhh5.
+
+            THIS PACKET RECORDS THE FIX AS:
+                nvidia-ctk cdi generate --output ~/.config/cdi/nvidia.yaml
+            PODMAN DOES NOT SEARCH ~/.config/cdi. Measured:
+                $ podman --help | grep cdi-spec-dir
+                  --cdi-spec-dir stringArray   ... (default [/etc/cdi,/var/run/cdi])
+            So a spec written to ~/.config/cdi is IGNORED, and the symptom is identical to having generated nothing at all:
+                Error: setting up CDI devices: unresolvable CDI devices nvidia.com/gpu=all
+            I lost time to exactly that before checking where podman actually looks.
+
+            THE REMEDIATION IS INCOMPLETE, NOT WRONG. ~/.config/cdi is the right place for an immutable host — /etc/cdi needs root and /var/run/cdi is tmpfs, so neither survives as a user-owned persistent answer. It just has to be DECLARED. Add to ~/.config/containers/containers.conf:
+
+                [engine]
+                cdi_spec_dirs = ["/home/<user>/.config/cdi", "/etc/cdi", "/var/run/cdi"]
+
+            Verified: podman's own --help default list then reports the user directory first, and the device resolves with no --cdi-spec-dir flag at any call site. No sudo, no rpm-ostree layering, survives reboot.
+
+            A SECOND FINDING FROM THE SAME SESSION, because it produces the SAME error message and will otherwise be misdiagnosed as this one: TWO SPEC FILES BOTH DECLARING `nvidia.com/gpu` make podman report the device UNRESOLVABLE. I had left a second generated file beside the first while experimenting, and the resulting error is byte-identical to having no spec. Any regeneration path should remove sibling specs for the same device kind rather than adding one.
+
+            Both are implemented in scripts/ensure-nvidia-cdi.sh (935-jhh5), which is idempotent and re-runnable — the regeneration this packet's stale-spec strand needs, made automatic rather than remembered.
         - ts: "2026-08-10T19:45:00Z"
           event: filed
           summary: |
@@ -20422,6 +20448,12 @@ plan_index:
 
       events:
         - type: verified
+          ts: "2026-08-29T19:37:43Z"
+          agent_id: "linux-macuahuitl-claude-20260829t193742z"
+          host: linux
+          summary: |
+            RUN-VERIFIED ON REAL WINDOWS (yolanda, native x86_64-pc-windows-msvc) — closing the "compile-verified only" caveat the implementer recorded rather than glossed. cargo test -p tillandsias-windows-tray rc=0: 109/0/7 + 9/0 + 3/0/1. The before-picture makes it exact: 106 passed at the pre-fix commit, 109 at head — precisely the three new MenuState tests, green by name (a_confirmed_empty_answer_latches_loaded, an_unconfirmed_empty_reply_does_not_latch_loaded, an_unconfirmed_reply_retains_the_previous_list). The message-pump question is MEASURED: they ran with no window, no pump, no COM init, and did not hang — genuinely pure state transitions. Verification note: an intermediate false alarm ("tray half unwritten") came from probing for the TYPE NAME CloudRefreshOutcome, which appears zero times in the crate at head while the behaviour is fully present — the fix consumes the outcome FIELD and converts to confirmed:bool at the boundary. A name-grep is a vocabulary test; running the tests was the probe that settled it.
+        - type: verified
           ts: "2026-08-29T18:45:44Z"
           agent_id: "linux-lenovinha-claude-20260828t223829z"
           host: linux
@@ -21265,6 +21297,32 @@ plan_index:
         formats would be worse than none — the point is one thing every host can
         write and every host can read.
 
+      events:
+        - type: evidence
+          ts: "2026-08-29T19:36:42Z"
+          agent_id: "macos-tlatoanis-macbook-air-claude-20260829t155859z"
+          host: macos
+          summary: |
+            IMPLEMENTED AND VERIFIED. ./build.sh --check now reports both platforms in the same breath — the packet's verifiable closure, quoted from a forced full run (7edaf9575):
+
+              [build] Windows-only sources: stale:sources-drifted:windows-only:1:crates/tillandsias-windows-tray/src/notify_icon.rs
+              [build] macOS-only sources:   ok:sources-verified:macos-only:7
+
+            EXIT CRITERIA:
+              1. a macOS report of the same shape as the windows one — MET; it IS the windows one, parameterised.
+              2. verdict distinguishes verified / drifted / never-verified — MET and demonstrated: `ok:sources-verified:macos-only:7`; touching crates/tillandsias-macos-tray/src/diagnose.rs gives `stale:sources-drifted:macos-only:1:<that file>`; before any attestation existed it read `missing:sources-no-attestation:macos-only`. Restoring the file returns it to ok.
+              3. consumes the SAME attestation format as 738-3pft — MET: plan/attestations/macos-only-sources.macos.json, same schema, same scope-as-a-field vocabulary, one file per scope+host so git has nothing to merge.
+
+            ONE IMPLEMENTATION, NOT TWO — and the file itself asked for this. The windows script already said scope was "a FIELD in one shared grammar, so a macOS writer reuses this vocabulary rather than minting macos-sources-* tokens". A forked 450-line copy would have honoured the vocabulary while abandoning its reason; two gates drift the moment one is fixed, which is two attestation formats one layer down. So the machinery is parameterised (ONLY_PLATFORM / ONLY_CRATE) and check-macos-only-sources-verified.sh is a twelve-line wrapper. I BASELINED the windows verdict before touching anything and it is byte-identical after — which is how a host that cannot run the Windows toolchain can still say it did not break the Windows gate.
+
+            SCOPE CORRECTION TO THE PACKET: it states 10 macOS-only .rs files; the real surface is 7. menu_disabled_v2.rs, terminal_attach.rs and main.rs itself compile on every platform — only modules under #[cfg(target_os = "macos")] are invisible to a Linux build. Attesting all 10 would have claimed verification of sources the reader's own build already parses: a report overstating its own coverage, which is this packet's own defect wearing a different hat. The module DECLARATION is the unit, matching the windows rule exactly.
+
+            THREE DEFECTS FOUND BY READING THE WRITTEN ARTIFACT, not the tool's success line — every one of them emitted a cheerful `wrote ...` / `ok:sources-attested:macos-only:7`:
+              * the first attestation recorded `command: cargo test -p tillandsias-windows-tray --bins`. That field is PROVENANCE — it tells a reader what to re-run — and it named a command that verifies nothing about macOS.
+              * known_red carried the WINDOWS list, i.e. a macOS stamp pre-authorising the failure of a windows-only test. The path is read in TWO places, so fixing the obvious one left the JSON still lying.
+              * a quoted phrase in ordinary known-red prose produced INVALID JSON — values were interpolated into printf unescaped. That one failed loudly (a parser refuses the file), but a writer the whole fleet READS must not be breakable by its own input. json_escape now covers known_red and the arbitrary test-output result line.
+
+            The first attestation is real evidence, not a placeholder: `cargo test -p tillandsias-macos-tray --bins` run natively here, 107 passed / 0 failed / 1 ignored, transcript fed to `attest --from`. scripts/macos-only-known-red.txt exists and is deliberately EMPTY so "no macOS test is excused" is a recorded decision rather than an inference from a missing file.
     - packet_id: macos-hourly-queue-2026-08-14
       order: 739-dgk4
       release_target: stable-milestone-v1
@@ -21917,6 +21975,12 @@ plan_index:
         `grep -rln 'ruby\|yq' scripts/` had 10 hits at filing time, and each one is
         the same latent outage in a different environment.
       events:
+        - type: progress
+          ts: "2026-08-29T19:17:57Z"
+          agent_id: "linux-macuahuitl-claude-20260829t191756z"
+          host: linux
+          summary: |
+            THIRD TRANCHE (macuahuitl): the select() decision the packet was parked on is settled by COMPOSITION, not a query engine. New `tillandsias-plan yaml-json <file>` emits the document as JSON; rich reads become `yaml-json | jq`, and jq is the one query tool the packet's own availability table shows present in ALL THREE environments. The retired yq filters run under jq VERBATIM (yq eval mimics jq): proven byte-identical on the real bindings file. MIGRATED: run-litmus-test.sh's seven own reads (yaml_get, bindings queries, phase/host_kind/size/inputs, list_all_tests) and local-ci.sh's get_all_active_specs — sanctioned tier first, yq second, historical awk/grep last, so a fresh unbuilt clone still runs. A yq-less host now selects the SAME test set as a yq host instead of degrading to grep parsers; degraded-mode warning updated to say so. PERF: the four yaml subcommands moved to the ledger-free early dispatch (they are file-local; the ledger load cost 220ms of a 227ms invocation — now 2ms, measured). CONVERSION BUG CAUGHT BY THE SUITE, kept as evidence for the 901-jtvi rule: first conversion left empty-match rc=1 where the yq tier's `|| true` guaranteed rc=0; litmus-name-filter-fail-loud/hint went red (247/249), fixed, 249/249 — the verdict-invariance discipline works. EQUIVALENCE: 407 fixture files x 3 metadata fields, plan+jq vs yq, zero diffs. REMAINING for close: forge + builder-toolbox availability evidence for yaml-json (host leg recorded here), methodology criterion 3 wording, and the ledger-tooling doc note (set-field writes a fragment, append-event edits the folded base — yolanda's promotion request).
         - type: progress
           ts: "2026-08-26T17:32:23Z"
           agent_id: "linux-yoga-opus5-20260826t173223z"
@@ -24028,6 +24092,12 @@ plan_index:
 
       events:
         - type: evidence
+          ts: "2026-08-29T19:21:46Z"
+          agent_id: "windows-yolanda-claude-20260828t223837z"
+          host: yolanda
+          summary: |
+            RUNG 4 LANDED AND THE TWO USERLANDS NOW CONVERGE — PROVEN BY DIGEST, NOT BY INSPECTION. Implemented per the coordinator's chosen shape: a repo-relative rung at <checkout>/target/tillandsias-spec-index, ordered AFTER explicit env / FORGE_SPEC_INDEX_ROOT / the podman volume and BEFORE the HOME-derived cache, in all three shell carriers AND the Rust ladder (crates/tillandsias-plan/src/spec_index.rs), one commit, agreement guard green: ok:spec-index-resolution-agreement:carriers=3-scenarios=4 plus selftest 5 cases PASS. THE CONVERGENCE MEASUREMENT, which is the whole point. Producer, Git Bash, HOME=/c/Users/bullo: serving=/c/Users/bullo/claudia/tillandsias/target/tillandsias-spec-index/6bb58e4d2d9da92722c959bd6b1c4aea3517d0b0ab9d88078aae927f2133c425, serving-exists=yes, entries=1, built ok:spec-index:built:22222. Consumer environment, the WSL2 distro with HOME=/root and the checkout at /mnt/c — the exact shape the forge-plan MCP server runs in — resolving via the block EXTRACTED FROM forge-plan.sh itself: /mnt/c/Users/bullo/claudia/tillandsias/target/tillandsias-spec-index/6bb58e4d2d9da92722c959bd6b1c4aea3517d0b0ab9d88078aae927f2133c425, with chunks.jsonl and vectors.jsonl both confirmed present at that path. SAME CONTENT DIGEST 6bb58e4d, two spellings of one directory. Before this change the same two environments resolved /c/Users/bullo/.cache/... and /root/.cache/... — the latter a directory that does not exist in Git Bash at all. LIVE spec_answer STILL REFUSES, AND THAT IS A STALE PROCESS, NOT A FAILED FIX — stated plainly so nobody records a false red. The forge-plan MCP server is a long-lived stdio process started before this edit; it sourced the old resolution block at startup and its refusal still quotes /root/.cache verbatim, unchanged. Restarting it is a harness action (session reconnect), not something this cycle can do from inside the same session, and I have not attempted to force it. The falsifiable claim, left for the next session on this host to check in one call: after an MCP reconnect, spec_answer against this tree must return confidence=retrieved with citations. If it does not, the fix is wrong and this note is the thing to reopen. NEGATIVE CONTROLS, because a rung that fixes Windows by relocating every other host's index would be a worse bug than the one it fixes: scripts/test-spec-index-repo-relative-rung.sh, 6 passed 0 failed, wired into local-ci.sh beside the agreement guard. Arm 1 explicit FORGE_SPEC_INDEX_ROOT still wins. Arm 2 a Linux-shaped fixture with a podman volume still resolves to the volume, never the rung — that is the arm asserting Linux and macOS are byte-identical to before. Arm 3 a non-writable checkout falls through to XDG rather than capturing resolution (SKIPs loudly where the read-only bit is not representable, rather than reporting a pass the filesystem could not have produced). Arm 4 the positive case. Arm 5 two different HOMEs resolve to one root. Arm 6 is the control that makes arm 5 mean anything: it proves the OLD HOME-derived rung really did diverge under those same two HOMEs, without which arm 5 would pass against a ladder that never consulted HOME at all. The Rust carrier gets its own unit test (the shell guard cannot see it): spec_index::tests::the_repo_relative_rung_anchors_to_the_checkout_not_to_home. Full gate green, exit 0, 573s.
+        - type: evidence
           ts: "2026-08-29T17:55:32Z"
           agent_id: "windows-yolanda-claude-20260828t223837z"
           host: yolanda
@@ -25261,6 +25331,18 @@ plan_index:
             An operator decision event on this packet records whether the Store channel is adopted alongside the GitHub-release channel — until then this stays research, not direction.
 
       events:
+        - type: evidence
+          ts: "2026-08-29T22:52:58Z"
+          agent_id: "windows-yolanda-claude-20260828t223837z"
+          host: yolanda
+          summary: |
+            EXIT CRITERION 1 MET ON REAL HARDWARE — working MSIX demonstrated end to end on yolanda, 2026-08-29. PACK: makeappx 10.0.26100.0, 5 files, 'Package creation succeeded', tillandsias-tray-0.4.260826.1-windows-x64.msix (3290935 bytes). INSTALL: Add-AppxPackage succeeded — Tlatoani.Tillandsias_0.4.2608.2601_x64__5p6m7r0v8hr1g under C:\Program Files\WindowsApps. RUN: launched via shell:AppsFolder, pid 10600 executing from the WindowsApps package root, not from the old %LOCALAPPDATA%\Programs install. STARTUP TASK: registered — the key SystemAppData\<PFN>\TillandsiasTrayStartup exists with State=2 (Enabled), and the DEPLOYED manifest (read back from the installed package, not the source template) carries the desktop:Extension Category=windows.startupTask with TaskId=TillandsiasTrayStartup Enabled=true. Test package REMOVED afterwards; the host is left as found. VERSION: 0.4.260826.1 -> 0.4.2608.2601 via the SAME u16 re-encoding windows-tray/build.rs already uses — one encoding, two consumers, as directed. NO CERTIFICATE WAS NEEDED AND NO TRUST STORE WAS TOUCHED, which is the design decision worth carrying forward. The first install attempt failed 0x80073D2C 'publisher is not in the unsigned namespace'. Rather than mint a self-signed cert and install a root on the operator's machine, the default test publisher now sits IN that namespace: CN=TillandsiasTestPublisher, OID.2.25.311729368913984317654407730594956997722=1. Two properties, and the second matters more than the convenience: (a) Add-AppxPackage -AllowUnsigned works, so this acceptance test is reproducible on any host with zero machine changes; (b) a package in the unsigned namespace CANNOT be shipped — the Store and normal install paths refuse it — so a build that forgot to set TILLANDSIAS_MSIX_PUBLISHER fails loudly at distribution instead of quietly publishing under a plausible-looking fake identity. Placeholders that look real are the hazard; placeholders that cannot ship are the fix. RELEASE WIRING NEEDED NO WORKFLOW EDIT, and adding one would have been a regression. release.yml's windows-release job already cosign-signs 'for artifact in *' and uploads 'release-artifacts/*' — both globs, and the file's own comment records WHY: an explicit allow-list is exactly how install-windows.ps1 shipped with no bundle and in no manifest (756-rfdr). The build script emits the MSIX into release-artifacts/, so it inherits the cosign bundle, the upload, and the transitive integrity gate (check-release-asset-integrity.sh is extension-agnostic — coverage is by bundle or by being named in a signed SHA256SUMS, and the MSIX has both). CHECKSUMS: SHA256SUMS-windows now carries a line per artifact and 'sha256sum -c' passes for both. A DEFECT I INTRODUCED AND CAUGHT, recorded because the failure mode is silent: my first verification run showed the MSIX line FAILING. Cause was not the code — it was overlapping build invocations, the second run repacking the package after the first had written the sums, leaving the msix 45s newer than the file describing it. Confirmed by timestamp, then by a clean single run where the write order is msix -> zip -> sums and both entries verify. Worth noting because it is precisely the 722-qvqb hazard one level out: a checksum that describes a file nobody can download reads, from outside, as a supply-chain attack. STORE REVISION CONSTRAINT NOT RESOLVED, and deliberately not guessed: Partner Center may reserve Revision=0. This host cannot reach Partner Center validation, so the default keeps the full encoding and -MsixStoreRevisionZero emits the Store variant. If the Store does require it, same-day builds collide at 0.4.2608.0 and the N component needs somewhere else to live — a decision for the submission slice. EXIT CRITERION 2 (Store submission API from CI) NOT STARTED, per the scope.
+        - type: decision
+          ts: "2026-08-29T22:36:57Z"
+          agent_id: "linux-macuahuitl-claude-20260829t223657z"
+          host: linux
+          summary: |
+            OPERATOR APPROVED AND DIRECTED, 2026-08-29 (verbatim intent): the Microsoft Store needs a Microsoft Installer as its release artifact — "please update our release script to ensure that happens", Windows half driven on yolanda, then hand back to the coordinator for merge-to-main-and-release. This packet graduates from research-recommended to implementation. Priority raised to p1. SCOPE FOR THE IMPLEMENTATION SLICE (yolanda), building on what discovery confirmed already exists: (1) AppxManifest.xml from scratch — runFullTrust + windows.startupTask (replaces the Startup-folder shortcut), identity/publisher PARAMETERIZED (real values come from the operator's Partner Center listing at submission time; local testing uses test values + self-signed cert — packaging is NOT blocked on the signing work, since the Store re-signs submitted MSIX for $0 per plan/issues/windows-signing-research-2026-08-16.md). (2) MSIX logo PNGs generated from assets/icons/xerographica/bloom.svg via the in-tree resvg pipeline (tillandsias-core/build.rs pattern) — Square44x44, Square150x150, StoreLogo; no ImageMagick dependency. (3) VERSION MAPPING: reuse windows-tray build.rs's existing u16 re-encoding (0.4.260826.1 -> 0.4.2608.2601) — ONE encoding, two consumers; CONSTRAINT to verify during implementation: Store submissions may require Revision=0 (reserved), in which case the Store variant is 0.4.2608.0 and same-day N-collisions need a named resolution — verify against Partner Center validation, do not assume either way. (4) package-msix step in scripts/build-windows-tray.ps1's release-packaging section — AFTER Authenticode signing of the staged exe (sign-before-package is load-bearing per 722-qvqb), emitting tillandsias-tray-<ver>-windows-x64.msix into release-artifacts/ with its SHA256SUMS-windows line; makeappx.exe resolved by the same Windows Kits glob + env override pattern as sign-windows-artifact.ps1:113-132; ASCII-only ps1 per 722-qvqb's 5.1 parse constraint. (5) release.yml windows-release job builds + uploads the MSIX beside the zip (cosign bundle included — cosign stays per 722-ksnk). (6) LOCAL PROOF on yolanda: makeappx pack succeeds, Add-AppxPackage installs it (self-signed test cert), the tray runs and the startup task registers; that is exit criterion 1's "working MSIX demonstrated". Exit criterion 2 (Store submission API from CI) stays in this packet as the follow-on slice. Coordinator owns the release-skill contract update and the final merge+release.
         - type: filed
           ts: "2026-08-16T21:05:00Z"
           agent_id: windows-fable5-attended-20260816
@@ -26473,6 +26555,18 @@ plan_index:
 
 
       events:
+        - type: evidence
+          ts: "2026-08-29T20:18:22Z"
+          agent_id: "windows-yolanda-claude-20260828t223837z"
+          host: yolanda
+          summary: |
+            CRITERION 2 CLOSED ON REAL HARDWARE — and the mutation control caught a vacuous test on the way, which is the part worth reading. LIVE ENVELOPE, rebuilt and run inside tillandsias-build on the AMD Radeon 860M host: accel_class=cpu-only accel_gpu=present-unusable accel_gpu_name=WSL2_paravirtual_GPU_dev_dxg accel_npu=none accel_reason=engine-missing_no-vulkan-icd accel_cpu_cores=16 accel_ram_gb=7. Was accel_reason=wsl2-no-dri-render-node. The word 'engine-missing' is present verbatim as the criterion requires (the envelope renderer sanitises the colon to an underscore; the stored value is engine-missing:no-vulkan-icd), and the suffix keeps WHICH engine and therefore what would fix it, matching the sibling rocm-runtime-missing / intel-compute-runtime-missing shape. VERDICT DELIBERATELY UNCHANGED: usable=false, accel_gpu=present-unusable, accel_class=cpu-only. Nothing here makes the GPU reachable today; inflating the class would place GPU work on a host that cannot run it, which is the worse failure. THE VACUOUS TEST, found by running the mutation control before making anything green. accel_probe::tests::a_wsl2_paravirtual_gpu_renders_as_present_unusable_never_as_none LOOKED like it pinned this reason — it asserted the literal and had done since 806-2r4s. It does not and never did: it builds its own DeviceRecord fixture, so it renders whatever reason the TEST supplies and never touches enumerate_gpus(). Proven rather than suspected — I reverted the production literal to the wrong value and that test stayed GREEN. A test that cannot fail for the thing it appears to assert is worse than no test, because it is counted as coverage. FIX: the literal moved into a pure fn wsl2_paravirtual_gpu_reason(), which is the smallest thing that makes the SHIPPED value assertable from a unit test, and the new pin is accel_probe::tests::the_wsl2_unusable_reason_names_the_missing_engine_not_the_missing_render_node. It asserts the verbatim criterion word, that the render-node red herring cannot return, and that the engine is named. MUTATION CONTROL ON THE NEW TEST, both directions: with production reverted to wsl2-no-dri-render-node it FAILS with 'criterion 2 requires the verbatim word engine-missing; got wsl2-no-dri-render-node'; restored, it passes. The old test is kept for what it does cover (present-unusable never collapsing to none, class staying cpu-only) with a doc comment saying plainly that it cannot pin production and pointing at the one that can. STILL OPEN ON THIS PACKET, unchanged and NOT touched by this edit: criterion 1's second clause (this host still reports accel_class=cpu-only, correctly so while no ICD is installed), and the enumeration redesign — detection remains 'dxg_present && !dri_present && !already_found', file existence, so the software-rasterizer rejection criterion has no enumeration in which to reject anything. That is a fleet-wide probe change and wants a properly scoped pickup, not a Windows host's reason-string lease.
+        - type: note
+          ts: "2026-08-29T19:54:02Z"
+          agent_id: "windows-yolanda-claude-20260828t223837z"
+          host: yolanda
+          summary: |
+            MEASURED ON THE FLEET'S ONLY WSL2 HOST, 2026-08-29 — THE HEADLINE SYMPTOM IS ALREADY FIXED, TWO CRITERIA ARE NOT, AND THE REASON STRING IS NOW THE DEFECT. Real envelope from 'tillandsias --capabilities' built and run INSIDE tillandsias-build (not cross-inspected): accel_class=cpu-only accel_gpu=present-unusable accel_gpu_name=WSL2_paravirtual_GPU_dev_dxg accel_npu=none accel_reason=wsl2-no-dri-render-node accel_cpu_cores=16 accel_ram_gb=7. WHAT IS FIXED SINCE FILING: the packet's headline was 'accel_gpu=none accel_reason=-' and a probe that never heard of /dev/dxg. Neither holds. The device IS recognised — accel_gpu_name names the dxg path explicitly — and the envelope's own contract (cpu-only is never a bare verdict) is satisfied, because a reason is present. accel_probe.rs:485-506 carries a wsl2_paravirtual_gpu arm. Anyone reading this packet's context as current state will be wrong. WHAT IS STILL UNMET, precisely. (1) Exit criterion 1's second clause, verbatim: 'windows/Yolanda specifically stops reporting accel_class=cpu-only'. It has not. accel_class is still cpu-only. (2) Exit criterion 2 requires that /dev/dxg present with NO Vulkan loader report 'engine-missing' AND NAME IT in accel_reason. This host is EXACTLY that configuration, measured: /dev/dxg present (crw-rw-rw- 10,258), /dev/dri absent, vulkaninfo NOT on PATH, /usr/share/vulkan/icd.d absent entirely, and /usr/lib/wsl/lib carries libd3d12.so, libd3d12core.so, libdxcore.so — the D3D12 userspace is delivered, the Vulkan translation layer is not. The verdict present-unusable is therefore CORRECT for this distro as provisioned. The REASON is wrong: 'wsl2-no-dri-render-node' blames a missing DRI render node, which on WSL2 is a red herring — dxg IS the delivery path and a render node is not expected to exist. The true obstruction is engine-missing. This is esmeraldinha's note in this packet made concrete on a second host: a PROVISIONING statement wearing the costume of a HARDWARE statement. A scheduler reading it concludes the machine has no usable GPU, when what it has is an unprovisioned Vulkan loader — three packages away per 793-a8e7. (3) Detection is still FILE EXISTENCE, not enumeration: wsl2_paravirtual_gpu() is 'dxg_present && !dri_present && !already_found'. Nothing enumerates a physical device, so the llvmpipe-rejection criterion is not merely untested here, it is unimplementable in the current shape — there is no enumeration in which to reject a software rasterizer. WHAT I DID NOT DO AND WHY. I did not install a Vulkan loader or Mesa dzn into the build distro to reproduce the 2.04x measurement. That is provisioning the operator's machine to make a test pass, and the 2026-08-16 evidence for the speedup already exists in plan/issues/research/wsl2-igpu-vulkan-over-dxg-measured-2026-08-16.md from this same host; re-measuring it proves nothing new, while the CURRENT unprovisioned state is precisely the fixture criterion 2 asks about and it would have been destroyed by installing. I also did not change the probe: the fix wants real Vulkan enumeration plus a software-rasterizer rejection with a pinning test, which is a design with fleet-wide reach, not a reason-string edit. NARROWEST CORRECT NEXT STEP, offered not taken: on WSL2, when dxg is present and no Vulkan ICD is installed, accel_reason should read engine-missing rather than wsl2-no-dri-render-node. That alone satisfies criterion 2 and stops the matrix publishing a hardware claim it cannot support, without touching the enumeration design.
         - type: note
           ts: "2026-08-23T04:50:02Z"
           agent_id: windows-esmeraldinha-opus5-20260823T042116Z
@@ -35924,6 +36018,12 @@ plan_index:
         5 confirmed. Headlines recorded in the cycle's loop-status entry.
 
       events:
+        - type: note
+          ts: "2026-08-29T20:40:46Z"
+          agent_id: "linux-macuahuitl-claude-20260829t204046z"
+          host: linux
+          summary: |
+            NEW SWEEP TARGET CLASS from 793-zumy (yolanda, 2026-08-29): FIXTURE-BUILDS-ITS-OWN-INPUT — a test that constructs the struct it then asserts about (DeviceRecord literal, hand-rolled config, synthetic envelope) pins its own fixture and never reaches the production path it appears to cover; it reads exactly like producer coverage and is counted as such. Measured instance: a_wsl2_paravirtual_gpu_renders_as_present_unusable_never_as_none asserted a reason literal since 806-2r4s and stayed GREEN with the production literal reverted — found only because the mutation control ran FIRST. The (mutation, predicted-observable) pair for this class: revert a production literal the test appears to assert; predicted observable is the test staying green. Yolanda's structural remedy (hoist the shipped value into a pure fn so production is reachable, pin THAT, control both directions) is the fix template. They would not assume this file's instance is the only one in the tree; the sweep should not either. Cheatsheet entry added beside the falsifiability rules.
         - type: progress
           ts: "2026-08-23T11:43:13Z"
           agent_id: "linux-lenovinha-claude-20260823t114313z"
@@ -39245,6 +39345,79 @@ plan_index:
         containers on the same side of the boundary as the workload; 397 is
         executable for them today and this packet does not gate that.
 
+      events:
+        - type: evidence
+          ts: "2026-08-29T20:16:56Z"
+          agent_id: "macos-tlatoanis-macbook-air-claude-20260829t155859z"
+          host: macos
+          summary: |
+            RUNTIME ACCEPT-PROOF OBTAINED — and it found a delivery constraint that no amount of reading would have.
+
+            THE PRIMITIVE WORKS. With TILLANDSIAS_HOST_VSOCK_PORT=42421 the host prints `host vsock: listening on port 42421` at start, and the delegate fires: `ACCEPTED a guest-initiated connection (fd 12)`. That is the first time in this tree that anything has crossed guest->host. The listener, the delegate conformance, the fail-closed downcast and the fd duplication all execute against a live VM.
+
+            BUT THE GUEST STILL FAILED, AND BOTH FACTS ARE REAL. First run:
+                [vz] host vsock: listening on port 42421
+                GUEST: failed after 2.00s: TimeoutError: [Errno 110]
+                [vz] host vsock: ACCEPTED a guest-initiated connection (fd 12)
+            The host accepted AFTER the guest had already given up. I required both sides to report precisely because either line alone is a lie by omission: the host's ACCEPTED alone reads as "it works", and the guest's timeout alone reads as "no listener".
+
+            DISCRIMINATOR, 6 attempts in one guest command: six TimeoutErrors at 2.04-2.06s each, then SIX ACCEPTED lines (fd 12,13,14,15,16,17) delivered in a BURST after the command returned. Not one, not the first — all six, queued and delivered together. That is conclusive: Virtualization.framework RETAINS guest connection requests and hands them to the delegate only when the host services its runloop. The accepts were never lost; they were deferred past the guest's kernel deadline.
+
+            MECHANISM: acceptance is gated on the host pumping CFRunLoop. `--exec-guest` blocks on the control wire while the guest command runs and pumps nothing until it returns, so every request sits queued while the guest's 2.0s VSOCK_DEFAULT_CONNECT_TIMEOUT expires underneath it. The timeout is the kernel's, measured earlier against a deliberate 45s budget, so nothing here can be fixed by widening a caller's patience.
+
+            SCOPE, and this is the part not to overstate. This is NOT a general defect of the listener. It is a property of the pumping model of the code path that hosts it:
+              * `--exec-guest` (CLI diagnostic): pumps only between phases, nothing during command execution -> guest connects CANNOT complete. MEASURED, 6/6.
+              * TRAY mode (the product's normal path): status_item::run() drives NSApplication, which services the main runloop continuously -> accepts should be prompt. NOT MEASURED. I am not claiming it works; I am recording that the failure I measured has a cause that path does not obviously share, and that it needs its own proof.
+
+            CONSEQUENCE FOR THE REMAINING HALF: the in-guest hop cannot be validated through `--exec-guest`. Whatever forwards `inference:11434` must be exercised from a host context that pumps continuously, or the reverse channel will appear broken for reasons that have nothing to do with the forwarder. That is a constraint on how the next slice is TESTED, not only on how it is built, and it would have cost that slice a confusing day.
+        - type: evidence
+          ts: "2026-08-29T20:03:53Z"
+          agent_id: "macos-tlatoanis-macbook-air-claude-20260829t155859z"
+          host: macos
+          summary: |
+            HALF IMPLEMENTED, AND I AM NAMING WHICH HALF. The host can now accept guest-initiated vsock connections; nothing has accepted a LIVE one yet, and the in-guest hop does not exist. Do not read this as the packet's deliverable met.
+
+            LANDED (f473614b7, gate green, 102 vm-layer tests):
+              * VsockAcceptDelegate — the FIRST Objective-C protocol conformance in this crate. vz.rs:1855 records VZVirtualMachineDelegate as deliberately unobserved, so there was no declare_class! precedent to copy; this block is the pattern the next delegate follows.
+              * HostVsockListener — wraps setSocketListener:forPort: with the same fail-closed isKindOfClass downcast the existing connector uses, and DEREGISTERS on Drop so the framework cannot keep accepting onto a delegate about to be freed.
+              * Two invariants carry their reasoning because both fail silently: the accepted fd is DUPLICATED (VZVirtioSocketConnection closes its fd on dealloc and lives only for the callback — forwarding the raw fd yields an EBADF far from the accept), and a failed handoff REFUSES rather than accepting into a channel nobody reads, because accepting looks like a working connection to the guest while delivering nothing.
+
+            NOT DONE, explicitly:
+              * No lifecycle wiring. VzRuntime never constructs a HostVsockListener, so no port is registered on a running VM today.
+              * No in-guest hop. `inference:11434` still resolves to the podman-network container; nothing forwards it to CID 2. The packet's transparency criterion is NOT met and cannot be until that exists.
+              * NO RUNTIME PROOF of accept. The listener has never seen a connection. Its shape is pinned by four source-scan tests; runtime is the packet's remaining criterion.
+
+            ON THOSE TESTS, precisely. I verified the ANCHOR GUARD fires — renaming the sliced symbol makes them FAIL rather than silently scanning the whole remainder and passing. I did NOT obtain a red run for the needle assertions themselves: any violation that would trigger them (removing the dup, returning YES on a failed handoff) also breaks compilation, so the test never runs to fail. Saying "all four watched red" would have been false; the anchor half is proven, the needle half is reasoned.
+
+            TWO GUARD FALSE POSITIVES FIXED RATHER THAN SUPPRESSED — worth the fleet's attention because the convenient response to each was to damage correct code:
+              * check-source-slice-bounds.sh accused a bound whose declaration is `unsafe fn ...`; its declaration regex admits `pub`/`async` but not modifier prefixes. A checker blind to a declaration form reports a working slice as dead — this guard's own failure mode one level up — and the tempting fix is to weaken the assertion it protects. Widened to admit modifier words, and its own remedy text demands a mutation control, so I ran one: a genuinely absent bound is still caught at exit 1. Widening a checker without proving it can still fail merely relocates the vacuousness into the guard.
+              * check-no-spawn-in-if-not.sh then read the `|` INSIDE that quoted regex as a shell pipeline. A `# sigpipe-ok: <reason>` marker was available and sanctioned, and would have been a comment asserting "I checked, it is fine" attached to a line the checker never understood. Rewrote the regex without alternation instead.
+            Both guards parse a PATTERN LANGUAGE EMBEDDED IN A HOST LANGUAGE — Rust declarations by regex, shell by regex — and both met a nesting level they do not model. That is where this class lives, and 11 unsafe-fn declarations plus 18 checked slice bounds are in scope for the first one.
+        - type: evidence
+          ts: "2026-08-29T19:50:40Z"
+          agent_id: "macos-tlatoanis-macbook-air-claude-20260829t155859z"
+          host: macos
+          summary: |
+            MEASURED BEFORE BUILDING, on the host that owns the packet, 2026-08-29.
+
+            THE PACKET'S CLAIMS STILL HOLD, ten days on — re-checked rather than inherited:
+              * `VZVirtioSocketListener` / `setSocketListener` appear NOWHERE in tree code. The only occurrence is the objc2-virtualization FEATURE FLAG in crates/tillandsias-vm-layer/Cargo.toml:90 — the binding is compiled in and used by nothing.
+              * transport_macos.rs exposes exactly one direction: `connect_to_vm_vsock`. There is no listener, no accept path.
+              * No Objective-C protocol is implemented anywhere in this crate. vz.rs:1855 notes VZVirtualMachineDelegate is deliberately NOT observed, so the host listener needs the FIRST delegate conformance in the codebase — that is the real content of the 8-hour estimate, not the wiring around it.
+
+            WHAT THE GUEST ACTUALLY SEES TODAY, which the packet did not record and which changes the design:
+
+              guest -> CID 2 (host), ports 42420 / 11434 / 9999:
+                ETIMEDOUT — "Connection timed out", errno 110
+
+            NOT `ENETUNREACH` and NOT `ECONNREFUSED`, and the difference is the whole finding:
+              * ENETUNREACH would mean no path — the guest's stack cannot route to the host at all, and the packet would need a different design entirely (host connects IN to a guest-side reverse channel, using the one primitive that exists).
+              * ECONNREFUSED would mean the path is live and the host actively rejects.
+              * ETIMEDOUT means the guest's vsock stack ROUTES to CID 2 and transmits, and nothing on the host side answers. The transport is there; only the listener is missing. So the packet is buildable as filed, and this is the confirming measurement it lacked.
+
+            AND THE FAILURE IS BOUNDED, WHICH I INITIALLY GOT WRONG. My first reading of "timed out" was that an absent host service would present as a HANG — the exact silent-stall shape this milestone exists to remove. Measured with a deliberate 45-SECOND budget so the bound could not come from my own probe: the connect failed after 2.0s. That is Linux's VSOCK_DEFAULT_CONNECT_TIMEOUT (2*HZ in af_vsock), not socat's -T and not my timeout. So a guest-side forwarder gets a fast, clean, errno-bearing failure when the host has no listener, and does NOT need to invent its own bound to avoid stalling an agent. Recording the correction because "it hangs" would have justified defensive machinery that the kernel already provides.
+
+            DESIGN CONSEQUENCE, now evidence-backed: the two halves are independent. The host listener is a pure macOS/objc2 problem (VZVirtioSocketListener + a VZVirtioSocketListenerDelegate conformance + setSocketListener:forPort:, all three present in objc2-virtualization 0.2.2 and already feature-enabled). The in-guest hop — something answering `inference:11434` inside the podman enclave and relaying to CID 2 — is a Linux-side problem that can be built and tested against ANY host listener, including a throwaway one, because the transport semantics are now known: connect succeeds or fails ETIMEDOUT in 2s.
     - packet_id: plan-compact-executes-on-help-and-ignores-every-flag
       order: 831-v9kt
       status: ready
@@ -54373,6 +54546,168 @@ plan_index:
         guard for one idiom cannot cover 1248 sites. 897-5m9y and 899-q9di both
         record instances.
       events:
+        - type: note
+          ts: "2026-08-29T20:34:31Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            A THIRD GATE CAUGHT A THIRD THING, and narrowing was the right answer rather than arguing with it.
+
+            After the compound revert, ./build.sh --check refused one of the five -qF redos: litmus-observability-convergence-script-shape.yaml, under the 634-39ik expression-pinning rule — "a NEW litmus step must assert a PROPERTY, not pin how source is currently written".
+
+            THE GATE IS DIFF-SCOPED AND CANNOT TELL A REWORD FROM A NEW STEP. The assertion it flagged is pre-existing; I only changed its FORM, from `grep -cF ... | grep -qF ...` to the staged equivalent. But the gate sees a changed line as an added step, and it is not wrong to: from a diff there is no difference.
+
+            I REVERTED THAT FILE rather than adding a negative control to satisfy it. Growing an unrelated test to make my migration pass is scope creep, and the whole value of this migration is that it changes FORM and not MEANING — a conversion that forces a test to acquire new assertions has stopped being a conversion. Four of the five redos landed; that one waits for whoever is actually working on that test.
+
+            WORTH RECORDING FOR THE REMAINING ~300 SITES: every conversion must be verdict-invariant AND gate-neutral. Expect 634-39ik to fire on any conversion of a step that pins a source expression, and treat it as a signal to skip that site rather than to modify the test.
+
+            FOUR LAYERS HAVE NOW EACH CAUGHT SOMETHING THE OTHERS COULD NOT, on the same batch:
+              per-file YAML validation  -> the unescaped quote that broke 16 files
+              the suite verdict compare -> the dropped `!` that inverted an assertion
+              ./build.sh --check        -> the expression-pinning rule on a reworded step
+              and the snapshot          -> made all three recoveries free
+            That is the batch discipline earning its cost three times in one batch.
+        - type: implemented
+          ts: "2026-08-29T20:25:40Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            BATCH 3 — the five -qF redos landed; THE COMPOUND CLASS IS NOT AUTO-CONVERTIBLE AND I HAVE THE COUNTEREXAMPLE THAT PROVES IT.
+
+            LANDED: the 5 held -qF conversions, now that macbook's BSD grep 2.6.0 run put every consumer variant at 12/12 on all four regimes. 7 sites across 5 files (5 literal + 1 ere + 1 i_ere), verdicts invariant: 248 pass / 1 fail, the single red being the pre-existing freshness-inventory-shape.
+
+            ATTEMPTED AND REVERTED IN FULL: the 17 "safe-looking" compound producers via mf_stage_sh. They converted, they parsed, and THREE LITMUS TESTS WENT RED — 245/4 against 248/1. By my own rule a verdict change is a conversion bug, so I diagnosed rather than shipped, and both causes are the regex not understanding shell grammar.
+
+            THE SERIOUS ONE — A DROPPED NEGATION. litmus:git-mirror-no-anonymous-daemon-write was:
+
+                grep -Fq 'config --unset-all http.receivepack' F && ! grep -vE '^#' F | grep -qiE 'PATTERN' && echo ok
+
+            `|` binds tighter than `!`, so the shell parses that as
+
+                grep -Fq … F && ! ( grep -vE '^#' F | grep -qiE 'PATTERN' ) && echo ok
+
+            My converter split at the LAST pipe, swallowed `grep -Fq … && ! grep -vE …` into "the producer", and emitted a POSITIVE mf_holds_i_ere. IT INVERTED THE ASSERTION. It happened to go red here; a different pattern would have gone green while asserting the opposite of what the author wrote. That is worse than the defect this packet is fixing.
+
+            THE OTHER — A PRODUCER WHOSE NON-ZERO IS THE POINT. litmus:build-cache-sweep-trigger was `test -x F && F | grep -qE '^(ok:…|due:…)'`. Staged with an asserted 0, it fails whenever the script reports "due" with a non-zero status — the exact intentional-non-zero case mf_stage exists to let a step DECLARE, and which a mechanical rule cannot infer.
+
+            THE CONCLUSION, and it should go in the migration ordering: A REGEX CANNOT CONVERT COMPOUND PRODUCERS, because it cannot see `!`, operator precedence, or which stage's status the author meant. The 22 compound sites need HAND conversion at reading pace, one at a time, each with its own judgement about the expected exit code. mf_stage_sh is still the right tool for them; the automation around it is not.
+
+            THE DISCIPLINE PAID FOR ITSELF TWICE MORE. First: my initial apply forgot that adding `"` around the shell string terminates the YAML scalar — 16 files converted, ALL 16 caught by per-file validation, reverted, zero corpus damage. Second: after fixing the escaping, the suite caught the semantic inversion the validator could not see. Snapshot, convert, validate every file, re-run, require invariance — each layer caught something the previous one could not.
+
+            STANDING SCORE: 46 direct + 7 in this batch = 53 sites converted, verdicts invariant at every step. Remaining: 22 compound (hand), ~282 multi-pipe or declined (hand).
+        - type: verified
+          ts: "2026-08-29T19:45:11Z"
+          agent_id: "linux-macuahuitl-claude-20260829t194511z"
+          host: linux
+          summary: |
+            12-ARM PORTABILITY: ALL FOUR FLEET REGIMES NOW MEASURED GREEN. linux/GNU closed on macuahuitl this hour: direct run 12/12 rc=0, runner-resolved grep verified as /usr/bin/grep = GNU grep 3.12 via bash -c (NOT the interactive shell's ugrep 7.8.4 alias — the same attribution trap macbook documented on darwin, present on this host too; regime checked at the raw tool: 'a+b' matches literally, BRE). Full matrix: darwin/BSD grep 2.6.0-FreeBSD + bash 3.2.57; MINGW64/GNU grep 3.0 + bash 5.3.15; WSL2/GNU grep 3.12 + bash 5.3.9; linux/GNU grep 3.12. The brace arm macbook flagged as the one to watch under a stricter grep passes under GNU 3.12 on two hosts. The 418-site conversion is unblocked on every dialect axis; the flag table governs.
+        - type: evidence
+          ts: "2026-08-29T19:37:43Z"
+          agent_id: "linux-macuahuitl-claude-20260829t193742z"
+          host: linux
+          summary: |
+            12-ARM RE-RUN GREEN ON BOTH WINDOWS SHELLS (yolanda, trunk 689c2534c merged), regimes attached: MINGW64 bash 5.3.15/GNU grep 3.0 — 12/12; WSL2 Fedora 44 bash 5.3.9/GNU grep 3.12 — 12/12; FIXTURE_RC read from inside the guest per the wrapper hazard. All four dialect arms pass in both: BRE/ERE divergence both directions, literal-brace under the BRE consumer, -qF, -qx. THE DETAIL THAT MAKES THIS STRONG: those greps are 3.0 and 3.12 — a ~12-year span, and the OLD one is the Windows-native side where a dialect regression would land first; agreement across that gap is what the BRE/ERE fix needed proving, far more than two modern greps agreeing would. Windows exposure for the 418 grep -q call sites: CLOSED. Yolanda has done no conversions and will do none without the flag table. STILL PENDING for the 12-arm model: the darwin re-run (BSD grep — the one non-GNU implementation in the fleet; macbook dispatched).
+        - type: evidence
+          ts: "2026-08-29T19:33:36Z"
+          agent_id: "macos-tlatoanis-macbook-air-claude-20260829t155859z"
+          host: macos
+          summary: |
+            DIALECT RE-RUN: 12/12 GREEN ON DARWIN, exit 0, trunk 689c2534c, tlatoanis-macbook-air. All arms by name:
+
+              ok: premise holds: in a pipefail-less shell (the runner's), the piped form masks exit 7
+              ok: mf_stage makes the producer's failure the verdict
+              ok: a passing producer is unchanged
+              ok: an intentional non-zero exit is expressible, not a false positive
+              ok: first-N reads a finished buffer; the producer survived (rc=0)
+              ok: stderr is captured by default
+              ok: no PIPESTATUS dependency in the step model (the bash-ism would be silently empty under zsh)
+              ok: mf_holds is BRE and mf_holds_ere is ERE — they disagree exactly as grep does
+              ok: …and they disagree in the other direction too
+              ok: a literal-brace pattern survives the BRE consumer (it errors under ERE)
+              ok: mf_holds_literal is fixed-string (-qF): '.' is a dot, not any-char
+              ok: mf_holds_line is whole-line (-qx)
+              ok:litmus-step-model:all
+
+            THE REGIME, and the grep line is the point this time:
+              bash  GNU bash 3.2.57(1)-release (arm64-apple-darwin25) — macOS system bash, PRE-4.0
+              grep  grep (BSD grep, GNU compatible) 2.6.0-FreeBSD, at /usr/bin/grep
+              uname Darwin 25.6.0 arm64
+
+            A CORRECTION THAT MATTERS FOR HOW THIS RESULT IS READ, and it corrects my own prior assumption. This host has ugrep 7.8.4 aliased as `grep` in the INTERACTIVE shell — `grep --version` typed at a prompt says ugrep, and I had that recorded as a host fact. It is not the dialect under test. A NON-INTERACTIVE bash script gets /usr/bin/grep (BSD 2.6.0-FreeBSD), because aliases do not apply there — and `bash -c` is exactly how run-litmus-test.sh executes every step. Verified directly: `bash -c 'command -v grep'` -> /usr/bin/grep. So this run exercises BSD grep, which is the dialect the fix was aimed at; if anyone re-runs this and sees ugrep in the banner, they are reading their prompt's alias, not the runner's grep.
+
+            DIALECT SANITY CHECK done independently of the fixture, so the green is not self-certifying: `printf 'a+b\n' | grep -q 'a+b'` MATCHES on this host, i.e. `+` is literal — BRE semantics confirmed at the raw tool, which is the premise the mf_holds/mf_holds_ere split rests on. The two arms disagreeing "exactly as grep does" is therefore disagreement against a dialect I measured rather than assumed.
+
+            WHAT THIS DOES AND DOES NOT CLOSE. It closes darwin/BSD-grep for the four new dialect arms — the axis the earlier 8/8 did NOT cover, since those arms did not exist. It says nothing about GNU grep behaviour, which is the linux and forge-container regime; the arms would need re-running there. The brace arm in particular is the one to watch elsewhere: a `{name}` pattern ERRORS under ERE, so a host whose grep is stricter about brace expressions could fail that arm where BSD's is permissive.
+        - type: implemented
+          ts: "2026-08-29T19:50:03Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            BATCH 2 — 39 SITES ACROSS 26 FILES. Verdicts invariant: 248 pass / 1 fail against a 247/2 baseline, and the one that flipped GREEN is my own 718-ja7g regression, fixed earlier. No new reds.
+
+            THE MECHANICAL FRACTION IS SMALLER THAN I TOLD YOU, and this is a correction to my own estimate from three hours ago. I wrote "115 of 418 are single-pipe and genuinely mechanical". Running a FAITHFUL automated rule over the corpus:
+
+              ok (direct)          46
+              compound-producer    22   <- mf_stage runs "$@"; it cannot take `a && b`, `x; y`, $(…) or a redirect
+              no-match            282   <- multi-pipe chains and shapes the rule declines
+              unmapped flag         0   (after adding -qi/-qiE variants)
+
+            So the truly mechanical share is 46/350 ≈ 13%, not 27%. "Single-pipe" was necessary but not sufficient: the producer must ALSO be a simple command.
+
+            MODEL GAP FOUND BY THE MIGRATION, and closed: mf_stage_sh, for a compound producer. It is NOT a retreat to the shell string this packet is about — the defect was never that a shell string exists, it is that a PIPELINE yields one status for several stages and lets a consumer SIGPIPE its producer. Staged, the whole compound producer is ONE stage with ONE asserted status and the consumer reads a finished buffer. Also added mf_holds_i / mf_holds_i_ere, because approximating a case-insensitive match with a case-sensitive consumer is exactly the flag-dropping this packet's own correction forbids.
+
+            I ALSO BROKE THE CORPUS ONCE AND CAUGHT IT, which is the reason the batch discipline exists. My first apply used mf_stage_sh with a naive `"` escape and produced INVALID YAML in at least one file. I had snapshotted first, reverted to zero diff, and re-ran with two changes: skip compound producers entirely rather than risk their quoting, and validate EVERY file individually after conversion with revert-on-failure. Result: 46 conversions, 31 files, zero reverts. The safe rule shipped; the clever one did not.
+
+            A PRE-EXISTING FINDING, not mine and not fixed here: openspec/litmus-tests/litmus-expert-groundtruth-harness.yaml DOES NOT PARSE AS YAML — `tillandsias-plan validate-yaml` reports blocked:yaml-load-failed at line 67, and it fails identically at HEAD before any of my changes. Worth someone's attention: a litmus definition the sanctioned reader cannot load is a test whose metadata nothing can check.
+
+            HELD BACK DELIBERATELY: 5 conversions in the -qF class, reverted rather than landed, because the darwin/BSD re-run of the dialect arms is still pending and macuahuitl named -qF/-qx as the classes at risk on the one non-GNU grep. They cost nothing to redo once that reports. The 20 plain-BRE and 16 ERE conversions are in the class measured safe on every regime that has reported.
+
+            WORTH RECORDING ABOUT THE PENDING VERIFICATION: a conversion cannot INTRODUCE a dialect difference. mf_holds delegates to the same grep with the same flag the original line used, so any BSD/GNU divergence was already there. What is newly at risk is only the `printf '%s\n' "$VAR" | grep` plumbing, which is what arms 7-12 exercise — so the pending run is about the CONSUMER contract, exactly as macuahuitl framed it, and not about the 39 sites landed here.
+        - type: implemented
+          ts: "2026-08-29T19:17:24Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            MIGRATION BATCH 1 — AND A FINDING THAT MUST LAND BEFORE ANYONE CONVERTS THE OTHER 411: THE MODEL AS SHIPPED WOULD HAVE SILENTLY REINTERPRETED THE LARGEST CLASS.
+
+            I surveyed the shapes before converting, and the "mechanical" assumption did not survive it.
+
+              the grep -q* flag distribution, MEASURED over the corpus:
+                grep -q   321      grep -qE   85      grep -qF   46
+                grep -qx   18      grep -qiE  10      grep -qv/-qvE/-qi  7
+
+            `mf_holds` shipped using `grep -qE`. The MAJORITY of call sites are plain `grep -q`, which is BASIC regex. So the obvious rewrite
+                producer | grep -q 'X'   ->   mf_stage p 0 V -- producer && mf_holds V 'X'
+            would have quietly reinterpreted 321 assertions as EXTENDED regex.
+
+            THAT IS NOT PEDANTIC. BRE and ERE give OPPOSITE answers on the same pattern, verified both directions:
+                'a+b' on "a+b" :  BRE MATCH,    ERE no match
+                'a+b' on "aab" :  BRE no match, ERE MATCH
+            74 plain-`grep -q` patterns in this corpus carry ERE-significant metachars. And one does not merely mismatch — it ERRORS:
+                fail:enclave-service-dead:service={name}:state={state}:rc={exit_code}…
+                grep -qE  ->  "invalid repeat" at position 39
+            `{name}` is an interval expression in ERE and a literal brace in BRE.
+
+            FIXED BEFORE MIGRATING: mf_holds is now BRE, and there is one variant per grep flag — mf_holds_ere (-qE), mf_holds_literal (-qF), mf_holds_line (-qx), each with an mf_lacks_* negation. The flag is PART OF THE ASSERTION; a conversion that drops it is a conversion bug. Now whatever flag the original carried, there is a consumer with exactly those semantics and no judgement required at the call site.
+
+            Pinned by five new fixture arms (12 total, all green) using the REAL divergence rather than a synthetic one, including the brace pattern that errors under ERE.
+
+            THE SURVEY ALSO CORRECTS "MECHANICAL": only 115 of the ~418 are a single producer piped once into grep -q. 341 are MULTI-PIPE chains. Those need the whole chain staged or its intermediate stages preserved, and are not a one-line rewrite. The migration is 115 easy + ~300 that need reading.
+
+            BATCH 1: litmus-ledger-fragment-convergence.yaml, all 7 simple sites, converted and re-run. VERDICTS UNCHANGED (11/11 steps OK), which is the bar my own next_action set — any change would have been a conversion bug, not a discovery.
+
+            AND THESE SEVEN ARE A PERFECT SPECIMEN OF THE LATENT DEFECT, which sharpens my earlier suite-wide result. Each was
+                cargo test … 2>&1 | grep -q 'test result: ok' && echo 'ok: …'
+            MEASURED: that invocation emits TWO `test result:` lines (two test binaries). If one binary FAILS while the other passes, `grep -q 'test result: ok'` matches the passing line and the step reports success on a failing suite — and cargo's own non-zero exit is discarded entirely. Demonstrated:
+                printf 'test result: ok. 5 passed\ntest result: FAILED. 1 failed\n' | grep -q 'test result: ok'   -> PASS
+
+            So my earlier finding stands but must be read precisely: ZERO MASKED FAILURES **TODAY** is not "these pipelines cannot mask". These can, in an assertion about whether tests pass, which is the most consequential place to have one. The suite-wide pipefail measurement found nothing because everything currently passes. Converted, cargo's status IS the verdict.
+        - type: evidence
+          ts: "2026-08-29T18:52:59Z"
+          agent_id: "linux-macuahuitl-claude-20260829t185259z"
+          host: linux
+          summary: |
+            WSL2 LEG GREEN — PORTABILITY EXIT CRITERION FULLY MET, all three fleet regimes: darwin bash 3.2.57 (oldest in fleet), MINGW64 bash 5.3.15 (cygwin), and now the WSL2 distro bash 5.3.9 (Fedora 44 container, kernel 6.18.33.2-microsoft-standard-WSL2, working dir on /mnt/c drvfs — the 9P slow lane from 895-bkrn). 8/8 including the first-N arm on drvfs, FIXTURE_RC=0 read from a file the fixture wrote INSIDE the guest, not from the wrapper (yolanda controlled for the wsl.exe exit-code swallow with bash -c 'exit 7' returning 0 through the same wrapper earlier the same day). The bulk migration (698 sites: 418 grep -q, 235 head, 93 tail) is unblocked on every platform axis; batches must still prove verdict-invariance per the packet's own rule.
         - type: evidence
           ts: "2026-08-29T18:42:09Z"
           agent_id: "linux-macuahuitl-claude-20260829t184209z"
@@ -54385,6 +54720,25 @@ plan_index:
           host: linux
           summary: |
             DARWIN PORTABILITY LEG GREEN — recorded by the coordinator from tlatoanis-macbook-air's report, regime attached: GNU bash 3.2.57(1)-release (macOS system bash, PRE-4.0 — no associative arrays, no declare -g, the oldest bash in the fleet), trunk 91d732751, scripts/test-litmus-step-model.sh 8/8 exit 0, /bin/sh (also bash) passes too. Passing on 3.2 is what makes the bulk migration safe on this axis, not "passing on a mac". NON-DEFECT recorded so nobody files it: `zsh scripts/test-litmus-step-model.sh` fails with "command not found: mf_stage" and that is EXPECTED — bash is the runner by construction (run-litmus-test.sh executes steps as `bash -c 'source "$LITMUS_STDLIB"; ...'`) and the PIPESTATUS arm is a static grep, not a zsh-load claim; assertion wording + header comment tightened to say so. REMAINING before bulk migration: the MSYS leg (queued on yolanda after their 760-hzi4 rung).
+        - type: evidence
+          ts: "2026-08-29T18:36:30Z"
+          agent_id: "macos-tlatoanis-macbook-air-claude-20260829t155859z"
+          host: macos
+          summary: |
+            DARWIN PORTABILITY: GREEN. scripts/test-litmus-step-model.sh run on tlatoanis-macbook-air (macOS 26.6.2, Apple M5) 2026-08-29 at trunk 91d732751: 8/8 assertions pass, exit 0, final line ok:litmus-step-model:all.
+
+              ok: premise holds: in a pipefail-less shell (the runner's), the piped form masks exit 7
+              ok: mf_stage makes the producer's failure the verdict
+              ok: a passing producer is unchanged
+              ok: an intentional non-zero exit is expressible, not a false positive
+              ok: first-N reads a finished buffer; the producer survived (rc=0)
+              ok: stderr is captured by default
+              ok: no PIPESTATUS in the step model (portable to zsh/BSD)
+              ok:litmus-step-model:all
+
+            THE SHELL THAT MATTERS: GNU bash 3.2.57(1)-release (arm64-apple-darwin25). That is macOS's system bash, PRE-4.0, and it is the strongest portability signal available here — it lacks associative arrays, `declare -g`, `${var^^}`, and the other post-3.2 conveniences a Linux-developed script picks up without noticing. Passing on 3.2 is what makes the bulk migration safe, not merely passing on darwin. `/bin/sh` is bash on this host and also passes.
+
+            ONE THING I CHECKED AND AM REPORTING AS A NON-DEFECT, because the opposite claim would have been easy to make and wrong. Running the script under zsh fails ("command not found: mf_stage", "BIG_rc: parameter not set"), which looks like a portability gap next to an assertion literally worded "portable to zsh/BSD". It is not one. run-litmus-test.sh:1228 executes every step as `bash -c 'source "$LITMUS_STDLIB"; ...'`, so bash is the execution context by construction and zsh is never the runner; and that assertion is a STATIC grep proving the stdlib contains no PIPESTATUS reference — a bash-ism that is empty under zsh — rather than a claim that the stdlib loads under zsh. The check is sound and its wording is about the bash-ism, not the interpreter. Recording it so the next person who runs `zsh scripts/test-litmus-step-model.sh` does not file the finding I nearly filed.
         - type: verified
           ts: "2026-08-29T18:21:59Z"
           agent_id: "linux-lenovinha-claude-20260828t223829z"
@@ -56404,6 +56758,12 @@ plan_index:
         trust `bash -n`. Syntax was valid in both cases where a conversion broke
         behaviour.
       events:
+        - type: note
+          ts: "2026-08-29T19:43:35Z"
+          agent_id: "linux-macuahuitl-claude-20260829t194335z"
+          host: linux
+          summary: |
+            Removed a 0-byte tracked file named 'grep' from the repo ROOT (commit after 1aa5d7784) — a materialization artifact of the exact bug scripts/test-tool-materialize.sh:18-21 documents (a grep FUNCTION made 'command -v grep' return the bare name, so the materializer wrote to cwd), swept into 8f971188e by git add -A. Found 2026-08-29 when a regime-attribution probe on macuahuitl resolved 'command -v grep' to ./grep. An empty file named after a core tool at repo root is a latent shadow for any dot-in-PATH environment. Owner (lenovinha) has veto if it was intentional.
         - type: note
           ts: "2026-08-29T00:01:25Z"
           agent_id: "linux-lenovinha-claude-20260828t223829z"

@@ -70,7 +70,7 @@ critical_path:
     # single stamp. Without a denominator delta that reads as regression, and
     # the honest reading — the target got bigger — is unavailable to anyone
     # looking at the report alone.
-    command: "scripts/freshness-inventory.sh | grep -qE '^freshness-target: scope=[^ ]+ excluded=[0-9]+ denominator_delta=(unknown|[+-][0-9]+) source=methodology.yaml$' && echo 'ok: denominator delta reported'"
+    command: "mf_stage prod 0 OUT -- scripts/freshness-inventory.sh && mf_holds_ere OUT '^freshness-target: scope=[^ ]+ excluded=[0-9]+ denominator_delta=(unknown|[+-][0-9]+) source=methodology.yaml$' && echo 'ok: denominator delta reported'"
     timeout_ms: 60000
     expected_behavior: "ok: denominator delta reported"
 
@@ -85,7 +85,7 @@ critical_path:
     expected_behavior: "ok: 2026-07-15 incident components stamped"
 
   - step: "Req: the report names the next audit target"
-    command: "scripts/freshness-inventory.sh | grep -qE '^freshness-next: [^ ]+ source=(unstamped|stale) seed=[^ ]+$' && echo 'ok: next-target grammar'"
+    command: "mf_stage prod 0 OUT -- scripts/freshness-inventory.sh && mf_holds_ere OUT '^freshness-next: [^ ]+ source=(unstamped|stale) seed=[^ ]+$' && echo 'ok: next-target grammar'"
     timeout_ms: 60000
     expected_behavior: "ok: next-target grammar"
 

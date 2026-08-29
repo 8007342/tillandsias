@@ -244,8 +244,51 @@ _toolbox_exists() {
 # init so `./build.sh --check` does not fail with "Missing host build tools".
 _toolbox_initialized() {
     toolbox run --container "$TOOLBOX_NAME" \
-        bash -c 'command -v gcc && command -v musl-gcc && command -v pkg-config && command -v ruby && command -v rustup && command -v jq && command -v yq && command -v rg && command -v openssl && command -v x86_64-w64-mingw32-gcc && rustup target list --installed 2>/dev/null | grep -qxF x86_64-unknown-linux-musl && rustup target list --installed 2>/dev/null | grep -qxF x86_64-pc-windows-gnu' \
+        bash -c 'command -v gcc && command -v musl-gcc && command -v pkg-config && command -v ruby && command -v rustup && command -v jq && command -v yq && command -v rg && command -v openssl && command -v x86_64-w64-mingw32-gcc && command -v podman && command -v nix && command -v node && command -v systemd-run && rustup target list --installed 2>/dev/null | grep -qxF x86_64-unknown-linux-musl && rustup target list --installed 2>/dev/null | grep -qxF x86_64-pc-windows-gnu' \
         &>/dev/null 2>&1
+}
+
+# ── Helper: host-escape shims for tools the toolbox cannot carry (934-7jd4) ─
+# podman and nix are HOST facilities: rootless podman needs the host's user
+# namespace and storage, and nix serves the host-shared chroot store in $HOME.
+# Neither exists inside the toolbox image, and their absence was silent — the
+# ci-full lane on this host lost its litmus phase (require_podman red) and its
+# nix guest-binary lane (blocked:nix-toolbox:image-pull-failed) for three days
+# after the capability-gate change routed builds through the toolbox, while
+# every interactive probe on the host answered fine (the 2/2-inside vs
+# 0/4-outside matrix on packet 934-7jd4).
+#
+# flatpak-spawn --host is the escape: it forwards stdio, the cwd and the exit
+# code EXACTLY (verified on macuahuitl 2026-08-29: `bash -c "exit 7"` -> 7;
+# pwd inside == pwd outside; $HOME is the same mount). What it does NOT
+# forward is the environment, so the shim re-exports the project's control
+# namespaces explicitly — the same boundary lesson the re-exec below already
+# records for toolbox run.
+_install_host_escape_shims() {
+    local shim_src="$HOME/.cache/tillandsias/host-escape-shim.sh"
+    mkdir -p "$(dirname "$shim_src")"
+    cat > "$shim_src" <<'SHIM'
+#!/usr/bin/env bash
+# Host-escape shim (934-7jd4): TOOL_NAME does not exist in this toolbox; run
+# the HOST's binary via flatpak-spawn, which forwards stdio/cwd/exit code
+# exactly. Env does not cross by default — forward the control namespaces.
+_fs_args=()
+for _v in $(compgen -e); do
+    case "$_v" in
+        TILLANDSIAS_*|LITMUS_*|FORGE_*|NIX_*|CONTAINER_HOST|DOCKER_HOST)
+            _fs_args+=("--env=$_v=${!_v}") ;;
+    esac
+done
+exec flatpak-spawn --host "${_fs_args[@]}" TOOL_NAME "$@"
+SHIM
+    local tool
+    for tool in podman nix; do
+        sed "s/TOOL_NAME/$tool/g" "$shim_src" > "$shim_src.$tool"
+        toolbox run --container "$TOOLBOX_NAME" \
+            sudo install -m 0755 "$shim_src.$tool" "/usr/local/bin/$tool"
+        rm -f "$shim_src.$tool"
+    done
+    rm -f "$shim_src"
 }
 
 # ── Ensure toolbox exists and is initialized ──────────────────────────────
@@ -295,6 +338,7 @@ if ! _toolbox_initialized; then
             ruby perl-FindBin \
             procps-ng findutils diffutils \
             jq yq ripgrep openssl \
+            nodejs systemd \
             mingw64-gcc \
         2>&1 | while IFS= read -r line; do printf '  [dnf] %s\n' "$line"; done
 
@@ -312,6 +356,8 @@ if ! _toolbox_initialized; then
     toolbox run --container "$TOOLBOX_NAME" \
         bash -l -c "rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl x86_64-pc-windows-gnu" \
         2>&1 | while IFS= read -r line; do printf '  [rustup] %s\n' "$line"; done
+
+    _install_host_escape_shims
 
     toolbox run --container "$TOOLBOX_NAME" \
         bash -c "mkdir -p '$(dirname "$MARKER_FILE")' && touch '$MARKER_FILE'"

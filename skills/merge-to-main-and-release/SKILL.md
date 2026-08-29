@@ -50,7 +50,14 @@ builds. The ALL-platform completeness requirement from
 all-green on `required` rows before that release") lives HERE instead:
 
 ```bash
-ruby -ryaml -e 'data = YAML.load_file(%q(openspec/tray-parity-matrix.yaml)); gaps = 0; data[%q(features)].each { |f| next unless f[%q(parity)] == %q(required); [%q(linux), %q(macos), %q(windows)].each { |p| (puts p + %q(: ) + f[%q(capability)].to_s + %q( status=) + f[p].to_s; gaps += 1) if f[p] != %q(done) } }; puts %q(parity gaps: ) + gaps.to_s; exit 1 if gaps > 0'
+# 746-htj9: the sanctioned YAML path — ruby is NOT present in every
+# environment this runbook runs in (it broke the forge once already).
+. scripts/plan-binary-probe.sh
+PLAN="$(resolve_plan_binary)" || { echo 'blocked: no runnable tillandsias-plan (run scripts/cycle-preflight.sh)'; exit 1; }
+gaps="$("$PLAN" yaml-json openspec/tray-parity-matrix.yaml | jq -r '.features[] | select(.parity=="required") | . as $f | ("linux","macos","windows") | select($f[.] != "done") | "\(.): \($f.capability) status=\($f[.])"')"
+printf '%s\n' "$gaps" | grep -v '^$' || true
+echo "parity gaps: $(printf '%s' "$gaps" | grep -c . || true)"
+test -z "$gaps"
 ```
 
 If this exits non-zero, the parity matrix has unverified/incomplete `required`
@@ -449,9 +456,14 @@ branch is not ahead of upstream.
   deletions rejected server-side).
 - **NEVER skip the workflow_dispatch step**: the release workflow is manual-only by design. If the user wants automatic-on-tag, they edit release.yml first.
 - **NEVER bump VERSION on linux-next**; only on main as part of the release commit. Sibling hosts (osx-next / windows-next) consume VERSION from their respective merge points; bumping it on linux-next desyncs them.
-- The release ships three platform artifacts to ONE GitHub release with matching versions:
-  Linux musl (`release` job), macOS arm64 thin tray (`macos-release`), Windows x64 thin tray
-  (`windows-release`). The macOS/Windows jobs `needs: release` and upload via `--clobber`.
+- The release ships three platform artifact SETS to ONE GitHub release with matching versions:
+  Linux musl (`release` job), macOS arm64 thin tray + DMG (`macos-release`), Windows x64 thin
+  tray zip + **MSIX package** (`windows-release`). The macOS/Windows jobs `needs: release` and
+  upload via `--clobber`. The MSIX (`tillandsias-tray-<ver>-windows-x64.msix`) is the
+  Microsoft Store's release artifact (operator directive 2026-08-29, order 776-g6r3): the
+  Store re-signs submitted MSIX itself, so its presence is NOT gated on the Authenticode
+  identity — a release whose windows job produced a zip but no MSIX is incomplete once
+  776-g6r3's packaging slice lands, and step 7's asset check should name it missing.
 - **NEVER cancel an in-flight release** — let it complete or fail, then handle in the next cycle.
 - **NEVER end a cut without the step-5 back-merge pushed to the source branch.**
   Until it lands, every sibling push is refused `blocked:version-not-monotonic`

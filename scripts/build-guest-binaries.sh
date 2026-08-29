@@ -298,6 +298,18 @@ build_with_nix() {
 build_with_cargo() {
     command -v cargo >/dev/null 2>&1 || return 1
 
+    # ORDER 934-7jd4: PREFLIGHT EVERY REQUIREMENT BEFORE COMPILING ANYTHING.
+    # This fallback used to compile the entire x86_64 target (~73s) and only
+    # then discover the aarch64 linker was absent — a doom knowable in
+    # milliseconds, reported as a linker problem when the actionable fact was
+    # that the nix lane (which carries that linker) was unavailable. The first
+    # line a reader sees must be the decision point, not the wreckage.
+    if ! command -v aarch64-linux-musl-gcc >/dev/null 2>&1 \
+        && ! command -v clang >/dev/null 2>&1; then
+        echo "[build-guest-binaries] REFUSED: the cargo fallback cannot succeed on this host — no aarch64 musl linker (aarch64-linux-musl-gcc or clang + rust-lld). Nothing was compiled. The nix lane carries that toolchain; its unavailability verdict is printed above and is the thing to fix." >&2
+        return 1
+    fi
+
     echo "[build-guest-binaries] Building guest binaries using local Cargo fallback..."
     # Features MUST match the Nix packages (flake.nix tillandsias-headless-*-musl:
     # `--features listen-vsock`). `--features tray` does NOT enable the vsock

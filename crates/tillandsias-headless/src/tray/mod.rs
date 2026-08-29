@@ -2055,7 +2055,7 @@ fn icon_pixmaps(state: TrayIconState) -> Vec<IconPixmap> {
     let (width, height) = image.dimensions();
     let rgba = image.into_rgba8();
     let mut argb = Vec::with_capacity(rgba.len());
-    for pixel in rgba.as_raw().chunks_exact(4) {
+    for pixel in rgba.as_raw().as_chunks::<4>().0 {
         argb.extend_from_slice(&[pixel[3], pixel[0], pixel[1], pixel[2]]);
     }
     vec![(width as i32, height as i32, argb)]

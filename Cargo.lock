@@ -3521,6 +3521,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "embed-resource",
+ "resvg",
  "serde",
  "serde_json",
  "tempfile",
@@ -3529,6 +3530,7 @@ dependencies = [
  "tillandsias-host-shell",
  "tillandsias-secure-channel",
  "tillandsias-vm-layer",
+ "tiny-skia",
  "tokio",
  "tracing",
  "tracing-appender",

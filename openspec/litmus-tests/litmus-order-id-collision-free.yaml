@@ -59,22 +59,22 @@ critical_path:
     expected_behavior: "ok: bad prefix refused"
 
   - step: "the ledger engine refuses an AMBIGUOUS order rather than answering arbitrarily"
-    command: "cargo test --quiet --release -p tillandsias-plan a_duplicated_order_resolves_to_nothing 2>&1 | grep -q 'test result: ok' && echo 'ok: ambiguous order refused'"
+    command: "mf_stage prod 0 OUT -- cargo test --quiet --release -p tillandsias-plan a_duplicated_order_resolves_to_nothing && mf_holds OUT 'test result: ok' && echo 'ok: ambiguous order refused'"
     timeout_ms: 300000
     expected_behavior: "ok: ambiguous order refused"
 
   - step: "an ambiguous miss NAMES its claimants (a bare 'no packet matches' would be false)"
-    command: "cargo test --quiet --release -p tillandsias-plan an_ambiguous_miss_can_name_its_claimants 2>&1 | grep -q 'test result: ok' && echo 'ok: claimants named'"
+    command: "mf_stage prod 0 OUT -- cargo test --quiet --release -p tillandsias-plan an_ambiguous_miss_can_name_its_claimants && mf_holds OUT 'test result: ok' && echo 'ok: claimants named'"
     timeout_ms: 300000
     expected_behavior: "ok: claimants named"
 
   - step: "check reports duplicate orders, and the provisional sentinel stays exempt"
-    command: "cargo test --quiet --release -p tillandsias-plan order_identity_tests 2>&1 | grep -q 'test result: ok' && echo 'ok: order identity suite green'"
+    command: "mf_stage prod 0 OUT -- cargo test --quiet --release -p tillandsias-plan order_identity_tests && mf_holds OUT 'test result: ok' && echo 'ok: order identity suite green'"
     timeout_ms: 300000
     expected_behavior: "ok: order identity suite green"
 
   - step: "MIGRATION IS ADDITIVE: an existing integer order still resolves unchanged"
-    command: "cargo run --quiet --release -p tillandsias-plan -- status 322 2>/dev/null | grep -q 'mirror-authenticated-push-transport' && echo 'ok: legacy integer orders unaffected'"
+    command: "mf_stage prod 0 OUT -- cargo run --quiet --release -p tillandsias-plan -- status 322 && mf_holds OUT 'mirror-authenticated-push-transport' && echo 'ok: legacy integer orders unaffected'"
     timeout_ms: 300000
     expected_behavior: "ok: legacy integer orders unaffected"
 

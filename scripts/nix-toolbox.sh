@@ -150,10 +150,29 @@ daemon_live() {
     nix "${NIX_FEATURES[@]}" store ping >/dev/null 2>&1
 }
 
+# ORDER 934-7jd4: the probes CAPTURE why they failed instead of discarding it.
+# The blocked:* verdict grammar is pinned (test-nix-toolbox.sh) and unchanged;
+# the cause travels as a `detail:` line on STDERR beside it. Diagnosing a
+# swallowed cause cost an evening on 2026-08-29: the real reason was
+# "nix: command not found" inside the builder toolbox, and every verdict said
+# only which rung refused.
+NIX_TB_CHROOT_ERR=""
+NIX_TB_PULL_ERR=""
+
 chroot_works() {
-    command -v nix >/dev/null 2>&1 || return 1
-    mkdir -p "$CHROOT_STORE" 2>/dev/null || return 1
-    nix "${NIX_FEATURES[@]}" --store "$CHROOT_STORE" store ping >/dev/null 2>&1
+    if ! command -v nix >/dev/null 2>&1; then
+        NIX_TB_CHROOT_ERR="nix: command not found on PATH"
+        return 1
+    fi
+    if ! mkdir -p "$CHROOT_STORE" 2>/dev/null; then
+        NIX_TB_CHROOT_ERR="mkdir failed: $CHROOT_STORE"
+        return 1
+    fi
+    local _cw_err
+    if ! _cw_err="$(nix "${NIX_FEATURES[@]}" --store "$CHROOT_STORE" store ping 2>&1 >/dev/null)"; then
+        NIX_TB_CHROOT_ERR="${_cw_err##*$'\n'}"
+        return 1
+    fi
 }
 
 # EXERCISE THE STORE, not merely `command -v nix` (order 914-ahsy follow-on).
@@ -194,7 +213,11 @@ ensure_toolbox() {
     # Pull explicitly so a proxy failure is reported as itself rather than as a
     # create failure.
     if ! _podman image exists "$TOOLBOX_IMAGE" 2>/dev/null; then
-        _podman pull "$TOOLBOX_IMAGE" >/dev/null 2>&1 || return 2
+        local _et_err
+        if ! _et_err="$(_podman pull "$TOOLBOX_IMAGE" 2>&1 >/dev/null)"; then
+            NIX_TB_PULL_ERR="${_et_err##*$'\n'}"
+            return 2
+        fi
     fi
     _toolbox create -y "$TOOLBOX_NAME" >/dev/null 2>&1 || return 3
     return 0
@@ -214,9 +237,13 @@ resolve_rung() {
         0) if toolbox_nix_works; then
                printf 'toolbox\n'; return 0
            fi
+           [ -n "$NIX_TB_CHROOT_ERR" ] && printf 'detail:nix-toolbox:chroot:%s\n' "$NIX_TB_CHROOT_ERR" >&2
            printf 'blocked:no-nix-and-no-toolbox\n'; return 1 ;;
-        2) printf 'blocked:image-pull-failed\n'; return 1 ;;
-        *) printf 'blocked:create-failed\n'; return 1 ;;
+        2) [ -n "$NIX_TB_CHROOT_ERR" ] && printf 'detail:nix-toolbox:chroot:%s\n' "$NIX_TB_CHROOT_ERR" >&2
+           [ -n "$NIX_TB_PULL_ERR" ] && printf 'detail:nix-toolbox:pull:%s\n' "$NIX_TB_PULL_ERR" >&2
+           printf 'blocked:image-pull-failed\n'; return 1 ;;
+        *) [ -n "$NIX_TB_CHROOT_ERR" ] && printf 'detail:nix-toolbox:chroot:%s\n' "$NIX_TB_CHROOT_ERR" >&2
+           printf 'blocked:create-failed\n'; return 1 ;;
     esac
 }
 

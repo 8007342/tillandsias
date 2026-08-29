@@ -63,7 +63,7 @@ critical_path:
     expected_behavior: "skip:live-runtime-present"
 
   - step: "the live-runtime guard is wired into all three host branches (order 442)"
-    command: "grep -c 'live_runtime_is_present' scripts/e2e-preflight.sh | grep -qE '^[3-9]|1[0-9]' && echo 'ok: live-runtime-guard-wired' || { echo 'FAIL: live_runtime_is_present not called in all branches'; exit 1; }"
+    command: "mf_stage prod 0 OUT -- grep -c 'live_runtime_is_present' scripts/e2e-preflight.sh && mf_holds_ere OUT '^[3-9]|1[0-9]' && echo 'ok: live-runtime-guard-wired' || { echo 'FAIL: live_runtime_is_present not called in all branches'; exit 1; }"
     timeout_ms: 3000
     expected_behavior: "ok: live-runtime-guard-wired"
 

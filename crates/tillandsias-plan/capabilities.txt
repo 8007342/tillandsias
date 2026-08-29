@@ -74,6 +74,7 @@ spec-envelope
 spec-floor
 spec-index
 spec-retrieve
+split-parents
 status
 # the litmus asserts the manifest covers the documented command surface too.
 # tillandsias-plan CAPABILITY MANIFEST — order 569
@@ -81,6 +82,7 @@ status
 validate-yaml
 verify-answer
 yaml-get
+yaml-json
 yaml-type
 # WHY THIS IS A DATA FILE AND NOT A RUST ARRAY
 #      with no build and no cargo.

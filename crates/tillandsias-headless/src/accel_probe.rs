@@ -506,6 +506,26 @@ fn wsl2_paravirtual_gpu(dxg_present: bool, dri_present: bool, already_found: boo
     dxg_present && !dri_present && !already_found
 }
 
+/// Why a WSL2 paravirtual GPU is unusable — as a value, so a test can pin it.
+///
+/// ORDER 793-zumy, AND THE REASON THIS IS A FUNCTION AT ALL. The literal used
+/// to sit inline in `enumerate_gpus`, which reads real `/dev` paths and cannot
+/// run in a unit test. The existing envelope test looked like it covered this
+/// and did not: it builds its own `DeviceRecord` fixture, so it renders whatever
+/// reason the TEST supplies and passes identically against a wrong production
+/// value — verified by reverting the literal and watching it stay green. A pure
+/// function is the smallest thing that makes the production value assertable.
+/// Gated to match its production caller, `enumerate_gpus`, which is
+/// `#[cfg(target_os = "linux")]` — plus `test` so the assertion 793-zumy added
+/// this function to make possible still runs on every host. Without the `test`
+/// arm the macOS gate fails on dead code; without the `linux` arm the Linux
+/// build loses the production value. Order 935-6fzk found this from macOS,
+/// where the Linux-only caller vanishes and nothing else references it.
+#[cfg(any(target_os = "linux", test))]
+fn wsl2_paravirtual_gpu_reason() -> &'static str {
+    "engine-missing:no-vulkan-icd"
+}
+
 /// Order 850-bif2, the pure decision half of the AMD arm (unit-tested):
 /// given what the walker observed for an amdgpu card, decide usability,
 /// lanes, and the reason for any refusal.
@@ -883,9 +903,36 @@ fn enumerate_gpus(effective_tier: &str) -> Vec<DeviceRecord> {
                 fw_version: None,
                 driver: None,
                 usable: false,
-                unusable_reason: Some("wsl2-no-dri-render-node".to_string()),
+                // ORDER 793-zumy. This said `wsl2-no-dri-render-node`, and that
+                // reason was a red herring dressed as a diagnosis. WSL2 delivers
+                // the GPU through /dev/dxg and is NOT EXPECTED to create a DRI
+                // render node at all, so naming the render node's absence as the
+                // obstruction describes normal WSL2 rather than anything wrong —
+                // while reading, to a scheduler, as a hardware verdict. Measured
+                // on yolanda 2026-08-29: /dev/dxg present, /dev/dri absent,
+                // /usr/lib/wsl/lib carrying libd3d12/libd3d12core/libdxcore, and
+                // NO Vulkan loader — vulkaninfo off PATH, /usr/share/vulkan/icd.d
+                // absent entirely. The device is delivered; the translation layer
+                // is not installed. That is the real obstruction and it is a
+                // PROVISIONING fact, three packages away (793-a8e7), not a
+                // statement about the silicon. The same host has already driven
+                // this GPU at 2.04x CPU prefill once a loader was present.
+                //
+                // `engine-missing` is the grammar's existing word for exactly
+                // this — hardware present, no runtime to reach it — and is what
+                // the packet's criterion 2 requires verbatim. The suffix keeps
+                // WHICH engine and therefore what would fix it, matching the
+                // sibling `rocm-runtime-missing` / `intel-compute-runtime-missing`
+                // shape: a provisioning statement should name its own remedy.
+                //
+                // THE VERDICT IS DELIBERATELY UNCHANGED. usable stays false and
+                // the class stays cpu-only: nothing here makes the GPU reachable
+                // today, and inflating the class would place GPU work on a host
+                // that cannot run it — the opposite failure, and the worse one.
+                unusable_reason: Some(wsl2_paravirtual_gpu_reason().to_string()),
                 // No lane: unreachable from the container AND from host-native
-                // code in the guest, because there is no render node to open.
+                // code in the guest, because no Vulkan ICD is installed to
+                // translate onto the dxg path.
                 lanes: vec![],
                 memory_bandwidth_gbps: None,
                 memory_bandwidth_source: "unknown".to_string(),
@@ -1620,8 +1667,46 @@ mod tests {
         );
     }
 
-    #[test]
     // @trace spec:accel-capability-probe
+    /// ORDER 793-zumy criterion 2, pinned against the PRODUCTION value.
+    ///
+    /// Measured on yolanda 2026-08-29: /dev/dxg present, /dev/dri absent, and no
+    /// Vulkan loader at all — vulkaninfo off PATH, /usr/share/vulkan/icd.d
+    /// absent. The old reason, `wsl2-no-dri-render-node`, named a render node
+    /// WSL2 is never expected to create, so it described normal WSL2 while
+    /// reading to a scheduler as a hardware verdict. The real obstruction is a
+    /// missing translation layer, which is provisioning, not silicon.
+    ///
+    /// Read the sibling test below before trusting either: it renders a
+    /// TEST-SUPPLIED reason and therefore cannot pin production at all. This one
+    /// asserts the shipped value, and was confirmed to go red against the old
+    /// literal before it went green.
+    #[test]
+    fn the_wsl2_unusable_reason_names_the_missing_engine_not_the_missing_render_node() {
+        let reason = wsl2_paravirtual_gpu_reason();
+
+        // Criterion 2 requires this word verbatim.
+        assert!(
+            reason.starts_with("engine-missing"),
+            "criterion 2 requires the verbatim word `engine-missing`; got {reason}"
+        );
+        // The red herring must not come back.
+        assert!(
+            !reason.contains("dri-render-node"),
+            "the reason blames a render node WSL2 never creates: {reason}"
+        );
+        // A provisioning statement should name its own remedy, like the sibling
+        // rocm-runtime-missing / intel-compute-runtime-missing values do.
+        assert!(
+            reason.contains("vulkan"),
+            "the reason should name WHICH engine is missing: {reason}"
+        );
+    }
+
+    /// NOTE: this test cannot pin the production reason — it supplies its own.
+    /// Kept for what it does cover (present-unusable never collapsing to none,
+    /// and the class staying cpu-only). See the test above for the reason pin.
+    #[test]
     fn a_wsl2_paravirtual_gpu_renders_as_present_unusable_never_as_none() {
         // The point of 806-2r4s: this host has a healthy AMD Radeon 860M that
         // WSL2 exposes only as /dev/dxg. Before the probe emitted this record
@@ -1632,7 +1717,7 @@ mod tests {
             "gpu",
             "WSL2 paravirtual GPU (/dev/dxg)",
             &[],
-            Some("wsl2-no-dri-render-node"),
+            Some("engine-missing:no-vulkan-icd"),
         );
         gpu.usable = false;
 
@@ -1643,7 +1728,7 @@ mod tests {
 
         assert!(env.contains("accel_gpu=present-unusable"), "{env}");
         assert!(!env.contains("accel_gpu=none"), "{env}");
-        assert!(env.contains("wsl2-no-dri-render-node"), "{env}");
+        assert!(env.contains("engine-missing"), "{env}");
         // Capacity is still cpu-only — an unreachable GPU must not inflate the
         // class, or a scheduler would place GPU work on a host that cannot run it.
         assert!(env.contains("accel_class=cpu-only"), "{env}");

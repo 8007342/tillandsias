@@ -216,7 +216,20 @@ spec_in_list() {
 }
 
 get_all_active_specs() {
-    if command -v yq &>/dev/null; then
+    # ORDER 746-htj9: the compiled reader + jq first — both exist in every
+    # environment the gates run in; yq and the awk parser stay as fallbacks
+    # for a fresh clone that has never built the binary.
+    local _bin=""
+    if [[ -f "$REPO_ROOT/scripts/plan-binary-probe.sh" ]]; then
+        # shellcheck source=scripts/plan-binary-probe.sh
+        . "$REPO_ROOT/scripts/plan-binary-probe.sh" 2>/dev/null || true
+        command -v resolve_plan_binary &>/dev/null && _bin="$(resolve_plan_binary 2>/dev/null)" || _bin=""
+    fi
+    local v
+    if [[ -n "$_bin" ]] && command -v jq &>/dev/null \
+        && v="$("$_bin" yaml-json "$REPO_ROOT/openspec/litmus-bindings.yaml" 2>/dev/null | jq -r '.specs[] | select(.status=="active") | .spec_id' 2>/dev/null)"; then
+        [[ -n "$v" ]] && printf '%s\n' "$v"
+    elif command -v yq &>/dev/null; then
         yq eval '.specs[] | select(.status=="active") | .spec_id' "$REPO_ROOT/openspec/litmus-bindings.yaml" 2>/dev/null || true
     else
         awk '
@@ -1305,6 +1318,29 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     else
         log_fail_missing_guard "spec-index-resolution-agreement" "scripts/check-spec-index-resolution-agreement.sh"
         archive_check_log "spec-index-resolution-agreement" "skipped"
+    fi
+
+    # Order 931-p26p. The guard above proves the three carriers AGREE; it cannot
+    # prove they agree on the RIGHT thing. Rung 4 (repo-relative) was added so
+    # two userlands on one Windows host stop resolving two roots from one $HOME
+    # rule — and the risk it carries is the mirror image of the bug: capturing
+    # resolution on Linux and macOS hosts whose podman-volume rung is correct
+    # today, silently relocating a working index fleet-wide. Three of this
+    # fixture's arms are negative controls asserting an earlier rung still wins,
+    # and one is a control proving the divergence it fixes was real. Wired here
+    # rather than trusted to review, because "no host moved" is a claim about
+    # every host, made from one.
+    if [[ -f "scripts/test-spec-index-repo-relative-rung.sh" ]]; then
+        if bash scripts/test-spec-index-repo-relative-rung.sh 2>&1 | tee /tmp/spec-index-repo-relative-rung.log; then
+            log_pass "Spec-index repo-relative rung fixes Windows without moving other hosts"
+            archive_check_log "spec-index-repo-relative-rung" "pass" /tmp/spec-index-repo-relative-rung.log
+        else
+            log_fail_tracked "spec-index-repo-relative-rung" "Spec-index repo-relative rung regression (see /tmp/spec-index-repo-relative-rung.log)"
+            archive_check_log "spec-index-repo-relative-rung" "fail" /tmp/spec-index-repo-relative-rung.log
+        fi
+    else
+        log_fail_missing_guard "spec-index-repo-relative-rung" "scripts/test-spec-index-repo-relative-rung.sh"
+        archive_check_log "spec-index-repo-relative-rung" "skipped"
     fi
 
     # Order 765-mza8. Wired here, literally, for the same reason as the two

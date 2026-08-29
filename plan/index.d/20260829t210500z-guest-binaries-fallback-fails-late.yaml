@@ -1,0 +1,87 @@
+packets:
+  - packet_id: guest-binaries-cargo-fallback-fails-late-and-blames-the-wrong-thing
+    order: 934-7jd4
+    status: ready
+    title: |
+      When the nix lane is down, build-guest-binaries falls back to local cargo on hosts where that fallback CANNOT succeed — and the error names the linker, not the lane
+    kind: bug
+    pickup_role: linux
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags:
+      - build-gate
+      - nix
+      - fail-loud
+      - guest-binaries
+    estimated_hours: 2
+    deliverable: |
+      A host that cannot complete the cargo fallback learns that in the first
+      line of the failure, together with why the nix lane was unavailable —
+      not from an aarch64 linker error after a full x86_64 compile.
+    context: |
+      MEASURED on macuahuitl 2026-08-29 during the day's closing
+      ./build.sh --ci-full: scripts/nix-toolbox.sh ensure returned
+      blocked:nix-toolbox:image-pull-failed — and the reproducibility
+      matrix is the second finding: 2/2 INSIDE ci-full (two runs, ~40min
+      apart), 0/4 OUTSIDE it (foreground, background task, and with
+      build.sh's HTTP_PROXY=127.0.0.1:3129 env replicated — all
+      ok:nix-toolbox:chroot; user tmpfs quota at 618M/25G when checked).
+      ROOT CAUSE, found the same evening and VERIFIED: since 2026-08-26
+      (operator direction, with-tillandsias-builder.sh:101 — gate on
+      CAPABILITY not OS identity), this host's local-ci/ci-full re-exec
+      INSIDE the tillandsias-builder toolbox — where podman and nix do not
+      exist (verified: `toolbox run --container tillandsias-builder
+      command -v podman nix` both empty, /usr/bin/podman absent). So
+      inside the toolbox: chroot rung fails (no nix), toolbox-image pull
+      fails (no podman) -> image-pull-failed; and local-ci's
+      podman-path-availability check fails three times per run, skipping
+      the pre-build litmus phase entirely. Every interactive reproduction
+      ran on the HOST, where both exist — the "context" was the container
+      boundary. CONSEQUENCE: the coordinator host's ci-full lane has been
+      structurally unable to run its litmus phase or the nix guest-binary
+      lane since 2026-08-26, while --check stayed green (--check does not
+      re-exec... verify that claim during pickup).
+
+      THE DIAGNOSIS COST remains a finding even with the cause found:
+      ensure discards the failing probe's stderr (`store ping >/dev/null
+      2>&1`, `pull >/dev/null 2>&1`), so the verdict names the rung and
+      swallows why. One captured stderr line ("bash: nix: command not
+      found") would have settled in one run what took an evening of
+      guesses (proxy, PATH, quota).
+
+      THE FIX IS THEREFORE TWO-HEADED and the second head grew: (1) the
+      original fail-late/fail-wrong shape below, still valid; (2) the
+      toolbox needs the tools its lanes require — per the fleet's
+      toolbox-first rule, either podman reaches the host socket from
+      inside (podman-remote/flatpak-spawn --host escape) and nix is
+      installed in the toolbox, or the podman/nix-dependent phases
+      explicitly escape to the host and SAY SO. A lane that silently
+      loses its container tooling at a container boundary is this
+      packet's title one level up. build-guest-binaries.sh then printed its honest DEGRADED
+      line and proceeded with local cargo — which compiled the entire
+      x86_64 target successfully (~73s) and only THEN failed:
+      "ERROR: missing aarch64 musl linker." This host has no
+      aarch64-linux-musl-gcc and never will by default; the fallback was
+      doomed before it started, the doom was knowable in milliseconds
+      (command -v), and the eventual error names a missing linker when the
+      actionable fact was "the nix lane, which carries that linker, was
+      unavailable — HERE IS WHY".
+
+      Two shapes acceptable, implementer's choice:
+        A. The fallback preflights its own requirements (linkers for every
+           guest arch) BEFORE compiling anything, and its refusal line
+           carries the nix-lane verdict verbatim, so the first error a
+           reader sees is the decision point, not the wreckage.
+        B. On hosts where the fallback is structurally impossible, skip it
+           entirely: nix-lane-unavailable becomes the terminal error,
+           carrying its verdict, with the linker precondition named as why
+           no fallback was attempted.
+      Either way the DEGRADED warning stays for hosts where the fallback
+      CAN work — degradation is legal, late doom is not.
+    exit_criteria:
+      - on a host without an aarch64-musl linker and with the nix lane forced unavailable, the failure appears before any compilation starts and its first line carries the nix-lane verdict
+      - on a host where the fallback can succeed, the DEGRADED path still builds (unchanged)
+      - a test pins the preflight refusal, watched red against the current late-failure behavior first
+      - "the blocked:nix-toolbox:* verdicts carry the failing probe's captured stderr (last line at minimum) — a rung refusal that swallows its cause is this milestone's disease inside its own tooling"
+      - the ci-full-context failure is re-run ONCE with stderr captured and its actual cause recorded on this packet (closing the 2/2-vs-0/4 matrix)

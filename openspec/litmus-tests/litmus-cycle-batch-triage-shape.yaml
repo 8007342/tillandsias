@@ -95,7 +95,7 @@ critical_path:
   # four fields, their names, their order, and their numeric shape are all still
   # required. The negative control below is what keeps the widening honest.
   - step: "reports epic coverage so the ungrouped gap cannot hide"
-    command: "scripts/select-work-batch.sh linux | grep -qE '^triage: eligible=[0-9]+ grouped=[0-9]+ ungrouped=[0-9]+ epics=[0-9]+( [a-z_]+=[0-9]+)*$' && echo 'ok: triage line'"
+    command: "mf_stage prod 0 OUT -- scripts/select-work-batch.sh linux && mf_holds_ere OUT '^triage: eligible=[0-9]+ grouped=[0-9]+ ungrouped=[0-9]+ epics=[0-9]+( [a-z_]+=[0-9]+)*$' && echo 'ok: triage line'"
     timeout_ms: 30000
     expected_behavior: "ok: triage line"
 

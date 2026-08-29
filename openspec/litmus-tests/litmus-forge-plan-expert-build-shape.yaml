@@ -89,7 +89,7 @@ critical_path:
     # lib-common.sh is SOURCED; an `exit` in this block would kill the whole
     # entrypoint. Assert the builder's tail is `return 0` and no `exit` was
     # introduced into the experts block.
-    command: "sed -n '/^ensure_forge_experts() {/,/^}/p' images/default/lib-common.sh | grep -qE '^[[:space:]]*exit[[:space:]]' && exit 1; sed -n '/^ensure_forge_experts() {/,/^}/p' images/default/lib-common.sh | grep -c 'return 0' | grep -qE '^[5-9]|^[0-9]{2}' && echo 'ok: builder-fail-soft'"
+    command: "mf_stage prod 0 OUT -- sed -n '/^ensure_forge_experts() {/,/^}/p' images/default/lib-common.sh && mf_holds_ere OUT '^[[:space:]]*exit[[:space:]]' && exit 1; sed -n '/^ensure_forge_experts() {/,/^}/p' images/default/lib-common.sh | grep -c 'return 0' | grep -qE '^[5-9]|^[0-9]{2}' && echo 'ok: builder-fail-soft'"
     timeout_ms: 5000
     expected_behavior: "ok: builder-fail-soft"
 
@@ -109,7 +109,7 @@ critical_path:
     # passed only on the second's window happening to reach it. Anchored to the
     # function that actually owns the probe instead.
     # NEGATIVE CONTROL (verified 2026-08-29): removing the candidate fails it.
-    command: "awk '/^resolve_plan_bin\\(\\)/,/^}/' images/default/config-overlay/mcp/forge-plan.sh | grep -qF 'PLAN_BIN_CANONICAL' && echo 'ok: canonical-probed'"
+    command: "mf_stage prod 0 OUT -- awk '/^resolve_plan_bin\\(\\)/,/^}/' images/default/config-overlay/mcp/forge-plan.sh && mf_holds_literal OUT 'PLAN_BIN_CANONICAL' && echo 'ok: canonical-probed'"
     timeout_ms: 5000
     expected_behavior: "ok: canonical-probed"
 
@@ -198,7 +198,7 @@ critical_path:
     expected_behavior: "ok: artifact-cache-warm-path"
 
   - step: "NO-PYTHON: the expert build path is cargo + POSIX shell only"
-    command: "sed -n '/^ensure_forge_experts() {/,/^}/p' images/default/lib-common.sh | grep -qiE '(^|[^a-z])python' && exit 1; sed -n '/^ensure_forge_experts() {/,/^}/p' images/default/lib-common.sh | grep -q 'cargo build' && echo 'ok: no-python-cargo-only'"
+    command: "mf_stage prod 0 OUT -- sed -n '/^ensure_forge_experts() {/,/^}/p' images/default/lib-common.sh && mf_holds_i_ere OUT '(^|[^a-z])python' && exit 1; sed -n '/^ensure_forge_experts() {/,/^}/p' images/default/lib-common.sh | grep -q 'cargo build' && echo 'ok: no-python-cargo-only'"
     timeout_ms: 5000
     expected_behavior: "ok: no-python-cargo-only"
 

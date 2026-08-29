@@ -70,7 +70,7 @@ critical_path:
     # The docstring claimed McpFrame wrapping long after order 505 deleted
     # that path — a false comment is how the next reader inherits the wrong
     # model. It must NOT claim to wrap frames.
-    command: "head -20 images/default/config-overlay/mcp/host-browser.sh | grep -qF 'wraps each as a' && { echo 'FAIL: bridge docstring still claims McpFrame wrapping'; exit 1; }; echo 'ok: bridge docstring matches the NDJSON reality'"
+    command: "mf_stage prod 0 OUT -- head -20 images/default/config-overlay/mcp/host-browser.sh && mf_holds_literal OUT 'wraps each as a' && { echo 'FAIL: bridge docstring still claims McpFrame wrapping'; exit 1; }; echo 'ok: bridge docstring matches the NDJSON reality'"
     timeout_ms: 5000
     expected_behavior: "ok: bridge docstring matches the NDJSON reality"
 

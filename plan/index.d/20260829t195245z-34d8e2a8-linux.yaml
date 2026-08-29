@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: no-yaml-reader-exists-in-every-environment-the-gates-run-in
+    field: status
+    value: completed
+    ts: "2026-08-29T19:52:45Z"
+    host: linux
+
+events:
+  - packet_id: no-yaml-reader-exists-in-every-environment-the-gates-run-in
+    event:
+      type: completed
+      ts: "2026-08-29T19:52:45Z"
+      host: linux
+      summary: >
+        status 'completed' with evidence_refs: ALL FIVE EXIT CRITERIA MET, the last three environments' verdicts recorded this session (macuahuitl, 2026-08-29). (1) One sanctioned path: validate-yaml/yaml-get for simple reads, `yaml-json <file> | jq` for rich queries — the select() sites the packet was parked on run their yq filters under jq VERBATIM (byte-identical on the real bindings file); check-plan-schema-divergence.sh migrated in tranche 1 (yoga), run-litmus-test.sh's seven own reads + local-ci.sh in tranche 3. (2) Availability RUN in all three environments, not asserted — host: ok:yaml-reader:host + ok:yaml-json-jq:host; builder toolbox: ok:yaml-reader:toolbox + ok:yaml-json-jq:toolbox (toolbox run); FORGE (the leg yoga explicitly did not claim): ok:yaml-reader:forge + ok:yaml-json-jq:forge inside localhost/tillandsias-forge:v0.4.260826.1 with TILLANDSIAS_HOST_KIND=forge, entrypoint bypassed, rc read unpiped. check-yaml-reader-availability.sh now probes the composition (jq -er type == object) so the rich path's availability is executable, not claimed; pin fixture 12/12. (3) methodology/multi-host-development.yaml names the sanctioned path once and says never to name yq/ruby in committed automation; the 627-c9c2 mirror-hook block is that image's internal history, not guidance. (4) Negative control held: yaml-load-failed / yaml-unreadable / yaml-json-unrepresentable / index-load-failed all distinct, pinned. (5) The real ledger's 231 bare timestamps load and query through yaml-json (plan_index keys=7). ALSO: the four yaml subcommands moved to ledger-free dispatch (227ms→2ms measured — the ledger load was 220ms of every call); conversion bug during migration caught BY the litmus suite (empty-match rc leak, 247/249→fixed→249/249) and recorded as 901-jtvi verdict-invariance evidence; usage text now documents the set-field/append-event write-target asymmetry (fragment vs folded base) measured on two hosts today. OUT OF SCOPE, unchanged: the 121 yq calls inside litmus step commands are 799-tb7q's shim territory.

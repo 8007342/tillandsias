@@ -41,27 +41,27 @@ preconditions:
 
 critical_path:
   - step: "the real ledger compacts format-preservingly (comments + item order + fold-equivalence)"
-    command: "cargo test --quiet --release -p tillandsias-plan compaction_on_the_real_ledger_preserves_every_comment_and_item 2>&1 | grep -q 'test result: ok' && echo 'ok: real-ledger compaction preserves format'"
+    command: "mf_stage prod 0 OUT -- cargo test --quiet --release -p tillandsias-plan compaction_on_the_real_ledger_preserves_every_comment_and_item && mf_holds OUT 'test result: ok' && echo 'ok: real-ledger compaction preserves format'"
     timeout_ms: 300000
     expected_behavior: "ok: real-ledger compaction preserves format"
 
   - step: "comments and indentation survive and future event edits still work on the compacted base"
-    command: "cargo test --quiet --release -p tillandsias-plan compaction_preserves_comments_and_indentation_and_matches_the_fold 2>&1 | grep -q 'test result: ok' && echo 'ok: comments survive and append/push events resolve'"
+    command: "mf_stage prod 0 OUT -- cargo test --quiet --release -p tillandsias-plan compaction_preserves_comments_and_indentation_and_matches_the_fold && mf_holds OUT 'test result: ok' && echo 'ok: comments survive and append/push events resolve'"
     timeout_ms: 300000
     expected_behavior: "ok: comments survive and append/push events resolve"
 
   - step: "a second compaction of an already-compacted base is a byte-identical no-op (half-finished runs are safe)"
-    command: "cargo test --quiet --release -p tillandsias-plan compaction_is_idempotent_so_a_half_finished_run_is_safe 2>&1 | grep -q 'test result: ok' && echo 'ok: compaction is idempotent'"
+    command: "mf_stage prod 0 OUT -- cargo test --quiet --release -p tillandsias-plan compaction_is_idempotent_so_a_half_finished_run_is_safe && mf_holds OUT 'test result: ok' && echo 'ok: compaction is idempotent'"
     timeout_ms: 300000
     expected_behavior: "ok: compaction is idempotent"
 
   - step: "compaction refuses when the final list item is not a packet item (appending would land in the wrong section)"
-    command: "cargo test --quiet --release -p tillandsias-plan compaction_refuses_when_the_final_list_item_is_not_a_packet 2>&1 | grep -q 'test result: ok' && echo 'ok: bad-anchor refusal pinned'"
+    command: "mf_stage prod 0 OUT -- cargo test --quiet --release -p tillandsias-plan compaction_refuses_when_the_final_list_item_is_not_a_packet && mf_holds OUT 'test result: ok' && echo 'ok: bad-anchor refusal pinned'"
     timeout_ms: 300000
     expected_behavior: "ok: bad-anchor refusal pinned"
 
   - step: "edit::append_event resolves both packet key shapes and respects item boundaries (the four-space prefix survives)"
-    command: "cargo test --quiet --release -p tillandsias-plan append_event_reaches_both_packet_shapes 2>&1 | grep -q 'test result: ok' && echo 'ok: append-event survives compaction'"
+    command: "mf_stage prod 0 OUT -- cargo test --quiet --release -p tillandsias-plan append_event_reaches_both_packet_shapes && mf_holds OUT 'test result: ok' && echo 'ok: append-event survives compaction'"
     timeout_ms: 300000
     expected_behavior: "ok: append-event survives compaction"
 

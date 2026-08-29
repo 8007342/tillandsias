@@ -2316,6 +2316,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Litmus step-model fixture passed"
 
+    _step "Checking every litmus definition parses (933-4gm8)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-yaml-parses.sh" 2>&1; then
+        _error "a litmus YAML does not load — the runner's fallbacks would silently re-bucket it (933-4gm8; the named file is above)"
+        exit 1
+    fi
+    _info "Litmus YAML parse gate passed"
+
     _step "Checking end-user UX strings against recorded operator approval (626-w3fn)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-approved-ux-strings.sh" 2>&1; then
         # The script names the file, the string and the ledger it failed to
@@ -2554,6 +2561,35 @@ if [[ "$FLAG_CHECK" == true ]]; then
             _warn "  A Linux build compiles src/stubs/ for these — this gate did NOT read them."
             _warn "  Verify natively (cargo test -p tillandsias-windows-tray), then:"
             _warn "    scripts/check-windows-only-sources-verified.sh attest --from <transcript>"
+            ;;
+    esac
+
+    # ORDER 739-6r6n. The macOS twin, reported in the SAME breath as the windows
+    # one — the asymmetry this closes was not a missing script, it was that one
+    # platform had a loud warning and the other had SILENCE, and the silent one
+    # read as healthy. Same gate, same vocabulary, same attestation format; only
+    # the scope differs.
+    _step "Reporting macOS-only source verification state (739-6r6n)..."
+    _macos_only_verdict="$(bash "$SCRIPT_DIR/scripts/check-macos-only-sources-verified.sh" 2>/dev/null || echo "stale:sources-check-failed:macos-only")"
+    case "$_macos_only_verdict" in
+        ok:* | skip:*)
+            _info "macOS-only sources: $_macos_only_verdict"
+            ;;
+        missing:*)
+            # Same distinction the windows arm draws, and for the same reason:
+            # this says the REPOSITORY holds no attestation, never that the
+            # sources are unverified.
+            _warn "macOS-only sources: $_macos_only_verdict"
+            _warn "  No host has committed an attestation for these yet — this is a fact about"
+            _warn "  the repository, NOT a claim that the sources are broken or unverified."
+            _warn "  On a macOS host: cargo test -p tillandsias-macos-tray --bins | \\"
+            _warn "    scripts/check-macos-only-sources-verified.sh attest --from -"
+            ;;
+        *)
+            _warn "macOS-only sources: $_macos_only_verdict"
+            _warn "  A Linux or Windows build compiles stubs for these — this gate did NOT read them."
+            _warn "  Verify natively (cargo test -p tillandsias-macos-tray --bins), then:"
+            _warn "    scripts/check-macos-only-sources-verified.sh attest --from <transcript>"
             ;;
     esac
 

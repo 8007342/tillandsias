@@ -261,13 +261,79 @@ mf_stage() {
   return 1
 }
 
-# mf_holds VAR PATTERN   — does the captured stream match PATTERN?
-# mf_lacks VAR PATTERN   — …or not?
-#   Consumers over an ALREADY-COMPLETE buffer. This is the `| grep -q`
-#   replacement: same question, no live pipe, so nothing upstream can be
-#   killed and the producer's status was already checked by its stage.
-mf_holds() { eval "printf '%s\\n' \"\$$1\"" | grep -qE "$2"; }
-mf_lacks() { ! mf_holds "$1" "$2"; }
+# mf_stage_sh NAME EXPECTED_RC VAR -- SHELL_STRING
+#   mf_stage for a producer that is a COMPOUND command — `a && b`, `x; y`, one
+#   using `$(…)`, or one with its own redirection. `mf_stage` runs `"$@"`
+#   directly, which cannot express those, and MEASURED over the corpus that is
+#   not an edge case: 22 of the single-pipe `grep -q` sites have a compound
+#   producer, and many of the multi-pipe chains reduce to one.
+#
+#   THIS IS NOT A RETREAT TO THE SHELL STRING THIS PACKET IS ABOUT. The defect
+#   was never that a shell string exists; it is that a PIPELINE yields one exit
+#   code for several stages and lets a consumer SIGPIPE its producer. Here the
+#   whole compound producer is ONE stage with ONE asserted status, and the
+#   consumer reads a finished buffer afterwards. Per-stage status is preserved
+#   because the stages are the producer and the consumer, which is the split
+#   that was being lost.
+mf_stage_sh() {
+  _mfx_name="$1"; _mfx_want="$2"; _mfx_var="$3"; shift 3
+  [ "${1:-}" = "--" ] && shift
+  mf_stage "$_mfx_name" "$_mfx_want" "$_mfx_var" -- sh -c "$*"
+}
+
+# mf_holds VAR PATTERN        — BRE, mirroring plain `grep -q`
+# mf_holds_ere VAR PATTERN    — ERE, mirroring `grep -qE`
+# mf_holds_literal VAR STRING — fixed string, mirroring `grep -qF`
+# mf_holds_line VAR STRING    — whole line, mirroring `grep -qx`
+# mf_lacks* VAR …             — the negation of each
+#
+#   Consumers over an ALREADY-COMPLETE buffer. This is the `| grep -q` family's
+#   replacement: same question, no live pipe, so nothing upstream can be killed
+#   and the producer's status was already checked by its stage.
+#
+# ONE VARIANT PER GREP FLAG, AND `mf_holds` IS **BRE** — which it was not in the
+# first cut of this model, and the correction is the difference between a
+# faithful migration and 418 silently altered assertions.
+#
+# MEASURED over the litmus corpus 2026-08-29, the `grep -q*` flag distribution:
+#     grep -q   321      grep -qE   85      grep -qF   46
+#     grep -qx   18      grep -qiE  10      grep -qv/-qvE/-qi  7
+# The MAJORITY is plain `grep -q`, which is BASIC regex. `mf_holds` shipped
+# using `grep -qE`, so the obvious mechanical rewrite
+#     `producer | grep -q 'X'`  ->  `mf_stage p 0 V -- producer && mf_holds V 'X'`
+# would have quietly reinterpreted every one of them as EXTENDED regex.
+#
+# THAT IS NOT A PEDANTIC DIFFERENCE. BRE and ERE give OPPOSITE answers on the
+# same pattern — verified:
+#     pattern 'a+b'   on "a+b" :  BRE MATCH,     ERE no match
+#     pattern 'a+b'   on "aab" :  BRE no match,  ERE MATCH
+# and 74 plain-`grep -q` patterns in this corpus carry ERE-significant
+# metachars. One of them, from the enclave-service-dead test (named WITHOUT its
+# `litmus:` prefix on purpose — that token is a VERIFICATION CLAIM, and the
+# 721-77yu pin gate correctly refused this file when the example wore one),
+#     fail:enclave-service-dead:service={name}:state={state}:rc={exit_code}…
+# does not merely mismatch under ERE — it ERRORS ("invalid repeat"), because
+# `{name}` is an interval expression there and a literal brace in BRE.
+#
+# So the flag is part of the assertion, and a conversion that drops it is a
+# conversion bug. Each variant below exists so the rewrite can be FAITHFUL:
+# whatever flag the original carried, there is a consumer with exactly those
+# semantics and no thinking required at the call site.
+mf_holds()         { eval "printf '%s\\n' \"\$$1\"" | grep -q  -- "$2"; }
+mf_holds_ere()     { eval "printf '%s\\n' \"\$$1\"" | grep -qE -- "$2"; }
+mf_holds_literal() { eval "printf '%s\\n' \"\$$1\"" | grep -qF -- "$2"; }
+mf_holds_line()    { eval "printf '%s\\n' \"\$$1\"" | grep -qx -- "$2"; }
+# -qi and -qiE. Added because the corpus has them (6 sites) and APPROXIMATING a
+# case-insensitive match with a case-sensitive consumer would be exactly the
+# flag-dropping this file exists to prevent.
+mf_holds_i()       { eval "printf '%s\\n' \"\$$1\"" | grep -qi  -- "$2"; }
+mf_holds_i_ere()   { eval "printf '%s\\n' \"\$$1\"" | grep -qiE -- "$2"; }
+mf_lacks()         { ! mf_holds "$1" "$2"; }
+mf_lacks_ere()     { ! mf_holds_ere "$1" "$2"; }
+mf_lacks_literal() { ! mf_holds_literal "$1" "$2"; }
+mf_lacks_line()    { ! mf_holds_line "$1" "$2"; }
+mf_lacks_i()       { ! mf_holds_i "$1" "$2"; }
+mf_lacks_i_ere()   { ! mf_holds_i_ere "$1" "$2"; }
 
 # mf_first VAR N — the first N lines of a captured stream.
 #   The `| head -N` replacement. Truncation is a property of the CONSUMER

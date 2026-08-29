@@ -177,6 +177,96 @@ checked. Remedy: `git commit -F file`. The family rule: any prose that passes
 through a shell argument can be silently rewritten by the shell; pass files,
 then verify the written artifact.
 
+## An edit script must ASSERT its anchor matched
+
+Adjacent family, different mechanism. The shell cases above are *your text got
+rewritten*; this one is *your operation never happened and told you it did*.
+
+Measured (926-bin4, macbook 2026-08-29): a patch script did
+
+```python
+s = s.replace(old, new, 1)      # no assert
+open(p, 'w').write(s)
+print('route matrix updated')   # prints whether or not it matched
+```
+
+The anchor had drifted, `replace` returned the string unchanged, the file was
+rewritten identically, and the success line printed anyway. Every later build
+shipped a guest that ADVERTISED a capability while its dispatch matrix REFUSED
+the variant — a contradiction no build could catch, because both halves
+compiled. It surfaced only on a live probe, as `variant PtyOpenData not
+supported on the in-VM vsock transport`.
+
+```python
+assert old in s, "anchor missing — the edit did NOT apply"
+s = s.replace(old, new, 1)
+```
+
+`str.replace` reports nothing on no-match, and `sed -i` is the same shape: a
+pattern that matches nothing exits 0. Any editor whose failure mode is
+"changed nothing, said fine" needs the assertion outside it.
+
+THE GENERAL FORM, which is what makes this worth a section rather than a note:
+**a tool's success message is a claim about the tool running, not about the
+work landing.** Three instances in one week, three different tools —
+`| tail`-masked merges (macuahuitl), the `wsl.exe` exit-code swallow
+(yolanda), and this. The check is the same in all three: after the tool says
+it worked, read the ARTIFACT for something you know must now be true.
+`grep -c PtyOpenData control_dispatch.rs` would have returned 0 and cost five
+seconds; the live probe cost a guest rebuild and a VM boot.
+
+Corollary already in this file: the same discipline applied to assertions
+themselves — watch a new check FAIL against the defect it targets before
+trusting its green.
+
+## A test that constructs the struct it asserts about pins its own fixture
+
+A whole CLASS of vacuous test, distinct from the wrong-expectation kind
+(924-bwda): the test builds its own input (a `DeviceRecord` literal, a
+hand-rolled config, a synthetic envelope) and then asserts properties of
+what it built — so it renders whatever the TEST supplied and never reaches
+the production code path it appears to cover. Measured on 793-zumy
+(yolanda, 2026-08-29): a reason-string assertion counted as coverage since
+806-2r4s stayed GREEN with the production literal reverted to the wrong
+value, because the fixture never reaches `enumerate_gpus()`. Found only
+because the control ran FIRST — write green after your change and you
+report a criterion closed on a test that cannot fail for it.
+
+The fix is structural, not an assertion tweak: move the shipped value into
+a pure function so the PRODUCTION value is reachable from a unit test, then
+pin that — with the control run in both directions. Keep the old test for
+what it does cover, with a doc comment saying plainly it cannot pin
+production. When auditing, ask of any test: whose value is being asserted —
+the producer's, or the fixture's?
+
+Second measured instance, same evening (935-6fzk, macbook): a signing-seam
+fixture ran ITS OWN PlistBuddy derivation and asserted the result — proving
+the TECHNIQUE works rather than that the BUILD uses it — and stayed green
+when the build was mutated to skip the entitlement strip. Caught by the
+author running the mutation control before trusting the green; rewritten
+to assert the build performs the deletion. Two instances in one evening,
+two authors, both found only by control-first: assume the class is common.
+
+## When a checker accuses correct code, fix the checker — with a mutation control
+
+Two guard false positives in one change (830-xsk2, macbook, 2026-08-29),
+same root: a guard parsing a PATTERN LANGUAGE EMBEDDED IN A HOST LANGUAGE
+(Rust declarations by regex; shell by regex) met a nesting level it does not
+model. `check-source-slice-bounds.sh` called a working slice dead because its
+declaration regex admitted `pub`/`async` but not `unsafe fn`;
+`check-no-spawn-in-if-not.sh` then read the `|` INSIDE that quoted regex as a
+shell pipeline.
+
+The tempting responses damage correct code or bury the gap: weaken the test
+the first guard protects, or drop a `# sigpipe-ok` marker — a comment
+asserting "I checked, it is fine" on a line the checker never understood.
+The right move both times: **fix the guard's model, then run the mutation
+control that proves the widened guard can still go red** (a genuinely absent
+slice bound must still exit 1). Widening a checker without proving it can
+still fail just relocates the vacuousness into the guard. Where alternation
+in a quoted regex trips a shell-parsing guard, prefer rewriting the pattern
+(a repeated word-class) over exempting the line.
+
 ## `check-litmus-pin-claims.sh` refuses bare litmus names (721-77yu)
 
 That guard greps every `*.sh` for `litmus:<name>` and refuses any name no test
@@ -329,6 +419,44 @@ or worktree checkouts at the suspect and its parent.
       only what your fixture could have caused, and name the file.
 - [ ] Crossing a container/distro boundary by hand? Forward the namespace, and
       test through the project's wrapper before blaming the boundary.
+- [ ] Does a comment claim parity with a sibling? Grep the sibling, not the
+      comment.
+
+## Existence on the host is not correctness of the container path
+
+A verifier that checks "every path in the spec exists" is structurally
+blind on a host with a self-referential symlink. Measured on 935-jhh5
+(lenovinha, Silverblue, 2026-08-29): `/run/host` is a symlink to `/`, so
+TWO broken CDI specs — one mounting the GPU node at
+`/run/host/dev/nvidia0`, one at `/run/host/run/host/usr/bin/nvidia-smi` —
+both passed their own every-path-exists verification (0 missing) while the
+container got wrong in-container paths and the inference entrypoint's
+`[ -e /dev/nvidia0 ]` found nothing. Both wrong answers came from reaching
+for the "clever" immutable-host lever (`--driver-root=/run/host`) when the
+boring `--driver-root=/` was correct. The fix has two halves: verify the
+path AS THE CONSUMER WILL SEE IT (in-container, not on-host), and refuse
+known self-referential prefixes outright rather than resolving them.
+
+Measured on 731-eupn (2026-08-29): the macOS applier's comment said it
+"mirrors the Windows wiring in notify_icon::apply_cloud_projects" — while
+the Windows applier was the one lane still MISSING the outcome
+discriminator (`{ projects, .. }` ate the field, `cloud_projects_loaded =
+true` unconditional, its own comment claiming "a confirmed answer (even an
+empty one)" with nothing confirming it). A reader auditing macOS against
+that sentence concludes Windows is fine. The sentence is evidence of the
+author's intent at writing time, not of the sibling's code now. Audit the
+named counterpart directly — one grep for the discriminator in the
+supposedly-mirroring crate (zero references to CloudRefreshOutcome) settled
+in one command what the comment had misdirected for days.
+
+The same probe has a false-negative mode, found by the host that used it
+(yolanda, same packet, hours later): a grep for a TYPE NAME is a test of
+vocabulary, not behaviour. After the fix landed, `CloudRefreshOutcome`
+STILL appeared zero times in the crate — the consumer destructures the
+field and converts at the boundary (`outcome` → `confirmed: bool`), so the
+callee's name never has to appear at the call site. Absence of the name
+proves nothing in either direction. When a runnable test exists, run it;
+it was always the stronger probe.
 
 ## Exit codes do not survive `wsl.exe -- bash -c '<quoted script>'`
 

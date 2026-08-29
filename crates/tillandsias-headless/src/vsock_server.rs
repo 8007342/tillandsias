@@ -994,6 +994,10 @@ async fn serve_ready_stream(
                 // strictly worse than the hang the frame exists to fix
                 // (924-eof7).
                 tillandsias_control_wire::CAP_PTY_STDIN_EOF.into(),
+                // Order 926-bin4: advertise that this guest can open a DATA
+                // session (child fd 0 on a pipe), so a host can send binary
+                // stdin without the line discipline eating control bytes.
+                tillandsias_control_wire::CAP_PTY_DATA_SESSION.into(),
                 CAP_PTY_ATTACH_V1.into(),
                 CAP_PTY_HEARTBEAT_V1.into(),
             ],
@@ -1527,6 +1531,39 @@ async fn serve_ready_stream(
                 // control-plane fairness deadline — a wedged session is
                 // killed by the store instead (kill-not-drop).
                 pty_store.write_to_guest(session_id, bytes).await;
+            }
+            #[cfg(unix)]
+            ControlMessage::PtyOpenData {
+                session_id,
+                rows,
+                cols,
+                argv,
+                env: pty_env,
+                cwd,
+            } => {
+                // Order 926-bin4: identical to PtyOpen except the child's fd 0
+                // is a pipe, so stdin crosses no line discipline. Shares the
+                // same failure reporting; only the stdin wiring differs.
+                if let Err(err) = pty_store
+                    .open_with_stdin_kind(session_id, rows, cols, argv, pty_env, cwd, true)
+                    .await
+                {
+                    let err_env = ControlEnvelope {
+                        wire_version: WIRE_VERSION,
+                        seq: env.seq,
+                        body: ControlMessage::Error {
+                            seq_in_reply_to: Some(env.seq),
+                            code: ErrorCode::Internal,
+                            message: format!("PtyOpenData failed: {err}"),
+                        },
+                    };
+                    if write_envelope_with_shutdown(&mut write_half, &err_env, &mut shutdown)
+                        .await
+                        .is_err()
+                    {
+                        break 'connection;
+                    }
+                }
             }
             #[cfg(unix)]
             ControlMessage::PtyStdinEof { session_id } => {

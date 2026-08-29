@@ -1,0 +1,65 @@
+packets:
+  - packet_id: macos-signing-notarization-and-app-store-path
+    order: 935-6fzk
+    status: ready
+    title: |
+      The macOS release channel needs signing + notarization, and the App Store path needs mapping — the Apple twin of the Windows 722-ksnk milestone
+    kind: research+enhancement
+    pickup_role: macos
+    priority: p1
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    capability_tags:
+      - macos
+      - signing
+      - release
+      - app-store
+    estimated_hours: 8
+    deliverable: |
+      A decided, costed signing/distribution architecture for macOS
+      (Developer ID + notarization for the direct channel; App Store
+      requirements mapped end to end), with whatever is implementable
+      without operator credentials implemented, and the operator asks
+      reduced to plain one-line items.
+    context: |
+      OPERATOR DIRECTIVE 2026-08-29: "the macos host looks at the Apple
+      Store release, and binary signing" — the third lane of the store
+      triple (Windows MSIX = 776-g6r3, in flight; Linux hybrid matrix =
+      935-jhh5).
+
+      Today's macOS release artifacts (tar.gz + DMG from
+      scripts/build-macos-tray.sh / build-macos-dmg.sh, cosign bundles
+      beside them) are UNSIGNED by Apple's trust system: Gatekeeper shows
+      the unidentified-developer wall on every fresh download. The Windows
+      research (plan/issues/windows-signing-research-2026-08-16.md) is the
+      shape to imitate: dated facts with provenance, costs named, a decided
+      primary path and recorded fallback, operator asks separated from
+      agent-implementable work.
+
+      QUESTIONS THE RESEARCH HALF MUST SETTLE (verify against current
+      Apple documentation, not memory): what the Apple Developer Program
+      costs and whether any fee waiver applies; Developer ID signing +
+      notarytool for the DIRECT channel (DMG/tar.gz) — the likely
+      Authenticode-equivalent first rung; App Store requirements for a
+      menu-bar app that manages VMs (sandbox entitlements vs
+      Virtualization.framework — CAN this app even be sandboxed, or is the
+      Store path structurally closed to it? A named structural blocker is
+      a complete answer per 776-g6r3's own criterion shape); hardened
+      runtime + entitlements the tray/VM stack needs; whether CI
+      (macos-release job) can sign+notarize with federated secrets the way
+      the Windows job does OIDC.
+
+      IMPLEMENTABLE WITHOUT CREDENTIALS: the signing seam in
+      build-macos-tray.sh/build-macos-dmg.sh (parameterized identity,
+      loud UNSIGNED warning — mirror 722-qvqb's shape including
+      sign-before-package ordering and the fixture that proves both
+      modes), entitlements plist drafts, notarization submission wiring
+      behind an env gate.
+
+      OPERATOR ASKS, kept to one line each when they mature: enroll (or
+      confirm) the Apple Developer account; App Store Connect listing if
+      the Store path is open.
+    exit_criteria:
+      - a dated research record in plan/issues/ with provenance, a decided primary path, costs, and the sandbox/Virtualization.framework question answered structurally (Store open or closed, with the citation)
+      - the signing seam exists in the build scripts with a fixture proving signed and unsigned modes, without requiring credentials to run unsigned
+      - the operator asks are enumerated as plain one-line items on this packet, each markable done independently

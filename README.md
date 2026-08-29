@@ -24,7 +24,30 @@ curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/insta
 
 **Windows** — portable download: **[tillandsias-tray.exe](https://github.com/8007342/tillandsias/releases/latest/download/tillandsias-tray.exe)** (single file) or **[tillandsias-windows-x64.zip](https://github.com/8007342/tillandsias/releases/latest/download/tillandsias-windows-x64.zip)** (zip). Run it; the tray provisions a Fedora WSL2 distro automatically.
 
-**macOS** — portable download: **[Tillandsias.dmg](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias.dmg)** (Apple Silicon). Open it and drag Tillandsias into Applications; the tray provisions a Fedora VM automatically.
+**macOS** (Apple Silicon) — install with:
+
+```bash
+curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install-macos.sh | bash
+```
+
+The tray provisions a Fedora VM automatically. **Prefer this over the
+[.dmg](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias.dmg):**
+Tillandsias is signed but not yet notarized (Apple Developer enrollment is
+pending), and macOS tags anything a *browser* downloads with
+`com.apple.quarantine` — so the .dmg route hits a Gatekeeper block on first
+launch, while `curl` does not tag at all and the app opens normally. The
+installer also clears the attribute if you did take the manual route.
+
+If you are already stuck on a quarantined copy:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Tillandsias.app
+```
+
+On macOS 15+ right-click → Open no longer bypasses the block. If macOS offers
+only "Done" / "Move to Trash", open the app once, then go to **System Settings
+→ Privacy & Security → Security → Open Anyway** — the button appears only for
+a short window after the refusal.
 
 Podman is the only host dependency on Linux (auto-detected). macOS and Windows
 provision a lightweight Fedora-based utility VM; no host Podman required.
@@ -159,7 +182,7 @@ Release operators should run the [local release gate](docs/RELEASING.md) before 
 | [install.sh](https://github.com/8007342/tillandsias/releases/latest/download/install.sh) | Linux curl installer (`--channel stable\|unstable`) |
 | [install-macos.sh](https://github.com/8007342/tillandsias/releases/latest/download/install-macos.sh) | macOS curl installer (`--channel stable\|unstable`) |
 | [install-windows.ps1](https://github.com/8007342/tillandsias/releases/latest/download/install-windows.ps1) | Windows curl installer (`$env:TILLANDSIAS_CHANNEL`) |
-| [Tillandsias.dmg](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias.dmg) | macOS portable disk image (Apple Silicon) |
+| [Tillandsias.dmg](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias.dmg) | macOS portable disk image (Apple Silicon) — quarantined by the browser; prefer `install-macos.sh` |
 | [tillandsias-tray.exe](https://github.com/8007342/tillandsias/releases/latest/download/tillandsias-tray.exe) | Windows portable single-file tray |
 | [tillandsias-windows-x64.zip](https://github.com/8007342/tillandsias/releases/latest/download/tillandsias-windows-x64.zip) | Windows portable zip (tray + installer script) |
 | [SHA256SUMS](https://github.com/8007342/tillandsias/releases/latest/download/SHA256SUMS) | Checksums for all artifacts |

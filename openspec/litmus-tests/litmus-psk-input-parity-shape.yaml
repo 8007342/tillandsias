@@ -41,7 +41,7 @@ critical_path:
     # crate literal would have satisfied it — the very thing the step exists to
     # forbid. NEGATIVE CONTROL (verified 2026-08-29): replacing the body with a
     # "0.0.0" literal fails the step.
-    command: "awk '/^pub fn version\\(\\)/,/^}/' crates/tillandsias-host-shell/src/lib.rs | grep -qF 'env!(\"WORKSPACE_VERSION\")' && echo 'ok: version() sources WORKSPACE_VERSION' || { echo 'FAIL: host-shell version() no longer sources WORKSPACE_VERSION'; exit 1; }"
+    command: "mf_stage prod 0 OUT -- awk '/^pub fn version\\(\\)/,/^}/' crates/tillandsias-host-shell/src/lib.rs && mf_holds_literal OUT 'env!(\"WORKSPACE_VERSION\")' && echo 'ok: version() sources WORKSPACE_VERSION' || { echo 'FAIL: host-shell version() no longer sources WORKSPACE_VERSION'; exit 1; }"
     timeout_ms: 3000
     expected_behavior: "ok: version() sources WORKSPACE_VERSION"
 
