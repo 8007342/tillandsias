@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: exec-wire-silently-eats-control-bytes-from-binary-stdin
+    field: priority
+    value: p1
+    ts: "2026-08-29T18:17:32Z"
+    host: linux
+
+events:
+  - packet_id: exec-wire-silently-eats-control-bytes-from-binary-stdin
+    event:
+      type: note
+      ts: "2026-08-29T18:17:32Z"
+      host: linux
+      summary: >
+        0x13 VSTOP wedges the session on ONE data byte (rc=124 at 120s bound, macbook 8dfcdc1fa) — the unrecoverable-wire class (635-kagg, 772-qn6j); the filed p2 understated it per the full nine-byte characterization
