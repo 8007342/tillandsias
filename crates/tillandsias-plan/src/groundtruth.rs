@@ -472,7 +472,7 @@ fn resolve_spec_index_dir() -> Result<String, String> {
         // 888-miiy: ABSENT index is a host capability gap -> the case is
         // SKIPPED and named. A STALE index (the loader's arity refusal)
         // stays a hard error.
-        format!("{ENGINE_UNAVAILABLE}spec.answer needs a built index: no rung of the resolution ladder (TILLANDSIAS_SPEC_INDEX_DIR, FORGE_SPEC_INDEX_DIR, FORGE_SPEC_INDEX_ROOT, the podman volume, XDG cache) names a directory containing vectors.jsonl — scripts/spec-index-ensure.sh builds and publishes one (801-a2by)")
+        format!("{ENGINE_UNAVAILABLE}spec.answer needs a built index: no rung of the resolution ladder (TILLANDSIAS_SPEC_INDEX_DIR, FORGE_SPEC_INDEX_DIR, FORGE_SPEC_INDEX_ROOT, the podman volume, the checkout's target/, XDG cache) names a directory containing vectors.jsonl — scripts/spec-index-ensure.sh builds and publishes one (801-a2by)")
             .to_string()
     })
 }

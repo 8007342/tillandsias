@@ -316,9 +316,30 @@ _tec_build_in_flight() {
 #       3. The project's podman named volume — what makes the host builder and
 #          every forge share ONE store. INSPECT only: creating it is the
 #          producer's job, never a reader's.
-#       4. $XDG_CACHE_HOME/tillandsias/spec-index — durable, podman-free, for
+#       4. <checkout>/target/tillandsias-spec-index — THE CHECKOUT IS THE ONE
+#          THING TWO USERLANDS SHARE (order 931-p26p, added 2026-08-29).
+#          Rungs 1-3 are unchanged and still win, so a host that reaches one of
+#          them behaves EXACTLY as before: Linux and macOS hit the podman volume
+#          at rung 3 and never see this. It exists for the Windows lane, where
+#          rung 5 is not a constant. Measured on yolanda: the producer runs in
+#          Git Bash with HOME=/c/Users/bullo and builds at
+#          /c/Users/bullo/.cache/...; the forge-plan MCP server answers from
+#          HOME=/root and looks in /root/.cache/... — a directory that does not
+#          exist in Git Bash at all. Identical code, divergent $HOME, two roots,
+#          one host, and spec_answer refuses against an index that was built
+#          twenty seconds earlier. The checkout is immune to that because both
+#          userlands genuinely share it, merely spelling it differently
+#          (/c/Users/... and /mnt/c/Users/...) — the same property that fixed
+#          890-t9pu's timing log, which is the precedent this follows.
+#          Discovery is self-contained so all three carriers agree without a
+#          shared runtime: an explicit TILLANDSIAS_SPEC_INDEX_CHECKOUT, else the
+#          checkout holding $TILLANDSIAS_PLAN_INDEX, else the nearest ancestor
+#          of $PWD containing plan/index.yaml. Unresolvable, or resolvable but
+#          not writable, falls through to (5) — a reader in a read-only enclave
+#          must not be dragged onto a rung it cannot use.
+#       5. $XDG_CACHE_HOME/tillandsias/spec-index — durable, podman-free, for
 #          hosts and harnesses with no podman (macOS/Windows bare metal).
-#     Every podman step is fail-soft: a hiccup degrades to (4), never to an
+#     Every podman step is fail-soft: a hiccup degrades to (4)/(5), never to an
 #     error. POSIX sh — lib-expert-capability.sh is not bash.
 _tillandsias_spec_index_paths() {
     _tsi_root="${FORGE_SPEC_INDEX_ROOT:-}"
@@ -327,6 +348,26 @@ _tillandsias_spec_index_paths() {
         _tsi_vol="${TILLANDSIAS_SPEC_INDEX_VOLUME:-tillandsias-spec-index-${TILLANDSIAS_PROJECT:-tillandsias}}"
         _tsi_root="$(podman volume inspect -f '{{.Mountpoint}}' "$_tsi_vol" 2>/dev/null)" || _tsi_root=""
         if [ -z "$_tsi_root" ] || [ ! -d "$_tsi_root" ]; then _tsi_root=""; fi
+    fi
+    if [ -z "$_tsi_root" ]; then
+        # Rung 4 — repo-relative (931-p26p). See the precedence note above.
+        _tsi_co="${TILLANDSIAS_SPEC_INDEX_CHECKOUT:-}"
+        if [ -z "$_tsi_co" ] && [ -n "${TILLANDSIAS_PLAN_INDEX:-}" ]; then
+            _tsi_co="$(dirname "$(dirname "$TILLANDSIAS_PLAN_INDEX")" 2>/dev/null)" || _tsi_co=""
+        fi
+        if [ -z "$_tsi_co" ]; then
+            _tsi_p="$PWD"
+            while [ -n "$_tsi_p" ] && [ "$_tsi_p" != / ]; do
+                if [ -f "$_tsi_p/plan/index.yaml" ]; then _tsi_co="$_tsi_p"; break; fi
+                _tsi_p="$(dirname "$_tsi_p")"
+            done
+        fi
+        # Writability is tested, not assumed: a read-only checkout mount would
+        # otherwise capture resolution and strand the reader on a rung nothing
+        # can publish into.
+        if [ -n "$_tsi_co" ] && [ -d "$_tsi_co" ]            && { [ -w "$_tsi_co/target" ] || { [ ! -e "$_tsi_co/target" ] && [ -w "$_tsi_co" ]; }; }; then
+            _tsi_root="$_tsi_co/target/tillandsias-spec-index"
+        fi
     fi
     if [ -z "$_tsi_root" ]; then
         _tsi_root="${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/spec-index"

@@ -99,15 +99,94 @@ pub fn resolve_dir() -> Option<String> {
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
             .filter(|s| !s.is_empty())
     };
+    // Rung 4 of the shell ladder: repo-relative under the checkout's target/
+    // (931-p26p). Ordered AFTER the podman volume and BEFORE the HOME-derived
+    // cache, so every host that reaches an earlier rung is byte-identical to
+    // before — Linux and macOS hit the podman volume and never see this.
+    //
+    // It exists because $HOME is not one value per HOST on the Windows lane.
+    // The producer runs in Git Bash (HOME=/c/Users/<user>) and the forge-plan
+    // MCP server answers from HOME=/root, so the xdg-cache rung resolves two
+    // different roots on one machine and spec_answer refuses against an index
+    // built seconds earlier. The checkout is the one thing both userlands
+    // genuinely share — /c/Users/... and /mnt/c/Users/... are two spellings of
+    // one directory — which is exactly how 890-t9pu fixed the timing log.
+    //
+    // Writability is TESTED, not assumed: a read-only checkout mount would
+    // otherwise capture resolution and strand a reader on a rung nothing can
+    // publish into.
+    let repo_root = repo_relative_root();
     let roots = [
         (
             "FORGE_SPEC_INDEX_ROOT",
             std::env::var("FORGE_SPEC_INDEX_ROOT").ok(),
         ),
         ("podman-volume", podman_root),
+        ("repo-relative", repo_root),
         ("xdg-cache", xdg_root),
     ];
     resolve_from(&dirs, &roots)
+}
+
+/// The checkout's `target/tillandsias-spec-index`, when there is a writable
+/// checkout to anchor it to.
+///
+/// Discovery mirrors the shell block in scripts/spec-index-ensure.sh and its
+/// two overlay copies, which the agreement guard pins: an explicit
+/// `TILLANDSIAS_SPEC_INDEX_CHECKOUT`, else the checkout holding
+/// `TILLANDSIAS_PLAN_INDEX`, else the nearest ancestor of the working directory
+/// containing `plan/index.yaml`.
+fn repo_relative_root() -> Option<String> {
+    let checkout = std::env::var("TILLANDSIAS_SPEC_INDEX_CHECKOUT")
+        .ok()
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var("TILLANDSIAS_PLAN_INDEX")
+                .ok()
+                .filter(|v| !v.is_empty())
+                .and_then(|p| {
+                    PathBuf::from(p)
+                        .parent()
+                        .and_then(|d| d.parent())
+                        .map(PathBuf::from)
+                })
+        })
+        .or_else(|| {
+            let mut dir = std::env::current_dir().ok()?;
+            loop {
+                if dir.join("plan/index.yaml").is_file() {
+                    return Some(dir);
+                }
+                if !dir.pop() {
+                    return None;
+                }
+            }
+        })?;
+    if !checkout.is_dir() {
+        return None;
+    }
+    let target = checkout.join("target");
+    let writable = if target.exists() {
+        !is_read_only(&target)
+    } else {
+        !is_read_only(&checkout)
+    };
+    if !writable {
+        return None;
+    }
+    Some(
+        target
+            .join("tillandsias-spec-index")
+            .to_string_lossy()
+            .into(),
+    )
+}
+
+fn is_read_only(path: &std::path::Path) -> bool {
+    std::fs::metadata(path)
+        .map(|m| m.permissions().readonly())
+        .unwrap_or(true)
 }
 
 /// One published, content-addressed index entry, loaded whole.
@@ -145,7 +224,7 @@ impl SpecIndexEntry {
     /// former with its ENGINE_UNAVAILABLE sentinel).
     pub fn load() -> Result<Self, String> {
         let dir = resolve_dir().ok_or_else(|| {
-            "no rung of the resolution ladder (TILLANDSIAS_SPEC_INDEX_DIR, FORGE_SPEC_INDEX_DIR, FORGE_SPEC_INDEX_ROOT, the podman volume, XDG cache) names a directory containing vectors.jsonl — scripts/spec-index-ensure.sh builds and publishes one (801-a2by)".to_string()
+            "no rung of the resolution ladder (TILLANDSIAS_SPEC_INDEX_DIR, FORGE_SPEC_INDEX_DIR, FORGE_SPEC_INDEX_ROOT, the podman volume, the checkout's target/, XDG cache) names a directory containing vectors.jsonl — scripts/spec-index-ensure.sh builds and publishes one (801-a2by)".to_string()
         })?;
         Self::load_dir(Path::new(&dir))
     }
@@ -228,6 +307,58 @@ impl SpecIndexEntry {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Rung 4 (931-p26p) must anchor to the checkout, NOT to $HOME.
+    ///
+    /// The shell agreement guard pins the three shell carriers against each
+    /// other; nothing pins this Rust copy against them, so it gets its own
+    /// assertion. `repo_relative_root` is called directly rather than through
+    /// `resolve_dir`, because the latter reads process-wide environment and
+    /// shells out to podman — untestable in parallel and dependent on the host
+    /// running the suite, which is the property this rung exists to eliminate.
+    #[test]
+    fn the_repo_relative_rung_anchors_to_the_checkout_not_to_home() {
+        let co = fixture_entry("repo-rung");
+        std::fs::create_dir_all(co.join("plan")).expect("plan dir");
+        std::fs::write(
+            co.join("plan/index.yaml"),
+            b"packets: []
+",
+        )
+        .expect("index");
+
+        let got = {
+            // Scoped so the variable never leaks into a sibling test.
+            let _guard = ();
+            let prev = std::env::var("TILLANDSIAS_SPEC_INDEX_CHECKOUT").ok();
+            // SAFETY: single-threaded within this test's use of the variable;
+            // the value is restored before returning.
+            unsafe { std::env::set_var("TILLANDSIAS_SPEC_INDEX_CHECKOUT", &co) };
+            let r = repo_relative_root();
+            match prev {
+                Some(v) => unsafe { std::env::set_var("TILLANDSIAS_SPEC_INDEX_CHECKOUT", v) },
+                None => unsafe { std::env::remove_var("TILLANDSIAS_SPEC_INDEX_CHECKOUT") },
+            }
+            r
+        };
+
+        let want = co.join("target").join("tillandsias-spec-index");
+        assert_eq!(
+            got.as_deref(),
+            Some(want.to_string_lossy().as_ref()),
+            "the repo-relative rung must resolve under the checkout's target/,              so two userlands with different $HOME on one host converge              (931-p26p); got {got:?}"
+        );
+
+        // The point of the rung, stated as an assertion rather than a comment:
+        // the answer must not mention a home directory at all.
+        let resolved = got.expect("rung resolved");
+        assert!(
+            !resolved.contains(".cache"),
+            "the rung leaked into the HOME-derived cache path: {resolved}"
+        );
+
+        let _ = std::fs::remove_dir_all(&co);
+    }
 
     fn fixture_entry(tag: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("tilland-sie-{tag}-{}", std::process::id()));
