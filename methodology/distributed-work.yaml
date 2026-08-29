@@ -2044,6 +2044,23 @@ distributed_work:
       confirm the cross-configuration build goes red, silent when reverted. A
       signature change whose stale callers build green is a build that did not
       look.
+
+      THE INVERSE INSTANCE, and the structural fact behind it (2026-08-29,
+      the same 793-zumy fn): a helper added on the Windows lane compiled
+      only in its target_os="linux" configuration there (the Windows gate
+      builds inside WSL2), was dead code off-Linux, and left trunk
+      UNBUILDABLE on darwin under -D dead-code until the fleet's one Apple
+      host happened to compile. The author's own gates could not catch it:
+      the Windows lane never compiles the non-Linux arm of files it edits,
+      check-cross-target-build.sh is single-target, and no Apple target is
+      reachable from a non-Apple host. STATE THE STRUCTURAL FACT PLAINLY:
+      for some platforms, ONE host is the sole detector of the entire
+      compile surface. The cheap mitigation is a review-time convention,
+      not a gate: in a file whose helpers carry cfg attributes, a NEW
+      helper inherits its neighbours' attribute unless there is a stated
+      reason not to — the convention was on the line directly above the
+      insertion point, which is exactly where the next author will not
+      look unless told to.
     why_a_message_and_not_more_care: >
       A HEADS-UP IS A FALSIFIABLE ACT AND CARE IS NOT (yoga, 2026-08-26).
       "I considered the siblings" cannot be checked by anyone, including its
