@@ -32907,6 +32907,12 @@ plan_index:
         second deliverable asks for.
 
       events:
+        - type: note
+          ts: "2026-08-29T16:48:17Z"
+          agent_id: "linux-macuahuitl-claude-20260829t164817z"
+          host: linux
+          summary: |
+            LIVE VERDICT READ, second post-refresh authorization: a fresh forge lane on macuahuitl (2026-08-29T16:44Z) read refs/tillandsias/upstream-auth/authorized/1787965164 — published by THIS host's own lane at 2026-08-29T00:59:24Z, after the operator's PAT refresh, independent of yoga's 2026-08-26T03:13Z authorized verdict. The DENIAL this packet is titled for is falsified on two hosts across three days. RESIDUAL, recorded not hidden: the verdict was 56,706s old against the 900s guard bound and the fresh lane's mirror start did NOT republish it within the lane's ~60s lifetime — so short lanes read stale-then-blocked by design (fail-closed, correct) while nothing between lanes refreshes the namespace. If a real drain lane hits blocked:upstream-auth-stale in the field, the probe-refresh cadence is the follow-on packet; it is a freshness-plumbing question, not a credential one.
         - type: progress
           ts: "2026-08-19T02:15:00Z"
           agent_id: linux-macuahuitl-opus5-20260819T021500Z
