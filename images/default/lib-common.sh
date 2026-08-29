@@ -4113,7 +4113,7 @@ inject_startup_context() {
   - Machine-readable (branch on this, do not parse the prose): \`inference_state=${_inference_state} inference_models=${_inference_count} inference_warm=${_inference_warm} inference_reason=${_inference_reason}\`
   - \`inference_state\` is \`ready\` only when the endpoint answers AND at least one model is cached. Otherwise \`not-ready\` with a named \`inference_reason\`: \`no-models\` (endpoint up, nothing cached), \`endpoint-unreachable\`, \`endpoint-timeout\`, \`endpoint-http-error\`, \`probe-tool-missing\`, \`probe-helper-missing\`, or \`probe-error-<n>\`. There is no indeterminate "starting up" state.
   - Local inference is OPTIONAL: a \`not-ready\` endpoint never blocks this session. Use cloud models, or pull one yourself (\`curl http://inference:11434/api/pull -d '{"name":"qwen2.5:0.5b"}'\`).
-- **Experts** — \`experts: ${_experts_status}\`. An expert is a CITED RETRIEVAL SURFACE behind an MCP tool, not a model; the plan expert runs NO inference. Query it through the \`forge-plan\` MCP server (\`plan_check\`, \`plan_status\`, \`plan_ready\`, \`plan_blocked_by\`, \`plan_closure\`, \`plan_burndown\`) instead of grepping \`plan/index.yaml\`.
+- **Experts** — \`experts: ${_experts_status}\`. An expert is a CITED RETRIEVAL SURFACE behind an MCP tool, not a model; the plan expert runs NO inference. Query it through the \`forge-plan\` MCP server (\`plan_answer\`, \`plan_next\`, \`methodology_ask\`, \`spec_answer\`, \`plan_check\`, \`plan_status\`, \`plan_ready\`, \`plan_blocked_by\`, \`plan_closure\`, \`plan_burndown\`; \`expert_capability\` when any answer is \`unsupported\`) instead of grepping \`plan/index.yaml\`.
   - Machine-readable (branch on this, do not parse the prose): \`experts_state=${_experts_state} experts_reason=${_experts_reason} experts_elapsed=${_experts_elapsed}\`
   - Machine-readable CAPABILITY SKEW (order 569 — branch on this, do not parse the prose): \`${_cap_line}\`
   - \`experts_state=ready\` only means THE BUILD FINISHED. It has never meant the binary can answer — a forge seeded from a base without the expert sources builds a pre-expert binary and reports \`ready\` truthfully while every \`plan_answer\` returns \`confidence=unsupported\` (order 531). The line above is the honest one. Read it as three answers: \`now=\` is what you can use in THIS session; \`after_relaunch=\` is what the MOUNTED CHECKOUT would give you on the next forge run (so it already includes your uncommitted edits to the expert crate); \`blocked_capabilities=\` is the direct answer to "is my current work blocked pending a relaunch".
@@ -4134,9 +4134,12 @@ You never need to configure git remotes, tokens, SSH keys, proxy settings, or CA
 
 ## Plan entry points
 
-- **Active work queue**: \`plan/index.yaml\`
-- **Full plan index**: \`plan/index.yaml\`
-- **Loop status**: \`plan/loop_status.md\`
+Ask, don't grep — answers come back cited, the files are thousands of lines:
+
+- **Current Direction**: \`plan_answer "what is the current Direction?"\` (forge-plan MCP)
+- **What's next**: \`plan_next\` (forge-plan MCP)
+- **Conversational status**: Local Experts mode (the \`local-experts\` agent → grounded \`expert-serve\`) — citations or a typed \`unsupported:\` refusal, never raw-model prose.
+- Fallback when experts are degraded/unsupported (see \`experts_state\` above): read \`plan/index.yaml\` / \`plan/loop_status.md\` directly and RECORD the outage (\`mcp_first_read_path\`).
 
 Pick up work using the \`/meta-orchestration\` skill or \`/advance-work-from-plan\`.
 

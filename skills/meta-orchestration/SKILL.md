@@ -1376,7 +1376,9 @@ it is paid again by every agent on every host every cycle.
 Ask `forge-plan` / `project-plan` (`plan_answer`, `plan_next`, `plan_query`,
 `plan_status`, `plan_blocked_by`, `methodology_ask`, `spec_answer`) and
 `project-info` (`search_code`, `grep_code`, `find_files`, `read_file`). Answers
-are cited — keep the citations.
+are cited — keep the citations. For a conversational/synthesis status question,
+use the Local Experts mode (`expert-serve`) — same citations-or-typed-refusal
+contract as `spec_answer`.
 
 Drop to the filesystem for exactly three reasons, and name the one that applies:
 **unavailable** (MCP down or `confidence=unsupported` — fall back and keep going,

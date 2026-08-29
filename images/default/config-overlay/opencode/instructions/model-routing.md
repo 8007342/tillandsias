@@ -51,11 +51,17 @@ build commit, 801-g9nn — not this checkout's HEAD) and
 `tillandsias_envelope`, the full ratified envelope, which
 `tillandsias-plan verify-answer` audits. The `tillandsias-plan pipeline`
 CLI arm is the SAME pipeline's second front-end and emits that envelope
-directly. If the endpoint refuses connections, expert-serve is not
-running in this forge (a pre-920-pxg6 binary, or the port was taken) —
-use the forge-plan MCP tools (`spec_answer`, `plan_answer`,
-`methodology_ask`) instead; deterministic single-node lookups belong to
-those tools regardless.
+directly. Pick the lane by question shape: deterministic single-node
+lookups (one packet, one rule) → `plan_answer` / `methodology_ask`;
+cross-spec joins → `spec_answer`; conversational or synthesis status →
+this Local Experts mode. If the endpoint refuses connections,
+expert-serve is not running in this forge (a pre-920-pxg6 binary, or
+the port was taken) — use the forge-plan MCP tools (`spec_answer`,
+`plan_answer`, `methodology_ask`) instead. On a typed `unsupported:`
+refusal or a degraded `experts_state` (see `.forge-startup-context.md`;
+`scripts/check-mcp-expert-health.sh` probes it), fall back to reading
+the `plan/` files and RECORD the fallback in your output
+(`mcp_first_read_path`).
 
 ## Fleet naming (Zen siblings)
 

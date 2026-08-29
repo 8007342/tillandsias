@@ -10,6 +10,7 @@ description: "Display project state: recent commits, OpenSpec items, readme.trac
 
 ## Flow
 
+0. If `.forge-startup-context.md` shows `experts_state=ready`, ask forge-plan `plan_answer` / `plan_next` for state + next action and present those (cited) instead of inferring from git log; otherwise — no startup context, degraded experts, or a typed `unsupported:` answer — fall back to the flow below.
 1. Run `openspec list --json` (if available) and summarize open items
 2. Run `git log --oneline -5` and display last 5 commits
 3. Load latest 5 lines from `.tillandsias/readme.traces` (if present)
