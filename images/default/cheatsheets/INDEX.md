@@ -26,14 +26,15 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 
 ## architecture
 
-- authorship-blindness.md             — Three distinct mechanisms, measured on this fleet on 2026-08-25/26, each found [bundled, partial-verify]
-- diagnostic-attribution.md           — A missing signal leaves a reader searching. A *misattributed* one leaves them [bundled, partial-verify]
-- enclave-service-catalog-research.md — designing or reviewing the enclave service catalog milestone — [bundled, partial-verify]
-- event-driven-basics.md              — Your system has multiple components that react to state changes happening elsew… [pull-on-demand: stub]
-- event-driven-ui-updates.md [DRAFT]  — Implementing event-driven architectures for responsive UIs. [bundled, partial-verify]
-- host-tool-dispatch-sweeps.md        — dispatch looks mechanical. It is not. Four hazard classes each cost a cycle to [bundled, partial-verify]
-- reactive-streams-spec.md            — You have a **stream** of asynchronous events whose producer might outpace its c… [pull-on-demand: stub]
-- transport-overhead.md               — touching the host↔guest control wire, adding a poll/refresh [bundled, partial-verify]
+- authorship-blindness.md               — Three distinct mechanisms, measured on this fleet on 2026-08-25/26, each found [bundled, partial-verify]
+- diagnostic-attribution.md             — A missing signal leaves a reader searching. A *misattributed* one leaves them [bundled, partial-verify]
+- enclave-service-catalog-research.md   — designing or reviewing the enclave service catalog milestone — [bundled, partial-verify]
+- event-driven-basics.md                — Your system has multiple components that react to state changes happening elsew… [pull-on-demand: stub]
+- event-driven-ui-updates.md [DRAFT]    — Implementing event-driven architectures for responsive UIs. [bundled, partial-verify]
+- expert-inference-endpoint-contract.md — wiring a dev host for the expert tiers, or working out why spec_answer refuses … [bundled, partial-verify]
+- host-tool-dispatch-sweeps.md          — dispatch looks mechanical. It is not. Four hazard classes each cost a cycle to [bundled, partial-verify]
+- reactive-streams-spec.md              — You have a **stream** of asynchronous events whose producer might outpace its c… [pull-on-demand: stub]
+- transport-overhead.md                 — touching the host↔guest control wire, adding a poll/refresh [bundled, partial-verify]
 
 ## build
 

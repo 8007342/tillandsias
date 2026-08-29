@@ -19607,6 +19607,65 @@ plan_index:
         - The two silent-drop traps in semantic_expert.rs are fixed or explicitly documented as constraints, with a test either way.
         - 'NEGATIVE CONTROL: with no endpoint set, every L0 tool still answers with citations and the probe says so — degradation must stay silent-free, not answer-free.'
 
+      events:
+        - type: verified
+          ts: "2026-08-29T16:14:17Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            A CORRECTION I OWE THIS PACKET, caught while running the 760-hzi4 index probe macuahuitl asked for mid-cycle — and it is this packet's own lesson applied to the tool built to teach it.
+
+            MY FIRST CUT REPORTED l1=ready FROM ENDPOINT REACHABILITY ALONE. That is precisely the over-optimism I had just finished criticising in lib-inference-state.sh, which answers "is there an Ollama" and gets read as "can the experts work". L1 retrieval needs BOTH halves: an embeddings endpoint AND a built spec index. A probe that checks one and reports the tier ready is the same false green in a new costume.
+
+            CAUGHT BY MEASUREMENT, not by review. `env -u FORGE_SPEC_INDEX_DIR scripts/spec-index-ensure.sh --where` on this host:
+
+              spec-index:serving=/var/home/lenovinha/.local/share/containers/storage/volumes/tillandsias-spec-index-tillandsias/_data
+              spec-index:serving-exists=yes
+              spec-index:entries=0
+
+            serving-exists=yes with entries=0 is a COLD TIER, NOT A LOST INDEX: the serving root is present and nothing has ever been published into it. My probe was calling that host L1-ready while retrieval could not run.
+
+            FIXED: TierState gains `no-index`, distinct from `unreachable` because it is a different half with a different fix, and L1 is now endpoint AND index — checked in that order so the advice names the half that is actually missing. This host now honestly reports:
+
+              experts_probe: l0=ready l1=no-index l2=ready embed=http://127.0.0.1:11434/v1 synth=http://127.0.0.1:11434/v1
+              advice=no-spec-index: the embeddings endpoint answers but no usable index is published (needs vectors.jsonl) — build it with scripts/spec-index-ensure.sh; L1 retrieval needs BOTH an endpoint and an index
+
+            Pinned by test (l1_needs_an_index_not_just_an_endpoint) and recorded in the cheatsheet, including the fact that it was a self-correction — a diagnostic is not exempt from the failure mode it diagnoses, and a reader deciding whether to trust this probe deserves to know it was wrong once in exactly the way it warns about.
+
+            SECOND-HOST EVIDENCE FOR 760-hzi4 (the coordinator's mid-cycle ask): serving-exists=yes on lenovinha, so the packet no longer rests on one host's evidence. Recorded on that packet too.
+        - type: implemented
+          ts: "2026-08-29T16:13:53Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            DELIVERED — contract, probe, both MCP servers wired, both traps resolved with tests.
+
+            THE CONTRACT: cheatsheets/architecture/expert-inference-endpoint-contract.md, bundled and indexed, every figure measured on lenovinha 2026-08-29 against a live Ollama serving qwen2.5:0.5b and nomic-embed-text.
+
+              L0  plan/ + methodology/ + spec envelopes. File-backed, needs NO endpoint, ALWAYS ready.
+              L1  retrieval. Needs BOTH TILLANDSIAS_EMBED_ENDPOINT and a built spec index.
+              L2  synthesis. Needs a chat-completions /v1 base.
+
+            Precedence is READ from InferenceConfig::default rather than restated beside it — a second copy of a precedence chain drifts, and a drifted diagnostic reports a configuration the engine does not use, which is the worst possible failure for this particular tool.
+
+            THE SHARPEST FINDING, and it was invisible before this packet: TILLANDSIAS_INFERENCE_ENDPOINT ALONE DOES NOT UNLOCK RETRIEVAL. It feeds synth_base; embed_base has NO fallback in the chain. Measured with a real Ollama and a root url:
+
+              lib-inference-state.sh : READY (models=2, warm=nomic-embed-text,qwen2.5:0.5b)
+              experts-probe          : l1=unset l2=ready
+
+            Both probes are truthful about what they asked. /api/tags is Ollama's NATIVE root api and it really is serving two models. But the expert path speaks only the OpenAI shape under /v1. So retrieval was DEAD on that host while the probe an operator is most likely to read said READY in capitals. `inference_state=ready` answers "is there an Ollama", not "can the experts work", and nothing said so.
+
+            TRAP 1 IS ALREADY FIXED, and saying so is part of the job rather than silently inheriting the packet's framing. 718-ja7g cites addr.parse::<SocketAddr>() making hostnames — including the enclave's own inference:11434 — unusable. Order 920-pxg6 (D6) removed it; dispatch goes through pipeline::http_post_json, which resolves via to_socket_addrs. Asserted by test rather than trusted to the comment that claims it.
+
+            TRAP 2 IS LIVE AND IS NOW NAMED. pipeline::parse_base — the crate's SINGLE url parser, used by every model call — begins url.strip_prefix("http://")?. An https base yields None before any request. That is not local to one call site as the packet supposed; it is the transport the whole crate speaks. Documented as a constraint and reported as `scheme-unsupported` with a sentence naming it, instead of the previous silent fall-back to an endpoint the operator never chose.
+
+            THE /v1-VS-ROOT DISTINCTION the macbook asked for is in every refusal that can hit it. Ollama serves its native api at the root and the OpenAI-compatible one under /v1, so http://host:11434 is a perfectly healthy Ollama AND a broken value here — every root-probing health check on the host says READY while the expert path 404s. Saying only "did not answer" sends the reader to inspect a server that is fine.
+
+            THE PROBE: `tillandsias-plan experts-probe`, one line, field=value in the idiom lib-inference-state.sh already emits so shell readers keep their case idiom. Closed vocabulary per tier: ready | unset | unreachable | no-index | scheme-unsupported | malformed | unknown. advice= carries ONE next action, never a list — a diagnostic offering three suggestions invites trying all three and two will be wrong. Exit code ADVISORY not a gate: a dev host with no endpoint is a supported state.
+
+            BOTH MCP SERVERS CONSUME IT via images/default/lib-experts-probe.sh. forge-plan.sh's spec_answer refusals carry the probe's advice; project-info.sh's synthesis refusals report experts_l1=/experts_l2= ALONGSIDE inference_state= rather than replacing it, because that probe answers a real and different question and both being visible is what keeps each honest. A missing helper or a pre-718-ja7g binary reports `unknown` with a named reason, never `unset` and never `ready` — an absent probe reporting a verdict is the lie order 531 recorded as `experts: ready`.
+
+            NEGATIVE CONTROL, both halves, verified end to end. With every endpoint variable unset: the probe says l0=ready and its advice explicitly says "L0 plan and methodology answers work without it", and `tillandsias-plan answer "what is the current Direction?"` returns a CITED answer (plan/loop_status.md:13378-13400, confidence=retrieved). Degradation is silent-free, not answer-free. Pinned as a test.
     - packet_id: wsl2-inference-substrate-decision
       order: 718-nkm2
       status: obsoleted
@@ -23725,6 +23784,27 @@ plan_index:
         - the index refreshes on commit or names its staleness in the envelope
 
       events:
+        - type: verified
+          ts: "2026-08-29T16:14:17Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            SECOND-HOST EVIDENCE from lenovinha (Fedora Silverblue), 2026-08-29 — the packet forbids closing on one host's evidence, so here is the other host.
+
+              $ env -u FORGE_SPEC_INDEX_DIR scripts/spec-index-ensure.sh --where
+              spec-index:project=tillandsias
+              spec-index:volume=tillandsias-spec-index-tillandsias
+              spec-index:root=/var/home/lenovinha/.local/share/containers/storage/volumes/tillandsias-spec-index-tillandsias/_data
+              spec-index:serving=/var/home/lenovinha/.local/share/containers/storage/volumes/tillandsias-spec-index-tillandsias/_data
+              spec-index:serving-exists=yes
+              spec-index:entries=0
+              spec-index:keep=3
+
+            serving-exists=yes — the resolution lands on the durable volume root with no FORGE_SPEC_INDEX_DIR override present, matching macuahuitl.
+
+            WORTH RECORDING ALONGSIDE IT, because the two lines together are the interesting fact: entries=0. The serving root EXISTS and nothing has ever been published into it. That is a COLD TIER, not a lost index — the distinction forge-plan.sh's _si_note already draws in prose, now with a measurement behind it on a second host.
+
+            This fed 718-ja7g directly and caught a defect in my own work there: the endpoint contract's tier probe was reporting l1=ready from endpoint reachability alone, when L1 retrieval needs BOTH an embeddings endpoint and a built index. This host is exactly the configuration that separates them — endpoint live, index empty — and it turned a plausible-looking green into a corrected `l1=no-index`. A host in a half-provisioned state is worth more for this kind of verification than a fully-provisioned one.
         - type: note
           ts: "2026-08-17T11:32:15Z"
           agent_id: "linux-yoga-claude-20260817t113215z"
