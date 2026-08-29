@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: hybrid-cpu-amd-nvidia-matrix-truthful-on-mobile-workstation
+    field: status
+    value: completed
+    ts: "2026-08-29T23:56:28Z"
+    host: linux
+
+events:
+  - packet_id: hybrid-cpu-amd-nvidia-matrix-truthful-on-mobile-workstation
+    event:
+      type: completed
+      ts: "2026-08-29T23:56:28Z"
+      host: linux
+      summary: >
+        status 'completed' with evidence_refs: d328c98b7 + 2547a35f9: ./build.sh --check GREEN including ok:cross-target:x86_64-pc-windows-gnu.  EXIT CRITERION 1 (warn once with the exact remediation, host-vs-toolbox recorded): the launch-time complaint was the inference container reporting no GPU; it now prints "GPU: NVIDIA (1 device(s))" and installs the CUDA backend. The host-vs-toolbox answer is recorded with its measurements — toolkit in the toolbox, spec describing the host, hook as a host-side executable — and scripts/ensure-nvidia-cdi.sh is the single idempotent remediation, self-verifying, no rpm-ostree layering and no sudo.  EXIT CRITERION 2 (live CUDA on the 3070, regime attached): MET.   engine 'core+cuda_v13' installed (836M libs)   library=CUDA compute=8.6 name=CUDA0 "NVIDIA GeForce RTX 3070 Laptop GPU" driver=13.3 type=discrete total=7.7GiB   qwen2.5:0.5b, 37 tokens, 296.3 tok/s, /api/ps size_vram=524602571 (was 0)   Regime: Fedora Silverblue immutable, driver 610.57.04, CUDA UMD 13.3, rootless podman, SELinux enforcing, --device nvidia.com/gpu=all --security-opt label=disable -e TILLANDSIAS_INFERENCE_TIER=gpu-cuda.  EXIT CRITERION 3 (envelope names all three truthfully; driver update no longer strands silently): cpu 16 cores/13GiB; nvidia usable lanes=[container, host-native] with the container lane now VERIFIED by reading the CDI spec rather than inferred from the tier; amd usable=false reason=rocm-runtime-missing lanes=[host-native]. Negative control proves the check works: moving the spec aside flips to accel_reason=cdi-spec-missing and lanes=[host-native], restoring it flips back — under the previous circular check both states read identically. ensure-nvidia-cdi.sh re-runs idempotently, which is 665-zddn's stale-spec regeneration made automatic rather than remembered.  EXIT CRITERION 4 (findings generic, not just this machine): recorded in next_action and the 2026-08-29 events — the hook is a host-side executable crun runs; use --driver-root=/ (a "clever" rebase through /run/host produced two specs that BOTH passed a host-existence check and BOTH broke the container, because that path is a symlink to /); podman does not search ~/.config/cdi unless cdi_spec_dirs declares it (correction appended to 665-zddn); two specs declaring one device kind produce the same error as zero specs; one absent hostPath makes crun refuse the whole container so prune and NAME them; SELinux blocks the device nodes independently of CDI.  NOT DONE, named rather than glossed: the 793-zumy enumeration redesign. This host's envelope is now truthful about all three paths, but the file-existence enumeration it was filed against is unchanged.
+  - packet_id: hybrid-cpu-amd-nvidia-matrix-truthful-on-mobile-workstation
+    event:
+      type: note
+      ts: "2026-08-29T23:56:28Z"
+      host: linux
+      summary: >
+        all four exit criteria met and verified on the hardware; the 793-zumy enumeration redesign is explicitly left out of scope
