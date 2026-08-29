@@ -71,6 +71,7 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
     | a methodology rule | `methodology_ask "<question>"` / `methodology_path` |
     | a spec's content | `spec_answer` |
     | repo/code navigation | `project-info`: `search_code`, `grep_code`, `find_files`, `file_summary`, `read_file` |
+    | conversational/synthesis status question | Local Experts mode (`expert-serve`) — same citations-or-typed-refusal contract as `spec_answer` |
 
     Every answer is CITED. Keep the citations — §5 and §7 need them.
 

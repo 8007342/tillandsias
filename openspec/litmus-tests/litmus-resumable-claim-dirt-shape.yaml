@@ -57,7 +57,13 @@ critical_path:
     expected_behavior: "ok: skill-consults-detector"
 
   - step: "the verdict stops at review — the skill wiring must not auto-commit on resumable"
-    command: "grep -A24 'check-resumable-claim-dirt.sh' skills/meta-orchestration/SKILL.md | grep -qiE 'REVIEW AND LAND|never to auto-commit' && echo 'ok: review-not-autocommit'"
+    # ORDER 925-erjs. Was `grep -A24 '<script>' SKILL.md`. Twenty-four lines of
+    # a living skill document is the most fragile anchor in the corpus — any
+    # edit above the prose slides it out, and any unrelated section that drifts
+    # within 24 lines slides in. The numbered step is the real unit, so the awk
+    # runs from the mention to the NEXT numbered step (21 lines today, and it
+    # tracks the step rather than a count).
+    command: "awk '/check-resumable-claim-dirt\\.sh/{f=1} f&&/^[0-9]+[a-z]?\\./&&!/check-resumable/{exit} f' skills/meta-orchestration/SKILL.md | grep -qiE 'REVIEW AND LAND|never to auto-commit' && echo 'ok: review-not-autocommit'"
     timeout_ms: 3000
     expected_behavior: "ok: review-not-autocommit"
 

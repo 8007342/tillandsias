@@ -1863,6 +1863,60 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Live MCP server build fixture passed"
 
+    # Order 748-tkjx. ./build.sh --check runs NO litmus (deliberate — the suite
+    # is minutes and a gate that slow gets bypassed with --no-verify), so a
+    # green gate plus the spec you happened to run can both pass over another
+    # spec's broken pin. Measured twice: an edit to images/default/lib-common.sh
+    # left litmus:startup-context-addendum-shape red through both on 2026-08-15,
+    # and 921-vtf4 found three tests red back to af745f3fd on 2026-08-28. This
+    # fixture pins the reverse map that lets an editor ask what to re-run.
+    _step "Checking the file -> covering-litmus-specs query (748-tkjx)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/litmus-covering-specs.sh" fixture 2>&1; then
+        _error "the litmus coverage query broke — an editor of a shared file cannot learn which specs cover it"
+        exit 1
+    fi
+    _info "Litmus coverage query fixture passed"
+
+    # Order 925-erjs. A litmus step that asserts through `grep -A<N>` measures
+    # FORMATTING: a comment inserted above the anchor reddens correct code, and
+    # a window too narrow to reach the real arm greens a broken one. 25 such
+    # windows across 15 tests were converted to structural ranges; the seven
+    # that remain are argued in
+    # openspec/litmus-tests/LINE-WINDOW-DISPOSITIONS.txt. ADVISORY, per
+    # 634-39ik's recorded scope — enforcement never halts the line — but the
+    # count must not silently grow back: it went from 21 to 23 in the one day
+    # between filing the packet and starting it.
+    _step "Reporting litmus line-window pins (925-erjs, advisory)..."
+    _run bash "$SCRIPT_DIR/scripts/check-litmus-line-windows.sh" 2>&1 || true
+    _info "Litmus line-window report emitted"
+
+    # Order 923-rmtw. containers.conf's [engine] env proxy block was written by
+    # an init that could only CREATE it (its guard was a presence test), so
+    # every host provisioned before 801-kqme kept a no_proxy list without
+    # nix-cache — four days of phantom 883-ncrs "cache RSTs" and a broken e2e,
+    # repaired BY HAND on two hosts. This fixture pins the converger that
+    # removes the block and the check that would have caught the drift.
+    _step "Checking the containers.conf proxy-env converger (923-rmtw)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-containers-conf-proxy-env.sh" fixture 2>&1; then
+        _error "the containers.conf proxy-env check broke — a stale enclave proxy can strand fleet hosts again"
+        exit 1
+    fi
+    _info "containers.conf proxy-env fixture passed"
+
+    # Order 923-rmtw, shell half. A pasted copy of a Rust constant stops
+    # tracking its source: run-forge-project.sh and orchestrate-enclave.sh each
+    # carried their own no_proxy list, both frozen at pre-801-kqme values for
+    # eleven days — naming git-service after the constant dropped it, missing
+    # nix-cache after it gained it. One definition now, and this gate parses
+    # main.rs rather than restating the value, so the next change to
+    # ENCLAVE_NO_PROXY_BASE breaks the build instead of stranding the fleet.
+    _step "Checking the enclave proxy list has one definition (923-rmtw)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-enclave-proxy-lib.sh" 2>&1; then
+        _error "the shell enclave proxy list drifted from ENCLAVE_NO_PROXY_BASE, or a script re-pasted it"
+        exit 1
+    fi
+    _info "Enclave proxy list single-source check passed"
+
     # Order 858-ihcb. A benchmark that measures a warm prompt cache reports a
     # number that is wrong by 10x and looks plausible. This fixture inspects
     # the payloads the harness's REAL call sites put on the wire, because the

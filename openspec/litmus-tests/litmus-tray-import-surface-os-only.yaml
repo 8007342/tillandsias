@@ -64,12 +64,21 @@ critical_path:
   - step: "the static-CRT rustflags that removed vcruntime140 are still configured for MSVC targets"
     # Not an expression pin on program logic: this asserts a build CONFIGURATION
     # value, and the step below is its negative control.
-    command: "grep -A1 'target.x86_64-pc-windows-msvc' .cargo/config.toml | grep -q 'crt-static' && echo 'ok: static-crt-configured'"
+    # ORDER 925-erjs. Was `grep -A1 '<target>' … | grep -q 'crt-static'`. A TOML
+    # section runs to the next `[`, not for one line, so a second rustflag or a
+    # comment inside the section would have hidden the flag from the window.
+    # NEGATIVE CONTROL (verified 2026-08-29): emptying rustflags fails the step.
+    command: "awk -v s='[target.x86_64-pc-windows-msvc]' 'index($0,s)==1{f=1;next} /^\\[/{f=0} f' .cargo/config.toml | grep -q 'crt-static' && echo 'ok: static-crt-configured'"
     timeout_ms: 3000
     expected_behavior: "ok: static-crt-configured"
 
   - step: "negative control for the grep above: it does not match an absent target section"
-    command: "grep -A1 'target.riscv64-pc-windows-msvc' .cargo/config.toml 2>/dev/null | grep -q 'crt-static' && { echo 'FAIL: matched a target section that does not exist'; exit 1; } || echo 'ok: grep-discriminates'"
+    # ORDER 925-erjs. The DISCRIMINATION control: a section that does not exist
+    # must not match. Converted with the same section reader as the positive
+    # step above, so the control tests the reader the positive step actually
+    # uses — with `grep -A1` here and a section reader there, it would have been
+    # vouching for a mechanism no longer in play.
+    command: "awk -v s='[target.riscv64-pc-windows-msvc]' 'index($0,s)==1{f=1;next} /^\\[/{f=0} f' .cargo/config.toml | grep -q 'crt-static' && { echo 'FAIL: matched a target section that does not exist'; exit 1; } || echo 'ok: grep-discriminates'"
     timeout_ms: 3000
     expected_behavior: "ok: grep-discriminates"
 

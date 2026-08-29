@@ -37,9 +37,16 @@ critical_path:
     expected_behavior: "is_ready_for_user_action"
 
   - step: "project-start gate is exposed and spec traced"
-    command: "grep -F 'pub fn can_start_project(&self) -> bool' crates/tillandsias-core/src/state.rs && grep -B2 -F 'pub fn can_start_project(&self) -> bool' crates/tillandsias-core/src/state.rs | grep -F '@trace spec:app-lifecycle'"
+    # ORDER 925-erjs. Was `grep -B2 -F '<signature>' … | grep -F '@trace …'`.
+    # The trace sits in the doc comment and is one line above today, so a
+    # two-line BACKWARD window fits — until someone adds a third line of doc,
+    # at which point the pin fails on correct, better-documented code. The awk
+    # buffers the CONTIGUOUS comment block immediately preceding the signature,
+    # so the binding is to the doc block rather than to its current length.
+    # NEGATIVE CONTROL (verified 2026-08-29): deleting the @trace line fails it.
+    command: "grep -qF 'pub fn can_start_project(&self) -> bool' crates/tillandsias-core/src/state.rs && awk '/^[[:space:]]*\\/\\//{buf=buf $0 \"\\n\"; next} {if ($0 ~ /pub fn can_start_project\\(&self\\) -> bool/) {print buf; exit} buf=\"\"}' crates/tillandsias-core/src/state.rs | grep -qF '@trace spec:app-lifecycle' && echo 'ok: gate exposed and traced'"
     timeout_ms: 3000
-    expected_behavior: "can_start_project"
+    expected_behavior: "ok: gate exposed and traced"
 
   - step: "shutdown gate treats Stopping and Error as terminal action blockers"
     command: "grep -F 'pub fn is_shutting_down(&self) -> bool' crates/tillandsias-core/src/state.rs && grep -F 'TrayAppLifecycleState::Stopping | TrayAppLifecycleState::Error' crates/tillandsias-core/src/state.rs"

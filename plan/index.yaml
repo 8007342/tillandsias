@@ -1310,8 +1310,8 @@ plan_index:
         packet's shutdown criterion covers the persistent reader/select boundary.
         Awaiting four named verified-by events for SC-08, SC-09, SC-10, and SC-17.
       split_into:
-        - "230 — headless-loginstatus-push (slice 2: LoginStatePush on Vault token change)"
-        - "231 — headless-cloudprojects-push (slice 3: CloudProjectsPush on gh repo list change)"
+        - headless-loginstatus-push   # 230 — slice 2: LoginStatePush on Vault token change
+        - headless-cloudprojects-push   # 231 — slice 3: CloudProjectsPush on gh repo list change
       kind: refactor+implementation
       deliverable: crates/tillandsias-headless/src/
       depends_on: [socket-protocol-push-variants]
@@ -2587,8 +2587,8 @@ plan_index:
       status: obsoleted
       kind: audit+security+design
       split_into:
-        - "246a — credential-inventory-audit (inventory all credential flows: vault, github, podman secrets, agent tokens)"
-        - "246b — token-lifecycle-policy (token TTLs, rotation, revocation, quarantine litmus)"
+        - credential-inventory-audit   # 246a — inventory all credential flows: vault, github, podman secrets, agent tokens
+        - token-lifecycle-policy   # 246b — token TTLs, rotation, revocation, quarantine litmus
       deliverable: plan/issues/credential-secrets-architecture-audit-2026-07-09.md
       depends_on: [network-architecture-audit]
       pickup_role: any
@@ -2640,8 +2640,8 @@ plan_index:
       status: obsoleted
       kind: audit+bug-fix
       split_into:
-        - "247a — tls-certificate-chain-audit (CA generation -> podman secrets -> container trust stores)"
-        - "247b — git-mirror-forwarding-e2e (forge -> mirror -> GitHub, ref consistency litmus)"
+        - tls-certificate-chain-audit   # 247a — CA generation -> podman secrets -> container trust stores
+        - git-mirror-forwarding-e2e   # 247b — forge -> mirror -> GitHub, ref consistency litmus
       deliverable: plan/issues/proxy-git-mirror-configuration-audit-2026-07-09.md
       depends_on: [network-architecture-audit]
       pickup_role: any
@@ -7834,11 +7834,11 @@ plan_index:
         ready children own failure quarantine, subscribed Linux power signals,
         adaptive preemption/resume/priority, and status/pin semantics.
       split_into:
-        - "484a — inference-policy-router/data-pure-route (CLASS-1, ROUTE-1/2/4/5, NEG-2 foundation)"
-        - "484b — inference-policy-router/failure-quarantine (ROUTE-3 failure advance + three strikes until re-probe)"
-        - "484c — inference-policy-router/linux-signal-watcher (ADAPT-1 UPower + PowerProfiles PropertiesChanged)"
-        - "484d — inference-policy-router/preemption-resume-priority (ADAPT-2/3 + battery residency guard)"
-        - "484e — inference-policy-router/status-pin (ADAPT-4 explanatory status + ephemeral expiring pin)"
+        - inference-policy-router/data-pure-route   # 484a — CLASS-1, ROUTE-1/2/4/5, NEG-2 foundation
+        - inference-policy-router/failure-quarantine   # 484b — ROUTE-3 failure advance + three strikes until re-probe
+        - inference-policy-router/linux-signal-watcher   # 484c — ADAPT-1 UPower + PowerProfiles PropertiesChanged
+        - inference-policy-router/preemption-resume-priority   # 484d — ADAPT-2/3 + battery residency guard
+        - inference-policy-router/status-pin   # 484e — ADAPT-4 explanatory status + ephemeral expiring pin
       kind: implementation
       multi_cycle: true
       deliverable: policy router in tillandsias-headless (data-driven routing table, fallback chains, D-Bus power signal watcher) + policy status surface + unit tests over serialized fixtures
@@ -11980,10 +11980,10 @@ plan_index:
             nixpkgs 26.05 + crane v0.24.0; flake check green; all 6 outputs realized; closures within 0.75% of the pre-bump published artifacts; zero runtime refs
     - packet_id: git-mirror-cross-project-service-identity
       split_into:
-        - '722-hthz — mirror-identity-vault-roles-exact (slice a: exact Vault signer roles/policies, no sign/*)'
-        - '722-ft6g — mirror-identity-per-project-dns (slice b: opaque per-project mirror DNS + provisioning sites)'
-        - '722-ecne — mirror-identity-lane-sidecar-and-sshd (slice c: per-lane sidecar, sshd principals, audit fields)'
-        - '722-uern — mirror-identity-negative-matrix-litmus (slice d: §4a M0-M7 executable gate)'
+        - mirror-identity-vault-roles-exact   # 722-hthz — slice a: exact Vault signer roles/policies, no sign/*
+        - mirror-identity-per-project-dns   # 722-ft6g — slice b: opaque per-project mirror DNS + provisioning sites
+        - mirror-identity-lane-sidecar-and-sshd   # 722-ecne — slice c: per-lane sidecar, sshd principals, audit fields
+        - mirror-identity-negative-matrix-litmus   # 722-uern — slice d: §4a M0-M7 executable gate
       release_target: forge-local-experts-milestone
       order: 606-bvnp
       status: blocked

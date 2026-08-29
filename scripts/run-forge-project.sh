@@ -70,6 +70,14 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
+# ORDER 923-rmtw. The proxy env comes from ONE definition, never a pasted copy.
+# This script carried its own list for long enough to go stale: it still named
+# `git-service` (dropped from the Rust constant) and never gained `nix-cache`
+# (added by 801-kqme on 2026-08-17), so every forge container it launched sent
+# https://nix-cache:5000 through squid. Kept in step with ENCLAVE_NO_PROXY_BASE
+# by scripts/test-enclave-proxy-lib.sh.
+# shellcheck source=scripts/lib/enclave-proxy.sh
+source "$SCRIPT_DIR/lib/enclave-proxy.sh"
 require_podman
 PODMAN_CTL="$SCRIPT_DIR/tillandsias-podman"
 
@@ -142,12 +150,7 @@ else
         --env PROJECT="$PROJECT_NAME" \
         --env TILLANDSIAS_PROJECT="$PROJECT_NAME" \
         --env TILLANDSIAS_GIT_MIRROR_PATH="$MIRROR_DIR" \
-        --env http_proxy=http://proxy:3128 \
-        --env https_proxy=http://proxy:3128 \
-        --env HTTP_PROXY=http://proxy:3128 \
-        --env HTTPS_PROXY=http://proxy:3128 \
-        --env no_proxy=localhost,127.0.0.1,proxy,git-service,inference \
-        --env NO_PROXY=localhost,127.0.0.1,proxy,git-service,inference \
+        "${ENCLAVE_PROXY_ENV_ARGS[@]}" \
         --env PATH=/usr/local/bin:/usr/bin:/usr/sbin:/bin:/sbin \
         --volume "${CA_CERT}:/etc/tillandsias/ca.crt:ro" \
         --entrypoint "$ENTRYPOINT" \

@@ -1,0 +1,223 @@
+---
+tags: [litmus, testing, fixtures, fail-loud, yaml, negative-control, falsifiability]
+languages: [bash, yaml]
+since: 2026-08-29
+last_verified: 2026-08-29
+sources:
+  - plan/index.yaml order:748-tkjx
+  - plan/index.yaml order:921-vtf4
+  - plan/index.yaml order:925-erjs
+  - plan/index.yaml order:721-77yu
+  - plan/index.yaml order:677-33be
+  - plan/index.yaml order:776-cm74
+authority: high
+status: current
+tier: bundled
+summary_generated_by: hand-curated
+bundled_into_image: true
+committed_for_project: true
+---
+
+# Writing litmus fixtures that can actually fail
+
+@trace spec:cheatsheet-tooling, spec:spec-traceability
+
+**Use when**: authoring or converting a litmus step, or writing any fixture that
+greps this repository's own source.
+
+Every rule below cost a measured incident on this fleet between 2026-08-15 and
+2026-08-29. They are ordered by how expensive the mistake is, not by how
+likely — the cheap-looking ones near the top are the ones that produced
+multi-day standing reds.
+
+## The one rule that subsumes most of the others
+
+**Ask what result would have falsified your assertion. If nothing would have,
+you measured your own input.**
+
+A test that cannot fail when the behaviour inverts is worse than no test,
+because it spends credibility. Three examples, all measured 2026-08-29 under
+order 925-erjs:
+
+| Pin | Why it could not fail |
+| --- | --- |
+| `grep -A 30 'pub fn is_transient' … \| grep 'StreamError'` | asserted the type NAME, so it passed whether the arm mapped to `true` or `false` |
+| `grep -A12 '<match arm>' … \| grep -F 'ErrorCode::Unsupported'` | matched the arm's own COMMENT two lines in; the code beneath was unpinned |
+| `grep -A 2 'pub fn enclave_network_name' … \| grep 'tillandsias'` | a substring the crate path itself satisfies; `tilla-{}-enc` passed it |
+
+Assert the **mapping**, not the name. `StreamError\(_\) *=> *true`, not
+`StreamError`.
+
+## Never anchor an assertion on a comment
+
+Order 921-vtf4, first-red commit `f58079555`. A pin read
+
+```bash
+grep -l 'lib/tool-dispatch.sh' scripts/tray-diagnose.sh scripts/diagnose-macos-provision.sh
+```
+
+to enforce "these shipped diagnostics do NOT source the shared lib". A docs
+commit then added the comment `WHY THIS DISPATCH IS INLINE AND NOT
+scripts/lib/tool-dispatch.sh` to both files — and the pin matched the comment.
+
+**The commit that documented the exception broke the test that guards the
+exception**, and it stood red for three days while the behaviour was never once
+violated. Match the construct, not the string:
+
+```bash
+# the invariant is a SOURCE STATEMENT, so require one
+grep -lE '^[[:space:]]*(\.|source)[[:space:]]+[^#]*lib/tool-dispatch\.sh' <files>
+```
+
+## Bound by syntax, never by a line count
+
+`grep -A<N>` measures FORMATTING. Insert a comment above the anchor and the
+target slides out; the test fails on correct code while naming the pinned
+behaviour, so the reader investigates working code. 748-tkjx records two such
+false failures in one hour.
+
+Use the range idiom this corpus already uses:
+
+```bash
+awk '/^fn build_inference_run_args\(/,/^}/' crates/…/main.rs   # top-level fn
+awk '/pub fn is_transient/,/^    }$/'       crates/…/client.rs # impl method
+awk '/gpu-cuda\)/,/;;/'                     images/…/entrypoint.sh  # case arm
+awk -v s='[target.x86_64-pc-windows-msvc]' \
+    'index($0,s)==1{f=1;next} /^\[/{f=0} f' .cargo/config.toml       # TOML section
+```
+
+For a doc comment above a signature, buffer the contiguous comment block rather
+than counting backwards with `-B2`:
+
+```bash
+awk '/^[[:space:]]*\/\//{buf=buf $0 "\n"; next}
+     {if ($0 ~ /pub fn can_start_project/) {print buf; exit} buf=""}' file.rs
+```
+
+### The subtlest form: a truncated comparison input
+
+`litmus:terminal-status-vocabulary-shape` read a status list through `grep -A3`
+and **compared** it against another list. An ordinary rustfmt reflow of the
+`matches!` makes the window see ONE status where the function has four — and the
+step then reports the *compared-against guard* as drifted.
+
+**A window that truncates an input to a comparison does not fail. It accuses
+something else.** Measured 2026-08-29: `-A3` saw `completed`; the awk range saw
+all four.
+
+## Verify every negative control on a mutated copy
+
+Not by reasoning — by running it. The loop that works:
+
+```bash
+cp real/file.rs /tmp/neg.rs
+sed -i 's/=> true,/=> false,/' /tmp/neg.rs
+<your assertion against /tmp/neg.rs> && echo 'STILL PASSES (bad)' || echo 'fails (correct)'
+```
+
+Under 925-erjs every one of 25 conversions was checked this way: flipping a
+match arm, weakening `0o600` to `0o644`, emptying `rustflags`, renaming a format
+string, deleting a `@trace`, replacing `exit 1` with `true`, pointing a CUDA
+device at `/dev/null`.
+
+## EXECUTE the decoded command — reviewing the diff cannot work
+
+**YAML double-quoted scalars eat backslashes, and awk needs them.**
+
+Writing `\\"$OLLAMA_LIBDIR` in a YAML `command:` produces `"$OLLAMA_LIBDIR` in
+the shell — the backslash escaped the quote, not the dollar. awk then reads `$`
+as end-of-line, the range matches nothing, and the step fails closed. The edit
+looks right in the diff.
+
+Extract and run what the harness will actually run:
+
+```bash
+tillandsias-plan yaml-get openspec/litmus-tests/<test>.yaml critical_path \
+  | grep '^command: ' | sed "s/^command: //" \
+  | while IFS= read -r c; do c="${c%\'}"; c="${c#\'}"; c="${c//\'\'/\'}"; bash -c "$c"; done
+```
+
+In an awk regex, an anchor you mean literally needs `\$` — which is `\\$` inside
+a YAML double-quoted scalar.
+
+### Same family: backticks in shell heredocs
+
+Writing a ledger event with an unquoted heredoc silently executed
+`` `proxy` `` as a command and left a GAP in the recorded text. Quote the
+delimiter (`<<'EOF'`) whenever the body is prose you want verbatim, and prefer
+writing long ledger prose as a fragment file over passing it as an argument.
+
+## `check-litmus-pin-claims.sh` refuses bare litmus names (721-77yu)
+
+That guard greps every `*.sh` for `litmus:<name>` and refuses any name no test
+declares — correctly, because *a script naming a litmus test that does not exist
+reads as verification and supplies none*. It fires on fixtures with synthetic
+stand-in tests, and on comments that drop a test's `-shape` suffix.
+
+Assemble the token at run time so the literal never appears in source:
+
+```bash
+_LT="litmus"; _LT="${_LT}:"      # then use "${_LT}alpha-shape"
+```
+
+## Constructed absence must SHADOW the real binary
+
+Order 921-vtf4 / commit `d013a6fc8`, found by lenovinha and macuahuitl. A
+fixture built a PATH "with deliberately no `nix`" by omitting it — but kept
+`/usr/bin` on PATH for the POSIX baseline, so on a distro-nix host the real
+`/usr/bin/nix` leaked into the fake world and honestly detected the throwaway
+store. **"No X" is a state you build, not one you assume**:
+
+```bash
+cat > "$FAKEBIN/nix" <<'EOF'
+#!/usr/bin/env bash
+exit 127
+EOF
+chmod +x "$FAKEBIN/nix"
+```
+
+A fixture whose premise holds only on the author's host is a fixture that
+reports on the host, not on the code.
+
+## A fixture that mutates tracked files owes restoration under every exit
+
+Order 677-33be: a killed run left a test sentinel in the tracked `VERSION`, which
+then blocked every push on that host. Under 921-vtf4 the same fixture grew an
+**index** mutation (`git add`), which owes the same discipline:
+
+- restore under `EXIT INT TERM HUP`, and restore the **index** too — an
+  unstaged `cp` leaves the blob staged while the working tree looks clean;
+- **repair on the next run** what a SIGKILL could not clean up;
+- **REFUSE rather than repair** when the file carries work that is not the
+  test's. Restoring from HEAD would destroy an operator's uncommitted edit, which
+  is worse than the test not running.
+
+Related reflex to avoid: `git checkout -- <file>` to undo a test mutation
+destroys *uncommitted* work in that file. It cost this session its own fixture
+fix mid-verification.
+
+## Before "fixing" a red, check the rule still holds
+
+Order 921-vtf4, first-red `32192d5bb`. `litmus:image-build-convergence-shape`
+appended a comment to a tracked `Containerfile` and expected a rebuild. Order
+776-cm74 — an attended operator decision — had changed the cache key to hash
+`git ls-files -s` object ids, so the key stops depending on where a checkout
+lives. Under that definition a working-tree-only edit is **not** a source change
+and the builder was right to skip.
+
+The test was asserting a rule the project had deliberately replaced. The fix was
+to re-cut the test (stage the edit), not to change the builder. **Name the
+first-red commit before choosing a side** — `git log -S` on the matched string,
+or worktree checkouts at the suspect and its parent.
+
+## Checklist
+
+- [ ] Would this fail if the behaviour INVERTED? If not, assert the mapping.
+- [ ] Is the anchor code, or could it match a comment?
+- [ ] Is the scope syntactic (`awk` range), not a line count?
+- [ ] Does a mutated copy actually turn it red?
+- [ ] Did you RUN the YAML-decoded command, not just read the diff?
+- [ ] Does any absence in your fixture SHADOW the real tool?
+- [ ] Do you name a `litmus:` test that exists — suffix and all?
+- [ ] If you mutate tracked files: restored on every exit, repaired next run,
+      and refused when the dirt is someone else's?

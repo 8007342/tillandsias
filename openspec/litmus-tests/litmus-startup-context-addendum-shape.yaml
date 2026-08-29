@@ -45,7 +45,25 @@ critical_path:
   - step: "the append is fail-soft — a missing or unreadable addendum never breaks a launch"
     # Off-Tillandsias projects have no addendum at all, and a documentation
     # append must never be able to take down a forge launch.
-    command: "grep -A4 'startup-context-addendum.md' images/default/lib-common.sh | grep -q '\\-r ' && grep -A10 'startup-context-addendum.md' images/default/lib-common.sh | grep -q '|| true' && echo 'ok: fail-soft'"
+    # ORDER 925-erjs. Was `grep -A4 … | grep -q '-r '` plus `grep -A10 … |
+    # grep -q '|| true'`. Two line-count windows, and this is the test whose own
+    # 748-tkjx history is that two such pins failed on CORRECT code when a
+    # comment was inserted above the anchor. Worse, `startup-context-addendum.md`
+    # matches a COMMENT 9 lines before the code, so the windows were not anchored
+    # to the gate at all — they concatenated every occurrence's window and passed
+    # if `-r ` appeared anywhere in any of them.
+    #
+    # The function body, bounded by SYNTAX rather than by a line count, using the
+    # awk-range idiom this corpus already uses (see
+    # litmus-forge-experts-ephemerality-shape). The literals are the actual
+    # invariants — the regular-file AND readable gate, and the fail-soft
+    # redirect — so this is strictly stronger than what it replaces and cannot
+    # be moved by an inserted comment.
+    #
+    # NEGATIVE CONTROLS, both verified by mutating a copy on 2026-08-29:
+    # dropping `&& -r "$addendum"` fails it; dropping `2>/dev/null || true`
+    # fails it.
+    command: "blk=$(awk '/^inject_startup_context\\(\\)/,/^}/' images/default/lib-common.sh); printf '%s' \"$blk\" | grep -qF '[[ -f \"$addendum\" && -r \"$addendum\" ]]' && printf '%s' \"$blk\" | grep -qF '>>\"$ctx_file\" 2>/dev/null || true' && echo 'ok: fail-soft'"
     timeout_ms: 3000
     expected_behavior: "ok: fail-soft"
 

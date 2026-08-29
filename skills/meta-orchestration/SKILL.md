@@ -353,6 +353,21 @@ On a durable bare-metal DEVELOPMENT host (not an ephemeral forge):
                                      # | stale:capability-row-drifted:<host>:row-only=…,probe-only=…
                                      # | stale:capability-row-expired:<host>:age=<n>s
    ```
+   On Linux, confirm this host is not carrying the orphaned enclave proxy
+   block (order 923-rmtw):
+   ```bash
+   scripts/check-containers-conf-proxy-env.sh   # ok:… | drift:… | unavailable:…
+   ```
+   `[engine] env` in containers.conf is injected into EVERY container on every
+   network, and `proxy` resolves only inside the enclave. Init used to write
+   that block and could never converge it, so hosts provisioned before
+   801-kqme kept a no_proxy list without `nix-cache` — that was four days of
+   phantom 883-ncrs "cache RSTs" and one broken nix e2e, hand-repaired on
+   macuahuitl and lenovinha. On `drift:containers-conf-proxy-env-present`, run
+   `tillandsias --init`: it now REMOVES the block, and containers get proxy env
+   per-container. A commented-out block still counts as drift — that is how
+   yoga ended up with no proxy env at all while init reported success.
+
    Report scratchpad headroom in the same breath (order 915-wkm2) — one line,
    ADVISORY, exits 0 on every path:
    ```bash
@@ -1376,7 +1391,9 @@ it is paid again by every agent on every host every cycle.
 Ask `forge-plan` / `project-plan` (`plan_answer`, `plan_next`, `plan_query`,
 `plan_status`, `plan_blocked_by`, `methodology_ask`, `spec_answer`) and
 `project-info` (`search_code`, `grep_code`, `find_files`, `read_file`). Answers
-are cited — keep the citations.
+are cited — keep the citations. For a conversational/synthesis status question,
+use the Local Experts mode (`expert-serve`) — same citations-or-typed-refusal
+contract as `spec_answer`.
 
 Drop to the filesystem for exactly three reasons, and name the one that applies:
 **unavailable** (MCP down or `confidence=unsupported` — fall back and keep going,
@@ -1817,6 +1834,57 @@ Before exit:
 
    `--backfill` only reaches BACKWARD (a future `--ts` is still refused), so it
    waives nothing the limit exists to protect, and the refusal already names it.
+2b. **Ask which litmus specs cover the files you touched** (order 748-tkjx),
+   BEFORE the gate rather than after the next host finds the red:
+
+   ```bash
+   scripts/litmus-covering-specs.sh --run --changed      # the specs to re-run
+   scripts/litmus-covering-specs.sh <path>...            # one file, with detail
+   ```
+
+   `./build.sh --check` runs NO litmus (deliberate — the suite is minutes, and
+   a gate that slow gets bypassed with `--no-verify`), so a green gate plus the
+   spec you happened to be working in can both pass over another spec's broken
+   pin. That is measured, twice: on 2026-08-15 an edit to
+   `images/default/lib-common.sh` left `litmus:startup-context-addendum-shape`
+   red through a green `--check` and a passing 7/7 run of the agent's own spec;
+   on 2026-08-28 three tests were found red back to `af745f3fd` only because a
+   full suite happened to run (921-vtf4). `lib-common.sh` alone is covered by
+   twelve specs across four lanes.
+
+   ADVISORY and cheap (~90ms over the whole corpus, no build). It answers from
+   committed data — each test's declared `workspace contains` artifacts plus its
+   commands — so there is no second list to drift. `match:declared` is an
+   authored coverage claim, `match:command` is coverage the preconditions never
+   declared; `binding:unbound` means no spec binds that test, so it executes in
+   no suite (885-92iu) and is excluded from the count and from `--run`. A path
+   no litmus references answers `ok:litmus-coverage:0-spec(s)` and nothing
+   else — an editor of an uncovered file is not nagged.
+
+2c. **Report split parents still competing with their own children**
+   (order 750-zrt4):
+
+   ```bash
+   tillandsias-plan split-parents   # parent<TAB>status<TAB>child:status,...
+   ```
+
+   A packet whose work has been split keeps `ready` and gains a `split_into`
+   list, and only `ready` is claimable — so a fully-delegated parent stays in
+   the pool forever. Measured 2026-08-14/15: `select-work-batch.sh linux`
+   reported `urgent=mirror-identity-lane-sidecar-and-sshd` on four consecutive
+   cycles and no host claimed it (eleven design rungs behind a 3-hour
+   estimate), while one level up 606-bvnp ranked #1 claimable with all four
+   slices already spoken for. Both were fixed by hand, which depended on an
+   agent noticing a four-cycle stall.
+
+   REPORTS ONLY — it names the children and their statuses so you can see where
+   the work went, and changes nothing. Resolve one by setting the parent
+   `blocked` with an event naming the children (accurate: it cannot progress
+   without them), or, if it genuinely retains work of its own, declare
+   `retains_direct_work: true`. **Never `obsoleted`** — that status satisfies
+   dependents and would falsely unblock work that is still waiting on the
+   rungs.
+
 3. Validate touched YAML with a parser, using the one that EXISTS where you are:
    `tillandsias-policy validate-yaml <files>` where built, else
    `yq . <file> >/dev/null`, else `ruby -ryaml -e "YAML.load_file('<file>')"`.

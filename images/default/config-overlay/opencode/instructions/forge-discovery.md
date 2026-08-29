@@ -8,10 +8,11 @@ You've just attached to a development environment. Before writing code, discover
 ## Quick Start
 
 1. Use the `/forge-quick-intro` skill immediately when starting a new session in a new environment to quickly jumpstart your awareness of the forge capabilities with minimal token overhead.
-2. Run `tillandsias-inventory` to list pre-installed tools and versions
-3. Read `$TILLANDSIAS_CHEATSHEETS/INDEX.md` to see all knowledge references
-4. Check `openspec/changes/` for in-flight work or open tasks
-5. Only assume a tool is missing AFTER checking inventory
+2. Project status / what's next: ask the experts first — `plan_answer "what is the current Direction?"`, `plan_next`; see `.forge-startup-context.md` `experts_state` for availability
+3. Run `tillandsias-inventory` to list pre-installed tools and versions
+4. Read `$TILLANDSIAS_CHEATSHEETS/INDEX.md` to see all knowledge references
+5. Check `openspec/changes/` for in-flight work or open tasks
+6. Only assume a tool is missing AFTER checking inventory
 
 ## The Inventory Command
 
@@ -101,6 +102,7 @@ User: "Cargo builds take 3 minutes"
 | "What OpenSpec workflow step am I on?" | `cheatsheets/agents/openspec.md` |
 | "What changes are in flight?" | `openspec status` or `ls openspec/changes/` |
 | "How do I query plan/index.yaml or methodology?" | Use the `forge-plan` MCP tools (`plan_answer`, `methodology_path`, `plan_blocked_by`, etc.) before grepping — see startup context |
+| "What's the project status / what's next?" | `plan_answer` / `plan_next` / `plan_status`; cross-spec joins → `spec_answer`; generic projects → `project_answer`; conversational → Local Experts mode (needs index + inference — see `experts_state`); when degraded or `unsupported`, read the `plan/` files and record the fallback |
 
 ## Sources of Truth
 

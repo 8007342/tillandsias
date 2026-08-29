@@ -39,7 +39,14 @@ critical_path:
     expected_behavior: "ok: affordances declared"
 
   - step: "it states ruby is ABSENT, since our own skills historically assumed it"
-    command: "grep -A6 'Tooling actually present here' images/default/lib-common.sh | grep -Fq 'ruby' && grep -Fq 'ABSENT' images/default/lib-common.sh && echo 'ok: ruby absence stated'"
+    # ORDER 925-erjs. Was `grep -A6 '<heading>' … | grep -Fq 'ruby'` plus a
+    # file-scoped `grep -Fq 'ABSENT'` — the window bound the two only by
+    # proximity, so any 'ruby' within six lines of the heading and any 'ABSENT'
+    # anywhere in a 4000-line file satisfied it. The claim is one LINE of the
+    # baked affordances doc, so assert that line: no window, and it fails the
+    # moment the claim changes.
+    # NEGATIVE CONTROL (verified 2026-08-29): renaming the absent tool fails it.
+    command: "grep -qF '**ABSENT:** \\`ruby\\`' images/default/lib-common.sh && echo 'ok: ruby absence stated'"
     timeout_ms: 5000
     expected_behavior: "ok: ruby absence stated"
 
