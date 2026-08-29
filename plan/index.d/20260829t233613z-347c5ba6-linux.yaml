@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: hybrid-cpu-amd-nvidia-matrix-truthful-on-mobile-workstation
+    field: status
+    value: in_progress
+    ts: "2026-08-29T23:36:13Z"
+    host: linux
+
+events:
+  - packet_id: hybrid-cpu-amd-nvidia-matrix-truthful-on-mobile-workstation
+    event:
+      type: note
+      ts: "2026-08-29T23:36:13Z"
+      host: linux
+      summary: >
+        claimed 2026-08-29T23:35Z — resolving the image contradiction (entrypoint advertises cuda_v12/v13, ollama discovers id=cpu). Re-verifying my own '/usr/lib/ollama is empty' claim first: it came from an exec whose PATH was broken, so the measurement is suspect.

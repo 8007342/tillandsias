@@ -323,8 +323,18 @@ pub fn record_measurement(m: MeasurementRecord) -> Result<(), String> {
 }
 
 // @trace spec:accel-capability-probe
+/// `effective_tier` NO LONGER REACHES DEVICE ENUMERATION (order 935-jhh5). It
+/// used to be threaded down to `enumerate_gpus` and decide `cdi_ok`, which made
+/// the GPU record's container lane a restatement of the tier — itself derived
+/// from the same `nvidia-smi` that record already runs.
+///
+/// It is still read HERE, for `legacy_tier`, and that is the right place for it:
+/// the document then carries the CLAIMED tier beside INDEPENDENTLY MEASURED
+/// devices, so the two can be compared instead of one being manufactured from
+/// the other. Enumeration measures the machine; this field records what the
+/// tier probe asserted. Do not re-thread it downward.
 pub fn run_probe(effective_tier: &str) -> CapabilityDocument {
-    let devices = enumerate_devices(effective_tier);
+    let devices = enumerate_devices();
     let engines = enumerate_engines();
     let measurements = Vec::new(); // Microbenchmarks run on demand / bounded
     let host = enumerate_host();
@@ -358,14 +368,14 @@ pub fn probe_identity() -> String {
 }
 
 // @trace spec:accel-capability-probe
-fn enumerate_devices(effective_tier: &str) -> Vec<DeviceRecord> {
+fn enumerate_devices() -> Vec<DeviceRecord> {
     let mut devices = Vec::new();
 
     // 1. CPU Device
     devices.push(enumerate_cpu());
 
     // 2. GPUs
-    devices.extend(enumerate_gpus(effective_tier));
+    devices.extend(enumerate_gpus());
 
     // 3. NPUs
     devices.extend(enumerate_npus());
@@ -725,13 +735,74 @@ fn intel_compute_runtime_present() -> bool {
         .unwrap_or(false)
 }
 
-fn enumerate_gpus(effective_tier: &str) -> Vec<DeviceRecord> {
+/// Does ONE spec body name the NVIDIA kind AND a usable device node?
+///
+/// Split out so it is testable without the filesystem: a spec that names the
+/// kind but no `/dev/nvidiaN` node cannot deliver a GPU, and neither can one
+/// whose node sits under a self-referential `/run/host` prefix — that lands at
+/// the wrong in-container path, which is exactly the spec a bad `--dev-root`
+/// produced on this host.
+#[cfg(target_os = "linux")]
+fn spec_body_delivers_nvidia(body: &str) -> bool {
+    body.contains("nvidia.com/gpu") && body.contains("/dev/nvidia") && !body.contains("/run/host")
+}
+
+#[cfg(target_os = "linux")]
+fn spec_file_delivers_nvidia(path: &std::path::Path) -> bool {
+    std::fs::read_to_string(path)
+        .map(|b| spec_body_delivers_nvidia(&b))
+        .unwrap_or(false)
+}
+
+#[cfg(target_os = "linux")]
+fn nvidia_cdi_deliverable() -> bool {
+    // podman's own default search path, plus the user dir a rootless immutable
+    // host must use (podman does not search it unless containers.conf declares
+    // it — the correction recorded on 665-zddn).
+    let mut dirs: Vec<std::path::PathBuf> = vec![
+        std::path::PathBuf::from("/etc/cdi"),
+        std::path::PathBuf::from("/var/run/cdi"),
+    ];
+    if let Ok(home) = std::env::var("HOME") {
+        dirs.push(std::path::Path::new(&home).join(".config/cdi"));
+    }
+
+    for dir in dirs {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("yaml") {
+                continue;
+            }
+            if spec_file_delivers_nvidia(&path) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// ORDER 935-jhh5: `effective_tier` USED TO BE A PARAMETER HERE and is gone on
+/// purpose. Its only consumer was `cdi_ok = effective_tier == "gpu-cuda"`, and
+/// that tier is itself derived from the same `nvidia-smi` this function already
+/// runs — so the parameter was the circularity, carried in by signature. The
+/// compiler flagging it unused the moment the real check landed is the proof
+/// that the dependency is severed rather than merely rerouted.
+fn enumerate_gpus() -> Vec<DeviceRecord> {
     let mut gpus = Vec::new();
 
-    // Only the Linux arm consults the tier (CDI container-deliverability);
-    // the macOS arm is host-native only by spec (PROBE-7).
-    #[cfg(not(target_os = "linux"))]
-    let _ = effective_tier;
+    // The tier no longer reaches this function at all (order 935-jhh5). It used
+    // to be a parameter whose ONLY consumer was the Linux arm's
+    // `cdi_ok = effective_tier == "gpu-cuda"` — a check derived from the same
+    // `nvidia-smi` that arm already runs. With that circularity removed the
+    // parameter went too, and this `let _ = effective_tier;` — the
+    // non-Linux fallback that existed purely to silence the resulting
+    // unused-parameter warning — went with it. The cross-target gate (656-spux)
+    // caught it: it compiles on the host either way, and only the Windows
+    // target proved the line was now referencing something that no longer
+    // exists. The macOS arm is host-native only by spec (PROBE-7).
 
     #[cfg(target_os = "macos")]
     {
@@ -765,7 +836,7 @@ fn enumerate_gpus(effective_tier: &str) -> Vec<DeviceRecord> {
             .filter(|s| !s.is_empty());
 
         if let Some(nvidia_output) = nvidia_present {
-            let cdi_ok = effective_tier == "gpu-cuda";
+            let cdi_ok = nvidia_cdi_deliverable();
             let lanes = if cdi_ok {
                 vec!["container".to_string(), "host-native".to_string()]
             } else {
@@ -1405,6 +1476,68 @@ fn slug(raw: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    /// ORDER 935-jhh5. The old `cdi_ok = effective_tier == "gpu-cuda"` was
+    /// CIRCULAR — the tier derives from the same `nvidia-smi` the caller already
+    /// ran — so it could never report a missing spec on a host with a working
+    /// driver. These pin the replacement against real spec SHAPES, using a
+    /// temp dir rather than this machine's state, because on a host where CDI
+    /// already works BOTH the broken and the fixed check answer true and a test
+    /// that read the live filesystem would pass either way.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn cdi_deliverable_requires_a_device_node_not_merely_the_kind() {
+        use std::io::Write;
+        let dir = std::env::temp_dir().join(format!("cdi-probe-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let write = |name: &str, body: &str| {
+            let p = dir.join(name);
+            let mut f = std::fs::File::create(&p).unwrap();
+            f.write_all(body.as_bytes()).unwrap();
+            p
+        };
+
+        // Names the kind but declares no node: cannot deliver a GPU.
+        let bare = write(
+            "bare.yaml",
+            "kind: nvidia.com/gpu\ndevices:\n  - name: all\n",
+        );
+        assert!(
+            !super::spec_file_delivers_nvidia(&bare),
+            "a spec with no /dev/nvidiaN node must not count as deliverable"
+        );
+
+        // The shape a bad --dev-root produced here: the node exists but under a
+        // self-referential prefix, so it lands at the wrong in-container path
+        // and the inference entrypoint's `[ -e /dev/nvidia0 ]` finds nothing.
+        let prefixed = write(
+            "prefixed.yaml",
+            "kind: nvidia.com/gpu\ndevices:\n  - name: all\n    deviceNodes:\n      - path: /run/host/dev/nvidia0\n",
+        );
+        assert!(
+            !super::spec_file_delivers_nvidia(&prefixed),
+            "a /run/host-prefixed node lands at the wrong container path — not deliverable"
+        );
+
+        // The good shape.
+        let good = write(
+            "good.yaml",
+            "kind: nvidia.com/gpu\ndevices:\n  - name: all\n    deviceNodes:\n      - path: /dev/nvidia0\n",
+        );
+        assert!(
+            super::spec_file_delivers_nvidia(&good),
+            "a spec naming the kind and a real /dev/nvidia0 IS deliverable"
+        );
+
+        // A spec for someone else's device must not answer for NVIDIA.
+        let other = write(
+            "other.yaml",
+            "kind: amd.com/gpu\ndevices:\n  - name: all\n    deviceNodes:\n      - path: /dev/dri/card0\n",
+        );
+        assert!(!super::spec_file_delivers_nvidia(&other));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
     use super::*;
 
     /// ORDER 880-tdwn: pin the podman seam to /bin/false for a test's
