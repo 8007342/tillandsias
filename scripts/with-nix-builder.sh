@@ -142,7 +142,10 @@ _nix_builder_ensure_image() {
         return 1
     fi
     echo "[nix-builder] Building '$_NB_IMAGE_NAME' image (first run)..."
-    podman build -t "$_NB_IMAGE_NAME" -f "$containerfile" "$(dirname "$containerfile")" \
+    # --http-proxy=false: containers.conf injects the enclave-only proxy:3128
+    # into every container; a host-network build cannot resolve it (precedent:
+    # build-image.sh).
+    podman build --http-proxy=false -t "$_NB_IMAGE_NAME" -f "$containerfile" "$(dirname "$containerfile")" \
         2>&1 | while IFS= read -r line; do printf '  [build] %s\n' "$line"; done
 }
 

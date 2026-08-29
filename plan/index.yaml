@@ -25868,6 +25868,12 @@ plan_index:
         Do not invent any of this. Bring the operator the choice, then wire it.
       events:
         - type: progress
+          ts: "2026-08-29T00:07:06Z"
+          agent_id: "linux-macuahuitl-claude-20260829t000706z"
+          host: linux
+          summary: |
+            LIVE E2E GREEN on macuahuitl 2026-08-29 after two environment fixes: (1) podman build inherited the enclave-only proxy from the stale containers.conf — --http-proxy=false added to both lane build sites (precedent build-image.sh:457); (2) the stale conf itself repaired + filed as 923-rmtw. Verdicts: run1 ok:nix-e2e:wall=109s:substituted=0:built=3; run2 wall=77s:substituted=0:built=2. The lane builds end-to-end against the reconciled images/builder image with the live cache up. FLYWHEEL UNPROVEN and now understood: the populate step lives in with-nix-builder.sh's post-build path, but check-nix-builder-e2e.sh drives its own podman run WITHOUT populate, so the cache never gains the outputs and substituted stays 0 (run2's speedup is /nix volume warmth). NEXT: either add the populate step to the e2e or prove the flywheel through the lane proper (with-nix-builder.sh twice, volume wiped between) — then the substituted>0 proof closes this half.
+        - type: progress
           ts: "2026-08-28T23:32:33Z"
           agent_id: "linux-macuahuitl-claude-20260828t233233z"
           host: linux
@@ -48287,6 +48293,12 @@ plan_index:
         prototype re-run in-container completes its cache-first build.
       events:
         - type: progress
+          ts: "2026-08-29T00:05:03Z"
+          agent_id: "linux-macuahuitl-claude-20260829t000503z"
+          host: linux
+          summary: |
+            ROOT CAUSE SOLVED on macuahuitl 2026-08-29: the cache was never resetting connections — the deployed ~/.config/containers/containers.conf [engine] env carried the PRE-801-kqme no_proxy list (nix-cache absent), so every enclave sibling routed https://nix-cache:5000 through squid: TCP_RESET when squid is up (allowlist denial — the signature documented in the cheatsheets 2026-08-28), DNS failure when down. Proof: sibling probe with proxy env stripped returned valid nix-cache-info (StoreDir:/nix/store, Priority:30) from a live harmonia; same probe with ambient env failed. The conf line is ORPHANED (no current writer; per-container proxy_env_args() is today's mechanism) and init does not converge it — filed as containers-conf-env-line-is-orphaned-and-never-converges (923-rmtw). This host repaired in place (backup kept); the 2026-08-25 hardening-suspect hypotheses are DISPROVEN for the per-host case. Remaining for closure: one fleet host with the stale conf converging via the 923-rmtw fix, then the original enclave-sibling substitution retest.
+        - type: progress
           ts: "2026-08-28T23:32:33Z"
           agent_id: "linux-macuahuitl-claude-20260828t233233z"
           host: linux
@@ -55901,6 +55913,127 @@ plan_index:
         trust `bash -n`. Syntax was valid in both cases where a conversion broke
         behaviour.
       events:
+        - type: note
+          ts: "2026-08-29T00:01:25Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            DESIGN SLICE PUSHED at 5fbb3b531 on linux-next, after the trunk red (920-pxg6 groundtruth expectation) was cleared at 5df72fcbb by macuahuitl. Re-merged, re-gated, pushed: ./build.sh --check green, the previously-red groundtruth case green at the merged tree.
+
+            Packet stays READY with the design attached. 19 of 20 callers remain and the conversion is now mechanical — see the next_action and the per-caller shape table.
+        - type: note
+          ts: "2026-08-28T23:40:51Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            CORRECTION TO MY OWN 'verified' EVENT MINUTES AGO — traps 1 and 2 lost the identifiers that made them legible, and I am restating them rather than leaving a maimed record.
+
+            WHAT HAPPENED: I passed the event summary as a shell argument containing BACKTICKS. The shell command-substituted them before tillandsias-plan ever saw the text. Every backtick-quoted term was EXECUTED and replaced by its output, which was usually empty. The stored sentence 'This session's own environment has a  function' had the word grep eaten out of it; 'the curated bin got , a self-referential dangling symlink' lost the example entirely; and trap 2's 'A COPY TESTED ON A HOST THAT HAS THE TOOL PROVES NOTHING.  runs fine here' lost the command it was about. Two stray commands actually RAN as a side effect, one of them a redirect that tried to create a file named host/jq.
+
+            THE PROCESS RULE, which I had not seen stated anywhere and which applies to every agent writing ledger prose: NEVER put backticks in an append-event summary passed as a shell argument. Ledger prose is technical and naturally wants to quote commands, so this is a trap the ledger's own house style walks into. Write the summary to a file and pass it as a command substitution of cat, or use single quotes throughout. This event was written that way.
+
+            TRAP 1, RESTATED IN FULL. The shell builtin 'command -v' answers for shell FUNCTIONS, aliases and builtins, not only for binaries, and returns the bare name when it does. This agent session's own environment defines a shell function named grep. So 'command -v grep' printed the four characters grep rather than /usr/bin/grep, and my curated-PATH builder ran the equivalent of 'ln -sf grep $dir/grep' — creating a SELF-REFERENTIAL DANGLING SYMLINK named grep pointing at grep. It satisfies a test for an existing symlink and fails at exec. Every consumer running inside the curated PATH then died with 'grep: command not found', and the arm concluded the tool-less path was unusable — a fixture failing for a reason with nothing to do with its subject. The fix is 'type -P', which resolves only binaries, plus a requirement that the answer be an absolute path. The lesson generalizes past this file: a harness that BUILDS an environment must resolve binaries, never commands, because the environment it inherits may define anything of the same name.
+
+            TRAP 2, RESTATED IN FULL. The naive materialization is to copy the binary out of the container, i.e. redirect the container's 'cat /usr/bin/jq' into a host file and chmod it. That produced a WORKING jq on lenovinha — and the result is CONFOUNDED and proves nothing, because lenovinha has jq installed, so the host already carried /usr/lib64/libjq.so.1 and /usr/lib64/libonig.so.5. jq is DYNAMICALLY LINKED against both. On a genuinely jq-less host those libraries are absent too and the copied binary fails at exec. A PATH cannot simulate that condition: PATH governs which BINARIES are found, never shared-library resolution. That is why materialize_tool extracts the non-glibc library closure alongside the binary and runs it under a private LD_LIBRARY_PATH, and why fixture arm 4 asserts via ldd that the PRIVATE copies are the ones actually loaded rather than the host's. That assertion is the real evidence; it holds whatever the host happens to have installed. glibc itself is deliberately not copied, because a mismatched loader is a crash rather than a fallback.
+
+            Traps 3 and 4 and everything else in that event stored intact and stand as written.
+        - type: verified
+          ts: "2026-08-28T23:40:04Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            THE HARNESS IS A WORKING ARTIFACT, PROVEN ON ONE PILOT — and building it rather than designing it found four environment traps, three of which would have made the follow-on story report green while measuring nothing.
+
+            macuahuitl's condition on this slice was exactly right, and it is the reason the traps below are findings rather than future incidents: a design for a measurement that has never been exercised is the green-without-testing shape this fleet keeps filing packets about.
+
+            PILOT: scripts/loop-success-probe.sh. Chosen as the archetype and it is worse than the packet knew — an OUTER poll loop re-scans the whole event log until a deadline, with THREE jq calls per line inside it. Converted two ways: the fast_tool header (the general fix) and 3 calls -> 1 via @tsv (the local win). Verdict byte-identical to the pre-change script with host jq, verified by stash-compare.
+
+            FIXTURE: scripts/test-tool-materialize.sh, 8 arms, bound as litmus:tool-materialization under ci-release. FOUR ARMS MUTATION-TESTED, each verified to FIRE on a broken tree and be silent on a clean one: deleting the library-closure extraction fires arm 4 with 'loaded the HOST's libjq'; reverting _ntp_binpath to command -v fires arm 2b with the self-symlink; removing the cache-hit re-verification fires arm 5; moving the resolution inside the loop fires the litmus step-2 check.
+
+            ARM 5 WAS REWRITTEN AFTER ITS FIRST MUTATION TEST FAILED TO FIRE. As written it asked for a tool the toolbox does not have and asserted no partial cache entry was left — which passes whether or not the cleanup exists, because that request fails at the --version probe BEFORE anything is created. A guard whose subject is never reached is not a guard. It now plants a CORRUPT cache entry and requires re-extraction.
+
+            FOUR TRAPS PAID FOR, all at the call site in the code:
+
+            1.  ANSWERS FOR SHELL FUNCTIONS. This session's own environment has a  function, so command -v grep returned the bare name and the curated bin got , a self-referential dangling symlink. Everything inside the curated PATH then died with 'grep: command not found' and the arm blamed the tool-less path. A harness that builds an environment must resolve BINARIES, never commands.
+
+            2. A COPY TESTED ON A HOST THAT HAS THE TOOL PROVES NOTHING.  runs fine here because lenovinha HAS jq, so /usr/lib64/libjq.so.1 is present; on a genuinely jq-less host it is not. PATH cannot simulate that — PATH governs binaries, not shared libraries. Hence the non-glibc closure travels with the binary under a private LD_LIBRARY_PATH, and arm 4 asserts via ldd that the PRIVATE copies are the ones loaded. That is the property that holds regardless of what the host has.
+
+            3. OVERRIDING XDG_RUNTIME_DIR BREAKS TOOLBOX. Pointing it at a temp dir to place a fixture log cost podman its user-session socket, so toolbox failed, materialization silently degraded to per-call dispatch, and the probe reported a false timeout. A fixture that rearranges the environment can break the runtime it is measuring. The log now lives under the REAL runtime dir.
+
+            4. THE LITMUS RUNNER'S OWN SHIMS. Standalone the suite was 8/8; under scripts/run-litmus-test.sh four arms failed, the timing arm reporting 141261 ms vs 141130 ms because BOTH paths had collapsed to the same broken fallback. Cause: the runner prepends target/litmus-runtime/bin, which holds a podman WRAPPER, and toolbox shells out to podman. run-litmus-test.sh documents this hazard about its own ordering; it is the same trap one level out. no-tool-path.sh now sanitizes PATH of that directory before resolving anything.
+
+            AND ONE I MADE TWICE MORE, worth recording because it is the same shape: I appended /usr/bin to the curated PATH in arms 4 and 7, which puts jq straight back — so materialize_tool correctly declined and the arms measured host jq against host jq (199 ms vs 196 ms), reporting 'the mechanism is not working'. The arm was right; the environment was wrong. Separately, two of my own mutation tests silently no-opped (a python replacement string whose backslash-n the shell had already expanded, and a case-sensitive grep for a message that says CORRUPT), each briefly reading as an arm with no teeth. Mutation tests need their own negative control: confirm the mutation APPLIED before believing the arm is toothless.
+
+            BASH DIALECT: ./build.sh --check caught 1787960403812587650 as a GNU-date-ism (766-tdij) — BSD date does not fail on it, it prints a literal N, so an exit-code guard cannot catch it and the timing arm would compare garbage. Now probed once, with arm 7 SKIPPING where GNU date is absent rather than reporting a number it cannot compute.
+
+            ./build.sh --check GREEN. litmus:tool-materialization 4/4 green under the runner, 8/8 arms.
+        - type: note
+          ts: "2026-08-28T23:39:36Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            AUTHORITATIVE INVENTORY, RE-MEASURED — 20 callers, not 17, and the loop/flat split in my own filing was wrong too.
+
+            Re-counted on the tree at 138ce0180 rather than trusting the 2026-08-26 figure. Format: caller (in-loop sites / flat sites).
+
+              bench-accel-lane.sh (4/8)                       update-convergence-dashboard.sh (1/9)
+              refusal-calibration/measure-recall-at-k.sh (10/2)  refusal-calibration/inject-negatives.sh (7/3)
+              refusal-calibration/measure-bands.sh (9/0)      bench-inference-floor.sh (3/6)
+              claude-mcp.sh (7/1)                             test-convergence-dashboard.sh (0/7)
+              spec-index-ensure.sh (5/2)                      query-traces.sh (4/0)
+              bench-semantic-budget.sh (4/0)                  refusal-calibration/judge-support.sh (3/0)
+              loop-success-probe.sh (3/0)  <- PILOT, converted  generate-evidence-bundle.sh (3/0)
+              test-ssh-lane-sidecar.sh (2/0)                  nix-deps-drv-paths.sh (1/0)
+              nix-push-cache.sh (0/2)      <- new since filing  nix-build-container.sh (0/1)   <- new
+              check-local-expert-health.sh (0/2) <- new        hooks/post-commit-expert-refresh.sh (0/2) <- new
+
+            TWO CORRECTIONS TO MY OWN PACKET TEXT:
+
+            1. 'Every remaining caller invokes jq INSIDE A LOOP' is FALSE. test-convergence-dashboard.sh is 7 flat sites and zero in-loop; the four new callers are entirely flat; and update-convergence-dashboard.sh is 9 flat to 1 in-loop. Five of the twenty have no loop at all and could have gone through the ordinary 799-tb7q sweep. I generalized from the worst cases I had looked at.
+
+            2. test-shipped-diagnostic-tool-dispatch.sh, which my inventory listed with 1 site, has NONE. Its jq mentions are comments and /usr/bin/jq preconditions. It is a fixture ABOUT tool dispatch, and my classifier counted it as a subject of one. Ninth instance in this packet family of a pattern matching text that merely looks like its subject.
+
+            The count moved from 17 to 20 partly because four callers landed after I filed. That is expected drift, and it is the argument for the follow-on story being mechanical: a design that needs re-deriving every time a caller is added is not a design.
+
+            RESTRUCTURING SHAPE PER CALLER, which is deliverable (b):
+
+              MATERIALIZE-ONLY (default, 20 of 20): add the walk-up source header plus
+              JQ="$(fast_tool jq || printf 'jq')" resolved ONCE outside every loop. No
+              restructuring. This is the whole conversion for every caller in the table.
+
+              OPTIONAL COLLAPSE, worth doing only where it is independently obvious: where
+              consecutive jq calls parse the SAME input in one iteration, fold them into one
+              invocation with @tsv. Candidates by consecutive-jq run length, measured:
+              test-convergence-dashboard.sh 8, claude-mcp.sh 5, measure-bands.sh 5,
+              measure-recall-at-k.sh 4, inject-negatives.sh 4, update-convergence-dashboard.sh 3,
+              bench-semantic-budget.sh 3. The pilot did this (3 calls per line -> 1).
+              It is a 3x on top of the 130x; take it where the fold is clear, never as a
+              precondition for converting.
+
+              EXEMPT, unchanged from 799-tb7q and already guarded: curl-piped installers
+              (install-macos.sh), bootstrap wrappers (with-tillandsias-builder.sh,
+              with-wsl2-builder.sh — and note their 'jq' matches are the dnf PACKAGE LIST,
+              not call sites), shipped diagnostics, and the heredoc-scoped stubs in
+              test-opencode-vault-auth-content.sh / test-bench-prompt-uniqueness.sh which
+              were deliberately reverted to bare jq.
+        - type: progress
+          ts: "2026-08-28T23:39:12Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            DESIGN SLICE — THE PACKET'S PREMISE IS WRONG, AND MEASURING IT MADE THE STORY MUCH SMALLER.
+
+            I filed this packet on 2026-08-26 saying the 17 remaining jq callers need RESTRUCTURING to a single jq pass, because per-call toolbox dispatch costs ~264 ms and each invokes jq inside a loop. The dispatch figure is right — independently re-measured today at 265 ms/call warm, 460 ms cold, against 2 ms for host jq. The CONCLUSION was wrong.
+
+            MATERIALIZE THE BINARY, DO NOT RESTRUCTURE THE CALLER. Extracting the toolbox's jq onto the host costs ~1.0 s ONCE and then runs at 2 ms/call — identical to host jq, because at that point it IS the same binary. Measured end to end on the pilot over a 200-line event log: host jq 595 ms, materialized 2306 ms (cold, extraction included), per-call dispatch 51520 ms. 22x, and the gap grows with every iteration.
+
+            So 102 call sites across 17 scripts do not need rewriting. They need ONE resolution line each. That is a different and far smaller story than the one I filed, and it is mechanical in a way the restructure never was.
+
+            NOT A NEW IDEA — GENERALIZED FROM ONE ALREADY IN THE TREE. run-litmus-test.sh already materializes the toolbox's yq for exactly this reason ('a toolbox run round trip measures ~0.29s here'). What did not generalize is that yq is a Go binary and copies cleanly, while jq is DYNAMICALLY LINKED, which is the trap below.
+
+            THE STRONGER FINDING, and it is not about speed. The UNCONVERTED pilot on a jq-less host does not run slowly — it reports {"status":"timeout"} for a stack that came up fine, because every jq call produces empty output and no stage is ever seen. Measured: 80 s against a 30 s budget, wrong answer. These callers are not slow on a tool-less host, they are WRONG on one. That reframes the packet from performance to correctness and argues for finishing it sooner than p2 suggested.
+
+            DELIVERED THIS SLICE: scripts/lib/tool-materialize.sh (materialize_tool + fast_tool), scripts/lib/no-tool-path.sh (the reusable tool-less PATH harness), scripts/test-tool-materialize.sh (8 arms), litmus:tool-materialization bound under ci-release, and ONE pilot conversion. The other 16 are deliberately untouched.
         - type: filed
           ts: "2026-08-26T16:20:00Z"
           agent_id: lenovinha-opus5-metaorch-20260826t153721z
