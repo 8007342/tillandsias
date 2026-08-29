@@ -24,9 +24,9 @@
 //!        plan/issues/optimization-macos-vz-idiomatic-exec-layer-2026-06-21.md
 
 use tillandsias_control_wire::{
-    CAP_PTY_HEARTBEAT_V1, CAP_PTY_HEARTBEAT_V2, ControlEnvelope, ControlMessage, MAX_MESSAGE_BYTES,
-    MAX_PTY_FRAME_BYTES, PtyDirection, PtyExit, PtyInputState, VmPhase, WIRE_VERSION, decode,
-    encode,
+    CAP_PTY_HEARTBEAT_V1, CAP_PTY_HEARTBEAT_V2, CAP_PTY_STDIN_EOF, ControlEnvelope, ControlMessage,
+    MAX_MESSAGE_BYTES, MAX_PTY_FRAME_BYTES, PtyDirection, PtyExit, PtyInputState, VmPhase,
+    WIRE_VERSION, decode, encode,
 };
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
@@ -470,13 +470,23 @@ where
     )
     .await?;
     let ack = read_setup_envelope(&mut stream, exec_idle_timeout()?, "the Hello handshake").await?;
-    match ack.body {
-        ControlMessage::HelloAck { wire_version, .. } => {
+    // Order 925-eofi: read the EOF capability off the ack. Feature-detect on
+    // the advertised token, NEVER on the wire version — a fleet routinely runs
+    // a host newer than the guest staged beside it, and a version comparison
+    // would send a frame an older guest cannot decode (which kills the session
+    // rather than degrading).
+    let peer_supports_stdin_eof = match ack.body {
+        ControlMessage::HelloAck {
+            wire_version,
+            ref server_caps,
+            ..
+        } => {
             if wire_version != WIRE_VERSION {
                 return Err(format!(
                     "vsock_exec: wire_version mismatch (peer {wire_version}, self {WIRE_VERSION})"
                 ));
             }
+            server_caps.iter().any(|c| c == CAP_PTY_STDIN_EOF)
         }
         other => {
             return Err(format!(
@@ -484,7 +494,7 @@ where
                 other.kind()
             ));
         }
-    }
+    };
 
     // 2) PtyOpen (seq 2). env REPLACES the guest environment; a login shell or
     // absolute argv[0] is the caller's responsibility (the guest pty handler
@@ -525,6 +535,38 @@ where
             },
         )
         .await?;
+    }
+
+    // 3b) Tell the guest the input is finished — but ONLY if it said it can be
+    // told (order 925-eofi). The guest turns this into whatever its terminal
+    // state actually requires; the host deliberately does not send the byte
+    // itself, for the reasons measured in 924-eof7.
+    //
+    // WHEN THE PEER CANNOT BE TOLD, SAY SO. Silence here is the whole defect:
+    // a child that reads to EOF would block forever on a PTY whose master
+    // never closes, and the caller would see a hang with no explanation. A
+    // named warning is the minimum; callers whose command genuinely needs EOF
+    // should treat this as a refusal rather than proceed hopefully.
+    if !input.is_empty() {
+        if peer_supports_stdin_eof {
+            seq += 1;
+            write_envelope(
+                &mut stream,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq,
+                    body: ControlMessage::PtyStdinEof { session_id },
+                },
+            )
+            .await?;
+        } else {
+            eprintln!(
+                "[vsock_exec] WARNING: this guest does not advertise {CAP_PTY_STDIN_EOF}, so it \
+                 cannot be told that stdin is finished. Commands that read to EOF (a bare `cat`, \
+                 `gh auth login --with-token`) will HANG here rather than return; byte-exact \
+                 readers (`head -c N`) are unaffected. Update the staged guest binary to fix it."
+            );
+        }
     }
 
     // 4) Drain until PtyClose for our session. Empty ToHost frames are guest
@@ -1342,6 +1384,59 @@ where
 
 #[cfg(test)]
 mod tests {
+
+    /// ORDER 925-eofi — the refusal must be reachable and NAMED. A peer that
+    /// cannot be told stdin is finished must not be sent the frame (it would
+    /// fail the decode and kill the session), and the caller must not be left
+    /// to infer a hang from silence.
+    #[test]
+    fn stdin_eof_is_gated_on_the_advertised_capability_not_the_wire_version() {
+        let source = include_str!("vsock_exec.rs");
+        let window = source
+            .split("pub async fn exec_over_stream_with_input<S>")
+            .nth(1)
+            .and_then(|t| t.split("pub async fn ").next())
+            .expect("the with_input entry point moved — repoint this scan");
+        assert!(
+            window.contains("server_caps.iter().any(|c| c == CAP_PTY_STDIN_EOF)"),
+            "the EOF frame must be gated on the advertised capability"
+        );
+        assert!(
+            !window.contains("wire_version >= ") && !window.contains("wire_version > "),
+            "feature detection must never be a wire-version comparison: a fleet \
+             runs hosts newer than the guest staged beside them"
+        );
+        assert!(
+            window.contains("if peer_supports_stdin_eof"),
+            "the send must be conditional"
+        );
+        let else_arm = window
+            .split("if peer_supports_stdin_eof")
+            .nth(1)
+            .expect("gated send");
+        assert!(
+            else_arm.contains("WARNING") && else_arm.contains("HANG"),
+            "an un-negotiated peer must produce a NAMED warning naming the \
+             consequence — silence here is the defect this packet exists to remove"
+        );
+    }
+
+    /// The EOF must only be sent when there was input to terminate; an empty
+    /// stdin needs no end marker and sending one would be a frame for nothing.
+    #[test]
+    fn stdin_eof_is_only_sent_when_input_was_actually_delivered() {
+        let source = include_str!("vsock_exec.rs");
+        let window = source
+            .split("3b) Tell the guest the input is finished")
+            .nth(1)
+            .expect("the 3b block moved — repoint this scan");
+        let guard = window.split("if peer_supports_stdin_eof").next().unwrap();
+        assert!(
+            guard.contains("if !input.is_empty()"),
+            "the EOF path must be inside an input-non-empty guard"
+        );
+    }
+
     use super::*;
 
     #[test]
