@@ -45,7 +45,24 @@ critical_path:
     expected_behavior: "ok:tool-dispatch-lib:all"
 
   - step: "the shipped diagnostics have not been 'tidied' into the shared lib"
-    command: "if grep -l 'lib/tool-dispatch.sh' scripts/tray-diagnose.sh scripts/diagnose-macos-provision.sh 2>/dev/null | grep -q .; then echo 'FAIL: a shipped diagnostic now sources a sibling lib'; else echo 'ok: shipped diagnostics self-contained'; fi"
+    # ORDER 925-erjs / 921-vtf4. Was `grep -l 'lib/tool-dispatch.sh' <files>` —
+    # a filename SUBSTRING, not a source statement. It went red at f58079555
+    # (2026-08-26, "docs(799-tb7q): the non-conversion's reason lives at the
+    # call site now"), green at its parent e75a9ff59: that commit added the
+    # comment "WHY THIS DISPATCH IS INLINE AND NOT scripts/lib/tool-dispatch.sh"
+    # to both diagnostics, and the pin matched the comment.
+    #
+    # So the commit that DOCUMENTED the exception broke the test that GUARDS the
+    # exception, and it stayed red for three days while the behaviour it pins was
+    # never once violated — neither script sources anything at all. Same shape as
+    # the 925-erjs sweep: an assertion anchored on prose rather than on code,
+    # failing on correct and better-documented work.
+    #
+    # Now: a SOURCE STATEMENT for that lib (`.` or `source`, at the start of a
+    # line, before any comment). NEGATIVE CONTROL, verified 2026-08-29 on a
+    # mutated copy: inserting `. "$(dirname "$0")/lib/tool-dispatch.sh"` into
+    # tray-diagnose.sh is detected; the explanatory comments are not.
+    command: "if grep -lE '^[[:space:]]*(\\.|source)[[:space:]]+[^#]*lib/tool-dispatch\\.sh' scripts/tray-diagnose.sh scripts/diagnose-macos-provision.sh 2>/dev/null | grep -q .; then echo 'FAIL: a shipped diagnostic now sources a sibling lib'; else echo 'ok: shipped diagnostics self-contained'; fi"
     timeout_ms: 5000
     expected_behavior: "ok: shipped diagnostics self-contained"
 

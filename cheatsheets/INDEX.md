@@ -228,6 +228,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - cargo-test.md                    — testing Rust code — unit tests, integration tests, doctests. [bundled, partial-verify]
 - go-test.md                       — testing Go — unit tests, subtests, benchmarks, fuzz, race detection, coverage. [bundled, partial-verify]
 - junit.md                         — testing Java code — unit tests through Surefire, integration tests through Fail… [pull-on-demand: stub]
+- litmus-fixture-writing.md        — authoring or converting a litmus step, or writing any fixture that [bundled, partial-verify]
 - node-test.md [DRAFT]             — testing JavaScript or TypeScript projects with Node's built-in `node:test` runn… [pull-on-demand: stub]
 - playwright.md                    — modern E2E browser testing — TypeScript/JavaScript primary, Python and Java als… [pull-on-demand: stub]
 - podman-testing.md                — You are deciding how to test code that shells out to Podman, or you want to spl… [bundled, partial-verify]

@@ -53,10 +53,41 @@ original_containerfile="$tmp/Containerfile.orig"
 cp "$ROOT/VERSION" "$original_version"
 cp "$CONTAINERFILE" "$original_containerfile"
 
+# ORDER 921-vtf4 / 776-cm74. The context-change case must STAGE its edit, so
+# this fixture now mutates the INDEX as well as the working tree — and index
+# mutation owes the same restoration discipline as the tracked VERSION file
+# (677-33be): under every exit, including the SIGKILL it cannot catch, which the
+# next run repairs.
+CONTAINERFILE_REL="${CONTAINERFILE#"$ROOT/"}"
+
+restore_containerfile_from_head() {
+    git -C "$ROOT" restore --staged --worktree -- "$CONTAINERFILE_REL" 2>/dev/null ||
+        git -C "$ROOT" checkout HEAD -- "$CONTAINERFILE_REL" 2>/dev/null
+}
+
+# REFUSE rather than repair when the operator has their own work here. This
+# fixture returns the file to HEAD, which would silently destroy an uncommitted
+# edit — a failure mode worse than the test not running.
+if ! git -C "$ROOT" diff --quiet -- "$CONTAINERFILE_REL" 2>/dev/null ||
+   ! git -C "$ROOT" diff --cached --quiet -- "$CONTAINERFILE_REL" 2>/dev/null; then
+    if grep -qF 'litmus-context-change' "$CONTAINERFILE" 2>/dev/null; then
+        echo "notice: $CONTAINERFILE_REL carries this test's marker from a killed run; restoring from HEAD" >&2
+        restore_containerfile_from_head
+    else
+        echo "FAIL: $CONTAINERFILE_REL has uncommitted changes that are not this test's." >&2
+        echo "      This fixture restores it from HEAD and would destroy them. Commit or" >&2
+        echo "      stash them first (order 921-vtf4)." >&2
+        exit 1
+    fi
+fi
+
 cleanup() {
     local rc=$?
     cp "$original_containerfile" "$CONTAINERFILE"
     cp "$original_version" "$ROOT/VERSION"
+    # The index too: the context-change case stages its edit, and an unstaged
+    # copy would leave the blob staged while the working tree looked clean.
+    restore_containerfile_from_head
     rm -rf "$tmp"
     trap - EXIT INT TERM HUP
     exit "$rc"
@@ -148,8 +179,21 @@ printf '0.0.0-test-retag\n' >"$ROOT/VERSION"
 "$ROOT/scripts/build-image.sh" "$IMAGE_NAME" >/dev/null
 assert_build_count 1 "VERSION-only change retags without build"
 
+# ORDER 776-cm74 CHANGED WHAT "A SOURCE CHANGE" MEANS, and this case was never
+# updated — which is why it stood red from 32192d5bb (2026-08-26) until
+# 921-vtf4. hash-image-sources.sh hashes the git-normalized content of TRACKED
+# entries (`git ls-files -s` object ids), deliberately, so the cache key stops
+# depending on where a checkout lives or how autocrlf materialised it. Under
+# that definition a working-tree-only edit is NOT a source change, and the
+# builder was RIGHT to skip: the test was asserting the pre-776-cm74 rule.
+#
+# So stage the edit. `git add` is not ceremony here — it is the operation that
+# makes this a source change under the cache key the project actually uses, and
+# the untracked-file alternative is closed by design (hash-image-sources.sh
+# REFUSES untracked image sources outright).
 cp "$original_containerfile" "$CONTAINERFILE"
 printf '\n# litmus-context-change\n' >>"$CONTAINERFILE"
+git -C "$ROOT" add -- "$CONTAINERFILE_REL"
 "$ROOT/scripts/build-image.sh" "$IMAGE_NAME" >/dev/null
 assert_build_count 2 "context change builds once"
 changed_hash="$(latest_hash)"
