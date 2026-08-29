@@ -62,7 +62,12 @@ preconditions:
   # HOST artifact, not a repo one, so it is OPTIONAL by design: a host without
   # one skips those cases loudly rather than failing. Stated here so an unmet
   # environment is legible before a step runs, not inferred from a red.
-  - OPTIONAL (spec.answer cases only): a built spec index — TILLANDSIAS_SPEC_INDEX_DIR,
+  # A plain scalar cannot carry this item: the `:` after "OPTIONAL (…)" makes
+  # it a mapping key and the continuation lines then scan as keyless keys —
+  # this file DID NOT PARSE from 888-miiy until 2026-08-29 (933-*), and the
+  # runner's metadata fallbacks silently mis-bucketed it instead of saying so.
+  - >-
+    OPTIONAL (spec.answer cases only): a built spec index — TILLANDSIAS_SPEC_INDEX_DIR,
     FORGE_SPEC_INDEX_DIR, FORGE_SPEC_INDEX_ROOT, the tillandsias-spec-index-tillandsias
     podman volume, or the XDG cache — containing vectors.jsonl. Build one with
     scripts/spec-index-ensure.sh. WITHOUT IT the spec.answer cases are SKIPPED and
