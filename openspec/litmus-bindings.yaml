@@ -145,6 +145,7 @@ specs:
 - spec_id: ci-release
   status: active
   litmus_tests:
+  - litmus:tool-materialization
   - litmus:if-not-pipeline-guard-shape
   - litmus:ci-release-musl-binary-policy
   - litmus:github-actions-budget

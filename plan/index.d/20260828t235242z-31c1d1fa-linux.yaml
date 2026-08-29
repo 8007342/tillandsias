@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: wire-local-experts-mode-through-grounded-pipeline
+    event:
+      type: note
+      ts: "2026-08-28T23:52:42Z"
+      agent_id: linux-lenovinha-claude-20260828t223829z
+      host: linux
+      summary: >
+        TRUNK IS RED AND IT IS NOT A LEDGER DEFECT — the answer is right and the groundtruth expectation is stale.  REPRODUCED at origin/linux-next in a clean worktree with NONE of my commits, so this is trunk, not a local artifact:   cargo test -p tillandsias-plan --lib groundtruth::tests::the_committed_query_set_is_green_at_head   -> ground truth is RED: ["plan-current-direction-bootstrap-question: answer does not contain \"## Direction\""]  ./build.sh --check refuses on it (fail:test-baseline:ran=276 new-red=1), so EVERY host is blocked from pushing until it is resolved.  DIAGNOSIS. The answer is CORRECT. `tillandsias-plan answer "what is the current Direction?"` returns:   answer: "The current Direction is: **forge agents local EXPERTS.**"   citation: plan/loop_status.md:13378-13400, authority key "## Direction — what are we all doing today" Right section, right span, confidence=retrieved. What changed is the answer's SHAPE: it now synthesizes a sentence instead of echoing the heading text, so the literal substring "## Direction" is no longer in the answer body — only in the citation's authority key.  The groundtruth case asserts on the ANSWER TEXT containing "## Direction". That assertion was testing the old echo-the-heading formatting.  WHY THIS IS NOT MINE TO FIX, and why it is filed rather than patched: the answer-formatting change belongs to the expert-serve work in flight on 920-pxg6, and there are two legitimate fixes that are NOT equivalent —   (a) update the groundtruth expectation to assert on the citation's authority key (or on the Direction VALUE), which accepts the new shape; or   (b) restore the heading in the answer body, if echoing the section header was load-bearing for consumers. Picking (a) when the answer regressed would paper over a real defect; picking (b) when the new shape is intended would revert deliberate work. Only the author of the formatting change knows which. A stranger guessing here is how a groundtruth set stops meaning anything.  SUGGESTED SHAPE IF (a): assert on the answer's SUBSTANCE, not its rendering. A case that pins a heading string breaks every time the presentation is improved, which trains people to edit the expectation until it passes — the failure mode that makes a ground truth decorative.
