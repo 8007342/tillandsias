@@ -149,7 +149,6 @@ async fn connect_and_run(socket_path: &std::path::Path, store: &OtpStore) -> std
             match env.body {
                 ControlMessage::HelloAck {
                     wire_version,
-                    build_version: _,
                     ..
                 } if wire_version == WIRE_VERSION => {
                     info!(
@@ -159,7 +158,6 @@ async fn connect_and_run(socket_path: &std::path::Path, store: &OtpStore) -> std
                 }
                 ControlMessage::HelloAck {
                     wire_version,
-                    build_version: _,
                     ..
                 } => {
                     return Err(std::io::Error::new(

@@ -1,0 +1,52 @@
+packets:
+  - packet_id: guest-binaries-cargo-fallback-fails-late-and-blames-the-wrong-thing
+    order: 934-7jd4
+    status: ready
+    title: |
+      When the nix lane is down, build-guest-binaries falls back to local cargo on hosts where that fallback CANNOT succeed — and the error names the linker, not the lane
+    kind: bug
+    pickup_role: linux
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags:
+      - build-gate
+      - nix
+      - fail-loud
+      - guest-binaries
+    estimated_hours: 2
+    deliverable: |
+      A host that cannot complete the cargo fallback learns that in the first
+      line of the failure, together with why the nix lane was unavailable —
+      not from an aarch64 linker error after a full x86_64 compile.
+    context: |
+      MEASURED on macuahuitl 2026-08-29 during the day's closing
+      ./build.sh --ci-full: scripts/nix-toolbox.sh ensure returned
+      blocked:nix-toolbox:image-pull-failed (TRANSIENT — unreproducible in
+      both foreground and background contexts 30 minutes later, where the
+      chroot rung answers ok; the moment's cause is unknown and is NOT this
+      packet). build-guest-binaries.sh then printed its honest DEGRADED
+      line and proceeded with local cargo — which compiled the entire
+      x86_64 target successfully (~73s) and only THEN failed:
+      "ERROR: missing aarch64 musl linker." This host has no
+      aarch64-linux-musl-gcc and never will by default; the fallback was
+      doomed before it started, the doom was knowable in milliseconds
+      (command -v), and the eventual error names a missing linker when the
+      actionable fact was "the nix lane, which carries that linker, was
+      unavailable — HERE IS WHY".
+
+      Two shapes acceptable, implementer's choice:
+        A. The fallback preflights its own requirements (linkers for every
+           guest arch) BEFORE compiling anything, and its refusal line
+           carries the nix-lane verdict verbatim, so the first error a
+           reader sees is the decision point, not the wreckage.
+        B. On hosts where the fallback is structurally impossible, skip it
+           entirely: nix-lane-unavailable becomes the terminal error,
+           carrying its verdict, with the linker precondition named as why
+           no fallback was attempted.
+      Either way the DEGRADED warning stays for hosts where the fallback
+      CAN work — degradation is legal, late doom is not.
+    exit_criteria:
+      - on a host without an aarch64-musl linker and with the nix lane forced unavailable, the failure appears before any compilation starts and its first line carries the nix-lane verdict
+      - on a host where the fallback can succeed, the DEGRADED path still builds (unchanged)
+      - a test pins the preflight refusal, watched red against the current late-failure behavior first
