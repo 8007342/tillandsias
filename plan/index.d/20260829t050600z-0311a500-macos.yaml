@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: wire-local-experts-mode-through-grounded-pipeline
+    event:
+      type: evidence
+      ts: "2026-08-29T05:06:00Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260828t223811z
+      host: macos
+      summary: >
+        7b FILTER VERDICT (920-pxg6 (b)): 7b PASSES — the prompt/filter is NOT too strict, and the model-size floor is real. Operator approved the 4.7 GB pull. Method: the through-the-pipeline run was CONFOUNDED and could not answer this (see the separate note), so synthesis was replicated DIRECTLY with the pipeline's exact spec-domain prompt from domain_synthesis_prompt — same top-6 retrieved context, same key list, same 'Sources: ... copied verbatim' final-line instruction — with no tier budget in the way. Same question, same context, only the model varies. RESULT: qwen2.5:3b echoed 0 of 6 keys verbatim and emitted no 'Sources:' line at all -> would fail build_envelope's only-if-used filter. qwen2.5:7b echoed 3 of 6 keys verbatim and emitted a correct final 'Sources:' line ('virtio-vsock transport for the Tillandsias control wire, vsock-transport Specification, <!-- @trace spec:vsock-transport -->') -> SURVIVES the filter. Per the coordinator's decision rule this is the 7b-passes branch: document a MODEL-SIZE FLOOR for local-experts mode. 3b cannot satisfy the citation contract; 7b can.
