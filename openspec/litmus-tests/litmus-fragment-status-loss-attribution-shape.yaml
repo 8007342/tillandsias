@@ -61,7 +61,7 @@ critical_path:
     expected_behavior: "ok: file boundary isolated"
 
   - step: "the wrapper reports its grammar over the real ledger"
-    command: "scripts/check-fragment-status-loss.sh | grep -qE '^(ok:no-fragment-status-loss:[0-9]+ checked|violation:fragment-status-loss:[0-9]+)$' && echo 'ok: wrapper grammar holds'"
+    command: "mf_stage prod 0 OUT -- scripts/check-fragment-status-loss.sh && mf_holds_ere OUT '^(ok:no-fragment-status-loss:[0-9]+ checked|violation:fragment-status-loss:[0-9]+)$' && echo 'ok: wrapper grammar holds'"
     timeout_ms: 30000
     expected_behavior: "ok: wrapper grammar holds"
 

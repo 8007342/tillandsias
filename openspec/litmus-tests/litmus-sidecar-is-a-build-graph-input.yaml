@@ -53,7 +53,7 @@ critical_path:
     # `install … ${tillandsias-router-sidecar-x86_64-musl}/bin/…` is what makes
     # this a dependency edge. Copying from a relative path would reintroduce the
     # exact bug — a file the build hopes is already there.
-    command: "awk '/stageRouterSidecar = /,/'\\'''\\'''\\''/' flake.nix | grep -q 'tillandsias-router-sidecar-x86_64-musl}/bin/tillandsias-router-sidecar' && echo 'ok: staged from the derivation output'"
+    command: "mf_stage prod 0 OUT -- awk '/stageRouterSidecar = /,/'\\'''\\'''\\''/' flake.nix && mf_holds OUT 'tillandsias-router-sidecar-x86_64-musl}/bin/tillandsias-router-sidecar' && echo 'ok: staged from the derivation output'"
     timeout_ms: 3000
     expected_behavior: "ok: staged from the derivation output"
 

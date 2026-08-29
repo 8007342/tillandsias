@@ -105,7 +105,7 @@ critical_path:
 
   # ── (e) the per-section CRDT choice is pinned behaviourally + by unit tests
   - step: "PIN: the loop_status CRDT unit tests (commutativity, idempotency, G-Set survival, gate refusals) are green"
-    command: "cargo test --quiet --release -p tillandsias-plan --lib loop_status 2>&1 | grep -q 'test result: ok' && echo 'ok: loop-status-unit-tests-green'"
+    command: "mf_stage prod 0 OUT -- cargo test --quiet --release -p tillandsias-plan --lib loop_status && mf_holds OUT 'test result: ok' && echo 'ok: loop-status-unit-tests-green'"
     timeout_ms: 300000
     expected_behavior: "ok: loop-status-unit-tests-green"
 

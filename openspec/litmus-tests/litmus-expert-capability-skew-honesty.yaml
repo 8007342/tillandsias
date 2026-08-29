@@ -297,7 +297,7 @@ critical_path:
     # Comments are stripped before the check: the file's own header says it uses
     # no python, and a guard that cannot tell a PROHIBITION from a VIOLATION is
     # not a guard.
-    command: "sed 's/#.*//' images/default/lib-expert-capability.sh | grep -qiE '(^|[^a-z])python' && exit 1; grep -q 'awk' images/default/lib-expert-capability.sh && sh -n images/default/lib-expert-capability.sh && bash -n images/default/config-overlay/mcp/forge-plan.sh && echo 'ok: no-python-posix-only'"
+    command: "mf_stage prod 0 OUT -- sed 's/#.*//' images/default/lib-expert-capability.sh && mf_holds_i_ere OUT '(^|[^a-z])python' && exit 1; grep -q 'awk' images/default/lib-expert-capability.sh && sh -n images/default/lib-expert-capability.sh && bash -n images/default/config-overlay/mcp/forge-plan.sh && echo 'ok: no-python-posix-only'"
     timeout_ms: 10000
     expected_behavior: "ok: no-python-posix-only"
 
@@ -307,7 +307,7 @@ critical_path:
     # the rebuild and leaves a binary whose advertised capability set no longer
     # matches the checkout — a capability probe reporting a stale answer, which
     # is worse than no probe because it is believed.
-    command: "sed -n '/^_forge_experts_source_hash() {/,/^}/p' images/default/lib-common.sh | grep -q \"name 'capabilities.txt'\" && echo 'ok: manifest-in-source-hash'"
+    command: "mf_stage prod 0 OUT -- sed -n '/^_forge_experts_source_hash() {/,/^}/p' images/default/lib-common.sh && mf_holds OUT \"name 'capabilities.txt'\" && echo 'ok: manifest-in-source-hash'"
     timeout_ms: 10000
     expected_behavior: "ok: manifest-in-source-hash"
 

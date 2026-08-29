@@ -34,7 +34,7 @@ critical_path:
     # docblock and Nomenclature) — only non-comment (code) lines are barred
     # from mentioning backend-impl names, per "MUST NOT appear in the
     # facade's public API, logs, or caller code".
-    command: "grep -vE '^[[:space:]]*//' crates/tillandsias-control-wire/src/guest_transport.rs | grep -qiE 'virtio-vsock|hvsock|vzvirtiosocketdevice' && { echo 'FAIL: backend impl name leaked into facade code'; exit 1; } || echo 'ok: no backend impl names in facade code'"
+    command: "mf_stage prod 0 OUT -- grep -vE '^[[:space:]]*//' crates/tillandsias-control-wire/src/guest_transport.rs && mf_holds_i_ere OUT 'virtio-vsock|hvsock|vzvirtiosocketdevice' && { echo 'FAIL: backend impl name leaked into facade code'; exit 1; } || echo 'ok: no backend impl names in facade code'"
     timeout_ms: 3000
     expected_behavior: "ok: no backend impl names in facade code"
 

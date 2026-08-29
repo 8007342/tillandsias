@@ -73,7 +73,7 @@ critical_path:
     timeout_ms: 240000
 
   - step: "SOURCE SCAN: the retired escaping workarounds are not defined anywhere"
-    command: "scripts/check-exec-argv-vector-workarounds.sh crates | grep -qE '^ok:exec-argv-workarounds-absent:[0-9]+ checked$' && echo 'ok: workarounds absent'"
+    command: "mf_stage prod 0 OUT -- scripts/check-exec-argv-vector-workarounds.sh crates && mf_holds_ere OUT '^ok:exec-argv-workarounds-absent:[0-9]+ checked$' && echo 'ok: workarounds absent'"
     expected_behavior: "ok: workarounds absent"
     timeout_ms: 30000
 

@@ -152,7 +152,7 @@ critical_path:
   - step: "NO-PYTHON: the capability probe is POSIX shell + awk only"
     # Comments are stripped before the check — a guard that cannot tell a
     # prohibition from a violation is not a guard.
-    command: "sed 's/#.*//' images/default/lib-project-engine-capability.sh | grep -qiE '(^|[^a-z])python' && exit 1; sh -n images/default/lib-project-engine-capability.sh && echo 'ok: no-python-posix-only'"
+    command: "mf_stage prod 0 OUT -- sed 's/#.*//' images/default/lib-project-engine-capability.sh && mf_holds_i_ere OUT '(^|[^a-z])python' && exit 1; sh -n images/default/lib-project-engine-capability.sh && echo 'ok: no-python-posix-only'"
     timeout_ms: 10000
     expected_behavior: "ok: no-python-posix-only"
 
