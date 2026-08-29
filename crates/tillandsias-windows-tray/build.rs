@@ -21,6 +21,25 @@ fn main() {
     let manifest_dir_path =
         std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default());
 
+    // ORDER 776-g6r3 — MSIX logo assets.
+    //
+    // The Store manifest needs Square44x44Logo, Square150x150Logo and
+    // StoreLogo as PNGs. They are RENDERED, not checked in, for the reason
+    // every generated asset in this tree is: a committed PNG silently stops
+    // matching the SVG it came from, and nothing goes red when it does.
+    //
+    // Written to `<target>/msix-logos/` rather than OUT_DIR alone, because the
+    // consumer is scripts/build-windows-tray.ps1 — a PowerShell packaging step
+    // that cannot discover OUT_DIR's hashed path. Deriving the target dir by
+    // walking up from OUT_DIR keeps it correct under CARGO_TARGET_DIR
+    // overrides, which this fleet uses on the WSL2 lane.
+    //
+    // Best-effort by design, matching the .ico policy above: a missing SVG must
+    // not break `cargo check` on a Linux host that will never package an MSIX.
+    // The packaging step is where absence becomes an error, because that is
+    // where it actually matters — see package-msix in build-windows-tray.ps1.
+    render_msix_logos(&manifest_dir_path);
+
     // Generate dummy headless binaries if they do not exist so include_bytes! compiles
     let assets_dir = manifest_dir_path.join("assets");
     let _ = std::fs::create_dir_all(&assets_dir);
@@ -223,4 +242,62 @@ END
             );
         }
     }
+}
+
+/// Render the three MSIX logo sizes from the xerographica bloom SVG.
+///
+/// ORDER 776-g6r3. Sizes are the Store's required set for a desktop package:
+/// 44x44 (taskbar/app list), 150x150 (medium tile), 50x50 (StoreLogo, used in
+/// the listing and in the installer dialog).
+fn render_msix_logos(manifest_dir: &std::path::Path) {
+    let svg = manifest_dir.join("../../assets/icons/xerographica/bloom.svg");
+    println!("cargo:rerun-if-changed=../../assets/icons/xerographica/bloom.svg");
+    if !svg.exists() {
+        return;
+    }
+    let Ok(out_dir) = std::env::var("OUT_DIR") else {
+        return;
+    };
+    // OUT_DIR is <target>/<profile>/build/<pkg>-<hash>/out — four levels down.
+    let mut target_root = std::path::PathBuf::from(&out_dir);
+    for _ in 0..4 {
+        if !target_root.pop() {
+            return;
+        }
+    }
+    let logo_dir = target_root.join("msix-logos");
+    if std::fs::create_dir_all(&logo_dir).is_err() {
+        return;
+    }
+    for (name, size) in [
+        ("Square44x44Logo.png", 44u32),
+        ("Square150x150Logo.png", 150),
+        ("StoreLogo.png", 50),
+    ] {
+        let _ = render_one_logo(&svg, &logo_dir.join(name), size);
+    }
+}
+
+/// Returns Err rather than panicking: see the best-effort note at the call site.
+fn render_one_logo(
+    svg_path: &std::path::Path,
+    png_path: &std::path::Path,
+    size: u32,
+) -> Result<(), String> {
+    let svg_data = std::fs::read(svg_path).map_err(|e| e.to_string())?;
+    let tree = resvg::usvg::Tree::from_data(&svg_data, &resvg::usvg::Options::default())
+        .map_err(|e| e.to_string())?;
+    let mut pixmap = tiny_skia::Pixmap::new(size, size).ok_or("pixmap")?;
+    let svg_size = tree.size();
+    // Uniform scale + centre, NOT the per-axis stretch the tray-icon renderer
+    // uses. Store logos are square and the source is not necessarily; stretching
+    // a bloom to fill 44x44 is visibly wrong in the taskbar, where this asset is
+    // seen most.
+    let scale = (size as f32 / svg_size.width()).min(size as f32 / svg_size.height());
+    let tx = (size as f32 - svg_size.width() * scale) / 2.0;
+    let ty = (size as f32 - svg_size.height() * scale) / 2.0;
+    let transform = tiny_skia::Transform::from_translate(tx, ty).pre_scale(scale, scale);
+    resvg::render(&tree, transform, &mut pixmap.as_mut());
+    let png = pixmap.encode_png().map_err(|e| e.to_string())?;
+    std::fs::write(png_path, &png).map_err(|e| e.to_string())
 }

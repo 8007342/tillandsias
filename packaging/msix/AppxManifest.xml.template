@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ORDER 776-g6r3 — MSIX manifest for the Windows tray.
+
+  PARAMETERISED, NOT CONFIGURED. Identity/Publisher below are placeholders that
+  scripts/build-windows-tray.ps1 substitutes. The real values live in the
+  operator's Partner Center listing and are NOT in this repo: a committed
+  publisher CN is a value that goes stale silently and, worse, one that a fork
+  would inherit and submit under someone else's identity.
+
+  Local testing uses the placeholders plus a self-signed certificate whose
+  subject MUST equal the Publisher string exactly, or Add-AppxPackage refuses
+  with a signature/identity mismatch. Packaging is deliberately NOT blocked on
+  the Authenticode work: the Store re-signs submitted MSIX at no cost
+  (plan/issues/windows-signing-research-2026-08-16.md), so this channel is
+  reachable before the SignPath channel is finished.
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap desktop rescap">
+
+  <Identity
+    Name="@MSIX_IDENTITY_NAME@"
+    Publisher="@MSIX_PUBLISHER@"
+    Version="@MSIX_VERSION@"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>@MSIX_DISPLAY_NAME@</DisplayName>
+    <PublisherDisplayName>@MSIX_PUBLISHER_DISPLAY_NAME@</PublisherDisplayName>
+    <Description>Tillandsias — a tray-resident workspace for local agent work.</Description>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <!-- 10.0.17763.0 (1809) is the floor for windows.startupTask on desktop. -->
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Applications>
+    <Application Id="TillandsiasTray"
+                 Executable="tillandsias-tray.exe"
+                 EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="@MSIX_DISPLAY_NAME@"
+        Description="Tillandsias tray"
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile ShortName="Tillandsias" />
+      </uap:VisualElements>
+      <Extensions>
+        <!--
+          REPLACES the Startup-folder shortcut install-windows.ps1 creates.
+          A startupTask is superior for a Store package in the way that matters
+          here: the user can disable it in Settings > Startup and it survives
+          uninstall cleanly, whereas a stray .lnk outlives the app that made it.
+          TaskId is an identity — changing it later orphans every user's
+          existing enable/disable choice, so treat it as frozen.
+        -->
+        <desktop:Extension
+          Category="windows.startupTask"
+          Executable="tillandsias-tray.exe"
+          EntryPoint="Windows.FullTrustApplication">
+          <desktop:StartupTask
+            TaskId="TillandsiasTrayStartup"
+            Enabled="true"
+            DisplayName="@MSIX_DISPLAY_NAME@" />
+        </desktop:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <!--
+      runFullTrust is what makes this a desktop app rather than a sandboxed UWP:
+      the tray drives WSL2, podman and the local filesystem. It is a restricted
+      capability, which means Store submission requires a justification — that
+      is a listing-time fact, not a packaging blocker, and it is why this
+      manifest declares rescap explicitly rather than hoping.
+    -->
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>
