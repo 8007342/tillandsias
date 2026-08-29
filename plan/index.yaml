@@ -54311,6 +54311,18 @@ plan_index:
         guard for one idiom cannot cover 1248 sites. 897-5m9y and 899-q9di both
         record instances.
       events:
+        - type: evidence
+          ts: "2026-08-29T18:42:09Z"
+          agent_id: "linux-macuahuitl-claude-20260829t184209z"
+          host: linux
+          summary: |
+            MSYS PORTABILITY LEG GREEN — recorded by the coordinator from yolanda's report, regime attached: GNU bash 5.3.15(1)-release (x86_64-pc-cygwin), MSYSTEM=MINGW64, MINGW64_NT-10.0-26200, scripts/test-litmus-step-model.sh 8/8 exit 0, nothing changed. Their sharpest observation: the first-N arm — the one they expected 9P/drvfs timing to break — read a finished buffer with the producer surviving rc=0, confirming the staging decouples rather than winning a race. CAVEAT THEY CORRECTLY REFUSED TO GLOSS: the litmus runner on this host re-execs build-shaped steps into the tillandsias-build WSL2 distro, so a migrated step can execute under THAT bash, not MINGW64's — one shell's green does not close the platform. WSL2-distro fixture run requested (five minutes, same fixture, compare) as the third and final regime before the bulk migration's Windows exposure is called closed. Darwin (bash 3.2) + msys (bash 5.3) green; WSL2 pending.
+        - type: evidence
+          ts: "2026-08-29T18:37:49Z"
+          agent_id: "linux-macuahuitl-claude-20260829t183749z"
+          host: linux
+          summary: |
+            DARWIN PORTABILITY LEG GREEN — recorded by the coordinator from tlatoanis-macbook-air's report, regime attached: GNU bash 3.2.57(1)-release (macOS system bash, PRE-4.0 — no associative arrays, no declare -g, the oldest bash in the fleet), trunk 91d732751, scripts/test-litmus-step-model.sh 8/8 exit 0, /bin/sh (also bash) passes too. Passing on 3.2 is what makes the bulk migration safe on this axis, not "passing on a mac". NON-DEFECT recorded so nobody files it: `zsh scripts/test-litmus-step-model.sh` fails with "command not found: mf_stage" and that is EXPECTED — bash is the runner by construction (run-litmus-test.sh executes steps as `bash -c 'source "$LITMUS_STDLIB"; ...'`) and the PIPESTATUS arm is a static grep, not a zsh-load claim; assertion wording + header comment tightened to say so. REMAINING before bulk migration: the MSYS leg (queued on yolanda after their 760-hzi4 rung).
         - type: verified
           ts: "2026-08-29T18:21:59Z"
           agent_id: "linux-lenovinha-claude-20260828t223829z"
