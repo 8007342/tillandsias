@@ -2294,6 +2294,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Bash dialect gate passed"
 
+    _step "Checking end-user UX strings against recorded operator approval (626-w3fn)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-approved-ux-strings.sh" 2>&1; then
+        # The script names the file, the string and the ledger it failed to
+        # match, and states the two remedies. spec:tray-ux makes this a
+        # governance gate rather than a style one: an unapproved user-facing
+        # string must not ship, and the in-file unit test cannot catch a
+        # reword because a single find-and-replace edits the assertion too.
+        _error "an end-user UX string is not the one the operator approved in the ledger (626-w3fn, spec:tray-ux)"
+        exit 1
+    fi
+    _info "Approved-UX-string gate passed"
+
     _step "Checking user-visible terminology against the dictionary (629-t6bx)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-terminology.sh" 2>&1; then
         # The script names the file, the variant and the offending string, and
