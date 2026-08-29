@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: exec-wire-cannot-signal-stdin-eof-to-the-guest-child
+    event:
+      type: note
+      ts: "2026-08-29T17:16:14Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260829t155859z
+      host: macos
+      summary: >
+        I ANSWERED MY OWN OPEN QUESTION RATHER THAN LEAVING IT — the EOF gap is LATENT, not live, and that should set the follow-on's priority.  Traced every producer of non-empty exec-wire stdin. ExecRequest::with_stdin is the only way to set it, and its callers today are transport_conformance.rs and a doctest in guest_transport.rs. No production caller sends stdin over the exec wire.  The one real stdin consumer the builder's own doc names — "a token piped to gh auth login --with-token" — does NOT go over the wire. remote_projects.rs runs it as a GUEST-SIDE pipe: printf '%s\n' "$TOKEN" | gh auth login --hostname github.com --with-token. The pipe's writer closes, so gh gets a genuine EOF from the kernel and the wire is never asked to signal one. Same shape at three other call sites plus the vault-cli variant.  Corroborating detail worth having: remote_projects.rs:657 already carries the comment "exits empty, and gh auth login --with-token blocks on stdin forever" — someone met the EOF-shaped failure on this exact command and solved it by construction (pipe inside the guest) rather than by asking the wire for EOF. That is why the defect has never bitten in production.  CONSEQUENCE. 924-eof7 is a real protocol gap and the design decision stands, but nothing in the shipping product is currently blocked on it, so it should be scheduled as correctness-debt rather than as a live-bug fix. It becomes live the moment anyone routes a genuine stdin consumer over the wire instead of building a guest-side pipe — and the trap is that they will have no reason to expect a hang, because the byte-exact cases (head -c N) work fine. The capability constant's doc is written to be found at exactly that moment.
