@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: empty-cloud-reply-conflates-no-repos-with-failed-fetch
+    field: status
+    value: completed
+    ts: "2026-08-29T18:46:06Z"
+    host: linux
+
+events:
+  - packet_id: empty-cloud-reply-conflates-no-repos-with-failed-fetch
+    event:
+      type: completed
+      ts: "2026-08-29T18:46:06Z"
+      host: linux
+      summary: >
+        status 'completed' with evidence_refs: b06a8f8f2: ./build.sh --check GREEN including ok:cross-target:x86_64-pc-windows-gnu. All four exit criteria met. (1) CloudRefreshReply carries CloudRefreshOutcome with a fail-closed serde default — pre-existing. (2) NOW met on Windows: notify_icon.rs threaded outcome.is_confirmed() through apply_cloud_projects -> apply_cloud_projects_state, which returns early on an unconfirmed reply; macOS and Linux already honoured it. (3) a failed fetch retains the previous list and logs the discard at warn, never renders (no repos). (4) three tests — a_confirmed_empty_answer_latches_loaded, an_unconfirmed_empty_reply_does_not_latch_loaded, an_unconfirmed_reply_retains_the_previous_list. COMPILE-verified against the Windows target from Linux and mutation-tested to prove the cross-check really compiles the module and its test target; NOT run-verified — yolanda should run cargo test -p tillandsias-windows-tray and record it.
+  - packet_id: empty-cloud-reply-conflates-no-repos-with-failed-fetch
+    event:
+      type: note
+      ts: "2026-08-29T18:46:06Z"
+      host: linux
+      summary: >
+        the last conflating lane is fixed; criteria 1 and 3 were already met, 2 and 4 are this change
