@@ -36,6 +36,7 @@ declared-closures-check
 decompose
 dependencies-of
 expert-serve
+experts-probe
 expire-claims
 # does not remove the capability — it makes the expert UNDER-report itself, and
 # file are checked against each other BEHAVIOURALLY by
@@ -70,6 +71,7 @@ ready
 select-rows
 set-field
 spec-envelope
+spec-floor
 spec-index
 spec-retrieve
 status

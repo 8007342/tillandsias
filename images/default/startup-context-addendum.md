@@ -30,6 +30,13 @@ can give. On a typed refusal or a degraded `experts_state`, fall back to
 `plan/index.yaml` / `plan/loop_status.md` and SAY SO in your output
 (`mcp_first_read_path`: unavailable / verification / not exposed).
 
+On a COLD host the spec index builds in the background at launch (919-vvyv:
+~2min GPU, ~60min CPU; instant when already published) — `spec_index=absent`
+on the capability line plus a typed `spec_answer` refusal means it is not
+ready YET, not broken. `/tmp/forge-lifecycle.log` (`[spec-index]` lines)
+carries the verdict; use `plan_answer`/`methodology_ask` (no index needed)
+meanwhile.
+
 ## Before you exit: a finding you did not PUSH is a finding you destroyed
 
 This workspace is a `git clone` into the container. When the forge tears down it

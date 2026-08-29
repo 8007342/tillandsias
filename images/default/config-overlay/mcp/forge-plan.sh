@@ -796,6 +796,36 @@ _tillandsias_spec_index_paths() {
 # 789-nc2s and 783-6rik both landed on.
 SPEC_INDEX_ROOT="$(_tillandsias_spec_index_paths | sed -n 1p)"
 SPEC_INDEX_DIR="$(_tillandsias_spec_index_paths | sed -n 2p)"
+# ORDER 718-ja7g. Ask the ONE tier probe and expose its advice sentence.
+# Sourced lazily and at most once per process: the probe opens a socket, and a
+# refusal path is not a place to pay that twice.
+FP_EXPERTS_ADVICE=""
+FP_EXPERTS_PROBED=""
+_fp_experts_advice() {
+    [ -n "$FP_EXPERTS_PROBED" ] && return 0
+    FP_EXPERTS_PROBED=1
+    FP_EXPERTS_ADVICE=""
+    for _fpe_lib in \
+        "${TILLANDSIAS_EXPERTS_PROBE_LIB:-}" \
+        "${BASH_SOURCE[0]%/*}/../../lib-experts-probe.sh" \
+        "/usr/local/lib/tillandsias/lib-experts-probe.sh"; do
+        if [ -n "$_fpe_lib" ] && [ -r "$_fpe_lib" ]; then
+            # shellcheck source=/dev/null
+            . "$_fpe_lib"
+            tillandsias_experts_probe "${PLAN_BIN:-}" || true
+            case "${TILLANDSIAS_EXPERTS_ADVICE:--}" in
+                -|"") FP_EXPERTS_ADVICE="" ;;
+                *)    FP_EXPERTS_ADVICE="TIER PROBE: ${TILLANDSIAS_EXPERTS_ADVICE}" ;;
+            esac
+            return 0
+        fi
+    done
+    # Absent helper is its own named fact, never a silent empty string that
+    # reads as "the probe had nothing to add".
+    FP_EXPERTS_ADVICE="TIER PROBE: unavailable (lib-experts-probe.sh not found) — tier liveness is UNKNOWN, not absent"
+    return 0
+}
+
 spec_answer_envelope() {
     SPEC_INDEX_ROOT="$(_tillandsias_spec_index_paths | sed -n 1p)"
     SPEC_INDEX_DIR="$(_tillandsias_spec_index_paths | sed -n 2p)"
@@ -803,7 +833,7 @@ spec_answer_envelope() {
     [ -n "$PLAN_BIN" ] || PLAN_BIN="$(resolve_plan_bin)"
     local embed_ep="${TILLANDSIAS_EMBED_ENDPOINT:-}"
     local synth_ep="${TILLANDSIAS_SPEC_EXPERT_ENDPOINT:-$embed_ep}"
-    local embed_model="${TILLANDSIAS_EMBED_MODEL:-nomic-embed-text-v1-GGUF}"
+    local embed_model="${TILLANDSIAS_EMBED_MODEL:-nomic-embed-text}"  # ollama name; the -v1-GGUF LM-Studio name 404s on the enclave (919-vvyv D1)
     local synth_model="${TILLANDSIAS_SPEC_EXPERT_MODEL:-}"
     if [ -z "$question" ]; then
         unsupported_envelope "no question was supplied"
@@ -859,7 +889,13 @@ spec_answer_envelope() {
         return 0
     fi
     if [ -z "$embed_ep" ]; then
-        unsupported_envelope "no embedding endpoint — set TILLANDSIAS_EMBED_ENDPOINT to a /v1 base that serves ${embed_model}"
+        # ORDER 718-ja7g: the refusal carries the SHARED probe's advice instead
+        # of this server's own sentence. Both MCP servers now answer "which
+        # tier is live" from tillandsias-plan experts-probe, so a reader cannot
+        # get two different diagnoses of one host depending on which tool they
+        # happened to call.
+        _fp_experts_advice
+        unsupported_envelope "no embedding endpoint — set TILLANDSIAS_EMBED_ENDPOINT to a /v1 base that serves ${embed_model}. ${FP_EXPERTS_ADVICE}"
         return 0
     fi
     local work qv top synth env
@@ -870,7 +906,14 @@ spec_answer_envelope() {
         -d "$(jq -nc --arg m "$embed_model" --arg q "$question" '{model:$m, input:$q}')" 2>/dev/null \
         | jq -c '.data[0].embedding' > "$qv" 2>/dev/null || [ ! -s "$qv" ]; then
         rm -rf "$work"
-        unsupported_envelope "the embedding endpoint ${embed_ep} did not answer for model ${embed_model} — the spec expert cannot retrieve"
+        # NAME THE /v1-VS-ROOT DISTINCTION (the macbook's finding, 718-ja7g).
+        # A live Ollama at its ROOT url is the single most common shape of this
+        # failure: /api/tags answers, so every other probe on the host says
+        # READY, while /embeddings 404s because the OpenAI-compatible surface
+        # lives under /v1. Saying only "did not answer" sends the reader to
+        # look at a server that is working.
+        _fp_experts_advice
+        unsupported_envelope "the embedding endpoint ${embed_ep} did not answer for model ${embed_model} — the spec expert cannot retrieve. ${FP_EXPERTS_ADVICE}"
         return 0
     fi
     # 2) retrieve (network-free)
@@ -878,6 +921,38 @@ spec_answer_envelope() {
         rm -rf "$work"
         unsupported_envelope "spec-retrieve produced no candidates from ${SPEC_INDEX_DIR}"
         return 0
+    fi
+    # 2b) coverage floors (orders 821-73es / 920-pxg6). Cosine top-k ALWAYS
+    #     returns k chunks, so without a floor an out-of-corpus question
+    #     dresses six real-but-irrelevant citations as a confident answer —
+    #     measured on yoga 2026-08-18 (sourdough -> confidence=retrieved,
+    #     citations=6) and again on darwin 2026-08-29. `spec-floor` applies
+    #     the SAME dual floors the grounded pipeline uses
+    #     (TILLANDSIAS_RETRIEVE_REFUSAL_FLOOR gates the BEST score,
+    #     TILLANDSIAS_RETRIEVE_MIN_SCORE each chunk), and they stop the FAR
+    #     band only: measured near-misses overlap the in-corpus band
+    #     (824-6qxh, relabelled n=561: overlap 0.2058, thresholds refuted on
+    #     five axes), so near-miss refusal belongs to the 853-6gz3 validation
+    #     layer, not to a bigger number here. FAIL-OPEN when the staged
+    #     binary predates spec-floor: unfloored answering is the pre-floor
+    #     behavior, and refusing every question over version skew would be
+    #     the worse lie.
+    if [ -z "$(capability_gap "spec-floor")" ]; then
+        local floored floor_verdict
+        floored="$work/floored.json"
+        if "$PLAN_BIN" spec-floor --chunks-json "$top" > "$floored" 2>/dev/null && [ -s "$floored" ]; then
+            floor_verdict="$(jq -r 'if type == "object" then .refused // empty else "kept" end' "$floored" 2>/dev/null)"
+            if [ "$floor_verdict" = "out-of-coverage" ]; then
+                local floor_reason
+                floor_reason="$(jq -r '.reason // "retrieval scored below the coverage floor"' "$floored" 2>/dev/null)"
+                rm -rf "$work"
+                unsupported_envelope "$floor_reason"
+                return 0
+            fi
+            if [ "$floor_verdict" = "kept" ] && [ "$(jq -r 'length' "$floored" 2>/dev/null)" -gt 0 ] 2>/dev/null; then
+                mv "$floored" "$top"
+            fi
+        fi
     fi
     # 3) synthesize over the cited spans; instruct the model to echo the keys so
     #    the citations survive verify(). Fail-soft to a retrieval-only answer.
@@ -1056,7 +1131,7 @@ while IFS= read -r line; do
                 {"name":"plan_next","description":"ORDER 606-xu52. Cold-start selector: at most FIVE cited, release-aware, role-compatible, dependency-clear, unleased claimable packets, ranked deterministically (priority, release-targeted first, order), each with why it ranked and its concrete next action. Release defaults from the folded '## ACTIVE RELEASE' heading beside the index; milestones and criteria holders are never offered as claims; no matching work returns the typed refusal 'unsupported: no claimable work ...'. Natural-language aliases via plan_answer: \"what's next?\" and \"what v0.5 work can I do on linux?\".","inputSchema":{"type":"object","properties":{"pickup_role":{"type":"string","minLength":1},"desired_release":{"type":"string","minLength":1},"limit":{"type":"integer","minimum":1,"maximum":5}},"additionalProperties":false}},
                 {"name":"methodology_path","description":"METHODOLOGY EXPERT (L0). Look up a YAML path in methodology.yaml and methodology/**/*.yaml and return the matched block plus a resolvable file:line, in the same CITED envelope as plan_answer. Query by full dotted path (methodology.runtime_language_policy.tlatoani_hard_no_python.rule), by path suffix (forge_cycle_budget.rule), or with * wildcards. An unknown path returns confidence=unsupported with zero citations — never the nearest key, never a guess.","inputSchema":{"type":"object","properties":{"path":{"type":"string","description":"e.g. \"forge_cycle_budget.rule\", \"bar_raise_governance.authority\", \"multi_host_development.pull_merge_cadence.pre_push_gate.rule\""}},"required":["path"]}},
                 {"name":"methodology_ask","description":"METHODOLOGY EXPERT (L0). Route a canonical discipline question to its YAML path and answer it in the CITED envelope. Deterministic routing only: a question matching no route, or two routes, is refused as confidence=unsupported and the refusal lists the routed forms so you can re-ask methodology_path directly.","inputSchema":{"type":"object","properties":{"question":{"type":"string","description":"e.g. \"may a forge cycle drain two packets?\", \"may I embed a script in base64?\", \"who may raise the scan bar?\", \"what happens to a dead mechanism with a live intent?\", \"which branch does macOS checkpoint to?\""}},"required":["question"]}},
-                {"name":"spec_answer","description":"FAT SPEC EXPERT (L1 RAG, orders 547/548). Answer a cross-cutting question about the whole spec corpus (openspec/specs + cheatsheets + methodology, ~950k tokens — too big for any context) as the same CITED envelope {answer, citations[], freshness, confidence=retrieved}. Retrieves the top spec sections (cosine over a local embedding index), synthesizes prose grounded ONLY in them, and keeps ONLY citations the answer actually used — verify with `tillandsias-plan verify-answer`. Use for JOIN-across-specs questions the deterministic plan/methodology experts refuse; those single-node lookups still go to plan_answer/methodology_ask. Fail-soft: returns confidence=unsupported (never a guess) when the index or an inference endpoint is unavailable.","inputSchema":{"type":"object","properties":{"question":{"type":"string","description":"e.g. \"how does the forge stay isolated from the host and control outbound network access?\", \"which specs govern async inference launch?\", \"how do the browser isolation specs interact with the enclave CA?\""}},"required":["question"]}},
+                {"name":"spec_answer","description":"FAT SPEC EXPERT (L1 RAG, orders 547/548). Answer a cross-cutting question about the whole spec corpus (openspec/specs + cheatsheets + methodology, ~950k tokens — too big for any context) as the same CITED envelope {answer, citations[], freshness, confidence=retrieved}. Retrieves the top spec sections (cosine over a local embedding index), synthesizes prose grounded ONLY in them, and keeps ONLY citations the answer actually used — verify with `tillandsias-plan verify-answer`. Use for JOIN-across-specs questions the deterministic plan/methodology experts refuse; those single-node lookups still go to plan_answer/methodology_ask. Fail-soft: returns confidence=unsupported (never a guess) when the index or an inference endpoint is unavailable, or when nothing retrieved scores above the coverage floor (out-of-corpus refusal, orders 821-73es/920-pxg6; TILLANDSIAS_RETRIEVE_REFUSAL_FLOOR / TILLANDSIAS_RETRIEVE_MIN_SCORE tune it).","inputSchema":{"type":"object","properties":{"question":{"type":"string","description":"e.g. \"how does the forge stay isolated from the host and control outbound network access?\", \"which specs govern async inference launch?\", \"how do the browser isolation specs interact with the enclave CA?\""}},"required":["question"]}},
                 {"name":"plan_decompose","description":"ADVERSARIAL DECOMPOSITION (order 920-pxg6). Decompose a natural-language query into adversarial prompt variants for concurrent hallucination-reducing dispatch. Returns a JSON array of {prompt, kind} pairs. Consumer is unaware this happens — transparent black box.","inputSchema":{"type":"object","properties":{"query":{"type":"string","description":"The natural-language query to decompose, e.g. \"how does the plan expert work\""}},"required":["query"]}},
                 {"name":"plan_collect","description":"COLLECTION DEDUP (order 920-pxg6). Collect and deduplicate validated adversarial inference responses (first-wins seen-set dedup). Reads a JSON array of response objects from stdin, returns the collected envelope. All validated responses survive — no confidence threshold, no merging.","inputSchema":{"type":"object","properties":{"responses":{"type":"array","description":"Array of validated response objects with answer, citations, confidence, query_kind, source_prompt, why, affordances, why_not fields"}},"required":["responses"]}},
                 {"name":"expert_capability","description":"ORDER 569. Answer three questions about this session's expert WITHOUT reading source: what can I use RIGHT NOW, what would be available if this forge were RELAUNCHED (i.e. what the mounted checkout's sources provide), and is my current work therefore BLOCKED pending a relaunch. Returns the pinned machine line `expert_capability: now=<csv|none|stale-binary> after_relaunch=<csv|none> skew=<none|pending-build|relaunch-required|relaunch-regresses> blocked_capabilities=<csv|-> lost_on_relaunch=<csv|->` plus the one-sentence action. Read `skew` first: `pending-build` means WAIT AND RETRY (the async launch build will deliver it in this session); `relaunch-required` means retrying is FUTILE and you must relaunch the forge or rebuild by hand. Call this whenever an expert tool returns confidence=unsupported — it distinguishes 'the plan has no answer' from 'this binary cannot answer'.","inputSchema":{"type":"object","properties":{}}}

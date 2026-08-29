@@ -23,6 +23,13 @@
 #   refs/tillandsias/upstream-auth/<state>/<epoch>
 #
 # <state> is one of authorized | denied | no-credential | agent-unauthenticated | local-only | error;
+# and a `denied` verdict carries a REASON segment (order 809-w2xy):
+#   refs/tillandsias/upstream-auth/denied/<reason>/<epoch>
+#   <reason> = permission | unauthenticated | sso
+#              (`unclassified` exists as a defensive default in the classifier
+#               but is unreachable today — see classify_refusal)
+# The consumer reads the FIRST and LAST segments, so the reason is additive and
+# an existing reader is unaffected.
 # <epoch> is the probe's unix time, so a consumer can bound staleness
 # (yesterday's verdict is from yesterday's token epoch — the bug in a hat).
 # The namespace is OUTSIDE refs/heads and refs/tags, so the startup retry
@@ -90,7 +97,20 @@ EPOCH="$(date -u +%s)"
 # writable, never confusable with project history.
 publish() {
     state="$1"
-    new_ref="refs/tillandsias/upstream-auth/$state/$EPOCH"
+    # ORDER 809-w2xy. A REASON segment may sit between the state and the epoch.
+    # It is BACKWARD COMPATIBLE by construction: the consumer parses
+    # `state="${rest%%/*}"` and `epoch="${rest##*/}"`
+    # (scripts/check-credential-channel.sh), so a middle segment is invisible to
+    # a reader that does not want it, and `git ls-remote` matches the deeper ref
+    # under the same `refs/tillandsias/upstream-auth/*` pattern — verified
+    # 2026-08-29 rather than assumed, because a guard that silently stopped
+    # seeing the verdict would fail OPEN on the one signal that blocks drain.
+    reason="${2:-}"
+    if [ -n "$reason" ]; then
+        new_ref="refs/tillandsias/upstream-auth/$state/$reason/$EPOCH"
+    else
+        new_ref="refs/tillandsias/upstream-auth/$state/$EPOCH"
+    fi
     if blob="$(git -C "$MIRROR" hash-object -w --stdin </dev/null 2>/dev/null)" \
        && git -C "$MIRROR" update-ref "$new_ref" "$blob" 2>/dev/null; then
         for old in $(git -C "$MIRROR" for-each-ref --format='%(refname)' refs/tillandsias/upstream-auth 2>/dev/null); do
@@ -107,7 +127,7 @@ publish() {
 
 finish() {
     state="$1"
-    publish "$state"
+    publish "$state" "${2:-}"
     case "$state" in
         authorized|local-only) exit 0 ;;
         *) exit 1 ;;
@@ -197,14 +217,58 @@ if [ "$rc" -eq 0 ]; then
 fi
 
 OUT_REDACTED="$(redact_output "$OUT")"
+
+# ORDER 809-w2xy — WHY the refusal, not just that there was one.
+#
+# `denied` collapsed three refusals that need three DIFFERENT operator actions,
+# and the packet's second deliverable is to tell them apart at probe time so the
+# next occurrence is a one-line answer instead of a two-hour rediscovery.
+#
+# THE CLASSIFICATION IS DELIBERATELY COARSE, and here is the measured reason.
+# On 2026-08-15 this fleet captured the real refusal:
+#
+#   remote: Permission to 8007342/tillandsias.git denied to 8007342.
+#   fatal: unable to access: The requested URL returned error: 403
+#
+# and the operator later found the cause was an EXPIRED PAT (recorded on
+# 809-w2xy, 2026-08-19). So on this fleet an expired token presents as
+# "permission denied", NOT as an authentication failure. `permission` therefore
+# means "authenticated, then refused" and must NOT be read as "the scope is
+# wrong" — expiry is the first thing to check, and the guard says so in that
+# order. Claiming a finer split than the evidence supports would be the same
+# confident-wrong-cause this milestone exists to remove.
+#
+# `sso` is the one refusal with a genuinely distinctive upstream message. It is
+# classified from GitHub's documented SAML wording rather than from a capture on
+# this fleet — we have never hit it — so it is separated from the measured cases
+# here rather than presented as equally evidenced.
+classify_refusal() {
+    # The `*)` arm below is UNREACHABLE today and deliberately kept: every
+    # substring the outer case matches on is covered by an arm here, and output
+    # matching none of them goes to `finish error` rather than reaching this
+    # function at all. It exists so that widening the outer case can never
+    # produce an EMPTY reason and a malformed ref — not as a state an operator
+    # will ever be shown. Verified unreachable 2026-08-29 by exercising every
+    # outer token.
+    case "$1" in
+        *"SAML"*|*"SSO"*|*"single sign-on"*|*"single-sign-on"*) echo sso ;;
+        *"error: 401"*|*"Authentication failed"*|*"could not read Username"*|*"terminal prompts disabled"*|*"Invalid username or password"*)
+            echo unauthenticated ;;
+        *"error: 403"*|*"Permission to "*|*"denied to "*|*"Write access to repository not granted"*)
+            echo permission ;;
+        *) echo unclassified ;;
+    esac
+}
+
 case "$OUT" in
     # Authorization/authentication failures. GitHub's 403 body is
     # "Permission to <repo> denied to <login>"; 401/credential-helper
     # failures surface as "Authentication failed", "could not read
     # Username", or "terminal prompts disabled".
-    *"error: 403"*|*"Permission to "*|*"denied to "*|*"error: 401"*|*"Authentication failed"*|*"could not read Username"*|*"terminal prompts disabled"*|*"Invalid username or password"*)
-        log_msg "upstream REFUSED the authenticated receive-pack advertisement — the credential cannot push: $OUT_REDACTED"
-        finish denied
+    *"error: 403"*|*"Permission to "*|*"denied to "*|*"error: 401"*|*"Authentication failed"*|*"could not read Username"*|*"terminal prompts disabled"*|*"Invalid username or password"*|*"Write access to repository not granted"*|*"SAML"*|*"SSO"*)
+        refusal="$(classify_refusal "$OUT")"
+        log_msg "upstream REFUSED the authenticated receive-pack advertisement (reason=$refusal) — the credential cannot push: $OUT_REDACTED"
+        finish denied "$refusal"
         ;;
     # The advertisement WAS served (authorization succeeded); the dry-run then
     # failed on ref policy (e.g. non-fast-forward). That is a data problem,

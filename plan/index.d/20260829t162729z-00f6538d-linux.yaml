@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: first-run-long-work-is-silent-across-surfaces
+    field: status
+    value: in_progress
+    ts: "2026-08-29T16:27:29Z"
+    host: linux
+
+events:
+  - packet_id: first-run-long-work-is-silent-across-surfaces
+    event:
+      type: note
+      ts: "2026-08-29T16:27:29Z"
+      host: linux
+      summary: >
+        claimed 2026-08-29T16:25Z by linux-lenovinha-claude-20260828t223829z for the UNGATED half only: re-scope, citation-by-symbol repair, and a decision-ready finding on whether the packet's own cheap path is viable. NOT implementing surface (b) — spec:tray-ux requires recorded operator approval for that exact surface and none exists; a coordinator assignment does not discharge an operator gate.

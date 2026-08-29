@@ -12585,6 +12585,37 @@ plan_index:
         Order 270 (macos-attach-first-use-materialization-blackout, status ready) already owns "materialization emits a progress signal the tray can render" for the IMAGE-BUILD half. This packet is the same defect one layer out — container lifecycle and the sign-in preflight — and cross-platform. Whoever claims either should read both; they may merge.
       events:
         - type: note
+          ts: "2026-08-29T16:28:01Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            THE PACKET'S OWN CHEAP PATH IS NOT VIABLE, and that is the finding that should decide how (b) gets scoped. Determined by reading the emitted shape, which is ungated engineering, NOT by writing any user-facing text.
+
+            The packet offers an alternative for (b): "promote the EXISTING emit_launch_event lines to the default path instead of adding new text — cheapest to build". It hedges that the text "likely fails the end-user vocabulary rule as-is". It does, three times over, and there is a fourth problem the packet did not anticipate.
+
+            WHAT THAT LINE ACTUALLY IS (crates/tillandsias-podman/src/client.rs, fn format_launch_event):
+
+              [2026-08-29T16:12:03.123Z] event:container_launch stage=vault state=starting container=tillandsias-vault
+
+              1. `container=` — `container` is on spec:tray-ux's explicit ban list.
+              2. `stage=vault` — `vault` is on the same list.
+              3. `event:container_launch` with an ISO-8601 millisecond timestamp is a MACHINE WIRE FORMAT, not prose. Even with every banned word removed it reads as internals to an end user, which is the rule's intent rather than its letter.
+              4. NOT IN THE PACKET, and the reason "just flip the flag" would be worse than it looks: this stream is a PINNED API. format_launch_event's doc comment says "litmus tests grep this stream (`event:container_launch ... state=running|failed`)" and "Keep the key=value field order stable: assertions depend on it". It is consumed by diagnostic_event_emitter.rs and referenced from four places in headless/main.rs. So the field order cannot be softened for human readability without breaking the assertions, and the assertions cannot be relaxed without losing the lifecycle coverage they exist for.
+
+            CONCLUSION: (b) needs NEW end-user text on a NEW surface, sitting alongside the diagnostics stream rather than replacing or promoting it. spec:tray-ux is explicit that "Diagnostic/agent-facing surfaces (--diagnose output, lifecycle traces, logs) are NOT end-user UX and remain under normal engineering discipline" — so the existing stream is fine exactly as it is, and the work is additive.
+
+            That is worth knowing before anyone budgets this: the cheap path was the reason the estimate looked small, and it is gone.
+
+            I DID NOT IMPLEMENT (b), and the reason is the packet's own blocked_on rather than caution. spec:tray-ux, Requirement "UX curation governance — Tlatoāni approval is MANDATORY for every UX change": no agent may alter any user-visible surface, terminal banners included, "without EXPLICIT prior operator approval recorded in the plan ledger (an operator_note or operator-attributed event on the packet)", and "the change MUST NOT be implemented until the packet carries recorded operator approval for that exact surface change". I searched plan/index.yaml and every plan/index.d fragment for an approval on this packet: there is none. yoga recorded the same absence on 2026-08-23.
+
+            A coordinator's assignment does not discharge an operator gate — the gate names the operator specifically, and a peer agent standing in for that role is precisely what the 2026-07-21 reset-guest-menu precedent was recorded against.
+
+            SURFACE (a) CONFIRMED DONE, independently of macuahuitl's 2026-08-26 note: run_provider_login carries an unconditional `step()` emitter gated to LoginInputMode::Terminal. Nothing to do there.
+
+            SURFACE (b) CONFIRMED STILL OPEN: emit_launch_event still opens `if !enabled { return; }` — now at fn emit_launch_event (client.rs ~2001), not the line 1849 the packet cites.
+
+            CITATION REPAIRED BY SYMBOL, not by line (881-29me). The packet's "VERIFIED at crates/tillandsias-podman/src/client.rs:1849" had drifted ~152 lines by 2026-08-26 and has drifted further since; line 1849 is now unrelated `cmd.args([...])`. Every citation in this event names a SYMBOL (fn emit_launch_event, fn format_launch_event, run_provider_login) so it survives the next refactor. A reader who checks a drifted line number, finds unrelated code, and concludes the packet is wrong would discard a claim that is still true — which is the failure mode 881-29me exists to prevent, and it nearly happened here twice.
+        - type: note
           ts: "2026-08-26T09:35:28Z"
           agent_id: "linux-macuahuitl-claude-20260826t093528z"
           host: macuahuitl
@@ -19607,6 +19638,65 @@ plan_index:
         - The two silent-drop traps in semantic_expert.rs are fixed or explicitly documented as constraints, with a test either way.
         - 'NEGATIVE CONTROL: with no endpoint set, every L0 tool still answers with citations and the probe says so — degradation must stay silent-free, not answer-free.'
 
+      events:
+        - type: verified
+          ts: "2026-08-29T16:14:17Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            A CORRECTION I OWE THIS PACKET, caught while running the 760-hzi4 index probe macuahuitl asked for mid-cycle — and it is this packet's own lesson applied to the tool built to teach it.
+
+            MY FIRST CUT REPORTED l1=ready FROM ENDPOINT REACHABILITY ALONE. That is precisely the over-optimism I had just finished criticising in lib-inference-state.sh, which answers "is there an Ollama" and gets read as "can the experts work". L1 retrieval needs BOTH halves: an embeddings endpoint AND a built spec index. A probe that checks one and reports the tier ready is the same false green in a new costume.
+
+            CAUGHT BY MEASUREMENT, not by review. `env -u FORGE_SPEC_INDEX_DIR scripts/spec-index-ensure.sh --where` on this host:
+
+              spec-index:serving=/var/home/lenovinha/.local/share/containers/storage/volumes/tillandsias-spec-index-tillandsias/_data
+              spec-index:serving-exists=yes
+              spec-index:entries=0
+
+            serving-exists=yes with entries=0 is a COLD TIER, NOT A LOST INDEX: the serving root is present and nothing has ever been published into it. My probe was calling that host L1-ready while retrieval could not run.
+
+            FIXED: TierState gains `no-index`, distinct from `unreachable` because it is a different half with a different fix, and L1 is now endpoint AND index — checked in that order so the advice names the half that is actually missing. This host now honestly reports:
+
+              experts_probe: l0=ready l1=no-index l2=ready embed=http://127.0.0.1:11434/v1 synth=http://127.0.0.1:11434/v1
+              advice=no-spec-index: the embeddings endpoint answers but no usable index is published (needs vectors.jsonl) — build it with scripts/spec-index-ensure.sh; L1 retrieval needs BOTH an endpoint and an index
+
+            Pinned by test (l1_needs_an_index_not_just_an_endpoint) and recorded in the cheatsheet, including the fact that it was a self-correction — a diagnostic is not exempt from the failure mode it diagnoses, and a reader deciding whether to trust this probe deserves to know it was wrong once in exactly the way it warns about.
+
+            SECOND-HOST EVIDENCE FOR 760-hzi4 (the coordinator's mid-cycle ask): serving-exists=yes on lenovinha, so the packet no longer rests on one host's evidence. Recorded on that packet too.
+        - type: implemented
+          ts: "2026-08-29T16:13:53Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            DELIVERED — contract, probe, both MCP servers wired, both traps resolved with tests.
+
+            THE CONTRACT: cheatsheets/architecture/expert-inference-endpoint-contract.md, bundled and indexed, every figure measured on lenovinha 2026-08-29 against a live Ollama serving qwen2.5:0.5b and nomic-embed-text.
+
+              L0  plan/ + methodology/ + spec envelopes. File-backed, needs NO endpoint, ALWAYS ready.
+              L1  retrieval. Needs BOTH TILLANDSIAS_EMBED_ENDPOINT and a built spec index.
+              L2  synthesis. Needs a chat-completions /v1 base.
+
+            Precedence is READ from InferenceConfig::default rather than restated beside it — a second copy of a precedence chain drifts, and a drifted diagnostic reports a configuration the engine does not use, which is the worst possible failure for this particular tool.
+
+            THE SHARPEST FINDING, and it was invisible before this packet: TILLANDSIAS_INFERENCE_ENDPOINT ALONE DOES NOT UNLOCK RETRIEVAL. It feeds synth_base; embed_base has NO fallback in the chain. Measured with a real Ollama and a root url:
+
+              lib-inference-state.sh : READY (models=2, warm=nomic-embed-text,qwen2.5:0.5b)
+              experts-probe          : l1=unset l2=ready
+
+            Both probes are truthful about what they asked. /api/tags is Ollama's NATIVE root api and it really is serving two models. But the expert path speaks only the OpenAI shape under /v1. So retrieval was DEAD on that host while the probe an operator is most likely to read said READY in capitals. `inference_state=ready` answers "is there an Ollama", not "can the experts work", and nothing said so.
+
+            TRAP 1 IS ALREADY FIXED, and saying so is part of the job rather than silently inheriting the packet's framing. 718-ja7g cites addr.parse::<SocketAddr>() making hostnames — including the enclave's own inference:11434 — unusable. Order 920-pxg6 (D6) removed it; dispatch goes through pipeline::http_post_json, which resolves via to_socket_addrs. Asserted by test rather than trusted to the comment that claims it.
+
+            TRAP 2 IS LIVE AND IS NOW NAMED. pipeline::parse_base — the crate's SINGLE url parser, used by every model call — begins url.strip_prefix("http://")?. An https base yields None before any request. That is not local to one call site as the packet supposed; it is the transport the whole crate speaks. Documented as a constraint and reported as `scheme-unsupported` with a sentence naming it, instead of the previous silent fall-back to an endpoint the operator never chose.
+
+            THE /v1-VS-ROOT DISTINCTION the macbook asked for is in every refusal that can hit it. Ollama serves its native api at the root and the OpenAI-compatible one under /v1, so http://host:11434 is a perfectly healthy Ollama AND a broken value here — every root-probing health check on the host says READY while the expert path 404s. Saying only "did not answer" sends the reader to inspect a server that is fine.
+
+            THE PROBE: `tillandsias-plan experts-probe`, one line, field=value in the idiom lib-inference-state.sh already emits so shell readers keep their case idiom. Closed vocabulary per tier: ready | unset | unreachable | no-index | scheme-unsupported | malformed | unknown. advice= carries ONE next action, never a list — a diagnostic offering three suggestions invites trying all three and two will be wrong. Exit code ADVISORY not a gate: a dev host with no endpoint is a supported state.
+
+            BOTH MCP SERVERS CONSUME IT via images/default/lib-experts-probe.sh. forge-plan.sh's spec_answer refusals carry the probe's advice; project-info.sh's synthesis refusals report experts_l1=/experts_l2= ALONGSIDE inference_state= rather than replacing it, because that probe answers a real and different question and both being visible is what keeps each honest. A missing helper or a pre-718-ja7g binary reports `unknown` with a named reason, never `unset` and never `ready` — an absent probe reporting a verdict is the lie order 531 recorded as `experts: ready`.
+
+            NEGATIVE CONTROL, both halves, verified end to end. With every endpoint variable unset: the probe says l0=ready and its advice explicitly says "L0 plan and methodology answers work without it", and `tillandsias-plan answer "what is the current Direction?"` returns a CITED answer (plan/loop_status.md:13378-13400, confidence=retrieved). Degradation is silent-free, not answer-free. Pinned as a test.
     - packet_id: wsl2-inference-substrate-decision
       order: 718-nkm2
       status: obsoleted
@@ -23737,6 +23827,27 @@ plan_index:
         - the index refreshes on commit or names its staleness in the envelope
 
       events:
+        - type: verified
+          ts: "2026-08-29T16:14:17Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            SECOND-HOST EVIDENCE from lenovinha (Fedora Silverblue), 2026-08-29 — the packet forbids closing on one host's evidence, so here is the other host.
+
+              $ env -u FORGE_SPEC_INDEX_DIR scripts/spec-index-ensure.sh --where
+              spec-index:project=tillandsias
+              spec-index:volume=tillandsias-spec-index-tillandsias
+              spec-index:root=/var/home/lenovinha/.local/share/containers/storage/volumes/tillandsias-spec-index-tillandsias/_data
+              spec-index:serving=/var/home/lenovinha/.local/share/containers/storage/volumes/tillandsias-spec-index-tillandsias/_data
+              spec-index:serving-exists=yes
+              spec-index:entries=0
+              spec-index:keep=3
+
+            serving-exists=yes — the resolution lands on the durable volume root with no FORGE_SPEC_INDEX_DIR override present, matching macuahuitl.
+
+            WORTH RECORDING ALONGSIDE IT, because the two lines together are the interesting fact: entries=0. The serving root EXISTS and nothing has ever been published into it. That is a COLD TIER, not a lost index — the distinction forge-plan.sh's _si_note already draws in prose, now with a measurement behind it on a second host.
+
+            This fed 718-ja7g directly and caught a defect in my own work there: the endpoint contract's tier probe was reporting l1=ready from endpoint reachability alone, when L1 retrieval needs BOTH an embeddings endpoint and a built index. This host is exactly the configuration that separates them — endpoint live, index empty — and it turned a plausible-looking green into a corrected `l1=no-index`. A host in a half-provisioned state is worth more for this kind of verification than a fully-provisioned one.
         - type: note
           ts: "2026-08-29T16:21:03Z"
           agent_id: "windows-yolanda-claude-20260828t223837z"
@@ -34262,6 +34373,12 @@ plan_index:
             expecting `unsupported`, so the refusal cannot silently regress.
 
       events:
+        - type: progress
+          ts: "2026-08-29T16:24:44Z"
+          agent_id: "linux-macuahuitl-claude-20260829t162444z"
+          host: linux
+          summary: |
+            THE CLOSABLE SLICE FROM next_action IS LANDED AND LIVE-VERIFIED ON THE spec_answer PATH. The which-chunk-won coverage decision now runs in the MCP server: forge-plan.sh's spec_answer_envelope calls a new deterministic `spec-floor` subcommand between retrieve and synthesis, and the decision itself is ONE Rust implementation — spec::apply_retrieval_floors, with the 920-pxg6 grounded pipeline rewired through the same function so the two surfaces cannot drift. Floors are the D8 pair, per-host env-tunable: TILLANDSIAS_RETRIEVE_REFUSAL_FLOOR (default 0.62) gates the BEST score, TILLANDSIAS_RETRIEVE_MIN_SCORE (default 0.45) each chunk. Feature-detected via capability_gap on the declared spec-floor token; FAIL-OPEN on a staged binary that predates it, because unfloored answering is the pre-floor behavior and refusing every question over version skew would be the worse lie. MEASURED THROUGH THE REAL MCP LOOP, not inferred: this packet's own question — sourdough proofing — now returns confidence=unsupported, citations=0, reason 'nothing in the full corpus is similar enough (best score 0.58 < refusal floor 0.62)'; the in-corpus control ('what does the pre-push gate check') still answers retrieved with 2 citations. Tier A citation verification needed NO new work here: spec-envelope already runs emit_verified_envelope -> answer::verify on this path (853-6gz3's 2026-08-23 finding), so the floor was the missing half of the which-chunk-won + citation-verifies decision. CRITERIA AUDIT: (1) met since 2026-08-18; (3) met since 2026-08-24 (spec-rung1.yaml carries the unsupported case); (2) now true for the far band with the threshold justified by four measured regimes rather than chosen — and SCOPED: 29/33 relabelled near-misses score above 0.62 on this host and still answer, BY DESIGN, because the fleet decision routes near-miss refusal to 853-6gz3's validation layer (no cosine floor separates near from in: overlap 0.2058 at n=561). NOT claiming completion over that scope. Remaining from next_action: the declined-alternatives corpus content (harness-measured 2/5 conversion, zero in-corpus regression) still lives only in negatives-declined-alternatives.jsonl — landing it is cheatsheet work outside this slice. Evidence: cargo test -p tillandsias-plan 257+28 green incl. 5 new floor tests; check-no-spawn-in-if-not green (3 prior violations verified pre-existing at HEAD); live probes on the published entry 12537c62… @1396258f9.
         - type: claim
           ts: "2026-08-18T07:25:37Z"
           agent_id: linux-yoga-claude-20260818t072537z
@@ -34758,6 +34875,12 @@ plan_index:
 
 
       events:
+        - type: progress
+          ts: "2026-08-29T16:24:44Z"
+          agent_id: "linux-macuahuitl-claude-20260829t162444z"
+          host: linux
+          summary: |
+            MACUAHUITL RE-REPORTS ITS BANDS ON TODAY'S LIVE INDEX, AND DRAFTS THE DECISION RECORD THE PACKET ASKS FOR. Ran the committed harness (measure-bands.sh, 579/579 questions, zero failures) against the PUBLISHED entry — 22,140 chunks, .commit 1396258f9 (= HEAD), nomic-embed-text, no prefix — projected through apply-relabelled-561.sh (its --verify reproduced the baseline first; ok:relabelled:579:561:18). THE VERDICT REPRODUCES EXACTLY ON THE GROWN CORPUS: in-floor 0.5620, near-ceiling 0.7677, global overlap 0.2058, margin overlap 0.1104, every corpus overlaps (spec 0.1742, methodology 0.1199, plan 0.1545, code 0.0315@n=2, cheatsheets 0.1172). New TSVs committed beside the baselines. FLOOR EFFICACY QUANTIFIED PER BAND, this regime: at 0.62 — far 58/70 refused (12 admitted, of which several are genuinely answerable from the general-reference cheatsheets: postgresql-jsonb 0.6911, CSS flexbox 0.6797; true leaks sit 0.62-0.64: LoRA 0.6411, JVM GC 0.6392, Oracle RAC 0.6337…), near 4/33 refused, in-corpus cost 11/458 = 2.4%. At 0.65: far 67/70 but in-corpus cost quadruples to 43/458 = 9.4%. Compare darwin D8 n=30 (covered 0.65-0.87, probes 0.48-0.60: 0.62 refuses every probe) and yoga n=21 (far ceiling 0.611: 0.62 refuses all far): THE RIGHT FLOOR IS REGIME-DEPENDENT, which is why D8 made it an env knob and why no fleet constant should be shipped. THE DECISION, from four regimes (yoga n=21, macuahuitl n=561-relabelled + today, darwin n=30): a single global cosine threshold is NOT SUFFICIENT — criterion 2's parenthesis, already five-axis-refuted (global, per-corpus, margin, 137M->4B monotonically worse, prefixes 0.0057). What replaces it, now all named AND partly landed: (a) D8 per-host env-tunable floors stop the FAR band only and are now implemented uniformly on both the grounded pipeline and the MCP spec_answer path via one shared spec::apply_retrieval_floors (see 821-73es this cycle); (b) NEAR-MISS refusal belongs to 853-6gz3's validation layer (which-chunk-won + citation-verifies; its own measured numbers: 0/33 false positives, recall@5 2x recall@1); (c) declined-alternatives negative content converts ANTICIPATED near-misses (measured 2/5, zero in-corpus regression) and is complementary, still un-landed in the corpus. RATIFICATION CHECK, as asked: kind:decision carries no bar_raise/promotion language in this packet and methodology has no decision-ratification rule (the only ratification uses are operator-ratified principles and coordinator-ratified release slips), so this record is a fleet decision the ledger can hold without an operator gate. depends_on 849-tz8g VERIFIED: status=ready, refuted as a ceiling (concurrent-runner-residency scheduling defect, p2, proven unload-between-models workaround) — it no longer bears on this decision; the model-size question it once gated was answered NO. THE ROW STAYS OPEN ON CRITERION 1 ALONE: low-end tier bands are still unreported — 864-dvhk is implemented but its events record judge coherence and latency, not retrieval bands; note the bands are a property of (embedder, corpus, prefix), not of host silicon, so the low-end report is cheap: the harness against that host's own live index.
         - type: progress
           ts: "2026-08-22T03:00:00Z"
           agent_id: linux-macuahuitl-opus5-20260822T024300Z
@@ -40425,6 +40548,13 @@ plan_index:
         by the same probe, and by a hand-driven call in this cycle. The gap is in
         what "healthy" is allowed to mean.
 
+      events:
+        - type: note
+          ts: "2026-08-29T16:24:44Z"
+          agent_id: "linux-macuahuitl-claude-20260829t162444z"
+          host: linux
+          summary: |
+            DELIVERED BY 823-u3k9'S LANDING (a50096a8c), verified against the tree rather than the commit message. The deliverable's both branches hold: (1) DISTINGUISH — scripts/check-mcp-live-build.sh joins the live server's self-reported build id (forge-plan.sh computes it once at startup via lib-mcp-build-id.sh and prints server_build:) against the file on disk through an agent attestation; measured live on yoga: check-mcp-expert-health.sh ok:experts-healthy while check-mcp-live-build.sh stale:live-server-build-unreported:forge-plan — exactly a healthy fresh spawn distinguished from a stale live connection; fixture re-run on this tree 2026-08-29: 11/11 including the pinned 799-j4xd defect case, unknown-is-never-current, and claim expiry. (2) SAYS-PLAINLY-IT-CANNOT — check-mcp-expert-health.sh:142 'WHAT THIS PROBE STILL CANNOT SEE (order 823-u3k9)' names that a fresh-spawn probe reads green BY CONSTRUCTION over a stale session process (the verdict token stays unqualified because litmus:mcp-expert-health-probe-shape pins the grammar); the default verdict of the live-build check is unattested:no-live-build-claim, never ok:, so silence can no longer read as health; skills/meta-orchestration/SKILL.md:1036 'is the server you reach running current code?' wires the attest flow into the cycle and covers this packet's 2026-08-20 sequence class ('a fix in a file does not reach a process that already read it'). RESIDUE, named not hidden: project-info.sh — the very server of this packet's incident — has no server_build emitter (grep: zero hits), so the live join covers forge-plan only; for an emitterless server the check's unreported->stale rationale ('the file on disk emits one') does not hold, and a stale project-info remains covered only by the says-plainly branch plus the restart-after-edit rule. Extending lib-mcp-build-id.sh to project-info.sh is a follow-on packet if the fleet wants per-server coverage; it is not an unmet half of this packet's disjunctive deliverable. Evidence: a50096a8c; scripts/check-mcp-live-build.sh fixture 11/11 (this tree); scripts/check-mcp-expert-health.sh:142-156; skills/meta-orchestration/SKILL.md:1036-1064.
     - order: 843-624y
       packet_id: ledger-compaction-deletes-fragments-it-never-folded
       desired_release: v0.5
@@ -41995,6 +42125,12 @@ plan_index:
       exit_criteria: |
         (1) `answer_question` returns a VERIFIED envelope through an UNCHANGED signature — no caller, MCP tool, or in-forge agent edited to accommodate it. A caller diff of zero is part of the acceptance. (2) Tier A alone demonstrably rejects a fabricated citation and a rotted one (a path compaction has folded away), with a negative control proving it ACCEPTS a real one. Shippable before 849-tz8g clears. (3) `Confidence::Exact` answers bypass the layer entirely, proven by a test that fails if an L0 lookup is fanned out. (4) The affordance vocabulary is closed and every returned candidate carries a reason; a candidate with an empty reason is a hard error, not a default. Prohibited entries name damage, cost, and the permission needed. (5) The complement probe runs as a SELF-CHECK: the layer detects and reports its own judge answering YES to both a claim and its complement, rather than silently averaging a degenerate judge into a confident answer. (6) Measured on the committed 579-question set BOTH directions — in-corpus answered rate AND out-of-corpus refused rate. A layer that refuses everything scores 100% on half the set, which is exactly how the 0.5B judge first read as a success. (7) A per-call budget: n sub-questions x waves is bounded and reported, so an answer cannot silently cost an unbounded number of model calls.
       events:
+        - type: note
+          ts: "2026-08-29T16:24:44Z"
+          agent_id: "linux-macuahuitl-claude-20260829t162444z"
+          host: linux
+          summary: |
+            Tier A's perimeter widened to the LAST unfloored surface: the MCP spec_answer path now runs the same dual-floor coverage decision as the 920-pxg6 pipeline (shared spec::apply_retrieval_floors, new spec-floor arm, forge-plan.sh wired, live-verified — sourdough refuses typed, in-corpus answers cited; events on 821-73es). What this sharpens rather than shrinks: the floors refuse 58/70 far but only 4/33 near on macuahuitl's re-measured n=561 (overlap 0.2058 reproduced today on the live 22,140-chunk index), so the near band — 29/33 sailing over 0.62 — remains ENTIRELY this packet's Tier B territory, exactly as the fleet decision assigns it.
         - type: filed
           ts: "2026-08-23T02:20:37Z"
           agent_id: linux-macuahuitl-opus5-20260822T144300Z

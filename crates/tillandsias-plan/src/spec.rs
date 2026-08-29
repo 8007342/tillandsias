@@ -63,6 +63,84 @@ pub struct ScoredChunk {
     pub score: f32,
 }
 
+/// The per-chunk inclusion floor: a retrieved chunk scoring below it is not
+/// citation-worthy. Default is the 920-pxg6 first cut; tune per-host with
+/// TILLANDSIAS_RETRIEVE_MIN_SCORE (an unparseable value falls back, same as
+/// the pipeline always did).
+pub fn retrieve_min_score() -> f32 {
+    std::env::var("TILLANDSIAS_RETRIEVE_MIN_SCORE")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0.45)
+}
+
+/// The coverage floor, applied to the BEST retrieved score: below it the
+/// question is out of corpus coverage, whatever the per-chunk floor above
+/// would keep. One scalar cannot answer both questions — measured on darwin
+/// 2026-08-29 (n=30): covered best-scores 0.65-0.87, off-topic probes
+/// 0.48-0.60, so the single 0.45 floor refused nothing while 0.62 refuses
+/// every measured probe. Tune per-host with TILLANDSIAS_RETRIEVE_REFUSAL_FLOOR.
+pub fn refusal_floor() -> f32 {
+    std::env::var("TILLANDSIAS_RETRIEVE_REFUSAL_FLOOR")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0.62)
+}
+
+/// The typed outcome of applying the retrieval floors to ONE retrieval.
+#[derive(Debug, Clone)]
+pub enum FloorDecision {
+    /// Covered: the citation-worthy chunks that survive the per-chunk floor.
+    Keep(Vec<ScoredChunk>),
+    /// Out of coverage: `best` is the highest score seen (0.0 when the
+    /// retrieval was empty), for the refusal message.
+    OutOfCoverage { best: f32 },
+}
+
+/// ORDER 821-73es — the ONE coverage decision, shared by the grounded
+/// pipeline (`pipeline::run_grounded`) and the `spec-floor` CLI arm that the
+/// shell spec_answer path calls, so the two surfaces cannot drift. Cosine
+/// top-k ALWAYS returns k chunks; without this gate an out-of-corpus question
+/// dresses k real-but-irrelevant citations as a confident answer.
+///
+/// SCOPE, so the number is not over-read: the floors stop the FAR band only.
+/// Measured near-misses overlap the in-corpus band (824-6qxh, relabelled
+/// n=561: overlap 0.2058, thresholds refuted on five axes), so near-miss
+/// refusal belongs to the 853-6gz3 validation layer — a bigger floor here
+/// would refuse real questions before it refused plausible-but-unanswerable
+/// ones.
+pub fn apply_retrieval_floors(
+    scored: Vec<ScoredChunk>,
+    min_score: f32,
+    refusal: f32,
+) -> FloorDecision {
+    let best = scored
+        .iter()
+        .map(|sc| sc.score)
+        .reduce(f32::max)
+        .unwrap_or(0.0);
+    if best < refusal {
+        return FloorDecision::OutOfCoverage { best };
+    }
+    let kept: Vec<ScoredChunk> = scored
+        .into_iter()
+        .filter(|sc| sc.score >= min_score)
+        .collect();
+    if kept.is_empty() {
+        return FloorDecision::OutOfCoverage { best };
+    }
+    FloorDecision::Keep(kept)
+}
+
+/// The out-of-coverage refusal reason — ONE string for both surfaces, naming
+/// the measured score and both tuning knobs. `domain` is "full" for
+/// whole-corpus retrieval.
+pub fn out_of_coverage_reason(domain: &str, best: f32, refusal: f32) -> String {
+    format!(
+        "nothing in the {domain} corpus is similar enough to this question (best score {best:.2} < refusal floor {refusal:.2}) — likely out of coverage; TILLANDSIAS_RETRIEVE_REFUSAL_FLOOR (coverage) and TILLANDSIAS_RETRIEVE_MIN_SCORE (per-chunk) tune the floors"
+    )
+}
+
 /// A dependency-free, non-cryptographic content hash for change detection.
 fn hash_hex(s: &str) -> String {
     let mut h = DefaultHasher::new();
@@ -1384,6 +1462,102 @@ pub fn corpus_coverage(root: &Path) -> Vec<(String, usize, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn floor_chunk(id: usize, score: f32) -> ScoredChunk {
+        ScoredChunk {
+            chunk: Chunk {
+                id,
+                path: "openspec/specs/x/spec.md".into(),
+                line_start: 1,
+                line_end: 2,
+                kind: "spec".into(),
+                key: format!("Requirement: k{id}"),
+                content_hash: "h".into(),
+                text: format!("Requirement: k{id}\nbody"),
+            },
+            score,
+        }
+    }
+
+    /// ORDER 821-73es. A covered retrieval keeps exactly the chunks above the
+    /// per-chunk floor — the below-floor tail is dropped, not refused.
+    #[test]
+    fn floors_keep_covered_retrieval_and_drop_below_min_chunks() {
+        let scored = vec![
+            floor_chunk(0, 0.80),
+            floor_chunk(1, 0.50),
+            floor_chunk(2, 0.30),
+        ];
+        match apply_retrieval_floors(scored, 0.45, 0.62) {
+            FloorDecision::Keep(kept) => {
+                assert_eq!(kept.len(), 2, "the 0.30 chunk must be dropped");
+                assert!(kept.iter().all(|sc| sc.score >= 0.45));
+            }
+            FloorDecision::OutOfCoverage { best } => {
+                panic!("a 0.80 best is covered, got OutOfCoverage {{ best: {best} }}")
+            }
+        }
+    }
+
+    /// ORDER 821-73es. The sourdough shape: k real chunks, none similar
+    /// enough. The decision is out-of-coverage carrying the best score, never
+    /// a kept set of irrelevant-but-real citations.
+    #[test]
+    fn floors_refuse_when_best_is_under_the_refusal_floor() {
+        let scored = vec![floor_chunk(0, 0.57), floor_chunk(1, 0.55)];
+        match apply_retrieval_floors(scored, 0.45, 0.62) {
+            FloorDecision::OutOfCoverage { best } => {
+                assert!(
+                    (best - 0.57).abs() < 1e-6,
+                    "best must be reported, got {best}"
+                );
+            }
+            FloorDecision::Keep(kept) => {
+                panic!("0.57 < 0.62 must refuse, kept {} chunks", kept.len())
+            }
+        }
+    }
+
+    /// An empty retrieval is out of coverage with best 0.0 — the same verdict
+    /// the pipeline always reached via `.first().unwrap_or(0.0)`.
+    #[test]
+    fn floors_refuse_empty_retrieval_with_best_zero() {
+        match apply_retrieval_floors(Vec::new(), 0.45, 0.62) {
+            FloorDecision::OutOfCoverage { best } => assert_eq!(best, 0.0),
+            FloorDecision::Keep(_) => panic!("an empty retrieval must refuse"),
+        }
+    }
+
+    /// A pathological min_score above the refusal floor can starve a covered
+    /// retrieval; that is out-of-coverage (nothing citation-worthy survives),
+    /// mirroring the pipeline's empty-scored continue.
+    #[test]
+    fn floors_refuse_when_min_score_starves_a_covered_retrieval() {
+        let scored = vec![floor_chunk(0, 0.70)];
+        match apply_retrieval_floors(scored, 0.90, 0.62) {
+            FloorDecision::OutOfCoverage { best } => assert!((best - 0.70).abs() < 1e-6),
+            FloorDecision::Keep(_) => panic!("a starved retrieval must refuse"),
+        }
+    }
+
+    /// The refusal reason names both tuning knobs and the two scores — it is
+    /// the one string the pipeline and spec-floor both serve.
+    #[test]
+    fn out_of_coverage_reason_names_both_knobs_and_the_scores() {
+        let reason = out_of_coverage_reason("full", 0.57, 0.62);
+        assert!(reason.contains("full corpus"), "{reason}");
+        assert!(reason.contains("out of coverage"), "{reason}");
+        assert!(reason.contains("0.57"), "{reason}");
+        assert!(reason.contains("0.62"), "{reason}");
+        assert!(
+            reason.contains("TILLANDSIAS_RETRIEVE_REFUSAL_FLOOR"),
+            "{reason}"
+        );
+        assert!(
+            reason.contains("TILLANDSIAS_RETRIEVE_MIN_SCORE"),
+            "{reason}"
+        );
+    }
 
     /// Order 920-pxg6 (R4/R5). The explicit-freshness builder keeps ONLY the
     /// citations the prose used — subset usage strips the rest — and the
