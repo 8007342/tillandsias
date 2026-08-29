@@ -1880,7 +1880,34 @@ fn login_state_label(state: &GithubLoginState) -> &'static str {
 /// was the FIRST confirmed answer (the moment the submenu stops showing
 /// "(loading repos…)"). Factored out of the global `MENU_STATE` so the
 /// latch it sets can be exercised alongside [`apply_login_state`].
-fn apply_cloud_projects_state(menu: &mut MenuState, mapped: Vec<ProjectEntry>) -> bool {
+fn apply_cloud_projects_state(
+    menu: &mut MenuState,
+    mapped: Vec<ProjectEntry>,
+    confirmed: bool,
+) -> bool {
+    // 731-eupn: AN UNCONFIRMED REPLY IS NOT AN ANSWER, and until this change
+    // the Windows lane had no way to know the difference.
+    //
+    // The wire grew a discriminator, the guest sets it, and the macOS and Linux
+    // handlers were updated — but this function kept latching
+    // `cloud_projects_loaded = true` for every reply that arrived, because its
+    // caller destructured `CloudRefreshReply { projects, .. }` and threw the
+    // outcome away. A user whose gh/vault/proxy path broke mid-session got a
+    // confident "(no repos)" on Windows: a confirmation nobody made, which is
+    // the precise defect this packet exists to end.
+    //
+    // WORTH RECORDING because it is how the gap survived review: the macOS
+    // applier's comment says it "mirrors the Windows wiring in
+    // notify_icon::apply_cloud_projects" — asserting a parity with a lane that
+    // did not have it. A comment claiming symmetry is not symmetry.
+    //
+    // A failure is DISCARDED: keep whatever was there and leave the flag alone.
+    // Doing nothing is the truthful response to being told nothing, and it is
+    // the defensive position Linux already took by stamping last_fetched only
+    // on success.
+    if !confirmed {
+        return false;
+    }
     // Before this observation the submenu was still showing
     // "(loading repos…)"; this is the moment the list becomes real.
     let first_answer = !menu.cloud_projects_loaded;
@@ -1928,13 +1955,24 @@ fn apply_login_state(menu: &mut MenuState, state: GithubLoginState) {
 /// or an unrequested `CloudProjectsPush` frame (order 154 slice 2; full
 /// replacement list per the wire doc) — to the shared
 /// `MenuState.cloud_projects`. Returns the entry count for logging.
-fn apply_cloud_projects(projects: &[tillandsias_control_wire::CloudProjectEntry]) -> usize {
+fn apply_cloud_projects(
+    projects: &[tillandsias_control_wire::CloudProjectEntry],
+    confirmed: bool,
+) -> usize {
     let mapped: Vec<ProjectEntry> = projects.iter().map(cloud_entry_to_menu).collect();
     let n = mapped.len();
     let mut first_answer = false;
+    if !confirmed {
+        // Named, not silent. The whole packet is about a state the user was
+        // never told; a lane that discards a failed fetch without saying so in
+        // the log reproduces that on the operator's side of the glass.
+        tracing::warn!(
+            "cloud-projects: fetch unconfirmed; keeping previous list (not rendering '(no repos)')"
+        );
+    }
     if let Ok(mut guard) = MENU_STATE.lock() {
         let state = guard.get_or_insert_with(MenuState::initial);
-        first_answer = apply_cloud_projects_state(state, mapped);
+        first_answer = apply_cloud_projects_state(state, mapped, confirmed);
     }
     // Companion to the sign-in transition above: the pair of INFO lines is
     // what lets a field log time the startup handoff end to end. First
@@ -2102,8 +2140,12 @@ async fn run_vm_status_push_listener(hwnd: HwndHandle) {
                         apply_github_login(logged_in, handle);
                         tracing::debug!(logged_in, "github login state pushed");
                     }
+                    // Split from CloudRefreshReply (731-eupn), same reasoning as
+                    // the macOS lane: a PUSH is only emitted from guest state a
+                    // confirmed fetch already wrote, so it is confirmed BY
+                    // CONSTRUCTION. A REPLY is not.
                     ControlMessage::CloudProjectsPush { projects, .. } => {
-                        let n = apply_cloud_projects(&projects);
+                        let n = apply_cloud_projects(&projects, true);
                         tracing::debug!(count = n, "cloud projects pushed");
                     }
                     ControlMessage::LocalProjectsPush { entries, .. } => {
@@ -2318,8 +2360,12 @@ async fn refresh_cloud_projects(hwnd: HwndHandle) {
         None => return,
     };
     match reply.body {
-        ControlMessage::CloudRefreshReply { projects, .. } => {
-            let n = apply_cloud_projects(&projects);
+        ControlMessage::CloudRefreshReply {
+            projects, outcome, ..
+        } => {
+            // 731-eupn: the REPLY carries its own discriminator and may not be
+            // confirmed. `outcome` was previously swallowed by `..`.
+            let n = apply_cloud_projects(&projects, outcome.is_confirmed());
             tracing::debug!(count = n, "cloud projects refreshed");
         }
         // Convergence packet (5c67ddb9): dispatcher returns Error{Unsupported}
@@ -4152,6 +4198,60 @@ fn apply_menu_action_state(state: &mut MenuState, action: &MenuAction) -> bool {
 mod tests {
     use super::*;
 
+    /// ORDER 731-eupn, exit criterion 4: "confirmed-empty renders (no repos);
+    /// failed-fetch does NOT."
+    ///
+    /// THESE TWO WERE INDISTINGUISHABLE ON THIS LANE. The wire grew an outcome
+    /// discriminator and the macOS and Linux handlers honoured it, but this
+    /// crate destructured `CloudRefreshReply { projects, .. }` and threw it
+    /// away — so a failed fetch published an empty list and the submenu latched
+    /// "(no repos)", a confirmation nobody made.
+    #[test]
+    fn a_confirmed_empty_answer_latches_loaded() {
+        let mut menu = MenuState::initial();
+        assert!(!menu.cloud_projects_loaded);
+        assert!(apply_cloud_projects_state(&mut menu, Vec::new(), true));
+        assert!(
+            menu.cloud_projects_loaded,
+            "a CONFIRMED empty answer is an answer — the submenu may say (no repos)"
+        );
+        assert!(menu.cloud_projects.is_empty());
+    }
+
+    #[test]
+    fn an_unconfirmed_empty_reply_does_not_latch_loaded() {
+        let mut menu = MenuState::initial();
+        assert!(!apply_cloud_projects_state(&mut menu, Vec::new(), false));
+        assert!(
+            !menu.cloud_projects_loaded,
+            "a FAILED fetch must not flip the submenu to (no repos) — it was never told zero"
+        );
+    }
+
+    /// And a failure must not DESTROY what the user could already see: wiping
+    /// the list to empty would render "(no repos)" by another route.
+    #[test]
+    fn an_unconfirmed_reply_retains_the_previous_list() {
+        let mut menu = MenuState::initial();
+        let prior = vec![ProjectEntry {
+            name: "hello-world".into(),
+            path: "octocat/hello-world".into(),
+            ready: false,
+            full_name: None,
+        }];
+        assert!(apply_cloud_projects_state(&mut menu, prior, true));
+        assert_eq!(menu.cloud_projects.len(), 1);
+
+        // The fetch breaks mid-session: gh, vault or the proxy path fails.
+        assert!(!apply_cloud_projects_state(&mut menu, Vec::new(), false));
+        assert_eq!(
+            menu.cloud_projects.len(),
+            1,
+            "the previous list must survive an unconfirmed fetch"
+        );
+        assert!(menu.cloud_projects_loaded, "and the flag must be untouched");
+    }
+
     /// 731-qth3, the windows half of the macOS 731-m58f defect. This is the
     /// PRODUCTION ordering — LoggedOut, then an empty cloud reply, then
     /// sign-in — not the returning-user ordering that starts from LoggedIn,
@@ -4174,7 +4274,7 @@ mod tests {
 
         // 2. The push listener's unconditional CloudRefreshRequest answers
         //    while there is no token: an empty list, which latches the flag.
-        assert!(apply_cloud_projects_state(&mut menu, Vec::new()));
+        assert!(apply_cloud_projects_state(&mut menu, Vec::new(), true));
         assert!(
             menu.cloud_projects_loaded,
             "an empty answer is still a confirmed answer while logged out"
@@ -4215,6 +4315,7 @@ mod tests {
                 ready: false,
                 full_name: None,
             }],
+            true,
         );
 
         apply_login_state(&mut menu, signed_in);
