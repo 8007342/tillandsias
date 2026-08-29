@@ -56544,6 +56544,12 @@ plan_index:
         behaviour.
       events:
         - type: note
+          ts: "2026-08-29T19:43:35Z"
+          agent_id: "linux-macuahuitl-claude-20260829t194335z"
+          host: linux
+          summary: |
+            Removed a 0-byte tracked file named 'grep' from the repo ROOT (commit after 1aa5d7784) — a materialization artifact of the exact bug scripts/test-tool-materialize.sh:18-21 documents (a grep FUNCTION made 'command -v grep' return the bare name, so the materializer wrote to cwd), swept into 8f971188e by git add -A. Found 2026-08-29 when a regime-attribution probe on macuahuitl resolved 'command -v grep' to ./grep. An empty file named after a core tool at repo root is a latent shadow for any dot-in-PATH environment. Owner (lenovinha) has veto if it was intentional.
+        - type: note
           ts: "2026-08-29T00:01:25Z"
           agent_id: "linux-lenovinha-claude-20260828t223829z"
           host: linux
