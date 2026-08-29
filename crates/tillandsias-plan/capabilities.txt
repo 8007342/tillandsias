@@ -71,6 +71,7 @@ ready
 select-rows
 set-field
 spec-envelope
+spec-floor
 spec-index
 spec-retrieve
 status

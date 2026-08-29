@@ -549,6 +549,41 @@ fi
 #               expert_slots=<N> max_loaded=<N> checkpoint=<written|skipped|unwritable>
 echo "[inference] preload-state: warm=$_warm_count models=$_warm_csv policy=$PRELOAD_POLICY expert_slots=$PRELOAD_EXPERT_SLOTS max_loaded=$OLLAMA_MAX_LOADED_MODELS checkpoint=$_checkpoint_state"
 
+# ── Embedding model for the spec RAG pipeline (order 919-vvyv) ────────────
+# spec_answer / expert-serve embed queries via /v1/embeddings on THIS
+# endpoint, and scripts/spec-index-ensure.sh embeds the corpus the same way.
+# Before this block nothing ever pulled an embedding model, so on a cold
+# volume the ENTIRE RAG pipeline was dead until someone pulled it by hand:
+# `curl .../api/embeddings -d '{"model":"nomic-embed-text",...}'` returned
+# "model not found, try pulling it first" (919-vvyv, measured on a fresh
+# forge). Deliberately NOT added to DEFAULT_MODELS: that literal is pinned
+# (order 168 tiny-model-first; litmus:zen-default-with-ollama-shape), and an
+# embedder is not a generation model — nomic-embed-text is 137M params /
+# ~274MB, holds no expert slot hostage, and answers no /api/generate.
+# BACKGROUNDED so it never delays the serve handoff below; a failed pull
+# degrades soft and retries next launch, same contract as every other pull
+# here. The forge startup context carries the state with no new grammar: the
+# model appears in `inference_warm=` once cached, and the capability line's
+# embed_endpoint= field (712-r5x8) reports the endpoint half.
+EMBED_MODEL="${TILLANDSIAS_EMBED_MODEL:-nomic-embed-text}"
+if [ -n "${TILLANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS:-}" ]; then
+    echo "[inference] status-check mode — skipping embed model pull ($EMBED_MODEL)"
+elif [ "$PRELOAD_POLICY" != "eager" ]; then
+    # lazy/off opted out of startup pulls; under `off` nothing may ever pull.
+    echo "[inference] preload policy=$PRELOAD_POLICY — skipping embed model pull ($EMBED_MODEL)"
+elif ollama list 2>/dev/null | grep -q "$EMBED_MODEL"; then
+    echo "[inference] embed model $EMBED_MODEL ready (cached)"
+else
+    echo "[inference] pulling embed model $EMBED_MODEL in background (first run)..."
+    (
+        if ollama pull "$EMBED_MODEL" 2>&1; then
+            echo "[inference] embed model $EMBED_MODEL ready"
+        else
+            echo "[inference] embed model $EMBED_MODEL pull FAILED — will retry next launch (non-fatal)" >&2
+        fi
+    ) &
+fi
+
 # ── Larger tier pulls — OPT-IN (order 392a) ───────────────────────
 # Reconciles the long-standing NOTE above: on a 16GB laptop the tier ladder
 # selected T2 and background-pulled qwen2.5:7b, which contradicts the

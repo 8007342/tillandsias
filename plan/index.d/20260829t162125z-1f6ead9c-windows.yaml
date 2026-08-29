@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-windows-toolbox-exception-evaporates-inside-the-wsl2-distro
+    field: status
+    value: completed
+    ts: "2026-08-29T16:21:25Z"
+    host: windows
+
+events:
+  - packet_id: the-windows-toolbox-exception-evaporates-inside-the-wsl2-distro
+    event:
+      type: completed
+      ts: "2026-08-29T16:21:25Z"
+      host: windows
+      summary: >
+        status 'completed' with evidence_refs: scripts/with-tillandsias-builder.sh native WSL detection + scripts/test-toolbox-refusal-wsl-exception.sh 6 passed 0 failed (arm 2 is the negative control keeping the Linux refusal intact); live proof inside the tillandsias-build distro with TILLANDSIAS_SKIP_TOOLBOX cleared -> pass-through, LIVE-PASSTHROUGH-OK; false os-release claim removed and pinned against return by arm 3; 889-8tcb's boundary-side TILLANDSIAS_SKIP_TOOLBOX=1 workaround REMOVED from with-wsl2-builder.sh so one mechanism carries the fact rather than two.

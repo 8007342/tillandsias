@@ -104,6 +104,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "split-parents",
     "experts-probe",
     "spec-envelope",
+    "spec-floor",
     "spec-index",
     "spec-retrieve",
     "status",
@@ -389,6 +390,12 @@ const USAGE: &str = concat!(
     "                                     ORDER 547. Chunk the whole-spec corpus into <dir>/chunks.jsonl\n",
     "           spec-retrieve --index-dir <dir> --query-vec <f> [--k N]\n",
     "                                     network-free cosine top-k over caller-supplied embeddings\n",
+    "           spec-floor --chunks-json <f>\n",
+    "                                     ORDER 821-73es. Apply the grounded pipeline's retrieval\n",
+    "                                     floors (TILLANDSIAS_RETRIEVE_REFUSAL_FLOOR on the best\n",
+    "                                     score, TILLANDSIAS_RETRIEVE_MIN_SCORE per chunk) to a\n",
+    "                                     spec-retrieve result: the kept array, or a typed\n",
+    "                                     out-of-coverage refusal object with the reason ready\n",
     "           spec-envelope --chunks-json <f> [--answer-file F] [--root D]\n",
     "                         [--corpus-commit SHA]\n",
     "                                     build a VERIFIED envelope keeping only the citations the\n",
@@ -1983,6 +1990,24 @@ fn read_chunks_array(path: &Path) -> Vec<spec::Chunk> {
     })
 }
 
+/// ORDER 821-73es. `spec-floor` consumes what `spec-retrieve` emits: scored
+/// chunks. A bare-chunk array (no `score` key) is refused loudly here rather
+/// than defaulting scores to anything — a floor applied to invented numbers
+/// would be a confident lie about coverage.
+fn read_scored_chunks_array(path: &Path) -> Vec<spec::ScoredChunk> {
+    let text = std::fs::read_to_string(path).unwrap_or_else(|e| {
+        eprintln!("error: read {}: {e}", path.display());
+        std::process::exit(1);
+    });
+    serde_json::from_str::<Vec<spec::ScoredChunk>>(&text).unwrap_or_else(|e| {
+        eprintln!(
+            "error: {} is not a JSON array of scored chunks (spec-retrieve output): {e}",
+            path.display()
+        );
+        std::process::exit(1);
+    })
+}
+
 fn read_vectors(path: &Path) -> Vec<Vec<f32>> {
     let text = std::fs::read_to_string(path).unwrap_or_else(|e| {
         eprintln!("error: read {}: {e}", path.display());
@@ -3168,6 +3193,44 @@ fn main() {
                     Err(e) => {
                         eprintln!("error: serialize retrieval result: {e}");
                         std::process::exit(1);
+                    }
+                }
+                return;
+            }
+            "spec-floor" => {
+                // ORDER 821-73es. The coverage decision for the shell
+                // spec_answer path: apply the grounded pipeline's dual
+                // retrieval floors (spec::apply_retrieval_floors — ONE
+                // implementation, no drift) to a spec-retrieve result.
+                // Covered: the kept chunks, the same array shape
+                // spec-retrieve emits. Out of coverage: a typed refusal
+                // OBJECT carrying the best score and the ready-made reason,
+                // so the caller refuses instead of dressing k
+                // real-but-irrelevant citations as a confident answer.
+                let Some(cj) = chunks_json else {
+                    eprintln!("error: spec-floor requires --chunks-json <file>");
+                    std::process::exit(2);
+                };
+                let scored = read_scored_chunks_array(&cj);
+                let min_score = spec::retrieve_min_score();
+                let refusal = spec::refusal_floor();
+                match spec::apply_retrieval_floors(scored, min_score, refusal) {
+                    spec::FloorDecision::Keep(kept) => match serde_json::to_string_pretty(&kept) {
+                        Ok(s) => println!("{s}"),
+                        Err(e) => {
+                            eprintln!("error: serialize floor result: {e}");
+                            std::process::exit(1);
+                        }
+                    },
+                    spec::FloorDecision::OutOfCoverage { best } => {
+                        let refused = serde_json::json!({
+                            "refused": "out-of-coverage",
+                            "best": best,
+                            "refusal_floor": refusal,
+                            "min_score": min_score,
+                            "reason": spec::out_of_coverage_reason("full", best, refusal),
+                        });
+                        println!("{refused}");
                     }
                 }
                 return;

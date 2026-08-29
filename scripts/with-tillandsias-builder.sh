@@ -156,9 +156,43 @@ fi
 # is the one whose build you should trust least, and letting it proceed
 # converts an environment fault into a silent behavioural difference.
 #
-# macOS and Windows are the sanctioned exceptions and are handled ABOVE by the
-# /etc/os-release guard — they have their own build paths (build-macos-tray.sh,
-# the tillandsias-build WSL2 distro). Reaching here means Linux.
+# macOS and Windows are the sanctioned exceptions. macOS is handled ABOVE by the
+# /etc/os-release guard — it has its own build path (build-macos-tray.sh).
+#
+# ORDER 922-curm — WINDOWS WAS NOT, AND THIS COMMENT USED TO CLAIM IT WAS.
+# The claim was "macOS and Windows ... are handled ABOVE by the /etc/os-release
+# guard". Half true: that guard fires where the file is ABSENT, which on Windows
+# is only the Git Bash side. `./build.sh --check` there does not stop at Git
+# Bash — it re-execs into the tillandsias-build WSL2 distro, and INSIDE that
+# distro /etc/os-release exists (Fedora 44 Container Image), so the guard the
+# comment pointed at never runs. Measured on yolanda 2026-08-28 while closing
+# 889-8tcb: /etc/os-release present, `container` unset, /run/.containerenv
+# absent, toolbox absent — the distro is indistinguishable from a bare Fedora
+# builder to every guard this script had, and the FATAL below killed EVERY
+# Windows gate before a single check ran.
+#
+# So detect WSL natively instead of asserting an exception that was not there.
+# /proc/version carries the marker on every WSL2 kernel (measured in this
+# distro: "6.18.33.2-microsoft-standard-WSL2"), it is a property of the KERNEL
+# rather than of the asker — the distinction 889-8tcb paid for when a
+# capability probe answered differently on each side of the same boundary — and
+# it needs no cooperation from the distro's userland, which is a container
+# image that ships neither `hostname` (890-t9pu) nor systemd-detect-virt.
+#
+# THIS DELIBERATELY DOES NOT WIDEN THE RULING. The refusal below is what an
+# owned Linux fleet gets, and a bare-metal Linux builder without toolbox still
+# fails exactly as hard — pinned by the negative control in
+# scripts/test-toolbox-refusal-wsl-exception.sh, not by review. What changes is
+# only that a WSL2 distro stops being mistaken for one: it is not a host
+# escaping its container, it is the container the Windows lane sanctions, and
+# scripts/with-wsl2-builder.sh is the thing that put us inside it.
+if grep -qi microsoft /proc/version 2>/dev/null; then
+    [[ "$_TB_DIRECT" == 1 && $# -gt 0 ]] && exec "$@"
+    ! declare -F _tb_restore_caller_opts >/dev/null || _tb_restore_caller_opts
+    return 0 2>/dev/null || exit 0
+fi
+
+# Reaching here means Linux, not under WSL.
 if ! command -v toolbox &>/dev/null; then
     echo "[tillandsias-builder] FATAL: 'toolbox' is not installed on this Linux host." >&2
     echo "[tillandsias-builder] Every Linux builder in this fleet is required to have it;" >&2

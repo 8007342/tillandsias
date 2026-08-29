@@ -34,6 +34,53 @@ Do **not** rely on local ollama models to follow tool-call protocols
 yet — that pathway is being prepared but is not in scope for the
 current setup. Tool calling stays with the Zen models.
 
+## Local model tier ladder (CPU-first, order 919-vvyv)
+
+Which local model a host can honestly run is a RAM question first and a
+GPU question second. The ladder below is anchored in measurements, not
+vibes; where a rung is inferred rather than measured it says so. Read
+the host's envelope from `.forge-startup-context.md` (`accel_class`,
+`accel_ram_gb`) before picking.
+
+| RAM (guest) | Model | Mode to expect |
+| --- | --- | --- |
+| < 4 GiB, CPU | `qwen2.5:0.5b` | RAG **mandatory**; retrieval-only is the NORMAL mode |
+| 4–8 GiB, CPU | `qwen2.5:3b` + RAG | cited retrieval-only digest expected |
+| 8–16 GiB, CPU | `qwen2.5:7b` **if** budget policy allows (927-2q4w open) | grounded synthesis, slow |
+| GPU | `qwen2.5:7b`+ | grounded synthesis |
+
+What each rung rests on:
+
+- **Never trust raw small-model prose about this project.** On a
+  CPU-only 3.8 GiB forge, 0.5b and 1.5b each hallucinated **6/6** spec
+  queries without RAG (forge cache = "blockchain"; measured, 919-ipki).
+  Below 4 GiB, 1.5b is the practical ceiling and RAG is not optional.
+- **3b runs comfortably in 8 GiB but cannot satisfy the citation
+  contract.** Measured resident: qwen2.5:3b (Q4_K_M, 2.42 GB) in an
+  8 GiB guest with ~4.7 GiB still free, swap untouched (919-jii2).
+  Measured contract: 3b echoed **0/6** retrieved keys and emitted no
+  `Sources:` line, so its prose never survives the only-if-used
+  citation filter — the pipeline degrades to the cited retrieval-only
+  digest, which is the honest output for this rung (927-2q4w).
+- **7b is the smallest model that passes the citation contract** (3/6
+  keys verbatim plus a correct `Sources:` line, same prompt and
+  context, only the model varied) — **but** it took 10–24s per
+  synthesis on a measured CPU host, blowing the quick-tier 3000ms
+  budget, so in-pipeline it times out into retrieval-only anyway. Until
+  927-2q4w decides the budget policy, "7b on 8–16 GiB CPU" buys
+  contract-capable synthesis only where the budget lets it finish.
+  The 10–24s figure is one host (darwin M5, CPU-only); other CPUs
+  should measure with `scripts/bench-inference-floor.sh` rather than
+  inherit it.
+- **GPU rung**: inferred from sibling-host reports (7b as the sweet
+  spot) plus the measured CUDA tuning A/B in
+  `images/inference/engine-tuning.sh`; it is the one rung with no
+  citation-contract measurement of its own yet.
+
+Whatever the rung, `spec_answer` / Local Experts answers are cited or
+refuse typed — the ladder changes HOW MUCH synthesis you get, never
+whether uncited prose is acceptable (it is not, at any size).
+
 ## Local Experts mode: grounded (order 920-pxg6)
 
 The `local-experts` agent talks to the grounded loopback endpoint served
