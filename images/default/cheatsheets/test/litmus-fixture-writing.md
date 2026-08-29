@@ -190,6 +190,22 @@ Assemble the token at run time so the literal never appears in source:
 _LT="litmus"; _LT="${_LT}:"      # then use "${_LT}alpha-shape"
 ```
 
+## A per-function assertion cannot see the sibling that forgot
+
+Green gate, dead feature (925-eofi, 2026-08-29, macbook): a wire fix was
+patched into one of TWO functions that chunk input onto the wire; three tests
+passed because every test scanned the function just edited; the live run
+hung with no warning line — and that SILENCE was the diagnosis, since the
+patched path prints a named warning. When an invariant must hold at every
+member of a family (every input entry point, every dispatch arm, every
+transport), write ONE test that ENUMERATES the family and require each member
+to satisfy it — and watch it fail red against the unpatched member before
+making it green. **An assertion never seen red is not known to be able to
+catch anything.** The companion design rule, measured in the same incident: a
+route matrix that REFUSES what it does not know turned the next omission into
+a named error instead of a silent no-op — fail-loud registration means an
+unregistered variant cannot quietly do nothing.
+
 ## Scope an authority search to the AUTHORITY, not the document
 
 A guard that asks "does this approved string appear in the ledger?" approves
