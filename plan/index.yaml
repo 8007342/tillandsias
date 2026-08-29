@@ -12585,6 +12585,37 @@ plan_index:
         Order 270 (macos-attach-first-use-materialization-blackout, status ready) already owns "materialization emits a progress signal the tray can render" for the IMAGE-BUILD half. This packet is the same defect one layer out — container lifecycle and the sign-in preflight — and cross-platform. Whoever claims either should read both; they may merge.
       events:
         - type: note
+          ts: "2026-08-29T16:28:01Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            THE PACKET'S OWN CHEAP PATH IS NOT VIABLE, and that is the finding that should decide how (b) gets scoped. Determined by reading the emitted shape, which is ungated engineering, NOT by writing any user-facing text.
+
+            The packet offers an alternative for (b): "promote the EXISTING emit_launch_event lines to the default path instead of adding new text — cheapest to build". It hedges that the text "likely fails the end-user vocabulary rule as-is". It does, three times over, and there is a fourth problem the packet did not anticipate.
+
+            WHAT THAT LINE ACTUALLY IS (crates/tillandsias-podman/src/client.rs, fn format_launch_event):
+
+              [2026-08-29T16:12:03.123Z] event:container_launch stage=vault state=starting container=tillandsias-vault
+
+              1. `container=` — `container` is on spec:tray-ux's explicit ban list.
+              2. `stage=vault` — `vault` is on the same list.
+              3. `event:container_launch` with an ISO-8601 millisecond timestamp is a MACHINE WIRE FORMAT, not prose. Even with every banned word removed it reads as internals to an end user, which is the rule's intent rather than its letter.
+              4. NOT IN THE PACKET, and the reason "just flip the flag" would be worse than it looks: this stream is a PINNED API. format_launch_event's doc comment says "litmus tests grep this stream (`event:container_launch ... state=running|failed`)" and "Keep the key=value field order stable: assertions depend on it". It is consumed by diagnostic_event_emitter.rs and referenced from four places in headless/main.rs. So the field order cannot be softened for human readability without breaking the assertions, and the assertions cannot be relaxed without losing the lifecycle coverage they exist for.
+
+            CONCLUSION: (b) needs NEW end-user text on a NEW surface, sitting alongside the diagnostics stream rather than replacing or promoting it. spec:tray-ux is explicit that "Diagnostic/agent-facing surfaces (--diagnose output, lifecycle traces, logs) are NOT end-user UX and remain under normal engineering discipline" — so the existing stream is fine exactly as it is, and the work is additive.
+
+            That is worth knowing before anyone budgets this: the cheap path was the reason the estimate looked small, and it is gone.
+
+            I DID NOT IMPLEMENT (b), and the reason is the packet's own blocked_on rather than caution. spec:tray-ux, Requirement "UX curation governance — Tlatoāni approval is MANDATORY for every UX change": no agent may alter any user-visible surface, terminal banners included, "without EXPLICIT prior operator approval recorded in the plan ledger (an operator_note or operator-attributed event on the packet)", and "the change MUST NOT be implemented until the packet carries recorded operator approval for that exact surface change". I searched plan/index.yaml and every plan/index.d fragment for an approval on this packet: there is none. yoga recorded the same absence on 2026-08-23.
+
+            A coordinator's assignment does not discharge an operator gate — the gate names the operator specifically, and a peer agent standing in for that role is precisely what the 2026-07-21 reset-guest-menu precedent was recorded against.
+
+            SURFACE (a) CONFIRMED DONE, independently of macuahuitl's 2026-08-26 note: run_provider_login carries an unconditional `step()` emitter gated to LoginInputMode::Terminal. Nothing to do there.
+
+            SURFACE (b) CONFIRMED STILL OPEN: emit_launch_event still opens `if !enabled { return; }` — now at fn emit_launch_event (client.rs ~2001), not the line 1849 the packet cites.
+
+            CITATION REPAIRED BY SYMBOL, not by line (881-29me). The packet's "VERIFIED at crates/tillandsias-podman/src/client.rs:1849" had drifted ~152 lines by 2026-08-26 and has drifted further since; line 1849 is now unrelated `cmd.args([...])`. Every citation in this event names a SYMBOL (fn emit_launch_event, fn format_launch_event, run_provider_login) so it survives the next refactor. A reader who checks a drifted line number, finds unrelated code, and concludes the packet is wrong would discard a claim that is still true — which is the failure mode 881-29me exists to prevent, and it nearly happened here twice.
+        - type: note
           ts: "2026-08-26T09:35:28Z"
           agent_id: "linux-macuahuitl-claude-20260826t093528z"
           host: macuahuitl

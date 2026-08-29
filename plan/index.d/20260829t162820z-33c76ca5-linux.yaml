@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: first-run-long-work-is-silent-across-surfaces
+    field: status
+    value: ready
+    ts: "2026-08-29T16:28:20Z"
+    host: linux
+
+events:
+  - packet_id: first-run-long-work-is-silent-across-surfaces
+    event:
+      type: note
+      ts: "2026-08-29T16:28:20Z"
+      host: linux
+      summary: >
+        returned to ready — the ungated half (re-scope, citation repair, viability finding) is done; the remaining half cannot be implemented by any agent until an operator approval event exists on this packet
