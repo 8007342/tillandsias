@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: hybrid-cpu-amd-nvidia-matrix-truthful-on-mobile-workstation
+    field: status
+    value: in_progress
+    ts: "2026-08-29T23:07:22Z"
+    host: linux
+
+events:
+  - packet_id: hybrid-cpu-amd-nvidia-matrix-truthful-on-mobile-workstation
+    event:
+      type: note
+      ts: "2026-08-29T23:07:22Z"
+      host: linux
+      summary: >
+        claimed 2026-08-29T23:20Z by linux-lenovinha-claude-20260828t223829z — operator-directed quest on this host's own hardware. Sequence per the packet: reproduce+locate the emitter, decide host-vs-toolbox WITH measurement, fix and prove CUDA live, then the matrix half.
