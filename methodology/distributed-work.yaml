@@ -2028,6 +2028,22 @@ distributed_work:
       Kept in this form deliberately. An exculpatory example teaches a reader
       that the defect was unavoidable, which is both false and demotivating; the
       protocol does not need it, because the structural argument above is enough.
+    the_gated_module_rule: >
+      WHEN A MODULE IS GATED OUT OF YOUR HOST'S DEFAULT BUILD, A GREEN BUILD IS
+      NOT A CHECK OF IT — `-p <crate>` selects a PACKAGE, not a configuration.
+      Two measured instances of one class in three days: macbook's FEATURE gate
+      (the `tray` feature never compiled — the worked example above) and
+      lenovinha's TARGET gate (2026-08-29, fixing this same 731-eupn defect on
+      the Windows lane: `cargo check -p tillandsias-windows-tray --all-targets`
+      was green on Linux while compiling the cfg-gated STUB
+      src/stubs/notify_icon.rs; the tell was two stale call sites of a changed
+      signature still building clean). The check that counts compiles the gated
+      configuration itself (`--features tray`, `--target
+      x86_64-pc-windows-gnu`), and the verifier must be mutation-tested before
+      it is trusted: append a deliberate type error to the REAL module and
+      confirm the cross-configuration build goes red, silent when reverted. A
+      signature change whose stale callers build green is a build that did not
+      look.
     why_a_message_and_not_more_care: >
       A HEADS-UP IS A FALSIFIABLE ACT AND CARE IS NOT (yoga, 2026-08-26).
       "I considered the siblings" cannot be checked by anyone, including its

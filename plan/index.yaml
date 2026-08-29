@@ -54374,6 +54374,12 @@ plan_index:
         record instances.
       events:
         - type: evidence
+          ts: "2026-08-29T18:52:59Z"
+          agent_id: "linux-macuahuitl-claude-20260829t185259z"
+          host: linux
+          summary: |
+            WSL2 LEG GREEN — PORTABILITY EXIT CRITERION FULLY MET, all three fleet regimes: darwin bash 3.2.57 (oldest in fleet), MINGW64 bash 5.3.15 (cygwin), and now the WSL2 distro bash 5.3.9 (Fedora 44 container, kernel 6.18.33.2-microsoft-standard-WSL2, working dir on /mnt/c drvfs — the 9P slow lane from 895-bkrn). 8/8 including the first-N arm on drvfs, FIXTURE_RC=0 read from a file the fixture wrote INSIDE the guest, not from the wrapper (yolanda controlled for the wsl.exe exit-code swallow with bash -c 'exit 7' returning 0 through the same wrapper earlier the same day). The bulk migration (698 sites: 418 grep -q, 235 head, 93 tail) is unblocked on every platform axis; batches must still prove verdict-invariance per the packet's own rule.
+        - type: evidence
           ts: "2026-08-29T18:42:09Z"
           agent_id: "linux-macuahuitl-claude-20260829t184209z"
           host: linux
