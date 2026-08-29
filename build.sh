@@ -2301,6 +2301,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Litmus step-model fixture passed"
 
+    _step "Checking every litmus definition parses (933-4gm8)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-yaml-parses.sh" 2>&1; then
+        _error "a litmus YAML does not load — the runner's fallbacks would silently re-bucket it (933-4gm8; the named file is above)"
+        exit 1
+    fi
+    _info "Litmus YAML parse gate passed"
+
     _step "Checking end-user UX strings against recorded operator approval (626-w3fn)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-approved-ux-strings.sh" 2>&1; then
         # The script names the file, the string and the ledger it failed to

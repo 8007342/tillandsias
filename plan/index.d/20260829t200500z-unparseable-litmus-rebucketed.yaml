@@ -1,0 +1,60 @@
+packets:
+  - packet_id: unparseable-litmus-definition-is-silently-rebucketed
+    order: 933-4gm8
+    status: completed
+    title: |
+      A litmus YAML that fails to parse does not fail anything — the runner's metadata fallbacks silently move it to a different test bucket
+    kind: bug
+    pickup_role: linux
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags:
+      - litmus
+      - yaml
+      - fail-loud
+      - build-gate
+    estimated_hours: 1
+    deliverable: |
+      An unparseable litmus definition is a red gate naming the file, not a
+      silent re-bucketing.
+    context: |
+      FOUND by lenovinha (2026-08-29, 901-jtvi batch validation, explicitly
+      pre-existing at HEAD before their changes):
+      litmus-expert-groundtruth-harness.yaml failed
+      `tillandsias-plan validate-yaml` at line 67 — 888-miiy added a
+      plain-scalar preconditions item containing `: `, so the continuation
+      lines scan as keyless mapping keys.
+
+      WHY THIS IS RE-BUCKETING, NOT JUST A BROKEN FILE, measured before
+      fixing: the file declares phase: pre-build, severity: critical. With
+      the parse failing, get_test_phase/size/host_kind all fell back to
+      their defaults (runtime/quick/any), so a critical pre-build test sat
+      in the RUNTIME bucket — absent from every pre-build suite run and
+      every 249/249 green since the item landed. A parse failure did not
+      fail anything; it changed WHICH TESTS RUN. This is the 932-3ck7 shape
+      one level down: the gate was green because the red test was no longer
+      in the set the gate runs.
+    exit_criteria:
+      - every file under openspec/litmus-tests/ loads under the sanctioned reader, enforced at ./build.sh --check
+      - the gate goes red on a deliberately broken copy (mutation control), and names the file
+      - the found instance parses again and lands back in its declared bucket (phase pre-build)
+    events:
+      - type: completed
+        ts: "2026-08-29T20:05:00Z"
+        agent_id: "linux-macuahuitl-claude-20260829t200500z"
+        host: linux
+        summary: |
+          Filed and closed in one motion (small in-session fix, evidence
+          complete). (1) Instance fixed: the preconditions item is a `>-`
+          block scalar now; validate-yaml ok; yaml-json reads phase
+          pre-build/size quick — back in its declared bucket. A comment at
+          the site records why a plain scalar cannot carry it. (2) Class
+          gated: scripts/check-litmus-yaml-parses.sh sweeps every litmus
+          YAML through the sanctioned reader (415 files, ~1s — cheap
+          because 746-htj9 made the reader dispatch ledger-free), wired
+          into ./build.sh --check beside the step-model fixture;
+          skip:no-runnable-reader is its own named state so a fresh clone
+          is not redded. (3) Mutation control run: a broken copy produced
+          blocked:litmus-yaml-unparseable:1, rc=1, naming the file.
+          Full-corpus sweep post-fix: broken=0 of 415.
