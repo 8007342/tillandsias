@@ -31,6 +31,8 @@ pub mod answer;
 /// ORDER 920-pxg6 — the OpenAI-compatible loopback front-end over
 /// `pipeline::run_grounded`. One grounded pipeline, two front-ends.
 pub mod expert_serve;
+/// ORDER 718-ja7g. The endpoint contract and the tier probe that reports it.
+pub mod experts_probe;
 /// CRDT fragment overlay — conflict-free ADDITIVE writes to the ledger, so
 /// concurrent hosts never produce a merge a human must adjudicate. Implements
 /// `methodology/distributed-work.yaml` → `crdt_principles.append_only_history`,

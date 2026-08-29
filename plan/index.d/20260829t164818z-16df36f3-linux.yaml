@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: mirror-vault-github-credential-is-denied-by-upstream
+    field: status
+    value: completed
+    ts: "2026-08-29T16:48:18Z"
+    host: linux
+
+events:
+  - packet_id: mirror-vault-github-credential-is-denied-by-upstream
+    event:
+      type: completed
+      ts: "2026-08-29T16:48:18Z"
+      host: linux
+      summary: >
+        status 'completed' with evidence_refs: Denial falsified twice post-refresh: authorized/1787714004 (yoga lane, 2026-08-26T03:13Z) + authorized/1787965164 (macuahuitl lane, 2026-08-29T00:59Z, read live 16:44Z); fail-loud half landed by yoga at 9f6c0c407 (named denial reasons, six litmus steps, git-mirror-service 20/20); operator renewal was the fix, seed-time-validation trap re-recorded (759)
+  - packet_id: mirror-vault-github-credential-is-denied-by-upstream
+    event:
+      type: note
+      ts: "2026-08-29T16:48:18Z"
+      host: linux
+      summary: >
+        the credential is not denied; the guard's staleness handling is fail-closed by design; refresh cadence recorded as the named residual

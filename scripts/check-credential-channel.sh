@@ -120,9 +120,10 @@ fi
 # local bare repo). Prints exactly one verdict line and returns its exit code.
 forge_upstream_auth_verdict() {
   local auth_src="$1"
-  local auth_lines _sha refname rest state epoch best_state best_epoch now age max_age
+  local auth_lines _sha refname rest state epoch reason middle best_state best_reason best_epoch now age max_age
   auth_lines="$(timeout 10 git ls-remote "$auth_src" 'refs/tillandsias/upstream-auth/*' 2>/dev/null || true)"
   best_state=""
+  best_reason=""
   best_epoch=-1
   while read -r _sha refname; do
     [ -n "$refname" ] || continue
@@ -130,11 +131,20 @@ forge_upstream_auth_verdict() {
     [ "$rest" != "$refname" ] || continue
     state="${rest%%/*}"
     epoch="${rest##*/}"
+    # ORDER 809-w2xy. A `denied` verdict may carry a REASON between the state
+    # and the epoch: denied/<reason>/<epoch>. Reading first-and-last segments
+    # was already the parse, so the reason is additive — an older mirror that
+    # publishes denied/<epoch> keeps working and simply reports no reason.
+    reason=""
+    middle="${rest#*/}"
+    middle="${middle%/*}"
+    [ "$middle" != "$rest" ] && [ "$middle" != "$epoch" ] && reason="$middle"
     case "$epoch" in ''|*[!0-9]*) continue ;; esac
     [ -n "$state" ] || continue
     if [ "$epoch" -gt "$best_epoch" ]; then
       best_epoch="$epoch"
       best_state="$state"
+      best_reason="$reason"
     fi
   done <<< "$auth_lines"
   if [ -z "$best_state" ]; then
@@ -232,6 +242,26 @@ forge_upstream_auth_verdict() {
       ;;
     denied)
       echo "[check-credential-channel] The mirror is reachable but upstream currently REFUSES its credential (mirror-published verdict: denied). This is the 2026-08-15 403 state: a push at end of cycle WILL fail, so stop BEFORE worker drain. Fix the GitHub credential in Vault (secret/github/token) or its repo permission; do NOT import host credentials." >&2
+      # ORDER 809-w2xy. `denied` alone sent the last operator on a two-hour
+      # rediscovery, because three refusals needing three DIFFERENT actions all
+      # look identical from here. Name the remedy for the one the probe saw.
+      case "$best_reason" in
+        permission)
+          echo "[check-credential-channel] REASON=permission — upstream ACCEPTED the credential and then refused the write. Check in THIS ORDER, because the fleet has already been caught by the first one: (1) IS THE TOKEN EXPIRED? On 2026-08-15 the refusal read 'Permission to 8007342/tillandsias.git denied to 8007342' and the cause was an EXPIRED PAT (809-w2xy, operator, 2026-08-19) — so 'permission denied' here does NOT mean the scope is wrong. (2) Does the token carry repo write to 8007342/tillandsias? (3) Is the account still a collaborator? Renew at github.com/settings/tokens, then re-seed Vault secret/github/token; do NOT import host credentials." >&2
+          ;;
+        unauthenticated)
+          echo "[check-credential-channel] REASON=unauthenticated — upstream did not accept the credential AS a credential (401 / 'Authentication failed' / no username). This is a MISSING or MALFORMED token rather than an insufficient one, so widening scopes will not help: re-seed Vault secret/github/token with a valid PAT." >&2
+          ;;
+        sso)
+          echo "[check-credential-channel] REASON=sso — the organization enforces SAML single sign-on and this token has not been AUTHORIZED for it. The token may be valid and correctly scoped: authorize it for the org at github.com/settings/tokens (Configure SSO). Renewing or rescoping without authorizing will change nothing. NOTE: this class has never been observed on this fleet; it is classified from GitHub's documented wording, so if you are reading it, capture the upstream message on 809-w2xy." >&2
+          ;;
+        "")
+          echo "[check-credential-channel] REASON is unavailable: this mirror publishes the pre-809-w2xy verdict shape (denied/<epoch>, no reason segment), so WHICH refusal it hit is unknown from here. Read the mirror's [upstream-auth] log for the upstream message, and note the mirror image predates the reason-carrying probe." >&2
+          ;;
+        *)
+          echo "[check-credential-channel] REASON=$best_reason — not a reason this guard knows. The mirror is newer than this checkout's guard; read the mirror's [upstream-auth] log for the upstream message." >&2
+          ;;
+      esac
       echo "blocked:upstream-push-unauthorized"
       return 1
       ;;

@@ -88,6 +88,16 @@ case "$TUNING_TIER" in
     *)
         # cpu / metal / anything unrecognised: conservative, and NEVER a
         # GPU-shaped claim. An unknown tier degrades like cpu (fail-soft).
+        #
+        # NOTE (order 919-vvyv): these are ENGINE knobs only — the CPU tier's
+        # MODEL guidance lives in the tier ladder in
+        # images/default/config-overlay/opencode/instructions/model-routing.md.
+        # Short form, measured: <4 GiB RAM 0.5b with RAG mandatory (0.5b/1.5b
+        # hallucinate 6/6 raw, 919-ipki); 4-8 GiB 3b + RAG with the cited
+        # retrieval-only digest as the normal output (3b fails the citation
+        # contract 0/6, 919-jii2/927-2q4w); 8-16 GiB 7b only if the tier
+        # budget allows (7b passes the contract 3/6 but ran 10-24s per
+        # synthesis on a measured CPU host — 927-2q4w is the open decision).
         _tuning_flash=0
         _tuning_kv=f16
         _tuning_parallel=1

@@ -102,7 +102,9 @@ const DISPATCH_ARMS: &[&str] = &[
     "ready",
     "select-rows",
     "split-parents",
+    "experts-probe",
     "spec-envelope",
+    "spec-floor",
     "spec-index",
     "spec-retrieve",
     "status",
@@ -147,6 +149,16 @@ const USAGE: &str = concat!(
     "                                     schedulable (device_class, lane, engine) triples, and its\n",
     "                                     present-but-unusable devices. Distinct from `capabilities`\n",
     "                                     above, which reports THIS BINARY's subcommands.\n",
+    "           experts-probe             ORDER 718-ja7g. Which expert TIER is live on this host, as\n",
+    "                                     ONE line: l0 (file-backed, always ready) / l1 (retrieval —\n",
+    "                                     needs BOTH an embeddings endpoint and a built index) / l2\n",
+    "                                     (synthesis). Closed vocabulary per tier: ready | unset |\n",
+    "                                     unreachable | no-index | scheme-unsupported | malformed.\n",
+    "                                     `advice=` names ONE next action. Exit 0 when every\n",
+    "                                     configured tier answers, 1 otherwise — ADVISORY, not a\n",
+    "                                     gate: a dev host with no endpoint is a supported state and\n",
+    "                                     L0 still answers with citations. Both MCP servers consume\n",
+    "                                     this instead of each re-deriving reachability.\n",
     "           corpus-coverage           Which repository file types the spec/answer corpus indexes,\n",
     "                                     which it DECLINES and why. Read-only. The declined list is\n",
     "                                     explicit so an answer's absence can be attributed to a\n",
@@ -378,6 +390,12 @@ const USAGE: &str = concat!(
     "                                     ORDER 547. Chunk the whole-spec corpus into <dir>/chunks.jsonl\n",
     "           spec-retrieve --index-dir <dir> --query-vec <f> [--k N]\n",
     "                                     network-free cosine top-k over caller-supplied embeddings\n",
+    "           spec-floor --chunks-json <f>\n",
+    "                                     ORDER 821-73es. Apply the grounded pipeline's retrieval\n",
+    "                                     floors (TILLANDSIAS_RETRIEVE_REFUSAL_FLOOR on the best\n",
+    "                                     score, TILLANDSIAS_RETRIEVE_MIN_SCORE per chunk) to a\n",
+    "                                     spec-retrieve result: the kept array, or a typed\n",
+    "                                     out-of-coverage refusal object with the reason ready\n",
     "           spec-envelope --chunks-json <f> [--answer-file F] [--root D]\n",
     "                         [--corpus-commit SHA]\n",
     "                                     build a VERIFIED envelope keeping only the citations the\n",
@@ -1972,6 +1990,24 @@ fn read_chunks_array(path: &Path) -> Vec<spec::Chunk> {
     })
 }
 
+/// ORDER 821-73es. `spec-floor` consumes what `spec-retrieve` emits: scored
+/// chunks. A bare-chunk array (no `score` key) is refused loudly here rather
+/// than defaulting scores to anything — a floor applied to invented numbers
+/// would be a confident lie about coverage.
+fn read_scored_chunks_array(path: &Path) -> Vec<spec::ScoredChunk> {
+    let text = std::fs::read_to_string(path).unwrap_or_else(|e| {
+        eprintln!("error: read {}: {e}", path.display());
+        std::process::exit(1);
+    });
+    serde_json::from_str::<Vec<spec::ScoredChunk>>(&text).unwrap_or_else(|e| {
+        eprintln!(
+            "error: {} is not a JSON array of scored chunks (spec-retrieve output): {e}",
+            path.display()
+        );
+        std::process::exit(1);
+    })
+}
+
 fn read_vectors(path: &Path) -> Vec<Vec<f32>> {
     let text = std::fs::read_to_string(path).unwrap_or_else(|e| {
         eprintln!("error: read {}: {e}", path.display());
@@ -2285,6 +2321,35 @@ fn carry_forward_gaps(doc: &serde_yaml::Value) -> Vec<String> {
 
 fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
     match subcommand {
+        "experts-probe" => {
+            // ORDER 718-ja7g. Which expert TIER is actually live on this host,
+            // as one typed line. Replaces both MCP servers each re-deriving
+            // reachability from the same three env vars in their own idiom —
+            // three derivations that could and did disagree.
+            //
+            // EXIT CODE IS ADVISORY, NOT A GATE: 0 when every configured tier
+            // answers, 1 otherwise. A dev host with no endpoint is a normal,
+            // supported state (L0 still answers), so a caller that treats
+            // non-zero as "broken" is reading it wrong — the LINE is the
+            // answer, the code is a convenience for `if` in shell.
+            let timeout = std::time::Duration::from_millis(
+                std::env::var("TILLANDSIAS_EXPERTS_PROBE_TIMEOUT_MS")
+                    .ok()
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(3000),
+            );
+            let (line, all_ready) = tillandsias_plan::experts_probe::run(timeout);
+            println!("{line}");
+            if !all_ready {
+                std::process::exit(1);
+            }
+            // This dispatcher's arms return whether they handled the
+            // subcommand. experts-probe belongs on this LEDGER-FREE fast path:
+            // it reads env and one socket, never folds the plan, and a
+            // diagnostic that paid the ledger load to answer "is the endpoint
+            // up" would be the slowest tool in the box.
+            true
+        }
         "corpus-coverage" => {
             // ORDER 810-k8jy. Every file class under a corpus root, and how the
             // indexer treats it. The packet's complaint was not that HCL and
@@ -3128,6 +3193,44 @@ fn main() {
                     Err(e) => {
                         eprintln!("error: serialize retrieval result: {e}");
                         std::process::exit(1);
+                    }
+                }
+                return;
+            }
+            "spec-floor" => {
+                // ORDER 821-73es. The coverage decision for the shell
+                // spec_answer path: apply the grounded pipeline's dual
+                // retrieval floors (spec::apply_retrieval_floors — ONE
+                // implementation, no drift) to a spec-retrieve result.
+                // Covered: the kept chunks, the same array shape
+                // spec-retrieve emits. Out of coverage: a typed refusal
+                // OBJECT carrying the best score and the ready-made reason,
+                // so the caller refuses instead of dressing k
+                // real-but-irrelevant citations as a confident answer.
+                let Some(cj) = chunks_json else {
+                    eprintln!("error: spec-floor requires --chunks-json <file>");
+                    std::process::exit(2);
+                };
+                let scored = read_scored_chunks_array(&cj);
+                let min_score = spec::retrieve_min_score();
+                let refusal = spec::refusal_floor();
+                match spec::apply_retrieval_floors(scored, min_score, refusal) {
+                    spec::FloorDecision::Keep(kept) => match serde_json::to_string_pretty(&kept) {
+                        Ok(s) => println!("{s}"),
+                        Err(e) => {
+                            eprintln!("error: serialize floor result: {e}");
+                            std::process::exit(1);
+                        }
+                    },
+                    spec::FloorDecision::OutOfCoverage { best } => {
+                        let refused = serde_json::json!({
+                            "refused": "out-of-coverage",
+                            "best": best,
+                            "refusal_floor": refusal,
+                            "min_score": min_score,
+                            "reason": spec::out_of_coverage_reason("full", best, refusal),
+                        });
+                        println!("{refused}");
                     }
                 }
                 return;
