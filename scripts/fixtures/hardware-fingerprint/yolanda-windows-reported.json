@@ -1,0 +1,106 @@
+{
+  "schema_version": 2,
+  "legacy_tier": "gpu-rocm",
+  "devices": [
+    {
+      "device_class": "cpu",
+      "vendor": "amd",
+      "name": "AMD Ryzen AI 7 350 w/ Radeon 860M",
+      "device_node": null,
+      "fw_version": null,
+      "driver": null,
+      "usable": true,
+      "unusable_reason": null,
+      "lanes": [
+        "container",
+        "host-native"
+      ],
+      "memory_bandwidth_gbps": null,
+      "memory_bandwidth_source": "unknown",
+      "cpu_flags": [
+        "fma",
+        "avx",
+        "avx2",
+        "avx512f",
+        "avx512dq",
+        "avx512ifma",
+        "avx512cd",
+        "avx512bw",
+        "avx512vl",
+        "avx_vnni",
+        "avx512_bf16",
+        "avx512vbmi",
+        "avx512_vbmi2",
+        "avx512_vnni",
+        "avx512_bitalg",
+        "avx512_vpopcntdq",
+        "avx512_vp2intersect"
+      ],
+      "cpu_cores": {
+        "physical": 8,
+        "logical": 16
+      },
+      "system_ram_gb": 14.773334503173828
+    },
+    {
+      "device_class": "gpu",
+      "vendor": "amd",
+      "name": "Krackan [Radeon 840M / 860M Graphics]",
+      "device_node": "/dev/dri/renderD128",
+      "fw_version": null,
+      "driver": "amdgpu",
+      "usable": true,
+      "unusable_reason": null,
+      "lanes": [
+        "container",
+        "host-native"
+      ],
+      "memory_bandwidth_gbps": null,
+      "memory_bandwidth_source": "unknown",
+      "cpu_flags": null,
+      "cpu_cores": null,
+      "system_ram_gb": null
+    },
+    {
+      "device_class": "npu",
+      "vendor": "AMD XDNA",
+      "name": "AMD XDNA NPU",
+      "device_node": "/dev/accel/accel0",
+      "fw_version": "1.1.2.64",
+      "driver": "amdxdna",
+      "usable": false,
+      "unusable_reason": "engine-missing",
+      "lanes": [
+        "host-native"
+      ],
+      "memory_bandwidth_gbps": null,
+      "memory_bandwidth_source": "unknown",
+      "cpu_flags": null,
+      "cpu_cores": null,
+      "system_ram_gb": null
+    }
+  ],
+  "engines": [
+    {
+      "name": "ollama",
+      "backend": "llama-server",
+      "supported_device_classes": [
+        "cpu",
+        "gpu"
+      ],
+      "lanes": [
+        "container"
+      ]
+    }
+  ],
+  "measurements": [],
+  "host": {
+    "is_battery_present": true,
+    "kernel_release": "7.1.10-200.fc44.x86_64",
+    "host_id": "yolanda",
+    "host_id_source": "node-name",
+    "host_kind": "windows"
+  },
+  "timestamp": "2026-08-28T23:20:30.615066011+00:00",
+  "probe_identity": "0.4.260819+4d3c26ac4c5cafb1"
+}

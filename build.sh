@@ -2335,6 +2335,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Litmus YAML parse gate passed"
 
+    _step "Checking the hardware fingerprint refuses an untrue twin claim (805-r98w)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-hardware-fingerprint.sh" 2>&1; then
+        _error "the hardware fingerprint would bless two different machines as a control — every tier number keyed on it inherits the difference (805-r98w)"
+        exit 1
+    fi
+    _info "Hardware-fingerprint gate passed"
+
     _step "Checking image rebuild keeps the installed binary's launch tag (747-knbp)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-build-image-installed-version-alias.sh" 2>&1; then
         _error "an image rebuild can orphan the tag the installed binary launches by — every forge launch would be dead on arrival (747-knbp)"
