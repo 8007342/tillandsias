@@ -48,6 +48,19 @@ order 925-erjs:
 Assert the **mapping**, not the name. `StreamError\(_\) *=> *true`, not
 `StreamError`.
 
+Its runtime twin, from the darwin lane the same night (920-pxg6 verification,
+tillandsias-91): **a green gate tells you the check passed, not that the
+property holds — the cheapest way to tell those apart is to run the thing on
+real hardware and read what it actually says.** The three findings that
+mattered that night were all this shape and none looked like a failure: a
+readiness probe reporting NOT-BOUND over a working port (socat absent from the
+VZ guest), an expert answering an off-topic question with six real-but-
+irrelevant citations (no similarity floor), and a coverage tool answering
+`0-spec(s)` for a changeset a dozen specs cover (BSD awk died and `2>/dev/null`
+ate the corpse). Two surfaced only because something was actually RUN; the
+third nearly shipped inverted until a tier-budget confound was stripped by
+isolating the variable on hardware.
+
 ## Never anchor an assertion on a comment
 
 Order 921-vtf4, first-red commit `f58079555`. A pin read
