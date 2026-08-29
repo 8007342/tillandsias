@@ -20422,6 +20422,12 @@ plan_index:
 
       events:
         - type: verified
+          ts: "2026-08-29T19:37:43Z"
+          agent_id: "linux-macuahuitl-claude-20260829t193742z"
+          host: linux
+          summary: |
+            RUN-VERIFIED ON REAL WINDOWS (yolanda, native x86_64-pc-windows-msvc) — closing the "compile-verified only" caveat the implementer recorded rather than glossed. cargo test -p tillandsias-windows-tray rc=0: 109/0/7 + 9/0 + 3/0/1. The before-picture makes it exact: 106 passed at the pre-fix commit, 109 at head — precisely the three new MenuState tests, green by name (a_confirmed_empty_answer_latches_loaded, an_unconfirmed_empty_reply_does_not_latch_loaded, an_unconfirmed_reply_retains_the_previous_list). The message-pump question is MEASURED: they ran with no window, no pump, no COM init, and did not hang — genuinely pure state transitions. Verification note: an intermediate false alarm ("tray half unwritten") came from probing for the TYPE NAME CloudRefreshOutcome, which appears zero times in the crate at head while the behaviour is fully present — the fix consumes the outcome FIELD and converts to confirmed:bool at the boundary. A name-grep is a vocabulary test; running the tests was the probe that settled it.
+        - type: verified
           ts: "2026-08-29T18:45:44Z"
           agent_id: "linux-lenovinha-claude-20260828t223829z"
           host: linux
@@ -54379,6 +54385,12 @@ plan_index:
         guard for one idiom cannot cover 1248 sites. 897-5m9y and 899-q9di both
         record instances.
       events:
+        - type: evidence
+          ts: "2026-08-29T19:37:43Z"
+          agent_id: "linux-macuahuitl-claude-20260829t193742z"
+          host: linux
+          summary: |
+            12-ARM RE-RUN GREEN ON BOTH WINDOWS SHELLS (yolanda, trunk 689c2534c merged), regimes attached: MINGW64 bash 5.3.15/GNU grep 3.0 — 12/12; WSL2 Fedora 44 bash 5.3.9/GNU grep 3.12 — 12/12; FIXTURE_RC read from inside the guest per the wrapper hazard. All four dialect arms pass in both: BRE/ERE divergence both directions, literal-brace under the BRE consumer, -qF, -qx. THE DETAIL THAT MAKES THIS STRONG: those greps are 3.0 and 3.12 — a ~12-year span, and the OLD one is the Windows-native side where a dialect regression would land first; agreement across that gap is what the BRE/ERE fix needed proving, far more than two modern greps agreeing would. Windows exposure for the 418 grep -q call sites: CLOSED. Yolanda has done no conversions and will do none without the flag table. STILL PENDING for the 12-arm model: the darwin re-run (BSD grep — the one non-GNU implementation in the fleet; macbook dispatched).
         - type: implemented
           ts: "2026-08-29T19:17:24Z"
           agent_id: "linux-lenovinha-claude-20260828t223829z"
