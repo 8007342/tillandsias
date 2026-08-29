@@ -1320,6 +1320,29 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         archive_check_log "spec-index-resolution-agreement" "skipped"
     fi
 
+    # Order 931-p26p. The guard above proves the three carriers AGREE; it cannot
+    # prove they agree on the RIGHT thing. Rung 4 (repo-relative) was added so
+    # two userlands on one Windows host stop resolving two roots from one $HOME
+    # rule — and the risk it carries is the mirror image of the bug: capturing
+    # resolution on Linux and macOS hosts whose podman-volume rung is correct
+    # today, silently relocating a working index fleet-wide. Three of this
+    # fixture's arms are negative controls asserting an earlier rung still wins,
+    # and one is a control proving the divergence it fixes was real. Wired here
+    # rather than trusted to review, because "no host moved" is a claim about
+    # every host, made from one.
+    if [[ -f "scripts/test-spec-index-repo-relative-rung.sh" ]]; then
+        if bash scripts/test-spec-index-repo-relative-rung.sh 2>&1 | tee /tmp/spec-index-repo-relative-rung.log; then
+            log_pass "Spec-index repo-relative rung fixes Windows without moving other hosts"
+            archive_check_log "spec-index-repo-relative-rung" "pass" /tmp/spec-index-repo-relative-rung.log
+        else
+            log_fail_tracked "spec-index-repo-relative-rung" "Spec-index repo-relative rung regression (see /tmp/spec-index-repo-relative-rung.log)"
+            archive_check_log "spec-index-repo-relative-rung" "fail" /tmp/spec-index-repo-relative-rung.log
+        fi
+    else
+        log_fail_missing_guard "spec-index-repo-relative-rung" "scripts/test-spec-index-repo-relative-rung.sh"
+        archive_check_log "spec-index-repo-relative-rung" "skipped"
+    fi
+
     # Order 765-mza8. Wired here, literally, for the same reason as the two
     # above. A dead `inputs:` glob is silent by construction: it cannot make a
     # test run, only skip, so nothing else in this suite would ever go red for

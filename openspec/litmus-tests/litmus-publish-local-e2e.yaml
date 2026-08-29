@@ -27,12 +27,12 @@ critical_path:
     expected_behavior: "URL=http://www.e2e-fixture-project.localhost:<port>"
 
   - step: "web container is running after publish"
-    command: "podman ps --filter 'name=tillandsias-e2e-fixture-project-web' --format '{{.Status}}' | grep -q 'Up' && echo WEB_UP"
+    command: "mf_stage prod 0 OUT -- podman ps --filter 'name=tillandsias-e2e-fixture-project-web' --format '{{.Status}}' && mf_holds OUT 'Up' && echo WEB_UP"
     timeout_ms: 5000
     expected_behavior: "WEB_UP"
 
   - step: "router container is running after publish"
-    command: "podman ps --filter 'name=tillandsias-router' --format '{{.Status}}' | grep -q 'Up' && echo ROUTER_UP"
+    command: "mf_stage prod 0 OUT -- podman ps --filter 'name=tillandsias-router' --format '{{.Status}}' && mf_holds OUT 'Up' && echo ROUTER_UP"
     timeout_ms: 5000
     expected_behavior: "ROUTER_UP"
 

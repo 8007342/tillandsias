@@ -24066,6 +24066,12 @@ plan_index:
 
       events:
         - type: evidence
+          ts: "2026-08-29T19:21:46Z"
+          agent_id: "windows-yolanda-claude-20260828t223837z"
+          host: yolanda
+          summary: |
+            RUNG 4 LANDED AND THE TWO USERLANDS NOW CONVERGE — PROVEN BY DIGEST, NOT BY INSPECTION. Implemented per the coordinator's chosen shape: a repo-relative rung at <checkout>/target/tillandsias-spec-index, ordered AFTER explicit env / FORGE_SPEC_INDEX_ROOT / the podman volume and BEFORE the HOME-derived cache, in all three shell carriers AND the Rust ladder (crates/tillandsias-plan/src/spec_index.rs), one commit, agreement guard green: ok:spec-index-resolution-agreement:carriers=3-scenarios=4 plus selftest 5 cases PASS. THE CONVERGENCE MEASUREMENT, which is the whole point. Producer, Git Bash, HOME=/c/Users/bullo: serving=/c/Users/bullo/claudia/tillandsias/target/tillandsias-spec-index/6bb58e4d2d9da92722c959bd6b1c4aea3517d0b0ab9d88078aae927f2133c425, serving-exists=yes, entries=1, built ok:spec-index:built:22222. Consumer environment, the WSL2 distro with HOME=/root and the checkout at /mnt/c — the exact shape the forge-plan MCP server runs in — resolving via the block EXTRACTED FROM forge-plan.sh itself: /mnt/c/Users/bullo/claudia/tillandsias/target/tillandsias-spec-index/6bb58e4d2d9da92722c959bd6b1c4aea3517d0b0ab9d88078aae927f2133c425, with chunks.jsonl and vectors.jsonl both confirmed present at that path. SAME CONTENT DIGEST 6bb58e4d, two spellings of one directory. Before this change the same two environments resolved /c/Users/bullo/.cache/... and /root/.cache/... — the latter a directory that does not exist in Git Bash at all. LIVE spec_answer STILL REFUSES, AND THAT IS A STALE PROCESS, NOT A FAILED FIX — stated plainly so nobody records a false red. The forge-plan MCP server is a long-lived stdio process started before this edit; it sourced the old resolution block at startup and its refusal still quotes /root/.cache verbatim, unchanged. Restarting it is a harness action (session reconnect), not something this cycle can do from inside the same session, and I have not attempted to force it. The falsifiable claim, left for the next session on this host to check in one call: after an MCP reconnect, spec_answer against this tree must return confidence=retrieved with citations. If it does not, the fix is wrong and this note is the thing to reopen. NEGATIVE CONTROLS, because a rung that fixes Windows by relocating every other host's index would be a worse bug than the one it fixes: scripts/test-spec-index-repo-relative-rung.sh, 6 passed 0 failed, wired into local-ci.sh beside the agreement guard. Arm 1 explicit FORGE_SPEC_INDEX_ROOT still wins. Arm 2 a Linux-shaped fixture with a podman volume still resolves to the volume, never the rung — that is the arm asserting Linux and macOS are byte-identical to before. Arm 3 a non-writable checkout falls through to XDG rather than capturing resolution (SKIPs loudly where the read-only bit is not representable, rather than reporting a pass the filesystem could not have produced). Arm 4 the positive case. Arm 5 two different HOMEs resolve to one root. Arm 6 is the control that makes arm 5 mean anything: it proves the OLD HOME-derived rung really did diverge under those same two HOMEs, without which arm 5 would pass against a ladder that never consulted HOME at all. The Rust carrier gets its own unit test (the shell guard cannot see it): spec_index::tests::the_repo_relative_rung_anchors_to_the_checkout_not_to_home. Full gate green, exit 0, 573s.
+        - type: evidence
           ts: "2026-08-29T17:55:32Z"
           agent_id: "windows-yolanda-claude-20260828t223837z"
           host: yolanda
@@ -54480,6 +54486,31 @@ plan_index:
             DIALECT SANITY CHECK done independently of the fixture, so the green is not self-certifying: `printf 'a+b\n' | grep -q 'a+b'` MATCHES on this host, i.e. `+` is literal — BRE semantics confirmed at the raw tool, which is the premise the mf_holds/mf_holds_ere split rests on. The two arms disagreeing "exactly as grep does" is therefore disagreement against a dialect I measured rather than assumed.
 
             WHAT THIS DOES AND DOES NOT CLOSE. It closes darwin/BSD-grep for the four new dialect arms — the axis the earlier 8/8 did NOT cover, since those arms did not exist. It says nothing about GNU grep behaviour, which is the linux and forge-container regime; the arms would need re-running there. The brace arm in particular is the one to watch elsewhere: a `{name}` pattern ERRORS under ERE, so a host whose grep is stricter about brace expressions could fail that arm where BSD's is permissive.
+        - type: implemented
+          ts: "2026-08-29T19:50:03Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            BATCH 2 — 39 SITES ACROSS 26 FILES. Verdicts invariant: 248 pass / 1 fail against a 247/2 baseline, and the one that flipped GREEN is my own 718-ja7g regression, fixed earlier. No new reds.
+
+            THE MECHANICAL FRACTION IS SMALLER THAN I TOLD YOU, and this is a correction to my own estimate from three hours ago. I wrote "115 of 418 are single-pipe and genuinely mechanical". Running a FAITHFUL automated rule over the corpus:
+
+              ok (direct)          46
+              compound-producer    22   <- mf_stage runs "$@"; it cannot take `a && b`, `x; y`, $(…) or a redirect
+              no-match            282   <- multi-pipe chains and shapes the rule declines
+              unmapped flag         0   (after adding -qi/-qiE variants)
+
+            So the truly mechanical share is 46/350 ≈ 13%, not 27%. "Single-pipe" was necessary but not sufficient: the producer must ALSO be a simple command.
+
+            MODEL GAP FOUND BY THE MIGRATION, and closed: mf_stage_sh, for a compound producer. It is NOT a retreat to the shell string this packet is about — the defect was never that a shell string exists, it is that a PIPELINE yields one status for several stages and lets a consumer SIGPIPE its producer. Staged, the whole compound producer is ONE stage with ONE asserted status and the consumer reads a finished buffer. Also added mf_holds_i / mf_holds_i_ere, because approximating a case-insensitive match with a case-sensitive consumer is exactly the flag-dropping this packet's own correction forbids.
+
+            I ALSO BROKE THE CORPUS ONCE AND CAUGHT IT, which is the reason the batch discipline exists. My first apply used mf_stage_sh with a naive `"` escape and produced INVALID YAML in at least one file. I had snapshotted first, reverted to zero diff, and re-ran with two changes: skip compound producers entirely rather than risk their quoting, and validate EVERY file individually after conversion with revert-on-failure. Result: 46 conversions, 31 files, zero reverts. The safe rule shipped; the clever one did not.
+
+            A PRE-EXISTING FINDING, not mine and not fixed here: openspec/litmus-tests/litmus-expert-groundtruth-harness.yaml DOES NOT PARSE AS YAML — `tillandsias-plan validate-yaml` reports blocked:yaml-load-failed at line 67, and it fails identically at HEAD before any of my changes. Worth someone's attention: a litmus definition the sanctioned reader cannot load is a test whose metadata nothing can check.
+
+            HELD BACK DELIBERATELY: 5 conversions in the -qF class, reverted rather than landed, because the darwin/BSD re-run of the dialect arms is still pending and macuahuitl named -qF/-qx as the classes at risk on the one non-GNU grep. They cost nothing to redo once that reports. The 20 plain-BRE and 16 ERE conversions are in the class measured safe on every regime that has reported.
+
+            WORTH RECORDING ABOUT THE PENDING VERIFICATION: a conversion cannot INTRODUCE a dialect difference. mf_holds delegates to the same grep with the same flag the original line used, so any BSD/GNU divergence was already there. What is newly at risk is only the `printf '%s\n' "$VAR" | grep` plumbing, which is what arms 7-12 exercise — so the pending run is about the CONSUMER contract, exactly as macuahuitl framed it, and not about the 39 sites landed here.
         - type: implemented
           ts: "2026-08-29T19:17:24Z"
           agent_id: "linux-lenovinha-claude-20260828t223829z"

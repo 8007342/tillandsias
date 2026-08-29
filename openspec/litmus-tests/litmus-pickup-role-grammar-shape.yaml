@@ -27,7 +27,7 @@ critical_path:
     expected_behavior: "ok: checker parses"
 
   - step: "emits the verdict grammar against the live ledger"
-    command: "scripts/check-pickup-role-grammar.sh | grep -qE '^pickup-role: total=[0-9]+ canonical=[0-9]+ prose=[0-9]+ multi_host=[0-9]+ sequenced=[0-9]+ verdict=(ok:canonical-roles|attention:sequenced-prose)$' && echo 'ok: verdict grammar'"
+    command: "mf_stage prod 0 OUT -- scripts/check-pickup-role-grammar.sh && mf_holds_ere OUT '^pickup-role: total=[0-9]+ canonical=[0-9]+ prose=[0-9]+ multi_host=[0-9]+ sequenced=[0-9]+ verdict=(ok:canonical-roles|attention:sequenced-prose)$' && echo 'ok: verdict grammar'"
     timeout_ms: 60000
     expected_behavior: "ok: verdict grammar"
 

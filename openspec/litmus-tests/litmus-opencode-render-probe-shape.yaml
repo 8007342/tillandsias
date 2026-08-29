@@ -40,12 +40,12 @@ critical_path:
     # record-last-good, validate-or-rollback and restore-last-good all call
     # harness_probe. Wiring the contract there — rather than at one call site
     # — is what stops a broken binary being certified as last-good.
-    command: "awk '/^harness_probe\\(\\)/,/^}/' images/default/lib-common.sh | grep -q 'opencode_render_contract_cached' && echo 'ok: render contract inside harness_probe'"
+    command: "mf_stage prod 0 OUT -- awk '/^harness_probe\\(\\)/,/^}/' images/default/lib-common.sh && mf_holds OUT 'opencode_render_contract_cached' && echo 'ok: render contract inside harness_probe'"
     timeout_ms: 10000
     expected_behavior: "ok: render contract inside harness_probe"
 
   - step: "Req: the probe cannot self-update (litmus:harness-byte-cheap contract)"
-    command: "awk '/^opencode_render_contract_ok\\(\\)/,/^}/' images/default/lib-common.sh | grep -q 'DISABLE_AUTOUPDATER=1 DISABLE_UPDATES=1' && echo 'ok: update guards present'"
+    command: "mf_stage prod 0 OUT -- awk '/^opencode_render_contract_ok\\(\\)/,/^}/' images/default/lib-common.sh && mf_holds OUT 'DISABLE_AUTOUPDATER=1 DISABLE_UPDATES=1' && echo 'ok: update guards present'"
     timeout_ms: 10000
     expected_behavior: "ok: update guards present"
 

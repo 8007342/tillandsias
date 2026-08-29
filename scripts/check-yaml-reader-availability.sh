@@ -60,3 +60,20 @@ case "$verdict" in
         exit 1
         ;;
 esac
+
+# THE RICH-READ COMPOSITION (746-htj9 third tranche): `yaml-json | jq` is the
+# sanctioned path for queries yaml-get refuses to grow into, so availability
+# means BOTH halves run here — the reader emitting JSON and jq consuming it.
+# jq -er: -e makes a null/false result a non-zero exit, so a probe that
+# produces nothing cannot read as a pass.
+if ! command -v jq >/dev/null 2>&1; then
+    echo "blocked:yaml-json-jq-absent:$ENV_NAME"
+    exit 1
+fi
+jverdict="$("$READER" yaml-json "$PROBE" 2>&1 | jq -er 'type' 2>&1 || true)"
+if [ "$jverdict" = "object" ]; then
+    echo "ok:yaml-json-jq:$ENV_NAME"
+else
+    echo "blocked:yaml-json-jq-broken:$ENV_NAME:${jverdict%%$'\n'*}"
+    exit 1
+fi

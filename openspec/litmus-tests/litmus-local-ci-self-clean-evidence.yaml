@@ -29,7 +29,7 @@ critical_path:
   # worktree it was about to declare clean. The rendering is gone; coverage is
   # computed on demand and writes nothing.
   - step: "compute trace coverage WITHOUT writing to the worktree"
-    command: "./scripts/trace-coverage.sh | grep -qE '^trace_coverage: specs=[0-9]+ traced=[0-9]+ ghost=[0-9]+ annotations=[0-9]+ files=[0-9]+$' && echo ok:trace-coverage-computed"
+    command: "mf_stage prod 0 OUT -- ./scripts/trace-coverage.sh && mf_holds_ere OUT '^trace_coverage: specs=[0-9]+ traced=[0-9]+ ghost=[0-9]+ annotations=[0-9]+ files=[0-9]+$' && echo ok:trace-coverage-computed"
     success_pattern: "^ok:trace-coverage-computed$"
     timeout_ms: 120000
 

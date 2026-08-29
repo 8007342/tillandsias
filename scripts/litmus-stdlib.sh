@@ -261,6 +261,26 @@ mf_stage() {
   return 1
 }
 
+# mf_stage_sh NAME EXPECTED_RC VAR -- SHELL_STRING
+#   mf_stage for a producer that is a COMPOUND command — `a && b`, `x; y`, one
+#   using `$(…)`, or one with its own redirection. `mf_stage` runs `"$@"`
+#   directly, which cannot express those, and MEASURED over the corpus that is
+#   not an edge case: 22 of the single-pipe `grep -q` sites have a compound
+#   producer, and many of the multi-pipe chains reduce to one.
+#
+#   THIS IS NOT A RETREAT TO THE SHELL STRING THIS PACKET IS ABOUT. The defect
+#   was never that a shell string exists; it is that a PIPELINE yields one exit
+#   code for several stages and lets a consumer SIGPIPE its producer. Here the
+#   whole compound producer is ONE stage with ONE asserted status, and the
+#   consumer reads a finished buffer afterwards. Per-stage status is preserved
+#   because the stages are the producer and the consumer, which is the split
+#   that was being lost.
+mf_stage_sh() {
+  _mfx_name="$1"; _mfx_want="$2"; _mfx_var="$3"; shift 3
+  [ "${1:-}" = "--" ] && shift
+  mf_stage "$_mfx_name" "$_mfx_want" "$_mfx_var" -- sh -c "$*"
+}
+
 # mf_holds VAR PATTERN        — BRE, mirroring plain `grep -q`
 # mf_holds_ere VAR PATTERN    — ERE, mirroring `grep -qE`
 # mf_holds_literal VAR STRING — fixed string, mirroring `grep -qF`
@@ -303,10 +323,17 @@ mf_holds()         { eval "printf '%s\\n' \"\$$1\"" | grep -q  -- "$2"; }
 mf_holds_ere()     { eval "printf '%s\\n' \"\$$1\"" | grep -qE -- "$2"; }
 mf_holds_literal() { eval "printf '%s\\n' \"\$$1\"" | grep -qF -- "$2"; }
 mf_holds_line()    { eval "printf '%s\\n' \"\$$1\"" | grep -qx -- "$2"; }
+# -qi and -qiE. Added because the corpus has them (6 sites) and APPROXIMATING a
+# case-insensitive match with a case-sensitive consumer would be exactly the
+# flag-dropping this file exists to prevent.
+mf_holds_i()       { eval "printf '%s\\n' \"\$$1\"" | grep -qi  -- "$2"; }
+mf_holds_i_ere()   { eval "printf '%s\\n' \"\$$1\"" | grep -qiE -- "$2"; }
 mf_lacks()         { ! mf_holds "$1" "$2"; }
 mf_lacks_ere()     { ! mf_holds_ere "$1" "$2"; }
 mf_lacks_literal() { ! mf_holds_literal "$1" "$2"; }
 mf_lacks_line()    { ! mf_holds_line "$1" "$2"; }
+mf_lacks_i()       { ! mf_holds_i "$1" "$2"; }
+mf_lacks_i_ere()   { ! mf_holds_i_ere "$1" "$2"; }
 
 # mf_first VAR N — the first N lines of a captured stream.
 #   The `| head -N` replacement. Truncation is a property of the CONSUMER
