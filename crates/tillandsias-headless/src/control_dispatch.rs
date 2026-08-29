@@ -111,19 +111,24 @@ pub fn decide_route(msg: &ControlMessage, transport: TransportKind) -> DispatchO
         // PTY family is vsock-only — the in-VM headless is the PTY
         // producer (it owns the forge container's session). The unix
         // dispatcher would have nothing useful to do here.
-        // PtyStdinEof joins the family (order 925-eofi). It is listed with the
+        // PtyStdinEof (925-eofi) and PtyOpenData (926-bin4) join the family. It is listed with the
         // others rather than in its own row because it IS the same family: a
         // host->guest signal about an open PTY session. Being absent from this
         // matrix is not a silent no-op — the vsock loop answers Unsupported and
         // the caller sees `variant PtyStdinEof not supported on the in-VM vsock
         // transport`, which is how this omission was caught on the first live
-        // run rather than by reading the code.
+        // run rather than by reading the code — TWICE now. The 926-bin4 entry
+        // was missed the same way and caught the same way, on the first live
+        // probe, by this matrix refusing a variant it did not know. That is the
+        // property to preserve here: an unregistered variant must never become a
+        // quiet pass-through.
         (
             PtyOpen { .. }
             | PtyData { .. }
             | PtyResize { .. }
             | PtyClose { .. }
-            | PtyStdinEof { .. },
+            | PtyStdinEof { .. }
+            | PtyOpenData { .. },
             Vsock,
         ) => Handle,
         (
@@ -131,7 +136,8 @@ pub fn decide_route(msg: &ControlMessage, transport: TransportKind) -> DispatchO
             | PtyData { .. }
             | PtyResize { .. }
             | PtyClose { .. }
-            | PtyStdinEof { .. },
+            | PtyStdinEof { .. }
+            | PtyOpenData { .. },
             UnixSocket,
         ) => Unsupported,
 

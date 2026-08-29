@@ -329,6 +329,22 @@ or worktree checkouts at the suspect and its parent.
       only what your fixture could have caused, and name the file.
 - [ ] Crossing a container/distro boundary by hand? Forward the namespace, and
       test through the project's wrapper before blaming the boundary.
+- [ ] Does a comment claim parity with a sibling? Grep the sibling, not the
+      comment.
+
+## A comment claiming symmetry is not symmetry
+
+Measured on 731-eupn (2026-08-29): the macOS applier's comment said it
+"mirrors the Windows wiring in notify_icon::apply_cloud_projects" — while
+the Windows applier was the one lane still MISSING the outcome
+discriminator (`{ projects, .. }` ate the field, `cloud_projects_loaded =
+true` unconditional, its own comment claiming "a confirmed answer (even an
+empty one)" with nothing confirming it). A reader auditing macOS against
+that sentence concludes Windows is fine. The sentence is evidence of the
+author's intent at writing time, not of the sibling's code now. Audit the
+named counterpart directly — one grep for the discriminator in the
+supposedly-mirroring crate (zero references to CloudRefreshOutcome) settled
+in one command what the comment had misdirected for days.
 
 ## Exit codes do not survive `wsl.exe -- bash -c '<quoted script>'`
 

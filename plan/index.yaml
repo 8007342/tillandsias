@@ -20421,6 +20421,68 @@ plan_index:
         - 'Tests for: confirmed-empty renders (no repos); failed-fetch does NOT.'
 
       events:
+        - type: verified
+          ts: "2026-08-29T18:45:44Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            I NEARLY SHIPPED THIS UNVERIFIED, VIA A GREEN COMMAND THAT COMPILED A DIFFERENT FILE. Recording it because it is the same trap the macbook recorded on this packet, entered from the opposite direction, and because the two commands look identical in a terminal.
+
+            I began by proving I could build the crate here:
+
+                $ cargo check -p tillandsias-windows-tray --all-targets
+                Finished `dev` profile ... in 7.59s
+
+            GREEN, AND MEANINGLESS. crates/tillandsias-windows-tray/src/main.rs carries
+
+                #[cfg(target_os = "windows")]      mod notify_icon;
+                #[cfg(not(target_os = "windows"))] #[path = "stubs/notify_icon.rs"] mod notify_icon;
+
+            so on Linux that command compiles a STUB and never touches the file I was editing. The tell was there and I nearly walked past it: after my change, two pre-existing test call sites still used the OLD 2-argument signature and cargo reported success. A signature change with stale callers that compiles clean is not a passing build, it is a build that did not look.
+
+            WHAT ACTUALLY VERIFIES IT — and I proved the verifier before trusting it:
+
+                $ cargo check -p tillandsias-windows-tray --target x86_64-pc-windows-gnu --all-targets
+
+            MUTATION-TESTED rather than assumed: I appended `let x: u32 = "not a number";` to notify_icon.rs and re-ran. It fired E0308 in BOTH the bin and the bin-test targets, then went silent when reverted. So the real module and its tests are genuinely compiled here, and my change is compile-verified against the Windows target from a Linux host. The mingw target is present because 799-tb7q added it to the builder toolbox for check-cross-target-build.sh (656-spux) — a capability landed for one packet paying off in an unrelated one.
+
+            THE RULE THIS GIVES THE NEXT PERSON, and it generalizes past this crate: WHEN A MODULE IS cfg-GATED TO A FOREIGN TARGET, THE HOST-TARGET BUILD IS NOT A CHECK OF IT. `-p <crate>` selects a package, not a target, and a stub can make the package green while your edit is not compiled at all. The macbook's version of this was a FEATURE gate (`--features tray` was never run); mine was a TARGET gate. Same defect class, and both produce a confident green.
+
+            WHAT I STILL CANNOT CLAIM: the three new tests are COMPILE-verified on the Windows target, not RUN. Cross-compiled Windows tests need a Windows host or wine to execute. yolanda should run `cargo test -p tillandsias-windows-tray` and record the result — the assertions are about pure MenuState transitions with no Win32 in them, so they should pass, but "should pass" is what this packet is about. Named rather than claimed.
+
+            ./build.sh --check GREEN, which includes ok:cross-target:x86_64-pc-windows-gnu.
+        - type: implemented
+          ts: "2026-08-29T18:45:25Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            THE WINDOWS TRAY WAS STILL CONFLATING THEM — the defect survived on one lane after the wire, the guest, the macOS tray and the Linux tray were all fixed.
+
+            VERIFIED BEFORE TOUCHING ANYTHING, and the state was not what an assignment implies. CloudRefreshReply already carries `outcome: CloudRefreshOutcome` with a fail-closed `#[serde(default)]`; the guest sets it; macOS calls `apply_cloud_projects(mapped, outcome.is_confirmed(), …)`; Linux was propagated by macuahuitl at 21a3d4804. Exit criteria 1 and 3 were met. CRITERION 2 WAS NOT, on Windows:
+
+              crates/tillandsias-windows-tray/src/notify_icon.rs
+                consumer  : ControlMessage::CloudRefreshReply { projects, .. }   <- `..` ate the outcome
+                applier   : apply_cloud_projects(&projects)                       <- no outcome parameter
+                state     : menu.cloud_projects_loaded = true;                    <- UNCONDITIONAL
+                comment   : "A confirmed answer (even an empty one)"              <- nothing confirmed it
+
+            So on Windows a failed gh/vault/proxy fetch delivered an empty list and the submenu latched "(no repos)" — the exact confirmation-nobody-made this packet exists to end, still live.
+
+            HOW IT SURVIVED REVIEW, and this is worth more than the fix: the macOS applier's own comment says it "mirrors the Windows wiring in notify_icon::apply_cloud_projects". It asserted parity with the one lane that did not have it. A COMMENT CLAIMING SYMMETRY IS NOT SYMMETRY, and a reader checking macOS against that sentence would conclude Windows was fine.
+
+            I ENUMERATED THE CALL SITES WITHOUT `head`, deliberately — the packet's own event records the macbook piping a CloudRefreshReply survey through `head -10` and letting the boundary decide what got fixed. 22 references, all read.
+
+            FIXED, mirroring macOS exactly:
+              * apply_cloud_projects_state(menu, mapped, confirmed) — an unconfirmed reply returns early: the previous list and the flag are both left alone. Doing nothing is the truthful response to being told nothing.
+              * apply_cloud_projects(projects, confirmed) — and it LOGS the discard at warn level. A lane that silently drops a failed fetch reproduces the defect on the operator's side of the glass.
+              * the REPLY arm destructures `outcome` and passes `outcome.is_confirmed()`.
+              * the PUSH arm passes `true` — a push is only emitted from guest state a confirmed fetch already wrote, so it is confirmed BY CONSTRUCTION. Same split, same reasoning, as macOS.
+
+            TESTS (exit criterion 4), three, in the crate's own module:
+              a_confirmed_empty_answer_latches_loaded          — confirmed empty MAY render (no repos)
+              an_unconfirmed_empty_reply_does_not_latch_loaded — a failed fetch must NOT
+              an_unconfirmed_reply_retains_the_previous_list   — and must not destroy what the user could already see, which would render (no repos) by another route
+            Two pre-existing call sites were updated for the new arity.
         - type: note
           ts: "2026-08-26T05:22:04Z"
           agent_id: "macos-tlatoanis-macbook-air-opus5-20260826t052204z"
@@ -21855,6 +21917,12 @@ plan_index:
         `grep -rln 'ruby\|yq' scripts/` had 10 hits at filing time, and each one is
         the same latent outage in a different environment.
       events:
+        - type: progress
+          ts: "2026-08-29T19:17:57Z"
+          agent_id: "linux-macuahuitl-claude-20260829t191756z"
+          host: linux
+          summary: |
+            THIRD TRANCHE (macuahuitl): the select() decision the packet was parked on is settled by COMPOSITION, not a query engine. New `tillandsias-plan yaml-json <file>` emits the document as JSON; rich reads become `yaml-json | jq`, and jq is the one query tool the packet's own availability table shows present in ALL THREE environments. The retired yq filters run under jq VERBATIM (yq eval mimics jq): proven byte-identical on the real bindings file. MIGRATED: run-litmus-test.sh's seven own reads (yaml_get, bindings queries, phase/host_kind/size/inputs, list_all_tests) and local-ci.sh's get_all_active_specs — sanctioned tier first, yq second, historical awk/grep last, so a fresh unbuilt clone still runs. A yq-less host now selects the SAME test set as a yq host instead of degrading to grep parsers; degraded-mode warning updated to say so. PERF: the four yaml subcommands moved to the ledger-free early dispatch (they are file-local; the ledger load cost 220ms of a 227ms invocation — now 2ms, measured). CONVERSION BUG CAUGHT BY THE SUITE, kept as evidence for the 901-jtvi rule: first conversion left empty-match rc=1 where the yq tier's `|| true` guaranteed rc=0; litmus-name-filter-fail-loud/hint went red (247/249), fixed, 249/249 — the verdict-invariance discipline works. EQUIVALENCE: 407 fixture files x 3 metadata fields, plan+jq vs yq, zero diffs. REMAINING for close: forge + builder-toolbox availability evidence for yaml-json (host leg recorded here), methodology criterion 3 wording, and the ledger-tooling doc note (set-field writes a fragment, append-event edits the folded base — yolanda's promotion request).
         - type: progress
           ts: "2026-08-26T17:32:23Z"
           agent_id: "linux-yoga-opus5-20260826t173223z"
@@ -54317,6 +54385,43 @@ plan_index:
         guard for one idiom cannot cover 1248 sites. 897-5m9y and 899-q9di both
         record instances.
       events:
+        - type: evidence
+          ts: "2026-08-29T18:52:59Z"
+          agent_id: "linux-macuahuitl-claude-20260829t185259z"
+          host: linux
+          summary: |
+            WSL2 LEG GREEN — PORTABILITY EXIT CRITERION FULLY MET, all three fleet regimes: darwin bash 3.2.57 (oldest in fleet), MINGW64 bash 5.3.15 (cygwin), and now the WSL2 distro bash 5.3.9 (Fedora 44 container, kernel 6.18.33.2-microsoft-standard-WSL2, working dir on /mnt/c drvfs — the 9P slow lane from 895-bkrn). 8/8 including the first-N arm on drvfs, FIXTURE_RC=0 read from a file the fixture wrote INSIDE the guest, not from the wrapper (yolanda controlled for the wsl.exe exit-code swallow with bash -c 'exit 7' returning 0 through the same wrapper earlier the same day). The bulk migration (698 sites: 418 grep -q, 235 head, 93 tail) is unblocked on every platform axis; batches must still prove verdict-invariance per the packet's own rule.
+        - type: evidence
+          ts: "2026-08-29T18:42:09Z"
+          agent_id: "linux-macuahuitl-claude-20260829t184209z"
+          host: linux
+          summary: |
+            MSYS PORTABILITY LEG GREEN — recorded by the coordinator from yolanda's report, regime attached: GNU bash 5.3.15(1)-release (x86_64-pc-cygwin), MSYSTEM=MINGW64, MINGW64_NT-10.0-26200, scripts/test-litmus-step-model.sh 8/8 exit 0, nothing changed. Their sharpest observation: the first-N arm — the one they expected 9P/drvfs timing to break — read a finished buffer with the producer surviving rc=0, confirming the staging decouples rather than winning a race. CAVEAT THEY CORRECTLY REFUSED TO GLOSS: the litmus runner on this host re-execs build-shaped steps into the tillandsias-build WSL2 distro, so a migrated step can execute under THAT bash, not MINGW64's — one shell's green does not close the platform. WSL2-distro fixture run requested (five minutes, same fixture, compare) as the third and final regime before the bulk migration's Windows exposure is called closed. Darwin (bash 3.2) + msys (bash 5.3) green; WSL2 pending.
+        - type: evidence
+          ts: "2026-08-29T18:37:49Z"
+          agent_id: "linux-macuahuitl-claude-20260829t183749z"
+          host: linux
+          summary: |
+            DARWIN PORTABILITY LEG GREEN — recorded by the coordinator from tlatoanis-macbook-air's report, regime attached: GNU bash 3.2.57(1)-release (macOS system bash, PRE-4.0 — no associative arrays, no declare -g, the oldest bash in the fleet), trunk 91d732751, scripts/test-litmus-step-model.sh 8/8 exit 0, /bin/sh (also bash) passes too. Passing on 3.2 is what makes the bulk migration safe on this axis, not "passing on a mac". NON-DEFECT recorded so nobody files it: `zsh scripts/test-litmus-step-model.sh` fails with "command not found: mf_stage" and that is EXPECTED — bash is the runner by construction (run-litmus-test.sh executes steps as `bash -c 'source "$LITMUS_STDLIB"; ...'`) and the PIPESTATUS arm is a static grep, not a zsh-load claim; assertion wording + header comment tightened to say so. REMAINING before bulk migration: the MSYS leg (queued on yolanda after their 760-hzi4 rung).
+        - type: evidence
+          ts: "2026-08-29T18:36:30Z"
+          agent_id: "macos-tlatoanis-macbook-air-claude-20260829t155859z"
+          host: macos
+          summary: |
+            DARWIN PORTABILITY: GREEN. scripts/test-litmus-step-model.sh run on tlatoanis-macbook-air (macOS 26.6.2, Apple M5) 2026-08-29 at trunk 91d732751: 8/8 assertions pass, exit 0, final line ok:litmus-step-model:all.
+
+              ok: premise holds: in a pipefail-less shell (the runner's), the piped form masks exit 7
+              ok: mf_stage makes the producer's failure the verdict
+              ok: a passing producer is unchanged
+              ok: an intentional non-zero exit is expressible, not a false positive
+              ok: first-N reads a finished buffer; the producer survived (rc=0)
+              ok: stderr is captured by default
+              ok: no PIPESTATUS in the step model (portable to zsh/BSD)
+              ok:litmus-step-model:all
+
+            THE SHELL THAT MATTERS: GNU bash 3.2.57(1)-release (arm64-apple-darwin25). That is macOS's system bash, PRE-4.0, and it is the strongest portability signal available here — it lacks associative arrays, `declare -g`, `${var^^}`, and the other post-3.2 conveniences a Linux-developed script picks up without noticing. Passing on 3.2 is what makes the bulk migration safe, not merely passing on darwin. `/bin/sh` is bash on this host and also passes.
+
+            ONE THING I CHECKED AND AM REPORTING AS A NON-DEFECT, because the opposite claim would have been easy to make and wrong. Running the script under zsh fails ("command not found: mf_stage", "BIG_rc: parameter not set"), which looks like a portability gap next to an assertion literally worded "portable to zsh/BSD". It is not one. run-litmus-test.sh:1228 executes every step as `bash -c 'source "$LITMUS_STDLIB"; ...'`, so bash is the execution context by construction and zsh is never the runner; and that assertion is a STATIC grep proving the stdlib contains no PIPESTATUS reference — a bash-ism that is empty under zsh — rather than a claim that the stdlib loads under zsh. The check is sound and its wording is about the bash-ism, not the interpreter. Recording it so the next person who runs `zsh scripts/test-litmus-step-model.sh` does not file the finding I nearly filed.
         - type: verified
           ts: "2026-08-29T18:21:59Z"
           agent_id: "linux-lenovinha-claude-20260828t223829z"

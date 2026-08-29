@@ -111,6 +111,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "validate-yaml",
     "verify-answer",
     "yaml-get",
+    "yaml-json",
     "yaml-type",
 ];
 
@@ -355,6 +356,10 @@ const USAGE: &str = concat!(
     "           yaml-get <file> <path>    ORDER 746-htj9. Read a dotted path and print the\n",
     "                                     sequence space-joined. Missing key is EMPTY, not an\n",
     "                                     error; unparseable stays its own verdict (720-24u6).\n",
+    "           yaml-json <file>          ORDER 746-htj9. Emit the document as JSON on stdout,\n",
+    "                                     so rich queries compose with jq — the one query tool\n",
+    "                                     present in ALL THREE environments: yaml-json f | jq '…'.\n",
+    "                                     The yq filters this retires are already jq syntax.\n",
     "           yaml-type <file>          ORDER 746-htj9. Top-level node kind in yq spelling\n",
     "                                     (!!map, !!seq, !!str, …), so pre-push can assert\n",
     "                                     fragment shape without yq.\n",
@@ -2319,6 +2324,251 @@ fn carry_forward_gaps(doc: &serde_yaml::Value) -> Vec<String> {
     gaps
 }
 
+/// ORDER 746-htj9 (dispatch position). The four YAML-reader subcommands are
+/// file-local: they read the file named in their argv and NOTHING else — no
+/// ledger, no schema, no fragments. Called from the ledger-free fast path in
+/// `dispatch_fragment_only`, because the `Ledger::load_with_fragments` below
+/// main's big match costs ~220ms of a 227ms invocation, and the litmus
+/// runner calls these in a per-file loop where that overhead multiplies into
+/// minutes. Measured 2026-08-29 on macuahuitl: yaml-type on a 40-line file,
+/// 227ms behind the ledger load; the parse itself is under 5ms.
+fn yaml_read_dispatch(subcommand: &str, args: &[String]) {
+    match subcommand {
+        // ORDER 746-htj9. The read half of the everywhere-reader.
+        //
+        // `validate-yaml` proves a file loads; the gates that caused the
+        // 2026-08-15 outage needed to READ something out of it — which is why
+        // they reached for yq and ruby in the first place. Shipping only the
+        // validator would have left every one of them on its interpreter
+        // chain, so this is the subcommand that actually retires them.
+        //
+        // Deliberately NOT a query language. The production call sites want a
+        // dotted path to a sequence of scalars, space-joined — that is the
+        // whole shape yq's `.a.b // [] | join(" ")` and the ruby `dig` exprs
+        // were computing. A general engine here would be a second yq with our
+        // name on it, and the packet asks for one read PATH, not one more tool.
+        //
+        // A missing key is EMPTY, not an error, matching the `// []` in the yq
+        // exprs it replaces: the schema gate distinguishes "loads, vocabulary
+        // is empty" from "will not load", and collapsing those two was the
+        // 720-24u6 defect.
+        "yaml-get" => {
+            if args.len() < 3 {
+                eprintln!("usage: tillandsias-plan yaml-get <file> <dotted.path>");
+                std::process::exit(2);
+            }
+            let (file, path) = (&args[1], &args[2]);
+            let text = match std::fs::read_to_string(file) {
+                Ok(t) => t,
+                Err(err) => {
+                    println!("blocked:yaml-unreadable:{file}: {err}");
+                    std::process::exit(1);
+                }
+            };
+            let doc: serde_yaml::Value = match serde_yaml::from_str(&text) {
+                Ok(v) => v,
+                Err(err) => {
+                    println!("blocked:yaml-load-failed:{file}: {err}");
+                    std::process::exit(1);
+                }
+            };
+            let mut cur = &doc;
+            let mut missing = false;
+            // A NUMERIC segment indexes a sequence. Real callers need this:
+            // the set-field shapes test reads `status.0.value`, which under the
+            // ruby it replaces was `((d["status"] || [])[0] || {})["value"]`.
+            // Keys win over indices — a mapping whose key is literally "0" is
+            // still reachable — so this only ever ADDS reach.
+            for key in path.split('.').filter(|s| !s.is_empty()) {
+                let next = cur.get(key).or_else(|| {
+                    key.parse::<usize>()
+                        .ok()
+                        .and_then(|i| cur.as_sequence().and_then(|s| s.get(i)))
+                });
+                match next {
+                    Some(v) => cur = v,
+                    None => {
+                        missing = true;
+                        break;
+                    }
+                }
+            }
+            if missing || cur.is_null() {
+                println!();
+                return;
+            }
+            match cur {
+                serde_yaml::Value::Sequence(items) => {
+                    let parts: Vec<String> = items.iter().map(scalar_to_string).collect();
+                    println!("{}", parts.join(" "));
+                }
+                other => println!("{}", scalar_to_string(other)),
+            }
+        }
+        // ORDER 746-htj9. The last thing the trunk's own gate needed yq for.
+        //
+        // scripts/hooks/pre-push-local-gate.sh validated each pushed fragment
+        // with `yq eval '.'` AND `yq eval 'type' == '!!map'`. It had a fallback
+        // for hosts without yq — but the fallback could not express the second
+        // check, so the map-shape assertion silently existed on some hosts and
+        // not others. A gate whose strictness depends on which tools happen to
+        // be installed is the same defect this packet is about, one level up.
+        //
+        // Names are yq's, deliberately: this replaces yq at call sites that
+        // already compare against `!!map`, and inventing a new vocabulary would
+        // mean editing every comparison for no gain.
+        "yaml-type" => {
+            if args.len() < 2 {
+                eprintln!("usage: tillandsias-plan yaml-type <file>");
+                std::process::exit(2);
+            }
+            let file = &args[1];
+            let text = match std::fs::read_to_string(file) {
+                Ok(t) => t,
+                Err(err) => {
+                    println!("blocked:yaml-unreadable:{file}: {err}");
+                    std::process::exit(1);
+                }
+            };
+            let doc: serde_yaml::Value = match serde_yaml::from_str(&text) {
+                Ok(v) => v,
+                Err(err) => {
+                    println!("blocked:yaml-load-failed:{file}: {err}");
+                    std::process::exit(1);
+                }
+            };
+            let kind = match doc {
+                serde_yaml::Value::Mapping(_) => "!!map",
+                serde_yaml::Value::Sequence(_) => "!!seq",
+                serde_yaml::Value::String(_) => "!!str",
+                serde_yaml::Value::Bool(_) => "!!bool",
+                serde_yaml::Value::Number(_) => "!!float",
+                serde_yaml::Value::Null => "!!null",
+                _ => "!!unknown",
+            };
+            println!("{kind}");
+        }
+        // ORDER 746-htj9. The bridge for the queries yaml-get refuses to grow
+        // into.
+        //
+        // yaml-get deliberately stopped short of a query language, and the
+        // call sites that remained after the first two tranches are exactly
+        // the ones that need one: run-litmus-test.sh and local-ci.sh filter
+        // litmus-bindings.yaml with `select()` expressions. Growing yaml-get
+        // toward them would end at a second yq with our name on it.
+        //
+        // The availability table above has one more row worth reading: `jq`
+        // IS present in all three environments — its only defect is that it
+        // cannot read YAML. So the sanctioned rich-read path is composition,
+        // not a new engine:
+        //
+        //     tillandsias-plan yaml-json <file> | jq '<filter>'
+        //
+        // and the yq filters this retires run under jq VERBATIM, because
+        // `yq eval` deliberately mimics jq's language:
+        //     .specs[] | select(.status=="active") | .spec_id
+        //
+        // A document that loads but cannot be represented as JSON (non-string
+        // mapping keys are the realistic case) is its own loud verdict, kept
+        // distinct from load failure per the 720-24u6 rule.
+        "yaml-json" => {
+            if args.len() < 2 {
+                eprintln!("usage: tillandsias-plan yaml-json <file>");
+                std::process::exit(2);
+            }
+            let file = &args[1];
+            let text = match std::fs::read_to_string(file) {
+                Ok(t) => t,
+                Err(err) => {
+                    println!("blocked:yaml-unreadable:{file}: {err}");
+                    std::process::exit(1);
+                }
+            };
+            let doc: serde_yaml::Value = match serde_yaml::from_str(&text) {
+                Ok(v) => v,
+                Err(err) => {
+                    println!("blocked:yaml-load-failed:{file}: {err}");
+                    std::process::exit(1);
+                }
+            };
+            match serde_json::to_string(&doc) {
+                Ok(json) => println!("{json}"),
+                Err(err) => {
+                    println!("blocked:yaml-json-unrepresentable:{file}: {err}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        // ORDER 746-htj9. THE YAML READ PATH THAT EXISTS EVERYWHERE.
+        //
+        // On 2026-08-15 two locally-correct fixes caused two outages in one
+        // day, because no YAML interpreter is present in all three
+        // environments this repo's gates run in:
+        //
+        //                     yq        ruby      jq        python3
+        //   forge             present   ABSENT    present   FORBIDDEN
+        //   host (Silverblue) ABSENT    ABSENT    present   FORBIDDEN
+        //   builder toolbox   ABSENT    present   present   FORBIDDEN
+        //
+        // `jq` is the only tool present everywhere and cannot read YAML. A
+        // fallback chain (`try yq, then ruby`) does not fix this: it still
+        // leaves an environment with no reader, and every future YAML-reading
+        // script has to remember to rewrite the same chain.
+        //
+        // WHY THIS LIVES ON `tillandsias-plan` AND NOT ON `tillandsias-policy`,
+        // which already has an identical `validate-yaml`: availability is the
+        // whole point, and only this binary HAS it. `scripts/cycle-preflight.sh`
+        // rebuilds `tillandsias-plan` at the top of every cycle, so a pre-push
+        // gate can rely on it being current. `tillandsias-policy` is not built
+        // by default, and its facade falls through to `cargo run`, which is a
+        // multi-minute build in a fresh forge and needs a network the enclave
+        // may not give it. A reader that might not be there is the defect, not
+        // the fix.
+        //
+        // serde_yaml also settles order 720-24u6 by construction: the folded
+        // ledger carries 231 bare ISO-8601 timestamps, which Ruby's safe_load
+        // rejects unless the caller remembers `permitted_classes: [Time, Date]`.
+        // Forgetting it made the schema gate report a vocabulary divergence
+        // that did not exist. serde_yaml reads them as scalars with nothing to
+        // remember.
+        //
+        // The verdict grammar keeps LOAD FAILURE distinct from every other
+        // verdict, which is the 720-24u6 negative control: a file that will not
+        // parse must never be reported as anything but unparseable.
+        "validate-yaml" => {
+            let files = if args.len() > 1 {
+                &args[1..]
+            } else {
+                &args[0..0]
+            };
+            if files.is_empty() {
+                eprintln!("usage: tillandsias-plan validate-yaml <file>...");
+                std::process::exit(2);
+            }
+            let mut failed = false;
+            for file in files {
+                match std::fs::read_to_string(file) {
+                    Ok(text) => match serde_yaml::from_str::<serde_yaml::Value>(&text) {
+                        Ok(_) => println!("ok:yaml-loads:{file}"),
+                        Err(err) => {
+                            println!("blocked:yaml-load-failed:{file}: {err}");
+                            failed = true;
+                        }
+                    },
+                    Err(err) => {
+                        println!("blocked:yaml-unreadable:{file}: {err}");
+                        failed = true;
+                    }
+                }
+            }
+            if failed {
+                std::process::exit(1);
+            }
+        }
+        other => unreachable!("yaml_read_dispatch called with {other}"),
+    }
+}
+
 fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
     match subcommand {
         "experts-probe" => {
@@ -2784,6 +3034,14 @@ fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
             for id in ids {
                 emit(&id);
             }
+            true
+        }
+        // ORDER 746-htj9 (perf). The YAML readers are file-local and belong on
+        // this ledger-free path: the litmus runner calls them per test file,
+        // and the ledger load below main's dispatch costs ~220ms per call that
+        // these subcommands never use.
+        "yaml-get" | "yaml-type" | "yaml-json" | "validate-yaml" => {
+            yaml_read_dispatch(subcommand, args);
             true
         }
         _ => false,
@@ -4496,186 +4754,6 @@ fn main() {
                 eprintln!(
                     "  A closure (completed/verified/done) must carry an event with evidence_refs (or type completed/verified/falsified). Use set-field --evidence, or add the event (686-7qcm)."
                 );
-                std::process::exit(1);
-            }
-        }
-        // ORDER 746-htj9. The read half of the everywhere-reader.
-        //
-        // `validate-yaml` proves a file loads; the gates that caused the
-        // 2026-08-15 outage needed to READ something out of it — which is why
-        // they reached for yq and ruby in the first place. Shipping only the
-        // validator would have left every one of them on its interpreter
-        // chain, so this is the subcommand that actually retires them.
-        //
-        // Deliberately NOT a query language. The production call sites want a
-        // dotted path to a sequence of scalars, space-joined — that is the
-        // whole shape yq's `.a.b // [] | join(" ")` and the ruby `dig` exprs
-        // were computing. A general engine here would be a second yq with our
-        // name on it, and the packet asks for one read PATH, not one more tool.
-        //
-        // A missing key is EMPTY, not an error, matching the `// []` in the yq
-        // exprs it replaces: the schema gate distinguishes "loads, vocabulary
-        // is empty" from "will not load", and collapsing those two was the
-        // 720-24u6 defect.
-        "yaml-get" => {
-            if args.len() < 3 {
-                eprintln!("usage: tillandsias-plan yaml-get <file> <dotted.path>");
-                std::process::exit(2);
-            }
-            let (file, path) = (&args[1], &args[2]);
-            let text = match std::fs::read_to_string(file) {
-                Ok(t) => t,
-                Err(err) => {
-                    println!("blocked:yaml-unreadable:{file}: {err}");
-                    std::process::exit(1);
-                }
-            };
-            let doc: serde_yaml::Value = match serde_yaml::from_str(&text) {
-                Ok(v) => v,
-                Err(err) => {
-                    println!("blocked:yaml-load-failed:{file}: {err}");
-                    std::process::exit(1);
-                }
-            };
-            let mut cur = &doc;
-            let mut missing = false;
-            // A NUMERIC segment indexes a sequence. Real callers need this:
-            // the set-field shapes test reads `status.0.value`, which under the
-            // ruby it replaces was `((d["status"] || [])[0] || {})["value"]`.
-            // Keys win over indices — a mapping whose key is literally "0" is
-            // still reachable — so this only ever ADDS reach.
-            for key in path.split('.').filter(|s| !s.is_empty()) {
-                let next = cur.get(key).or_else(|| {
-                    key.parse::<usize>()
-                        .ok()
-                        .and_then(|i| cur.as_sequence().and_then(|s| s.get(i)))
-                });
-                match next {
-                    Some(v) => cur = v,
-                    None => {
-                        missing = true;
-                        break;
-                    }
-                }
-            }
-            if missing || cur.is_null() {
-                println!();
-                return;
-            }
-            match cur {
-                serde_yaml::Value::Sequence(items) => {
-                    let parts: Vec<String> = items.iter().map(scalar_to_string).collect();
-                    println!("{}", parts.join(" "));
-                }
-                other => println!("{}", scalar_to_string(other)),
-            }
-        }
-        // ORDER 746-htj9. The last thing the trunk's own gate needed yq for.
-        //
-        // scripts/hooks/pre-push-local-gate.sh validated each pushed fragment
-        // with `yq eval '.'` AND `yq eval 'type' == '!!map'`. It had a fallback
-        // for hosts without yq — but the fallback could not express the second
-        // check, so the map-shape assertion silently existed on some hosts and
-        // not others. A gate whose strictness depends on which tools happen to
-        // be installed is the same defect this packet is about, one level up.
-        //
-        // Names are yq's, deliberately: this replaces yq at call sites that
-        // already compare against `!!map`, and inventing a new vocabulary would
-        // mean editing every comparison for no gain.
-        "yaml-type" => {
-            if args.len() < 2 {
-                eprintln!("usage: tillandsias-plan yaml-type <file>");
-                std::process::exit(2);
-            }
-            let file = &args[1];
-            let text = match std::fs::read_to_string(file) {
-                Ok(t) => t,
-                Err(err) => {
-                    println!("blocked:yaml-unreadable:{file}: {err}");
-                    std::process::exit(1);
-                }
-            };
-            let doc: serde_yaml::Value = match serde_yaml::from_str(&text) {
-                Ok(v) => v,
-                Err(err) => {
-                    println!("blocked:yaml-load-failed:{file}: {err}");
-                    std::process::exit(1);
-                }
-            };
-            let kind = match doc {
-                serde_yaml::Value::Mapping(_) => "!!map",
-                serde_yaml::Value::Sequence(_) => "!!seq",
-                serde_yaml::Value::String(_) => "!!str",
-                serde_yaml::Value::Bool(_) => "!!bool",
-                serde_yaml::Value::Number(_) => "!!float",
-                serde_yaml::Value::Null => "!!null",
-                _ => "!!unknown",
-            };
-            println!("{kind}");
-        }
-        // ORDER 746-htj9. THE YAML READ PATH THAT EXISTS EVERYWHERE.
-        //
-        // On 2026-08-15 two locally-correct fixes caused two outages in one
-        // day, because no YAML interpreter is present in all three
-        // environments this repo's gates run in:
-        //
-        //                     yq        ruby      jq        python3
-        //   forge             present   ABSENT    present   FORBIDDEN
-        //   host (Silverblue) ABSENT    ABSENT    present   FORBIDDEN
-        //   builder toolbox   ABSENT    present   present   FORBIDDEN
-        //
-        // `jq` is the only tool present everywhere and cannot read YAML. A
-        // fallback chain (`try yq, then ruby`) does not fix this: it still
-        // leaves an environment with no reader, and every future YAML-reading
-        // script has to remember to rewrite the same chain.
-        //
-        // WHY THIS LIVES ON `tillandsias-plan` AND NOT ON `tillandsias-policy`,
-        // which already has an identical `validate-yaml`: availability is the
-        // whole point, and only this binary HAS it. `scripts/cycle-preflight.sh`
-        // rebuilds `tillandsias-plan` at the top of every cycle, so a pre-push
-        // gate can rely on it being current. `tillandsias-policy` is not built
-        // by default, and its facade falls through to `cargo run`, which is a
-        // multi-minute build in a fresh forge and needs a network the enclave
-        // may not give it. A reader that might not be there is the defect, not
-        // the fix.
-        //
-        // serde_yaml also settles order 720-24u6 by construction: the folded
-        // ledger carries 231 bare ISO-8601 timestamps, which Ruby's safe_load
-        // rejects unless the caller remembers `permitted_classes: [Time, Date]`.
-        // Forgetting it made the schema gate report a vocabulary divergence
-        // that did not exist. serde_yaml reads them as scalars with nothing to
-        // remember.
-        //
-        // The verdict grammar keeps LOAD FAILURE distinct from every other
-        // verdict, which is the 720-24u6 negative control: a file that will not
-        // parse must never be reported as anything but unparseable.
-        "validate-yaml" => {
-            let files = if args.len() > 1 {
-                &args[1..]
-            } else {
-                &args[0..0]
-            };
-            if files.is_empty() {
-                eprintln!("usage: tillandsias-plan validate-yaml <file>...");
-                std::process::exit(2);
-            }
-            let mut failed = false;
-            for file in files {
-                match std::fs::read_to_string(file) {
-                    Ok(text) => match serde_yaml::from_str::<serde_yaml::Value>(&text) {
-                        Ok(_) => println!("ok:yaml-loads:{file}"),
-                        Err(err) => {
-                            println!("blocked:yaml-load-failed:{file}: {err}");
-                            failed = true;
-                        }
-                    },
-                    Err(err) => {
-                        println!("blocked:yaml-unreadable:{file}: {err}");
-                        failed = true;
-                    }
-                }
-            }
-            if failed {
                 std::process::exit(1);
             }
         }

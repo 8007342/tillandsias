@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: exec-wire-silently-eats-control-bytes-from-binary-stdin
+    field: status
+    value: completed
+    ts: "2026-08-29T19:01:17Z"
+    host: macos
+
+events:
+  - packet_id: exec-wire-silently-eats-control-bytes-from-binary-stdin
+    event:
+      type: completed
+      ts: "2026-08-29T19:01:17Z"
+      host: macos
+      summary: >
+        status 'completed' with evidence_refs: 228197173 — all NINE harness rows INTACT on a live guest (scripts/measure-exec-wire-control-bytes.sh, exit 0), including the 0x41 negative control that makes the table trustworthy; 0x03 no longer kills the child, 0x13 no longer wedges the session, 0x15/0x1a no longer discard buffered data, 0x04/0x11/0x7f no longer alter bytes, and 0x08 is unregressed. Terminal-session piped `cat` still returns (TERM_EOF_OK bytes=12), so 925-eofi's VEOF path is intact for un-negotiated peers. Gate green; enumeration test watched RED against a reverted entry point before being made green. This also discharges the honest limit I recorded in the design slice: a pipe-stdin child IS proven to work under this guest's spawn path, and the FD_CLOEXEC requirement that reasoning had not anticipated is now measured, fixed and documented.
+  - packet_id: exec-wire-silently-eats-control-bytes-from-binary-stdin
+    event:
+      type: note
+      ts: "2026-08-29T19:01:17Z"
+      host: macos
+      summary: >
+        data-session pipe implemented and runtime-verified; all nine control bytes intact, no regression on the terminal path
