@@ -177,6 +177,48 @@ checked. Remedy: `git commit -F file`. The family rule: any prose that passes
 through a shell argument can be silently rewritten by the shell; pass files,
 then verify the written artifact.
 
+## An edit script must ASSERT its anchor matched
+
+Adjacent family, different mechanism. The shell cases above are *your text got
+rewritten*; this one is *your operation never happened and told you it did*.
+
+Measured (926-bin4, macbook 2026-08-29): a patch script did
+
+```python
+s = s.replace(old, new, 1)      # no assert
+open(p, 'w').write(s)
+print('route matrix updated')   # prints whether or not it matched
+```
+
+The anchor had drifted, `replace` returned the string unchanged, the file was
+rewritten identically, and the success line printed anyway. Every later build
+shipped a guest that ADVERTISED a capability while its dispatch matrix REFUSED
+the variant — a contradiction no build could catch, because both halves
+compiled. It surfaced only on a live probe, as `variant PtyOpenData not
+supported on the in-VM vsock transport`.
+
+```python
+assert old in s, "anchor missing — the edit did NOT apply"
+s = s.replace(old, new, 1)
+```
+
+`str.replace` reports nothing on no-match, and `sed -i` is the same shape: a
+pattern that matches nothing exits 0. Any editor whose failure mode is
+"changed nothing, said fine" needs the assertion outside it.
+
+THE GENERAL FORM, which is what makes this worth a section rather than a note:
+**a tool's success message is a claim about the tool running, not about the
+work landing.** Three instances in one week, three different tools —
+`| tail`-masked merges (macuahuitl), the `wsl.exe` exit-code swallow
+(yolanda), and this. The check is the same in all three: after the tool says
+it worked, read the ARTIFACT for something you know must now be true.
+`grep -c PtyOpenData control_dispatch.rs` would have returned 0 and cost five
+seconds; the live probe cost a guest rebuild and a VM boot.
+
+Corollary already in this file: the same discipline applied to assertions
+themselves — watch a new check FAIL against the defect it targets before
+trusting its green.
+
 ## `check-litmus-pin-claims.sh` refuses bare litmus names (721-77yu)
 
 That guard greps every `*.sh` for `litmus:<name>` and refuses any name no test
@@ -345,6 +387,15 @@ author's intent at writing time, not of the sibling's code now. Audit the
 named counterpart directly — one grep for the discriminator in the
 supposedly-mirroring crate (zero references to CloudRefreshOutcome) settled
 in one command what the comment had misdirected for days.
+
+The same probe has a false-negative mode, found by the host that used it
+(yolanda, same packet, hours later): a grep for a TYPE NAME is a test of
+vocabulary, not behaviour. After the fix landed, `CloudRefreshOutcome`
+STILL appeared zero times in the crate — the consumer destructures the
+field and converts at the boundary (`outcome` → `confirmed: bool`), so the
+callee's name never has to appear at the call site. Absence of the name
+proves nothing in either direction. When a runnable test exists, run it;
+it was always the stronger probe.
 
 ## Exit codes do not survive `wsl.exe -- bash -c '<quoted script>'`
 
