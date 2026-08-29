@@ -12584,6 +12584,78 @@ plan_index:
       notes: |
         Order 270 (macos-attach-first-use-materialization-blackout, status ready) already owns "materialization emits a progress signal the tray can render" for the IMAGE-BUILD half. This packet is the same defect one layer out — container lifecycle and the sign-in preflight — and cross-platform. Whoever claims either should read both; they may merge.
       events:
+        - type: verified
+          ts: "2026-08-29T17:07:42Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            THE UNIT TEST FOR THE APPROVED STRING HAD NO TEETH, AND I ONLY FOUND OUT BY MUTATING IT — so the governance is now anchored outside the file it governs.
+
+            WHAT I ASSUMED: bringup_progress.rs asserts the emitted line equals the approved template, so an unapproved reword fails the suite.
+
+            WHAT IS ACTUALLY TRUE, measured: the assertion is a LITERAL IN THE SAME FILE as the constant it checks, so one find-and-replace edits both and the suite stays green. Rewording "Getting your workspace ready…" to "Setting up your workspace…" across that file left ALL SIX TESTS PASSING. A guard co-edited by its own subject is not a guard — the tenth instance of this shape in my recent work and the first where the subject is a governance rule rather than a behaviour.
+
+            The vocabulary test does still fire for a reword that introduces a BANNED word (verified: "Preparing the container stack…" trips it on `container`). But the change the approval gate exists to prevent is an unapproved reword with CLEAN vocabulary, and nothing caught that. The gate would have been discovered as absent by the operator noticing different words on their screen.
+
+            FIXED BY ANCHORING TO THE LEDGER: scripts/check-approved-ux-strings.sh reads APPROVED_SENTENCE out of the source and requires it to appear in plan/index.yaml. Two different files, written by two different actors, so a source edit cannot co-modify its own authority. That is not merely a convenient second copy — spec:tray-ux says approval lives "recorded in the plan ledger (an operator_note or operator-attributed event on the packet)", so the ledger IS where the authority is, and the check simply asks the code to agree with it. Wired into ./build.sh --check.
+
+            MUTATION-VERIFIED both ways: the innocuous reword that defeated all six unit tests now fails the gate with the file, the string, and the two remedies named; the clean tree passes. The denominator guard is mutation-verified too — deleting one progress.step() fires "BringUpProgress::new(5) but 4 progress.step() calls", which is the invariant no reader can check by eye since the constructor and the call sites sit ~15 lines apart in a 25k-line file.
+
+            WHAT THE GATE DELIBERATELY DOES NOT CLAIM: it cannot verify that approval exists for a string nobody has added yet, and it cannot distinguish an operator_note from a persuasive note that calls itself one. It closes the drift-AFTER-approval hole, which is the mechanically checkable one. Overstating it would be the same category error the check is about.
+
+            ./build.sh --check GREEN. bringup_progress 6/6.
+        - type: implemented
+          ts: "2026-08-29T17:07:25Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            SURFACE (b) IMPLEMENTED, under the operator approval recorded earlier today.
+
+            crates/tillandsias-headless/src/bringup_progress.rs — BringUpProgress emits the approved template on the DEFAULT path, five stages in run_opencode_mode: secure channel, network, images, sign-in, workspace start.
+
+                [tillandsias] Getting your workspace ready… (1 of 5)
+                …
+                [tillandsias] Getting your workspace ready… (5 of 5)
+
+            FIVE IS DECLARED, NOT DISCOVERED. The denominator is what the function KNOWS it will do before starting; a count that grew as it went would render "(1 of 1)" on the first line of a five-stage run. The fifth step fires BEFORE the workspace work rather than after it, because a progress line that appears once the wait is over is not progress.
+
+            ONE SENTENCE PLUS A COUNTER, NOT A LABEL PER STAGE, and that is the safest available shape as well as the approved one: every stage NAME here is internals (vault, proxy, router, enclave-network), so any design that renders them must launder each one and stays one new stage away from leaking. A fixed sentence cannot leak a banned word by construction.
+
+            NOT DEBUG-GATED — that is the whole packet. It IS gated on stdout being a terminal, the same refinement surface (a) already carries via LoginInputMode::Terminal: when output is piped, the consumer is a machine and prose is noise. The counter still advances when suppressed, so a piped run and a terminal run agree about which stage they are on.
+
+            THE EXISTING DIAGNOSTICS STREAM IS UNTOUCHED. emit_launch_event stays --debug-gated and event:container_launch keeps its pinned key=value field order. spec:tray-ux classes diagnostics as agent-facing under normal engineering discipline; this is additive, which is what the non-viability of the packet's cheap path forced and what the approval covers.
+
+            EXIT CRITERIA:
+              (1) sign-in output within ~5s — surface (a), landed 9a244471c, unchanged.
+              (2) one line per stage on the default path with no --debug — done, five stages.
+              (3) no internals vocabulary, pinned by a test over the emitted strings — no_internals_vocabulary_in_any_emitted_line asserts over EVERY line the type can produce for totals 1..=12 against an 18-word ban list (spec:tray-ux's eight, plus the neighbouring internals this codebase actually says, so the guard is about the RULE and not the eight examples).
+              (4) cross-platform — run_opencode_mode is the shared headless lane all three platforms run; the module is deliberately NOT feature-gated.
+
+            AND A BUG I INTRODUCED AND CAUGHT IN THE SAME MINUTE, worth recording because it is invisible in a diff: my `mod bringup_progress;` landed BETWEEN an existing `#[cfg(any(feature = "tray", feature = "listen-vsock"))]` and the `mod cloud_projects;` it guarded. The cfg silently transferred to MY module — which would have compiled the progress out of exactly the default builds it exists for — and cloud_projects lost its gate. Caught because the tests reported 0 passed instead of 6: a suite that runs zero tests is not a green suite, and reading the count rather than the colour is what surfaced it.
+        - type: operator_note
+          ts: "2026-08-29T16:59:39Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            OPERATOR APPROVAL GRANTED — surface (b), container/workspace bring-up progress.
+
+            Granted by the operator (The Tlatoāni, bulloncito@gmail.com) on 2026-08-29, in session, in response to a direct request naming the exact surface and offering three options: decline, approve the packet's proposed wording, or approve different wording. The operator chose "Approve the packet's proposed wording".
+
+            THIS DISCHARGES `blocked_on: operator UX approval` FOR THIS SURFACE AND ONLY THIS SURFACE. spec:tray-ux requires approval "for that exact surface change", so the approved thing is the string template and placement below, not a licence to add further user-facing output to this or any other flow.
+
+            APPROVED STRING TEMPLATE, exactly as proposed in the packet's proposed_ux_change:
+
+                [tillandsias] Getting your workspace ready… (N of M)
+
+            APPROVED PROPERTIES, which are part of the approved surface and not implementation latitude:
+              - ONE line per bring-up stage, on the DEFAULT path, with no --debug required.
+              - A stage COUNTER (N of M) so a user can see motion and estimate remaining work — this is what distinguishes it from a blank window, which is the defect.
+              - NO internals vocabulary. The spec's ban list is explicit: VM, WSL, enclave, mirror, vault, container, podman, provisioning. The approved text names none of them and the implementation must keep it that way under a test.
+              - The EXISTING diagnostics stream (event:container_launch …, emit_launch_event) is UNCHANGED and stays --debug-gated. spec:tray-ux classes it as an agent-facing surface under normal engineering discipline; it is not being promoted, reworded, or exposed. The approved work is ADDITIVE and sits alongside it.
+
+            WHY A NEW SURFACE RATHER THAN THE PACKET'S CHEAPER ALTERNATIVE: recorded in full in the 2026-08-29 note. The existing line is `event:container_launch stage=vault state=starting container=tillandsias-vault` — it trips the ban list twice, is a machine wire format rather than prose, and is a pinned API whose key=value field order litmus assertions depend on. Promoting it was the packet's own suggestion and it is not viable.
+
+            PROCESS NOTE, recorded because the gate is only as good as its provenance: this approval came from the OPERATOR when asked directly. It was NOT inferred from the coordinator's assignment of this packet, and could not have been — a peer agent cannot stand in for the Tlatoāni, which is exactly what the reset-guest-menu precedent (added 2026-07-21 without approval, removed by operator order 2026-07-22) was recorded against. Three hosts had previously verified the absence of this approval rather than proceeding without it; the gate held each time and is now discharged properly.
         - type: note
           ts: "2026-08-29T16:28:01Z"
           agent_id: "linux-lenovinha-claude-20260828t223829z"
