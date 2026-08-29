@@ -159,6 +159,40 @@ fi
 IMAGE_LABEL_PREFIX="tillandsias-${IMAGE_NAME}"
 IMAGE_VERSION_TAG="${IMAGE_LABEL_PREFIX}:v${IMAGE_VERSION}"
 IMAGE_LATEST_TAG="${IMAGE_LABEL_PREFIX}:latest"
+
+# ORDER 747-knbp — the launcher resolves images by the INSTALLED BINARY's
+# version (`versioned_image_tag` -> localhost/tillandsias-<img>:v<version>),
+# while this script tags from the checkout's VERSION file. On any host whose
+# installed tray predates the checkout — which is precisely what "rebuild the
+# image so my fix is live" means — the rebuild moved the human aliases onto the
+# new version and `_remove_stale_image_tags` then DELETED the tag the installed
+# binary launches by, leaving every forge launch dead on arrival.
+#
+# So the installed binary's version is a KEPT alias too, whenever it differs
+# from VERSION. When the two agree (the common case) nothing extra is tagged and
+# nothing is printed: the negative control stays silent.
+_installed_binary_version() {
+    local bin ver
+    bin=""
+    for candidate in "${TILLANDSIAS_INSTALLED_BIN:-}" "$HOME/.local/bin/tillandsias" "$(command -v tillandsias 2>/dev/null || true)"; do
+        if [[ -n "$candidate" && -x "$candidate" ]]; then
+            bin="$candidate"
+            break
+        fi
+    done
+    [[ -n "$bin" ]] || return 1
+    # `tillandsias --version` prints e.g. "Tillandsias v0.4.260826.1".
+    ver="$("$bin" --version 2>/dev/null | head -1 | grep -oE 'v?[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1 || true)"
+    ver="${ver#v}"
+    [[ -n "$ver" ]] || return 1
+    printf '%s' "$ver"
+}
+
+INSTALLED_VERSION="$(_installed_binary_version || true)"
+IMAGE_INSTALLED_TAG=""
+if [[ -n "$INSTALLED_VERSION" && "$INSTALLED_VERSION" != "$IMAGE_VERSION" ]]; then
+    IMAGE_INSTALLED_TAG="${IMAGE_LABEL_PREFIX}:v${INSTALLED_VERSION}"
+fi
 USE_HUMAN_ALIASES=true
 if [[ -n "$FLAG_TAG" ]]; then
     IMAGE_CANONICAL_TAG="$FLAG_TAG"
@@ -235,6 +269,10 @@ _is_kept_image_tag() {
                 return 0
                 ;;
         esac
+        # ORDER 747-knbp: never reap the tag the installed binary launches by.
+        if [[ -n "$IMAGE_INSTALLED_TAG" && "$candidate" == "$IMAGE_INSTALLED_TAG" ]]; then
+            return 0
+        fi
     else
         case "$candidate" in
             "$IMAGE_TAG")
@@ -305,6 +343,15 @@ _apply_alias_tags() {
         fi
         _verbose_info "Tagging ${source_tag} -> ${IMAGE_LATEST_TAG}"
         "$PODMAN" tag "$source_tag" "$IMAGE_LATEST_TAG" >/dev/null 2>&1 || true
+    fi
+    # ORDER 747-knbp — version skew: also point the INSTALLED binary's tag at
+    # this image, loudly, so the rebuild cannot orphan the launch path.
+    if [[ -n "$IMAGE_INSTALLED_TAG" && "$source_tag" != "$IMAGE_INSTALLED_TAG" ]]; then
+        if "$PODMAN" image exists "$IMAGE_INSTALLED_TAG" 2>/dev/null; then
+            "$PODMAN" rmi "$IMAGE_INSTALLED_TAG" >/dev/null 2>&1 || true
+        fi
+        _info "Version skew: installed binary is v${INSTALLED_VERSION}, checkout VERSION is v${IMAGE_VERSION}; also aliasing ${IMAGE_INSTALLED_TAG} so the installed tray can still launch this image"
+        "$PODMAN" tag "$source_tag" "$IMAGE_INSTALLED_TAG" >/dev/null 2>&1 || true
     fi
 }
 
@@ -625,7 +672,11 @@ echo ""
 _info "----------------------------------------------"
 _info "Image:    ${BOLD}${IMAGE_TAG}${NC}"
 if [[ "$USE_HUMAN_ALIASES" == true ]]; then
-    _info "Aliases:  ${IMAGE_VERSION_TAG}, ${IMAGE_LATEST_TAG}"
+    if [[ -n "$IMAGE_INSTALLED_TAG" ]]; then
+        _info "Aliases:  ${IMAGE_VERSION_TAG}, ${IMAGE_LATEST_TAG}, ${IMAGE_INSTALLED_TAG} (installed binary)"
+    else
+        _info "Aliases:  ${IMAGE_VERSION_TAG}, ${IMAGE_LATEST_TAG}"
+    fi
 fi
 _info "Size:     ${SIZE_DISPLAY}"
 _info "Time:     ${BUILD_DURATION}s"

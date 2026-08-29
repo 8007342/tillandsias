@@ -2323,6 +2323,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Litmus YAML parse gate passed"
 
+    _step "Checking image rebuild keeps the installed binary's launch tag (747-knbp)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-build-image-installed-version-alias.sh" 2>&1; then
+        _error "an image rebuild can orphan the tag the installed binary launches by — every forge launch would be dead on arrival (747-knbp)"
+        exit 1
+    fi
+    _info "Image-rebuild launch-tag gate passed"
+
     _step "Checking end-user UX strings against recorded operator approval (626-w3fn)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-approved-ux-strings.sh" 2>&1; then
         # The script names the file, the string and the ledger it failed to
