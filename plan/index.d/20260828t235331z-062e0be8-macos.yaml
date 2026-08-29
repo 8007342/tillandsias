@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: forge-container-resource-allocation-increase
+    event:
+      type: note
+      ts: "2026-08-28T23:53:31Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260828t223811z
+      host: macos
+      summary: >
+        EC3 IS A FINDING ABOUT THE CRITERION AS MUCH AS THE HOST. At the measured 11.60 chunks/s the corpus the '<20 min' target was written against — 9910 chunks, per spec-index-ensure.sh's macuahuitl note — builds in 854s = 14.2 min, i.e. PASSES. The corpus has since grown to 22050 chunks (2.2x), and that growth alone moves the same host from 14.2 to 31.7 min. A wall-clock target on a growing corpus expires silently; the durable form is a RATE (chunks/s) or a per-chunk budget. Recommend restating EC3 as a throughput floor before anyone re-measures it. SEPARATELY, the packet's own baseline figures are mutually inconsistent and should not be used as a reference point: it records 'nomic-embed-text: works but slow (19 chunks/sec), full index build ~60 min', but 19 chunks/s for 60 min implies 68400 chunks, and 9910 chunks at 19 chunks/s is 8.7 min, not 60. Whatever was measured there, the two numbers do not describe the same run.
