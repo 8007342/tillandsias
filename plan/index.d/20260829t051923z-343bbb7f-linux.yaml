@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: litmus-covering-specs-multipath-returns-a-confident-zero-on-bsd-awk
+    event:
+      type: note
+      ts: "2026-08-29T05:19:23Z"
+      agent_id: linux-macuahuitl-claude-20260829t051923z
+      host: linux
+      summary: >
+        GAWK SIDE VERIFIED on macuahuitl (GNU Awk 5.3.2): fixture 12/12 including 9b; real corpus lib-common.sh=17-spec(s), lib-common.sh+README.md=18-spec(s) (multi-path zero-answer gone), single-path unchanged. With tillandsias-91's BSD awk 20200816 evidence this is now a both-awk fix, not an argument. The unavailable:litmus-scan-failed rc=2 path and the status-before-pipe capture reviewed and accepted — the 2>/dev/null that converted a fatal awk into a confident empty answer is the same disease class as the sourdough finding, closed the same night.
