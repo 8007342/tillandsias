@@ -103,7 +103,13 @@ critical_path:
 
   - step: "the wrapper's probe LOOP actually uses the canonical path"
     # Agreement on a constant is worthless if the loop stops consulting it.
-    command: "grep -A3 'for candidate in' images/default/config-overlay/mcp/forge-plan.sh | grep -q 'PLAN_BIN_CANONICAL' && echo 'ok: canonical-probed'"
+    # ORDER 925-erjs. Was `grep -A3 'for candidate in' … `. That anchor matches
+    # TWO loops in this file (the plan-index probe and the plan-binary probe);
+    # the window from the first contains no PLAN_BIN_CANONICAL and the step
+    # passed only on the second's window happening to reach it. Anchored to the
+    # function that actually owns the probe instead.
+    # NEGATIVE CONTROL (verified 2026-08-29): removing the candidate fails it.
+    command: "awk '/^resolve_plan_bin\\(\\)/,/^}/' images/default/config-overlay/mcp/forge-plan.sh | grep -qF 'PLAN_BIN_CANONICAL' && echo 'ok: canonical-probed'"
     timeout_ms: 5000
     expected_behavior: "ok: canonical-probed"
 

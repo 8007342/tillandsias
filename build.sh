@@ -1877,6 +1877,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Litmus coverage query fixture passed"
 
+    # Order 925-erjs. A litmus step that asserts through `grep -A<N>` measures
+    # FORMATTING: a comment inserted above the anchor reddens correct code, and
+    # a window too narrow to reach the real arm greens a broken one. 25 such
+    # windows across 15 tests were converted to structural ranges; the seven
+    # that remain are argued in
+    # openspec/litmus-tests/LINE-WINDOW-DISPOSITIONS.txt. ADVISORY, per
+    # 634-39ik's recorded scope — enforcement never halts the line — but the
+    # count must not silently grow back: it went from 21 to 23 in the one day
+    # between filing the packet and starting it.
+    _step "Reporting litmus line-window pins (925-erjs, advisory)..."
+    _run bash "$SCRIPT_DIR/scripts/check-litmus-line-windows.sh" 2>&1 || true
+    _info "Litmus line-window report emitted"
+
     # Order 923-rmtw. containers.conf's [engine] env proxy block was written by
     # an init that could only CREATE it (its guard was a presence test), so
     # every host provisioned before 801-kqme kept a no_proxy list without

@@ -1,0 +1,68 @@
+# Recorded dispositions for litmus critical_path steps that still assert
+# through a grep line window. Order 925-erjs; enforced by
+# scripts/check-litmus-line-windows.sh.
+#
+# FORMAT: one entry per test, `<test-file.yaml> | <reason>`, reason continued on
+# indented lines. Keyed by TEST rather than by line number, because line numbers
+# move whenever anything above them is edited and a key that moves is a key that
+# rots.
+#
+# THE BAR. A window is acceptable only when ADJACENCY IS THE INVARIANT, or when
+# the window reads a fixture the step itself just wrote. It is NOT acceptable as
+# a stand-in for a scope — a function, a section, a match arm, a numbered step —
+# because a scope has a syntactic end and a count does not. 25 windows across 15
+# tests were converted to structural ranges under 925-erjs; these seven were
+# argued instead.
+#
+# ADDING A LINE HERE IS A DELIBERATE ACT. The check reports any window with no
+# entry, and the corpus grew from 21 windows to 23 in the one day between filing
+# 925-erjs and starting it — which is why the check exists at all.
+
+litmus-forge-experts-ephemerality-shape.yaml | ARGUMENT GATHERING INSIDE AN ALREADY-STRUCTURAL RANGE.
+    Two steps pipe `awk '/^fn <name>\(/,/^}/'` — a real function range — into
+    `grep -A3 '.volume('` / `grep -A3 'forge_spec_index_volume('`. The OUTER
+    bound is syntactic; the inner `-A3` gathers one call's arguments across the
+    lines rustfmt splits them onto, which is the thing being read, not a scope
+    being approximated. RESIDUAL, stated: a `.volume(` call that grew past four
+    lines would be truncated. It is bounded by the enclosing function, so the
+    failure mode is a miss inside a known region rather than a slide into
+    unrelated code.
+
+litmus-git-mirror-unborn-head-repair.yaml | ADJACENCY IS THE INVARIANT.
+    `grep -A2 -F 'COMMON TAIL (order 501, B6)' | grep -c '<seed call>'` asserts
+    that the seed call IMMEDIATELY FOLLOWS each B6 marker, in both transports —
+    the step's own name is "seed-tail-both-transports". The two-line window is
+    not standing in for a scope; the proximity IS the claim, and widening it to
+    a structural range would weaken the test by letting the call drift anywhere
+    in the enclosing block.
+
+litmus-host-browser-mcp-lane-socket-shape.yaml | THE WINDOW READS THE STEP'S OWN FIXTURE.
+    The step writes a synthetic source file into a mktemp dir with printf and
+    then greps it. Nothing about repository formatting can move that window,
+    because the step authored every line of the file it reads. Converting it
+    would add indirection with no falsifiability gained.
+
+litmus-inference-gpu-device-args.yaml | THE WINDOW'S OUTPUT IS DISCARDED.
+    `grep -A2 -F '"gpu-rocm" =>' … >/dev/null` is an existence probe whose
+    output goes nowhere; the verdict is decided by the `awk` range that follows
+    it on the same line. Not load-bearing, so there is nothing to convert.
+
+litmus-psk-input-parity-shape.yaml | ARGUMENT GATHERING ACROSS FIVE UNRELATED FILES.
+    `grep -A2 'channel_psk(' "$f"` runs over five crates whose call sites have
+    different enclosing shapes (free function, impl method, closure), so there
+    is no single structural range that fits all of them; the window reads the
+    arguments of one call. The step already ORs three accepted spellings, so a
+    reflow that pushed an argument past two lines fails to one of the other
+    alternatives rather than silently passing. RESIDUAL: a reflow past two lines
+    in ALL three spellings at once would red it.
+
+litmus-resumable-claim-dirt-shape.yaml | AUDIT TRAIL ONLY — NOT AN ASSERTION.
+    This test's window was CONVERTED under 925-erjs (to a numbered-step range
+    over SKILL.md). The entry remains because the conversion's comment quotes
+    the old `grep -A24` form, and the check skips YAML comments but the entry
+    documents that the quotation is deliberate. No live window remains here.
+
+litmus-ssh-lane-sidecar-shape.yaml | THE WINDOW'S OUTPUT IS DISCARDED.
+    `grep -A20 'fn cleanup_stack_containers' … >/dev/null` probes that the
+    function exists; the assertions on either side are file-scoped `grep -q`.
+    Nothing reads the window's contents, so its width cannot change a verdict.

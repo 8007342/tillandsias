@@ -35,7 +35,13 @@ critical_path:
     expected_behavior: "ok: all initiators + guest responder use workspace VERSION"
 
   - step: "host-shell's shared version() helper itself sources WORKSPACE_VERSION (not a crate literal)"
-    command: "grep -A1 'pub fn version()' crates/tillandsias-host-shell/src/lib.rs | grep -qF 'WORKSPACE_VERSION' && echo 'ok: version() sources WORKSPACE_VERSION' || { echo 'FAIL: host-shell version() no longer sources WORKSPACE_VERSION'; exit 1; }"
+    # ORDER 925-erjs. Was `grep -A1 … | grep -qF 'WORKSPACE_VERSION'`. The
+    # function body IS one line today, so the window happened to fit; it asserts
+    # the identifier rather than the env! expansion, so a `const WORKSPACE_VERSION`
+    # crate literal would have satisfied it — the very thing the step exists to
+    # forbid. NEGATIVE CONTROL (verified 2026-08-29): replacing the body with a
+    # "0.0.0" literal fails the step.
+    command: "awk '/^pub fn version\\(\\)/,/^}/' crates/tillandsias-host-shell/src/lib.rs | grep -qF 'env!(\"WORKSPACE_VERSION\")' && echo 'ok: version() sources WORKSPACE_VERSION' || { echo 'FAIL: host-shell version() no longer sources WORKSPACE_VERSION'; exit 1; }"
     timeout_ms: 3000
     expected_behavior: "ok: version() sources WORKSPACE_VERSION"
 

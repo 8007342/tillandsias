@@ -44,7 +44,7 @@ critical_path:
     expected_behavior: "ok: non-repo degrades honestly"
 
   - step: "the startup-context generator sources the lib FAIL-SOFT and emits the fields"
-    command: "grep -q 'lib-ledger-freshness.sh' images/default/lib-common.sh && grep -q 'base_head=\\${_base_head}' images/default/lib-common.sh && grep -q 'ledger_lag_h=\\${_ledger_lag_h}' images/default/lib-common.sh && grep -q 'ledger_newest=\\${_ledger_newest}' images/default/lib-common.sh && grep -B2 'source \"\\$_ledger_freshness_lib\"' images/default/lib-common.sh | grep -q '\\-r ' && echo 'ok: generator wires the lib fail-soft'"
+    command: "grep -q 'lib-ledger-freshness.sh' images/default/lib-common.sh && grep -q 'base_head=\\${_base_head}' images/default/lib-common.sh && grep -q 'ledger_lag_h=\\${_ledger_lag_h}' images/default/lib-common.sh && grep -q 'ledger_newest=\\${_ledger_newest}' images/default/lib-common.sh && grep -qF 'if [[ -r \"$_ledger_freshness_lib\" ]]; then' images/default/lib-common.sh && echo 'ok: generator wires the lib fail-soft'"
     timeout_ms: 3000
     expected_behavior: "ok: generator wires the lib fail-soft"
 

@@ -17,9 +17,15 @@ critical_path:
     expected_behavior: "pub fn enclave_network_name"
 
   - step: "verify function signature takes &str parameter"
-    command: "grep -A 1 'pub fn enclave_network_name' crates/tillandsias-podman/src/lib.rs | grep '&str'"
+    # ORDER 925-erjs. Was `grep -A 1 … | grep '&str'`, which found `&str`
+    # anywhere in the next line and would have passed on a neighbouring
+    # signature had a comment shifted the window. Now the function body bounded
+    # by syntax, asserting the whole signature.
+    # NEGATIVE CONTROL (verified 2026-08-29): changing the parameter to
+    # `project_label: String` fails the step.
+    command: "blk=$(awk '/^pub fn enclave_network_name/,/^}/' crates/tillandsias-podman/src/lib.rs); printf '%s' \"$blk\" | grep -qF 'enclave_network_name(project_label: &str) -> String' && echo 'ok: borrowed-str signature'"
     timeout_ms: 5000
-    expected_behavior: "&str"
+    expected_behavior: "ok: borrowed-str signature"
 
   - step: "run unit test for enclave_network_name"
     command: "cargo test -p tillandsias-podman enclave_network_name -- --nocapture --test-threads=1"
@@ -27,9 +33,14 @@ critical_path:
     expected_behavior: "test result: ok"
 
   - step: "verify tillandsias-<project>-enclave format in function definition"
-    command: "grep -A 2 'pub fn enclave_network_name' crates/tillandsias-podman/src/lib.rs | grep 'tillandsias'"
+    # ORDER 925-erjs. Was `grep -A 2 … | grep 'tillandsias'` — a window plus a
+    # substring that the crate path itself satisfies, so it could not fail on a
+    # wrong FORMAT. Now the literal format string inside the function body.
+    # NEGATIVE CONTROL (verified): renaming the pattern to `tilla-{}-enc` fails
+    # the step; the old form passed it.
+    command: "blk=$(awk '/^pub fn enclave_network_name/,/^}/' crates/tillandsias-podman/src/lib.rs); printf '%s' \"$blk\" | grep -qF 'format!(\"tillandsias-{}-enclave\", project_label)' && echo 'ok: enclave-name format'"
     timeout_ms: 5000
-    expected_behavior: "tillandsias"
+    expected_behavior: "ok: enclave-name format"
 
   - step: "verify network_exists() function in client.rs"
     command: "grep -F 'pub async fn network_exists' crates/tillandsias-podman/src/client.rs"

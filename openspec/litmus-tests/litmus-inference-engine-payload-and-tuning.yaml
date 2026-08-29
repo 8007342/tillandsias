@@ -67,7 +67,15 @@ critical_path:
   - step: "fail-loud guard asserts llama-server, not merely `command -v ollama`"
     # `command -v ollama` was the WRONG assertion — it passes on a payload that
     # cannot load a model. The guard must exit non-zero without llama-server.
-    command: "grep -q 'OLLAMA_LIBDIR/llama-server' images/inference/entrypoint.sh && grep -A6 'no executable llama-server' images/inference/entrypoint.sh | grep -q 'exit 1' && echo 'ok: llama-server guard fails loud'"
+    # ORDER 925-erjs. Was `grep -A6 'no executable llama-server' … | grep -q
+    # 'exit 1'` — six lines from a MESSAGE string to the exit that makes the
+    # guard fail-loud. Adding a line to the diagnostic (three echos today, and
+    # this is exactly the kind of block that grows) would have dropped the
+    # `exit 1` out of the window and reddened correct code. Now the guard's own
+    # if-block, bounded by its `fi`.
+    # NEGATIVE CONTROL (verified 2026-08-29): replacing `exit 1` with `true`
+    # fails the step.
+    command: "grep -q 'OLLAMA_LIBDIR/llama-server' images/inference/entrypoint.sh && awk '/if \\[ ! -x \"\\$OLLAMA_LIBDIR\\/llama-server\" \\]; then/,/^fi$/' images/inference/entrypoint.sh | grep -q 'exit 1' && echo 'ok: llama-server guard fails loud'"
     timeout_ms: 3000
     expected_behavior: "ok: llama-server guard fails loud"
 
@@ -92,7 +100,11 @@ critical_path:
     # A tier claiming cuda with no /dev/nvidia0 in the container must NOT pull an
     # 844 MB backend that can never load — the order-392 "no GPU tier in name
     # only" rule applied to the payload.
-    command: "grep -q '_engine_wanted_backends' images/inference/entrypoint.sh && grep -A4 'gpu-cuda)' images/inference/entrypoint.sh | grep -q '/dev/nvidia0' && echo 'ok: tier + device corroboration'"
+    # ORDER 925-erjs. Was `grep -A4 'gpu-cuda)' … `. A case arm is delimited by
+    # `;;`, not by four lines, so the awk range says what the pin means.
+    # NEGATIVE CONTROL (verified 2026-08-29): pointing the arm at /dev/null
+    # fails the step.
+    command: "grep -q '_engine_wanted_backends' images/inference/entrypoint.sh && awk '/gpu-cuda\\)/,/;;/' images/inference/entrypoint.sh | grep -q '/dev/nvidia0' && echo 'ok: tier + device corroboration'"
     timeout_ms: 3000
     expected_behavior: "ok: tier + device corroboration"
 

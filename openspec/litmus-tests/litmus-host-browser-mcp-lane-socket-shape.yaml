@@ -40,7 +40,14 @@ preconditions:
 
 critical_path:
   - step: "LIVE NEGATIVE: McpFrame on the shared control socket is refused as Unsupported"
-    command: "grep -A12 'ControlMessage::McpFrame { .. } =>' crates/tillandsias-headless/src/tray/mod.rs | grep -F 'ErrorCode::Unsupported' && echo 'ok: forgeable-attribution path stays closed'"
+    # ORDER 925-erjs. Was `grep -A12 … | grep -F 'ErrorCode::Unsupported'`, and
+    # the arm's own COMMENT says "refused with ErrorCode::Unsupported" two lines
+    # in — so the pin passed on the comment and would have kept passing if the
+    # code beneath it had been changed to any other code. Now the match arm
+    # bounded by its closing brace, asserting the CODE line.
+    # NEGATIVE CONTROL (verified 2026-08-29): changing it to
+    # `code: ErrorCode::Internal,` fails the step; the old form passed.
+    command: "blk=$(awk '/ControlMessage::McpFrame \\{ \\.\\. \\} =>/,/^                \\}$/' crates/tillandsias-headless/src/tray/mod.rs); printf '%s' \"$blk\" | grep -qF 'code: ErrorCode::Unsupported,' && echo 'ok: forgeable-attribution path stays closed'"
     timeout_ms: 5000
     expected_behavior: "ok: forgeable-attribution path stays closed"
 

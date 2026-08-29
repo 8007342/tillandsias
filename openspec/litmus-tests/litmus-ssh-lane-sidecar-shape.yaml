@@ -58,7 +58,10 @@ critical_path:
     expected_behavior: "ok: launcher-wired-and-torn-down"
 
   - step: "the D6 AppRole binds exactly the one minted lane policy (no extra policies by construction)"
-    command: "grep -A12 'pub async fn provision_lane_signer_approle(' crates/tillandsias-headless/src/vault_bootstrap.rs | grep -q 'mirror_lane_signer_policy_name(mirror_id)' && echo 'ok: single-policy-binding'"
+    # ORDER 925-erjs. Was `grep -A12 … `; the function is longer than twelve
+    # lines, so the pin depended on the binding staying near the top of it.
+    # NEGATIVE CONTROL (verified 2026-08-29): replacing the call fails the step.
+    command: "blk=$(awk '/^pub async fn provision_lane_signer_approle\\(/,/^}/' crates/tillandsias-headless/src/vault_bootstrap.rs); printf '%s' \"$blk\" | grep -qF 'mirror_lane_signer_policy_name(mirror_id)' && echo 'ok: single-policy-binding'"
     timeout_ms: 5000
     expected_behavior: "ok: single-policy-binding"
 

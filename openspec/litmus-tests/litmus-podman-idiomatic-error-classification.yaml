@@ -38,24 +38,57 @@ critical_path:
     expected_behavior: "ParseError"
 
   - step: "verify is_transient() handles StreamError as transient"
-    command: "grep -A 30 'pub fn is_transient' crates/tillandsias-podman/src/client.rs | grep 'StreamError'"
+    # ORDER 925-erjs. Was `grep -A 30 'pub fn is_transient' … | grep '<token>'`.
+    # Two defects in one line: a 30-line WINDOW that any inserted comment could
+    # push the arm out of, and an assertion that only looked for the type NAME —
+    # it passed whether the arm mapped to true or to false, so it could not fail
+    # if the classification INVERTED. Now: the function body bounded by syntax
+    # (11 lines, not 30), and the arm's actual mapping.
+    # NEGATIVE CONTROL (verified 2026-08-29 on a mutated copy): flipping this
+    # arm to `=> false` fails the step. The old form passed either way.
+    command: "blk=$(awk '/pub fn is_transient/,/^    }$/' crates/tillandsias-podman/src/client.rs); printf '%s' \"$blk\" | grep -qE 'StreamError\\(_\\) *=> *true' && echo 'ok: StreamError transient'"
     timeout_ms: 5000
-    expected_behavior: "StreamError"
+    expected_behavior: "ok: StreamError transient"
 
   - step: "verify is_transient() handles timeout errors"
-    command: "grep -A 30 'pub fn is_transient' crates/tillandsias-podman/src/client.rs | grep 'timeout'"
+    # ORDER 925-erjs. Was `grep -A 30 'pub fn is_transient' … | grep '<token>'`.
+    # Two defects in one line: a 30-line WINDOW that any inserted comment could
+    # push the arm out of, and an assertion that only looked for the type NAME —
+    # it passed whether the arm mapped to true or to false, so it could not fail
+    # if the classification INVERTED. Now: the function body bounded by syntax
+    # (11 lines, not 30), and the arm's actual mapping.
+    # The literal predicate, not the bare word: `timeout` also appears in
+    # comments and in neighbouring functions the old window reached.
+    command: "blk=$(awk '/pub fn is_transient/,/^    }$/' crates/tillandsias-podman/src/client.rs); printf '%s' \"$blk\" | grep -qF 'msg.contains(\"timeout\")' && echo 'ok: timeout transient'"
     timeout_ms: 5000
-    expected_behavior: "timeout"
+    expected_behavior: "ok: timeout transient"
 
   - step: "verify is_transient() handles NotFound as permanent"
-    command: "grep -A 30 'pub fn is_transient' crates/tillandsias-podman/src/client.rs | grep -A 5 'NotFound' | grep 'false'"
+    # ORDER 925-erjs. Was `grep -A 30 'pub fn is_transient' … | grep '<token>'`.
+    # Two defects in one line: a 30-line WINDOW that any inserted comment could
+    # push the arm out of, and an assertion that only looked for the type NAME —
+    # it passed whether the arm mapped to true or to false, so it could not fail
+    # if the classification INVERTED. Now: the function body bounded by syntax
+    # (11 lines, not 30), and the arm's actual mapping.
+    # This one nested a SECOND window inside the first (`| grep -A 5 'NotFound'
+    # | grep 'false'`), so it passed on any `false` within five lines of the
+    # name — including one belonging to another arm.
+    # NEGATIVE CONTROL (verified): flipping the arm to `=> true` fails it.
+    command: "blk=$(awk '/pub fn is_transient/,/^    }$/' crates/tillandsias-podman/src/client.rs); printf '%s' \"$blk\" | grep -qE 'NotFound\\(_\\).*=> *false' && echo 'ok: NotFound permanent'"
     timeout_ms: 5000
-    expected_behavior: "false"
+    expected_behavior: "ok: NotFound permanent"
 
   - step: "verify is_transient() handles ParseError as permanent"
-    command: "grep -A 30 'pub fn is_transient' crates/tillandsias-podman/src/client.rs | grep 'ParseError'"
+    # ORDER 925-erjs. Was `grep -A 30 'pub fn is_transient' … | grep '<token>'`.
+    # Two defects in one line: a 30-line WINDOW that any inserted comment could
+    # push the arm out of, and an assertion that only looked for the type NAME —
+    # it passed whether the arm mapped to true or to false, so it could not fail
+    # if the classification INVERTED. Now: the function body bounded by syntax
+    # (11 lines, not 30), and the arm's actual mapping.
+    # NEGATIVE CONTROL (verified): flipping the arm to `=> true` fails it.
+    command: "blk=$(awk '/pub fn is_transient/,/^    }$/' crates/tillandsias-podman/src/client.rs); printf '%s' \"$blk\" | grep -qE 'ParseError\\(_\\).*=> *false' && echo 'ok: ParseError permanent'"
     timeout_ms: 5000
-    expected_behavior: "ParseError"
+    expected_behavior: "ok: ParseError permanent"
 
 observability:
   traces:
