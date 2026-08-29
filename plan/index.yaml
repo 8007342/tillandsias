@@ -15856,6 +15856,32 @@ plan_index:
             A launch failure after partial enclave provisioning leaves a durable one-line breadcrumb on the host (not only in a vanishing terminal window) naming the failed service and the inspect command.
 
       events:
+        - type: note
+          ts: "2026-08-29T23:27:23Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            A CORRECTION TO THIS PACKET'S RECORDED REMEDIATION, measured on lenovinha (Fedora Silverblue, podman with default config) 2026-08-29 while working 935-jhh5.
+
+            THIS PACKET RECORDS THE FIX AS:
+                nvidia-ctk cdi generate --output ~/.config/cdi/nvidia.yaml
+            PODMAN DOES NOT SEARCH ~/.config/cdi. Measured:
+                $ podman --help | grep cdi-spec-dir
+                  --cdi-spec-dir stringArray   ... (default [/etc/cdi,/var/run/cdi])
+            So a spec written to ~/.config/cdi is IGNORED, and the symptom is identical to having generated nothing at all:
+                Error: setting up CDI devices: unresolvable CDI devices nvidia.com/gpu=all
+            I lost time to exactly that before checking where podman actually looks.
+
+            THE REMEDIATION IS INCOMPLETE, NOT WRONG. ~/.config/cdi is the right place for an immutable host — /etc/cdi needs root and /var/run/cdi is tmpfs, so neither survives as a user-owned persistent answer. It just has to be DECLARED. Add to ~/.config/containers/containers.conf:
+
+                [engine]
+                cdi_spec_dirs = ["/home/<user>/.config/cdi", "/etc/cdi", "/var/run/cdi"]
+
+            Verified: podman's own --help default list then reports the user directory first, and the device resolves with no --cdi-spec-dir flag at any call site. No sudo, no rpm-ostree layering, survives reboot.
+
+            A SECOND FINDING FROM THE SAME SESSION, because it produces the SAME error message and will otherwise be misdiagnosed as this one: TWO SPEC FILES BOTH DECLARING `nvidia.com/gpu` make podman report the device UNRESOLVABLE. I had left a second generated file beside the first while experimenting, and the resulting error is byte-identical to having no spec. Any regeneration path should remove sibling specs for the same device kind rather than adding one.
+
+            Both are implemented in scripts/ensure-nvidia-cdi.sh (935-jhh5), which is idempotent and re-runnable — the regeneration this packet's stale-spec strand needs, made automatic rather than remembered.
         - ts: "2026-08-10T19:45:00Z"
           event: filed
           summary: |

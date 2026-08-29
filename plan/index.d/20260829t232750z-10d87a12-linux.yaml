@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: hybrid-cpu-amd-nvidia-matrix-truthful-on-mobile-workstation
+    field: next_action
+    value: |-
+      STATE 2026-08-29 (lenovinha). CDI IS SOLVED, PROVEN AND IDEMPOTENT. TWO PIECES REMAIN AND BOTH ARE NOW PRECISELY LOCALIZED.
+
+      RUN THIS FIRST ON ANY HYBRID HOST: `bash scripts/ensure-nvidia-cdi.sh`
+      Verdict: ok:nvidia-cdi:paths=54:missing=0:pruned=1:node=/dev/nvidia0:selinux-callers-need=label=disable
+      Callers MUST pass `--security-opt label=disable` (SELinux enforcing; the nodes are xserver_misc_device_t). That is a lane fact, not something the spec can fix.
+
+      REMAINING 1 — OLLAMA PICKS CPU INSIDE THE CONTAINER, and the blocker is now INSIDE THE IMAGE, not in CDI. Proven working: /dev/nvidia0 + 4 siblings at correct in-container paths, `nvidia-smi` reporting the 3070 from inside, libcuda.so.1 AND libnvidia-ml.so.1 injected, and the entrypoint printing "GPU: NVIDIA (1 device(s))" and "engine backends available: cuda_v12 cuda_v13 vulkan". 478 tokens generated. But `/api/ps` says size_vram: 0 and ollama's discovery logs `id=cpu library=cpu` with no CUDA device enumerated.
+      So: the driver stack reaches the container and ollama still does not select it. Look at ollama's runner libdirs in images/inference/Containerfile — `ls /usr/lib/ollama` was empty in the running container while the entrypoint claims cuda_v12/v13 are available, which is a contradiction worth resolving first. DO NOT re-debug CDI; it is proven.
+
+      REMAINING 2 — THE CIRCULAR PROBE (still the highest-value item). accel_probe.rs computes `cdi_ok = effective_tier == "gpu-cuda"`, and effective_tier comes from inference-tier-probe.sh, which decides gpu-cuda from host `nvidia-smi -L` — the SAME signal as the surrounding `nvidia_present`. Where nvidia-smi works, `cdi-spec-missing` can never fire. Fix it the 799-tb7q way: EXERCISE the lane. The cheap primitive is a `podman run --device nvidia.com/gpu=all … true` canary (rc 126 = unresolvable), or reuse ensure-nvidia-cdi.sh's verified-paths verdict. NOTE the trap: my fix has made the optimistic answer TRUE on this host, so the bug is currently INVISIBLE here — do not conclude from a green probe that it is fixed. Pull first: macbook cfg-gated wsl2_paravirtual_gpu_reason in that same file.
+
+      REMAINING 3 — 793-zumy matrix half, untouched and in scope. This host has both vendors live. The placement rule stands: presence must not choose placement.
+
+      GENERIC MOBILE-WORKSTATION FINDINGS (the operator's actual point), all measured here:
+        * Toolkit in a container; the SPEC must describe the host; the HOOK must be a host-side executable — crun runs it. The hook is the piece most likely missed, because everything else in the spec is data.
+        * USE `--driver-root=/`. I twice reached for `--driver-root=/run/host` because the host is immutable, and got specs with `/run/host/dev/nvidia0` and `/run/host/run/host/usr/bin/nvidia-smi`. BOTH PATHS EXIST (that symlink points at /), so a host-existence check calls them clean while the container gets wrong paths. On Silverblue a host-existence check CANNOT catch this class; assert that no /run/host prefix appears at all.
+        * Podman does not search ~/.config/cdi. Declare cdi_spec_dirs or the spec is ignored, with an error identical to having no spec. (Correction appended to 665-zddn.)
+        * TWO specs declaring one device kind produce that same "unresolvable" error.
+        * ONE absent hostPath makes crun refuse the whole container, so prune absent mounts — and NAME each one. Here it is the Vulkan implicit-layer JSON, a distro layout difference (/etc/vulkan vs /usr/share/vulkan), irrelevant to CUDA compute.
+        * SELinux enforcing blocks the device nodes independently of CDI.
+    ts: "2026-08-29T23:27:50Z"
+    host: linux
+
+events:
+  - packet_id: hybrid-cpu-amd-nvidia-matrix-truthful-on-mobile-workstation
+    event:
+      type: note
+      ts: "2026-08-29T23:27:50Z"
+      host: linux
+      summary: >
+        CDI proven end to end; ollama-selects-CPU and the circular probe remain, both localized

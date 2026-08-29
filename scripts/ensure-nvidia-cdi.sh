@@ -77,15 +77,61 @@ fi
 #    nvidia.com/gpu make podman report the device UNRESOLVABLE, which reads
 #    exactly like no spec at all — measured, and it cost an hour.
 find "$CDI_DIR" -maxdepth 1 -name 'nvidia*.yaml' ! -name 'nvidia.yaml' -delete 2>/dev/null
-_tb nvidia-ctk cdi generate --driver-root=/run/host --dev-root=/ \
+_tb nvidia-ctk cdi generate --driver-root=/ --dev-root=/ \
     --nvidia-cdi-hook-path="$HOOK" --output="$CDI_DIR/nvidia.yaml" >/dev/null 2>&1 \
     || { echo "blocked:nvidia-cdi:generate-failed"; exit 1; }
 
-# 5. VERIFY, never assert. Every path the spec names must exist on THIS host —
-#    the check that would have caught the toolbox-root spec immediately.
+# 5a. NO ROOT PREFIX MAY LEAK INTO THE SPEC, and this guard exists because I
+#     shipped two broken specs before getting here — each of which my own
+#     host-existence check declared clean.
+#
+#     `--driver-root=/run/host` looked like the immutable-host lever, and on
+#     Silverblue /run/host is a symlink to /. That symlink is exactly what makes
+#     the mistake invisible: `--dev-root=/` put the GPU node at
+#     `/run/host/dev/nvidia0`, and `--dev-root=/run/host` produced
+#     `/run/host/run/host/usr/bin/nvidia-smi` — BOTH RESOLVE ON THE HOST, so
+#     "every path exists" passed while the container got the wrong in-container
+#     paths and images/inference/entrypoint.sh's `[ -e /dev/nvidia0 ]` found
+#     nothing.
+#
+#     THE ANSWER IS `--driver-root=/`: the toolbox already sees the host's
+#     driver libraries at their real paths, so no rebasing is needed at all.
+#     EXISTENCE ON THE HOST IS NOT CORRECTNESS OF THE CONTAINER PATH, and this
+#     assertion is the one that would have caught both attempts immediately.
+if grep -qE '/run/host' "$CDI_DIR/nvidia.yaml"; then
+    echo "blocked:nvidia-cdi:spec-carries-a-/run/host-prefix (use --driver-root=/)"
+    exit 1
+fi
+grep -qE '^\s+- path: /dev/nvidia[0-9]' "$CDI_DIR/nvidia.yaml" || {
+    echo "blocked:nvidia-cdi:spec-declares-no-/dev/nvidiaN-node"
+    exit 1
+}
+
+# 5b. PRUNE MOUNTS WHOSE SOURCE IS ABSENT, LOUDLY. ONE absent hostPath makes
+#     crun refuse the ENTIRE container ("cannot stat …"), so a spec that is
+#     99% right is 100% unusable. On this host exactly one entry is affected:
+#     the Vulkan implicit-layer JSON, which the fedora-toolbox image keeps at
+#     /etc/vulkan/implicit_layer.d/ and Silverblue keeps under /usr/share — a
+#     DISTRO LAYOUT DIFFERENCE, not an error. It is a graphics layer and no
+#     part of the CUDA compute path.
+#
+#     Pruned rather than fabricated, and NAMED rather than silent: a spec that
+#     quietly drops entries is how a GPU lane degrades without anyone noticing,
+#     which is the defect class this packet sits in.
+pruned=0
+for p in $(grep -oE 'hostPath: +[^ ]+' "$CDI_DIR/nvidia.yaml" | awk '{print $2}' | sort -u); do
+    [ -e "$p" ] && continue
+    esc=$(printf '%s' "$p" | sed 's/[\/&]/\\&/g')
+    sed -i "/hostPath: ${esc}$/,+2d" "$CDI_DIR/nvidia.yaml"
+    pruned=$((pruned + 1))
+    echo "  pruned absent mount: $p" >&2
+done
+
+# 5c. VERIFY, never assert: nothing the spec still names may be missing.
 missing=0
 for p in $(grep -oE '(hostPath|path): +[^ ]+' "$CDI_DIR/nvidia.yaml" | awk '{print $2}' | sort -u); do
-    [ -e "$p" ] || { missing=$((missing + 1)); echo "  missing: $p" >&2; }
+    case "$p" in /dev/*) continue ;; esac   # device nodes are created, not mounted
+    [ -e "$p" ] || { missing=$((missing + 1)); echo "  still missing: $p" >&2; }
 done
 if [ "$missing" -gt 0 ]; then
     echo "blocked:nvidia-cdi:spec-references-$missing-absent-paths"
@@ -93,4 +139,4 @@ if [ "$missing" -gt 0 ]; then
 fi
 
 total=$(grep -oE '(hostPath|path): +[^ ]+' "$CDI_DIR/nvidia.yaml" | awk '{print $2}' | sort -u | wc -l)
-echo "ok:nvidia-cdi:spec=$CDI_DIR/nvidia.yaml:paths=$total:missing=0:selinux-callers-need=label=disable"
+echo "ok:nvidia-cdi:spec=$CDI_DIR/nvidia.yaml:paths=$total:missing=0:pruned=$pruned:node=/dev/nvidia0:selinux-callers-need=label=disable"
