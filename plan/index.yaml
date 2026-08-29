@@ -39291,6 +39291,30 @@ plan_index:
 
       events:
         - type: evidence
+          ts: "2026-08-29T20:16:56Z"
+          agent_id: "macos-tlatoanis-macbook-air-claude-20260829t155859z"
+          host: macos
+          summary: |
+            RUNTIME ACCEPT-PROOF OBTAINED — and it found a delivery constraint that no amount of reading would have.
+
+            THE PRIMITIVE WORKS. With TILLANDSIAS_HOST_VSOCK_PORT=42421 the host prints `host vsock: listening on port 42421` at start, and the delegate fires: `ACCEPTED a guest-initiated connection (fd 12)`. That is the first time in this tree that anything has crossed guest->host. The listener, the delegate conformance, the fail-closed downcast and the fd duplication all execute against a live VM.
+
+            BUT THE GUEST STILL FAILED, AND BOTH FACTS ARE REAL. First run:
+                [vz] host vsock: listening on port 42421
+                GUEST: failed after 2.00s: TimeoutError: [Errno 110]
+                [vz] host vsock: ACCEPTED a guest-initiated connection (fd 12)
+            The host accepted AFTER the guest had already given up. I required both sides to report precisely because either line alone is a lie by omission: the host's ACCEPTED alone reads as "it works", and the guest's timeout alone reads as "no listener".
+
+            DISCRIMINATOR, 6 attempts in one guest command: six TimeoutErrors at 2.04-2.06s each, then SIX ACCEPTED lines (fd 12,13,14,15,16,17) delivered in a BURST after the command returned. Not one, not the first — all six, queued and delivered together. That is conclusive: Virtualization.framework RETAINS guest connection requests and hands them to the delegate only when the host services its runloop. The accepts were never lost; they were deferred past the guest's kernel deadline.
+
+            MECHANISM: acceptance is gated on the host pumping CFRunLoop. `--exec-guest` blocks on the control wire while the guest command runs and pumps nothing until it returns, so every request sits queued while the guest's 2.0s VSOCK_DEFAULT_CONNECT_TIMEOUT expires underneath it. The timeout is the kernel's, measured earlier against a deliberate 45s budget, so nothing here can be fixed by widening a caller's patience.
+
+            SCOPE, and this is the part not to overstate. This is NOT a general defect of the listener. It is a property of the pumping model of the code path that hosts it:
+              * `--exec-guest` (CLI diagnostic): pumps only between phases, nothing during command execution -> guest connects CANNOT complete. MEASURED, 6/6.
+              * TRAY mode (the product's normal path): status_item::run() drives NSApplication, which services the main runloop continuously -> accepts should be prompt. NOT MEASURED. I am not claiming it works; I am recording that the failure I measured has a cause that path does not obviously share, and that it needs its own proof.
+
+            CONSEQUENCE FOR THE REMAINING HALF: the in-guest hop cannot be validated through `--exec-guest`. Whatever forwards `inference:11434` must be exercised from a host context that pumps continuously, or the reverse channel will appear broken for reasons that have nothing to do with the forwarder. That is a constraint on how the next slice is TESTED, not only on how it is built, and it would have cost that slice a confusing day.
+        - type: evidence
           ts: "2026-08-29T20:03:53Z"
           agent_id: "macos-tlatoanis-macbook-air-claude-20260829t155859z"
           host: macos

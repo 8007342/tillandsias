@@ -52,6 +52,11 @@ pub struct VzRuntime {
     /// can coordinate on the same VZVirtualMachine.
     #[cfg(target_os = "macos")]
     vm: std::sync::Mutex<Option<vm_handle::VmHandle>>,
+    /// Order 830-xsk2. Host-side vsock listener, registered at start when
+    /// TILLANDSIAS_HOST_VSOCK_PORT names a port. Held here so the registration
+    /// lives exactly as long as the VM: dropping it deregisters the port.
+    #[cfg(target_os = "macos")]
+    host_listener: std::sync::Mutex<Option<vm_handle::HostListenerHandle>>,
     /// When true, `start()` routes the guest serial console (early-boot getty +
     /// kernel) to `console.log` instead of the host process stderr. Headless CLI
     /// modes (`--exec-guest`, `--github-login`) set this so the getty's terminal
@@ -101,12 +106,48 @@ mod vm_handle {
             });
             unsafe { self.0.startWithCompletionHandler(&handler) };
         }
+
+        /// Bind a host-side vsock listener on this VM (order 830-xsk2).
+        ///
+        /// A METHOD ON THE HANDLE, not a closure borrowing `self.0`, for the
+        /// same reason `start_and_report` is: under edition 2021 a `move`
+        /// closure that mentions `handle.0` captures the FIELD — a
+        /// `Retained<VZVirtualMachine>`, which is not `Send` — rather than the
+        /// wrapper whose `unsafe impl Send` makes the dispatch legal. Taking
+        /// `self` by value forces the whole handle across, which is what the
+        /// safety argument in this module's docstring actually covers.
+        #[cfg(target_os = "macos")]
+        pub(crate) fn bind_host_listener(
+            self,
+            port: u32,
+            tx: std::sync::mpsc::Sender<Result<HostListenerHandle, String>>,
+        ) {
+            let result = crate::transport_macos::HostVsockListener::bind(&self.0, port)
+                .map(HostListenerHandle)
+                .map_err(|e| e.to_string());
+            let _ = tx.send(result);
+        }
     }
 
     // SAFETY: see module docstring.
     unsafe impl Send for VmHandle {}
     // SAFETY: see module docstring.
     unsafe impl Sync for VmHandle {}
+
+    /// Order 830-xsk2. Same wrapper, same justification, for the host-side
+    /// vsock listener: it holds `Retained<...>` objects that VZ requires be
+    /// operated on one queue, and `VzRuntime` serialises every VZ call through
+    /// its own mutex. Held for the VM's lifetime so the port stays registered;
+    /// dropped with the runtime, which deregisters it.
+    #[cfg(target_os = "macos")]
+    pub(crate) struct HostListenerHandle(pub crate::transport_macos::HostVsockListener);
+
+    // SAFETY: see module docstring — identical reasoning to VmHandle.
+    #[cfg(target_os = "macos")]
+    unsafe impl Send for HostListenerHandle {}
+    // SAFETY: see module docstring — identical reasoning to VmHandle.
+    #[cfg(target_os = "macos")]
+    unsafe impl Sync for HostListenerHandle {}
 }
 
 impl VzRuntime {
@@ -117,6 +158,8 @@ impl VzRuntime {
             image_root,
             #[cfg(target_os = "macos")]
             vm: std::sync::Mutex::new(None),
+            #[cfg(target_os = "macos")]
+            host_listener: std::sync::Mutex::new(None),
             serial_to_log: std::sync::atomic::AtomicBool::new(false),
         }
     }
@@ -1819,6 +1862,68 @@ impl VmRuntime for VzRuntime {
                 return Err("VzRuntime::start: VM start timed out after 30s".into());
             }
             boot::pump_cf_loop_for(Duration::from_millis(250));
+        }
+
+        // ── Host-side vsock listener (order 830-xsk2) ────────────────────
+        //
+        // OPT-IN, and deliberately so. The eventual Metal inference lane needs
+        // the host reachable from inside the guest, but registering a port on
+        // every VM start would change startup for every user to serve a path
+        // nothing uses yet. TILLANDSIAS_HOST_VSOCK_PORT names the port when a
+        // caller wants it; unset, this is a no-op and boot is byte-identical.
+        //
+        // Registered on the MAIN QUEUE like every other VZ call in this file:
+        // Virtualization.framework is not thread-safe, and binding from this
+        // thread would be the same category of bug the start path avoids.
+        //
+        // A failure here does NOT fail the boot. The VM is already running and
+        // usable for everything that does not need the reverse channel; killing
+        // a working VM over an opt-in diagnostic port would be the worse
+        // outcome. It is reported loudly instead.
+        #[cfg(target_os = "macos")]
+        if let Ok(port_s) = std::env::var("TILLANDSIAS_HOST_VSOCK_PORT") {
+            match port_s.trim().parse::<u32>() {
+                Ok(port) => {
+                    let (ltx, lrx) = std::sync::mpsc::channel();
+                    let vm_for_listen = vm_handle::VmHandle(vm.clone());
+                    boot::dispatch_to_main_queue(move || {
+                        vm_for_listen.bind_host_listener(port, ltx)
+                    });
+                    let deadline = Instant::now() + Duration::from_secs(5);
+                    loop {
+                        if let Ok(result) = lrx.try_recv() {
+                            match result {
+                                Ok(h) => {
+                                    eprintln!(
+                                        "[vz] host vsock: listening on port {port} — a guest \
+                                         may now connect to CID 2"
+                                    );
+                                    if let Ok(mut g) = self.host_listener.lock() {
+                                        *g = Some(h);
+                                    }
+                                }
+                                Err(e) => eprintln!(
+                                    "[vz] host vsock: FAILED to listen on port {port}: {e}. The \
+                                     VM is running; only the reverse channel is unavailable."
+                                ),
+                            }
+                            break;
+                        }
+                        if Instant::now() >= deadline {
+                            eprintln!(
+                                "[vz] host vsock: listener bind did not complete within 5s on \
+                                 port {port}; continuing without the reverse channel"
+                            );
+                            break;
+                        }
+                        boot::pump_cf_loop_for(Duration::from_millis(50));
+                    }
+                }
+                Err(_) => eprintln!(
+                    "[vz] host vsock: TILLANDSIAS_HOST_VSOCK_PORT={port_s:?} is not a port \
+                     number; not listening"
+                ),
+            }
         }
 
         // Persist the handle so stop()/wait_ready() can address the same VM.

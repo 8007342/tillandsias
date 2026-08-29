@@ -540,6 +540,15 @@ declare_class!(
                 return objc2::runtime::Bool::NO;
             };
             let fd = owned.as_raw_fd();
+            // The accept is otherwise invisible: it happens on VZ's queue, with
+            // no return path a caller can watch. This line IS the runtime proof
+            // that the guest reached the host, and it is the only evidence a
+            // probe can quote — so it names the port and the fd rather than
+            // saying "accepted".
+            eprintln!(
+                "[vz] host vsock: ACCEPTED a guest-initiated connection (fd {fd}) \
+                 — the guest reached the host"
+            );
             match self.ivars().tx.send(fd) {
                 Ok(()) => {
                     // Ownership has moved to the receiver; do not let `owned`
@@ -567,6 +576,26 @@ impl VsockAcceptDelegate {
 
 /// A live host-side vsock listener. Dropping it removes the listener from the
 /// port, so a caller cannot leave the VM accepting connections nobody reads.
+///
+/// ACCEPTANCE IS GATED ON THE HOST PUMPING ITS RUNLOOP — measured, and the
+/// single most important thing to know before building on this.
+/// Virtualization.framework RETAINS guest connection requests and delivers them
+/// to the delegate only when the host services CFRunLoop. It does not drop
+/// them, and it does not deliver them eagerly.
+///
+/// Measured 2026-08-29 (order 830-xsk2) under `--exec-guest`, which blocks on
+/// the control wire and pumps nothing while a guest command runs: six guest
+/// connects failed with ETIMEDOUT at 2.04-2.06s each — the kernel's
+/// VSOCK_DEFAULT_CONNECT_TIMEOUT, not a caller's patience — and then ALL SIX
+/// were accepted in a burst (fd 12 through 17) the moment the command returned
+/// and pumping resumed. The accepts were never lost; they arrived after the
+/// guest had already given up.
+///
+/// So a host path that blocks without pumping cannot serve this listener, no
+/// matter how correct the listener is. Tray mode drives NSApplication, whose
+/// main runloop runs continuously, and should not have the problem — that is
+/// REASONED, not measured, and needs its own proof before anything depends on
+/// it.
 pub struct HostVsockListener {
     device: Retained<VZVirtioSocketDevice>,
     port: u32,
