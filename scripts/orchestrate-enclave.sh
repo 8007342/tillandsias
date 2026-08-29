@@ -60,7 +60,12 @@ log_step() { echo -e "${CYAN}[orchestrate]${NC} $*"; }
 
 PROMPT_MODE="${TILLANDSIAS_OPENCODE_PROMPT:-}"
 STATUS_CHECK_MODE="${TILLANDSIAS_STATUS_CHECK:-}"
-ENCLAVE_NO_PROXY="localhost,127.0.0.1,0.0.0.0,::1,inference,proxy,git-service,10.0.42.0/24"
+# ORDER 923-rmtw. Was a pasted copy, frozen at its pre-801-kqme value for
+# eleven days: `git-service` still named after the Rust constant dropped it,
+# `nix-cache` never added after 801-kqme added it. One definition now, kept in
+# step with ENCLAVE_NO_PROXY_BASE by scripts/test-enclave-proxy-lib.sh.
+# shellcheck source=scripts/lib/enclave-proxy.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/enclave-proxy.sh"
 if [ -n "$PROMPT_MODE" ]; then
     log_step "OpenCode prompt seed provided; launching the full enclave stack"
 fi

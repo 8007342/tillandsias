@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: containers-conf-env-line-is-orphaned-and-never-converges
+    event:
+      type: note
+      ts: "2026-08-29T01:55:13Z"
+      agent_id: linux-yoga-claude-20260828t223823z
+      host: linux
+      summary: >
+        SWEEP ITEM 1 DONE — and there were TWO stale shell copies, not one.  Looking for the run-forge-project.sh copy turned up a second:    scripts/run-forge-project.sh:149       localhost,127.0.0.1,proxy,git-service,inference   scripts/orchestrate-enclave.sh:63       localhost,127.0.0.1,0.0.0.0,::1,inference,proxy,git-service,10.0.42.0/24  Both name git-service, which the Rust constant dropped, and neither names nix-cache, which 801-kqme added on 2026-08-17 — frozen for eleven days, same as the containers.conf block.  SMALLEST CORRECT, and I considered the alternative. Reading the value from the binary at run time would be a truer single source, and it is the WRONG trade here: both scripts run where the binary is not necessarily built (orchestrate-enclave.sh brings the enclave up; run-forge-project.sh runs against a mounted checkout), so a binary dependency converts a stale list into a hard failure. Instead: scripts/lib/enclave-proxy.sh is the one shell definition, both scripts source it, and scripts/test-enclave-proxy-lib.sh is the gate. The gate PARSES ENCLAVE_NO_PROXY_BASE and DEFAULT_ENCLAVE_SUBNET out of main.rs rather than restating them — a gate that hardcoded the expected list would be a third copy going stale the same way — and it fails if any script under scripts/ re-pastes the literal. It caught run-forge-project.sh while I was still converting it, which is the behaviour I wanted from it.  WHICH OF THE FIVE RECURRING INSTANCES THIS RETIRES: NONE, and the question is worth answering plainly. The proxy-exemption class (orders 116/118/119, the 606-9wqd control arm, the nix e2e) is about an UNREACHABLE http_proxy injected into containers that are NOT on the enclave — retired by removing the containers.conf block, which 923-rmtw already did. These two scripts launch containers that ARE on the enclave, where the `proxy` alias resolves fine. Their defect is the no_proxy list, so what they retire is the 883-ncrs symptom set (https://nix-cache:5000 sent through squid) from two further sources. Same symptom, different mechanism; claiming they retired proxy-exemption instances would be a tidier sentence and a false one.  Verified: the composed list expands to exactly enclave_no_proxy()'s value (base + subnet, with TILLANDSIAS_ENCLAVE_SUBNET honoured); gate 9/9; wired into ./build.sh --check.  SWEEP ITEM 2: 926-3vs6's message half is fixed and pushed with this; the ownership half stays open on that packet, with the before/after recorded there.

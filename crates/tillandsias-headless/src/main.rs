@@ -7031,10 +7031,21 @@ fn upstream_dns_servers() -> Vec<String> {
 /// a loopback resolver stub. No-op if `dns_servers` is already present.
 /// @trace plan/issues/init-dns-systemd-resolved-2026-06-27.md
 #[cfg(target_os = "linux")]
+/// `Ok(true)` when the file was changed, `Ok(false)` when it already carried a
+/// `dns_servers` key and was left alone.
+///
+/// ORDER 926-3vs6 (message half only). The early return below is a PRESENCE
+/// test — any file that has ever had the key keeps its first value forever, so
+/// a host whose resolver changed keeps stale DNS in every container. Whether
+/// init should OWN that line is a policy question and is deliberately still
+/// open on 926-3vs6; what is fixed here is that the caller can no longer
+/// announce a write that did not happen. Measured on yoga 2026-08-29: init
+/// printed `configuring containers.conf dns_servers = ["209.18.47.61", …]`
+/// while the file kept a list written on 2026-07-08.
 fn ensure_containers_conf_dns_servers(
     path: &std::path::Path,
     servers: &[String],
-) -> Result<(), String> {
+) -> Result<bool, String> {
     let quoted = servers
         .iter()
         .map(|s| format!("\"{s}\""))
@@ -7049,14 +7060,16 @@ fn ensure_containers_conf_dns_servers(
         }
         fs::write(path, format!("[network]\n{dns_line}"))
             .map_err(|e| format!("failed to write containers.conf: {e}"))?;
-        return Ok(());
+        return Ok(true);
     }
 
     let content =
         fs::read_to_string(path).map_err(|e| format!("failed to read containers.conf: {e}"))?;
 
     if content.contains("dns_servers") {
-        return Ok(());
+        // Left as found — see the doc comment: convergence is 926-3vs6's
+        // open policy question, honest reporting is not.
+        return Ok(false);
     }
 
     let mut new_content = String::new();
@@ -7077,7 +7090,7 @@ fn ensure_containers_conf_dns_servers(
     }
 
     fs::write(path, new_content).map_err(|e| format!("failed to update containers.conf: {e}"))?;
-    Ok(())
+    Ok(true)
 }
 
 /// Detect a loopback-only host resolver and configure podman with reachable
@@ -7096,15 +7109,34 @@ fn auto_detect_and_configure_dns(debug: bool) {
         return;
     };
     let servers = upstream_dns_servers();
-    if debug {
-        eprintln!(
-            "[tillandsias] init: host uses a loopback resolver stub; configuring containers.conf dns_servers = {servers:?}"
-        );
-    }
-    if let Err(e) = ensure_containers_conf_dns_servers(&conf_path, &servers)
-        && debug
-    {
-        eprintln!("[tillandsias] init: failed to configure dns_servers: {e}");
+    // ORDER 926-3vs6, message half. This used to announce the servers BEFORE
+    // the call, and the call's early return was silent — so `--debug` reported
+    // a configuration that had not happened whenever the key already existed
+    // (measured on yoga 2026-08-29, over a list written seven weeks earlier).
+    // The message now follows the outcome. It does NOT decide whether init
+    // should own that line; a host left unconverged is told so, in the words
+    // the situation deserves, and the ownership question stays on 926-3vs6.
+    match ensure_containers_conf_dns_servers(&conf_path, &servers) {
+        Err(e) => {
+            if debug {
+                eprintln!("[tillandsias] init: failed to configure dns_servers: {e}");
+            }
+        }
+        Ok(true) => {
+            if debug {
+                eprintln!(
+                    "[tillandsias] init: host uses a loopback resolver stub; wrote containers.conf dns_servers = {servers:?}"
+                );
+            }
+        }
+        Ok(false) => {
+            if debug {
+                eprintln!(
+                    "[tillandsias] init: host uses a loopback resolver stub, but containers.conf already sets dns_servers — LEFT UNCHANGED, not converged (926-3vs6). Detected upstreams were {servers:?}; edit {} by hand if the deployed list is stale.",
+                    conf_path.display()
+                );
+            }
+        }
     }
 }
 
@@ -15930,6 +15962,49 @@ mod tests {
         assert!(
             after.contains("someone-elses-proxy"),
             "another section's env must survive, got:\n{after}"
+        );
+    }
+
+    /// ORDER 926-3vs6, message half. The writer must REPORT whether it wrote,
+    /// because its caller's `--debug` line used to announce the detected
+    /// servers before the call while the early return was silent — so init
+    /// stated a configuration that had not happened. Measured on yoga
+    /// 2026-08-29 over a dns_servers list written seven weeks earlier.
+    ///
+    /// This pins the REPORTING only. Whether init should converge the line is
+    /// still open on 926-3vs6, and the `Ok(false)` case below is that packet's
+    /// unconverged host — deliberately left as found.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn the_dns_writer_reports_whether_it_actually_wrote() {
+        let servers = vec!["9.9.9.9".to_string()];
+
+        // Absent file: created, and reported as a write.
+        let tmp = tempfile::tempdir().unwrap();
+        let fresh = tmp.path().join("containers.conf");
+        assert!(
+            ensure_containers_conf_dns_servers(&fresh, &servers).unwrap(),
+            "creating the file is a write"
+        );
+        assert!(fs::read_to_string(&fresh).unwrap().contains("9.9.9.9"));
+
+        // File without the key: appended, and reported as a write.
+        let (_t2, no_key) = conf_fixture("[engine]\nruntime = \"crun\"\n");
+        assert!(ensure_containers_conf_dns_servers(&no_key, &servers).unwrap());
+        assert!(fs::read_to_string(&no_key).unwrap().contains("9.9.9.9"));
+
+        // THE CASE THAT LIED. The key exists with a DIFFERENT list: still left
+        // alone (ownership is 926-3vs6's open question), but now reported as
+        // a no-op so the caller cannot announce a write.
+        let (_t3, stale) = conf_fixture("[network]\ndns_servers = [\"1.1.1.1\"]\n");
+        assert!(
+            !ensure_containers_conf_dns_servers(&stale, &servers).unwrap(),
+            "an existing dns_servers key must be reported as NOT written"
+        );
+        let after = fs::read_to_string(&stale).unwrap();
+        assert!(
+            after.contains("1.1.1.1") && !after.contains("9.9.9.9"),
+            "the deployed list is left as found — convergence is still 926-3vs6, got:\n{after}"
         );
     }
 

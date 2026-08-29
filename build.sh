@@ -1890,6 +1890,20 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "containers.conf proxy-env fixture passed"
 
+    # Order 923-rmtw, shell half. A pasted copy of a Rust constant stops
+    # tracking its source: run-forge-project.sh and orchestrate-enclave.sh each
+    # carried their own no_proxy list, both frozen at pre-801-kqme values for
+    # eleven days — naming git-service after the constant dropped it, missing
+    # nix-cache after it gained it. One definition now, and this gate parses
+    # main.rs rather than restating the value, so the next change to
+    # ENCLAVE_NO_PROXY_BASE breaks the build instead of stranding the fleet.
+    _step "Checking the enclave proxy list has one definition (923-rmtw)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-enclave-proxy-lib.sh" 2>&1; then
+        _error "the shell enclave proxy list drifted from ENCLAVE_NO_PROXY_BASE, or a script re-pasted it"
+        exit 1
+    fi
+    _info "Enclave proxy list single-source check passed"
+
     # Order 858-ihcb. A benchmark that measures a warm prompt cache reports a
     # number that is wrong by 10x and looks plausible. This fixture inspects
     # the payloads the harness's REAL call sites put on the wire, because the

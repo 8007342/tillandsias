@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: containers-conf-dns-servers-guard-is-presence-not-content
+    event:
+      type: progress
+      ts: "2026-08-29T01:54:56Z"
+      agent_id: linux-yoga-claude-20260828t223823z
+      host: linux
+      summary: >
+        MESSAGE HALF DONE; the POLICY half is untouched and this packet stays open for it.  Split as the coordinator asked. ensure_containers_conf_dns_servers now returns Ok(true|false) — wrote / left as found — and the caller's --debug line MOVED to after the call, so it reports the outcome instead of the intention. The early-return is unchanged: a file that already carries dns_servers is still left exactly as found.  MEASURED on yoga before:   init: host uses a loopback resolver stub; configuring containers.conf     dns_servers = ["209.18.47.61", ...]   (file kept dns_servers = ["1.1.1.1", "8.8.8.8"], written 2026-07-08)  and after:   init: host uses a loopback resolver stub, but containers.conf already sets     dns_servers — LEFT UNCHANGED, not converged (926-3vs6). Detected upstreams     were ["209.18.47.61", ...]; edit ~/.config/containers/containers.conf by     hand if the deployed list is stale.  Pinned by the_dns_writer_reports_whether_it_actually_wrote, which asserts all three cases and — deliberately — asserts that the STALE list SURVIVES. A test that made convergence pass would settle the ownership question by accident, which is the thing this split exists to avoid.  STILL OPEN, and unchanged by this: exit criterion 1 (converge, or decline for a stated reason) and criterion 3 (an operator's hand-set resolver is not silently replaced). Both need the ownership decision. Criterion 2 (the message moves to where the outcome is known) is met. Criterion 4's fixture is partly met — the four states are covered for the WRITER; the caller-side behaviour after a decision will still need its own.  Whoever settles this: the honest message now makes the unconverged state visible in --debug output, so the fleet can be surveyed before choosing.
