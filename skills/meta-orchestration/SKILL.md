@@ -353,6 +353,21 @@ On a durable bare-metal DEVELOPMENT host (not an ephemeral forge):
                                      # | stale:capability-row-drifted:<host>:row-only=…,probe-only=…
                                      # | stale:capability-row-expired:<host>:age=<n>s
    ```
+   On Linux, confirm this host is not carrying the orphaned enclave proxy
+   block (order 923-rmtw):
+   ```bash
+   scripts/check-containers-conf-proxy-env.sh   # ok:… | drift:… | unavailable:…
+   ```
+   `[engine] env` in containers.conf is injected into EVERY container on every
+   network, and `proxy` resolves only inside the enclave. Init used to write
+   that block and could never converge it, so hosts provisioned before
+   801-kqme kept a no_proxy list without `nix-cache` — that was four days of
+   phantom 883-ncrs "cache RSTs" and one broken nix e2e, hand-repaired on
+   macuahuitl and lenovinha. On `drift:containers-conf-proxy-env-present`, run
+   `tillandsias --init`: it now REMOVES the block, and containers get proxy env
+   per-container. A commented-out block still counts as drift — that is how
+   yoga ended up with no proxy env at all while init reported success.
+
    Report scratchpad headroom in the same breath (order 915-wkm2) — one line,
    ADVISORY, exits 0 on every path:
    ```bash

@@ -7108,52 +7108,127 @@ fn auto_detect_and_configure_dns(debug: bool) {
     }
 }
 
-// Idempotently writes the proxy env vars to containers.conf [engine] section.
-// Podman 4.0+ injects [engine] env into every container launched by this user,
-// so forge containers and other containers that bypass the Rust launcher also
-// get HTTP_PROXY / HTTPS_PROXY without per-container injection.
-// @trace cheatsheets/runtime/enclave-proxy-patterns.md, spec:proxy-container
+// ORDER 923-rmtw. CONVERGES containers.conf by REMOVING the `[engine] env`
+// proxy block, and this function replaced one that only ever created it.
+//
+// ── WHAT THE OLD FUNCTION DID, AND WHY IT COULD NOT CONVERGE ─────────────────
+//
+// It wrote the block when absent and otherwise returned early on
+//
+//     if content.contains("[engine]") && content.contains("HTTP_PROXY")
+//
+// — a PRESENCE test, not a content test. Any file already naming those two
+// strings was left untouched forever, so when ENCLAVE_NO_PROXY_BASE gained
+// `nix-cache` (801-kqme, 2026-08-17) every host provisioned earlier kept the old
+// list and no init would ever fix it. Measured on macuahuitl 2026-08-29: the
+// deployed list still named git-service/tillandsias-git and lacked nix-cache, so
+// every substituter request went to squid as a CONNECT and came back
+// `Recv failure: Connection reset by peer` — four days of 883-ncrs "cache RSTs"
+// were this file. macuahuitl and lenovinha repaired theirs by hand.
+//
+// It was worse than stale on a host whose line is COMMENTED OUT. Measured on
+// yoga 2026-08-29: `#env = [... "HTTP_PROXY=..." ...]` under `[engine]` still
+// satisfies both `contains` tests, so init returned Ok, printed "proxy env
+// written to …", and wrote nothing — a success message for a no-op, over a
+// host that had no proxy env at all. An artifact read as evidence of the write
+// that would have produced it.
+//
+// ── WHY REMOVE RATHER THAN CONVERGE THE LIST ────────────────────────────────
+//
+// The block's own justification was "forge containers and other containers that
+// bypass the Rust launcher also get HTTP_PROXY without per-container
+// injection". MEASURED, and it does not hold: scripts/run-forge-project.sh —
+// the bypassing launcher — passes its own six `--env` proxy flags and never
+// consults containers.conf. Meanwhile every enclave container the Rust launcher
+// starts already gets `proxy_env_args()` (8 call sites).
+//
+// So nothing needs the global block, and its cost is a documented RECURRING
+// CLASS. `[engine] env` applies to every container on every network, but
+// `proxy` is an alias that resolves only inside the enclave, so anywhere else
+// egress dies with `lookup proxy: no such host`:
+//   * tillandsias-podman/src/client.rs records "Proxy-exemption class (orders
+//     116/118/119; 4th instance 2026-07-11)" and hardcodes --http-proxy=false;
+//   * the 5th instance landed in the CONTROL ARM of a p0 security audit
+//     (606-9wqd), read as "this host has no container egress", and the
+//     reproduction was filed INCONCLUSIVE while being reproducible throughout;
+//   * scripts/podman-neutralize-proxy.sh (653-zzkb) exists solely to undo this
+//     block for host-side podman, and says in as many words that "a per-site fix
+//     for a class that recurs at new sites is a convention, not a fix";
+//   * the nix-builder e2e lost a full build to it on 2026-08-28
+//     (`curl: (5) Could not resolve proxy: proxy`) until a third build site
+//     gained --http-proxy=false.
+//
+// Correcting no_proxy would fix none of those: they fail because http_proxy
+// POINTS AT AN UNREACHABLE NAME, which no bypass list can rescue. Removing the
+// line removes the class.
+//
+// Left in place deliberately: --http-proxy=false at the build sites and
+// podman-neutralize-proxy.sh. They become belt-and-braces rather than load-
+// bearing, and retiring them is its own change with its own blast radius.
+//
+// ── WHAT IT TOUCHES ─────────────────────────────────────────────────────────
+//
+// ONLY an `env` assignment carrying a proxy variable, commented or not, and
+// only inside `[engine]`. Another section's `env`, an `[engine] env` holding
+// unrelated variables, and every other key are preserved — a config file is the
+// operator's, and a converger that removes more than it owns is a worse defect
+// than the one it fixes. Returns whether it changed anything, so the caller can
+// report a write as a write and a no-op as a no-op.
 #[cfg(target_os = "linux")]
-fn ensure_containers_conf_proxy_env(path: &std::path::Path) -> Result<(), String> {
-    let no_proxy = enclave_no_proxy();
-    let proxy_url = "http://proxy:3128";
-    let env_block = format!(
-        "[engine]\nenv = [\
-            \"http_proxy={proxy_url}\", \
-            \"https_proxy={proxy_url}\", \
-            \"HTTP_PROXY={proxy_url}\", \
-            \"HTTPS_PROXY={proxy_url}\", \
-            \"no_proxy={no_proxy}\", \
-            \"NO_PROXY={no_proxy}\"\
-        ]\n"
-    );
+fn containers_conf_line_is_proxy_env(line: &str) -> bool {
+    let trimmed = line.trim_start();
+    let body = trimmed.strip_prefix('#').unwrap_or(trimmed).trim_start();
+    let Some(rest) = body.strip_prefix("env") else {
+        return false;
+    };
+    let rest = rest.trim_start();
+    let Some(rest) = rest.strip_prefix('=') else {
+        return false;
+    };
+    // Only a proxy env assignment is ours to remove. An [engine] env carrying
+    // unrelated variables belongs to the operator.
+    let rest = rest.to_ascii_lowercase();
+    rest.contains("http_proxy") || rest.contains("https_proxy")
+}
 
+/// Remove the orphaned `[engine] env` proxy block. `Ok(true)` when the file
+/// changed. Absent file or absent block are both `Ok(false)` — already correct.
+#[cfg(target_os = "linux")]
+fn ensure_containers_conf_no_proxy_env(path: &std::path::Path) -> Result<bool, String> {
     if !path.exists() {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| format!("failed to create config directory: {e}"))?;
-        }
-        fs::write(path, &env_block).map_err(|e| format!("failed to write containers.conf: {e}"))?;
-        return Ok(());
+        return Ok(false);
     }
-
     let content =
         fs::read_to_string(path).map_err(|e| format!("failed to read containers.conf: {e}"))?;
 
-    // Already present — idempotent if the engine env section is there.
-    if content.contains("[engine]") && content.contains("HTTP_PROXY") {
-        return Ok(());
+    let mut in_engine = false;
+    let mut removed = false;
+    let mut kept: Vec<&str> = Vec::new();
+    for line in content.lines() {
+        let trimmed = line.trim();
+        // Section headers: track whether we are inside [engine]. A commented
+        // header is prose, not a section.
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            in_engine = trimmed == "[engine]";
+            kept.push(line);
+            continue;
+        }
+        if in_engine && containers_conf_line_is_proxy_env(line) {
+            removed = true;
+            continue;
+        }
+        kept.push(line);
+    }
+    if !removed {
+        return Ok(false);
     }
 
-    let mut new_content = content.clone();
+    let mut new_content = kept.join("\n");
     if !new_content.ends_with('\n') {
         new_content.push('\n');
     }
-    new_content.push('\n');
-    new_content.push_str(&env_block);
-
     fs::write(path, new_content).map_err(|e| format!("failed to update containers.conf: {e}"))?;
-    Ok(())
+    Ok(true)
 }
 
 #[cfg(target_os = "linux")]
@@ -7210,19 +7285,40 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     auto_detect_and_configure_dns(debug);
 
-    // Write proxy env to containers.conf so Podman injects it into every
-    // container on this host, including forge containers that bypass the Rust
-    // launcher. Idempotent — only writes when the [engine] env block is absent.
+    // ORDER 923-rmtw. Converge containers.conf by REMOVING the global [engine]
+    // env proxy block. It injected an enclave-only `proxy` alias into every
+    // container on every network, and nothing needs it: the Rust launcher
+    // passes proxy_env_args() per container and run-forge-project.sh passes its
+    // own. Its predecessor here only ever CREATED the block, so a host
+    // provisioned before 801-kqme kept a stale no_proxy forever.
+    //
+    // Reported as what it is: a removal is announced, a no-op is silent even in
+    // debug. The old code printed "proxy env written to …" on its early-return
+    // path, which is how a success message came to stand for a write that never
+    // happened.
     #[cfg(target_os = "linux")]
     {
         if let Some(conf_path) = get_user_containers_conf() {
-            if let Err(e) = ensure_containers_conf_proxy_env(&conf_path) {
-                eprintln!("[tillandsias] init: failed to configure proxy in containers.conf: {e}");
-            } else if debug {
-                eprintln!(
-                    "[tillandsias] init: proxy env written to {}",
-                    conf_path.display()
-                );
+            match ensure_containers_conf_no_proxy_env(&conf_path) {
+                Err(e) => {
+                    eprintln!(
+                        "[tillandsias] init: failed to converge containers.conf proxy env: {e}"
+                    );
+                }
+                Ok(true) => {
+                    eprintln!(
+                        "[tillandsias] init: removed the orphaned [engine] env proxy block from {} (923-rmtw); containers receive proxy env per-container",
+                        conf_path.display()
+                    );
+                }
+                Ok(false) => {
+                    if debug {
+                        eprintln!(
+                            "[tillandsias] init: containers.conf carries no [engine] env proxy block ({})",
+                            conf_path.display()
+                        );
+                    }
+                }
             }
         }
     }
@@ -15704,6 +15800,149 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
     use tillandsias_podman::{CommandFailure, CommandOutput, FakeBackend, RetryClass};
+
+    // ── ORDER 923-rmtw ──────────────────────────────────────────────────────
+    //
+    // The convergence the predecessor could not do. Every case below is a
+    // FIXTURE HOME: nothing here touches the operator's own containers.conf.
+
+    #[cfg(target_os = "linux")]
+    fn conf_fixture(body: &str) -> (tempfile::TempDir, std::path::PathBuf) {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("containers.conf");
+        fs::write(&path, body).unwrap();
+        (tmp, path)
+    }
+
+    /// THE DEFECT, PINNED. A pre-801-kqme list — git-service/tillandsias-git
+    /// present, nix-cache ABSENT — is exactly what macuahuitl and lenovinha
+    /// found and hand-repaired, and what four days of 883-ncrs "cache RSTs"
+    /// turned out to be. The old writer's `contains("[engine]") &&
+    /// contains("HTTP_PROXY")` guard returned early on this file forever.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_stale_pre_801_kqme_proxy_block_is_removed_and_the_rest_of_the_file_survives() {
+        let (_tmp, path) = conf_fixture(concat!(
+            "[network]\n",
+            "dns_servers = [\"1.1.1.1\"]\n",
+            "pasta_options = [\"--ipv4-only\"]\n",
+            "\n",
+            "[engine]\n",
+            "env = [\"http_proxy=http://proxy:3128\", \"HTTP_PROXY=http://proxy:3128\", ",
+            "\"no_proxy=localhost,inference,proxy,git-service,tillandsias-git,10.0.42.0/24\"]\n",
+        ));
+
+        assert!(
+            ensure_containers_conf_no_proxy_env(&path).unwrap(),
+            "a stale proxy block must be reported as a real change"
+        );
+        let after = fs::read_to_string(&path).unwrap();
+        assert!(
+            !after.contains("http_proxy") && !after.contains("HTTP_PROXY"),
+            "the proxy env line must be gone, got:\n{after}"
+        );
+        // The operator's own settings are not ours to remove.
+        assert!(
+            after.contains("dns_servers = [\"1.1.1.1\"]"),
+            "got:\n{after}"
+        );
+        assert!(
+            after.contains("pasta_options = [\"--ipv4-only\"]"),
+            "the ipv4-only workaround must survive, got:\n{after}"
+        );
+        assert!(after.contains("[engine]"), "got:\n{after}");
+    }
+
+    /// MEASURED ON yoga, 2026-08-29, and the reason a presence test was never
+    /// enough: the line is COMMENTED OUT, yet it still satisfies both
+    /// `contains` checks the old writer used. That host therefore had NO proxy
+    /// env at all while init printed "proxy env written to …".
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_commented_out_proxy_block_is_still_removed() {
+        let (_tmp, path) = conf_fixture(concat!(
+            "[network]\n",
+            "dns_servers = [\"1.1.1.1\", \"8.8.8.8\"]\n",
+            "\n",
+            "[engine]\n",
+            "#env = [\"http_proxy=http://proxy:3128\", \"HTTP_PROXY=http://proxy:3128\", ",
+            "\"no_proxy=localhost,inference,proxy,git-service,tillandsias-git\"]\n",
+        ));
+
+        assert!(ensure_containers_conf_no_proxy_env(&path).unwrap());
+        let after = fs::read_to_string(&path).unwrap();
+        assert!(
+            !after.to_ascii_lowercase().contains("http_proxy"),
+            "a commented stale line is still stale state, got:\n{after}"
+        );
+        assert!(after.contains("dns_servers"), "got:\n{after}");
+    }
+
+    /// IDEMPOTENT, and it must report the difference. A second run changes
+    /// nothing and says so — the old code's habit of announcing a write it had
+    /// not performed is the thing being removed here.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn converging_an_already_clean_conf_is_a_reported_no_op() {
+        let (_tmp, path) = conf_fixture("[network]\ndns_servers = [\"1.1.1.1\"]\n");
+        assert!(
+            !ensure_containers_conf_no_proxy_env(&path).unwrap(),
+            "a clean file is not a change"
+        );
+        let after = fs::read_to_string(&path).unwrap();
+        assert_eq!(after, "[network]\ndns_servers = [\"1.1.1.1\"]\n");
+
+        // And idempotence over the repaired file, which is what init re-running
+        // on a converged host does every time.
+        let (_t2, p2) = conf_fixture("[engine]\nenv = [\"http_proxy=http://proxy:3128\"]\n");
+        assert!(ensure_containers_conf_no_proxy_env(&p2).unwrap());
+        assert!(
+            !ensure_containers_conf_no_proxy_env(&p2).unwrap(),
+            "the second pass must be a no-op"
+        );
+    }
+
+    /// NEGATIVE CONTROL, and the one that matters most: a converger that
+    /// removes more than it owns is a worse defect than the stale line. An
+    /// [engine] env holding the operator's OWN variables is untouched, and so
+    /// is an `env` in another section.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn an_env_that_is_not_ours_is_never_removed() {
+        let (_tmp, path) = conf_fixture(concat!(
+            "[containers]\n",
+            "env = [\"http_proxy=http://someone-elses-proxy:8080\"]\n",
+            "\n",
+            "[engine]\n",
+            "env = [\"EDITOR=vim\", \"LANG=C.UTF-8\"]\n",
+            "runtime = \"crun\"\n",
+        ));
+
+        assert!(
+            !ensure_containers_conf_no_proxy_env(&path).unwrap(),
+            "no proxy env under [engine] means nothing to converge"
+        );
+        let after = fs::read_to_string(&path).unwrap();
+        assert!(after.contains("EDITOR=vim"), "got:\n{after}");
+        assert!(after.contains("runtime = \"crun\""), "got:\n{after}");
+        // A [containers] env is a different section and not this function's
+        // business, even when it names a proxy.
+        assert!(
+            after.contains("someone-elses-proxy"),
+            "another section's env must survive, got:\n{after}"
+        );
+    }
+
+    /// An absent file is already correct — init must not CREATE a
+    /// containers.conf just to record the absence of a block.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn an_absent_containers_conf_is_left_absent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("containers.conf");
+        assert!(!ensure_containers_conf_no_proxy_env(&path).unwrap());
+        assert!(!path.exists(), "no file must be created");
+    }
 
     /// 798-q4m9 exit criterion 1 + verifiable closure. The vsock listener must
     /// be the FIRST thing on the runtime's injection queue.
