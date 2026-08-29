@@ -67,6 +67,10 @@ use tracing::{debug, error, info, warn};
 
 use serde::{Deserialize, Serialize};
 
+/// ORDER 626-w3fn (b). User-facing bring-up progress, on the DEFAULT path.
+/// UNCONDITIONAL: the packet's whole point is that this reaches users without
+/// --debug and on every platform, so it must not sit behind a feature gate.
+mod bringup_progress;
 #[cfg(any(feature = "tray", feature = "listen-vsock"))]
 mod cloud_projects;
 mod container_deps;
@@ -11174,7 +11178,21 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("opencode-project");
+    // ORDER 626-w3fn (b). Bring-up is multi-minute on a cold host and was
+    // entirely silent without --debug; the field report this packet was filed
+    // from records an operator closing a window that was working. Five stages
+    // are announced on the DEFAULT path, in the exact template the operator
+    // approved 2026-08-29 (operator_note on 626-w3fn).
+    //
+    // FIVE is what this function KNOWS it will do before it starts: secure
+    // channel, network, images, sign-in, workspace start. The denominator is
+    // declared rather than discovered, because a count that grows as it goes
+    // would render "(1 of 1)" on the first line of a five-stage run.
+    let mut progress = crate::bringup_progress::BringUpProgress::new(5);
+
+    progress.step();
     let certs_dir = ensure_ca_bundle(debug)?;
+    progress.step();
     ensure_enclave_network(debug)?;
 
     // Router MUST be in this preflight list: run_opencode_mode later calls
@@ -11183,8 +11201,15 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
     // (order-327 class; the OpenCode CLI lane was the one lane the 293/327
     // fixes missed — reproduced live on macOS cold-forge 2026-07-15).
     let images = ["proxy", "router", "git", "inference", "forge"];
+    progress.step();
     ensure_versioned_images(&root, &images, version, debug)?;
+    progress.step();
     ensure_provider_auth(ForgeAgentMode::OpenCode, debug)?;
+    // Fifth and last announced stage: everything after this is the workspace
+    // itself coming up. Stepped HERE rather than at the end of the function so
+    // the user sees "(5 of 5)" while that work runs, not after it finishes —
+    // a progress line that appears once the wait is over is not progress.
+    progress.step();
 
     if debug {
         eprintln!("[tillandsias] [OpenCode] Repo root: {}", root.display());

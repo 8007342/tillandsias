@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: append-event-archive-guard-counts-files-in-the-live-fragment-directory
+    field: status
+    value: completed
+    ts: "2026-08-29T17:17:27Z"
+    host: yoga
+
+events:
+  - packet_id: append-event-archive-guard-counts-files-in-the-live-fragment-directory
+    event:
+      type: completed
+      ts: "2026-08-29T17:17:27Z"
+      host: yoga
+      summary: >
+        status 'completed' with evidence_refs: scripts/test-append-event-archived-refusal.sh: ls|wc -l before/after replaced by a set difference, filtered to files carrying FIXTURE_MARK (the identity cleanup_fixture_fragments already trusts)
+  - packet_id: append-event-archive-guard-counts-files-in-the-live-fragment-directory
+    event:
+      type: note
+      ts: "2026-08-29T17:17:27Z"
+      host: yoga
+      summary: >
+        the before/after count over the live ledger directory is now a set comparison scoped to fragments this fixture could have written

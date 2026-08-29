@@ -87,7 +87,30 @@ cleanup_fixture_fragments() {
 }
 trap cleanup_fixture_fragments EXIT
 
-before="$(ls "$ROOT"/plan/index.d/ 2>/dev/null | wc -l)"
+# ORDER 923-28js — OBSERVE WHAT THIS TEST COULD HAVE CAUSED, NOT WHAT THE
+# DIRECTORY DID.
+#
+# This was `before=$(ls plan/index.d/ | wc -l)` against the LIVE ledger
+# directory, compared to an `after` count. A count over a shared directory
+# makes any concurrent writer this test's failure: another agent session, a
+# driver cycle, a `set-field`, or a plain `git` operation moving fragments in
+# or out of the working tree. MEASURED 2026-08-29: a `git stash push -u` and
+# `git stash pop` during a concurrent ./build.sh --check moved the count 62 ->
+# 65 inside this window, and the test reported "a refusal still wrote a
+# fragment" and "append-event's archive guard regressed". Nothing had
+# regressed.
+#
+# A count is also the weakest observation available — it cannot say WHICH file
+# appeared, which is why the message had to guess at a cause and guessed wrong.
+# On a fleet that runs driver cycles beside agent cycles on one checkout
+# (873-zcim), a red whose own text denies its reason is worse than no check.
+#
+# So: snapshot the SET, and judge only files this fixture could have written.
+# Its identity is FIXTURE_MARK, which every summary it passes to append-event
+# carries and which cleanup_fixture_fragments above already trusts for exactly
+# this purpose. FIXTURE_AGENT is NOT usable as the identity — it resolves to
+# this host's real agent id, so it matches the operator's own fragments too.
+before_set="$(ls "$ROOT"/plan/index.d/ 2>/dev/null | LC_ALL=C sort)"
 
 # ── 1. an ARCHIVED ref is refused, and says so as its own case ──────────────
 out="$("$BIN" append-event "$ARCHIVED_ORDER" note "append-event-archived-refusal fixture probe: must refuse" \
@@ -116,11 +139,29 @@ else
 fi
 
 # ── 3. NEGATIVE CONTROL: neither refusal wrote anything ────────────────────
-after="$(ls "$ROOT"/plan/index.d/ 2>/dev/null | wc -l)"
-if [ "$before" -eq "$after" ]; then
-    ok "both refusals wrote NOTHING (fragment count unchanged at $before)"
+# Judged over the set difference, and only over files carrying this fixture's
+# mark. A fragment that appeared from somewhere else is somebody else's write
+# and is reported as context, never as this test's verdict (923-28js).
+after_set="$(ls "$ROOT"/plan/index.d/ 2>/dev/null | LC_ALL=C sort)"
+new_fragments="$(comm -13 <(printf '%s\n' "$before_set") <(printf '%s\n' "$after_set") | grep . || true)"
+leaked=""
+foreign=""
+while IFS= read -r _nf; do
+    [ -n "$_nf" ] || continue
+    if grep -q "$FIXTURE_MARK" "$ROOT/plan/index.d/$_nf" 2>/dev/null; then
+        leaked="${leaked}${leaked:+ }plan/index.d/$_nf"
+    else
+        foreign="${foreign}${foreign:+ }$_nf"
+    fi
+done <<EOF
+$new_fragments
+EOF
+if [ -n "$leaked" ]; then
+    bad "a refusal still wrote a fragment: $leaked"
+elif [ -n "$foreign" ]; then
+    ok "both refusals wrote NOTHING (ignored $(printf '%s' "$foreign" | wc -w) concurrent write(s) by another writer: $foreign)"
 else
-    bad "a refusal still wrote a fragment: $before -> $after"
+    ok "both refusals wrote NOTHING (no new fragments at all)"
 fi
 
 # ── 4. NEGATIVE CONTROL: a LIVE packet still accepts events ────────────────
