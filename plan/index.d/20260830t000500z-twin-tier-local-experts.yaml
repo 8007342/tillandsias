@@ -1,0 +1,81 @@
+packets:
+  - packet_id: twin-tier-7b-experts-behind-an-openai-endpoint
+    order: 937-68n4
+    status: ready
+    title: |
+      Tune 7B models on the yolanda/yoga twin tier and serve the RAG-verified expert pipeline through a local OpenAI-compliant endpoint for OpenCode
+    kind: enhancement
+    pickup_role: any
+    priority: p1
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    capability_tags:
+      - local-experts
+      - inference
+      - openai-endpoint
+      - rag
+      - twin-control
+    estimated_hours: 12
+    deliverable: |
+      OpenCode on a mid-tier consumer machine talks to a LOCAL
+      OpenAI-compliant endpoint whose answers ride the grounded pipeline
+      (retrieval floors, citations-only-if-used, typed refusals) over a
+      tuned 7B model — measured on both twins, with the twin comparison
+      separating model/hardware effects from OS effects.
+    context: |
+      OPERATOR DIRECTIVE 2026-08-29 (late), verbatim intent: "use the twins
+      Yolanda with Windows and Yoga with Silverblue to tune the 7b models
+      and the OpenAI compliant endpoint to serve it locally from OpenCode
+      using our RAG verification system. I think their hardware tier is the
+      most likely to be our target audience in the wild — have them
+      coordinate that work." COORDINATION IS PEER-TO-PEER between the two
+      hosts, with the linux coordinator merging.
+
+      WHY THE TWINS SPECIFICALLY (805-r98w): yolanda and yoga are the
+      recorded twin pair — same silicon, different OS — so every
+      measurement lands twice: agreement gives a portable number for the
+      target tier, disagreement isolates an OS effect. 805-r98w (the
+      fingerprint that would PROVE twin-ness) is ready and unclaimed; its
+      first rung is this packet's natural preflight — verify the twins are
+      twins before publishing tier numbers.
+
+      WHAT EXISTS (build on, do not duplicate): expert-serve
+      (crates/tillandsias-plan, 920-pxg6) — the grounded pipeline behind
+      127.0.0.1:11436 with dual retrieval floors, citations-only-if-used,
+      typed `unsupported:` refusals, TILLANDSIAS_SYNTH_BUDGET_MS, and
+      retrieval-only as the documented floor when the model tier is weak.
+      The inference lane already exposes ollama's own OpenAI-compatible
+      API to forges. What does NOT exist: an OpenAI-compliant facade over
+      the GROUNDED pipeline (chat/completions in, pipeline-verified answer
+      out, refusals mapped to a well-formed response rather than a broken
+      one), and any 7B-tier tuning — current calibration was done at the
+      0.5b floor where synthesis mostly times out into retrieval-only.
+
+      THE TWO HALVES, split so the twins can parallelize then converge:
+        MODEL HALF (natural first owner: yoga — the gpu-rocm-usable twin;
+        yolanda mirrors on Windows where lenovinha's 935-jhh5 findings on
+        WSL2 GPU delivery apply): pick 2-3 candidate 7B-class models,
+        quantizations, and context settings; measure tokens/s, time-to-
+        first-token, synthesis-vs-budget behaviour, and grade with the
+        EXISTING groundtruth harness (`tillandsias-plan grade`) — answer
+        QUALITY is already measurable, do not invent a new rubric. The
+        deliverable is a per-tier recommendation with regimes attached,
+        not a leaderboard.
+        ENDPOINT HALF (either twin; single owner, the other reviews): an
+        OpenAI-compliant /v1/chat/completions surface over run_grounded —
+        citations rendered into the message content or a documented
+        extension field, refusals as valid completions with a typed
+        marker, streaming optional-but-honest (no fake token streaming of
+        a non-streamed synthesis). OpenCode pointed at it as a model
+        provider is the acceptance: ask a project question in OpenCode,
+        get a cited, floor-guarded answer from the local 7B.
+
+      TWIN PROTOCOL: agree the measurement matrix BEFORE measuring (the
+      multi-outcome-test rule); publish each result with its regime; a
+      number that exists on one twin only is unfinished. Divergences are
+      findings, not failures.
+    exit_criteria:
+      - the twin preflight ran (805-r98w rung or equivalent) and the twin claim is verified, not assumed
+      - a 7B model recommendation for the tier exists with measurements from BOTH twins (throughput, latency, groundtruth grade), regimes attached
+      - OpenCode completes a real project question against the local OpenAI endpoint with citations and floor behaviour intact, demonstrated on both twins
+      - a refusal (out-of-coverage question) arrives at OpenCode as a well-formed completion carrying the typed marker, not an error

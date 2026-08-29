@@ -25,6 +25,18 @@
 set -euo pipefail
 export TILLANDSIAS_NO_SINGLETON=1
 
+# ORDER 936-kdev. A SIGTERM used to kill this script SILENTLY: two ci-full
+# runs died rc=143 with every check green, and even naming the phase that was
+# live took forensic log reading — the sender is still unidentified. This
+# trap converts the event into one loud line (phase, pid, UTC), then
+# re-raises with default disposition so rc stays 143 and process-group
+# semantics are untouched. It is attribution, not protection.
+trap '{
+    echo "[build] SIGTERM received (pid $$) during phase: ${_PHASE_NAME:-<pre-phase>} at $(date -u +%Y-%m-%dT%H:%M:%SZ) — exiting 143 (936-kdev)" >&2
+    trap - TERM
+    kill -TERM $$
+}' TERM
+
 # On Fedora Silverblue (immutable), transparently re-exec inside the
 # tillandsias-builder toolbox where Rust/gcc/ruby/etc are available.
 # Non-Silverblue hosts skip with zero overhead.

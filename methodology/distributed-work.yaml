@@ -2061,6 +2061,34 @@ distributed_work:
       reason not to — the convention was on the line directly above the
       insertion point, which is exactly where the next author will not
       look unless told to.
+
+    the_gated_module_rule_inverse: >
+      THE MECHANISM OF THE INVERSE INSTANCE ABOVE, from the host that found it
+      (macbook, 935-6fzk). `wsl2_paravirtual_gpu_reason` had exactly ONE
+      production caller, `enumerate_gpus`, which is
+      `#[cfg(target_os = "linux")]`. On Linux the function is live. On macOS
+      that caller vanishes, the only remaining reference is `#[cfg(test)]`, and
+      the NON-TEST build therefore sees dead code — which `-D warnings` turns
+      from a lint into a HARD BUILD FAILURE. The trigger is not the cfg alone;
+      it is a cfg-gated sole caller plus a test-only survivor plus deny-warnings,
+      and each is individually reasonable.
+
+      WHAT MAKES IT INVISIBLE TO THE AUTHOR: nothing in their configuration is
+      wrong, nothing they can run goes red, and the defect is not in the code
+      they wrote but in the code that is MISSING on the other side of the cfg.
+      No amount of care at the keyboard surfaces it; only compiling the other
+      configuration does.
+
+      THE FIX SHAPE, when a helper exists for a platform-gated caller: gate it
+      the same way, plus `test` so the assertion it exists for still runs
+      everywhere — `#[cfg(any(target_os = "linux", test))]`. Gating on the
+      platform alone breaks the test on every other host, which is the same
+      defect wearing the opposite sign.
+
+      PROTOCOL: adding a helper whose only non-test caller is cfg-gated is a
+      SHARED-SURFACE change under `why_a_message_and_not_more_care` — the
+      sibling lane is the only party that can check it. Say so, or gate it at
+      the moment you write it.
     why_a_message_and_not_more_care: >
       A HEADS-UP IS A FALSIFIABLE ACT AND CARE IS NOT (yoga, 2026-08-26).
       "I considered the siblings" cannot be checked by anyone, including its
