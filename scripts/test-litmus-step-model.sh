@@ -80,6 +80,12 @@ fi
 #    bash-only and EMPTY under zsh 5.9 (macOS's default shell) — defect (3) in
 #    this packet's list, where the workaround for one platform silently failed
 #    on another.
+#    This is a STATIC grep, not a claim that the stdlib loads under zsh: bash
+#    is the runner by construction (run-litmus-test.sh executes every step as
+#    `bash -c 'source "$LITMUS_STDLIB"; ...'`), so `zsh
+#    scripts/test-litmus-step-model.sh` failing with "command not found:
+#    mf_stage" is expected and is NOT a portability gap (darwin run,
+#    2026-08-29).
 # COMMENT LINES EXCLUDED, and that exclusion is itself a finding: the first
 # version of this arm was tripped by the step model's own comment explaining
 # that it avoids PIPESTATUS. A guard fired by the documentation of the decision
@@ -88,7 +94,7 @@ fi
 if grep -vE '^[[:space:]]*#' scripts/litmus-stdlib.sh | grep -q 'PIPESTATUS'; then
     bad "litmus-stdlib.sh references PIPESTATUS — empty under zsh, breaks macOS"
 else
-    ok "no PIPESTATUS in the step model (portable to zsh/BSD)"
+    ok "no PIPESTATUS dependency in the step model (the bash-ism would be silently empty under zsh)"
 fi
 
 if [ "$fail" -ne 0 ]; then
