@@ -169,6 +169,14 @@ ledgers make the damage permanent. Remedy: write the body to a file and pass
 `"$(cat body.txt)"` — file content is not re-scanned — then grep the WRITTEN
 fragment for identifiers you know must be present before committing it.
 
+Third instance, same family (macbook 2026-08-29): inner double quotes in a
+double-quoted `git commit -m "…"` terminated the string and the remainder
+became pathspecs — the COMMIT failed while the packet's set-field succeeded,
+leaving the ledger claiming an SHA that did not exist until `git log` was
+checked. Remedy: `git commit -F file`. The family rule: any prose that passes
+through a shell argument can be silently rewritten by the shell; pass files,
+then verify the written artifact.
+
 ## `check-litmus-pin-claims.sh` refuses bare litmus names (721-77yu)
 
 That guard greps every `*.sh` for `litmus:<name>` and refuses any name no test
