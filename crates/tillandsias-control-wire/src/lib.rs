@@ -581,6 +581,32 @@ pub enum ControlMessage {
     ///
     /// @trace spec:vsock-transport
     PtyStdinEof { session_id: u32 },
+    /// Host → guest: open a DATA session (order 926-bin4). Same shape as
+    /// [`ControlMessage::PtyOpen`], and deliberately a SEPARATE VARIANT rather
+    /// than a flag on it — see `CAP_PTY_DATA_SESSION` for the measurement that
+    /// forced that choice (an older peer silently ignores a widened variant's
+    /// extra field and would treat a data session as a terminal one, which is
+    /// the corruption this exists to prevent, arriving with no error).
+    ///
+    /// The guest wires the child's fd 0 to a PIPE instead of the PTY slave,
+    /// leaving fd 1/2 on the slave. Stdin therefore crosses NO line discipline:
+    /// the six control bytes measured corrupting, killing or wedging an exec
+    /// session (0x03, 0x04, 0x11, 0x13, 0x15, 0x1a, 0x7f) arrive as data. End
+    /// of input is a real pipe close rather than a VEOF injection.
+    ///
+    /// Use it for stdin that is DATA. A terminal session must keep using
+    /// `PtyOpen`, because there 0x03 SHOULD raise SIGINT — it is a user
+    /// pressing Ctrl-C, not a byte to preserve.
+    ///
+    /// @trace spec:vsock-transport
+    PtyOpenData {
+        session_id: u32,
+        rows: u16,
+        cols: u16,
+        argv: Vec<String>,
+        env: Vec<(String, String)>,
+        cwd: Option<String>,
+    },
 }
 
 /// What the guest established about a PTY session's foreground process.
@@ -843,6 +869,7 @@ impl ControlMessage {
             ControlMessage::MetricsSnapshotRequest { .. } => "MetricsSnapshotRequest",
             ControlMessage::MetricsSnapshotReply { .. } => "MetricsSnapshotReply",
             ControlMessage::PtyStdinEof { .. } => "PtyStdinEof",
+            ControlMessage::PtyOpenData { .. } => "PtyOpenData",
         }
     }
 }
