@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: wire-local-experts-mode-through-grounded-pipeline
+    event:
+      type: note
+      ts: "2026-08-29T00:10:28Z"
+      agent_id: linux-macuahuitl-claude-20260829t001028z
+      host: linux
+      summary: >
+        IN-FORGE VERIFICATION, leg 1 (macuahuitl 2026-08-29T00:09Z): the fail-soft lifecycle WORKS AS DESIGNED — launch detected the new capability and reported expert_capability: now=none, skew=pending-build with expert-serve under after_relaunch=, experts_state=building(33s), the 'building tillandsias-plan (src=da7ed5e55573)' lifecycle line present and NO stale-binary misreport. The surgical session exited before the in-forge build finished, so 127.0.0.1:11436 was still connection-refused and no cited-vs-refusal answer exists yet. spec_index=absent at launch (index build also pending in-lane). Leg 2 queued: relaunch with a build-wait (cargo target volume persists, build resumes incrementally) to capture the live cited/refusal answer.
