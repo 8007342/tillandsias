@@ -63,6 +63,19 @@ statuses:
 # field is safe by construction; declaring a REFERENCE field is not — see
 # the note on reference_fields.
 optional_fields:
+  retains_direct_work:
+    kind: optional
+    type: bool
+    note: >
+      ORDER 750-zrt4. Declared TRUE on a split parent that still holds work of
+      its own alongside its children, so `tillandsias-plan split-parents` does
+      not report it. Splitting off one slice must not make the remainder
+      unclaimable, and whether a remainder exists is NOT derivable from
+      `split_into` — so it is stated rather than guessed. Absent means "not
+      claimed either way", and the report is advisory: it names the parent and
+      its children and changes no status. Do NOT solve a split parent by
+      setting it `obsoleted`; that status SATISFIES dependents and would turn a
+      selection nuisance into a false green.
   next_action:
     kind: recommended
     type: text
@@ -85,11 +98,24 @@ optional_fields:
 # prose-shaped, or unresolved on a retired packet, is a warning. So measure
 # the field's existing values BEFORE declaring it, never after.
 #
-# `split_into` is the standing example of the cost: 37 of the 45 warnings a
-# clean checkout reports are its prose annotations
-# ("227 — container-dependency-graph-satisfier-typestate (slice 3: …)"),
-# spared only because the id grammar classifies them as prose rather than
-# as dangling ids.
+# `split_into` USED TO BE the standing example of the cost: its prose
+# annotations ("227 — container-dependency-graph-satisfier-typestate
+# (slice 3: …)") were the bulk of the warnings a clean checkout reported,
+# spared from being violations only because the id grammar classifies them
+# as prose rather than as dangling ids.
+#
+# ORDER 750-zrt4 migrated them. Every `split_into` entry is now a bare child
+# packet_id, with the slice note kept as a trailing YAML comment so
+# machine-readability cost no information; all 15 children were verified to
+# resolve before the rewrite. MEASURED 2026-08-28 on linux-next: organic
+# reference-debt warnings went 15 -> 0, all 15 having been split_into prose.
+#
+# The point was never tidiness. Prose split_into is UNQUERYABLE, so nothing
+# could connect a parent to its children — which is why a fully-delegated
+# parent kept `ready` and the selector kept offering it (722-ecne was ranked
+# urgent= on four consecutive cycles and claimed by nobody). See
+# `tillandsias-plan split-parents`, which only works because this field is
+# now id-shaped.
 reference_fields:
   - depends_on
   - release_target

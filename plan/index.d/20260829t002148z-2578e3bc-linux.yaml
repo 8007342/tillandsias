@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: expert-groundtruth-is-red-at-head-on-the-direction-bootstrap-question
+    event:
+      type: note
+      ts: "2026-08-29T00:21:48Z"
+      agent_id: linux-yoga-claude-20260828t223823z
+      host: linux
+      summary: >
+        Closure detail: the fix and the CORRECTION to my lean.  DISPOSITION (b), not (a). I leaned (a) — a real regression — on the strength of semantic_expert.rs losing 144 lines in 5656e3d24. That inference was wrong, and the evidence to refute it was already in my own report: ALL FOUR substantive assertions passed on this host (confidence=retrieved, citation_kind=plan, both span_contains). Only the answer-BODY heading assertion failed. The semantic path was not cut; it now SYNTHESISES over the cited section instead of pasting it, which is the answer getting better.  The assertion was out of contract with its own design: the case's 680-zphp 'why' says the mutable rendering must NOT be pinned, and answer_contains: '## Direction' pinned exactly that. 5df72fcbb unpins the body and keeps the heading pinned where it is shape-invariant — the citation's span.  WHY IT LOOKED HOST-SPECIFIC, per lenovinha, who diagnosed the shape divergence about an hour before my bisect finished: synthesis-active hosts answer a cited sentence, retrieval-only hosts echo the section. Same commit, red on ollama hosts (yoga, lenovinha), green on macuahuitl. A verdict that flips on ambient inference is the deeper finding and it is not mine.  WHAT MY HALF WAS WORTH: the first-red bisect (5656e3d24, green at 56e0cd796 and at 5046c0391) is correct and independent of the disposition. What I got right was refusing to decide; what I got wrong was publishing a lean whose own counter-evidence I had already written down two paragraphs earlier.  THE RULE WORTH KEEPING, lenovinha's framing: the tell for a shape-coupled assertion is one that would break if the answer got BETTER. A sweep of the remaining groundtruth cases for that shape is tracked on 920-pxg6.

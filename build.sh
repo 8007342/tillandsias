@@ -1863,6 +1863,20 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Live MCP server build fixture passed"
 
+    # Order 748-tkjx. ./build.sh --check runs NO litmus (deliberate — the suite
+    # is minutes and a gate that slow gets bypassed with --no-verify), so a
+    # green gate plus the spec you happened to run can both pass over another
+    # spec's broken pin. Measured twice: an edit to images/default/lib-common.sh
+    # left litmus:startup-context-addendum-shape red through both on 2026-08-15,
+    # and 921-vtf4 found three tests red back to af745f3fd on 2026-08-28. This
+    # fixture pins the reverse map that lets an editor ask what to re-run.
+    _step "Checking the file -> covering-litmus-specs query (748-tkjx)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/litmus-covering-specs.sh" fixture 2>&1; then
+        _error "the litmus coverage query broke — an editor of a shared file cannot learn which specs cover it"
+        exit 1
+    fi
+    _info "Litmus coverage query fixture passed"
+
     # Order 858-ihcb. A benchmark that measures a warm prompt cache reports a
     # number that is wrong by 10x and looks plausible. This fixture inspects
     # the payloads the harness's REAL call sites put on the wire, because the

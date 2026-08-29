@@ -101,6 +101,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "query",
     "ready",
     "select-rows",
+    "split-parents",
     "spec-envelope",
     "spec-index",
     "spec-retrieve",
@@ -254,6 +255,21 @@ const USAGE: &str = concat!(
     "           parked-blocks [id|order]  dependents invisibly blocked behind a PARKED\n",
     "                                     packet (implemented/needs_clarification/blocked/\n",
     "                                     failed); no arg = whole ledger (order 686-7qcm)\n",
+    "           split-parents             ORDER 750-zrt4. Packets SPLIT INTO children that\n",
+    "                                     are still `ready`, so the selector keeps offering\n",
+    "                                     them: 722-ecne was ranked urgent= on four\n",
+    "                                     consecutive cycles and claimed by nobody, and\n",
+    "                                     606-bvnp ranked #1 claimable with all four slices\n",
+    "                                     already spoken for. One TSV row per parent, NAMING\n",
+    "                                     the children and their statuses so a host reading\n",
+    "                                     the exclusion knows where the work went. A parent\n",
+    "                                     that legitimately keeps direct work of its own\n",
+    "                                     declares `retains_direct_work: true` and is never\n",
+    "                                     reported; an unresolvable child is skipped, so a\n",
+    "                                     typo cannot make a parent unclaimable. REPORTS\n",
+    "                                     ONLY (exit 0) — auto-obsoleting a split parent\n",
+    "                                     would satisfy its dependents and turn a selection\n",
+    "                                     nuisance into a false green.\n",
     "           ready [role]              ready packets (optionally for a pickup role)\n",
     "           next [role] [--release V] [--limit N]\n",
     "                                     ORDER 606-xu52. The cold-start selector: at most FIVE\n",
@@ -4231,6 +4247,21 @@ fn main() {
                     "{}\t{}\t{}\t{}",
                     pb.dependent, pb.dependency, pb.status, pb.outstanding
                 ));
+            }
+        }
+        "split-parents" => {
+            // 750-zrt4. A packet whose residual work lives entirely in children
+            // should stop competing with its own children for a cycle, without
+            // an agent having to notice a four-cycle stall. One TSV row per
+            // parent: parent<TAB>status<TAB>child:status,child:status.
+            for sp in &ledger.split_parents() {
+                let kids = sp
+                    .children
+                    .iter()
+                    .map(|(id, st)| format!("{id}:{st}"))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                emit(&format!("{}\t{}\t{}", sp.parent, sp.status, kids));
             }
         }
         "closure-evidence-check" => {
