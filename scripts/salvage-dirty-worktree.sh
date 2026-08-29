@@ -103,8 +103,22 @@ COPY for recovery, not a proposal to merge.
 git status at capture:
 $(git --no-optional-locks status --porcelain=v1 --untracked-files=all 2>/dev/null | head -60)"
 
-commit="$(printf '%s' "$msg" | git commit-tree "$tree" -p "$head_sha" 2>/dev/null)" \
-    || { echo "fail:salvage:commit-tree"; exit 1; }
+# 934-7jd4 (found via 872-c9nd's own fixture): salvage must NEVER fail for
+# want of a git identity. A host with no user.email configured auto-derives
+# one from its FQDN — which works on bare metal and hard-fails inside a
+# container, where the hostname yields 'user@toolbx.(none)' and commit-tree
+# exits 128. On the refusal path that means the copy justifying the refusal
+# never exists, which is the exact loss 872-c9nd was written to prevent. An
+# explicit fallback identity is strictly better than no salvage; the ref
+# name already carries the real host.
+if ! git var GIT_COMMITTER_IDENT >/dev/null 2>&1; then
+    export GIT_AUTHOR_NAME="salvage" GIT_AUTHOR_EMAIL="salvage@${HOST}" \
+           GIT_COMMITTER_NAME="salvage" GIT_COMMITTER_EMAIL="salvage@${HOST}"
+fi
+# stderr is CAPTURED into the verdict, not discarded: a swallowed cause here
+# cost an evening of guesses elsewhere the same day this line was fixed.
+commit="$(printf '%s' "$msg" | git commit-tree "$tree" -p "$head_sha" 2>"$tmp/cterr")" \
+    || { echo "fail:salvage:commit-tree:$(head -1 "$tmp/cterr" 2>/dev/null | tr -d '\n' | cut -c1-80)"; exit 1; }
 
 if ! git push --quiet origin "${commit}:${REF}" 2>"$tmp/perr"; then
     echo "fail:salvage:push:$(head -1 "$tmp/perr" 2>/dev/null | tr -d '\n' | cut -c1-80)"
