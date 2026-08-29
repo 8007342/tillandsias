@@ -28,33 +28,103 @@
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 2
 
-SRC="crates/tillandsias-headless/src/bringup_progress.rs"
-LEDGER="plan/index.yaml"
-fail=0
+# ── THE TABLE ────────────────────────────────────────────────────────────────
+#
+# One row per user-visible string that carries a POST-GOVERNANCE operator
+# approval, as: <source-file>|<extractor-sed>|<label>.
+#
+# ONLY POST-2026-07-22 APPROVALS BELONG HERE, and that date is the whole reason
+# this table is short. The UX curation rule was codified 2026-07-21
+# (01696cd54); strings that shipped before it were never approved under it and
+# enforcing them now would be inventing an approval nobody gave. Adding a row
+# means asserting that an operator_note in the ledger records THIS EXACT string.
+#
+# WHY NOT AUTO-DISCOVER EVERY USER-VISIBLE STRING: measured, locales/en.toml
+# carries 168 of them and exactly one has a recorded post-governance approval.
+# A gate that demanded ledger backing for all 168 would be red on its first run
+# and switched off by the next person, which is how a governance check becomes
+# decoration. The audit lives in the ledger (929-47u8); the GATE covers what is
+# genuinely approved, and grows a row at a time as approvals are granted.
+UX_ROWS="
+crates/tillandsias-headless/src/bringup_progress.rs|s/^const APPROVED_SENTENCE: &str = \"\(.*\)\";$/\1/p|bring-up progress (626-w3fn)
+"
 
-[ -f "$SRC" ]    || { echo "skip:approved-ux-strings:no-source"; exit 0; }
+# operator_notes — every operator_note event body in the ledger, and nothing
+# else. Captures from a `type: operator_note` line until the next event or
+# packet boundary, which is the shape tillandsias-plan append-event writes.
+# Fragments under plan/index.d/ are included: an approval recorded today lives
+# there until the next compaction, and a guard that missed it would refuse a
+# string the operator had just approved.
+operator_notes() {
+    awk '
+        # An event opens with `- type: <kind>`. Entering an operator_note turns
+        # capture ON; entering any OTHER event turns it OFF. Anchoring on the
+        # leading dash matters: `type:` alone also matches the `- type:` line of
+        # every other event kind, and the first draft here required a
+        # line-initial `type:` and therefore captured nothing at all — the check
+        # went red on a clean tree, which is at least the honest direction to
+        # fail in.
+        /^[[:space:]]*-[[:space:]]*type:[[:space:]]*operator_note[[:space:]]*$/ { inside = 1; next }
+        /^[[:space:]]*-[[:space:]]*type:/ { inside = 0; next }
+        /^[[:space:]]*-[[:space:]]*packet_id:/ { inside = 0; next }
+        /^[[:space:]]*(packets|events|status):[[:space:]]*$/ { inside = 0; next }
+        inside { print }
+    ' "$LEDGER" plan/index.d/*.yaml 2>/dev/null
+}
+
+LEDGER="plan/index.yaml"
 [ -f "$LEDGER" ] || { echo "skip:approved-ux-strings:no-ledger"; exit 0; }
 
-# The approved sentence, read from the constant rather than hardcoded here —
-# hardcoding it would make THIS file a third copy that can drift.
-sentence="$(sed -n 's/^const APPROVED_SENTENCE: &str = "\(.*\)";$/\1/p' "$SRC" | head -1)"
-if [ -z "$sentence" ]; then
-    echo "blocked:approved-ux-strings:no-constant — APPROVED_SENTENCE not found in $SRC" >&2
-    echo "blocked:approved-ux-strings:1"
-    exit 1
-fi
-
-# grep -F: the sentence contains a typographic ellipsis and parentheses; it is a
-# literal, never a pattern.
-if grep -qF "$sentence" "$LEDGER"; then
-    echo "ok:approved-ux-strings:1 checked (\"$sentence\" is recorded in the ledger)"
-    exit 0
-fi
-
-cat >&2 <<EOF
+# THE LOOP IS NOT PIPED INTO, and that is load-bearing rather than stylistic.
+# The first version of this generalization was `printf '%s' "$UX_ROWS" | while
+# read …`, which puts the loop body in a SUBSHELL: its `exit 1` ended the
+# subshell, `fail=1` never escaped, and the check reported ok:…:1 while the
+# clean-vocabulary reword sat in the tree. MEASURED — the mutation test that is
+# this packet's whole bar returned rc=0. A guard generalized into silence is
+# worse than the single-string version it replaced, because it now looks like it
+# covers more.
+#
+# A here-string keeps the loop in THIS shell, so a failure is visible to the
+# verdict below.
+fail=0
+checked=0
+while IFS='|' read -r src extractor label; do
+    [ -n "$src" ] || continue
+    if [ ! -f "$src" ]; then
+        echo "blocked:approved-ux-strings:missing-source — $src ($label)" >&2
+        fail=1
+        continue
+    fi
+    sentence="$(sed -n "$extractor" "$src" | head -1)"
+    checked=$((checked + 1))
+    if [ -z "$sentence" ]; then
+        echo "blocked:approved-ux-strings:no-string — could not extract from $src ($label)" >&2
+        fail=1
+        continue
+    fi
+    # SEARCH ONLY operator_note BODIES, never the whole ledger.
+    #
+    # THE BUG THIS AVOIDS, found by mutation-testing this very check and it is
+    # the sharpest thing in this packet: searching the whole ledger means any
+    # PROSE MENTION of a string counts as approval. My own 626-w3fn and 929-47u8
+    # notes quote "Setting up your workspace…" as the counterexample that
+    # defeated the in-file test — so the guard, asked whether that reword was
+    # approved, found it in the ledger and said yes. A guard SATISFIED by the
+    # documentation of its own counterexample.
+    #
+    # spec:tray-ux is precise about where authority lives: "an operator_note or
+    # operator-attributed event on the packet". So the search is scoped to those
+    # event bodies, which is what the rule actually says, not merely what is
+    # convenient to grep.
+    if operator_notes | grep -qF "$sentence"; then
+        continue
+    fi
+    fail=1
+    cat >&2 <<EOF
 [check-approved-ux-strings] UNAPPROVED end-user UX string.
 
-  in code   : $SRC
+  surface   : $label
+  in code   : $src
   string    : "$sentence"
   ledger    : $LEDGER — no operator approval records this exact string
 
@@ -68,5 +138,22 @@ operator and recorded as an operator_note on the packet FIRST. Precedent for
 getting this wrong is on the record — the reset-guest menu leaf, added
 2026-07-21 without approval, removed by operator order 2026-07-22.
 EOF
-echo "blocked:approved-ux-strings:1"
-exit 1
+done <<EOT
+$UX_ROWS
+EOT
+
+# A table that checked NOTHING is a failure, not a pass. Otherwise deleting the
+# table — or breaking its parsing — reads as a clean tree.
+if [ "$checked" -eq 0 ]; then
+    echo "blocked:approved-ux-strings:empty-table — no row was checked; the table is empty or unparseable" >&2
+    echo "blocked:approved-ux-strings:0"
+    exit 1
+fi
+
+if [ "$fail" -ne 0 ]; then
+    echo "blocked:approved-ux-strings:${checked}"
+    exit 1
+fi
+
+echo "ok:approved-ux-strings:${checked} checked against the ledger"
+exit 0
