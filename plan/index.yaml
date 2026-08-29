@@ -54379,6 +54379,37 @@ plan_index:
         guard for one idiom cannot cover 1248 sites. 897-5m9y and 899-q9di both
         record instances.
       events:
+        - type: evidence
+          ts: "2026-08-29T19:33:36Z"
+          agent_id: "macos-tlatoanis-macbook-air-claude-20260829t155859z"
+          host: macos
+          summary: |
+            DIALECT RE-RUN: 12/12 GREEN ON DARWIN, exit 0, trunk 689c2534c, tlatoanis-macbook-air. All arms by name:
+
+              ok: premise holds: in a pipefail-less shell (the runner's), the piped form masks exit 7
+              ok: mf_stage makes the producer's failure the verdict
+              ok: a passing producer is unchanged
+              ok: an intentional non-zero exit is expressible, not a false positive
+              ok: first-N reads a finished buffer; the producer survived (rc=0)
+              ok: stderr is captured by default
+              ok: no PIPESTATUS dependency in the step model (the bash-ism would be silently empty under zsh)
+              ok: mf_holds is BRE and mf_holds_ere is ERE — they disagree exactly as grep does
+              ok: …and they disagree in the other direction too
+              ok: a literal-brace pattern survives the BRE consumer (it errors under ERE)
+              ok: mf_holds_literal is fixed-string (-qF): '.' is a dot, not any-char
+              ok: mf_holds_line is whole-line (-qx)
+              ok:litmus-step-model:all
+
+            THE REGIME, and the grep line is the point this time:
+              bash  GNU bash 3.2.57(1)-release (arm64-apple-darwin25) — macOS system bash, PRE-4.0
+              grep  grep (BSD grep, GNU compatible) 2.6.0-FreeBSD, at /usr/bin/grep
+              uname Darwin 25.6.0 arm64
+
+            A CORRECTION THAT MATTERS FOR HOW THIS RESULT IS READ, and it corrects my own prior assumption. This host has ugrep 7.8.4 aliased as `grep` in the INTERACTIVE shell — `grep --version` typed at a prompt says ugrep, and I had that recorded as a host fact. It is not the dialect under test. A NON-INTERACTIVE bash script gets /usr/bin/grep (BSD 2.6.0-FreeBSD), because aliases do not apply there — and `bash -c` is exactly how run-litmus-test.sh executes every step. Verified directly: `bash -c 'command -v grep'` -> /usr/bin/grep. So this run exercises BSD grep, which is the dialect the fix was aimed at; if anyone re-runs this and sees ugrep in the banner, they are reading their prompt's alias, not the runner's grep.
+
+            DIALECT SANITY CHECK done independently of the fixture, so the green is not self-certifying: `printf 'a+b\n' | grep -q 'a+b'` MATCHES on this host, i.e. `+` is literal — BRE semantics confirmed at the raw tool, which is the premise the mf_holds/mf_holds_ere split rests on. The two arms disagreeing "exactly as grep does" is therefore disagreement against a dialect I measured rather than assumed.
+
+            WHAT THIS DOES AND DOES NOT CLOSE. It closes darwin/BSD-grep for the four new dialect arms — the axis the earlier 8/8 did NOT cover, since those arms did not exist. It says nothing about GNU grep behaviour, which is the linux and forge-container regime; the arms would need re-running there. The brace arm in particular is the one to watch elsewhere: a `{name}` pattern ERRORS under ERE, so a host whose grep is stricter about brace expressions could fail that arm where BSD's is permissive.
         - type: implemented
           ts: "2026-08-29T19:17:24Z"
           agent_id: "linux-lenovinha-claude-20260828t223829z"
