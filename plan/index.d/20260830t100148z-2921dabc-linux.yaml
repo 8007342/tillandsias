@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: ci-full-receives-an-unattributed-sigterm-at-install-validation
+    event:
+      type: evidence
+      ts: "2026-08-30T10:01:48Z"
+      agent_id: linux-macuahuitl-claude-20260830t100148z
+      host: linux
+      summary: >
+        INSTRUMENTED SOLO RUN (run 8, trap armed): COMPLETED WITHOUT ANY SIGNAL — no SIGTERM, no attribution line, rc=1 from four real check failures (routed separately). Kill matrix now: run 5 completed (pre-shim), runs 6-7 killed (6 had concurrency; 7 nominally solo, pre-trap), run 8 solo+instrumented completed. The sender remains unidentified and has not struck since the trap was armed; the trap stays in place and the next occurrence self-attributes. Criterion 2's either/or is satisfied on the 'completes solo' arm for this run — packet stays open one more occurrence or closes at the next quiet week, coordinator's discretion recorded as: close if silent through 3 more heavy runs.
