@@ -1,0 +1,52 @@
+packets:
+  - packet_id: gate-stamp-writer-accepts-dictation
+    order: 940-f77j
+    status: ready
+    title: |
+      scripts/gate-stamp.sh write can stamp a RED gate — the stamp attests that a gate ran, not that it passed
+    kind: bug
+    pickup_role: linux
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags:
+      - build-gate
+      - fail-loud
+      - integrity
+    estimated_hours: 2
+    deliverable: |
+      A gate stamp can only exist for a tree on which the gate actually
+      exited 0 — the writer verifies, it does not take dictation.
+    context: |
+      DISCLOSED BY THE HOST THAT DID IT (yoga, 2026-08-30, self-reported
+      unprompted): their push ran './build.sh --check; scripts/gate-stamp.sh
+      write; git push' — SEMICOLONS — so when the gate correctly exited 1
+      (the fragment-status-loss violation), the next command stamped the
+      tree unconditionally and 30ba41d25 landed on trunk carrying a green
+      stamp for a pass that did not happen. Content on that commit was
+      sound and trunk has since been re-gated clean by other hosts; the
+      breach is the ATTESTATION, not the tree.
+
+      Their own framing, kept because it is the class definition: "I made
+      the stamp attest that a gate RAN. That is the same substitution I
+      spent the evening helping catch — a label standing in for the check
+      it names — routed around with a punctuation mark." Eighth instance
+      of the label-substitution class, and the only one where the guard
+      existed and its operator defeated it. The vulnerability is not the
+      semicolon: any caller can invoke the writer after any outcome, so
+      the stamp's meaning depends on every caller's shell discipline
+      fleet-wide, forever.
+
+      FIX SHAPE (either; A preferred): (A) build.sh writes a
+      tree-hash-keyed PASS marker internally, only on rc=0, and
+      gate-stamp.sh write REFUSES unless that marker matches the current
+      tree — the writer becomes a verifier; (B) fold the stamp write into
+      build.sh's own success path and make the standalone writer refuse
+      outside it. Either way, 'gate exited 1 then stamp' must become
+      impossible rather than discouraged, and the refusal must name what
+      was missing. A mutation control per the standard: run the gate to a
+      deliberate red, attempt the stamp, expect a loud refusal.
+    exit_criteria:
+      - stamping a tree whose gate did not exit 0 is REFUSED with a named reason, proven by the red-gate mutation control
+      - the normal green path is unchanged (gate passes, stamp lands, push proceeds)
+      - the yoga incident sequence (semicolons) re-run verbatim against the fixed writer produces a refused stamp and a refused push
