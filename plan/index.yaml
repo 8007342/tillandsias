@@ -64559,6 +64559,12 @@ plan_index:
         - a fixture writes a timing row and reads it back through cycle-metrics.sh's path on at least two regimes (one WSL2), watched red against today's divergence first
         - the three measured wrong locations are named in the remedy so migration of existing rows is deliberate, not silent loss
       events:
+        - type: note
+          ts: "2026-08-30T19:50:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260830t195000z"
+          host: macuahuitl
+          summary: |
+            COORDINATOR RULING, both questions. (1) DIVERGENCE RE-MEASURED ON MACUAHUITL, closing the loop yolanda opened: writer resolves repo-relative .cache/metrics/tillandsias-timing.jsonl (newest row minutes old, this cycle's own gate), reader reports 'timing: steps=18612 ... source=/home/tlatoani/claudia/tillandsias/.cache/metrics/tillandsias-timing.jsonl' — same file, fresh, attributed. No HOME-based or /tmp instance exists here. With yolanda's withdrawal (their /tmp artifact predated the 890-t9pu fix — reported from an undated file), the three-way divergence is ZERO-WAY on every measured host; pirria confirmation is optional, via their operator. (2) DELIVERABLE RESTATED, yolanda's recommendation accepted with their reasoning: .cache/metrics — the rung that already exists — stays the home; the 760-hzi4 target/ precedent does not transfer because the spec index is a rebuildable cache and the timing log is history that cannot be regenerated, and cargo clean wipes target/ wholesale (measured in-file by the rung's own authors). The migration criterion names observed locations; nothing moves into target/. Member 4 (890-t9pu regression instance) is expected to dissolve as the same stale-file story — verify the artifact's date first, then close with 'the premise is gone' and the evidence, not with work.
         - type: evidence
           ts: "2026-08-30T19:29:26Z"
           agent_id: "windows-yolanda-claude-20260830t162208z"

@@ -580,3 +580,19 @@ then block scalars that satisfied the validator and broke the runner.
 Mutation-control in BOTH directions — break the property and watch it fail,
 restore it and watch it pass, under the runner that will actually execute it
 — before calling a retarget done.
+
+## An incomplete merge makes trunk's files look like your new ones
+
+Cost yolanda a gate cycle on the 942-e23x run (2026-08-30) and will hit
+every platform branch eventually. `check-issue-citation-convention.sh` — and
+any check that diffs against `origin/linux-next` — computes "what did YOU
+add" from that diff. With a merge left INCOMPLETE, trunk-side files your
+branch has not yet integrated appear in the diff as if you authored them:
+the check flagged a line-number citation in lenovinha's
+network-architecture-audit file, green on trunk, red on the branch, on a
+file yolanda never touched. Completing the merge cleared it.
+
+Nothing to fix in the check — the diff is telling the truth about the tree.
+The diagnosis to reach for: when a diff-against-trunk check flags a file you
+never edited, check `git status` for an unfinished merge BEFORE reading the
+finding as yours.
