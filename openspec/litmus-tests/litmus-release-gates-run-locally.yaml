@@ -94,8 +94,15 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok: build.sh wires the gate"
 
+  # ORDER 940-f77j changed the WRITE contract under this step: a stamp is no
+  # longer something any caller can write, so this fixture must issue the pass
+  # token that a green gate issues. The step now asserts BOTH halves of
+  # tree-change detection — the stamp going stale after an edit (as before), and
+  # the writer REFUSING a token issued for a tree that has since changed, which
+  # is the same property enforced one layer earlier. Asserting only the first
+  # would leave the new half uncovered while looking like full coverage.
   - step: "the stamp mechanism DETECTS a changed tree (behavioural, not a grep)"
-    command: "set -e; t=$(mktemp -d); cleanup() { rm -rf \"$t\"; }; trap cleanup EXIT; git init -q -b main \"$t\"; git -C \"$t\" config user.email t@t; git -C \"$t\" config user.name t; cp scripts/gate-stamp.sh \"$t\"/; echo seed > \"$t\"/f.txt; git -C \"$t\" add -A; git -C \"$t\" commit -qm base; ( cd \"$t\" && bash gate-stamp.sh write >/dev/null && a=$(bash gate-stamp.sh verify) && echo changed >> f.txt && b=$(bash gate-stamp.sh verify || true); if [ \"$a\" = 'ok:gate-fresh' ] && [ \"$b\" = 'stale:tree-changed-since-gate' ]; then echo 'ok: stamp detects tree change'; else echo \"fail: fresh='$a' after-edit='$b'\"; fi )"
+    command: "set -e; t=$(mktemp -d); cleanup() { rm -rf \"$t\"; }; trap cleanup EXIT; git init -q -b main \"$t\"; git -C \"$t\" config user.email t@t; git -C \"$t\" config user.name t; cp scripts/gate-stamp.sh \"$t\"/; echo seed > \"$t\"/f.txt; git -C \"$t\" add -A; git -C \"$t\" commit -qm base; ( cd \"$t\" && g=$(git rev-parse --absolute-git-dir) && issue() { { echo 'version 1'; echo \"digest $(bash gate-stamp.sh compute)\"; echo 'dispatch check'; echo 'issued now'; } > \"$g\"/tillandsias-gate-pass-token; }; issue && bash gate-stamp.sh write >/dev/null && a=$(bash gate-stamp.sh verify) && echo changed >> f.txt && b=$(bash gate-stamp.sh verify || true); issue && echo again >> f.txt && c=$(bash gate-stamp.sh write 2>/dev/null || true); if [ \"$a\" = 'ok:gate-fresh' ] && [ \"$b\" = 'stale:tree-changed-since-gate' ] && [ \"$c\" = 'refused:gate-pass-token-is-for-another-tree' ]; then echo 'ok: stamp detects tree change'; else echo \"fail: fresh='$a' after-edit='$b' stale-token='$c'\"; fi )"
     timeout_ms: 60000
     expected_behavior: "ok: stamp detects tree change"
 

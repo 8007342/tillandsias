@@ -47,7 +47,13 @@ grep -qi "brew\|warning" <<<"$got" \
     && fail "the evidence field carries shell noise as proof that nix answered: '$got'"
 
 # ARM 2: the defect's shape reproduced, so arm 1 is known to have teeth.
-old_way="$("$WORK/noisy-nix" --version 2>&1 | head -1)"
+# `| head -1` closes the pipe early, so the producer takes SIGPIPE and, under
+# this script's own `set -o pipefail`, the substitution returns 141 — which is
+# how this arm previously killed the whole test AFTER printing ok (exit 141 with
+# every assertion passed). Reproducing a defect must not import the defect's
+# side effects into the harness: capture to a file, then read it.
+"$WORK/noisy-nix" --version > "$WORK/old.out" 2>&1 || true
+old_way="$(head -1 "$WORK/old.out")"
 [[ "$old_way" != "nix (Nix) 2.34.8" ]] \
     || fail "fixture drift: the old 2>&1|head -1 capture no longer reproduces the defect, so arm 1 proves nothing"
 
