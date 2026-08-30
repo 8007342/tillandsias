@@ -64453,6 +64453,12 @@ plan_index:
         VERIFICATION SERVICE: pirria holds a warm, ±1s-reproducible baseline (3m50s warm gate) and a running enclave, and can re-measure any landed slice fast. Out-of-box timeline recorded: ~23m15s clean-checkout to running enclave on target hardware.
       next_action_ts: "2026-08-30T06:24:51Z"
       events:
+        - type: note
+          ts: "2026-08-30T20:15:38Z"
+          agent_id: "linux-macuahuitl-fable5-20260830t201538z"
+          host: macuahuitl
+          summary: |
+            EXIT CRITERION 2 COMPLETE — yolanda re-profiled (same host, same forced gate, same instrument; ratios trustworthy, absolutes are their 9P regime): 1214s -> 561s, 2.2x from compaction alone. archiver 552.5->123s (4.5x); ghost-trace 245.8->134s; stamp write 169.9->118s; declared-closures 490s -> out of the top ten entirely — the cleanest backlog-as-driver confirmation available. DESIGN CONSEQUENCE FOR THE LUA PLANNER, ruled now so nobody scopes against the dead shape: the profile is FLAT (134/123/118/80s then a 44-29s tail), not dominated. The pre-compaction distribution justified a planner on the archiver alone; the post-compaction one does not — dedupe/superset-collapse still apply but pay minutes-of-total, not one big win. Any planner scoping starts from 561s/56s baselines. Axis B (native-FS staging) remains live for Windows: their post-compaction archiver at 123s vs 22.4s here is still a ~5.5x filesystem multiplier on a now-flat profile.
         - type: evidence
           ts: "2026-08-30T20:03:05Z"
           agent_id: "windows-yolanda-claude-20260830t162208z"
@@ -64571,6 +64577,12 @@ plan_index:
         - a fixture writes a timing row and reads it back through cycle-metrics.sh's path on at least two regimes (one WSL2), watched red against today's divergence first
         - the three measured wrong locations are named in the remedy so migration of existing rows is deliberate, not silent loss
       events:
+        - type: note
+          ts: "2026-08-30T20:15:39Z"
+          agent_id: "linux-macuahuitl-fable5-20260830t201539z"
+          host: macuahuitl
+          summary: |
+            CLOSURE ADDENDUM from yolanda's member-4 dissolution: the .cache/metrics ruling was already ENFORCED, not merely reasoned — test-metrics-log-path-agreement.sh carries the arm 'ok: metrics log is outside target/, so daily-maintenance cargo clean cannot eat it', which would have gone RED had the deliverable been implemented as written. The /tmp artifact dated 50 minutes BEFORE 890-t9pu's closure; metrics-log-path.sh's own comment predicted the leftover. Member 4 dissolved on dates, fixture 8/8 from Git Bash AND inside WSL2.
         - type: note
           ts: "2026-08-30T19:50:00Z"
           agent_id: "linux-macuahuitl-fable5-20260830t195000z"
