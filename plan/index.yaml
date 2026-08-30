@@ -64454,6 +64454,40 @@ plan_index:
       next_action_ts: "2026-08-30T06:24:51Z"
       events:
         - type: evidence
+          ts: "2026-08-30T20:25:47Z"
+          agent_id: "windows-yolanda-claude-20260830t162208z"
+          host: yolanda
+          summary: |
+            AXIS B MEASURED ON YOLANDA — the filesystem multiplier is 2.96x, not 5.5x, and the difference matters because the two numbers measure different things.
+
+            THE VALID COMPARISON, same host, same binary, same tree, only the filesystem differs. Both arms exit rc=0 with the identical verdict line ("Check passed: ready set unchanged, no new orphaned events, archived packets stay answerable"), which is what makes it a comparison rather than two numbers:
+
+              scripts/archive-plan-packets.sh --check on 9P (/mnt/c)      131606 ms
+              scripts/archive-plan-packets.sh --check on native ext4       44411 ms
+              one-time staging cost (tar pipe, excluding target/ and .cache)  26837 ms for 463 MB
+
+              FILESYSTEM MULTIPLIER: 2.96x
+
+            THIS DECOMPOSES THE CROSS-HOST NUMBER RATHER THAN CONTRADICTING IT. The ~5.5x figure came from comparing this host's archiver (123s) against macuahuitl's (22.4s) — two different filesystems AND two different CPUs, so it conflates the axes. Isolating them on one machine:
+
+              131.6s  yolanda, 9P
+               44.4s  yolanda, native ext4     -> 2.96x is the FILESYSTEM
+               22.4s  macuahuitl, native        -> the remaining ~2.0x is HOST/CPU
+
+              2.96 x 1.98 = 5.9, consistent with the 5.5x observed end to end. So axis B can reclaim the filesystem factor and nothing else; the residual 2x against macuahuitl is silicon and is not staging's to win.
+
+            NET FOR ONE STEP, stated plainly: 131.6s becomes 44.4s + 26.8s staging = 71.2s, saving 60.4s. But the staging is paid ONCE per gate and every ledger-reading step that runs against the stage inherits the 2.96x, so the real question is how much of the gate is ledger-reading.
+
+            WHAT I HAVE NOT MEASURED, and will not extrapolate: whether the ghost-trace ratchet (134s), the gate stamp (118s) and the terminology dictionary (80s) are equally filesystem-bound. The archiver is the only step I isolated. If the same 2.96x held across the flat top four (455s), staging would turn them into ~154s + 27s = 181s and take the 561s gate to roughly 285s — but that arithmetic assumes a multiplier I measured on ONE step, and the coordinator's instruction was to measure rather than trust arithmetic. Treat it as the hypothesis to test next, not a result.
+
+            A BLOCKER THAT SHAPES THE DESIGN, found by the staging failing: plan/ CANNOT BE STAGED ALONE. My first native-FS attempt copied plan/ + scripts/ + .git and the archiver refused with "could not find Cargo.toml in /root/axisb-stage/target/archive-answerability/tree or any parent" — its answerability check needs the WORKSPACE, not just the ledger. That is why the valid arm above stages the full tracked tree at 463 MB and 26.8s rather than the 21 MB plan/ directory. Any axis-B design that assumes "stage the ledger" will hit this; the unit is the checkout.
+
+            THREE INVALID MEASUREMENTS PRECEDED THE VALID ONE, recorded because each looked like a result:
+              (1) Both arms refused with "no runnable tillandsias-plan" and reported 13559 ms vs 278 ms — a 48.8x that measured path probing, not the archiver. Neither arm did any work.
+              (2) With TILLANDSIAS_PLAN_BIN set, both arms failed on "cargo: command not found" at 86277 ms vs 5520 ms — a 15.6x where both stopped at the same wall, so the verdict-line diff said "identical" while neither completed.
+              (3) With cargo sourced, ARM A completed (rc=0) and ARM B failed (rc=1) on the missing workspace — different exit codes, correctly reported as invalid rather than as a 24x win.
+            Each intermediate ratio was larger than the true one, and each would have overstated axis B's value. The check that caught all three is comparing rc AND the verdict line before dividing.
+        - type: evidence
           ts: "2026-08-30T20:03:05Z"
           agent_id: "windows-yolanda-claude-20260830t162208z"
           host: yolanda
