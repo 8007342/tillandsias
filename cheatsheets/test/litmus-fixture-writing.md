@@ -462,6 +462,14 @@ any check's output, ask what the output would look like if the thing it
 measures were ABSENT — and whether that is distinguishable from what you
 are holding.
 
+THE COMMON REPAIR, proven three separate times in one night: make the
+artifact CARRY HOW IT KNOWS — treatment_verified as prose naming the
+server log lines, the gate stamp requiring a token only the gate can
+issue, the capability probe emitting its method beside its verdict (with
+`unknown` as a first-class verdict for an unreachable substrate, and a
+shim that answers `command -v` but not `--version` treated as evidence
+of NOTHING). Record the evidence, not the conclusion.
+
 ## Existence on the host is not correctness of the container path
 
 A verifier that checks "every path in the spec exists" is structurally
