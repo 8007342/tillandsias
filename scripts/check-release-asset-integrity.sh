@@ -126,7 +126,7 @@ done
 
 if [ "${#violations[@]}" -gt 0 ]; then
     echo "violation:release-asset-integrity:${#violations[@]}"
-    for v in "${violations[@]}"; do
+    for v in ${violations[@]+"${violations[@]}"}; do
         echo "  $v has no integrity path: no ${v}.cosign.bundle, and no signed SHA256SUMS names it" >&2
     done
     echo "  A downloader cannot verify these. Sign them in the release workflow" >&2

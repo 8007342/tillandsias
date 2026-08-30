@@ -124,7 +124,7 @@ if [[ "$LITMUS_COUNT_FIXTURE" == true ]]; then
 
     fixture_passed=0
     fixture_failed=0
-    for litmus_file in "${LITMUS_COUNT_FIXTURE_FILES[@]}"; do
+    for litmus_file in ${LITMUS_COUNT_FIXTURE_FILES[@]+"${LITMUS_COUNT_FIXTURE_FILES[@]}"}; do
         fixture_passed=$((fixture_passed + $(litmus_count_passed "$litmus_file")))
         fixture_failed=$((fixture_failed + $(litmus_count_failed "$litmus_file")))
     done

@@ -221,7 +221,7 @@ fi
 excluded=0
 if [ -z "${FRESHNESS_FIXTURE_DIR:-}" ] && [ "${#CANDIDATES[@]}" -gt 0 ]; then
     _kept=()
-    for _c in "${CANDIDATES[@]}"; do
+    for _c in ${CANDIDATES[@]+"${CANDIDATES[@]}"}; do
         _rel="${_c#./}"
         _drop=0
         for _entry in "${EXCLUDED_PREFIXES[@]}"; do

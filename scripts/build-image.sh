@@ -523,9 +523,24 @@ fi
 # Log preservation: the build output is kept in $ROOT/build-*.log for agent iteration
 
 BUILD_TIMEOUT_SECS="${TILLANDSIAS_BUILD_TIMEOUT_SECS:-1800}"
+# macOS ships no GNU timeout; coreutils installs it as gtimeout. With neither,
+# the build runs untimed rather than not at all — the timeout is a guard
+# against a hung network fetch, not a correctness requirement.
+_resolve_timeout_bin() {
+    if command -v timeout >/dev/null 2>&1; then
+        printf 'timeout'
+    elif command -v gtimeout >/dev/null 2>&1; then
+        printf 'gtimeout'
+    fi
+}
+TIMEOUT_BIN="$(_resolve_timeout_bin)"
 _timeout_podman_build() {
     local rc=0
-    timeout --signal=TERM --kill-after=10 "$BUILD_TIMEOUT_SECS" "$PODMAN" build "$@" || rc=$?
+    if [[ -n "$TIMEOUT_BIN" ]]; then
+        "$TIMEOUT_BIN" --signal=TERM --kill-after=10 "$BUILD_TIMEOUT_SECS" "$PODMAN" build "$@" || rc=$?
+    else
+        "$PODMAN" build "$@" || rc=$?
+    fi
     if [[ "$rc" -eq 124 ]]; then
         _error "podman build timed out after ${BUILD_TIMEOUT_SECS}s (TILLANDSIAS_BUILD_TIMEOUT_SECS to adjust)."
         _error "A package-manager layer needing a genuine network fetch can hang"

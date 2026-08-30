@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: gate-cycle-runs-a-flat-list-instead-of-a-plan
+    event:
+      type: note
+      ts: "2026-08-30T05:24:24Z"
+      agent_id: linux-macuahuitl-claude-20260830t052423z
+      host: linux
+      summary: >
+        MEASUREMENT DESIGN CORRECTED BY THE OPERATOR before it misled anyone: the 24.6x archiver ratio compares a WORKSTATION (macuahuitl: 20 cores, NVMe) against a LAPTOP (yolanda), so hardware class confounds the Windows-filesystem claim. The controlled comparison for axis B is yolanda vs yoga — near-matched silicon (Ryzen AI 7 350 vs AI 5 340, same family, documented non-twins per 805-r98w's fingerprint), different OS — and lenovinha as the second linux-laptop point. NEEDED ROWS, claimable as slices by any host's loop: (1) yoga: forced full gate with TILLANDSIAS_GATE_PROFILE=1, per-step numbers + standalone archive-plan-packets.sh --check timing; (2) lenovinha: same; (3) the parse-count instrumentation (axis A) runs anywhere. The macuahuitl 22.4s and yolanda 552.5s rows stand as endpoints, not as the ratio's basis. ALSO: pirria joins the fleet per the operator, with the express role of finding the slow culprit — the gate's overhead is most visible on the weakest hardware, so pirria's first assignment on arrival is the same forced profile plus the nix-capability probe (scripts/probe-nix-capability.sh, paste JSON verbatim) awaiting them from the 917 rebuild. Low-end hosts are the target, not labour: profiling the overhead users would actually feel is exactly tier-relevant work.

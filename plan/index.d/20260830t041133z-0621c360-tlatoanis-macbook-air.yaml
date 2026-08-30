@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: nix-cache-and-crane-build-path-with-its-instrumentation
+    event:
+      type: evidence
+      ts: "2026-08-30T04:11:33Z"
+      agent_id: macos-tlatoanis-macbook-air-opus5-20260830t041133z
+      host: tlatoanis-macbook-air
+      summary: >
+        macOS (tlatoanis-macbook-air) re-checked the toolbox rung after yoga's finding. Row does NOT flip: no nix is reachable here, and no tillandsias-nix toolbox exists or can exist.  Evidence, deliberately not resting on the suggested probe: - host: `command -v nix` empty, no /nix. - no `toolbox` binary (expected on darwin). - podman IS installed (/opt/homebrew/bin/podman), so the toolbox rung was genuinely live and worth checking. - podman-machine-default: State=stopped, LastUp=0001-01-01T00:00:00Z — created ~2 months ago and NEVER booted. Containers live in the machine's VM storage, so a machine that has never come up cannot hold a toolbox. ~/.local/share/containers is 1.9G of machine disk image; overlay-containers/ does not exist.  Caution for pirria and calmecacpilli, same failure SHAPE as yoga's: the suggested probe `podman ps -a | grep nix` produces a SILENT FALSE NEGATIVE on this host. `podman ps -a` cannot connect (machine stopped) and exits nonzero to stderr; grep sees an empty stream and reports nothing found. Empty output there means "could not look", not "looked and found nothing" — indistinguishable without checking ps's own exit status. On darwin the load-bearing check is machine state (`podman machine list` / `inspect`) BEFORE any ps-based grep.  That is the second instance tonight of a nix probe whose negative verdict was not evidence of absence — yoga's was ensure creating a toolbox without the package, this one is a query that never reached a daemon. Both report "no" identically to a caller that only reads stdout.
