@@ -14,14 +14,21 @@ documents and neither describes the machine:
       cpu_physical  16                      <- WRONG; the part is 8 physical / 16 logical
       cpu_logical   16
       gpu_model     "none"                  <- the machine has a Radeon 860M
-      accel_ram_gb  "-"
+      accel_ram_gb  "-"                     <- correctly says UNKNOWN, see below
 
     WSL2-GUEST probe
       cpu_model     "AMD Ryzen AI 7 350 w/ Radeon 860M"   <- correct
       cpu_physical  8   cpu_logical 16                     <- correct
       gpu_model     "WSL2 paravirtual GPU (/dev/dxg)"      <- the PATH, not the silicon
+      accel_gpu     present-unusable
+      accel_reason  engine-missing:no-vulkan-icd
       npu           none                                   <- the machine has an XDNA NPU
       RAM           the VM's ~7 GB slice, not the host's 15.2 GB
+
+The two documents FAIL DIFFERENTLY, and the difference is the point: the native
+probe says the GPU DOES NOT EXIST, the guest probe says it exists and cannot be
+reached. Those are opposite claims about one piece of silicon, and a reader
+holding either document alone has no way to know the other exists.
 
 So: the CPU fields are right only inside the guest, and the GPU and RAM fields
 are right in neither. There is no single vantage point on this platform from
@@ -57,6 +64,14 @@ support a hardware comparison and should not silently be used for one.
   unknown, never as a plausible default. `cpu_physical = cpu_logical` when the
   topology is unreadable, and `gpu_model = "none"` when the enumeration failed,
   are both fabrications a reader cannot detect.
+
+  THE FIX IS SMALLER THAN IT LOOKS, and this is the actionable part: the native
+  document ALREADY emits `accel_ram_gb = "-"`. The probe knows how to say
+  unknown. It says unknown in one field and invents a plausible 16 in another,
+  in the same document, in the same run. So this is not "teach the probe a new
+  vocabulary" — it is an INCONSISTENCY between fields that already have both
+  behaviours available. Whichever field convention is right, one of these two is
+  wrong today.
 - Record the VANTAGE POINT in the document (native | wsl2-guest), so two
   documents from one machine are recognisably two views rather than two
   machines.
