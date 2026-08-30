@@ -165,6 +165,17 @@ orphaned inside the proxy image (see Patch P6).
 
 ## 2. Network Scenarios Catalog (NA-02)
 
+> SUPERSEDED IN PART, 2026-08-30 (order 245 P5). The scenario catalog is now
+> published as `openspec/specs/network-scenarios/spec.md`, verified against the
+> tree rather than carried from this draft. THREE THINGS CHANGED in the move,
+> and the spec is authoritative on all three: **S0 was dropped** (nothing takes
+> it; a posture with no taker is a label without wiring), **S6 was added** for
+> the browser posture this section itself admitted the catalog "has no name
+> for", and **S4's retirement mechanism was corrected** — the policy layer does
+> not denylist `--network=host`, it ALLOWLISTS only `--device=` flags, which is
+> strictly stronger and was mis-described here. The operation table below is NOT
+> superseded; the spec does not duplicate it.
+
 Six canonical scenarios; every operation must name one per container it runs.
 
 - **S0 none** — no network. (Nothing uses this today; candidate for
@@ -368,8 +379,17 @@ encrypted control channel; slices 1-3 of 141 landed, 4 and 6 remain —
   `vsock-transport/spec.md` carries only two matches across the whole
   hvsock/virtio-vsock/unix-socket vocabulary. Remaining patch is the
   `vsock-transport` half of the §4 platform matrix, as normative text.
-- **P5 new spec `openspec/specs/network-scenarios/spec.md` — OPEN.** The
-  directory does not exist. S0-S5 catalog (§2) with the operation table as
+- **P5 — DONE 2026-08-30, and publishing it corrected the draft three times.**
+  `openspec/specs/network-scenarios/spec.md` now exists, verified against the
+  tree: S0 DROPPED (no taker), S6 ADDED for the browser posture §2 admitted was
+  unnamed, and S4's retirement mechanism CORRECTED (an allowlist admitting only
+  `--device=`, not a `--network=host` denylist — stronger than recorded, and
+  §2's citation pointed at the test rather than the function). Left unbound in
+  litmus-bindings: 38 of 177 specs already are, and binding it to
+  `litmus:enclave-membership-documented` would overstate coverage since that
+  guard tests enclave membership, not the catalog. The scenario-constant half
+  of P5's proposed litmus still needs code changes to the launch builders.
+  Original finding: S0-S5 catalog (§2) with the operation table as
   scenarios; litmus: a source audit that every `--network` / `.network(` site
   names a scenario constant, so a new container must declare a scenario to
   compile/pass.
