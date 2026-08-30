@@ -43,6 +43,29 @@ printf 'packets: []\n' > plan/index.d/folded-b.yaml
 git add -A
 git commit -qm base
 
+# ORDER 940-f77j — a stamp is now EARNED, not merely written: `write` requires a
+# one-shot pass token that a GREEN gate issues, naming the tree it validated.
+# This fixture stands in for the gate, so it issues the token the same way
+# build.sh does before each write it expects to succeed.
+#
+# NOTE FOR THE READER: this changes nothing about the compaction allowance these
+# cases exist for. That allowance lives in `compute()` — a deleted tracked entry
+# is DROPPED from the hashed list so a compacted tree can be hashed at all — and
+# it never meant "a compacted tree stamps without re-gating". A deletion still
+# changes the digest exactly as an edit does. The token requirement sits one
+# layer above and is orthogonal: issue it, and every case below asserts exactly
+# what it asserted before.
+issue_pass_token() {
+    local _d
+    _d="$(bash "$STAMP" compute)" || return 1
+    {
+        echo 'version 1'
+        echo "digest $_d"
+        echo 'dispatch check'
+        echo 'issued now'
+    } > "$(git rev-parse --absolute-git-dir)/tillandsias-gate-pass-token"
+}
+
 BASE_STAMP="$(bash "$STAMP" compute)" || fail "case 0: compute failed on a clean tree"
 [ -n "$BASE_STAMP" ] || fail "case 0: empty stamp on a clean tree"
 echo "ok: case 0 — clean tree hashes"
@@ -51,6 +74,7 @@ echo "ok: case 0 — clean tree hashes"
 # Only dirt is deleted tracked files, exactly what `tillandsias-plan compact`
 # leaves behind after folding fragments into the base.
 rm plan/index.d/folded-a.yaml plan/index.d/folded-b.yaml
+issue_pass_token || fail "could not issue a pass token"
 out="$(bash "$STAMP" write)"
 [ "$out" = "ok:gate-stamped" ] || fail "case 1: write on a deletion-only tree said '$out'"
 out="$(bash "$STAMP" verify)"
@@ -91,6 +115,12 @@ echo "ok: case 4 — restored tree does not inherit the deletion-era stamp"
 # --- case 5 (NEGATIVE CONTROL): unmeasurable is not the same as absent -------
 # An entry that EXISTS but is neither a regular file nor a symlink was never
 # measured, so it must still refuse rather than be waved through as deleted.
+# Issue the token BEFORE breaking the tree (940-f77j). Without this the write
+# refuses at the token check and never reaches the unmeasurable-entry path, so
+# the control would still "refuse" while proving nothing about the thing it was
+# written to prove — a negative control passing for the wrong reason is the same
+# defect it exists to catch.
+issue_pass_token || fail "case 5: could not issue a pass token"
 rm f.txt
 mkdir f.txt
 out="$(bash "$STAMP" write 2>/dev/null)"
@@ -108,6 +138,7 @@ echo "ok: case 5 — non-file, non-symlink entry still refused"
 # commit, because the hook checks it AFTER the commit. Content, not HEAD, is
 # what the stamp covers — so no second gate run is needed anywhere in here.
 rm plan/index.d/folded-a.yaml plan/index.d/folded-b.yaml
+issue_pass_token || fail "case 6: could not issue a pass token"   # <- the gate
 out="$(bash "$STAMP" write)"                      # <- the ONLY gate+stamp
 [ "$out" = "ok:gate-stamped" ] || fail "case 6: write said '$out'"
 git add -A
