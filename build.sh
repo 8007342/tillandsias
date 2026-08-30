@@ -2578,6 +2578,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Long-running view agreement check passed"
 
+    _step "Checking the reclaim-stranded-claims fixture (943-unii)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-reclaim-stranded-claims.sh" 2>&1; then
+        _error "the stranded-claim reaper regressed (943-unii) — see the failing case above"
+        exit 1
+    fi
+    _info "Reclaim-stranded-claims fixture passed"
+
     _step "Checking plan fragments use keys the fold reads (944-vim8)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-keys-are-read.sh" 2>&1; then
         _error "a plan/index.d/ fragment uses a top-level key the fold discards (944-vim8) — see the verdict line above"

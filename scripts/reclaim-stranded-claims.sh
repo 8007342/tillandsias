@@ -41,15 +41,55 @@ TTL_HOURS=24
 APPLY=0
 NOW_EPOCH=""
 
+# ORDER 943-unii. Every flag that takes a value REQUIRES one, and says so.
+#
+# All three arms below were silently wrong, and two of them HUNG. The old
+# parser was:
+#     --ttl-hours) TTL_HOURS="${2:-4}"; shift 2 ;;
+#     --now)       NOW_EPOCH="${2:-}";  shift 2 ;;
+# With the flag passed bare, `shift 2` has only one argument to consume. Under
+# `set -uo pipefail` (no `-e`) that shift FAILS, leaves `$#` unchanged, and the
+# `while` re-reads the same argument forever — measured 2026-08-30: both
+# `--ttl-hours` and `--now` with no value hang until killed.
+#
+# The `${2:-4}` fallback made it worse in principle: had the shift succeeded it
+# would have silently reaped at 4 HOURS instead of the documented 24, returning
+# live claims six times too early. In a reaper the meta-orchestration skill
+# already warns "launders finished work into lost work" (833-fpe7), a typo must
+# not be able to choose a shorter TTL.
+#
+# TTL is validated HERE rather than left to expire-claims: passing `abc`
+# through made the wrapper print `mode=refused-expire-claims-failed`, blaming
+# the tool for the caller's argument.
+need_value() { # need_value <flag> <count-remaining>
+    if [ "$2" -lt 2 ]; then
+        echo "summary: candidates=0 reclaimed=0 refused=0 mode=refused-missing-value:$1" >&2
+        echo "usage: reclaim-stranded-claims.sh [--apply] [--ttl-hours N] [--now EPOCH]" >&2
+        exit 2
+    fi
+}
+
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --apply) APPLY=1; shift ;;
-        --ttl-hours) TTL_HOURS="${2:-4}"; shift 2 ;;
+        --ttl-hours) need_value "$1" "$#"; TTL_HOURS="$2"; shift 2 ;;
         --ttl-hours=*) TTL_HOURS="${1#--ttl-hours=}"; shift ;;
-        --now) NOW_EPOCH="${2:-}"; shift 2 ;;   # test seam: fixed clock
+        --now) need_value "$1" "$#"; NOW_EPOCH="$2"; shift 2 ;;   # test seam: fixed clock
         *) echo "usage: reclaim-stranded-claims.sh [--apply] [--ttl-hours N] [--now EPOCH]" >&2; exit 2 ;;
     esac
 done
+
+case "$TTL_HOURS" in
+    ''|*[!0-9]*)
+        echo "summary: candidates=0 reclaimed=0 refused=0 mode=refused-bad-ttl:$TTL_HOURS" >&2
+        echo "--ttl-hours needs a positive integer (hours); got '$TTL_HOURS'" >&2
+        exit 2 ;;
+esac
+[ "$TTL_HOURS" -gt 0 ] 2>/dev/null || {
+    echo "summary: candidates=0 reclaimed=0 refused=0 mode=refused-bad-ttl:$TTL_HOURS" >&2
+    echo "--ttl-hours needs a POSITIVE integer; 0 would reclaim every live claim" >&2
+    exit 2
+}
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 2
