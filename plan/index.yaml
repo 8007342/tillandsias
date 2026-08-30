@@ -64098,6 +64098,12 @@ plan_index:
         - one instrumented run either completes exit 0 solo or names the sender
       events:
         - type: note
+          ts: "2026-08-30T21:34:15Z"
+          agent_id: "linux-macuahuitl-fable5-20260830t213415z"
+          host: macuahuitl
+          summary: |
+            REOPENED IN EFFECT — the ghost is caught, hermetically reproducible, and it is not what any hypothesis said. REPRO (macuahuitl, 5/5 today): run the install-validation headless launch INSIDE the tillandsias-builder toolbox — 'toolbox run --container tillandsias-builder bash -c "timeout 5 <musl tillandsias> --headless /tmp/test-install-validation"' — and the TOOLBOX CONTAINER ITSELF dies exit 143 (podman events: died, NO stop event — raw SIGTERM to container init), taking build.sh down as rc=137. This is why every --ci-full/--install SIGTERM landed 'at install-validation' and why manual steps outside the toolbox were always fine. THREE HYPOTHESES TESTED AND REFUTED, each with a control: (1) running tray singleton-killed — repro'd with tray down; (2) on-demand image build via --replace — repro'd with images pre-built; (3) launcher-singleton pidfile kill across PID namespaces — repro'd under TILLANDSIAS_NO_SINGLETON=1, still dies; also setsid does not save it, so it is not the graceful-shutdown group sweep. The kill happens between 'Received shutdown signal' and exit. OPERATOR-DIRECTED WORKAROUND SHIPPED: binary installed directly (validated musl static, v0.4.260830.5, tray running on it). REMAINING WORK: identify the exact syscall path from the headless instance's 5s startup+shutdown that TERMs the toolbox init (candidates left: something in enclave reconciliation resolving a container-namespace pid; a kill(-1)-shaped sweep in a dependency); needs strace/bpftrace which this session lacks privileges for, OR add eprintln instrumentation to every kill() call site and re-run the hermetic repro.
+        - type: note
           ts: "2026-08-29T23:47:12Z"
           host: linux
           summary: |
@@ -64201,6 +64207,12 @@ plan_index:
         - OpenCode completes a real project question against the local OpenAI endpoint with citations and floor behaviour intact, demonstrated on both twins
         - a refusal (out-of-coverage question) arrives at OpenCode as a well-formed completion carrying the typed marker, not an error
       events:
+        - type: note
+          ts: "2026-08-30T21:34:42Z"
+          agent_id: "linux-macuahuitl-fable5-20260830t213442z"
+          host: macuahuitl
+          summary: |
+            ACCEPTANCE MET through the real client (yolanda, 9a18a5ac4, operator authorised the winget install directly): opencode models lists exactly the five declared domains; cited project question returned the exactly-correct span (pull_merge_cadence.pre_push_gate, methodology/multi-host-development.yaml:458-509); refusal path reached the user as well-formed text naming the floor (best 0.56 < 0.62); domain routing survived the client (code question cited gate-stamp.sh, the hook, the memoization fixture). QUALIFIER ON THE RECORD, yolanda's framing kept: both cited answers were the RETRIEVAL-ONLY FLOOR, not synthesis — 7B decodes 9.1 tok/s against the 60s clamp on that hardware. Read as 'pipeline, floors and citations survive the client', not '7B answers well there'.
         - type: evidence
           ts: "2026-08-30T20:38:54Z"
           agent_id: "windows-yolanda-claude-20260830t162208z"
@@ -64657,6 +64669,12 @@ plan_index:
             A CAVEAT I AM STATING RATHER THAN BURYING: these are STANDALONE invocations, and their 9P absolutes do not match the in-gate profile for the same steps (ghost-trace 36.8s standalone vs 134s in-gate; terminology 40.9s vs 80s). The gate runs them under different conditions — warm/cold caches, concurrent work, possibly wider scope. The RATIOS are same-host same-command and are the trustworthy part; the projected 122s should be treated as an order-of-magnitude estimate, not a promise, and re-measured in-gate before anyone commits to it.
 
             NOT MEASURED: whether a staged tree can actually serve these steps in a real gate run. Every number above comes from invoking the step directly against a staged copy; wiring the gate to use a stage introduces refresh, staleness and correctness questions (the stamp must describe the REAL tree, not the copy) that this measurement does not address and that are the harder half of axis B.
+        - type: note
+          ts: "2026-08-30T21:34:42Z"
+          agent_id: "linux-macuahuitl-fable5-20260830t213442z"
+          host: macuahuitl
+          summary: |
+            AXIS B MEASURED (yolanda, same host/binary/tree, both arms rc=0 with identical verdict lines): archiver 131.6s on 9P vs 44.4s native ext4 = FILESYSTEM MULTIPLIER 2.96x; staging cost 26.8s/463MB one-time. The ~5.5x cross-host figure decomposes as 2.96 (filesystem) x ~1.98 (silicon) = 5.9, consistent. DESIGN BLOCKER for any 'stage plan/' scheme: the archiver's answerability check needs the WORKSPACE (refuses without Cargo.toml) — the staging unit is the CHECKOUT (463MB), not the 21MB ledger. NOT extrapolated: whether the ratchet/stamp/dictionary steps carry the same multiplier is the next measurement (if it held across the top four: 561s -> ~285s, but that assumes a factor measured on ONE step). Three invalid measurements preceded the valid one, each OVERSTATING the win (48.8x/15.6x/24x — both arms failing identically); comparing rc AND verdict line before dividing caught all three.
         - type: note
           ts: "2026-08-30T20:15:38Z"
           agent_id: "linux-macuahuitl-fable5-20260830t201538z"

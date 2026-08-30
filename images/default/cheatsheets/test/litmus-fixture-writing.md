@@ -596,3 +596,19 @@ Nothing to fix in the check — the diff is telling the truth about the tree.
 The diagnosis to reach for: when a diff-against-trunk check flags a file you
 never edited, check `git status` for an unfinished merge BEFORE reading the
 finding as yours.
+
+## Two arms that fail the same way produce a ratio that looks like a result
+
+From yolanda's axis-B measurement (941-trcf, 2026-08-30). Three invalid
+A/B measurements preceded the valid one, and every one of them OVERSTATED
+the win: both arms refusing on a missing binary read as 48.8x, both failing
+on missing cargo read as 15.6x, arms with different exit codes read as 24x.
+The true, controlled number was 2.96x. A ratio of two failure walls is not
+a measurement of the treatment — it is a measurement of how fast each arm
+happens to fail.
+
+The control that caught all three: before dividing, require BOTH arms to
+have rc=0 AND identical verdict lines — the same work demonstrably done on
+both sides, differing only in the variable under test. This is the A/B
+sibling of record-the-evidence-not-the-conclusion: the evidence is the two
+verdict lines, and the ratio is only as real as their agreement.

@@ -3817,8 +3817,15 @@ impl StatusNotifierItemIface {
         tray_icon_status(self.0.snapshot().tray_icon_state).to_string()
     }
 
+    // SNI spec: WindowId is INT32 ('i'). Exporting u32 made gnome-shell log
+    // "Received property WindowId with type u does not match expected type i"
+    // and busy-loop at ~100% CPU from the moment the item registered —
+    // the 2026-08-30 desktop freeze, live on this host, shell CPU dropping
+    // 99.5% -> 2.3% the instant the tray unit stopped. Same defect class as
+    // the dbusmenu Event/EventGroup signatures (938-9yh4): a wire type the
+    // watcher tolerates until it doesn't.
     #[zbus(property)]
-    fn window_id(&self) -> u32 {
+    fn window_id(&self) -> i32 {
         0
     }
 
@@ -4027,7 +4034,14 @@ impl DbusMenuIface {
         }
     }
 
-    async fn about_to_show(&self, id: i32) -> fdo::Result<(bool, bool)> {
+    // REPLY TYPE IS LOAD-BEARING, third instance of the class (944-jaef,
+    // 2026-08-30): com.canonical.dbusmenu declares AboutToShow as returning a
+    // SINGLE bool — "b" (needUpdate). This returned (bool, bool) — wire
+    // "(bb)" — and expanding a project submenu froze the Wayland session
+    // mid-grab exactly like the Event "(ib)" incident documented below.
+    // AboutToShowGroup is the variant with two return values; AboutToShow is
+    // not it.
+    async fn about_to_show(&self, id: i32) -> fdo::Result<bool> {
         // The ☁️ Cloud submenu (id=22) opens — refresh if our TTL expired.
         // The root menu (id=0) opens — refresh too, since many trays call
         // AboutToShow on the root rather than per-submenu. Both paths are
@@ -4059,7 +4073,7 @@ impl DbusMenuIface {
         // The refresh above is asynchronous. Returning "needs update" here
         // asks the shell to re-read the submenu while it is opening, which
         // causes visible flicker when the cache is already fresh.
-        Ok((false, false))
+        Ok(false)
     }
 
     // REPLY TYPE IS LOAD-BEARING (2026-08-29 incident): com.canonical.dbusmenu
@@ -6514,9 +6528,8 @@ mod tests {
         let result = futures::executor::block_on(iface.about_to_show(22))
             .expect("AboutToShow should succeed");
 
-        assert_eq!(
-            result,
-            (false, false),
+        assert!(
+            !result,
             "fresh Cloud cache must not ask the shell to re-read the submenu while it opens"
         );
     }
