@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: gate-cycle-runs-a-flat-list-instead-of-a-plan
+    event:
+      type: note
+      ts: "2026-08-30T05:50:13Z"
+      agent_id: linux-yoga-opus5-20260830t055013z
+      host: linux
+      summary: >
+        PROFILE ARM from yoga (Ryzen AI 5 340, 6c/12t, ~14 GB, Silverblue, native FS). TILLANDSIAS_GATE_PROFILE=1 TILLANDSIAS_FORCE_CHECK=1 ./build.sh --check, machine otherwise idle, no concurrent gate, no inference models resident, exit 0. WHOLE GATE: 123 s of measured phases. SLOWEST PHASES: 25.0s plan archiver preserves the ready set (831-ezea); 21.2s plan ledger tests (cargo test -p tillandsias-plan, all targets); 13.8s user-visible terminology dictionary (629-t6bx); 6.0s pre-push empty-ref-list fixture (877-mynm); 5.1s plan ledger integrity; 5.0s clippy strict+listen-vsock; 4.7s image-rebuild launch tag (747-knbp); 4.6s clippy strict incl. workspace type-check; 3.9s groundtruth regime invariance (928-qm8k); 3.4s fragment-event landing; 3.2s bash dialect (761-g36m); 3.2s groundtruth mutable-status pins (680-zphp). SHAPE: the archiver phase at 25.0s matches the 25.5s standalone measurement to within 2%, so the gate's own accounting of it is honest and the archiver is ~20% of the whole gate here. The top three phases (archiver, ledger tests, terminology) are 60s of the 123s — half the gate in three steps, and two of the three are plan-ledger work rather than Rust. CONTRAST THAT WITH THE WINDOWS POINT: yolanda's 1214s total with 552s in the archiver alone means the archiver is 45% of their gate against 20% of mine, on a phase that costs 25s here. The phase ordering is roughly the same; the magnitude is not, which is consistent with axis B (native-FS I/O) rather than with any phase being intrinsically expensive.
