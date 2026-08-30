@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: claim-events-change-no-status-so-claiming-separates-nobody
+    field: next_action
+    value: 'THE DECISION IS STILL THE DECISION AND IT IS NOT A WORKER''S. But it now has the data it was missing, measured 2026-08-30: the two branches are NOT equally cheap. If claiming becomes EXCLUSIVE, every claimed packet''s return depends on scripts/reclaim-stranded-claims.sh, which has NO CALLER anywhere outside its own source and fixture — build.sh only shape-checks expire-claims --list-live, never the mutating form, and the meta-orchestration skill warns that indiscriminate reaping ''launders finished work into lost work'' (833-fpe7). So the exclusive branch requires building a discriminating invoker first, which is its own non-trivial packet. The AUDIT-RECORD branch (a claim event is a record, not a mutex) carries no such dependency and needs only the methodology rule corrected plus a guard that no reader treats a claim as exclusion. ALREADY LANDED, factual corrections only: the worker skill said claims are ''reclaimed after 4h''; both tools use 24h and nothing runs either, so it now says ''reclaimable after 24h'' with the no-caller measurement stated. RECORDED NOT FIXED: reclaim-stranded-claims.sh''s ''--ttl-hours) TTL_HOURS=${2:-4}'' silently yields 4 when the flag is passed without a value — plausibly the origin of the skill''s wrong number.'
+    ts: "2026-08-30T22:18:45Z"
+    host: linux
+
+events:
+  - packet_id: claim-events-change-no-status-so-claiming-separates-nobody
+    event:
+      type: note
+      ts: "2026-08-30T22:18:45Z"
+      host: linux
+      summary: >
+        measured the reaper; the decision's two branches are not equally cheap
