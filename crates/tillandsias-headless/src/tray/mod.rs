@@ -4062,15 +4062,23 @@ impl DbusMenuIface {
         Ok((false, false))
     }
 
+    // REPLY TYPE IS LOAD-BEARING (2026-08-29 incident): com.canonical.dbusmenu
+    // declares Event as returning NOTHING — `()`. This method returned
+    // `(i32, bool)` (wire type "(ib)"), and gnome-shell REJECTS a reply whose
+    // signature disagrees with the spec: the operator clicked the tray icon,
+    // the shell logged `Method "com.canonical.dbusmenu.Event" returned type
+    // "(ib)", but expected "()"` mid menu-grab, and the Wayland session froze
+    // hard enough to need a session restart. The handler's work is its side
+    // effects; the reply carries no information and must carry none.
     async fn event(
         &self,
         id: i32,
         event_id: &str,
         _data: OwnedValue,
         _timestamp: u32,
-    ) -> fdo::Result<(i32, bool)> {
+    ) -> fdo::Result<()> {
         if event_id != "clicked" && event_id != "opened" && event_id != "activate" {
-            return Ok((0, false));
+            return Ok(());
         }
 
         // Static-id dispatch covers the minimal-UX skeleton. Per-project
@@ -4120,7 +4128,7 @@ impl DbusMenuIface {
                     in_flight
                 };
                 if already_in_flight {
-                    return Ok((0, true));
+                    return Ok(());
                 }
                 let _ = self.0.rebuild_after_state_change().await;
                 // GitHubLogin click: launch the gh login flow AND refresh
@@ -4245,24 +4253,23 @@ impl DbusMenuIface {
             }
         }
 
-        Ok((0, true))
+        Ok(())
     }
 
     async fn event_group(
         &self,
-        ids: Vec<i32>,
-        event_id: &str,
-        _data: OwnedValue,
-        timestamp: u32,
-    ) -> fdo::Result<Vec<(i32, i32, bool)>> {
-        let mut out = Vec::new();
-        for id in ids {
-            let (result, handled) = self
-                .event(id, event_id, ov(Value::from(0u32)), timestamp)
-                .await?;
-            out.push((id, result, handled));
+        events: Vec<(i32, String, OwnedValue, u32)>,
+    ) -> fdo::Result<Vec<i32>> {
+        // Spec: EventGroup(events: a(isvu)) -> idErrors: ai. Both halves were
+        // wrong here (same 2026-08-29 incident class as `event` above): the
+        // input was flattened parallel args (wire "aisvu") and the reply was
+        // a(iib). Every event dispatches through the same handler as Event
+        // (unknown ids are a handled no-op there), so the error list is
+        // always empty.
+        for (id, event_id, data, timestamp) in events {
+            self.event(id, &event_id, data, timestamp).await?;
         }
-        Ok(out)
+        Ok(Vec::new())
     }
 
     #[zbus(signal)]

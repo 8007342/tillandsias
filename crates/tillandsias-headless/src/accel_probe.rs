@@ -735,6 +735,179 @@ fn intel_compute_runtime_present() -> bool {
         .unwrap_or(false)
 }
 
+/// ORDER 793-zumy — REAL GPU ENUMERATION, replacing file-existence detection.
+///
+/// THE CLASS THIS EXISTS TO END, in yoga's words: A LABEL THAT SUBSTITUTES FOR
+/// THE WIRING IT NAMES. Four measured instances, one shape:
+///
+///   * accel_probe.rs computed `cdi_ok = effective_tier == "gpu-cuda"` — a label
+///     derived from the same `nvidia-smi` the surrounding code had already run.
+///     The container lane was advertised on a host where
+///     `podman run --device nvidia.com/gpu=all` returned rc=126 (935-jhh5).
+///   * WSL2 detection is `dxg_present && !dri_present` — file existence. Nothing
+///     enumerates, so the software-rasterizer rejection this packet requires is
+///     not merely untested there, it is UNIMPLEMENTABLE (yolanda, 793-zumy).
+///   * The inference container announced `TILLANDSIAS_INFERENCE_TIER=gpu-rocm`
+///     with `HostConfig.Devices == []` and `size_vram=0` on every model (yoga).
+///   * dev-inference-ensure.sh wires `--device` for gpu-cuda only; gpu-rocm falls
+///     through empty while the tier label is still passed in (yoga).
+///
+/// A label that stands in for wiring READS AS EVIDENCE to every later reader,
+/// which is why the gap survived three orders unnoticed.
+///
+/// THE RULE: a lane is proven by what can be STATTED OR PLACED — a device node
+/// visible in-container, a nonzero size_vram, a real enumeration — never by a
+/// label, an env var, or the presence of a file. The precedent is already
+/// in-tree and is a shell script: images/inference/entrypoint.sh refuses a cuda
+/// tier when `[ -e /dev/nvidia0 ]` fails INSIDE the container.
+///
+/// WHY DRM RENDER NODES ARE THE RIGHT PRIMITIVE HERE, measured on lenovinha
+/// 2026-08-30 — the fleet's only dual-vendor host:
+///
+///   renderD128  vendor=0x1002 device=0x1638 driver=amdgpu   (AMD Cezanne iGPU)
+///   renderD129  vendor=0x10de device=0x24dd driver=nvidia    (RTX 3070 dGPU)
+///
+///   1. IT REPRESENTS TWO GPUs. `/dev/dri exists` is one bit and cannot; this is
+///      the enumeration gap 793-zumy was filed against, and this host is the
+///      fixture that shows it.
+///   2. IT CARRIES REAL IDENTITY — PCI vendor/device and the BOUND KERNEL
+///      DRIVER, not a guess from a filename.
+///   3. IT REJECTS SOFTWARE RASTERIZERS STRUCTURALLY. lavapipe/llvmpipe are
+///      USERSPACE-ONLY ICDs: they create no DRM render node, so an enumeration
+///      of render nodes cannot see them AT ALL. Criterion 3 is satisfied by
+///      construction rather than by a blocklist of driver names — and a
+///      blocklist is exactly the shape that rots when a new rasterizer appears.
+///
+/// WHAT THIS DELIBERATELY DOES NOT COVER, stated so nobody reads it as total:
+/// WSL2. /dev/dxg is not a DRM device and creates no render node, so a
+/// paravirtualised GPU is invisible here and its arm must keep its own proof.
+/// Yolanda's `engine-missing:no-vulkan-icd` reason already carries that case
+/// honestly. Enumerating nothing on WSL2 is CORRECT for this primitive; it is
+/// the WSL2 arm's job to say what it can prove, not this one's job to guess.
+/// WHERE a piece of evidence was gathered. Yoga's tightening of the rule, and it
+/// is the dimension whose absence produced their finding: not "proven by what
+/// can be statted or placed" but PROVEN BY WHAT CAN BE STATTED FROM WHERE THE
+/// WORK HAPPENS.
+///
+/// Measured on yoga 2026-08-30, one machine, two true statements:
+///   host envelope : accel_gpu=usable, /dev/kfd 235,0 and /dev/dri/renderD128 present
+///   in-container  : /dev/kfd absent, /dev/dri absent, size_vram=0 for every model
+/// "usable" was true of the MACHINE and false of every lane any workload runs
+/// in, and nothing in the envelope distinguished those. The node existed the
+/// entire time it was missing where it mattered.
+///
+/// So a record carries its vantage. An enumeration performed on the host is
+/// evidence ABOUT THE HOST and must never be read as a container-lane claim —
+/// which is exactly the substitution this packet exists to end, one level up
+/// from the label.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Vantage {
+    /// Observed from the host's own filesystem.
+    Host,
+    /// Observed from inside a container — the only vantage that can speak for
+    /// the container lane. `images/inference/entrypoint.sh` is the in-tree
+    /// precedent: it refuses a cuda tier when `[ -e /dev/nvidia0 ]` fails THERE.
+    Container,
+}
+
+impl Vantage {
+    pub fn token(&self) -> &'static str {
+        match self {
+            Vantage::Host => "host",
+            Vantage::Container => "container",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DrmRenderNode {
+    /// e.g. "renderD128"
+    pub node: String,
+    /// PCI vendor id, e.g. 0x10de
+    pub vendor_id: u16,
+    /// PCI device id
+    pub device_id: u16,
+    /// bound kernel driver, e.g. "amdgpu" / "nvidia" / "i915"
+    pub driver: String,
+    /// WHERE this was observed. Set by the enumerator, never by a caller: a
+    /// record that could be relabelled is a label again.
+    pub vantage: Vantage,
+}
+
+impl DrmRenderNode {
+    /// Vendor name from the PCI id. Unknown ids are named as themselves rather
+    /// than guessed — an honest "0x1234" beats a wrong "intel".
+    pub fn vendor(&self) -> String {
+        match self.vendor_id {
+            0x10de => "nvidia".to_string(),
+            0x1002 => "amd".to_string(),
+            0x8086 => "intel".to_string(),
+            other => format!("0x{other:04x}"),
+        }
+    }
+}
+
+/// Parse one hex sysfs id file body ("0x10de\n") into a u16.
+///
+/// Split out because it is the only fiddly part and the whole enumeration is
+/// worthless if it silently yields 0 for a value it could not read.
+pub fn parse_pci_id(body: &str) -> Option<u16> {
+    let t = body.trim();
+    let hex = t.strip_prefix("0x").unwrap_or(t);
+    u16::from_str_radix(hex, 16).ok()
+}
+
+/// Enumerate DRM render nodes under a sysfs root. `root` is a parameter ONLY so
+/// tests can point it at a fixture tree — production always passes
+/// "/sys/class/drm". A test that read the real /sys would assert whatever this
+/// machine happens to be, which is the vacuous-green shape yolanda caught on
+/// this very packet: a test that built its own fixture, never touched
+/// production, and stayed GREEN when production was reverted to a wrong value.
+pub fn enumerate_render_nodes_at(root: &std::path::Path, vantage: Vantage) -> Vec<DrmRenderNode> {
+    let mut out = Vec::new();
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return out;
+    };
+    let mut names: Vec<String> = entries
+        .flatten()
+        .filter_map(|e| e.file_name().into_string().ok())
+        .filter(|n| n.starts_with("renderD"))
+        .collect();
+    names.sort();
+    for name in names {
+        let dev = root.join(&name).join("device");
+        let vendor_id = std::fs::read_to_string(dev.join("vendor"))
+            .ok()
+            .as_deref()
+            .and_then(parse_pci_id);
+        let device_id = std::fs::read_to_string(dev.join("device"))
+            .ok()
+            .as_deref()
+            .and_then(parse_pci_id);
+        // A node whose identity cannot be read is SKIPPED, not defaulted to
+        // zero: a record claiming vendor 0x0000 is still a claim, and this
+        // packet is about not making claims the evidence does not support.
+        let (Some(vendor_id), Some(device_id)) = (vendor_id, device_id) else {
+            continue;
+        };
+        let driver = std::fs::read_link(dev.join("driver"))
+            .ok()
+            .and_then(|p| p.file_name().and_then(|f| f.to_str()).map(str::to_string))
+            .unwrap_or_else(|| "unknown".to_string());
+        out.push(DrmRenderNode {
+            node: name,
+            vendor_id,
+            device_id,
+            driver,
+            // This function reads a filesystem. Whose filesystem is the
+            // caller's business; what it can honestly say is "I saw this from
+            // where I ran". Production passes /sys/class/drm on the host.
+            vantage,
+        });
+    }
+    out
+}
+
 /// Does ONE spec body name the NVIDIA kind AND a usable device node?
 ///
 /// Split out so it is testable without the filesystem: a spec that names the
@@ -1476,6 +1649,150 @@ fn slug(raw: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    /// ORDER 793-zumy. Fixture trees, never the real /sys — a test that read
+    /// this machine would assert whatever it happens to be, which is the
+    /// vacuous-green shape yolanda caught on this very packet: a test that
+    /// built its own fixture, never touched production, and stayed GREEN when
+    /// production was reverted to a wrong value.
+    #[cfg(target_os = "linux")]
+    fn drm_fixture(spec: &[(&str, &str, &str, &str)]) -> std::path::PathBuf {
+        let root =
+            std::env::temp_dir().join(format!("drm-fixture-{}-{}", std::process::id(), spec.len()));
+        let _ = std::fs::remove_dir_all(&root);
+        for (node, vendor, device, driver) in spec {
+            let dev = root.join(node).join("device");
+            std::fs::create_dir_all(&dev).unwrap();
+            std::fs::write(dev.join("vendor"), vendor).unwrap();
+            std::fs::write(dev.join("device"), device).unwrap();
+            if !driver.is_empty() {
+                let drv = root.join("drivers").join(driver);
+                std::fs::create_dir_all(&drv).unwrap();
+                let _ = std::os::unix::fs::symlink(&drv, dev.join("driver"));
+            }
+        }
+        root
+    }
+
+    /// THE ENUMERATION GAP 793-zumy WAS FILED AGAINST. `/dev/dri exists` is one
+    /// bit and cannot represent two GPUs. This is lenovinha's real hardware,
+    /// measured 2026-08-30 — the fleet's only dual-vendor fixture.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn enumeration_represents_two_gpus_where_file_existence_cannot() {
+        let root = drm_fixture(&[
+            ("renderD128", "0x1002\n", "0x1638\n", "amdgpu"),
+            ("renderD129", "0x10de\n", "0x24dd\n", "nvidia"),
+        ]);
+        let nodes = super::enumerate_render_nodes_at(&root, super::Vantage::Host);
+        assert_eq!(nodes.len(), 2, "two render nodes must yield two records");
+        assert_eq!(nodes[0].vendor(), "amd");
+        assert_eq!(nodes[0].driver, "amdgpu");
+        assert_eq!(nodes[1].vendor(), "nvidia");
+        assert_eq!(nodes[1].driver, "nvidia");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// EXIT CRITERION 3, SATISFIED STRUCTURALLY RATHER THAN BY A BLOCKLIST.
+    /// lavapipe/llvmpipe are USERSPACE-ONLY Vulkan ICDs: they create no DRM
+    /// render node, so an enumeration of render nodes cannot see them at all.
+    /// A host with Mesa's full ICD set installed and no GPU enumerates ZERO —
+    /// which is why no driver-name blocklist is needed, and why this cannot rot
+    /// when a new software rasterizer appears.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_software_rasterizer_cannot_satisfy_the_gpu_check() {
+        let root = drm_fixture(&[]);
+        std::fs::create_dir_all(&root).unwrap();
+        let nodes = super::enumerate_render_nodes_at(&root, super::Vantage::Host);
+        assert!(
+            nodes.is_empty(),
+            "a tree with no render node must enumerate nothing — llvmpipe has no node to find"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// A NODE WHOSE IDENTITY CANNOT BE READ IS SKIPPED, NOT DEFAULTED. A record
+    /// claiming vendor 0x0000 is still a claim, and the whole packet is about
+    /// not making claims the evidence does not support.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn an_unreadable_node_is_skipped_rather_than_reported_as_vendor_zero() {
+        let root = std::env::temp_dir().join(format!("drm-partial-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("renderD128").join("device")).unwrap();
+        // vendor present, device absent
+        std::fs::write(root.join("renderD128/device/vendor"), "0x10de\n").unwrap();
+        let nodes = super::enumerate_render_nodes_at(&root, super::Vantage::Host);
+        assert!(
+            nodes.is_empty(),
+            "a half-readable node must not become a record"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// YOGA'S TIGHTENING, pinned: a record carries WHERE it was observed, and a
+    /// host enumeration must never read as a container-lane claim. Their
+    /// machine reported accel_gpu=usable from the host while the container had
+    /// no /dev/kfd, no /dev/dri and size_vram=0 on every model — both true, and
+    /// nothing distinguished them.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_record_carries_the_vantage_it_was_observed_from() {
+        let root = drm_fixture(&[("renderD128", "0x1002\n", "0x1638\n", "amdgpu")]);
+        let host = super::enumerate_render_nodes_at(&root, super::Vantage::Host);
+        assert_eq!(host[0].vantage.token(), "host");
+        let inside = super::enumerate_render_nodes_at(&root, super::Vantage::Container);
+        assert_eq!(inside[0].vantage.token(), "container");
+        assert_ne!(
+            super::Vantage::Host,
+            super::Vantage::Container,
+            "the two vantages must not be interchangeable"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// LIVE, on whatever this host is. Deliberately NOT an assertion about
+    /// lenovinha's hardware — it asserts an INVARIANT that must hold on every
+    /// host: whatever enumerates, its identity is readable and its vantage is
+    /// host. On a machine with no GPU it passes vacuously, which is correct.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn live_enumeration_is_self_consistent_on_whatever_host_this_is() {
+        let nodes = super::enumerate_render_nodes_at(
+            std::path::Path::new("/sys/class/drm"),
+            super::Vantage::Host,
+        );
+        for n in &nodes {
+            assert_ne!(n.vendor_id, 0, "a reported node must have a real vendor id");
+            assert!(!n.node.is_empty());
+            assert_eq!(n.vantage.token(), "host");
+        }
+        eprintln!(
+            "[793-zumy] live enumeration on this host: {} node(s)",
+            nodes.len()
+        );
+        for n in &nodes {
+            eprintln!(
+                "  {} vendor={} (0x{:04x}) device=0x{:04x} driver={} vantage={}",
+                n.node,
+                n.vendor(),
+                n.vendor_id,
+                n.device_id,
+                n.driver,
+                n.vantage.token()
+            );
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn pci_ids_parse_with_and_without_the_prefix_and_reject_garbage() {
+        assert_eq!(super::parse_pci_id("0x10de\n"), Some(0x10de));
+        assert_eq!(super::parse_pci_id("1002"), Some(0x1002));
+        assert_eq!(super::parse_pci_id(""), None);
+        assert_eq!(super::parse_pci_id("not-a-number"), None);
+    }
 
     /// ORDER 935-jhh5. The old `cdi_ok = effective_tier == "gpu-cuda"` was
     /// CIRCULAR — the tier derives from the same `nvidia-smi` the caller already
