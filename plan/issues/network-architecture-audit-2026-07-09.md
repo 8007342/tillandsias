@@ -17,9 +17,10 @@ This has led to:
    was built on-demand rather than as part of the declarative image set, and its build
    happened in the user-runtime path rather than the init/build-runtime path.
    RESOLVED (order 253, commit 8b6c7031, 2026-07-09): `run_init` now builds vault
-   third in its 10-image declarative set (`main.rs:5884-5895`, rationale comment
-   `main.rs:5879-5883`); the login-path build survives only as a fail-soft
-   fallback for runtimes that skipped `--init` (`vault_bootstrap.rs:1410-1426`).
+   third in its ten-image declarative set (`main.rs` `fn run_init`, with the
+   order-253 rationale comment directly above the array); the login-path build
+   survives only as a fail-soft fallback for runtimes that skipped `--init`
+   (`vault_bootstrap.rs` `fn build_vault_image`).
 
 2. **HTTP 401 from `gh auth login` inside git-login container** (2026-07-09): the
    proxy-routed auth request to `api.github.com` failed with Bad Credentials; root
@@ -28,21 +29,23 @@ This has led to:
    hypotheses: gh's interactive masked prompt put the container pty into raw
    char-at-a-time mode, so a token pasted over `podman exec -it` picked up
    bracketed-paste escape bytes (`ESC[200~ … ESC[201~`) or was truncated; gh
-   validated garbage and GitHub returned 401 (`main.rs:7193-7205`). The login now
-   reads the token via a cooked-mode shell `read -rs` piped to
-   `gh auth login --with-token` (`main.rs:7206-7215`), plus a non-interactive
-   `--with-token` stdin lane (`main.rs:7223-7230`; mode selection
-   `main.rs:7416-7430`); the interactive gh prompt is deliberately avoided.
+   validated garbage and GitHub returned 401 (`main.rs`
+   `const GH_LOGIN_TOKEN_SCRIPT`, whose doc comment carries the diagnosis). The
+   login now reads the token via a cooked-mode shell `read -rs` piped to
+   `gh auth login --with-token`, plus a non-interactive `--with-token` stdin lane
+   (`main.rs` `const GH_LOGIN_STDIN_TOKEN_SCRIPT`; mode selection
+   `main.rs` `fn select_github_login_input_mode`); the interactive gh prompt is
+   deliberately avoided.
 
 3. **Vault rebuilds on repeated login attempts**: the vault container/image was
    sometimes rebuilt when re-running `--github-login`, indicating the init/build
    caching boundary was unclear between user-runtime and build-runtime.
    RESOLVED by the same order-253 change: `build_vault_image` checks
    `image_exists_sync` on the init-built identity tag and returns early
-   (`vault_bootstrap.rs:1410-1423`), so repeated logins are zero-build on an
-   initialized runtime; the init/build context owns the vault build, and the
-   login path only falls back to building when `--init` was never run.
-
+   (`vault_bootstrap.rs` `fn build_vault_image`), so repeated logins are
+   zero-build on an initialized runtime; the init/build context owns the vault
+   build, and the login path only falls back to building when `--init` was never
+   run.
 4. **No declared network scenarios**: the codebase has no explicit taxonomy of
    which network topology applies to which runtime mode.
 
@@ -312,68 +315,121 @@ encrypted control channel; slices 1-3 of 141 landed, 4 and 6 remain —
 
 ## 5. Spec/Cheatsheet Patch List (NA-05)
 
-- **P1 `openspec/specs/enclave-network/spec.md`** — Purpose says "Only the
-  proxy container has external access (dual-homed)". At draft time this was
-  false twice over (git-mirror upstream forwarding since order 167, plus the
-  login-helper dual-home). Post-0a972411 the mirror is enclave-only, so the
-  remaining divergence is the login helper's dual-home (`run_provider_login`,
-  `main.rs:7589,7625`) — itself ruled an unsanctioned violation pending a
-  verdict (`plan/issues/git-mirror-egress-spec-divergence-audit-2026-08-10.md`).
-  Patch: enumerate the now-two-member S3 set + cite this taxonomy. Still
-  unapplied as of Revision 2 (spec.md:10 unchanged; no
-  `openspec/specs/network-scenarios/` exists).
-- **P2 `openspec/specs/enclave-network/spec.md`** — "cleanup on app exit
-  removes the network" scenario: verify against current long-running headless
-  behavior; likely obsolete → tombstone or re-scope to `--reset` flows.
+> AUDITED 2026-08-30 (lenovinha, linux slice). Every item below was checked
+> against the tree, not carried forward. Disposition is stated per item, because
+> a patch list that still says "pending" for work that landed steers effort at
+> done work — the same decoy shape §L1 found in the citations. One item is
+> CLOSED as already-satisfied, one is half-applied, and one new item was found.
+> See §L4.
+
+- **P1 `openspec/specs/enclave-network/spec.md` — OPEN, and the divergence is
+  in TWO places in this spec, not one.** Purpose still says "Only the proxy
+  container has external access (dual-homed)"; the *Container attachment to
+  enclave network* requirement repeats it as "Only the proxy container MUST
+  additionally be attached to the default bridge network". Post-0a972411 the
+  git mirror is enclave-only, so the remaining divergence is the login
+  helper's dual-home: `main.rs` `fn run_provider_login` runs on
+  `const ENCLAVE_EGRESS_NETS` (`"tillandsias-enclave,tillandsias-egress"`) —
+  itself ruled an unsanctioned violation pending a verdict
+  (`plan/issues/git-mirror-egress-spec-divergence-audit-2026-08-10.md`).
+  Patch: enumerate the now-two-member S3 set in BOTH places and cite this
+  taxonomy.
+- **P2 — CLOSED, already satisfied; the draft's recommendation is refuted by
+  the spec's own current text.** P2 proposed verifying the "cleanup on app
+  exit removes the network" scenario against long-running headless behaviour
+  and predicted it was "likely obsolete → tombstone or re-scope". It is
+  neither: the scenario is guarded by an explicit sibling,
+  *Enclave network cleanup skipped when containers active*, which requires a
+  warning and leaves the network in place. The pair is correct as written, and
+  the concern P2 was filed on is exactly what the second scenario handles.
+  Tombstoning it would have deleted a correct requirement.
 - **P3 `openspec/specs/proxy-container/spec.md` +
-  `cheatsheets/runtime/enclave-proxy-patterns.md`** — add the S2/S3 split and
+  `cheatsheets/runtime/enclave-proxy-patterns.md` — OPEN, and live rather than
+  stale.** Both constants still exist in code — `main.rs`
+  `const ENCLAVE_NO_PROXY_BASE` and the `NODE_USE_ENV_PROXY=1` env entry
+  beside it — and NEITHER name appears anywhere under `openspec/specs/`,
+  `cheatsheets/` or `docs/`. So this is a genuine code-documented-nowhere gap,
+  not a proposal that time overtook. Patch unchanged: add the S2/S3 split and
   the `NODE_USE_ENV_PROXY` contract; document `ENCLAVE_NO_PROXY_BASE` as the
   single NO_PROXY source of truth.
-- **P4 `openspec/specs/host-guest-transport/spec.md` + `vsock-transport`** —
-  add the §4 platform matrix (hvsock vs virtio-vsock vs unix socket) as
-  normative.
-- **P5 new spec `openspec/specs/network-scenarios/spec.md`** — S0-S5 catalog
-  (§2) with the operation table as scenarios; litmus: a source audit that every
-  `--network` / `.network(` site names a scenario constant, so new containers
-  must declare a scenario to compile/pass.
-- **P6 `images/proxy/squid.conf` + spec** — decide :3129's fate: either wire
-  image builds through it (replacing `--dns 8.8.8.8` bypass) or delete the
-  port. Recommendation: wire builds through it on HOST runtime where the
-  proxy exists; keep direct as bootstrap fallback (proxy image itself,
-  chicken-and-egg: `plan/issues/podman-proxy-reset-chicken-and-egg-2026-07-08.md`).
-- **P7 `openspec/specs/headless-mode/spec.md`** — document per-operation image
-  ensure lists (or their unification per §3.1) and the vault-in-init change.
-
+- **P4 `openspec/specs/host-guest-transport/spec.md` + `vsock-transport` —
+  HALF APPLIED.** `host-guest-transport/spec.md` now names hvsock;
+  `vsock-transport/spec.md` carries only two matches across the whole
+  hvsock/virtio-vsock/unix-socket vocabulary. Remaining patch is the
+  `vsock-transport` half of the §4 platform matrix, as normative text.
+- **P5 new spec `openspec/specs/network-scenarios/spec.md` — OPEN.** The
+  directory does not exist. S0-S5 catalog (§2) with the operation table as
+  scenarios; litmus: a source audit that every `--network` / `.network(` site
+  names a scenario constant, so a new container must declare a scenario to
+  compile/pass.
+- **P6 `images/proxy/squid.conf` + spec — OPEN, and the situation is now WORSE
+  than "undecided".** P6 asked to decide :3129's fate: wire image builds
+  through it, or delete the port. Neither happened, and meanwhile the config
+  started asserting the first: `squid.conf` documents :3129 as
+  "PERMISSIVE (image builds): all domains allowed", declares `http_port 3129
+  ssl-bump` and an `acl build_port localport 3129`, and
+  `images/proxy/entrypoint.sh` advertises `permissive: :3129` at startup.
+  MEASURED 2026-08-30: no build routes through it — the only reference to
+  3129 outside squid.conf in `crates/`, `scripts/` or `images/` is that
+  startup echo — while the bypass P6 wanted replaced is still live at
+  `tillandsias-podman/src/client.rs` (`--dns 8.8.8.8` in the build args).
+  So the port is open, documented as serving image builds, and serves none.
+  That is a stronger reason to act than the draft had: the decision now reads
+  as taken in the config and untaken in the code, which is how a reader
+  concludes builds are proxied when they are not.
+- **P7 `openspec/specs/headless-mode/spec.md` — OPEN.** The spec contains zero
+  occurrences of "vault". Document the per-operation image ensure lists (or
+  their unification per §3.1) and the vault-in-init change (order 253).
+- **P8 (NEW) `openspec/specs/enclave-network/spec.md` — the enclave membership
+  list is incomplete.** Purpose enumerates "forge, git, inference, and proxy
+  containers". The nix cache is also an enclave member:
+  `scripts/nix-cache-service.sh` joins it "to the enclave as a real nix BINARY
+  CACHE" and carries `no-enclave` as one of its own blocked verdicts. This is
+  the same drift §L2 found in §3 — order 801-vm4p added `Service::NixCache` to
+  the launch graph and the prose did not follow, in two separate documents.
+  Patch: add the nix cache to the membership enumeration, and prefer a pointer
+  to the service list over a hand-maintained prose enumeration, since this is
+  the second place it has gone stale.
 ## 6. Root-cause notes for the three §Observation failures (NA-06)
+
+> REVISED 2026-08-30 (lenovinha, linux slice). All three root causes
+> re-verified TRUE against the tree; every citation but one had drifted, and
+> the citations are now anchored on SYMBOL NAMES. See §L3.
 
 1. **Vault missing from `--init`** — was CONFIRMED at source at draft time
    (the then-current `run_init` image list lacked vault; on-demand build lived
    in the login path). RESOLVED per the predicted fix direction (§3 item 5):
-   order 253 / commit 8b6c7031 put vault in `run_init`'s declarative set
-   (`main.rs:5884-5895`); the login-path build is a fail-soft fallback only
-   (`vault_bootstrap.rs:1410-1426`).
+   order 253 / commit 8b6c7031 put vault in the declarative set inside
+   `main.rs` `fn run_init` — still exactly ten images, with `"vault"` THIRD
+   after `"proxy"` and `"git"`, and the rationale comment naming order 253 sits
+   immediately above the array. The login-path build survives as a fail-soft
+   fallback only (`vault_bootstrap.rs` `fn build_vault_image`).
 2. **HTTP 401 from `gh auth login`** — the audit's network exoneration was
    CORRECT: the failure was never in the proxy path. RESOLVED — root cause was
    the container pty, not credentials or network: gh's interactive masked
    prompt switched the pty to raw char-at-a-time mode, so a token pasted over
-   `podman exec -it` picked up bracketed-paste escape bytes or truncation; gh
-   validated garbage and GitHub returned 401 Bad credentials
-   (`main.rs:7193-7205`). Fix: cooked-mode shell `read -rs` (no bracketed
-   paste) piped to `gh auth login --with-token`, plus a non-interactive
-   `--with-token` stdin lane; the interactive gh prompt is deliberately
-   avoided (`main.rs:7206-7230`, wiring `main.rs:518-519`, mode selection
-   `main.rs:7416-7430`). Note the draft's mechanism detail is now obsolete:
-   squid's `no_bump` ACL no longer exists — everything except GitHub release
-   assets is spliced end-to-end (`squid.conf:64-80`), so tokens never transit
-   the bump CA when proxied either.
+   `podman exec -it` picked up bracketed-paste escape bytes (`ESC[200~ …
+   ESC[201~`) or truncation; gh validated garbage and GitHub returned 401 Bad
+   credentials. The whole diagnosis is preserved as the doc comment on
+   `main.rs` `const GH_LOGIN_TOKEN_SCRIPT`. Fix: cooked-mode
+   `IFS= read -rs TOKEN < /dev/tty` (a plain shell `read` does not enable
+   bracketed paste, so the terminal delivers pasted text verbatim) piped
+   straight into `gh auth login --with-token`, plus a non-interactive stdin
+   lane (`main.rs` `const GH_LOGIN_STDIN_TOKEN_SCRIPT`), chosen by
+   `main.rs` `fn select_github_login_input_mode`. The interactive gh prompt is
+   deliberately avoided. The draft's proxy-mechanism detail remains obsolete
+   and remains true: squid's `no_bump` ACL no longer exists — only
+   `github_release_assets` is bumped and everything else is spliced
+   end-to-end (`images/proxy/squid.conf`, the `ssl_bump` rule block), so tokens
+   never transit the bump CA when proxied either.
 3. **Vault rebuilds on repeated login** — RESOLVED by the same order-253
    change, exactly as predicted: vault moved to the init/Build context and
-   `build_vault_image` early-returns when the init-built identity tag exists
-   (`vault_bootstrap.rs:1410-1423`, guarded by
-   `tillandsias_podman::image_exists_sync`), so login is zero-build on an
+   `vault_bootstrap.rs` `fn build_vault_image` early-returns when the
+   init-built identity tag exists (guarded by
+   `tillandsias_podman::image_exists_sync`, with an order-253 comment naming
+   this audit as the source of the observation), so login is zero-build on an
    initialized runtime and the rebuild disappeared from the login path by
    construction.
-
 ## 7. Follow-up packets proposed
 
 - Wire vault into the `--init` declarative image set (§3.5, §6.1) — DONE
@@ -588,3 +644,135 @@ after a second section it is worth stating plainly: **whoever drives
 ratification should change NA-05 to `file:symbol`**, because the criterion as
 written mandates the defect. That is a change to an exit criterion, so it is
 the packet owner's call, not this slice's.
+
+## L3. NA-06 re-verified and re-anchored — 2026-08-30, lenovinha (linux slice)
+
+Cycle-scoped claim on a `multi_cycle` packet; `phase` stays `review`, NOT
+closed. NA-06 was the last of the three GPT-failed criteria with no revision
+pass. Method is §L1/§L2's: verify each CLAIM against the tree, then fix the
+citation.
+
+### All three root causes still hold
+
+Unlike §3, this section had no content drift. Each resolution re-verified TRUE:
+
+- **Item 1** — `run_init` still builds a **ten-image** declarative set with
+  `"vault"` third, immediately after `"proxy"` and `"git"`, and the order-253
+  rationale comment still sits directly above the array. The draft's
+  "10-image declarative set" is exact, not approximately right.
+- **Item 2** — the cooked-read fix is intact: `IFS= read -rs TOKEN < /dev/tty`
+  piped into `gh auth login --with-token`, with the whole bracketed-paste
+  diagnosis preserved as a doc comment. The stdin lane and the mode selector
+  both exist.
+- **Item 3** — `build_vault_image` still early-returns on
+  `image_exists_sync(&identity.canonical_tag)`, and its comment still names
+  "the repeated-login rebuild observed in the order-245 audit" — the code
+  cites this document back.
+- The **squid** claim also holds: `no_bump` is gone, only
+  `github_release_assets` is bumped, `ssl_bump splice all` covers the rest.
+
+### One citation of twelve survived, and the worst miss lands on the exonerated hypothesis
+
+| cited | claimed | actually at |
+|---|---|---|
+| `main.rs:5884-5895` | `run_init`'s vault build | `fn run_init` (~7297), array (~7370) — the range is `sanitize_hostname` | <!-- cite-ok: the drifted line number IS the evidence; this table records what each stale citation pointed at -->
+| `main.rs:5879-5883` | the order-253 rationale comment | directly above the array (~7365) | <!-- cite-ok: the drifted line number IS the evidence; this table records what each stale citation pointed at -->
+| `main.rs:7193-7205` | the raw-pty / bracketed-paste root cause | `const GH_LOGIN_TOKEN_SCRIPT` doc (~8686) — **the range is a comment about `no_proxy` and proxy-resolution failures** | <!-- cite-ok: the drifted line number IS the evidence; this table records what each stale citation pointed at -->
+| `main.rs:7206-7215`, `:7223-7230` | the cooked-read and stdin lanes | `const GH_LOGIN_TOKEN_SCRIPT` (~8697), `const GH_LOGIN_STDIN_TOKEN_SCRIPT` (~8714) | <!-- cite-ok: the drifted line number IS the evidence; this table records what each stale citation pointed at -->
+| `main.rs:518-519` | the wiring | a `chrono::Utc::now()` timestamp line | <!-- cite-ok: the drifted line number IS the evidence; this table records what each stale citation pointed at -->
+| `main.rs:7416-7430` | login input-mode selection | `fn select_github_login_input_mode` (~8907) | <!-- cite-ok: the drifted line number IS the evidence; this table records what each stale citation pointed at -->
+| `vault_bootstrap.rs:1410-1426`, `:1410-1423` | `build_vault_image` early-return | `fn build_vault_image` (~1676), the guard (~1694) — the range is `mint_approle_token_for_container`'s doc | <!-- cite-ok: the drifted line number IS the evidence; this table records what each stale citation pointed at -->
+| `squid.conf:64-80` | the `ssl_bump` rules | **STILL CORRECT** — the block is at 64-79 | <!-- cite-ok: the drifted line number IS the evidence; this table records what each stale citation pointed at -->
+
+**`main.rs:7193-7205` is the one to remember.** Item 2's whole point is that <!-- cite-ok: naming the drifted citation IS the finding — it is what a verifier would follow -->
+the 401 was *not* a network problem — the audit's central exoneration. The
+citation supporting it now lands on a comment about `no_proxy` and proxy
+resolution failing a build. A verifier checking "was this really not the
+proxy?" is delivered to a discussion of proxy failures. §L2 argued that a
+confidently wrong citation is worse than an absent one; this is the case where
+the wrong landing site actively argues the opposite of the claim.
+
+The one surviving citation is the only one into a file that barely moves.
+`squid.conf` is 170 lines; `main.rs` is 24,668. That contrast is the whole
+argument for symbol anchoring, and it is worth stating rather than treating the
+survivor as luck: line citations are safe exactly where they are least needed.
+
+### §Observation repaired too
+
+Items 1-3 of §Observation restate the same three resolutions and carried the
+same rot. Both are fixed in this pass, because NA-06 is *by definition* "root
+cause notes for the three §Observation failures" — leaving the upstream copy
+drifted would mean a verifier reading the two sections against each other finds
+one anchored and one void.
+
+### Where 245 stands after three slices
+
+§1/§1.1 (yoga), §3/NA-03 (lenovinha), §6 + §Observation/NA-06 (lenovinha).
+**NA-01 was the third GPT-failed criterion and §1 has had its pass**, so all
+three failures now have one. Still carrying line citations: §2, §4, §5, §7.
+
+The NA-05 recommendation from §L1 and §L2 stands and is now three-for-three:
+the criterion asks for a patch list of "specific file:line references", which
+is the requirement that produces this rot. It should say `file:symbol`.
+
+## L4. NA-05 patch list audited against the tree — 2026-08-30, lenovinha
+
+Cycle-scoped claim on a `multi_cycle` packet; `phase` stays `review`, NOT
+closed. Fourth revision slice. §L1/§L2/§L3 fixed what the document SAYS about
+the code; this one asks whether its proposed WORK is still the work.
+
+A patch list is the one section that is read to decide what to do next, so a
+stale entry does not merely mislead — it spends someone's cycle. That is the
+decoy shape §L1 named, applied to a to-do list instead of to citations.
+
+### Dispositions, all measured at HEAD
+
+| item | disposition | evidence |
+|---|---|---|
+| P1 enclave-network Purpose | OPEN, and in **two** places | Purpose and the *Container attachment* requirement both assert proxy-only egress; `fn run_provider_login` still runs on `ENCLAVE_EGRESS_NETS` |
+| P2 cleanup-on-exit scenario | **CLOSED — already satisfied** | the sibling scenario *cleanup skipped when containers active* is exactly the guard P2 worried was missing |
+| P3 NO_PROXY / NODE_USE_ENV_PROXY | OPEN, and live | both constants exist in `main.rs`; neither name appears in `openspec/specs/`, `cheatsheets/` or `docs/` |
+| P4 transport platform matrix | **HALF APPLIED** | `host-guest-transport/spec.md` names hvsock; `vsock-transport/spec.md` has two matches total |
+| P5 network-scenarios spec | OPEN | the directory does not exist |
+| P6 squid :3129 | OPEN, and worse than undecided | port declared and advertised as the image-build lane; no build routes through it; the `--dns 8.8.8.8` bypass it was meant to replace is still in `client.rs` |
+| P7 headless-mode spec | OPEN | zero occurrences of "vault" in the spec |
+| P8 enclave membership | **NEW** | the nix cache joins the enclave (`scripts/nix-cache-service.sh`, `no-enclave` verdict) and is absent from the Purpose enumeration |
+
+### The two findings worth carrying forward
+
+**P2 is a refutation, and refuting a proposed patch is a result.** The draft
+predicted the cleanup scenario was "likely obsolete → tombstone or re-scope".
+It is not: the spec grew a second scenario that handles precisely the
+long-running case the draft was worried about. Acting on P2 as written would
+have deleted a correct requirement. This is the audit-dispose discipline
+pointed at the audit's own output — a proposal is not evidence just because an
+audit made it, and three revision passes had carried P2 forward unexamined.
+
+**P6 drifted in the dangerous direction: the config now asserts what the code
+does not do.** In 2026-07 :3129 was an undecided port. Since then `squid.conf`
+grew a comment calling it "PERMISSIVE (image builds)", an `acl build_port`,
+and a startup banner in `entrypoint.sh` announcing it. Nothing builds through
+it. A reader checking "are image builds proxied?" finds a port, a rule, an ACL
+and a banner all saying yes, and the actual build path still passing
+`--dns 8.8.8.8`. That is the §L3 hazard — evidence that argues against its own
+claim — reproduced in configuration rather than in a citation.
+
+**P8 is the second instance of one omission.** Order 801-vm4p added
+`Service::NixCache` to the forge-launch graph. §3 of this document did not have
+it (§L2), and the enclave-network spec does not have it either. Two documents,
+one landed service, no update to either. The patch therefore proposes pointing
+at the service list rather than re-writing the prose enumeration, because a
+hand-maintained membership list has now gone stale twice.
+
+### Where 245 stands after four slices
+
+§1/§1.1 (yoga), §3/NA-03, §6 + §Observation/NA-06, §5/NA-05 (lenovinha). All
+three GPT-failed criteria have a revision pass and the patch list is now
+dispositioned. Still carrying line citations: §2, §4, §7.
+
+**The NA-05 exit-criterion recommendation now has a fourth voice and a
+concrete cost.** The criterion asks for a patch list with "specific file:line
+references". This slice replaced its remaining line citations with symbols
+while auditing it — meaning the criterion, read literally, asks the next author
+to undo that. It should say `file:symbol`. Changing an exit criterion remains
+the packet owner's call.

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: network-architecture-audit
+    field: next_action
+    value: 'Four revision slices have landed. ALL THREE GPT-failed criteria (NA-01, NA-03, NA-06) have a pass, and NA-05''s patch list is now dispositioned against the tree: P2 CLOSED as already-satisfied (the draft''s ''likely obsolete, tombstone it'' was refuted — the spec grew the exact guard P2 worried was missing, and acting on it would have deleted a correct requirement), P4 HALF APPLIED (host-guest-transport names hvsock, vsock-transport does not), P8 NEW (the nix cache is an enclave member absent from the spec''s enumeration — second document to miss order 801-vm4p''s Service::NixCache), and P1/P3/P5/P6/P7 open with evidence. HIGHEST-VALUE REMAINING WORK IS NOT MORE CITATION REPAIR: P6 is actionable and is drifting the dangerous way — squid.conf declares :3129 as the image-build lane, entrypoint.sh announces it, and NOTHING builds through it while the --dns 8.8.8.8 bypass it was meant to replace is still in client.rs. The config asserts what the code does not do. P1 needs the git-mirror-egress verdict first (plan/issues/git-mirror-egress-spec-divergence-audit-2026-08-10.md). Sections 2, 4 and 7 still carry line citations if someone wants the mechanical pass. FOR THE PACKET OWNER, fourth request: NA-05''s exit criterion mandates ''specific file:line references'' — this slice replaced that section''s line citations with symbols, so the criterion as written now asks the next author to undo the work. It should say file:symbol.'
+    ts: "2026-08-30T12:20:59Z"
+    host: linux
+
+events:
+  - packet_id: network-architecture-audit
+    event:
+      type: note
+      ts: "2026-08-30T12:20:59Z"
+      host: linux
+      summary: >
+        patch list dispositioned; naming P6 as the actionable item rather than more citation repair

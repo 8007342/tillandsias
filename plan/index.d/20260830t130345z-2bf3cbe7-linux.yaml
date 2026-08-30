@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: ci-full-receives-an-unattributed-sigterm-at-install-validation
+    event:
+      type: evidence
+      ts: "2026-08-30T13:03:45Z"
+      agent_id: linux-macuahuitl-claude-20260830t130345z
+      host: linux
+      summary: >
+        Countdown run 2/3 (run 9, solo, trap armed): SILENT — no signal, rc=1 from real check failures (zombie-reap test flake under parallel load, fixed with a bounded poll this commit; release-gates step 13 routed to 940's author; vsock-ordering still in yolanda's queue). One more silent heavy run closes this packet.

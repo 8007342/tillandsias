@@ -2452,6 +2452,163 @@ plan_index:
         - "Platform Abstraction Layer mapped (Linux bare, WSL2, macOS VZ, Silverblue Toolbox — bridge/forwarding mechanism)"
         - "Spec/Cheatsheet patch list published with specific file:line references"
       events:
+        - type: progress
+          ts: "2026-08-30T12:20:35Z"
+          agent_id: "linux-lenovinha-claude-20260830t121429z"
+          host: linux
+          summary: |
+            NA-05 PATCH LIST AUDITED AGAINST THE TREE (linux slice, cycle-scoped claim on
+            a multi_cycle packet; phase stays `review`, NOT closed). Fourth revision slice.
+            L1/L2/L3 fixed what the document SAYS about the code; this one asks whether its
+            proposed WORK is still the work.
+
+            WHY THIS SECTION AND NOT MORE CITATION REPAIR. A patch list is the one section
+            read to decide what to do NEXT, so a stale entry does not merely mislead, it
+            spends someone's cycle. Same decoy shape L1 named, pointed at a to-do list.
+
+            ALL SEVEN ITEMS MEASURED AT HEAD. Five OPEN, one CLOSED, one HALF APPLIED, and
+            one NEW item found:
+              P1 enclave-network Purpose -- OPEN, and the divergence is in TWO places in
+                 that spec, not one: Purpose AND the Container-attachment requirement both
+                 assert proxy-only egress, while fn run_provider_login still runs on
+                 ENCLAVE_EGRESS_NETS.
+              P2 cleanup-on-exit scenario -- CLOSED, ALREADY SATISFIED, and the draft's
+                 recommendation is REFUTED. P2 predicted the scenario was "likely obsolete
+                 -> tombstone or re-scope". It is not: the spec grew a sibling scenario,
+                 "cleanup skipped when containers active", which is exactly the guard P2
+                 worried was missing. Acting on P2 as written would have DELETED a correct
+                 requirement. Three revision passes had carried it forward unexamined.
+              P3 NO_PROXY / NODE_USE_ENV_PROXY -- OPEN and live, not stale: both constants
+                 still exist in main.rs and NEITHER name appears anywhere under
+                 openspec/specs/, cheatsheets/ or docs/. A genuine documented-nowhere gap.
+              P4 transport platform matrix -- HALF APPLIED. host-guest-transport/spec.md
+                 names hvsock; vsock-transport/spec.md has two matches across the whole
+                 hvsock/virtio-vsock/unix-socket vocabulary.
+              P5 network-scenarios spec -- OPEN, the directory does not exist.
+              P6 squid :3129 -- OPEN and WORSE THAN UNDECIDED. P6 asked to either wire
+                 image builds through it or delete the port. Neither happened, and the
+                 config started asserting the first: squid.conf now documents :3129 as
+                 "PERMISSIVE (image builds)", declares http_port 3129 ssl-bump and an acl
+                 build_port, and entrypoint.sh announces "permissive: :3129" at startup.
+                 MEASURED: no build routes through it -- the only 3129 reference outside
+                 squid.conf in crates/, scripts/ or images/ is that banner -- while the
+                 bypass it was meant to replace is still live in
+                 tillandsias-podman/src/client.rs as --dns 8.8.8.8. A reader checking "are
+                 image builds proxied?" finds a port, a rule, an ACL and a banner all
+                 saying yes, and a build path that is not. That is the L3 hazard --
+                 evidence arguing against its own claim -- reproduced in CONFIGURATION
+                 rather than in a citation.
+              P7 headless-mode spec -- OPEN, zero occurrences of "vault".
+              P8 (NEW) enclave membership -- the Purpose enumerates "forge, git, inference
+                 and proxy". The nix cache is also a member: scripts/nix-cache-service.sh
+                 joins it "to the enclave as a real nix BINARY CACHE" and carries
+                 no-enclave among its own blocked verdicts. This is the SECOND instance of
+                 one omission: order 801-vm4p added Service::NixCache to the forge-launch
+                 graph, section 3 of this document did not have it (L2), and this spec does
+                 not either. The patch therefore proposes pointing at the service list
+                 rather than rewriting the prose enumeration, since a hand-maintained
+                 membership list has now gone stale twice.
+
+            REFUTING A PROPOSED PATCH IS A RESULT. P2 is the audit-dispose discipline
+            turned on the audit's own output: a proposal is not evidence just because an
+            audit made it.
+
+            245 AFTER FOUR SLICES: section 1/1.1 (yoga), section 3/NA-03, section 6 +
+            section Observation/NA-06, section 5/NA-05 (lenovinha). All three GPT-failed
+            criteria have a revision pass and the patch list is dispositioned. Still
+            carrying line citations: sections 2, 4, 7.
+
+            THE NA-05 EXIT-CRITERION RECOMMENDATION NOW HAS A FOURTH VOICE AND A CONCRETE
+            COST. The criterion asks for a patch list with "specific file:line references".
+            This slice replaced that section's remaining line citations with symbols while
+            auditing it -- so the criterion, read literally, now asks the next author to
+            UNDO this work. It should say file:symbol. Still the packet owner's call.
+        - type: claim
+          ts: "2026-08-30T12:14:57Z"
+          agent_id: "linux-lenovinha-claude-20260830t121429z"
+          host: linux
+          summary: |
+            NA-05 slice: audit the seven-item spec/cheatsheet patch list — a patch list that still says 'unapplied' for patches that landed steers effort at done work.
+        - type: note
+          ts: "2026-08-30T11:46:42Z"
+          agent_id: "linux-lenovinha-claude-20260830t111429z"
+          host: linux
+          summary: |
+            PROCESS NOTE, third catch by the same gate this cycle and the one that is my own fault rather than the document's. My ./build.sh --check ran BEFORE I appended the work-queue ledger line, and that line quotes main.rs:7193-7205 as the finding -- so the gate passed, I committed, and the violation only surfaced after the rebase re-ran it. The line is annotated now. Recording it because the sequencing trap generalizes: the pre-push gate validates the tree it was RUN on, and a cycle that gates, then writes its ledger line, then commits has gated the wrong tree. Run the gate last, or after every plan/issues write. Also worth noting the gate reads ANY line -- table row, prose sentence, or a one-line work-queue entry -- which is what made all three catches true positives rather than a row-scoped guard missing two of them.
+        - type: progress
+          ts: "2026-08-30T11:32:53Z"
+          agent_id: "linux-lenovinha-claude-20260830t111429z"
+          host: linux
+          summary: |
+            NA-06 RE-VERIFIED AND RE-ANCHORED, plus the section-Observation copy of the
+            same three claims (linux slice, cycle-scoped claim on a multi_cycle packet;
+            phase stays `review`, NOT closed). NA-06 was the last of the three GPT-failed
+            criteria with no revision pass. Method is L1/L2's: verify the CLAIM, then fix
+            the citation.
+
+            UNLIKE SECTION 3, THIS SECTION HAD NO CONTENT DRIFT. All three root causes
+            re-verified TRUE:
+              * run_init still builds a TEN-image declarative set with "vault" THIRD after
+                "proxy" and "git", order-253 rationale comment still directly above the
+                array. The draft's "10-image declarative set" is exact, not roughly right.
+              * the cooked-read fix is intact -- `IFS= read -rs TOKEN < /dev/tty` piped
+                into `gh auth login --with-token`, with the whole bracketed-paste diagnosis
+                preserved as a doc comment; the stdin lane and the mode selector both exist.
+              * build_vault_image still early-returns on
+                image_exists_sync(&identity.canonical_tag), and its comment still names
+                "the repeated-login rebuild observed in the order-245 audit" -- the code
+                cites this document back.
+              * the squid claim holds too: no_bump is gone, only github_release_assets is
+                bumped, `ssl_bump splice all` covers the rest.
+
+            ONE CITATION OF TWELVE SURVIVED, and the worst miss lands on the exonerated
+            hypothesis. main.rs:7193-7205 is cited for the raw-pty / bracketed-paste root
+            cause -- the finding whose whole point is that the 401 was NOT a network
+            problem. That range is now A COMMENT ABOUT no_proxy AND PROXY-RESOLUTION
+            FAILURES. A verifier checking "was this really not the proxy?" is delivered to
+            a discussion of proxy failures. L2 argued a confidently wrong citation is worse
+            than an absent one; this is the case where the wrong landing site actively
+            argues the OPPOSITE of the claim it supports.
+
+            Others: main.rs:5884-5895 (run_init's vault build) -> fn run_init ~7297, array
+            ~7370, the range being sanitize_hostname; main.rs:518-519 (wiring) -> a
+            chrono::Utc::now() timestamp; main.rs:7416-7430 -> fn
+            select_github_login_input_mode ~8907; vault_bootstrap.rs:1410-1426 -> fn
+            build_vault_image ~1676, the range being mint_approle_token_for_container's
+            doc.
+
+            THE SURVIVOR IS INSTRUCTIVE, not lucky: squid.conf:64-80 is still correct, and
+            squid.conf is 170 lines while main.rs is 24,668. Line citations are safe
+            exactly where they are least needed. That is the argument for symbol anchoring
+            stated from the other direction.
+
+            SECTION-OBSERVATION REPAIRED TOO. Its items 1-3 restate the same three
+            resolutions and carried the same rot. NA-06 is BY DEFINITION "root-cause notes
+            for the three section-Observation failures", so leaving the upstream copy
+            drifted would mean a verifier reading the two against each other finds one
+            anchored and one void.
+
+            THE 881-29me GATE CAUGHT THIS SLICE TWICE, both true positives. First the
+            evidence table (9 rows), then -- after I annotated the rows -- a PROSE line
+            naming main.rs:7193-7205 as the finding. Worth recording that the gate reads
+            any line, not just table rows, because the second catch is the one a
+            row-scoped guard would have missed and it is the sentence carrying the whole
+            point of the section.
+
+            WHERE 245 STANDS AFTER THREE SLICES: section 1/1.1 (yoga), section 3 / NA-03
+            (lenovinha), section 6 + section Observation / NA-06 (lenovinha). All three
+            GPT-failed criteria now have a revision pass -- NA-01 was covered by yoga's
+            section-1 pass. Still carrying line citations: sections 2, 4, 5, 7.
+
+            The NA-05 recommendation is now three-for-three: the criterion asks for a patch
+            list of "specific file:line references", which is the requirement that PRODUCES
+            this rot. It should say file:symbol. Still the packet owner's call.
+        - type: claim
+          ts: "2026-08-30T11:14:53Z"
+          agent_id: "linux-lenovinha-claude-20260830t111429z"
+          host: linux
+          summary: |
+            NA-06 slice: root-cause notes for the three Observation failures — the last untouched criterion that GPT verification FAILED. Same method: verify each claim against the tree before touching its citation.
         - type: note
           ts: "2026-08-30T09:31:37Z"
           agent_id: "linux-lenovinha-claude-20260830t091429z"
@@ -3098,6 +3255,81 @@ plan_index:
         - "plan/long-running.md created as filtered view of active long-running packets"
         - "Additive update policy documented (new sections/supersede annotations, no rewrites)"
       events:
+        - type: progress
+          ts: "2026-08-30T10:23:32Z"
+          agent_id: "linux-lenovinha-claude-20260830t101428z"
+          host: linux
+          summary: |
+            LM-04's GATE HAD A BLIND SPOT THAT MADE IT ENFORCE THE DEFECT. Cycle-scoped
+            claim on a multi_cycle packet; phase stays `verification`, NOT closed -- the
+            three named agents' verified-by events are still the gate, and this slice is
+            not one.
+
+            WHAT I CHECKED AND WHY. next_action says LM-04 is now mechanically checkable
+            via scripts/check-long-running-view.sh. The honest reading of a gate landed to
+            stop a SECOND recurrence is: does it still hold five days later, and is its
+            definition of the truth actually the truth? It held on its own terms
+            (ok:long-running-view:27) and its definition was wrong.
+
+            THE BLIND SPOT. live_orders() is a single awk pass over plan/index.yaml,
+            deliberately. But `tillandsias-plan set-field <id> status done` writes the LWW
+            status into a plan/index.d/ FRAGMENT, and the worker protocol MANDATES that
+            method -- section 7.2 is explicit that a status must never be hand-authored
+            into the base. So between a closure and the next fold the base is wrong and the
+            gate believes it.
+
+            THE WINDOW IS NOT SMALL. Measured 2026-08-30: 321 unfolded fragments spanning
+            FOUR DAYS, 144 of them carrying a `field: status` entry. This is not a
+            theoretical race against a 2h cron.
+
+            AND ONE INSTANCE WAS LIVE. Order 831-ezea is `completed` per the folding
+            reader and was sitting in plan/long-running.md as `in_progress`. So the view
+            was advertising a closed packet as claimable long-running work -- the exact
+            DECOY failure the 2026-08-25 repair exists to end -- and the gate would have
+            REFUSED THE PUSH of anyone who removed the row. Both directions bad: leave it
+            and the sub-queue lies; fix it and the trunk goes red.
+
+            WHY THE LITMUS DID NOT CATCH IT, which is the reusable half and the third
+            instance of this shape I have hit in three cycles. All five existing arms
+            supply a fixture INDEX, so every one of them exercised the base parse and none
+            could reach a fragment. The suite pinned the membership arithmetic perfectly
+            and never asked where `live` comes from. Compare 943-3xyf (every arm supplied
+            an explicit --alive-cmd, so none exercised the default probe) and 943-7dn5 (the
+            litmus invokes --emit-flow itself, so it is green over a log nothing writes).
+            Same shape each time: the test constructs the input the production path
+            derives.
+
+            FIXED as 943-26rx. apply_fragment_status_overlay resolves each base-derived
+            order through the sanctioned folding reader (scripts/plan-binary-probe.sh) and
+            drops the terminal ones. It only ever REFINES live -> terminal, and a host
+            without a usable binary degrades to the old base-only answer rather than
+            failing the build -- a gate that reds when its optional reader is missing gets
+            switched off. Second, smaller fix found while testing: the `[ -z "$live" ]`
+            emptiness guard now asks the BASE parse, because after the overlay "the parser
+            produced nothing" and "everything is legitimately closed" became two different
+            conditions and the guard was blaming the instrument for a true answer.
+
+            The stale 831-ezea row is removed in the same commit -- the repair the old gate
+            was refusing. Two litmus arms added as a pair (a real terminal order must read
+            terminal; a real live order must still read live, so the overlay cannot pass by
+            calling everything terminal), and mutation-tested: disabling the overlay makes
+            STEP 1 fail on the live tree, demanding 831-ezea be re-listed as active work.
+            Litmus 7/7.
+
+            FOR THE THREE VERIFIERS, unchanged otherwise: LM-04 can still be checked in one
+            command, and that command is now reading the folded truth rather than a
+            four-day-old snapshot of it. LM-01/02/03/05 are untouched by this slice and the
+            completion gate is unchanged -- opencode-bigpickle, antigravity-gemini and
+            codex-gpt55-highthink still owe verified-by events. If a verifier disagrees
+            with the gate's definition of active (non-terminal status on a multi_cycle
+            packet, NOW resolved through the fold), that disagreement still belongs on this
+            row.
+        - type: claim
+          ts: "2026-08-30T10:15:43Z"
+          agent_id: "linux-lenovinha-claude-20260830t101428z"
+          host: linux
+          summary: |
+            LM-04 slice: the gate that stopped the recurrence is blind to plan/index.d/, so a set-field closure (the mandated method) makes it refuse a correct view.
         - type: progress
           ts: "2026-08-25T15:49:55Z"
           agent_id: "linux-yoga-opus5-20260825t154955z"
