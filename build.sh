@@ -710,7 +710,23 @@ fi
 # time. That is exactly how `./build.sh --observatorium` used to die
 # (_require_host_build_tools was defined ~45 lines below its only caller).
 
+# spec:dev-build "Build churn directories opt out of copy-on-write on btrfs".
+# Idempotent and best-effort: `chattr +C` affects only files created after it
+# is set, so this is safe on a live tree and needs no wipe; on non-btrfs the
+# chattr simply fails and we stay silent. The churn these trees hold is
+# rebuildable, and CoW+zstd+checksum amplification on it is what saturated
+# macuahuitl's NVMe during parallel builds (2026-08-30, io full 21.6% PSI).
+_ensure_nodatacow_churn_dirs() {
+    local d
+    for d in "$SCRIPT_DIR/target" "$HOME/.local/share/containers/storage/overlay"; do
+        [[ -d "$d" ]] || continue
+        [[ "$(lsattr -d "$d" 2>/dev/null | awk '{print $1}')" == *C* ]] && continue
+        chattr +C "$d" 2>/dev/null || true
+    done
+}
+
 _require_host_build_tools() {
+    _ensure_nodatacow_churn_dirs
     local missing=()
     local tool
     for tool in cargo rustc rustfmt clippy-driver gcc pkg-config; do

@@ -3692,6 +3692,16 @@ fn shared_id_to_int(id: &str) -> i32 {
 /// translation happens. The shared builder's string IDs are mapped to
 /// integer IDs via [`shared_id_to_int`].
 fn shared_menu_item_to_node(item: &shared_menu::MenuItem) -> MenuNode {
+    shared_menu_item_to_node_depth(item, -1)
+}
+
+/// Convert a shared item to a dbusmenu node, including children only to
+/// `depth` more levels (`-1` = unlimited, `0` = none — dbusmenu's
+/// GetLayout `recursionDepth` semantics). A depth-pruned submenu KEEPS its
+/// `children-display=submenu` property: that property is how the client
+/// knows an arrow belongs there and that a deeper GetLayout will yield the
+/// children — pruning it would render submenus as dead leaves.
+fn shared_menu_item_to_node_depth(item: &shared_menu::MenuItem, depth: i32) -> MenuNode {
     let id = shared_id_to_int(&item.id);
 
     let mut p = vec![
@@ -3706,13 +3716,87 @@ fn shared_menu_item_to_node(item: &shared_menu::MenuItem) -> MenuNode {
         p.push(("children-display".to_string(), ov_str("submenu")));
     }
 
-    let children: Vec<OwnedValue> = item
-        .children
-        .iter()
-        .map(|c| child(shared_menu_item_to_node(c)))
-        .collect();
+    let children: Vec<OwnedValue> = if depth == 0 {
+        Vec::new()
+    } else {
+        let next = if depth < 0 { -1 } else { depth - 1 };
+        item.children
+            .iter()
+            .map(|c| child(shared_menu_item_to_node_depth(c, next)))
+            .collect()
+    };
 
     node(id, props(p), children)
+}
+
+/// The shared builder's item list with the Linux-specific podman-unavailable
+/// status override applied — the single source both the full-menu path and
+/// the per-subtree GetLayout path convert from.
+fn shared_menu_items(state: &TrayUiState) -> Vec<shared_menu::MenuItem> {
+    let mut ui_state = tray_ui_state_to_menu_state(state);
+    if !state.podman_available {
+        ui_state.status_text = status_label(&TrayStatusStage::PodmanMissing);
+    }
+    match shared_menu::build(&ui_state) {
+        shared_menu::MenuStructure::Provisioning { items }
+        | shared_menu::MenuStructure::Ready { items }
+        | shared_menu::MenuStructure::Failed { items } => items,
+    }
+}
+
+/// Depth-first search for the shared item whose dbusmenu id is `id`.
+fn find_shared_item<'a>(
+    items: &'a [shared_menu::MenuItem],
+    id: i32,
+) -> Option<&'a shared_menu::MenuItem> {
+    for item in items {
+        if shared_id_to_int(&item.id) == id {
+            return Some(item);
+        }
+        if let Some(found) = find_shared_item(&item.children, id) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+/// The layout GetLayout must return: the subtree rooted at `parent_id`,
+/// with children included to `recursion_depth` levels (`-1` = unlimited).
+/// `None` when no node carries `parent_id` — the caller turns that into a
+/// DBus error rather than guessing (944-jaef: guessing was returning the
+/// root tree for EVERY id, and gnome-shell's client livelocked re-queueing
+/// a reply whose root never matched what it asked for).
+fn build_menu_layout(
+    state: &TrayUiState,
+    parent_id: i32,
+    recursion_depth: i32,
+) -> Option<MenuNode> {
+    let items = shared_menu_items(state);
+    if parent_id == 0 {
+        let children: Vec<OwnedValue> = if recursion_depth == 0 {
+            Vec::new()
+        } else {
+            let next = if recursion_depth < 0 {
+                -1
+            } else {
+                recursion_depth - 1
+            };
+            items
+                .iter()
+                .map(|item| child(shared_menu_item_to_node_depth(item, next)))
+                .collect()
+        };
+        return Some(node(
+            0,
+            props(vec![
+                ("label".to_string(), ov_str("Tillandsias")),
+                ("visible".to_string(), ov(Value::from(true))),
+            ]),
+            children,
+        ));
+    }
+    find_shared_item(&items, parent_id)
+        .map(|item| shared_menu_item_to_node_depth(item, recursion_depth))
 }
 
 // @trace spec:tray-minimal-ux, spec:tray-ux, spec:tray-progress-and-icon-states
@@ -3767,32 +3851,7 @@ fn shared_menu_item_to_node(item: &shared_menu::MenuItem) -> MenuNode {
 // menu-shape contract as the documentation for `tray_ui_state_to_menu_state`.
 // The shorter duplicate that had grown here in the meantime is folded in.
 fn build_menu(state: &TrayUiState) -> MenuNode {
-    // Podman-unavailable: override the status text before building.
-    let mut ui_state = tray_ui_state_to_menu_state(state);
-    if !state.podman_available {
-        ui_state.status_text = status_label(&TrayStatusStage::PodmanMissing);
-    }
-
-    let structure = shared_menu::build(&ui_state);
-
-    match structure {
-        shared_menu::MenuStructure::Provisioning { items }
-        | shared_menu::MenuStructure::Ready { items }
-        | shared_menu::MenuStructure::Failed { items } => {
-            let children: Vec<OwnedValue> = items
-                .iter()
-                .map(|item| child(shared_menu_item_to_node(item)))
-                .collect();
-            node(
-                0,
-                props(vec![
-                    ("label".to_string(), ov_str("Tillandsias")),
-                    ("visible".to_string(), ov(Value::from(true))),
-                ]),
-                children,
-            )
-        }
-    }
+    build_menu_layout(state, 0, -1).expect("root layout always exists")
 }
 
 #[interface(name = "org.kde.StatusNotifierItem")]
@@ -3965,14 +4024,27 @@ impl DbusMenuIface {
         "normal".to_string()
     }
 
+    // BOTH PARAMETERS ARE LOAD-BEARING (944-jaef, the fourth desktop
+    // freeze): this handler ignored parent_id and recursion_depth and
+    // returned the full root tree for every request. gnome-shell's dbusmenu
+    // client asks for ONE submenu at depth 1 while opening it; a reply
+    // rooted at 0 never matches, the client re-queues the whole tree and
+    // asks again — an unbounded Array.shift livelock that wedged the
+    // Wayland session on a single tray click. Content conformance is as
+    // load-bearing as wire types.
     async fn get_layout(
         &self,
-        _parent_id: i32,
-        _recursion_depth: i32,
+        parent_id: i32,
+        recursion_depth: i32,
         _property_names: Vec<String>,
     ) -> fdo::Result<(u32, MenuNode)> {
         let state = self.0.snapshot();
-        Ok((state.revision, build_menu(&state)))
+        match build_menu_layout(&state, parent_id, recursion_depth) {
+            Some(layout) => Ok((state.revision, layout)),
+            None => Err(fdo::Error::InvalidArgs(format!(
+                "no menu node with id {parent_id}"
+            ))),
+        }
     }
 
     async fn get_group_properties(
@@ -6510,6 +6582,72 @@ mod tests {
     }
 
     #[test]
+    // 944-jaef FIXTURE — the contract whose absence cost four desktop
+    // sessions: GetLayout returns the subtree rooted at the REQUESTED id,
+    // pruned to the REQUESTED depth. The old handler returned the id-0 full
+    // tree for every request and gnome-shell's client livelocked.
+    #[test]
+    fn get_layout_honors_parent_id_and_recursion_depth() {
+        let state = TrayStateBuilder::new()
+            .forge_available(true)
+            .enclave_status(EnclaveStatus::AllHealthy)
+            .authenticated(true)
+            .projects(vec![ProjectEntry {
+                name: "tillandsias".to_string(),
+                path: PathBuf::from("/home/x/src/tillandsias"),
+                full_name: None,
+            }])
+            .build();
+        let service = Arc::new(TrayService::new(state));
+        let iface = DbusMenuIface(service.clone());
+
+        // Root at unlimited depth: id 0, non-empty children.
+        let (_, root) =
+            futures::executor::block_on(iface.get_layout(0, -1, Vec::new())).expect("root");
+        assert_eq!(root.0, 0, "root request must root at 0");
+        assert!(!root.2.is_empty(), "root must carry the top-level items");
+
+        // Root at depth 0: children pruned entirely.
+        let (_, shallow) =
+            futures::executor::block_on(iface.get_layout(0, 0, Vec::new())).expect("depth-0 root");
+        assert!(shallow.2.is_empty(), "depth 0 must prune all children");
+
+        // Submenu request roots at the REQUESTED id — the whole 944-jaef
+        // defect in one assertion.
+        let local = MENU_ID_LOCAL_PROJECTS;
+        let (_, sub) = futures::executor::block_on(iface.get_layout(local, 1, Vec::new()))
+            .expect("submenu layout");
+        assert_eq!(sub.0, local, "reply must be rooted at the requested id");
+        assert!(!sub.2.is_empty(), "~/src submenu has the project child");
+        // Depth 1 means the project child appears but ITS children (the
+        // per-agent leaves) are pruned — while children-display survives so
+        // the shell still draws the arrow and asks deeper.
+        for c in &sub.2 {
+            let st = c
+                .downcast_ref::<zbus::zvariant::Structure>()
+                .expect("child is a structure");
+            let fields = st.fields();
+            let grandchildren = fields[2]
+                .downcast_ref::<zbus::zvariant::Array>()
+                .expect("children field is an array");
+            assert_eq!(
+                grandchildren.len(),
+                0,
+                "depth 1 prunes grandchildren under {:?}",
+                fields[0]
+            );
+            let prop_str = format!("{:?}", fields[1]);
+            assert!(
+                prop_str.contains("children-display"),
+                "pruned submenu child keeps children-display so the arrow survives"
+            );
+        }
+
+        // Unknown id is an ERROR, never a guessed tree.
+        let unknown = futures::executor::block_on(iface.get_layout(9999, -1, Vec::new()));
+        assert!(unknown.is_err(), "unknown parent_id must error, not guess");
+    }
+
     fn cloud_about_to_show_with_fresh_cache_does_not_request_immediate_relayout() {
         let state = TrayStateBuilder::new()
             .forge_available(true)
