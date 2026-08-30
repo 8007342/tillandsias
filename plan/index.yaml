@@ -27555,6 +27555,57 @@ plan_index:
         which is how this subsystem got here.
       events:
         - type: progress
+          ts: "2026-08-30T04:16:50Z"
+          agent_id: "linux-lenovinha-claude-20260830t035415z"
+          host: linux
+          summary: |
+            AUDIT CYCLE, NOT AN IMPLEMENTATION ONE — this packet is substantially DONE and its next_action is stale in three of four steps. Verified before writing any code, which is the only reason no time went into re-implementing landed work.
+
+            next_action step by step, checked against HEAD:
+
+              1. "First reconcile openspec/specs/vsock-exec-authz with the landed
+                 absolute-prefix verbatim arm" — ALREADY DONE. The spec documents the two
+                 admission arms, the verbatim arm's prefix rule and its rationale
+                 (§4), the `/..` traversal refusal, the shell-name ban, and the capability
+                 contract (§5). Nothing to reconcile.
+
+              2. "make each host feature-detect CAP_EXEC_ARGV_VECTOR after HelloAck" —
+                 LANDED. crates/tillandsias-control-wire/src/lib.rs:119 defines it and the
+                 macOS tray feature-detects on it (main.rs:285). The constant's own doc
+                 records a THIRD state I had not expected — a guest that advertises
+                 ExecArgvVector while predating a later preamble change — so the
+                 mixed-version reasoning the step asked for is present, not merely the flag.
+
+              3. "implement the exec-guest absolute-path-vector versus shell discriminator"
+                 — LANDED, in crates/tillandsias-headless/src/exec_allowlist.rs. The arm is
+                 `other if other.starts_with('/') => verbatim_argv_is_allowed(argv)`,
+                 reached only on an absolute path so it cannot shadow a name-based arm.
+
+              4. "bind litmus:guest-exec-argv-vector-no-shell" — BOUND under spec
+                 vsock-exec-authz, and GREEN: that spec's two tests
+                 (pty-open-argv-allowlisted, guest-exec-argv-vector-no-shell) both pass here.
+
+            THE DELIVERABLE'S SECOND HALF — "the five host-side escaping workarounds are deleted" — audited individually rather than counted:
+
+              wt_safe_title                 GONE (0 occurrences)
+              build_exec_guest_shell_cmd    PRESENT AND KEPT BY DESIGN — next_action itself
+                                            says keep it for genuine shell requests (838-48ca)
+              argv_survives_wt_reparse      PRESENT, Windows lane, NOT MINE: next_action says
+                                            "Windows deletions require Windows-lane evidence"
+              wsl_root_sh                   PRESENT, Windows lane, same rule
+              the `;` -> `&&` rule          RESOLVED BY DECISION, and the code says so in
+                                            crates/tillandsias-host-shell/src/pty/mod.rs:181:
+                                            "THE FIX LANDED; THIS GUARD REMAINS BY DECISION."
+                                            The verbatim vector landed for project launches as
+                                            order 823-u5zf; the one lane still composed through
+                                            vm_login_shell_argv is GithubLogin, which
+                                            interpolates NO project name, so the guard guards
+                                            nothing exploitable and is cheap to keep.
+
+            SO: one deleted, one kept deliberately, one resolved by a recorded decision, and TWO remaining — both Windows-lane, both explicitly gated on Windows-lane evidence by this packet's own next_action. There is no Linux-side work left here, and I did not invent any.
+
+            I DELIBERATELY WROTE NO CODE THIS CYCLE. The packet is p1 and looked like implementation work from the batch line; three of its four steps were already satisfied. Re-deriving them would have produced a plausible diff over landed behaviour, which on this surface — an exec allowlist — is a security-relevant change made for no reason. The audit IS the cycle's output, per the rule that a near-obsolete-looking packet is a signal to audit rather than to implement as busywork.
+        - type: progress
           ts: "2026-08-25T20:09:17Z"
           agent_id: "macos-tlatoanis-macbook-air-opus5-20260825t200917z"
           host: tlatoanis-macbook-air
