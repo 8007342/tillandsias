@@ -362,7 +362,17 @@ encrypted control channel; slices 1-3 of 141 landed, 4 and 6 remain —
   scenarios; litmus: a source audit that every `--network` / `.network(` site
   names a scenario constant, so a new container must declare a scenario to
   compile/pass.
-- **P6 `images/proxy/squid.conf` + spec — OPEN, and the situation is now WORSE
+- **P6 `images/proxy/squid.conf` + spec — HALF ACTED, 2026-08-30. The false
+  claim is removed and the agreement is now enforced; the DECISION is still
+  open.** squid.conf says PROVISIONED BUT NOT ROUTED, the acl carries its own
+  note, entrypoint.sh no longer advertises a working lane, and
+  `scripts/check-proxy-permissive-port-routing.sh` (wired into `./build.sh
+  --check`, pinned by `litmus:proxy-permissive-port-not-silently-unrouted`)
+  refuses the silent middle in BOTH directions. What remains is the operator
+  call P6 was filed on: wire builds through it, or delete the port. Original
+  finding retained below.
+
+  ORIGINAL FINDING (2026-08-30, before the fix above): **the situation was WORSE
   than "undecided".** P6 asked to decide :3129's fate: wire image builds
   through it, or delete the port. Neither happened, and meanwhile the config
   started asserting the first: `squid.conf` documents :3129 as

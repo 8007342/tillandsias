@@ -824,6 +824,7 @@ specs:
   - litmus:brew-attestation-egress
   - litmus:proxy-container-shape
   - litmus:agent-egress-allowlist-shape
+  - litmus:proxy-permissive-port-not-silently-unrouted
   - litmus:podman-egress-control-shape
   - litmus:proxy-crash-supervision-shape
   coverage_ratio: 75

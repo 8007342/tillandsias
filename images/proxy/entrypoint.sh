@@ -74,7 +74,7 @@ echo "SSL certificate database created."
 echo "========================================"
 echo "  tillandsias proxy (ssl-bump enabled)"
 echo "  strict:     :3128"
-echo "  permissive: :3129"
+echo "  permissive: :3129 (provisioned, NOT routed — order 245 P6)"
 echo "========================================"
 
 # Parse only after the runtime CA material and cache paths exist. This turns

@@ -2453,6 +2453,77 @@ plan_index:
         - "Spec/Cheatsheet patch list published with specific file:line references"
       events:
         - type: progress
+          ts: "2026-08-30T13:21:25Z"
+          agent_id: "linux-lenovinha-claude-20260830t131430z"
+          host: linux
+          summary: |
+            P6 ACTED ON, without taking the operator's decision (linux slice, cycle-scoped
+            claim on a multi_cycle packet; phase stays `review`, NOT closed). Last cycle's
+            next_action named P6 as the actionable item rather than more citation repair;
+            this is that.
+
+            THE DEFECT, restated with the final measurement. squid.conf described :3129
+            flatly as "PERMISSIVE (image builds): all domains allowed", declared
+            `http_port 3129 ssl-bump`, carried `acl build_port localport 3129`, and
+            entrypoint.sh announced `permissive: :3129` at startup. MEASURED 2026-08-30:
+            the string 3129 appears NOWHERE in crates/ -- not a published port, not in any
+            HTTP_PROXY value, not a build argument. Only 3128 is wired (container_profile.rs
+            sets http://proxy:3128 in five places). Image builds still egress directly via
+            the --dns 8.8.8.8 argument in tillandsias-podman client.rs. Four pieces of
+            configuration said image builds were proxied and the build path said they were
+            not.
+
+            WHAT I DID NOT DO, deliberately. P6 asks to either wire builds through the port
+            or delete it, and recommends wiring on HOST runtime with direct egress kept as
+            the bootstrap fallback for the proxy image itself (the chicken-and-egg in
+            plan/issues/podman-proxy-reset-chicken-and-egg-2026-07-08.md). That is an
+            operator decision about egress behaviour, not a cleanup, and deleting the port
+            would ALSO have overridden the audit's own recommendation. So the decision is
+            untouched.
+
+            WHAT I DID: made the configuration stop asserting what the code does not do,
+            and made that agreement enforceable.
+              * squid.conf's header now reads "PERMISSIVE, PROVISIONED BUT NOT ROUTED --
+                intended for image builds; NO BUILD PATH USES IT TODAY", with the
+                measurement, the reason the port is kept rather than deleted, and a pointer
+                to the guard.
+              * the acl build_port line carries its own note saying nothing sets it today.
+              * entrypoint.sh's banner says "(provisioned, NOT routed -- order 245 P6)"
+                instead of announcing a working lane.
+              * scripts/check-proxy-permissive-port-routing.sh checks the AGREEMENT, never
+                the decision: if no .rs references 3129 the header must carry NOT ROUTED,
+                and if a consumer appears that caveat must be gone. EITHER state is legal;
+                what is refused is the silent middle. Wired into ./build.sh --check.
+
+            WHY A GUARD AND NOT JUST A COMMENT. P6 has been open since 2026-07 and in that
+            time the config drifted from "undecided port" to "port that claims a purpose it
+            does not serve" -- a comment alone would drift again. The guard is symmetric on
+            purpose: the day someone wires builds through :3129, it refuses the stale
+            caveat, so the note cannot outlive the wiring either.
+
+            PINNED by litmus:proxy-permissive-port-not-silently-unrouted, 5/5, bound under
+            spec proxy-container: tree agreement in the pinned grammar; the caveat removed
+            while unrouted refused; a consumer appearing while the caveat stands refused
+            (both directions asserted separately, because either arm alone passes on a
+            guard hard-wired the other way); a POSITIVE control so a refuse-everything
+            guard cannot satisfy the negatives; and a wiring arm proving build.sh actually
+            calls it. MUTATION-TESTED against the real defect: restoring the original
+            "PERMISSIVE (image builds)" header makes the guard emit
+            violation:proxy-permissive-port:undocumented-unrouted.
+
+            THIS IS THE SAME SHAPE AS THE L3 CITATION FINDING, in configuration rather than
+            prose: evidence that reads as proof of a claim while the claim is false, which
+            survives review precisely BECAUSE it reads as evidence. Three artifacts have now
+            carried it in this packet -- a source citation landing on the exonerated
+            hypothesis (L3), a patch list carrying a refuted proposal (L4), and a proxy port
+            advertising a consumer it does not have.
+        - type: claim
+          ts: "2026-08-30T13:14:52Z"
+          agent_id: "linux-lenovinha-claude-20260830t131430z"
+          host: linux
+          summary: |
+            P6 slice: squid's :3129 is declared and advertised as the image-build lane while no build routes through it. Make the config stop asserting what the code does not do.
+        - type: progress
           ts: "2026-08-30T12:20:35Z"
           agent_id: "linux-lenovinha-claude-20260830t121429z"
           host: linux

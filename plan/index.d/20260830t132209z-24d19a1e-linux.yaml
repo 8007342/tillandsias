@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: network-architecture-audit
+    field: next_action
+    value: 'P6 is HALF ACTED (2026-08-30): the false claim is gone and the agreement is enforced — squid.conf says PROVISIONED BUT NOT ROUTED, entrypoint.sh no longer advertises a working lane, and scripts/check-proxy-permissive-port-routing.sh (in ./build.sh --check, pinned by litmus:proxy-permissive-port-not-silently-unrouted, 5/5, mutation-tested) refuses the silent middle in BOTH directions. WHAT REMAINS ON P6 IS AN OPERATOR DECISION, not work: wire image builds through :3129 on HOST runtime (P6''s own recommendation, keeping direct egress as the bootstrap fallback for the proxy image itself — see plan/issues/podman-proxy-reset-chicken-and-egg-2026-07-08.md), or delete the port. Either choice is one commit and the guard will demand the matching doc change. REMAINING PATCH-LIST WORK, in value order: P8 (the nix cache is an enclave member missing from the enclave-network spec''s enumeration — second document to miss order 801-vm4p''s Service::NixCache; prefer pointing at the service list over a prose enumeration that has now gone stale twice), P3 (ENCLAVE_NO_PROXY_BASE and NODE_USE_ENV_PROXY exist in main.rs and appear in NO spec, cheatsheet or doc), P7 (headless-mode spec has zero occurrences of ''vault''), P4''s vsock-transport half, P5 (the network-scenarios spec does not exist). P1 needs the git-mirror-egress verdict first. Sections 2, 4 and 7 still carry line citations. FOR THE PACKET OWNER, fifth request: NA-05''s exit criterion mandates ''specific file:line references'' and now contradicts four slices of work.'
+    ts: "2026-08-30T13:22:09Z"
+    host: linux
+
+events:
+  - packet_id: network-architecture-audit
+    event:
+      type: note
+      ts: "2026-08-30T13:22:09Z"
+      host: linux
+      summary: >
+        P6 half acted; naming what is decision vs work, and the remaining patch order
