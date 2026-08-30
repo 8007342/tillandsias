@@ -398,9 +398,17 @@ encrypted control channel; slices 1-3 of 141 landed, 4 and 6 remain —
   That is a stronger reason to act than the draft had: the decision now reads
   as taken in the config and untaken in the code, which is how a reader
   concludes builds are proxied when they are not.
-- **P7 `openspec/specs/headless-mode/spec.md` — OPEN.** The spec contains zero
-  occurrences of "vault". Document the per-operation image ensure lists (or
-  their unification per §3.1) and the vault-in-init change (order 253).
+- **P7 — DONE 2026-08-30.** The spec gains a requirement tabulating all SIX
+  per-operation ensure lists plus `run_init`'s ten-image set, symbol-anchored,
+  with two scenarios. Two findings: `vault` is in the init list and in NO
+  per-operation list, which is order 253's DESIGN not an omission (as is
+  `nix-cache`, which arrives via the ForgeLaunch graph) — both now stated as
+  requirements so nobody "fixes" them; and the offered UNIFICATION is the wrong
+  move, since the lists differ because the operations differ and the real risk
+  is an INCOMPLETE list, which fails as a phantom registry pull (125) rather
+  than a named missing-image error. Uneven drift protection recorded for
+  whoever hardens it: two of six sites have their list CONTENTS pinned, four
+  only the call string.
 - **P8 `openspec/specs/enclave-network/spec.md` — DONE 2026-08-30, and the
   filing UNDERSTATED it.** Filed as "the nix cache is missing"; enumerating the
   attach sites found SIX missing members (vault, router, nix cache, catalog

@@ -2452,6 +2452,67 @@ plan_index:
         - "Platform Abstraction Layer mapped (Linux bare, WSL2, macOS VZ, Silverblue Toolbox — bridge/forwarding mechanism)"
         - "Spec/Cheatsheet patch list published with specific file:line references"
       events:
+        - type: progress
+          ts: "2026-08-30T16:19:31Z"
+          agent_id: "linux-lenovinha-claude-20260830t161432z"
+          host: linux
+          summary: |
+            P7 DONE (linux slice, cycle-scoped claim on a multi_cycle packet; phase stays
+            `review`, NOT closed). With this the NA-05 patch list has no OPEN item that is
+            work rather than a decision or a dependency.
+
+            ENUMERATED FROM CODE, not paraphrased. Six per-operation ensure lists feed
+            fn ensure_versioned_images, plus run_init's ten-image declarative set:
+              run_init                     ten images, "vault" THIRD
+              ensure_proxy_running         proxy only
+              run_status_check             proxy, git, inference, chromium-core,
+                                           chromium-framework, forge, router, web
+              run_observatorium_mode       web, router, chromium-core, chromium-framework
+              run_opencode_mode            proxy, router, git, inference, forge
+              ensure_enclave_for_project   router, git, inference, forge
+
+            VAULT IS IN THE INIT LIST AND IN NO PER-OPERATION LIST, and that is order 253's
+            DESIGN rather than the omission P7 might read as. Vault belongs to the
+            init/Build context; build_vault_image early-returns on the init-built identity
+            tag so a login on an initialized runtime is zero-build. nix-cache is likewise
+            in no ensure list -- it arrives through the ForgeLaunch dependency graph
+            (Service::NixCache, order 801-vm4p). Both absences are now stated as
+            requirements so a future author does not "fix" them.
+
+            P7 OFFERED "OR THEIR UNIFICATION PER SECTION 3.1" AND UNIFICATION IS THE WRONG
+            MOVE. The lists differ because the operations start different containers;
+            merging them makes every lane pay for every image. The real risk is the
+            opposite -- an INCOMPLETE list -- and it fails obscurely: when router and web
+            were missing from every ensure list the publish path hit a phantom registry
+            pull (exit 125) on any version handover (2026-07-16, recorded at the
+            run_status_check list). An operation that starts a container it did not ensure
+            does not report a missing image, it reports a registry failure. That is why the
+            new scenario says the list is verified against what the operation STARTS, never
+            against another operation's list.
+
+            A FINDING FOR WHOEVER HARDENS THIS: the existing drift protection is UNEVEN.
+            Two of the six sites have their list CONTENTS pinned by source-scanning tests
+            that freeze the exact literal (opencode_mode_preflights_router_image_before_start
+            and forge_launch_preflights_router_image_before_start). The other four are
+            pinned only on the CALL string -- "must preflight required images" -- which
+            cannot see a list that is missing an entry. The 2026-07-16 incident was exactly
+            a contents defect, so the four unpinned sites are the ones the incident would
+            recur at. I did NOT extend the frozen literals to them: freezing four more list
+            literals in source scans is the brittle form the project already criticises
+            (721-77yu, and the symbol-anchoring lesson from this packet's own citation
+            work). The right hardening derives what each operation STARTS and checks the
+            list against that -- a real analysis, larger than this slice, and worth its own
+            packet if someone wants it.
+
+            DOCUMENTED in openspec/specs/headless-mode/spec.md as a requirement with a
+            table of the six lists and two scenarios, symbol-anchored throughout. The spec
+            had zero occurrences of "vault" before this.
+        - type: claim
+          ts: "2026-08-30T16:14:49Z"
+          agent_id: "linux-lenovinha-claude-20260830t161432z"
+          host: linux
+          summary: |
+            P7 slice: headless-mode spec documents neither the per-operation image ensure lists nor the vault-in-init change (order 253). Enumerate from code first.
         - type: note
           ts: "2026-08-30T15:31:46Z"
           agent_id: "linux-lenovinha-claude-20260830t151432z"
