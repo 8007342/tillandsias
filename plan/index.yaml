@@ -17221,6 +17221,80 @@ plan_index:
         - a stage log exists in the ledger (event per lift with telemetry evidence and the operator approval reference)
       events:
         - type: progress
+          ts: "2026-08-30T08:26:15Z"
+          agent_id: "linux-lenovinha-claude-20260830t081427z"
+          host: linux
+          summary: |
+            G4'S PRODUCER WAS BROKEN, and this cycle found it by being the first thing
+            ever to run the DEFAULT path on this host. Filed and fixed as 943-3xyf.
+
+            WHAT I SET OUT TO DO. Criterion 1 needs a real delegate launched, which is
+            operational work I did not undertake (see below), so I took the tractable
+            prerequisite instead: exercise the disposition channel end-to-end here,
+            since G4's gate reads it and nothing had ever registered through it.
+
+            THE DEFECT. `register` recorded the default liveness probe as the literal
+            string `pgrep -f <id>`, and `is_alive` ran it through `sh -c`. That sh
+            process's own command line contains the id, so pgrep matched the PROBE, not
+            the delegate. Measured with a random id nothing anywhere carried:
+            `pgrep -c -f <id>` from a clean shell returned 0 while `reconcile` returned
+            `outcome:still-running`. Every delegate that ever existed would have read as
+            alive forever, and `died-without-outcome` -- the disposition 690-2kwd built
+            this whole channel to guarantee is 'never mistaken for a clean finish' --
+            could not fire. `sweep` would have auto-filed nothing, ever.
+
+            EXCLUDING ANCESTRY WAS NOT ENOUGH, and the second attempt is worth recording
+            because it is subtle. After removing `sh -c` and filtering out the caller's
+            ancestor chain, the probe STILL always said alive: the surviving self-match
+            is the command-substitution SUBSHELL inside the probe itself, which bash
+            forks from the script so it inherits the script's argv (containing
+            `--id <id>`) and is a CHILD, invisible to any ancestry filter. The reliable
+            discriminator turned out to be the tool's own NAME -- a real delegate's
+            command line is `tillandsias <project> --<harness> --prompt ...` and never
+            contains `delegate-outcome`.
+
+            WHY THE LITMUS WAS GREEN THROUGHOUT, which is the reusable half. Every arm of
+            litmus:delegate-outcome-disposition-not-silent-shape passes an explicit
+            `--alive-cmd false` or `true`. The suite pinned the disposition GRAMMAR
+            perfectly and never once exercised the probe that produces it in production.
+            Same shape as 943-7dn5 filed last cycle: a green light over an emitter while
+            the wiring that would call it does not exist.
+
+            THE FIX AND ITS CONTROLS. register records the sentinel `:default:`;
+            is_alive routes that -- AND the legacy literal, because a fleet upgrades at
+            different times and a record written by an un-upgraded host must not keep
+            reporting alive -- to default_alive, which runs pgrep directly and drops any
+            match whose `ps -o args=` contains `delegate-outcome`. Verified in three
+            states: nothing running -> died-without-outcome; a process exec'd with the id
+            in its argv -> still-running; after it exits -> died-without-outcome, with
+            sweep emitting would-file. Two litmus arms added as an explicit PAIR, with a
+            comment saying they must not be separated: the dead-case arm alone passes on
+            a probe hard-wired to 'dead', the live-case arm alone on one hard-wired to
+            'alive'. Mutation-tested -- restoring the old default makes step 6 fail with
+            the exact original symptom. Litmus 7/7.
+
+            GATE G4 IS RE-RATED. My previous cycle recorded it as 'MECHANISM LIVE, NO
+            DATA'. That was wrong in the first half and I am correcting it rather than
+            leaving it: the mechanism was NOT live, it was incapable of ever reporting
+            the condition it gates on. It is live now. The 'NO DATA' half stands.
+
+            WHAT I DID NOT DO, and why. Criterion 1 -- stage 0 actually running -- means
+            launching a sibling AI harness that will autonomously commit to the shared
+            ledger, plus a tray rebuild and container recycle on the operator's machine.
+            The 2026-08-11 authorization was interactive, that night, on linux_mutable,
+            naming a delegate logged in THERE. On lenovinha `opencode` is present and
+            `codex`/`gemini` are absent, and I have no recorded authorization for this
+            host. Launching another agent on someone's machine is not something a loop
+            should infer from a nineteen-day-old note about a different host, so it needs
+            an explicit operator go-ahead. Everything that could be prepared without it
+            now is.
+        - type: claim
+          ts: "2026-08-30T08:15:08Z"
+          agent_id: "linux-lenovinha-claude-20260830t081427z"
+          host: linux
+          summary: |
+            Criterion 1 prerequisites: exercise the delegate disposition channel end-to-end on this host (G4's producer, never once run here) and record what still blocks stage 0 from actually running.
+        - type: progress
           ts: "2026-08-30T07:18:15Z"
           agent_id: "linux-lenovinha-claude-20260830t071426z"
           host: linux
