@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: long-running-work-packet-methodology
+    field: next_action
+    value: 'The three named agents re-verify LM-01..LM-05; that gate is unchanged. LM-04 is mechanically checkable — run scripts/check-long-running-view.sh — and as of 943-26rx it reads the FOLDED truth rather than plan/index.yaml alone. That correction matters to a verifier: before it, a packet closed by set-field (which writes a fragment) still read as live, so the gate both demanded a completed packet stay in the active view AND refused the push of anyone removing it. Measured window was 321 unfolded fragments over four days, with order 831-ezea live-in-view while completed. If a verifier disagrees with the gate''s definition of active (non-terminal status on a multi_cycle packet, resolved through the fold), record the disagreement here — the gate encodes it for the whole fleet. NOTE FOR WHOEVER AUDITS THE OTHER CRITERIA: three gates in this family have now failed the same way — their litmus arms construct the input the production path derives, so the suite is green over a check that never ran (943-26rx fixture index, 943-3xyf explicit --alive-cmd, 943-7dn5 self-invoked emitter). Worth asking of LM-01/02/03/05 too.'
+    ts: "2026-08-30T10:23:56Z"
+    host: linux
+
+events:
+  - packet_id: long-running-work-packet-methodology
+    event:
+      type: note
+      ts: "2026-08-30T10:23:56Z"
+      host: linux
+      summary: >
+        LM-04's gate now reads the folded truth; naming the shared litmus defect for the remaining criteria

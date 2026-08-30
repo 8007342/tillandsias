@@ -65,6 +65,49 @@ live_orders() {
     ' "$INDEX" | sort -u
 }
 
+
+# ORDER 943-26rx. APPLY THE FRAGMENT LWW STATUS OVERLAY BEFORE JUDGING.
+#
+# The awk pass above reads only the FOLDED BASE. That was a real blind spot,
+# not a theoretical one: `tillandsias-plan set-field <id> status done` — the
+# closure method the worker protocol MANDATES (never hand-author a status) —
+# writes to a `plan/index.d/` fragment, and the base keeps the old status until
+# the next fold. Measured 2026-08-30: 321 unfolded fragments spanning four
+# days, 144 of them carrying a `field: status` entry.
+#
+# Both directions of the resulting failure are bad, and one was LIVE when this
+# was written:
+#   * a packet closed by set-field still reads `live` here, so this gate
+#     DEMANDS it stay in the active view — and refuses the push of whoever
+#     correctly removes the row. The trunk reds for doing the right thing.
+#   * left in, the view advertises a closed packet as claimable long-running
+#     work. That is exactly the DECOY failure this gate was built to end
+#     (2026-08-25: four obsoleted packets listed, twenty live ones absent),
+#     recurring through the gate itself.
+# Live instance at the time of the fix: order 831-ezea, `completed` per the
+# folding reader, `live` per the base, and duly listed in the view.
+#
+# The plan binary is the sanctioned folding reader, so ask it. It is a
+# REFINEMENT, never a widener: it can only move an order from live to
+# terminal, so a host without a usable binary degrades to the old base-only
+# answer rather than failing the build. That asymmetry is deliberate — a gate
+# that goes RED when its optional reader is missing gets switched off.
+apply_fragment_status_overlay() {
+    local plan_bin order status kept=""
+    # shellcheck source=/dev/null
+    . "$REPO_ROOT/scripts/plan-binary-probe.sh" 2>/dev/null || { cat; return 0; }
+    plan_bin="$(resolve_plan_binary)" || { cat; return 0; }
+    while read -r order; do
+        [ -n "$order" ] || continue
+        status="$("$plan_bin" status "$order" 2>/dev/null | awk 'NR==1{print $2}')"
+        case "$status" in
+            done|obsoleted|superseded|completed|failed|cancelled) continue ;;
+            *) kept="$kept$order"$'\n' ;;
+        esac
+    done
+    printf '%s' "$kept"
+}
+
 # Orders the view claims, read from the leading cell of each table row. Anchored
 # to the row shape so prose mentioning an order elsewhere in the file is not
 # mistaken for a listing.
@@ -72,13 +115,24 @@ view_orders() {
     sed -n 's/^| *\([0-9][0-9a-z-]*\) *|.*/\1/p' "$VIEW" | sort -u
 }
 
-live="$(live_orders)"
-listed="$(view_orders)"
+# ORDER 943-26rx: the emptiness guard now asks the BASE PARSE, not the final
+# set. It exists to catch a broken awk pass ("the parser produced nothing"),
+# and once the overlay was added those became two different conditions: a tree
+# where every multi_cycle packet has been CLOSED legitimately has zero live
+# orders, and reporting that as `blocked:no-multi-cycle-packets-parsed` blames
+# the instrument for a true answer. Checked before the overlay, so a real parse
+# failure is still caught, and an empty result AFTER refinement is reported as
+# the ok:0 it is.
+base_live="$(live_orders)"
 
-if [ -z "$live" ]; then
+if [ -z "$base_live" ]; then
     echo "blocked:no-multi-cycle-packets-parsed"
     exit 2
 fi
+
+live="$(printf '%s\n' "$base_live" | apply_fragment_status_overlay)"
+listed="$(view_orders)"
+
 
 missing="$(comm -23 <(printf '%s\n' "$live") <(printf '%s\n' "$listed"))"
 stale="$(comm -13 <(printf '%s\n' "$live") <(printf '%s\n' "$listed"))"

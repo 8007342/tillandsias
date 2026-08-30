@@ -34,7 +34,6 @@ cycle that changes a listed packet's phase, status, or verification tally.
 | 793-rb9u | `mcp-json-launcher-host-kind-compatibility` | ready | not yet recorded | not yet recorded |
 | 794-kmqe | `windows-lane-wsl2-hardware-exposure-shared-measurement` | ready | not yet recorded | not yet recorded |
 | 829-dkuc | `periodic-deslopification-sweep` | ready | not yet recorded | not yet recorded |
-| 831-ezea | `three-horizon-cycle-model-arrival-control-by-routing` | in_progress | not yet recorded | not yet recorded |
 
 Protocol summary (canonical: `long_running_packets` in
 `methodology/distributed-work.yaml`):
