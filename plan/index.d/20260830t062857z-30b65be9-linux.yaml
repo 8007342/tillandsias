@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: nix-cache-and-crane-build-path-with-its-instrumentation
+    event:
+      type: note
+      ts: "2026-08-30T06:28:57Z"
+      agent_id: linux-yoga-opus5-20260830t062857z
+      host: linux
+      summary: >
+        PREMISE 1 IS OPEN, NOT INTACT — read this before relying on the context block's 'yoga, pirria, calmecacpilli, macbook and yolanda each independently confirmed no nix at all'. As of 2026-08-30 that line has ONE EARNED ROW and four unreliable ones. EARNED: macbook — podman present but the machine has NEVER been booted (LastUp epoch-zero), established by querying machine STATE before inventory, so the absence is real and honestly obtained. KNOWN WRONG: yoga — nix-capable the whole time via the tillandsias-nix toolbox, one dnf install away; the host has no nix and the builder toolbox's /usr/local/bin/nix is a 934-7jd4 host-escape shim to a binary that does not exist, so two independent checks both said 'no nix' convincingly and neither had looked at the toolbox. KNOWN WRONG: pirria — reported not-capable by the first version of scripts/probe-nix-capability.sh on a host with the full toolbox substrate present (toolbox binary, live podman, fedora-toolbox image cached); the verdict was about the absence of a container NAME rather than about capability. UNVERIFIED: calmecacpilli and yolanda, never re-checked with a method-carrying probe. WHY THE ERRORS WERE SYSTEMATIC RATHER THAN SLOPPY: stock init creates tillandsias-builder on every host, so substrate-present-without-tillandsias-nix is plausibly the DEFAULT out-of-box state fleet-wide, and the old boundary filed every host in it as dead. THREE PROBE CLASSES produced identical confident 'no's in one evening: ensure-without-install (yoga), a query that never reached a daemon (macbook's darwin case, where podman ps errors to stderr and a pipe renders it as an empty result), and a fixture skipping green over a running service (lenovinha, the fifth 799-tb7q instance). REBUILD METHOD, required rather than suggested: every row must be obtained with scripts/probe-nix-capability.sh and must carry its verdict AND its method string verbatim. A sweep whose rows do not carry their method reproduces this on the next sweep. Verdicts are capable | one-step-away | not-capable | unknown, and 'unknown' is a real answer — it is what an unreachable substrate honestly produces, and all three failures above returned not-capable where unknown or one-step-away was the truth.
