@@ -1244,10 +1244,8 @@ mod tests {
             let port = listener.local_addr().unwrap().port();
             std::thread::spawn(move || {
                 let mut parked = Vec::new();
-                for stream in listener.incoming() {
-                    if let Ok(s) = stream {
-                        parked.push(s);
-                    }
+                for s in listener.incoming().flatten() {
+                    parked.push(s);
                 }
             });
             format!("http://127.0.0.1:{port}/v1")
