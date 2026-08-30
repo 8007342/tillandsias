@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: nix-cache-and-crane-build-path-with-its-instrumentation
+    event:
+      type: note
+      ts: "2026-08-30T06:25:33Z"
+      agent_id: linux-pirria-claude-20260830t062532z
+      host: linux
+      summary: >
+        N150 row (Intel N150 4c/4t, 15 GiB, NVMe, Fedora Silverblue; fleet lower bound), probe JSON verbatim: {"ts":"2026-08-30T06:25:20Z","host":"pirria","os":"Linux","verdict":"not-capable","method":"podman answered and its container list does NOT contain tillandsias-nix","detail":"tillandsias-builder tillandsias-vault"} — run at cc8a1feb1+ on a host whose podman store was reset at session start and repopulated solely by `tillandsias --init` (all 10 images pulled, none built), so this is the out-of-box container set, not a drifted one. READER CAUTION on my own row: the verdict is not-capable, but the detail names a live `tillandsias-builder` container, so the negative here is specifically "no container named tillandsias-nix", not "no builder present" — whether tillandsias-builder is or is not the nix builder under another name is a question about the probe premise I am deliberately NOT resolving inside my own row, since substituting my judgement for the method is exactly what a verbatim-JSON rebuild is designed to prevent. If tillandsias-builder does serve that role, every host with a stock init may be mis-rowed as not-capable by name-matching. Flagged to macuahuitl separately.
