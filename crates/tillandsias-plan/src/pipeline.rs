@@ -566,6 +566,17 @@ pub async fn run_grounded(
         _ => LatencyTier::Fine,
     };
     let budget = effective_synth_budget(tier);
+    // ORDER 939-jxgz. The budget is a REQUEST deadline over the model-prose
+    // phases (decomposition + synthesis), not a per-phase allowance. Before
+    // this, decomposition ran under raw 120s socket timeouts OUTSIDE the
+    // budget, so a stalled model produced ~124s requests against a 60s
+    // ceiling (measured on both twin hosts, 937-68n4 ladder) — the budget
+    // bounded synthesis and not the wait. Retrieval keeps its own transport
+    // timeout: the floor answer requires embeddings, so the request bound is
+    // budget + retrieval transport + a small constant, and that is the
+    // promise the knob's docs make.
+    let prose_deadline = std::time::Instant::now() + budget;
+    let remaining = move || prose_deadline.saturating_duration_since(std::time::Instant::now());
 
     // ── decompose (skipped on the immediate tier: its budget is the
     //    deterministic floor, and a decompose round-trip would blow it
@@ -577,14 +588,31 @@ pub async fn run_grounded(
     let all_prompts = if tier == LatencyTier::Immediate {
         original_only.clone()
     } else {
-        let inference = cfg.inference.clone();
+        let mut inference = cfg.inference.clone();
+        // The socket timeout IS the cancellation mechanism for the blocking
+        // thread: tokio::time::timeout below frees the CALLER at the
+        // deadline, but dropping the JoinHandle detaches the thread rather
+        // than cancelling it — only its own socket deadline ends the WORK
+        // (939-jxgz; yoga's leaked-generation mechanism).
+        inference.timeout = inference
+            .timeout
+            .min(remaining().max(Duration::from_millis(1)));
         let q = query.to_string();
-        tokio::task::spawn_blocking(move || decompose_with_llm(&inference, &q))
-            .await
-            .unwrap_or_else(|e| {
+        let decompose_task =
+            tokio::task::spawn_blocking(move || decompose_with_llm(&inference, &q));
+        match tokio::time::timeout(remaining(), decompose_task).await {
+            Ok(Ok(v)) => v,
+            Ok(Err(e)) => {
                 eprintln!("[grounded] decompose task failed: {e}");
                 original_only.clone()
-            })
+            }
+            Err(_) => {
+                eprintln!(
+                    "[grounded] decomposition exceeded the request budget; dispatching the original only (939-jxgz)"
+                );
+                original_only.clone()
+            }
+        }
     };
 
     // ── trim to the tier's variant budget (Lua, deterministic CPU floor) ──
@@ -691,14 +719,19 @@ pub async fn run_grounded(
         let base = cfg.inference.synth_base.clone();
         let model = cfg.inference.model.clone();
         let user = p.prompt.clone();
-        let timeout = cfg.inference.timeout;
+        // What decomposition left of the request budget bounds BOTH layers:
+        // the socket timeout ends the detached blocking thread's work at the
+        // deadline (dropping the JoinHandle only detaches), and the tokio
+        // timeout below frees this task at the same instant (939-jxgz).
+        let synth_remaining = remaining().max(Duration::from_millis(1));
+        let timeout = cfg.inference.timeout.min(synth_remaining);
         synth_tasks.spawn(async move {
             let dispatched = tokio::task::spawn_blocking(move || {
                 chat_completion(&base, &model, Some(&system), &user, Some(320), timeout)
             });
             // The tier budget is enforced HERE — an overrun degrades to
             // the cited retrieval-only digest below, NAMED as a timeout.
-            let outcome = match tokio::time::timeout(budget, dispatched).await {
+            let outcome = match tokio::time::timeout(synth_remaining, dispatched).await {
                 Ok(Ok(Some(a))) => SynthOutcome::Answered(a),
                 Ok(_) => SynthOutcome::EndpointFailed,
                 Err(_) => SynthOutcome::TimedOut,
@@ -1186,6 +1219,63 @@ mod tests {
     /// falls below the similarity floor returns the typed out-of-coverage
     /// refusal — never irrelevant-but-real citations dressed as an answer
     /// (the darwin sourdough finding, 2026-08-29).
+    /// ORDER 939-jxgz. The budget bounds the REQUEST, not the synthesis
+    /// attempt alone. Pre-fix, a stalled model endpoint held the caller in
+    /// DECOMPOSITION under a raw 120s socket timeout before the budget even
+    /// started (measured ~124s against a 60s ceiling on both twin hosts,
+    /// 937-68n4 ladder). This pins: with a stalled prose endpoint and a
+    /// 1500ms budget, run_grounded returns the retrieval-only floor within
+    /// budget + a small constant. Watched RED against the pre-fix code
+    /// (wall > 30s) before being made green.
+    #[test]
+    fn stalled_prose_endpoint_returns_floor_within_budget() {
+        let root = fixture_root("stall");
+        let entry = entry_with(
+            &root.join("entry"),
+            vec![chunk(0, "k", "spec", "openspec/specs/x/spec.md")],
+            None,
+        );
+        let embed = embedding_stub("[1.0,0.0]");
+        // A prose endpoint that ACCEPTS and never responds — the stalled
+        // model. Connections are parked, not closed.
+        let stall = {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+            let port = listener.local_addr().unwrap().port();
+            std::thread::spawn(move || {
+                let mut parked = Vec::new();
+                for s in listener.incoming().flatten() {
+                    parked.push(s);
+                }
+            });
+            format!("http://127.0.0.1:{port}/v1")
+        };
+        let mut cfg = cfg_with(Some(embed), stall, root.clone());
+        // The budget under test; the config's transport timeout stays at its
+        // 120s default so the bound can only come from the deadline.
+        cfg.inference.timeout = Duration::from_secs(120);
+        unsafe { std::env::set_var("TILLANDSIAS_SYNTH_BUDGET_MS", "1500") };
+        let runtime = shared_runtime(&root);
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let t0 = std::time::Instant::now();
+        // Multi-clause question so the Lua classifier picks a tier that RUNS
+        // decomposition — the phase the pre-fix code left unbudgeted.
+        let env = rt.block_on(run_grounded(
+            &runtime,
+            &entry,
+            &cfg,
+            "compare the k spec's retrieval floors with its refusal grammar and explain how the two interact across tiers",
+        ));
+        unsafe { std::env::remove_var("TILLANDSIAS_SYNTH_BUDGET_MS") };
+        let wall = t0.elapsed();
+        assert!(
+            wall < Duration::from_millis(1500) + Duration::from_secs(8),
+            "request ran {wall:?} against a 1500ms budget — the deadline is not bounding the request"
+        );
+        // Degradation stays the cited floor, never a raw failure.
+        assert!(!env.answer().is_empty());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     #[test]
     fn below_floor_retrieval_refuses_out_of_coverage() {
         let root = fixture_root("floor");
