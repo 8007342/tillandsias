@@ -97,9 +97,9 @@
   "host": {
     "is_battery_present": true,
     "kernel_release": "7.1.10-200.fc44.x86_64",
-    "host_id": "yolanda",
+    "host_id": "synthetic-same-gpu-different-cpu",
     "host_id_source": "node-name",
-    "host_kind": "windows"
+    "host_kind": "linux"
   },
   "timestamp": "2026-08-28T23:20:30.615066011+00:00",
   "probe_identity": "0.4.260819+4d3c26ac4c5cafb1"
