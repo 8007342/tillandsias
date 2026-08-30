@@ -64558,6 +64558,39 @@ plan_index:
         VERIFICATION SERVICE: pirria holds a warm, ±1s-reproducible baseline (3m50s warm gate) and a running enclave, and can re-measure any landed slice fast. Out-of-box timeline recorded: ~23m15s clean-checkout to running enclave on target hardware.
       next_action_ts: "2026-08-30T06:24:51Z"
       events:
+        - type: evidence
+          ts: "2026-08-30T21:40:10Z"
+          agent_id: "windows-yolanda-claude-20260830t162208z"
+          host: yolanda
+          summary: |
+            THE FILESYSTEM MULTIPLIER DOES NOT GENERALIZE — it ranges from 1.01x to 79.9x across four gate steps on one host. The instruction was to measure rather than extrapolate; this is why that instruction was right.
+
+            FOUR STEPS, TWO ARMS EACH, same host, same command, same tree, only the filesystem differs. Every pair is validity-guarded: reported only when both arms exit with the SAME rc and the SAME verdict line, because three earlier attempts at this comparison produced large ratios from arms that had failed identically without doing the work.
+
+              step                     9P (/mnt/c)   native ext4   ratio   verdict
+              ghost-trace ratchet         36843 ms       461 ms   79.92x   ok:ghost-trace-gate
+              gate-stamp compute          29280 ms      1670 ms   17.53x   (no verdict token, rc=0 both)
+              plan archiver --check      131606 ms     44411 ms    2.96x   ok / "Check passed"
+              terminology dictionary      40892 ms     40633 ms    1.01x   ok:terminology-clean:terms
+
+              one-time staging of the full tracked tree: 29230 ms, 463 MB
+
+            WHAT THE SPREAD MEANS, and it is a design constraint rather than a curiosity. The steps that WALK THE TREE — the ghost-trace ratchet scanning @trace annotations across every source file, the gate stamp hashing every tracked path — are almost entirely filesystem-bound and collapse to nearly nothing on native ext4. The archiver is only PARTLY filesystem-bound (2.96x) because it also does real ledger computation. The terminology dictionary is PURE CPU: 40892 vs 40633 ms is a 0.6 percent difference, i.e. staging buys it nothing at all.
+
+            So "stage plan/ on native FS and the ledger steps get faster" is the wrong model. The correct model is per-step: a step's benefit is proportional to how much of its time is spent touching files, and that varies by two orders of magnitude across the very steps the epic groups together.
+
+            WHAT IT WOULD ACTUALLY SAVE, using the measured per-step numbers rather than one multiplier applied to a group:
+              ghost-trace   36.8s -> 0.5s   saves 36.3s
+              gate-stamp    29.3s -> 1.7s   saves 27.6s
+              archiver     131.6s -> 44.4s  saves 87.2s
+              terminology   40.9s -> 40.6s  saves  0.3s
+              gross saving ~151.4s, minus 29.2s staging = ~122s net
+
+            Against the fresh 561s baseline that is roughly a 22 percent gate reduction — real, worth doing, and materially LESS than the ~50 percent a uniform 2.96x across the flat top four would have projected. Note the naive extrapolation would have been wrong in BOTH directions at once: it would have badly understated ghost-trace (79.9x, not 2.96x) while inventing a saving for terminology that does not exist.
+
+            A CAVEAT I AM STATING RATHER THAN BURYING: these are STANDALONE invocations, and their 9P absolutes do not match the in-gate profile for the same steps (ghost-trace 36.8s standalone vs 134s in-gate; terminology 40.9s vs 80s). The gate runs them under different conditions — warm/cold caches, concurrent work, possibly wider scope. The RATIOS are same-host same-command and are the trustworthy part; the projected 122s should be treated as an order-of-magnitude estimate, not a promise, and re-measured in-gate before anyone commits to it.
+
+            NOT MEASURED: whether a staged tree can actually serve these steps in a real gate run. Every number above comes from invoking the step directly against a staged copy; wiring the gate to use a stage introduces refresh, staleness and correctness questions (the stamp must describe the REAL tree, not the copy) that this measurement does not address and that are the harder half of axis B.
         - type: note
           ts: "2026-08-30T20:15:38Z"
           agent_id: "linux-macuahuitl-fable5-20260830t201538z"
