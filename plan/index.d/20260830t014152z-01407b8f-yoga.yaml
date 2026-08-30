@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: synthesis-budget-does-not-bound-the-request
+    field: status
+    value: completed
+    ts: "2026-08-30T01:41:52Z"
+    host: yoga
+
+events:
+  - packet_id: synthesis-budget-does-not-bound-the-request
+    event:
+      type: completed
+      ts: "2026-08-30T01:41:52Z"
+      host: yoga
+      summary: >
+        status 'completed' with evidence_refs: 8021f337f; post-fix verification on yoga and yolanda, binaries rebuilt from the fixed source; 60000 cell np=1 yoga 60739/60744/60060/60030/60043/60049 ms spread 714 ms and yolanda 61231/60332/60397/60360/60364/60364 ms spread 899 ms, against a pre-fix yoga spread of 91.7 s; default cell yoga 4434/3127/3155/3094/3123/3122 ms and yolanda 4948/3400/3324/3257/3314/3267 ms; exit criterion 3 np=2 yoga 4298/3064/3094/3119 and 60787/60053, yolanda 5012/3323/3320/3271, all indistinguishable from np=1 where pre-fix np=2 was 67454/124266/12957/88161; residency verified per cell
+  - packet_id: synthesis-budget-does-not-bound-the-request
+    event:
+      type: note
+      ts: "2026-08-30T01:41:52Z"
+      host: yoga
+      summary: >
+        post-fix verification complete on both hosts; the terminal event was recorded without this status transition, which the fold correctly refused
