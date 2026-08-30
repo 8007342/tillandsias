@@ -2365,6 +2365,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Litmus YAML parse gate passed"
 
+    _step "Checking the nix-capability probe's evidence survives a noisy shell (917-zkge)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-probe-nix-capability-evidence.sh" 2>&1; then
+        _error "a capable row can carry shell noise as its proof that nix answered (917-zkge)"
+        exit 1
+    fi
+    _info "Probe evidence-capture guard passed"
+
     _step "Checking a gate stamp cannot be written unearned (940-f77j)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-gate-stamp-must-be-earned.sh" 2>&1; then
         _error "a caller can stamp a tree the gate never passed — the stamp stops meaning 'this tree is green' (940-f77j)"

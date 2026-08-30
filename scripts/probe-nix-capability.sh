@@ -36,6 +36,35 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOST="${1:-$(hostname -s 2>/dev/null || echo unknown)}"
 
+# EVIDENCE CAPTURE, and why it is a function rather than an inline pipe.
+#
+# THIRD-GENERATION DEFECT in this file, found by pirria 2026-08-30 on their
+# capable run. The capture was `nix --version 2>&1 | head -1`, and the 2>&1
+# merges the invoking shell's stderr AHEAD of nix's stdout — so on any host with
+# a noisy ~/.bashrc, head -1 grabs the rc warning. Pirria's capable row carried a
+# brew-not-found message as its proof that nix answered. The VERDICT was right
+# (exit status decides the branch), but the evidence field was silently wrong on
+# exactly the hosts with chatty shells, so a fleet of capable rows could each
+# carry an unrelated warning as their justification.
+#
+# That is this file's own rule — record the evidence, not the conclusion —
+# biting the evidence CHANNEL. A row that carries how it knows is worth nothing
+# if the how is polluted, and this pollution is invisible: the string looks like
+# a plausible line of output.
+#
+# So: stdout only (exit status still branches), and then PICK THE VERSION LINE
+# rather than trusting position. Two guards, because either alone can fail — a
+# shell can write to stdout too, and a nix could in principle print a banner.
+_nix_version_evidence() {   # runs "$@" and returns its version line, or a marker
+    local _out
+    _out="$("$@" 2>/dev/null)" || true
+    grep -m1 -iE 'nix.*[0-9]+\.[0-9]+' <<<"$_out" && return 0
+    # No recognisable version line. Say so rather than emitting the first line
+    # of whatever this was — an unrecognised string presented as a version is
+    # the same defect wearing a different mask.
+    printf 'answered, but printed no recognisable version line'
+}
+
 emit() { # verdict, method, detail
     if command -v jq >/dev/null 2>&1; then
         jq -nc --arg h "$HOST" --arg v "$1" --arg m "$2" --arg d "${3:-}" \
@@ -49,12 +78,15 @@ emit() { # verdict, method, detail
 
 # ── 1. HOST NIX, the cheapest true yes ──────────────────────────────────────
 if command -v nix >/dev/null 2>&1 && nix --version >/dev/null 2>&1; then
-    emit capable "host nix answered --version" "$(nix --version 2>&1|head -1)"
+    emit capable "host nix answered --version" "$(_nix_version_evidence nix --version)"
 fi
 # A `nix` on PATH that does not answer is NOT a nix. yoga's builder toolbox
 # carries a host-escape shim forwarding to a host binary that does not exist,
 # so `command -v nix` succeeds and every invocation fails.
 if command -v nix >/dev/null 2>&1; then
+    # Deliberately 2>&1 HERE: this branch's evidence IS the failure message, so
+    # merging stderr is correct rather than a bug. Kept explicit so the next
+    # reader does not "fix" it into silence.
     _shim_err="$(nix --version 2>&1|head -1)"
     emit unknown "a 'nix' is on PATH but did not answer --version — it may be a shim to an absent binary; this is NOT evidence of absence" "$_shim_err"
 fi
@@ -133,7 +165,7 @@ fi
 # ── 4. THE TOOLBOX EXISTS — does it hold a nix? ─────────────────────────────
 if toolbox run -c tillandsias-nix nix --version >/dev/null 2>&1; then
     emit capable "tillandsias-nix toolbox exists and its nix answered --version" \
-        "$(toolbox run -c tillandsias-nix nix --version 2>&1|head -1)"
+        "$(_nix_version_evidence toolbox run -c tillandsias-nix nix --version)"
 fi
 
 # THE yoga CASE. The toolbox is present and running; only the install is
