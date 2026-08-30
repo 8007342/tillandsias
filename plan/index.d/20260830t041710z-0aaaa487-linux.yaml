@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: guest-exec-allowlist-forces-argv-flattening
+    field: next_action
+    value: |-
+      STATE 2026-08-30 (lenovinha, audited at HEAD). ALL FOUR STEPS OF THE PREVIOUS next_action ARE DONE. WHAT REMAINS IS TWO WINDOWS-LANE DELETIONS AND NOTHING ELSE — this is a windows-lane packet now, not an any-host one.
+
+      VERIFIED LANDED (do not re-implement — the audit is on the 2026-08-30 progress event):
+        * the spec reconciliation (openspec/specs/vsock-exec-authz documents both arms, the prefix rule, traversal refusal, and the capability contract)
+        * CAP_EXEC_ARGV_VECTOR + host feature detection (control-wire lib.rs:119; macOS tray main.rs:285)
+        * the absolute-path-vector discriminator (exec_allowlist.rs, `other if other.starts_with('/')`)
+        * litmus:guest-exec-argv-vector-no-shell, BOUND under spec vsock-exec-authz and GREEN with its sibling
+
+      REMAINING — BOTH NEED A WINDOWS HOST, and this packet's own earlier next_action is why:
+        1. crates/tillandsias-windows-tray/src/notify_icon.rs — `argv_survives_wt_reparse` (2 sites)
+        2. crates/tillandsias-vm-layer/src/wsl.rs — `wsl_root_sh`'s re-parse hazard (19 sites)
+        Delete them only WITH WINDOWS-LANE EVIDENCE that the verbatim vector carries the
+        affected launches. A Linux host can read those files but cannot produce the
+        evidence that makes the deletion safe, and `wsl_root_sh`'s 19 sites are not a
+        mechanical removal.
+
+      NOT TO BE DELETED, so nobody "finishes" the deliverable by removing them:
+        * `build_exec_guest_shell_cmd` (macos-tray) — KEEP for genuine shell requests per 838-48ca.
+        * the `;` -> `&&` guard in crates/tillandsias-host-shell/src/pty/mod.rs — RESOLVED BY DECISION and the code says so at line 181. The verbatim vector landed for project launches as 823-u5zf; the one lane still composed through vm_login_shell_argv is GithubLogin, which interpolates no project name.
+        * `wt_safe_title` — already gone; 0 occurrences.
+
+      SUGGESTED DISPOSITION for whoever coordinates: re-point pickup_role from `any` to `windows`, or split the two Windows deletions into their own child packet and close this one. As it stands the row advertises p1 any-host work to every free host, and every Linux host that picks it up will spend a cycle rediscovering that three quarters of it shipped.
+    ts: "2026-08-30T04:17:10Z"
+    host: linux
+
+events:
+  - packet_id: guest-exec-allowlist-forces-argv-flattening
+    event:
+      type: note
+      ts: "2026-08-30T04:17:10Z"
+      host: linux
+      summary: >
+        audited at HEAD: all four prior steps landed; only two Windows-lane deletions remain
