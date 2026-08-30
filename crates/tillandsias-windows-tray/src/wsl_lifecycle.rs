@@ -1653,97 +1653,21 @@ fi
         // `systemctl --failed` and the journal -- a signal that is loud without
         // being lethal. The deadline is generous because nothing waits on it,
         // and it still retries because it races a Type=exec ExecStart.
-        let ready_script = r#"#!/usr/bin/env bash
-set -uo pipefail
-PORT="${1:-42420}"
-
-# CID 1 is VMADDR_CID_LOCAL, and reaching it requires the vsock_loopback
-# module. A fresh guest does NOT have it loaded -- measured on a clean-room
-# provision of v0.4.260815.1 -- and without it this probe reported the control
-# wire down while the HOST was talking to the guest perfectly happily
-# (phase=Ready, podman_ready=true). The host arrives over hvsocket to the VM's
-# own CID and never touches loopback, so the probe was asserting a path nobody
-# depends on and failing a healthy system (order 757-4hdt).
-#
-# ORDER 798-emje: by the time this runs the module is supposed to ALREADY be
-# there -- provisioning loads it before it starts any unit, and this unit is
-# ordered `After=systemd-modules-load.service`. This modprobe stays as the
-# backstop and is load-bearing (removing it recreates 757-4hdt's false alarm on
-# a guest whose modules-load.d entry was never written), but it is no longer
-# SILENT. It reports the module state it observed BEFORE acting and after, so:
-#
-#   before=loaded  -> the ordering held; the verdict below did not race anything
-#   before=missing -> the ordering did NOT hold and only this backstop saved the
-#                     run. That is a defect regression, and it is now greppable
-#                     in the journal instead of being invisible behind a passing
-#                     probe -- which is precisely how this bug survived from
-#                     735-ewzp through 757-4hdt to 798-emje.
-#
-# A probe that works by winning a race and a probe that works because the
-# dependency was satisfied print the same verdict. These two words are what
-# tell them apart.
-vsock_loopback_state() {
-  if [ -d /sys/module/vsock_loopback ] || grep -q '^vsock_loopback ' /proc/modules; then
-    echo loaded
-  else
-    echo missing
-  fi
-}
-before="$(vsock_loopback_state)"
-if [ "$before" = missing ]; then
-  modprobe vsock_loopback 2>/dev/null || true
-fi
-after="$(vsock_loopback_state)"
-echo "[tillandsias-ready] vsock_loopback before=${before} after=${after}"
-
-# The two failure modes are DISTINGUISHABLE and must not be conflated:
-#   ENETUNREACH "Network is unreachable"  -> no loopback transport; this probe
-#                                            cannot see the property from here
-#   ECONNREFUSED "Connection refused"     -> transport fine, nothing listening,
-#                                            which is exactly the defect
-#                                            735-ewzp exists to catch
-# Reporting the first as NOT-BOUND is a false alarm about a working system;
-# reporting it as OK would be the always-passes probe 735-ewzp replaced.
-# So it gets its own verdict and its own exit code.
-# The 900s is NOT a bind-latency budget. Measured over four cold boots
-# (order 795-jeym, 2026-08-17) the listener answers 61-255 ms after daemon
-# start, so 900s is ~3500x the worst observed bind. What the window actually
-# covers is the `vsock_loopback` module load racing this probe: the modprobe
-# above is best-effort, and on a boot where systemd-modules-load has not run
-# yet the retry loop is the only thing that converges. Shorten this ONLY
-# after that dependency is made deterministic (ordering the unit after
-# systemd-modules-load.service, or an ExecStartPre modprobe) -- otherwise a
-# short deadline just converts a slow pass into a fast INDETERMINATE.
-DEADLINE=$(( $(date +%s) + ${TILLANDSIAS_READY_TIMEOUT:-900} ))
-last=""
-while :; do
-  # The CONNECT address must come FIRST. Written the other way round --
-  # `socat -u /dev/null VSOCK-CONNECT:1:$PORT` -- socat reaches EOF on
-  # /dev/null and exits 0 BEFORE the connection can fail, so the probe passes
-  # against a dead port. That form was measured returning 0 for both a live
-  # and a dead port: a readiness check that always succeeds, which is worse
-  # than the signal it replaces.
-  last="$(timeout 8 socat -T1 "VSOCK-CONNECT:1:${PORT}" /dev/null 2>&1)" && {
-    echo "[tillandsias-ready] vsock_listener=bound port=${PORT}"
-    exit 0
-  }
-  if [ "$(date +%s)" -ge "$DEADLINE" ]; then
-    case "$last" in
-      *"Network is unreachable"*)
-        echo "[tillandsias-ready] vsock_listener=INDETERMINATE port=${PORT} -- no vsock loopback transport in this guest (vsock_loopback absent), so a guest-local probe cannot observe the listener; this says NOTHING about host reachability, which uses hvsocket. Check the host side with: tillandsias-tray --diagnose --json" >&2
-        exit 2
-        ;;
-      *)
-        echo "[tillandsias-ready] vsock_listener=NOT-BOUND port=${PORT} -- the transport works but nothing accepts on the control-wire port; the host cannot reach this guest. Last error: ${last}" >&2
-        exit 1
-        ;;
-    esac
-  fi
-  sleep 1
-done
-"#;
+        // ORDER 740-3k4s — the probe now comes from the SHARED module rather
+        // than a literal here. This file carried the ORIGINAL, measured on this
+        // hardware over three attempts; vz.rs and wsl.rs were given a copy of it
+        // and readiness.rs was written to hold the one definition. Three copies
+        // of a probe that took three attempts to get right is how one of them
+        // silently drifts back into an always-passing check.
+        //
+        // Adopting it also gives Windows the UNVERIFIABLE fourth verdict it did
+        // not have: the local copy reported NOT-BOUND when `socat` was missing,
+        // so a broken check and an unbound port were indistinguishable. Measured
+        // on yolanda 2026-08-30: the installed script contained UNVERIFIABLE
+        // zero times while readiness.rs contained it four.
+        let ready_script = tillandsias_vm_layer::readiness::READY_SCRIPT;
         self.wsl_root_write(
-            "/usr/local/lib/tillandsias/headless-ready.sh",
+            tillandsias_vm_layer::readiness::READY_SCRIPT_PATH,
             ready_script,
             true,
         )
@@ -1876,24 +1800,13 @@ WantedBy=multi-user.target
         // information loss 798-emje forbids -- the third state is a real fact
         // ("this probe cannot observe the property from here") and neither PASS
         // nor FAIL is a truthful place to fold it.
-        let ready_unit = r#"[Unit]
-Description=Tillandsias control-wire readiness assertion
-After=tillandsias-headless.service
-Wants=tillandsias-headless.service
-After=systemd-modules-load.service
-Wants=systemd-modules-load.service
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStart=/usr/local/lib/tillandsias/headless-ready.sh 42420
-StandardOutput=journal+console
-StandardError=journal+console
-[Install]
-WantedBy=multi-user.target
-"#;
+        // Same fold as the script above: one definition, three installers.
+        // The port is a parameter rather than a baked 42420 so the shared
+        // builder cannot disagree with the ExecStart it writes.
+        let ready_unit = tillandsias_vm_layer::readiness::ready_unit(42420);
         self.wsl_root_write(
             "/etc/systemd/system/tillandsias-headless-ready.service",
-            ready_unit,
+            &ready_unit,
             false,
         )
         .await?;
@@ -2790,11 +2703,13 @@ mod tests {
             !headless_unit.contains("ExecStartPost="),
             "the daemon unit must have no ExecStartPost: a control process that              fails there STOPS the service it was measuring (757-4hdt): {headless_unit}"
         );
-        let ready_unit = source
-            .split("// 4b. tillandsias-headless-ready.service")
-            .nth(1)
-            .and_then(|tail| tail.split("// 5. home-forge-src.mount").next())
-            .expect("ready unit window");
+        // ORDER 740-3k4s — asserted against the VALUE the shared module builds,
+        // not against a source window in this file. It used to slice raw source
+        // between two comment markers, which was the right shape while the unit
+        // was a literal here; now that the definition moved, a source scan would
+        // pass on prose and prove nothing about what gets installed. This reads
+        // the same string the provisioner writes.
+        let ready_unit = tillandsias_vm_layer::readiness::ready_unit(42420);
         assert!(
             ready_unit.contains("ExecStart=/usr/local/lib/tillandsias/headless-ready.sh 42420"),
             "the readiness assertion must still run, just not on the daemon's unit: {ready_unit}"
@@ -2829,12 +2744,27 @@ mod tests {
         );
         // The script it names must actually be installed, or the unit fails on
         // a missing file and the diagnosis is about the wrong thing.
-        assert!(
-            source.contains("/usr/local/lib/tillandsias/headless-ready.sh"),
-            "the readiness script the unit references must be written to the guest"
+        // ORDER 740-3k4s — these assert the SHARED probe, not this file's source.
+        // They were source scans while the script was a literal here; with the
+        // definition moved, scanning this file would prove only that the
+        // comments still mention socat. Pointing them at the constant means they
+        // pin what actually gets installed, on every platform that installs it.
+        let ready_script = tillandsias_vm_layer::readiness::READY_SCRIPT;
+        // The unit's ExecStart and the install path must be the SAME string.
+        // Asserting the script body for its own path was always slightly wrong
+        // (a script does not name where it lives); what matters is that the
+        // provisioner writes it where the unit looks for it, and both now come
+        // from one constant so they cannot drift apart.
+        assert_eq!(
+            tillandsias_vm_layer::readiness::READY_SCRIPT_PATH,
+            "/usr/local/lib/tillandsias/headless-ready.sh"
         );
         assert!(
-            source.contains("VSOCK-CONNECT:1:"),
+            ready_unit.contains(tillandsias_vm_layer::readiness::READY_SCRIPT_PATH),
+            "the unit must ExecStart the path the provisioner installs to"
+        );
+        assert!(
+            ready_script.contains("VSOCK-CONNECT:1:"),
             "readiness must connect to the port (CID 1 = VMADDR_CID_LOCAL), not test /dev/vsock"
         );
         // ORDER 757-4hdt: CID 1 needs the vsock_loopback module, which a fresh
@@ -2846,15 +2776,15 @@ mod tests {
         // listening -> NOT-BOUND (exit 1); no loopback transport at all ->
         // INDETERMINATE (exit 2).
         assert!(
-            source.contains("modprobe vsock_loopback"),
+            ready_script.contains("modprobe vsock_loopback"),
             "the probe must load the transport CID 1 depends on before judging"
         );
         assert!(
-            source.contains("vsock_listener=INDETERMINATE"),
+            ready_script.contains("vsock_listener=INDETERMINATE"),
             "an absent loopback transport must get its own verdict, not be              reported as an unbound listener"
         );
         assert!(
-            source.contains("Network is unreachable"),
+            ready_script.contains("Network is unreachable"),
             "the probe must branch on ENETUNREACH (no transport) versus a              refused connection (nothing listening) — conflating them is how it              failed a healthy system"
         );
         // The connect address must be socat's FIRST argument. With /dev/null
@@ -2863,11 +2793,11 @@ mod tests {
         // check that always passes. This assertion pins the discriminating
         // form, not merely the presence of the address.
         assert!(
-            source.contains("socat -T1 \"VSOCK-CONNECT:1:${PORT}\" /dev/null"),
+            ready_script.contains("socat -T1 \"VSOCK-CONNECT:1:${PORT}\" /dev/null"),
             "the connect address must precede the sink, or the probe passes against a dead port"
         );
         assert!(
-            source.contains("vsock_listener=NOT-BOUND"),
+            ready_script.contains("vsock_listener=NOT-BOUND"),
             "the failure must name the property that is false, not a generic error"
         );
 
@@ -2881,11 +2811,13 @@ mod tests {
         // the directive and left the prose. That is 601-462g exactly, and this
         // file has already been bitten by it once (the stale ExecStartPost
         // wording that made a `grep -c` report 1).
-        let ready_unit_literal = ready_unit
-            .split("let ready_unit = r#\"")
-            .nth(1)
-            .and_then(|tail| tail.split("\"#;").next())
-            .expect("ready unit literal");
+        // Was: slice the literal out of this file's source, because `ready_unit`
+        // held a source WINDOW whose comments discussed the directives by name —
+        // a window-scoped `contains` would pass on prose after someone deleted
+        // the directive (601-462g). `ready_unit` is now the BUILT UNIT itself,
+        // which has no comments to be fooled by, so the extraction is not just
+        // unnecessary, it is the weaker check. Assert the value directly.
+        let ready_unit_literal = ready_unit.as_str();
         assert!(
             ready_unit_literal.contains("After=systemd-modules-load.service"),
             "the readiness assertion must be ORDERED after the module load, not              race it: the probe connects to CID 1, which requires vsock_loopback              (798-emje): {ready_unit_literal}"
@@ -2928,7 +2860,8 @@ mod tests {
         // worked because the backstop modprobe won a race. Both print the same
         // verdict; only this line separates them.
         assert!(
-            source.contains("[tillandsias-ready] vsock_loopback before=${before} after=${after}"),
+            ready_script
+                .contains("[tillandsias-ready] vsock_loopback before=${before} after=${after}"),
             "the probe must report the module state it OBSERVED before judging,              or a regression of the ordering is invisible behind a passing probe              (798-emje)"
         );
         // The restart bound belongs to [Unit]; under [Service] systemd ignores

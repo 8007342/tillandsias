@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: dev-host-spec-rag-index-never-built
+    field: status
+    value: completed
+    ts: "2026-08-30T03:11:01Z"
+    host: windows
+
+events:
+  - packet_id: dev-host-spec-rag-index-never-built
+    event:
+      type: completed
+      ts: "2026-08-30T03:11:01Z"
+      host: windows
+      summary: >
+        status 'completed' with evidence_refs: CLOSING CONDITION MET, and it is the one I wrote as falsifiable rather than as a claim. After an operator-initiated restart gave this host a FRESH forge-plan MCP process, spec_answer returned confidence=retrieved with 6 real citations (cheatsheets/concurrent-git/git-mirror-enterprise-practices.md:56-57, openspec/specs/reverse-proxy-internal/spec.md:168-172, docs/cheatsheets/github-credential-tools.md:156-198, cheatsheets/concurrent-git/git-mirror-architecture-audit.md:154-165, openspec/specs/podman-idiomatic-patterns/spec.md:121-130 and :149-154). The refusal quoting /root/.cache/tillandsias/spec-index is GONE. I recorded the reopen condition in the same breath as the fix — 'if it does not, the fix is wrong and this note is the thing to reopen' — and it did not fire. THE INTERESTING FIELD IS citation_root: /mnt/c/Users/bullo/claudia/tillandsias. The consumer resolved the index through the repo-relative rung (931-p26p) under its OWN spelling of the checkout, while the producer built it at /c/Users/bullo/claudia/tillandsias. Two userlands, one directory, one index — which is exactly what the rung was for, now observed end to end in the live consumer rather than proven by digest equality in a fixture. freshness.source_commit 9c6c67bd4 is this host's own HEAD, so the index it served is the one this checkout built. WHY THE EARLIER CHECKS WERE NOT FAILURES: every prior attempt ran against a long-lived MCP process started before the fix, which had sourced the pre-edit resolution block at startup. Those refusals were stale-process artifacts and I declined to record them as reopens — the on-disk script with HOME=/root resolved correctly to the target/ path throughout, which is what said the fix was sound while the live check could not yet show it. Producer half and consumer half are now both verified on Windows.
