@@ -1,0 +1,39 @@
+{
+  "schema_version": 2,
+  "legacy_tier": "cpu",
+  "devices": [
+    {
+      "device_class": "cpu",
+      "vendor": "unknown",
+      "name": "Host CPU",
+      "device_node": null,
+      "fw_version": null,
+      "driver": null,
+      "usable": true,
+      "unusable_reason": null,
+      "lanes": [
+        "container",
+        "host-native"
+      ],
+      "memory_bandwidth_gbps": null,
+      "memory_bandwidth_source": "unknown",
+      "cpu_flags": [],
+      "cpu_cores": {
+        "physical": 16,
+        "logical": 16
+      },
+      "system_ram_gb": null
+    }
+  ],
+  "engines": [],
+  "measurements": [],
+  "host": {
+    "is_battery_present": false,
+    "kernel_release": "3.6.9-b4195d69.x86_64",
+    "host_id": "yolanda",
+    "host_id_source": "node-name",
+    "host_kind": "windows"
+  },
+  "timestamp": "2026-08-30T00:05:12.275619100+00:00",
+  "probe_identity": "0.4.260819+dd67baad90407fa3"
+}
