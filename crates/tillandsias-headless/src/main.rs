@@ -5974,6 +5974,31 @@ const SHARED_STACK_SCOPES: &[(&str, SharedStackScope)] = &[
     ("tillandsias-inference", SharedStackScope::LaneScoped),
 ];
 
+/// Is `name` a container THIS APPLICATION creates and therefore may stop?
+/// (936-kdev). The `tillandsias-` prefix alone is NOT ownership: the
+/// developer build toolbox (`tillandsias-builder`) and dev-substrate
+/// containers (`tillandsias-dev-*`) match the prefix, were created by
+/// toolbox(1)/developer tooling, and being stopped by our shutdown sweep is
+/// exactly how every in-toolbox build died at install-validation. Membership
+/// here is the union of the names our own builders mint: the shared-stack
+/// table plus the per-project patterns (forge, git, browser, ssh sidecar,
+/// observatorium, status-check lanes). Anything else — however it is
+/// prefixed — belongs to someone who is not us.
+fn is_stack_managed_name(name: &str) -> bool {
+    if shared_stack_scope(name).is_some() {
+        return true;
+    }
+    // forge_container_name{,_with_instance}: tillandsias-<project>-forge[...]
+    if name.starts_with("tillandsias-") && name.contains("-forge") {
+        return true;
+    }
+    name.starts_with("tillandsias-git-")
+        || name.starts_with("tillandsias-browser-")
+        || name.starts_with("tillandsias-ssh-sidecar-")
+        || name.starts_with("tillandsias-observatorium-")
+        || name.starts_with("tillandsias-status-check-")
+}
+
 /// Scope of `container` when it is a SHARED stack container; `None` for
 /// per-project containers (forge/git/browser) and unknown names.
 fn shared_stack_scope(container: &str) -> Option<SharedStackScope> {
@@ -15574,8 +15599,24 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
         .await
         {
             Ok(Ok(containers)) if !containers.is_empty() => {
-                let running_at_start: Vec<_> =
-                    containers.iter().filter(|c| c.state == "running").collect();
+                // ORDER 936-kdev, ROOT CAUSE OF THE INSTALL-VALIDATION KILLS.
+                // "tillandsias-" prefix is NOT "tillandsias-managed": the
+                // developer build toolbox (`tillandsias-builder`) and the
+                // dev-substrate containers (`tillandsias-dev-*`) match the
+                // prefix but were never created by this app — and this sweep
+                // stopped them on EVERY headless exit. The 5-second
+                // install-validation instance inside build.sh therefore
+                // stopped the very toolbox the build was running in, SIGKILLing
+                // the build at rc=137 (5/5 reproducible 2026-08-30; podman
+                // events show the builder dying one second after "Received
+                // shutdown signal", no `podman stop` event because WE were the
+                // stopper). Ownership is decided by is_stack_managed_name —
+                // the same vocabulary the teardown and reset scopes speak —
+                // never by prefix alone.
+                let running_at_start: Vec<_> = containers
+                    .iter()
+                    .filter(|c| c.state == "running" && is_stack_managed_name(&c.name))
+                    .collect();
 
                 if !running_at_start.is_empty() {
                     info!(
@@ -17310,6 +17351,22 @@ mod tests {
             "inference holds the only material idle footprint (resident model \
              weights) and is stateless — it stays lane-scoped"
         );
+    }
+
+    /// ORDER 936-kdev: the shutdown sweep's ownership predicate. The
+    /// `tillandsias-` prefix alone is NOT ownership — the developer build
+    /// toolbox and dev-substrate containers match it but were never created
+    /// by this app, and sweeping them SIGKILLed every in-toolbox build at
+    /// install-validation (rc=137, 5/5 on 2026-08-30).
+    #[test]
+    fn stack_managed_name_never_claims_by_prefix_alone() {
+        // NOT ours: toolbox(1) and dev-substrate containers.
+        assert!(!is_stack_managed_name("tillandsias-builder"));
+        assert!(!is_stack_managed_name("tillandsias-dev-inference"));
+        // Ours: shared stack + the per-project names our builders mint.
+        assert!(is_stack_managed_name("tillandsias-vault"));
+        assert!(is_stack_managed_name("tillandsias-myproj-forge"));
+        assert!(is_stack_managed_name("tillandsias-git-myproj"));
     }
 
     /// Order 477 (the packet's steady-state criterion): after the LAST lane
