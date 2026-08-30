@@ -422,6 +422,26 @@ or worktree checkouts at the suspect and its parent.
 - [ ] Does a comment claim parity with a sibling? Grep the sibling, not the
       comment.
 
+## Never gate while a measurement batch is live
+
+Measured on the yoga/yolanda 7B tuning day (2026-08-30): a gate flipped red
+on IDENTICAL content because heavy inference was running beside it — and the
+inverse hazard is worse, because on a fleet where the MEASUREMENT host is
+also the GATE host, a green gate says nothing about what else the machine
+was doing when it ran. The twins' rule, adopted fleet-wide: unload models
+and finish (or pause) the measurement batch before gating, and do not treat
+greens on load-sensitive checks as load-bearing until a clean re-gate.
+
+Same day, same hosts, five failures of one shape worth naming as a family:
+a check RAN, produced CONFIDENT output, and the output meant nothing — two
+nonexistent files comparing as twins via sha256(""); a refusal on stderr
+while the empty hash went to stdout at exit 0; a fixture pinning its own
+input; failed curls defaulted into a mode and counted as six 6ms
+"syntheses"; the loaded-host gate above. The common test: before trusting
+any check's output, ask what the output would look like if the thing it
+measures were ABSENT — and whether that is distinguishable from what you
+are holding.
+
 ## Existence on the host is not correctness of the container path
 
 A verifier that checks "every path in the spec exists" is structurally
