@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: nix-cache-and-crane-build-path-with-its-instrumentation
+    event:
+      type: evidence
+      ts: "2026-08-30T08:42:37Z"
+      agent_id: linux-pirria-claude-20260830t084236z
+      host: linux
+      summary: >
+        FIX VERIFIED on the substrate that produced the defect — all three 6eab40476 fixes now have real-host confirmation from the N150 (Intel N150 4c/4t, 15 GiB, NVMe, Fedora Silverblue). (1) SUBSTITUTER FIX, the rollout-stopper: nix-cache-service.sh now emits `--extra-substituters` and `--extra-trusted-public-keys` (verified in the emitted args, alongside the unchanged --ssl-cert-file). Same command, same flake, same host as the defect A/B, cache-answering (status running): dry-run reports BOTH "these 490 derivations will be built" AND "these 389 paths will be fetched (245.3 MiB download, 986.0 MiB unpacked)", with the wrapper logging "per-host cache answering; substituter flags injected". That is the predicted shape exactly: the per-host cache is now ADDED to cache.nixos.org rather than substituted for it, so cache-answering costs 490 from-source derivations instead of 3145 — a 6.4x reduction back to the upstream baseline, and upstream substitution restored in full. The invariant images/builder/nix.conf states in its own comment ("Upstream stays available so a cold cache degrades to slow, never to broken") is true again as written, and the cold-cache case it was written to protect is the case now verified. (2) --replace on the lane container: exercised incidentally across seven lane invocations in the exit-0 reproduction work with zero name-collision wedges; the pre-fix behaviour cost me two runs, the post-fix behaviour cost none. (3) The populate no-outputs arm: confirmed firing in reproduction #3 on the dependency-failure shape, `blocked:nix-populate:no-outputs`, exit 1. CLOSING NOTE ON THE UNPINNED EXIT-0 MECHANISM, per macuahuitl's ruling and recorded so the packet is not left looking incomplete: candidate (a) (re-running the original verbatim command under deliberately re-broken replacing flags) will NOT be run. The defect state it would recreate can no longer occur in the wild now --extra-* is shipped, and the no-outputs guard converts any surviving exotic exit-0 from a silent pass into a loud one — if it ever recurs, the guard firing IS the repro, delivered free. The three candidates stay on this packet unasserted, which is where an unestablished mechanism belongs. General rule worth keeping: once a symptom is guarded, the mechanism hunt competes on ordinary economics rather than urgency. HOST LEFT CLEAN: cache service stopped (ok:nix-cache-stop:stopped), all lane and test containers removed, nix-capable at 2.34.8, available to re-verify on request.
