@@ -576,8 +576,7 @@ pub async fn run_grounded(
     // budget + retrieval transport + a small constant, and that is the
     // promise the knob's docs make.
     let prose_deadline = std::time::Instant::now() + budget;
-    let remaining =
-        move || prose_deadline.saturating_duration_since(std::time::Instant::now());
+    let remaining = move || prose_deadline.saturating_duration_since(std::time::Instant::now());
 
     // ── decompose (skipped on the immediate tier: its budget is the
     //    deterministic floor, and a decompose round-trip would blow it
@@ -595,7 +594,9 @@ pub async fn run_grounded(
         // deadline, but dropping the JoinHandle detaches the thread rather
         // than cancelling it — only its own socket deadline ends the WORK
         // (939-jxgz; yoga's leaked-generation mechanism).
-        inference.timeout = inference.timeout.min(remaining().max(Duration::from_millis(1)));
+        inference.timeout = inference
+            .timeout
+            .min(remaining().max(Duration::from_millis(1)));
         let q = query.to_string();
         let decompose_task =
             tokio::task::spawn_blocking(move || decompose_with_llm(&inference, &q));
