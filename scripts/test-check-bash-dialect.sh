@@ -95,9 +95,35 @@ rm "$TMP/localassoc.sh"
 expect "local-r-passes" "ok:bash-dialect-clean" 0
 rm "$TMP/localr.sh"
 
+# Empty-array expansion under set -u (761-g36m extension). Direction 1 is the
+# EXACT shape that broke hash-image-sources.sh and blocked every macOS push on
+# 2026-08-30: an array initialised empty, appended to only inside a branch,
+# then iterated bare.
+printf '#!/usr/bin/env bash\nset -euo pipefail\nfile_list=()\nif [ -n "${X:-}" ]; then\n    file_list+=("a")\nfi\nfor file in "${file_list[@]}"; do\n    echo "$file"\ndone\n' > "$TMP/emptyarr.sh"
+expect "empty-array-expansion-refused" "blocked:bash4-unguarded:1" 1
+
+# Direction 2: the remedy idiom passes. Inert when non-empty, expands to
+# nothing instead of dying when empty.
+printf '#!/usr/bin/env bash\nset -euo pipefail\nfile_list=()\nif [ -n "${X:-}" ]; then\n    file_list+=("a")\nfi\nfor file in ${file_list[@]+"${file_list[@]}"}; do\n    echo "$file"\ndone\n' > "$TMP/emptyarr.sh"
+expect "empty-array-remedy-passes" "ok:bash-dialect-clean" 0
+
+# The exemption marker passes, for arrays provably populated on every path.
+printf '#!/usr/bin/env bash\nset -euo pipefail\nfile_list=()\nfile_list+=("a")\nfor file in "${file_list[@]}"; do # maybe-empty: ok (populated above)\n    echo "$file"\ndone\n' > "$TMP/emptyarr.sh"
+expect "empty-array-exemption-passes" "ok:bash-dialect-clean" 0
+
+# Scope guard: a COUNT on an empty array is safe on bash 3.2 (verified: yields
+# 0, does not error), so count guards must NOT be flagged.
+printf '#!/usr/bin/env bash\nset -euo pipefail\nfile_list=()\nif [ "${#file_list[@]}" -eq 0 ]; then echo none; fi\n' > "$TMP/emptyarr.sh"
+expect "array-count-not-flagged" "ok:bash-dialect-clean" 0
+
+# Scope guard: without set -u the construct is harmless on both dialects.
+printf '#!/usr/bin/env bash\nfile_list=()\nfor file in "${file_list[@]}"; do\n    echo "$file"\ndone\n' > "$TMP/emptyarr.sh"
+expect "no-set-u-not-flagged" "ok:bash-dialect-clean" 0
+rm "$TMP/emptyarr.sh"
+
 if [ "$fails" -gt 0 ]; then
   echo "FAIL: check-bash-dialect fixture: $fails scenario(s) diverged" >&2
   exit 1
 fi
-echo "PASS: check-bash-dialect fixture 14/14 scenarios green"
+echo "PASS: check-bash-dialect fixture 19/19 scenarios green"
 exit 0

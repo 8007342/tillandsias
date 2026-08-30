@@ -275,7 +275,7 @@ EOF
   if [[ "$PASS" == "false" ]]; then
     echo ""
     echo "Uncovered specs (no @trace annotations in code):" >&2
-    for spec in "${UNCOVERED_SPECS[@]}"; do
+    for spec in ${UNCOVERED_SPECS[@]+"${UNCOVERED_SPECS[@]}"}; do
       echo "  - $spec" >&2
     done
     echo ""

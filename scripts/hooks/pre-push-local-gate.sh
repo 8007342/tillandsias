@@ -678,7 +678,7 @@ attempt_plan_only_lane() {
     # Guard on the length, which is well-defined for an empty array everywhere.
     local note
     if [ "${#LANE_NOTES[@]}" -gt 0 ]; then
-        for note in "${LANE_NOTES[@]}"; do
+        for note in ${LANE_NOTES[@]+"${LANE_NOTES[@]}"}; do
             echo "plan-only lane: note: $note" >&2
         done
     fi

@@ -2085,6 +2085,50 @@ distributed_work:
       platform alone breaks the test on every other host, which is the same
       defect wearing the opposite sign.
 
+    the_sole_detector_surface_is_wider_than_cfg_code: >
+      THE GENERALISATION, proven three ways in one night on macbook
+      (2026-08-30). The rule above reads as if this were a Rust `cfg` problem.
+      It is not. The invariant is: SOME SURFACES HAVE EXACTLY ONE HOST THAT
+      CAN SEE THEM, and a change that is green on every other lane can be
+      trunk-broken there with nobody learning until that host tries to push.
+      Three distinct surfaces, same night, same shape:
+
+      (1) CFG-COMPILED CODE — the instance above.
+
+      (2) SHELL DIALECT. Apple ships bash 3.2 and nothing newer.
+      `"${arr[@]}"` on an EMPTY array is an unbound-variable death under
+      `set -u` there, and expands to nothing on bash 4.4+. 776-cm74 added a
+      branch to hash-image-sources.sh that left one of two arrays empty
+      whichever way it went; linux and windows could not see it, and it broke
+      747-knbp, which BLOCKED EVERY PUSH FROM THE MAC.
+
+      (3) SEALED-PATH ENVIRONMENTS — the subtlest, because the obvious
+      diagnosis is wrong. The 747-knbp fixture runs build-image.sh under
+      `env -i` with `PATH="$WORK/bin:/usr/bin:/bin"` so its podman stubs are
+      the only ones reachable. On linux that PATH still carries
+      /usr/bin/timeout because coreutils is base; on macOS nothing there
+      provides it. The host was NOT missing the tool — /opt/homebrew/bin/timeout
+      exists. It is a sealed PATH that only linux survives. Read as a missing
+      host tool, the "fix" is to install coreutils on every mac forever; read
+      correctly, it is to stop requiring a non-POSIX tool inside a hermetic
+      fixture. A hermetic PATH is a PORTABILITY CLAIM, and the claim is only
+      ever tested on the hosts that run it.
+
+      THE MITIGATION IS TWO-PART, and the second half is the point. Review-time
+      convention alone does not survive contact: a reviewer on linux cannot see
+      any of these three. So whenever a sole-detector surface is found, ask
+      whether one slice of it can be made MECHANICAL, and give that slice to
+      the gate that already owns the class. Case (2) became a rule in the
+      bash-dialect gate — the gate had PASSED the broken file, being the very
+      gate that exists for the linux/darwin split. Case (3) has no gate yet and
+      remains review-time.
+
+      COROLLARY, and the reason this is filed rather than left to convention:
+      A DIALECT GATE MUST BE ABLE TO GROW RULES FROM THE HOST THAT DETECTS THE
+      DIALECT. Requiring the sole detector to get permission from hosts that
+      cannot reproduce the finding is the sole-detector problem eating its own
+      solution.
+
       PROTOCOL: adding a helper whose only non-test caller is cfg-gated is a
       SHARED-SURFACE change under `why_a_message_and_not_more_care` — the
       sibling lane is the only party that can check it. Say so, or gate it at

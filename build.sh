@@ -1057,7 +1057,7 @@ _run_litmus_phase() {
     shift 3
     local -a phase_args=()
     local arg
-    for arg in "${CI_ARG_LIST[@]}"; do
+    for arg in ${CI_ARG_LIST[@]+"${CI_ARG_LIST[@]}"}; do
         # run-litmus-test runs the full selected phase by default; strict-all is
         # a local-ci frontier-expansion flag and is not part of its CLI.
         [[ "$arg" == "--strict-all" ]] || phase_args+=("$arg")

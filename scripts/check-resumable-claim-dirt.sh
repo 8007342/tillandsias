@@ -80,7 +80,7 @@ fi
 # ── condition 1: untracked dirt is never claim dirt ──────────────────────────
 if [[ ${#untracked_paths[@]} -gt 0 ]]; then
     joined=""
-    for p in "${untracked_paths[@]}"; do
+    for p in ${untracked_paths[@]+"${untracked_paths[@]}"}; do
         [[ -n "$joined" ]] && joined="$joined,"
         joined="$joined$p"
     done
@@ -167,7 +167,7 @@ if ! TZ=UTC touch -t "$touch_stamp" "$anchor" 2>/dev/null; then
 fi
 
 stale=""
-for p in "${tracked_paths[@]}"; do
+for p in ${tracked_paths[@]+"${tracked_paths[@]}"}; do
     # A path deleted in the worktree has no mtime to attribute; refuse.
     if [[ ! -e "$p" ]] || [[ ! "$p" -nt "$anchor" ]]; then
         [[ -n "$stale" ]] && stale="$stale,"
