@@ -205,29 +205,68 @@ Six canonical scenarios; every operation must name one per container it runs.
 
 ## 3. Dependency Graph Awareness (NA-03)
 
+> REVISED 2026-08-30 (lenovinha, linux slice). Every claim below was
+> re-verified against the tree before its citation was touched, and the
+> citations are now anchored on SYMBOL NAMES for the reason recorded in §L1.
+> The file is `crates/tillandsias-headless/src/container_deps.rs` — **not**
+> `tillandsias-podman`, which the previous text left implicit while naming the
+> podman crate in the same paragraph. See §L2 for what drifted.
+
 `container_deps.rs` today models TWO launch targets plus a derived wrapper: the
 GitLogin bring-up (EnclaveNetwork → EgressNetwork/CaBundle → Vault → Proxy →
-GitLogin — unchanged) and `Service::ForgeLaunch` (`container_deps.rs:43`) with
-dependency edges EnclaveNetwork, EgressNetwork, CaBundle, Proxy AND Vault
-(`container_deps.rs:84-98` — the Vault edge added per windows-260716-2: the
-git-mirror relay credential made vault a hard launch requirement, "the vault is
-now a launch requirement (mint fails loud)"). `ensure_forge_launch()`
-(`container_deps.rs:210-226`) returns the typed witness `Up<ForgeLaunchReady>`
-and is the shared wrapper both tray launch (`ensure_enclave_for_project`) and
-CLI launch (`run_forge_agent_cli_mode`) route through (`main.rs:11067`);
-`ensure_service_catalog`/`CatalogServiceReady` layers on top
-(`container_deps.rs:228-234`). The taxonomy still demands a **RuntimeContext**
-dimension:
+GitLogin — unchanged) and `Service::ForgeLaunch` (`container_deps.rs` `enum
+Service`), whose `DEPS` entry now carries **SIX** edges, not the five this
+draft was written against:
+
+| edge | why |
+|---|---|
+| `EnclaveNetwork` | original |
+| `EgressNetwork` | original |
+| `CaBundle` | original |
+| `Proxy` | original |
+| `Vault` | windows-260716-2: the git-mirror relay credential made mint-or-fail-loud a hard launch requirement |
+| `NixCache` | **ORDER 801-vm4p, new since the draft** |
+
+`Service::NixCache` is a launch-graph node this document did not have. It rides
+the forge-launch graph so a cache is ensured wherever a forge comes up, and its
+ensure SKIPS with `Ok` on a host with no nix and no store — so the edge adds no
+new launch REQUIREMENT anywhere, which is why it could land without breaking a
+lane. Its own edges are `EnclaveNetwork` and `CaBundle` only. For a section
+whose subject IS the dependency graph, an unlisted node is a content gap rather
+than citation rot, and it is the substantive NA-03 finding of this pass.
+
+`ensure_forge_launch()` (`container_deps.rs` `pub fn ensure_forge_launch`)
+returns the typed witness `Up<ForgeLaunchReady>` and is the shared wrapper both
+tray launch (`ensure_enclave_for_project`) and CLI launch
+(`run_forge_agent_cli_mode`) route through; `ensure_service_catalog` /
+`CatalogServiceReady` layers on top.
+
+**The SHAPE of that convergence changed and the old text implied otherwise.**
+There is now exactly ONE production call site — inside
+`main.rs` `pub(crate) fn ensure_enclave_for_project` — and the CLI reaches it
+TRANSITIVELY: `run_forge_agent_cli_mode` calls `ensure_enclave_for_project`,
+which calls `ensure_forge_launch`. The previous text cited two locations, which
+reads as two parallel call sites. The order-252 property (both routes are
+covered) still holds; it is now enforced by convergence rather than by
+duplication, which is stronger and worth stating as such. Pinned by
+`main.rs` `fn enclave_bringup_cleans_up_before_ensuring_prerequisites`, a
+source-scanning test that also fixes the ORDER (cleanup must precede the
+ensure, or the ensure's proxy is torn down — order 298).
+
+The taxonomy still demands a **RuntimeContext** dimension:
 
 1. `Ctx::Build` — needs NOTHING from the graph (no vault, no proxy). Image
-   ensure remains an implicit side effect of user operations (status-check now
-   building 8 images, `main.rs:6950-6962`) and must become an explicit
-   Build-context node set — no such node set exists yet; the RuntimeLane
-   taxonomy that did land classifies host session lanes, not build vs runtime
-   contexts (`crates/tillandsias-podman/src/lib.rs:105-109`). (One boundary
-   did move: the forge-launch path's `ensure_versioned_images` no longer
-   includes `proxy` — folded into the order-252 satisfier via
-   `ensure_proxy_running`, `plan/index.yaml:7292-7296`.)
+   ensure remains an implicit side effect of user operations
+   (`main.rs` `fn ensure_versioned_images`, called from four separate paths)
+   and must become an explicit Build-context node set — no such node set exists
+   yet. The RuntimeLane taxonomy that did land classifies host session lanes,
+   not build vs runtime contexts
+   (`crates/tillandsias-podman/src/lib.rs` `pub enum RuntimeLane` /
+   `pub fn current_runtime_lane`). (One boundary did move: the forge-launch
+   path's `ensure_versioned_images` no longer includes `proxy` — that is folded
+   into the order-252 satisfier, which reaches it through
+   `main.rs` `fn ensure_proxy_running`, the one remaining caller that passes
+   `&["proxy"]`. Order 252, not a line in the ledger.)
 2. `Ctx::HostRuntime` — full graph as today; liveness probe (order 228) may
    re-ensure only nodes tagged steady-state (Vault, Proxy) — and must do so
    under the order 232-235 concurrency safeguards.
@@ -238,20 +277,20 @@ dimension:
    aliases that already exist. Order 252 COMPLETED (2026-07-09T20:07:38Z, the
    day of the draft): the satisfier now errors on BOTH launch targets —
    GitLogin and ForgeLaunch each return "is a launch target, not a satisfiable
-   prerequisite" (`container_deps.rs:319-326`, tests at `:547-565`); both tray
-   and CLI routes go through `ensure_forge_launch`
-   (`main.rs:11067,16610-16611`; closure note `container_deps.rs:207-209`);
-   the order-229 known-gap allowlist was emptied (`plan/index.yaml:7253-7296`).
-   The satisfier additionally gained an order-234 runtime-phase gate refusing
-   all container mutations while the VM is draining
-   (`container_deps.rs:293-301`) — a guard this draft did not anticipate. The
+   prerequisite" (`container_deps.rs` `impl Satisfier for RealSatisfier`, the
+   two guard arms), with tests
+   `RealSatisfier refuses to satisfy GitLogin` / `… ForgeLaunch`; the
+   order-229 known-gap allowlist was emptied (order 252, order 229). The
+   satisfier additionally gained an order-234 runtime-phase gate refusing all
+   container mutations while the VM is draining
+   (`container_deps.rs`, the `crate::runtime_phase::container_mutations_allowed()`
+   check at the head of `satisfy`) — a guard this draft did not anticipate. The
    deeper ask — a true Ctx::Forge read-only graph with in-container detection —
    remains unimplemented: the guard is still "launch targets are
    unsatisfiable", not "this process is inside a forge".
 5. Vault joining the declarative image set for Build context — DONE (order
-   253): `--init` pre-builds it (`main.rs:5884-5895`), closing
-   §Observation-1/3 (on-demand vault build+rebuild during login).
-
+   253): `--init` pre-builds it, closing §Observation-1/3 (on-demand vault
+   build+rebuild during login).
 ## 4. Platform Abstraction Layer (NA-04)
 
 | HOST platform | VM/bridge mechanism | Control plane | Podman location |
@@ -464,3 +503,88 @@ file:symbol references" instead.
 Filed alongside: the systemic version of this — nothing in the tree checks that
 a `plan/issues/` citation still resolves, so an audit's evidence rots silently
 while the document keeps reading as verified.
+
+## L2. NA-03 re-verified and re-anchored — 2026-08-30, lenovinha (linux slice)
+
+Cycle-scoped claim on a `multi_cycle` packet; `phase` stays `review`, NOT
+closed. W5 handed §3 (ForgeLaunch dependency modeling) to "a linux host with
+podman"; this is that host taking it. NA-03 is one of the three criteria the
+2026-07-14 GPT verification FAILED, which is why it was picked over the
+untouched sections.
+
+Method is §L1's, and it is the whole point: **verify the CLAIM first, then fix
+the citation.** A bulk re-anchoring without re-verification would trade
+wrong-but-honest citations for confident-looking ones.
+
+### The substantive finding: a sixth edge, and a node the document does not have
+
+`Service::ForgeLaunch`'s `DEPS` entry carries SIX edges. The draft lists five.
+The sixth is `Service::NixCache`, added by **order 801-vm4p** so the nix cache
+rides the forge-launch graph and is ensured wherever a forge comes up. Its
+ensure SKIPS with `Ok` on a host with neither nix nor a store, which is exactly
+why it could be added to every lane's prerequisites without breaking one.
+
+`NixCache` is also a `Service` variant the draft's graph description omits
+entirely, with its own edges (`EnclaveNetwork`, `CaBundle`). For a section
+whose subject IS the dependency graph, an unlisted node is a **content** gap,
+not citation rot — and it is the kind of drift `progress_summary` predicted
+when it said the draft "predates … ForgeLaunch dependency modeling".
+
+### The second finding: the order-252 convergence changed shape
+
+The old text said both tray and CLI launch "route through" `ensure_forge_launch`
+and cited TWO locations, which reads as two parallel call sites. There is now
+exactly ONE production call site, inside `ensure_enclave_for_project`, and the
+CLI reaches it transitively — `run_forge_agent_cli_mode` calls
+`ensure_enclave_for_project`. The order-252 property still holds and is in fact
+stronger: it is enforced by convergence rather than by two callers agreeing.
+Recorded because "both routes go through X" and "there is one X" are different
+architectural statements and a verifier checking the old sentence against the
+tree would find two citations resolving to unrelated code.
+
+### Citation drift in §3: total, as in §1
+
+Ten citations checked, ten wrong. Not an offset — the same "lands in plausible
+neighbouring code" hazard §L1 named:
+
+| cited | claimed | actually at |
+|---|---|---|
+| `container_deps.rs:43` | `Service::ForgeLaunch` | `:48` | <!-- cite-ok: the drifted line number IS the evidence; this table exists to record what each stale citation pointed at -->
+| `container_deps.rs:84-98` | the ForgeLaunch edge list | edge block starts `:97`; the range covers GitLogin + NixCache edges | <!-- cite-ok: the drifted line number IS the evidence; this table exists to record what each stale citation pointed at -->
+| `container_deps.rs:210-226` | `ensure_forge_launch` | `pub fn` at `:230`; the range is the tail of `ensure_git_login` | <!-- cite-ok: the drifted line number IS the evidence; this table exists to record what each stale citation pointed at -->
+| `container_deps.rs:228-234` | `ensure_service_catalog` | `:248`/`:250` | <!-- cite-ok: the drifted line number IS the evidence; this table exists to record what each stale citation pointed at -->
+| `container_deps.rs:319-326` | the launch-target refusal | `:341`/`:345`; the range is the satisfier's dispatch `match` | <!-- cite-ok: the drifted line number IS the evidence; this table exists to record what each stale citation pointed at -->
+| `container_deps.rs:547-565` | the refusal tests | `:685`/`:696`; the range is `dependency_graph_is_complete_and_acyclic` | <!-- cite-ok: the drifted line number IS the evidence; this table exists to record what each stale citation pointed at -->
+| `container_deps.rs:293-301` | the order-234 drain gate | `:314-317`; **the range is the `RealSatisfier` doc comment** | <!-- cite-ok: the drifted line number IS the evidence; this table exists to record what each stale citation pointed at -->
+| `main.rs:11067` | the shared-wrapper route | `:12884` | <!-- cite-ok: the drifted line number IS the evidence; this table exists to record what each stale citation pointed at -->
+| `main.rs:16610-16611` | the CLI route | a `tier` assertion in a test | <!-- cite-ok: the drifted line number IS the evidence; this table exists to record what each stale citation pointed at -->
+| `main.rs:6950-6962` | status-check building 8 images | a `containers.conf` write | <!-- cite-ok: the drifted line number IS the evidence; this table exists to record what each stale citation pointed at -->
+| `main.rs:5884-5895` | vault `--init` pre-build | `sanitize_hostname` for a forge name | <!-- cite-ok: the drifted line number IS the evidence; this table exists to record what each stale citation pointed at -->
+| `podman/src/lib.rs:105-109` | `RuntimeLane` | enum `:76`, classifier `:97` | <!-- cite-ok: the drifted line number IS the evidence; this table exists to record what each stale citation pointed at -->
+
+The `:293-301` row is the one to keep in mind when judging whether this matters:
+a reader checking "is there a drain gate?" lands on a struct's doc comment about
+dependency ORDER and can come away satisfied that they looked.
+
+`main.rs` is now 24,668 lines — up from the ~22,000 §L1 measured five days ago.
+Line citations into it do not decay, they are void.
+
+### Also removed
+
+The two `plan/index.yaml:72xx` citations (order-229 allowlist, order-252
+satisfier). Line numbers into the ledger rot by design, per §L1; replaced with
+the order numbers, which are the ledger's own stable identity.
+
+### Not done here
+
+§2, §4, §5, §6, §7 still carry line-number citations, and the count is now
+lower than §L1's 80 only by the twelve fixed above. They were left because this
+slice's mandate was §3 and because re-verifying a claim is the expensive half —
+it is what makes the re-anchoring honest, and it does not compress.
+
+NA-05's exit criterion still asks for a patch list with "specific file:line
+references". §L1 flagged that this is the requirement that produced the rot;
+after a second section it is worth stating plainly: **whoever drives
+ratification should change NA-05 to `file:symbol`**, because the criterion as
+written mandates the defect. That is a change to an exit criterion, so it is
+the packet owner's call, not this slice's.
