@@ -1,0 +1,66 @@
+packets:
+  - packet_id: gate-cycle-runs-a-flat-list-instead-of-a-plan
+    order: 941-trcf
+    status: ready
+    title: |
+      The gate is "another nix without a cache" — 19 steps re-derive ledger state independently, and Windows pays a ~25x filesystem multiplier on every one
+    kind: epic
+    pickup_role: any
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    capability_tags:
+      - build-gate
+      - performance
+      - lua
+      - ledger
+    estimated_hours: 16
+    deliverable: |
+      The gate collects its check set, dedupes it, collapses ordering, and
+      lets semantic supersets subsume contained checks — with the ledger
+      parsed once, not nineteen times — so a full --check costs minutes on
+      every host, including Windows.
+    context: |
+      OPERATOR-DIRECTED (2026-08-30, relayed via yolanda with the frame
+      kept verbatim): the gate "runs the same tests over and over inside a
+      single build run, blindly, because the design is a flat list of
+      commands rather than a plan. Collect all checks, DEDUPE them,
+      COLLAPSE ordering, and recognise that some are semantically SUPERSETS
+      of others. The Lua layer is the natural place — a runtime
+      sophisticated enough to reason about the check set instead of
+      executing a list." Orchestration assigned to macuahuitl.
+
+      MEASUREMENTS, both regimes attached:
+        yolanda (Windows, forced full gate, GATE_PROFILE=1): 1214s total,
+        Rust compilation ~14%. Top: archiver ready-set 552.5s; ghost-trace
+        ratchet 245.8s; gate-stamp write 169.9s; ~1170s total in
+        plan/ledger checking. One check is 4.5x the whole cargo test step.
+        macuahuitl (linux, same archiver check, standalone): 22.4s real
+        (33.5s user — genuinely compute-parallel, not pure I/O). RATIO:
+        24.6x. Full gate here: ~94s.
+      TWO DISTINCT PROBLEMS, so two remedy axes that must not be conflated:
+        A. EVERYWHERE: 19 gate steps invoke tillandsias-plan or read
+           plan/index.yaml (31,678 lines); yolanda's measure-first
+           hypothesis is that each re-parses and re-derives independently,
+           in which case a SHARED PARSE (one fold, checks consume the
+           folded structure) is a much smaller change than a check planner
+           and may capture most of the win. Measure before designing the
+           planner: instrument how many full parses one --check performs.
+        B. WINDOWS ONLY: the 24.6x multiplier is the 9P/drvfs class
+           (895-bkrn family). Cheapest candidate lever: run the
+           ledger-reading checks against a native-FS copy of plan/ (tmpfs
+           or the distro's ext4) refreshed once per gate — potentially
+           reclaiming ~18 of yolanda's 20 minutes with zero planner work.
+           Verify against the archiver check first; if 552s -> ~25s, the
+           multiplier is confirmed fixable independently of axis A.
+      SEQUENCE: measure A's parse count -> land the shared parse if the
+      hypothesis holds -> land B's native-FS staging for Windows -> only
+      THEN evaluate whether the full Lua check-planner (dedupe/collapse/
+      superset) still pays against what remains. The operator's design is
+      the architecture target; the cheap layers come first so the planner
+      is judged against an honest baseline.
+    exit_criteria:
+      - the number of full ledger parses in one --check is measured and recorded before any fix
+      - after the landed slices, a full forced --check is re-profiled on BOTH macuahuitl and yolanda with per-step numbers beside the baseline above
+      - any superset-subsumption the planner performs is itself pinned (a subsumed check's defect class must still be caught — prove with a mutation the superset detects)
+      - the gate's verdict behaviour is unchanged (same failures fail, proven on a deliberately-broken tree)
