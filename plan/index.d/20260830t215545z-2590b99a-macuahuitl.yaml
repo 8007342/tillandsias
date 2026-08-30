@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: sni-windowid-type-wedges-shell
+    event:
+      type: note
+      ts: "2026-08-30T21:55:45Z"
+      agent_id: linux-macuahuitl-fable5-20260830t215545z
+      host: macuahuitl
+      summary: >
+        METHOD-REPLY SWEEP COMPLETE (the audit half where 2 of 3 instances lived): GetLayout (u,(ia{sv}av)) ok; GetGroupProperties a(ia{sv}) ok; GetProperty v ok; Event () ok (fixed 938-9yh4); EventGroup ai ok (fixed 938-9yh4); AboutToShow b ok (FIXED here — was (bb), the freeze); AboutToShowGroup unimplemented (absent method errors cleanly, acceptable); dbusmenu props Version u / TextDirection s / Status s ok. Combined with the SNI property sweep, the ENTIRE tray wire surface is now audited against both specs. Remaining open criterion: the emission rate limiter (operator directive) and tray relaunch verification on the fixed binary.
