@@ -2550,6 +2550,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Long-running view agreement check passed"
 
+    _step "Checking the enclave membership list matches the code (245 P8)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-enclave-membership-documented.sh" 2>&1; then
+        _error "an enclave attach site is undocumented, or the spec names one that is gone (245 P8) — see the verdict line above"
+        exit 1
+    fi
+    _info "Enclave membership documentation check passed"
+
     _step "Checking the proxy's permissive port agrees with its consumers (245 P6)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-proxy-permissive-port-routing.sh" 2>&1; then
         _error "squid.conf and the code disagree about whether :3129 is routed (245 P6) — see the verdict line above"

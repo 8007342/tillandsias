@@ -390,7 +390,18 @@ encrypted control channel; slices 1-3 of 141 landed, 4 and 6 remain —
 - **P7 `openspec/specs/headless-mode/spec.md` — OPEN.** The spec contains zero
   occurrences of "vault". Document the per-operation image ensure lists (or
   their unification per §3.1) and the vault-in-init change (order 253).
-- **P8 (NEW) `openspec/specs/enclave-network/spec.md` — the enclave membership
+- **P8 `openspec/specs/enclave-network/spec.md` — DONE 2026-08-30, and the
+  filing UNDERSTATED it.** Filed as "the nix cache is missing"; enumerating the
+  attach sites found SIX missing members (vault, router, nix cache, catalog
+  service, observatorium web, ssh-lane sidecar) across TWO places in the spec.
+  Both now point at a symbol-anchored builder list, and
+  `scripts/check-enclave-membership-documented.sh` (in `./build.sh --check`,
+  pinned by `litmus:enclave-membership-documented`) refuses divergence in both
+  directions. The sixth member was found by the guard, not by the hand audit:
+  the enclave is named by THREE constants and a manual sweep covered two.
+  Original filing retained below.
+
+  ORIGINAL FILING: **the enclave membership
   list is incomplete.** Purpose enumerates "forge, git, inference, and proxy
   containers". The nix cache is also an enclave member:
   `scripts/nix-cache-service.sh` joins it "to the enclave as a real nix BINARY

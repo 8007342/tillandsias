@@ -284,6 +284,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:enclave-isolation
+  - litmus:enclave-membership-documented
   - litmus:binary-e2e-smoke
   - litmus:enclave-network-source-shape
   - litmus:tray-network-bootstrap

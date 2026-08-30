@@ -2453,6 +2453,77 @@ plan_index:
         - "Spec/Cheatsheet patch list published with specific file:line references"
       events:
         - type: progress
+          ts: "2026-08-30T14:22:42Z"
+          agent_id: "linux-lenovinha-claude-20260830t141431z"
+          host: linux
+          summary: |
+            P8 ACTED ON, and the hand audit that filed it was itself incomplete (linux
+            slice, cycle-scoped claim on a multi_cycle packet; phase stays `review`, NOT
+            closed).
+
+            WHAT P8 SAID vs WHAT IS TRUE. Last cycle I filed P8 as "the nix cache is an
+            enclave member absent from the spec's enumeration" -- one missing member.
+            Enumerating the actual attach sites found SIX: vault (launch_vault_container),
+            the router, the nix cache (order 801-vm4p), the catalog service, the
+            observatorium web, and the ssh-lane sidecar. The spec still said "forge, git,
+            inference, and proxy" in TWO places -- a four-item answer to a twelve-site
+            question. Vault being absent is the one that should sting: it is central to the
+            spec's own dependency story.
+
+            THE SIXTH WAS FOUND BY THE GUARD, NOT BY ME, and that is the finding worth
+            carrying. My manual sweep grepped ENCLAVE_NET and ENCLAVE_EGRESS_NETS. The
+            enclave is named by THREE constants -- ENCLAVE_ONLY_NET is the git mirror's
+            enclave-only form (order 606-9wqd) and also the ssh-lane sidecar's. A human
+            sweep got this 90% right; the scan got it right. That is the argument for
+            mechanising the enumeration in one sentence, and it is the same lesson as the
+            citation work: the facts that rot are the ones maintained by hand.
+
+            WHAT CHANGED. The spec no longer enumerates members in prose. Both sites now
+            point at a SYMBOL-ANCHORED list of the run-argument builders that attach --
+            `fn build_proxy_run_args`, `fn launch_vault_container`, and so on -- for order
+            881-29me's reason: a symbol survives every edit that does not rename it, and a
+            rename is an event worth noticing. scripts/check-enclave-membership-documented.sh
+            refuses divergence in BOTH directions: an attach site the spec does not name,
+            and a bullet the code no longer backs. Wired into ./build.sh --check.
+
+            MY OWN GUARD WAS WRONG THREE TIMES BEFORE IT WAS RIGHT, and I am recording it
+            because each failure was silent-looking:
+              1. it reported build_git_run_args and build_inference_run_args as NO LONGER
+                 attaching, when both do. Cause: the three-constant problem again -- the
+                 first draft matched only ENCLAVE_NET.
+              2. build_inference_run_args still read as absent after that fix, because it
+                 contains a NESTED `fn chown_tree` that stole the attribution from the
+                 line-based scanner. Fixed by tracking only column-0 functions.
+              3. cutting the file at `#[cfg(test)]` to exclude tests truncated main.rs at
+                 line 3872 -- an INLINE test module 20,000 lines before the end -- so the
+                 scan silently lost most of the file and reported seven false "stale"
+                 entries. The cut was unnecessary: the column-0 rule already excludes the
+                 indented `#[test]` fn that prompted it.
+            Each of those would have produced a plausible-looking verdict. All three are now
+            pinned by the litmus's SCOPE CONTROL arm, which asserts a nested helper does not
+            steal attribution and a #[test] fn does not count as a member.
+
+            PINNED by litmus:enclave-membership-documented, 6/6, bound under spec
+            enclave-network: tree agreement in the pinned grammar; an undocumented attach
+            site refused; a stale bullet refused (both directions separately, since either
+            arm alone passes on a guard hard-wired the other way); a POSITIVE control so a
+            refuse-everything guard cannot satisfy the negatives; the SCOPE control above;
+            and a wiring arm proving build.sh calls it.
+
+            245 AFTER SIX SLICES: sections 1/1.1 (yoga), 3/NA-03, 6 + Observation/NA-06,
+            5/NA-05, P6, P8 (lenovinha). Remaining patch-list work: P3 (ENCLAVE_NO_PROXY_BASE
+            and NODE_USE_ENV_PROXY exist in main.rs and appear in no spec, cheatsheet or
+            doc), P7 (headless-mode spec has zero occurrences of "vault" -- note this is now
+            the SECOND spec found silent about vault), P4's vsock-transport half, P5 (the
+            network-scenarios spec does not exist), P1 (needs the git-mirror-egress verdict
+            first). Sections 2, 4 and 7 still carry line citations.
+        - type: claim
+          ts: "2026-08-30T14:15:12Z"
+          agent_id: "linux-lenovinha-claude-20260830t141431z"
+          host: linux
+          summary: |
+            P8 slice: the enclave-network spec enumerates four members in prose. Enumerating the actual attach sites finds more.
+        - type: progress
           ts: "2026-08-30T13:21:25Z"
           agent_id: "linux-lenovinha-claude-20260830t131430z"
           host: linux
