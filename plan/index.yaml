@@ -64069,6 +64069,12 @@ plan_index:
         - one instrumented run either completes exit 0 solo or names the sender
       events:
         - type: note
+          ts: "2026-08-30T23:00:39Z"
+          agent_id: "linux-macuahuitl-fable5-20260830t230039z"
+          host: macuahuitl
+          summary: |
+            ROOT CAUSE FOUND AND FIXED: the graceful-shutdown prefix sweep stopped every tillandsias-* container, including non-managed ones (tillandsias-builder toolbox, tillandsias-dev-inference) — so build.sh's 5s install-validation instance stopped the toolbox its own build ran in, SIGKILLing at rc=137 (5/5 repro). New is_stack_managed_name predicate (shared-stack table + the app's own per-project name patterns) now scopes the sweep; prefix alone never decides ownership. Confirmed live: the operator's forge launches TERM'd a running gate (rc=143) via exactly this sweep before the fix.
+        - type: note
           ts: "2026-08-30T21:34:15Z"
           agent_id: "linux-macuahuitl-fable5-20260830t213415z"
           host: macuahuitl
