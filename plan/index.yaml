@@ -2452,6 +2452,45 @@ plan_index:
         - "Platform Abstraction Layer mapped (Linux bare, WSL2, macOS VZ, Silverblue Toolbox — bridge/forwarding mechanism)"
         - "Spec/Cheatsheet patch list published with specific file:line references"
       events:
+        - type: note
+          ts: "2026-08-30T15:31:46Z"
+          agent_id: "linux-lenovinha-claude-20260830t151432z"
+          host: linux
+          summary: |
+            CORRECTING MY OWN NOTE FROM THIS CYCLE, before it misleads anyone. The previous
+            note called images/default/cheatsheets/ "build-regenerated output whose source
+            is committed" and said I unstaged it. Both halves were wrong, and the pre-push
+            hook is what corrected me.
+
+            WHAT ACTUALLY HAPPENS. The derived cheatsheet tree is TRACKED ON PURPOSE and
+            must be committed alongside the authored one. It is gitignored so that a stray
+            `git add .` does not sweep it, and the sanctioned path is explicit:
+              scripts/stage-image-cheatsheets.sh --stage && git add -f images/default/cheatsheets
+            The pre-push hook refuses `cheatsheet-image-sync:drift
+            derived-tree-index-stale` with that exact remedy printed. So "gitignored" here
+            means "staged deliberately, never incidentally" -- not "build residue".
+
+            THE REAL LESSON IS ABOUT MY RETRY LOOP, not the cheatsheets. I pushed eight
+            times and read every rejection as a lost race, because my loop was
+            `git push >/dev/null 2>&1 || echo "lost race"`. It was never a race: it was a
+            DETERMINISTIC refusal, with the fix printed on stderr, discarded eight times by
+            my own redirect. The peer-cadence theory was reinforced by F9 (order 335), which
+            is a real measured mode -- so a plausible prior made me stop reading the actual
+            output. A retry loop that discards the reason converts "the tool told you
+            exactly what to do" into "the trunk is busy".
+
+            Two corrections to carry: (1) the derived cheatsheet tree is committed with
+            `git add -f`, per the hook; (2) never suppress stderr on the operation whose
+            failure the loop is branching on. F9's diagnosis in the order-335 record stands
+            on its own measurement (five refusals with the hook's own verdict lines read),
+            but any future "lost race" count should be taken from rejections that were
+            actually READ.
+        - type: note
+          ts: "2026-08-30T15:26:45Z"
+          agent_id: "linux-lenovinha-claude-20260830t151432z"
+          host: linux
+          summary: |
+            EXIT-STATE NOTE, and a small trap for the next host who edits a cheatsheet. Editing cheatsheets/runtime/enclave-proxy-patterns.md caused ./build.sh --check to sync the change into images/default/cheatsheets/runtime/enclave-proxy-patterns.md, which is GITIGNORED (.gitignore:49) yet TRACKED -- added before the ignore rule. The effect: git add refuses it as ignored, so an unconditional 'git add <path> && git commit --amend' SHORT-CIRCUITS and the amend silently does not run, while git status keeps showing the path as modified. My work is pushed and the branch is not ahead of origin; the residue is build-regenerated output whose source is committed, so I unstaged it rather than force-adding an ignored path. Flagging rather than fixing: whether that mirror should be untracked (git rm --cached) or un-ignored is a call about the image build's contract, not something to decide inside an audit slice. The failure mode to watch for is the silent one -- a '&& commit --amend' chain that no-ops because the add was refused.
         - type: progress
           ts: "2026-08-30T15:21:19Z"
           agent_id: "linux-lenovinha-claude-20260830t151432z"
