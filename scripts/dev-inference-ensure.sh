@@ -189,6 +189,19 @@ ensure_container() {
     _ec_accel=""
     if [ "$_ec_tier" = "gpu-cuda" ]; then
         _ec_accel="--device=nvidia.com/gpu=all"
+    elif [ "$_ec_tier" = "gpu-rocm" ]; then
+        # ORDER 937-68n4 / the gpu-rocm half of the very bug the comment above
+        # describes. That fix was written for CUDA and never extended, so the
+        # fleet's gpu-rocm host spent three orders running CPU-only while this
+        # script passed TILLANDSIAS_INFERENCE_TIER=gpu-rocm INTO the container.
+        # The label announced an accelerator the container was never given —
+        # and the label is why nobody noticed, because a tier that names the
+        # wiring reads as evidence that the wiring happened.
+        #
+        # ROCm has no CDI spec to name, so the devices are passed directly:
+        # /dev/kfd is the compute interface and /dev/dri carries the render
+        # node. Both are needed; /dev/kfd alone enumerates no agent.
+        _ec_accel="--device=/dev/kfd --device=/dev/dri"
     fi
 
     # shellcheck disable=SC2086 # _ec_accel is one optional flag or empty
