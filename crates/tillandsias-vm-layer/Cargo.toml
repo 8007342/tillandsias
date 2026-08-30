@@ -17,6 +17,8 @@ required-features = ["materialize"]
 
 [dependencies]
 tokio = { workspace = true, features = ["process", "io-util", "rt", "time"] }
+tokio-util = { workspace = true }
+futures-util = { workspace = true }
 serde = { workspace = true }
 async-trait = { workspace = true }
 thiserror = { workspace = true }
