@@ -4062,15 +4062,23 @@ impl DbusMenuIface {
         Ok((false, false))
     }
 
+    // REPLY TYPE IS LOAD-BEARING (2026-08-29 incident): com.canonical.dbusmenu
+    // declares Event as returning NOTHING — `()`. This method returned
+    // `(i32, bool)` (wire type "(ib)"), and gnome-shell REJECTS a reply whose
+    // signature disagrees with the spec: the operator clicked the tray icon,
+    // the shell logged `Method "com.canonical.dbusmenu.Event" returned type
+    // "(ib)", but expected "()"` mid menu-grab, and the Wayland session froze
+    // hard enough to need a session restart. The handler's work is its side
+    // effects; the reply carries no information and must carry none.
     async fn event(
         &self,
         id: i32,
         event_id: &str,
         _data: OwnedValue,
         _timestamp: u32,
-    ) -> fdo::Result<(i32, bool)> {
+    ) -> fdo::Result<()> {
         if event_id != "clicked" && event_id != "opened" && event_id != "activate" {
-            return Ok((0, false));
+            return Ok(());
         }
 
         // Static-id dispatch covers the minimal-UX skeleton. Per-project
@@ -4120,7 +4128,7 @@ impl DbusMenuIface {
                     in_flight
                 };
                 if already_in_flight {
-                    return Ok((0, true));
+                    return Ok(());
                 }
                 let _ = self.0.rebuild_after_state_change().await;
                 // GitHubLogin click: launch the gh login flow AND refresh
@@ -4245,7 +4253,7 @@ impl DbusMenuIface {
             }
         }
 
-        Ok((0, true))
+        Ok(())
     }
 
     async fn event_group(
@@ -4254,15 +4262,17 @@ impl DbusMenuIface {
         event_id: &str,
         _data: OwnedValue,
         timestamp: u32,
-    ) -> fdo::Result<Vec<(i32, i32, bool)>> {
-        let mut out = Vec::new();
+    ) -> fdo::Result<Vec<i32>> {
+        // Spec: EventGroup returns `idErrors: ai` — the ids that were NOT
+        // FOUND. Every id is dispatched through the same handler as Event
+        // (unknown ids are a handled no-op there), so the error list is
+        // always empty. Same incident as `event` above: the previous
+        // `a(iib)` reply was a spec violation no shell had exercised.
         for id in ids {
-            let (result, handled) = self
-                .event(id, event_id, ov(Value::from(0u32)), timestamp)
+            self.event(id, event_id, ov(Value::from(0u32)), timestamp)
                 .await?;
-            out.push((id, result, handled));
         }
-        Ok(out)
+        Ok(Vec::new())
     }
 
     #[zbus(signal)]
