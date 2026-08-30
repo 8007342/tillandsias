@@ -374,8 +374,16 @@ encrypted control channel; slices 1-3 of 141 landed, 4 and 6 remain —
   not a proposal that time overtook. Patch unchanged: add the S2/S3 split and
   the `NODE_USE_ENV_PROXY` contract; document `ENCLAVE_NO_PROXY_BASE` as the
   single NO_PROXY source of truth.
-- **P4 `openspec/specs/host-guest-transport/spec.md` + `vsock-transport` —
-  HALF APPLIED.** `host-guest-transport/spec.md` now names hvsock;
+- **P4 — DONE 2026-08-30.** `vsock-transport/spec.md` gains the platform
+  matrix as a requirement with three scenarios. Publishing it corrected the
+  boundary: §4 labels Windows "hvsock" as though the whole transport were, but
+  hvsock is the HOST side and the guest listens on plain `AF_VSOCK` on every
+  platform — which is what makes §4's uniformity claim checkable. macOS was
+  imprecise the same way (Virtualization.framework does NOT expose `AF_VSOCK`).
+  And §4 omitted a contract entirely: the Windows service GUID is DERIVED from
+  `CONTROL_WIRE_VSOCK_PORT`, so the port requirement and the endpoint id are one
+  fact. Windows and macOS rows are source-read, not exercised; the spec says so.
+  Original finding: `host-guest-transport/spec.md` now names hvsock;
   `vsock-transport/spec.md` carries only two matches across the whole
   hvsock/virtio-vsock/unix-socket vocabulary. Remaining patch is the
   `vsock-transport` half of the §4 platform matrix, as normative text.

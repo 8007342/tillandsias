@@ -2463,6 +2463,64 @@ plan_index:
         - "Spec/Cheatsheet patch list published with specific file:line references"
       events:
         - type: progress
+          ts: "2026-08-30T18:18:12Z"
+          agent_id: "linux-lenovinha-claude-20260830t181434z"
+          host: linux
+          summary: |
+            P4 DONE, and with it the NA-05 patch list has NO open work item left (linux
+            slice, cycle-scoped claim on a multi_cycle packet; phase stays `review`, NOT
+            closed).
+
+            THE AUDIT'S SECTION-4 MATRIX DREW THE BOUNDARY ONE LEVEL TOO HIGH. It labels
+            the Windows row "hvsock" as though the whole transport were hvsock.
+            transport_windows.rs describes itself as bridging "the host's Win32 Hyper-V
+            network to the guest's AF_VSOCK listener" -- so hvsock is the HOST-side
+            mechanism and the guest listens on plain AF_VSOCK, exactly as it does on Linux
+            and under VZ. The correct statement is: the HOST side differs by platform, the
+            GUEST side is uniform. That is not pedantry -- section 4 asks to RATIFY a
+            uniformity claim ("platform differences are confined to the host-headless
+            transport"), and the claim is only checkable once the boundary is drawn where
+            it actually falls.
+
+            THE macOS ROW WAS ALSO IMPRECISE in the direction that matters for writing
+            code. Section 4 says "virtio-vsock (transport_macos.rs)", which is right about
+            the wire and hides the host-side fact: that module's own header says Apple's
+            Virtualization.framework does NOT expose vsock via the kernel's AF_VSOCK family
+            "(the way Linux + tokio-vsock do)". A macOS host-side path that assumes the
+            socket family is available does not compile-fail into a clear error; it is
+            simply the wrong API. The new scenario says so directly.
+
+            A CONTRACT SECTION 4 DID NOT MENTION AT ALL, and it strengthens an existing
+            requirement. On Windows the HvSocket service GUID is DERIVED from the vsock
+            port by the kernel's template: fn vsock_service_guid formats the port as eight
+            lowercase hex digits followed by facb-11e6-bd58-64006a7986d3. So the spec's
+            existing "Stable port 42420" requirement and the Windows endpoint identifier
+            are ONE fact, not two -- CONTROL_WIRE_VSOCK_PORT = 42420 derives
+            0000a5b4-facb-11e6-bd58-64006a7986d3 (computed, not copied). The scenario
+            forbids configuring the GUID separately, because a second source of truth for
+            one endpoint can disagree with the port. It also records WHY the derivation
+            lives in tillandsias-vm-layer rather than the tray: hvsocket.rs re-exports
+            vsock_service_guid rather than re-deriving it, which is the one-copy discipline
+            this packet has been finding violations of all week.
+
+            WHAT I DID NOT VERIFY, named rather than asserted. The Windows and macOS rows
+            are READ FROM SOURCE, not exercised -- I am on Linux. The requirement carries
+            that caveat in its own text: a Windows lane should confirm the derived GUID
+            resolves against a live WSL utility VM, and a macOS lane that the
+            Virtualization.framework connector is the only host-side path. Recording the
+            limit inside the spec rather than only in this event, so a verifier reading the
+            spec alone sees which rows are source-read.
+
+            THE PATCH LIST IS NOW: P2 closed-as-refuted, P3/P4/P5/P7/P8 done, P6 half-acted
+            with an operator decision remaining, P1 blocked on the git-mirror-egress
+            verdict. No item is work that a Linux host can take.
+        - type: claim
+          ts: "2026-08-30T18:14:47Z"
+          agent_id: "linux-lenovinha-claude-20260830t181434z"
+          host: linux
+          summary: |
+            P4 slice: the vsock-transport half of the section-4 platform matrix. Verify what a Linux host can, and mark the rest as needing lane evidence rather than asserting it.
+        - type: progress
           ts: "2026-08-30T17:24:39Z"
           agent_id: "linux-lenovinha-claude-20260830t171432z"
           host: linux

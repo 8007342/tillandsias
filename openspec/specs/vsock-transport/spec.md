@@ -233,6 +233,63 @@ values below 60 seconds SHALL fail loudly.
 - **THEN** the guest SHALL NOT emit empty heartbeat frames on that connection
 - **AND** defensive host routing SHALL ignore any empty `PtyData{ToHost}` frame
 
+
+### Requirement: Platform transport matrix — the host side differs, the guest side does not
+
+The host↔guest transport MUST be one of the three mechanisms below, chosen by
+host platform. The GUEST side is uniform on every platform: it listens on the
+kernel's `AF_VSOCK` family at `CONTROL_WIRE_VSOCK_PORT`. Only the HOST side
+varies.
+
+Added 2026-08-30 from order 245 §5 P4. The audit's §4 matrix drew the boundary
+one level too high — it labelled the Windows row "hvsock" as though the whole
+transport were hvsock, when `transport_windows.rs` describes itself as bridging
+"the host's Win32 Hyper-V network to the guest's `AF_VSOCK` listener". Naming
+the boundary correctly is what makes the uniformity claim checkable.
+
+@trace spec:vsock-transport, spec:host-guest-transport, order:245
+
+| host | host-side mechanism | symbol | guest side |
+|---|---|---|---|
+| Linux | `AF_VSOCK` directly, via `tokio-vsock` | `tillandsias-control-wire` `enum Listener` variant `Vsock`, `#[cfg(all(target_os = "linux", feature = "vsock"))]` | `AF_VSOCK` |
+| Linux (host-local) | Unix domain socket — same framing, no VM | `enum Listener` variant `Unix`, `#[cfg(unix)]` | n/a, headless is host-adjacent |
+| Windows | Hyper-V HvSocket, addressed by a derived service GUID | `tillandsias-vm-layer` `transport_windows.rs` `fn vsock_service_guid` | `AF_VSOCK` in the WSL2 guest |
+| macOS | `Virtualization.framework`'s own vsock API — **not** the `AF_VSOCK` socket family | `tillandsias-vm-layer` `transport_macos.rs` | `AF_VSOCK` in the VZ guest |
+
+#### Scenario: The Windows service GUID is derived from the port, not configured
+- **WHEN** the Windows host opens the control wire
+- **THEN** the HvSocket service GUID MUST be derived from
+  `CONTROL_WIRE_VSOCK_PORT` by the kernel's vsock↔HvSocket template —
+  `fn vsock_service_guid` formats the port as eight lowercase hex digits
+  followed by `facb-11e6-bd58-64006a7986d3`
+- **AND** it MUST NOT be a separately configured identifier, because a second
+  source of truth for the same endpoint can disagree with the port: the port
+  requirement above and this GUID are ONE fact, and `42420` derives
+  `0000a5b4-facb-11e6-bd58-64006a7986d3`
+- **AND** the derivation lives in `tillandsias-vm-layer` rather than the tray so
+  both the vm-layer and `tillandsias-windows-tray` `hvsocket.rs` import one
+  copy — the tray re-exports it rather than re-deriving it
+
+#### Scenario: macOS does not have AF_VSOCK and must not be assumed to
+- **WHEN** host-side transport code is written or reviewed for macOS
+- **THEN** it MUST use the `Virtualization.framework` connector in
+  `transport_macos.rs`
+- **AND** it MUST NOT assume the `AF_VSOCK` socket family is available, as it is
+  on Linux and inside both guests; that module exists precisely because Apple
+  does not expose vsock through the socket family
+
+#### Scenario: The uniform guest side is what keeps the container layer identical
+- **WHEN** a platform difference is proposed anywhere above the transport
+- **THEN** it MUST be justified against this matrix, because the audit's
+  uniformity claim rests on the differences being confined to the host side
+- **AND** a difference that reaches the guest or the container layer is a
+  finding, not a platform detail
+
+**Not verified from a Linux host, and named rather than asserted:** the Windows
+and macOS rows are read from source, not exercised. A Windows lane should
+confirm the derived GUID resolves against a live WSL utility VM, and a macOS
+lane that the `Virtualization.framework` connector is the only host-side path.
+
 ## Invariants
 
 ### Invariant: Host CID is 2
