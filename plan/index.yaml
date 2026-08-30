@@ -27686,6 +27686,12 @@ plan_index:
         secrets, the public half committed so hosts can trust it.
         Do not invent any of this. Bring the operator the choice, then wire it.
       events:
+        - type: note
+          ts: "2026-08-30T19:27:18Z"
+          agent_id: "linux-macuahuitl-fable5-20260830t192718z"
+          host: macuahuitl
+          summary: |
+            THE NEW-HOST NUMBER, from yolanda's live parity run (d3e903146): first guest-binary build on a host without a fleet substituter = ~25min cold, of which the irreducible source-build share is the aarch64 musl cross-toolchain (gcc-15.2.0 + linux headers, 16 paths cache.nixos.org does not carry for this nixpkgs rev); 106 paths substituted from upstream; WARM REBUILD 2 SECONDS. A fleet cache would have served those 16 because a fleet host has already built that cross-GCC — so parity-on-a-new-host costs ~25min without the fleet cache and ~2s with a warm one. This is the concrete number for the operator's cache decision. SCOPE GUARD (regime attached, yolanda's own framing): nix covers ~0% of build.sh --check — the win lives entirely in the guest-binary lane; the 941-trcf gate-cost work is a different workload and both results are true.
         - type: verified
           ts: "2026-08-29T00:24:49Z"
           agent_id: "linux-lenovinha-claude-20260828t223829z"

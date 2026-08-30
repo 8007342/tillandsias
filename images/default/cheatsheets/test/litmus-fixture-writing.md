@@ -558,3 +558,25 @@ copy: `bash -c 'exit 1'` and `bash -c 'exit 7'` through the same invocation
 ALSO returned 0. Piping the script to `wsl.exe ... -- bash` on stdin makes
 propagation exact. Any Windows-lane defect report resting on an exit code
 from the quoted form is unproven until that control has run.
+
+## A pattern that survives in comments makes a plain grep lie in both directions
+
+Found by yolanda retargeting the vsock-ordering litmus after a fold moved the
+systemd ordering definition from `wsl_lifecycle.rs` to `readiness.rs`
+(937-68n4 fallout, 2026-08-30). `After=` and `Wants=` STILL appear in the old
+file — in comments and in the test assertions written during the fold — so
+`grep -q 'After=' wsl_lifecycle.rs` stays GREEN while the definition it
+claims to pin lives in a file it never reads. A grep that cannot tell a
+definition from a mention of one goes green on the corpse of the code it
+guards.
+
+The repair that worked: keep the LITERAL-EXTRACTION step (the one that
+correctly failed — it pulls the actual unit text and asserts on the emitted
+value) and move it to the new file; do not loosen the grep to pass. Two
+intermediate attempts produced meaningless greens on the way and are the
+other half of the lesson: YAML the strict validator rejects while the litmus
+runner reported 8/8 PASS (no yq on the host, so the runner parsed by grep),
+then block scalars that satisfied the validator and broke the runner.
+Mutation-control in BOTH directions — break the property and watch it fail,
+restore it and watch it pass, under the runner that will actually execute it
+— before calling a retarget done.
