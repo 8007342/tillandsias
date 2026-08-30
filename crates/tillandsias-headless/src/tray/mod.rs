@@ -4821,8 +4821,17 @@ mod tests {
         }
 
         // Give the reaping threads time to wait() the exited children.
-        std::thread::sleep(std::time::Duration::from_millis(500));
-        let zombies_after = count_zombie_children();
+        // BOUNDED POLL, not a fixed sleep: under the full parallel suite
+        // (584 tests) 500ms was not reliably enough and the count is
+        // process-wide, so a slow reap read as a zombie leak (flaked in
+        // ci-full run 9, 2026-08-30; passes in isolation in 0.5s). Poll to
+        // quiescence with a hard ceiling so a REAL leak still fails.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let mut zombies_after = count_zombie_children();
+        while zombies_after > zombies_before && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            zombies_after = count_zombie_children();
+        }
         assert!(
             zombies_after <= zombies_before,
             "fast-exiting children must be reaped, not left as zombies \
