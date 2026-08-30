@@ -247,6 +247,31 @@ author running the mutation control before trusting the green; rewritten
 to assert the build performs the deletion. Two instances in one evening,
 two authors, both found only by control-first: assume the class is common.
 
+## Which fixtures must survive the old code, and which must fail it
+
+A contract change produces TWO kinds of fixture, and confusing them leaves
+the change untested (yoga, 940 follow-through, 2026-08-30): a PROPERTY
+fixture asserts behaviour the change must preserve — it must pass against
+BOTH the old and new implementation (the compaction cases pass under
+either stamp writer; a token is inert to a writer that does not read one).
+A CONTRACT fixture asserts the new mechanism itself — it must go RED
+against the old implementation, verified by actually running it there.
+Check each new fixture against both sides and know which answer you expect
+from each.
+
+Two traps from the same change: (1) A NEW GUARD CAN MASK THE PROPERTY
+UNDER TEST — after the stamp gained its token check, a negative control
+(broken tree must refuse) refused AT THE TOKEN CHECK and never reached the
+path under test; it would have passed while proving nothing. Issue the
+guard's prerequisite BEFORE breaking the tree, so the refusal you observe
+is the one you are testing. (2) A WELL-POSED QUESTION CAN SHIP A HOLE —
+the routed question offered "honor or retire the compaction allowance",
+but no such allowance existed (it was a hashability fix; deletions change
+the digest like edits). Implementing the plausible option (a) would have
+required inventing a compaction-vs-modified classifier — a forgery
+surface — to satisfy a test. When a fix seems to demand a new classifier,
+first verify the premise names a mechanism that actually exists.
+
 ## When a checker accuses correct code, fix the checker — with a mutation control
 
 Two guard false positives in one change (830-xsk2, macbook, 2026-08-29),
