@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: network-architecture-audit
+    field: next_action
+    value: 'Eight slices landed. THE NA-05 PATCH LIST NOW HAS NO OPEN ITEM THAT IS WORK: P2 closed-as-refuted, P3/P7/P8 done, P6 half-acted with its remainder an OPERATOR DECISION (wire builds through :3129 or delete the port), P4''s vsock-transport half and P5 (the network-scenarios spec) remain as ordinary work, P1 is blocked on the git-mirror-egress verdict (plan/issues/git-mirror-egress-spec-divergence-audit-2026-08-10.md). WHAT IS LEFT ON THE PACKET: (a) P4 and P5; (b) sections 2, 4 and 7 still carry line citations — mechanical, and the expensive half is re-verifying each claim, not the re-anchoring; (c) the three named verifiers still owe verified-by events, which is the actual completion gate and belongs to opencode-bigpickle, antigravity-gemini and codex-gpt55-highthink, not to a worker slice. A FINDING WORTH ITS OWN PACKET if someone wants it: the per-operation image ensure lists have UNEVEN drift protection — two of six sites pin their list CONTENTS via frozen source literals, four pin only the call string, and the 2026-07-16 incident (router+web missing everywhere, phantom registry pull 125) was a contents defect. The right fix derives what each operation STARTS and checks the list against that; extending frozen literals to the other four would add the brittleness 721-77yu warns about. FOR THE PACKET OWNER, eighth request: NA-05''s exit criterion mandates ''specific file:line references'' and now contradicts seven slices, three spec rewrites and a cheatsheet.'
+    ts: "2026-08-30T16:19:50Z"
+    host: linux
+
+events:
+  - packet_id: network-architecture-audit
+    event:
+      type: note
+      ts: "2026-08-30T16:19:50Z"
+      host: linux
+      summary: >
+        P7 done; patch list has no remaining work-item that is not a decision or dependency
