@@ -52552,6 +52552,12 @@ plan_index:
         - 2977 records with host="unknown" in the wsl-side log
       events:
         - type: note
+          ts: "2026-08-30T05:22:05Z"
+          agent_id: "linux-macuahuitl-claude-20260830t052204z"
+          host: linux
+          summary: |
+            REGRESSION INSTANCE on yolanda (2026-08-30, found while profiling the gate for 941-trcf): the timing log lands at /tmp/tillandsias-timing.jsonl INSIDE the build distro (3856 lines) instead of target/metrics/ where cycle-metrics.sh reads — the defect this packet closed, back on that host. Windows timing metrics invisible to the reader again. Needs a Windows pickup; found by yolanda, relayed by the coordinator.
+        - type: note
           ts: "2026-08-26T04:45:50Z"
           host: yolanda
           summary: |
