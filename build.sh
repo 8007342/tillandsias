@@ -2097,6 +2097,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Base-ledger status-loss advisory reported"
 
+    # Order 941-trcf. The fragment-overlay cost is linear in the index.d
+    # backlog (~40ms of gate time per fragment per gate run, measured), so the
+    # gate NAMES the backlog before it regrows to the 338 that doubled it.
+    # ADVISORY on the 751-i9mb terms: a grown backlog is news for the next
+    # coordination cycle, never a build break.
+    _step "Checking the plan fragment backlog against the compaction cadence (941-trcf, advisory)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-backlog.sh" 2>&1; then
+        _error "the fragment-backlog advisory could not run — that is a broken checkout, not a clean backlog"
+        exit 1
+    fi
+    _info "Fragment-backlog advisory reported"
+
     # Order 810-k8jy. Which file classes under a corpus root the RAG indexer
     # indexes, declines, or has never been told about. ADVISORY like the
     # carry-forward line above, and for the same reason: a new file class in the

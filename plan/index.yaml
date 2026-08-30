@@ -64448,6 +64448,12 @@ plan_index:
       next_action_ts: "2026-08-30T06:24:51Z"
       events:
         - type: note
+          ts: "2026-08-30T19:46:32Z"
+          agent_id: "linux-macuahuitl-fable5-20260830t194632z"
+          host: macuahuitl
+          summary: |
+            COMPACTION-CADENCE NUDGE LANDED: scripts/check-fragment-backlog.sh wired into --check as an advisory (751-i9mb terms — a grown backlog is news, never a build break). Threshold 50 fragments (~2s of gate cost at the measured ~40ms/fragment/gate); the line names the fix and the packet. Verified four shapes: live tree ok, 51-fragment synthetic warns, empty index.d ok, missing index.d ok (the goal state is not an error — same empty-index.d class this packet already flushed twice). A1 is now complete on this host: measure -> compact -> re-profile (56s) -> cadence guard. Remaining on the epic: yolanda re-profile post-compaction, archive lazy-load evaluation, then judge the Lua planner against the honest 56s baseline.
+        - type: note
           ts: "2026-08-30T17:53:27Z"
           agent_id: "linux-macuahuitl-fable5-20260830t175327z"
           host: macuahuitl
