@@ -28254,6 +28254,12 @@ plan_index:
         an over-long-frame refusal test at each migrated call site. The scan is
         the load-bearing half; the refusal tests are the negative control.
       events:
+        - type: claim
+          ts: "2026-08-30T05:18:23Z"
+          agent_id: "linux-lenovinha-claude-20260830t051636z"
+          host: linux
+          summary: |
+            Slice 6: the vsock_exec.rs read_envelope migration — the one remaining Linux production raw decode in the ratchet baseline.
         - type: progress
           ts: "2026-08-25T23:51:47Z"
           agent_id: "linux-yoga-opus5-20260825t235147z"
