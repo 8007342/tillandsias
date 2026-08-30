@@ -2453,6 +2453,86 @@ plan_index:
         - "Spec/Cheatsheet patch list published with specific file:line references"
       events:
         - type: note
+          ts: "2026-08-30T11:46:42Z"
+          agent_id: "linux-lenovinha-claude-20260830t111429z"
+          host: linux
+          summary: |
+            PROCESS NOTE, third catch by the same gate this cycle and the one that is my own fault rather than the document's. My ./build.sh --check ran BEFORE I appended the work-queue ledger line, and that line quotes main.rs:7193-7205 as the finding -- so the gate passed, I committed, and the violation only surfaced after the rebase re-ran it. The line is annotated now. Recording it because the sequencing trap generalizes: the pre-push gate validates the tree it was RUN on, and a cycle that gates, then writes its ledger line, then commits has gated the wrong tree. Run the gate last, or after every plan/issues write. Also worth noting the gate reads ANY line -- table row, prose sentence, or a one-line work-queue entry -- which is what made all three catches true positives rather than a row-scoped guard missing two of them.
+        - type: progress
+          ts: "2026-08-30T11:32:53Z"
+          agent_id: "linux-lenovinha-claude-20260830t111429z"
+          host: linux
+          summary: |
+            NA-06 RE-VERIFIED AND RE-ANCHORED, plus the section-Observation copy of the
+            same three claims (linux slice, cycle-scoped claim on a multi_cycle packet;
+            phase stays `review`, NOT closed). NA-06 was the last of the three GPT-failed
+            criteria with no revision pass. Method is L1/L2's: verify the CLAIM, then fix
+            the citation.
+
+            UNLIKE SECTION 3, THIS SECTION HAD NO CONTENT DRIFT. All three root causes
+            re-verified TRUE:
+              * run_init still builds a TEN-image declarative set with "vault" THIRD after
+                "proxy" and "git", order-253 rationale comment still directly above the
+                array. The draft's "10-image declarative set" is exact, not roughly right.
+              * the cooked-read fix is intact -- `IFS= read -rs TOKEN < /dev/tty` piped
+                into `gh auth login --with-token`, with the whole bracketed-paste diagnosis
+                preserved as a doc comment; the stdin lane and the mode selector both exist.
+              * build_vault_image still early-returns on
+                image_exists_sync(&identity.canonical_tag), and its comment still names
+                "the repeated-login rebuild observed in the order-245 audit" -- the code
+                cites this document back.
+              * the squid claim holds too: no_bump is gone, only github_release_assets is
+                bumped, `ssl_bump splice all` covers the rest.
+
+            ONE CITATION OF TWELVE SURVIVED, and the worst miss lands on the exonerated
+            hypothesis. main.rs:7193-7205 is cited for the raw-pty / bracketed-paste root
+            cause -- the finding whose whole point is that the 401 was NOT a network
+            problem. That range is now A COMMENT ABOUT no_proxy AND PROXY-RESOLUTION
+            FAILURES. A verifier checking "was this really not the proxy?" is delivered to
+            a discussion of proxy failures. L2 argued a confidently wrong citation is worse
+            than an absent one; this is the case where the wrong landing site actively
+            argues the OPPOSITE of the claim it supports.
+
+            Others: main.rs:5884-5895 (run_init's vault build) -> fn run_init ~7297, array
+            ~7370, the range being sanitize_hostname; main.rs:518-519 (wiring) -> a
+            chrono::Utc::now() timestamp; main.rs:7416-7430 -> fn
+            select_github_login_input_mode ~8907; vault_bootstrap.rs:1410-1426 -> fn
+            build_vault_image ~1676, the range being mint_approle_token_for_container's
+            doc.
+
+            THE SURVIVOR IS INSTRUCTIVE, not lucky: squid.conf:64-80 is still correct, and
+            squid.conf is 170 lines while main.rs is 24,668. Line citations are safe
+            exactly where they are least needed. That is the argument for symbol anchoring
+            stated from the other direction.
+
+            SECTION-OBSERVATION REPAIRED TOO. Its items 1-3 restate the same three
+            resolutions and carried the same rot. NA-06 is BY DEFINITION "root-cause notes
+            for the three section-Observation failures", so leaving the upstream copy
+            drifted would mean a verifier reading the two against each other finds one
+            anchored and one void.
+
+            THE 881-29me GATE CAUGHT THIS SLICE TWICE, both true positives. First the
+            evidence table (9 rows), then -- after I annotated the rows -- a PROSE line
+            naming main.rs:7193-7205 as the finding. Worth recording that the gate reads
+            any line, not just table rows, because the second catch is the one a
+            row-scoped guard would have missed and it is the sentence carrying the whole
+            point of the section.
+
+            WHERE 245 STANDS AFTER THREE SLICES: section 1/1.1 (yoga), section 3 / NA-03
+            (lenovinha), section 6 + section Observation / NA-06 (lenovinha). All three
+            GPT-failed criteria now have a revision pass -- NA-01 was covered by yoga's
+            section-1 pass. Still carrying line citations: sections 2, 4, 5, 7.
+
+            The NA-05 recommendation is now three-for-three: the criterion asks for a patch
+            list of "specific file:line references", which is the requirement that PRODUCES
+            this rot. It should say file:symbol. Still the packet owner's call.
+        - type: claim
+          ts: "2026-08-30T11:14:53Z"
+          agent_id: "linux-lenovinha-claude-20260830t111429z"
+          host: linux
+          summary: |
+            NA-06 slice: root-cause notes for the three Observation failures — the last untouched criterion that GPT verification FAILED. Same method: verify each claim against the tree before touching its citation.
+        - type: note
           ts: "2026-08-30T09:31:37Z"
           agent_id: "linux-lenovinha-claude-20260830t091429z"
           host: linux

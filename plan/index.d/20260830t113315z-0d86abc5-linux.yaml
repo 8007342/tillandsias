@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: network-architecture-audit
+    field: progress_summary
+    value: 'GPT verification 2026-07-14 failed NA-01, NA-03 and NA-06. ALL THREE NOW HAVE A REVISION PASS: NA-01 via yoga''s section-1/1.1 slice (2026-08-25 — every fact re-verified true, every citation drifted), NA-03 via lenovinha 2026-08-30 (real CONTENT drift: ForgeLaunch''s DEPS carries SIX edges not five — Service::NixCache joined via order 801-vm4p and is an undocumented Service node; the order-252 convergence also changed from two call sites to one reached transitively; 10/10 citations wrong), NA-06 via lenovinha 2026-08-30 (no content drift — all three root causes and the squid claim re-verified true — but 11 of 12 citations wrong, the worst landing the not-a-network-problem finding on a comment about proxy-resolution failures; section Observation''s copy repaired in the same pass). READY FOR RE-VERIFICATION on the three failed criteria. STILL CARRYING LINE CITATIONS: sections 2, 4, 5, 7. STANDING RECOMMENDATION, now made by three consecutive slices: NA-05''s exit criterion mandates ''specific file:line references'', which is the requirement that produces the rot; it should say file:symbol. Changing an exit criterion is the packet owner''s call.'
+    ts: "2026-08-30T11:33:15Z"
+    host: linux
+
+events:
+  - packet_id: network-architecture-audit
+    event:
+      type: note
+      ts: "2026-08-30T11:33:15Z"
+      host: linux
+      summary: >
+        all three GPT-failed criteria now have a revision pass
