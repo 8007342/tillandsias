@@ -1150,11 +1150,41 @@ _write_gate_stamp() {
         _stamp_dispatch="ci"
     fi
 
+    # ORDER 940-f77j — issue the PASS TOKEN that authorises the stamp.
+    #
+    # This function is reached only after every check passed, so reaching it IS
+    # the gate's verdict. Until now that invariant lived only in this control
+    # flow, while `gate-stamp.sh write` stayed callable by anyone — so a caller
+    # could assert a pass the gate never granted, and on 2026-08-29 one did
+    # (`./build.sh --check; scripts/gate-stamp.sh write; git push`, semicolons
+    # rather than `&&`: red gate, stamped anyway, pushed).
+    #
+    # Emitting the token here moves the invariant out of build.sh's shell and
+    # into an artifact only a green run produces. The token names the TREE it
+    # covers, so it cannot vouch for a tree edited after the gate ran, and
+    # gate-stamp.sh consumes it, so it cannot vouch twice.
+    local _pass_token _token_digest
+    _pass_token="$(git rev-parse --absolute-git-dir 2>/dev/null)/tillandsias-gate-pass-token"
+    if _token_digest="$(bash "$SCRIPT_DIR/scripts/gate-stamp.sh" compute 2>/dev/null)" \
+       && [[ -n "$_token_digest" ]]; then
+        {
+            printf 'version 1\n'
+            printf 'digest %s\n' "$_token_digest"
+            printf 'dispatch %s\n' "$_stamp_dispatch"
+            printf 'issued %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        } > "$_pass_token" 2>/dev/null || true
+    fi
+
     _step "Writing the gate stamp..."
     if bash "$SCRIPT_DIR/scripts/gate-stamp.sh" write --scope full --dispatch "$_stamp_dispatch" >/dev/null 2>&1; then
         _info "Gate stamp recorded (pre-push will accept this tree)"
     else
         _warn "Could not record gate stamp — pre-push may ask you to re-run the gate"
+        # Never leave a live token behind: an unconsumed token is a standing
+        # authorisation to stamp this tree later, which is the thing 940-f77j
+        # removes. If the stamp could not be written, the remedy is to re-run
+        # the gate, not to hold a credit note for it.
+        rm -f "$_pass_token" 2>/dev/null || true
     fi
     return 0
 }
@@ -2334,6 +2364,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Litmus YAML parse gate passed"
+
+    _step "Checking a gate stamp cannot be written unearned (940-f77j)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-gate-stamp-must-be-earned.sh" 2>&1; then
+        _error "a caller can stamp a tree the gate never passed — the stamp stops meaning 'this tree is green' (940-f77j)"
+        exit 1
+    fi
+    _info "Gate-stamp earned-only guard passed"
 
     _step "Checking the hardware fingerprint refuses an untrue twin claim (805-r98w)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-hardware-fingerprint.sh" 2>&1; then

@@ -441,6 +441,64 @@ case "${1:-verify}" in
                 *) echo "gate-stamp: unknown write option '$1'" >&2; exit 2 ;;
             esac
         done
+
+        # ORDER 940-f77j — A STAMP MUST BE EARNED, NOT MERELY WRITTEN.
+        #
+        # build.sh has always reached `_write_gate_stamp` only after every check
+        # passed, so ITS stamps were honest. But `write` is a public entry point,
+        # and the invariant lived in build.sh's control flow rather than here —
+        # so any caller could assert a pass the gate never granted. On
+        # 2026-08-29 one did: `./build.sh --check; scripts/gate-stamp.sh write;
+        # git push`, semicolons rather than `&&`. The gate exited 1, the next
+        # command stamped anyway, and a red tree pushed under a stamp saying it
+        # was green.
+        #
+        # The vulnerability was never the punctuation. A guarantee whose
+        # enforcement lives in every caller's shell is not enforced, it is
+        # documented — and this one had a real checker sitting right beside it
+        # whose verdict simply was not wired to the artifact that spoke for it.
+        #
+        # So the gate now hands over a PASS TOKEN naming the tree it validated,
+        # and `write` refuses without one. The token is consumed here, which
+        # bounds it to the single run that earned it: a second `write` after the
+        # same gate is refused exactly like the first unearned one.
+        #
+        # SCOPE OF THE GUARANTEE, stated rather than implied: this makes an
+        # unearned stamp impossible BY ACCIDENT. It does not make one impossible
+        # by intent — anyone who can write the stamp file can write the token
+        # file. Unforgeable-by-accident is achievable here and is the whole of
+        # what is claimed; a determined caller was always able to write
+        # $STAMP_FILE directly and still is.
+        _pass_token="$(git rev-parse --absolute-git-dir 2>/dev/null)/tillandsias-gate-pass-token"
+        if [[ "${GATE_STAMP_REQUIRE_TOKEN:-1}" != "0" ]]; then
+            if [[ ! -f "$_pass_token" ]]; then
+                echo "refused:no-gate-pass-token"
+                echo "  A stamp says './build.sh --check PASSED against this tree'. Nothing in this" >&2
+                echo "  invocation establishes that it did, so writing one would be an assertion" >&2
+                echo "  rather than a record (940-f77j)." >&2
+                echo "  Run the gate and let it stamp: ./build.sh --check" >&2
+                echo "  Note the gate writes the stamp itself on success — a separate 'gate-stamp.sh" >&2
+                echo "  write' was never needed after a green run, and after a RED one it is the bug." >&2
+                exit 1
+            fi
+            _token_digest="$(sed -n 's/^digest //p' "$_pass_token" 2>/dev/null | head -1)"
+            _tree_digest="$(compute)" || {
+                echo "stale:cannot-write-stamp"
+                exit 1
+            }
+            # A token keyed to a DIFFERENT tree is the same defect one step
+            # subtler: "a gate passed" wearing "this tree passed" as a costume.
+            if [[ "$_token_digest" != "$_tree_digest" ]]; then
+                rm -f "$_pass_token" 2>/dev/null || true
+                echo "refused:gate-pass-token-is-for-another-tree"
+                echo "  The gate passed against ${_token_digest:-<unreadable>}; this tree is ${_tree_digest}." >&2
+                echo "  The tree changed after the gate ran, so its verdict does not cover these bytes." >&2
+                echo "  Re-run: ./build.sh --check" >&2
+                exit 1
+            fi
+            # One-shot: consuming the token bounds it to the run that earned it.
+            rm -f "$_pass_token" 2>/dev/null || true
+        fi
         # Refuse an unknown class AT WRITE TIME too. A stamp is only as
         # trustworthy as the vocabulary both sides share; letting a typo become
         # a scope token would make the hook's subset test silently wrong in the
