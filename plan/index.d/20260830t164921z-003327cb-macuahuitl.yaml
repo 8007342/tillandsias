@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: gate-stamp-writer-accepts-dictation
+    event:
+      type: note
+      ts: "2026-08-30T16:49:21Z"
+      agent_id: linux-macuahuitl-fable5-20260830t164921z
+      host: macuahuitl
+      summary: >
+        follow-up: yoga's batch fix covered test-gate-stamp.sh; the litmus's own inline steps (15,16), test-gate-stamp-scope.sh, and test-gate-stamp-memoization.sh still called bare write and failed in sequence as each earlier fix let the next step run. All now issue the pass token as the gate's stand-in. Two extra defects fixed on the way: memoization case 12's 90s bound dies inside the toolbox re-exec under the litmus PATH (now accepts rc=124 with memo untaken, the case-13 pattern), and the fixture's real build.sh runs bumped VERSION leaving dirt every litmus run (now TILLANDSIAS_SKIP_VERSION_BUMP=1). litmus:release-gates-run-locally 20/20; spec suite 19/19; fixture deterministic 3/3 in plain and litmus-PATH envs. During diagnosis the 936-kdev SIGTERM signature reproduced twice inside the unbounded case-11 full-gate fallback — trap attributed the phase correctly; source still unidentified.
