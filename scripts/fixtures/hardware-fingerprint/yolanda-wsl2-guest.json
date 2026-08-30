@@ -1,0 +1,73 @@
+{
+  "schema_version": 2,
+  "legacy_tier": "cpu",
+  "devices": [
+    {
+      "device_class": "cpu",
+      "vendor": "amd",
+      "name": "AMD Ryzen AI 7 350 w/ Radeon 860M",
+      "device_node": null,
+      "fw_version": null,
+      "driver": null,
+      "usable": true,
+      "unusable_reason": null,
+      "lanes": [
+        "container",
+        "host-native"
+      ],
+      "memory_bandwidth_gbps": null,
+      "memory_bandwidth_source": "unknown",
+      "cpu_flags": [
+        "fma",
+        "avx",
+        "avx2",
+        "avx512f",
+        "avx512dq",
+        "avx512ifma",
+        "avx512cd",
+        "avx512bw",
+        "avx512vl",
+        "avx_vnni",
+        "avx512_bf16",
+        "avx512vbmi",
+        "avx512_vbmi2",
+        "avx512_vnni",
+        "avx512_bitalg",
+        "avx512_vpopcntdq",
+        "avx512_vp2intersect"
+      ],
+      "cpu_cores": {
+        "physical": 8,
+        "logical": 16
+      },
+      "system_ram_gb": 7.339508056640625
+    },
+    {
+      "device_class": "gpu",
+      "vendor": "unknown",
+      "name": "WSL2 paravirtual GPU (/dev/dxg)",
+      "device_node": "/dev/dxg",
+      "fw_version": null,
+      "driver": null,
+      "usable": false,
+      "unusable_reason": "engine-missing:no-vulkan-icd",
+      "lanes": [],
+      "memory_bandwidth_gbps": null,
+      "memory_bandwidth_source": "unknown",
+      "cpu_flags": null,
+      "cpu_cores": null,
+      "system_ram_gb": null
+    }
+  ],
+  "engines": [],
+  "measurements": [],
+  "host": {
+    "is_battery_present": true,
+    "kernel_release": "6.18.33.2-microsoft-standard-WSL2",
+    "host_id": "yolanda",
+    "host_id_source": "node-name",
+    "host_kind": "linux"
+  },
+  "timestamp": "2026-08-29T20:18:00.411621361+00:00",
+  "probe_identity": "0.4.260819+943de94d914a33d6"
+}
