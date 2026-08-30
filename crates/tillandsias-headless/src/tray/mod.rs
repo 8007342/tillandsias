@@ -4258,19 +4258,16 @@ impl DbusMenuIface {
 
     async fn event_group(
         &self,
-        ids: Vec<i32>,
-        event_id: &str,
-        _data: OwnedValue,
-        timestamp: u32,
+        events: Vec<(i32, String, OwnedValue, u32)>,
     ) -> fdo::Result<Vec<i32>> {
-        // Spec: EventGroup returns `idErrors: ai` — the ids that were NOT
-        // FOUND. Every id is dispatched through the same handler as Event
+        // Spec: EventGroup(events: a(isvu)) -> idErrors: ai. Both halves were
+        // wrong here (same 2026-08-29 incident class as `event` above): the
+        // input was flattened parallel args (wire "aisvu") and the reply was
+        // a(iib). Every event dispatches through the same handler as Event
         // (unknown ids are a handled no-op there), so the error list is
-        // always empty. Same incident as `event` above: the previous
-        // `a(iib)` reply was a spec violation no shell had exercised.
-        for id in ids {
-            self.event(id, event_id, ov(Value::from(0u32)), timestamp)
-                .await?;
+        // always empty.
+        for (id, event_id, data, timestamp) in events {
+            self.event(id, &event_id, data, timestamp).await?;
         }
         Ok(Vec::new())
     }
