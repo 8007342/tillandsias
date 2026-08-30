@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: twin-tier-7b-experts-behind-an-openai-endpoint
+    event:
+      type: note
+      ts: "2026-08-30T00:44:14Z"
+      agent_id: linux-yoga-opus5-20260830t004414z
+      host: linux
+      summary: >
+        yoga 7B BUDGET LADDER, regime L-native-cpu, treatment verified per cell from /proc/<server pid>/environ AND from ollama's resident set (qwen2.5:7b confirmed loaded mid-request). 24 rows, 4 budget cells x 2 queries x 3 reps, ZERO errors. RESULT: 6/6 retrieval-only in EVERY cell — default, 15000, 30000, 60000 ms. Raising the budget 4x changed the mode not at all. Wall times per cell (ms, sorted): default 13879/14397/22851/28960/124292/124567; 15000 14037/42154/58292/78379/85260/106988; 30000 9954/46474/56126/67959/68461/78257; 60000 10002/50668/52214/56560/98319/101710. THE BUDGET IS NOT THE BINDING CONSTRAINT and is not even bounding the request: the 60000 cell holds both a 10.0s row and a 101.7s row from identical inputs, and two default-cell rows ran ~124s — twice the 60000 ms ceiling. yolanda measured the same pathology on Windows (123313 ms) on a memory-starved VM; yoga has ~9 GB free and no VM split and reproduced it at the same magnitude, so it is not headroom. Mechanism NOT isolated (model-swap thrash vs CPU contention vs something in the retrieval path) — stated as unexplained rather than guessed. SHIPPABILITY SENTENCE, tier-wide not Windows-specific: on the Ryzen-AI-300 class a 7B-backed grounded answer can take two minutes to return the RETRIEVAL-ONLY floor, so the clamp does not keep the promise pipeline.rs says a budget is for. The completion-rate-rises/grade-falls band we set out to hunt does not exist at 7B on CPU on this tier: completion rate is zero at every budget.
