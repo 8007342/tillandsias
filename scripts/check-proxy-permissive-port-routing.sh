@@ -44,6 +44,15 @@ CONSUMER_ROOT="${TILLANDSIAS_PROXY_CONSUMER_ROOT:-crates}"
 [ -r "$CONF" ] || { echo "blocked:proxy-conf-unreadable:$CONF"; exit 2; }
 [ -d "$CONSUMER_ROOT" ] || { echo "blocked:consumer-root-missing:$CONSUMER_ROOT"; exit 2; }
 
+# SCOPE, and a correction someone will otherwise "fix". This searches `crates/`
+# only, and that is right even though `build.sh` contains `3129` in several
+# places. Those are a DIFFERENT proxy: `_ensure_dev_proxy` runs
+# `tillandsias-dev-proxy` from `docker.io/library/squid:6.1` and publishes
+# `3129:3129` on the host for dev build tooling. The question this guard asks is
+# whether anything routes to the TILLANDSIAS PROXY IMAGE's permissive port, so
+# adding build.sh to the search would make it answer a different question and
+# report the port as routed when it is not.
+
 # A CONSUMER is Rust that names the port — a published port, a proxy URL, an
 # argument. squid.conf declaring its own listener is not a consumer, which is
 # the whole distinction the old comment collapsed.

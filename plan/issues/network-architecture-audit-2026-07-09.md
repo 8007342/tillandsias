@@ -500,19 +500,39 @@ encrypted control channel; slices 1-3 of 141 landed, 4 and 6 remain —
    construction.
 ## 7. Follow-up packets proposed
 
-- Wire vault into the `--init` declarative image set (§3.5, §6.1) — DONE
-  (order 253, commit 8b6c7031, 2026-07-09); it did close two of three observed
-  failures structurally.
-- RuntimeContext enum in container_deps (§3) — still open: order 252 completed
-  with launch-target guards + the second ForgeLaunch target, not context
-  modeling.
-- P5 network-scenarios spec + `--network`-site litmus — still open (no
-  `openspec/specs/network-scenarios/` exists).
-- P6 build-egress decision (squid :3129 vs `--dns 8.8.8.8`) — still open; note
-  the dev-build flow already runs its own separate squid cache on
-  `127.0.0.1:3129` (`build.sh:355-411`), distinct from the proxy image's
-  orphaned :3129.
+> RE-CHECKED 2026-08-30 (lenovinha). Dispositions below are measured, not
+> carried; one citation had drifted and one entry understated what exists.
 
+- Wire vault into the `--init` declarative image set (§3.5, §6.1) — **DONE**
+  (order 253, commit 8b6c7031, 2026-07-09); it did close two of three observed
+  failures structurally. Re-verified 2026-08-30: `main.rs` `fn run_init` still
+  builds ten images with `"vault"` third, and the per-operation lists still
+  exclude it by design (now a requirement in `openspec/specs/headless-mode/spec.md`).
+- RuntimeContext enum in container_deps (§3) — **STILL OPEN**, and still not
+  filed as its own packet. Order 252 completed with launch-target guards plus
+  the second ForgeLaunch target, not context modeling. Anyone taking it should
+  read §3's revised text first: the graph gained `Service::NixCache` since the
+  draft (order 801-vm4p).
+- P5 network-scenarios spec + `--network`-site litmus — **SPEC DONE**
+  (`openspec/specs/network-scenarios/spec.md`, 2026-08-30). The litmus is half
+  built: `scripts/check-enclave-membership-documented.sh` already enumerates
+  every enclave attach site; naming a SCENARIO per site still needs scenario
+  constants in the launch builders.
+- P6 build-egress decision (squid :3129 vs `--dns 8.8.8.8`) — **STILL OPEN as a
+  decision**, with the false claim removed and the agreement now enforced
+  (`scripts/check-proxy-permissive-port-routing.sh`).
+  **This entry's note was the most useful thing in §7 and its citation had
+  rotted.** `build.sh:355-411` lands on CLI argument parsing; the dev proxy is <!-- cite-ok: the rotted line number IS the finding — this sentence records where it now lands -->
+  `build.sh` `fn _ensure_dev_proxy`. What it actually says matters twice over:
+  the dev-build flow runs `tillandsias-dev-proxy` from
+  `docker.io/library/squid:6.1` — **explicitly not `tillandsias-proxy`, "which
+  may be under build"** — publishes `3129:3129` on the host, and exports
+  `HTTP_PROXY`/`CARGO_HTTP_PROXY` at `http://127.0.0.1:3129`. So (a) host-side
+  dev builds ARE proxied, just not through the tillandsias image, and (b) the
+  chicken-and-egg P6 wanted a direct-egress fallback for **is already solved by
+  image choice**. Whoever takes the decision should also weigh the host port
+  collision: wiring AND publishing this image's :3129 would contend with the
+  dev proxy for the same host port.
 
 ---
 
