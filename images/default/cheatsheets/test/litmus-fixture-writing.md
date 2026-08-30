@@ -442,6 +442,22 @@ its output: read the treatment back out of the running server (its own
 /api/ps, its own env, its own config endpoint) and REFUSE THE ARM on
 mismatch. Both twin harnesses now do this per cell.
 
+## A process query whose pattern matches the querier
+
+Two measured instances in one day. (1) macuahuitl, mid-incident: a
+cleanup `pkill -f` whose pattern appeared in the wrapper shell's own
+command line killed the cleanup itself (exit 144 mid-remediation). (2)
+yoga: waiter loops polling `pgrep -f "build.sh --check"` MATCHED THE
+WAITERS — their own command lines contain the string — and reported
+"gate running" for 86 minutes on a machine at load 0.08, waiting on
+their own reflection, while the real gate they had accidentally killed
+earlier stayed dead. A liveness check that can see itself answers from
+its own existence, not from the thing it watches. Remedies: match the
+executable, not the command line (`pgrep -x`, or an absolute-path
+`pgrep -f ^/path/to/binary`); or check the OBJECT the process would
+hold (the lockfile, the stamp mtime, the pid file) rather than the
+process table at all.
+
 ## Never gate while a measurement batch is live
 
 Measured on the yoga/yolanda 7B tuning day (2026-08-30): a gate flipped red

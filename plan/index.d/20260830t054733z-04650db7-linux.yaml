@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: gate-cycle-runs-a-flat-list-instead-of-a-plan
+    event:
+      type: evidence
+      ts: "2026-08-30T05:47:33Z"
+      agent_id: linux-macuahuitl-claude-20260830t054732z
+      host: linux
+      summary: >
+        CONTROL ARM (yoga, recorded verbatim by the coordinator at their request): archive-plan-packets.sh --check standalone = 25.5s on the SLOWER laptop SKU (Ryzen AI 5 340, 6c/12t, ~14GB, Silverblue native FS) vs 552s on near-identical silicon under WSL2 (yolanda, AI 7 350) vs 22s workstation. THE OPERATOR'S CONFOUND RESOLVES CLEANLY: the check is not expensive on laptop hardware — 21.6x is FILESYSTEM, not silicon. AXIS B (native-FS staging of plan/ for Windows ledger checks) is PROMOTED to lead remedy for the Windows half; check-cheapening remedies would optimise the wrong axis for that host. Measurement condition attached per the gate-under-load rule, applied by its author to their own run: machine idle (load 0.08), no concurrent gate, no models resident, wall clock around the process — and the fast number was verified to have done the real work ('ok:archive-answerability:273/273 after archiving 826 packets, ready set unchanged at 392'), because a fast number is exactly where a skipped body hides. Axis A (shared parse) remains live for the everywhere-cost; yoga's full per-step profile follows.
