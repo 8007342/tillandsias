@@ -190,7 +190,13 @@ in_forge_delegation:
           channel were built around, and one instance means the stage is not
           stable at its CURRENT width, let alone a wider one.
         fed: >
-          MECHANISM LIVE, NO DATA YET. Measured 2026-08-30:
+          MECHANISM LIVE AS OF 2026-08-30, NO DATA YET. CORRECTED same day: the
+          first version of this verdict said "mechanism live" after testing
+          only with an explicit --alive-cmd. Exercising the DEFAULT probe
+          showed it matched the shell that ran it and reported still-running
+          for every id, so died-without-outcome could never fire and this gate
+          could never have failed. Fixed as 943-3xyf and pinned by two new
+          litmus arms. Measured after the fix, 2026-08-30:
           `delegate-outcome.sh sweep` → `sweep:no-registered-runs`, printing
           and exiting 0 as litmus:delegate-outcome-disposition-not-silent-shape
           requires. The channel works; nothing has been registered through it

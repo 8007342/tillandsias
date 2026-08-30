@@ -2452,6 +2452,87 @@ plan_index:
         - "Platform Abstraction Layer mapped (Linux bare, WSL2, macOS VZ, Silverblue Toolbox — bridge/forwarding mechanism)"
         - "Spec/Cheatsheet patch list published with specific file:line references"
       events:
+        - type: note
+          ts: "2026-08-30T09:31:37Z"
+          agent_id: "linux-lenovinha-claude-20260830t091429z"
+          host: linux
+          summary: |
+            GATE CAUGHT THIS SLICE, correctly, and it is worth recording as a closed loop. yoga filed 881-29me from the L1 pass (nothing checks that a plan/issues citation still resolves); it has since LANDED as a build gate, and it refused this commit with violation:issue-citation-line-numbers:12 -- my own drift-evidence table, which quotes twelve stale line numbers as the finding. That is a true positive by the gate's own rule. It ships with the right escape hatch for this exact case ('if the line number IS the point, end the line with <!-- cite-ok: ... -->'), so the twelve rows are annotated rather than the gate weakened, and ./build.sh --check now passes. Note the gate is DIFF-SCOPED: L1's identical evidence table at the same file does not trip it, only newly added citations do -- which is the ratchet posture (refuse NEW debt at the door, do not red the trunk on standing debt) that the 795-5itp closure and the framing ratchet also use.
+        - type: progress
+          ts: "2026-08-30T09:18:09Z"
+          agent_id: "linux-lenovinha-claude-20260830t091429z"
+          host: linux
+          summary: |
+            NA-03 RE-VERIFIED AND RE-ANCHORED (linux slice, cycle-scoped claim on a
+            multi_cycle packet; phase stays `review`, NOT closed). W5 handed section 3 --
+            ForgeLaunch dependency modeling -- to "a linux host with podman"; this is that
+            host taking it. NA-03 was picked over the untouched sections because it is one
+            of the three criteria the 2026-07-14 GPT verification FAILED.
+
+            Method is L1's and it is the point: verify the CLAIM first, then fix the
+            citation. A bulk re-anchor without re-verification trades wrong-but-honest
+            citations for confident-looking ones.
+
+            SUBSTANTIVE FINDING 1 -- A SIXTH EDGE, AND A NODE THE DOCUMENT DOES NOT HAVE.
+            Service::ForgeLaunch's DEPS entry carries SIX edges; the draft lists five. The
+            sixth is Service::NixCache (ORDER 801-vm4p), so the nix cache rides the
+            forge-launch graph and is ensured wherever a forge comes up. Its ensure SKIPS
+            with Ok on a host with neither nix nor a store, which is precisely why it could
+            join every lane's prerequisites without breaking one. NixCache is also a
+            Service variant the draft's graph description omits entirely (own edges:
+            EnclaveNetwork, CaBundle). For a section whose subject IS the dependency graph
+            an unlisted node is a CONTENT gap, not citation rot -- exactly the drift
+            progress_summary predicted when it said the draft "predates ForgeLaunch
+            dependency modeling".
+
+            SUBSTANTIVE FINDING 2 -- THE ORDER-252 CONVERGENCE CHANGED SHAPE. The old text
+            said both tray and CLI launch "route through" ensure_forge_launch and cited TWO
+            locations, which reads as two parallel call sites. There is now exactly ONE
+            production call site, inside ensure_enclave_for_project, and the CLI reaches it
+            transitively (run_forge_agent_cli_mode calls ensure_enclave_for_project). The
+            property still holds and is stronger -- enforced by convergence rather than by
+            two callers agreeing -- but "both routes go through X" and "there is one X" are
+            different architectural statements, and a verifier checking the old sentence
+            would find two citations resolving to unrelated code.
+
+            CITATION DRIFT IN SECTION 3: TEN CHECKED, TEN WRONG, and not by an offset.
+            Worst case, kept in the doc as the reason this matters: container_deps.rs
+            :293-301, cited for the order-234 drain gate, is the RealSatisfier DOC COMMENT
+            -- about dependency ORDER. A reader asking "is there a drain gate?" lands
+            there and can come away satisfied that they looked. The gate is really at
+            :314-317. Others: Service::ForgeLaunch :43 -> :48; ensure_forge_launch
+            :210-226 -> :230 (the range is the tail of ensure_git_login); the launch-target
+            refusal :319-326 -> :341/:345; its tests :547-565 -> :685/:696;
+            ensure_service_catalog :228-234 -> :248/:250; main.rs:11067 -> :12884;
+            main.rs:16610-16611 -> a `tier` assertion in a test; main.rs:6950-6962 -> a
+            containers.conf write; main.rs:5884-5895 -> sanitize_hostname; RuntimeLane
+            podman lib.rs:105-109 -> enum :76, classifier :97 (L1 fixed this in section 1;
+            section 3 still carried the stale one).
+
+            main.rs is now 24,668 lines, up from the ~22,000 L1 measured five days ago.
+            Line citations into it do not decay, they are void.
+
+            ALSO REMOVED: the two plan/index.yaml:72xx citations, replaced with the order
+            numbers -- ledger line numbers rot by design (L1).
+
+            RECOMMENDATION TO WHOEVER DRIVES RATIFICATION, now that two sections have hit
+            the same wall: NA-05's exit criterion asks for a patch list with "specific
+            file:line references". L1 flagged that this is the requirement that PRODUCED
+            the rot. After a second section it is worth stating plainly -- the criterion as
+            written mandates the defect, and should say `file:symbol`. That is a change to
+            an exit criterion, so it is the packet owner's call and I did not make it.
+
+            NOT DONE: sections 2, 4, 5, 6, 7 still carry line citations -- L1's count of 80
+            is down only by the twelve fixed here. Left because this slice's mandate was
+            section 3 and because re-verifying each claim is the expensive half; it is what
+            makes the re-anchoring honest and it does not compress. Verification by the
+            three required agents is unchanged and unrequested by this slice.
+        - type: claim
+          ts: "2026-08-30T09:15:27Z"
+          agent_id: "linux-lenovinha-claude-20260830t091429z"
+          host: linux
+          summary: |
+            Linux slice: NA-03 (section 3, ForgeLaunch dependency modeling) — a criterion GPT verification FAILED, explicitly handed to a linux host with podman by W5. Re-verify each claim against the tree before touching its citations.
         - type: progress
           ts: "2026-08-25T11:47:34Z"
           agent_id: "linux-yoga-opus5-20260825t114734z"
@@ -17220,6 +17301,80 @@ plan_index:
         - stage-lift gates are DEFINED numerically against the 682 telemetry set (which metrics, which thresholds, over how many cycles) and recorded in the methodology, so lifting to stage 1+ is a measurement plus an operator approval, never a vibe
         - a stage log exists in the ledger (event per lift with telemetry evidence and the operator approval reference)
       events:
+        - type: progress
+          ts: "2026-08-30T08:26:15Z"
+          agent_id: "linux-lenovinha-claude-20260830t081427z"
+          host: linux
+          summary: |
+            G4'S PRODUCER WAS BROKEN, and this cycle found it by being the first thing
+            ever to run the DEFAULT path on this host. Filed and fixed as 943-3xyf.
+
+            WHAT I SET OUT TO DO. Criterion 1 needs a real delegate launched, which is
+            operational work I did not undertake (see below), so I took the tractable
+            prerequisite instead: exercise the disposition channel end-to-end here,
+            since G4's gate reads it and nothing had ever registered through it.
+
+            THE DEFECT. `register` recorded the default liveness probe as the literal
+            string `pgrep -f <id>`, and `is_alive` ran it through `sh -c`. That sh
+            process's own command line contains the id, so pgrep matched the PROBE, not
+            the delegate. Measured with a random id nothing anywhere carried:
+            `pgrep -c -f <id>` from a clean shell returned 0 while `reconcile` returned
+            `outcome:still-running`. Every delegate that ever existed would have read as
+            alive forever, and `died-without-outcome` -- the disposition 690-2kwd built
+            this whole channel to guarantee is 'never mistaken for a clean finish' --
+            could not fire. `sweep` would have auto-filed nothing, ever.
+
+            EXCLUDING ANCESTRY WAS NOT ENOUGH, and the second attempt is worth recording
+            because it is subtle. After removing `sh -c` and filtering out the caller's
+            ancestor chain, the probe STILL always said alive: the surviving self-match
+            is the command-substitution SUBSHELL inside the probe itself, which bash
+            forks from the script so it inherits the script's argv (containing
+            `--id <id>`) and is a CHILD, invisible to any ancestry filter. The reliable
+            discriminator turned out to be the tool's own NAME -- a real delegate's
+            command line is `tillandsias <project> --<harness> --prompt ...` and never
+            contains `delegate-outcome`.
+
+            WHY THE LITMUS WAS GREEN THROUGHOUT, which is the reusable half. Every arm of
+            litmus:delegate-outcome-disposition-not-silent-shape passes an explicit
+            `--alive-cmd false` or `true`. The suite pinned the disposition GRAMMAR
+            perfectly and never once exercised the probe that produces it in production.
+            Same shape as 943-7dn5 filed last cycle: a green light over an emitter while
+            the wiring that would call it does not exist.
+
+            THE FIX AND ITS CONTROLS. register records the sentinel `:default:`;
+            is_alive routes that -- AND the legacy literal, because a fleet upgrades at
+            different times and a record written by an un-upgraded host must not keep
+            reporting alive -- to default_alive, which runs pgrep directly and drops any
+            match whose `ps -o args=` contains `delegate-outcome`. Verified in three
+            states: nothing running -> died-without-outcome; a process exec'd with the id
+            in its argv -> still-running; after it exits -> died-without-outcome, with
+            sweep emitting would-file. Two litmus arms added as an explicit PAIR, with a
+            comment saying they must not be separated: the dead-case arm alone passes on
+            a probe hard-wired to 'dead', the live-case arm alone on one hard-wired to
+            'alive'. Mutation-tested -- restoring the old default makes step 6 fail with
+            the exact original symptom. Litmus 7/7.
+
+            GATE G4 IS RE-RATED. My previous cycle recorded it as 'MECHANISM LIVE, NO
+            DATA'. That was wrong in the first half and I am correcting it rather than
+            leaving it: the mechanism was NOT live, it was incapable of ever reporting
+            the condition it gates on. It is live now. The 'NO DATA' half stands.
+
+            WHAT I DID NOT DO, and why. Criterion 1 -- stage 0 actually running -- means
+            launching a sibling AI harness that will autonomously commit to the shared
+            ledger, plus a tray rebuild and container recycle on the operator's machine.
+            The 2026-08-11 authorization was interactive, that night, on linux_mutable,
+            naming a delegate logged in THERE. On lenovinha `opencode` is present and
+            `codex`/`gemini` are absent, and I have no recorded authorization for this
+            host. Launching another agent on someone's machine is not something a loop
+            should infer from a nineteen-day-old note about a different host, so it needs
+            an explicit operator go-ahead. Everything that could be prepared without it
+            now is.
+        - type: claim
+          ts: "2026-08-30T08:15:08Z"
+          agent_id: "linux-lenovinha-claude-20260830t081427z"
+          host: linux
+          summary: |
+            Criterion 1 prerequisites: exercise the delegate disposition channel end-to-end on this host (G4's producer, never once run here) and record what still blocks stage 0 from actually running.
         - type: progress
           ts: "2026-08-30T07:18:15Z"
           agent_id: "linux-lenovinha-claude-20260830t071426z"

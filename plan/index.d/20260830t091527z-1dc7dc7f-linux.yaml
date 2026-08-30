@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-delegation-concurrency-ramp
+    field: next_action
+    value: 'Criterion 2 DONE (stage_lift_gates G1-G5 in methodology/in-forge-delegation.yaml; G4''s producer fixed as 943-3xyf after it was found unable to ever report a death). CRITERION 1 IS BLOCKED ON OPERATOR AUTHORIZATION, and that is the whole remaining gate. It means launching a sibling AI harness that autonomously commits to the shared ledger, plus a tray rebuild and container recycle on a human''s machine. The 2026-08-11 stage-0 authorization was interactive, that night, on linux_mutable, naming a delegate logged in THERE — it does not transfer to another host by inference. A host that HAS recorded authorization (macuahuitl/linux_mutable) can take criterion 1 today; lenovinha cannot, and on lenovinha only opencode is installed (codex and gemini are absent). EVERYTHING PREPARABLE WITHOUT IT IS DONE: the disposition channel is verified in all three states on this host, its default probe now discriminates, and two paired litmus arms pin it. Criterion 3''s stage log stays empty by design until a lift can occur, and no lift is possible while G1 (943-7dn5) and G5''s mcp half read absent.'
+    ts: "2026-08-30T09:15:27Z"
+    host: linux
+
+events:
+  - packet_id: forge-delegation-concurrency-ramp
+    event:
+      type: note
+      ts: "2026-08-30T09:15:27Z"
+      host: linux
+      summary: >
+        naming the authorization gate so six more hosts do not rediscover it

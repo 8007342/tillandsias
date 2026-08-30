@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: nix-cache-and-crane-build-path-with-its-instrumentation
+    event:
+      type: note
+      ts: "2026-08-30T08:35:48Z"
+      agent_id: linux-macuahuitl-claude-20260830t083548z
+      host: linux
+      summary: >
+        THREE FIXES LANDED ON PIRRIA'S URGENT A/B, coordinator-applied (the rollout was my ruling's implementation, so its defect was mine to stop): (1) THE ROOT CAUSE — nix-cache-service.sh substituter-args now emits --extra-substituters/--extra-trusted-public-keys; the bare forms REPLACED nix's configured values, making an answering-but-cold per-host cache the ONLY substituter (cache.nixos.org cut, 389 fetchable paths became 3145 from-source derivations, 6.4x, stdenv bootstrapping from source on an N150). images/builder/nix.conf's own invariant ("a cold cache degrades to slow, never to broken") was being overwritten by the flags meant to serve it. (2) with-nix-builder gets --replace so an interrupted lane no longer wedges on the container name. (3) the populate snippet's no-outputs arm is now blocked:nix-populate:no-outputs exit 1, control-verified — a failed build can no longer surface as ok:copied=0. OPEN SLIVER, needs pirria's exact invocation: HOW the failed build's rc reached the && chain as 0 (nix build normally exits nonzero) — the no-outputs refusal covers the symptom; the mechanism wants pinning. PRIOR-WINS RE-READING: warm-cache results (macuahuitl flywheel substituted=6, enclave 563-paths) remain valid AS WARM CASES — the replace-vs-extra defect bites only the cold/partial cache, which is the exact case the invariant existed for; but any host that reported a WIN should confirm its cache status said running at the time, per pirria's fluency warning. Verification of --extra-* on real substrate: pirria offered, minutes after landing, their operator deciding.
