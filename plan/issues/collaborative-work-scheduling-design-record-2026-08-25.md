@@ -134,3 +134,189 @@ entry above.
   milestone-burndown surfacing, both named in the packet's outcome, have no
   entry yet because I did not find citable evidence for them in one cycle;
   absence here means unexamined, not absent.
+
+---
+
+# Second cycle (lenovinha, 2026-08-29)
+
+Continues the inventory. Three results: F1 is **reproduced on a second host and
+reclassified**, and the two entries the previous cycle left as "unexamined" are
+now **searched** — one is absent, the other is already built.
+
+## F1 REVISITED. Reproduced on lenovinha, and I am the cause of one instance
+
+**MEASURED first-hand, lenovinha, three consecutive cycles on 2026-08-29/30
+(04:5xZ → 06:14Z).** Identical batch every time:
+
+```
+epic=architecture-audit-epic role=linux size=5 seed=silverblue-ryzen7-amd+nvidia-lenovinha-20260830 pick=2/7
+795-zshi  guest-exec-allowlist-forces-argv-flattening   p1
+795-5itp  nine-hand-rolled-length-prefixed-framing-copies p2
+335       collaborative-work-scheduling-research        kind:research
+245 / 251 unscored
+```
+
+This is F1's shape on a different host with a different seed, which is worth
+recording on its own: yoga's five-cycle measurement could have been read as a
+seed artifact, and it was not.
+
+But the useful part is the causal chain, because I am inside it:
+
+- **Cycle 1** — audited 795-zshi. Three of four `next_action` steps had already
+  landed; the only remaining work is two Windows-lane deletions. I wrote that
+  into its `next_action`, including the sentence *"suggests re-pointing
+  `pickup_role` from `any` to `windows`"* — **and did not do it**.
+- **Cycle 2** — the selector offered 795-zshi again, first in the batch, exactly
+  as predicted. I skipped it and took 795-5itp. Landing slice 6 narrowed *that*
+  packet's remainder to macOS + Windows, and I recorded the narrowing in prose
+  `next_action` too.
+- **Cycle 3** — the selector offered both again, unchanged.
+
+So F1 did not merely recur: **the cycle that diagnosed it also produced the
+next instance of it, in the same commit that named the remedy.** That is a
+sharper datum than "routing cannot see the lane", and it moves the entry to a
+different class.
+
+### The measurement that reclassifies it: `pickup_role` DOES filter
+
+The previous cycle listed F1 as one of two *live gaps in selection itself*. That
+is not what the code does. `select-work-batch.sh` delegates role filtering to
+the plan binary, and `PlanIndex::ready()` (`crates/tillandsias-plan/src/lib.rs`
+:1005-1013) filters on `pickup_role == role || pickup_role == "any"`.
+
+Measured at HEAD, 2026-08-29:
+
+```
+ready linux    318 packets
+ready windows  178 packets
+windows-ready packets NOT offered to linux: 36
+```
+
+The exclusion works. A packet re-pointed to `windows` leaves the Linux pool the
+same cycle, with no new machinery and no operator decision.
+
+**So the single-lane half of F1 is a DISCIPLINE failure over an existing
+mechanism — the same class as F2, not a missing mechanism.** Nobody updates
+`pickup_role` when a slice narrows the remainder to one lane, and the narrowing
+gets written in prose instead, which the selector cannot read. That was already
+the diagnosis; what is new is that the field it needs already exists and already
+works.
+
+Acted on rather than only recorded: 795-zshi is re-pointed to `pickup_role:
+windows` in this cycle's commit. If F1 is discipline, the honest response is to
+exercise the discipline, not to describe it again.
+
+### What IS a real mechanism gap, and it is one line
+
+`pickup_role` is a scalar with exactly one wildcard. It can say *linux*, or
+*windows*, or *any*. It **cannot** say "what remains needs macOS **and**
+Windows, but not Linux".
+
+Confirmed rather than assumed — the grammar admits no disjunct:
+
+```
+pickup_role: linux    275     pickup_role: operator    7
+pickup_role: any      259     pickup_role: tlatoani    3
+pickup_role: windows   55     pickup_role: forge       2
+pickup_role: macos     36
+```
+
+Zero disjuncts across 637 carriers, and `ready()` does an exact string compare,
+so a value like `macos|windows` would match no role at all and silently vanish
+from every pool — a fail-quiet, which this packet's mandate forbids.
+
+**Live exhibit: 795-5itp.** After this cycle's slice 6 its remaining work is
+5 decodes in `macos-tray/pty_vsock_bridge.rs` and 2 in
+`windows-tray/hvsocket.rs`. Every available value is wrong:
+
+- `any` — what it has now. Keeps offering it to Linux forever. This is F1.
+- `macos` — hides genuinely-ready work from Windows. Strictly worse.
+- `windows` — same, mirrored.
+
+So the packet stays `any` and stays in my batch, and it will stay there until
+the grammar can express its remainder. **That is the actual gap, and it is far
+smaller than anything on this packet's candidate list**: make `ready()` accept a
+`|`-separated disjunct, plus a value grammar and a validator that refuses an
+unknown lane so the fail-quiet above cannot happen.
+
+**Verifiable closure (proposed, NOT adopted — criterion 4 reserves that for the
+Tlatoāni):** a test asserting that a packet with `pickup_role: macos|windows`
+appears in `ready macos` and `ready windows` and NOT in `ready linux`; plus a
+validator arm refusing `pickup_role: mac|windows` by naming the unknown lane,
+so a typo cannot silently empty a packet from every pool.
+
+**Migration rung:** the field is additive and every existing scalar value keeps
+its exact meaning, so the rung is one commit with no ledger migration. The
+adoption half is the discipline half above, and it needs no code at all.
+
+## F7. Thrashing mediation — SEARCHED, no evidence in the ledger
+
+The packet's outcome text names "thrashing mediation cases" among the failure
+modes to survey. The previous cycle left it unexamined and said so.
+
+Searched at HEAD: `thrash` appears **6 times in `plan/index.yaml`**, and not one
+is a scheduling case.
+
+- 2 are this packet's own outcome text and the previous cycle's note about it —
+  i.e. the term citing itself.
+- 1 is GPU memory (`spill to host RAM or thrash`, the accel-tier work).
+- 1 is NTFS I/O (`we are thrashing NTFS`, the Windows build-offload report).
+
+So the word entered this packet's mandate from the 2026-07-14 operator
+directive without a case behind it. **Absence here is now SEARCHED, not
+unexamined** — which is the distinction the previous cycle explicitly asked its
+successor to close. If thrashing mediation is a real concern it is a
+*predicted* mode, and by this record's own rule (predicted vs observed) it must
+not enter the mechanism set until something measures it.
+
+## F8. Milestone-burndown surfacing — ALREADY MECHANISED
+
+Also named in the outcome as a candidate mechanism. It exists:
+
+```
+$ tillandsias-plan burndown architecture-audit-epic
+245      ready       network-architecture-audit
+246      obsoleted   credential-secrets-architecture-audit
+...
+795-hzpg completed   podman-sync-wait-bounded-busy-polls-two-detached-threads
+```
+
+`burndown` is in the binary's own `capabilities` set and is exposed as the
+`plan_burndown` MCP tool. It reports terminal states (`obsoleted`, `completed`,
+`implemented`) alongside open ones, which is what makes it a burndown rather
+than a queue view.
+
+This joins F3 and F6 in the already-mechanised column. Whatever remains here is
+about *surfacing* it in `loop_status` — a habit, not a mechanism — and this
+record should not carry a mechanism proposal for it.
+
+## Where the inventory stands after this cycle
+
+Eight entries. **Four already mechanised** (F3, F6, F2's claiming, F8), **two
+discipline problems over existing mechanisms** (F2, and now F1's single-lane
+half), **one predicted-but-unmeasured** (F7), and **two live gaps**: F1's
+multi-lane half (`pickup_role` cannot express a partial-lane remainder) and F4
+(a claim hides work in both directions with only a reaper to return it).
+
+The mandate was the SMALLEST mechanism set that fixes what we actually hit. On
+the evidence now recorded that set is **two changes, one of which is a single
+predicate**, and **four of the packet's own five named candidates are foreclosed
+by measurement**: better seeding (F5, refuted), dependency-aware dispatch waves
+and priority lanes with aging (traceable to no entry), and milestone-burndown
+surfacing (F8, already built). Per-host reservations survive only as F4's
+candidate remedy, not on their own merits.
+
+## Still not done
+
+- **Criterion 2, the prior-art survey with provenance, is still not started.**
+  I did not start it deliberately: the mechanism surface has shrunk twice now
+  under measurement, and surveying CI schedulers and OS run-queues to justify a
+  one-line predicate change would be the ad-hoc growth this packet exists to
+  prevent. It should be scoped to the two surviving gaps — attention/lane
+  routing for F1, and lease-visibility for F4 — rather than to the original
+  five candidates, four of which no longer have a problem attached.
+- **F4 is untouched since the previous cycle.** It is now the larger of the two
+  live gaps and has no first-hand measurement on this host.
+- **Criterion 4 (Tlatoāni sign-off) is not sought here.** Nothing in this cycle
+  became worker-protocol contract: the `ready()` disjunct is a proposal, and the
+  795-zshi re-point uses the existing field as designed.
