@@ -64087,6 +64087,32 @@ plan_index:
         - OpenCode completes a real project question against the local OpenAI endpoint with citations and floor behaviour intact, demonstrated on both twins
         - a refusal (out-of-coverage question) arrives at OpenCode as a well-formed completion carrying the typed marker, not an error
       events:
+        - type: evidence
+          ts: "2026-08-30T20:38:54Z"
+          agent_id: "windows-yolanda-claude-20260830t162208z"
+          host: yolanda
+          summary: |
+            ACCEPTANCE MET — OpenCode answers cited project questions through the local grounded endpoint on Windows. The operator authorised the install directly (winget), which was the only thing blocking this.
+
+            INSTALLED: winget SST.opencode (CLI 1.18.21, alias on PATH at %LOCALAPPDATA%\Microsoft\WinGet\Links\opencode.exe) and SST.OpenCodeDesktop 1.18.25. Both reported "Installé correctement".
+
+            PROVIDER LOADS FROM THE REPO CONFIG, not from anything I hand-fed it. `opencode models` lists exactly the five domains opencode.json declares:
+              tillandsias-experts/all
+              tillandsias-experts/cheatsheet
+              tillandsias-experts/code
+              tillandsias-experts/methodology
+              tillandsias-experts/spec
+            So the earlier set-wise check (declared == served) is now confirmed by the client that consumes it, rather than by me comparing two lists.
+
+            ARM 1 — A CITED PROJECT QUESTION, the packet's actual acceptance. `opencode run --model tillandsias-experts/methodology "what is the pre-push gate rule for non-linux-next branches?"` returned the retrieval-only floor with six citations, top hit multi_host_development.pull_merge_cadence.pre_push_gate [methodology/multi-host-development.yaml:458-509] — the exactly-correct span, independently verified earlier against the rule text at :459-468.
+
+            ARM 2 — THE REFUSAL PATH, which opencode.json's agent prompt promises literally ("a typed refusal beginning unsupported: naming exactly what is missing ... There is no third state"). An out-of-corpus question returned: "unsupported: nothing in the spec corpus is similar enough to this question (best score 0.56 < refusal floor 0.62) — likely out of coverage; TILLANDSIAS_RETRIEVE_REFUSAL_FLOOR (coverage) and TILLANDSIAS_RETRIEVE_MIN_SCORE (per-chunk) tune the floors". A well-formed completion carrying the typed marker and naming the floor that refused it — reaching the user as text, not as a client error.
+
+            ARM 3 — DOMAIN ROUTING THROUGH THE CLIENT. `--model tillandsias-experts/code` on "where is the gate stamp written and verified?" cited scripts/gate-stamp.sh (three spans), scripts/hooks/pre-push-local-gate.sh and scripts/test-gate-stamp-memoization.sh. Code domain, code corpus, correct file — so the domain filter survives the client round-trip and is not something only the raw endpoint honours.
+
+            WHAT WAS ALREADY TRUE AND IS NOW OBSERVED RATHER THAN INFERRED: I reported earlier that this half was verification rather than construction, because expert_serve.rs already served the facade over run_grounded and opencode.json already declared the provider. That reading holds — nothing needed building. What was missing was the client, and the client agrees with the server on all three behaviours.
+
+            ONE HONEST NOTE ON WHAT THE RUNS SHOW: both cited answers came back as the retrieval-only floor rather than a synthesis, because the 7B model on this hardware does not clear the tier budget (measured separately: 9.1 tok/s decode, and a 60s clamp that a real answer exceeds). That is the documented floor behaving correctly and it is what a user on this tier gets — the citations are real and the refusal is honest — but it is not a synthesis, and the acceptance should be read as "the pipeline, floors and citations survive the client", not as "the 7B answers well here".
         - type: note
           ts: "2026-08-29T23:58:21Z"
           agent_id: windows-yolanda-claude-20260828t223837z
