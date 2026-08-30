@@ -20,12 +20,18 @@
 //! one definition rather than each carrying a hand-transcribed variant that can
 //! drift back into an always-passing check.
 //!
-//! KNOWN TRIPLICATION, deliberately not resolved here: the Windows path
-//! (`tillandsias-windows-tray/src/wsl_lifecycle.rs`) still carries its own
-//! copy, which is the ORIGINAL and the one measured on hardware. Folding it
-//! into this module is a mechanical follow-up, but that file is under active
-//! edit on the Windows host and a cross-crate move would collide with it. The
-//! tests below pin this copy against drift; the Windows copy keeps its own.
+//! TRIPLICATION RESOLVED (740-3k4s, 2026-08-30). The Windows path
+//! (`tillandsias-windows-tray/src/wsl_lifecycle.rs`) carried its own copy —
+//! the ORIGINAL, and the one measured on hardware. It now installs THIS
+//! definition. The fold was deliberately not done blind: it landed from the
+//! Windows host itself, behind a real `--reset-guest` reprovision, because
+//! shipping an unverified probe to a path nobody could start is the exact
+//! mistake 740-3k4s was split off from 735-ewzp to avoid.
+//!
+//! It also closes a gap the copy had: the Windows probe carried three verdicts
+//! and no UNVERIFIABLE, so a guest missing `socat` reported NOT-BOUND — a
+//! broken check and an unbound port reading identical. Windows gets the fourth
+//! verdict by adopting this module, not by a second edit.
 
 /// Guest-local probe that CONNECTS to the control-wire port and reports whether
 /// anything accepts.
@@ -59,7 +65,7 @@
 /// so "this probe cannot observe the property from here" is a true and distinct
 /// verdict, and it gets its own exit code (2) rather than being folded into
 /// either PASS or FAIL.
-pub(crate) const READY_SCRIPT: &str = r#"#!/usr/bin/env bash
+pub const READY_SCRIPT: &str = r#"#!/usr/bin/env bash
 set -uo pipefail
 PORT="${1:-42420}"
 
@@ -140,7 +146,7 @@ done
 "#;
 
 /// Absolute path the probe is installed at, on every path that installs it.
-pub(crate) const READY_SCRIPT_PATH: &str = "/usr/local/lib/tillandsias/headless-ready.sh";
+pub const READY_SCRIPT_PATH: &str = "/usr/local/lib/tillandsias/headless-ready.sh";
 
 /// Bound the daemon's restart loop (735-ewzp): a daemon that can never start
 /// should end in `failed`, loudly and once, not restart every two seconds
@@ -151,7 +157,7 @@ pub(crate) const READY_SCRIPT_PATH: &str = "/usr/local/lib/tillandsias/headless-
 /// SILENTLY IGNORED — the same looks-configured-does-nothing shape this whole
 /// packet exists to remove. `start_limit_is_a_unit_section_directive` pins
 /// that, because review is exactly how this gets missed.
-pub(crate) const START_LIMIT_DIRECTIVES: &str = "StartLimitIntervalSec=120\nStartLimitBurst=3";
+pub const START_LIMIT_DIRECTIVES: &str = "StartLimitIntervalSec=120\nStartLimitBurst=3";
 
 /// The readiness ASSERTION as its own oneshot unit — deliberately NOT an
 /// `ExecStartPost` on the daemon (order 757-4hdt).
@@ -176,7 +182,7 @@ pub(crate) const START_LIMIT_DIRECTIVES: &str = "StartLimitIntervalSec=120\nStar
 /// (798-emje). The edge is already implied on a normal boot, but implied is not
 /// declared: an implied edge is invisible to the reader, unassertable by a
 /// test, and silently lost the day someone adds `DefaultDependencies=no`.
-pub(crate) fn ready_unit(port: u32) -> String {
+pub fn ready_unit(port: u32) -> String {
     format!(
         r#"[Unit]
 Description=Tillandsias control-wire readiness assertion
@@ -204,7 +210,7 @@ WantedBy=multi-user.target
 /// unavailable — that is a legitimate guest configuration, the host wire does
 /// not use loopback, and the correct verdict for it is the probe's
 /// INDETERMINATE, not a dead provision.
-pub(crate) fn vsock_loopback_provision_snippet() -> &'static str {
+pub fn vsock_loopback_provision_snippet() -> &'static str {
     "echo 'vsock_loopback' > /etc/modules-load.d/tillandsias-vsock.conf; \
      modprobe vsock_loopback 2>/dev/null; \
      if [ -d /sys/module/vsock_loopback ] || grep -q '^vsock_loopback ' /proc/modules; then \

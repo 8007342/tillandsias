@@ -41,7 +41,13 @@ pub mod wsl;
 // (order 740-3k4s). Shared rather than copied: the probe's discriminating form
 // was measured, not reasoned, and two hand-written variants of it silently
 // passed against a dead port before the surviving one was found.
-mod readiness;
+// ORDER 740-3k4s — PUBLIC because the Windows tray is the third consumer.
+// The module doc's "known triplication, deliberately not resolved" note was
+// written when wsl_lifecycle.rs was under active edit and a cross-crate move
+// would have collided. That has now happened, from the Windows host, with a
+// live reprovision behind it — so the copy is gone and this is the one
+// definition all three provisioning paths install.
+pub mod readiness;
 
 /// Self-contained control-wire client for non-interactive guest exec (the wire
 /// half of `VmRuntime::exec` on vsock backends). Cross-platform / unit-testable
