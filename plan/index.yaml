@@ -32538,6 +32538,12 @@ plan_index:
         preconditions. Without them the fleet produces more data and less
         agreement, which is the failure mode worth naming before more hosts join.
       events:
+        - type: progress
+          ts: "2026-08-30T00:00:02Z"
+          agent_id: "linux-yoga-opus5-20260830t000002z"
+          host: linux
+          summary: |
+            First rung landed in 465d98d2b: scripts/hardware-fingerprint.sh derives a comparable key (cpu model + physical/logical cores, gpu model, npu vendor + node, ram class) from the capability document, excluding kernel release, driver, hostname, probe identity and timestamp. compare mode REFUSES an untrue twin claim, naming the differing fields, exit 1. Gate scripts/test-hardware-fingerprint.sh wired into build.sh --check. FIRST REAL USE REFUSED THE FLEET'S TWIN PAIR: yoga is a Ryzen AI 5 340, 6c/12t; yolanda is a Ryzen AI 7 350, 8c/16t. Different parts, so the pair cannot isolate the OS or the container substrate and no tier matrix may be keyed on it as a control. Both machines report the IDENTICAL GPU model string 'Krackan [Radeon 840M / 860M Graphics]' — AMD ships 840M and 860M under one PCI name — so a fingerprint keyed on the GPU would have blessed the false control outright; the CPU part is the only discriminator. RAM class is document-only and reports unknown when the probe did not record it: reading /proc/meminfo instead would substitute a different machine's number for a foreign document and would make one document fingerprint differently depending on where it is read. NOT YET DONE: recording host RAM in the probe (accel_probe.rs, owned by lenovinha under 935-jhh5 today), and keying the accel matrix rows on (fingerprint, substrate). yoga fingerprint db66f5ab2978d77a.
         - type: note
           ts: "2026-08-17T21:21:10Z"
           agent_id: linux-macuahuitl-opus5-20260817T113400Z
