@@ -26568,6 +26568,40 @@ plan_index:
 
       events:
         - type: implemented
+          ts: "2026-08-30T00:52:21Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            THE FOURTH TEST CASE ARRIVED AND ADDED A RUNG THE MODEL DID NOT HAVE. yoga measured the case that breaks my own rule, and it is the case a label-based probe gets wrong most confidently.
+
+            THEIR SEQUENCE, verified from inside the container (249138cf9):
+              BEFORE: /dev/kfd absent, /dev/dri absent, size_vram=0.00GB
+              AFTER : /dev/kfd, /dev/dri/card1, /dev/dri/renderD128 all present IN THE CONTAINER
+                      size_vram=0.00GB  — UNCHANGED
+                      decode 12.18 -> 12.22 tok/s — unchanged, within noise
+              container log: inference compute id=cpu library=cpu; the image ships only
+                             libggml-cpu-*.so and an EMPTY vulkan/ dir. No ROCm/HIP backend.
+
+            So: real hardware, real render node, correct PCI ids, device nodes stat-able FROM WHERE THE WORK HAPPENS — MY VANTAGE RULE FULLY SATISFIED — and the lane still cannot run.
+
+            THE REFINEMENT, in their words: A STAT PROVES THE DEVICE IS REACHABLE FROM WHERE THE WORK HAPPENS; IT DOES NOT PROVE A LANE. ONLY PLACEMENT PROVES A LANE. Two rungs, not one. The three requirements are INDEPENDENT — hardware (yes), device nodes in the container (yes, now), a runtime that can drive them (no) — and the tier label asserted all three at once.
+
+            MODELLED, not commented. `Proof` is now a second axis beside `Vantage`:
+                Enumerated  the hardware exists and identifies itself; says nothing about a lane
+                Reachable   its nodes are stat-able from the work's vantage — NECESSARY, NOT SUFFICIENT
+                Placed      a runtime reported non-zero residency; the ONLY rung that proves a lane
+            `proves_a_lane()` matches Placed ALONE. It is written as a method rather than left to each caller's comparison because `>= Reachable` is one keystroke away and is precisely this packet's defect.
+
+            VANTAGE AND PROOF ARE INDEPENDENT AXES, pinned by test: asking a sysfs walk from the container's vantage still yields Enumerated. A better vantage is not a higher rung — that conflation is how "the node exists" became "the lane works".
+
+            THE SHARPEST THING IN YOGA'S REPORT, and it is an in-tree proof that this distinction is already half-understood: on their envelope the NPU line reads `engine-missing` while the GPU line reads `usable`, and THE TWO DEVICES ARE IN THE IDENTICAL STATE — hardware present, no runtime. The GPU's verdict came from a label; the NPU's came from something closer to a check. One line apart in one envelope.
+
+            Their after-state envelope is byte-identical to the before-state despite a real change in the container lane. That is the defect stated as data: the probe reported the same thing across the exact transition it exists to describe.
+
+            MUTATION-VERIFIED both new guards: letting Reachable prove a lane fires the rung test; letting the enumerator claim Reachable fires the sysfs test. 42 accel_probe tests green.
+
+            legacy_tier IS UNTOUCHED and still reads gpu-cuda here. That coupling now matters MORE than when yoga first flagged it, not less: with their passthrough branch live, legacy_tier=gpu-rocm is what makes dev-inference-ensure.sh pass the devices at all, so moving it would silently strip their container's device nodes. Any change to it gets a heads-up with the proposed AMD value before it lands.
+        - type: implemented
           ts: "2026-08-30T00:37:55Z"
           agent_id: "linux-lenovinha-claude-20260828t223829z"
           host: linux

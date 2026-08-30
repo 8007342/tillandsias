@@ -819,6 +819,59 @@ impl Vantage {
     }
 }
 
+/// HOW FAR THE EVIDENCE ACTUALLY GOES. Yoga's second refinement, measured on
+/// their host 2026-08-30, and it is a rung this model did not have.
+///
+/// My rule after their first message was "statted from where the work happens".
+/// They then supplied the case that breaks it, and it is the case a
+/// label-based probe gets wrong most confidently:
+///
+///     hardware present                              yes  (real AMD, real PCI ids)
+///     device nodes stat-able INSIDE the container   yes  (/dev/kfd, /dev/dri/renderD128)
+///     a runtime that can drive them                 NO   (no ROCm/HIP backend in the image)
+///     -> size_vram = 0.00GB, decode 12.18 -> 12.22 tok/s, unchanged
+///
+/// EVERY SIGNAL SHORT OF PLACEMENT SAID YES. The vantage rule was satisfied and
+/// the lane still could not run. So: A STAT PROVES THE DEVICE IS REACHABLE FROM
+/// WHERE THE WORK HAPPENS; IT DOES NOT PROVE A LANE. ONLY PLACEMENT PROVES A
+/// LANE. Two rungs, not one — and the three requirements (hardware, device
+/// nodes, a runtime) are INDEPENDENT. The tier label asserted all three.
+///
+/// THE IN-TREE PROOF THAT THIS DISTINCTION IS ALREADY UNDERSTOOD, and the
+/// sharpest thing in yoga's report: on that same envelope the NPU line reads
+/// `engine-missing` while the GPU line reads `usable` — the two devices are in
+/// the IDENTICAL state. The GPU's verdict came from a label; the NPU's came
+/// from something closer to a check.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Proof {
+    /// The hardware exists and identifies itself. Says nothing about any lane.
+    Enumerated,
+    /// Its device nodes are stat-able from the vantage the work runs in.
+    /// Necessary, and NOT sufficient — this is exactly where yoga's host sat
+    /// with size_vram still 0.
+    Reachable,
+    /// Work was actually placed on it: a runtime reported non-zero residency.
+    /// The only rung that proves a lane.
+    Placed,
+}
+
+impl Proof {
+    pub fn token(&self) -> &'static str {
+        match self {
+            Proof::Enumerated => "enumerated",
+            Proof::Reachable => "reachable",
+            Proof::Placed => "placed",
+        }
+    }
+    /// A lane may be ADVERTISED only at the top rung. Deliberately not `>=
+    /// Reachable`: that is the mistake this whole packet family is about, and
+    /// it is one keystroke away, so it is stated as a method rather than left
+    /// to each caller's comparison.
+    pub fn proves_a_lane(&self) -> bool {
+        matches!(self, Proof::Placed)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DrmRenderNode {
     /// e.g. "renderD128"
@@ -832,6 +885,11 @@ pub struct DrmRenderNode {
     /// WHERE this was observed. Set by the enumerator, never by a caller: a
     /// record that could be relabelled is a label again.
     pub vantage: Vantage,
+    /// HOW FAR the evidence goes. An enumeration can only ever establish
+    /// `Enumerated`; reaching `Reachable` needs a stat from the work's vantage
+    /// and `Placed` needs a runtime's residency report, neither of which a
+    /// sysfs walk can do. Hardcoded here so no caller can inflate it.
+    pub proof: Proof,
 }
 
 impl DrmRenderNode {
@@ -903,6 +961,10 @@ pub fn enumerate_render_nodes_at(root: &std::path::Path, vantage: Vantage) -> Ve
             // caller's business; what it can honestly say is "I saw this from
             // where I ran". Production passes /sys/class/drm on the host.
             vantage,
+            // A sysfs walk sees hardware. It cannot see a container's device
+            // list and it cannot see size_vram, so this is the ONLY rung it is
+            // entitled to claim.
+            proof: Proof::Enumerated,
         });
     }
     out
@@ -1649,6 +1711,55 @@ fn slug(raw: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    /// YOGA'S SECOND REFINEMENT, pinned as a rule rather than a comment: a stat
+    /// proves the DEVICE is reachable; only PLACEMENT proves a lane.
+    ///
+    /// Their measured case is the reason this rung exists — real AMD hardware,
+    /// real render node, correct PCI ids, /dev/kfd and /dev/dri/renderD128
+    /// stat-able INSIDE the container, and size_vram still 0.00GB with decode
+    /// unchanged at 12.2 tok/s. Every signal short of placement said yes.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn only_placement_proves_a_lane_reachable_is_not_enough() {
+        assert!(!super::Proof::Enumerated.proves_a_lane());
+        assert!(
+            !super::Proof::Reachable.proves_a_lane(),
+            "REACHABLE MUST NOT PROVE A LANE — yoga's host had device nodes in \
+             the container and size_vram=0; this is the exact assertion that \
+             stops the next reader treating a successful stat as a working lane"
+        );
+        assert!(super::Proof::Placed.proves_a_lane());
+        // The rungs are ordered, so a future caller can ask "at least
+        // Reachable" for diagnosis without that ordering implying a lane.
+        assert!(super::Proof::Enumerated < super::Proof::Reachable);
+        assert!(super::Proof::Reachable < super::Proof::Placed);
+    }
+
+    /// A sysfs walk may claim ONLY the bottom rung. It cannot see a container's
+    /// device list and cannot see size_vram, so any higher claim would be the
+    /// substitution this packet exists to end.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_sysfs_enumeration_claims_only_the_enumerated_rung() {
+        let root = drm_fixture(&[("renderD128", "0x1002\n", "0x1638\n", "amdgpu")]);
+        let nodes = super::enumerate_render_nodes_at(&root, super::Vantage::Host);
+        assert_eq!(nodes[0].proof, super::Proof::Enumerated);
+        assert!(
+            !nodes[0].proof.proves_a_lane(),
+            "an enumeration must never advertise a lane"
+        );
+        // Even asked from the container's vantage, a sysfs walk is still only
+        // an enumeration — the vantage improves WHERE, not HOW FAR.
+        let inside = super::enumerate_render_nodes_at(&root, super::Vantage::Container);
+        assert_eq!(inside[0].vantage.token(), "container");
+        assert_eq!(
+            inside[0].proof,
+            super::Proof::Enumerated,
+            "vantage and proof are independent axes; a better vantage is not a higher rung"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     /// ORDER 793-zumy. Fixture trees, never the real /sys — a test that read
     /// this machine would assert whatever it happens to be, which is the
