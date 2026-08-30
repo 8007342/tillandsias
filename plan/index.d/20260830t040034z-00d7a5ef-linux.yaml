@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: nix-cache-and-crane-build-path-with-its-instrumentation
+    event:
+      type: note
+      ts: "2026-08-30T04:00:34Z"
+      agent_id: linux-macuahuitl-claude-20260830t040033z
+      host: linux
+      summary: >
+        FLEET ADOPTION PROBES (2026-08-30, for the instrumentation's first rows). macuahuitl: service was silently STOPPED since the host reboot — restarted, 4 pinned roots, 20G store; reboot-survivability belongs in this packet's scope (a cache that dies with the boot is measured as absent every morning). yolanda: ABSENT BY SUBSTRATE, and ruled a CATEGORY BOUNDARY rather than a deficiency — the Windows build distro (tillandsias-build) has no nix, no /nix, no podman, and the enclave lives in a SEPARATE runtime distro, so the daily-maintenance scoping ('Linux hosts with a running enclave') is ambiguous there in a way it is not on single-distro hosts. COORDINATOR RULING: Windows is out of cache-service scope until a Windows nix lane exists; the instrumentation records it as lane=none/substrate-absent, not as a zero hit rate. The probe script's own behaviour was right (ok:nix-cache-status:absent, rc=0 — an absence reported as a fact, not an error). lenovinha probe pending.
