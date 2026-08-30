@@ -2453,6 +2453,74 @@ plan_index:
         - "Spec/Cheatsheet patch list published with specific file:line references"
       events:
         - type: progress
+          ts: "2026-08-30T17:24:39Z"
+          agent_id: "linux-lenovinha-claude-20260830t171432z"
+          host: linux
+          summary: |
+            P5 DONE: openspec/specs/network-scenarios/spec.md now exists (linux slice,
+            cycle-scoped claim on a multi_cycle packet; phase stays `review`, NOT closed).
+
+            PUBLISHING IT CORRECTED THE DRAFT THREE TIMES, which is the argument for
+            verifying a catalog before making it normative rather than after:
+
+              1. S0 DROPPED. The draft listed "S0 none -- no network. (Nothing uses this
+                 today; candidate for observatorium.)" A posture with no taker is a label
+                 without wiring, and publishing it as available invites someone to "use the
+                 existing S0" for something it was never shaped around. The spec says S0 is
+                 minted when it has a taker, not before.
+
+              2. S6 ADDED, and section 2 asked for it itself. Its last row admits "the
+                 browser runs on a default-netns posture the catalog has no name for".
+                 Verified: main.rs fn build_project_browser_spec contains ZERO .network(
+                 calls across its whole body (11904-12009), so the browser inherits
+                 podman's default rootless netns BY OMISSION. A posture reached by omission
+                 is the one most likely to be adopted by accident, which is exactly why it
+                 needs a name -- and the spec's scenario says so, along with the warning
+                 that the default netns is NOT the enclave and does have outbound access.
+
+              3. S4'S RETIREMENT MECHANISM CORRECTED, and the correction is in the safe
+                 direction. The draft says "the policy layer now denylists --network=host
+                 (policy.rs:271,280)". Two things wrong. The citation points at a TEST, not
+                 the mechanism. And it is not a denylist: fn is_allowlisted_passthrough_option
+                 admits an option only if it starts with --device= and carries a value, and
+                 fn disallowed_passthrough_options returns everything else. So --network=host
+                 is refused because NOTHING but a device flag is permitted. That is strictly
+                 stronger than a denylist, which must enumerate every dangerous flag in
+                 advance and silently admits the next one nobody thought of. The spec states
+                 the allowlist form and says why it is the stronger one.
+
+            SCENARIO NUMBERS ARE PINNED AS PERMANENT in the spec's invariants, S4's number
+            included: the label leaks into comments, audits and commit messages, and a
+            pushed reference cannot be corrected -- the same reason order tokens are never
+            renumbered.
+
+            LEFT UNBOUND IN litmus-bindings.yaml, deliberately. 38 of 177 specs already
+            carry no binding, so this is a tolerated state rather than debt I am adding.
+            Binding it to litmus:enclave-membership-documented would OVERSTATE coverage:
+            that guard tests whether the enclave-network spec names every attach site, not
+            whether the scenario catalog is right. The spec's own Litmus Tests section says
+            plainly what exists and what does not -- the enumeration half of P5's proposed
+            litmus is built (check-enclave-membership-documented.sh finds every attach
+            site); the scenario-naming half needs scenario CONSTANTS in the launch
+            builders, which is a code change, not a documentation act, and I did not invent
+            it.
+
+            SECTION 2 IS MARKED SUPERSEDED IN PART rather than deleted: the spec does not
+            duplicate its operation table, so deleting it would lose content. The note names
+            all three corrections so a reader who finds the old catalog quoted elsewhere can
+            tell which way the disagreement resolves.
+
+            245 AFTER NINE SLICES. The NA-05 patch list now has exactly ONE open work item:
+            P4's vsock-transport half of the platform matrix. P1 is blocked on the
+            git-mirror-egress verdict; P6's remainder is an operator decision. Sections 2,
+            4 and 7 still carry line citations.
+        - type: claim
+          ts: "2026-08-30T17:14:47Z"
+          agent_id: "linux-lenovinha-claude-20260830t171432z"
+          host: linux
+          summary: |
+            P5 slice: the network-scenarios spec does not exist. Verify section 2's S0-S5 catalog against the real network topologies before publishing it as normative.
+        - type: progress
           ts: "2026-08-30T16:19:31Z"
           agent_id: "linux-lenovinha-claude-20260830t161432z"
           host: linux
