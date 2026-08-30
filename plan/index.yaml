@@ -26567,6 +26567,30 @@ plan_index:
 
 
       events:
+        - type: verified
+          ts: "2026-08-30T03:49:34Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            HANDOFF STATUS AGAINST THE FOUR EXIT CRITERIA, stated honestly rather than rounded up. THE ENUMERATION REDESIGN IS BUILT AND WIRED; THIS PACKET IS NOT CLOSABLE FROM THIS HOST.
+
+            CRITERION 1 — "a WSL2 guest with /dev/dxg AND a Vulkan ICD that enumerates a non-CPU device reports a usable GPU; yolanda specifically stops reporting cpu-only": NOT MET, AND NOT MINE TO MEET. It requires a WSL2 host with a Vulkan ICD INSTALLED. Yolanda's host has none, so it correctly reports present-unusable — and they declined to install one, which was right: provisioning the operator's machine to make a criterion pass is not evidence. The clause is satisfiable only on a host someone chooses to provision, and that is a Windows-host decision, not a Linux redesign.
+
+            CRITERION 2 — "/dev/dxg present with no loader reports engine-missing and NAMES it": MET, by yolanda, before I touched anything (engine-missing:no-vulkan-icd).
+
+            CRITERION 3 — "a software rasterizer NEVER satisfies the GPU check, with a test pinning the rejection": MET FOR THE DRM PATH, STRUCTURALLY. lavapipe/llvmpipe are userspace-only ICDs that create no DRM render node, so an enumeration of render nodes cannot see them at all — no blocklist, nothing to rot when a new rasterizer appears. Pinned by a_software_rasterizer_cannot_satisfy_the_gpu_check, and this host has Mesa's FULL ICD set installed while still enumerating exactly two real GPUs. STILL UNIMPLEMENTABLE ON THE WSL2 PATH for the reason yolanda gave: /dev/dxg is not a DRM device, creates no render node, and nothing there enumerates — so there remains no enumeration in which to reject anything. That half needs Vulkan enumeration, which needs an ICD, which is criterion 1's blocker wearing a different hat.
+
+            CRITERION 4 — "regression is impossible on hosts that were already correct": PARTIALLY, AND I DELIBERATELY BROKE ONE CLAUSE. Verified unchanged: NVIDIA on this host still reports lanes=[container, host-native] reason=None (its container lane is backed by reading the CDI spec, which is real host-side evidence about the WIRING); the AMD arm here is untouched because Cezanne fails earlier at rocm-runtime-missing; the workspace still compiles for a non-host target (0 errors, x86_64-pc-windows-gnu), which covers the macOS cfg arms structurally.
+
+              THE DELIBERATE CHANGE: an AMD host WITH a working ROCm runtime previously reported lanes=[container, host-native] reason=None and now reports lanes=[host-native] reason=container-lane-unverified. That IS a changed envelope on a host the criterion calls "already correct" — and the criterion's premise is what yoga measured as false. Their host produced that exact old envelope while the container had no /dev/kfd, no /dev/dri and size_vram=0. Calling it correct was the defect. Changed with their explicit green light after their ladder finished.
+
+            WHAT IS BUILT AND LANDED: DRM render-node enumeration carrying PCI vendor+device and the bound kernel driver; a Vantage axis (host vs container) set by the enumerator, never a caller; a Proof axis (Enumerated / Reachable / Placed) where proves_a_lane() matches Placed ALONE; the two pinned INDEPENDENT, because a better vantage is not a higher rung. Nine tests, fixture-based, four mutation-verified.
+
+            NEXT STEPS FOR WHOEVER TAKES IT:
+              1. Criterion 1 + the WSL2 half of criterion 3 are ONE task on a Windows host: install a Vulkan ICD, add Vulkan enumeration, reject PHYSICAL_DEVICE_TYPE_CPU / DRIVER_ID_MESA_LLVMPIPE. Do NOT attempt it from Linux — there is nothing here to enumerate.
+              2. Wire Proof::Reachable and Proof::Placed to real sources. Nothing currently produces either rung; they are modelled and unused. Reachable wants a stat from inside the container (images/inference/entrypoint.sh already does exactly this for cuda), Placed wants ollama's /api/ps size_vram. Until something produces them, the model is honest but inert.
+              3. legacy_tier is UNTOUCHED and must stay so without a heads-up to yoga: with their passthrough branch live it is what makes dev-inference-ensure.sh pass their device nodes at all, so moving it silently strips them.
+              4. Fields are STABLE for yoga's hwfp-v2 bump: vendor_id: u16, device_id: u16, driver, node, vantage, proof. Use vendor_id AND device_id together — 0x1638 is both yoga's Krackan and this host's Cezanne.
         - type: implemented
           ts: "2026-08-30T01:04:38Z"
           agent_id: "linux-lenovinha-claude-20260828t223829z"
