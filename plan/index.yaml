@@ -1475,6 +1475,34 @@ plan_index:
       status: ready
       events:
         - type: progress
+          ts: "2026-08-30T23:40:16Z"
+          agent_id: "windows-yolanda-claude-20260830t162208z"
+          host: yolanda
+          summary: |
+            SC-11 NOW HAS A MEASUREMENT THAT REFUSES INSTEAD OF GUESSING — scripts/measure-sc11-idle-cpu.ps1.
+
+            Last cycle I pinned SC-11's unit, measured, and threw the number away because the tray's control wire flapped five times inside the window. I closed that note by saying the precondition should be asserted BY the measurement rather than assumed, and that it was three lines. This is that, written rather than recommended.
+
+            WHAT IT ENFORCES, both of them preconditions that have already produced numbers looking like results:
+              * THE UNIT. Reports share of ONE CORE, the reading pinned on 2026-08-30, and prints share-of-machine only as a labelled context field that is never the verdict. The first live measurement straddled the threshold precisely because the unit was unstated -- 0.11% of a core and 0.007% of a 16-core machine from the SAME samples.
+              * THE HEALTHY-VM CONDITION. Records the tray log's byte offset BEFORE sampling, reads only the bytes appended during the window, and REFUSES if "control wire unreachable" appears in them. Scoping to the window matters: counting flaps over the whole file would fail a tray for a disconnect that happened days ago.
+
+            A refusal carries no cpu_percent field at all. A zero there would be a measurement claim and there is no measurement -- the same shape as the inference harness, and for the same reason: "the tray was not idle" and "the idle tray used too much CPU" are different claims and only one is about the code.
+
+            FOUR CONTROLS, ALL EXERCISED:
+              1. no tray running          -> refused: "no tillandsias-tray process is running"
+              2. live tray, flapping wire -> refused: "control wire flapped 2 time(s) inside the window -- the tray was reconnecting, not idle"
+              3. measurement path          -> produced a well-formed verdict with the pinned unit and flaps_in_window=0
+              4. missing tray log          -> refused: "cannot verify the healthy-VM precondition, and an unverified precondition is not a passed one"
+
+            Control 2 is the one that matters and it fired on the real defect: the wire flapped twice inside a 90-second window on this host tonight, which is a faster cadence than the five-in-five-minutes I saw earlier.
+
+            WHAT CONTROL 3 IS AND IS NOT, stated because it prints a number that looks like an answer: it ran against a deliberately empty log file, so it exercises the arithmetic and the output shape and proves the measurement path is reachable. It is NOT an SC-11 reading -- the precondition was bypassed by construction, not satisfied. Its 0.2603% should not be quoted as a result any more than last cycle's 0.1615% should have been.
+
+            SC-11 REMAINS UNMEASURED ON THIS HOST, and now for a stated reason rather than an ambiguous one: the control wire will not hold still long enough. Two windows tonight, both refused. The packet stays ready.
+
+            THE FLAPPING IS WORTH SOMEONE'S ATTENTION, and I am still not claiming a root cause. Tonight: 5 events in a 5-minute window, then 2 in a 90-second window. Earlier in the log the same message appears once, on 2026-08-26. So it is recent and it is accelerating on this host. My standing hypothesis is guest starvation from my own day (reset-guest, expert-serve, 7B model loads, a cold nix cross-compile, ~1 GB of guest headroom), which would make it my artifact rather than a product defect -- but I have not correlated flaps against guest memory or CPU, and the honest next step is to run the harness on a quiet host before concluding anything. If it refuses there too, the flapping is real and is a defect in its own right; if it passes, the criterion closes and my hypothesis was right.
+        - type: progress
           ts: "2026-08-30T22:48:00Z"
           agent_id: "windows-yolanda-claude-20260830t162208z"
           host: yolanda
