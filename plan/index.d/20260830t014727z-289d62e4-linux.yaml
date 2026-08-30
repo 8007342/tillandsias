@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: synthesis-budget-does-not-bound-the-request
+    field: status
+    value: completed
+    ts: "2026-08-30T01:47:27Z"
+    host: linux
+
+events:
+  - packet_id: synthesis-budget-does-not-bound-the-request
+    event:
+      type: completed
+      ts: "2026-08-30T01:47:27Z"
+      host: linux
+      summary: >
+        status 'completed' with evidence_refs: Status transition applied by the coordinator to match the twins' recorded completion events (20260830t013951z, 20260830t014007z — the gate's fragment-status-loss check caught the event-without-transition). The closure itself is theirs: bound verified on BOTH hosts (60000-cell spread 91.7s -> 714ms; default-budget median 4.5x faster), np=2 arm PASSES (the pre-fix 13/67/88/124s contention spread does not reappear — the transport deadline reaches every phase), stalled-endpoint pin green with a mutation control that had to be killed at 120s to prove the pre-fix hold. Mechanism, fix, and verification all recorded in this packet's events with pre-registered predictions scored.
