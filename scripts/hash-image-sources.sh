@@ -110,7 +110,7 @@ manifest=("layer-policy:squash-new")
 
 # Tracked entries: mode and content id come straight from the index, so the
 # manifest line is already normalized and no file is read from disk.
-for entry in "${indexed_entries[@]}"; do
+for entry in ${indexed_entries[@]+"${indexed_entries[@]}"}; do
     gmode="${entry%%:*}"
     rest="${entry#*:}"
     oid="${rest%%:*}"
@@ -125,7 +125,7 @@ for entry in "${indexed_entries[@]}"; do
     manifest+=("${path_hash}:${type}:${gmode}:${oid}")
 done
 
-for file in "${file_list[@]}"; do
+for file in ${file_list[@]+"${file_list[@]}"}; do
     rel="${file#"$root"/}"
     path_hash="$(printf '%s' "$rel" | "${PORTABLE_SHA256[@]}" | cut -d' ' -f1)"
     if mode="$(stat -c '%a' "$file" 2>/dev/null)"; then
