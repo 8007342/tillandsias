@@ -2562,6 +2562,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Long-running view agreement check passed"
 
+    _step "Checking plan fragments use keys the fold reads (944-vim8)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-keys-are-read.sh" 2>&1; then
+        _error "a plan/index.d/ fragment uses a top-level key the fold discards (944-vim8) — see the verdict line above"
+        exit 1
+    fi
+    _info "Fragment key check passed"
+
     _step "Checking the enclave membership list matches the code (245 P8)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-enclave-membership-documented.sh" 2>&1; then
         _error "an enclave attach site is undocumented, or the spec names one that is gone (245 P8) — see the verdict line above"

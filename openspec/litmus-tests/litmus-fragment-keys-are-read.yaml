@@ -1,0 +1,84 @@
+# @trace spec:methodology-accountability
+# @trace order:944-vim8, order:635-i6vm
+#
+# ORDER 944-vim8. Four packets were filed across four cycles in fragments keyed
+# `steps:` — the key the BASE ledger uses. The fold reads only `packets:`,
+# `events:`, `fields:` and `status:`. Those fragments parsed, passed
+# validate-yaml, passed `tillandsias-plan check` (same packet count before and
+# after: 696, then 700 once re-filed correctly), read correctly in review, and
+# were silently discarded by the next compaction.
+#
+# The failure was indistinguishable from success at every checkpoint a worker
+# has. It is the G-Set no-op §7.2 documents for STATUS re-declaration (635-i6vm,
+# 11 of 21 completions lost) met again at packet DEFINITION — the skill warned
+# about the symptom it was bitten by and nobody generalised it to "a key the
+# fold does not read".
+#
+# The KEY-LIST arm is the load-bearing one: the guard hard-codes the readable
+# keys so it cannot fail open, and that copy must be checked against the source
+# it copies, or the guard becomes its own stale premise.
+name: litmus:fragment-keys-are-read
+spec: methodology-accountability
+phase: pre-build
+description: >
+  Pin that every plan/index.d/ fragment uses top-level keys the fold actually
+  reads, that the guard's key list matches fragments.rs, and that the exact
+  `steps:` shape which silently lost four packets is refused.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/check-fragment-keys-are-read.sh
+  - workspace contains crates/tillandsias-plan/src/fragments.rs
+  - shell utilities (bash, grep, sed, mktemp) are available in PATH
+
+critical_path:
+  - step: "the guard parses, is executable, and the live fragment directory agrees"
+    command: "bash -n scripts/check-fragment-keys-are-read.sh && test -x scripts/check-fragment-keys-are-read.sh && out=$(scripts/check-fragment-keys-are-read.sh) && printf '%s' \"$out\" | grep -qE '^ok:fragment-keys:[0-9]+ fragment\\(s\\) checked$' && echo 'ok: live fragments use read keys'"
+    timeout_ms: 20000
+    expected_behavior: "ok: live fragments use read keys"
+
+  - step: "NEGATIVE CONTROL — the exact `steps:` shape that silently lost four packets is refused"
+    command: "T=$(mktemp -d); printf 'steps:\\n  - packet_id: lost-forever\\n    order: 999-zzz\\n    status: ready\\n' > \"$T/a.yaml\"; out=$(TILLANDSIAS_FRAGMENT_DIR=\"$T\" scripts/check-fragment-keys-are-read.sh 2>/dev/null); rc=$?; rm -rf \"$T\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -q '^violation:fragment-keys:1 unread key(s)$' && echo 'ok: steps-keyed fragment refused' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: steps-keyed fragment refused"
+
+  - step: "POSITIVE CONTROL — all four real channels are accepted, so the guard cannot pass the negative by refusing everything"
+    command: "T=$(mktemp -d); printf 'packets: []\\nevents: []\\nfields: []\\nstatus: []\\n' > \"$T/a.yaml\"; out=$(TILLANDSIAS_FRAGMENT_DIR=\"$T\" scripts/check-fragment-keys-are-read.sh 2>/dev/null); rc=$?; rm -rf \"$T\"; [ \"$rc\" -eq 0 ] && echo 'ok: every read channel accepted' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: every read channel accepted"
+
+  - step: "SCOPE CONTROL — comments and nested keys are not top-level keys and must not be flagged"
+    command: "T=$(mktemp -d); printf '# packets: not a key\\npackets:\\n  - packet_id: x\\n    order: 1-a\\n    nested_key: value\\n' > \"$T/a.yaml\"; out=$(TILLANDSIAS_FRAGMENT_DIR=\"$T\" scripts/check-fragment-keys-are-read.sh 2>/dev/null); rc=$?; rm -rf \"$T\"; [ \"$rc\" -eq 0 ] && echo 'ok: comments and nested keys ignored' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: comments and nested keys ignored"
+
+  - step: "THE GUARD'S KEY LIST MATCHES fragments.rs — a hard-coded allowlist that drifts from the fold becomes its own stale premise"
+    command: "for k in packets events fields status; do grep -q \"\\\"$k\\\"\" crates/tillandsias-plan/src/fragments.rs || { echo \"FAIL: fragments.rs does not name channel $k\"; exit 1; }; grep -q \" $k \" scripts/check-fragment-keys-are-read.sh || { echo \"FAIL: the guard's READ_KEYS omits $k\"; exit 1; }; done; echo 'ok: guard key list agrees with the fold'"
+    timeout_ms: 10000
+    expected_behavior: "ok: guard key list agrees with the fold"
+
+  - step: "build.sh consults the guard (wiring is real, not prose)"
+    command: "grep -q 'check-fragment-keys-are-read.sh' build.sh && echo 'ok: wired into the gate'"
+    timeout_ms: 8000
+    expected_behavior: "ok: wired into the gate"
+
+observability:
+  traces:
+    - "@trace spec:methodology-accountability"
+    - "@trace order:944-vim8"
+  expected_log: "plan fragments use only fold-readable top-level keys; steps-keyed definitions refused"
+  log_fields:
+    spec: "methodology-accountability"
+    test: "fragment-keys-are-read"
+    artifact: "scripts/check-fragment-keys-are-read.sh"
+
+rollback:
+  on_failure: >
+    A fragment declares content under a top-level key the fold discards. Move it
+    to `packets:` (definitions), `events:` (event records) or `status:`/`fields:`
+    (LWW field writes). Do NOT resolve this by widening the guard's key list
+    unless the fold learned a new channel in the same commit — the list exists
+    to be narrower than YAML, and the four packets lost to `steps:` were lost
+    precisely because every other check was wider.
+  command: "scripts/check-fragment-keys-are-read.sh; grep -n 'for channel in' crates/tillandsias-plan/src/fragments.rs"

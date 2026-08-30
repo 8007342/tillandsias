@@ -4894,6 +4894,12 @@ plan_index:
         - "proposed mechanism set, each with a verifiable closure + staged adoption rung"
         - "Tlatoani sign-off recorded before any mechanism becomes worker-protocol contract"
       events:
+        - type: note
+          ts: "2026-08-30T21:20:59Z"
+          agent_id: "linux-lenovinha-claude-20260830t211433z"
+          host: linux
+          summary: |
+            THE GUARD F10'S SLICE DEFERRED IS BUILT: order 944-vim8, scripts/check-fragment-keys-are-read.sh, wired into ./build.sh --check and pinned by litmus:fragment-keys-are-read (6/6), mutation-tested. It refuses any plan/index.d/ fragment whose top-level key the fold does not read. Filed under packets: -- the key the packet exists to make mandatory, which is also the smallest possible demonstration that the fix works. NOT CLOSED, and the reason is worth carrying: the guard prevents RECURRENCE, it does not find fragments already lost in history. Three of my four were folded away and survive only as prose inside other packets; nobody has swept the ledger's history for others, and a sweep is a different piece of work than a gate. Status is implemented, not completed. ALSO WORTH RECORDING FOR THE INVENTORY: this is the second time in two cycles that a defect of mine was caught by an existing guard rather than by me -- 881-29me on the citation evidence, and append-event-archived-refusal on the lost packets. Both were guards someone else built for a neighbouring purpose. That is an argument for the guard-per-finding discipline this epic keeps producing, and it belongs in criterion 3's mechanism set as evidence that cheap guards pay for themselves in ways their authors do not predict.
         - type: progress
           ts: "2026-08-30T20:22:58Z"
           agent_id: "linux-lenovinha-claude-20260830t201434z"
