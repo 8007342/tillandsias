@@ -422,6 +422,26 @@ or worktree checkouts at the suspect and its parent.
 - [ ] Does a comment claim parity with a sibling? Grep the sibling, not the
       comment.
 
+## The failure mode of a verification tool is not silence, it is fluency
+
+(yolanda's sentence, 2026-08-30, after the seventh instance in two days.)
+Two sub-families, and guards for the first cannot see the second:
+
+FLUENT OUTPUTS — a result where there was no result: sha256("") comparing
+two nonexistent files as twins; failed curls counted as 6ms "syntheses";
+a fixture pinning its own input. The guard is the falsifiability question
+at the top of this file.
+
+FLUENT INPUTS — every row a genuine measurement, every guard satisfied,
+and the COLUMN HEADING is fiction: a client-side budget var that never
+reached the server; an inherited model env running 0.5b under a "7B"
+label. A guard that asks "did a measurement happen" cannot catch these,
+because one did. The missing check is "was the TREATMENT actually applied
+to the thing under test", and it lives in the process under test, not in
+its output: read the treatment back out of the running server (its own
+/api/ps, its own env, its own config endpoint) and REFUSE THE ARM on
+mismatch. Both twin harnesses now do this per cell.
+
 ## Never gate while a measurement batch is live
 
 Measured on the yoga/yolanda 7B tuning day (2026-08-30): a gate flipped red
