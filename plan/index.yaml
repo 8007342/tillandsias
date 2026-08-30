@@ -28254,6 +28254,74 @@ plan_index:
         an over-long-frame refusal test at each migrated call site. The scan is
         the load-bearing half; the refusal tests are the negative control.
       events:
+        - type: progress
+          ts: "2026-08-30T05:35:59Z"
+          agent_id: "linux-lenovinha-claude-20260830t051636z"
+          host: linux
+          summary: |
+            SLICE 6 LANDED (commit 42a7f8145). vsock_exec.rs read_envelope now decodes
+            through control_frame_codec(); its baseline row is DELETED, not lowered.
+            Ratchet 18 sites/10 files -> 17/9. No raw frame-length decode remains in
+            any Linux PRODUCTION path.
+
+            HOW, and why the shape matters. The session is framed ONCE per entry point
+            (frame_stream) and &mut ExecFramed<S> is threaded through, rather than a
+            Framed per call. The earlier note in this baseline warned that a per-call
+            Framed would over-read and drop pipelined bytes; that was correct and is
+            now MEASURED, not argued. Under a per-call FramedRead the new test
+            two_frames_in_one_write_are_both_read_back fails and several session tests
+            hang outright, because a guest that emits PtyData and PtyClose into one
+            segment loses the second frame to the dropped codec's buffer.
+
+            The feared 41-call-site restructure did not materialise. Every call site
+            passes a plain stream variable, so changing the variable's TYPE at the five
+            functions that own a stream left the ~110 call sites textually unchanged.
+            The whole production diff is five frame_stream() lines plus three helper
+            signatures.
+
+            THE WRITE SIDE IS A DISPOSITIONED KEEP, recorded at the site and in the
+            baseline. write_envelope still emits the u32-BE prefix itself, through two
+            staged write_all_bounded calls, because 690-eug2 bounds the LENGTH and the
+            BODY separately so a stalled writer names which half stalled, and
+            SinkExt::send encodes-and-writes in one call and cannot. Migrating it would
+            delete a diagnostic another packet deliberately built, and the assertion
+            'it must name WHICH part of the frame stalled' would have to be deleted
+            with it. This is the same class as the 828-r2ek keeps and the interop-peer
+            keeps: a criterion that can only be satisfied by removing evidence is not
+            satisfied, it is evaded. It writes via Framed::get_mut(), which is sound
+            ONLY because the Sink half is never used, so the codec write buffer is
+            always empty -- stated at the site so nobody later 'tidies' it into a send.
+            Note the ratchet does not count it either way: the scan counts DECODES.
+
+            NEGATIVE CONTROLS, both mutation-tested for teeth before being believed:
+              * an_oversize_inbound_frame_is_refused_by_the_codec_bound (criterion 3).
+                LengthDelimitedCodec's DEFAULT max_frame_length is 8 MiB, not
+                MAX_MESSAGE_BYTES, so a codec built without the bound would silently
+                widen the ceiling 128x and no existing test would notice -- they only
+                ever send legal frames. Widening the bound makes this test fail.
+              * two_frames_in_one_write_are_both_read_back, per above.
+
+            EXIT CRITERIA, honestly assessed at HEAD:
+              1. Linux production: DONE. Every Linux site is now migrated or carries a
+                 recorded disposition. macos-tray/pty_vsock_bridge.rs (5) and
+                 windows-tray/hvsocket.rs (2) remain, both unassessable from here.
+              2. ONE named constant: already satisfied -- every site takes
+                 MAX_MESSAGE_BYTES from control-wire, none defines its own.
+              3. Negative control at each migrated site: satisfied for this site.
+
+            CRITERION 1 IS STILL UNSATISFIABLE AS WRITTEN and I did not rewrite it,
+            because it is the packet's contract and the coordinator owns it. It says
+            'every site above', and that list counts test peers and blocking-stream
+            reads alongside async production sites; five Linux entries were already
+            dispositioned as keeps for reasons this packet accepted, so the criterion
+            can only ever be met by its own escape clause. The escape clause works --
+            it just means the criterion measures nothing. Proposal for the coordinator:
+            restate it as 'every site is migrated OR carries a recorded disposition,
+            and the ratchet baseline agrees with the tree', which is exactly what
+            litmus:one-length-delimited-framing-impl already executes.
+
+            85 tests pass in tillandsias-vm-layer (83 before).
+            litmus:one-length-delimited-framing-impl PASS. ./build.sh --check PASS.
         - type: claim
           ts: "2026-08-30T05:18:23Z"
           agent_id: "linux-lenovinha-claude-20260830t051636z"
