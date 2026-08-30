@@ -17,7 +17,7 @@ else
 fi
 
 violations=()
-for f in "${files[@]}"; do
+for f in ${files[@]+"${files[@]}"}; do
     [ -n "$f" ] || continue
     # Skip non-files or the checker itself
     if [ ! -f "$f" ] || [[ "$f" == "scripts/check-no-spawn-in-if-not.sh" ]]; then
@@ -42,7 +42,7 @@ done < <(git ls-files 'scripts/*.sh' 'build.sh' 2>/dev/null || true)
 
 if [ "${#violations[@]}" -gt 0 ]; then
     echo "violation:spawn-in-if-not: found ${#violations[@]} violations" >&2
-    for v in "${violations[@]}"; do
+    for v in ${violations[@]+"${violations[@]}"}; do
         echo "  $v" >&2
     done
     echo "Do not use 'if ! <pipeline>' because pipefail + SIGPIPE can invert the guard." >&2

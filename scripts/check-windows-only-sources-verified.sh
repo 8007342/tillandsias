@@ -338,7 +338,7 @@ case "${1:-check}" in
         # which is the failure this whole check exists to prevent.
         rm -rf "$STAMP_FILE.d"
         mkdir -p "$STAMP_FILE.d"
-        for f in "${SOURCES[@]}"; do
+        for f in ${SOURCES[@]+"${SOURCES[@]}"}; do
             rel="${f#"$ROOT"/}"
             printf '%s\n' "$f" | digest_of \
                 > "$STAMP_FILE.d/$(printf '%s' "$rel" | tr '/' '_')"
@@ -401,7 +401,7 @@ case "${1:-check}" in
             printf '  "result": "%s",\n' "$(json_escape "$RESULT_LINE")"
             printf '  "sources": {\n'
             _n=0
-            for f in "${SOURCES[@]}"; do
+            for f in ${SOURCES[@]+"${SOURCES[@]}"}; do
                 rel="${f#"$ROOT"/}"
                 _n=$((_n + 1))
                 if [ "$_n" -lt "${#SOURCES[@]}" ]; then
@@ -436,7 +436,7 @@ case "${1:-check}" in
             # bytes it has.
             _drifted=0
             _first=""
-            for f in "${SOURCES[@]}"; do
+            for f in ${SOURCES[@]+"${SOURCES[@]}"}; do
                 rel="${f#"$ROOT"/}"
                 _have="$(blob_hash_of "$f")"
                 # Line-oriented read of the one field that matters; no YAML/JSON
@@ -475,7 +475,7 @@ case "${1:-check}" in
         # and a rumour.
         changed=0
         first=""
-        for f in "${SOURCES[@]}"; do
+        for f in ${SOURCES[@]+"${SOURCES[@]}"}; do
             rel="${f#"$ROOT"/}"
             per_file="$(printf '%s\n' "$f" | digest_of)"
             prev_file="$STAMP_FILE.d/$(printf '%s' "$rel" | tr '/' '_')"

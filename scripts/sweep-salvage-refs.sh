@@ -95,7 +95,7 @@ if [ "$apply" -eq 1 ] && [ "$new" -gt 0 ]; then
     agent="${TILLANDSIAS_AGENT_ID:-$("$ROOT/scripts/agent-identity.sh" id salvage-sweep 2>/dev/null)}"
     host="$(hostname -s 2>/dev/null | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9-')"
     [ -n "$host" ] || host="unknown"
-    for entry in "${new_refs[@]}"; do
+    for entry in ${new_refs[@]+"${new_refs[@]}"}; do
         ref="${entry% *}"; sha="${entry##* }"
         summary="SALVAGED WORK AWAITING RECOVERY: $ref ($sha) is on the remote and not yet merged or consciously abandoned. Filed by scripts/sweep-salvage-refs.sh (874-w2gc). Inspect: git fetch $REMOTE $ref && git diff HEAD FETCH_HEAD --stat. When recovered or dismissed, say so in a follow-up event; deletion needs TILLANDSIAS_SALVAGE_DELETE_OK=1."
         if "$PLAN_BIN" append-event "$PACKET" progress --agent "$agent" --host "$host" --summary "$summary" >/dev/null 2>&1; then

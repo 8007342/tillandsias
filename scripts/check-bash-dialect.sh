@@ -90,6 +90,36 @@ GNUDU_EXEMPT='# gnu-du: ok'
 PAT_GNUSED='(^|[^A-Za-z0-9_])sed[^|;&()]*\\[SsWwBbDd]'
 GNUSED_EXEMPT='# gnu-sed: ok'
 
+# EMPTY-ARRAY EXPANSION UNDER `set -u` (761-g36m extension, 2026-08-30).
+# Not a bash-4-ism: `"${arr[@]}"` parses in both dialects. It is a SEMANTIC
+# divergence, the same family as the GNU date/du/sed rules above — bash 3.2
+# treats the expansion of an EMPTY array as an unbound variable and dies,
+# while bash 4.4+ expands it to nothing and carries on. So the construct is
+# invisible on every linux and windows lane and fatal on darwin.
+#
+# Measured 2026-08-30 on tlatoanis-macbook-air: 776-cm74 added a
+# `git ls-files` branch to hash-image-sources.sh that fills indexed_entries
+# and leaves file_list empty (the find branch does the reverse). Whichever
+# branch ran, the OTHER array was empty, so the script died at its `for`
+# with "file_list[@]: unbound variable", failing 747-knbp and BLOCKING EVERY
+# PUSH FROM THIS HOST. The gate below passed that file: the class it exists
+# to catch, with no rule for it.
+#
+# Scoped deliberately, because the bare construct is everywhere and mostly
+# fine. Flagged only where BOTH hold:
+#   - the array is initialised empty in this file (`arr=()`), i.e. it is
+#     populated conditionally and CAN be empty at the expansion, and
+#   - it is expanded by a `for x in "${arr[@]}"` loop header, the crash site.
+# `${#arr[@]}` is NOT flagged: verified on bash 3.2 that a count on an empty
+# array yields 0 rather than erroring, so count guards are genuinely safe.
+#
+# REMEDY: ${arr[@]+"${arr[@]}"} — inert when the array is non-empty, expands
+# to nothing instead of dying when it is empty.
+# Line-level exemption: `# maybe-empty: ok (<reason>)` where the array is
+# provably populated on every path reaching the loop.
+PAT_EMPTYARR='for +[A-Za-z_][A-Za-z0-9_]* +in +"\$\{[A-Za-z_][A-Za-z0-9_]*\[@\]\}"'
+EMPTYARR_EXEMPT='# maybe-empty: ok'
+
 in_allowlist() {
   case " $ALLOWLIST " in
     *" $1 "*) return 0 ;;
@@ -260,6 +290,34 @@ for f in $SCAN_FILES; do
   if [ -n "$gnused_bad" ]; then
     echo "[check-bash-dialect] UNEXEMPTED GNU-sed class in '$f' (BSD sed does not implement \\S \\s \\w \\b \\d and does NOT error — the substitution silently leaves the input unchanged, so the consumer gets the whole line; see 803-bqte):" >&2
     printf '%s' "$gnused_bad" | head -3 >&2
+    unguarded=$((unguarded + 1))
+  fi
+
+  # Empty-array expansion under `set -u`. Only meaningful when the file
+  # actually runs under -u; without it bash 3.2 expands an empty array to
+  # nothing exactly like bash 4, and there is nothing to catch.
+  emptyarr_bad=""
+  if grep -qE '^set -[a-z]*u' "$f"; then
+    _ea="$(code_of "$f" | grep -nE "$PAT_EMPTYARR" || true)"
+    if [ -n "$_ea" ]; then
+      while IFS= read -r _h; do
+        [ -n "$_h" ] || continue
+        _ln="${_h%%:*}"
+        if sed -n "${_ln}p" "$f" | grep -qF "$EMPTYARR_EXEMPT"; then
+          continue
+        fi
+        # Only arrays this file initialises EMPTY can reach the loop empty.
+        _arr="$(printf '%s' "$_h" | sed -n 's/.*in *"\${\([A-Za-z_][A-Za-z0-9_]*\)\[@\]}".*/\1/p')"
+        [ -n "$_arr" ] || continue
+        grep -qE "^[[:space:]]*${_arr}=\(\)" "$f" || continue
+        emptyarr_bad="${emptyarr_bad}${_h}
+"
+      done <<< "$_ea"
+    fi
+  fi
+  if [ -n "$emptyarr_bad" ]; then
+    echo "[check-bash-dialect] EMPTY-ARRAY expansion under set -u in '$f' (bash 3.2 — the only bash macOS ships — dies with 'unbound variable' on an EMPTY array here, while bash 4.4+ expands to nothing, so this is invisible on linux/windows and fatal on darwin; broke 747-knbp 2026-08-30). Use \${arr[@]+\"\${arr[@]}\"}:" >&2
+    printf '%s' "$emptyarr_bad" | head -3 >&2
     unguarded=$((unguarded + 1))
   fi
 done

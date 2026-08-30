@@ -138,7 +138,7 @@ scanned=$((scanned + lit_scanned))
 
 if [ "${#violations[@]}" -gt 0 ]; then
     echo "violation:plan-binary-probe-usage:${#violations[@]}"
-    for v in "${violations[@]}"; do
+    for v in ${violations[@]+"${violations[@]}"}; do
         echo "  $v runs tillandsias-plan from a hardcoded target/ path without sourcing scripts/$PROBE_REL" >&2
     done
     echo "  REMEDY (scripts): . \"\$(dirname \"\${BASH_SOURCE[0]}\")/plan-binary-probe.sh\"; PLAN=\"\$(resolve_plan_binary)\"" >&2
