@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: synthesis-budget-does-not-bound-the-request
+    event:
+      type: completed
+      ts: "2026-08-30T01:40:07Z"
+      agent_id: linux-yoga-opus5-20260830t014007z
+      host: linux
+      summary: >
+        CLOSED on both hosts against 8021f337f. All three exit criteria met, each verified on yoga (Ryzen AI 5 340, 12 logical cores, ~9 GB free, no VM split) AND yolanda (Ryzen AI 7 350, 16 logical cores, ~1 GB free, WSL2) — both hosts, because eliminating memory pressure as the cause is what made the original finding credible, and a fix verified only on the roomy host would leave that confounder unexcluded. Binaries rebuilt from the fixed source before measuring on both (the installed binary is stale and would verify the old pipeline). 60000 CELL, np=1, 6 rows each: yoga 60739/60744/60060/60030/60043/60049 (spread 714 ms); yolanda 61231/60332/60397/60360/60364/60364 (spread 899 ms, worst +1231 ms over budget). Pre-fix yoga was 10002-101710, spread 91.7 SECONDS, worst row 41.7s BEYOND the budget bounding it. MEMORY PRESSURE DOES NOT BREAK THE PIN — the constrained host pins within 1.2s of budget, so the deadline is not missing a phase that only appears under pressure. DEFAULT CELL, np=1, 6 rows each: yoga 4434/3127/3155/3094/3123/3122; yolanda 4948/3400/3324/3257/3314/3267. Against pre-fix medians of 25.9s (yoga) and 74.6s (yolanda) — an unpredicted ~4-4.5x improvement to the ORDINARY path, because decomposition at pipeline.rs:582 carried no tokio timeout at all and every request had been paying an unbudgeted phase. EXIT CRITERION 3 (np=2), treatment verified from /proc environ on yoga and runner argv on yolanda: yoga default 4298/3064/3094/3119 and 60000 60787/60053; yolanda default 5012/3323/3320/3271. Indistinguishable from the np=1 rows on both. Pre-fix np=2 on yoga was 67454/124266/12957/88161 — the contention spread is gone, which is the arm that distinguishes a real cancellation fix from one that merely bounds the caller at one slot. SCOPE OF WHAT IS VERIFIED, per the residency check recorded above: the default cell verifies the DEADLINE (7B never loads), the 60000 cell verifies the ABANDONMENT (7B resident mid-flight, killed at the deadline). Both hosts restored to fleet default; the np=2 state was a measurement condition, not a config change.
