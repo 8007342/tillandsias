@@ -219,6 +219,7 @@ _nix_builder_run_args() {
     # cache's host port — must be reachable), read-write stores.
     local -a args=(
         --rm
+        --replace
         --name "$_NB_CONTAINER_NAME"
         --privileged
         --network host
@@ -267,7 +268,7 @@ _nix_builder_run_args() {
 # that rejects a local copy is breakage, not a degraded cache.
 # In-container /etc/nix/nix.conf already enables nix-command/flakes, so the
 # snippet needs no experimental-features flag.
-_NB_POPULATE_SNIPPET='outs=$(for l in result result-*; do if [ -L "$l" ]; then readlink -f "$l"; fi; done | grep "^/nix/store/" | sort -u); if [ -z "$outs" ]; then echo "ok:nix-populate:copied=0"; else total=$(nix path-info -r $outs 2>/dev/null | sort -u | wc -l); pre=$(nix --store /host-store path-info -r $outs 2>/dev/null | sort -u | wc -l); if nix copy --to /host-store --no-check-sigs $outs; then echo "ok:nix-populate:copied=$((total - pre))"; else echo "blocked:nix-populate:copy-failed"; exit 1; fi; fi'
+_NB_POPULATE_SNIPPET='outs=$(for l in result result-*; do if [ -L "$l" ]; then readlink -f "$l"; fi; done | grep "^/nix/store/" | sort -u); if [ -z "$outs" ]; then echo "blocked:nix-populate:no-outputs (the command reported success but left no result symlink — a failed build must not read as copied=0)"; exit 1; else total=$(nix path-info -r $outs 2>/dev/null | sort -u | wc -l); pre=$(nix --store /host-store path-info -r $outs 2>/dev/null | sort -u | wc -l); if nix copy --to /host-store --no-check-sigs $outs; then echo "ok:nix-populate:copied=$((total - pre))"; else echo "blocked:nix-populate:copy-failed"; exit 1; fi; fi'
 
 # Whether the current invocation is a build whose outputs should populate the
 # per-host cache. Set in _nb_entry before _nix_builder_exec.
