@@ -4023,6 +4023,12 @@ plan_index:
         - "Tlatoani sign-off recorded before any mechanism becomes worker-protocol contract"
       events:
         - type: progress
+          ts: "2026-08-30T06:35:45Z"
+          agent_id: "linux-lenovinha-claude-20260830t061426z"
+          host: linux
+          summary: |
+            F9 ADDED to the inventory, measured while landing the F1 section: five consecutive lost push races in one cycle. The trunk's only gate (./build.sh --check, ~186s here) must re-run after every rebase because it stamps a TREE, and a peer host was pushing about once a minute. A 3-minute gate cannot win a 1-minute race except by luck; landed on the sixth attempt. What makes it a SCHEDULING entry rather than a build-time complaint: the changeset was plan-only, and the pre-push hook already has a fast lane for that shape, which declined because plan/index.yaml is outside it. That exclusion is right in general -- but the folded index is where append-event WRITES when a packet lives in plan/index.yaml rather than a fragment, so any cycle recording an event on a folded packet is pushed out of the fast lane by the ledger tool's own write target, not by its content. Two candidate remedies are visible (accept an additive events: diff in the fast lane; or make append-event always write a fragment) and BOTH are deliberately left unproposed: they touch the ledger write path, which is F3/F6 territory and outside a scheduling record's authority. Recorded because it is a measured starvation mode in the same family as F1 and F4 -- work that exists, is ready, and cannot reach the pool.
+        - type: progress
           ts: "2026-08-30T06:18:01Z"
           agent_id: "linux-lenovinha-claude-20260830t061426z"
           host: linux

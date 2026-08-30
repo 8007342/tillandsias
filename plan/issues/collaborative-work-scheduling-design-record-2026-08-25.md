@@ -320,3 +320,50 @@ candidate remedy, not on their own merits.
 - **Criterion 4 (Tlatoāni sign-off) is not sought here.** Nothing in this cycle
   became worker-protocol contract: the `ready()` disjunct is a proposal, and the
   795-zshi re-point uses the existing field as designed.
+
+## F9. A slow gate starves a fast lane: five lost push races in one cycle
+
+**MEASURED first-hand, lenovinha, 2026-08-29 ~06:20–06:40Z, while landing this
+very section.** Five consecutive `git push origin linux-next` refusals as
+non-fast-forward, each after a full rebase + `./build.sh --check`. Landed on the
+sixth.
+
+The mechanism is arithmetic, not bad luck:
+
+- The pre-push hook is the trunk's only gate and it stamps a specific TREE. Any
+  rebase onto a new upstream commit changes that tree, so the gate must re-run.
+- `./build.sh --check` reports `Gate phases totalled ~186s` on this host.
+- A peer host was pushing roughly once per minute (`dd8e3650b` 23:24:52,
+  `cc8a1feb1` 23:23:52, `879f7537e` 23:16:10, `d376fb896` 23:04:26).
+
+A 3-minute gate cannot win a 1-minute race except by luck. The host is not
+blocked and nothing is broken — it simply burns ~3 minutes of gate per attempt
+until the peer's burst ends. Like F1, the cost is real and invisible in
+burndown.
+
+**What makes it a scheduling entry rather than a build-time complaint** is that
+the changeset was *plan-only*: two `plan/index.d/` fragments, one
+`plan/issues/` record, one work-queue line — and `plan/index.yaml`. The hook
+already HAS a fast lane for exactly this shape, and it declined:
+
+```
+plan-only lane: not applicable — 'plan/index.yaml' is outside
+plan/index.d/, plan/loop_status.d/, plan/issues/, and
+plan/mo-full-attestations.d/ (full gate required)
+```
+
+The lane is correct to exclude the folded index in general. But the folded
+index is *where `append-event` writes* when a packet lives in `plan/index.yaml`
+rather than in a fragment — so any cycle that records an event on a folded
+packet is pushed out of the fast lane by the ledger tool's own write target,
+not by anything about its content.
+
+**Not proposed as a mechanism here, deliberately.** Two candidate remedies are
+visible and both need measurement this entry does not have: teach the fast lane
+to accept a `plan/index.yaml` diff that is *additive within `events:`*, or make
+`append-event` always write a fragment and let the fold be regenerated. Either
+touches the ledger's write path, which is F3/F6 territory and well outside a
+scheduling record's authority. Recorded here because it is a measured
+starvation mode in the same family as F1 and F4 — work that exists, is ready,
+and cannot reach the pool — and because the next host to lose six pushes in a
+row should find it written down rather than rediscover it.
