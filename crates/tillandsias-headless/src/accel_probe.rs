@@ -568,10 +568,32 @@ fn amd_gpu_disposition(
     if !render_node {
         return (false, vec![], Some("render-node-missing".to_string()));
     }
+    // ORDER 793-zumy: THE CONTAINER LANE IS NOT CLAIMED HERE, and its absence is
+    // the fix rather than an omission.
+    //
+    // Every input above — rocm_gfx, kfd, render_node — is read from the HOST.
+    // MEASURED on yoga 2026-08-30: all three were true, this function therefore
+    // advertised `container`, and inside the container /dev/kfd and /dev/dri
+    // were absent, size_vram was 0.00GB for every model, and the runtime
+    // reported library=cpu. After their passthrough fix put the device nodes
+    // IN the container, size_vram was STILL 0.00GB — the image ships no
+    // ROCm/HIP backend. The envelope did not move a single character across
+    // that entire real change.
+    //
+    // So host-vantage evidence cannot support a container-lane claim, twice
+    // over: it does not know what `--device` flags a launcher will pass, and
+    // even when they are passed it does not know whether a runtime inside can
+    // drive them. Those are `Proof::Reachable` and `Proof::Placed`
+    // respectively, and a sysfs read reaches neither.
+    //
+    // Unlike NVIDIA there is no CDI spec to read — AMD passthrough is explicit
+    // `--device` at launch — so there is nothing host-side to inspect. The
+    // honest report is the lane we CAN prove, plus a reason naming what is
+    // unverified rather than silently dropping it.
     (
         true,
-        vec!["container".to_string(), "host-native".to_string()],
-        None,
+        vec!["host-native".to_string()],
+        Some("container-lane-unverified".to_string()),
     )
 }
 
@@ -851,7 +873,19 @@ pub enum Proof {
     /// with size_vram still 0.
     Reachable,
     /// Work was actually placed on it: a runtime reported non-zero residency.
-    /// The only rung that proves a lane.
+    /// The only rung that proves a lane EXISTS.
+    ///
+    /// AND IT IS NOT A CLAIM ABOUT CAPACITY — yoga's caveat, recorded here so
+    /// this rung does not inherit the problem it fixes. Non-zero residency
+    /// proves a runtime placed weights on a device. It does NOT prove the
+    /// device is doing the compute (a PARTIAL OFFLOAD reports non-zero VRAM
+    /// while most layers run on CPU), and it does not prove the lane works at
+    /// the size that matters (a lane that places 200 MB may still fail at
+    /// 5 GB).
+    ///
+    /// PLACED ANSWERS "DID ANY WORK LAND HERE", NOT "WILL THE WORK LAND HERE".
+    /// A scheduler reading it as capacity is making the same substitution one
+    /// rung up, which is exactly how this family reproduces.
     Placed,
 }
 
@@ -878,7 +912,15 @@ pub struct DrmRenderNode {
     pub node: String,
     /// PCI vendor id, e.g. 0x10de
     pub vendor_id: u16,
-    /// PCI device id
+    /// PCI device id.
+    ///
+    /// USE THIS WITH `vendor_id`, NEVER ALONE, and the fleet's own data is the
+    /// argument: 0x1638 is BOTH yoga's Krackan Radeon 840M/860M AND lenovinha's
+    /// Cezanne Vega iGPU. Device id alone would call one machine the other.
+    /// Vendor alone collides the other way — every AMD part shares 0x1002. The
+    /// PAIR discriminates; either half on its own does not. Recorded here
+    /// because the next reader to simplify this field set will look at the
+    /// field, not at a packet (hwfp-v2, yoga).
     pub device_id: u16,
     /// bound kernel driver, e.g. "amdgpu" / "nvidia" / "i915"
     pub driver: String,
@@ -2705,10 +2747,34 @@ mod tests {
         assert!(lanes.is_empty(), "no render node = no lane to reach it on");
         assert_eq!(reason.as_deref(), Some("render-node-missing"));
 
+        // ORDER 793-zumy: THIS ASSERTION CHANGED, AND IT WAS PINNING THE DEFECT.
+        //
+        // It previously required lanes == ["container", "host-native"] and
+        // reason == None for a host with rocm + kfd + a render node. All three
+        // of those inputs are read FROM THE HOST, and yoga measured 2026-08-30
+        // that a host satisfying all three had, inside the container that
+        // actually runs inference: no /dev/kfd, no /dev/dri, size_vram=0.00GB
+        // for every model, and a runtime reporting library=cpu. After the
+        // device nodes WERE passed in, size_vram was still 0.00GB because the
+        // image ships no ROCm backend.
+        //
+        // So the old expectation encoded exactly the substitution this packet
+        // exists to end — host evidence standing in for a container-lane claim
+        // — and a test asserting it made the defect look verified. Updating it
+        // is the point, not collateral: the probe now reports the lane it can
+        // prove and NAMES the one it cannot.
         let (usable, lanes, reason) = amd_gpu_disposition(true, true, true);
-        assert!(usable);
-        assert_eq!(lanes, vec!["container", "host-native"]);
-        assert_eq!(reason, None);
+        assert!(usable, "the DEVICE is usable — that part was never wrong");
+        assert_eq!(
+            lanes,
+            vec!["host-native"],
+            "a host-vantage probe cannot claim the container lane"
+        );
+        assert_eq!(
+            reason.as_deref(),
+            Some("container-lane-unverified"),
+            "and it must SAY the lane is unverified rather than silently omit it"
+        );
     }
 
     #[test]

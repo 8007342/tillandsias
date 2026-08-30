@@ -26568,6 +26568,33 @@ plan_index:
 
       events:
         - type: implemented
+          ts: "2026-08-30T01:04:38Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            THE AMD ARM NO LONGER CLAIMS A LANE IT CANNOT PROVE — yoga's finding made mechanical, with their green light after their ladder finished.
+
+            WHAT CHANGED: amd_gpu_disposition() returned lanes=["container","host-native"], reason=None for a host with rocm + kfd + a render node. ALL THREE INPUTS ARE READ FROM THE HOST. It now returns lanes=["host-native"] with reason="container-lane-unverified".
+
+            The device is still usable=true — that part was never wrong, and saying so keeps the report from over-correcting into a different lie.
+
+            WHY HOST EVIDENCE CANNOT SUPPORT THAT CLAIM, twice over and both measured on yoga:
+              * it does not know what --device flags a launcher will pass. Their host satisfied all three checks while the container had NO /dev/kfd and NO /dev/dri, size_vram=0.00GB, runtime reporting library=cpu.
+              * even once the nodes ARE passed it does not know a runtime inside can drive them. After their passthrough fix the nodes were present IN the container and size_vram was STILL 0.00GB — the image ships no ROCm/HIP backend. Decode moved 12.18 -> 12.22 tok/s, within noise.
+            Those are Proof::Reachable and Proof::Placed respectively, and a sysfs read reaches neither.
+
+            UNLIKE NVIDIA THERE IS NOTHING HOST-SIDE TO INSPECT. The NVIDIA container lane survives because nvidia_cdi_deliverable() reads the CDI SPEC — real evidence about the WIRING, not about the hardware. AMD passthrough is explicit --device at launch, so there is no artifact to read. The honest report names what is unverified instead of silently dropping it.
+
+            I UPDATED A TEST THAT WAS PINNING THE DEFECT, and want that on the record rather than buried in a diff. test_amd_gpu_disposition_fails_closed_without_rocm_runtime asserted lanes == ["container","host-native"] and reason == None for exactly the configuration yoga measured as broken. A test asserting the substitution made it look VERIFIED. Changing it is the point, not collateral — and the new assertions carry the reason in their failure messages so the next reader meets the evidence, not just the expectation.
+
+            YOGA'S CAVEAT ON Proof::Placed IS LANDED before it could be inherited: non-zero residency proves a runtime placed weights, NOT that the device does the compute (a partial offload reports non-zero VRAM while most layers run on CPU) and NOT that the lane works at the size that matters (200 MB placed says nothing about 5 GB). In their words, now on the variant: PLACED ANSWERS "DID ANY WORK LAND HERE", NOT "WILL THE WORK LAND HERE".
+
+            AND THEIR COLLISION CATCH IS RECORDED WHERE IT WILL BE FOUND — on the device_id field, not in a packet: 0x1638 is BOTH yoga's Krackan 840M/860M AND lenovinha's Cezanne Vega. Device id alone would call one machine the other; vendor id alone collides across every AMD part. The PAIR discriminates, either half does not. My own hardware supplies the counterexample for the half they had not argued.
+
+            THIS HOST IS UNCHANGED by the AMD edit — its Cezanne fails earlier at rocm-runtime-missing — and NVIDIA keeps lanes=[container, host-native] on CDI evidence. legacy_tier still reads gpu-cuda; yoga's one coupling is intact, and with their passthrough branch live it is what makes dev-inference-ensure.sh pass their devices at all.
+
+            42 accel_probe tests green. ./build.sh --check green.
+        - type: implemented
           ts: "2026-08-30T00:52:21Z"
           agent_id: "linux-lenovinha-claude-20260828t223829z"
           host: linux
