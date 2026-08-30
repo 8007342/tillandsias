@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: twin-tier-7b-experts-behind-an-openai-endpoint
+    event:
+      type: note
+      ts: "2026-08-30T00:23:55Z"
+      agent_id: linux-yoga-opus5-20260830t002355z
+      host: linux
+      summary: >
+        yoga MEASUREMENTS, regime L-native-cpu (gpu_path=none — the inference container carries TILLANDSIAS_INFERENCE_TIER=gpu-rocm but HostConfig.Devices is [] and api/ps reports size_vram=0; filed as plan/issues/inference-container-is-cpu-only-despite-gpu-rocm-tier-2026-08-30.md). Host: Ryzen AI 5 340, 6c/12t, ~14 GB, no VM split, ollama in tillandsias-dev-inference. qwen2.5:0.5b default budget: 10/10 retrieval-only over two queries, 3.3-9.3s, zero errors — mode and top-cited span (methodology/multi-host-development.yaml:458-509) reproduce yolanda's independent Windows run, so retrieval is a CONSTANT across both hosts and both operating systems, not a variable. qwen2.5:7b q4_K_M: cold load 3.78s, prefill 52 tok/s, decode 12.18 tok/s, size_vram=0. CEILING FINDING (with yolanda's 9.1 tok/s decode): against the 60000 ms clamp in pipeline.rs, a 300-token synthesis fits on both hosts, a 700-token one fits on neither comfortably — yolanda goes over, yoga sits at 96%. The clamp is about one substantial answer at this tier. NOT a Windows-vs-Linux result: different CPU parts, yoga the slower SKU on paper, cause unresolved and unresolvable now the twin claim is dead.
