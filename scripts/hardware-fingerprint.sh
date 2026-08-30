@@ -52,6 +52,14 @@ _capture() {
         cpu_model:      (first_name("cpu")),
         cpu_physical:   ([dev("cpu") | .cpu_cores.physical] | (.[0] // 0)),
         cpu_logical:    ([dev("cpu") | .cpu_cores.logical]  | (.[0] // 0)),
+        # gpu_model IS A WEAK DISCRIMINATOR — trust it less than it looks.
+        # AMD ships the Radeon 840M and the 860M under ONE PCI name,
+        # "Krackan [Radeon 840M / 860M Graphics]", so two genuinely different
+        # parts produce an identical string here and this field alone would
+        # call them the same machine. It is in the fingerprint because it
+        # separates machines whose GPUs differ by more than a bin; it is not
+        # in it because a match means anything on its own. When two hosts
+        # agree on gpu_model, the CPU fields are what actually decided.
         gpu_model:      (first_name("gpu")),
         npu_vendor:     ([dev("npu") | .vendor] | (.[0] // "none")),
         npu_node:       (first_node("npu")),
