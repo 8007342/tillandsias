@@ -343,8 +343,19 @@ encrypted control channel; slices 1-3 of 141 landed, 4 and 6 remain —
   warning and leaves the network in place. The pair is correct as written, and
   the concern P2 was filed on is exactly what the second scenario handles.
   Tombstoning it would have deleted a correct requirement.
-- **P3 `openspec/specs/proxy-container/spec.md` +
-  `cheatsheets/runtime/enclave-proxy-patterns.md` — OPEN, and live rather than
+- **P3 — DONE 2026-08-30, with a code half the filing did not name.** Both
+  documents now carry the contract, symbol-anchored: the spec gains a
+  requirement with three scenarios, the cheatsheet the per-peer decision table
+  and the counter-intuitive rule (the appended subnet does NOT rescue a missing
+  NAME; curl matches `no_proxy` against the hostname as written). Reading the
+  code to write it found that `fn proxy_env_args` and `fn apply_proxy_env` are
+  hand-maintained parallel lists with only ONE of seven variables pinned across
+  the pair, and that pin a source scan — so a port change in one would have
+  shipped silently. Now pinned behaviourally by
+  `fn both_proxy_env_appliers_emit_the_same_contract`, mutation-tested.
+  Original finding retained below.
+
+  ORIGINAL FINDING: **OPEN, and live rather than
   stale.** Both constants still exist in code — `main.rs`
   `const ENCLAVE_NO_PROXY_BASE` and the `NODE_USE_ENV_PROXY=1` env entry
   beside it — and NEITHER name appears anywhere under `openspec/specs/`,

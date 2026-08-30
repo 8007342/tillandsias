@@ -377,6 +377,53 @@ both an `acl localhost_subdomain dstdomain .localhost` and a
   external DNS resolution
 - **AND** no `*.localhost` lookup SHALL ever leave the host
 
+
+### Requirement: NO_PROXY exemptions and the Node egress contract
+
+The system MUST inject the same seven proxy variables into every enclave
+container, from a SINGLE source of truth, regardless of which builder launches
+it.
+
+`main.rs` `const ENCLAVE_NO_PROXY_BASE` is that source for the exemption list;
+`main.rs` `fn enclave_no_proxy` appends the enclave subnet to it. Two appliers
+consume it — `main.rs` `fn proxy_env_args` (raw `podman run` arguments) and
+`main.rs` `fn apply_proxy_env` (the `ContainerSpec` twin) — and they MUST emit
+an identical set. That agreement is pinned behaviourally, through the args the
+spec actually builds, by
+`main.rs` `fn both_proxy_env_appliers_emit_the_same_contract` (order 245 P3);
+before it, only `NODE_USE_ENV_PROXY` was pinned across the pair and the other
+six could have drifted silently, so a container's egress would have depended on
+which builder launched it.
+
+@trace spec:proxy-container, order:245
+
+#### Scenario: An in-enclave HTTPS service is exempt by NAME, not by subnet
+- **WHEN** a container reaches an enclave peer over HTTPS by its service DNS
+  name — `https://vault:8200`, `https://nix-cache:5000`
+- **THEN** that NAME MUST appear in `ENCLAVE_NO_PROXY_BASE`
+- **AND** the enclave subnet appended by `enclave_no_proxy` MUST NOT be relied
+  on to cover it, because curl matches `no_proxy` against the hostname AS
+  WRITTEN and never against the address it resolves to — measured from an
+  enclave container on 2026-08-17, where omitting `nix-cache` sent every
+  substituter request to squid as a CONNECT and returned
+  `curl: (56) Recv failure: Connection reset by peer`
+
+#### Scenario: A non-HTTP transport is deliberately NOT exempt
+- **WHEN** a peer's only transport is one that never consults `http_proxy` —
+  the git mirror speaks git://, the git wire protocol
+- **THEN** its name MUST NOT be added to `ENCLAVE_NO_PROXY_BASE`
+- **AND** the absence is deliberate, not an omission (order 659-8faj, measured
+  against a black-hole proxy control on 2026-08-10); adding it would widen the
+  exemption list for no transport that reads it
+
+#### Scenario: Node egress is routed through the proxy explicitly
+- **WHEN** a Node-based agent runs in the enclave
+- **THEN** `NODE_USE_ENV_PROXY=1` MUST be set, because Node's global
+  fetch/undici does NOT honour `HTTP_PROXY` by default
+- **AND** without it a Node agent attempts a DIRECT connection, which the
+  `--internal` enclave cannot resolve — the "times out then dies" failure
+  observed while curl worked
+
 ## Security implications and trust model
 
 ### What the proxy CAN do (architecturally)

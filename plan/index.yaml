@@ -2453,6 +2453,77 @@ plan_index:
         - "Spec/Cheatsheet patch list published with specific file:line references"
       events:
         - type: progress
+          ts: "2026-08-30T15:21:19Z"
+          agent_id: "linux-lenovinha-claude-20260830t151432z"
+          host: linux
+          summary: |
+            P3 DONE, and it turned out to have a code half nobody had named (linux slice,
+            cycle-scoped claim on a multi_cycle packet; phase stays `review`, NOT closed).
+
+            FIRST, A CORRECTION TO MY OWN next_action. Last cycle I flagged that
+            headless-mode is "the SECOND spec found silent about vault" and called the
+            pattern worth a look. Checked: 18 of 176 specs mention vault, and most specs
+            have nothing to do with it. That is not a pattern of neglect, it is one spec
+            (P7) that SHOULD mention vault because --init builds it (order 253) and does
+            not. Withdrawing the framing rather than building on it.
+
+            P3 AS FILED asked to document the S2/S3 split, the NODE_USE_ENV_PROXY contract,
+            and ENCLAVE_NO_PROXY_BASE as the single NO_PROXY source of truth. Reading the
+            code to write that found the source of truth IS single -- both appliers call
+            enclave_no_proxy() -- but that the two appliers are HAND-MAINTAINED PARALLEL
+            LISTS and only ONE of their seven variables was pinned across the pair.
+
+            THE GAP. fn proxy_env_args (raw podman-run args) and fn apply_proxy_env (the
+            ContainerSpec twin) each set the same seven env vars. The existing test
+            proxy_env_routes_node_through_the_proxy pins NODE_USE_ENV_PROXY in both -- and
+            pins the twin BY SOURCE SCAN, which can only tell you a token appears in both,
+            never that they agree in VALUE. Changing http_proxy's port in one, or dropping
+            NO_PROXY from one, would have shipped containers whose egress configuration
+            depends on which builder launched them, silently, because both paths still "set
+            the proxy env". Same class as P8: two hand-maintained lists, partial
+            enforcement.
+
+            FIXED with fn both_proxy_env_appliers_emit_the_same_contract, which compares
+            them BEHAVIOURALLY through build_run_args() rather than by scanning source, and
+            additionally anchors the content so an equal-but-empty pair cannot pass.
+            Mutation-tested: drifting apply_proxy_env's http_proxy port to 9999 makes it
+            fail with the disagreement message.
+
+            I HIT THE NESTED-FN HAZARD MYSELF while adding it, one cycle after finding it
+            in build_inference_run_args. The new test landed INSIDE the previous test's
+            body, so it compiled as a nested fn and cargo reported "0 passed" plus a "never
+            used" warning rather than an error. Caught only because I read the count. Worth
+            recording twice in two cycles: a test that is not COLLECTED looks exactly like
+            a test that passed.
+
+            DOCUMENTED, symbol-anchored, in both places P3 named:
+              * openspec/specs/proxy-container/spec.md gains a requirement with three
+                scenarios -- an in-enclave HTTPS service is exempt BY NAME not by subnet;
+                a non-HTTP transport is deliberately NOT exempt; Node egress is routed
+                explicitly.
+              * cheatsheets/runtime/enclave-proxy-patterns.md gains the decision RULE with
+                the per-peer table and the reasons, which were living only in code comments.
+
+            THE RULE WORTH HAVING WRITTEN DOWN, because it is counter-intuitive: the subnet
+            entry enclave_no_proxy() appends does NOT rescue a missing name. curl matches
+            no_proxy against the HOSTNAME AS WRITTEN, never against the resolved address,
+            so a CIDR entry never covers https://nix-cache:5000 (measured 2026-08-17, order
+            801-kqme). And the mirror's ABSENCE is equally deliberate: git:// never
+            consults http_proxy, measured against a black-hole proxy control on 2026-08-10
+            (order 659-8faj). "Is it in the enclave" is the wrong question; "does its
+            transport read no_proxy" is the right one.
+
+            REMAINING: P7 (headless-mode silent on vault-in-init), P4's vsock-transport
+            half, P5 (network-scenarios spec), P1 (blocked on the git-mirror-egress
+            verdict). Sections 2, 4 and 7 still carry line citations. P6's remainder is an
+            operator decision, not work.
+        - type: claim
+          ts: "2026-08-30T15:14:50Z"
+          agent_id: "linux-lenovinha-claude-20260830t151432z"
+          host: linux
+          summary: |
+            P3/P7 slice: the proxy env contract is documented nowhere, and two specs are silent about vault. Check whether the vault silence is a pattern before patching one spec.
+        - type: progress
           ts: "2026-08-30T14:22:42Z"
           agent_id: "linux-lenovinha-claude-20260830t141431z"
           host: linux

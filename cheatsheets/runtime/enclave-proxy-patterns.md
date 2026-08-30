@@ -198,3 +198,38 @@ namespace. To set iptables NAT rules:
 - `runtime/networking.md` — forge external access overview
 - `runtime/squid-cache-peer-routing.md` — *.localhost peer routing
 - `utils/podman-secrets.md` — secret injection patterns
+
+## The NO_PROXY exemption list — why a name is there, or deliberately isn't
+
+<!-- @trace spec:proxy-container, order:245 -->
+
+Added 2026-08-30 (order 245 §5 P3). The rules below were in code comments and
+in no cheatsheet or spec; this is the distillation, anchored on symbols.
+
+**One source of truth.** `main.rs` `const ENCLAVE_NO_PROXY_BASE` holds the
+exemption list; `main.rs` `fn enclave_no_proxy` appends the enclave subnet.
+Two appliers consume it and must emit an identical set —
+`fn proxy_env_args` (raw `podman run` args) and `fn apply_proxy_env` (the
+`ContainerSpec` twin). Their agreement is pinned by
+`fn both_proxy_env_appliers_emit_the_same_contract`, behaviourally rather than
+by source scan.
+
+**The decision rule for adding a name, and it is not "is it in the enclave":**
+
+| peer | transport | in the list? | why |
+|---|---|---|---|
+| `vault`, `tillandsias-vault` | HTTPS | YES | reached at `https://vault:8200` since the move off the `127.0.0.1` listener; without it vault-cli's curl routes through squid and fails `Could not resolve proxy: proxy` |
+| `nix-cache` | HTTPS | YES | order 801-kqme, measured 2026-08-17 — omitting it turned every substituter request into a CONNECT to squid, `curl: (56) Recv failure` |
+| `inference`, `proxy` | HTTP(S) | YES | in-enclave peers reached by name |
+| `git-{project}` mirror | **git://** | **NO — deliberately** | the git wire protocol never consults `http_proxy`; order 659-8faj measured this against a black-hole proxy control on 2026-08-10. Listing it would widen the exemption for a transport that cannot read it |
+
+**The trap worth internalising:** the subnet entry `enclave_no_proxy` appends
+does NOT rescue a missing name. curl matches `no_proxy` against the hostname
+**as written**, never against the address it resolves to, so a CIDR entry never
+covers `https://nix-cache:5000`. If a peer is reached by NAME over a
+proxy-consulting transport, the NAME must be listed.
+
+**Node needs telling twice.** `NODE_USE_ENV_PROXY=1` is in the contract because
+Node's global fetch/undici ignores `HTTP_PROXY`. Without it a Node agent
+connects directly, and the `--internal` enclave cannot resolve the target — the
+"times out then dies" failure seen while curl worked from the same container.
