@@ -22407,6 +22407,12 @@ plan_index:
         - 'NEGATIVE CONTROL per host: the probe FAILS against a port with no listener — demonstrate it, because two of the three candidate forms silently passed on Windows.'
         - The start-limit directives sit in [Unit] on both, pinned by a test rather than by review.
       events:
+        - type: evidence
+          ts: "2026-08-30T03:35:32Z"
+          agent_id: "windows-yolanda-claude-20260828t223837z"
+          host: yolanda
+          summary: |
+            THE FOLD IS DONE AND VERIFIED BEHIND A REAL --reset-guest, which is the condition I said gated it. Operator authorised the wipe directly (ephemeral-and-idempotent by design); the guest was destroyed and reprovisioned from scratch, ending 'RESULT: VM Ready — control wire up'. WHAT CHANGED: crates/tillandsias-windows-tray/src/wsl_lifecycle.rs no longer carries its own probe. It installs tillandsias_vm_layer::readiness::READY_SCRIPT at READY_SCRIPT_PATH and writes readiness::ready_unit(42420). The module is now a public `pub mod readiness` and its items are pub; readiness.rs's 'KNOWN TRIPLICATION, deliberately not resolved' note is replaced by the resolution, because leaving a stale note claiming three copies is its own defect. THE GAP THIS CLOSES, measured before and after: the Windows-installed probe contained UNVERIFIABLE zero times and had three verdicts. The freshly provisioned guest's script now contains it twice. Windows gained the fourth verdict by ADOPTING the module rather than by a second hand-edit — which was the whole argument for folding rather than patching. FOURTH VERDICT PROVEN LIVE, not inferred from the source: with socat moved aside, the probe prints 'vsock_listener=UNVERIFIABLE port=42420 -- socat is not installed in this guest, so this probe cannot observe the listener at all. This says NOTHING about whether the control wire works; it says the CHECK is broken.' and exits 3. socat restored afterwards and confirmed. NOTE ON THAT MEASUREMENT, because I nearly reported it wrong: my first attempt piped the probe through 'tail -1' and printed NOSOCAT_EXIT=0 — tail's status, not the script's. The verdict text was right and the number was meaningless. Re-measured without the pipe: exit 3, alongside a control (bash -c 'exit 3') proving codes propagate on that path at all. A correct message beside a fabricated exit code is exactly the shape this fleet spent the day cataloguing. EC1: script + unit installed from the shared module, enabled at boot. EC2, the unit's OWN journal on the fresh boot: 'Starting tillandsias-headless-ready.service' / '[tillandsias-ready] vsock_loopback before=loaded after=loaded' / '[tillandsias-ready] vsock_listener=bound port=42420' / 'Finished'; is-active=active. before=loaded proves the After=systemd-modules-load.service ordering held rather than the backstop modprobe winning a race. EC3: port 42999 -> exit 1, port 42420 -> exit 0. EC4: systemctl show reports StartLimitIntervalUSec=2min StartLimitBurst=3, so systemd PARSED the [Unit] placement at runtime. TESTS GOT STRONGER AS A SIDE EFFECT. Eight assertions in wsl_lifecycle.rs scanned this file's RAW SOURCE for the probe's text, and one sliced the unit literal out of the source with a string split. With the definition moved they would have passed on the surrounding comments — 601-462g, which that very test block warns about. They now assert readiness::READY_SCRIPT and readiness::ready_unit(42420) directly: the values that get installed, on every platform that installs them. 109 tests pass.
         - type: note
           ts: "2026-08-29T16:21:03Z"
           agent_id: "windows-yolanda-claude-20260828t223837z"
@@ -26567,6 +26573,30 @@ plan_index:
 
 
       events:
+        - type: verified
+          ts: "2026-08-30T03:49:34Z"
+          agent_id: "linux-lenovinha-claude-20260828t223829z"
+          host: linux
+          summary: |
+            HANDOFF STATUS AGAINST THE FOUR EXIT CRITERIA, stated honestly rather than rounded up. THE ENUMERATION REDESIGN IS BUILT AND WIRED; THIS PACKET IS NOT CLOSABLE FROM THIS HOST.
+
+            CRITERION 1 — "a WSL2 guest with /dev/dxg AND a Vulkan ICD that enumerates a non-CPU device reports a usable GPU; yolanda specifically stops reporting cpu-only": NOT MET, AND NOT MINE TO MEET. It requires a WSL2 host with a Vulkan ICD INSTALLED. Yolanda's host has none, so it correctly reports present-unusable — and they declined to install one, which was right: provisioning the operator's machine to make a criterion pass is not evidence. The clause is satisfiable only on a host someone chooses to provision, and that is a Windows-host decision, not a Linux redesign.
+
+            CRITERION 2 — "/dev/dxg present with no loader reports engine-missing and NAMES it": MET, by yolanda, before I touched anything (engine-missing:no-vulkan-icd).
+
+            CRITERION 3 — "a software rasterizer NEVER satisfies the GPU check, with a test pinning the rejection": MET FOR THE DRM PATH, STRUCTURALLY. lavapipe/llvmpipe are userspace-only ICDs that create no DRM render node, so an enumeration of render nodes cannot see them at all — no blocklist, nothing to rot when a new rasterizer appears. Pinned by a_software_rasterizer_cannot_satisfy_the_gpu_check, and this host has Mesa's FULL ICD set installed while still enumerating exactly two real GPUs. STILL UNIMPLEMENTABLE ON THE WSL2 PATH for the reason yolanda gave: /dev/dxg is not a DRM device, creates no render node, and nothing there enumerates — so there remains no enumeration in which to reject anything. That half needs Vulkan enumeration, which needs an ICD, which is criterion 1's blocker wearing a different hat.
+
+            CRITERION 4 — "regression is impossible on hosts that were already correct": PARTIALLY, AND I DELIBERATELY BROKE ONE CLAUSE. Verified unchanged: NVIDIA on this host still reports lanes=[container, host-native] reason=None (its container lane is backed by reading the CDI spec, which is real host-side evidence about the WIRING); the AMD arm here is untouched because Cezanne fails earlier at rocm-runtime-missing; the workspace still compiles for a non-host target (0 errors, x86_64-pc-windows-gnu), which covers the macOS cfg arms structurally.
+
+              THE DELIBERATE CHANGE: an AMD host WITH a working ROCm runtime previously reported lanes=[container, host-native] reason=None and now reports lanes=[host-native] reason=container-lane-unverified. That IS a changed envelope on a host the criterion calls "already correct" — and the criterion's premise is what yoga measured as false. Their host produced that exact old envelope while the container had no /dev/kfd, no /dev/dri and size_vram=0. Calling it correct was the defect. Changed with their explicit green light after their ladder finished.
+
+            WHAT IS BUILT AND LANDED: DRM render-node enumeration carrying PCI vendor+device and the bound kernel driver; a Vantage axis (host vs container) set by the enumerator, never a caller; a Proof axis (Enumerated / Reachable / Placed) where proves_a_lane() matches Placed ALONE; the two pinned INDEPENDENT, because a better vantage is not a higher rung. Nine tests, fixture-based, four mutation-verified.
+
+            NEXT STEPS FOR WHOEVER TAKES IT:
+              1. Criterion 1 + the WSL2 half of criterion 3 are ONE task on a Windows host: install a Vulkan ICD, add Vulkan enumeration, reject PHYSICAL_DEVICE_TYPE_CPU / DRIVER_ID_MESA_LLVMPIPE. Do NOT attempt it from Linux — there is nothing here to enumerate.
+              2. Wire Proof::Reachable and Proof::Placed to real sources. Nothing currently produces either rung; they are modelled and unused. Reachable wants a stat from inside the container (images/inference/entrypoint.sh already does exactly this for cuda), Placed wants ollama's /api/ps size_vram. Until something produces them, the model is honest but inert.
+              3. legacy_tier is UNTOUCHED and must stay so without a heads-up to yoga: with their passthrough branch live it is what makes dev-inference-ensure.sh pass their device nodes at all, so moving it silently strips them.
+              4. Fields are STABLE for yoga's hwfp-v2 bump: vendor_id: u16, device_id: u16, driver, node, vantage, proof. Use vendor_id AND device_id together — 0x1638 is both yoga's Krackan and this host's Cezanne.
         - type: implemented
           ts: "2026-08-30T01:04:38Z"
           agent_id: "linux-lenovinha-claude-20260828t223829z"
@@ -30543,6 +30573,22 @@ plan_index:
         set rather than paying it on every fresh host.
 
       events:
+        - type: note
+          ts: "2026-08-30T03:59:26Z"
+          agent_id: "linux-lenovinha-claude-20260830t035415z"
+          host: linux
+          summary: |
+            A FIFTH INSTANCE OF THE HOST-BINARY DEFECT, found while answering an operator question rather than by auditing — which is how it stayed hidden.
+
+            The operator asked whether every host uses the nix-cache container. On lenovinha the answer was YES with numbers: service running (ok:nix-cache-status:running:endpoint=https://nix-cache:5000), persistent store populated at 5715 paths / 8G / pinned=1. But scripts/test-nix-cache-service.sh:73 — THE FIXTURE THAT WOULD PROVE IT — gated on `command -v nix` on the HOST and printed skip:nix-cache-fixture:no-nix, exit 0.
+
+            So the adoption evidence was missing for a reason that was not true. A green skip on exactly the hosts that use the toolbox rung, in the test whose entire job is to demonstrate the cache works.
+
+            CONVERTED to nix-toolbox.sh capability, and the conversion immediately taught the second half of its own lesson: with only the GATE fixed, arms 6 and 7 failed rc=127 because they called `nix` directly and it is not on this host at all. More honest than a false skip, still not a test. BOTH HALVES HAVE TO MOVE TOGETHER — a gate that admits a host the body cannot run on has only relocated the lie. Arms now route through the same rung the gate proved.
+
+            RESULT ON THIS HOST: ok:nix-cache-fixture:8/8, where the same command printed a green skip an hour ago.
+
+            That is now five: check-nix-deps-stability.sh, select-work-batch.sh, check-nix-builder-e2e.sh, nix-cache-service.sh, and this fixture. The pattern for anyone finding a sixth: the tell is a skip verdict on a host where the thing being skipped is demonstrably working.
         - type: verified
           ts: "2026-08-28T22:48:08Z"
           agent_id: "linux-lenovinha-claude-20260828t223829z"

@@ -70,7 +70,36 @@ mkdir -p "$XDG_CACHE_HOME"
 
 _podman() { env http_proxy= https_proxy= HTTP_PROXY= HTTPS_PROXY= podman "$@"; }
 
-command -v nix >/dev/null 2>&1     || { echo "skip:nix-cache-fixture:no-nix"; exit 0; }
+# CAPABILITY, NOT `command -v nix` ON THE HOST — the FIFTH instance of the
+# 799-tb7q defect in this lane (after check-nix-deps-stability.sh,
+# select-work-batch.sh, check-nix-builder-e2e.sh and nix-cache-service.sh).
+#
+# FOUND WHILE ANSWERING AN OPERATOR QUESTION, which is the part worth recording:
+# the operator asked whether every host uses the nix-cache container. On
+# lenovinha 2026-08-30 the service was RUNNING
+# (ok:nix-cache-status:running:endpoint=https://nix-cache:5000) with a populated
+# store (5715 paths, 8G) — and THIS FIXTURE, the evidence that would prove it,
+# printed skip:nix-cache-fixture:no-nix and exited 0. A host with no host-nix
+# binary but a working toolbox rung produced a green skip where the truth was
+# "yes, and here are the numbers". The adoption evidence was missing for a
+# reason that was not true.
+_ncf_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bash "$_ncf_dir/nix-toolbox.sh" capability >/dev/null 2>&1     || { echo "skip:nix-cache-fixture:no-nix"; exit 0; }
+
+# And the ARMS must use the same rung the gate just proved. Converting only the
+# gate turned a false green skip into two rc=127 failures — `nix` is not on this
+# host's PATH at all — which is more honest but still not a test. Both halves
+# have to move together: a gate that admits a host the body cannot run on has
+# only relocated the lie.
+_NCF_RUNG="$(bash "$_ncf_dir/nix-toolbox.sh" capability 2>/dev/null)"
+_NCF_RUNG="${_NCF_RUNG#ok:nix-capability:}"
+_ncf_nix() {
+    if [ "$_NCF_RUNG" = "toolbox" ]; then
+        bash "$_ncf_dir/nix-toolbox.sh" run -- nix "$@"
+    else
+        nix "$@"
+    fi
+}
 command -v podman >/dev/null 2>&1  || { echo "skip:nix-cache-fixture:no-podman"; exit 0; }
 [ -d "$CHROOT_STORE/nix/store" ]   || { echo "skip:nix-cache-fixture:no-store"; exit 0; }
 [ -s "$CA_DIR/intermediate.crt" ]  || { echo "skip:nix-cache-fixture:no-ca"; exit 0; }
@@ -143,7 +172,7 @@ TARGET="$(readlink "$CHROOT_STORE/nix/var/nix/gcroots/tillandsias/nix-cache-harm
 # --- 6. POSITIVE: an empty store substitutes with the correct key -------------
 if [ -n "$TARGET" ]; then
     mkdir -p "$TMP/pos"
-    nix --extra-experimental-features "nix-command flakes" copy \
+    _ncf_nix --extra-experimental-features "nix-command flakes" copy \
         --from "https://127.0.0.1:${HOST_PORT}" --to "$TMP/pos" \
         --option require-sigs true \
         --option trusted-public-keys "$PUBKEY" \
@@ -164,7 +193,7 @@ if [ -n "$TARGET" ]; then
     nix-store --generate-binary-cache-key bogus-not-our-cache \
         "$TMP/bad.sec" "$TMP/bad.pub" >/dev/null 2>&1
     mkdir -p "$TMP/neg"
-    nix --extra-experimental-features "nix-command flakes" copy \
+    _ncf_nix --extra-experimental-features "nix-command flakes" copy \
         --from "https://127.0.0.1:${HOST_PORT}" --to "$TMP/neg" \
         --option require-sigs true \
         --option trusted-public-keys "$(cat "$TMP/bad.pub")" \
