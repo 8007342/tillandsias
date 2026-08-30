@@ -4022,6 +4022,12 @@ plan_index:
         - "proposed mechanism set, each with a verifiable closure + staged adoption rung"
         - "Tlatoani sign-off recorded before any mechanism becomes worker-protocol contract"
       events:
+        - type: claim
+          ts: "2026-08-30T06:15:07Z"
+          agent_id: "linux-lenovinha-claude-20260830t061426z"
+          host: linux
+          summary: |
+            Criterion 1 continuation: F1 reproduced first-hand on a second host, and an empirical test of whether pickup_role actually filters selection.
         - type: progress
           ts: "2026-08-25T17:48:41Z"
           agent_id: "linux-yoga-opus5-20260825t174841z"
