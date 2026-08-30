@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: synthesis-budget-does-not-bound-the-request
+    event:
+      type: progress
+      ts: "2026-08-30T01:20:58Z"
+      agent_id: linux-yoga-opus5-20260830t012058z
+      host: linux
+      summary: >
+        EXIT CRITERION 3 (the np=2 arm) PASSES on yoga against 8021f337f. Container recreated with OLLAMA_NUM_PARALLEL=2 confirmed in its own startup log; treatment verified in the server's /proc environ; qwen2.5:7b; CPU-only. Default budget, 4 rows: 4298 3064 3094 3119 ms. 60000 budget, 2 rows: 60787 60053 ms. All retrieval-only, zero errors. AGAINST THE PRE-FIX np=2 BASELINE of 67454 / 124266 / 12957 / 88161 ms: the contention spread is GONE. That was the falsification risk — pre-fix, raising parallelism converted queueing into contention because the abandoned generation kept burning CPU; post-fix there is no abandoned generation to contend with, because the transport deadline ends the WORK rather than only freeing the caller. The np=2 default rows (3.1-4.3 ms band) are indistinguishable from the np=1 default rows (3.1-4.4 ms band), which is the positive form of the same statement: parallelism no longer affects the wall, because nothing leaks past the deadline for a second slot to collide with. This is the arm that distinguishes a real cancellation fix from one that merely bounds the caller at one slot, and it is why the transport shape was the right choice over tightening the budget.

@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: synthesis-budget-does-not-bound-the-request
+    event:
+      type: progress
+      ts: "2026-08-30T01:16:45Z"
+      agent_id: linux-yoga-opus5-20260830t011645z
+      host: linux
+      summary: >
+        POST-FIX VERIFICATION on yoga against 8021f337f, plan binary rebuilt from the fixed source, treatment verified in the server's /proc environ, qwen2.5:7b, CPU-only (gpu_path=none), np=1. Prediction written before the run: no wall exceeds ~68s (budget + retrieval transport + a small constant). RESULT — 60000 ms cell, 6 rows: 60739 60744 60060 60030 60043 60049 ms. Spread 714 ms; every row inside budget+0.75s. PRE-FIX same cell, same queries: 10002 50668 52214 56560 98319 101710 ms, spread 91.7 SECONDS, worst row 41.7s BEYOND budget. The unbounded tail is gone and the wall is now a function of the budget rather than of a 120s socket timeout two layers down. DEFAULT-BUDGET CELL, 6 rows post-fix: 4434 3127 3155 3094 3123 3122 ms, against a pre-fix default cell of 13879 14397 22851 28960 124292 124567 ms. So the fix did not merely cap the tail — it improved the MEDIAN by ~4.5x at the default budget, because the previously-unbudgeted decomposition phase (pipeline.rs:582, which carried no tokio timeout at all) now runs under the request deadline. NOTE ON SHAPE, offered as an observation rather than a defect: post-fix the wall pins just above the budget whenever synthesis cannot complete, so at a large budget the user waits the budget deterministically instead of waiting a random 10-102s. That is the promised semantics — a budget is a bound, and on this tier 7B never completes — but it means a large TILLANDSIAS_SYNTH_BUDGET_MS is now paid in full on every request on hardware where synthesis cannot finish, which strengthens the tier recommendation to leave the default alone on the Ryzen-AI-300 class. Mode is retrieval-only in all 12 post-fix rows, zero errors. The np=2 arm (exit criterion 3) is next.
