@@ -1219,7 +1219,6 @@ mod tests {
     /// falls below the similarity floor returns the typed out-of-coverage
     /// refusal — never irrelevant-but-real citations dressed as an answer
     /// (the darwin sourdough finding, 2026-08-29).
-    #[test]
     /// ORDER 939-jxgz. The budget bounds the REQUEST, not the synthesis
     /// attempt alone. Pre-fix, a stalled model endpoint held the caller in
     /// DECOMPOSITION under a raw 120s socket timeout before the budget even
