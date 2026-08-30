@@ -223,6 +223,30 @@ ensure_toolbox() {
     return 0
 }
 
+# ORDER 917-zkge follow-on — INSTALL THE THING THE TOOLBOX EXISTS FOR.
+#
+# `ensure_toolbox` above creates the container and stops there, so a host could
+# hold a running tillandsias-nix toolbox with no nix in it and this script would
+# report `no-nix-and-no-toolbox` — a verdict naming an absent toolbox that is
+# present. That is what yoga reported on 2026-08-30 while sitting one `dnf
+# install nix` from capable, and 917-zkge's premise ("five hosts each
+# independently confirmed no nix at all") rests partly on readings of that kind.
+#
+# The install step was already documented — in a COMMENT above
+# `toolbox_nix_works`, describing a past manual run. A step that only a reader
+# performs is not part of `ensure`.
+#
+# Kept deliberately narrow: only when the toolbox exists and its nix does not
+# answer, only dnf, and a failure is reported rather than retried. This is a
+# convenience over a step an operator would otherwise type, not a package
+# manager.
+ensure_toolbox_nix() {
+    toolbox_exists || return 1
+    toolbox_nix_works && return 0
+    _toolbox run -c "$TOOLBOX_NAME" sudo dnf install -y nix >/dev/null 2>&1 || return 1
+    toolbox_nix_works
+}
+
 resolve_rung() {
     if daemon_live; then
         printf 'daemon\n'
@@ -235,6 +259,11 @@ resolve_rung() {
     ensure_toolbox
     case "$?" in
         0) if toolbox_nix_works; then
+               printf 'toolbox\n'; return 0
+           fi
+           # The toolbox is there and its nix is not. Install it rather than
+           # reporting the host incapable (917-zkge follow-on).
+           if ensure_toolbox_nix; then
                printf 'toolbox\n'; return 0
            fi
            [ -n "$NIX_TB_CHROOT_ERR" ] && printf 'detail:nix-toolbox:chroot:%s\n' "$NIX_TB_CHROOT_ERR" >&2

@@ -94,7 +94,40 @@ fi
 
 _tb="$(grep -x 'tillandsias-nix' <<<"$_ps" || true)"
 if [[ -z "$_tb" ]]; then
-    emit not-capable "podman answered and its container list does NOT contain tillandsias-nix" "$(printf '%s' "$_ps"|tr '\n' ' ')"
+    # PIRRIA'S CASE, 2026-08-30 — and the first version of this probe got it
+    # wrong in exactly the way the file's own header warns about.
+    #
+    # "No tillandsias-nix container" was reported as not-capable. But a host
+    # running a live tillandsias-builder toolbox has ALL the substrate the
+    # toolbox rung needs: the toolbox binary, a live podman, and the
+    # fedora-toolbox image already cached. What is missing is a `toolbox
+    # create` and the dnf install — two cheap commands. And because stock init
+    # creates tillandsias-builder everywhere, that is plausibly the DEFAULT
+    # out-of-box state fleet-wide, so the old boundary would have systematically
+    # filed nearly-there hosts as dead ones.
+    #
+    # That is line 33's warning one rung over: the verdict was about the
+    # ABSENCE OF A NAME rather than about the capability, and a reader cannot
+    # tell "cannot" from "not created yet" out of "not-capable".
+    #
+    # one-step-away exists precisely so a nearly-there host is never filed as a
+    # dead one, so the boundary moves to substrate-present and the DETAIL
+    # carries the exact remaining distance. not-capable is now reserved for a
+    # host that genuinely cannot host the rung.
+    _has_toolbox_bin=no
+    command -v toolbox >/dev/null 2>&1 && _has_toolbox_bin=yes
+    _img="$(podman images --format '{{.Repository}}' 2>/dev/null | grep -m1 'fedora-toolbox' || true)"
+
+    if [[ "$_has_toolbox_bin" == no ]]; then
+        emit not-capable "podman answered, no tillandsias-nix container, AND no toolbox binary — nothing here can create the rung" \
+            "containers: $(printf '%s' "$_ps"|tr '\n' ' ')"
+    fi
+    if [[ -n "$_img" ]]; then
+        emit one-step-away "substrate is present (toolbox binary + live podman + a fedora-toolbox image already cached); only the tillandsias-nix toolbox and its nix are missing" \
+            "distance: scripts/nix-toolbox.sh ensure, then 'toolbox run -c tillandsias-nix sudo dnf install -y nix'. Image already local ($_img), so no pull is needed. Containers present: $(printf '%s' "$_ps"|tr '\n' ' ')"
+    fi
+    emit one-step-away "substrate is present (toolbox binary + live podman) but no fedora-toolbox image is cached — the rung is reachable if a pull succeeds, which is NOT established here" \
+        "distance: a fedora-toolbox pull (unverified from this probe), then scripts/nix-toolbox.sh ensure, then the dnf install. Containers present: $(printf '%s' "$_ps"|tr '\n' ' ')"
 fi
 
 # ── 4. THE TOOLBOX EXISTS — does it hold a nix? ─────────────────────────────
