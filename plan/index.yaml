@@ -4023,6 +4023,103 @@ plan_index:
         - "Tlatoani sign-off recorded before any mechanism becomes worker-protocol contract"
       events:
         - type: progress
+          ts: "2026-08-30T06:35:45Z"
+          agent_id: "linux-lenovinha-claude-20260830t061426z"
+          host: linux
+          summary: |
+            F9 ADDED to the inventory, measured while landing the F1 section: five consecutive lost push races in one cycle. The trunk's only gate (./build.sh --check, ~186s here) must re-run after every rebase because it stamps a TREE, and a peer host was pushing about once a minute. A 3-minute gate cannot win a 1-minute race except by luck; landed on the sixth attempt. What makes it a SCHEDULING entry rather than a build-time complaint: the changeset was plan-only, and the pre-push hook already has a fast lane for that shape, which declined because plan/index.yaml is outside it. That exclusion is right in general -- but the folded index is where append-event WRITES when a packet lives in plan/index.yaml rather than a fragment, so any cycle recording an event on a folded packet is pushed out of the fast lane by the ledger tool's own write target, not by its content. Two candidate remedies are visible (accept an additive events: diff in the fast lane; or make append-event always write a fragment) and BOTH are deliberately left unproposed: they touch the ledger write path, which is F3/F6 territory and outside a scheduling record's authority. Recorded because it is a measured starvation mode in the same family as F1 and F4 -- work that exists, is ready, and cannot reach the pool.
+        - type: progress
+          ts: "2026-08-30T06:18:01Z"
+          agent_id: "linux-lenovinha-claude-20260830t061426z"
+          host: linux
+          summary: |
+            CRITERION 1 ADVANCED to eight entries; criterion 2 still not started, and this
+            event says why that was a choice rather than an omission. Design record:
+            plan/issues/collaborative-work-scheduling-design-record-2026-08-25.md
+            (second-cycle section, lenovinha 2026-08-29).
+
+            F1 REPRODUCED ON A SECOND HOST, AND RECLASSIFIED. Three consecutive cycles on
+            lenovinha drew the identical batch under a different seed, so yoga's five-cycle
+            measurement was not a seed artifact. The useful part is the causal chain,
+            because I am inside it: cycle 1 audited 795-zshi, found its remainder is two
+            Windows-lane deletions, wrote 'suggests re-pointing pickup_role to windows'
+            into its next_action AND DID NOT DO IT; cycle 2 was offered the same packet
+            first, skipped it, took 795-5itp, and narrowed THAT one's remainder in prose
+            too; cycle 3 was offered both again. The cycle that diagnosed F1 produced the
+            next instance of F1, in the same commit that named the remedy.
+
+            THE MEASUREMENT THAT RECLASSIFIES IT. The previous cycle listed F1 as a live
+            gap in selection itself. It is not. select-work-batch.sh delegates role
+            filtering to PlanIndex::ready() (crates/tillandsias-plan/src/lib.rs:1005-1013),
+            which filters pickup_role == role || pickup_role == 'any'. Measured at HEAD:
+            ready linux = 318, ready windows = 178, and 36 windows-ready packets are NOT
+            offered to linux. The exclusion works today, with no new machinery.
+
+            So the SINGLE-LANE half of F1 is a discipline failure over an existing
+            mechanism -- the same class as F2 -- not a missing mechanism. ACTED ON rather
+            than described again: 795-zshi is re-pointed to pickup_role: windows in this
+            cycle's commit, and verified to leave the Linux ready set and appear in the
+            Windows one. If F1 is discipline, the honest response is to exercise it.
+
+            WHAT IS A REAL GAP, AND IT IS ONE PREDICATE. pickup_role is a scalar with one
+            wildcard: linux, windows, or any. It cannot say 'what remains needs macOS AND
+            Windows, but not Linux'. Confirmed, not assumed -- zero disjuncts across 637
+            carriers, and ready() does an exact string compare, so 'macos|windows' would
+            match no role and silently vanish from every pool. A fail-quiet, which this
+            packet's mandate forbids.
+
+            Live exhibit: 795-5itp after this cycle's slice 6. Its remainder is 5 decodes
+            in macos-tray and 2 in windows-tray. `any` re-offers it to Linux forever (F1);
+            `macos` hides ready work from Windows; `windows` mirrors that. So it stays
+            `any`, stays in my batch, and will until the grammar can express it.
+
+            PROPOSED (NOT ADOPTED -- criterion 4 reserves that for the Tlatoani): let
+            ready() accept a `|`-separated disjunct. Verifiable closure: a test asserting
+            pickup_role 'macos|windows' appears in ready macos and ready windows and NOT in
+            ready linux, plus a validator arm refusing 'mac|windows' by NAMING the unknown
+            lane, so a typo cannot silently empty a packet from every pool. Migration rung:
+            additive, every existing scalar keeps its exact meaning, one commit, no ledger
+            migration.
+
+            THE TWO ENTRIES THE PREVIOUS CYCLE LEFT UNEXAMINED ARE NOW SEARCHED.
+              F7 thrashing mediation -- NO EVIDENCE. 'thrash' appears 6 times in
+              plan/index.yaml and not one is a scheduling case: 2 are this packet's own
+              outcome text citing itself, 1 is GPU memory spill, 1 is NTFS I/O. The term
+              entered the mandate from the 2026-07-14 directive without a case behind it.
+              Absence is now SEARCHED, not unexamined -- the distinction the previous cycle
+              asked its successor to close. It is a PREDICTED mode and by this record's own
+              rule must not enter the mechanism set until something measures it.
+              F8 milestone-burndown surfacing -- ALREADY MECHANISED. `tillandsias-plan
+              burndown <milestone>` exists, is in the binary's capabilities set, is exposed
+              as plan_burndown, and reports terminal states alongside open ones. Joins F3,
+              F6 and F2's claiming in the already-built column.
+
+            WHERE THE SET STANDS. Eight entries: four already mechanised, two discipline
+            problems over existing mechanisms, one predicted-but-unmeasured, and two live
+            gaps -- F1's multi-lane half and F4 (claims hide work in both directions). The
+            smallest mechanism set is now TWO changes, one of them a single predicate, and
+            FOUR of this packet's own five named candidates are foreclosed by measurement:
+            better seeding (F5, refuted), dependency-aware dispatch waves and priority
+            lanes with aging (traceable to no entry), and burndown surfacing (F8, built).
+            Per-host reservations survive only as F4's candidate remedy.
+
+            CRITERION 2 DELIBERATELY NOT STARTED. The mechanism surface has now shrunk
+            twice under measurement. Surveying CI schedulers and OS run-queues to justify a
+            one-line predicate change would be exactly the ad-hoc growth this packet exists
+            to prevent. It should be scoped to the two SURVIVING gaps -- attention/lane
+            routing for F1, lease visibility for F4 -- not to the original five, four of
+            which no longer have a problem attached.
+
+            Cycle-scoped claim released; packet stays ready. Nothing here became
+            worker-protocol contract: the disjunct is a proposal, and the 795-zshi
+            re-point uses the existing field as designed.
+        - type: claim
+          ts: "2026-08-30T06:15:07Z"
+          agent_id: "linux-lenovinha-claude-20260830t061426z"
+          host: linux
+          summary: |
+            Criterion 1 continuation: F1 reproduced first-hand on a second host, and an empirical test of whether pickup_role actually filters selection.
+        - type: progress
           ts: "2026-08-25T17:48:41Z"
           agent_id: "linux-yoga-opus5-20260825t174841z"
           host: yoga
@@ -17123,6 +17220,78 @@ plan_index:
         - stage-lift gates are DEFINED numerically against the 682 telemetry set (which metrics, which thresholds, over how many cycles) and recorded in the methodology, so lifting to stage 1+ is a measurement plus an operator approval, never a vibe
         - a stage log exists in the ledger (event per lift with telemetry evidence and the operator approval reference)
       events:
+        - type: progress
+          ts: "2026-08-30T07:18:15Z"
+          agent_id: "linux-lenovinha-claude-20260830t071426z"
+          host: linux
+          summary: |
+            CRITERION 2 LANDED: methodology/in-forge-delegation.yaml now carries a
+            stage_lift_gates block. Its lift_rule already promised the gates were
+            'defined under 689-zwzm', which for nineteen days was a forward reference to
+            nothing -- so 'the 682 telemetry set showing stability' had no operational
+            meaning and any lift would have been exactly the vibe the rule forbids.
+
+            THE DESIGN DECISION THAT MAKES THE BLOCK WORTH HAVING: an unfed metric is a
+            RED gate, never a pass. Each of the five gates names the exact command that
+            produces its number, a threshold, and a dated `fed:` verdict measured at
+            HEAD. Absent data reading as green is how a concurrency ramp lifts itself on
+            silence, and four of these five metrics can currently produce nothing or
+            almost nothing.
+
+            MEASURED 2026-08-30 ON LENOVINHA, gate by gate:
+              G1 overhead_ratio -- UNFED, BLOCKING. The flow log holds SEVEN rows, all
+                from 2026-08-26 05:53Z-17:47Z, and `completed` is 0 in every one, so the
+                metric has never once been computable (cycle-metrics.sh only divides `if
+                $c > 0`). No caller of --emit-flow exists anywhere in the loop: the only
+                invocations in the tree are its own fixture and its own litmus, which is
+                why litmus:cycle-flow-telemetry-shape is GREEN against a four-day-dead
+                log -- it tests the emitter, not the wiring. Filed as 943-7dn5, grouped
+                under the 682 milestone because the gap is in that set's wiring.
+              G2 expert_accuracy -- FED and green. pass=28 graded=28 rate=100%,
+                computed from the corpus on demand so it cannot go stale the way G1 did.
+                Threshold is deliberately two-part: rate 100% AND `graded` must not FALL,
+                because a rate over a shrinking denominator goes green by grading less.
+              G3 stranded claims -- FED, and CURRENTLY FAILING. expire-claims reports
+                in_progress=4 expired=1 held=0 ttl_hours=24; 920-pxg6 has been stale
+                since 2026-08-29T05:13:52Z. Recorded as a live demonstration that the
+                gate discriminates rather than quietly reset before writing it down. The
+                threshold is expired==0 and held==0, NOT in_progress==0 -- an in-flight
+                claim is the mechanism working.
+              G4 delegate deaths -- MECHANISM LIVE, NO DATA. delegate-outcome.sh sweep
+                returns sweep:no-registered-runs, printing and exiting 0 as its litmus
+                requires. An empty registry is NOT a passing G4; it is an unrun stage.
+                Zero tolerance on this one: a silent mid-task death is the recorded
+                failure mode the whole disposition channel was built around.
+              G5 fold integrity + mcp usage -- HALF FED. `tillandsias-plan check` runs
+                every cycle and is clean. The mcp half reads `servers=0
+                other-servers=uninstrumented-see-682-m8ek source=absent` -- pointing at a
+                packet that is COMPLETED and ARCHIVED. Either the instrumentation
+                regressed or the reporter's pointer is stale; a gate cannot be built on
+                source=absent either way. Investigate before the first lift.
+
+            EVALUATION WINDOW: six consecutive cycles on the lifting host, at least four
+            of which ran a delegate. Six because the flow view is per-cycle and one night
+            is one or two points; four-with-a-delegate because a gate a QUIET cycle can
+            satisfy is measuring the host, not the ramp.
+
+            BLOCKING SUMMARY, and it is the honest state rather than an obstacle: no
+            stage lift is possible today, for reasons of MEASUREMENT rather than
+            behaviour. Only G2 is green.
+
+            WHAT I DID NOT DO, named so it is not mistaken for absent. Criterion 1 (stage
+            0 running a full night with cycle records) is untouched: it needs a delegate
+            launched through the disposition channel, which is operational work, not a
+            definition. Criterion 3 (a stage log with an event per lift) has nothing to
+            log yet -- correctly, since no lift can occur. And I did not lift anything,
+            propose lifting anything, or launch a delegate: bar_raise_governance says the
+            loop never lifts its own concurrency gate, and defining the gate is the half
+            that belongs to the loop.
+        - type: claim
+          ts: "2026-08-30T07:15:26Z"
+          agent_id: "linux-lenovinha-claude-20260830t071426z"
+          host: linux
+          summary: |
+            Criterion 2 slice: define the stage-lift gates numerically against the 682 telemetry set, now that five of its six children are done. Not touching stage 0 operation (criterion 1) or lifting anything (bar_raise_governance).
         - type: filed
           ts: "2026-08-11T22:43:37Z"
           agent_id: linux-mutable-session-20260811

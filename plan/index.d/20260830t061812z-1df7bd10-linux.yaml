@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: collaborative-work-scheduling-research
+    field: next_action
+    value: 'Criterion 1 now has EIGHT entries (design record, second-cycle section). Two things to do, in this order. (1) F4 IS THE LARGER LIVE GAP AND IS UNTOUCHED: a claim hides work from the pool in both directions with only a reaper to return it; it has no first-hand measurement on any host yet. Measure it before proposing anything. (2) CRITERION 2, the prior-art survey with provenance, is still not started and must be SCOPED TO THE TWO SURVIVING GAPS — attention/lane routing for F1''s multi-lane half, and lease visibility for F4. Do NOT survey against the packet''s original five candidates: four are foreclosed by measurement (better seeding refuted by F5; dispatch waves and priority-lanes-with-aging traceable to no inventory entry; burndown surfacing already built, F8). AWAITING TLATOANI (criterion 4): the one proposed mechanism is a ''|''-separated disjunct in PlanIndex::ready() so pickup_role can express a partial-lane remainder — closure and migration rung are written in the record; 795-5itp is the live exhibit that has no correct value today. DISCIPLINE, NEEDS NO DECISION: when a slice narrows a packet''s remainder to ONE lane, set pickup_role to that lane in the same commit. Measured to work — 36 windows-ready packets are already excluded from the Linux pool, and 795-zshi left it this cycle.'
+    ts: "2026-08-30T06:18:12Z"
+    host: linux
+
+events:
+  - packet_id: collaborative-work-scheduling-research
+    event:
+      type: note
+      ts: "2026-08-30T06:18:12Z"
+      host: linux
+      summary: >
+        criterion 1 advanced to eight entries; F1 reclassified and acted on; F7/F8 searched

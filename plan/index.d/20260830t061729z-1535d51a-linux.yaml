@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: guest-exec-allowlist-forces-argv-flattening
+    field: pickup_role
+    value: windows
+    ts: "2026-08-30T06:17:29Z"
+    host: linux
+
+events:
+  - packet_id: guest-exec-allowlist-forces-argv-flattening
+    event:
+      type: note
+      ts: "2026-08-30T06:17:29Z"
+      host: linux
+      summary: >
+        Cycle-1 audit (2026-08-29) found three of four next_action steps already landed; the only remaining work is two Windows-lane deletions. Order 335 F1: pickup_role records who may CLAIM, and leaving it 'any' after the remainder narrows is what re-offers a dead packet to Linux every cycle. Measured: ready() filters on this field, so this removes it from the Linux pool immediately.
