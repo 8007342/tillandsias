@@ -60,6 +60,15 @@ _capture() {
         # separates machines whose GPUs differ by more than a bin; it is not
         # in it because a match means anything on its own. When two hosts
         # agree on gpu_model, the CPU fields are what actually decided.
+        #
+        # WORSE ACROSS PLATFORMS: the field is not merely weak, it is
+        # INCOMMENSURABLE. Two Linux hosts here both report "Krackan [...]",
+        # the same machine probed inside WSL2 reports "WSL2 paravirtual GPU
+        # (/dev/dxg)" — the PATH, not the silicon — and probed natively on
+        # Windows reports "none" on a machine that has a Radeon. Comparing this
+        # field between a Linux and a Windows document compares two different
+        # kinds of fact, and a mismatch there is not evidence of different
+        # hardware.
         gpu_model:      (first_name("gpu")),
         npu_vendor:     ([dev("npu") | .vendor] | (.[0] // "none")),
         npu_node:       (first_node("npu")),
@@ -104,9 +113,47 @@ _fields_json() {
     echo "$base" | jq --arg ram "$ram" '.ram_class_gb = $ram'
 }
 
+# The hash is taken over a canonical string WE build, field by field in a fixed
+# order, not over jq's JSON serialization. jq versions differ in how they render
+# numbers and order keys, and a fingerprint that changes with the reader's jq is
+# not a fingerprint — yolanda's jq and mine disagreed on the same committed
+# document, which is how this was caught (2026-08-30).
+#
+# FINGERPRINT_SCHEMA is part of the hashed string on purpose: if the field set
+# ever changes, every fingerprint changes with it, so an old value can never be
+# silently compared against a new one.
+FINGERPRINT_SCHEMA="hwfp-v1"
+
+_canonical_string() {
+    local doc="$1" fields
+    fields="$(_fields_json "$doc")"
+    local cpu_model cpu_physical cpu_logical gpu_model npu_vendor npu_node ram
+    cpu_model="$(jq -r '.cpu_model' <<<"$fields")"
+    cpu_physical="$(jq -r '.cpu_physical' <<<"$fields")"
+    cpu_logical="$(jq -r '.cpu_logical' <<<"$fields")"
+    gpu_model="$(jq -r '.gpu_model' <<<"$fields")"
+    npu_vendor="$(jq -r '.npu_vendor' <<<"$fields")"
+    npu_node="$(jq -r '.npu_node' <<<"$fields")"
+    ram="$(jq -r '.ram_class_gb' <<<"$fields")"
+
+    # A DOCUMENT THAT TAUGHT US NOTHING MUST NOT FINGERPRINT.
+    # Without this, two unreadable files both produce an empty field set, hash
+    # to sha256("") and COMPARE AS TWINS — the one input state compare must
+    # never bless is the one where it learned nothing. Reported by yolanda
+    # 2026-08-30 with a one-line repro; it is the vacuous-test failure landing
+    # inside the tool built to prevent it.
+    if [[ "$cpu_model" == "none" || -z "$cpu_model" ]]; then
+        _fail "hardware-fingerprint: $doc carries no CPU device — there is nothing to fingerprint, and an empty field set would compare equal to any other empty one. Refusing rather than returning a hash."
+    fi
+
+    printf '%s\ncpu_model=%s\ncpu_physical=%s\ncpu_logical=%s\ngpu_model=%s\nnpu_vendor=%s\nnpu_node=%s\nram_class_gb=%s\n' \
+        "$FINGERPRINT_SCHEMA" "$cpu_model" "$cpu_physical" "$cpu_logical" \
+        "$gpu_model" "$npu_vendor" "$npu_node" "$ram"
+}
+
 _fingerprint_of() {
     local doc="$1"
-    _fields_json "$doc" | jq -S -c . | sha256sum | cut -c1-16
+    _canonical_string "$doc" | sha256sum | cut -c1-16
 }
 
 _resolve_doc() {
@@ -133,7 +180,15 @@ case "${1:-}" in
 compare)
     [[ $# -eq 3 ]] || _fail "usage: hardware-fingerprint.sh compare <a.json> <b.json>"
     a="$2"; b="$3"
-    fa="$(_fingerprint_of "$a")"; fb="$(_fingerprint_of "$b")"
+    # Check BOTH documents before comparing. A missing file used to reach the
+    # hash as an empty field set, and two missing files then compared as twins.
+    for _d in "$a" "$b"; do
+        [[ -r "$_d" ]] || _fail "hardware-fingerprint: cannot read $_d — refusing to compare, an absent document is not evidence of anything"
+        jq -e . "$_d" >/dev/null 2>&1 || _fail "hardware-fingerprint: $_d is not a readable JSON capability document — refusing to compare"
+    done
+    fa="$(_fingerprint_of "$a")" || exit 2
+    fb="$(_fingerprint_of "$b")" || exit 2
+    [[ -n "$fa" && -n "$fb" ]] || _fail "hardware-fingerprint: refusing to compare an empty fingerprint"
     if [[ "$fa" == "$fb" ]]; then
         echo "twin: both documents fingerprint $fa — same machine model, so a difference between these hosts isolates the substrate"
         exit 0
@@ -150,10 +205,18 @@ compare)
     ;;
 --json)
     doc="$(_resolve_doc "${2:-}")"
-    _fields_json "$doc" | jq --arg fp "$(_fingerprint_of "$doc")" '{fingerprint: $fp} + .'
+    # Compute the hash into a variable FIRST. Inlining it as $(...) runs _fail in
+    # a subshell, whose exit does not stop this one — the refusal was printed and
+    # sha256("") was then reported as the fingerprint anyway. Same class of bug as
+    # the one this refusal exists to prevent, one layer out.
+    fp="$(_fingerprint_of "$doc")" || exit 2
+    [[ -n "$fp" ]] || _fail "hardware-fingerprint: refusing to report an empty fingerprint"
+    _fields_json "$doc" | jq --arg fp "$fp" '{fingerprint: $fp} + .'
     ;;
 *)
     doc="$(_resolve_doc "${1:-}")"
-    echo "$(_fingerprint_of "$doc")"
+    fp="$(_fingerprint_of "$doc")" || exit 2
+    [[ -n "$fp" ]] || _fail "hardware-fingerprint: refusing to report an empty fingerprint"
+    printf '%s\n' "$fp"
     ;;
 esac
