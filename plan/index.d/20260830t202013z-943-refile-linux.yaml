@@ -1,0 +1,377 @@
+# Re-filed 2026-08-30: the original four fragments used a top-level `steps:`
+# key, which the fragment fold does not read as packet definitions, so all
+# four packets were silently discarded. The canonical key is `packets:`
+# (crates/tillandsias-plan/src/fragments.rs — the G-Set keyed by packet_id).
+# Content is recovered verbatim from the original commits; only the top-level
+# key changed.
+packets:
+  - packet_id: emit-flow-has-no-caller-so-overhead-ratio-has-never-been-computable
+    order: 943-7dn5
+    status: ready
+    kind: fix
+    priority: p1
+    desired_release: v0.5
+    release_target: local-telemetry-for-bottleneck-finding-milestone
+    pickup_role: any
+    depends_on: []
+    capability_tags:
+      - telemetry
+      - metrics
+      - orchestration
+      - coordination
+    title: >
+      cycle-metrics.sh --emit-flow has no caller anywhere in the loop, so the
+      flow log holds seven rows from a single day with completed=0 in every
+      one and overhead_ratio has never once been computable — while
+      litmus:cycle-flow-telemetry-shape stays green because it exercises the
+      emitter rather than the wiring
+    deliverable: >
+      the worker loop emits one flow record per cycle, so `flow:` reports real
+      numbers, plus a guard that fails on a STALE log rather than on a
+      malformed one
+    context: |
+      FOUND while defining 689-zwzm's stage-lift gates (criterion 2), which
+      name `overhead_ratio not degrading` as the first gate metric. It cannot
+      be a gate: it has never produced a number.
+
+      MEASURED 2026-08-30 on lenovinha:
+        * .cache/metrics/tillandsias-cycle-flow.jsonl holds SEVEN rows, all
+          from 2026-08-26 between 05:53Z and 17:47Z. File mtime 2026-08-26.
+          Four days and many cycles across the fleet have added nothing.
+        * `completed` is 0 in all seven. cycle-metrics.sh computes
+          overhead_ratio only `if $c > 0`, so it has printed `-` every time
+          the metric has existed.
+        * `grep -rn emit-flow` over the tree finds NO caller outside
+          scripts/test-cycle-flow-emit-idempotency.sh (its own fixture) and
+          litmus-cycle-flow-telemetry-shape.yaml (its own litmus). The worker
+          skill's section 7.0 tells agents to RUN cycle-metrics.sh and report
+          its output; nothing tells them to EMIT.
+
+      THIS IS THE SUBSTITUTION SHAPE, not a missing feature. 682-epud shipped
+      the emitter and is `done`; the emitter works and its fixture proves it.
+      What was never built is the call. And the litmus cannot see the gap
+      because it invokes --emit-flow itself: a green light on a dead log.
+
+      WHY IT MATTERS BEYOND ONE METRIC. overhead_ratio is the number
+      682-yiz7 (greedier batching) was filed to answer and the number
+      689-zwzm gates its concurrency ramp on. A ramp gated on a metric that
+      is structurally `-` either never lifts, or lifts on the absence being
+      read as calm. 689-zwzm's gate block therefore records G1 as BLOCKING
+      and states the rule an unfed metric is a RED gate, never a pass.
+    exit_criteria:
+      - >
+          every cycle of the worker loop appends exactly one flow record on
+          the host that ran it, and `scripts/cycle-metrics.sh` reports a
+          NUMERIC overhead_ratio on a host that has completed at least one
+          packet. Idempotency is already pinned (801-tpxd, cycle= minting) and
+          must keep passing.
+      - >
+          NEGATIVE CONTROL, and it is the load-bearing half: a guard fails
+          when the flow log is STALE — no record newer than N cycles/hours on
+          a host that has been committing — not merely when a row is
+          malformed. The current litmus is green against a four-day-dead log,
+          so staleness is exactly the condition nothing detects. Prove it by
+          pointing the guard at the log as it stands today and watching it
+          refuse.
+      - >
+          the fix is in the shared worker protocol, not one host's habit, so
+          every host emits without being told twice.
+    verifiable_closure: >
+      Extend litmus:cycle-flow-telemetry-shape with a STALENESS arm: a log
+      whose newest record predates the freshness horizon must be refused with
+      a named verdict, and the arm must be mutation-tested by pointing it at a
+      log it should accept. The existing shape arms stay; they are correct
+      about the emitter and were simply never asked about the caller.
+    events:
+      - type: filed
+        ts: "2026-08-30T07:30:00Z"
+        agent_id: linux-lenovinha-claude-20260830t071426z
+        host: linux
+        summary: >
+          Filed from the 689-zwzm criterion-2 slice. Order minted with
+          `tillandsias-plan next-order`. Grouped under the 682 telemetry
+          milestone because the gap is in that set's wiring, not in the ramp.
+  - packet_id: delegate-liveness-probe-matched-itself-so-no-death-could-be-detected
+    order: 943-3xyf
+    status: implemented
+    kind: fix
+    priority: p1
+    desired_release: v0.5
+    release_target: architecture-audit-epic
+    pickup_role: any
+    depends_on: []
+    capability_tags:
+      - orchestration
+      - forge
+      - delegation
+      - shell
+    title: >
+      the delegate disposition channel's DEFAULT liveness probe matched the
+      shell that ran it, so every delegate reported still-running forever and
+      died-without-outcome — the one disposition the channel exists to detect —
+      could never fire, while its litmus stayed green by supplying an explicit
+      --alive-cmd in every arm
+    deliverable: scripts/delegate-outcome.sh default probe + two litmus arms that exercise it
+    context: |
+      FOUND while exercising the channel for 689-zwzm's G4 gate, which is the
+      first thing that ever ran the DEFAULT path on this host.
+
+      THE DEFECT. `register` recorded the default probe as the literal string
+      `pgrep -f <id>`, and `is_alive` ran it via `sh -c "$alive_cmd"`. That sh
+      process's own command line contains the id, so pgrep matched the PROBE
+      rather than the delegate. Measured with a random id no process anywhere
+      carried: `pgrep -c -f <id>` from a clean shell returned 0, and
+      `reconcile` returned `outcome:still-running`.
+
+      Excluding the caller's ANCESTRY was tried first and was not enough. The
+      surviving self-match is the command-substitution SUBSHELL inside
+      default_alive: bash forks it from this script so it inherits the script's
+      argv (which contains `--id <id>`), and it is a CHILD, so no ancestry
+      filter sees it. The reliable discriminator is the tool's own name — a
+      real delegate's command line is `tillandsias <project> --<harness>
+      --prompt ...` and never contains `delegate-outcome`.
+
+      WHY THE LITMUS DID NOT CATCH IT, which is the reusable half. Every arm of
+      litmus:delegate-outcome-disposition-not-silent-shape passes an explicit
+      `--alive-cmd false` or `--alive-cmd true`. The suite therefore pinned the
+      DISPOSITION GRAMMAR perfectly and never once exercised the probe that
+      produces it in production. A green suite over a check that always
+      answers the same way — the same shape as the framing ratchet's
+      emitter-vs-wiring gap (943-7dn5) filed one cycle earlier.
+
+      BLAST RADIUS. 690-2kwd built this channel precisely so a silent
+      mid-task delegate death is "never mistaken for a clean finish", and
+      cycle_protocol's CYCLE END step relies on `sweep` auto-filing one. With
+      the probe always alive, sweep would have filed nothing, ever. Stage 0 has
+      not run on this host, so no death has actually been lost here; a host
+      that HAS run stage 0 should re-read its registry rather than assume.
+    exit_criteria:
+      - >
+          the default probe discriminates in BOTH directions on a live host: a
+          registered id with no matching process reconciles as
+          died-without-outcome, and a real process carrying the id reconciles
+          as still-running
+      - >
+          both directions are pinned as litmus arms, and the pair is documented
+          as a pair — the dead-case arm alone passes on a probe hard-wired to
+          "dead", the live-case arm alone passes on one hard-wired to "alive"
+      - >
+          records written by hosts that have not yet taken this fix (carrying
+          the old literal `pgrep -f <id>`) are recognised on READ and routed to
+          the fixed probe, since a fleet upgrades at different times
+    verifiable_closure: >
+      litmus:delegate-outcome-disposition-not-silent-shape steps 6 and 7,
+      mutation-tested: restoring the old `sh -c "pgrep -f <id>"` default makes
+      step 6 fail with the exact original symptom
+      (`outcome:still-running` for an id nothing carries).
+    events:
+      - type: filed
+        ts: "2026-08-30T08:35:00Z"
+        agent_id: linux-lenovinha-claude-20260830t081427z
+        host: linux
+        summary: >
+          Filed and fixed in the same cycle from the 689-zwzm G4 slice. Order
+          minted with `tillandsias-plan next-order`. Status `implemented`
+          rather than `completed`: the fix and its negative controls are
+          verified here, but the channel has still never carried a REAL
+          delegate, which is 689-zwzm criterion 1.
+      - type: progress
+        ts: "2026-08-30T08:36:00Z"
+        agent_id: linux-lenovinha-claude-20260830t081427z
+        host: linux
+        summary: >
+          Fixed. `register` now records the sentinel `:default:`; `is_alive`
+          routes that (and the legacy literal) to `default_alive`, which runs
+          pgrep directly rather than through `sh -c` and drops any match whose
+          `ps -o args=` contains `delegate-outcome`. Verified in three states
+          on this host — nothing running -> died-without-outcome; a process
+          exec'd with the id in argv -> still-running; after it exits ->
+          died-without-outcome again, and `sweep --dry-run` emits
+          `would-file:died-without-outcome`. Legacy-record path verified with a
+          hand-written .rec carrying the old literal. Litmus 7/7 green, and
+          mutation-tested: restoring the old default makes step 6 fail with the
+          original symptom.
+  - packet_id: long-running-view-gate-read-only-the-folded-base
+    order: 943-26rx
+    status: implemented
+    kind: fix
+    priority: p1
+    desired_release: v0.5
+    release_target: architecture-audit-epic
+    pickup_role: any
+    depends_on: []
+    capability_tags:
+      - plan
+      - coordination
+      - shell
+      - methodology
+    title: >
+      the LM-04 gate read only plan/index.yaml, so a set-field closure — the
+      MANDATED closure method, which writes a fragment — left a completed
+      packet reading as live: the gate demanded it stay in the active
+      long-running view and refused the push of anyone removing it
+    deliverable: scripts/check-long-running-view.sh fragment status overlay + two litmus arms
+    context: |
+      FOUND while taking 251's LM-04 slice: checking whether the gate yoga
+      landed on 2026-08-25 to stop the view's second drift still holds.
+
+      THE BLIND SPOT. `live_orders()` is a single awk pass over
+      `plan/index.yaml`, deliberately (the comment says so). But
+      `tillandsias-plan set-field <id> status done` writes the LWW status into
+      a `plan/index.d/` fragment, and the worker protocol MANDATES that method
+      — section 7.2 is explicit that a status must never be hand-authored into
+      the base. So between a closure and the next fold, the base is wrong and
+      the gate believes it.
+
+      THE WINDOW IS NOT SMALL. Measured 2026-08-30: 321 unfolded fragments
+      spanning FOUR DAYS (2026-08-26 to 2026-08-30), 144 of them carrying a
+      `field: status` entry.
+
+      BOTH FAILURE DIRECTIONS ARE BAD, AND ONE WAS LIVE. Order 831-ezea
+      (`three-horizon-cycle-model-arrival-control-by-routing`) is `completed`
+      per the folding reader and was listed in plan/long-running.md as
+      `in_progress`. So the view was advertising a closed packet as claimable
+      long-running work — the exact DECOY failure the gate exists to prevent
+      (2026-08-25: four obsoleted packets listed, twenty live ones absent) —
+      and removing the row would have turned the trunk red.
+
+      WHY THE LITMUS DID NOT CATCH IT. All five existing arms supply a fixture
+      INDEX, so every one of them tested the base parse and none could reach a
+      fragment. The suite pinned membership arithmetic correctly and never
+      asked where "live" comes from.
+    exit_criteria:
+      - >
+          a packet closed via set-field reads TERMINAL to the gate while the
+          folded base still says ready, pinned by a litmus arm that uses a real
+          order rather than a fixture
+      - >
+          POSITIVE CONTROL in the same suite: a genuinely live packet still
+          reads live, so the overlay cannot satisfy the negative by resolving
+          everything to terminal — which would empty the view's obligations
+          and be worse than the blind spot
+      - >
+          the overlay only ever REFINES live -> terminal, and a host with no
+          usable plan binary degrades to the old base-only answer instead of
+          failing the build (a gate that reds when its optional reader is
+          absent gets switched off)
+    verifiable_closure: >
+      litmus:long-running-view-agreement steps 6 and 7, mutation-tested:
+      disabling the overlay makes STEP 1 fail on the live tree, demanding
+      831-ezea be re-listed as active work.
+    events:
+      - type: filed
+        ts: "2026-08-30T10:35:00Z"
+        agent_id: linux-lenovinha-claude-20260830t101428z
+        host: linux
+        summary: >
+          Filed and fixed in the same cycle from 251's LM-04 slice. Order
+          minted with `tillandsias-plan next-order`.
+      - type: progress
+        ts: "2026-08-30T10:36:00Z"
+        agent_id: linux-lenovinha-claude-20260830t101428z
+        host: linux
+        summary: >
+          Fixed. `apply_fragment_status_overlay` resolves each base-derived
+          order through the sanctioned folding reader
+          (scripts/plan-binary-probe.sh) and drops the terminal ones. Second,
+          smaller fix found while testing: the `[ -z "$live" ]` emptiness guard
+          now asks the BASE parse rather than the final set — it exists to
+          catch a broken awk pass, and after the overlay those became two
+          different conditions, so a tree whose multi_cycle packets are all
+          legitimately closed no longer reports
+          `blocked:no-multi-cycle-packets-parsed` for a true answer. The stale
+          831-ezea row is removed from plan/long-running.md in the same commit
+          — the repair the old gate was refusing. Litmus 7/7.
+  - packet_id: claim-events-change-no-status-so-claiming-separates-nobody
+    order: 943-unii
+    status: ready
+    kind: fix
+    priority: p1
+    desired_release: v0.5
+    release_target: architecture-audit-epic
+    pickup_role: any
+    depends_on: []
+    capability_tags:
+      - coordination
+      - plan
+      - methodology
+      - orchestration
+    title: >
+      methodology says "a claim event changes status from ready to in_progress"
+      but append-event has no status flag and the worker skill never sets one —
+      so the claim step added after 814-iyu7's duplicate implementation runs
+      every cycle on every host and separates nobody
+    deliverable: >
+      a decision, then its implementation — either claiming performs the
+      transition the contract promises, or the contract stops promising it
+    context: |
+      FOUND while measuring order 335's F4, which had no first-hand measurement
+      on any host.
+
+      MEASURED 2026-08-30 on lenovinha, over seventeen consecutive cycles of
+      real claiming:
+        * packet 245 carries 43 `claim` events — eleven of them from this host,
+          one per cycle — and is `status: ready` at HEAD, still returned by
+          `ready linux`. So are 335 and 251.
+        * fleet-wide: ready linux = 316 packets; in_progress = 4; of those 4,
+          THREE are past their 24h TTL.
+
+      THE DIVERGENCE. methodology/distributed-work.yaml states in `rules`:
+      "A `claim` event changes status from ready to in_progress (mint lease_id;
+      heartbeat per lease rules)." The worker skill §3 implements claiming as
+      `tillandsias-plan append-event <id> claim …`, whose entire usage is
+      `<ref> <type> <summary> --ts <ISO> [--agent A] [--host H]` — no status
+      flag exists. Appending an event cannot change a status; only
+      `set-field status in_progress` can, and neither the rule nor the skill's
+      claim step says to run it.
+
+      THE SAME SENTENCE SHAPE WAS ALREADY FOUND FALSE, TWO RULES BELOW. The
+      same block says "A `completed` event REQUIRES evidence_refs and sets
+      status to `completed`". That is equally untrue of the tool, and the
+      worker skill's §7.2 exists precisely because it is untrue — it cites
+      600-c266 and 635-i6vm and opens "An event alone does not close a packet",
+      after three hosts left finished work claimable on 2026-08-09. The claim
+      rule was never given the same correction. The fleet learned the lesson on
+      the CLOSING end and did not carry it back to the OPENING end.
+
+      WHY IT MATTERS BEYOND TIDINESS. 814-iyu7 recorded two hosts implementing
+      798-tk7b six minutes apart, and the remedy was to add a claim step to the
+      worker skill (commit 7fff8d2a2). That step now runs on every host every
+      cycle and provides no exclusion whatsoever: two hosts claiming the same
+      packet both see it `ready` and both proceed. A mechanism that was
+      "existing but unused" is now used and inert — which reads as FIXED in
+      every cycle report, which is worse than visibly absent.
+    exit_criteria:
+      - >
+          the contract and the tooling agree. EITHER the claim step performs the
+          transition (and `ready` stops offering claimed work — note the 3-of-4
+          stranded rate says that path needs the reaper to be reliable first),
+          OR the methodology rule is corrected to say a claim event is an audit
+          record and explicitly NOT a mutex, with the worker skill saying the
+          same where it prescribes the step.
+      - >
+          whichever is chosen, a guard refuses the divergence returning: if the
+          rule promises a transition, something must verify a claim produces
+          one; if it does not, something must verify no reader treats a claim
+          event as exclusion.
+      - >
+          the fix is decided with 814-iyu7 in view — it is the incident the
+          claim step was added for, and it is not addressed by the step as it
+          stands.
+    verifiable_closure: >
+      A litmus arm that claims a fixture packet through the SANCTIONED recipe
+      and asserts the resulting pool membership matches the contract — present
+      if claiming is an audit record, absent if it is a mutex. Either assertion
+      is falsifiable; the current state satisfies neither because the contract
+      and the tool disagree about which one is true.
+    events:
+      - type: filed
+        ts: "2026-08-30T20:25:00Z"
+        agent_id: linux-lenovinha-claude-20260830t201434z
+        host: linux
+        summary: >
+          Filed from order 335's F4 slice. Order minted with `next-order`.
+          Deliberately filed as a DECISION rather than fixed in place: making
+          claiming exclusive changes what every host is offered every cycle,
+          and the measured 3-of-4 stranded rate among existing `in_progress`
+          packets says the reaper's reliability has to be settled first.

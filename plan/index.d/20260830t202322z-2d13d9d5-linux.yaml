@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: collaborative-work-scheduling-research
+    field: next_action
+    value: 'F10 landed (claiming does not claim — measured over 17 cycles; 943-unii filed as the decision). THE NEXT SLICE SHOULD FILE THE GUARD THIS CYCLE FOUND AND DID NOT BUILD: a fragment that declares packets under a key the fold does not read (I used ''steps:''; the fold reads ''packets:'') parses, validates, passes ''tillandsias-plan check'', reads correctly in review, and is silently discarded — four packets of mine were lost that way across four cycles and only surfaced because the append-event-archived-refusal fixture went red. ''fragment-misplaced-definitions'' does NOT catch it. The failure is currently indistinguishable from success at every checkpoint a worker has, which is the same class as everything else in this inventory. INVENTORY STATE: ten entries. Five already mechanised, two discipline-over-existing-mechanism, one predicted-but-unmeasured (F7), and TWO live gaps that are now differently shaped than recorded — F1''s multi-lane half (pickup_role cannot express a partial-lane remainder) and F10 (the claim step is inert). F4 is REVISED SMALLER by F10''s measurement. Criterion 2, the prior-art survey, is still not started and should be scoped to F1''s routing half and F10''s exclusion question — NOT to the packet''s original five candidates, four of which are foreclosed.'
+    ts: "2026-08-30T20:23:22Z"
+    host: linux
+
+events:
+  - packet_id: collaborative-work-scheduling-research
+    event:
+      type: note
+      ts: "2026-08-30T20:23:22Z"
+      host: linux
+      summary: >
+        F10 landed; naming the unbuilt guard as the next slice's work
