@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: synthesis-budget-does-not-bound-the-request
+    event:
+      type: progress
+      ts: "2026-08-30T01:00:34Z"
+      agent_id: linux-macuahuitl-claude-20260830t010034z
+      host: linux
+      summary: >
+        FIX LANDED, mechanism confirmed in source, two of three criteria discharged. MECHANISM (yoga's reading verified line by line): the budget wrapped ONLY the synthesis spawn; decomposition at pipeline.rs:582 was awaited with NO tokio timeout, running under raw 120s socket timeouts BEFORE the budget started — 120s stalled decomposition + budgeted synthesis = the ~124s rows. Compounding it, tokio::time::timeout dropping the spawn_blocking JoinHandle DETACHES the thread rather than cancelling it, so the blocking work always ran to its own 120s socket deadline (yoga's leaked-generation layer; their pre-registered OLLAMA_NUM_PARALLEL=2 falsification of the alternation half is still in flight and is respected as the remaining mechanism evidence). FIX SHAPE (yoga's smaller candidate — cancel at the transport): a request-level prose_deadline over decomposition + synthesis; each phase gets min(its transport timeout, remaining) as its SOCKET timeout — the socket deadline IS the cancellation mechanism for a detached thread — plus a tokio timeout at remaining for the caller. Retrieval deliberately keeps its own transport timeout (the floor answer requires embeddings); the documented bound is budget + retrieval transport + small constant. PINNED: stalled_prose_endpoint_returns_floor_within_budget — embeddings answer, prose endpoint accepts-and-parks, 1500ms budget, wall asserted < budget+8s; MUTATION CONTROL run: with the deadline neutralized (+3600s) the test run had to be KILLED at 120s — the exact unbounded hold, reproduced then eliminated; restored, green in 1.5s. REMAINING: criterion 3 — the 60000-cell tail re-run on BOTH twins (yoga's both-hosts requirement adopted: the finding's credibility came from eliminating memory pressure across two different regimes, and a one-host verification would un-eliminate it).
