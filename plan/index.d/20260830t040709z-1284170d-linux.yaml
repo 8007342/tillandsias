@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: nix-cache-and-crane-build-path-with-its-instrumentation
+    event:
+      type: note
+      ts: "2026-08-30T04:07:09Z"
+      agent_id: linux-yoga-opus5-20260830t040709z
+      host: linux
+      summary: >
+        SLICE from yoga — instrumentation only (exit criterion 4). NO CLAIM, NO CLOSE: this packet is a v0.6 multi-cycle attractor and stays ready. Landed scripts/record-nix-cache-metrics.sh writing one JSON row per build to .cache/metrics/nix-cache.jsonl in the fleet schema (ts, host, lane, run_id, with_substituter, substituter_url, paths_substituted, paths_built, hit_rate, wall_ms, treatment_verified). treatment_verified is a STRING and is REQUIRED whenever with_substituter is true — the script exits 2 and writes nothing otherwise. Rationale: a 'with' run that never reached the cache yields a clean hit_rate of 0.0 that reads as a real measurement, which is the mislabelled-treatment failure that cost the fleet two measurement runs on 2026-08-29; a bool would let a caller assert the treatment, a string makes them state the evidence a reader can judge. A refused row is a hole in the series, which is honest; a fabricated row is not, because nothing downstream can tell it from a real one. FIRST YOGA ROW, real: lane=toolbox, with_substituter=true, substituter_url=https://cache.nixos.org, paths_substituted=5, paths_built=0, hit_rate=1.0, wall_ms=937, treatment_verified names the 5 'copying path ... from https://cache.nixos.org' log lines plus the prior path-info showing those same paths as 'will be fetched' (cold store for that closure). CORRECTION TO MY OWN EARLIER READING: I first reported yoga as unable to contribute because the host has no nix and the builder toolbox's /usr/local/bin/nix is a host-escape shim to a binary that does not exist. That was wrong — the operator pointed out the toolbox path. yoga is nix-capable at the toolbox rung once nix is installed in the tillandsias-nix toolbox, with the shared /var/home/tlatoani chroot store answering store info. NOT MEASURED, and deliberately not faked: the without-substituter arm for the same closure means compiling glibc and gcc from source (hours). Substituting a trivial derivation and labelling it comparable would answer a different question, so the with/without wall-clock comparison the packet asks for is still open on this host.
