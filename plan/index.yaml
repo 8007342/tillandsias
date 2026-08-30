@@ -17220,6 +17220,78 @@ plan_index:
         - stage-lift gates are DEFINED numerically against the 682 telemetry set (which metrics, which thresholds, over how many cycles) and recorded in the methodology, so lifting to stage 1+ is a measurement plus an operator approval, never a vibe
         - a stage log exists in the ledger (event per lift with telemetry evidence and the operator approval reference)
       events:
+        - type: progress
+          ts: "2026-08-30T07:18:15Z"
+          agent_id: "linux-lenovinha-claude-20260830t071426z"
+          host: linux
+          summary: |
+            CRITERION 2 LANDED: methodology/in-forge-delegation.yaml now carries a
+            stage_lift_gates block. Its lift_rule already promised the gates were
+            'defined under 689-zwzm', which for nineteen days was a forward reference to
+            nothing -- so 'the 682 telemetry set showing stability' had no operational
+            meaning and any lift would have been exactly the vibe the rule forbids.
+
+            THE DESIGN DECISION THAT MAKES THE BLOCK WORTH HAVING: an unfed metric is a
+            RED gate, never a pass. Each of the five gates names the exact command that
+            produces its number, a threshold, and a dated `fed:` verdict measured at
+            HEAD. Absent data reading as green is how a concurrency ramp lifts itself on
+            silence, and four of these five metrics can currently produce nothing or
+            almost nothing.
+
+            MEASURED 2026-08-30 ON LENOVINHA, gate by gate:
+              G1 overhead_ratio -- UNFED, BLOCKING. The flow log holds SEVEN rows, all
+                from 2026-08-26 05:53Z-17:47Z, and `completed` is 0 in every one, so the
+                metric has never once been computable (cycle-metrics.sh only divides `if
+                $c > 0`). No caller of --emit-flow exists anywhere in the loop: the only
+                invocations in the tree are its own fixture and its own litmus, which is
+                why litmus:cycle-flow-telemetry-shape is GREEN against a four-day-dead
+                log -- it tests the emitter, not the wiring. Filed as 943-7dn5, grouped
+                under the 682 milestone because the gap is in that set's wiring.
+              G2 expert_accuracy -- FED and green. pass=28 graded=28 rate=100%,
+                computed from the corpus on demand so it cannot go stale the way G1 did.
+                Threshold is deliberately two-part: rate 100% AND `graded` must not FALL,
+                because a rate over a shrinking denominator goes green by grading less.
+              G3 stranded claims -- FED, and CURRENTLY FAILING. expire-claims reports
+                in_progress=4 expired=1 held=0 ttl_hours=24; 920-pxg6 has been stale
+                since 2026-08-29T05:13:52Z. Recorded as a live demonstration that the
+                gate discriminates rather than quietly reset before writing it down. The
+                threshold is expired==0 and held==0, NOT in_progress==0 -- an in-flight
+                claim is the mechanism working.
+              G4 delegate deaths -- MECHANISM LIVE, NO DATA. delegate-outcome.sh sweep
+                returns sweep:no-registered-runs, printing and exiting 0 as its litmus
+                requires. An empty registry is NOT a passing G4; it is an unrun stage.
+                Zero tolerance on this one: a silent mid-task death is the recorded
+                failure mode the whole disposition channel was built around.
+              G5 fold integrity + mcp usage -- HALF FED. `tillandsias-plan check` runs
+                every cycle and is clean. The mcp half reads `servers=0
+                other-servers=uninstrumented-see-682-m8ek source=absent` -- pointing at a
+                packet that is COMPLETED and ARCHIVED. Either the instrumentation
+                regressed or the reporter's pointer is stale; a gate cannot be built on
+                source=absent either way. Investigate before the first lift.
+
+            EVALUATION WINDOW: six consecutive cycles on the lifting host, at least four
+            of which ran a delegate. Six because the flow view is per-cycle and one night
+            is one or two points; four-with-a-delegate because a gate a QUIET cycle can
+            satisfy is measuring the host, not the ramp.
+
+            BLOCKING SUMMARY, and it is the honest state rather than an obstacle: no
+            stage lift is possible today, for reasons of MEASUREMENT rather than
+            behaviour. Only G2 is green.
+
+            WHAT I DID NOT DO, named so it is not mistaken for absent. Criterion 1 (stage
+            0 running a full night with cycle records) is untouched: it needs a delegate
+            launched through the disposition channel, which is operational work, not a
+            definition. Criterion 3 (a stage log with an event per lift) has nothing to
+            log yet -- correctly, since no lift can occur. And I did not lift anything,
+            propose lifting anything, or launch a delegate: bar_raise_governance says the
+            loop never lifts its own concurrency gate, and defining the gate is the half
+            that belongs to the loop.
+        - type: claim
+          ts: "2026-08-30T07:15:26Z"
+          agent_id: "linux-lenovinha-claude-20260830t071426z"
+          host: linux
+          summary: |
+            Criterion 2 slice: define the stage-lift gates numerically against the 682 telemetry set, now that five of its six children are done. Not touching stage 0 operation (criterion 1) or lifting anything (bar_raise_governance).
         - type: filed
           ts: "2026-08-11T22:43:37Z"
           agent_id: linux-mutable-session-20260811
