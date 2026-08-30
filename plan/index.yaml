@@ -2452,6 +2452,83 @@ plan_index:
         - "Platform Abstraction Layer mapped (Linux bare, WSL2, macOS VZ, Silverblue Toolbox — bridge/forwarding mechanism)"
         - "Spec/Cheatsheet patch list published with specific file:line references"
       events:
+        - type: progress
+          ts: "2026-08-30T12:20:35Z"
+          agent_id: "linux-lenovinha-claude-20260830t121429z"
+          host: linux
+          summary: |
+            NA-05 PATCH LIST AUDITED AGAINST THE TREE (linux slice, cycle-scoped claim on
+            a multi_cycle packet; phase stays `review`, NOT closed). Fourth revision slice.
+            L1/L2/L3 fixed what the document SAYS about the code; this one asks whether its
+            proposed WORK is still the work.
+
+            WHY THIS SECTION AND NOT MORE CITATION REPAIR. A patch list is the one section
+            read to decide what to do NEXT, so a stale entry does not merely mislead, it
+            spends someone's cycle. Same decoy shape L1 named, pointed at a to-do list.
+
+            ALL SEVEN ITEMS MEASURED AT HEAD. Five OPEN, one CLOSED, one HALF APPLIED, and
+            one NEW item found:
+              P1 enclave-network Purpose -- OPEN, and the divergence is in TWO places in
+                 that spec, not one: Purpose AND the Container-attachment requirement both
+                 assert proxy-only egress, while fn run_provider_login still runs on
+                 ENCLAVE_EGRESS_NETS.
+              P2 cleanup-on-exit scenario -- CLOSED, ALREADY SATISFIED, and the draft's
+                 recommendation is REFUTED. P2 predicted the scenario was "likely obsolete
+                 -> tombstone or re-scope". It is not: the spec grew a sibling scenario,
+                 "cleanup skipped when containers active", which is exactly the guard P2
+                 worried was missing. Acting on P2 as written would have DELETED a correct
+                 requirement. Three revision passes had carried it forward unexamined.
+              P3 NO_PROXY / NODE_USE_ENV_PROXY -- OPEN and live, not stale: both constants
+                 still exist in main.rs and NEITHER name appears anywhere under
+                 openspec/specs/, cheatsheets/ or docs/. A genuine documented-nowhere gap.
+              P4 transport platform matrix -- HALF APPLIED. host-guest-transport/spec.md
+                 names hvsock; vsock-transport/spec.md has two matches across the whole
+                 hvsock/virtio-vsock/unix-socket vocabulary.
+              P5 network-scenarios spec -- OPEN, the directory does not exist.
+              P6 squid :3129 -- OPEN and WORSE THAN UNDECIDED. P6 asked to either wire
+                 image builds through it or delete the port. Neither happened, and the
+                 config started asserting the first: squid.conf now documents :3129 as
+                 "PERMISSIVE (image builds)", declares http_port 3129 ssl-bump and an acl
+                 build_port, and entrypoint.sh announces "permissive: :3129" at startup.
+                 MEASURED: no build routes through it -- the only 3129 reference outside
+                 squid.conf in crates/, scripts/ or images/ is that banner -- while the
+                 bypass it was meant to replace is still live in
+                 tillandsias-podman/src/client.rs as --dns 8.8.8.8. A reader checking "are
+                 image builds proxied?" finds a port, a rule, an ACL and a banner all
+                 saying yes, and a build path that is not. That is the L3 hazard --
+                 evidence arguing against its own claim -- reproduced in CONFIGURATION
+                 rather than in a citation.
+              P7 headless-mode spec -- OPEN, zero occurrences of "vault".
+              P8 (NEW) enclave membership -- the Purpose enumerates "forge, git, inference
+                 and proxy". The nix cache is also a member: scripts/nix-cache-service.sh
+                 joins it "to the enclave as a real nix BINARY CACHE" and carries
+                 no-enclave among its own blocked verdicts. This is the SECOND instance of
+                 one omission: order 801-vm4p added Service::NixCache to the forge-launch
+                 graph, section 3 of this document did not have it (L2), and this spec does
+                 not either. The patch therefore proposes pointing at the service list
+                 rather than rewriting the prose enumeration, since a hand-maintained
+                 membership list has now gone stale twice.
+
+            REFUTING A PROPOSED PATCH IS A RESULT. P2 is the audit-dispose discipline
+            turned on the audit's own output: a proposal is not evidence just because an
+            audit made it.
+
+            245 AFTER FOUR SLICES: section 1/1.1 (yoga), section 3/NA-03, section 6 +
+            section Observation/NA-06, section 5/NA-05 (lenovinha). All three GPT-failed
+            criteria have a revision pass and the patch list is dispositioned. Still
+            carrying line citations: sections 2, 4, 7.
+
+            THE NA-05 EXIT-CRITERION RECOMMENDATION NOW HAS A FOURTH VOICE AND A CONCRETE
+            COST. The criterion asks for a patch list with "specific file:line references".
+            This slice replaced that section's remaining line citations with symbols while
+            auditing it -- so the criterion, read literally, now asks the next author to
+            UNDO this work. It should say file:symbol. Still the packet owner's call.
+        - type: claim
+          ts: "2026-08-30T12:14:57Z"
+          agent_id: "linux-lenovinha-claude-20260830t121429z"
+          host: linux
+          summary: |
+            NA-05 slice: audit the seven-item spec/cheatsheet patch list — a patch list that still says 'unapplied' for patches that landed steers effort at done work.
         - type: note
           ts: "2026-08-30T11:46:42Z"
           agent_id: "linux-lenovinha-claude-20260830t111429z"

@@ -315,38 +315,81 @@ encrypted control channel; slices 1-3 of 141 landed, 4 and 6 remain —
 
 ## 5. Spec/Cheatsheet Patch List (NA-05)
 
-- **P1 `openspec/specs/enclave-network/spec.md`** — Purpose says "Only the
-  proxy container has external access (dual-homed)". At draft time this was
-  false twice over (git-mirror upstream forwarding since order 167, plus the
-  login-helper dual-home). Post-0a972411 the mirror is enclave-only, so the
-  remaining divergence is the login helper's dual-home (`run_provider_login`,
-  `main.rs:7589,7625`) — itself ruled an unsanctioned violation pending a
-  verdict (`plan/issues/git-mirror-egress-spec-divergence-audit-2026-08-10.md`).
-  Patch: enumerate the now-two-member S3 set + cite this taxonomy. Still
-  unapplied as of Revision 2 (spec.md:10 unchanged; no
-  `openspec/specs/network-scenarios/` exists).
-- **P2 `openspec/specs/enclave-network/spec.md`** — "cleanup on app exit
-  removes the network" scenario: verify against current long-running headless
-  behavior; likely obsolete → tombstone or re-scope to `--reset` flows.
+> AUDITED 2026-08-30 (lenovinha, linux slice). Every item below was checked
+> against the tree, not carried forward. Disposition is stated per item, because
+> a patch list that still says "pending" for work that landed steers effort at
+> done work — the same decoy shape §L1 found in the citations. One item is
+> CLOSED as already-satisfied, one is half-applied, and one new item was found.
+> See §L4.
+
+- **P1 `openspec/specs/enclave-network/spec.md` — OPEN, and the divergence is
+  in TWO places in this spec, not one.** Purpose still says "Only the proxy
+  container has external access (dual-homed)"; the *Container attachment to
+  enclave network* requirement repeats it as "Only the proxy container MUST
+  additionally be attached to the default bridge network". Post-0a972411 the
+  git mirror is enclave-only, so the remaining divergence is the login
+  helper's dual-home: `main.rs` `fn run_provider_login` runs on
+  `const ENCLAVE_EGRESS_NETS` (`"tillandsias-enclave,tillandsias-egress"`) —
+  itself ruled an unsanctioned violation pending a verdict
+  (`plan/issues/git-mirror-egress-spec-divergence-audit-2026-08-10.md`).
+  Patch: enumerate the now-two-member S3 set in BOTH places and cite this
+  taxonomy.
+- **P2 — CLOSED, already satisfied; the draft's recommendation is refuted by
+  the spec's own current text.** P2 proposed verifying the "cleanup on app
+  exit removes the network" scenario against long-running headless behaviour
+  and predicted it was "likely obsolete → tombstone or re-scope". It is
+  neither: the scenario is guarded by an explicit sibling,
+  *Enclave network cleanup skipped when containers active*, which requires a
+  warning and leaves the network in place. The pair is correct as written, and
+  the concern P2 was filed on is exactly what the second scenario handles.
+  Tombstoning it would have deleted a correct requirement.
 - **P3 `openspec/specs/proxy-container/spec.md` +
-  `cheatsheets/runtime/enclave-proxy-patterns.md`** — add the S2/S3 split and
+  `cheatsheets/runtime/enclave-proxy-patterns.md` — OPEN, and live rather than
+  stale.** Both constants still exist in code — `main.rs`
+  `const ENCLAVE_NO_PROXY_BASE` and the `NODE_USE_ENV_PROXY=1` env entry
+  beside it — and NEITHER name appears anywhere under `openspec/specs/`,
+  `cheatsheets/` or `docs/`. So this is a genuine code-documented-nowhere gap,
+  not a proposal that time overtook. Patch unchanged: add the S2/S3 split and
   the `NODE_USE_ENV_PROXY` contract; document `ENCLAVE_NO_PROXY_BASE` as the
   single NO_PROXY source of truth.
-- **P4 `openspec/specs/host-guest-transport/spec.md` + `vsock-transport`** —
-  add the §4 platform matrix (hvsock vs virtio-vsock vs unix socket) as
-  normative.
-- **P5 new spec `openspec/specs/network-scenarios/spec.md`** — S0-S5 catalog
-  (§2) with the operation table as scenarios; litmus: a source audit that every
-  `--network` / `.network(` site names a scenario constant, so new containers
-  must declare a scenario to compile/pass.
-- **P6 `images/proxy/squid.conf` + spec** — decide :3129's fate: either wire
-  image builds through it (replacing `--dns 8.8.8.8` bypass) or delete the
-  port. Recommendation: wire builds through it on HOST runtime where the
-  proxy exists; keep direct as bootstrap fallback (proxy image itself,
-  chicken-and-egg: `plan/issues/podman-proxy-reset-chicken-and-egg-2026-07-08.md`).
-- **P7 `openspec/specs/headless-mode/spec.md`** — document per-operation image
-  ensure lists (or their unification per §3.1) and the vault-in-init change.
-
+- **P4 `openspec/specs/host-guest-transport/spec.md` + `vsock-transport` —
+  HALF APPLIED.** `host-guest-transport/spec.md` now names hvsock;
+  `vsock-transport/spec.md` carries only two matches across the whole
+  hvsock/virtio-vsock/unix-socket vocabulary. Remaining patch is the
+  `vsock-transport` half of the §4 platform matrix, as normative text.
+- **P5 new spec `openspec/specs/network-scenarios/spec.md` — OPEN.** The
+  directory does not exist. S0-S5 catalog (§2) with the operation table as
+  scenarios; litmus: a source audit that every `--network` / `.network(` site
+  names a scenario constant, so a new container must declare a scenario to
+  compile/pass.
+- **P6 `images/proxy/squid.conf` + spec — OPEN, and the situation is now WORSE
+  than "undecided".** P6 asked to decide :3129's fate: wire image builds
+  through it, or delete the port. Neither happened, and meanwhile the config
+  started asserting the first: `squid.conf` documents :3129 as
+  "PERMISSIVE (image builds): all domains allowed", declares `http_port 3129
+  ssl-bump` and an `acl build_port localport 3129`, and
+  `images/proxy/entrypoint.sh` advertises `permissive: :3129` at startup.
+  MEASURED 2026-08-30: no build routes through it — the only reference to
+  3129 outside squid.conf in `crates/`, `scripts/` or `images/` is that
+  startup echo — while the bypass P6 wanted replaced is still live at
+  `tillandsias-podman/src/client.rs` (`--dns 8.8.8.8` in the build args).
+  So the port is open, documented as serving image builds, and serves none.
+  That is a stronger reason to act than the draft had: the decision now reads
+  as taken in the config and untaken in the code, which is how a reader
+  concludes builds are proxied when they are not.
+- **P7 `openspec/specs/headless-mode/spec.md` — OPEN.** The spec contains zero
+  occurrences of "vault". Document the per-operation image ensure lists (or
+  their unification per §3.1) and the vault-in-init change (order 253).
+- **P8 (NEW) `openspec/specs/enclave-network/spec.md` — the enclave membership
+  list is incomplete.** Purpose enumerates "forge, git, inference, and proxy
+  containers". The nix cache is also an enclave member:
+  `scripts/nix-cache-service.sh` joins it "to the enclave as a real nix BINARY
+  CACHE" and carries `no-enclave` as one of its own blocked verdicts. This is
+  the same drift §L2 found in §3 — order 801-vm4p added `Service::NixCache` to
+  the launch graph and the prose did not follow, in two separate documents.
+  Patch: add the nix cache to the membership enumeration, and prefer a pointer
+  to the service list over a hand-maintained prose enumeration, since this is
+  the second place it has gone stale.
 ## 6. Root-cause notes for the three §Observation failures (NA-06)
 
 > REVISED 2026-08-30 (lenovinha, linux slice). All three root causes
@@ -671,3 +714,65 @@ three failures now have one. Still carrying line citations: §2, §4, §5, §7.
 The NA-05 recommendation from §L1 and §L2 stands and is now three-for-three:
 the criterion asks for a patch list of "specific file:line references", which
 is the requirement that produces this rot. It should say `file:symbol`.
+
+## L4. NA-05 patch list audited against the tree — 2026-08-30, lenovinha
+
+Cycle-scoped claim on a `multi_cycle` packet; `phase` stays `review`, NOT
+closed. Fourth revision slice. §L1/§L2/§L3 fixed what the document SAYS about
+the code; this one asks whether its proposed WORK is still the work.
+
+A patch list is the one section that is read to decide what to do next, so a
+stale entry does not merely mislead — it spends someone's cycle. That is the
+decoy shape §L1 named, applied to a to-do list instead of to citations.
+
+### Dispositions, all measured at HEAD
+
+| item | disposition | evidence |
+|---|---|---|
+| P1 enclave-network Purpose | OPEN, and in **two** places | Purpose and the *Container attachment* requirement both assert proxy-only egress; `fn run_provider_login` still runs on `ENCLAVE_EGRESS_NETS` |
+| P2 cleanup-on-exit scenario | **CLOSED — already satisfied** | the sibling scenario *cleanup skipped when containers active* is exactly the guard P2 worried was missing |
+| P3 NO_PROXY / NODE_USE_ENV_PROXY | OPEN, and live | both constants exist in `main.rs`; neither name appears in `openspec/specs/`, `cheatsheets/` or `docs/` |
+| P4 transport platform matrix | **HALF APPLIED** | `host-guest-transport/spec.md` names hvsock; `vsock-transport/spec.md` has two matches total |
+| P5 network-scenarios spec | OPEN | the directory does not exist |
+| P6 squid :3129 | OPEN, and worse than undecided | port declared and advertised as the image-build lane; no build routes through it; the `--dns 8.8.8.8` bypass it was meant to replace is still in `client.rs` |
+| P7 headless-mode spec | OPEN | zero occurrences of "vault" in the spec |
+| P8 enclave membership | **NEW** | the nix cache joins the enclave (`scripts/nix-cache-service.sh`, `no-enclave` verdict) and is absent from the Purpose enumeration |
+
+### The two findings worth carrying forward
+
+**P2 is a refutation, and refuting a proposed patch is a result.** The draft
+predicted the cleanup scenario was "likely obsolete → tombstone or re-scope".
+It is not: the spec grew a second scenario that handles precisely the
+long-running case the draft was worried about. Acting on P2 as written would
+have deleted a correct requirement. This is the audit-dispose discipline
+pointed at the audit's own output — a proposal is not evidence just because an
+audit made it, and three revision passes had carried P2 forward unexamined.
+
+**P6 drifted in the dangerous direction: the config now asserts what the code
+does not do.** In 2026-07 :3129 was an undecided port. Since then `squid.conf`
+grew a comment calling it "PERMISSIVE (image builds)", an `acl build_port`,
+and a startup banner in `entrypoint.sh` announcing it. Nothing builds through
+it. A reader checking "are image builds proxied?" finds a port, a rule, an ACL
+and a banner all saying yes, and the actual build path still passing
+`--dns 8.8.8.8`. That is the §L3 hazard — evidence that argues against its own
+claim — reproduced in configuration rather than in a citation.
+
+**P8 is the second instance of one omission.** Order 801-vm4p added
+`Service::NixCache` to the forge-launch graph. §3 of this document did not have
+it (§L2), and the enclave-network spec does not have it either. Two documents,
+one landed service, no update to either. The patch therefore proposes pointing
+at the service list rather than re-writing the prose enumeration, because a
+hand-maintained membership list has now gone stale twice.
+
+### Where 245 stands after four slices
+
+§1/§1.1 (yoga), §3/NA-03, §6 + §Observation/NA-06, §5/NA-05 (lenovinha). All
+three GPT-failed criteria have a revision pass and the patch list is now
+dispositioned. Still carrying line citations: §2, §4, §7.
+
+**The NA-05 exit-criterion recommendation now has a fourth voice and a
+concrete cost.** The criterion asks for a patch list with "specific file:line
+references". This slice replaced its remaining line citations with symbols
+while auditing it — meaning the criterion, read literally, asks the next author
+to undo that. It should say `file:symbol`. Changing an exit criterion remains
+the packet owner's call.
