@@ -1,0 +1,47 @@
+packets:
+  - packet_id: synthesis-budget-does-not-bound-the-request
+    order: 939-jxgz
+    status: ready
+    title: |
+      A 7B-backed grounded answer can take two minutes to return the retrieval-only FLOOR — the synthesis budget bounds the model call, not the request
+    kind: bug
+    pickup_role: linux
+    priority: p1
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    capability_tags:
+      - local-experts
+      - pipeline
+      - fail-loud
+      - latency
+    estimated_hours: 3
+    deliverable: |
+      TILLANDSIAS_SYNTH_BUDGET_MS (and its 60s clamp) bounds the WALL TIME of
+      run_grounded end to end: a caller waiting on a budgeted request gets an
+      answer — synthesized or floor — within budget plus a small constant,
+      measured, never 2x the ceiling.
+    context: |
+      MEASURED by yoga on the 937-68n4 ladder (2026-08-30, 24 rows, treatment
+      verified per cell by reading it back from the server): with qwen2.5:7b
+      on the Ryzen-AI-300 CPU tier, the 60000ms cell contains a 10.0s row
+      and a 101.7s row FROM IDENTICAL INPUTS, and two default-cell rows ran
+      ~124s — twice the ceiling. yolanda measured 123s independently on
+      Windows (~1GB headroom, VM); yoga reproduced at the same magnitude
+      with ~9GB and no VM split, so it is not (only) memory pressure.
+      Mechanism NOT isolated — deliberately unguessed by the reporters.
+      pipeline.rs's budget promises that the wait ends; what it bounds today
+      is (evidently) the synthesis attempt, while something before or around
+      it — model load? prompt eval? a retry the clamp does not cover? — runs
+      unbudgeted. 24/24 rows at this tier returned retrieval-only at EVERY
+      budget (raising it 4x changed nothing), so at 7B-on-CPU the user pays
+      up to two minutes for the answer the floor would have given in
+      seconds.
+      SHIPPABILITY consequence, recorded on 937-68n4: this hardware class
+      runs 0.5b with the retrieval-only floor as its normal mode; 7B buys
+      nothing on CPU because synthesis never completes — and the fix here is
+      what makes that degradation GRACEFUL instead of two minutes of
+      unbounded wait.
+    exit_criteria:
+      - a wall-clock bound covers run_grounded end to end; a request with budget B returns within B plus a named constant, pinned by a test with a deliberately slow endpoint
+      - the mechanism behind the 2x-ceiling rows is identified during the fix (what phase ran unbudgeted), recorded on this packet
+      - the ladder's 60000-cell shape (10s and 101s from identical inputs) is re-run on one twin after the fix and the tail is gone
