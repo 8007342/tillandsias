@@ -630,6 +630,7 @@ specs:
 - spec_id: methodology-accountability
   status: active
   litmus_tests:
+  - litmus:fragment-keys-are-read
   - litmus:methodology-accountability-shape
   - litmus:base-ledger-status-loss-shape
   - litmus:agent-identity-canonical-source-shape

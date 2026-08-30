@@ -1,0 +1,94 @@
+packets:
+  - packet_id: fragment-keys-the-fold-does-not-read-are-discarded-silently
+    order: 944-vim8
+    status: implemented
+    kind: fix
+    priority: p1
+    desired_release: v0.5
+    release_target: architecture-audit-epic
+    pickup_role: any
+    depends_on: []
+    capability_tags:
+      - plan
+      - coordination
+      - methodology
+      - shell
+    title: >
+      a plan/index.d/ fragment keyed with anything but packets/events/fields/
+      status parses, passes validate-yaml, passes `tillandsias-plan check`,
+      reads correctly in review, and is silently discarded by the fold — four
+      packets were lost that way across four cycles before an unrelated fixture
+      happened to notice
+    deliverable: scripts/check-fragment-keys-are-read.sh + litmus:fragment-keys-are-read
+    context: |
+      MEASURED 2026-08-30. Four packets (943-7dn5, 943-3xyf, 943-26rx,
+      943-unii) were filed in fragments whose top-level key was `steps:` — the
+      key the BASE ledger `plan/index.yaml` uses. The fold reads `packets:`,
+      `events:`, `fields:` and `status:`, and nothing else
+      (crates/tillandsias-plan/src/fragments.rs).
+
+      EVERY CHECKPOINT A WORKER HAS REPORTED SUCCESS:
+        * the YAML parsed;
+        * `tillandsias-plan validate-yaml` said ok;
+        * `tillandsias-plan check` said ok AND reported the same packet count
+          before and after — 696, then 700 once the four were re-filed under
+          `packets:`;
+        * the fragments read correctly to a human in review;
+        * `fragment-misplaced-definitions` returns nothing for them.
+      Three of the four were then folded away, surviving in the base only as
+      prose inside other packets' `next_action`. Not packets, not archived, not
+      resolvable by `status` or `append-event`.
+
+      IT SURFACED BY ACCIDENT. The append-event-archived-refusal fixture picks a
+      fragment-only ready packet for its live-accept arm; a compaction cleared
+      every other candidate, leaving one of these, and `append-event` refused
+      it. Without that coincidence the loss would still be invisible.
+
+      THIS IS 635-i6vm's G-SET NO-OP AT A DIFFERENT FIELD. The worker skill's
+      §7.2 documents it for STATUS re-declaration — 11 of 21 completions
+      discarded — and warns in detail. Nobody generalised it from "re-declaring
+      status in a fragment is a no-op" to "any key the fold does not read is a
+      no-op", so the same lattice property bit again at packet DEFINITION.
+    exit_criteria:
+      - >
+          a fragment whose top-level key the fold does not read is REFUSED at
+          the gate, with the verdict naming the key and where the content
+          belongs
+      - >
+          POSITIVE CONTROL in the same suite: all four real channels are
+          accepted, so the guard cannot satisfy the negative by refusing
+          everything; plus a scope control proving comments and nested keys are
+          not mistaken for top-level keys
+      - >
+          the guard's hard-coded key list is checked against
+          fragments.rs — an allowlist that drifts from the fold becomes its own
+          stale premise, which is the defect class this packet belongs to
+    verifiable_closure: >
+      litmus:fragment-keys-are-read, 6/6, bound under methodology-accountability
+      and wired into ./build.sh --check. Mutation-tested: adding `steps` to the
+      guard's READ_KEYS makes the negative-control arm fail with the exact
+      original symptom.
+    events:
+      - type: filed
+        ts: "2026-08-30T21:20:00Z"
+        agent_id: linux-lenovinha-claude-20260830t211433z
+        host: linux
+        summary: >
+          Filed and fixed in one cycle, from order 335's F10 slice which found
+          the loss. Order minted with `next-order`. Filed under `packets:` —
+          the key this packet exists to make mandatory.
+      - type: progress
+        ts: "2026-08-30T21:21:00Z"
+        agent_id: linux-lenovinha-claude-20260830t211433z
+        host: linux
+        summary: >
+          scripts/check-fragment-keys-are-read.sh refuses any top-level key
+          outside packets/events/fields/status, wired into ./build.sh --check
+          and pinned by litmus:fragment-keys-are-read (6/6): live-tree
+          agreement, the exact `steps:` shape refused, all four channels
+          accepted, comments and nested keys ignored, the guard's key list
+          checked against fragments.rs, and a wiring arm. Mutation-tested by
+          adding `steps` to READ_KEYS — the negative control fails with the
+          original symptom. Status `implemented` rather than `completed`: the
+          guard prevents recurrence but does not find fragments already lost in
+          history, and no one has swept for those.

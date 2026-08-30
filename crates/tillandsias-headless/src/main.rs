@@ -1590,6 +1590,7 @@ const EGRESS_NET: &str = "tillandsias-egress";
 /// Before adding a caller: an enclave container that needs ONE external
 /// destination wants `ENCLAVE_ONLY_NET` plus `proxy_env_args()`. The proxy
 /// enforces an allowlist and denies everything else, which this does not.
+/// @trace spec:network-scenarios
 const ENCLAVE_EGRESS_NETS: &str = "tillandsias-enclave,tillandsias-egress";
 /// The compliant posture for every non-proxy enclave container: enclave leg
 /// only, with outbound traffic routed through the proxy via `proxy_env_args()`.
@@ -1598,6 +1599,7 @@ const ENCLAVE_EGRESS_NETS: &str = "tillandsias-enclave,tillandsias-egress";
 /// GitHub succeeds (exit 0) while example.com, wikipedia.org and bbc.co.uk are all
 /// refused — the proxy's allowlist plus `http_access deny all` turns "has the
 /// internet" into "has the allowlist".
+/// @trace spec:network-scenarios
 const ENCLAVE_ONLY_NET: &str = "tillandsias-enclave";
 // `vault` + `tillandsias-vault` MUST be here: containers reach Vault by its
 // service DNS name (`https://vault:8200`) since the move off the locally-bound

@@ -4894,6 +4894,12 @@ plan_index:
         - "proposed mechanism set, each with a verifiable closure + staged adoption rung"
         - "Tlatoani sign-off recorded before any mechanism becomes worker-protocol contract"
       events:
+        - type: note
+          ts: "2026-08-30T21:20:59Z"
+          agent_id: "linux-lenovinha-claude-20260830t211433z"
+          host: linux
+          summary: |
+            THE GUARD F10'S SLICE DEFERRED IS BUILT: order 944-vim8, scripts/check-fragment-keys-are-read.sh, wired into ./build.sh --check and pinned by litmus:fragment-keys-are-read (6/6), mutation-tested. It refuses any plan/index.d/ fragment whose top-level key the fold does not read. Filed under packets: -- the key the packet exists to make mandatory, which is also the smallest possible demonstration that the fix works. NOT CLOSED, and the reason is worth carrying: the guard prevents RECURRENCE, it does not find fragments already lost in history. Three of my four were folded away and survive only as prose inside other packets; nobody has swept the ledger's history for others, and a sweep is a different piece of work than a gate. Status is implemented, not completed. ALSO WORTH RECORDING FOR THE INVENTORY: this is the second time in two cycles that a defect of mine was caught by an existing guard rather than by me -- 881-29me on the citation evidence, and append-event-archived-refusal on the lost packets. Both were guards someone else built for a neighbouring purpose. That is an argument for the guard-per-finding discipline this epic keeps producing, and it belongs in criterion 3's mechanism set as evidence that cheap guards pay for themselves in ways their authors do not predict.
         - type: progress
           ts: "2026-08-30T20:22:58Z"
           agent_id: "linux-lenovinha-claude-20260830t201434z"
@@ -64063,6 +64069,12 @@ plan_index:
         - one instrumented run either completes exit 0 solo or names the sender
       events:
         - type: note
+          ts: "2026-08-30T21:34:15Z"
+          agent_id: "linux-macuahuitl-fable5-20260830t213415z"
+          host: macuahuitl
+          summary: |
+            REOPENED IN EFFECT — the ghost is caught, hermetically reproducible, and it is not what any hypothesis said. REPRO (macuahuitl, 5/5 today): run the install-validation headless launch INSIDE the tillandsias-builder toolbox — 'toolbox run --container tillandsias-builder bash -c "timeout 5 <musl tillandsias> --headless /tmp/test-install-validation"' — and the TOOLBOX CONTAINER ITSELF dies exit 143 (podman events: died, NO stop event — raw SIGTERM to container init), taking build.sh down as rc=137. This is why every --ci-full/--install SIGTERM landed 'at install-validation' and why manual steps outside the toolbox were always fine. THREE HYPOTHESES TESTED AND REFUTED, each with a control: (1) running tray singleton-killed — repro'd with tray down; (2) on-demand image build via --replace — repro'd with images pre-built; (3) launcher-singleton pidfile kill across PID namespaces — repro'd under TILLANDSIAS_NO_SINGLETON=1, still dies; also setsid does not save it, so it is not the graceful-shutdown group sweep. The kill happens between 'Received shutdown signal' and exit. OPERATOR-DIRECTED WORKAROUND SHIPPED: binary installed directly (validated musl static, v0.4.260830.5, tray running on it). REMAINING WORK: identify the exact syscall path from the headless instance's 5s startup+shutdown that TERMs the toolbox init (candidates left: something in enclave reconciliation resolving a container-namespace pid; a kill(-1)-shaped sweep in a dependency); needs strace/bpftrace which this session lacks privileges for, OR add eprintln instrumentation to every kill() call site and re-run the hermetic repro.
+        - type: note
           ts: "2026-08-29T23:47:12Z"
           host: linux
           summary: |
@@ -64166,6 +64178,12 @@ plan_index:
         - OpenCode completes a real project question against the local OpenAI endpoint with citations and floor behaviour intact, demonstrated on both twins
         - a refusal (out-of-coverage question) arrives at OpenCode as a well-formed completion carrying the typed marker, not an error
       events:
+        - type: note
+          ts: "2026-08-30T21:34:42Z"
+          agent_id: "linux-macuahuitl-fable5-20260830t213442z"
+          host: macuahuitl
+          summary: |
+            ACCEPTANCE MET through the real client (yolanda, 9a18a5ac4, operator authorised the winget install directly): opencode models lists exactly the five declared domains; cited project question returned the exactly-correct span (pull_merge_cadence.pre_push_gate, methodology/multi-host-development.yaml:458-509); refusal path reached the user as well-formed text naming the floor (best 0.56 < 0.62); domain routing survived the client (code question cited gate-stamp.sh, the hook, the memoization fixture). QUALIFIER ON THE RECORD, yolanda's framing kept: both cited answers were the RETRIEVAL-ONLY FLOOR, not synthesis — 7B decodes 9.1 tok/s against the 60s clamp on that hardware. Read as 'pipeline, floors and citations survive the client', not '7B answers well there'.
         - type: evidence
           ts: "2026-08-30T20:38:54Z"
           agent_id: "windows-yolanda-claude-20260830t162208z"
@@ -64558,6 +64576,12 @@ plan_index:
         VERIFICATION SERVICE: pirria holds a warm, ±1s-reproducible baseline (3m50s warm gate) and a running enclave, and can re-measure any landed slice fast. Out-of-box timeline recorded: ~23m15s clean-checkout to running enclave on target hardware.
       next_action_ts: "2026-08-30T06:24:51Z"
       events:
+        - type: note
+          ts: "2026-08-30T21:34:42Z"
+          agent_id: "linux-macuahuitl-fable5-20260830t213442z"
+          host: macuahuitl
+          summary: |
+            AXIS B MEASURED (yolanda, same host/binary/tree, both arms rc=0 with identical verdict lines): archiver 131.6s on 9P vs 44.4s native ext4 = FILESYSTEM MULTIPLIER 2.96x; staging cost 26.8s/463MB one-time. The ~5.5x cross-host figure decomposes as 2.96 (filesystem) x ~1.98 (silicon) = 5.9, consistent. DESIGN BLOCKER for any 'stage plan/' scheme: the archiver's answerability check needs the WORKSPACE (refuses without Cargo.toml) — the staging unit is the CHECKOUT (463MB), not the 21MB ledger. NOT extrapolated: whether the ratchet/stamp/dictionary steps carry the same multiplier is the next measurement (if it held across the top four: 561s -> ~285s, but that assumes a factor measured on ONE step). Three invalid measurements preceded the valid one, each OVERSTATING the win (48.8x/15.6x/24x — both arms failing identically); comparing rc AND verdict line before dividing caught all three.
         - type: note
           ts: "2026-08-30T20:15:38Z"
           agent_id: "linux-macuahuitl-fable5-20260830t201538z"
