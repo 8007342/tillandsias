@@ -2463,6 +2463,71 @@ plan_index:
         - "Spec/Cheatsheet patch list published with specific file:line references"
       events:
         - type: progress
+          ts: "2026-08-30T19:24:30Z"
+          agent_id: "linux-lenovinha-claude-20260830t191434z"
+          host: linux
+          summary: |
+            SECTION 7 RE-CHECKED, and the honest headline is that I RE-DISCOVERED SOMETHING
+            THE DOCUMENT ALREADY KNEW (linux slice, cycle-scoped claim on a multi_cycle
+            packet; phase stays `review`, NOT closed).
+
+            WHAT I FOUND. Section 7's P6 entry notes that "the dev-build flow already runs
+            its own separate squid cache on 127.0.0.1:3129, distinct from the proxy image's
+            orphaned :3129". Verified: build.sh fn _ensure_dev_proxy runs a container named
+            tillandsias-dev-proxy from docker.io/library/squid:6.1, publishes 3129:3129 on
+            the HOST, and exports HTTP_PROXY/HTTPS_PROXY/CARGO_HTTP_PROXY at
+            http://127.0.0.1:3129. So host-side dev build tooling IS proxied -- through a
+            DIFFERENT image on the same port number.
+
+            WHY THAT MATTERS FOR MY OWN P6 WORK, THREE CYCLES AGO. My squid.conf note said
+            "NO BUILD PATH USES IT TODAY" and "Image builds still egress directly via
+            --dns 8.8.8.8". Both true of the tillandsias proxy image's :3129, and both
+            phrased so a reader could conclude "builds are unproxied", which is false for
+            host-side dev builds. Corrected in place: the note now distinguishes the two
+            ports explicitly and says do not read one as the other. The guard needed no
+            change -- it searches crates/ and asks whether anything routes to THIS image's
+            port -- but it now carries a scope comment saying so, because someone reading
+            build.sh would otherwise "fix" it by adding build.sh to the search and get a
+            guard answering a different question.
+
+            AND HERE IS THE PART I SHOULD NOT DRESS UP. Section 1's CONTAINER matrix --
+            yoga's L1 slice, 2026-08-25 -- ALREADY carries this correction, in almost these
+            words: it warns that "builds bypass squid entirely" is OVER-BROAD, names the
+            stock squid:6.1 dev-cache on 127.0.0.1:3129, and states the narrower surviving
+            claim about the tillandsias-proxy container's own permissive port. It is one
+            section away from where I was working. I wrote the over-broad phrasing anyway,
+            three cycles ago, and only met the correction now because section 7 pointed at
+            it from the other side. The lesson is not "read more"; it is that a long audit
+            document accumulates corrections in the section where they were FOUND, not in
+            the section a later reader is editing, and nothing cross-links them. Recorded
+            because the next slice will have the same exposure.
+
+            A SECOND THING SECTION 7 SUPPLIES FOR P6'S PENDING DECISION, which I did not
+            have when I half-acted on it: _ensure_dev_proxy's own comment says it uses the
+            standard squid image "not tillandsias-proxy, which may be under build". That is
+            P6's chicken-and-egg ALREADY SOLVED, by image choice rather than by keeping a
+            direct-egress fallback. Whoever takes the decision should weigh it, along with
+            the host port collision it implies -- wiring AND publishing this image's :3129
+            would contend with the dev proxy for the same host port.
+
+            CITATION DRIFT, FOURTH SECTION RUNNING. build.sh:355-411 lands on CLI argument
+            parsing; the dev proxy is fn _ensure_dev_proxy. Re-anchored on the symbol.
+
+            DISPOSITIONS FOR THE OTHER THREE SECTION-7 ITEMS, measured: vault-in-init DONE
+            and re-verified; RuntimeContext enum STILL OPEN and still never filed as its
+            own packet (a proposed follow-up that no packet carries is the lost-work case
+            this slice was looking for -- it is the only one); P5 spec DONE with the litmus
+            half built.
+
+            The 881-29me gate refused this slice once, correctly, on the drift-evidence
+            sentence. Fourth true positive it has scored on my work.
+        - type: claim
+          ts: "2026-08-30T19:14:49Z"
+          agent_id: "linux-lenovinha-claude-20260830t191434z"
+          host: linux
+          summary: |
+            Section 7 slice: the audit proposes follow-up packets. Check whether each was ever FILED — a proposed follow-up nobody filed is lost work, and the section is where that would hide.
+        - type: progress
           ts: "2026-08-30T18:18:12Z"
           agent_id: "linux-lenovinha-claude-20260830t181434z"
           host: linux
