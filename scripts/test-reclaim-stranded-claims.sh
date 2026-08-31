@@ -77,4 +77,46 @@ printf '%s\n' "$out" | grep -q 'summary: candidates=0 reclaimed=0 refused=0 mode
     || fail "case 3: wrong empty summary: $out"
 echo "ok: case 3 — an empty stranded set is a clean zero, not an error"
 
-echo "PASS: reclaim stranded claims (3/3)"
+
+# --- case 4: ORDER 943-unii — a value-taking flag passed BARE must refuse, ---
+# not hang. Both of these looped forever before the fix: `shift 2` with one
+# argument left fails under `set -uo pipefail` (no `-e`), leaves `$#` unchanged,
+# and the while re-reads the same argument. Measured 2026-08-30. The timeout is
+# the assertion: a regression here is a hang, and a hung fixture in the gate
+# would be indistinguishable from a slow one without it.
+d="$WORK/bareflag"; scaffold "$d" "2026-08-21T00:00:00Z"
+for flag in --ttl-hours --now; do
+    out="$(timeout 20 bash -c "cd '$d' && TILLANDSIAS_PLAN_BIN='$PLAN' bash scripts/reclaim-stranded-claims.sh $flag" 2>&1)"; rc=$?
+    [ "$rc" = 124 ] && fail "case 4: bare $flag HUNG (the pre-943-unii defect)"
+    [ "$rc" = 2 ] || fail "case 4: bare $flag must exit 2, got rc=$rc: $out"
+    printf '%s\n' "$out" | grep -q "mode=refused-missing-value:$flag" \
+        || fail "case 4: bare $flag must name itself in the verdict: $out"
+done
+echo "ok: case 4 — a bare value-taking flag refuses by name instead of hanging"
+
+# --- case 5: ORDER 943-unii — a TTL that is not a positive integer refuses ---
+# with its OWN cause. `--ttl-hours abc` used to reach expire-claims and surface
+# as `mode=refused-expire-claims-failed`, blaming the tool for the caller's
+# argument. Zero is refused separately because it would reclaim EVERY live
+# claim — the "launders finished work into lost work" hazard (833-fpe7) reached
+# by a typo.
+d="$WORK/badttl"; scaffold "$d" "2026-08-21T00:00:00Z"
+for bad in abc 0 -5; do
+    out="$(run "$d" --ttl-hours "$bad" 2>&1)"; rc=$?
+    [ "$rc" = 2 ] || fail "case 5: --ttl-hours $bad must exit 2, got rc=$rc: $out"
+    printf '%s\n' "$out" | grep -q "mode=refused-bad-ttl:$bad" \
+        || fail "case 5: --ttl-hours $bad must name its own cause, not expire-claims: $out"
+done
+echo "ok: case 5 — a non-positive-integer TTL refuses with its own named cause"
+
+# --- case 6: POSITIVE CONTROL for 4 and 5 — the guards must not refuse a -----
+# well-formed invocation. Without this, both arms above are satisfied by a
+# script that refuses everything.
+d="$WORK/goodargs"; scaffold "$d" "2026-08-21T00:00:00Z"
+out="$(run "$d" --ttl-hours 24 --now "$NOW")" || fail "case 6: a valid --ttl-hours must be accepted, got: $out"
+printf '%s\n' "$out" | grep -q 'mode=dry-run' || fail "case 6: wrong summary: $out"
+out="$(run "$d" --ttl-hours=24 --now "$NOW")" || fail "case 6: the = form must be accepted, got: $out"
+printf '%s\n' "$out" | grep -q 'mode=dry-run' || fail "case 6: wrong = form summary: $out"
+echo "ok: case 6 — valid arguments in both forms are still accepted"
+
+echo "PASS: reclaim stranded claims (6/6)"

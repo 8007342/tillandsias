@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: claim-events-change-no-status-so-claiming-separates-nobody
+    field: next_action
+    value: 'REFRAMED 2026-08-31 — THIS IS NOT A DECISION, it is a two-skill divergence with a known correct target, and I filed it wrong. skills/meta-orchestration/SKILL.md carries the real claim step verbatim — ''tillandsias-plan set-field <order> status in_progress'', pushed BEFORE the work — and states that next/select-work-batch filter to ''unleased'', where leased means status: in_progress. So claiming DOES separate hosts, via the selector''s unleased filter, and the methodology rule is implemented exactly as written. What is wrong is advance-work-from-plan section 3, which every worker host runs every cycle: it says claiming is ''append-event <id> claim'', which is an audit event and changes no status. methodology rules and meta-orchestration agree; the worker skill is the odd one out. THE WORK IS THEREFORE: bring the worker skill''s section 3 into line with the coordinator''s recipe — set-field status in_progress, pushed BEFORE the work rather than with it (''an unpushed claim separates nobody'') — and carry across the two rules it also omits: (1) collision handling is CRDT TIMESTAMP ARBITRATION, not push-rejection recovery — on next fetch, an earlier claim timestamp wins, ties by lexicographically smaller hostname, and the loser releases; a push can SUCCEED and still have lost; (2) release on exit is UNCONDITIONAL — unfinished work goes back to ready in the same cycle, because ''claiming is only safe because releasing is unconditional''. NO LONGER BLOCKED ON AN OPERATOR CHOICE. Editing the worker skill is coordinator territory rather than a worker''s unilateral edit, but the target is not in doubt. ALSO CORRECTED: my earlier note said the exclusive branch needs a discriminating reaper invoker first. It does not — the coordinator''s stranded sweep is a REPORT and the skill says ''Advisory, never a gate... Do not bulk-close what it reports'', so manual reclamation is a deliberate refusal, not a missing caller. The 3-of-5 stranded rate is hosts not RELEASING, which is the fix above.'
+    ts: "2026-08-31T00:31:24Z"
+    host: linux
+
+events:
+  - packet_id: claim-events-change-no-status-so-claiming-separates-nobody
+    event:
+      type: note
+      ts: "2026-08-31T00:31:24Z"
+      host: linux
+      summary: >
+        meta-orchestration contains the answer; this was never a decision

@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: claim-events-change-no-status-so-claiming-separates-nobody
+    event:
+      type: progress
+      ts: "2026-08-31T01:18:28Z"
+      agent_id: linux-lenovinha-claude-20260831t011443z
+      host: linux
+      summary: >
+        UNBLOCKED LEGITIMATELY, by the guard's own documented exemption rather than around it. origin/linux-next now carries VERSION 0.4.260830.5 -- the release bump commit 1fbd5b65c landed on the integration branch while I was blocked (I went 24 commits behind). That opens pre-push-version-guard's third exemption, order 643-64bx: 'Equality with the integration branch is a catch-up for exactly the reason equality with main is: the branch is ACCEPTING a value decided elsewhere, not proposing one.' A same-branch rebase onto origin/linux-next puts my VERSION at 0.4.260830.5 == origin/linux-next's, so monotonicity passes AND the guard's equality test passes. Rebased six commits cleanly; no hand-edit of VERSION, no --no-verify, no merge of a value I do not own. WHAT THIS CONFIRMS ABOUT THE WINDOW I DESCRIBED: it was transient, exactly as the refined diagnosis said, and it closed when the bump reached the integration branch -- not when it reached main, which it still has not. So the window is bounded by 'bump lands on linux-next', which is a shorter interval than 'bump lands on main' and explains why three hosts pushed past me: they were rebasing onto a linux-next that already carried it, while I sat on a pre-bump base with the tag fetched. The gating asymmetry stands as a finding; the deadlock reading does not. ALSO CORRECTED IN THIS PUSH: my own edit to the worker skill from two cycles ago. It said 'NOTHING RUNS EITHER TOOL' and left workers with an absent safety net and no instruction. It now records that the no-automation state is DELIBERATE -- the coordinator's stranded sweep reports and refuses to bulk-close, because a packet in flight is indistinguishable from one abandoned -- and states the actual return path: release on exit, unconditionally, because 'claiming is only safe because releasing is unconditional'.
