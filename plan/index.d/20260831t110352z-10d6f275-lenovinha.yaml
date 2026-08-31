@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: explicit-seed-cannot-override-ordinal-routing
+    event:
+      type: progress
+      ts: "2026-08-31T11:03:52Z"
+      agent_id: linux-lenovinha-claude-20260831t105311z
+      host: lenovinha
+      summary: >
+        FIXED and pinned. An explicitly passed --seed now takes the seeded score-weighted pick even under ordinal routing; the DEFAULT (no --seed) still routes by roster rank, so 847-wgy4 separation and the rotation's cross-cycle cohesion are untouched. ROUTE is reset to the string 'seed' rather than given a new token, so an explicit-seed run prints no route= field at all — the pick genuinely did not come from rank, and inventing a third grammar token would have widened the pinned grammar to describe a false provenance. MEASURED BEFORE: seven unrelated seeds, byte-identical output, route=rank:2/7:width=7. AFTER: nine seeds reach three distinct epics (socket-audit-master, architecture-audit-epic, forge-local-experts-milestone) while the bare default still reports route=rank:2/7:width=7 and is stable across runs. Reproducibility holds in both modes: same seed twice is identical, default twice is identical. THREE LITMUS ARMS added to litmus:cycle-batch-triage-shape, each mutation-tested before being believed. Disabling the override makes the positive arm red ('nine explicit seeds all chose one epic') while the negative control stays green, because the mutation does not touch the default path. Making the override unconditional makes the NEGATIVE CONTROL red ('default run lost its rank routing') while the positive arm stays green. Each arm therefore fails only in the direction it exists for, which is what makes the pair meaningful rather than two ways of saying the same thing. The positive arm skips rather than fails on a single-epic frontier, because a red light there would be reporting the ledger's shape rather than the code's behaviour. A SIDE EFFECT WORTH RECORDING: the suite's existing arm 'REPRODUCIBLE: the same seed yields the same batch' was VACUOUS on any routed host — it passed because the seed was ignored, and would have passed against a build with seeding deleted entirely. Its sibling entropy-floor arm already detects routing and declares itself n/a; this one silently did not. The fix makes it genuinely exercise seeding again, so exit criterion 4 is satisfied by restoring the mechanism rather than by editing the arm. NOT DECIDED HERE, and deliberately left to the coordinator: routing has no notion of whether the epic it routes a host to holds work that host can ACTUALLY DO. Residual is a property of the epic; actionability is a property of the (epic, host) pair. That is what stranded this host for four cycles on an epic whose four packets are operator-blocked, sibling-owned, or verification-gated here.
