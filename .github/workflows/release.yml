@@ -660,7 +660,7 @@ jobs:
               # included; a checksum for an absent asset fails every verifier,
               # so drop its line in the same breath as the file.
               # LINE ENDINGS (v56.8.31.1 post-mortem): Set-Content rewrote the
-              # whole file CRLF, and sha256sum -c hunted for "...zip" — the
+              # whole file CRLF, and sha256sum -c hunted for "...zip\r" — the
               # release shipped ZERO Windows assets. Write LF explicitly, UTF8
               # no-BOM, single trailing newline; the consuming job asserts
               # CR-free before verifying. (Fix authored by yolanda, f77897371,
