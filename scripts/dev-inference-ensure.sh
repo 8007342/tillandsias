@@ -238,11 +238,20 @@ ensure_container() {
     #
     # TTFT (yoga, 0.5b, warm, wall clock to the first STREAMED token, 3 reps):
     #   GPU 33-34 ms   CPU 26-27 ms   -> 1.26x WORSE on the accelerated lane.
-    # Direction agrees with yolanda's Windows hybrid pair (0.562s vs 0.108s), the
+    # Direction agrees with yolanda's Windows pair (0.562s vs 0.108s), the
     # MAGNITUDE does not: 1.26x here against 5.2x there. Kept as two separate
-    # numbers rather than averaged — theirs is an NPU+iGPU hybrid through
-    # Lemonade, mine is Vulkan through ollama, and collapsing them would invent a
-    # cross-substrate figure neither host measured.
+    # numbers rather than averaged — an average of 1.26x and 5.2x would describe
+    # no machine that exists and would read as more authoritative than either
+    # measurement.
+    #
+    # AND THEY ARE NOT TWO POINTS ON ONE AXIS. This 1.26x is GPU-vs-CPU. Theirs is
+    # HYBRID(NPU+iGPU)-vs-CPU, which varies the device count AND their kinds AND
+    # the dispatch path at once. So the 5.2x is a HYBRID-DISPATCH cost measured on
+    # one stack, not a property of accelerated lanes: a reader on a discrete-GPU
+    # host should expect something nearer 1.26x. yolanda tried to isolate the
+    # handoff cost with a GPU-only path and reported it untestable there — the
+    # ryzenai-llm recipe ships CPU/NPU/Hybrid checkpoints and no GPU-only variant,
+    # so the device count can vary 1->2 but not WHICH single device.
     #
     # CONSEQUENCE FOR THE DEFAULT MODEL, which is the operator-facing part: the
     # fleet default is qwen2.5:0.5b, and on this hardware class that model is
