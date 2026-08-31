@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+
+events:
+  - packet_id: epoch-version-encoding-fleet-adoption
+    event:
+      type: note
+      ts: "2026-08-31T19:55:00Z"
+      host: macuahuitl
+      summary: >
+        Run 3 (33425939025) verdict: Linux and macOS PUBLISHED under tag
+        v56.8.31.2; Windows RED with a NEW cause — not the sums file. The
+        build compiled clean in 4m40s, then build-windows-tray.ps1:371 threw
+        'msix-version-unmappable: expected a 6-digit YYMMDD': the trunk
+        packager still parses the LEGACY scheme (six-digit YYMMDD in field 3)
+        and the epoch scheme's field 3 is '31'. The cutover migrated
+        bump-version.sh and the spec but the MSIX packager is windows-owned
+        and its migration (yolanda's 62652e063, built-manifest confirmation
+        green on her hardware) exists ONLY on her machine — git cat-file
+        confirms the object is not on origin. Coordinator error recorded: I
+        told her the commit had 'no ordering constraint'; it is
+        release-blocking. Fourth instance tonight of asserting a property of
+        a ref without checking the ref. Plan: she pushes to windows-next
+        (pre-push gate merge required — trunk moved), coordinator merges to
+        linux-next, cuts 56.8.31.3, dispatches run 4. v56.8.31.2 stands
+        fixed-forward (its Linux/macOS assets are sound); README epoch row
+        deferred until .3 settles so one row records the .1/.2 supersede
+        trail. Catch-up queue landed at 7ad58de52 under guard exception 4:
+        trunk now carries the WriteAllText LF fix and the CR invariant.
+        Same-day Store constraint unaffected — every build today derives
+        MSIX 56.8.31.0.
