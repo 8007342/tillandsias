@@ -5636,6 +5636,12 @@ plan_index:
         - "guest-lane litmus pins staged-gitdir readability for the forge uid"
         - "macOS VZ lane spot-checked for the same class (same shared guest binary)"
       events:
+        - type: note
+          ts: "2026-08-31T01:04:10Z"
+          agent_id: "forge-forge-tillandsias-opencode-20260831t005829z"
+          host: macuahuitl
+          summary: |
+            PROSE (packet 382 guest-staged-gitdir-root-owned, status=ready): events record implementation landed (chown_tree_to_forge_uid, main.rs:10073; write_forge_repo_gitdir main.rs:10096 handing root+objects+refs to uid 1000, euid-gated, lchown) AND criterion 2 guest-lane litmus LANDED 2026-07-20; criteria 1 (fresh Windows curl-install) and 3 (macOS VZ spot-check) are named platform-gated. VERIFIED against linux-next HEAD 06b3e1878: (a) built+staged the missing sidecar (scripts/build-sidecar.sh -> 'staged: .../images/router/tillandsias-router-sidecar (2.0M)') then ran the named criterion-2 unit test: 'cargo test -p tillandsias-headless --bin tillandsias forge_gitdir_staging_hands_root_staged_trees_to_forge_uid' -> 'test tests::forge_gitdir_staging_hands_root_staged_trees_to_forge_uid ... ok / test result: ok. 1 passed; 0 failed; 444 filtered out'; (b) all litmus-forge-gitdir-staging-chown shell steps pass: 'ok: lchown used', 'ok: wired for every lane', 'ok: fails loud'. Residual: PARTIALLY DONE, close with this evidence for criterion 2; criteria 1 and 3 remain and are platform-gated (cannot verify here: need a Windows curl-install host and a macOS VZ host respectively). Also note plan/index.yaml:48743 COORDINATOR INVENTORY listed forge-gitdir-staging-chown among 12 pre-build FAILING - that was without the gitignored sidecar; with it staged, the litmus unit test passes in this container.
         - type: verified
           ts: "2026-07-28T23:45:00Z"
           agent_id: "linux-mutable-metaorch-20260728"
@@ -6574,6 +6580,12 @@ plan_index:
         - "INVARIANT CORE vs pluggable rules: id stability and referential soundness (depends_on/release_target/split_into resolve; ids never mutate on edit) are engine-level non-negotiables that hold ACROSS schema versions — pinned by a litmus that renames a schema field and proves references still validate (aligns with methodology/between-commits-work-discipline.yaml stable-ID preconditions)"
 
       events:
+        - type: note
+          ts: "2026-08-31T01:04:22Z"
+          agent_id: "forge-forge-tillandsias-opencode-20260831t005829z"
+          host: macuahuitl
+          summary: |
+            PROSE (packet 398 plan-yaml-compiled-editor, status=ready): single progress event 2026-07-18 claims slice 2 rung 1 (validated event-append) implemented + dogfooded and 'Remaining slices: claim/status-flip edits, the format-preserving round-trip design decision, and skill docs' - i.e. PARTIAL, not full completion. VERIFIED against linux-next HEAD 06b3e1878: the compiled engine binary is present and functional on PATH (/home/forge/.local/bin/tillandsias-plan); (a) criterion 3 invalid-edit refusal: 'tillandsias-plan append-event NOSUCHREF_LITMUS --type note --summary ...' -> rc=1 stderr 'error: no packet matches NOSUCHREF_LITMUS'; unknown-flag variant -> rc=2 'error: unknown flag --bogus for append-event'; (b) queries answer on live state: 'tillandsias-plan status 382/398/399' returned correct rows; 'tillandsias-plan check' -> 'ok: 702 packets, ids unique, live references sound (9 parked-block edges)'; (c) criterion 5 schema-as-data: plan/schema.yaml present; (d) criteria 1/6/7 (round-trip, open-world, invariant-core) covered by crate suite: 'cargo test -p tillandsias-plan' -> 'running 273 tests / test result: ok. 273 passed' + 'running 28 tests / ok. 28 passed', incl. unknown_fields_survive_load, operator_and_legacy_sections_are_byte_identical_after_folding, every_known_fragment_channel_survives_a_compaction_round_trip. Residual: substantially DONE on the query/check/event-append/schema-as-data surfaces verified here; the packet prose does NOT claim full completion (it self-reports remaining slices), so it is honestly PARTIALLY done with the edit-surface breadth (claim/status-flip) and skill-doc criteria still open - coordinator should not treat it as fully done nor re-offer it as untouched-ready without noting the self-declared remaining slices.
         - type: progress
           ts: "2026-07-18T09:15:00Z"
           agent_id: "linux-macuahuitl-opus48-20260717T1747Z"
@@ -6593,6 +6605,12 @@ plan_index:
       capability_tags: [lsp, forge, opencode, images, dx]
       estimated_hours: 5
       events:
+        - type: note
+          ts: "2026-08-31T01:04:30Z"
+          agent_id: "forge-forge-tillandsias-opencode-20260831t005829z"
+          host: macuahuitl
+          summary: |
+            PROSE (packet 399 forge-lsp-by-default, status=ready): verified event 2026-07-28 says 'Config and image sides are done and litmus-pinned ... Remaining: one live go-to-definition/references check in a fresh forge session', and progress 2026-07-18 notes criterion 2 (image size delta) is zero by construction - i.e. PARTIAL/full-on-non-live-sides. VERIFIED against linux-next HEAD 06b3e1878: (a) 'scripts/run-litmus-test.sh forge-environment-discoverability --phase pre-build --size instant' -> '[PASS] litmus:forge-lsp-availability-shape' (17 PASS / 1 FAIL, the FAIL being unrelated litmus:host-expert-refresh-gate-shape, not an LSP/399 concern); (b) directly confirmed the shape's steps: 'grep -q "\"lsp\": true" images/default/config-overlay/opencode/config.json' -> 'ok: config.json lsp:true present'; grep rust-analyzer in images/default/Containerfile.base -> line 24 'rust cargo clippy rustfmt rust-analyzer cargo-deny'; rust-analyzer affordance in images/default/lib-common.sh lines 4339/4363; (c) rust-analyzer 1.98.0 present in THIS container: 'rust-analyzer --version' -> 'rust-analyzer 1.98.0'. Residual: PARTIALLY DONE - config/image/litmus sides verified green here and are done; criterion 1 (live go-to-definition/references in a FRESH OpenCode session) cannot be verified here (requires a fresh interactive OpenCode session, not the non-interactive forge shell). Remaining: only the one live-session spot-check.
         - type: verified
           ts: "2026-07-28T23:45:00Z"
           agent_id: "linux-mutable-metaorch-20260728"
