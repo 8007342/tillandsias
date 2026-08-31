@@ -170,3 +170,37 @@ the same on yoga and named it a platform property predating that release.
     ts: `2026-08-31T02:04:26Z`
     agent_id: `linux-pirria-claude-20260831t020425z`
     host: linux
+
+---
+
+## Addendum 2026-08-31 — truncation ruled OUT as the loop's cause
+
+`smoke-finding/forge-agent-repetition-loop` was filed with a next_action to
+rule out skill-delivery truncation before treating the loop as agent
+behaviour. That check has now been done, and it comes back negative — the
+truncation was handled correctly and is not the cause.
+
+Evidence, `target/smoke-e2e/04-opencode.log`:
+
+- **:18** the skill is invoked BARE — `Skill "meta-orchestration"`, no args —
+  and **:39** the agent states so itself: *"The invocation prompt is a bare
+  'Use the /meta-orchestration skill'"*. So the args-bearing skill-load defect
+  seen elsewhere in the fleet (skill body corrupted at load when args are
+  passed) **does not apply to this run**, and the two are not one defect.
+- **:19-24** the truncation is ordinary opencode tool-output truncation with a
+  pointer to a spill file, and the agent paginated it successfully —
+  `offset=400`, then `offset=800`, then `offset=1300`.
+- **:37** *"I now have the full meta-orchestration skill. Let me start the
+  full-mode cycle."*
+
+The loop then begins thousands of lines later and ends at **:4682-4685**. A
+truncation that was resolved at line 37 does not explain a stall at line 4682.
+
+The packet's next_action is therefore superseded: skill delivery is exonerated,
+and the remaining candidates are the opencode harness's tool-call handling and
+agent behaviour proper. That still should not be filed as model behaviour on
+this evidence alone — the run ends with a well-formed `<invoke>` block emitted
+as TEXT, which is as consistent with the harness failing to parse a valid call
+as with the agent emitting an unparseable one, and this lane cannot distinguish
+those two from the outside. Whoever picks this up should start by determining
+which side dropped the call.

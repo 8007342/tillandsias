@@ -56739,6 +56739,12 @@ plan_index:
         level up — not a message that misdescribes an event, but a TEST that
         misdescribes what it covers.
       events:
+        - type: note
+          ts: "2026-08-31T02:24:53Z"
+          agent_id: "linux-pirria-claude-20260831t022453z"
+          host: linux
+          summary: |
+            Cross-reference only, no new claim about this packet: the same v0.4.260830.5 smoke run that reproduced 900-z3kv on pirria also let me falsify a fleet hypothesis about its forge-lane findings. The in-forge meta-orchestration skill was invoked BARE (04-opencode.log:18, and the agent says so itself at :39), so the args-bearing skill-load corruption seen on another host tonight is NOT the same defect as pirria repetition loop; and the truncation at :19 was ordinary tool-output spill that the agent paginated successfully by :37, thousands of lines before the loop at :4682. Skill delivery is exonerated as the loop cause. Recorded here because the smoke report carrying both findings is plan/issues/smoke-e2e-findings-v0.4.260830.5-linux-2026-08-31-pirria.md and a reader arriving via this packet should not re-run the ruled-out check.
         - type: evidence
           ts: "2026-08-31T02:05:23Z"
           agent_id: "linux-pirria-claude-20260831t020522z"
