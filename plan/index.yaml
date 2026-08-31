@@ -1475,6 +1475,63 @@ plan_index:
       status: ready
       events:
         - type: progress
+          ts: "2026-08-30T23:40:16Z"
+          agent_id: "windows-yolanda-claude-20260830t162208z"
+          host: yolanda
+          summary: |
+            SC-11 NOW HAS A MEASUREMENT THAT REFUSES INSTEAD OF GUESSING — scripts/measure-sc11-idle-cpu.ps1.
+
+            Last cycle I pinned SC-11's unit, measured, and threw the number away because the tray's control wire flapped five times inside the window. I closed that note by saying the precondition should be asserted BY the measurement rather than assumed, and that it was three lines. This is that, written rather than recommended.
+
+            WHAT IT ENFORCES, both of them preconditions that have already produced numbers looking like results:
+              * THE UNIT. Reports share of ONE CORE, the reading pinned on 2026-08-30, and prints share-of-machine only as a labelled context field that is never the verdict. The first live measurement straddled the threshold precisely because the unit was unstated -- 0.11% of a core and 0.007% of a 16-core machine from the SAME samples.
+              * THE HEALTHY-VM CONDITION. Records the tray log's byte offset BEFORE sampling, reads only the bytes appended during the window, and REFUSES if "control wire unreachable" appears in them. Scoping to the window matters: counting flaps over the whole file would fail a tray for a disconnect that happened days ago.
+
+            A refusal carries no cpu_percent field at all. A zero there would be a measurement claim and there is no measurement -- the same shape as the inference harness, and for the same reason: "the tray was not idle" and "the idle tray used too much CPU" are different claims and only one is about the code.
+
+            FOUR CONTROLS, ALL EXERCISED:
+              1. no tray running          -> refused: "no tillandsias-tray process is running"
+              2. live tray, flapping wire -> refused: "control wire flapped 2 time(s) inside the window -- the tray was reconnecting, not idle"
+              3. measurement path          -> produced a well-formed verdict with the pinned unit and flaps_in_window=0
+              4. missing tray log          -> refused: "cannot verify the healthy-VM precondition, and an unverified precondition is not a passed one"
+
+            Control 2 is the one that matters and it fired on the real defect: the wire flapped twice inside a 90-second window on this host tonight, which is a faster cadence than the five-in-five-minutes I saw earlier.
+
+            WHAT CONTROL 3 IS AND IS NOT, stated because it prints a number that looks like an answer: it ran against a deliberately empty log file, so it exercises the arithmetic and the output shape and proves the measurement path is reachable. It is NOT an SC-11 reading -- the precondition was bypassed by construction, not satisfied. Its 0.2603% should not be quoted as a result any more than last cycle's 0.1615% should have been.
+
+            SC-11 REMAINS UNMEASURED ON THIS HOST, and now for a stated reason rather than an ambiguous one: the control wire will not hold still long enough. Two windows tonight, both refused. The packet stays ready.
+
+            THE FLAPPING IS WORTH SOMEONE'S ATTENTION, and I am still not claiming a root cause. Tonight: 5 events in a 5-minute window, then 2 in a 90-second window. Earlier in the log the same message appears once, on 2026-08-26. So it is recent and it is accelerating on this host. My standing hypothesis is guest starvation from my own day (reset-guest, expert-serve, 7B model loads, a cold nix cross-compile, ~1 GB of guest headroom), which would make it my artifact rather than a product defect -- but I have not correlated flaps against guest memory or CPU, and the honest next step is to run the harness on a quiet host before concluding anything. If it refuses there too, the flapping is real and is a defect in its own right; if it passes, the criterion closes and my hypothesis was right.
+        - type: progress
+          ts: "2026-08-30T22:48:00Z"
+          agent_id: "windows-yolanda-claude-20260830t162208z"
+          host: yolanda
+          summary: |
+            SC-11 UNIT PINNED; THE RE-MEASUREMENT IS NOT VALID AND I AM NOT REPORTING IT AS ONE.
+
+            THE UNIT IS SETTLED, which was the residual the previous measuring agent left ("pin the unit in the criterion, then re-measure"). SC-11 now reads "<0.1% OF ONE CORE over a 5-minute window" in plan/issues/observable-streams-contract-2026-06-30.md, with the argument recorded beside it.
+
+            THE ARGUMENT, so the choice is reviewable rather than asserted: share-of-machine is not a property of the software. It divides by core count, so the same binary doing the same work changes verdict with the host it runs on — a tray would "improve" by being moved to a bigger machine, which is not a thing SC-11 can have meant. Every neighbouring row in that table (no timer wakeups, one long-lived task, no periodic GET) states what the CODE does, and share-of-one-core is the only reading that keeps SC-11 in that family. It is also the stricter reading, which is the right way to resolve an ambiguity in a contract whose whole purpose is catching idle cost. Note this is the reading that does NOT close the packet, which is why it needs the argument rather than a preference.
+
+            THE MEASUREMENT I TOOK, AND WHY IT DOES NOT COUNT. Fresh tray from target/release, 45s settle, then a clean 300.0s window on a 16-core host: 0.484 CPU-seconds = 0.1615% of one core (0.0101% of machine). Against the pinned threshold that is a FAIL by 1.61x, and it is higher than the previous agent's 0.11%.
+
+            I am not recording it as an SC-11 result, because SC-11's condition is "a tray with a HEALTHY idle VM" and that condition did not hold. The tray log shows the control wire FLAPPING throughout the window:
+
+              2026-08-30T22:42:15Z  WARN control wire unreachable — in-VM headless not answering
+              2026-08-30T22:42:24Z  INFO control wire recovered
+              2026-08-30T22:43:05Z  WARN control wire unreachable
+              2026-08-30T22:43:14Z  INFO control wire recovered
+              2026-08-30T22:43:54Z  WARN control wire unreachable
+              2026-08-30T22:44:04Z  INFO control wire recovered
+
+            FIVE unreachable events inside my five-minute sample. That is a tray reconnecting roughly every fifty seconds, not an idle tray — and reconnection work is exactly the kind of thing an idle-CPU criterion must exclude. Reporting 0.1615% as SC-11 would have been a number measured under the wrong condition, which is the same class of error as the stale timing log and the vacuous control earlier in this cycle: real measurement, wrong precondition, confident conclusion.
+
+            WHAT THE FLAPPING IS, HONESTLY SCOPED. Six unreachable events exist in the whole log, first 2026-08-26T16:49Z and last 2026-08-30T22:43Z — so five of the six are from my window today and the behaviour is not chronic across the log's life. I am NOT claiming a defect. The likeliest explanation is my own load: this host spent the day running --reset-guest, expert-serve, 7B model loads and a cold nix cross-compile, and the guest has ~1 GB of headroom with three models resident. A starved guest failing to answer the wire within its deadline would produce exactly this. That is a hypothesis, not a diagnosis; I have not correlated the flaps against guest memory or CPU.
+
+            WHAT SC-11 ACTUALLY NEEDS, and it is now well-defined rather than ambiguous: a quiet host, a tray with a subscription established and NO unreachable events in the sampling window, and 300s of wall clock. The precondition should be asserted BY THE MEASUREMENT rather than assumed — grep the log for unreachable events over the window and refuse the sample if any appear. Whoever takes this next should automate that check; it is three lines and it is what separates an SC-11 number from a number.
+
+            PACKET STATE: unchanged. 154 does not close on this cycle. The unit is pinned, which was the blocking residual; the measurement remains outstanding and now has a stated precondition it can be held to.
+        - type: progress
           ts: "2026-08-12T13:43:51Z"
           agent_id: "windows-claude-opus5-20260811t215500z"
           host: windows
@@ -28222,6 +28279,67 @@ plan_index:
             no identity. The pair keyed to the node is what names a GPU. Same conclusion,
             honest premise. Worth noting where it landed: an invented fact, written into the
             doc comment of the exact field built to resist invented facts.
+        - type: evidence
+          ts: "2026-08-31T00:42:07Z"
+          agent_id: "windows-yolanda-claude-20260830t162208z"
+          host: yolanda
+          summary: |
+            CORRECTION TO MY OWN EVIDENCE EVENT ABOVE — the NPU IS being used. I concluded "runs on the GPU, not the NPU" and that was wrong. Both accelerators participate.
+
+            WHAT CORRECTED IT: yoga supplied an instrument I did not have — device power state read from the OS's PnP layer rather than from the vendor's runtime. On Linux that is /sys/class/accel/accel0/device/power/runtime_status; the Windows equivalent is DEVPKEY_Device_PowerData on the NPU's PCI instance, whose CM_POWER_DATA carries PD_MostRecentPowerState at byte offset 4. Their argument for trusting it over a utilisation field is the reason it worked: runtime power state is maintained by the kernel's PCI power management for its own purposes, and would be wrong in a way that broke suspend/resume rather than merely mis-reporting. A device the OS believes is powered down cannot be executing inference.
+
+            THE MEASUREMENT, with the idle control on both sides:
+
+              state                       NPU D-state        worker GPU engine
+              idle, before                D3-off             0%
+              DURING generation           D0-active (6/6)    95.12%
+              idle, +60s after            D3-off             0%
+              idle, +120s after           D3-off             0%
+
+            The NPU transitions D3 -> D0 for exactly the span of the generation and drops back. That is not a counter's opinion; it is the OS powering the device up to do work and releasing it afterwards.
+
+            SO THE CORRECT FINDING IS HYBRID EXECUTION, not GPU-instead-of-NPU: the ryzenai-llm recipe engages BOTH the XDNA2 NPU and the gfx1152 iGPU on this part, which is consistent with the split these stacks typically use (NPU for one phase, iGPU for another). My "four proxies agreed and the placement disagreed" framing was the wrong conclusion drawn from a real gap.
+
+            WHAT THE REAL DEFECT IS, and it is nastier than what I first reported. Lemonade's own amd_npu.utilization reads 0.0 through every sample of a generation in which Windows shows the NPU in D0 doing work. The vendor's counter is unwired or broken. That is worse than a mislabelled lane: a lane that runs on the wrong device is at least honestly idle on the right one, whereas this reports nothing happening on a device that is demonstrably active. Anyone gating an NPU lane on that field would conclude the NPU is unused and disable a path that works.
+
+            WHAT I GOT RIGHT AND WHAT I GOT WRONG, for the record. Right: that "it answered" is not "it ran where the name says"; that the CPU is not doing the work (0.08 of 16 cores); that the vendor's utilisation field cannot be trusted; and — decisively — flagging the residual uncertainty explicitly, which is the only reason the correction arrived in one exchange rather than surviving into a recommendation. Wrong: concluding placement from three agreeing indirect signals (flat NPU counter, one enumerated video controller, GPU at 95%) when none of them observed the NPU directly. That is exactly the fluent-inference failure yoga named earlier tonight, committed by me, one message after warning them about it.
+
+            THE PRACTICAL RESULT IMPROVES: this host has fast, offloaded, OpenAI-compatible local inference on Windows using BOTH accelerators, CPU at 0.08 of 16 cores. The gfx1152 half is the same target yoga is building a HIP backend for; the XDNA2 half is the lane the fleet has never had working anywhere.
+
+            STILL UNMEASURED: how the work divides between the two, and whether a -Hybrid checkpoint differs from this -NPU one in placement. Both are answerable with the same D-state-plus-GPU-engine pairing and neither is claimed here.
+        - type: evidence
+          ts: "2026-08-31T00:36:38Z"
+          agent_id: "windows-yolanda-claude-20260830t162208z"
+          host: yolanda
+          summary: |
+            A VENDOR NPU STACK THAT RUNS ON THE GPU — every label says NPU, the placement says Radeon. Measured on yolanda 2026-08-30, and it is this packet's own failure class arriving from outside our code.
+
+            THE SETUP. Lemonade Server 11.7.0 is installed on the Windows side of this host, OpenAI-compatible on /v1 and /api/v1, and its own system-info advertises:
+              amd_npu : { available: true, family: "XDNA2", utilization: 0.0 }
+              amd_gpu : { available: true, family: "gfx1152", integrated: true, name: "AMD Radeon(TM) 860M Graphics" }
+            The Windows NPU is bound and healthy: "NPU Compute Accelerator Device", PCI\VEN_1022&DEV_17F0, AMD driver 32.0.20102.3930 dated 2026-05-06 — the same 1022:17F0 part yoga enumerates on Linux as amdxdna.
+
+            WHAT I PULLED AND RAN. DeepSeek-R1-Distill-Qwen-1.5B-NPU, checkpoint amd/DeepSeek-R1-Distill-Qwen-1.5B-onnx-ryzenai-npu, recipe ryzenai-llm, served by a worker process literally named ryzenai-server (pid 17076, 2.69 GB resident). It generates real text through the OpenAI endpoint: 2527 chars in one completion, 1613 and 831 in others, 17-26s wall.
+
+            THE PLACEMENT EVIDENCE, gathered because "it answered" is not "it ran where the name says":
+              worker CPU during generation    2.06 CPU-s over 26.4s wall = 0.08 of 16 cores
+              Lemonade's amd_npu.utilization  0, across every sample in three separate generations
+              GPU attributable to pid 17076   95.12% peak, engtype=compute
+              GPU from all other processes    1.19% peak
+              video controllers present       ONE — Radeon 860M, PCI\VEN_1002&DEV_1114
+              the NPU as a display adapter    absent; 1022:17F0 is not a video controller
+
+            So the CPU is idle, the vendor's NPU counter never moves, and the serving process pins a GPU compute engine at 95%. The model name, the checkpoint path, the recipe and the vendor's own capability flag all say NPU. The work is on the integrated Radeon.
+
+            WHY THIS BELONGS ON THIS PACKET. 793-zumy exists because our probe reported cpu-only on a host whose GPU was usable, and its remedy was to stop trusting a proxy for a placement. This is the same defect one layer out and from a vendor: a capability flag ("available: true"), a naming convention ("-NPU"), and a checkpoint path ("...-ryzenai-npu") are all PROXIES, and all four agreed with each other while disagreeing with the placement. Tonight the fleet has now found this shape five times — a container asserting gpu-rocm with an empty device list, a host claiming accel_gpu=usable with size_vram=0, rocm-smi answering about a GPU nothing can dispatch to, our own tier label, and now a vendor runtime. The lesson generalises past our code: the only evidence of placement is placement.
+
+            THE RESIDUAL UNCERTAINTY, stated rather than buried. I have not directly confirmed that the LUID carrying the 95% (0x00000000_0x00011d33) maps to the 860M rather than to an NPU presented as a DXCore adapter. My conclusion rests on two agreeing signals — a single enumerated video controller, and an NPU counter that stays flat — which is precisely the two-signals-agreeing reasoning that has been wrong twice on this fleet tonight. What is NOT in doubt: the work is offloaded off the CPU, and Lemonade's own NPU utilisation field never registers it. Nailing GPU-versus-NPU exactly would want a DXCore adapter enumeration by LUID, which I have not run.
+
+            THE PRACTICAL RESULT IS GOOD AND SHOULD NOT BE LOST IN THE CORRECTION. This host now has fast, offloaded, OpenAI-compatible local inference on the Windows side — the CPU sits at 0.08 cores while it generates. That is a different world from the WSL2 lane, which is CPU-only at 9.1 tok/s decode because the distro has no Vulkan ICD (793-zumy's engine-missing). And it is the SAME gfx1152 target yoga is building a HIP backend for, so the two lanes converge on one GPU target across the pair.
+
+            WHAT BLOCKS USING IT FROM THE ENCLAVE: the guest cannot reach the host endpoint — 000 on the NAT nameserver IP (10.255.255.254:8000), 000 on host.docker.internal, no default route visible from the build distro, while github.com returns 200 from the same shell. Almost certainly Windows Firewall on the WSL vNIC. The operator's own instinct is the better fix than a firewall rule: route it over the existing hvsocket control wire, which keeps the endpoint off the network entirely.
+
+            AND A POSTURE FINDING WORTH ITS OWN LINE: Lemonade binds 0.0.0.0:8000 — ALL INTERFACES. dev-inference-ensure.sh binds ollama to 127.0.0.1 deliberately, and its comment says the endpoint "is for the agent on this machine; it is not a service and must not look like one". A vendor tool defaulting to all-interfaces is exactly the kind of thing that ships quietly into a fleet, and anyone adopting Lemonade should pin the bind address.
         - type: verified
           ts: "2026-08-30T03:49:34Z"
           agent_id: "linux-lenovinha-claude-20260828t223829z"
@@ -64311,6 +64429,29 @@ plan_index:
         - OpenCode completes a real project question against the local OpenAI endpoint with citations and floor behaviour intact, demonstrated on both twins
         - a refusal (out-of-coverage question) arrives at OpenCode as a well-formed completion carrying the typed marker, not an error
       events:
+        - type: evidence
+          ts: "2026-08-31T00:59:51Z"
+          agent_id: "windows-yolanda-claude-20260830t162208z"
+          host: yolanda
+          summary: |
+            YOGA'S CORRECTED 0.5b FINDING REPLICATES ON A THIRD SUBSTRATE — the accelerator is slower for the fleet default, and now that is two independent stacks rather than one host's claim.
+
+            THE CONTROLLED PAIR, chosen because yoga's retraction showed what an uncontrolled one costs: same model, same server, same recipe family, same host, same prompt, three reps each — differing ONLY in execution target. Lemonade's own decoding_speed_tps and prefill_duration_ttft, not my stopwatch.
+
+              Qwen2.5-0.5B-Instruct-CPU       median 64.47 tok/s   (64.5, 61.9, 61.3)   TTFT 0.108s
+              Qwen2.5-0.5B-Instruct-Hybrid    median 52.92 tok/s   (42.6, 52.9, 52.5)   TTFT 0.562s
+
+              RATIO hybrid/CPU = 0.82x — THE ACCELERATOR LOSES.
+
+            Against yoga on Linux/Vulkan/iGPU: 86.4 GPU vs 115.6 CPU = 0.75x. Same direction, comparable magnitude, and the substrates share almost nothing: theirs is RADV Vulkan on gfx1152 through ollama; mine is AMD's ryzenai-llm engaging the XDNA2 NPU (D0-confirmed) plus the iGPU through Lemonade. Two stacks, two accelerators, two operating systems, one conclusion.
+
+            AND A SECOND FINDING THEY DID NOT REPORT: time-to-first-token is 5.2x WORSE on the accelerated path — 0.562s against 0.108s. For an interactive expert that is the number a user feels, and it moves the wrong way even further than throughput does. Dispatch and setup cost is being paid per request and there is not enough work at this model size to amortise it.
+
+            THE OPERATOR-FACING CONSEQUENCE, which is the point: the fleet default is qwen2.5:0.5b, and on this hardware class that model is faster on the CPU — measured now on both twins, through different accelerator stacks. Routing the default to an accelerator is a REGRESSION in both throughput and latency. The accelerator lanes should exist and be measurable, but the default should stay where it is until a larger model is chosen.
+
+            WHAT THIS DOES NOT SAY, stated because the inverted-U is yoga's inference from three points and I have contributed one: I have NOT measured 3b or 7b on the hybrid path, so I cannot confirm the peak they predict at 3b, and my 1.5B hybrid number (23.38 tok/s) still has NO CPU baseline and should not be read as a curve point. The prediction I recorded earlier — hybrid 7B at 12-14 tok/s on the bandwidth thesis — remains untested and I did not spend the operator's 9 GB to test it on a peer's say-so.
+
+            METHOD NOTE, because it is why this measurement is worth anything: yoga retracted a fabricated CPU baseline they had estimated and reported as measured. Their retraction is what made me build a controlled pair on one host instead of comparing my hybrid number against their curve — which is precisely the uncontrolled cross-host comparison that produced the 5.5x filesystem figure I had to decompose earlier tonight. A retraction that arrives before the next measurement is worth more than one that arrives after it.
         - type: note
           ts: "2026-08-30T21:34:42Z"
           agent_id: "linux-macuahuitl-fable5-20260830t213442z"
@@ -64709,6 +64850,70 @@ plan_index:
         VERIFICATION SERVICE: pirria holds a warm, ±1s-reproducible baseline (3m50s warm gate) and a running enclave, and can re-measure any landed slice fast. Out-of-box timeline recorded: ~23m15s clean-checkout to running enclave on target hardware.
       next_action_ts: "2026-08-30T06:24:51Z"
       events:
+        - type: note
+          ts: "2026-08-30T22:38:18Z"
+          agent_id: "windows-yolanda-claude-20260830t162208z"
+          host: yolanda
+          summary: |
+            AXIS B'S BENEFIT IS CONCENTRATED EXACTLY WHERE STAGING IS UNSAFE — and that deflates it from ~122s to roughly ~58s before any wiring is attempted.
+
+            THE CORRECTNESS CONSTRAINT, from gate-stamp.sh's own header: "WHAT THE STAMP COVERS: HEAD plus the full working-tree diff against it, including untracked files. Any edit after the gate ran invalidates the stamp."
+
+            So the stamp is BY DEFINITION a statement about the real worktree's bytes. Computing it against a staged copy would attest to the copy — a stamp saying "the gate validated these bytes" about bytes nobody is pushing. That is precisely the defect class 889-8tcb and 940-f77j exist to prevent ("a gate stamp must be earned, not merely written"), and it is not a tuning question: a stamp over a copy is a false stamp however fresh the copy is.
+
+            CROSS-REFERENCED AGAINST THE MEASURED WINS, which is where it turns awkward:
+
+              step                    filesystem win   safe to stage?
+              ghost-trace ratchet          79.92x      NO, without proof the stage equals the worktree
+              gate-stamp compute           17.53x      NO, by definition — it must hash the real tree
+              plan archiver --check         2.96x      only if the staged ledger is provably current
+              terminology dictionary        1.01x      yes, and worth nothing
+
+            The two largest wins are the two whose correctness depends on describing the real tree. That is not a coincidence: a step is filesystem-bound BECAUSE it walks every file, and a step that must walk every file is usually the one asserting something about all of them.
+
+            THE STAGE-EQUALS-WORKTREE PROBLEM IS NOT HYPOTHETICAL ON THIS HOST. pre-push-local-gate.sh carries a `stale:tree-changed-since-gate` refusal, and I tripped it repeatedly this cycle by appending ledger evidence between the gate and the push. The tree demonstrably changes around gate runs. Any staged step therefore needs a freshness proof, and the cheapest sound proof is hashing the tree — which is the stamp's own work, so the verification costs what the staging saves.
+
+            WHAT SURVIVES: the archiver alone, and only under the same freshness caveat. 87.2s saved minus 29.2s staging = ~58s net against a 561s gate, roughly 10 percent. Real, but a third of the ~122s I projected one tick ago and a fifth of the ~50 percent the uniform-multiplier arithmetic suggested.
+
+            I AM NOT RULING AXIS B OUT — that is a design decision and the coordinator session that would make it has ended. What I am recording is that the design cannot simply "stage the tree and point the ledger steps at it": it has to answer, per step, how the step proves the stage matches what is being pushed, and for the gate stamp there is no answer because the question is self-contradictory. Three honest options for whoever picks this up:
+              (a) stage only the archiver's work and accept ~58s, with a freshness proof for the ledger;
+              (b) find a cheaper freshness proof than a full hash, which would unlock ghost-trace's 79.9x and is where the real value is;
+              (c) attack the 9P boundary itself rather than working around it — the whole multiplier is a WSL2 artifact and does not exist on the Linux hosts.
+
+            Option (b) is the interesting one and I have not attempted it. Option (c) is out of this packet's scope but is the only one that helps every step at once.
+        - type: evidence
+          ts: "2026-08-30T21:40:10Z"
+          agent_id: "windows-yolanda-claude-20260830t162208z"
+          host: yolanda
+          summary: |
+            THE FILESYSTEM MULTIPLIER DOES NOT GENERALIZE — it ranges from 1.01x to 79.9x across four gate steps on one host. The instruction was to measure rather than extrapolate; this is why that instruction was right.
+
+            FOUR STEPS, TWO ARMS EACH, same host, same command, same tree, only the filesystem differs. Every pair is validity-guarded: reported only when both arms exit with the SAME rc and the SAME verdict line, because three earlier attempts at this comparison produced large ratios from arms that had failed identically without doing the work.
+
+              step                     9P (/mnt/c)   native ext4   ratio   verdict
+              ghost-trace ratchet         36843 ms       461 ms   79.92x   ok:ghost-trace-gate
+              gate-stamp compute          29280 ms      1670 ms   17.53x   (no verdict token, rc=0 both)
+              plan archiver --check      131606 ms     44411 ms    2.96x   ok / "Check passed"
+              terminology dictionary      40892 ms     40633 ms    1.01x   ok:terminology-clean:terms
+
+              one-time staging of the full tracked tree: 29230 ms, 463 MB
+
+            WHAT THE SPREAD MEANS, and it is a design constraint rather than a curiosity. The steps that WALK THE TREE — the ghost-trace ratchet scanning @trace annotations across every source file, the gate stamp hashing every tracked path — are almost entirely filesystem-bound and collapse to nearly nothing on native ext4. The archiver is only PARTLY filesystem-bound (2.96x) because it also does real ledger computation. The terminology dictionary is PURE CPU: 40892 vs 40633 ms is a 0.6 percent difference, i.e. staging buys it nothing at all.
+
+            So "stage plan/ on native FS and the ledger steps get faster" is the wrong model. The correct model is per-step: a step's benefit is proportional to how much of its time is spent touching files, and that varies by two orders of magnitude across the very steps the epic groups together.
+
+            WHAT IT WOULD ACTUALLY SAVE, using the measured per-step numbers rather than one multiplier applied to a group:
+              ghost-trace   36.8s -> 0.5s   saves 36.3s
+              gate-stamp    29.3s -> 1.7s   saves 27.6s
+              archiver     131.6s -> 44.4s  saves 87.2s
+              terminology   40.9s -> 40.6s  saves  0.3s
+              gross saving ~151.4s, minus 29.2s staging = ~122s net
+
+            Against the fresh 561s baseline that is roughly a 22 percent gate reduction — real, worth doing, and materially LESS than the ~50 percent a uniform 2.96x across the flat top four would have projected. Note the naive extrapolation would have been wrong in BOTH directions at once: it would have badly understated ghost-trace (79.9x, not 2.96x) while inventing a saving for terminology that does not exist.
+
+            A CAVEAT I AM STATING RATHER THAN BURYING: these are STANDALONE invocations, and their 9P absolutes do not match the in-gate profile for the same steps (ghost-trace 36.8s standalone vs 134s in-gate; terminology 40.9s vs 80s). The gate runs them under different conditions — warm/cold caches, concurrent work, possibly wider scope. The RATIOS are same-host same-command and are the trustworthy part; the projected 122s should be treated as an order-of-magnitude estimate, not a promise, and re-measured in-gate before anyone commits to it.
+
+            NOT MEASURED: whether a staged tree can actually serve these steps in a real gate run. Every number above comes from invoking the step directly against a staged copy; wiring the gate to use a stage introduces refresh, staleness and correctness questions (the stamp must describe the REAL tree, not the copy) that this measurement does not address and that are the harder half of axis B.
         - type: note
           ts: "2026-08-31T02:19:35Z"
           agent_id: "linux-macuahuitl-fable5-20260831t021935z"

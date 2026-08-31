@@ -429,6 +429,14 @@ $sums = Join-Path $artifactsDir 'SHA256SUMS-windows'
 # rather than its own file: a verifier that has to know which sums file to fetch
 # for which artifact is a verifier people skip. Order matters only for humans;
 # sha256sum -c does not care.
+#
+# The PUBLISHED file carries two separator conventions and that is expected,
+# not a defect. These lines use sha256sum TEXT mode ("<hash>  <name>"); the
+# release workflow later appends the alias, exe and installer lines with
+# coreutils sha256sum, which writes BINARY mode ("<hash> *<name>"). Both parse,
+# and release.yml runs `sha256sum -c` on the merged file right after appending.
+# Do not "normalize" one producer without the other -- a uniform-looking file
+# produced by changing only this end would still be produced by two writers.
 $sumLines = @("$hash  $(Split-Path $zip -Leaf)")
 if ($msix -and (Test-Path -LiteralPath $msix)) {
     $msixHash = (Get-FileHash $msix -Algorithm SHA256).Hash.ToLower()

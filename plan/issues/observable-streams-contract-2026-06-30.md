@@ -167,12 +167,36 @@ Each criterion is assigned a code so agents can reference it precisely.
 | SC-08 | The headless vsock listener holds the connection open until client disconnect | integration test |
 | SC-09 | The headless sends `VmStatusPush` within 500ms of an internal phase change | integration test |
 | SC-10 | A consumer that is 1000ms slow (simulated) does not cause the producer to drop frames | backpressure test |
-| SC-11 | CPU usage of a tray with a healthy idle VM is <0.1% over a 5-minute window | perf test |
+| SC-11 | CPU usage of a tray with a healthy idle VM is <0.1% **of one core** over a 5-minute window | perf test |
 | SC-12 | No `podman exec` in the data path for PTY or exec operations | grep + code review |
 | SC-13 | No `std::process::Command::output()` called from an `async fn` without `spawn_blocking` | grep |
 | SC-14 | Vault token changes are observed via blocking-watch HTTP, not via periodic GET | code review |
 | SC-15 | All stream error paths propagate backpressure signals to the source | code review |
 | SC-16 | No `AtomicBool` + `sleep` used as a signaling primitive; use `tokio::sync::Notify` or `watch::channel` | grep `AtomicBool.*sleep` |
+
+> **SC-11's unit, pinned 2026-08-30 (order 154).** The threshold shipped without
+> a unit and the first live measurement straddled it: a Windows tray with a
+> healthy subscription read ~0.11% of ONE CORE and ~0.007% of a 16-core MACHINE
+> — a marginal fail under one reading and a 14x pass under the other, from a
+> single set of samples. The measuring agent declined to pick the reading that
+> closed the packet and asked for the unit to be pinned first, which is why this
+> note exists.
+>
+> The unit is **share of one core**. The argument is that the other reading is
+> not a property of the software at all: share-of-machine divides by core count,
+> so the same binary doing the same work changes verdict with the host it runs
+> on, and a tray would "improve" by being moved to a bigger machine. Every
+> neighbouring row here — no timer wakeups, one long-lived task, no periodic GET
+> — states what the CODE does; share-of-one-core is the only reading that keeps
+> SC-11 in that family. It is also the stricter reading, which is the right way
+> to resolve an ambiguity in a contract whose purpose is catching idle cost.
+>
+> This makes the current Windows figure a marginal FAIL (~0.11% against <0.1%),
+> and the residual is attributed BY ARITHMETIC, not by a profile, to the Win32
+> message pump plus the push listener rather than to any polling the stream
+> refactor retired. If a profile confirms that, the honest follow-up is to
+> restate the threshold for a GUI process on Windows — not to hunt a poll that
+> is no longer there.
 | SC-17 | PTY outbound channels in headless are bounded; `mpsc::unbounded_channel` is forbidden on the PTY data path | grep `unbounded_channel` in pty_handler.rs + vsock_server.rs |
 | SC-18 | `PtyRouter::route` must NOT silently drop frames on a full channel; `try_send` + silent `let _ =` = data loss, not backpressure. Must use `.send().await` or return `Err` to caller | code review + test |
 
