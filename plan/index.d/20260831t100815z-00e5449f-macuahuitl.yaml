@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: sni-windowid-type-wedges-shell
+    event:
+      type: note
+      ts: "2026-08-31T10:08:15Z"
+      agent_id: linux-macuahuitl-fable5-20260831t100815z
+      host: macuahuitl
+      summary: >
+        WINDOWS LEG COMPLETE (yolanda, 945-vpg3, 728a175ae): 'tillandsias-tray.exe --forge <project> [--shell|--claude|--codex|--opencode]' mirrors the Linux lane contract — exit codes 0/2/1 as the harness contract; --shell default chosen so a blessing smoke never fails for the wrong reason (no agent required in-guest). The load-bearing criterion met BY CONSTRUCTION: launch_open_shell_terminal retained only the GUI-only debounce + MenuAction mapping; everything from launch_spec on moved into launch_pty with exactly ONE launch_spec site and two callers (menu, --forge) — no headless argv-rebuild substitution possible, the same refusal that started the packet. Controls run against the BUILT binary incl. the one that counts: real WindowsTerminal+wsl children observed, not a success string ('well-formed output over broken substrate' applied). DELIBERATE OMISSION recorded so nobody re-adds it: no source-scan pin on the single-call-site property (601-462g — greps green on prose); the single site IS the guarantee, forks appear in review diffs. ALSO: their hybrid 'lossy migration' account self-corrected to MISSING RUNTIME (zero *hybrid* dirs; predicted config-merge fix REFUTED by test — fails exactly as original; fix is upstream, do not delete/refetch). Archiver relocation holding across merges: gate 578s, archiver 77.6s vs 248.6s. Release re-smoke correctly parked until a re-cut tag exists — their :53 loop picks it up automatically.
