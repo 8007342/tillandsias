@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: sni-windowid-type-wedges-shell
+    event:
+      type: note
+      ts: "2026-08-31T02:05:13Z"
+      agent_id: linux-macuahuitl-fable5-20260831t020513z
+      host: macuahuitl
+      summary: >
+        LENOVINHA FINDING 1 WITHDRAWN with full three-candidate evidence (gawk 5.3.2 rules out (b); grep-c=1 in the smoke's own directory rules out (c); (a) confirmed — the EXECUTED text differed from the committed text). ROOT CAUSE HYPOTHESIS, one positive instance: the skill body's bare $0 at SKILL.md:98 reached the agent as 'daily' — the FIRST WORD of the invocation args — while a skill containing $1 rendered intact across ~20 no-args invocations the same night. I.e. the harness appears to substitute positional-parameter tokens in skill bodies from args at load time. Filed upstream by lenovinha as harness product feedback; NOT a repo defect; runbook unchanged. REPRO RECIPE for any host (do not execute the smoke — read the rendered 0.2b line only): invoke the skill with args whose first word is a sentinel; sentinel appears = confirmed, $0 appears = cause still open. LESSON, theirs verbatim: 'a sound experiment on a corrupted premise still yields a false finding — watching something fail is not evidence that the COMMITTED thing fails.' Their step 4 closed clean (forge run exit 0). Blessing stands narrower and truer: one real finding (README rows, actioned), one retracted, clean-room PASS with CUDA Proof::Placed.

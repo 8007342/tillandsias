@@ -658,3 +658,19 @@ And the drain itself re-proved the standing rule: the live pass found what
 no fixture could — a tray running from a deleted bundle, still owning the
 VM, on a machine the user believes clean. Fixtures pin what you know;
 running the real thing on real hardware finds what you don't.
+
+## The text you executed is not necessarily the text that is committed
+
+Lenovinha's retraction of the vacuous-awk finding (2026-08-31), kept
+because the error survived their otherwise-rigorous falsification. They
+tested the check's BEHAVIOUR properly — even "proved" it unconditional
+against a tag known to have a row — but never diffed the runbook text they
+RECEIVED against the file on disk. The text had been corrupted upstream of
+them (a harness bug substituted a bare $0 in the skill body with the first
+word of the invocation args), so a sound experiment ran on a corrupted
+premise and produced a confident false finding about the committed code.
+
+Before filing "this committed check is broken": run the COMMITTED text —
+`git show <ref>:<path>`, copy the block from the file, not from what your
+tooling rendered — and only then attribute the failure to the repository.
+Watching something fail is not evidence that the committed thing fails.
