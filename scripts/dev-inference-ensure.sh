@@ -204,6 +204,31 @@ ensure_container() {
         _ec_accel="--device=/dev/kfd --device=/dev/dri"
     fi
 
+    # ORDER 917-zkge — A WORKING LANE REFUSED BY POLICY.
+    #
+    # ollama ENUMERATES an integrated GPU and then discards it by default:
+    #   "dropping integrated GPU; to enable, set OLLAMA_IGPU_ENABLE=1"
+    #   id=0 library=Vulkan name=Vulkan0 description="AMD Radeon 840M Graphics"
+    # That line is DEBUG level, so on a host whose ONLY GPU is integrated the
+    # observable result is a silent fall back to CPU while every other signal
+    # says the lane is configured: devices passed, ICD present, backend
+    # installed, manifest recording core+vulkan.
+    #
+    # Reasonable default for a machine with a discrete card beside the iGPU;
+    # wrong for this whole hardware class, where integrated IS the GPU. Set for
+    # the AMD lanes only, so a discrete-GPU host keeps ollama's own preference.
+    #
+    # MEASURED on yoga after setting it (gfx1152 / RADV KRACKAN1):
+    #   qwen2.5:0.5b  size_vram 0.57/0.57 GB   decode 77.51 tok/s
+    #   qwen2.5:7b    size_vram 4.86/4.86 GB   decode 12.89 tok/s (CPU was 12.18)
+    # Both FULLY placed. The 7B decode barely moves because an iGPU shares the
+    # system memory bus: the small model is compute-bound and wins hugely, the
+    # 7B is bandwidth-bound and the bandwidth did not change.
+    _ec_igpu=""
+    case "$_ec_tier" in
+        gpu-rocm|gpu-vulkan) _ec_igpu="--env=OLLAMA_IGPU_ENABLE=1" ;;
+    esac
+
     # shellcheck disable=SC2086 # _ec_accel is one optional flag or empty
     podman run --detach --name "$DEV_CONTAINER" \
         --publish "${ENDPOINT_HOST}:${ENDPOINT_PORT}:11434" \
@@ -211,6 +236,7 @@ ensure_container() {
         --userns=keep-id --pids-limit=128 \
         $_ec_accel \
         --env OLLAMA_DEBUG=1 \
+        $_ec_igpu \
         --env TILLANDSIAS_INFERENCE_TIER="$_ec_tier" \
         --env OLLAMA_KEEP_ALIVE="${TILLANDSIAS_DEV_INFERENCE_KEEP_ALIVE:-30m}" \
         -v "$_ec_cache:/home/ollama/.ollama/models:rw" \
