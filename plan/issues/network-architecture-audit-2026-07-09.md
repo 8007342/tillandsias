@@ -960,3 +960,53 @@ Two things make this worse than ordinary rot:
 - §5's P1/P6 items remain open on their own terms (git-mirror-egress verdict;
   the `:3129` decision) — both operator calls, unchanged by this slice.
 - 39 line citations remain in the document, all outside §2/§4/§7.
+
+## L6. NA-02 operation table re-VERIFIED (not just re-anchored) — 2026-08-31, lenovinha
+
+L5 replaced §2's line citations with symbol anchors but explicitly did not
+re-check the claims those citations supported, and said so under "Not done
+here". This closes that gap. Every counted and structural claim in the
+operation table was checked against the arrays the symbols now resolve to.
+
+| claim in §2 | verdict |
+|---|---|
+| `--init` builds 10 images INCLUDING vault | TRUE — `run_init`'s array is proxy, git, vault, inference, router, chromium-core, chromium-framework, forge-base, forge, web |
+| `--init` does NOT create the enclave/egress networks | TRUE — no `ensure_enclave_network`/`ensure_egress_network` call in the `run_init` body |
+| status check ensures EIGHT images | TRUE — proxy, git, inference, chromium-core, chromium-framework, forge, router, web |
+| forge launch image-ensure of 4 = `["router","git","inference","forge"]` | TRUE, verbatim |
+| CLI opencode: 5-image ensure, router no longer web-mode-only | TRUE — `["proxy","router","git","inference","forge"]`, router present |
+| opencode web mode: 7-image ensure WITHOUT `web` | TRUE — proxy, git, inference, chromium-core, chromium-framework, forge, router; `web` absent |
+
+**Six of six hold. No finding.** Recorded because a verification with a
+negative result is still a result: the alternative is that the next reader
+re-does this work, or worse, assumes it was never checked and treats the table
+as unverified prose.
+
+### The pattern this confirms for the third time
+
+§1 (L1, yoga) found every factual claim TRUE while every `file:line` citation
+pointed at unrelated code. §3 (L2) found the same. §2 now makes it three for
+three: the table survived seven weeks and a distribution pivot intact, while
+its citations died completely.
+
+That asymmetry is worth stating as a property rather than a coincidence.
+Claims here are about **structure** — how many images a lane ensures, whether a
+network is created in a body — and structure changes only when someone
+deliberately changes it, which is rare and visible. Line numbers change when
+anyone edits anything above them, which is constant and invisible. The document
+was not rotting; its **pointers** were, and only its pointers.
+
+The practical consequence: citation rot in this document is a navigation
+failure, not a correctness signal. Finding a rotted citation is not evidence
+that the claim beside it is stale, and treating it that way would have thrown
+away six accurate rows here. Verify the claim against the tree; do not infer
+its health from the state of its pointer.
+
+### What this leaves
+
+For a Linux host, §2 is now closed: anchored, and every claim checked. The
+remaining NA-05 items are not workable from here — the completion gate needs
+three named verifier agents, the vsock matrix's two source-read rows need
+Windows and macOS lanes, and P1/P6 are operator decisions. The 39 surviving
+line citations sit outside §2/§4/§7 and were already judged the least valuable
+remaining work, since those sections' content is promoted into specs.
