@@ -453,9 +453,18 @@ case "$cmd" in
         # retries it on every path. Silence here means "build as you did before".
         [ -s "$PUBLIC_KEY" ] || exit 0
         probe_ready || exit 0
+        # ORDER 917-zkge (pirria's A/B, 2026-08-30): these MUST be the
+        # --extra-* forms. The bare --substituters/--trusted-public-keys
+        # REPLACE nix's configured values, so an answering-but-cold cache
+        # became the ONLY substituter -- cutting cache.nixos.org and turning
+        # 389 fetchable paths into 3145 from-source derivations (6.4x) on
+        # the host least able to build them. images/builder/nix.conf states
+        # the invariant verbatim: "Upstream stays available so a cold cache
+        # degrades to slow, never to broken." The extra- forms APPEND, which
+        # is what every prior reading of this flag list assumed it did.
         printf '%s\n' \
-            --substituters "$(endpoint_host)" \
-            --trusted-public-keys "$(cat "$PUBLIC_KEY")" \
+            --extra-substituters "$(endpoint_host)" \
+            --extra-trusted-public-keys "$(cat "$PUBLIC_KEY")" \
             --ssl-cert-file "$CA_BUNDLE"
         ;;
     *)

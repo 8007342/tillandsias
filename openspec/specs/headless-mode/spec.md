@@ -98,6 +98,60 @@ The `--status-check` flag MUST enable a lightweight initialization verification 
 - **AND** initialization verification MUST be run after images are built
 - **AND** exit code MUST reflect the combined result (success only if both steps succeed)
 
+
+### Requirement: Per-operation image ensure lists, and the Build-context vault
+
+Every headless operation that starts containers MUST ensure the images it will
+start, before starting them. The lists are DELIBERATELY per-operation subsets,
+not one shared set, and MUST NOT be unified.
+
+`main.rs` `fn ensure_versioned_images` is the single mechanism; the lists that
+feed it are the per-operation part:
+
+| operation | symbol | ensures |
+|---|---|---|
+| init / Build context | `fn run_init` | ten images, `"vault"` THIRD after `"proxy"` and `"git"` |
+| proxy bring-up | `fn ensure_proxy_running` | `proxy` only |
+| status check | `fn run_status_check` | proxy, git, inference, chromium-core, chromium-framework, forge, router, web |
+| observatorium | `fn run_observatorium_mode` | web, router, chromium-core, chromium-framework |
+| OpenCode CLI lane | `fn run_opencode_mode` | proxy, router, git, inference, forge |
+| cold forge launch | `fn ensure_enclave_for_project` | router, git, inference, forge |
+
+**`vault` appears in the init list and in NO per-operation list, and that is
+order 253's design, not an omission.** Vault belongs to the init/Build context;
+`vault_bootstrap.rs` `fn build_vault_image` early-returns when the init-built
+identity tag exists, so a login on an initialized runtime is zero-build and the
+on-demand build survives only as a fail-soft fallback for runtimes that skipped
+`--init`. `nix-cache` likewise appears in no ensure list: it is reached through
+the ForgeLaunch dependency graph (`container_deps.rs` `Service::NixCache`,
+order 801-vm4p), not through `ensure_versioned_images`.
+
+**Why unification would be wrong.** The lists differ because the operations
+start different containers; merging them would make every lane pay for every
+image. The risk they carry is the opposite one — an INCOMPLETE list — and it
+fails obscurely: when `router` and `web` were missing from every ensure list,
+the publish path hit a phantom registry pull (exit 125) on any version
+handover (2026-07-16, recorded at the `run_status_check` list). An operation
+that starts a container it did not ensure does not report a missing image; it
+reports a registry failure.
+
+@trace spec:headless-mode, order:245, order:253
+
+#### Scenario: An operation ensures every image it starts
+- **WHEN** a headless operation starts a container
+- **THEN** that container's image MUST appear in the operation's own ensure
+  list, or be ensured for it through the `container_deps` dependency graph
+- **AND** the failure mode of getting this wrong is a phantom registry pull
+  (125), not a named missing-image error — so the list is verified against what
+  the operation STARTS, never against another operation's list
+
+#### Scenario: Vault is not ensured per-operation
+- **WHEN** a per-operation ensure list is written or extended
+- **THEN** `vault` MUST NOT be added to it
+- **AND** the init/Build context owns the vault build (order 253), with the
+  login-path build kept only as a fail-soft fallback for runtimes that never
+  ran `--init`
+
 ## Invariants
 
 - **No GTK in headless**: GTK/Adwaita imports and initialization code MUST NOT be reachable in headless mode without the `tray` feature.

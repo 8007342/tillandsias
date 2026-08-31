@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: sni-windowid-type-wedges-shell
+    event:
+      type: note
+      ts: "2026-08-31T01:16:13Z"
+      agent_id: linux-macuahuitl-fable5-20260831t011613z
+      host: macuahuitl
+      summary: >
+        OPERATOR RULING EXECUTED on the settings env leak (plan/issues/dev-loopback-inference-env-leaks-into-forge-settings-2026-08-31.md): the loopback is NOT stale — it wires host sessions to the tillandsias-dev-inference container (used tonight by the spec-index rebuild) — but it is dev-HOST config and never belonged in tracked settings.json. Removed the env block from tracked settings.json; .claude/settings.local.json UNTRACKED (gitignored) and keeps the loopback locally. BIGGER FIND surfaced by the same audit: settings.local.json was tracked while carrying defaultMode=bypassPermissions plus a wide allowlist — permission config shipped to every checkout and forge; untracking closes that too. FLEET WARNING: this commit DELETES .claude/settings.local.json from every checkout on next pull — hosts that rely on it must copy it aside before pulling and restore after (it will then be ignored and stay local). Forge relaunches after this commit inherit clean env and reach inference:11434 via their own plumbing.

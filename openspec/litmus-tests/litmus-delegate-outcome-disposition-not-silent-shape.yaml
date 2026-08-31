@@ -45,6 +45,26 @@ critical_path:
     timeout_ms: 15000
     expected_behavior: "ok: silent death would be auto-filed"
 
+  # ORDER 943-3xyf. THE ARMS ABOVE ALL PASS AN EXPLICIT --alive-cmd, so none of
+  # them ever exercised the probe production actually uses. The default probe
+  # was `pgrep -f <id>` run through `sh -c`, and that sh's own argv contains the
+  # id — so it matched itself and reported ALIVE for every delegate that had
+  # ever existed. died-without-outcome, the disposition this whole litmus is
+  # named for, could not fire. The suite was green throughout.
+  #
+  # These two arms are a PAIR and neither is sufficient alone: the first would
+  # pass on a probe hard-wired to "dead", the second on one hard-wired to
+  # "alive". Do not keep one without the other.
+  - step: "DEFAULT PROBE, nothing running: a delegate id no process carries must reconcile as died-without-outcome (943-3xyf — the arm that was missing)"
+    command: "S=$(mktemp -d); L=$(mktemp -d); echo none > \"$L/x.yaml\"; ID=\"d$(od -An -N4 -tx1 /dev/urandom | tr -d ' \\n')\"; TILLANDSIAS_DELEGATE_STATE=\"$S\" scripts/delegate-outcome.sh register --id \"$ID\" --order o-1 --ledger-glob \"$L/*.yaml\" >/dev/null; out=$(TILLANDSIAS_DELEGATE_STATE=\"$S\" scripts/delegate-outcome.sh reconcile --id \"$ID\"); rc=$?; rm -rf \"$S\" \"$L\"; [ \"$rc\" = 0 ] && printf '%s' \"$out\" | grep -q \"^outcome:died-without-outcome $ID o-1$\" && echo 'ok: default probe detects a dead delegate' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: default probe detects a dead delegate"
+
+  - step: "DEFAULT PROBE, negative control: a REAL process carrying the id must reconcile as still-running, so the arm above cannot pass by always saying dead"
+    command: "S=$(mktemp -d); L=$(mktemp -d); echo none > \"$L/x.yaml\"; ID=\"d$(od -An -N4 -tx1 /dev/urandom | tr -d ' \\n')\"; TILLANDSIAS_DELEGATE_STATE=\"$S\" scripts/delegate-outcome.sh register --id \"$ID\" --order o-1 --ledger-glob \"$L/*.yaml\" >/dev/null; bash -c \"exec -a 'tillandsias forge --opencode --prompt $ID' sleep 30\" & BG=$!; sleep 1; out=$(TILLANDSIAS_DELEGATE_STATE=\"$S\" scripts/delegate-outcome.sh reconcile --id \"$ID\"); kill $BG 2>/dev/null; rm -rf \"$S\" \"$L\"; printf '%s' \"$out\" | grep -q \"^outcome:still-running $ID o-1$\" && echo 'ok: default probe sees a live delegate' || { echo \"FAIL [$out]\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: default probe sees a live delegate"
+
 observability:
   traces:
     - "@trace spec:methodology-accountability"

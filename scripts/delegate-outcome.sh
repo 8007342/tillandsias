@@ -64,7 +64,15 @@ cmd_register() {
   [ -n "$id" ] || die "register: --id required"
   [ -n "$order" ] || die "register: --order required"
   # Default liveness probe: is any process matching the delegate id alive?
-  [ -n "$alive_cmd" ] || alive_cmd="pgrep -f $id"
+  #
+  # ORDER 943-3xyf. A SENTINEL, not a command string. This used to record the
+  # literal `pgrep -f <id>`, which is_alive then ran through `sh -c` — and that
+  # sh process's OWN command line contains the id, so pgrep matched the probe
+  # instead of the delegate and the answer was ALWAYS "alive". Measured: a
+  # freshly registered id with zero matching processes reconciled as
+  # `still-running`. died-without-outcome, the one disposition this whole
+  # channel exists to detect, could never fire in production. See default_alive.
+  [ -n "$alive_cmd" ] || alive_cmd=":default:"
   mkdir -p "$STATE_DIR"
   {
     printf 'id=%s\n' "$id"
@@ -105,9 +113,63 @@ find_token() { # find_token <id> <ledger_glob>
     | head -1 | sed "s/^delegate-outcome:${id}://" || true
 }
 
-is_alive() { # is_alive <alive_cmd>
+# ORDER 943-3xyf. Every pid in THIS process's ancestry, so the default probe
+# cannot mistake itself for the delegate. Portable `ps` rather than /proc: the
+# fleet includes macOS, and a probe that silently stops walking on one platform
+# is the same always-alive bug wearing a different hat.
+self_ancestry() {
+  local p="$$" out=""
+  while [ -n "$p" ] && [ "$p" != "0" ] && [ "$p" != "1" ]; do
+    out="$out $p"
+    p="$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')" || break
+  done
+  printf '%s ' "$out"
+}
+
+# The DEFAULT probe (order 943-3xyf): is a process OTHER than this tool running
+# with this delegate id on its command line?
+#
+# Two things match the id but are NOT the delegate, and both were measured:
+#   1. `sh -c "pgrep -f <id>"` — the old implementation's own wrapper. Removed
+#      by not routing the default through sh -c at all.
+#   2. the command-substitution SUBSHELL below. Bash forks it from this script,
+#      so it inherits this script's argv — which contains `--id <id>` — and it
+#      is a CHILD, so an ancestry filter does not see it.
+# Excluding by ANCESTRY alone therefore still reported alive. The reliable
+# discriminator is the tool's own name: a real delegate's command line is
+# `tillandsias <project> --<harness> --prompt ...` and never contains
+# `delegate-outcome`.
+default_alive() { # default_alive <id>
+  local pid args
+  for pid in $(pgrep -f -- "$1" 2>/dev/null || true); do
+    [ "$pid" = "$$" ] && continue
+    args="$(ps -o args= -p "$pid" 2>/dev/null || true)"
+    case "$args" in
+      *delegate-outcome*) continue;;   # this tool, in any of its shapes
+      "") continue;;                   # vanished between pgrep and ps
+    esac
+    return 0
+  done
+  return 1
+}
+
+is_alive() { # is_alive <alive_cmd> <id>
   # Runs the recorded probe; exit 0 => alive. Kept a cheap LOCAL check (pgrep),
   # never a live query into the delegate's ephemeral forge stack.
+  #
+  # An explicit --alive-cmd is still an arbitrary shell string; only the
+  # DEFAULT avoids sh -c, because only the default embeds the id in its own
+  # command line.
+  # BACK-COMPAT (943-3xyf): records written before this fix carry the literal
+  # `pgrep -f <id>`, which is the self-matching form. Route those to the fixed
+  # default too — otherwise a delegate registered by an un-upgraded host, or by
+  # this host before the fix, keeps reporting alive forever and its death is
+  # never filed. Migrating the STORED string is not enough on a fleet where
+  # hosts upgrade at different times; recognising it on READ is.
+  if [ "$1" = ":default:" ] || [ -z "$1" ] || [ "$1" = "pgrep -f $2" ]; then
+    default_alive "$2"
+    return $?
+  fi
   sh -c "$1" >/dev/null 2>&1
 }
 
@@ -133,7 +195,7 @@ cmd_reconcile() {
     echo "outcome:finished-with-evidence $id $order $disp"
     return 0
   fi
-  if is_alive "$alive_cmd"; then
+  if is_alive "$alive_cmd" "$id"; then
     echo "outcome:still-running $id $order"
     return 0
   fi

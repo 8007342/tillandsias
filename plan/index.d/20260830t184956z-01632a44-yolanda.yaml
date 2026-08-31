@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: twin-tier-7b-experts-behind-an-openai-endpoint
+    event:
+      type: evidence
+      ts: "2026-08-30T18:49:56Z"
+      agent_id: windows-yolanda-claude-20260830t162208z
+      host: yolanda
+      summary: >
+        BUILD PARITY IS LIVE ON WINDOWS — both guest architectures, verified, and the lane needed NO code change. Story member 2 turned out to be provisioning rather than plumbing: with nix installed in the tillandsias-build WSL2 distro, scripts/nix-toolbox.sh ensure returns ok:nix-toolbox:daemon, build-guest-binaries.sh selects its nix path over the cargo fallback on its own, and both binaries land staged and verified. Output: 'x86_64 version check passed: Tillandsias v0.4.260826.1' / 'aarch64 strings version check passed' / 'Verification SUCCESS: both binaries are correct and match VERSION 0.4.260826.1', with tillandsias-headless-x86_64-unknown-linux-musl (14284016 bytes) and tillandsias-headless-aarch64-unknown-linux-musl (13178064 bytes) in target-guest/. This closes the gap that surfaced during the MSIX work, where the tray build warned 'no staged guest binary ... fresh guests fall back to fetching the latest release (version skew possible)'. Windows can now build what it ships. THE COST SHAPE, measured rather than estimated, and it is the number that decides the fleet-cache argument: COLD build about 25 minutes; WARM REBUILD 2 SECONDS. Substituted 106 paths from cache.nixos.org (reachable, HTTP 200) against 16 built from source. The 16 are the aarch64 musl CROSS-TOOLCHAIN — gcc-15.2.0, linux headers — which the public cache does not carry for this nixpkgs revision, so a first-time host compiles a cross-GCC. That is a one-time cost that then lives in the local store. WHAT THAT MEANS FOR 790-6n2k / THE FLEET CACHE, and it is the useful conclusion rather than the parity result itself: parity on Windows is CHEAP IF THE FLEET CACHE SERVES IT and expensive if it does not. Those 16 source builds are exactly what a fleet substituter would have supplied — another host has already built that cross-GCC. So the parity lane and the cache lane are not independent tracks: the cache is what makes parity affordable for a new host, and this host is now the concrete example of what it costs without one. RELATION TO THE EARLIER SPEED MEASUREMENT, so the two are not read as contradicting: nix covers ~0 percent of build.sh --check (1214s, ~1170s of it plan/ledger checking, Rust compilation only ~14 percent, and the guest binaries are not in the gate at all). The 25-minutes-to-2-seconds win is real and lives entirely in the guest-binary lane. Both statements are true; they are about different workloads.

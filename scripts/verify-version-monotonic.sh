@@ -114,11 +114,23 @@ check_tag="${1:-}"
 if [[ -n "$check_tag" ]]; then
     latest_tag="$check_tag"
 else
-    # Find latest release tag matching v* across all fetched tags. Do not limit
-    # this to tags merged into HEAD: release branches can lag main while remote
-    # release tags continue moving, and publishing an older VERSION from such a
-    # branch would regress the global artifact stream.
-    latest_tag="$(git tag -l 'v*' --sort=-version:refname 2>/dev/null | head -1)" || true
+    # Find the latest release tag REACHABLE FROM HEAD (2026-08-31, the daily-
+    # channel deadlock). This used to scan ALL fetched tags, on the premise
+    # that every tag is a stable release cut from main. The daily/prerelease
+    # channel broke that premise by design: its tags run AHEAD of main as the
+    # operator's staging lane, so the moment a host fetched the daily tag,
+    # every push was refused as version-not-monotonic while the version guard
+    # simultaneously refused the VERSION bump off main — a two-guard deadlock
+    # that wedged lenovinha and then macuahuitl within the hour.
+    #
+    # The property actually worth enforcing: a branch must never regress a
+    # tag IT CARRIES. A tag whose commit this branch has never contained is
+    # another channel's history, not this branch's past — comparing against
+    # it converts "a prerelease exists somewhere" into "nobody can push".
+    # The release workflow's own tag-cut check still sees every tag it needs:
+    # prior stable tags are ancestors of any branch that merges main, and
+    # --check-tag remains available for explicit cross-channel comparisons.
+    latest_tag="$(git tag -l 'v*' --merged HEAD --sort=-version:refname 2>/dev/null | head -1)" || true
 fi
 
 # If no tags exist, current version is automatically monotonic

@@ -914,13 +914,29 @@ pub struct DrmRenderNode {
     pub vendor_id: u16,
     /// PCI device id.
     ///
-    /// USE THIS WITH `vendor_id`, NEVER ALONE, and the fleet's own data is the
-    /// argument: 0x1638 is BOTH yoga's Krackan Radeon 840M/860M AND lenovinha's
-    /// Cezanne Vega iGPU. Device id alone would call one machine the other.
-    /// Vendor alone collides the other way — every AMD part shares 0x1002. The
-    /// PAIR discriminates; either half on its own does not. Recorded here
-    /// because the next reader to simplify this field set will look at the
-    /// field, not at a packet (hwfp-v2, yoga).
+    /// USE THIS WITH `vendor_id`, NEVER ALONE.
+    ///
+    /// CORRECTED 2026-08-30. This comment previously argued the point with a
+    /// FABRICATED counterexample — "0x1638 is BOTH yoga's Krackan Radeon
+    /// 840M/860M AND lenovinha's Cezanne". That is false. Measured from each
+    /// host's own `lspci -nn`:
+    ///
+    ///   yoga       04:00.0 Krackan Radeon 840M/860M   [1002:1114]
+    ///   lenovinha  05:00.0 Cezanne  Radeon Vega       [1002:1638]
+    ///
+    /// device_id DISCRIMINATES those two parts; it does not collide. I took the
+    /// collision from a peer message rather than from an artifact, and wrote it
+    /// into a doc comment that outlives the message — the assertion-not-artifact
+    /// error, committed on the very field built to resist it.
+    ///
+    /// THE CONCLUSION SURVIVES, on a measured argument instead of an invented
+    /// one: VENDOR alone collides — yoga's 1002:1114 and lenovinha's 1002:1638
+    /// share 0x1002, so vendor identifies a manufacturer, not a part. And on
+    /// lenovinha the two render nodes are different vendors AND different
+    /// devices (0x1002:0x1638 amdgpu, 0x10de:0x24dd nvidia), so the node index
+    /// carries no identity of its own. The PAIR, keyed to the node, is what
+    /// names a GPU. Neither half alone is sufficient, and only one half was ever
+    /// shown to collide.
     pub device_id: u16,
     /// bound kernel driver, e.g. "amdgpu" / "nvidia" / "i915"
     pub driver: String,

@@ -45,6 +45,16 @@ description: >
   is CONFIRMED rather than assumed, the probe reports the module state it
   observed before judging, and the three-state verdict (bound 0 / NOT-BOUND 1 /
   INDETERMINATE 2) survives intact.
+
+  RETARGETED 2026-08-30 (order 740-3k4s). The unit and probe steps now read
+  crates/tillandsias-vm-layer/src/readiness.rs, not the Windows tray, because
+  the fold made that module the ONE definition all three provisioning paths
+  install. That STRENGTHENS the pin rather than relocating it: it used to cover
+  one of three copies, so drift in the macOS or Linux copy was invisible here.
+  Note the trap a naive fix walks into — After= and Wants= still appear in
+  wsl_lifecycle.rs, in COMMENTS and test assertions, so a plain grep on that
+  file passes on prose (601-462g). The literal-extraction is what correctly
+  went red, so it was kept and moved rather than replaced by a grep.
 severity: high
 size: instant
 
@@ -54,12 +64,12 @@ preconditions:
 
 critical_path:
   - step: "the ready unit LITERAL declares the module-load ordering edge"
-    command: "awk 'index($0,\"let ready_unit = r#\\\"\"){i=index($0,\"let ready_unit = r#\\\"\")+length(\"let ready_unit = r#\\\"\"); print substr($0,i); f=1; next} f&&/^\"#;$/{f=0} f' crates/tillandsias-windows-tray/src/wsl_lifecycle.rs | grep -q '^After=systemd-modules-load.service$' && echo 'ok: ordered-after-module-load'"
+    command: "sed -n '/pub fn ready_unit/,/^}/p' crates/tillandsias-vm-layer/src/readiness.rs | grep -q '^After=systemd-modules-load.service$' && echo 'ok: ordered-after-module-load'"
     timeout_ms: 5000
     expected_behavior: "ok: ordered-after-module-load"
 
   - step: "the edge is Wants=, never Requires= — a guest that cannot load the module must still RUN the probe so it can report INDETERMINATE"
-    command: "u=$(awk 'index($0,\"let ready_unit = r#\\\"\"){i=index($0,\"let ready_unit = r#\\\"\")+length(\"let ready_unit = r#\\\"\"); print substr($0,i); f=1; next} f&&/^\"#;$/{f=0} f' crates/tillandsias-windows-tray/src/wsl_lifecycle.rs); echo \"$u\" | grep -q '^Wants=systemd-modules-load.service$' && ! echo \"$u\" | grep -q '^Requires=systemd-modules-load.service$' && echo 'ok: wants-not-requires'"
+    command: "u=$(sed -n '/pub fn ready_unit/,/^}/p' crates/tillandsias-vm-layer/src/readiness.rs); echo \"$u\" | grep -q '^Wants=systemd-modules-load.service$' && ! echo \"$u\" | grep -q '^Requires=systemd-modules-load.service$' && echo 'ok: wants-not-requires'"
     timeout_ms: 5000
     expected_behavior: "ok: wants-not-requires"
 
@@ -74,17 +84,17 @@ critical_path:
     expected_behavior: "ok: load-confirmed-both-ways"
 
   - step: "the probe reports the module state it OBSERVED before judging, so a run that won a race is distinguishable from one that did not"
-    command: "grep -q 'vsock_loopback before=\\${before} after=\\${after}' crates/tillandsias-windows-tray/src/wsl_lifecycle.rs && echo 'ok: probe-reports-observed-state'"
+    command: "grep -q 'vsock_loopback before=${before} after=${after}' crates/tillandsias-vm-layer/src/readiness.rs && echo 'ok: probe-reports-observed-state'"
     timeout_ms: 3000
     expected_behavior: "ok: probe-reports-observed-state"
 
   - step: "the backstop modprobe SURVIVES — removing it recreates 757-4hdt's false alarm on a guest whose modules-load.d entry was never written"
-    command: "grep -q 'modprobe vsock_loopback' crates/tillandsias-windows-tray/src/wsl_lifecycle.rs && echo 'ok: backstop-retained'"
+    command: "grep -q 'modprobe vsock_loopback' crates/tillandsias-vm-layer/src/readiness.rs && echo 'ok: backstop-retained'"
     timeout_ms: 3000
     expected_behavior: "ok: backstop-retained"
 
   - step: "all THREE verdicts survive: bound / NOT-BOUND / INDETERMINATE are distinct, and the ENETUNREACH branch that separates them is intact"
-    command: "for t in 'vsock_listener=bound' 'vsock_listener=NOT-BOUND' 'vsock_listener=INDETERMINATE' 'Network is unreachable'; do grep -q \"$t\" crates/tillandsias-windows-tray/src/wsl_lifecycle.rs || { echo \"FAIL: missing $t\"; exit 1; }; done; echo 'ok: three-state-verdict-intact'"
+    command: "for t in 'vsock_listener=bound' 'vsock_listener=NOT-BOUND' 'vsock_listener=INDETERMINATE' 'Network is unreachable'; do grep -q \"$t\" crates/tillandsias-vm-layer/src/readiness.rs || { echo \"FAIL: missing $t\"; exit 1; }; done; echo 'ok: three-state-verdict-intact'"
     timeout_ms: 5000
     expected_behavior: "ok: three-state-verdict-intact"
 

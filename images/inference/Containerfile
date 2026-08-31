@@ -17,6 +17,30 @@ FROM registry.fedoraproject.org/fedora-minimal:44
 RUN microdnf install -y bash curl ca-certificates zstd tar gzip pciutils \
     && microdnf clean all
 
+# -- Vulkan userspace for the AMD GPU lane --
+# @trace order:917-zkge
+# `_engine_wanted_backends()` maps the gpu-rocm tier to the `vulkan` backend
+# (order 482, RamaLama's pattern), and the self-install duly puts ollama's
+# lib/ollama/vulkan/ into the model cache. But a Vulkan BACKEND cannot enumerate
+# a device without a Vulkan USERSPACE: the loader (libvulkan.so.1) and an ICD
+# (/usr/share/vulkan/icd.d/*.json — radv for AMD). Neither was in this image, so
+# on yoga the backend installed, the manifest recorded core+vulkan, every
+# artifact said the GPU lane was configured, and ollama reported
+# `inference compute id=cpu` with size_vram=0 for every model.
+#
+# The engine-selection guard could not catch it: it checks that the backend
+# DIRECTORY exists, which cannot detect a backend that cannot LOAD. A backend
+# dir is a proxy for a working lane; placement is the lane.
+#
+# Same missing component as the WSL2 guest's `engine-missing:no-vulkan-icd`, so
+# this fixes both substrates if they share the image.
+#
+# vulkan-loader is small; mesa-vulkan-drivers carries radv and is the bulk. Kept
+# unconditional rather than tier-gated: the image is one artifact shared by every
+# host, and a CPU-only host loading no ICD costs nothing at runtime.
+RUN microdnf install -y vulkan-loader mesa-vulkan-drivers \
+    && microdnf clean all
+
 # -- Create non-root user --
 # DISTRO: useradd (Fedora shadow-utils), NOT adduser -D (Alpine)
 RUN useradd -u 1000 -m -s /bin/bash ollama

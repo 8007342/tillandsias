@@ -3196,7 +3196,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-core"
-version = "0.4.260819"
+version = "0.4.260830"
 dependencies = [
  "async-trait",
  "dirs",
@@ -3219,7 +3219,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-headless"
-version = "0.4.260819"
+version = "0.4.260830"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -3382,7 +3382,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-podman"
-version = "0.4.260819"
+version = "0.4.260830"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3445,7 +3445,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-scanner"
-version = "0.4.260819"
+version = "0.4.260830"
 dependencies = [
  "dirs",
  "notify",
@@ -3496,6 +3496,7 @@ dependencies = [
  "block2",
  "flate2",
  "fs2",
+ "futures-util",
  "objc2",
  "objc2-foundation",
  "objc2-virtualization",
@@ -3509,6 +3510,7 @@ dependencies = [
  "tillandsias-control-wire",
  "tillandsias-core",
  "tokio",
+ "tokio-util",
  "toml 0.8.2",
  "tracing",
  "windows 0.58.0",

@@ -69,8 +69,19 @@ operator_notes() {
         /^[[:space:]]*-[[:space:]]*packet_id:/ { inside = 0; next }
         /^[[:space:]]*(packets|events|status):[[:space:]]*$/ { inside = 0; next }
         inside { print }
-    ' "$LEDGER" plan/index.d/*.yaml 2>/dev/null
+    ' "$LEDGER" "${FRAGMENTS[@]}" 2>/dev/null
 }
+
+# Fragment list resolved ONCE, tolerating an EMPTY index.d: a fully compacted
+# ledger leaves no fragments, the bare glob then reaches awk as a literal
+# filename, awk exits 2 after the base file — and under this script's
+# pipefail that nonzero poisons `operator_notes | grep -q` even when the
+# grep MATCHED. First fired on the first complete compaction (941-trcf):
+# every approval looked missing on a tree where every approval was present.
+FRAGMENTS=()
+for _f in plan/index.d/*.yaml; do
+    [ -e "$_f" ] && FRAGMENTS+=("$_f")
+done
 
 LEDGER="plan/index.yaml"
 [ -f "$LEDGER" ] || { echo "skip:approved-ux-strings:no-ledger"; exit 0; }

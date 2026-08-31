@@ -22,7 +22,6 @@
 1	crates/tillandsias-host-shell/src/provisioning.rs	keep
 2	crates/tillandsias-host-shell/src/vsock_client.rs	keep
 5	crates/tillandsias-macos-tray/src/pty_vsock_bridge.rs	pending
-1	crates/tillandsias-vm-layer/src/vsock_exec.rs	pending
 2	crates/tillandsias-windows-tray/src/hvsocket.rs	pending
 #
 # KEEP REASONS, recorded here as well as at each site (795-5itp events
@@ -57,10 +56,20 @@
 #     blocking-stream keep already recorded for tray/mod.rs:590, seen from the
 #     other end of the same socket.
 #
-# THE ONE REAL LINUX PRODUCTION TARGET:
-#   vm-layer/vsock_exec.rs:354  async read_envelope<R: AsyncRead + Unpin>
-#     Genuinely migratable and genuinely NOT a mechanical swap: 41 call sites
-#     share one stream (`&mut guest` reused across reads), so a per-call Framed
-#     would over-read and drop pipelined bytes; tokio-util is not yet a
-#     dependency of tillandsias-vm-layer. Needs the into_parts treatment the
-#     vsock_server slice used, or callers restructured to own the Framed.
+# THE ONE REAL LINUX PRODUCTION TARGET -- MIGRATED, slice 6 (lenovinha,
+# 2026-08-29). vm-layer/vsock_exec.rs read_envelope now decodes through
+# control_frame_codec(); its row is deleted above rather than lowered to 0.
+# The session is framed ONCE per entry point (`frame_stream`) and
+# `&mut ExecFramed<S>` is threaded through, because the per-call Framed the
+# earlier note warned about really does lose data: mutation-tested this cycle,
+# `two_frames_in_one_write_are_both_read_back` FAILS under it and several
+# session tests hang outright.
+#
+# THE WRITE SIDE OF THIS FILE IS A DELIBERATE KEEP, and is not counted by this
+# ratchet (which scans DECODES). `write_envelope` still emits the u32-BE prefix
+# itself via two staged `write_all_bounded` calls, because 690-eug2 bounds the
+# length and the body SEPARATELY so a stalled writer names which half stalled;
+# `SinkExt::send` encodes and writes in one call and cannot. It writes through
+# `Framed::get_mut()`, which is sound only because the Sink half is never used,
+# so the codec write buffer is always empty. Pinned by
+# `a_peer_that_stops_draining_does_not_park_the_writer`.

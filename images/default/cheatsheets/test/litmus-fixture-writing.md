@@ -247,6 +247,31 @@ author running the mutation control before trusting the green; rewritten
 to assert the build performs the deletion. Two instances in one evening,
 two authors, both found only by control-first: assume the class is common.
 
+## Which fixtures must survive the old code, and which must fail it
+
+A contract change produces TWO kinds of fixture, and confusing them leaves
+the change untested (yoga, 940 follow-through, 2026-08-30): a PROPERTY
+fixture asserts behaviour the change must preserve — it must pass against
+BOTH the old and new implementation (the compaction cases pass under
+either stamp writer; a token is inert to a writer that does not read one).
+A CONTRACT fixture asserts the new mechanism itself — it must go RED
+against the old implementation, verified by actually running it there.
+Check each new fixture against both sides and know which answer you expect
+from each.
+
+Two traps from the same change: (1) A NEW GUARD CAN MASK THE PROPERTY
+UNDER TEST — after the stamp gained its token check, a negative control
+(broken tree must refuse) refused AT THE TOKEN CHECK and never reached the
+path under test; it would have passed while proving nothing. Issue the
+guard's prerequisite BEFORE breaking the tree, so the refusal you observe
+is the one you are testing. (2) A WELL-POSED QUESTION CAN SHIP A HOLE —
+the routed question offered "honor or retire the compaction allowance",
+but no such allowance existed (it was a hashability fix; deletions change
+the digest like edits). Implementing the plausible option (a) would have
+required inventing a compaction-vs-modified classifier — a forgery
+surface — to satisfy a test. When a fix seems to demand a new classifier,
+first verify the premise names a mechanism that actually exists.
+
 ## When a checker accuses correct code, fix the checker — with a mutation control
 
 Two guard false positives in one change (830-xsk2, macbook, 2026-08-29),
@@ -442,6 +467,22 @@ its output: read the treatment back out of the running server (its own
 /api/ps, its own env, its own config endpoint) and REFUSE THE ARM on
 mismatch. Both twin harnesses now do this per cell.
 
+## A process query whose pattern matches the querier
+
+Two measured instances in one day. (1) macuahuitl, mid-incident: a
+cleanup `pkill -f` whose pattern appeared in the wrapper shell's own
+command line killed the cleanup itself (exit 144 mid-remediation). (2)
+yoga: waiter loops polling `pgrep -f "build.sh --check"` MATCHED THE
+WAITERS — their own command lines contain the string — and reported
+"gate running" for 86 minutes on a machine at load 0.08, waiting on
+their own reflection, while the real gate they had accidentally killed
+earlier stayed dead. A liveness check that can see itself answers from
+its own existence, not from the thing it watches. Remedies: match the
+executable, not the command line (`pgrep -x`, or an absolute-path
+`pgrep -f ^/path/to/binary`); or check the OBJECT the process would
+hold (the lockfile, the stamp mtime, the pid file) rather than the
+process table at all.
+
 ## Never gate while a measurement batch is live
 
 Measured on the yoga/yolanda 7B tuning day (2026-08-30): a gate flipped red
@@ -461,6 +502,14 @@ input; failed curls defaulted into a mode and counted as six 6ms
 any check's output, ask what the output would look like if the thing it
 measures were ABSENT — and whether that is distinguishable from what you
 are holding.
+
+THE COMMON REPAIR, proven three separate times in one night: make the
+artifact CARRY HOW IT KNOWS — treatment_verified as prose naming the
+server log lines, the gate stamp requiring a token only the gate can
+issue, the capability probe emitting its method beside its verdict (with
+`unknown` as a first-class verdict for an unreachable substrate, and a
+shim that answers `command -v` but not `--version` treated as evidence
+of NOTHING). Record the evidence, not the conclusion.
 
 ## Existence on the host is not correctness of the container path
 
@@ -509,3 +558,77 @@ copy: `bash -c 'exit 1'` and `bash -c 'exit 7'` through the same invocation
 ALSO returned 0. Piping the script to `wsl.exe ... -- bash` on stdin makes
 propagation exact. Any Windows-lane defect report resting on an exit code
 from the quoted form is unproven until that control has run.
+
+## A pattern that survives in comments makes a plain grep lie in both directions
+
+Found by yolanda retargeting the vsock-ordering litmus after a fold moved the
+systemd ordering definition from `wsl_lifecycle.rs` to `readiness.rs`
+(937-68n4 fallout, 2026-08-30). `After=` and `Wants=` STILL appear in the old
+file — in comments and in the test assertions written during the fold — so
+`grep -q 'After=' wsl_lifecycle.rs` stays GREEN while the definition it
+claims to pin lives in a file it never reads. A grep that cannot tell a
+definition from a mention of one goes green on the corpse of the code it
+guards.
+
+The repair that worked: keep the LITERAL-EXTRACTION step (the one that
+correctly failed — it pulls the actual unit text and asserts on the emitted
+value) and move it to the new file; do not loosen the grep to pass. Two
+intermediate attempts produced meaningless greens on the way and are the
+other half of the lesson: YAML the strict validator rejects while the litmus
+runner reported 8/8 PASS (no yq on the host, so the runner parsed by grep),
+then block scalars that satisfied the validator and broke the runner.
+Mutation-control in BOTH directions — break the property and watch it fail,
+restore it and watch it pass, under the runner that will actually execute it
+— before calling a retarget done.
+
+## An incomplete merge makes trunk's files look like your new ones
+
+Cost yolanda a gate cycle on the 942-e23x run (2026-08-30) and will hit
+every platform branch eventually. `check-issue-citation-convention.sh` — and
+any check that diffs against `origin/linux-next` — computes "what did YOU
+add" from that diff. With a merge left INCOMPLETE, trunk-side files your
+branch has not yet integrated appear in the diff as if you authored them:
+the check flagged a line-number citation in lenovinha's
+network-architecture-audit file, green on trunk, red on the branch, on a
+file yolanda never touched. Completing the merge cleared it.
+
+Nothing to fix in the check — the diff is telling the truth about the tree.
+The diagnosis to reach for: when a diff-against-trunk check flags a file you
+never edited, check `git status` for an unfinished merge BEFORE reading the
+finding as yours.
+
+## Two arms that fail the same way produce a ratio that looks like a result
+
+From yolanda's axis-B measurement (941-trcf, 2026-08-30). Three invalid
+A/B measurements preceded the valid one, and every one of them OVERSTATED
+the win: both arms refusing on a missing binary read as 48.8x, both failing
+on missing cargo read as 15.6x, arms with different exit codes read as 24x.
+The true, controlled number was 2.96x. A ratio of two failure walls is not
+a measurement of the treatment — it is a measurement of how fast each arm
+happens to fail.
+
+The control that caught all three: before dividing, require BOTH arms to
+have rc=0 AND identical verdict lines — the same work demonstrably done on
+both sides, differing only in the variable under test. This is the A/B
+sibling of record-the-evidence-not-the-conclusion: the evidence is the two
+verdict lines, and the ratio is only as real as their agreement.
+
+## A prefix standing in for ownership — the destructive variant of the label class
+
+Yoga's distillation of 936-kdev's root cause (2026-08-31), and the reason
+this instance outranks its siblings. The shutdown sweep stopped every
+container matching `tillandsias-*` — "looks like mine" doing the work of
+"is mine" — and the matches included the builder toolbox the app never
+created. Same shape as a tier label standing in for wiring, or a stamp
+standing in for a gate that passed, with one difference that changes the
+severity class entirely: a label that over-claims a CAPABILITY wastes a
+measurement and costs a wrong row; a label that over-claims OWNERSHIP
+deletes someone else's container. This one cost the fleet a wedged desktop
+and a night of phantom SIGTERMs attributed to three innocent env variables.
+
+The repair is structural, not a better pattern: ownership recorded at
+creation (an explicit table of names the app's own builders mint —
+`is_stack_managed_name`) rather than inferred from the name at deletion
+time. Before writing any destructive sweep, ask where the ownership fact
+is RECORDED; if the answer is "in the name", the sweep will eventually
+destroy something that merely resembles yours.

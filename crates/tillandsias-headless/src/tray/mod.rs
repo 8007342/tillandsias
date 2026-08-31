@@ -1631,7 +1631,27 @@ struct TrayService {
     /// backlink a Quit click would set `TrayService.shutdown` but never
     /// break the main wait loop.
     signal_shutdown: OnceLock<Arc<AtomicBool>>,
+    /// ORDER 944-jaef, the operator's rate-limiter directive after the sixth
+    /// freeze: every state change used to emit NewIcon+NewStatus+NewToolTip+
+    /// LayoutUpdated unconditionally (16 call sites), and during a forge
+    /// build's status ticks with the menu OPEN each LayoutUpdated makes
+    /// gnome-shell refetch the FULL layout + every property + run its
+    /// unguarded GC walk — enough ticks and the session drowns for a minute
+    /// at a time. Emissions are now coalesced: at most one signal group per
+    /// EMIT_COOLDOWN, with a suppressed burst flagged in `emit_pending` and
+    /// flushed by the 250 ms main wait loop so the FINAL state of a burst
+    /// always reaches the shell.
+    last_emit: std::sync::Mutex<std::time::Instant>,
+    emit_pending: AtomicBool,
 }
+
+/// Minimum spacing between tray signal-emission groups (944-jaef).
+/// Operator-directed: "orders of magnitude larger than the collisions,
+/// probably rate limited in the order of seconds." The trailing flush in
+/// the main wait loop guarantees the final state of a burst still lands,
+/// so the only cost of a wide window is status-line staleness, bounded by
+/// this constant.
+const EMIT_COOLDOWN: std::time::Duration = std::time::Duration::from_secs(2);
 
 #[derive(Clone)]
 struct StatusNotifierItemIface(Arc<TrayService>);
@@ -1745,6 +1765,10 @@ impl TrayService {
             task_executor,
             shutdown: AtomicBool::new(false),
             signal_shutdown: OnceLock::new(),
+            last_emit: std::sync::Mutex::new(
+                std::time::Instant::now() - EMIT_COOLDOWN - EMIT_COOLDOWN,
+            ),
+            emit_pending: AtomicBool::new(false),
         }
     }
 
@@ -1807,7 +1831,38 @@ impl TrayService {
         self.snapshot()
     }
 
+    /// True when an emission is allowed NOW (and stamps the cooldown);
+    /// false marks the burst pending for the main loop's trailing flush.
+    fn emission_due(&self) -> bool {
+        let mut last = self.last_emit.lock().expect("emit stamp lock");
+        if last.elapsed() >= EMIT_COOLDOWN {
+            *last = std::time::Instant::now();
+            true
+        } else {
+            self.emit_pending
+                .store(true, std::sync::atomic::Ordering::SeqCst);
+            false
+        }
+    }
+
+    /// Trailing-edge flush: called from the 250 ms main wait loop so the
+    /// last state of a coalesced burst always reaches the shell.
+    async fn flush_pending_emit(&self) {
+        if self.emit_pending.load(std::sync::atomic::Ordering::SeqCst) && self.emission_due() {
+            self.emit_pending
+                .store(false, std::sync::atomic::Ordering::SeqCst);
+            let _ = self.emit_refresh_now(true).await;
+        }
+    }
+
     async fn emit_refresh(&self, include_menu: bool) -> zbus::Result<()> {
+        if !self.emission_due() {
+            return Ok(());
+        }
+        self.emit_refresh_now(include_menu).await
+    }
+
+    async fn emit_refresh_now(&self, include_menu: bool) -> zbus::Result<()> {
         let item_ctxt = SignalContext::new(self.connection(), self.item_path.as_str())?;
         StatusNotifierItemIface::new_icon(&item_ctxt).await?;
         StatusNotifierItemIface::new_status(&item_ctxt).await?;
@@ -3102,6 +3157,25 @@ pub(super) fn resolved_max_cloud_projects_in_menu() -> usize {
         .unwrap_or(MAX_CLOUD_PROJECTS_IN_MENU)
 }
 
+/// A UNIQUE, NEVER-ZERO id for a shared-menu id string this mapper has no
+/// arm for (944-jaef, the fifth desktop freeze). The old fallback was `0` —
+/// the ROOT's dbusmenu id — so the first item the shared builder grew that
+/// this match didn't know shipped a layout in which the root was its own
+/// child. gnome-shell's appindicator extension walks the item graph with an
+/// unguarded `toTraverse.shift()` loop (dbusMenu.js `_gcItems`): a root
+/// cycle makes that queue grow forever, and one tray click wedged the whole
+/// Wayland session. An unknown item as a DEAD, uniquely-numbered leaf is
+/// harmless (its click dispatches nowhere); an unknown item as id 0 is a
+/// session killer. Range 0x0800_0000..0x1000_0000 sits below LOCAL_BASE_LO
+/// and above every fixed top-level id, so it collides with nothing.
+fn fallback_menu_id(id_str: &str) -> i32 {
+    use std::hash::Hash;
+    use std::hash::Hasher;
+    let mut hash = std::collections::hash_map::DefaultHasher::new();
+    id_str.hash(&mut hash);
+    0x0800_0000 + (hash.finish() as u32 % 0x0800_0000u32) as i32
+}
+
 fn project_base(name: &str, scope: ProjectScope) -> i32 {
     use std::hash::Hash;
     use std::hash::Hasher;
@@ -3656,7 +3730,7 @@ fn shared_id_to_int(id: &str) -> i32 {
                 let scope = match scope_str {
                     "local" => ProjectScope::Local,
                     "cloud" => ProjectScope::Cloud,
-                    _ => return 0,
+                    _ => return fallback_menu_id(other),
                 };
                 let base = project_base(name, scope);
                 let offset = match verb {
@@ -3668,7 +3742,7 @@ fn shared_id_to_int(id: &str) -> i32 {
                     "observatorium" => 5,
                     "maintenance" => 6,
                     "" => PROJECT_SUBMENU_OFFSET,
-                    _ => return 0,
+                    _ => return fallback_menu_id(other),
                 };
                 base + offset
             } else if other == shared_menu::ids::LOCAL_PROJECTS_EMPTY {
@@ -3680,7 +3754,7 @@ fn shared_id_to_int(id: &str) -> i32 {
             } else if other == shared_menu::ids::CLOUD_PROJECTS_OVERFLOW {
                 CLOUD_OVERFLOW_ID
             } else {
-                0
+                fallback_menu_id(other)
             }
         }
     }
@@ -3692,6 +3766,16 @@ fn shared_id_to_int(id: &str) -> i32 {
 /// translation happens. The shared builder's string IDs are mapped to
 /// integer IDs via [`shared_id_to_int`].
 fn shared_menu_item_to_node(item: &shared_menu::MenuItem) -> MenuNode {
+    shared_menu_item_to_node_depth(item, -1)
+}
+
+/// Convert a shared item to a dbusmenu node, including children only to
+/// `depth` more levels (`-1` = unlimited, `0` = none — dbusmenu's
+/// GetLayout `recursionDepth` semantics). A depth-pruned submenu KEEPS its
+/// `children-display=submenu` property: that property is how the client
+/// knows an arrow belongs there and that a deeper GetLayout will yield the
+/// children — pruning it would render submenus as dead leaves.
+fn shared_menu_item_to_node_depth(item: &shared_menu::MenuItem, depth: i32) -> MenuNode {
     let id = shared_id_to_int(&item.id);
 
     let mut p = vec![
@@ -3706,13 +3790,127 @@ fn shared_menu_item_to_node(item: &shared_menu::MenuItem) -> MenuNode {
         p.push(("children-display".to_string(), ov_str("submenu")));
     }
 
-    let children: Vec<OwnedValue> = item
-        .children
-        .iter()
-        .map(|c| child(shared_menu_item_to_node(c)))
-        .collect();
+    let children: Vec<OwnedValue> = if depth == 0 {
+        Vec::new()
+    } else {
+        let next = if depth < 0 { -1 } else { depth - 1 };
+        item.children
+            .iter()
+            .map(|c| child(shared_menu_item_to_node_depth(c, next)))
+            .collect()
+    };
 
     node(id, props(p), children)
+}
+
+/// The shared builder's item list with the Linux-specific podman-unavailable
+/// status override applied — the single source both the full-menu path and
+/// the per-subtree GetLayout path convert from.
+fn shared_menu_items(state: &TrayUiState) -> Vec<shared_menu::MenuItem> {
+    let mut ui_state = tray_ui_state_to_menu_state(state);
+    if !state.podman_available {
+        ui_state.status_text = status_label(&TrayStatusStage::PodmanMissing);
+    }
+    match shared_menu::build(&ui_state) {
+        shared_menu::MenuStructure::Provisioning { items }
+        | shared_menu::MenuStructure::Ready { items }
+        | shared_menu::MenuStructure::Failed { items } => items,
+    }
+}
+
+/// WIRE-BOUNDARY INVARIANT (944-jaef): no item may map to id 0 (the root's
+/// id — a root cycle livelocks gnome-shell's unguarded graph walk) and no
+/// two items may share an id (the client's flat item map would cross-link
+/// two subtrees). Violating items are DROPPED here, loudly — a missing menu
+/// leaf is an inconvenience; an emitted cycle is a dead Wayland session,
+/// five times over. This runs on every layout build so a future mapper gap
+/// or hash collision degrades instead of freezing.
+fn enforce_unique_nonroot_ids(items: &mut Vec<shared_menu::MenuItem>) {
+    fn walk(items: &mut Vec<shared_menu::MenuItem>, seen: &mut std::collections::HashSet<i32>) {
+        items.retain(|item| {
+            let id = shared_id_to_int(&item.id);
+            if id == 0 {
+                eprintln!(
+                    "[tray] DROPPING menu item '{}': it mapped to dbusmenu id 0 (the root) — \
+                     emitting it would hand the shell a cyclic layout (944-jaef)",
+                    item.id
+                );
+                return false;
+            }
+            if !seen.insert(id) {
+                eprintln!(
+                    "[tray] DROPPING menu item '{}': duplicate dbusmenu id {id} — \
+                     emitting it would cross-link two subtrees in the shell's item map (944-jaef)",
+                    item.id
+                );
+                return false;
+            }
+            true
+        });
+        for item in items.iter_mut() {
+            walk(&mut item.children, seen);
+        }
+    }
+    // Root id 0 is pre-seeded: any ITEM mapping to 0 is a violation.
+    let mut seen = std::collections::HashSet::new();
+    seen.insert(0);
+    walk(items, &mut seen);
+}
+
+/// Depth-first search for the shared item whose dbusmenu id is `id`./// Depth-first search for the shared item whose dbusmenu id is `id`.
+fn find_shared_item<'a>(
+    items: &'a [shared_menu::MenuItem],
+    id: i32,
+) -> Option<&'a shared_menu::MenuItem> {
+    for item in items {
+        if shared_id_to_int(&item.id) == id {
+            return Some(item);
+        }
+        if let Some(found) = find_shared_item(&item.children, id) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+/// The layout GetLayout must return: the subtree rooted at `parent_id`,
+/// with children included to `recursion_depth` levels (`-1` = unlimited).
+/// `None` when no node carries `parent_id` — the caller turns that into a
+/// DBus error rather than guessing (944-jaef: guessing was returning the
+/// root tree for EVERY id, and gnome-shell's client livelocked re-queueing
+/// a reply whose root never matched what it asked for).
+fn build_menu_layout(
+    state: &TrayUiState,
+    parent_id: i32,
+    recursion_depth: i32,
+) -> Option<MenuNode> {
+    let mut items = shared_menu_items(state);
+    enforce_unique_nonroot_ids(&mut items);
+    if parent_id == 0 {
+        let children: Vec<OwnedValue> = if recursion_depth == 0 {
+            Vec::new()
+        } else {
+            let next = if recursion_depth < 0 {
+                -1
+            } else {
+                recursion_depth - 1
+            };
+            items
+                .iter()
+                .map(|item| child(shared_menu_item_to_node_depth(item, next)))
+                .collect()
+        };
+        return Some(node(
+            0,
+            props(vec![
+                ("label".to_string(), ov_str("Tillandsias")),
+                ("visible".to_string(), ov(Value::from(true))),
+            ]),
+            children,
+        ));
+    }
+    find_shared_item(&items, parent_id)
+        .map(|item| shared_menu_item_to_node_depth(item, recursion_depth))
 }
 
 // @trace spec:tray-minimal-ux, spec:tray-ux, spec:tray-progress-and-icon-states
@@ -3767,32 +3965,7 @@ fn shared_menu_item_to_node(item: &shared_menu::MenuItem) -> MenuNode {
 // menu-shape contract as the documentation for `tray_ui_state_to_menu_state`.
 // The shorter duplicate that had grown here in the meantime is folded in.
 fn build_menu(state: &TrayUiState) -> MenuNode {
-    // Podman-unavailable: override the status text before building.
-    let mut ui_state = tray_ui_state_to_menu_state(state);
-    if !state.podman_available {
-        ui_state.status_text = status_label(&TrayStatusStage::PodmanMissing);
-    }
-
-    let structure = shared_menu::build(&ui_state);
-
-    match structure {
-        shared_menu::MenuStructure::Provisioning { items }
-        | shared_menu::MenuStructure::Ready { items }
-        | shared_menu::MenuStructure::Failed { items } => {
-            let children: Vec<OwnedValue> = items
-                .iter()
-                .map(|item| child(shared_menu_item_to_node(item)))
-                .collect();
-            node(
-                0,
-                props(vec![
-                    ("label".to_string(), ov_str("Tillandsias")),
-                    ("visible".to_string(), ov(Value::from(true))),
-                ]),
-                children,
-            )
-        }
-    }
+    build_menu_layout(state, 0, -1).expect("root layout always exists")
 }
 
 #[interface(name = "org.kde.StatusNotifierItem")]
@@ -3817,8 +3990,15 @@ impl StatusNotifierItemIface {
         tray_icon_status(self.0.snapshot().tray_icon_state).to_string()
     }
 
+    // SNI spec: WindowId is INT32 ('i'). Exporting u32 made gnome-shell log
+    // "Received property WindowId with type u does not match expected type i"
+    // and busy-loop at ~100% CPU from the moment the item registered —
+    // the 2026-08-30 desktop freeze, live on this host, shell CPU dropping
+    // 99.5% -> 2.3% the instant the tray unit stopped. Same defect class as
+    // the dbusmenu Event/EventGroup signatures (938-9yh4): a wire type the
+    // watcher tolerates until it doesn't.
     #[zbus(property)]
-    fn window_id(&self) -> u32 {
+    fn window_id(&self) -> i32 {
         0
     }
 
@@ -3958,14 +4138,27 @@ impl DbusMenuIface {
         "normal".to_string()
     }
 
+    // BOTH PARAMETERS ARE LOAD-BEARING (944-jaef, the fourth desktop
+    // freeze): this handler ignored parent_id and recursion_depth and
+    // returned the full root tree for every request. gnome-shell's dbusmenu
+    // client asks for ONE submenu at depth 1 while opening it; a reply
+    // rooted at 0 never matches, the client re-queues the whole tree and
+    // asks again — an unbounded Array.shift livelock that wedged the
+    // Wayland session on a single tray click. Content conformance is as
+    // load-bearing as wire types.
     async fn get_layout(
         &self,
-        _parent_id: i32,
-        _recursion_depth: i32,
+        parent_id: i32,
+        recursion_depth: i32,
         _property_names: Vec<String>,
     ) -> fdo::Result<(u32, MenuNode)> {
         let state = self.0.snapshot();
-        Ok((state.revision, build_menu(&state)))
+        match build_menu_layout(&state, parent_id, recursion_depth) {
+            Some(layout) => Ok((state.revision, layout)),
+            None => Err(fdo::Error::InvalidArgs(format!(
+                "no menu node with id {parent_id}"
+            ))),
+        }
     }
 
     async fn get_group_properties(
@@ -4027,7 +4220,14 @@ impl DbusMenuIface {
         }
     }
 
-    async fn about_to_show(&self, id: i32) -> fdo::Result<(bool, bool)> {
+    // REPLY TYPE IS LOAD-BEARING, third instance of the class (944-jaef,
+    // 2026-08-30): com.canonical.dbusmenu declares AboutToShow as returning a
+    // SINGLE bool — "b" (needUpdate). This returned (bool, bool) — wire
+    // "(bb)" — and expanding a project submenu froze the Wayland session
+    // mid-grab exactly like the Event "(ib)" incident documented below.
+    // AboutToShowGroup is the variant with two return values; AboutToShow is
+    // not it.
+    async fn about_to_show(&self, id: i32) -> fdo::Result<bool> {
         // The ☁️ Cloud submenu (id=22) opens — refresh if our TTL expired.
         // The root menu (id=0) opens — refresh too, since many trays call
         // AboutToShow on the root rather than per-submenu. Both paths are
@@ -4059,7 +4259,7 @@ impl DbusMenuIface {
         // The refresh above is asynchronous. Returning "needs update" here
         // asks the shell to re-read the submenu while it is opening, which
         // causes visible flicker when the cache is already fresh.
-        Ok((false, false))
+        Ok(false)
     }
 
     // REPLY TYPE IS LOAD-BEARING (2026-08-29 incident): com.canonical.dbusmenu
@@ -4558,6 +4758,8 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
         use std::sync::atomic::Ordering;
         while !shutdown.load(Ordering::SeqCst) {
             tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+            // 944-jaef: trailing flush of a coalesced signal burst.
+            service.flush_pending_emit().await;
         }
         info!(
             spec = "signal-handling",
@@ -4821,8 +5023,17 @@ mod tests {
         }
 
         // Give the reaping threads time to wait() the exited children.
-        std::thread::sleep(std::time::Duration::from_millis(500));
-        let zombies_after = count_zombie_children();
+        // BOUNDED POLL, not a fixed sleep: under the full parallel suite
+        // (584 tests) 500ms was not reliably enough and the count is
+        // process-wide, so a slow reap read as a zombie leak (flaked in
+        // ci-full run 9, 2026-08-30; passes in isolation in 0.5s). Poll to
+        // quiescence with a hard ceiling so a REAL leak still fails.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let mut zombies_after = count_zombie_children();
+        while zombies_after > zombies_before && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            zombies_after = count_zombie_children();
+        }
         assert!(
             zombies_after <= zombies_before,
             "fast-exiting children must be reaped, not left as zombies \
@@ -6487,6 +6698,155 @@ mod tests {
     }
 
     #[test]
+    // 944-jaef, sixth freeze — emission coalescing. A burst of state
+    // changes must collapse to one signal group per cooldown window, with
+    // the suppressed tail flagged for the main loop's trailing flush.
+    #[test]
+    fn signal_emissions_coalesce_within_cooldown() {
+        let state = TrayStateBuilder::new().build();
+        let service = TrayService::new(state);
+        assert!(service.emission_due(), "first emission passes");
+        assert!(
+            !service.emission_due(),
+            "second emission within the cooldown is suppressed"
+        );
+        assert!(
+            service
+                .emit_pending
+                .load(std::sync::atomic::Ordering::SeqCst),
+            "suppressed burst is flagged for the trailing flush"
+        );
+    }
+
+    // 944-jaef FIXTURE, fifth freeze — the id-0 cycle. An unknown shared-menu
+    // id string used to map to dbusmenu id 0 (the root), which handed
+    // gnome-shell a cyclic layout and livelocked its unguarded graph walk.
+    #[test]
+    fn no_layout_ever_carries_id_zero_or_duplicates() {
+        // Unknown strings map to a unique nonzero fallback, never 0.
+        assert_ne!(
+            shared_id_to_int("agents"),
+            0,
+            "AGENTS must never map to root"
+        );
+        assert_ne!(
+            shared_id_to_int("reset-guest"),
+            0,
+            "RESET_GUEST must never map to root"
+        );
+        assert_ne!(
+            shared_id_to_int("agents"),
+            shared_id_to_int("reset-guest"),
+            "distinct unknown strings get distinct fallback ids"
+        );
+        assert_ne!(
+            shared_id_to_int("project.bogus-scope.x.claude"),
+            0,
+            "unknown project scope must never map to root"
+        );
+
+        // The full authenticated layout (local + cloud projects, the shape
+        // the operator's freezing click opened) contains no id 0 and no
+        // duplicate ids anywhere.
+        let state = TrayStateBuilder::new()
+            .forge_available(true)
+            .enclave_status(EnclaveStatus::AllHealthy)
+            .authenticated(true)
+            .projects(vec![ProjectEntry {
+                name: "tillandsias".to_string(),
+                path: PathBuf::from("/home/x/src/tillandsias"),
+                full_name: None,
+            }])
+            .cloud_projects(vec![ProjectEntry {
+                name: "tillandsias".to_string(),
+                path: PathBuf::new(),
+                full_name: Some("owner/tillandsias".to_string()),
+            }])
+            .last_fetched(Some(Instant::now()))
+            .build();
+        let menu = build_menu(&state);
+        let mut flat = Vec::new();
+        flatten_layout(&menu, &mut flat);
+        assert!(flat.len() > 5, "authenticated layout is non-trivial");
+        let mut seen = std::collections::HashSet::new();
+        for (id, _) in &flat {
+            if *id == 0 {
+                // Exactly one id 0 is legal: the root itself, first in the walk.
+                assert!(
+                    seen.is_empty(),
+                    "id 0 appeared as a NON-ROOT item — the cycle that froze five sessions"
+                );
+            }
+            assert!(seen.insert(*id), "duplicate dbusmenu id {id} in one layout");
+        }
+    }
+
+    // 944-jaef FIXTURE — the contract whose absence cost four desktop
+    // sessions: GetLayout returns the subtree rooted at the REQUESTED id,
+    // pruned to the REQUESTED depth. The old handler returned the id-0 full
+    // tree for every request and gnome-shell's client livelocked.
+    #[test]
+    fn get_layout_honors_parent_id_and_recursion_depth() {
+        let state = TrayStateBuilder::new()
+            .forge_available(true)
+            .enclave_status(EnclaveStatus::AllHealthy)
+            .authenticated(true)
+            .projects(vec![ProjectEntry {
+                name: "tillandsias".to_string(),
+                path: PathBuf::from("/home/x/src/tillandsias"),
+                full_name: None,
+            }])
+            .build();
+        let service = Arc::new(TrayService::new(state));
+        let iface = DbusMenuIface(service.clone());
+
+        // Root at unlimited depth: id 0, non-empty children.
+        let (_, root) =
+            futures::executor::block_on(iface.get_layout(0, -1, Vec::new())).expect("root");
+        assert_eq!(root.0, 0, "root request must root at 0");
+        assert!(!root.2.is_empty(), "root must carry the top-level items");
+
+        // Root at depth 0: children pruned entirely.
+        let (_, shallow) =
+            futures::executor::block_on(iface.get_layout(0, 0, Vec::new())).expect("depth-0 root");
+        assert!(shallow.2.is_empty(), "depth 0 must prune all children");
+
+        // Submenu request roots at the REQUESTED id — the whole 944-jaef
+        // defect in one assertion.
+        let local = MENU_ID_LOCAL_PROJECTS;
+        let (_, sub) = futures::executor::block_on(iface.get_layout(local, 1, Vec::new()))
+            .expect("submenu layout");
+        assert_eq!(sub.0, local, "reply must be rooted at the requested id");
+        assert!(!sub.2.is_empty(), "~/src submenu has the project child");
+        // Depth 1 means the project child appears but ITS children (the
+        // per-agent leaves) are pruned — while children-display survives so
+        // the shell still draws the arrow and asks deeper.
+        for c in &sub.2 {
+            let st = c
+                .downcast_ref::<zbus::zvariant::Structure>()
+                .expect("child is a structure");
+            let fields = st.fields();
+            let grandchildren = fields[2]
+                .downcast_ref::<zbus::zvariant::Array>()
+                .expect("children field is an array");
+            assert_eq!(
+                grandchildren.len(),
+                0,
+                "depth 1 prunes grandchildren under {:?}",
+                fields[0]
+            );
+            let prop_str = format!("{:?}", fields[1]);
+            assert!(
+                prop_str.contains("children-display"),
+                "pruned submenu child keeps children-display so the arrow survives"
+            );
+        }
+
+        // Unknown id is an ERROR, never a guessed tree.
+        let unknown = futures::executor::block_on(iface.get_layout(9999, -1, Vec::new()));
+        assert!(unknown.is_err(), "unknown parent_id must error, not guess");
+    }
+
     fn cloud_about_to_show_with_fresh_cache_does_not_request_immediate_relayout() {
         let state = TrayStateBuilder::new()
             .forge_available(true)
@@ -6505,9 +6865,8 @@ mod tests {
         let result = futures::executor::block_on(iface.about_to_show(22))
             .expect("AboutToShow should succeed");
 
-        assert_eq!(
-            result,
-            (false, false),
+        assert!(
+            !result,
             "fresh Cloud cache must not ask the shell to re-read the submenu while it opens"
         );
     }
