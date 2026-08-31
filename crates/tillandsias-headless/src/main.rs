@@ -1590,6 +1590,7 @@ const EGRESS_NET: &str = "tillandsias-egress";
 /// Before adding a caller: an enclave container that needs ONE external
 /// destination wants `ENCLAVE_ONLY_NET` plus `proxy_env_args()`. The proxy
 /// enforces an allowlist and denies everything else, which this does not.
+/// @trace spec:network-scenarios
 const ENCLAVE_EGRESS_NETS: &str = "tillandsias-enclave,tillandsias-egress";
 /// The compliant posture for every non-proxy enclave container: enclave leg
 /// only, with outbound traffic routed through the proxy via `proxy_env_args()`.
@@ -1598,6 +1599,7 @@ const ENCLAVE_EGRESS_NETS: &str = "tillandsias-enclave,tillandsias-egress";
 /// GitHub succeeds (exit 0) while example.com, wikipedia.org and bbc.co.uk are all
 /// refused — the proxy's allowlist plus `http_access deny all` turns "has the
 /// internet" into "has the allowlist".
+/// @trace spec:network-scenarios
 const ENCLAVE_ONLY_NET: &str = "tillandsias-enclave";
 // `vault` + `tillandsias-vault` MUST be here: containers reach Vault by its
 // service DNS name (`https://vault:8200`) since the move off the locally-bound
@@ -5971,6 +5973,31 @@ const SHARED_STACK_SCOPES: &[(&str, SharedStackScope)] = &[
     ("tillandsias-nix-cache", SharedStackScope::Core),
     ("tillandsias-inference", SharedStackScope::LaneScoped),
 ];
+
+/// Is `name` a container THIS APPLICATION creates and therefore may stop?
+/// (936-kdev). The `tillandsias-` prefix alone is NOT ownership: the
+/// developer build toolbox (`tillandsias-builder`) and dev-substrate
+/// containers (`tillandsias-dev-*`) match the prefix, were created by
+/// toolbox(1)/developer tooling, and being stopped by our shutdown sweep is
+/// exactly how every in-toolbox build died at install-validation. Membership
+/// here is the union of the names our own builders mint: the shared-stack
+/// table plus the per-project patterns (forge, git, browser, ssh sidecar,
+/// observatorium, status-check lanes). Anything else — however it is
+/// prefixed — belongs to someone who is not us.
+fn is_stack_managed_name(name: &str) -> bool {
+    if shared_stack_scope(name).is_some() {
+        return true;
+    }
+    // forge_container_name{,_with_instance}: tillandsias-<project>-forge[...]
+    if name.starts_with("tillandsias-") && name.contains("-forge") {
+        return true;
+    }
+    name.starts_with("tillandsias-git-")
+        || name.starts_with("tillandsias-browser-")
+        || name.starts_with("tillandsias-ssh-sidecar-")
+        || name.starts_with("tillandsias-observatorium-")
+        || name.starts_with("tillandsias-status-check-")
+}
 
 /// Scope of `container` when it is a SHARED stack container; `None` for
 /// per-project containers (forge/git/browser) and unknown names.
@@ -15572,8 +15599,24 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
         .await
         {
             Ok(Ok(containers)) if !containers.is_empty() => {
-                let running_at_start: Vec<_> =
-                    containers.iter().filter(|c| c.state == "running").collect();
+                // ORDER 936-kdev, ROOT CAUSE OF THE INSTALL-VALIDATION KILLS.
+                // "tillandsias-" prefix is NOT "tillandsias-managed": the
+                // developer build toolbox (`tillandsias-builder`) and the
+                // dev-substrate containers (`tillandsias-dev-*`) match the
+                // prefix but were never created by this app — and this sweep
+                // stopped them on EVERY headless exit. The 5-second
+                // install-validation instance inside build.sh therefore
+                // stopped the very toolbox the build was running in, SIGKILLing
+                // the build at rc=137 (5/5 reproducible 2026-08-30; podman
+                // events show the builder dying one second after "Received
+                // shutdown signal", no `podman stop` event because WE were the
+                // stopper). Ownership is decided by is_stack_managed_name —
+                // the same vocabulary the teardown and reset scopes speak —
+                // never by prefix alone.
+                let running_at_start: Vec<_> = containers
+                    .iter()
+                    .filter(|c| c.state == "running" && is_stack_managed_name(&c.name))
+                    .collect();
 
                 if !running_at_start.is_empty() {
                     info!(
@@ -17310,6 +17353,22 @@ mod tests {
         );
     }
 
+    /// ORDER 936-kdev: the shutdown sweep's ownership predicate. The
+    /// `tillandsias-` prefix alone is NOT ownership — the developer build
+    /// toolbox and dev-substrate containers match it but were never created
+    /// by this app, and sweeping them SIGKILLed every in-toolbox build at
+    /// install-validation (rc=137, 5/5 on 2026-08-30).
+    #[test]
+    fn stack_managed_name_never_claims_by_prefix_alone() {
+        // NOT ours: toolbox(1) and dev-substrate containers.
+        assert!(!is_stack_managed_name("tillandsias-builder"));
+        assert!(!is_stack_managed_name("tillandsias-dev-inference"));
+        // Ours: shared stack + the per-project names our builders mint.
+        assert!(is_stack_managed_name("tillandsias-vault"));
+        assert!(is_stack_managed_name("tillandsias-myproj-forge"));
+        assert!(is_stack_managed_name("tillandsias-git-myproj"));
+    }
+
     /// Order 477 (the packet's steady-state criterion): after the LAST lane
     /// exits, the container set must converge in ONE step — the set the
     /// teardown leaves standing must be exactly the set the liveness
@@ -17728,6 +17787,82 @@ mod tests {
             window.contains("\"NODE_USE_ENV_PROXY\""),
             "apply_proxy_env must also set NODE_USE_ENV_PROXY for forge agents"
         );
+    }
+    /// ORDER 245 §5 P3. The two proxy-env appliers must agree on ALL SEVEN
+    /// variables, not just on `NODE_USE_ENV_PROXY`.
+    ///
+    /// `proxy_env_args()` (Vec<String> for a raw `podman run`) and
+    /// `apply_proxy_env()` (the ContainerSpec builder twin) are hand-maintained
+    /// parallel lists. The test above pins ONE variable across both, and by
+    /// source scan; nothing pinned the other six. Changing `http_proxy`'s port
+    /// in one, or dropping `NO_PROXY` from one, would have shipped containers
+    /// whose egress configuration depends on which builder launched them —
+    /// silently, because both paths still "set the proxy env".
+    ///
+    /// This compares them BEHAVIOURALLY, through `build_run_args()`, rather
+    /// than by scanning source text: a source scan cannot tell whether the two
+    /// lists agree in VALUE, only that a token appears in both.
+    #[test]
+    fn both_proxy_env_appliers_emit_the_same_contract() {
+        // The raw-args path.
+        let raw = proxy_env_args();
+        let mut from_args: Vec<String> = raw
+            .windows(2)
+            .filter(|w| w[0] == "--env")
+            .map(|w| w[1].clone())
+            .collect();
+
+        // The ContainerSpec path, read back through the args it actually builds.
+        let spec_args =
+            apply_proxy_env(tillandsias_podman::ContainerSpec::new("scratch")).build_run_args();
+        let mut from_spec: Vec<String> = spec_args
+            .windows(2)
+            .filter(|w| w[0] == "--env" || w[0] == "-e")
+            .map(|w| w[1].clone())
+            .collect();
+
+        from_args.sort();
+        from_spec.sort();
+
+        assert!(
+            !from_args.is_empty(),
+            "proxy_env_args emitted no --env pairs; the extractor is wrong, not the code"
+        );
+        assert_eq!(
+            from_args, from_spec,
+            "the two proxy-env appliers disagree. They are parallel hand-maintained \
+             lists and a container's egress must not depend on which builder launched \
+             it (order 245 P3)"
+        );
+
+        // Anchor the CONTENT too, so an equal-but-empty pair cannot pass: every
+        // variable the contract names must be present with its documented value.
+        for expected in [
+            "http_proxy=http://proxy:3128",
+            "https_proxy=http://proxy:3128",
+            "HTTP_PROXY=http://proxy:3128",
+            "HTTPS_PROXY=http://proxy:3128",
+            "NODE_USE_ENV_PROXY=1",
+        ] {
+            assert!(
+                from_args.iter().any(|v| v == expected),
+                "the proxy env contract must include {expected}"
+            );
+        }
+        // no_proxy/NO_PROXY carry the subnet, so match the prefix rather than
+        // freezing a value that ENCLAVE_SUBNET_ENV is allowed to change.
+        for key in ["no_proxy=", "NO_PROXY="] {
+            let v = from_args
+                .iter()
+                .find(|v| v.starts_with(key))
+                .unwrap_or_else(|| panic!("the contract must set {key}"));
+            assert!(
+                v.contains("vault") && v.contains("nix-cache"),
+                "ENCLAVE_NO_PROXY_BASE must keep vault and nix-cache exempt — both \
+                 speak HTTPS to in-enclave names and curl matches no_proxy against \
+                 the hostname as written, so the subnet entry cannot rescue them: {v}"
+            );
+        }
     }
 
     #[test]

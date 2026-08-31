@@ -68,7 +68,12 @@ run reader-absent-is-named 'blocked:index-load-failed:*sanctioned YAML reader*' 
 
 # 9/10/11. yaml-type, in yq's own spelling — the pre-push lane compares
 #          against '!!map' literally, so the vocabulary must match yq's.
-run type-of-fragment-is-map '!!map' "$READER" yaml-type "$(ls -t plan/index.d/*.yaml | head -1)"
+# The input is SYNTHESIZED, not `ls plan/index.d/*.yaml`: a fully compacted
+# ledger leaves index.d empty, and the first complete compaction (941-trcf)
+# turned that ls into a gate failure. The property is yaml-type's vocabulary,
+# so the fixture pins its own fragment-shaped input.
+printf 'packets:\n  - packet_id: fixture\n' > "$W/frag.yaml"
+run type-of-fragment-is-map '!!map' "$READER" yaml-type "$W/frag.yaml"
 printf -- '- a\n- b\n' > "$W/seq.yaml"
 run type-of-sequence '!!seq' "$READER" yaml-type "$W/seq.yaml"
 run type-of-broken-is-load-failed 'blocked:yaml-load-failed:*' "$READER" yaml-type "$W/bad.yaml"

@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: sni-windowid-type-wedges-shell
+    event:
+      type: note
+      ts: "2026-08-30T22:54:56Z"
+      agent_id: linux-macuahuitl-fable5-20260830t225456z
+      host: macuahuitl
+      summary: >
+        OPERATOR-DIRECTED IO REMEDY LANDED (spun out of the same incident day): nodatacow (chattr +C) applied to target/ and the rootless overlay store on this host — no wipe needed, the attribute covers all NEW files, which is exactly the churn; documented as a dev-build spec requirement ('Build churn directories opt out of copy-on-write on btrfs', with a non-btrfs named-skip scenario) and made self-applying via _ensure_nodatacow_churn_dirs in build.sh's host preflight so every Linux builder gets it without reading the spec. Basis measurement: io full avg300=21.6% PSI with CPU pressure 0.00 during parallel builds on the DRAM-less NE-1TB. Drive-swap question answered with attach-the-regime discipline: measure a normal build day under nodatacow BEFORE moving hardware.

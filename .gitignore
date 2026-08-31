@@ -165,3 +165,4 @@ node_modules/
 *.a
 *.wasm
 *.pdb
+.claude/settings.local.json

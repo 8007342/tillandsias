@@ -710,7 +710,23 @@ fi
 # time. That is exactly how `./build.sh --observatorium` used to die
 # (_require_host_build_tools was defined ~45 lines below its only caller).
 
+# spec:dev-build "Build churn directories opt out of copy-on-write on btrfs".
+# Idempotent and best-effort: `chattr +C` affects only files created after it
+# is set, so this is safe on a live tree and needs no wipe; on non-btrfs the
+# chattr simply fails and we stay silent. The churn these trees hold is
+# rebuildable, and CoW+zstd+checksum amplification on it is what saturated
+# macuahuitl's NVMe during parallel builds (2026-08-30, io full 21.6% PSI).
+_ensure_nodatacow_churn_dirs() {
+    local d
+    for d in "$SCRIPT_DIR/target" "$HOME/.local/share/containers/storage/overlay"; do
+        [[ -d "$d" ]] || continue
+        [[ "$(lsattr -d "$d" 2>/dev/null | awk '{print $1}')" == *C* ]] && continue
+        chattr +C "$d" 2>/dev/null || true
+    done
+}
+
 _require_host_build_tools() {
+    _ensure_nodatacow_churn_dirs
     local missing=()
     local tool
     for tool in cargo rustc rustfmt clippy-driver gcc pkg-config; do
@@ -2097,6 +2113,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Base-ledger status-loss advisory reported"
 
+    # Order 941-trcf. The fragment-overlay cost is linear in the index.d
+    # backlog (~40ms of gate time per fragment per gate run, measured), so the
+    # gate NAMES the backlog before it regrows to the 338 that doubled it.
+    # ADVISORY on the 751-i9mb terms: a grown backlog is news for the next
+    # coordination cycle, never a build break.
+    _step "Checking the plan fragment backlog against the compaction cadence (941-trcf, advisory)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-backlog.sh" 2>&1; then
+        _error "the fragment-backlog advisory could not run — that is a broken checkout, not a clean backlog"
+        exit 1
+    fi
+    _info "Fragment-backlog advisory reported"
+
     # Order 810-k8jy. Which file classes under a corpus root the RAG indexer
     # indexes, declines, or has never been told about. ADVISORY like the
     # carry-forward line above, and for the same reason: a new file class in the
@@ -2365,6 +2393,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Litmus YAML parse gate passed"
 
+    _step "Checking the nix-capability probe's evidence survives a noisy shell (917-zkge)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-probe-nix-capability-evidence.sh" 2>&1; then
+        _error "a capable row can carry shell noise as its proof that nix answered (917-zkge)"
+        exit 1
+    fi
+    _info "Probe evidence-capture guard passed"
+
     _step "Checking a gate stamp cannot be written unearned (940-f77j)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-gate-stamp-must-be-earned.sh" 2>&1; then
         _error "a caller can stamp a tree the gate never passed — the stamp stops meaning 'this tree is green' (940-f77j)"
@@ -2378,6 +2413,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Hardware-fingerprint gate passed"
+
+    _step "Checking uninstall sweeps BOTH macOS app dirs..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-uninstall-sweeps-both-app-dirs.sh" 2>&1; then
+        _error "uninstall would leave the app in the DEFAULT install dir while removing the LaunchAgent beside it — the app stays, nothing launches it, and the uninstaller reports success"
+        exit 1
+    fi
+    _info "Uninstall app-dir sweep gate passed"
 
     _step "Checking image rebuild keeps the installed binary's launch tag (747-knbp)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-build-image-installed-version-alias.sh" 2>&1; then
@@ -2542,6 +2584,34 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Long-running view agreement check passed"
+
+    _step "Checking the reclaim-stranded-claims fixture (943-unii)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-reclaim-stranded-claims.sh" 2>&1; then
+        _error "the stranded-claim reaper regressed (943-unii) — see the failing case above"
+        exit 1
+    fi
+    _info "Reclaim-stranded-claims fixture passed"
+
+    _step "Checking plan fragments use keys the fold reads (944-vim8)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-keys-are-read.sh" 2>&1; then
+        _error "a plan/index.d/ fragment uses a top-level key the fold discards (944-vim8) — see the verdict line above"
+        exit 1
+    fi
+    _info "Fragment key check passed"
+
+    _step "Checking the enclave membership list matches the code (245 P8)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-enclave-membership-documented.sh" 2>&1; then
+        _error "an enclave attach site is undocumented, or the spec names one that is gone (245 P8) — see the verdict line above"
+        exit 1
+    fi
+    _info "Enclave membership documentation check passed"
+
+    _step "Checking the proxy's permissive port agrees with its consumers (245 P6)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-proxy-permissive-port-routing.sh" 2>&1; then
+        _error "squid.conf and the code disagree about whether :3129 is routed (245 P6) — see the verdict line above"
+        exit 1
+    fi
+    _info "Proxy permissive-port routing check passed"
 
     _step "Checking litmus pin claims resolve and execute (721-77yu)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-pin-claims.sh" 2>&1; then

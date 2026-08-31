@@ -1,0 +1,84 @@
+# @trace spec:enclave-network
+# @trace order:245
+#
+# ORDER 245 §5 P8. openspec/specs/enclave-network/spec.md enumerated its
+# members in PROSE — "forge, git, inference, and proxy" — in two places. By
+# 2026-08-30 SIX more services had joined and none had been added: vault, the
+# router, the nix cache (order 801-vm4p), the catalog service, the
+# observatorium web, and the ssh-lane sidecar. A reader asking "what is on the
+# enclave?" got a four-item answer to a twelve-site question, and vault —
+# central to the spec's own dependency story — was one of the missing ones.
+#
+# THE SIXTH WAS FOUND BY THE GUARD, NOT BY THE HAND AUDIT that preceded it. The
+# enclave is named by THREE constants (ENCLAVE_NET, ENCLAVE_ONLY_NET,
+# ENCLAVE_EGRESS_NETS) and the manual sweep covered two. That is the argument
+# for the guard in one sentence: the enumeration is exactly the kind of fact a
+# human sweep gets 90% right and a scan gets right.
+#
+# The list is symbol-anchored for order 881-29me's reason: a symbol survives
+# every edit that does not rename it, and a rename is an event worth noticing.
+name: litmus:enclave-membership-documented
+spec: enclave-network
+phase: pre-build
+description: >
+  Pin that every function attaching a container to the enclave is named in the
+  enclave-network spec's membership list, and that the spec names no function
+  which has stopped attaching — refused in both directions.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/check-enclave-membership-documented.sh
+  - workspace contains openspec/specs/enclave-network/spec.md
+  - shell utilities (bash, grep, awk, comm, mktemp) are available in PATH
+
+critical_path:
+  - step: "the guard parses, is executable, and the tree agrees in the pinned grammar"
+    command: "bash -n scripts/check-enclave-membership-documented.sh && test -x scripts/check-enclave-membership-documented.sh && out=$(scripts/check-enclave-membership-documented.sh) && printf '%s' \"$out\" | grep -qE '^ok:enclave-membership:[0-9]+ attach site\\(s\\) documented$' && echo 'ok: spec agrees with the code'"
+    timeout_ms: 30000
+    expected_behavior: "ok: spec agrees with the code"
+
+  - step: "NEGATIVE CONTROL — an attach site the spec does not name is refused (this is the state the spec was actually in, six times over)"
+    command: "T=$(mktemp -d); mkdir -p \"$T/crates\"; printf 'fn build_newthing_run_args() -> Vec<String> {\\n    vec![ENCLAVE_NET.into()]\\n}\\n' > \"$T/crates/x.rs\"; printf '# fixture\\n\\n- `x.rs` `fn build_somethingelse`\\n' > \"$T/spec.md\"; out=$(TILLANDSIAS_ENCLAVE_SPEC=\"$T/spec.md\" TILLANDSIAS_ENCLAVE_SRC_ROOT=\"$T/crates\" scripts/check-enclave-membership-documented.sh 2>/dev/null); rc=$?; rm -rf \"$T\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -q '^violation:enclave-membership:undocumented=1:stale=1$' && echo 'ok: undocumented member refused' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    timeout_ms: 30000
+    expected_behavior: "ok: undocumented member refused"
+
+  - step: "NEGATIVE CONTROL — the other direction: a bullet the code no longer backs is refused too, so the list cannot outlive the wiring"
+    command: "T=$(mktemp -d); mkdir -p \"$T/crates\"; printf 'fn build_newthing_run_args() -> Vec<String> {\\n    vec![ENCLAVE_NET.into()]\\n}\\n' > \"$T/crates/x.rs\"; printf '# fixture\\n\\n- `x.rs` `fn build_newthing_run_args`\\n- `x.rs` `fn build_departed_run_args`\\n' > \"$T/spec.md\"; out=$(TILLANDSIAS_ENCLAVE_SPEC=\"$T/spec.md\" TILLANDSIAS_ENCLAVE_SRC_ROOT=\"$T/crates\" scripts/check-enclave-membership-documented.sh 2>/dev/null); rc=$?; rm -rf \"$T\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -q '^violation:enclave-membership:undocumented=0:stale=1$' && echo 'ok: stale bullet refused' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    timeout_ms: 30000
+    expected_behavior: "ok: stale bullet refused"
+
+  - step: "POSITIVE CONTROL — an exactly-agreeing fixture pair passes, so a refuse-everything guard cannot satisfy the two negatives"
+    command: "T=$(mktemp -d); mkdir -p \"$T/crates\"; printf 'fn build_newthing_run_args() -> Vec<String> {\\n    vec![ENCLAVE_NET.into()]\\n}\\n' > \"$T/crates/x.rs\"; printf '# fixture\\n\\n- `x.rs` `fn build_newthing_run_args`\\n' > \"$T/spec.md\"; out=$(TILLANDSIAS_ENCLAVE_SPEC=\"$T/spec.md\" TILLANDSIAS_ENCLAVE_SRC_ROOT=\"$T/crates\" scripts/check-enclave-membership-documented.sh 2>/dev/null); rc=$?; rm -rf \"$T\"; [ \"$rc\" -eq 0 ] && printf '%s' \"$out\" | grep -q '^ok:enclave-membership:1 attach site(s) documented$' && echo 'ok: agreement accepted' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    timeout_ms: 30000
+    expected_behavior: "ok: agreement accepted"
+
+  - step: "SCOPE CONTROL — a nested helper inside a builder must not steal the attribution, and a #[test] fn must not count as a member"
+    command: "T=$(mktemp -d); mkdir -p \"$T/crates\"; printf 'fn build_outer_run_args() -> Vec<String> {\\n    fn helper() {}\\n    vec![ENCLAVE_NET.into()]\\n}\\n\\n#[cfg(test)]\\nmod t {\\n    #[test]\\n    fn build_looks_like_a_member() { let _ = ENCLAVE_NET; }\\n}\\n' > \"$T/crates/x.rs\"; printf '# fixture\\n\\n- `x.rs` `fn build_outer_run_args`\\n' > \"$T/spec.md\"; out=$(TILLANDSIAS_ENCLAVE_SPEC=\"$T/spec.md\" TILLANDSIAS_ENCLAVE_SRC_ROOT=\"$T/crates\" scripts/check-enclave-membership-documented.sh 2>/dev/null); rc=$?; rm -rf \"$T\"; [ \"$rc\" -eq 0 ] && echo 'ok: nested helper and test fn both excluded' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    timeout_ms: 30000
+    expected_behavior: "ok: nested helper and test fn both excluded"
+
+  - step: "build.sh consults the guard (wiring is real, not prose)"
+    command: "grep -q 'check-enclave-membership-documented.sh' build.sh && echo 'ok: wired into the gate'"
+    timeout_ms: 8000
+    expected_behavior: "ok: wired into the gate"
+
+observability:
+  traces:
+    - "@trace spec:enclave-network"
+    - "@trace order:245"
+  expected_log: "enclave membership list agrees with the attach sites in both directions"
+  log_fields:
+    spec: "enclave-network"
+    test: "enclave-membership-documented"
+    artifact: "scripts/check-enclave-membership-documented.sh + openspec/specs/enclave-network/spec.md"
+
+rollback:
+  on_failure: >
+    Either a container joined the enclave without a bullet in the spec's
+    membership list — add it, by SYMBOL, in the same commit as the attach — or
+    a listed function stopped attaching and its bullet must go. Do not resolve
+    this by returning the spec to a prose enumeration: that form went stale by
+    six members before this guard existed, and the sixth was found only by the
+    scan.
+  command: "scripts/check-enclave-membership-documented.sh; grep -rn 'ENCLAVE_NET\\|ENCLAVE_ONLY_NET\\|ENCLAVE_EGRESS_NETS' --include='*.rs' crates/ | head -20"

@@ -85,6 +85,13 @@ Still live as a class: `check-stranded-in-progress.sh` reported
 Inventory note: the asymmetry is the defect. A claim hides work from the pool
 immediately and returns it only via a 24h reaper.
 
+**REVISED 2026-08-30 by measurement — see F10.** The first half of that
+sentence is false for the recipe the worker protocol prescribes:
+`append-event <id> claim` changes no status, so nothing is hidden. F4 is real
+only for the four packets that carry an explicit `in_progress`, three of which
+are stranded — so its operative problem is abandonment, not latency of return,
+and it is smaller than recorded here.
+
 ## F5. Selection does not separate concurrent hosts by itself
 
 **Measured 2026-08-19, inherited from the record** (skill, "Cycle batch
@@ -367,3 +374,111 @@ scheduling record's authority. Recorded here because it is a measured
 starvation mode in the same family as F1 and F4 — work that exists, is ready,
 and cannot reach the pool — and because the next host to lose six pushes in a
 row should find it written down rather than rediscover it.
+
+## F10. Claiming does not claim — the WORKER recipe changes no status
+
+> **CORRECTED 2026-08-31, and the correction is central rather than cosmetic.**
+> The title said "the sanctioned recipe". It is not the sanctioned one — it is
+> the WORKER skill's. `skills/meta-orchestration/SKILL.md` carries the real
+> claim step: `tillandsias-plan set-field <order> status in_progress`, pushed
+> BEFORE the work, and states that "`next`/`select-work-batch` filter to
+> `unleased`, and 'leased' means `status: in_progress`". So claiming DOES hide
+> work from the pool, and the methodology rule this entry called unimplementable
+> is implemented — by the coordinator recipe, exactly as written.
+>
+> The measurement below stands: 245 really does carry 43 claim events and really
+> is still offered. The INFERENCE was wrong. `append-event <id> claim` is an
+> audit event, not a claim; I followed the worker recipe for nineteen cycles and
+> never claimed anything. The mechanism was not broken — I was not using it.
+>
+> WHAT THE ENTRY BECOMES: not "claiming is inert" but a THREE-WAY DIVERGENCE in
+> which two sources agree and the one every worker runs does not. methodology
+> `rules` and meta-orchestration both say a claim moves status to `in_progress`;
+> advance-work-from-plan §3 says append an event. F2 is therefore still live for
+> the reason F10 originally gave — hosts are not separated — but the cause is a
+> worker recipe that omits the step, not a mechanism that does not exist.
+>
+> Also corrected by the same reading: collision handling is CRDT TIMESTAMP
+> ARBITRATION ("if another host's claim event carries an EARLIER timestamp —
+> ties broken by lexicographically smaller hostname — you lost: release yours"),
+> not the push-rejection recovery the worker skill describes; and the return
+> path is UNCONDITIONAL RELEASE ON EXIT, not the reaper. "Claiming is only safe
+> because releasing is unconditional."
+
+**MEASURED first-hand, lenovinha, 2026-08-30, over seventeen consecutive cycles
+of real claiming on this host.**
+
+F4 is recorded above as *"a claim hides work from the pool immediately and
+returns it only via a 24h reaper"*, with the asymmetry named as the defect.
+For the recipe the worker protocol actually prescribes, **the first half is
+false**: nothing is hidden, because nothing changes.
+
+### The measurement
+
+Packet 245 carries **43 `claim` events** — eleven of them mine, one per cycle.
+At HEAD it is `status: ready` and still returned by `ready linux`. So are 335
+and 251, both claimed repeatedly by this host.
+
+Fleet-wide at the same moment:
+
+```
+ready linux                 316 packets
+in_progress (expire-claims)   4 packets
+  of which stranded            3
+```
+
+Four packets in the whole ledger carry `in_progress`, and three of those four
+are past their TTL. So where the status IS set, the dominant outcome is
+abandonment — and where the protocol's own recipe is followed, the status is
+never set at all.
+
+### Why: the rule describes a transition the tool does not perform
+
+`methodology/distributed-work.yaml` states, in `rules`:
+
+> "A `claim` event changes status from ready to in_progress (mint lease_id;
+> heartbeat per lease rules)."
+
+The worker skill §3 implements claiming as
+`tillandsias-plan append-event <id> claim …`. That command's whole usage is
+`<ref> <type> <summary> --ts <ISO> [--agent A] [--host H]` — **there is no
+status flag**. Appending an event cannot change a status; only
+`set-field status in_progress` can, and neither the rule nor the skill's claim
+step says to run it.
+
+### The same sentence was already found false once, two rules below
+
+The same `rules` block says:
+
+> "A `completed` event REQUIRES evidence_refs and sets status to `completed`"
+
+That is equally untrue of the tool, and the worker skill's §7.2 exists
+*precisely because it is untrue* — it is three paragraphs long, cites
+600-c266 and 635-i6vm, and opens *"An event alone does not close a packet."*
+Three hosts left finished work claimable on 2026-08-09 before that was written.
+
+**The claim rule is the same sentence shape and was never corrected.** The
+fleet learned the lesson on the closing end and did not carry it back to the
+opening end.
+
+### What this does to the inventory
+
+- **F4's asymmetry is not the operative defect.** Work is not hidden by
+  claiming; it is hidden only by the rare explicit `in_progress`, and the
+  3-of-4 stranded rate says that path's problem is abandonment, not latency of
+  return. F4 remains real for those four packets and is *smaller* than recorded.
+- **F2 gets worse, not better.** 814-iyu7's duplicate implementation led the
+  fleet to add a claim step to the skill (commit 7fff8d2a2). That step runs on
+  every host every cycle and separates nothing: two hosts claiming the same
+  packet both see it `ready` and both proceed. The mechanism that was "existing
+  but unused" is now *used and inert* — which reads as fixed in every cycle
+  report.
+- **F5's finding stands unrescued.** Selection does not separate concurrent
+  hosts, and claiming was the answer; it is not one.
+
+Filed as **order 943-unii**. The fix is a decision, not an obvious edit: either
+the claim step gains a status transition (and `ready` stops offering claimed
+work, with everything that implies for the 3-of-4 stranded rate), or the rule
+is corrected to say a claim event is an audit record and NOT a mutex — but the
+current state, where the contract promises exclusion the tool does not deliver,
+is the one state that cannot be right.

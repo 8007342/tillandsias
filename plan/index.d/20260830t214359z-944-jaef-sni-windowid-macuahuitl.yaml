@@ -1,0 +1,24 @@
+packets:
+  - packet_id: sni-windowid-type-wedges-shell
+    order: 944-jaef
+    status: in_progress
+    kind: defect
+    pickup_role: linux
+    priority: p1
+    desired_release: v0.5
+    title: |
+      SNI WindowId exported as u32 wedges gnome-shell at 100% CPU — second wire-type freeze on the tray surface
+    context: |
+      Live incident 2026-08-30 ~14:32-14:47 PDT on macuahuitl. The freshly
+      installed v0.4.260830.5 tray registered its StatusNotifierItem and
+      gnome-shell immediately logged "Received property WindowId with type u
+      does not match expected type i" and busy-looped at 99.5% CPU — full
+      desktop freeze. Recovered WITHOUT killing the session (operator asked
+      for investigation first): stopping the tray unit dropped the shell to
+      2.3% instantly, which is also the causal confirmation. Same defect
+      class as 938-9yh4's dbusmenu Event/EventGroup signatures: a wire type
+      the watcher tolerates until it does not.
+    exit_criteria:
+      - window_id property exports i32 (fix is one line, landed with this packet)
+      - a sweep audits EVERY SNI property and signal type on the tray surface against the StatusNotifierItem spec, recorded as a table on this packet, so the third instance of this class cannot exist
+      - tray relaunched on the fixed binary and gnome-shell CPU stays nominal with the item registered

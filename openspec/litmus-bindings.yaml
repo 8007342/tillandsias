@@ -284,6 +284,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:enclave-isolation
+  - litmus:enclave-membership-documented
   - litmus:binary-e2e-smoke
   - litmus:enclave-network-source-shape
   - litmus:tray-network-bootstrap
@@ -629,6 +630,7 @@ specs:
 - spec_id: methodology-accountability
   status: active
   litmus_tests:
+  - litmus:fragment-keys-are-read
   - litmus:methodology-accountability-shape
   - litmus:base-ledger-status-loss-shape
   - litmus:agent-identity-canonical-source-shape
@@ -824,6 +826,7 @@ specs:
   - litmus:brew-attestation-egress
   - litmus:proxy-container-shape
   - litmus:agent-egress-allowlist-shape
+  - litmus:proxy-permissive-port-not-silently-unrouted
   - litmus:podman-egress-control-shape
   - litmus:proxy-crash-supervision-shape
   coverage_ratio: 75
