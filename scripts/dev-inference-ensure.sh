@@ -218,12 +218,38 @@ ensure_container() {
     # wrong for this whole hardware class, where integrated IS the GPU. Set for
     # the AMD lanes only, so a discrete-GPU host keeps ollama's own preference.
     #
-    # MEASURED on yoga after setting it (gfx1152 / RADV KRACKAN1):
-    #   qwen2.5:0.5b  size_vram 0.57/0.57 GB   decode 77.51 tok/s
-    #   qwen2.5:7b    size_vram 4.86/4.86 GB   decode 12.89 tok/s (CPU was 12.18)
-    # Both FULLY placed. The 7B decode barely moves because an iGPU shares the
-    # system memory bus: the small model is compute-bound and wins hugely, the
-    # 7B is bandwidth-bound and the bandwidth did not change.
+    # MEASURED on yoga (gfx1152 / RADV KRACKAN1), all fully placed, CPU baselines
+    # taken on the same host with size_vram=0 verified as the control:
+    #
+    #   model         GPU decode      CPU decode      ratio
+    #   qwen2.5:0.5b  86.4 tok/s      115.6 tok/s     0.75x  <- GPU is SLOWER
+    #   llama3.2:3b   32.6 tok/s       25.2 tok/s     1.30x
+    #   qwen2.5:7b    12.9 tok/s       12.2 tok/s     1.06x
+    #
+    # NOT a monotonic win — an inverted U with the benefit peaking mid-size:
+    #   * 0.5b LOSES on the GPU. The model is small enough that dispatch and
+    #     synchronisation overhead exceeds what the iGPU's parallelism buys, and
+    #     12 CPU threads on a model this size are simply faster.
+    #   * 3b is the sweet spot: big enough to amortise dispatch, small enough that
+    #     compute still dominates.
+    #   * 7b is bandwidth-bound. An iGPU shares the system memory bus, so the
+    #     constraint that binds is identical on both lanes and the GPU cannot fix
+    #     it (prefill DOES improve, 93 vs 52 tok/s — that part is compute-bound).
+    #
+    # TTFT (yoga, 0.5b, warm, wall clock to the first STREAMED token, 3 reps):
+    #   GPU 33-34 ms   CPU 26-27 ms   -> 1.26x WORSE on the accelerated lane.
+    # Direction agrees with yolanda's Windows hybrid pair (0.562s vs 0.108s), the
+    # MAGNITUDE does not: 1.26x here against 5.2x there. Kept as two separate
+    # numbers rather than averaged — theirs is an NPU+iGPU hybrid through
+    # Lemonade, mine is Vulkan through ollama, and collapsing them would invent a
+    # cross-substrate figure neither host measured.
+    #
+    # CONSEQUENCE FOR THE DEFAULT MODEL, which is the operator-facing part: the
+    # fleet default is qwen2.5:0.5b, and on this hardware class that model is
+    # FASTER on the CPU. Enabling this lane is a regression for the default and a
+    # win only from roughly 3b up. The flag is still set because the lane must
+    # exist and be measurable, but a tier that routes 0.5b to the GPU here is
+    # choosing the slower path.
     _ec_igpu=""
     case "$_ec_tier" in
         gpu-rocm|gpu-vulkan) _ec_igpu="--env=OLLAMA_IGPU_ENABLE=1" ;;
