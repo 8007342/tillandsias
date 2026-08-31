@@ -12,11 +12,11 @@ was first mistaken for a trunk break during the v0.4.260830.5 smoke.
 - discovered_by: `/smoke-curl-install-and-test-e2e` on release `v0.4.260830.5`, incidentally
 - evidence:
   - observed failure: `scripts/archive-plan-packets-check.rb: No such file or directory @ rb_check_realpath_internal`, followed by `[build] the plan archiver would CHANGE THE READY SET, orphan events, or leave archived rows unanswerable — do not sweep` — i.e. the gate reports a **ledger-integrity verdict** for what is actually a missing-file race.
-  - `scripts/archive-plan-packets.sh:97` generates the helper at a FIXED path in the working tree: `sed 's|plan/|plan_tmp/|g' scripts/archive-plan-packets.rb > scripts/archive-plan-packets-check.rb`
-  - `scripts/archive-plan-packets.sh:88` (`_archiver_cleanup`, trapped on `EXIT INT TERM` at :93) deletes that same fixed path, along with `plan_tmp`, `plan_tmp_bak`, `plan_tmp_*.txt`
-  - confirmed race window on this host: a stray `build.sh --check` (PID 1340530) survived a killed background task; its trap fired while a second, foreground `--check` was between generation (:97) and use (:182), deleting the file out from under the running gate. `pgrep -af build.sh` showed the stray; killing it made the identical gate pass in 154s.
+  - `scripts/archive-plan-packets.sh`, in the `--check` branch, generates the helper at a FIXED path in the working tree: `sed 's|plan/|plan_tmp/|g' scripts/archive-plan-packets.rb > scripts/archive-plan-packets-check.rb`
+  - `_archiver_cleanup` in the same script — trapped on `EXIT INT TERM` at the top of the `--check` branch — deletes that same fixed path, along with `plan_tmp`, `plan_tmp_bak`, `plan_tmp_*.txt`
+  - confirmed race window on this host: a stray `build.sh --check` (PID 1340530) survived a killed background task; its trap fired while a second, foreground `--check` was between the `sed` that generates the helper and the `_ruby scripts/archive-plan-packets-check.rb` that consumes it, deleting the file out from under the running gate. `pgrep -af build.sh` showed the stray; killing it made the identical gate pass in 154s.
 - repro:
-  - run two `./build.sh --check` invocations concurrently on one checkout, or kill one mid-run while a second is between `archive-plan-packets.sh:97` and `:182`
+  - run two `./build.sh --check` invocations concurrently on one checkout, or kill one mid-run while a second is between the helper-generating `sed` and the `_ruby scripts/archive-plan-packets-check.rb` call that consumes it
 - next_action: >
     Generate the check helper into a per-run path — `mktemp` under `target/`,
     or a name keyed by PID — and scope `_archiver_cleanup` to that run's own

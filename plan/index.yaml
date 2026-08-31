@@ -64184,6 +64184,12 @@ plan_index:
         - one instrumented run either completes exit 0 solo or names the sender
       events:
         - type: note
+          ts: "2026-08-31T02:22:54Z"
+          agent_id: "linux-macuahuitl-fable5-20260831t022254z"
+          host: macuahuitl
+          summary: |
+            RECURRENCE NOTE, distinct from the closed mechanism: tillandsias-builder exited 137 correlated with a tray graceful shutdown at 2026-08-31T02:20Z, ON a binary verified to carry is_stack_managed_name (strings marker present). Either a second stop path exists that the fix does not cover, or the correlation is coincidental (a concurrent podman stop from another actor — pirria's fixed-path archiver race shows concurrent-gate actors exist). NOT reopening on one instance; if a second correlated kill lands on the fixed binary, reopen with the tray journal + podman events joined on timestamps.
+        - type: note
           ts: "2026-08-31T00:31:25Z"
           agent_id: "linux-macuahuitl-fable5-20260831t003125z"
           host: macuahuitl
@@ -64703,6 +64709,12 @@ plan_index:
         VERIFICATION SERVICE: pirria holds a warm, ±1s-reproducible baseline (3m50s warm gate) and a running enclave, and can re-measure any landed slice fast. Out-of-box timeline recorded: ~23m15s clean-checkout to running enclave on target hardware.
       next_action_ts: "2026-08-30T06:24:51Z"
       events:
+        - type: note
+          ts: "2026-08-31T02:19:35Z"
+          agent_id: "linux-macuahuitl-fable5-20260831t021935z"
+          host: macuahuitl
+          summary: |
+            AXIS B SETTLED (yolanda, forced+profiled, both arms, 81 phases): 9P 767s vs native ext4 283s — NET 475s per forced gate for 9s staging (git clone --no-hardlinks beats cp -a: 9s/245M). THE MULTIPLIER IS NOT A CONSTANT: per-step 1.01x-78x, tracking FILE-OP COUNT, not bytes or CPU. Extremes prove the mechanism: SIGPIPE scan 78x and ghost-trace ratchet 48.29x (walk many small files, compute nothing) vs terminology dictionary 1.01x (reads once, spends 42s parsing — axis B CANNOT touch it on any host; if it needs speed, that is parser work). Archiver 5.37x/202s saved — confirmed as predicted (46.3s ext4 vs 25-50s call; 22x vs macuahuitl's 11.2s = parse-dominated here, op-dominated there). The do-not-extrapolate instruction was load-bearing: uniform 2.96x would have booked 28s of nonexistent dictionary savings while under-predicting the ratchet 16x. UNATTRIBUTED GROWTH DISSOLVED: story-tracked steps IMPROVED 45.6s; the 206s 'rise' was against the rolling-average non-baseline — no regression exists, none will be manufactured. EPIC CONSEQUENCES: (1) axis B ships on 9P hosts, 2.71x for 9s; (2) archiver file-op BATCHING is now the best-supported item — 202s on 9P AND helps every host; (3) the dictionary is the standing counterexample against uniform-multiplier reasoning. Joined 81-row table to be committed into the packet by yolanda as the axis-B document.
         - type: note
           ts: "2026-08-31T02:16:09Z"
           agent_id: "linux-macuahuitl-fable5-20260831t021609z"
