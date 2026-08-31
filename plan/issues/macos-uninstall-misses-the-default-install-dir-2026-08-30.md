@@ -6,7 +6,7 @@ housekeeping item is real but minor; this one sat behind it and is not.
 
 ## The defect
 
-`scripts/install-macos.sh:131-138` picks the install dir:
+`scripts/install-macos.sh`, where `INSTALL_DIR` is chosen, picks the install dir:
 
     INSTALL_DIR="/Applications"
     if ! [[ -w "$INSTALL_DIR" ]]; then
@@ -16,7 +16,7 @@ So `/Applications` is the PREFERRED target and `$HOME/Applications` is only a
 fallback for a non-writable `/Applications`. On a personal Mac — an admin
 account, the common case — the app lands in `/Applications`.
 
-`scripts/uninstall.sh:238` removes exactly one path:
+`scripts/uninstall.sh`, in its `macOS desktop cleanup` block, removes exactly one path:
 
     rm -rf "$HOME/Applications/Tillandsias.app"
 
@@ -41,21 +41,22 @@ does not do. Same sole-detector shape as
 ## The `.app.bak` item, corrected
 
 Worth stating precisely, because the first report of this (mine, to the
-coordinator) overstated it. `install-macos.sh:154-158`:
+coordinator) overstated it. In `scripts/install-macos.sh`, where `BACKUP` is assigned:
 
     if [[ -d "$DEST" ]]; then
         BACKUP="${DEST}.bak"
         rm -rf "$BACKUP"
         mv "$DEST" "$BACKUP"
 
-Line 156 deletes the previous backup, so it does NOT accumulate across
+The `rm -rf "$BACKUP"` immediately above the `mv` deletes the previous
+backup, so it does NOT accumulate across
 installs — exactly one `.bak` exists at any time, bounded at ~30 MB. Two
 things are true about it and neither is growth:
 
 1. It is never removed on success, so one stale 30 MB copy persists
    indefinitely after the last install.
-2. Nothing reads it. There is no rollback path — `BACKUP` appears on line
-   155 and nowhere else in the repo. It is a backup that cannot be restored
+2. Nothing reads it. There is no rollback path — `BACKUP` is assigned once
+   and read nowhere else in the repo. It is a backup that cannot be restored
    from, except by hand.
 
 And it inherits the defect above: `uninstall.sh` does not remove
