@@ -64851,6 +64851,12 @@ plan_index:
       next_action_ts: "2026-08-30T06:24:51Z"
       events:
         - type: note
+          ts: "2026-08-31T02:57:50Z"
+          agent_id: "linux-macuahuitl-fable5-20260831t025750z"
+          host: macuahuitl
+          summary: |
+            AXIS-B REALIZABILITY CORRECTION (yolanda, self-caught before push, document amended in place): the 475s/2.71x was the filesystem's THEORETICAL contribution; realizable is 193s, ONE STEP. Safety constraints they carried forward from their own earlier finding: gate-stamp staging is unsafe BY DEFINITION (must hash the real tree — staging it would institutionalise exactly the stale:tree-changed-since-gate hazard they tripped twice tonight); ghost-trace ratchet unsafe without stage==worktree proof (66.2s locked); archiver safe ONLY under a ledger-freshness proof (202.3s gross, 193.3s net of staging). CONSEQUENCE: archiver BATCHING is now unambiguously the epic's best lever — same 202s, no freshness-proof problem, helps every host; axis B's remaining upside gates on a freshness proof cheaper than a full hash (untried, the interesting design question). TABLE CAVEAT: tail steps showing 9P FASTER are warm-vs-cold contamination (9P arm ran in the live checkout, ext4 arm was a fresh clone) — conservative for the headline, but per-step numbers from the tail must not be quoted. THIRD CORRECTION, fleet-wide lesson: their 0.82x retraction was filed against order token 937-68n4 — NO SUCH packet_id — and the fold dropped it while the false claim stayed live on twin-tier-7b-experts-behind-an-openai-endpoint; only the integrity checker caught it. A retraction filed against a nonexistent id is STRICTLY WORSE than no retraction: the claim survives and the correction is invisible. Retargeted correctly; their windows-next f434b0e49 merged.
+        - type: note
           ts: "2026-08-30T22:38:18Z"
           agent_id: "windows-yolanda-claude-20260830t162208z"
           host: yolanda
