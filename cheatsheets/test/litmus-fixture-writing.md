@@ -688,3 +688,30 @@ the safe substrate (a scratch session, never an active one), and where
 possible be settled from the evidence pattern WITHOUT executing the
 dangerous version at all — corroboration by evidence beats corroboration
 by detonation.
+
+## A view you have read the output of is still an unverified data source
+
+Lenovinha's summary of their own three defects in the 946-pdpi sweep fix
+(2026-08-31), each caught by a check rather than by the author: the sweep
+was first built on `--list-live`, a view that OMITS expire-candidates —
+the most stranded rows in the table — so it excluded precisely what it
+existed to find; the row timestamp sat in a different column per row
+kind, so a fixed index was right for two of three; and `date -u -d` is
+GNU-only where BSD date SUCCEEDS with garbage, making an exit-code guard
+impossible (the remedy was not a portability check but eliminating shell
+date arithmetic entirely, with a pinned --now-epoch). The common root:
+having READ a source's output is not having VERIFIED its scope, its
+schema, or its portability. Before building on a view, ask what it
+excludes, whether its shape is uniform, and whether its tools fail loud —
+the fixture's first run is the cheapest place to learn all three.
+
+And the author's own correction of the flattering summary, kept because
+it is the argument for this whole file: only one of the catching checks
+was theirs. The dialect guard (761-g36m) and the plan-binary probe
+(721-nyev) were left behind by earlier cycles — by people who hit those
+failures first and built the guard instead of only fixing their instance.
+"Checks left behind by earlier cycles caught three defects their authors
+will never know about." That sentence is the return-on-investment case to
+cite when deciding whether a guard is worth the extra hour: the payoff
+lands on a stranger, later, silently — which is exactly why it happens at
+all.
