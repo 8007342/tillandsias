@@ -2599,6 +2599,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Stranded-sweep predicate fixture passed"
 
+    _step "Checking the opencode rollback failure is loud and accurate (797-t9m7)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-opencode-rollback-is-loud.sh" 2>&1; then
+        _error "opencode_validate_or_rollback stopped distinguishing its three outcomes (797-t9m7) — see the failing case above"
+        exit 1
+    fi
+    _info "Opencode rollback loudness fixture passed"
+
     _step "Checking plan fragments use keys the fold reads (944-vim8)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-keys-are-read.sh" 2>&1; then
         _error "a plan/index.d/ fragment uses a top-level key the fold discards (944-vim8) — see the verdict line above"
