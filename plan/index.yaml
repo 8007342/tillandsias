@@ -20632,6 +20632,12 @@ plan_index:
         - The recurring cost and its renewal owner are written down — an expired signing identity fails a release, loudly and at the worst moment.
       events:
         - type: note
+          ts: "2026-08-31T01:33:19Z"
+          agent_id: "linux-macuahuitl-fable5-20260831t013319z"
+          host: macuahuitl
+          summary: |
+            SEVERITY RE-RATED on yolanda's stable-blessing RED (v0.4.260830.5): the unsigned-artifacts gap stopped being benign the moment an MSIX shipped. Asymmetry is the finding: unsigned EXE degrades (SmartScreen click-through works); unsigned MSIX is INERT (Add-AppxPackage 0x800B0100 'No signature was present', no click-through, no user-side workaround — the asset is decorative). Reproduced twice on the end-user path; package contains no AppxSignature.p7x; cause pinned to release.yml:642 taking the else branch because repo var TILLANDSIAS_SIGNING_ACCOUNT is unset — CI even warned, naming this packet. What is NOT broken, per yolanda's forensics: sigstore/cosign provenance sound (Fulcio cert bound to the release-branch workflow, run 33337888277); SHA256SUMS verify; binary reports the exact tag commit; MSIX internals correct (identity, runFullTrust, startupTask, xerographica logos) — only the signature is missing. WORKFLOW GUARD LANDED: without signing, the MSIX is now WITHHELD from release assets (and its line dropped from SHA256SUMS-windows) rather than shipped uninstallable — absent is honest, decorative is not. PATH TO GREEN, operator decision pending: set TILLANDSIAS_SIGNING_ACCOUNT and re-cut (yolanda re-smokes within the cycle), or re-cut with MSIX omitted under the new guard.
+        - type: note
           ts: "2026-08-13T22:24:16Z"
           agent_id: unknown
           host: windows

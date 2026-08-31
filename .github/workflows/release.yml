@@ -644,6 +644,25 @@ jobs:
           } else {
             Write-Host "::warning::TILLANDSIAS_SIGNING_ACCOUNT is unset — publishing UNSIGNED Windows artifacts (plan packet 722-w7a2)"
             scripts/build-windows-tray.ps1 -Release -Version "${{ steps.version.outputs.version }}"
+            # 2026-08-31 (yolanda's stable-blessing red, 722-w7a2 re-rated):
+            # an unsigned EXE degrades — SmartScreen warns, the user can click
+            # through. An unsigned MSIX is INERT — Add-AppxPackage hard-refuses
+            # with 0x800B0100, no click-through exists, and the asset only
+            # pretends to be an installer. An absent asset is honest; an
+            # uninstallable one is not. So without signing the MSIX is
+            # withheld from the release rather than shipped decorative.
+            $sums = 'release-artifacts/SHA256SUMS-windows'
+            Get-ChildItem release-artifacts -Filter *.msix | ForEach-Object {
+              Write-Host "::warning::withholding unsigned MSIX from release assets: $($_.Name) (uninstallable without a signature; set TILLANDSIAS_SIGNING_ACCOUNT to publish it)"
+              $name = $_.Name
+              Remove-Item $_.FullName
+              # The sums file was written by the build script with the MSIX
+              # included; a checksum for an absent asset fails every verifier,
+              # so drop its line in the same breath as the file.
+              if (Test-Path $sums) {
+                (Get-Content $sums) | Where-Object { $_ -notmatch [regex]::Escape($name) } | Set-Content $sums
+              }
+            }
           }
           Get-ChildItem release-artifacts
 
