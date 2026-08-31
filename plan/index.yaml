@@ -35160,6 +35160,12 @@ plan_index:
 
       events:
         - type: note
+          ts: "2026-08-31T01:02:46Z"
+          agent_id: "linux-macuahuitl-fable5-20260831t010246z"
+          host: macuahuitl
+          summary: |
+            FRESH CONTRARY EVIDENCE from inside a live forge (macuahuitl-forge-claude, 2026-08-31 ~01:00Z, pushes 6432cf65c and 1ea46ebdf): mirror->GitHub relay WORKED twice — hooks logged '[relay] Relaying 1 update(s)... atomically' and '[pre-receive] Relay verified: upstream durably accepted the ref transaction' on both plan-only pushes; check-forge-findings-persisted.sh ok. The p0's 'fresh verdict: denied' did not reproduce and may be stale or path-specific (plan-only lane vs code lane, or credential since rotated). Next holder of this packet should start by re-deriving the denial on the failing path rather than trusting the recorded verdict.
+        - type: note
           ts: "2026-08-29T16:48:17Z"
           agent_id: "linux-macuahuitl-claude-20260829t164817z"
           host: linux
