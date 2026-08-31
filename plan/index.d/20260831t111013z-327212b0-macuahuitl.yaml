@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: stranded-sweep-ages-on-status-ts
+    event:
+      type: note
+      ts: "2026-08-31T11:10:13Z"
+      agent_id: linux-macuahuitl-fable5-20260831t111013z
+      host: macuahuitl
+      summary: >
+        PROVENANCE CORRECTED (lenovinha's request, and they are right that the record must say who actually held what): my earlier 'ASSIGNED: lenovinha takes this next cycle' overstated. Actual chronology: filed by macuahuitl; lenovinha DECLINED twice (first deferring to my script-ownership and my own deferral, then declining to take a packet still being shaped) and offered to take it only on explicit handover; the handover occurred 2026-08-31 ~11:15Z and was ACCEPTED — they claim at their next odd:23. The interim deferral was theirs and they retracted it themselves when its premise expired. No packet sat unworked on an assigned host; the claim protocol's whole point is that this distinction is visible.
