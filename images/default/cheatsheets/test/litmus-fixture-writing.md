@@ -612,3 +612,23 @@ have rc=0 AND identical verdict lines — the same work demonstrably done on
 both sides, differing only in the variable under test. This is the A/B
 sibling of record-the-evidence-not-the-conclusion: the evidence is the two
 verdict lines, and the ratio is only as real as their agreement.
+
+## A prefix standing in for ownership — the destructive variant of the label class
+
+Yoga's distillation of 936-kdev's root cause (2026-08-31), and the reason
+this instance outranks its siblings. The shutdown sweep stopped every
+container matching `tillandsias-*` — "looks like mine" doing the work of
+"is mine" — and the matches included the builder toolbox the app never
+created. Same shape as a tier label standing in for wiring, or a stamp
+standing in for a gate that passed, with one difference that changes the
+severity class entirely: a label that over-claims a CAPABILITY wastes a
+measurement and costs a wrong row; a label that over-claims OWNERSHIP
+deletes someone else's container. This one cost the fleet a wedged desktop
+and a night of phantom SIGTERMs attributed to three innocent env variables.
+
+The repair is structural, not a better pattern: ownership recorded at
+creation (an explicit table of names the app's own builders mint —
+`is_stack_managed_name`) rather than inferred from the name at deletion
+time. Before writing any destructive sweep, ask where the ownership fact
+is RECORDED; if the answer is "in the name", the sweep will eventually
+destroy something that merely resembles yours.

@@ -375,7 +375,35 @@ starvation mode in the same family as F1 and F4 — work that exists, is ready,
 and cannot reach the pool — and because the next host to lose six pushes in a
 row should find it written down rather than rediscover it.
 
-## F10. Claiming does not claim — the sanctioned recipe changes no status
+## F10. Claiming does not claim — the WORKER recipe changes no status
+
+> **CORRECTED 2026-08-31, and the correction is central rather than cosmetic.**
+> The title said "the sanctioned recipe". It is not the sanctioned one — it is
+> the WORKER skill's. `skills/meta-orchestration/SKILL.md` carries the real
+> claim step: `tillandsias-plan set-field <order> status in_progress`, pushed
+> BEFORE the work, and states that "`next`/`select-work-batch` filter to
+> `unleased`, and 'leased' means `status: in_progress`". So claiming DOES hide
+> work from the pool, and the methodology rule this entry called unimplementable
+> is implemented — by the coordinator recipe, exactly as written.
+>
+> The measurement below stands: 245 really does carry 43 claim events and really
+> is still offered. The INFERENCE was wrong. `append-event <id> claim` is an
+> audit event, not a claim; I followed the worker recipe for nineteen cycles and
+> never claimed anything. The mechanism was not broken — I was not using it.
+>
+> WHAT THE ENTRY BECOMES: not "claiming is inert" but a THREE-WAY DIVERGENCE in
+> which two sources agree and the one every worker runs does not. methodology
+> `rules` and meta-orchestration both say a claim moves status to `in_progress`;
+> advance-work-from-plan §3 says append an event. F2 is therefore still live for
+> the reason F10 originally gave — hosts are not separated — but the cause is a
+> worker recipe that omits the step, not a mechanism that does not exist.
+>
+> Also corrected by the same reading: collision handling is CRDT TIMESTAMP
+> ARBITRATION ("if another host's claim event carries an EARLIER timestamp —
+> ties broken by lexicographically smaller hostname — you lost: release yours"),
+> not the push-rejection recovery the worker skill describes; and the return
+> path is UNCONDITIONAL RELEASE ON EXIT, not the reaper. "Claiming is only safe
+> because releasing is unconditional."
 
 **MEASURED first-hand, lenovinha, 2026-08-30, over seventeen consecutive cycles
 of real claiming on this host.**

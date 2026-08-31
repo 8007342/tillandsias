@@ -5693,6 +5693,12 @@ plan_index:
         - "guest-lane litmus pins staged-gitdir readability for the forge uid"
         - "macOS VZ lane spot-checked for the same class (same shared guest binary)"
       events:
+        - type: note
+          ts: "2026-08-31T01:04:10Z"
+          agent_id: "forge-forge-tillandsias-opencode-20260831t005829z"
+          host: macuahuitl
+          summary: |
+            PROSE (packet 382 guest-staged-gitdir-root-owned, status=ready): events record implementation landed (chown_tree_to_forge_uid, main.rs:10073; write_forge_repo_gitdir main.rs:10096 handing root+objects+refs to uid 1000, euid-gated, lchown) AND criterion 2 guest-lane litmus LANDED 2026-07-20; criteria 1 (fresh Windows curl-install) and 3 (macOS VZ spot-check) are named platform-gated. VERIFIED against linux-next HEAD 06b3e1878: (a) built+staged the missing sidecar (scripts/build-sidecar.sh -> 'staged: .../images/router/tillandsias-router-sidecar (2.0M)') then ran the named criterion-2 unit test: 'cargo test -p tillandsias-headless --bin tillandsias forge_gitdir_staging_hands_root_staged_trees_to_forge_uid' -> 'test tests::forge_gitdir_staging_hands_root_staged_trees_to_forge_uid ... ok / test result: ok. 1 passed; 0 failed; 444 filtered out'; (b) all litmus-forge-gitdir-staging-chown shell steps pass: 'ok: lchown used', 'ok: wired for every lane', 'ok: fails loud'. Residual: PARTIALLY DONE, close with this evidence for criterion 2; criteria 1 and 3 remain and are platform-gated (cannot verify here: need a Windows curl-install host and a macOS VZ host respectively). Also note plan/index.yaml:48743 COORDINATOR INVENTORY listed forge-gitdir-staging-chown among 12 pre-build FAILING - that was without the gitignored sidecar; with it staged, the litmus unit test passes in this container.
         - type: verified
           ts: "2026-07-28T23:45:00Z"
           agent_id: "linux-mutable-metaorch-20260728"
@@ -6631,6 +6637,12 @@ plan_index:
         - "INVARIANT CORE vs pluggable rules: id stability and referential soundness (depends_on/release_target/split_into resolve; ids never mutate on edit) are engine-level non-negotiables that hold ACROSS schema versions — pinned by a litmus that renames a schema field and proves references still validate (aligns with methodology/between-commits-work-discipline.yaml stable-ID preconditions)"
 
       events:
+        - type: note
+          ts: "2026-08-31T01:04:22Z"
+          agent_id: "forge-forge-tillandsias-opencode-20260831t005829z"
+          host: macuahuitl
+          summary: |
+            PROSE (packet 398 plan-yaml-compiled-editor, status=ready): single progress event 2026-07-18 claims slice 2 rung 1 (validated event-append) implemented + dogfooded and 'Remaining slices: claim/status-flip edits, the format-preserving round-trip design decision, and skill docs' - i.e. PARTIAL, not full completion. VERIFIED against linux-next HEAD 06b3e1878: the compiled engine binary is present and functional on PATH (/home/forge/.local/bin/tillandsias-plan); (a) criterion 3 invalid-edit refusal: 'tillandsias-plan append-event NOSUCHREF_LITMUS --type note --summary ...' -> rc=1 stderr 'error: no packet matches NOSUCHREF_LITMUS'; unknown-flag variant -> rc=2 'error: unknown flag --bogus for append-event'; (b) queries answer on live state: 'tillandsias-plan status 382/398/399' returned correct rows; 'tillandsias-plan check' -> 'ok: 702 packets, ids unique, live references sound (9 parked-block edges)'; (c) criterion 5 schema-as-data: plan/schema.yaml present; (d) criteria 1/6/7 (round-trip, open-world, invariant-core) covered by crate suite: 'cargo test -p tillandsias-plan' -> 'running 273 tests / test result: ok. 273 passed' + 'running 28 tests / ok. 28 passed', incl. unknown_fields_survive_load, operator_and_legacy_sections_are_byte_identical_after_folding, every_known_fragment_channel_survives_a_compaction_round_trip. Residual: substantially DONE on the query/check/event-append/schema-as-data surfaces verified here; the packet prose does NOT claim full completion (it self-reports remaining slices), so it is honestly PARTIALLY done with the edit-surface breadth (claim/status-flip) and skill-doc criteria still open - coordinator should not treat it as fully done nor re-offer it as untouched-ready without noting the self-declared remaining slices.
         - type: progress
           ts: "2026-07-18T09:15:00Z"
           agent_id: "linux-macuahuitl-opus48-20260717T1747Z"
@@ -6650,6 +6662,12 @@ plan_index:
       capability_tags: [lsp, forge, opencode, images, dx]
       estimated_hours: 5
       events:
+        - type: note
+          ts: "2026-08-31T01:04:30Z"
+          agent_id: "forge-forge-tillandsias-opencode-20260831t005829z"
+          host: macuahuitl
+          summary: |
+            PROSE (packet 399 forge-lsp-by-default, status=ready): verified event 2026-07-28 says 'Config and image sides are done and litmus-pinned ... Remaining: one live go-to-definition/references check in a fresh forge session', and progress 2026-07-18 notes criterion 2 (image size delta) is zero by construction - i.e. PARTIAL/full-on-non-live-sides. VERIFIED against linux-next HEAD 06b3e1878: (a) 'scripts/run-litmus-test.sh forge-environment-discoverability --phase pre-build --size instant' -> '[PASS] litmus:forge-lsp-availability-shape' (17 PASS / 1 FAIL, the FAIL being unrelated litmus:host-expert-refresh-gate-shape, not an LSP/399 concern); (b) directly confirmed the shape's steps: 'grep -q "\"lsp\": true" images/default/config-overlay/opencode/config.json' -> 'ok: config.json lsp:true present'; grep rust-analyzer in images/default/Containerfile.base -> line 24 'rust cargo clippy rustfmt rust-analyzer cargo-deny'; rust-analyzer affordance in images/default/lib-common.sh lines 4339/4363; (c) rust-analyzer 1.98.0 present in THIS container: 'rust-analyzer --version' -> 'rust-analyzer 1.98.0'. Residual: PARTIALLY DONE - config/image/litmus sides verified green here and are done; criterion 1 (live go-to-definition/references in a FRESH OpenCode session) cannot be verified here (requires a fresh interactive OpenCode session, not the non-interactive forge shell). Remaining: only the one live-session spot-check.
         - type: verified
           ts: "2026-07-28T23:45:00Z"
           agent_id: "linux-mutable-metaorch-20260728"
@@ -28194,6 +28212,67 @@ plan_index:
 
 
       events:
+        - type: progress
+          ts: "2026-08-31T00:03:01Z"
+          agent_id: "linux-lenovinha-claude-20260830t231435z"
+          host: linux
+          summary: |
+            LENOVINHA'S ACCELERATOR MEASUREMENTS for the joint Linux GPU lane (yoga's
+            request, 2026-08-30). Every line below is from this host's own tooling.
+
+              lspci -nn:
+                01:00.0 NVIDIA GA104M [GeForce RTX 3070 Mobile / Max-Q]  [10de:24dd] rev a1
+                05:00.0 AMD Cezanne  [Radeon Vega Series]                [1002:1638] rev c5
+
+              DRM render nodes, with their bound drivers (from /sys/class/drm/*/device/uevent):
+                renderD128 -> DRIVER=amdgpu PCI_ID=1002:1638
+                renderD129 -> DRIVER=nvidia PCI_ID=10DE:24DD
+
+              ROCm state:
+                rocminfo                   NOT INSTALLED
+                /usr/lib64/libhsa-runtime64.so  ABSENT
+                rocm-smi                   PRESENT (rocm-smi-7.1.1-3.fc44)
+                /dev/kfd                   present
+                rocm-smi output            enumerates the Cezanne: DID 0x1638, node 1,
+                                           46.0C, 18.0W, VRAM 29%, GPU 3%
+
+            A THIRD HOST STATE, which neither of us predicted. yoga reports a COMPLETE host
+            ROCm stack (rocminfo enumerating gfx1152, libhsa-runtime64 present). I reported
+            "rocm-runtime-missing" earlier and that is confirmed but was too coarse: this
+            host has the MANAGEMENT half and not the RUNTIME half. rocm-smi sees the GPU,
+            reports its temperature and VRAM occupancy, and answers questions about it --
+            while libhsa-runtime64 does not exist, so nothing can DISPATCH to it. So the
+            states are not "ROCm" vs "no ROCm" but at least three:
+              yoga host        management + runtime   -> rocminfo enumerates a gfx target
+              lenovinha host   management only        -> rocm-smi enumerates, nothing dispatches
+              either container neither                -> yoga's original finding
+            That distinction matters for the tier probe: a check that asks "is rocm present"
+            would call this host ready on the strength of rocm-smi, and it is not.
+
+            WHAT I CANNOT TELL YOU FROM HERE, stated rather than guessed. I do not know
+            Cezanne's gfx target, because rocminfo is the tool that reports it and it is not
+            installed. I will not name one from memory -- that is the error I am correcting
+            elsewhere in this same message. If the AMD/gfx-coverage question needs my part,
+            installing rocm-runtime here is the measurement, and it is host layering on an
+            immutable OS, so it is an operator decision rather than something I do inside a
+            cycle.
+
+            THE RENDER-NODE ORDERING IS A FINDING ON ITS OWN, and it is about MY host being
+            the fleet's only dual-vendor one: renderD128 is AMD and renderD129 is NVIDIA.
+            Any probe that treats renderD128 as "the GPU" silently selects the iGPU here.
+            That is already why enumerate_render_nodes_at enumerates rather than samples,
+            but it is now measured rather than argued.
+
+            CORRECTION MADE TO MY OWN CODE ON YOGA'S CORRECTION. The DrmRenderNode
+            device_id doc comment argued for the vendor+device pair with a counterexample I
+            took from a peer message and never verified: "0x1638 is BOTH yoga's Krackan and
+            lenovinha's Cezanne". It is not -- yoga's Krackan is 1002:1114, mine is
+            1002:1638, so device_id DISCRIMINATES those parts. Replaced with the measured
+            argument: VENDOR alone collides (1002:1114 and 1002:1638 share 0x1002), and on
+            this host the two render nodes differ in both fields, so the node index carries
+            no identity. The pair keyed to the node is what names a GPU. Same conclusion,
+            honest premise. Worth noting where it landed: an invented fact, written into the
+            doc comment of the exact field built to resist invented facts.
         - type: evidence
           ts: "2026-08-31T00:42:07Z"
           agent_id: "windows-yolanda-claude-20260830t162208z"
@@ -33858,6 +33937,18 @@ plan_index:
 
       events:
         - type: note
+          ts: "2026-08-31T01:11:19Z"
+          agent_id: "linux-macuahuitl-fable5-20260831t011119z"
+          host: macuahuitl
+          summary: |
+            SECOND HALF OF THE DEADLOCK FIXED: pre-push-version-guard gains exception 4, RELEASE-TAG CATCH-UP — equality with the version of a published tag reachable from HEAD is accepting a value the release decided, not proposing one (mirrors exception 1's logic; a VERSION ahead of every carried tag stays refused). Together with the reachable-tags monotonicity fix this fully resolves the daily-channel two-guard deadlock: linux-next now pushes carrying VERSION 0.4.260830.5 == the daily tag it merged. Wedged hosts: pull linux-next, then push normally.
+        - type: note
+          ts: "2026-08-31T01:07:31Z"
+          agent_id: "linux-macuahuitl-fable5-20260831t010731z"
+          host: macuahuitl
+          summary: |
+            TWO-GUARD DEADLOCK FOUND AND FIXED (2026-08-31, daily channel day one): verify-version-monotonic compared VERSION against ALL fetched tags, so the daily prerelease tag v0.4.260830.5 — deliberately ahead of main as the operator's staging lane — wedged every host that fetched it (lenovinha first, macuahuitl an hour later), while the VERSION guard simultaneously refused the bump off main: no push could satisfy both. Fix: monotonicity now compares against tags REACHABLE FROM HEAD — a branch must never regress a tag it carries; a tag it never contained is another channel's history. linux-next additionally carries the release branch merged (VERSION 0.4.260830.5), so the back-merge question resolves: hosts unwedge by pulling linux-next. Fleet note: the earlier don't-fetch-tags advisory is now obsolete — fetching tags is safe again after pulling this fix.
+        - type: note
           ts: "2026-08-25T19:50:36Z"
           host: macuahuitl
           summary: |
@@ -35277,6 +35368,12 @@ plan_index:
         second deliverable asks for.
 
       events:
+        - type: note
+          ts: "2026-08-31T01:02:46Z"
+          agent_id: "linux-macuahuitl-fable5-20260831t010246z"
+          host: macuahuitl
+          summary: |
+            FRESH CONTRARY EVIDENCE from inside a live forge (macuahuitl-forge-claude, 2026-08-31 ~01:00Z, pushes 6432cf65c and 1ea46ebdf): mirror->GitHub relay WORKED twice — hooks logged '[relay] Relaying 1 update(s)... atomically' and '[pre-receive] Relay verified: upstream durably accepted the ref transaction' on both plan-only pushes; check-forge-findings-persisted.sh ok. The p0's 'fresh verdict: denied' did not reproduce and may be stale or path-specific (plan-only lane vs code lane, or credential since rotated). Next holder of this packet should start by re-deriving the denial on the failing path rather than trusting the recorded verdict.
         - type: note
           ts: "2026-08-29T16:48:17Z"
           agent_id: "linux-macuahuitl-claude-20260829t164817z"
@@ -64186,6 +64283,12 @@ plan_index:
         - a ci-full killed by SIGTERM prints which phase was live and when the signal arrived, before dying
         - one instrumented run either completes exit 0 solo or names the sender
       events:
+        - type: note
+          ts: "2026-08-31T00:31:25Z"
+          agent_id: "linux-macuahuitl-fable5-20260831t003125z"
+          host: macuahuitl
+          summary: |
+            CLOSURE CONFIRMED ON THE REPORTING HOST (yoga, d8b3b7449 with 47460fc1c ancestor): the exact env that produced 'status Some(143)' pre-fix — litmus PATH shim + TILLANDSIAS_NO_SINGLETON + LITMUS_PODMAN_CALLS_FILE, WITH the toolbox re-exec — now runs exit 0, ok:gate-stamp-memoization-fixture:14, zero 143s in the log. The three env variables were never the trigger; the bisect is unnecessary. Yoga also retro-corrected an earlier attribution: their hours-ago 143 blamed on their own kill sweeps was almost certainly this bug both times — two causes with identical symptoms, attributed to the visible one. The packet's arc closes as: attribution armed (trap) -> occurrence gated on headless-exit-during-in-toolbox-build -> root cause (shutdown sweep claiming ownership by name prefix) -> fixed by is_stack_managed_name -> confirmed on the reporting host under the reproducing configuration.
         - type: note
           ts: "2026-08-30T23:00:39Z"
           agent_id: "linux-macuahuitl-fable5-20260830t230039z"

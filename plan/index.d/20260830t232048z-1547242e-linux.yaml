@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: claim-events-change-no-status-so-claiming-separates-nobody
+    field: next_action
+    value: 'THE DECISION IS UNCHANGED AND IS NOT A WORKER''S: claiming as mutex, or claiming as audit record. Two cycles of preparatory work are now done so whichever branch is taken is safe to take. (1) The data: if claiming becomes EXCLUSIVE, every claimed packet''s return depends on scripts/reclaim-stranded-claims.sh, which has no caller — build.sh only shape-checks expire-claims --list-live, and the meta-orchestration skill warns indiscriminate reaping ''launders finished work into lost work'' (833-fpe7). So the exclusive branch needs a DISCRIMINATING invoker built first; the audit-record branch needs only the methodology rule corrected plus a guard that no reader treats a claim as exclusion. The branches are not equally cheap. (2) The reaper itself is now safe to invoke: it no longer HANGS on a bare --ttl-hours or --now (both looped forever), a bad TTL reports its own cause instead of blaming expire-claims, and --ttl-hours 0 is refused because it would reclaim every live claim. Its fixture went 3/3 to 6/6 and — this is the point — is now WIRED into ./build.sh --check, which it never was. A FINDING FOR WHOEVER TAKES THE DECISION, and for order 335''s inventory: four tools found in four cycles that pass their own tests and that nothing calls — --emit-flow (943-7dn5), the delegate liveness probe (943-3xyf), reclaim-stranded-claims.sh, and its own fixture. That is what happens when ''the capability exists'' is checked and ''something invokes it'' is not. If a mechanism is added here, give it a caller in the same commit.'
+    ts: "2026-08-30T23:20:48Z"
+    host: linux
+
+events:
+  - packet_id: claim-events-change-no-status-so-claiming-separates-nobody
+    event:
+      type: note
+      ts: "2026-08-30T23:20:48Z"
+      host: linux
+      summary: >
+        reaper made safe and actually exercised; decision unchanged
