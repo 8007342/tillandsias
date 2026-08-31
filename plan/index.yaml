@@ -28194,6 +28194,39 @@ plan_index:
 
 
       events:
+        - type: evidence
+          ts: "2026-08-31T00:36:38Z"
+          agent_id: "windows-yolanda-claude-20260830t162208z"
+          host: yolanda
+          summary: |
+            A VENDOR NPU STACK THAT RUNS ON THE GPU — every label says NPU, the placement says Radeon. Measured on yolanda 2026-08-30, and it is this packet's own failure class arriving from outside our code.
+
+            THE SETUP. Lemonade Server 11.7.0 is installed on the Windows side of this host, OpenAI-compatible on /v1 and /api/v1, and its own system-info advertises:
+              amd_npu : { available: true, family: "XDNA2", utilization: 0.0 }
+              amd_gpu : { available: true, family: "gfx1152", integrated: true, name: "AMD Radeon(TM) 860M Graphics" }
+            The Windows NPU is bound and healthy: "NPU Compute Accelerator Device", PCI\VEN_1022&DEV_17F0, AMD driver 32.0.20102.3930 dated 2026-05-06 — the same 1022:17F0 part yoga enumerates on Linux as amdxdna.
+
+            WHAT I PULLED AND RAN. DeepSeek-R1-Distill-Qwen-1.5B-NPU, checkpoint amd/DeepSeek-R1-Distill-Qwen-1.5B-onnx-ryzenai-npu, recipe ryzenai-llm, served by a worker process literally named ryzenai-server (pid 17076, 2.69 GB resident). It generates real text through the OpenAI endpoint: 2527 chars in one completion, 1613 and 831 in others, 17-26s wall.
+
+            THE PLACEMENT EVIDENCE, gathered because "it answered" is not "it ran where the name says":
+              worker CPU during generation    2.06 CPU-s over 26.4s wall = 0.08 of 16 cores
+              Lemonade's amd_npu.utilization  0, across every sample in three separate generations
+              GPU attributable to pid 17076   95.12% peak, engtype=compute
+              GPU from all other processes    1.19% peak
+              video controllers present       ONE — Radeon 860M, PCI\VEN_1002&DEV_1114
+              the NPU as a display adapter    absent; 1022:17F0 is not a video controller
+
+            So the CPU is idle, the vendor's NPU counter never moves, and the serving process pins a GPU compute engine at 95%. The model name, the checkpoint path, the recipe and the vendor's own capability flag all say NPU. The work is on the integrated Radeon.
+
+            WHY THIS BELONGS ON THIS PACKET. 793-zumy exists because our probe reported cpu-only on a host whose GPU was usable, and its remedy was to stop trusting a proxy for a placement. This is the same defect one layer out and from a vendor: a capability flag ("available: true"), a naming convention ("-NPU"), and a checkpoint path ("...-ryzenai-npu") are all PROXIES, and all four agreed with each other while disagreeing with the placement. Tonight the fleet has now found this shape five times — a container asserting gpu-rocm with an empty device list, a host claiming accel_gpu=usable with size_vram=0, rocm-smi answering about a GPU nothing can dispatch to, our own tier label, and now a vendor runtime. The lesson generalises past our code: the only evidence of placement is placement.
+
+            THE RESIDUAL UNCERTAINTY, stated rather than buried. I have not directly confirmed that the LUID carrying the 95% (0x00000000_0x00011d33) maps to the 860M rather than to an NPU presented as a DXCore adapter. My conclusion rests on two agreeing signals — a single enumerated video controller, and an NPU counter that stays flat — which is precisely the two-signals-agreeing reasoning that has been wrong twice on this fleet tonight. What is NOT in doubt: the work is offloaded off the CPU, and Lemonade's own NPU utilisation field never registers it. Nailing GPU-versus-NPU exactly would want a DXCore adapter enumeration by LUID, which I have not run.
+
+            THE PRACTICAL RESULT IS GOOD AND SHOULD NOT BE LOST IN THE CORRECTION. This host now has fast, offloaded, OpenAI-compatible local inference on the Windows side — the CPU sits at 0.08 cores while it generates. That is a different world from the WSL2 lane, which is CPU-only at 9.1 tok/s decode because the distro has no Vulkan ICD (793-zumy's engine-missing). And it is the SAME gfx1152 target yoga is building a HIP backend for, so the two lanes converge on one GPU target across the pair.
+
+            WHAT BLOCKS USING IT FROM THE ENCLAVE: the guest cannot reach the host endpoint — 000 on the NAT nameserver IP (10.255.255.254:8000), 000 on host.docker.internal, no default route visible from the build distro, while github.com returns 200 from the same shell. Almost certainly Windows Firewall on the WSL vNIC. The operator's own instinct is the better fix than a firewall rule: route it over the existing hvsocket control wire, which keeps the endpoint off the network entirely.
+
+            AND A POSTURE FINDING WORTH ITS OWN LINE: Lemonade binds 0.0.0.0:8000 — ALL INTERFACES. dev-inference-ensure.sh binds ollama to 127.0.0.1 deliberately, and its comment says the endpoint "is for the agent on this machine; it is not a service and must not look like one". A vendor tool defaulting to all-interfaces is exactly the kind of thing that ships quietly into a fleet, and anyone adopting Lemonade should pin the bind address.
         - type: verified
           ts: "2026-08-30T03:49:34Z"
           agent_id: "linux-lenovinha-claude-20260828t223829z"
