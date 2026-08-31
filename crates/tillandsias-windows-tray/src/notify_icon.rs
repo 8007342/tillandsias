@@ -968,6 +968,10 @@ pub fn help_text() -> String {
             deleting the VHDX + in-VM vault) and reprovision from scratch.\n                            \
             Destructive by design; you'll re-authenticate once. Exit: 0 = Ready,\n                            \
             1 = failed.\n    \
+            --forge <project>       Open a forge PTY for <project> without a tray click.\n                            \
+            Add --shell (default), --claude, --codex or --opencode to pick\n                            \
+            the intent. Runs the SAME launch path as the tray menu item.\n                            \
+            Exit: 0 = spawned, 2 = usage, 1 = refused or failed.\n    \
             --status-once [--json]  Connect to the live control wire, print VmStatus.\n                            \
             Exit: 0 = Ready, 2 = reachable-not-Ready, 1 = unreachable.\n    \
             --diagnose [--json]     Bundled health report (10+ keys). Exit: 0 healthy,\n                            \
@@ -4032,18 +4036,43 @@ fn launch_open_shell_terminal(action: &MenuAction) {
     // HWND in scope for a balloon, and ERROR relays to tray.log AND the Windows
     // Event Log (source "Tillandsias"), which is the surface a GUI-only user is
     // pointed at by `--logs` and `--diagnose`.
-    let spec = match launch_spec(&intent, project.as_deref(), 24, 80) {
-        Ok(s) => s,
-        Err(refused) => {
-            tracing::error!(
-                refused = %refused,
-                ?intent,
-                project = ?project,
-                "refusing to open a PTY: unsafe project name"
-            );
-            return;
-        }
-    };
+    match launch_pty(&intent, project.as_deref()) {
+        Ok(()) => tracing::info!(?intent, project = ?project,
+            "opened in-VM PTY in a native terminal (wsl.exe)"),
+        Err(err) => tracing::error!(%err, ?intent, project = ?project,
+            "failed to open terminal for in-VM PTY"),
+    }
+}
+
+/// Open an in-VM PTY for `intent` — the launch path with NO GUI in it.
+///
+/// 945-vpg3. This body used to live inline in `launch_open_shell_terminal`,
+/// which meant the ONLY way to launch a forge was to click a tray menu item.
+/// A release blessing could therefore smoke every other leg headlessly and had
+/// to stop at the forge launch, and the v0.4.260830.5 round did exactly that.
+///
+/// The split is deliberately placed so that the menu arm and any headless
+/// caller run THE SAME CODE from here down. Everything above this line in
+/// `launch_open_shell_terminal` is genuinely GUI-only — the double-click
+/// debounce and `intent_for_action`, which maps a `MenuAction`. Everything
+/// from `launch_spec` onward is host-agnostic and lives here.
+///
+/// That placement is the point rather than an implementation detail: a
+/// headless path that reimplemented argv construction would let a smoke pass
+/// while the menu did something else, which is a test of the tester rather
+/// than of the client. Errors are RETURNED instead of logged so a caller that
+/// is not a tray can set an exit code; the menu arm logs them exactly as
+/// before.
+pub(crate) fn launch_pty(intent: &PtyIntent, project: Option<&str>) -> Result<(), String> {
+    // Hostile project names are REFUSED here (E3, 2026-08-17). launch_spec
+    // now emits the project as ONE verbatim argv element (823-u5zf), so the
+    // old single-quoted `--cloud '<p>'` breakout is structurally gone; the
+    // refusal stays because names come verbatim off disk and it is what keeps
+    // every token wt-safe (belt and braces). It deliberately does not
+    // sanitize, because a silently rewritten name launches a DIFFERENT
+    // project than the one clicked.
+    let spec = launch_spec(intent, project, 24, 80)
+        .map_err(|refused| format!("refusing to open a PTY: unsafe project name: {refused}"))?;
     // GitHub Login runs the INJECTED wrapper (bare path, zero shell
     // metacharacters): the inline `bash -lc '<script>'` argv had to survive
     // both std::process MSVC quoting AND wt.exe's own re-parse, and arrived
@@ -4057,7 +4086,7 @@ fn launch_open_shell_terminal(action: &MenuAction) {
         spec.argv.clone()
     };
     let distro = crate::wsl_lifecycle::DISTRO_NAME;
-    let title = terminal_title(&intent, project.as_deref());
+    let title = terminal_title(intent, project);
     // The credential-critical login lane bypasses wt.exe ENTIRELY: two field
     // crashes (Esmeralda, 2026-08-09) reached bash with an unbalanced quote
     // through the wt re-parse chain, and wt offers no verbatim-args contract.
@@ -4074,12 +4103,7 @@ fn launch_open_shell_terminal(action: &MenuAction) {
     } else {
         spawn_wsl_terminal(distro, &title, &argv)
     };
-    match spawn_result {
-        Ok(()) => tracing::info!(?intent, project = ?project, argv = ?argv,
-            "opened in-VM PTY in a native terminal (wsl.exe)"),
-        Err(err) => tracing::warn!(%err, ?intent, project = ?project,
-            "failed to open terminal for in-VM PTY"),
-    }
+    spawn_result.map_err(|err| format!("failed to spawn terminal for in-VM PTY: {err}"))
 }
 
 /// Plain-console spawn: `wsl.exe` in its own fresh conhost window, argv passed
