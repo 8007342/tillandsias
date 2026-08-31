@@ -165,6 +165,17 @@ orphaned inside the proxy image (see Patch P6).
 
 ## 2. Network Scenarios Catalog (NA-02)
 
+> SUPERSEDED IN PART, 2026-08-30 (order 245 P5). The scenario catalog is now
+> published as `openspec/specs/network-scenarios/spec.md`, verified against the
+> tree rather than carried from this draft. THREE THINGS CHANGED in the move,
+> and the spec is authoritative on all three: **S0 was dropped** (nothing takes
+> it; a posture with no taker is a label without wiring), **S6 was added** for
+> the browser posture this section itself admitted the catalog "has no name
+> for", and **S4's retirement mechanism was corrected** — the policy layer does
+> not denylist `--network=host`, it ALLOWLISTS only `--device=` flags, which is
+> strictly stronger and was mis-described here. The operation table below is NOT
+> superseded; the spec does not duplicate it.
+
 Six canonical scenarios; every operation must name one per container it runs.
 
 - **S0 none** — no network. (Nothing uses this today; candidate for
@@ -343,8 +354,19 @@ encrypted control channel; slices 1-3 of 141 landed, 4 and 6 remain —
   warning and leaves the network in place. The pair is correct as written, and
   the concern P2 was filed on is exactly what the second scenario handles.
   Tombstoning it would have deleted a correct requirement.
-- **P3 `openspec/specs/proxy-container/spec.md` +
-  `cheatsheets/runtime/enclave-proxy-patterns.md` — OPEN, and live rather than
+- **P3 — DONE 2026-08-30, with a code half the filing did not name.** Both
+  documents now carry the contract, symbol-anchored: the spec gains a
+  requirement with three scenarios, the cheatsheet the per-peer decision table
+  and the counter-intuitive rule (the appended subnet does NOT rescue a missing
+  NAME; curl matches `no_proxy` against the hostname as written). Reading the
+  code to write it found that `fn proxy_env_args` and `fn apply_proxy_env` are
+  hand-maintained parallel lists with only ONE of seven variables pinned across
+  the pair, and that pin a source scan — so a port change in one would have
+  shipped silently. Now pinned behaviourally by
+  `fn both_proxy_env_appliers_emit_the_same_contract`, mutation-tested.
+  Original finding retained below.
+
+  ORIGINAL FINDING: **OPEN, and live rather than
   stale.** Both constants still exist in code — `main.rs`
   `const ENCLAVE_NO_PROXY_BASE` and the `NODE_USE_ENV_PROXY=1` env entry
   beside it — and NEITHER name appears anywhere under `openspec/specs/`,
@@ -352,17 +374,44 @@ encrypted control channel; slices 1-3 of 141 landed, 4 and 6 remain —
   not a proposal that time overtook. Patch unchanged: add the S2/S3 split and
   the `NODE_USE_ENV_PROXY` contract; document `ENCLAVE_NO_PROXY_BASE` as the
   single NO_PROXY source of truth.
-- **P4 `openspec/specs/host-guest-transport/spec.md` + `vsock-transport` —
-  HALF APPLIED.** `host-guest-transport/spec.md` now names hvsock;
+- **P4 — DONE 2026-08-30.** `vsock-transport/spec.md` gains the platform
+  matrix as a requirement with three scenarios. Publishing it corrected the
+  boundary: §4 labels Windows "hvsock" as though the whole transport were, but
+  hvsock is the HOST side and the guest listens on plain `AF_VSOCK` on every
+  platform — which is what makes §4's uniformity claim checkable. macOS was
+  imprecise the same way (Virtualization.framework does NOT expose `AF_VSOCK`).
+  And §4 omitted a contract entirely: the Windows service GUID is DERIVED from
+  `CONTROL_WIRE_VSOCK_PORT`, so the port requirement and the endpoint id are one
+  fact. Windows and macOS rows are source-read, not exercised; the spec says so.
+  Original finding: `host-guest-transport/spec.md` now names hvsock;
   `vsock-transport/spec.md` carries only two matches across the whole
   hvsock/virtio-vsock/unix-socket vocabulary. Remaining patch is the
   `vsock-transport` half of the §4 platform matrix, as normative text.
-- **P5 new spec `openspec/specs/network-scenarios/spec.md` — OPEN.** The
-  directory does not exist. S0-S5 catalog (§2) with the operation table as
+- **P5 — DONE 2026-08-30, and publishing it corrected the draft three times.**
+  `openspec/specs/network-scenarios/spec.md` now exists, verified against the
+  tree: S0 DROPPED (no taker), S6 ADDED for the browser posture §2 admitted was
+  unnamed, and S4's retirement mechanism CORRECTED (an allowlist admitting only
+  `--device=`, not a `--network=host` denylist — stronger than recorded, and
+  §2's citation pointed at the test rather than the function). Left unbound in
+  litmus-bindings: 38 of 177 specs already are, and binding it to
+  `litmus:enclave-membership-documented` would overstate coverage since that
+  guard tests enclave membership, not the catalog. The scenario-constant half
+  of P5's proposed litmus still needs code changes to the launch builders.
+  Original finding: S0-S5 catalog (§2) with the operation table as
   scenarios; litmus: a source audit that every `--network` / `.network(` site
   names a scenario constant, so a new container must declare a scenario to
   compile/pass.
-- **P6 `images/proxy/squid.conf` + spec — OPEN, and the situation is now WORSE
+- **P6 `images/proxy/squid.conf` + spec — HALF ACTED, 2026-08-30. The false
+  claim is removed and the agreement is now enforced; the DECISION is still
+  open.** squid.conf says PROVISIONED BUT NOT ROUTED, the acl carries its own
+  note, entrypoint.sh no longer advertises a working lane, and
+  `scripts/check-proxy-permissive-port-routing.sh` (wired into `./build.sh
+  --check`, pinned by `litmus:proxy-permissive-port-not-silently-unrouted`)
+  refuses the silent middle in BOTH directions. What remains is the operator
+  call P6 was filed on: wire builds through it, or delete the port. Original
+  finding retained below.
+
+  ORIGINAL FINDING (2026-08-30, before the fix above): **the situation was WORSE
   than "undecided".** P6 asked to decide :3129's fate: wire image builds
   through it, or delete the port. Neither happened, and meanwhile the config
   started asserting the first: `squid.conf` documents :3129 as
@@ -377,10 +426,29 @@ encrypted control channel; slices 1-3 of 141 landed, 4 and 6 remain —
   That is a stronger reason to act than the draft had: the decision now reads
   as taken in the config and untaken in the code, which is how a reader
   concludes builds are proxied when they are not.
-- **P7 `openspec/specs/headless-mode/spec.md` — OPEN.** The spec contains zero
-  occurrences of "vault". Document the per-operation image ensure lists (or
-  their unification per §3.1) and the vault-in-init change (order 253).
-- **P8 (NEW) `openspec/specs/enclave-network/spec.md` — the enclave membership
+- **P7 — DONE 2026-08-30.** The spec gains a requirement tabulating all SIX
+  per-operation ensure lists plus `run_init`'s ten-image set, symbol-anchored,
+  with two scenarios. Two findings: `vault` is in the init list and in NO
+  per-operation list, which is order 253's DESIGN not an omission (as is
+  `nix-cache`, which arrives via the ForgeLaunch graph) — both now stated as
+  requirements so nobody "fixes" them; and the offered UNIFICATION is the wrong
+  move, since the lists differ because the operations differ and the real risk
+  is an INCOMPLETE list, which fails as a phantom registry pull (125) rather
+  than a named missing-image error. Uneven drift protection recorded for
+  whoever hardens it: two of six sites have their list CONTENTS pinned, four
+  only the call string.
+- **P8 `openspec/specs/enclave-network/spec.md` — DONE 2026-08-30, and the
+  filing UNDERSTATED it.** Filed as "the nix cache is missing"; enumerating the
+  attach sites found SIX missing members (vault, router, nix cache, catalog
+  service, observatorium web, ssh-lane sidecar) across TWO places in the spec.
+  Both now point at a symbol-anchored builder list, and
+  `scripts/check-enclave-membership-documented.sh` (in `./build.sh --check`,
+  pinned by `litmus:enclave-membership-documented`) refuses divergence in both
+  directions. The sixth member was found by the guard, not by the hand audit:
+  the enclave is named by THREE constants and a manual sweep covered two.
+  Original filing retained below.
+
+  ORIGINAL FILING: **the enclave membership
   list is incomplete.** Purpose enumerates "forge, git, inference, and proxy
   containers". The nix cache is also an enclave member:
   `scripts/nix-cache-service.sh` joins it "to the enclave as a real nix BINARY
@@ -432,19 +500,39 @@ encrypted control channel; slices 1-3 of 141 landed, 4 and 6 remain —
    construction.
 ## 7. Follow-up packets proposed
 
-- Wire vault into the `--init` declarative image set (§3.5, §6.1) — DONE
-  (order 253, commit 8b6c7031, 2026-07-09); it did close two of three observed
-  failures structurally.
-- RuntimeContext enum in container_deps (§3) — still open: order 252 completed
-  with launch-target guards + the second ForgeLaunch target, not context
-  modeling.
-- P5 network-scenarios spec + `--network`-site litmus — still open (no
-  `openspec/specs/network-scenarios/` exists).
-- P6 build-egress decision (squid :3129 vs `--dns 8.8.8.8`) — still open; note
-  the dev-build flow already runs its own separate squid cache on
-  `127.0.0.1:3129` (`build.sh:355-411`), distinct from the proxy image's
-  orphaned :3129.
+> RE-CHECKED 2026-08-30 (lenovinha). Dispositions below are measured, not
+> carried; one citation had drifted and one entry understated what exists.
 
+- Wire vault into the `--init` declarative image set (§3.5, §6.1) — **DONE**
+  (order 253, commit 8b6c7031, 2026-07-09); it did close two of three observed
+  failures structurally. Re-verified 2026-08-30: `main.rs` `fn run_init` still
+  builds ten images with `"vault"` third, and the per-operation lists still
+  exclude it by design (now a requirement in `openspec/specs/headless-mode/spec.md`).
+- RuntimeContext enum in container_deps (§3) — **STILL OPEN**, and still not
+  filed as its own packet. Order 252 completed with launch-target guards plus
+  the second ForgeLaunch target, not context modeling. Anyone taking it should
+  read §3's revised text first: the graph gained `Service::NixCache` since the
+  draft (order 801-vm4p).
+- P5 network-scenarios spec + `--network`-site litmus — **SPEC DONE**
+  (`openspec/specs/network-scenarios/spec.md`, 2026-08-30). The litmus is half
+  built: `scripts/check-enclave-membership-documented.sh` already enumerates
+  every enclave attach site; naming a SCENARIO per site still needs scenario
+  constants in the launch builders.
+- P6 build-egress decision (squid :3129 vs `--dns 8.8.8.8`) — **STILL OPEN as a
+  decision**, with the false claim removed and the agreement now enforced
+  (`scripts/check-proxy-permissive-port-routing.sh`).
+  **This entry's note was the most useful thing in §7 and its citation had
+  rotted.** `build.sh:355-411` lands on CLI argument parsing; the dev proxy is <!-- cite-ok: the rotted line number IS the finding — this sentence records where it now lands -->
+  `build.sh` `fn _ensure_dev_proxy`. What it actually says matters twice over:
+  the dev-build flow runs `tillandsias-dev-proxy` from
+  `docker.io/library/squid:6.1` — **explicitly not `tillandsias-proxy`, "which
+  may be under build"** — publishes `3129:3129` on the host, and exports
+  `HTTP_PROXY`/`CARGO_HTTP_PROXY` at `http://127.0.0.1:3129`. So (a) host-side
+  dev builds ARE proxied, just not through the tillandsias image, and (b) the
+  chicken-and-egg P6 wanted a direct-egress fallback for **is already solved by
+  image choice**. Whoever takes the decision should also weigh the host port
+  collision: wiring AND publishing this image's :3129 would contend with the
+  dev proxy for the same host port.
 
 ---
 

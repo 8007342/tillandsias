@@ -186,9 +186,21 @@ automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triag
     block by hand in your own fragment. **A `status` change is different: never
     hand-author it, use `tillandsias-plan set-field`** (see §7.2).
 
-    A claim that produces no event by cycle end is reclaimed after 4h by
+    A claim that produces no event by cycle end is reclaimable after **24h** by
     `scripts/reclaim-stranded-claims.sh` — 8 claims abandoned for 17–26 days
     were found that way. Ending a cycle with an event is what keeps your claim.
+
+    CORRECTED 2026-08-30 (order 943-unii), and read the verb: RECLAIMABLE, not
+    reclaimed. This paragraph said "reclaimed after 4h", and both halves were
+    wrong. The TTL is 24h — `reclaim-stranded-claims.sh` defaults `TTL_HOURS=24`
+    ("the fleet claim TTL") and `tillandsias-plan expire-claims` reports
+    `ttl_hours=24`. And NOTHING RUNS EITHER TOOL: `reclaim-stranded-claims.sh`
+    has no caller anywhere outside its own source and its own fixture, and
+    `build.sh` only shape-checks `expire-claims --list-live` without invoking the
+    mutating form. Measured 2026-08-30: 5 packets `in_progress`, 3 of them past
+    the TTL. Reclamation happens when a human or agent types it, and not
+    otherwise — so do not treat the reaper as a safety net that will return your
+    claim while you are gone.
 3.  **Commit & Push**: Commit ONLY the plan fragment edits, and push them to your active platform branch:
     ```bash
     git add plan/index.d/

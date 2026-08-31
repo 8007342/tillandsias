@@ -1,0 +1,79 @@
+# @trace spec:proxy-container
+# @trace order:245
+#
+# ORDER 245 §5 P6. squid.conf described :3129 flatly as "PERMISSIVE (image
+# builds)", declared `http_port 3129 ssl-bump`, carried `acl build_port
+# localport 3129`, and entrypoint.sh announced it at startup — while the string
+# `3129` appeared NOWHERE in crates/. Image builds egressed directly via
+# `--dns 8.8.8.8`. Four pieces of configuration said the builds were proxied
+# and the build path said they were not.
+#
+# The guard checks AGREEMENT, never the decision. Wiring builds through the
+# proxy or deleting the port is an operator call (P6 recommends wiring, with
+# direct egress kept as the bootstrap fallback for the proxy image itself).
+# What is refused is the silent middle: being in one state and documenting the
+# other.
+#
+# BOTH negative arms are required and neither is sufficient alone — the first
+# passes on a guard hard-wired to "always demand the caveat", the second on one
+# hard-wired to "always forbid it". The positive arm stops a refuse-everything
+# guard from satisfying both.
+name: litmus:proxy-permissive-port-not-silently-unrouted
+spec: proxy-container
+phase: pre-build
+description: >
+  Pin that images/proxy/squid.conf and the code agree about whether the
+  permissive port :3129 is routed: unrouted must be documented as NOT ROUTED,
+  and a real consumer must clear that caveat.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/check-proxy-permissive-port-routing.sh
+  - workspace contains images/proxy/squid.conf
+  - shell utilities (bash, grep, sed, mktemp) are available in PATH
+
+critical_path:
+  - step: "the guard parses, is executable, and the tree agrees with itself in the pinned grammar"
+    command: "bash -n scripts/check-proxy-permissive-port-routing.sh && test -x scripts/check-proxy-permissive-port-routing.sh && out=$(scripts/check-proxy-permissive-port-routing.sh) && printf '%s' \"$out\" | grep -qE '^ok:proxy-permissive-port:(unrouted-and-documented|routed:[0-9]+ consumer\\(s\\))$' && echo 'ok: tree agrees'"
+    timeout_ms: 20000
+    expected_behavior: "ok: tree agrees"
+
+  - step: "NEGATIVE CONTROL — the caveat removed while nothing routes to the port is refused (this is the state the config was actually in)"
+    command: "T=$(mktemp -d); sed 's/NOT ROUTED/happily routed/' images/proxy/squid.conf > \"$T/squid.conf\"; out=$(TILLANDSIAS_PROXY_CONF=\"$T/squid.conf\" scripts/check-proxy-permissive-port-routing.sh 2>/dev/null); rc=$?; rm -rf \"$T\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -q '^violation:proxy-permissive-port:undocumented-unrouted$' && echo 'ok: undocumented-unrouted refused' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: undocumented-unrouted refused"
+
+  - step: "NEGATIVE CONTROL — a consumer appearing while the caveat stands is refused too, so the note cannot outlive the wiring"
+    command: "T=$(mktemp -d); mkdir -p \"$T/crates\"; printf 'const P: &str = \"http://proxy:3129\";\\n' > \"$T/crates/x.rs\"; out=$(TILLANDSIAS_PROXY_CONSUMER_ROOT=\"$T/crates\" scripts/check-proxy-permissive-port-routing.sh 2>/dev/null); rc=$?; rm -rf \"$T\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -q '^violation:proxy-permissive-port:stale-unrouted-caveat$' && echo 'ok: stale caveat refused' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: stale caveat refused"
+
+  - step: "POSITIVE CONTROL — consumer present AND caveat cleared passes, so a refuse-everything guard cannot satisfy the two negatives"
+    command: "T=$(mktemp -d); mkdir -p \"$T/crates\"; sed 's/NOT ROUTED/happily routed/' images/proxy/squid.conf > \"$T/squid.conf\"; printf 'const P: &str = \"http://proxy:3129\";\\n' > \"$T/crates/x.rs\"; out=$(TILLANDSIAS_PROXY_CONF=\"$T/squid.conf\" TILLANDSIAS_PROXY_CONSUMER_ROOT=\"$T/crates\" scripts/check-proxy-permissive-port-routing.sh 2>/dev/null); rc=$?; rm -rf \"$T\"; [ \"$rc\" -eq 0 ] && printf '%s' \"$out\" | grep -q '^ok:proxy-permissive-port:routed:1 consumer(s)$' && echo 'ok: routed state accepted' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: routed state accepted"
+
+  - step: "build.sh consults the guard (wiring is real, not prose)"
+    command: "grep -q 'check-proxy-permissive-port-routing.sh' build.sh && echo 'ok: wired into the gate'"
+    timeout_ms: 8000
+    expected_behavior: "ok: wired into the gate"
+
+observability:
+  traces:
+    - "@trace spec:proxy-container"
+    - "@trace order:245"
+  expected_log: "proxy permissive port :3129 and its consumers agree (unrouted is documented; a consumer clears the caveat)"
+  log_fields:
+    spec: "proxy-container"
+    test: "proxy-permissive-port-not-silently-unrouted"
+    artifact: "scripts/check-proxy-permissive-port-routing.sh + images/proxy/squid.conf"
+
+rollback:
+  on_failure: >
+    Either a build path started using :3129 — remove the NOT ROUTED caveat from
+    the squid.conf header in the same commit — or the caveat was dropped while
+    nothing routes there. Do not resolve this by deleting the guard: the
+    silent-middle state it refuses is the one order 245 P6 was filed on, where
+    the config claimed image builds were proxied and they were not.
+  command: "scripts/check-proxy-permissive-port-routing.sh; grep -rlF 3129 --include='*.rs' crates/"

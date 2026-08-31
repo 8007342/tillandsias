@@ -57,21 +57,14 @@ make_repo() {
 
 remote_head() { git -C "$1/work" ls-remote origin refs/heads/main 2>/dev/null | cut -f1; }
 
-# ORDER 940-f77j — `write` now requires a one-shot pass token that a GREEN gate
-# issues, naming the tree it validated. Every case below stands in for that gate,
-# so each issues the token immediately before the write it expects to succeed.
-#
-# ISSUED PER WRITE, deliberately, not once at the top: the token is consumed on
-# use and is bound to the tree it names, so a case that edits the tree and stamps
-# again needs a fresh one. Hoisting it would make later writes refuse for a
-# reason unrelated to what the case is testing — the guard masking the test,
-# which is exactly the trap the compaction fixture hit.
-#
-# These cases assert SCOPE semantics, not the write mechanism, so they are
-# expected to pass against a writer with or without the token requirement.
+# ORDER 940-f77j — `write` now requires the one-shot pass token a GREEN gate
+# issues, naming the tree it validated. This fixture stands in for the gate
+# (its subject is scope semantics, not stamp earning), so it issues the token
+# the way build.sh does before each write it expects to get past the token
+# check. Run from inside the case's work directory, after the tree is final.
 issue_pass_token() {
     local _d
-    _d="$(bash "$ROOT/scripts/gate-stamp.sh" compute)" || return 1
+    _d="$(bash scripts/gate-stamp.sh compute)" || return 1
     {
         echo 'version 1'
         echo "digest $_d"
@@ -93,7 +86,8 @@ echo "ok: case 0 — classifier is total (unknown path -> other)"
 D="$WORK/c1"; make_repo "$D"
 (
     cd "$D/work" || exit 1
-    issue_pass_token && bash scripts/gate-stamp.sh write --scope full --dispatch check >/dev/null
+    issue_pass_token || exit 1
+    bash scripts/gate-stamp.sh write --scope full --dispatch check >/dev/null
 ) || fail "case 1: write failed"
 before="$(remote_head "$D")"
 out="$(cd "$D/work" && printf 'pub fn more() {}\n' >> crates/demo/lib.rs && git add -A && git commit -qm edit >/dev/null 2>&1 && issue_pass_token && bash scripts/gate-stamp.sh write --scope full --dispatch check >/dev/null && git push origin main 2>&1)"
@@ -158,6 +152,9 @@ echo "ok: case 5 — an unknown scope token is treated as stale (fail closed)"
 
 # ── case 6 (NEGATIVE CONTROL): write refuses an unknown class up front ────────
 D="$WORK/c6"; make_repo "$D"
+# The token is issued first so the refusal reached is the one under test
+# (the unknown-scope-class check), not the earlier no-token refusal — the
+# same guard-masks-test trap yoga's 940-f77j fix named in test-gate-stamp.sh.
 out="$(cd "$D/work" && issue_pass_token && bash scripts/gate-stamp.sh write --scope nonsense 2>&1)"
 rc=$?
 [ "$rc" != 0 ] || fail "case 6: write accepted an unknown scope class"

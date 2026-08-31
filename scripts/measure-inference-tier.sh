@@ -6,13 +6,12 @@
 #
 # WHY THIS EXISTS RATHER THAN A CURL ONE-LINER
 #
-# Every ad-hoc harness this cycle produced fluent nonsense before it produced a
-# number. yoga's defaulted `mode=synthesized` and emitted six 6-millisecond
-# "syntheses" from requests that failed while the server was starting — rows
-# that would have entered the matrix as the fastest results in the experiment
-# and dragged the completion-rate/grade crossover we are hunting. Mine, minutes
-# after agreeing to guard against exactly that, printed `prefill 0 tok in 0.00s
-# = 0.0 tok/s` four times from a script that could not open its own input.
+# Every ad-hoc harness in the 937-68n4 cycle produced fluent nonsense before it
+# produced a number. yoga's defaulted `mode=synthesized` and emitted six
+# 6-millisecond "syntheses" from requests that failed while the server was
+# starting — rows that would have entered the matrix as the fastest results in
+# the experiment. Mine, minutes after agreeing to guard against exactly that,
+# printed `0.0 tok/s` four times from a script that could not open its own input.
 #
 # Neither errored. Both answered. That is the shape: the failure mode of a
 # measurement tool is not silence, it is fluency.
@@ -24,10 +23,23 @@
 # 10 requests failed to synthesize" are different claims and only one of them is
 # about the model.
 #
+# NO PYTHON, AND NO SHELL CLOCK. The first version of this script used python
+# for JSON and `date +%s%3N` for timing. Both were wrong and the fleet's own
+# guards said so: python is forbidden in every environment
+# (check-no-python-scripts.sh), and `date +%s%3N` is a GNU-ism that BSD date
+# ACCEPTS while emitting garbage, so a macOS host would have produced confident
+# wrong wall times with nothing erroring (761-g36m / 784-dwkh).
+#
+# Timing is therefore curl's own %{time_total}, following the precedent in
+# bench-accel-lane.sh:133 — portable, and the better instrument anyway: it
+# measures the REQUEST, excluding the jq and process-spawn overhead a shell-side
+# timestamp folds into every sample. JSON is jq in both directions.
+#
 # Output: one JSON object per invocation on stdout. Always exactly one.
-#   mode=error       no measurement was taken; `error` says why
-#   mode=synthesized the model produced an answer within budget
+#   mode=error           no measurement was taken; `error` says why
+#   mode=synthesized     the model produced an answer within budget
 #   mode=retrieval-only  the pipeline fell back to its documented floor
+#   mode=refused         a typed `unsupported:` refusal
 set -uo pipefail
 
 ENDPOINT="${TILLANDSIAS_MEASURE_ENDPOINT:-http://127.0.0.1:11436/v1/chat/completions}"
@@ -35,98 +47,70 @@ MODEL="${1:-methodology}"
 QUERY="${2:-what is the pre-push gate rule for non-linux-next branches?}"
 TIMEOUT="${TILLANDSIAS_MEASURE_TIMEOUT:-300}"
 
-emit_error() {
-    # Note the absent fields are absent, not zero. A zero here would be a
-    # measurement claim; there is no measurement.
-    printf '{"mode":"error","error":%s,"model":%s}\n' \
-        "$(printf '%s' "$1" | python -c 'import json,sys; print(json.dumps(sys.stdin.read()))')" \
-        "$(printf '%s' "$MODEL" | python -c 'import json,sys; print(json.dumps(sys.stdin.read()))')"
+command -v jq >/dev/null 2>&1 || {
+    printf '{"mode":"error","error":"jq is required and is not on PATH"}\n'
     exit 0
 }
 
-body="$(python - "$MODEL" "$QUERY" <<'PY'
-import json, sys
-print(json.dumps({"model": sys.argv[1],
-                  "messages": [{"role": "user", "content": sys.argv[2]}]}))
-PY
-)" || emit_error "could not build the request body"
+work="$(mktemp -d)" || {
+    printf '{"mode":"error","error":"could not create a work directory"}\n'
+    exit 0
+}
+trap 'rm -rf "$work"' EXIT
 
-# Milliseconds via python, NOT `date +%s%3N`. That is a GNU-date-ism: BSD date
-# does not fail on it, it SUCCEEDS and prints garbage, so every wall_ms this
-# script produced on a macOS host would have been a confident wrong number with
-# no error anywhere. Caught by check-bash-dialect, which is the same failure
-# class this script exists to refuse — a measurement tool emitting fluent
-# nonsense — found in the measurement tool itself.
-now_ms() { python -c 'import time; print(int(time.time()*1000))'; }
-start_ms=$(now_ms)
-resp="$(curl -sS --max-time "$TIMEOUT" -X POST "$ENDPOINT" \
-        -H 'Content-Type: application/json' -d "$body" 2>/dev/null)"
+emit_error() {
+    # The absent fields are ABSENT, not zero. A zero wall_ms here would be a
+    # measurement claim, and there is no measurement.
+    jq -nc --arg e "$1" --arg m "$MODEL" '{mode:"error", error:$e, model:$m}'
+    exit 0
+}
+
+jq -nc --arg m "$MODEL" --arg q "$QUERY" \
+    '{model:$m, messages:[{role:"user", content:$q}]}' > "$work/req.json" \
+    || emit_error "could not build the request body"
+
+# %{time_total} and the body come from ONE request — timing a second call would
+# measure a different request than the one being classified.
+secs="$(curl -sS --max-time "$TIMEOUT" -o "$work/resp.json" -w '%{time_total}' \
+        -X POST "$ENDPOINT" -H 'Content-Type: application/json' \
+        -d @"$work/req.json" 2>/dev/null)"
 curl_rc=$?
-end_ms=$(now_ms)
 
 # GUARD 1 — the request itself. A non-zero curl is not a slow answer.
 [ "$curl_rc" -eq 0 ] || emit_error "curl exit $curl_rc (timeout, refused, or transport failure)"
 # GUARD 2 — an empty body is not an empty answer.
-[ -n "$resp" ] || emit_error "empty response body"
+[ -s "$work/resp.json" ] || emit_error "empty response body"
+# GUARD 3 — parseable JSON.
+jq -e type "$work/resp.json" >/dev/null 2>&1 || emit_error "response is not JSON"
+# GUARD 4 — an endpoint-level error object is not a completion.
+if jq -e 'has("error")' "$work/resp.json" >/dev/null 2>&1; then
+    emit_error "endpoint returned an error object: $(jq -rc '.error' "$work/resp.json")"
+fi
+# GUARD 5 — content that is actually present. The classifier only ever runs on
+# a body that reached here, so it has no default to fall back to.
+jq -e '.choices[0].message.content | type == "string" and (length > 0)' \
+    "$work/resp.json" >/dev/null 2>&1 \
+    || emit_error "response carried no non-empty choices[0].message.content"
 
-# GUARDS 3 and 4 — parseable JSON, and content that is actually present.
-# Done in one pass so a malformed response cannot reach the classifier.
-#
-# The response travels through a FILE, not stdin. `python - <<PY` already uses
-# stdin for the program text, so a piped response is read as EMPTY — which is
-# how the first version of this script reported "response is not JSON" for a
-# perfectly good 3071-byte reply. Worth keeping the note: the guard behaved
-# correctly (an error row, not a fabricated one) while the bug was mine, one
-# layer up. A harness that refuses to guess tells you when it is broken.
-resp_file="$(mktemp)"
-trap 'rm -f "$resp_file"' EXIT
-printf '%s' "$resp" > "$resp_file"
-python - "$((end_ms - start_ms))" "$MODEL" "$resp_file" <<'PY'
-import json, sys
+wall_ms="$(awk -v s="${secs:-0}" 'BEGIN { printf "%d\n", (s * 1000) + 0.5 }')"
 
-wall_ms = int(sys.argv[1])
-model = sys.argv[2]
-raw = open(sys.argv[3], encoding="utf-8").read()
-
-def bail(msg):
-    print(json.dumps({"mode": "error", "error": msg, "model": model}))
-    sys.exit(0)
-
-try:
-    v = json.loads(raw)
-except Exception as e:
-    bail(f"response is not JSON: {e}")
-
-if "error" in v:
-    bail(f"endpoint returned an error object: {v['error']}")
-
-try:
-    content = v["choices"][0]["message"]["content"]
-except Exception:
-    bail("response carried no choices[0].message.content")
-
-if not content.strip():
-    bail("completion content was empty")
-
-env = v.get("tillandsias_envelope") or {}
-# The classifier reads the answer, and only ever runs on content that exists.
-# It has no default: an unrecognised shape is an error, not a synthesis.
-if "synthesis timed out" in content:
-    mode = "retrieval-only"
-elif content.startswith("unsupported: "):
-    mode = "refused"
-else:
-    mode = "synthesized"
-
-cits = env.get("citations") or []
-print(json.dumps({
-    "mode": mode,
-    "model": model,
-    "wall_ms": wall_ms,
-    "confidence": env.get("confidence"),
-    "citation_count": len(cits),
-    "top_citation": (f"{cits[0]['path']}:{cits[0].get('line_start')}" if cits else None),
-    "content_chars": len(content),
-    "rag_source_commit": v.get("rag_source_commit"),
-}))
-PY
+jq -c --argjson wall "$wall_ms" --arg model "$MODEL" '
+    (.choices[0].message.content) as $c
+  | (.tillandsias_envelope // {}) as $env
+  | ($env.citations // []) as $cits
+  | {
+      mode:
+        (if   ($c | contains("synthesis timed out")) then "retrieval-only"
+         elif ($c | startswith("unsupported: "))     then "refused"
+         else "synthesized" end),
+      model:             $model,
+      wall_ms:           $wall,
+      confidence:        ($env.confidence // null),
+      citation_count:    ($cits | length),
+      top_citation:      (if ($cits | length) > 0
+                          then ($cits[0].path + ":" + (($cits[0].line_start // 0) | tostring))
+                          else null end),
+      content_chars:     ($c | length),
+      rag_source_commit: (.rag_source_commit // null)
+    }' "$work/resp.json" 2>/dev/null \
+  || emit_error "could not project the response fields"
