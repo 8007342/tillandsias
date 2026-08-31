@@ -58,7 +58,44 @@ done
 # anyone can afford to run into one nobody does. The tree itself is wiped and
 # recopied each time, so the input is still pristine; only the compiler cache
 # persists.
-WORK="${TILLANDSIAS_ARCHIVE_CHECK_WORK:-$REPO_ROOT/target/archive-answerability}"
+# DEFAULT WORK ROOT, and why it is not simply $REPO_ROOT/target on every host.
+#
+# The header above documents this check at "6s on linux-mutable with a warm
+# $WORK/target". On a WSL2 host whose checkout lives on /mnt/c that figure is
+# 82s — measured 2026-08-31, warm, twice (83s then 82s), and it is 65% of the
+# whole plan-archiver gate step. The cause is structural rather than incidental:
+# this check's entire method is to copy the FULL TREE and run the crate's suite
+# inside the copy, and a 9P/DrvFs mount charges per file operation, so the one
+# check that must copy everything is the one that pays most.
+#
+# Pointing $WORK at a native filesystem takes it to 34s warm as this default
+# actually ships — 2.4x, 48s saved, rc=0 and 273/273 in both arms. A hand-run
+# with the env override measured 29s; 34s is quoted because it is the figure
+# produced BY THE CODE BELOW rather than by a manual invocation of it.
+#
+# Both quoted numbers are warm. The first native run was 57s cold, and 57s
+# against a warm 82s would have reported 1.4x — understating a real win by
+# comparing unlike states. Warm-vs-warm, twice on each arm, is the control.
+#
+# This is SAFE to relocate in a way most gate steps are not. The pre-push gate
+# stamp and the ghost-trace ratchet must describe the real worktree being pushed
+# — staging them would institutionalise the very `stale:tree-changed-since-gate`
+# failure the pre-push hook exists to catch. This check is the opposite: it
+# operates on a copy BY DESIGN, precisely so the live ledger is never touched
+# (see "THE LIVE LEDGER IS NEVER TOUCHED" above). Where the copy physically
+# lives is not part of what it proves.
+#
+# The explicit env override still wins, so a host with its own opinion keeps it.
+if [ -z "${TILLANDSIAS_ARCHIVE_CHECK_WORK:-}" ] \
+   && [ "$(stat -f -c '%T' "$REPO_ROOT" 2>/dev/null)" = "v9fs" ] \
+   && [ -w /root ]; then
+    # Only when the checkout is demonstrably on 9P AND a native root is
+    # writable. Probed, never assumed: a wrong guess here would silently move
+    # the work root on a host this reasoning does not apply to.
+    WORK="/root/.cache/tillandsias-archive-answerability"
+else
+    WORK="${TILLANDSIAS_ARCHIVE_CHECK_WORK:-$REPO_ROOT/target/archive-answerability}"
+fi
 TREE="$WORK/tree"
 LOG="$WORK/log"
 rm -rf "$TREE" "$LOG"
