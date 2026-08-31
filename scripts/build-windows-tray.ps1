@@ -359,7 +359,44 @@ if (Test-Path -LiteralPath $msixTemplate) {
     # Placeholders, not defaults with real-looking values: a publisher CN that
     # LOOKS plausible is one somebody ships under by accident. These are
     # overridable per-invocation and the Store values come from Partner Center.
-    $identityName = if ($env:TILLANDSIAS_MSIX_IDENTITY_NAME) { $env:TILLANDSIAS_MSIX_IDENTITY_NAME } else { 'Tlatoani.Tillandsias' }
+    # IDENTITY RESOLUTION: env var, then an UNTRACKED user-space file, then the
+    # placeholder. The middle rung exists because the operator declines to
+    # commit the Partner Center Publisher CN to a public repo (2026-08-31), and
+    # retyping an env var every session is how a value ends up wrong once and
+    # silently thereafter.
+    #
+    # The file is KEY=VALUE, one per line, read as UTF-8 EXPLICITLY. That is
+    # load-bearing rather than tidy: PublisherDisplayName must match Partner
+    # Center byte-for-byte and this operator's is "Tlatoa" + U+0304 + "ni". Read
+    # with the ANSI default it becomes mojibake, the manifest is written
+    # correctly from a wrong string, and certification fails for a reason that
+    # looks nothing like encoding. Get-Content without -Encoding is exactly that
+    # bug, which is why this uses ReadAllText with an explicit UTF8Encoding.
+    #
+    # This function contains no non-ASCII literals: 722-qvqb pins this script to
+    # ASCII for the 5.1 parser, so the macron only ever travels as DATA.
+    $identityFile = Join-Path $HOME '.config/tillandsias/msix-identity.env'
+    $identityFromFile = @{}
+    if (Test-Path -LiteralPath $identityFile) {
+        $lines = [System.IO.File]::ReadAllText(
+            $identityFile, (New-Object System.Text.UTF8Encoding($false))) -split "`r?`n"
+        foreach ($line in $lines) {
+            if ($line -match '^\s*#') { continue }
+            if ($line -match '^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$') {
+                $identityFromFile[$Matches[1]] = $Matches[2]
+            }
+        }
+    }
+    function Resolve-MsixIdentityValue([string]$Key, [string]$Fallback) {
+        $fromEnv = [Environment]::GetEnvironmentVariable($Key)
+        if ($fromEnv) { return $fromEnv }
+        if ($identityFromFile.ContainsKey($Key) -and $identityFromFile[$Key]) {
+            return $identityFromFile[$Key]
+        }
+        return $Fallback
+    }
+
+    $identityName = Resolve-MsixIdentityValue 'TILLANDSIAS_MSIX_IDENTITY_NAME' 'Tlatoani.Tillandsias'
     # The default publisher sits in Microsoft's UNSIGNED NAMESPACE -- the
     # OID.2.25.3117... suffix. Two reasons, and the second is the important one:
     #   1. It makes `Add-AppxPackage -AllowUnsigned` work, so the acceptance test
@@ -371,9 +408,41 @@ if (Test-Path -LiteralPath $msixTemplate) {
     #      that forgot to set TILLANDSIAS_MSIX_PUBLISHER fails loudly at the
     #      point of distribution rather than quietly publishing under a
     #      plausible-looking fake identity.
-    $publisher = if ($env:TILLANDSIAS_MSIX_PUBLISHER) { $env:TILLANDSIAS_MSIX_PUBLISHER } else { 'CN=TillandsiasTestPublisher, OID.2.25.311729368913984317654407730594956997722=1' }
-    $publisherDisplay = if ($env:TILLANDSIAS_MSIX_PUBLISHER_DISPLAY) { $env:TILLANDSIAS_MSIX_PUBLISHER_DISPLAY } else { 'Tlatoani' }
-    $displayName = if ($env:TILLANDSIAS_MSIX_DISPLAY_NAME) { $env:TILLANDSIAS_MSIX_DISPLAY_NAME } else { 'Tillandsias' }
+    $placeholderPublisher = 'CN=TillandsiasTestPublisher, OID.2.25.311729368913984317654407730594956997722=1'
+    $publisher = Resolve-MsixIdentityValue 'TILLANDSIAS_MSIX_PUBLISHER' $placeholderPublisher
+    $publisherDisplay = Resolve-MsixIdentityValue 'TILLANDSIAS_MSIX_PUBLISHER_DISPLAY' 'Tlatoani'
+    $displayName = Resolve-MsixIdentityValue 'TILLANDSIAS_MSIX_DISPLAY_NAME' 'Tillandsias'
+
+    # STORE-BOUND BUILDS REFUSE THE PLACEHOLDER. -MsixStoreRevisionZero is only
+    # ever passed when the package is meant for Partner Center, and a Store
+    # submission carrying the unsigned-namespace CN is rejected after upload,
+    # certification queue and wait -- feedback measured in hours for a fault
+    # knowable in milliseconds. Worse, the package LOOKS submittable: it builds,
+    # it sideloads, its manifest reads plausibly.
+    #
+    # This refuses instead, and never prints the resolved CN. The operator
+    # treats it as sensitive; a build log is the last place it should surface,
+    # and "did the build see it" is answerable without echoing it.
+    if ($MsixStoreRevisionZero -and $publisher -eq $placeholderPublisher) {
+        throw @"
+msix-store-identity-missing: refusing to build a Store-bound package under the
+placeholder publisher.
+
+  -MsixStoreRevisionZero says this package is for Partner Center, but
+  TILLANDSIAS_MSIX_PUBLISHER resolved to the unsigned-namespace placeholder, so
+  the Store would reject it after upload and certification.
+
+  Set it in the environment, or in an untracked file:
+    $identityFile
+  as KEY=VALUE lines (UTF-8), using the values from Partner Center ->
+  Product management -> View app identity details:
+    TILLANDSIAS_MSIX_IDENTITY_NAME=<Package/Identity/Name, verbatim>
+    TILLANDSIAS_MSIX_PUBLISHER=<Package/Identity/Publisher, the CN=... string>
+    TILLANDSIAS_MSIX_PUBLISHER_DISPLAY=<Package/Identity/PublisherDisplayName>
+
+  Omit -MsixStoreRevisionZero to build a sideload package instead.
+"@
+    }
 
     $manifestText = Get-Content -LiteralPath $msixTemplate -Raw
     $manifestText = $manifestText.Replace('@MSIX_IDENTITY_NAME@', $identityName)
