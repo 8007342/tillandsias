@@ -1631,7 +1631,27 @@ struct TrayService {
     /// backlink a Quit click would set `TrayService.shutdown` but never
     /// break the main wait loop.
     signal_shutdown: OnceLock<Arc<AtomicBool>>,
+    /// ORDER 944-jaef, the operator's rate-limiter directive after the sixth
+    /// freeze: every state change used to emit NewIcon+NewStatus+NewToolTip+
+    /// LayoutUpdated unconditionally (16 call sites), and during a forge
+    /// build's status ticks with the menu OPEN each LayoutUpdated makes
+    /// gnome-shell refetch the FULL layout + every property + run its
+    /// unguarded GC walk — enough ticks and the session drowns for a minute
+    /// at a time. Emissions are now coalesced: at most one signal group per
+    /// EMIT_COOLDOWN, with a suppressed burst flagged in `emit_pending` and
+    /// flushed by the 250 ms main wait loop so the FINAL state of a burst
+    /// always reaches the shell.
+    last_emit: std::sync::Mutex<std::time::Instant>,
+    emit_pending: AtomicBool,
 }
+
+/// Minimum spacing between tray signal-emission groups (944-jaef).
+/// Operator-directed: "orders of magnitude larger than the collisions,
+/// probably rate limited in the order of seconds." The trailing flush in
+/// the main wait loop guarantees the final state of a burst still lands,
+/// so the only cost of a wide window is status-line staleness, bounded by
+/// this constant.
+const EMIT_COOLDOWN: std::time::Duration = std::time::Duration::from_secs(2);
 
 #[derive(Clone)]
 struct StatusNotifierItemIface(Arc<TrayService>);
@@ -1745,6 +1765,10 @@ impl TrayService {
             task_executor,
             shutdown: AtomicBool::new(false),
             signal_shutdown: OnceLock::new(),
+            last_emit: std::sync::Mutex::new(
+                std::time::Instant::now() - EMIT_COOLDOWN - EMIT_COOLDOWN,
+            ),
+            emit_pending: AtomicBool::new(false),
         }
     }
 
@@ -1807,7 +1831,38 @@ impl TrayService {
         self.snapshot()
     }
 
+    /// True when an emission is allowed NOW (and stamps the cooldown);
+    /// false marks the burst pending for the main loop's trailing flush.
+    fn emission_due(&self) -> bool {
+        let mut last = self.last_emit.lock().expect("emit stamp lock");
+        if last.elapsed() >= EMIT_COOLDOWN {
+            *last = std::time::Instant::now();
+            true
+        } else {
+            self.emit_pending
+                .store(true, std::sync::atomic::Ordering::SeqCst);
+            false
+        }
+    }
+
+    /// Trailing-edge flush: called from the 250 ms main wait loop so the
+    /// last state of a coalesced burst always reaches the shell.
+    async fn flush_pending_emit(&self) {
+        if self.emit_pending.load(std::sync::atomic::Ordering::SeqCst) && self.emission_due() {
+            self.emit_pending
+                .store(false, std::sync::atomic::Ordering::SeqCst);
+            let _ = self.emit_refresh_now(true).await;
+        }
+    }
+
     async fn emit_refresh(&self, include_menu: bool) -> zbus::Result<()> {
+        if !self.emission_due() {
+            return Ok(());
+        }
+        self.emit_refresh_now(include_menu).await
+    }
+
+    async fn emit_refresh_now(&self, include_menu: bool) -> zbus::Result<()> {
         let item_ctxt = SignalContext::new(self.connection(), self.item_path.as_str())?;
         StatusNotifierItemIface::new_icon(&item_ctxt).await?;
         StatusNotifierItemIface::new_status(&item_ctxt).await?;
@@ -4703,6 +4758,8 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
         use std::sync::atomic::Ordering;
         while !shutdown.load(Ordering::SeqCst) {
             tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+            // 944-jaef: trailing flush of a coalesced signal burst.
+            service.flush_pending_emit().await;
         }
         info!(
             spec = "signal-handling",
@@ -6641,6 +6698,26 @@ mod tests {
     }
 
     #[test]
+    // 944-jaef, sixth freeze — emission coalescing. A burst of state
+    // changes must collapse to one signal group per cooldown window, with
+    // the suppressed tail flagged for the main loop's trailing flush.
+    #[test]
+    fn signal_emissions_coalesce_within_cooldown() {
+        let state = TrayStateBuilder::new().build();
+        let service = TrayService::new(state);
+        assert!(service.emission_due(), "first emission passes");
+        assert!(
+            !service.emission_due(),
+            "second emission within the cooldown is suppressed"
+        );
+        assert!(
+            service
+                .emit_pending
+                .load(std::sync::atomic::Ordering::SeqCst),
+            "suppressed burst is flagged for the trailing flush"
+        );
+    }
+
     // 944-jaef FIXTURE, fifth freeze — the id-0 cycle. An unknown shared-menu
     // id string used to map to dbusmenu id 0 (the root), which handed
     // gnome-shell a cyclic layout and livelocked its unguarded graph walk.
