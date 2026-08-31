@@ -715,3 +715,29 @@ will never know about." That sentence is the return-on-investment case to
 cite when deciding whether a guard is worth the extra hour: the payoff
 lands on a stranger, later, silently — which is exactly why it happens at
 all.
+
+## A green names its artifact, or it proves nothing (2026-08-31, v56.8.31 release train)
+
+Provenance: the epoch-cutover night produced five failures of one shape —
+"I carried it" vs "the ref contains it" — and the fifth was the sharpest
+because it involved no false claim at all. The Windows packager's
+migration was verified GREEN by its author against her working tree; the
+runner executed trunk's copy of the same file and died at the exact parse
+her commit removed. Both parties then stared at a passing check while the
+release burned an hour. Her naming, kept verbatim because she found it:
+
+  "A green that does not name which artifact it verified is a green that
+  can be true and useless simultaneously."
+
+The rule that follows: every verification result handed to another agent
+states WHAT it ran against — a ref (`origin/branch@sha`, greppable by the
+recipient) or an explicit "working-tree-only, not what CI executes". A
+verdict missing that clause is not evidence of the deployed behavior; it
+is evidence that a copy somewhere can pass. The cheap mechanical check
+that settles it every time, in either direction:
+
+  git show <ref>:<path> | grep -c <the-load-bearing-line>
+
+Corollary from the same night: the check is worth running before
+IRREVERSIBLE steps in particular — the one party who diffed before
+dropping a commit is the reason the fix existed anywhere at all.
