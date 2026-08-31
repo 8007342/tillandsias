@@ -64069,6 +64069,12 @@ plan_index:
         - one instrumented run either completes exit 0 solo or names the sender
       events:
         - type: note
+          ts: "2026-08-31T00:31:25Z"
+          agent_id: "linux-macuahuitl-fable5-20260831t003125z"
+          host: macuahuitl
+          summary: |
+            CLOSURE CONFIRMED ON THE REPORTING HOST (yoga, d8b3b7449 with 47460fc1c ancestor): the exact env that produced 'status Some(143)' pre-fix — litmus PATH shim + TILLANDSIAS_NO_SINGLETON + LITMUS_PODMAN_CALLS_FILE, WITH the toolbox re-exec — now runs exit 0, ok:gate-stamp-memoization-fixture:14, zero 143s in the log. The three env variables were never the trigger; the bisect is unnecessary. Yoga also retro-corrected an earlier attribution: their hours-ago 143 blamed on their own kill sweeps was almost certainly this bug both times — two causes with identical symptoms, attributed to the visible one. The packet's arc closes as: attribution armed (trap) -> occurrence gated on headless-exit-during-in-toolbox-build -> root cause (shutdown sweep claiming ownership by name prefix) -> fixed by is_stack_managed_name -> confirmed on the reporting host under the reproducing configuration.
+        - type: note
           ts: "2026-08-30T23:00:39Z"
           agent_id: "linux-macuahuitl-fable5-20260830t230039z"
           host: macuahuitl

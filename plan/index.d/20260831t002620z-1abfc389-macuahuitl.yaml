@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: sni-windowid-type-wedges-shell
+    event:
+      type: note
+      ts: "2026-08-31T00:26:20Z"
+      agent_id: linux-macuahuitl-fable5-20260831t002620z
+      host: macuahuitl
+      summary: >
+        SIXTH FREEZE (recovering variety) + RATE LIMITER LANDED, operator-directed window. The id-0 fix held (freezes now RECOVER — cycles never did); what remained was the signal firehose: 16 call sites emitting NewIcon+NewStatus+NewToolTip+LayoutUpdated unconditionally per state change, and during forge-build status ticks with the menu open each LayoutUpdated triggers the shell's full-layout refetch + property sweep + GC walk — minute-long drowning, recovery when the burst pauses. FIX: emissions coalesce to one group per EMIT_COOLDOWN=2s (operator: 'orders of magnitude larger than the collisions... order of seconds'), with emit_pending + a trailing flush in the 250ms main wait loop so a burst's FINAL state always reaches the shell — staleness bounded at 2s, storms impossible. Measured post-fix: ~2 groups/10s at startup. Fixture signal_emissions_coalesce_within_cooldown; tray module 79/79. Operator's forge lane died during the tray teardowns — needs relaunch once this build is accepted.
