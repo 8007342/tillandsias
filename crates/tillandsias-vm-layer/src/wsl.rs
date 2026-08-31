@@ -550,11 +550,35 @@ impl WslRuntime {
     /// was migrated to [`Self::wsl_root_sh_stdin`]; the guard below fails
     /// loud before spawning if a multi-line payload ever lands here again.
     async fn wsl_root_sh(&self, script: &str) -> Result<(), VmError> {
+        // THE MULTI-LINE GUARD WAS NOT ENOUGH, measured on this host 2026-08-31
+        // (795-zshi, which asked for Windows-lane evidence before touching this).
+        // The same script through both invocation forms, against a live distro:
+        //
+        //   script: probe=hello; echo "value=[$probe]"
+        //   wsl ... --      /bin/sh -c <script>   ->  value=[]        SHREDDED
+        //   wsl ... --exec  /bin/sh -c <script>   ->  value=[hello]   correct
+        //   /bin/sh -c <script> locally           ->  value=[hello]   control
+        //
+        // That payload is SINGLE-LINE, so the guard below passed it and the
+        // re-join ate the assignment anyway. The guard was written from the
+        // order-326 repro, which happened to be multi-line, and it encoded the
+        // symptom of that repro rather than the mechanism: `wsl` without
+        // `--exec` re-joins its trailing args and re-parses them through the
+        // guest login shell, and a variable assignment is enough to lose.
+        //
+        // `--exec` bypasses the login shell entirely and hands argv straight to
+        // the guest, so the payload is delivered verbatim. That fixes the
+        // hazard for all ten call sites at once, because it lives in this one
+        // function rather than in any of them.
+        //
+        // The multi-line guard STAYS. It is now belt-and-braces rather than the
+        // only defence: `wsl_root_sh_stdin` remains the right home for scripts,
+        // it delivers off-argv where no re-join can reach, and a multi-line
+        // payload arriving here still signals a caller that wanted stdin.
         if script.contains('\n') {
             return Err(format!(
-                "wsl_root_sh: multi-line script rejected — the guest login shell \
-                 re-parses arg-delivered payloads (use wsl_root_sh_stdin; order 366). \
-                 First line: {:?}",
+                "wsl_root_sh: multi-line script rejected — use wsl_root_sh_stdin \
+                 for scripts (order 366). First line: {:?}",
                 script.lines().next().unwrap_or_default()
             ));
         }
@@ -563,7 +587,7 @@ impl WslRuntime {
             .arg(&self.distro_name)
             .arg("--user")
             .arg("root")
-            .arg("--")
+            .arg("--exec")
             .arg("/bin/sh")
             .arg("-c")
             .arg(script)
