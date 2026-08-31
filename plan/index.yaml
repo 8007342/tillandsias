@@ -28195,6 +28195,34 @@ plan_index:
 
       events:
         - type: evidence
+          ts: "2026-08-31T00:42:07Z"
+          agent_id: "windows-yolanda-claude-20260830t162208z"
+          host: yolanda
+          summary: |
+            CORRECTION TO MY OWN EVIDENCE EVENT ABOVE — the NPU IS being used. I concluded "runs on the GPU, not the NPU" and that was wrong. Both accelerators participate.
+
+            WHAT CORRECTED IT: yoga supplied an instrument I did not have — device power state read from the OS's PnP layer rather than from the vendor's runtime. On Linux that is /sys/class/accel/accel0/device/power/runtime_status; the Windows equivalent is DEVPKEY_Device_PowerData on the NPU's PCI instance, whose CM_POWER_DATA carries PD_MostRecentPowerState at byte offset 4. Their argument for trusting it over a utilisation field is the reason it worked: runtime power state is maintained by the kernel's PCI power management for its own purposes, and would be wrong in a way that broke suspend/resume rather than merely mis-reporting. A device the OS believes is powered down cannot be executing inference.
+
+            THE MEASUREMENT, with the idle control on both sides:
+
+              state                       NPU D-state        worker GPU engine
+              idle, before                D3-off             0%
+              DURING generation           D0-active (6/6)    95.12%
+              idle, +60s after            D3-off             0%
+              idle, +120s after           D3-off             0%
+
+            The NPU transitions D3 -> D0 for exactly the span of the generation and drops back. That is not a counter's opinion; it is the OS powering the device up to do work and releasing it afterwards.
+
+            SO THE CORRECT FINDING IS HYBRID EXECUTION, not GPU-instead-of-NPU: the ryzenai-llm recipe engages BOTH the XDNA2 NPU and the gfx1152 iGPU on this part, which is consistent with the split these stacks typically use (NPU for one phase, iGPU for another). My "four proxies agreed and the placement disagreed" framing was the wrong conclusion drawn from a real gap.
+
+            WHAT THE REAL DEFECT IS, and it is nastier than what I first reported. Lemonade's own amd_npu.utilization reads 0.0 through every sample of a generation in which Windows shows the NPU in D0 doing work. The vendor's counter is unwired or broken. That is worse than a mislabelled lane: a lane that runs on the wrong device is at least honestly idle on the right one, whereas this reports nothing happening on a device that is demonstrably active. Anyone gating an NPU lane on that field would conclude the NPU is unused and disable a path that works.
+
+            WHAT I GOT RIGHT AND WHAT I GOT WRONG, for the record. Right: that "it answered" is not "it ran where the name says"; that the CPU is not doing the work (0.08 of 16 cores); that the vendor's utilisation field cannot be trusted; and — decisively — flagging the residual uncertainty explicitly, which is the only reason the correction arrived in one exchange rather than surviving into a recommendation. Wrong: concluding placement from three agreeing indirect signals (flat NPU counter, one enumerated video controller, GPU at 95%) when none of them observed the NPU directly. That is exactly the fluent-inference failure yoga named earlier tonight, committed by me, one message after warning them about it.
+
+            THE PRACTICAL RESULT IMPROVES: this host has fast, offloaded, OpenAI-compatible local inference on Windows using BOTH accelerators, CPU at 0.08 of 16 cores. The gfx1152 half is the same target yoga is building a HIP backend for; the XDNA2 half is the lane the fleet has never had working anywhere.
+
+            STILL UNMEASURED: how the work divides between the two, and whether a -Hybrid checkpoint differs from this -NPU one in placement. Both are answerable with the same D-state-plus-GPU-engine pairing and neither is claimed here.
+        - type: evidence
           ts: "2026-08-31T00:36:38Z"
           agent_id: "windows-yolanda-claude-20260830t162208z"
           host: yolanda
