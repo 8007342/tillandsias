@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: opencode-curl-install-never-populates-its-cache
+    field: next_action
+    value: 'LOUD-FAILURE CLAUSE DONE 2026-08-31 (lenovinha): opencode_validate_or_rollback now distinguishes three states — last-good restores (quiet), last-good present but unusable (loud), no last-good at all (loud, and says the curl path is not populating its cache and that this is not fatal because npm provides the running binary). Fixture scripts/test-opencode-rollback-is-loud.sh, 7 cases, wired into build.sh --check, mutation-tested both directions. REMAINING IS ONE DECISION, already evidenced twice and not needing more investigation: retire curl_install_opencode, or make it succeed by running the installer with a PATH containing no other opencode. Yoga established from the upstream installer''s own source that while npm provides opencode on PATH at the same version, the curl path can NEVER succeed — check_version() runs ''command -v opencode'', matches, prints ''already installed'' and exits 0 without consulting OPENCODE_INSTALL_DIR. So this is structural, not a flake. Retiring loses no capability: harness_probe defaults to the npm binary and harness_record_last_good keeps a last-good in the npm prefix, so the auth/render contracts and rollback all still apply to the binary that actually runs. DO NOT decide this unattended — yoga deferred it because it touches fleet harness provisioning, and it wants the same per-host-kind treatment as 793-rb9u. A COST CLOCK IS NOW RUNNING: the warning fires on every cold forge launch until the decision lands. That is deliberate, and it is the reason to decide rather than to silence it.'
+    ts: "2026-08-31T21:00:34Z"
+    host: linux
+
+events:
+  - packet_id: opencode-curl-install-never-populates-its-cache
+    event:
+      type: note
+      ts: "2026-08-31T21:00:34Z"
+      host: linux
+      summary: >
+        loud-failure clause landed; the remaining retire-or-repair decision is scoped and evidenced but is a per-host-kind call
