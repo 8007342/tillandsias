@@ -1,0 +1,58 @@
+events:
+  - packet_id: twin-tier-7b-experts-behind-an-openai-endpoint
+    event:
+      type: evidence
+      ts: "2026-08-31T06:00:17Z"
+      agent_id: "windows-yolanda-claude-20260830t162208z"
+      host: windows
+      summary: |
+        DIAGNOSED: the hybrid checkpoint's token soup is a LOSSY CONFIG MIGRATION by
+        Lemonade, not a corrupt download and not a bad upstream artifact. The
+        migration turns a loud failure into a silent one, which is the worse of the
+        two.
+
+        NOT A CORRUPT DOWNLOAD, checked first because it is the cheap explanation:
+        791 MB on disk, ZERO .incomplete files, ZERO truncated blobs. Refetching
+        cannot help and deleting would only force the same migration again.
+
+        WHAT LEMONADE DID. Next to genai_config.json sits genai_config_bkp.json with
+        an IDENTICAL mtime — Lemonade wrote the backup as it rewrote the original.
+        Diffing them, the rewrite MOVES the hybrid_opt_* settings from config_entries
+        into provider_options[].RyzenAI and DROPS two keys entirely:
+
+          custom_allocator     "shared_d3d_xrt"        -> absent
+          custom_ops_library   "onnx_custom_ops.dll"   -> absent
+
+        A hybrid graph deprived of its custom operator library still executes, still
+        returns finish_reason "stop", still reports exact completion_tokens — and
+        computes nonsense. That is precisely the observed behaviour.
+
+        THE CONTROLLED TEST, and it inverted what I expected. I restored the backup
+        config to confirm it was the working shape. It is NOT: the model then fails
+        to load at all, "RyzenAI-Server failed to start". So the migration is
+        NECESSARY for the installed runtime — the original config is incompatible —
+        and it is simultaneously LOSSY. Lemonade is not corrupting a working model; it
+        is converting "this checkpoint will not load with your runtime", which is
+        honest and actionable, into "this checkpoint loads and quietly emits garbage",
+        which is neither. The machine was restored to its as-found state and the
+        defect reproduces there.
+
+        WHY THIS IS THE NIGHT'S PATTERN AGAIN, one layer down: the vendor's own
+        amd_npu.utilization reads 0.0 while the NPU is demonstrably in D0 doing work,
+        and now its config migration silently discards the ops library. Both are
+        instruments that report success while the thing underneath is wrong. Our
+        guard 6 (TILLANDSIAS_TIER_ASSERT) catches this class from the outside without
+        needing to understand any of it, which is the argument for asserting on
+        OUTPUT rather than on the vendor's status fields.
+
+        OPERATOR-FACING: do not route to Qwen2.5-0.5B-Instruct-Hybrid on this Lemonade
+        version. Deleting or refetching it is wasted effort — the migration reruns.
+        The NPU lane is NOT dead: DeepSeek-R1-Distill-Qwen-1.5B-NPU is coherent on the
+        same server and same accelerator, so this is one checkpoint's migration path
+        rather than a property of NPU execution.
+
+        NOT ESTABLISHED, stated so nobody reads further than the evidence: I have not
+        confirmed that restoring ONLY custom_ops_library and custom_allocator into the
+        migrated config would fix generation, because that config does not load in its
+        original form and I did not attempt a hand-merged hybrid of the two. That is
+        the obvious next experiment and it is untried.
