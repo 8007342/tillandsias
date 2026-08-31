@@ -741,3 +741,13 @@ that settles it every time, in either direction:
 Corollary from the same night: the check is worth running before
 IRREVERSIBLE steps in particular — the one party who diffed before
 dropping a commit is the reason the fix existed anywhere at all.
+
+The pair to it, from the same author the same night, after her own first
+pass nearly reported a false RED (a `grep -c $'\r'` whose pattern
+collapsed to empty in Git Bash, matching all four lines of a clean file;
+`tr -cd '\r' | wc -c` and file(1) disagreed, and were right): "a RED that
+does not name its instrument can be false and expensive." Symmetric rule:
+a failing measurement names the tool and invocation that produced it, and
+a surprising one is confirmed by a second, differently-shaped instrument
+before it is filed — the third measurement artifact of that night was
+caught only by asking a second tool.

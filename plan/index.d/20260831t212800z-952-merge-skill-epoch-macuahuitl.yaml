@@ -1,0 +1,54 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+
+packets:
+  - packet_id: merge-to-main-runbook-speaks-legacy-versions
+    order: 952-mrsl
+    status: ready
+    kind: fix
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    depends_on: []
+    capability_tags:
+      - release
+      - docs
+      - coordination
+    title: >
+      The merge-to-main-and-release runbook's step 1 still computes
+      MAJOR.MINOR.YYMMDD.N — under the epoch scheme it would derive the
+      malformed hybrid v56.8.260831.1 and walk it into a tag.
+    context: |
+      FOUND 2026-08-31T21:20Z while running the v56.8.31.3 stable promotion,
+      the first promotion after the epoch cutover (operator ruling
+      2026-08-31; spec: openspec/specs/versioning/spec.md). Step 1 of
+      skills/merge-to-main-and-release/SKILL.md reads the series as
+      `cut -d. -f1-2 VERSION` ("56.8") and appends `$(date -u +%y%m%d).N`,
+      producing a five-field-shaped v56.8.260831.1 whose third field blows
+      the Store's 65535 cap — the exact class the cutover retired. The
+      promotion this was found during did NOT run that computation: it
+      promoted the already-tagged v56.8.31.3 (yolanda's blessed cut), so no
+      malformed tag exists. But the next agent who follows the runbook
+      verbatim to cut a NEW version from main will mint one.
+
+      Scope for the fix, all in SKILL.md (plus its symlinked runtimes,
+      which follow automatically):
+      - Step 1: replace the series/YYMMDD computation with
+        scripts/bump-version.sh --bump-build semantics (the scheme's
+        executable definition), or better, delegate to it outright.
+      - Step 4: the bump commit must contain VERSION + Cargo files ONLY
+        (702-eusw sweep guard, hit live tonight when a stray loop-status
+        fragment rode along with a bump).
+      - Steps 5-7: document the promote-existing-release path taken tonight
+        (no new tag; flip prerelease on the blessed release) alongside the
+        cut-new-tag path, and when each applies — promoting the EXACT
+        artifacts a blessing round verified is the honest default; cutting
+        fresh discards the blessing.
+      - Hard guardrails: "canonical format is MAJOR.MINOR.YYMMDD.N" line and
+        the MSIX-presence note (unsigned MSIX is now withheld BY DESIGN —
+        step 7's asset check should expect the honest-withhold, not name the
+        MSIX missing).
+    verifiable_closure: |
+      A dry read of the updated SKILL.md step 1 against VERSION=56.8.31.3
+      derives 56.8.31.4 (same UTC day) and 56.9.1.1 (next UTC day), never a
+      six-digit third field; the runbook names both promotion paths and
+      states when each applies.
