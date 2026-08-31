@@ -54953,6 +54953,12 @@ plan_index:
         level up — not a message that misdescribes an event, but a TEST that
         misdescribes what it covers.
       events:
+        - type: evidence
+          ts: "2026-08-31T02:05:23Z"
+          agent_id: "linux-pirria-claude-20260831t020522z"
+          host: linux
+          summary: |
+            Reproduced on a THIRD host during the v0.4.260830.5 curl-install smoke (pirria, Intel N150 4c/4t, 15 GiB, NVMe, Fedora Silverblue). Step 2 of /smoke-curl-install-and-test-e2e asserted a genuinely empty store — `podman system reset --force` exit 0, then 0 containers, 0 volumes, 0 images, all three asserted not merely observed — and step 3's pristine `tillandsias --debug --init` nonetheless logged `recovered Shamir unseal share from host keychain or fallback (v1, base64)` followed by `preserving existing data volume (Shamir share present in keychain)`, alongside a fresh `creating podman secret tillandsias-vault-unseal (32 bytes from HKDF)`. Vault came up healthy (initialized=true sealed=false v=1.18.5, 12 policies) but by RECOVERY, not by initialization, so the vault re-init path SKILL.md:52-53 claims this smoke exercises was again not exercised. This is a third independent host on top of the two of differing share ages recorded in the v0.4.260826.1 stable row, which further supports the platform-property reading over any single host's state, and confirms Linux still has no equivalent of Windows' 804-ckst credential clearing. NOT re-filed as a new packet per the smoke skill's de-duplication rule; recorded here as an additional data point. Evidence: target/smoke-e2e/02-empty-store.txt (all three sections empty), target/smoke-e2e/03-init.log (the two recovery lines). Full run report: plan/issues/smoke-e2e-findings-v0.4.260830.5-linux-2026-08-31-pirria.md.
         - type: filed
           ts: "2026-08-26T03:55:00Z"
           agent_id: linux-macuahuitl-claude-20260826t034017z
