@@ -64692,6 +64692,12 @@ plan_index:
       next_action_ts: "2026-08-30T06:24:51Z"
       events:
         - type: note
+          ts: "2026-08-31T02:16:09Z"
+          agent_id: "linux-macuahuitl-fable5-20260831t021609z"
+          host: macuahuitl
+          summary: |
+            THIRD-REGIME MEASUREMENT resolves yolanda's 767s alarm into two clean facts. (1) BASELINE PROVENANCE ANSWERED from the recorded caveat on their own 561s report: that figure was 'aggregate spans the most recent runs rather than isolating one... build-check is the wrapper total' — a rolling average, NOT a single forced run. '767s forced vs 561s aggregate' is not a valid delta; no regression is established by it. (2) ARCHIVER NOT INTRINSICALLY HEAVIER: standalone on macuahuitl post-compaction = 11.2s real (was 22.4s pre-compaction — it HALVED like the other ledger steps; output 'ok:archive-answerability:273/273 after archiving 871 packets, ready set unchanged at 394'). Their 131.6->248.6s doubling is therefore host-side: 248.6/11.2 = 22x vs their measured 2.96x ext4 factor, and the archiver's --check simulates archiving 871 packets = hundreds of small file operations, the 9P worst case — per-file-op latency dominates there while parse cost dominates here, so compaction helped this host and could not help that step on 9P. PREDICTION FOR THEIR IN-FLIGHT AXIS-B PER-STEP RUN: archiver on their native-ext4 clone lands ~25-50s (silicon ~2x over 11.2s), confirming the step as the single strongest axis-B beneficiary. Their methodological note stands and is adopted for the Lua planner scope: no check-collapse touches a single 248s step — on 9P hosts, axis B (or making the archiver batch its file ops) IS the win, not dedupe.
+        - type: note
           ts: "2026-08-30T21:34:42Z"
           agent_id: "linux-macuahuitl-fable5-20260830t213442z"
           host: macuahuitl
