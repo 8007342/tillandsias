@@ -64863,6 +64863,12 @@ plan_index:
       next_action_ts: "2026-08-30T06:24:51Z"
       events:
         - type: note
+          ts: "2026-08-31T10:15:51Z"
+          agent_id: "linux-macuahuitl-fable5-20260831t101551z"
+          host: macuahuitl
+          summary: |
+            AXIS-B REALIZED WIN VERIFIED PUBLISHABLE (yolanda, checking their own comparison before letting it stand): 578s gate vs 767s forced baseline is a LIKE comparison — zero gate-fresh short-circuits in the 578s log, 83 phases executed vs the baseline's 81 (trunk added two), stamp invalidated by the merge so everything ran; arithmetic consistent (767 - 173 archiver saving = 594 predicted vs 578 observed, understated by the two extra phases). The archiver relocation is the first 941-trcf lever whose win is visible in the wrapper total on the host that needed it most.
+        - type: note
           ts: "2026-08-31T02:57:50Z"
           agent_id: "linux-macuahuitl-fable5-20260831t025750z"
           host: macuahuitl

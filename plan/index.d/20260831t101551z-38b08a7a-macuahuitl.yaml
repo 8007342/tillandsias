@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: sni-windowid-type-wedges-shell
+    event:
+      type: note
+      ts: "2026-08-31T10:15:51Z"
+      agent_id: linux-macuahuitl-fable5-20260831t101551z
+      host: macuahuitl
+      summary: >
+        STANDING GUIDANCE (yolanda, on the shipped --forge agent flags): an agent lane that prompts for trust/bypass HANGS a headless smoke — nobody answers, and it looks identical to a product hang, the worst version of failing for the wrong reason. Until the vault approvals rail is VERIFIED INSIDE THE WSL2 GUEST, blessing rounds use '--forge <project> --shell' only; agent flags are interactive-use. Guest-side rail confirmation is a real testable exit criterion, not a doc change — it flips the agent lanes smoke-safe. Whether --forge --claude currently prompts on their host is recorded as UNTESTED, for the right reason: answering it fires a GUI window at an unattended operator desktop and only matters once the rail lands there. The three agent flags map to PtyIntent::Agent through the same single launch path as the menu — no exposure the menu did not already have.
