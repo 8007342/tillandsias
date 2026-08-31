@@ -632,3 +632,29 @@ creation (an explicit table of names the app's own builders mint —
 time. Before writing any destructive sweep, ask where the ownership fact
 is RECORDED; if the answer is "in the name", the sweep will eventually
 destroy something that merely resembles yours.
+
+## Some assertions must not be executable, and a banner-located block must fail loud
+
+Two design choices from the macOS uninstaller drain (945-qs3n, 2026-08-31),
+recorded because each is the correct resolution of a trap this file already
+documents, applied under pressure.
+
+First: the fixture asserts the uninstaller's tray-stop TEXTUALLY, not by
+running it — an executable assertion would `pkill` the developer's real
+tray on every machine that runs the gate. The self-matching-process-query
+trap taught "match the object, not the process table"; this is its sibling:
+when the behaviour under test is inherently destructive to the host running
+the test, pin the CODE that performs it and verify the behaviour in a live
+pass on the owning platform, not in the gate.
+
+Second: the fixture locates the block under test by its banner comment and
+FAILS LOUD with an explanatory message when the banner is missing — never
+silently finds nothing and passes. A scan that can come back empty must
+distinguish "checked and clean" from "found nothing to check" (the
+dialect-gate scan-empty lesson, applied at authoring time instead of after
+an incident).
+
+And the drain itself re-proved the standing rule: the live pass found what
+no fixture could — a tray running from a deleted bundle, still owning the
+VM, on a machine the user believes clean. Fixtures pin what you know;
+running the real thing on real hardware finds what you don't.

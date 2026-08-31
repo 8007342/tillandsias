@@ -1,0 +1,29 @@
+packets:
+  - packet_id: macos-uninstall-default-dir-and-live-tray
+    order: 945-qs3n
+    status: completed
+    kind: defect
+    pickup_role: macos
+    priority: p2
+    desired_release: v0.5
+    title: |
+      Uninstall missed the default /Applications dir AND left a live tray owning the VM — both fixed, fixture-pinned, live-verified twice
+    context: |
+      Retroactive ledger row for plan/issues/macos-uninstall-misses-the-
+      default-install-dir-2026-08-30.md, drained by macos 2026-08-31
+      (osx-next 9466bac67, merged to linux-next). Defect 1 (scoped):
+      uninstall removed only $HOME/Applications while install prefers
+      /Applications — default-path uninstall left the app and deleted its
+      LaunchAgent. Defect 2 (found ONLY by the live pass): uninstall never
+      stopped a running tray — measured pid alive 12 minutes after
+      "complete" uninstall, bundle deleted underneath it, STILL OWNING THE
+      VM. Fixed with the installer's own two-stage stop, run first.
+      Fixture test-uninstall-sweeps-both-app-dirs.sh wired into --check,
+      watched RED (5 failures) against the original block before green.
+      Live-verified twice on curl-installed v0.4.260830.5; VM correctly
+      preserved without --wipe throughout.
+    evidence: |
+      osx-next 9466bac67; fixture red-then-green; two live cycles on real
+      darwin (cycle 1 sweep-only surfaced defect 2; cycle 2 both fixes
+      clean: app+bak removed, tray stopped, VM preserved 2.2G, host
+      reinstalled healthy provisioned=true).
