@@ -725,6 +725,20 @@ jobs:
           # (order 756-rfdr, measured on the published v0.4.260815.1).
           cp ../scripts/install-windows.ps1 install-windows.ps1
           sha256sum tillandsias-windows-x64.zip tillandsias-tray.exe install-windows.ps1 >> SHA256SUMS-windows
+          # LINE-ENDING INVARIANT, asserted in the job rather than commented at
+          # a writer (v56.8.31.1 post-mortem): this file has had THREE writers
+          # across two files and two languages — the packaging script (LF), this
+          # step's coreutils append (LF), and the unsigned-MSIX withhold guard,
+          # whose PowerShell Set-Content rewrote every line CRLF and made
+          # `sha256sum -c` hunt for "…zip\r". The documented seam warning did
+          # not protect the file because the third writer lived in a different
+          # file, days later, by a different host — an invariant must live where
+          # the file is CONSUMED, failing the job that created the byte, not the
+          # next release.
+          if grep -q $'\r' SHA256SUMS-windows; then
+            echo "::error::SHA256SUMS-windows contains CR bytes — some writer emitted CRLF; sha256sum -c would hunt for filenames ending in \\r (v56.8.31.1 shipped zero Windows assets this way)"
+            exit 1
+          fi
           # Fail the job rather than publish a checksum file that cannot verify.
           sha256sum -c SHA256SUMS-windows
           echo "Staged version-stable aliases:"

@@ -20707,6 +20707,12 @@ plan_index:
         - The recurring cost and its renewal owner are written down — an expired signing identity fails a release, loudly and at the worst moment.
       events:
         - type: note
+          ts: "2026-08-31T18:24:07Z"
+          agent_id: "linux-macuahuitl-fable5-20260831t182407z"
+          host: macuahuitl
+          summary: |
+            v56.8.31.1 BLESSING RED (yolanda) — DO NOT PROMOTE: the release shipped ZERO Windows assets (no exe/zip/msix/SHA256SUMS-windows/install-windows.ps1 — even the curl path is gone), while Linux/macOS succeeded, so the release LOOKS populated unless filtered by platform. ROOT CAUSE IS MINE: the unsigned-MSIX withhold guard (8c18acdcb) used PowerShell Set-Content to drop the msix checksum line, which rewrote the whole file CRLF; sha256sum -c then hunted for 'zip\r' — the 3-pass/1-fail split in the log was the three post-guard coreutils LF lines passing while the build script's line failed. The version SCHEME is NOT implicated; one CRLF in one guard. YOLANDA'S FIX merged (f77897371: WriteAllText, explicit LF join, UTF8 no-BOM, controlled old-vs-new: CRs 1->0, msix still dropped, other lines byte-identical). PROCESS FINDING, hers, adopted: the sums file has had THREE writers across two files and two languages; the documented seam warning did not protect it because the third writer lived elsewhere — the invariant is now ASSERTED IN THE JOB (CR-grep before sha256sum -c, failing the job that creates the byte, not the next release). Re-cut as 56.8.31.2 dispatching now; her :53 re-smokes.
+        - type: note
           ts: "2026-08-31T15:53:55Z"
           agent_id: "linux-macuahuitl-fable5-20260831t155355z"
           host: macuahuitl
