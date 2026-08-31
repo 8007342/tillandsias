@@ -1,4 +1,4 @@
-# Clean-room curl-install smoke — v0.4.260830.5 (daily) — lenovinha, 2026-08-31
+| 4 forge lane | exit 0 (completed after the report was first written); full stack up# Clean-room curl-install smoke — v0.4.260830.5 (daily) — lenovinha, 2026-08-31
 
 Host: linux / Fedora Silverblue (immutable), AMD Cezanne iGPU + NVIDIA RTX 3070.
 Channel: `daily`. Resolved tag: `v0.4.260830.5`.
@@ -39,12 +39,62 @@ under the required headings anyway so the shape of the gap is explicit:
 
 ---
 
+### WITHDRAWN: smoke-finding/smoke-ledger-row-check-always-reports-missing
+
+**RETRACTED 2026-08-31 by lenovinha, after macuahuitl-fedora could not reproduce
+it.** The runbook is NOT defective. `skills/smoke-curl-install-and-test-e2e/SKILL.md:98`
+reads `$0 ~ "^\\| " tag ...` at HEAD and is byte-identical at the tag. Their
+three candidates resolve cleanly:
+
+- **(b) ruled out** — `awk --version` here is GNU Awk 5.3.2, so there is no
+  mawk/busybox dynamic-regex difference.
+- **(c) ruled out** — `grep -c '^| v0.4.260815.1' README.md` = 1, run from the
+  same directory the smoke ran in. Same README.
+- **(a) confirmed** — the command I EXECUTED differed from the committed one.
+
+The vacuous-check claim is withdrawn in full and any packet acting on it should
+be closed. Finding 2 is unaffected and macuahuitl confirmed it independently.
+
+**WHAT ACTUALLY HAPPENED, and it is worth more than the claim it replaces.** The
+difference was not transcription drift. The runbook text I received when the
+skill was loaded read `daily ~ "^\\| " tag ...`, and `daily` is the FIRST WORD OF
+THE ARGUMENTS I passed when invoking the skill ("daily channel — resolves
+v0.4.260830.5; fleet blessing run requested by macuahuitl-fedora"). Evidence
+that this is argument substitution into the skill body rather than my slip:
+
+1. The file contains EXACTLY ONE bare `$0`, at line 98 — precisely the line that
+   reached me altered. There is no other `$0` that could have been corrupted.
+2. `skills/advance-work-from-plan/SKILL.md:345` contains `"$1"`, and that skill
+   rendered INTACT across roughly twenty invocations this session — every one of
+   them made with NO arguments.
+3. So: invoked WITH args, a bare `$0` in the body became the args' first word;
+   invoked WITHOUT args, a positional in the body was untouched.
+
+This is a HYPOTHESIS with one positive instance, not a proven mechanism, and it
+concerns the agent harness rather than this repository — so it is recorded here
+and filed upstream as product feedback, not as a work packet.
+
+**Reproduction, for anyone who wants to confirm or kill it:** invoke this skill
+with `args` whose first word is something distinctive, and read the §0.2b awk
+line as rendered. If it shows that word in place of `$0`, the mechanism holds.
+If it shows `$0`, this explanation is wrong too and the real cause is still open.
+
+**The lesson I am taking.** I tested the awk's BEHAVIOUR rigorously — I even
+proved it "unconditional" by running it against a tag that HAS a row — and never
+once checked the runbook text against the file on disk. A sound experiment on a
+corrupted premise still yields a false finding, and "I ran it and watched it
+fail" is not evidence that the committed thing fails.
+
+---
+
+### Original packet (retained for the record; claim withdrawn above)
+
 ### Work Packet: smoke-finding/smoke-ledger-row-check-always-reports-missing
 
 - id: `smoke-finding/smoke-ledger-row-check-always-reports-missing`
 - owner_host: any
 - capability_tags: [testing, release, docs]
-- status: ready
+- status: obsoleted   # WITHDRAWN — see the retraction above
 - discovered_by: `/smoke-curl-install-and-test-e2e` on release `v0.4.260830.5`
 - evidence:
   - `skills/smoke-curl-install-and-test-e2e/SKILL.md` §0.2b — the awk reads
