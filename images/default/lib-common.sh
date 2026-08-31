@@ -3337,11 +3337,14 @@ apply_claude_config_overlay() {
     trace_lifecycle "config" "claude MCP overlay applied"
 }
 
-# Seed first-run state so a FRESH forge's claude never blocks on the
-# interactive theme/onboarding picker (2026-08-31, coordinator-minted
-# sessions: the picker queued the --prompt behind a dialog nobody can
-# answer headlessly — the minted agent sat at "Dark mode ✔" while the
-# coordinator waited for it to phone home). Idempotent and additive:
+# Seed first-run state so a FRESH forge's claude never blocks on an
+# interactive dialog (2026-08-31, coordinator-minted sessions — THREE
+# blockers found across the live rounds, each invisible until the one
+# before it was seeded): the theme/onboarding picker, the workspace-trust
+# dialog (seeded per-project separately), and the
+# --dangerously-skip-permissions consent dialog, which held round 3 until
+# the operator came home from dinner and pressed allow. Idempotent and
+# additive:
 # only absent keys are seeded, so a config restored from the provider
 # vault document keeps whatever the operator chose there.
 seed_claude_first_run_defaults() {
@@ -3350,9 +3353,9 @@ seed_claude_first_run_defaults() {
     mkdir -p "$(dirname "$user_cfg")"
     tmp="$(mktemp "${user_cfg}.tmp.XXXXXX")" || return 1
     if [ -s "$user_cfg" ] && jq -e 'type == "object"' "$user_cfg" >/dev/null 2>&1; then
-        jq '. + {hasCompletedOnboarding: (.hasCompletedOnboarding // true), theme: (.theme // "dark")}'             "$user_cfg" >"$tmp" || { rm -f "$tmp"; return 1; }
+        jq '. + {hasCompletedOnboarding: (.hasCompletedOnboarding // true), theme: (.theme // "dark"), bypassPermissionsModeAccepted: (.bypassPermissionsModeAccepted // true)}'             "$user_cfg" >"$tmp" || { rm -f "$tmp"; return 1; }
     else
-        printf '{"hasCompletedOnboarding": true, "theme": "dark"}
+        printf '{"hasCompletedOnboarding": true, "theme": "dark", "bypassPermissionsModeAccepted": true}
 ' >"$tmp"
     fi
     chmod 600 "$tmp"
