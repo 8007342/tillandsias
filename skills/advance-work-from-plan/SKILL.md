@@ -190,17 +190,28 @@ automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triag
     `scripts/reclaim-stranded-claims.sh` — 8 claims abandoned for 17–26 days
     were found that way. Ending a cycle with an event is what keeps your claim.
 
-    CORRECTED 2026-08-30 (order 943-unii), and read the verb: RECLAIMABLE, not
-    reclaimed. This paragraph said "reclaimed after 4h", and both halves were
-    wrong. The TTL is 24h — `reclaim-stranded-claims.sh` defaults `TTL_HOURS=24`
-    ("the fleet claim TTL") and `tillandsias-plan expire-claims` reports
-    `ttl_hours=24`. And NOTHING RUNS EITHER TOOL: `reclaim-stranded-claims.sh`
-    has no caller anywhere outside its own source and its own fixture, and
-    `build.sh` only shape-checks `expire-claims --list-live` without invoking the
-    mutating form. Measured 2026-08-30: 5 packets `in_progress`, 3 of them past
-    the TTL. Reclamation happens when a human or agent types it, and not
-    otherwise — so do not treat the reaper as a safety net that will return your
-    claim while you are gone.
+    CORRECTED 2026-08-30, REFINED 2026-08-31 (order 943-unii). Read the verb:
+    RECLAIMABLE, not reclaimed. This paragraph said "reclaimed after 4h" and
+    both halves were wrong. The TTL is 24h — `reclaim-stranded-claims.sh`
+    defaults `TTL_HOURS=24` ("the fleet claim TTL") and `expire-claims` reports
+    `ttl_hours=24`. No automation runs either tool: the reaper has no caller
+    outside its own source and fixture, and `build.sh` only shape-checks
+    `expire-claims --list-live`.
+
+    THAT IS DELIBERATE, NOT A GAP — the first version of this note implied
+    otherwise. `skills/meta-orchestration/SKILL.md` gives the coordinator a
+    per-cycle stranded sweep that REPORTS and does not reap, and says why:
+    "Advisory, never a gate... Do not bulk-close what it reports. Closing a
+    packet requires checking its exit criteria against the tree; guessing marks
+    unfinished work done, which is strictly worse than leaving it stranded."
+    A packet legitimately in flight is indistinguishable from one abandoned an
+    hour ago, so the discrimination is human judgement by design.
+
+    SO THE RETURN PATH IS YOURS, NOT THE REAPER'S. The coordinator skill states
+    it directly: "Work you did NOT finish goes back to `ready` in the same cycle
+    you abandon it... Claiming is only safe because releasing is
+    unconditional." Release on exit, always. The reaper is the backstop for a
+    host that died, not the mechanism you rely on.
 3.  **Commit & Push**: Commit ONLY the plan fragment edits, and push them to your active platform branch:
     ```bash
     git add plan/index.d/
@@ -208,6 +219,41 @@ automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triag
     git push origin <active-branch>
     ```
 4.  **Collision Recovery**: If the push is rejected because another agent claimed the lease concurrently, fetch, pull, yield your claim, and select a different packet.
+
+    DIVERGENCE FROM THE COORDINATOR SKILL — READ THIS BEFORE RELYING ON STEP 2
+    (recorded 2026-08-31, order 943-unii; flagged here, NOT resolved here,
+    because rewriting the worker claim protocol is the coordinator's call).
+
+    `skills/meta-orchestration/SKILL.md` ("Cycle batch triage") specifies a
+    DIFFERENT claim step, and says the separation depends on it:
+
+        tillandsias-plan set-field <order> status in_progress \
+            --host "$(hostname -s)" --reason "claimed for cycle <UTC ts>"
+        git add plan/index.d && git commit -m "claim(<order>): <host>" && git push
+
+    with "SEPARATION COMES FROM CLAIMING... `next`/`select-work-batch` filter to
+    `unleased`, and 'leased' means `status: in_progress`", and "Push the claim
+    BEFORE the work, not with it — an unpushed claim separates nobody."
+
+    Step 2 above appends an EVENT, which changes no status, so a packet claimed
+    this way stays `ready` and stays offered to every other host. Measured
+    2026-08-30: packet 245 carried 43 claim events and was still returned by
+    `ready linux`. methodology `distributed-work.yaml` rules ("a `claim` event
+    changes status from ready to in_progress") agrees with the COORDINATOR, not
+    with this section — two of three sources agree and this one is the outlier,
+    while being the one every worker host runs every cycle. 814-iyu7 (two hosts
+    implementing the same packet six minutes apart) is the failure it leaves
+    open.
+
+    The coordinator skill also carries two rules this section lacks:
+      * COLLISIONS ARE ARBITRATED BY TIMESTAMP, not by push rejection. "Two
+        hosts can claim in the same window. On your next fetch, if another
+        host's claim event for that order carries an EARLIER timestamp (ties
+        broken by lexicographically smaller hostname), you lost: release yours
+        back to `ready` and take the next batch item." Step 4's push-rejection
+        recovery is a weaker signal — a push can SUCCEED and still have lost.
+      * "Losing the race is normal and cheap." The ledger is a CRDT; both hosts
+        writing is fine. Both CONTINUING is the defect.
 
 ---
 
