@@ -2592,6 +2592,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Reclaim-stranded-claims fixture passed"
 
+    _step "Checking the stranded-sweep predicate fixture (946-pdpi)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-check-stranded-in-progress.sh" 2>&1; then
+        _error "the stranded sweep's age predicate regressed (946-pdpi) — see the failing case above"
+        exit 1
+    fi
+    _info "Stranded-sweep predicate fixture passed"
+
     _step "Checking plan fragments use keys the fold reads (944-vim8)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-keys-are-read.sh" 2>&1; then
         _error "a plan/index.d/ fragment uses a top-level key the fold discards (944-vim8) — see the verdict line above"
