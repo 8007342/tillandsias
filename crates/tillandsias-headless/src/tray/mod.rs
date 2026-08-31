@@ -3102,6 +3102,25 @@ pub(super) fn resolved_max_cloud_projects_in_menu() -> usize {
         .unwrap_or(MAX_CLOUD_PROJECTS_IN_MENU)
 }
 
+/// A UNIQUE, NEVER-ZERO id for a shared-menu id string this mapper has no
+/// arm for (944-jaef, the fifth desktop freeze). The old fallback was `0` —
+/// the ROOT's dbusmenu id — so the first item the shared builder grew that
+/// this match didn't know shipped a layout in which the root was its own
+/// child. gnome-shell's appindicator extension walks the item graph with an
+/// unguarded `toTraverse.shift()` loop (dbusMenu.js `_gcItems`): a root
+/// cycle makes that queue grow forever, and one tray click wedged the whole
+/// Wayland session. An unknown item as a DEAD, uniquely-numbered leaf is
+/// harmless (its click dispatches nowhere); an unknown item as id 0 is a
+/// session killer. Range 0x0800_0000..0x1000_0000 sits below LOCAL_BASE_LO
+/// and above every fixed top-level id, so it collides with nothing.
+fn fallback_menu_id(id_str: &str) -> i32 {
+    use std::hash::Hash;
+    use std::hash::Hasher;
+    let mut hash = std::collections::hash_map::DefaultHasher::new();
+    id_str.hash(&mut hash);
+    0x0800_0000 + (hash.finish() as u32 % 0x0800_0000u32) as i32
+}
+
 fn project_base(name: &str, scope: ProjectScope) -> i32 {
     use std::hash::Hash;
     use std::hash::Hasher;
@@ -3656,7 +3675,7 @@ fn shared_id_to_int(id: &str) -> i32 {
                 let scope = match scope_str {
                     "local" => ProjectScope::Local,
                     "cloud" => ProjectScope::Cloud,
-                    _ => return 0,
+                    _ => return fallback_menu_id(other),
                 };
                 let base = project_base(name, scope);
                 let offset = match verb {
@@ -3668,7 +3687,7 @@ fn shared_id_to_int(id: &str) -> i32 {
                     "observatorium" => 5,
                     "maintenance" => 6,
                     "" => PROJECT_SUBMENU_OFFSET,
-                    _ => return 0,
+                    _ => return fallback_menu_id(other),
                 };
                 base + offset
             } else if other == shared_menu::ids::LOCAL_PROJECTS_EMPTY {
@@ -3680,7 +3699,7 @@ fn shared_id_to_int(id: &str) -> i32 {
             } else if other == shared_menu::ids::CLOUD_PROJECTS_OVERFLOW {
                 CLOUD_OVERFLOW_ID
             } else {
-                0
+                fallback_menu_id(other)
             }
         }
     }
@@ -3744,7 +3763,46 @@ fn shared_menu_items(state: &TrayUiState) -> Vec<shared_menu::MenuItem> {
     }
 }
 
-/// Depth-first search for the shared item whose dbusmenu id is `id`.
+/// WIRE-BOUNDARY INVARIANT (944-jaef): no item may map to id 0 (the root's
+/// id — a root cycle livelocks gnome-shell's unguarded graph walk) and no
+/// two items may share an id (the client's flat item map would cross-link
+/// two subtrees). Violating items are DROPPED here, loudly — a missing menu
+/// leaf is an inconvenience; an emitted cycle is a dead Wayland session,
+/// five times over. This runs on every layout build so a future mapper gap
+/// or hash collision degrades instead of freezing.
+fn enforce_unique_nonroot_ids(items: &mut Vec<shared_menu::MenuItem>) {
+    fn walk(items: &mut Vec<shared_menu::MenuItem>, seen: &mut std::collections::HashSet<i32>) {
+        items.retain(|item| {
+            let id = shared_id_to_int(&item.id);
+            if id == 0 {
+                eprintln!(
+                    "[tray] DROPPING menu item '{}': it mapped to dbusmenu id 0 (the root) — \
+                     emitting it would hand the shell a cyclic layout (944-jaef)",
+                    item.id
+                );
+                return false;
+            }
+            if !seen.insert(id) {
+                eprintln!(
+                    "[tray] DROPPING menu item '{}': duplicate dbusmenu id {id} — \
+                     emitting it would cross-link two subtrees in the shell's item map (944-jaef)",
+                    item.id
+                );
+                return false;
+            }
+            true
+        });
+        for item in items.iter_mut() {
+            walk(&mut item.children, seen);
+        }
+    }
+    // Root id 0 is pre-seeded: any ITEM mapping to 0 is a violation.
+    let mut seen = std::collections::HashSet::new();
+    seen.insert(0);
+    walk(items, &mut seen);
+}
+
+/// Depth-first search for the shared item whose dbusmenu id is `id`./// Depth-first search for the shared item whose dbusmenu id is `id`.
 fn find_shared_item<'a>(
     items: &'a [shared_menu::MenuItem],
     id: i32,
@@ -3771,7 +3829,8 @@ fn build_menu_layout(
     parent_id: i32,
     recursion_depth: i32,
 ) -> Option<MenuNode> {
-    let items = shared_menu_items(state);
+    let mut items = shared_menu_items(state);
+    enforce_unique_nonroot_ids(&mut items);
     if parent_id == 0 {
         let children: Vec<OwnedValue> = if recursion_depth == 0 {
             Vec::new()
@@ -6582,6 +6641,69 @@ mod tests {
     }
 
     #[test]
+    // 944-jaef FIXTURE, fifth freeze — the id-0 cycle. An unknown shared-menu
+    // id string used to map to dbusmenu id 0 (the root), which handed
+    // gnome-shell a cyclic layout and livelocked its unguarded graph walk.
+    #[test]
+    fn no_layout_ever_carries_id_zero_or_duplicates() {
+        // Unknown strings map to a unique nonzero fallback, never 0.
+        assert_ne!(
+            shared_id_to_int("agents"),
+            0,
+            "AGENTS must never map to root"
+        );
+        assert_ne!(
+            shared_id_to_int("reset-guest"),
+            0,
+            "RESET_GUEST must never map to root"
+        );
+        assert_ne!(
+            shared_id_to_int("agents"),
+            shared_id_to_int("reset-guest"),
+            "distinct unknown strings get distinct fallback ids"
+        );
+        assert_ne!(
+            shared_id_to_int("project.bogus-scope.x.claude"),
+            0,
+            "unknown project scope must never map to root"
+        );
+
+        // The full authenticated layout (local + cloud projects, the shape
+        // the operator's freezing click opened) contains no id 0 and no
+        // duplicate ids anywhere.
+        let state = TrayStateBuilder::new()
+            .forge_available(true)
+            .enclave_status(EnclaveStatus::AllHealthy)
+            .authenticated(true)
+            .projects(vec![ProjectEntry {
+                name: "tillandsias".to_string(),
+                path: PathBuf::from("/home/x/src/tillandsias"),
+                full_name: None,
+            }])
+            .cloud_projects(vec![ProjectEntry {
+                name: "tillandsias".to_string(),
+                path: PathBuf::new(),
+                full_name: Some("owner/tillandsias".to_string()),
+            }])
+            .last_fetched(Some(Instant::now()))
+            .build();
+        let menu = build_menu(&state);
+        let mut flat = Vec::new();
+        flatten_layout(&menu, &mut flat);
+        assert!(flat.len() > 5, "authenticated layout is non-trivial");
+        let mut seen = std::collections::HashSet::new();
+        for (id, _) in &flat {
+            if *id == 0 {
+                // Exactly one id 0 is legal: the root itself, first in the walk.
+                assert!(
+                    seen.is_empty(),
+                    "id 0 appeared as a NON-ROOT item — the cycle that froze five sessions"
+                );
+            }
+            assert!(seen.insert(*id), "duplicate dbusmenu id {id} in one layout");
+        }
+    }
+
     // 944-jaef FIXTURE — the contract whose absence cost four desktop
     // sessions: GetLayout returns the subtree rooted at the REQUESTED id,
     // pruned to the REQUESTED depth. The old handler returned the id-0 full
