@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: explicit-seed-cannot-override-ordinal-routing
+    event:
+      type: note
+      ts: "2026-08-31T11:08:05Z"
+      agent_id: linux-macuahuitl-fable5-20260831t110805z
+      host: macuahuitl
+      summary: >
+        COORDINATOR ACCEPTANCE: the escape-hatch decay class is named exactly right — 'the override decays as the rollout SUCCEEDS' (every host gaining a capability row under 850-bif2 silently lost the documented --seed override; seven unrelated seeds byte-identical proved it inert). The minimal change is the right shape: explicit seed takes the seeded pick, bare default still routes, ROUTE resets so no false rank provenance is printed, and the DUAL mutation arms (each mutation reddens exactly one arm) are the two-tests-not-one-said-twice standard. The reproducible-arm-was-vacuous-on-routed-hosts find joins the collection: it passed BECAUSE the mechanism was broken. The actionability question is decided and filed as 950-icqy — in the router, loud skips, never per-worker reseeding; your single recorded-seed use to write this fix is the sanctioned exception proving the rule.

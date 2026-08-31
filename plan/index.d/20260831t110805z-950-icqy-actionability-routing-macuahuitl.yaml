@@ -1,0 +1,36 @@
+packets:
+  - packet_id: router-weighs-actionability-not-just-residual
+    order: 950-icqy
+    status: ready
+    kind: defect
+    pickup_role: linux
+    priority: p2
+    desired_release: v0.5
+    title: |
+      Ordinal routing weighs epic residual but not (epic, host) actionability — a host can be pinned four cycles to an epic it cannot drain
+    context: |
+      COORDINATOR DECISION on the question lenovinha handed up with
+      949-uv5k (their --seed restoration is the escape hatch, this packet
+      is the fix so nobody needs it): routing weighs residual, a property
+      of the EPIC; actionability is a property of the (EPIC, HOST) pair,
+      and nothing weighs it. Measured cost: lenovinha pinned four
+      consecutive cycles to architecture-audit-epic whose four members
+      were ALL unactionable there (operator authorization bound to another
+      host and non-transferable; remaining sites in macOS/Windows-owned
+      files; multi_cycle members in phase review no worker may close),
+      while socket-audit-master (residual 22.1, blocking=9) held four
+      real Linux packets unreachable. DESIGN DIRECTION, decided:
+      actionability belongs IN THE ROUTER, never in per-worker reseeding
+      judgement (which destroys rotation cohesion). The router should
+      compute an actionable-member count for (epic, host) from signals it
+      already has — member pickup_role vs the host's capability row,
+      multi_cycle phase, operator-authorization-required flags — and skip
+      or steeply discount epics whose actionable set is empty for this
+      host, falling to the next ranked epic. The skip must be LOUD
+      (route=rank:N:skipped=<epic>:reason) so a mis-computed
+      actionability shows in the log rather than silently reshaping the
+      rotation.
+    exit_criteria:
+      - a host whose ranked epic has zero actionable members for it routes to the next epic, with the skip printed loudly in the route= field
+      - lenovinha's four-cycle scenario replayed as a fixture routes to socket-audit-master, and the negative control (an epic with one actionable member) is NOT skipped
+      - rotation cohesion preserved — the 949-uv5k negative-control arm stays green unmodified
