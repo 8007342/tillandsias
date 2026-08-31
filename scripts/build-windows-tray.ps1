@@ -325,14 +325,66 @@ if (Test-Path -LiteralPath $msixTemplate) {
     # Store does require it, same-day builds collide at 0.4.2608.0 and the N
     # component needs somewhere else to live -- that is a decision for the
     # submission slice, not a default to assume here.
+    # SUPERSEDED 2026-08-31 by the epoch-anchored encoding below. The old
+    # YYMM/DD*100+N split kept the workspace major in field one, and the
+    # workspace major is 0 -- which the Store forbids outright ("the first
+    # section cannot be 0"). Every MSIX this repo produced was rejected before
+    # certification ever looked at it, and -MsixStoreRevisionZero alone did not
+    # help: it fixed field four while field one stayed 0.
+    #
+    # OPERATOR-DIRECTED ENCODING, 2026-08-31:
+    #
+    #     <minor> . <years_since_epoch><day_of_year:3> . <daily_N> . 0
+    #     0.4.260831.5  ->  4.56243.5.0
+    #
+    # Field 1 is the workspace MINOR, promoted so field one is non-zero.
+    # Field 2 concatenates years since the Unix epoch with the zero-padded day
+    # of year. Field 3 is the daily build number. Field 4 is 0, which the Store
+    # reserves.
+    #
+    # THE ZERO-PADDING IS LOAD-BEARING, not cosmetic. Unpadded, 2026 day 366
+    # encodes as 56366 and 2027 day 001 as 571 -- the version would go BACKWARDS
+    # at the year boundary, and the Store permanently refuses a version lower
+    # than one already shipped. Padded, 56366 -> 57001 and it climbs.
+    #
+    # TWO KNOWN LIMITS, recorded rather than discovered later:
+    #   * FIELD 2 OVERFLOWS IN 2036. Store fields cap at 65535; year 65 (2035)
+    #     yields at most 65366 and fits, year 66 (2036) yields 66001 and does
+    #     not. That is ~9 years of runway and a hard wall, not a degradation.
+    #   * MINOR MUST NEVER BE 0. Field one is the minor, so a future 1.0 release
+    #     would put 0 back in field one and the package would be rejected again
+    #     for the exact reason this encoding exists to fix.
+    # Both are asserted below rather than trusted.
     $vParts = $Version.Split('.')
-    if ($vParts.Count -eq 4) {
-        $yymmdd = [int]$vParts[2]
-        $rev = if ($MsixStoreRevisionZero) { 0 } else { ($yymmdd % 100) * 100 + [int]$vParts[3] }
-        $msixVersion = "{0}.{1}.{2}.{3}" -f $vParts[0], $vParts[1], [int]($yymmdd / 100), $rev
-    } else {
+    if ($vParts.Count -ne 4) {
         throw "msix-version-unmappable: expected major.minor.YYMMDD.N, got '$Version'"
     }
+    $minor = [int]$vParts[1]
+    if ($minor -lt 1) {
+        throw "msix-version-first-field-zero: the MSIX first field is the workspace MINOR and it is '$minor'. The Store forbids a leading 0, so this package would be rejected. Pick a non-zero minor or re-map the encoding."
+    }
+    # Day-of-year from the workspace version's own YYMMDD, NOT from the wall
+    # clock: rebuilding an old tag must reproduce its version, and `date` would
+    # silently stamp today onto a rebuild of last week's release.
+    $yymmdd = $vParts[2]
+    if ($yymmdd -notmatch '^\d{6}$') {
+        throw "msix-version-unmappable: expected a 6-digit YYMMDD in field 3, got '$yymmdd'"
+    }
+    $stampYear  = 2000 + [int]$yymmdd.Substring(0, 2)
+    $stampMonth = [int]$yymmdd.Substring(2, 2)
+    $stampDay   = [int]$yymmdd.Substring(4, 2)
+    $stamp = Get-Date -Year $stampYear -Month $stampMonth -Day $stampDay -Hour 0 -Minute 0 -Second 0
+    $yearsSinceEpoch = $stampYear - 1970
+    $dayOfYear = $stamp.DayOfYear
+    $fineGrained = [int]("{0}{1:D3}" -f $yearsSinceEpoch, $dayOfYear)
+    if ($fineGrained -gt 65535) {
+        throw "msix-version-field-overflow: fine-grained field is $fineGrained and the Store caps fields at 65535. This encoding runs out in 2036; it is now that year or later, so the scheme needs re-mapping (see the comment above)."
+    }
+    $daily = [int]$vParts[3]
+    if ($daily -gt 65535) {
+        throw "msix-version-field-overflow: daily build number $daily exceeds 65535"
+    }
+    $msixVersion = "{0}.{1}.{2}.0" -f $minor, $fineGrained, $daily
 
     # -- stage the package layout -------------------------------------------
     $msixStage = Join-Path $artifactsDir "$base-msix"
