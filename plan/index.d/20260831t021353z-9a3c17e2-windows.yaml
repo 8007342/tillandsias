@@ -1,5 +1,5 @@
 events:
-  - packet_id: 937-68n4
+  - packet_id: twin-tier-7b-experts-behind-an-openai-endpoint
     event:
       type: evidence
       ts: "2026-08-31T02:13:53Z"

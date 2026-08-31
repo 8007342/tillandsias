@@ -64908,6 +64908,7 @@ plan_index:
             A CAVEAT I AM STATING RATHER THAN BURYING: these are STANDALONE invocations, and their 9P absolutes do not match the in-gate profile for the same steps (ghost-trace 36.8s standalone vs 134s in-gate; terminology 40.9s vs 80s). The gate runs them under different conditions — warm/cold caches, concurrent work, possibly wider scope. The RATIOS are same-host same-command and are the trustworthy part; the projected 122s should be treated as an order-of-magnitude estimate, not a promise, and re-measured in-gate before anyone commits to it.
 
             NOT MEASURED: whether a staged tree can actually serve these steps in a real gate run. Every number above comes from invoking the step directly against a staged copy; wiring the gate to use a stage introduces refresh, staleness and correctness questions (the stamp must describe the REAL tree, not the copy) that this measurement does not address and that are the harder half of axis B.
+        - type: note
           ts: "2026-08-31T02:19:35Z"
           agent_id: "linux-macuahuitl-fable5-20260831t021935z"
           host: macuahuitl

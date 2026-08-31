@@ -146,3 +146,57 @@ All 75 steps present in both arms, sorted by seconds saved.
 | 0.8 | 11.6 | 0.07x | -10.8 | Checking the new-surface parity railguard fixture (628-r2vk) |
 | 0.3 | 23.6 | 0.01x | -23.3 | Staging router sidecar (build artifact — not committed) |
 | 1.2 | 38.7 | 0.03x | -37.5 | Checking every fragment event lands on a real packet |
+
+## What is actually realizable — the 475s is NOT the win
+
+**Correction to this document's own headline, added before it was pushed.** The
+475s is the filesystem's *theoretical* contribution. Most of it cannot be safely
+captured, and an earlier measurement on this host (2026-08-30T21:40:10Z, same
+packet) already established why: the two largest wins are the two steps whose
+correctness depends on describing *the real worktree being pushed*.
+
+| step | win here | safe to stage? |
+|---|---|---|
+| ghost-trace ratchet | 66.2s | **NO** — not without proof the stage equals the worktree |
+| writing the gate stamp | 57.9s | **NO, by definition** — it must hash the real tree |
+| plan archiver | 202.3s | only if the staged ledger is provably current |
+| terminology dictionary | 0.3s | yes, and worth nothing |
+
+Not hypothetical here: `pre-push-local-gate.sh` carries a
+`stale:tree-changed-since-gate` refusal that exists precisely because a stamp
+covering a *different* tree than the one being pushed is worse than no stamp.
+Staging the gate-stamp step would institutionalise the failure that refusal was
+written to catch. This session hit that refusal twice for real, against a
+`git status` that read clean because it compares to HEAD rather than to the last
+passing gate.
+
+**Honest bottom line: the archiver alone, under a freshness proof** — 202.3s
+gross, 193.3s net of the 9s staging. Better than the earlier ~58s estimate
+because the archiver regressed on 9P since then, but it is ONE step, not 2.71x
+of the gate.
+
+The design question is the coordinator's: (a) stage only the archiver's work and
+accept ~193s with a ledger freshness proof, (b) find a cheaper freshness proof
+than a full hash — the interesting option, untried — which would also unlock the
+ratchet's 66.2s, or (c) attack the 9P boundary itself.
+
+## A contamination in the tail of the table, stated rather than hidden
+
+Several rows show NEGATIVE savings — steps that ran *faster* on 9P:
+
+| 9P | ext4 | step |
+|---|---|---|
+| 0.3s | 23.6s | staging router sidecar (build artifact) |
+| 1.2s | 38.7s | every fragment event lands on a real packet |
+| 0.8s | 11.6s | new-surface parity railguard fixture |
+
+These are NOT filesystem effects. The 9P arm ran in the live checkout with warm
+build artifacts and caches; the ext4 arm was a fresh clone that had to do the
+work cold. Any step whose cost depends on cache warmth rather than file I/O is
+contaminated in this comparison and its multiplier should not be quoted.
+
+This does not weaken the headline — it makes it conservative. The cold-cache
+penalty fell on the ext4 arm, so a warm ext4 arm would be FASTER than 283s and
+the true filesystem multiplier is somewhat larger, not smaller. The steps the
+conclusions rest on (archiver, ghost ratchet, gate stamp, dictionary) are
+ledger and corpus I/O rather than build artifacts, and are not affected.
