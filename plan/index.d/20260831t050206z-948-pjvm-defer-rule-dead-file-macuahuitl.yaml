@@ -1,0 +1,24 @@
+packets:
+  - packet_id: worker-defer-rule-reads-nonexistent-file
+    order: 948-pjvm
+    status: ready
+    kind: defect
+    pickup_role: any
+    priority: p3
+    desired_release: v0.5
+    title: |
+      Worker skill section 6 Defer Rule reads plan/issues/multi-host-integration-loop-2026-05-24.md — file does not exist, rule can never fire
+    context: |
+      Found by lenovinha 2026-08-31, confirmed on macuahuitl: no
+      integration-loop file exists under plan/issues/ at all, so the
+      cron-settling defer in skills/advance-work-from-plan/SKILL.md:410
+      is dead — a worker never defers for the coordinator's writes to
+      settle. Likely superseded by the loop-status fragment system
+      (582-nqw5 era); the fix is probably to key the defer on the latest
+      plan/loop_status.d/ fragment timestamp for the coordinator host, or
+      delete the rule if the plan-only lane makes it obsolete. Note the
+      cadence just changed to 2h staggered slots, which the rule text
+      should reflect if kept.
+    exit_criteria:
+      - the defer rule reads a file that exists (or is removed with rationale) — verified by running its exact check command
+      - if kept, a synthetic fresh coordinator fragment triggers the defer and a stale one does not
