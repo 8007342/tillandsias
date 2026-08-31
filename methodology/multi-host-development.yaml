@@ -920,3 +920,36 @@ multi_host_development:
       wrapped gate locally (35s) AND leave the packet's live criteria to the
       owning host — partial local evidence plus an honest residual note
       beats both silence and false completion.
+
+# ── OPERATOR DIRECTIVE 2026-08-31: loop cadence and stagger ────────────────────
+loop_cadence:
+  directive: >
+    Hourly loops on every host trampled each other: concurrent pushes forced
+    pull/re-gate/retry cycles on most landings (the 2026-08-31 blessing round
+    re-gated the coordinator five times just to land records). Operator ruling:
+    fleet loops run EVERY 2 HOURS, staggered, and we compare convergence
+    velocity after a day — the hypothesis is same velocity, fewer tokens
+    spent merging.
+  cadence_hours: 2
+  stagger_slots:
+    # Minutes are offsets inside the repeating 2-hour window anchored on EVEN
+    # local hours. No two slots within 15 minutes. A host arms its OWN slot —
+    # relayed cadence is coordination config, but each session's operator or
+    # loop harness does the arming (rate-change doctrine unchanged).
+    macos: "08 even hours (0-22/2) — reserved; currently loops on request"
+    macuahuitl: "23 even hours (0-22/2) — coordinator; armed 2026-08-31"
+    yolanda: "53 even hours (0-22/2)"
+    pirria: "08 odd hours (1-23/2) — reserved; currently one-off per operator"
+    lenovinha: "23 odd hours (1-23/2)"
+    yoga: "53 odd hours (1-23/2)"
+  coordinator_note: >
+    The coordinator's slot at even:23 lands 30 minutes after yolanda's
+    previous-window push and 30 before her next, and sweeps sibling landings
+    from the odd-hour slots — each loop generally finds at most one fresh
+    sibling landing to merge instead of racing three.
+  velocity_review: >
+    After ~24h on this schedule, compare plan-event throughput and the count
+    of pull/re-gate/retry cycles per landing against the hourly era
+    (loop_status entries 2026-08-30 are the baseline). If velocity drops
+    materially, the operator decides between returning to hourly-staggered
+    or keeping 2h.
