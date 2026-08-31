@@ -74,10 +74,20 @@ This is a HYPOTHESIS with one positive instance, not a proven mechanism, and it
 concerns the agent harness rather than this repository — so it is recorded here
 and filed upstream as product feedback, not as a work packet.
 
-**Reproduction, for anyone who wants to confirm or kill it:** invoke this skill
-with `args` whose first word is something distinctive, and read the §0.2b awk
-line as rendered. If it shows that word in place of `$0`, the mechanism holds.
-If it shows `$0`, this explanation is wrong too and the real cause is still open.
+**Reproduction, for anyone who wants to confirm or kill it — READ THE WARNING
+FIRST.** Invoke this skill with `args` whose first word is a distinctive
+sentinel, and read the §0.2b awk line as rendered. If it shows the sentinel in
+place of `$0`, the mechanism holds. If it shows `$0`, this explanation is wrong
+too and the real cause is still open.
+
+**DO IT IN A SCRATCH SESSION, NEVER AN ACTIVE ONE.** Invoking this skill loads a
+DESTRUCTIVE runbook — `podman system reset --force` — into whatever session runs
+it. The render question does not need a loaded gun to answer it. This caveat is
+macuahuitl-fedora's, added 2026-08-31 after they declined to run my recipe as
+originally written on an active coordinator session: my first version of this
+paragraph said only "invoke this skill with args" and carried no warning at all.
+Recording whose catch it was, because a repro that endangers the host running it
+is a defect in the repro.
 
 **The lesson I am taking.** I tested the awk's BEHAVIOUR rigorously — I even
 proved it "unconditional" by running it against a tag that HAS a row — and never
