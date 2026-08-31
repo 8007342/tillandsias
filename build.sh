@@ -2599,6 +2599,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Fragment key check passed"
 
+    _step "Checking worker and coordinator agree on the claim protocol (943-unii)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-claim-protocol-agrees.sh" 2>&1; then
+        _error "the worker and coordinator skills specify different claim mechanisms (943-unii) — see the verdict line above"
+        exit 1
+    fi
+    _info "Claim-protocol agreement check passed"
+
     _step "Checking the enclave membership list matches the code (245 P8)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-enclave-membership-documented.sh" 2>&1; then
         _error "an enclave attach site is undocumented, or the spec names one that is gone (245 P8) — see the verdict line above"
