@@ -1,0 +1,30 @@
+packets:
+  - packet_id: epoch-version-encoding-fleet-adoption
+    order: 951-jnig
+    status: needs_clarification
+    kind: research
+    pickup_role: any
+    priority: p3
+    desired_release: v0.6
+    title: |
+      Should the epoch-anchored version encoding extend beyond the MSIX manifest to VERSION/tags/--version fleet-wide?
+    context: |
+      The operator's encoding (see 776-g6r3 landing) is FORCED for the
+      Store MSIX manifest and landed there. Fleet-wide adoption has no
+      external constraint and is a genuine decision. COORDINATOR
+      RECOMMENDATION, recorded for the operator's ruling: keep the
+      canonical scheme as-is for now and treat the encoding as a
+      PER-ARTIFACT derivation (exactly what yolanda wired) — the visible
+      v0.4.YYMMDD.N shape is load-bearing across the monotonicity script,
+      the two push guards fixed 2026-08-31, resolve-smoke-release's
+      TAG_RE, sort -V channel resolution, installers, and the README
+      ledger; a cutover mid-release-train multiplies blast radius for
+      zero forced benefit, and the encoding's own 2036 overflow wall
+      argues for keeping it at the artifact boundary where it can be
+      swapped without re-tagging history. IF adopted canonically later:
+      inventory every version-parsing site first (grep TAG_RE, sort -V,
+      version regexes), carry the two asserts (2036 wall, minor!=0)
+      wherever it lands, and plan the tag-history transition explicitly.
+    exit_criteria:
+      - operator ruling recorded (adopt fleet-wide / keep artifact-boundary / defer)
+      - if adopted, a complete inventory of version-parsing sites with a migration plan and the two asserts propagated

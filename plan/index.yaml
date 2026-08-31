@@ -26963,6 +26963,12 @@ plan_index:
             An operator decision event on this packet records whether the Store channel is adopted alongside the GitHub-release channel — until then this stays research, not direction.
 
       events:
+        - type: note
+          ts: "2026-08-31T16:41:33Z"
+          agent_id: "linux-macuahuitl-fable5-20260831t164133z"
+          host: macuahuitl
+          summary: |
+            EPOCH-ANCHORED MSIX VERSION ENCODING LANDED (operator design, yolanda verification + Windows wiring): minor.years-since-epoch||day-of-year:3.dailyN.0 — 0.4.260830.5 -> 4.56242.5.0. Resolves Store blockers (1) leading-zero and (2) fourth-field in one move, retires the same-day collision hazard (daily N owns field 3), and is derived from the workspace VERSION's own YYMMDD never the wall clock (a rebuilt old tag reproduces its own version). Boundary-verified: year rollover CLIMBS (zero-padding is load-bearing — unpadded goes BACKWARDS and the Store permanently refuses regression), overflow refused at year 66, minor-zero refused. TWO HARD LIMITS asserted in code with named walls: field 2 overflows in 2036 (~9y runway, hard wall); minor must never be 0. Calendar rationale recorded accurately at yolanda's insistence: Unix epoch is 1970-01-01 GREGORIAN and day-of-year is Gregorian arithmetic with a moved origin — the operator's own 'still rolling date based, but disguised' stands as the honest characterization; the scheme's merits (monotonic, compact, collision-free, opaque) are independent of the rationale. SCOPE AS LANDED: MSIX manifest ONLY — VERSION, tags, --version, release names untouched. Store submission now blocks solely on (c) Partner Center identity values (operator dashboard) plus a re-cut.
         - type: evidence
           ts: "2026-08-29T22:52:58Z"
           agent_id: "windows-yolanda-claude-20260828t223837z"
