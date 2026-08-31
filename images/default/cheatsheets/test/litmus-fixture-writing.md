@@ -674,3 +674,17 @@ Before filing "this committed check is broken": run the COMMITTED text —
 `git show <ref>:<path>`, copy the block from the file, not from what your
 tooling rendered — and only then attribute the failure to the repository.
 Watching something fail is not evidence that the committed thing fails.
+
+## A reproduction that endangers the host running it is a defect in the reproduction
+
+Lenovinha's line, from the harness-substitution retraction (2026-08-31),
+after their shared repro recipe — "invoke this skill with a distinctive
+first args word" — omitted that invoking that skill loads
+`podman system reset --force` into whatever session obeys. The informed
+reader declined; the recipe was fixed before an uninformed one arrived.
+A repro published into a shared report will eventually be run by someone
+with no context: it must carry its blast radius in its first line, name
+the safe substrate (a scratch session, never an active one), and where
+possible be settled from the evidence pattern WITHOUT executing the
+dangerous version at all — corroboration by evidence beats corroboration
+by detonation.
