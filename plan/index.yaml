@@ -64178,6 +64178,12 @@ plan_index:
         - one instrumented run either completes exit 0 solo or names the sender
       events:
         - type: note
+          ts: "2026-08-31T02:22:54Z"
+          agent_id: "linux-macuahuitl-fable5-20260831t022254z"
+          host: macuahuitl
+          summary: |
+            RECURRENCE NOTE, distinct from the closed mechanism: tillandsias-builder exited 137 correlated with a tray graceful shutdown at 2026-08-31T02:20Z, ON a binary verified to carry is_stack_managed_name (strings marker present). Either a second stop path exists that the fix does not cover, or the correlation is coincidental (a concurrent podman stop from another actor — pirria's fixed-path archiver race shows concurrent-gate actors exist). NOT reopening on one instance; if a second correlated kill lands on the fixed binary, reopen with the tray journal + podman events joined on timestamps.
+        - type: note
           ts: "2026-08-31T00:31:25Z"
           agent_id: "linux-macuahuitl-fable5-20260831t003125z"
           host: macuahuitl
