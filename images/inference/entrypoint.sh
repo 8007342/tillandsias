@@ -506,15 +506,71 @@ if [ "$PRELOAD_POLICY" != "eager" ]; then
     echo "[inference] preload policy=$PRELOAD_POLICY — no startup pulls (models are served from the mounted cache only)"
 fi
 
+# ── Pull-failure classification (order 525, exit criterion 3) ─────
+#
+# WHY A CLASSIFIER RATHER THAN A LOG LINE. A failed pull and an empty cache
+# reach the agent as the SAME token: `inference_reason=no-models`, whose detail
+# string names three causes at once (preload pending, a lazy/off policy, or a
+# failed pull) and tells the reader to go and read the container logs. Order
+# 525's first two criteria fixed the TLS trust itself; this one is about the
+# state being AMBIGUOUS, which is a defect independent of the TLS bug — two very
+# different faults must not share one message.
+#
+# `tillandsias_classify_pull_failure` turns a pull's own output into ONE stable
+# token, so `podman logs tillandsias-inference` answers the question the
+# no-models message asks the operator to go and answer:
+#
+#   pull-failed-tls-untrusted  x509 / certificate verification — the enclave CA
+#                              is not trusted by the engine's TLS stack. This is
+#                              order 525's original fault and the one that used
+#                              to masquerade as an empty cache.
+#   pull-failed-unreachable    DNS or connect refused — the proxy or network is
+#                              down, not a trust problem.
+#   pull-failed-not-found      the registry answered and does not have it: a
+#                              wrong model name, not an infrastructure fault.
+#   pull-failed-other          anything else, still named and still falsifiable
+#                              rather than swallowed.
+#
+# The tail of the real output is echoed with the token, because a classifier
+# that hides its evidence is only a nicer-looking swallow.
+tillandsias_classify_pull_failure() {
+    _cls_out="$1"
+    case "$_cls_out" in
+        *x509*|*"certificate signed by unknown authority"*|*"certificate verify failed"*|*"tls: failed to verify"*|*"unable to get local issuer"*)
+            printf 'pull-failed-tls-untrusted' ;;
+        *"no such host"*|*"connection refused"*|*"dial tcp"*|*"i/o timeout"*)
+            printf 'pull-failed-unreachable' ;;
+        *"file does not exist"*|*"model not found"*|*"pull model manifest"*404*)
+            printf 'pull-failed-not-found' ;;
+        *)
+            printf 'pull-failed-other' ;;
+    esac
+}
+
+# Report a failed pull with its classification and the evidence behind it.
+tillandsias_report_pull_failure() {
+    _rpf_label="$1"; _rpf_model="$2"; _rpf_out="$3"
+    _rpf_reason="$(tillandsias_classify_pull_failure "$_rpf_out")"
+    echo "[inference] $_rpf_label $_rpf_model pull FAILED reason=$_rpf_reason — will retry next launch (non-fatal)" >&2
+    if [ "$_rpf_reason" = "pull-failed-tls-untrusted" ]; then
+        # Name the remedy at the moment of failure: this is the exact state
+        # order 525 was filed for, and it is invisible from the forge side,
+        # where the probe only sees zero models.
+        echo "[inference] $_rpf_label $_rpf_model: the enclave CA is NOT trusted by the engine's TLS stack (SSL_CERT_FILE=${SSL_CERT_FILE:-unset}). An agent probing this container will see inference_reason=no-models, which is NOT an empty cache — it is a trust failure (order 525)." >&2
+    fi
+    printf '%s\n' "$_rpf_out" | tail -3 | sed 's/^/[inference]   pull-output| /' >&2
+}
+
 for _model in $PRELOAD_MODELS; do
     if ollama list 2>/dev/null | grep -q "$_model"; then
         echo "[inference] default model $_model ready (cached)"
     else
         echo "[inference] pulling default model $_model (first run)..."
-        if ollama pull "$_model" 2>&1; then
+        if _pull_out="$(ollama pull "$_model" 2>&1)"; then
+            printf '%s\n' "$_pull_out"
             echo "[inference] default model $_model ready"
         else
-            echo "[inference] default model $_model pull FAILED — will retry next launch (non-fatal)" >&2
+            tillandsias_report_pull_failure "default model" "$_model" "$_pull_out"
         fi
     fi
 done
@@ -576,10 +632,11 @@ elif ollama list 2>/dev/null | grep -q "$EMBED_MODEL"; then
 else
     echo "[inference] pulling embed model $EMBED_MODEL in background (first run)..."
     (
-        if ollama pull "$EMBED_MODEL" 2>&1; then
+        if _pull_out="$(ollama pull "$EMBED_MODEL" 2>&1)"; then
+            printf '%s\n' "$_pull_out"
             echo "[inference] embed model $EMBED_MODEL ready"
         else
-            echo "[inference] embed model $EMBED_MODEL pull FAILED — will retry next launch (non-fatal)" >&2
+            tillandsias_report_pull_failure "embed model" "$EMBED_MODEL" "$_pull_out"
         fi
     ) &
 fi
