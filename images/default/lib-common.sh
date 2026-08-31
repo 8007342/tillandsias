@@ -3337,6 +3337,29 @@ apply_claude_config_overlay() {
     trace_lifecycle "config" "claude MCP overlay applied"
 }
 
+# Seed first-run state so a FRESH forge's claude never blocks on the
+# interactive theme/onboarding picker (2026-08-31, coordinator-minted
+# sessions: the picker queued the --prompt behind a dialog nobody can
+# answer headlessly — the minted agent sat at "Dark mode ✔" while the
+# coordinator waited for it to phone home). Idempotent and additive:
+# only absent keys are seeded, so a config restored from the provider
+# vault document keeps whatever the operator chose there.
+seed_claude_first_run_defaults() {
+    local user_cfg="${CLAUDE_CONFIG_FILE:-$HOME/.claude.json}"
+    local tmp
+    mkdir -p "$(dirname "$user_cfg")"
+    tmp="$(mktemp "${user_cfg}.tmp.XXXXXX")" || return 1
+    if [ -s "$user_cfg" ] && jq -e 'type == "object"' "$user_cfg" >/dev/null 2>&1; then
+        jq '. + {hasCompletedOnboarding: (.hasCompletedOnboarding // true), theme: (.theme // "dark")}'             "$user_cfg" >"$tmp" || { rm -f "$tmp"; return 1; }
+    else
+        printf '{"hasCompletedOnboarding": true, "theme": "dark"}
+' >"$tmp"
+    fi
+    chmod 600 "$tmp"
+    mv -f "$tmp" "$user_cfg"
+    trace_lifecycle "config" "claude first-run defaults seeded (onboarding, theme)"
+}
+
 # ── Hot-path population ─────────────────────────────────────
 # @trace spec:forge-hot-cold-split, spec:agent-cheatsheets, spec:cheatsheets-license-tiered
 # @cheatsheet runtime/cheatsheet-crdt-overrides.md

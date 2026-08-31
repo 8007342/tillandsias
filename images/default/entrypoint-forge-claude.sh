@@ -87,6 +87,7 @@ fi
 # Run after OAuth restore because Claude keeps credentials and MCP registration
 # in the same document. The overlay merge preserves every non-MCP field.
 apply_claude_config_overlay
+seed_claude_first_run_defaults
 
 # ── SSH key auto-discovery ──────────────────────────────────
 # @trace gap:ON-007
