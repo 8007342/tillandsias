@@ -22,8 +22,17 @@ packets:
       watched RED (5 failures) against the original block before green.
       Live-verified twice on curl-installed v0.4.260830.5; VM correctly
       preserved without --wipe throughout.
-    evidence: |
-      osx-next 9466bac67; fixture red-then-green; two live cycles on real
-      darwin (cycle 1 sweep-only surfaced defect 2; cycle 2 both fixes
-      clean: app+bak removed, tray stopped, VM preserved 2.2G, host
-      reinstalled healthy provisioned=true).
+    events:
+      - type: completed
+        ts: "2026-08-31T01:45:23Z"
+        host: macuahuitl
+        agent: linux-macuahuitl-fable5-20260831t014523z
+        evidence_refs:
+          - "commit d9ada1425 (osx-next 9466bac67, merged linux-next): uninstall sweeps both app dirs and stops the tray"
+          - "scripts/test-uninstall-sweeps-both-app-dirs.sh wired into --check; watched RED (5 failures incl system-app-survived) against the original block, then green"
+          - "live cycle 1 (sweep-only) on curl-installed v0.4.260830.5: app+bak removed, tray STILL RUNNING pid alive 12min bundle deleted — surfaced defect 2"
+          - "live cycle 2 (both fixes): app removed, .bak removed, tray stopped, VM preserved 2.2G; reinstall healthy provisioned=true vm_owner_live=true"
+        summary: |
+          Drained by macos host; both defects fixed and live-verified twice;
+          fixture pinned into the gate. This row is retroactive — the work
+          arrived as a plan/issues doc with no ledger row.
