@@ -57,6 +57,29 @@ make_repo() {
 
 remote_head() { git -C "$1/work" ls-remote origin refs/heads/main 2>/dev/null | cut -f1; }
 
+# ORDER 940-f77j — `write` now requires a one-shot pass token that a GREEN gate
+# issues, naming the tree it validated. Every case below stands in for that gate,
+# so each issues the token immediately before the write it expects to succeed.
+#
+# ISSUED PER WRITE, deliberately, not once at the top: the token is consumed on
+# use and is bound to the tree it names, so a case that edits the tree and stamps
+# again needs a fresh one. Hoisting it would make later writes refuse for a
+# reason unrelated to what the case is testing — the guard masking the test,
+# which is exactly the trap the compaction fixture hit.
+#
+# These cases assert SCOPE semantics, not the write mechanism, so they are
+# expected to pass against a writer with or without the token requirement.
+issue_pass_token() {
+    local _d
+    _d="$(bash "$ROOT/scripts/gate-stamp.sh" compute)" || return 1
+    {
+        echo 'version 1'
+        echo "digest $_d"
+        echo 'dispatch check'
+        echo 'issued now'
+    } > "$(git rev-parse --absolute-git-dir)/tillandsias-gate-pass-token"
+}
+
 # ── classifier totality ───────────────────────────────────────────────────────
 # The `other` arm is what makes an unscoped path fail closed; if the taxonomy
 # ever silently classified an unknown path as something a scoped stamp covers,
@@ -70,10 +93,10 @@ echo "ok: case 0 — classifier is total (unknown path -> other)"
 D="$WORK/c1"; make_repo "$D"
 (
     cd "$D/work" || exit 1
-    bash scripts/gate-stamp.sh write --scope full --dispatch check >/dev/null
+    issue_pass_token && bash scripts/gate-stamp.sh write --scope full --dispatch check >/dev/null
 ) || fail "case 1: write failed"
 before="$(remote_head "$D")"
-out="$(cd "$D/work" && printf 'pub fn more() {}\n' >> crates/demo/lib.rs && git add -A && git commit -qm edit >/dev/null 2>&1 && bash scripts/gate-stamp.sh write --scope full --dispatch check >/dev/null && git push origin main 2>&1)"
+out="$(cd "$D/work" && printf 'pub fn more() {}\n' >> crates/demo/lib.rs && git add -A && git commit -qm edit >/dev/null 2>&1 && issue_pass_token && bash scripts/gate-stamp.sh write --scope full --dispatch check >/dev/null && git push origin main 2>&1)"
 rc=$?
 after="$(remote_head "$D")"
 [ "$rc" = 0 ] || fail "case 1: full-scope push refused: $out"
@@ -85,7 +108,7 @@ echo "ok: case 1 — a full-scope stamp accepts the push, as today"
 # packet's named negative litmus.
 D="$WORK/c2"; make_repo "$D"
 before="$(remote_head "$D")"
-out="$(cd "$D/work" && printf 'packets: []\n' > plan/index.d/frag.yaml && printf 'pub fn sneak() {}\n' >> crates/demo/lib.rs && git add -A && git commit -qm mixed >/dev/null 2>&1 && bash scripts/gate-stamp.sh write --scope plan-ledger --dispatch check >/dev/null && git push origin main 2>&1)"
+out="$(cd "$D/work" && printf 'packets: []\n' > plan/index.d/frag.yaml && printf 'pub fn sneak() {}\n' >> crates/demo/lib.rs && git add -A && git commit -qm mixed >/dev/null 2>&1 && issue_pass_token && bash scripts/gate-stamp.sh write --scope plan-ledger --dispatch check >/dev/null && git push origin main 2>&1)"
 rc=$?
 after="$(remote_head "$D")"
 [ "$rc" != 0 ] || fail "case 2: an out-of-scope push was ACCEPTED (this is the F5 silent-green risk)"
@@ -100,7 +123,7 @@ echo "ok: case 2 — scoped stamp refuses an out-of-scope push, naming the missi
 # the negative case and the scope field would be decorative.
 D="$WORK/c3"; make_repo "$D"
 before="$(remote_head "$D")"
-out="$(cd "$D/work" && printf 'packets: []\n' > plan/index.d/frag.yaml && git add -A && git commit -qm frag >/dev/null 2>&1 && bash scripts/gate-stamp.sh write --scope plan-ledger --dispatch check >/dev/null && git push origin main 2>&1)"
+out="$(cd "$D/work" && printf 'packets: []\n' > plan/index.d/frag.yaml && git add -A && git commit -qm frag >/dev/null 2>&1 && issue_pass_token && bash scripts/gate-stamp.sh write --scope plan-ledger --dispatch check >/dev/null && git push origin main 2>&1)"
 rc=$?
 after="$(remote_head "$D")"
 [ "$rc" = 0 ] || fail "case 3: an in-scope push was refused: $out"
@@ -135,7 +158,7 @@ echo "ok: case 5 — an unknown scope token is treated as stale (fail closed)"
 
 # ── case 6 (NEGATIVE CONTROL): write refuses an unknown class up front ────────
 D="$WORK/c6"; make_repo "$D"
-out="$(cd "$D/work" && bash scripts/gate-stamp.sh write --scope nonsense 2>&1)"
+out="$(cd "$D/work" && issue_pass_token && bash scripts/gate-stamp.sh write --scope nonsense 2>&1)"
 rc=$?
 [ "$rc" != 0 ] || fail "case 6: write accepted an unknown scope class"
 [ "$out" = "stale:unknown-scope-class:nonsense" ] || fail "case 6: unexpected verdict '$out'"

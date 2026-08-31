@@ -56,13 +56,33 @@ setup_repo() {
 # Prints the verdict and RETURNS the exit code, so callers can use
 # `v="$(memo check)"; rc=$?` — a command substitution runs in a subshell, so a
 # global assigned inside would never reach the caller (it did not, first try).
+# ORDER 940-f77j — `write` requires a pass token that a GREEN gate issues. These
+# cases stand in for that gate, so each issues one immediately before the write
+# it expects to succeed. Per write, not hoisted: the token is consumed on use and
+# is bound to the tree it names, so a case that edits and re-stamps needs a fresh
+# one, and hoisting would make later writes refuse for a reason unrelated to the
+# memoization property under test.
+#
+# These cases assert MEMOIZATION semantics rather than the write mechanism, so
+# they pass against a writer with or without the token requirement.
+issue_pass_token() {
+    local _d
+    _d="$(bash scripts/gate-stamp.sh compute)" || return 1
+    {
+        echo 'version 1'
+        echo "digest $_d"
+        echo 'dispatch check'
+        echo 'issued now'
+    } > "$(git rev-parse --absolute-git-dir)/tillandsias-gate-pass-token"
+}
+
 memo() { # <dispatch>
     ( cd "$TDIR/repo" && bash scripts/gate-stamp.sh memo-check "$1" 2>&1 )
 }
 
 # 1. Unchanged tree after a green stamp -> memo hit carrying the timestamp.
 setup_repo
-(cd "$TDIR/repo" && bash scripts/gate-stamp.sh write --scope full --dispatch check >/dev/null)
+(cd "$TDIR/repo" && issue_pass_token && bash scripts/gate-stamp.sh write --scope full --dispatch check >/dev/null)
 v="$(memo check)"; rc=$?
 if [ "$rc" -eq 0 ] && [ "${v#ok:gate-fresh }" != "$v" ]; then
     ok "unchanged tree memoizes and reports when it was stamped"
@@ -82,7 +102,7 @@ fi
 # 3. A changed UNTRACKED byte invalidates it too — the stamp covers untracked
 #    files, and a memo that ignored them would bless an unvalidated tree.
 setup_repo
-(cd "$TDIR/repo" && bash scripts/gate-stamp.sh write --scope full --dispatch check >/dev/null)
+(cd "$TDIR/repo" && issue_pass_token && bash scripts/gate-stamp.sh write --scope full --dispatch check >/dev/null)
 printf 'new\n' > "$TDIR/repo/untracked.txt"
 v="$(memo check)"; rc=$?
 if [ "$rc" -ne 0 ] && [ "$v" = "stale:tree-changed-since-gate" ]; then
@@ -94,7 +114,7 @@ fi
 # 4. Toolchain change with byte-identical tree -> refuse. Faked by rewriting
 #    the recorded digest, which is what a rustc/clippy bump does to it.
 setup_repo
-(cd "$TDIR/repo" && bash scripts/gate-stamp.sh write --scope full --dispatch check >/dev/null)
+(cd "$TDIR/repo" && issue_pass_token && bash scripts/gate-stamp.sh write --scope full --dispatch check >/dev/null)
 stampfile="$TDIR/repo/.git/tillandsias-gate-stamp"
 sed -i 's/^toolchain .*/toolchain 0000000000000000000000000000000000000000000000000000000000000000/' "$stampfile"
 v="$(memo check)"; rc=$?
@@ -107,7 +127,7 @@ fi
 # 5. A stamp predating 765-tkq2 (no toolchain field) is stale, not "assume
 #    unchanged" — the fail-closed migration path.
 setup_repo
-(cd "$TDIR/repo" && bash scripts/gate-stamp.sh write --scope full --dispatch check >/dev/null)
+(cd "$TDIR/repo" && issue_pass_token && bash scripts/gate-stamp.sh write --scope full --dispatch check >/dev/null)
 grep -v '^toolchain ' "$stampfile" > "$stampfile.tmp"
 mv "$stampfile.tmp" "$stampfile"
 v="$(memo check)"; rc=$?
@@ -139,7 +159,7 @@ fi
 
 # 8. A SCOPED stamp may not memoize the whole gate.
 setup_repo
-(cd "$TDIR/repo" && bash scripts/gate-stamp.sh write --scope plan-ledger --dispatch check >/dev/null)
+(cd "$TDIR/repo" && issue_pass_token && bash scripts/gate-stamp.sh write --scope plan-ledger --dispatch check >/dev/null)
 v="$(memo check)"; rc=$?
 if [ "$rc" -ne 0 ] && [ "$v" = "stale:scoped-stamp-cannot-memoize-full-gate" ]; then
     ok "a scoped stamp cannot memoize the full gate"
@@ -149,7 +169,7 @@ fi
 
 # 9. Dispatch equality: a ci-full stamp does not memoize a --check run.
 setup_repo
-(cd "$TDIR/repo" && bash scripts/gate-stamp.sh write --scope full --dispatch ci-full >/dev/null)
+(cd "$TDIR/repo" && issue_pass_token && bash scripts/gate-stamp.sh write --scope full --dispatch ci-full >/dev/null)
 v="$(memo check)"; rc=$?
 if [ "$rc" -ne 0 ] && [ "$v" = "stale:dispatch-mismatch:ci-full" ]; then
     ok "a ci-full stamp does not memoize a check dispatch"
@@ -161,7 +181,7 @@ fi
 #     freshly stamped tree still passes. Without this, "refuse everything"
 #     would satisfy cases 2-9.
 setup_repo
-(cd "$TDIR/repo" && bash scripts/gate-stamp.sh write --scope full --dispatch check >/dev/null)
+(cd "$TDIR/repo" && issue_pass_token && bash scripts/gate-stamp.sh write --scope full --dispatch check >/dev/null)
 v="$(memo check)"; rc=$?
 if [ "$rc" -eq 0 ]; then
     ok "NEGATIVE CONTROL — a fresh stamp still memoizes after the refusal cases"
