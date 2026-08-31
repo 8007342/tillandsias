@@ -33,6 +33,29 @@
 
 set -eu
 
+
+# ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has it.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+# Resolve the lib by WALKING UP, not by a fixed depth (order 914-ahsy). The
+# fixed form `dirname "${BASH_SOURCE[0]}"/lib/...` is correct only for a caller
+# sitting directly in scripts/. From scripts/refusal-calibration/ it points at a
+# lib that does not exist, the `|| true` swallows the miss, and the tool variable
+# silently falls back to the bare name — a conversion that passes review, passes
+# the suite, and changes nothing.
+_td_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_td_dir" ] && [ "$_td_dir" != "/" ] && [ ! -f "$_td_dir/lib/tool-dispatch.sh" ]; do
+    _td_dir="$(dirname "$_td_dir")"
+done
+if [ -f "$_td_dir/lib/tool-dispatch.sh" ]; then
+    . "$_td_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+fi
+if command -v resolve_tool >/dev/null 2>&1; then
+    JQ="$(resolve_tool jq || printf 'jq')"
+else
+    JQ="jq"   # lib unavailable: preserve the previous behaviour exactly
+fi
+
 usage() {
     cat <<'USAGE'
 usage: windows-host-capability-probe.sh [--fragment] [--host-id ID] [--ts ISO8601]
@@ -134,7 +157,7 @@ fi
 # engineering problems ("buy hardware" versus "ship a lane").
 #
 # The two reason strings are the fleet's existing vocabulary, not new terms.
-DOC="$(printf '%s' "$PS_JSON" | jq -c \
+DOC="$(printf '%s' "$PS_JSON" | "$JQ" -c \
     --arg host_id "$HOST_ID" \
     --arg ts "$TS" \
     '
@@ -180,7 +203,7 @@ DOC="$(printf '%s' "$PS_JSON" | jq -c \
     }')"
 
 if [ "$EMIT_FRAGMENT" -eq 0 ]; then
-    printf '%s\n' "$DOC" | jq .
+    printf '%s\n' "$DOC" | "$JQ" .
     exit 0
 fi
 
@@ -201,4 +224,4 @@ capabilities:
     locus: windows-host
     document:
 HEADER
-printf '%s\n' "$DOC" | jq . | sed 's/^/      /'
+printf '%s\n' "$DOC" | "$JQ" . | sed 's/^/      /'

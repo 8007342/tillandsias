@@ -1,7 +1,34 @@
-//! Portable menu state model shared by the Windows and macOS trays.
+//! Portable menu state model — **the ONLY menu builder in the tree.**
 //!
-//! Mirrors the Linux tray's `TrayUiState` but emits a backend-agnostic
-//! `MenuStructure`. The Windows tray turns this into Win32 `MENUITEMINFO`
+//! ## This is the sole builder (order 628-p5tj). Changes here reach ALL THREE trays.
+//!
+//! Windows, macOS AND Linux all render from `build()` in this module. If you
+//! are changing what items appear, their order, their labels, or the
+//! auth-gated structure, you are changing every platform at once — including
+//! Linux, which many of these docs predate.
+//!
+//! **There is no second builder to keep in sync, and that is recent.** Linux
+//! used to carry its own `build_menu` implementation, gating on a plain
+//! `is_authenticated: bool` while this module used the `GithubLoginState`
+//! tri-state. The consequence was measured on 2026-08-09: the 626-r7kq fix
+//! landed HERE, Windows and macOS inherited it, and Linux did not — it kept
+//! the same defect through a different mechanism (627-m3vp). That was not a
+//! one-off; it was the structural consequence of two builders, which is why
+//! there is now one.
+//!
+//! Linux's `build_menu` (`tillandsias-headless/src/tray/mod.rs`) is now a
+//! CONVERTER, not a builder: it calls `build()` and translates the result to
+//! DBus (`String` ids to integers, `MenuItem` to `MenuNode`). Anything that
+//! decides WHAT appears belongs here; anything that decides how a toolkit
+//! renders it belongs in that platform's converter.
+//!
+//! The top-level id sequence is pinned by
+//! `top_level_id_sequence_is_pinned_for_all_platforms` in this file's tests.
+//! Because all three platforms derive from `build()`, that one test guards all
+//! three — a reorder fails there once rather than diverging silently in one
+//! tray.
+//!
+//! Emits a backend-agnostic `MenuStructure`. The Windows tray turns this into Win32 `MENUITEMINFO`
 //! entries; the macOS tray turns it into `NSMenuItem` instances.
 //!
 //! The structure is intentionally toolkit-agnostic: no `HMENU`, no
@@ -11,12 +38,13 @@
 //!
 //! ## Parity with the Linux tray
 //!
-//! The Linux tray's `build_menu` (see
+//! Linux's converter, `build_menu` (see
 //! `crates/tillandsias-headless/src/tray/mod.rs::build_menu`) surfaces a
 //! status header, then the `~/src` and `Cloud` submenus when authenticated.
 //! Agents (`Seedlings`), Observatorium and OpenCode Web also live in that
-//! tree. The portable menu reproduces this shape in a stable order so the
-//! Windows + macOS trays render identical menus.
+//! tree. All three trays render this shape in a stable order because all
+//! three call `build()` — the parity is structural now rather than
+//! maintained, which is what 628-p5tj was for.
 //!
 //! @trace spec:host-shell-architecture, spec:windows-native-tray, spec:macos-native-tray
 
@@ -239,6 +267,10 @@ pub struct ProjectEntry {
     /// `true` once the in-VM forge for this project has reported "ready".
     /// Used for the running checkmark on local entries.
     pub ready: bool,
+    /// Cloud-only: the GitHub `owner/repo` slug used as the menu label so
+    /// the user sees the same identifier `gh` returns. `None` for local
+    /// projects. When `Some`, used as the submenu label instead of `name`.
+    pub full_name: Option<String>,
 }
 
 /// Login state surfaced in the menu's GitHub item.
@@ -745,10 +777,11 @@ fn build_project_submenu(
         })
         .collect();
 
+    let label_base = project.full_name.as_deref().unwrap_or(&project.name);
     let label = if project.ready && scope == "local" {
-        format!("{} \u{2713}", project.name)
+        format!("{} \u{2713}", label_base)
     } else {
-        project.name.clone()
+        label_base.to_string()
     };
 
     MenuItem::submenu(id, label, children)
@@ -757,6 +790,134 @@ fn build_project_submenu(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// @trace spec:host-shell-architecture
+    /// @trace order:628-p5tj
+    ///
+    /// EXIT CRITERION 3: the three platforms produce the same top-level item id
+    /// sequence for the same state.
+    ///
+    /// WHY THIS TEST IS HERE AND NOT THREE TESTS. Since the convergence
+    /// (3500e6301) all three trays derive their menu from THIS `build()`:
+    /// Windows and macOS walk `top_items()` directly; Linux converts the same
+    /// items in order via `shared_menu_item_to_node`. So the id sequence is a
+    /// property of one function, and pinning it here pins all three at once. A
+    /// reorder or an inserted item now fails HERE — once, loudly, before any
+    /// platform ships it — instead of diverging silently in one tray the way
+    /// 626-r7kq did, where a shared-layer fix landed and Linux did not inherit
+    /// it because Linux had its own builder.
+    ///
+    /// WHAT IT DOES NOT PROVE, stated so nobody reads more into it. It does not
+    /// execute the macOS or Windows tray code, which is cfg-gated off this
+    /// host; those lanes derive from `build()` BY CONSTRUCTION and their own
+    /// conversion fidelity is theirs to assert. And a golden sequence is a
+    /// characterization test: it detects change, it does not judge whether a
+    /// change is correct. When it fails, decide whether the new sequence is
+    /// right and update it deliberately — do not update it to make the test
+    /// pass.
+    #[test]
+    fn top_level_id_sequence_is_pinned_for_all_platforms() {
+        fn ids_of(state: &MenuState) -> Vec<String> {
+            build(state)
+                .top_items()
+                .iter()
+                .map(|i| i.id.clone())
+                .collect()
+        }
+
+        // 1. Cold start, logged out, nothing ready.
+        let cold = MenuState::initial();
+        let cold_ids = ids_of(&cold);
+
+        // 2. Same state with a terminal provisioning failure — the early-return
+        //    branch, which is where a divergence would be least visible because
+        //    the menu is short.
+        let mut failed = MenuState::initial();
+        failed.provisioning_failure = Some("disk full".to_string());
+        let failed_ids = ids_of(&failed);
+
+        // 3. Logged in with one local and one cloud project.
+        let mut ready = MenuState::initial();
+        ready.login = GithubLoginState::LoggedIn {
+            handle: "tlatoani".to_string(),
+        };
+        ready.podman_ready = true;
+        ready.login_runtime_ready = true;
+        ready.cloud_projects_loaded = true;
+        ready.local_projects = vec![ProjectEntry {
+            name: "proj".to_string(),
+            path: "/home/u/src/proj".to_string(),
+            ready: true,
+            full_name: None,
+        }];
+        ready.cloud_projects = vec![ProjectEntry {
+            name: "repo".to_string(),
+            path: "octocat/repo".to_string(),
+            ready: false,
+            full_name: Some("octocat/repo".to_string()),
+        }];
+        let ready_ids = ids_of(&ready);
+
+        // THE INVARIANTS, checked rather than eyeballed.
+
+        // a. Every state opens with the status line and closes with quit. A tray
+        //    that lost either would still render, which is why this is asserted
+        //    rather than left to the golden compare below.
+        for (name, seq) in [
+            ("cold", &cold_ids),
+            ("failed", &failed_ids),
+            ("ready", &ready_ids),
+        ] {
+            assert_eq!(
+                seq.first().map(String::as_str),
+                Some(ids::STATUS),
+                "{name}: status line is not first: {seq:?}"
+            );
+            assert_eq!(
+                seq.last().map(String::as_str),
+                Some(ids::QUIT),
+                "{name}: quit is not last: {seq:?}"
+            );
+        }
+
+        // b. No duplicate ids within a menu. A duplicate would make the
+        //    platform id->handler mapping ambiguous and the second item dead.
+        for (name, seq) in [
+            ("cold", &cold_ids),
+            ("failed", &failed_ids),
+            ("ready", &ready_ids),
+        ] {
+            let mut sorted = seq.clone();
+            sorted.sort();
+            let before = sorted.len();
+            sorted.dedup();
+            assert_eq!(
+                before,
+                sorted.len(),
+                "{name}: duplicate top-level id in {seq:?}"
+            );
+        }
+
+        // c. The failure branch really is the short early-return, not the full
+        //    menu with a failure chip. If this stops holding, the branch above
+        //    it changed and the reason in `build()` needs re-reading.
+        assert!(
+            failed_ids.len() < ready_ids.len(),
+            "failure menu is not shorter than the ready menu: {failed_ids:?} vs {ready_ids:?}"
+        );
+
+        // d. GOLDEN SEQUENCES. Update deliberately, never to make this pass.
+        assert_eq!(
+            failed_ids,
+            vec![
+                ids::STATUS.to_string(),
+                "retry".to_string(),
+                "open-log".to_string(),
+                ids::QUIT.to_string(),
+            ],
+            "the provisioning-failure id sequence changed"
+        );
+    }
 
     /// @trace spec:host-shell-architecture, spec:windows-native-tray
     ///
@@ -770,6 +931,7 @@ mod tests {
                 name: format!("local-{i}"),
                 path: format!("/home/u/src/local-{i}"),
                 ready: false,
+                full_name: None,
             })
             .collect::<Vec<_>>();
         let cloud = (0..22)
@@ -777,6 +939,7 @@ mod tests {
                 name: format!("cloud-{i}"),
                 path: format!("octocat/cloud-{i}"),
                 ready: false,
+                full_name: None,
             })
             .collect::<Vec<_>>();
 
@@ -897,6 +1060,7 @@ mod tests {
                 name: "secret".into(),
                 path: "/home/u/src/secret".into(),
                 ready: false,
+                full_name: None,
             }],
             ..MenuState::initial()
         };
@@ -1079,6 +1243,7 @@ mod tests {
                 name: "secret".into(),
                 path: "/home/u/src/secret".into(),
                 ready: false,
+                full_name: None,
             }],
             ..MenuState::initial()
         };
@@ -1118,6 +1283,7 @@ mod tests {
                 name: "myapp".into(),
                 path: "/home/u/src/myapp".into(),
                 ready: false,
+                full_name: None,
             }],
             podman_ready: false,
             ..MenuState::initial()
@@ -1145,6 +1311,7 @@ mod tests {
                 name: "myapp".into(),
                 path: "/home/u/src/myapp".into(),
                 ready: false,
+                full_name: None,
             }],
             podman_ready: true,
             ..MenuState::initial()
@@ -1265,6 +1432,7 @@ mod tests {
                     name: format!("c-{i}"),
                     path: format!("o/c-{i}"),
                     ready: false,
+                    full_name: None,
                 })
                 .collect(),
             ..MenuState::initial()
@@ -1350,6 +1518,7 @@ mod tests {
                             name: "myapp".into(),
                             path: "/home/u/src/myapp".into(),
                             ready: false,
+                            full_name: None,
                         }],
                         ..MenuState::initial()
                     };

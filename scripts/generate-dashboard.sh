@@ -1,6 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+
+# ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has it.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+# Resolve the lib by WALKING UP, not by a fixed depth (order 914-ahsy). The
+# fixed form `dirname "${BASH_SOURCE[0]}"/lib/...` is correct only for a caller
+# sitting directly in scripts/. From scripts/refusal-calibration/ it points at a
+# lib that does not exist, the `|| true` swallows the miss, and the tool variable
+# silently falls back to the bare name — a conversion that passes review, passes
+# the suite, and changes nothing.
+_td_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_td_dir" ] && [ "$_td_dir" != "/" ] && [ ! -f "$_td_dir/lib/tool-dispatch.sh" ]; do
+    _td_dir="$(dirname "$_td_dir")"
+done
+if [ -f "$_td_dir/lib/tool-dispatch.sh" ]; then
+    . "$_td_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+fi
+if command -v resolve_tool >/dev/null 2>&1; then
+    JQ="$(resolve_tool jq || printf 'jq')"
+else
+    JQ="jq"   # lib unavailable: preserve the previous behaviour exactly
+fi
+
 METRICS_FILE="$1"
 DASHBOARD_FILE="$2"
 
@@ -9,10 +32,10 @@ if [[ ! -f "$METRICS_FILE" ]]; then
 fi
 
 # Extract times and sizes for the 'forge' image
-DURATIONS=$(jq -r 'select(.image == "forge") | .duration_s' "$METRICS_FILE" | tail -n 20)
-SIZES=$(jq -r 'select(.image == "forge") | .size_bytes' "$METRICS_FILE" | tail -n 20)
-BYTES_DL=$(jq -r 'select(.image == "forge") | .bytes_downloaded // 0' "$METRICS_FILE" | tail -n 20)
-CACHE_HITS=$(jq -r 'select(.image == "forge") | .cache_hits // 0' "$METRICS_FILE" | tail -n 20)
+DURATIONS=$("$JQ" -r 'select(.image == "forge") | .duration_s' "$METRICS_FILE" | tail -n 20)
+SIZES=$("$JQ" -r 'select(.image == "forge") | .size_bytes' "$METRICS_FILE" | tail -n 20)
+BYTES_DL=$("$JQ" -r 'select(.image == "forge") | .bytes_downloaded // 0' "$METRICS_FILE" | tail -n 20)
+CACHE_HITS=$("$JQ" -r 'select(.image == "forge") | .cache_hits // 0' "$METRICS_FILE" | tail -n 20)
 
 # 766-7zqf: the dashboard is a COMMITTED, cross-host artifact, but this
 # telemetry file is per-host ephemeral cache — on a host that never built the

@@ -1002,6 +1002,32 @@ FORGE_EXPERTS_BIN_DIR="${FORGE_EXPERTS_BIN_DIR:-$HOME/.local/bin}"
 FORGE_EXPERTS_STATE_DIR="${FORGE_EXPERTS_STATE_DIR:-/dev/shm/tillandsias-experts}"
 export FORGE_EXPERTS_BIN_DIR FORGE_EXPERTS_STATE_DIR
 
+# ── Embedding env for the L1 spec RAG pipeline (order 919-vvyv) ──────────────
+# spec_answer (forge-plan.sh), the capability line's embed_endpoint= probe
+# (712-r5x8) and scripts/spec-index-ensure.sh all read these two variables.
+# Before this block a fresh forge left BOTH unset: `embed_endpoint=unset` was
+# 712-r5x8's own headline finding ("the launch never wired
+# TILLANDSIAS_EMBED_ENDPOINT — the fresh-forge gap itself"), and forge-plan.sh's
+# fallback model name is the lemonade/LM-Studio `nomic-embed-text-v1-GGUF`,
+# which the enclave ollama at inference:11434 404s — so the L1 tier was dead on
+# every cold forge (919-vvyv). Same split lib-dev-env.sh draws on the dev side:
+# the ENVIRONMENT names the endpoint and the model that matches it; an explicit
+# operator value always wins. Without OLLAMA_HOST (no enclave inference
+# service) the endpoint stays unset and spec_answer keeps its typed refusal.
+if [ -z "${TILLANDSIAS_EMBED_ENDPOINT:-}" ] && [ -n "${OLLAMA_HOST:-}" ]; then
+    # ollama's OpenAI-compatible surface, for /v1/embeddings — the same
+    # derivation start_expert_serve_fail_soft applies per-invocation below.
+    export TILLANDSIAS_EMBED_ENDPOINT="${OLLAMA_HOST%/}/v1"
+fi
+if [ -z "${TILLANDSIAS_EMBED_MODEL:-}" ]; then
+    # The OLLAMA name — what the inference entrypoint pulls at startup
+    # (919-vvyv D1) and what spec-index-ensure.sh embeds the corpus with.
+    # Keeping producer and query path on one name is load-bearing: an index
+    # embedded with one model and queried with another 404s, and the failure
+    # looks like a missing index (760-hzi4 scoping note, defect i).
+    export TILLANDSIAS_EMBED_MODEL="nomic-embed-text"
+fi
+
 # PINNED STATE GRAMMAR (litmus:forge-plan-expert-build-shape):
 #   experts: ready
 #   experts: building(<n>s)
@@ -1243,12 +1269,191 @@ start_forge_experts_async() {
         # Non-project session: nothing was cloned, so there is nothing to build.
         return 0
     fi
+    # Order 919-vvyv (D2): the spec-index root decision must run HERE, in the
+    # entrypoint shell, so the harness and every MCP server it spawns inherit
+    # the same FORGE_SPEC_INDEX_ROOT the backgrounded builder writes to. An
+    # export from the forked subshell below would reach nobody.
+    _forge_spec_index_root_for_session || true
     _forge_experts_set_state building
     _generic_project_set_state building
     (
         discover_generic_project >>/tmp/forge-lifecycle.log 2>&1 || true
         ensure_forge_experts >>/tmp/forge-lifecycle.log 2>&1 || true
+        # ORDER 920-pxg6: the grounded OpenAI-compatible endpoint the
+        # local-experts OpenCode agent talks to. AFTER ensure_forge_experts,
+        # so the capabilities probe sees the freshly installed binary.
+        start_expert_serve_fail_soft >>/tmp/forge-lifecycle.log 2>&1 || true
+        # ORDER 919-vvyv (D2): LAST, because it can churn for a long time on
+        # CPU (measured: ~2min GPU, ~60min CPU cold; 0.05s warm) and nothing
+        # else in this lane depends on it. Needs the tillandsias-plan binary
+        # ensure_forge_experts just installed.
+        ensure_forge_spec_index >>/tmp/forge-lifecycle.log 2>&1 || true
     ) &
+    return 0
+}
+
+# _forge_spec_index_root_for_session — order 919-vvyv (D2), SYNCHRONOUS.
+#
+# The launcher injects FORGE_SPEC_INDEX_ROOT=/opt/tillandsias/spec-index, the
+# durable named volume, mounted READ-ONLY by design (801-a2by: the ephemeral
+# tier structurally cannot corrupt the durable tier). That is the right
+# authority whenever it already SERVES an index — but on a host that has never
+# built one (the cold CPU-only forge 919-vvyv observed) it is an empty
+# directory nothing in-forge can ever write, so spec_answer refuses forever
+# and the refusal names a directory no build here could fill.
+#
+# So: keep the durable root when it serves a complete entry (or is genuinely
+# writable); otherwise repoint the SESSION's root at the per-project cache —
+# the sanctioned persistent surface for expensive derived artifacts (the same
+# volume that carries the cargo cache), so the cold build is paid once per
+# host, not once per container. Every reader resolves the root from this env
+# per call (forge-plan.sh re-resolves on every spec_answer), so the moment the
+# backgrounded builder publishes `current`, answers start serving.
+#
+# An operator-pinned FORGE_SPEC_INDEX_DIR is an EXACT serving directory and
+# outranks the root in every reader; leave the whole decision alone then.
+_forge_spec_index_root_for_session() {
+    [ -z "${FORGE_SPEC_INDEX_DIR:-}" ] || return 0
+    local root fp dir cache_root
+    root="${FORGE_SPEC_INDEX_ROOT:-}"
+    if [ -n "$root" ]; then
+        fp="$(cat "$root/current" 2>/dev/null | tr -d '[:space:]')" || fp=""
+        dir="$root${fp:+/$fp}"
+        if [ -n "$fp" ] && [ -s "$dir/chunks.jsonl" ] && [ -s "$dir/vectors.jsonl" ]; then
+            # The durable tier serves. If the corpus has since moved, the entry
+            # is stale-but-announced (801-g9nn stamps each citation with the
+            # entry's own commit); refreshing it is the HOST builder's job.
+            return 0
+        fi
+        # A writable root can take the build where it stands (no launcher
+        # injection, or a future rw mount).
+        [ -w "$root" ] && return 0
+    fi
+    cache_root="${TILLANDSIAS_PROJECT_CACHE:-/home/forge/.cache/tillandsias-project}/spec-index"
+    if ! mkdir -p "$cache_root" 2>/dev/null; then
+        # Nowhere writable either — keep the env as it was; the ensure and
+        # spec_answer both name the state in their own typed vocabulary.
+        trace_lifecycle "spec-index" "root kept at ${root:-unset}: ${cache_root} is not creatable either"
+        return 0
+    fi
+    export FORGE_SPEC_INDEX_ROOT="$cache_root"
+    trace_lifecycle "spec-index" "root repointed to ${cache_root} (durable root ${root:-unset} is cold and read-only in-forge — 919-vvyv)"
+    return 0
+}
+
+# ensure_forge_spec_index — order 919-vvyv (D2). Build/refresh the spec RAG
+# index at forge launch, so a cold forge's spec_answer stops refusing for want
+# of a producer nobody ran (the 552 class: the system knew what it needed and
+# never provisioned it). FAIL-SOFT: always returns 0, never gates a launch —
+# the same contract as ensure_forge_experts, which must run first (the ensure
+# script resolves the tillandsias-plan binary that lane installs).
+#
+# The heavy machinery deliberately stays in the checkout's
+# scripts/spec-index-ensure.sh (760-hzi4): the fingerprint short-circuit
+# (0.05s warm), the mkdir build lock with dead-holder reclaim (one builder per
+# root, a burst of launches starts one build not six), delta re-embed, atomic
+# publish. This wrapper only decides whether to invoke it and records the
+# verdict in the lifecycle log. NO new status grammar: the honest surfaces
+# already exist — the capability line's spec_index=present|absent and
+# embed_endpoint= fields (712-r5x8/760-hzi4) and spec_answer's typed refusal.
+#
+# REMAINING RUNG, deliberately not attempted here: shipping the index as a
+# PRE-BUILT artifact. The cold build is still paid once per host (~60min on a
+# CPU-only host, 919-vvyv measured 21799 chunks at ~6 vectors/s) — making it
+# ~0 is a distribution design question (where does a trusted prebuilt index
+# come from, keyed how), recorded on the packet as the open half.
+ensure_forge_spec_index() {
+    local project_dir ensure ep model deadline models rc verdict
+    project_dir=""
+    if [ -n "${TILLANDSIAS_PROJECT:-}" ]; then
+        project_dir="/home/forge/src/${TILLANDSIAS_PROJECT}"
+    fi
+    [ -n "$project_dir" ] || project_dir="$PWD"
+    ensure="$project_dir/scripts/spec-index-ensure.sh"
+    if [ ! -r "$ensure" ]; then
+        # Most projects have no spec corpus — a named skip, same rule as
+        # degraded(no-plan-crate): never leave an agent guessing whether a
+        # build failed or was never applicable.
+        echo "[spec-index] skipped (no-ensure-script): ${ensure} absent — this project has no spec index producer"
+        return 0
+    fi
+    ep="${TILLANDSIAS_EMBED_ENDPOINT:-}"
+    if [ -z "$ep" ]; then
+        echo "[spec-index] skipped (no-embed-endpoint): TILLANDSIAS_EMBED_ENDPOINT is unset — spec_answer keeps its typed refusal (712-r5x8)"
+        return 0
+    fi
+    # A cold inference volume is still PULLING the embed model (the inference
+    # entrypoint backgrounds that pull — 919-vvyv D1), so give it a bounded
+    # window instead of failing the first launch's build on a 404. Bounded,
+    # not forever: on timeout the ensure still runs so the failure is typed
+    # by the producer, never silent here.
+    model="${TILLANDSIAS_EMBED_MODEL:-nomic-embed-text}"
+    deadline=$(( $(date +%s 2>/dev/null || echo 0) + ${FORGE_SPEC_INDEX_MODEL_WAIT:-600} ))
+    while :; do
+        models="$(curl -fsS -m 3 "${ep%/}/models" 2>/dev/null)" || models=""
+        case "$models" in
+            *"$model"*) break ;;
+        esac
+        if [ "$(date +%s 2>/dev/null || echo 0)" -ge "$deadline" ]; then
+            echo "[spec-index] embed model ${model} not served at ${ep} after ${FORGE_SPEC_INDEX_MODEL_WAIT:-600}s — running the ensure anyway so the refusal is typed, not silent"
+            break
+        fi
+        sleep 20
+    done
+    rc=0
+    verdict="$(bash "$ensure" 2>>/tmp/forge-lifecycle.log)" || rc=$?
+    echo "[spec-index] ${verdict:-no-verdict} (rc=${rc}, root=${FORGE_SPEC_INDEX_ROOT:-unset})"
+    return 0
+}
+
+# start_expert_serve_fail_soft — ORDER 920-pxg6. Launch the grounded
+# `expert-serve` loopback endpoint beside the MCP servers. FAIL-SOFT on every
+# rung: a missing binary, a pre-920-pxg6 binary (no `expert-serve` token in
+# its capabilities manifest — the relaunch-skew shape order 569 names), or an
+# already-bound port each log one line to the lane log and return 0. Launch
+# is NEVER blocked on this.
+start_expert_serve_fail_soft() {
+    local bin port caps project_dir
+    bin="$FORGE_EXPERTS_BIN_DIR/tillandsias-plan"
+    port="${TILLANDSIAS_EXPERT_SERVE_PORT:-11436}"
+    project_dir=""
+    if [ -n "${TILLANDSIAS_PROJECT:-}" ]; then
+        project_dir="/home/forge/src/${TILLANDSIAS_PROJECT}"
+    fi
+    [ -n "$project_dir" ] || project_dir="$PWD"
+
+    if [ ! -x "$bin" ]; then
+        trace_lifecycle "expert-serve" "skipped (no-binary): ${bin} is not installed"
+        return 0
+    fi
+    # Capability probe, not a version guess: a binary without the token
+    # predates the subcommand and would die on an unknown arm (order 569's
+    # skew line already tells the agent a relaunch delivers it).
+    caps="$("$bin" capabilities 2>/dev/null || true)"
+    case "$caps" in
+        *expert-serve*) : ;;
+        *)
+            trace_lifecycle "expert-serve" "skipped (stale-binary): installed tillandsias-plan predates expert-serve — relaunch after the async build lands"
+            return 0
+            ;;
+    esac
+    # Something already on the port (an earlier lane, a manual server) is a
+    # working endpoint, not an error.
+    if (exec 3<>"/dev/tcp/127.0.0.1/${port}") 2>/dev/null; then
+        # fd 3 lived only in the probe subshell; nothing leaks here.
+        trace_lifecycle "expert-serve" "skipped (already-listening): 127.0.0.1:${port} is already served"
+        return 0
+    fi
+    # The server's lifetime is stdin EOF (deliberate: `</dev/null` keeps the
+    # capability-sweep litmus fast), so the lane holds its stdin open with a
+    # silent pipe that dies with the container. The embed endpoint defaults
+    # from the enclave inference service the profile already injects
+    # (OLLAMA_HOST); an explicit operator value always wins, and with neither
+    # the server refuses typed per request — same discipline as spec_answer.
+    TILLANDSIAS_EMBED_ENDPOINT="${TILLANDSIAS_EMBED_ENDPOINT:-${OLLAMA_HOST:+${OLLAMA_HOST%/}/v1}}" \
+        nohup bash -c "tail -f /dev/null | '$bin' expert-serve --port '$port' --root '$project_dir'" \
+        >>/tmp/forge-lifecycle.log 2>&1 &
+    trace_lifecycle "expert-serve" "starting: ${bin} expert-serve on 127.0.0.1:${port} (root ${project_dir}, pid $!)"
     return 0
 }
 
@@ -2536,19 +2741,52 @@ opencode_restore_curl_last_good() {
     harness_probe opencode "$target"
 }
 
+# ORDER 797-t9m7. TWO DIFFERENT FAILURES USED TO PRINT THE SAME LINE, and the
+# more serious one printed a sentence that was not true.
+#
+# This function announced "rolling back to last-good" BEFORE checking whether a
+# last-good existed. On a cold cache nothing had ever been recorded, so the
+# harness reported a rollback to a binary that was never there — measured on
+# yoga across three cold launches (2026-08-17), where
+# $HARNESS_CURL_ROOT/opencode/bin stayed empty every time.
+#
+# It was also emitted at trace_lifecycle level, which returns early unless
+# TILLANDSIAS_DEBUG is set. So in normal operation the curl provisioning path
+# failed completely silently, on every launch, while the lane kept working
+# because opencode resolves from the NPM harness path instead
+# (NPM_CONFIG_PREFIX/bin is earlier on PATH). A failure invisible in normal
+# operation and mis-described in debug output is the fail-loud defect this
+# packet is filed under.
+#
+# WHAT THIS DOES NOT CHANGE, deliberately. Which binary the forge executes is
+# untouched: opencode still comes from npm, exactly as before. Retiring the
+# curl path or making it succeed both alter fleet provisioning and were left to
+# the per-host-kind treatment 793-rb9u is getting — yoga's 2026-08-17 judgement,
+# and it still holds. This slice only makes the existing outcome legible.
 opencode_validate_or_rollback() {
-    local bin="$1"
+    local bin="$1" last_good
     OPENCODE_ROLLBACK_USED=0
     if [ -x "$bin" ] && harness_probe opencode "$bin"; then
         opencode_record_curl_last_good "$bin" >/dev/null 2>&1 || true
         return 0
     fi
-    trace_lifecycle "harness" "opencode refresh FAILED auth contract — rolling back to last-good"
-    if opencode_restore_curl_last_good "$bin"; then
-        OPENCODE_ROLLBACK_USED=1
-        trace_lifecycle "harness" "opencode rollback to last-good OK"
-        return 0
+    last_good="$(opencode_curl_last_good_path)"
+    if [ -x "$last_good" ]; then
+        trace_lifecycle "harness" "opencode refresh FAILED auth contract — rolling back to last-good"
+        if opencode_restore_curl_last_good "$bin"; then
+            OPENCODE_ROLLBACK_USED=1
+            trace_lifecycle "harness" "opencode rollback to last-good OK"
+            return 0
+        fi
+        # A recorded last-good that will not restore is worse than none: the
+        # snapshot exists and is not usable, so say so rather than folding it
+        # into the empty-cache case below.
+        echo "[harness] WARNING: opencode rollback FAILED — a curl-side last-good exists at $last_good but could not be restored or did not pass the auth contract (order 797-t9m7)." >&2
+        return 1
     fi
+    # THE EMPTY-CACHE CASE, which is the one that was lying. There is no
+    # last-good because the curl path has never once succeeded here.
+    echo "[harness] WARNING: opencode curl-install produced no usable binary and there is NO last-good to roll back to ($last_good does not exist). The curl provisioning path is not populating ${HARNESS_CURL_ROOT}/opencode/bin. This is not fatal: opencode runs from the npm harness path, which carries its own last-good and auth/render contracts. It means the SECOND provisioning path is inert — see order 797-t9m7 for the retire-or-repair decision." >&2
     return 1
 }
 
@@ -3130,6 +3368,52 @@ apply_claude_config_overlay() {
     chmod 600 "$tmp"
     mv -f "$tmp" "$user_cfg"
     trace_lifecycle "config" "claude MCP overlay applied"
+}
+
+# Seed first-run state so a FRESH forge's claude never blocks on an
+# interactive dialog (2026-08-31, coordinator-minted sessions — THREE
+# blockers found across the live rounds, each invisible until the one
+# before it was seeded): the theme/onboarding picker, the workspace-trust
+# dialog (seeded per-project separately), and the
+# --dangerously-skip-permissions consent dialog, which held round 3 until
+# the operator came home from dinner and pressed allow. Idempotent and
+# additive:
+# only absent keys are seeded, so a config restored from the provider
+# vault document keeps whatever the operator chose there.
+seed_claude_first_run_defaults() {
+    local user_cfg="${CLAUDE_CONFIG_FILE:-$HOME/.claude.json}"
+    local tmp
+    mkdir -p "$(dirname "$user_cfg")"
+    tmp="$(mktemp "${user_cfg}.tmp.XXXXXX")" || return 1
+    if [ -s "$user_cfg" ] && jq -e 'type == "object"' "$user_cfg" >/dev/null 2>&1; then
+        jq '. + {hasCompletedOnboarding: (.hasCompletedOnboarding // true), theme: (.theme // "dark")}'             "$user_cfg" >"$tmp" || { rm -f "$tmp"; return 1; }
+    else
+        printf '{"hasCompletedOnboarding": true, "theme": "dark"}
+' >"$tmp"
+    fi
+    chmod 600 "$tmp"
+    mv -f "$tmp" "$user_cfg"
+    trace_lifecycle "config" "claude first-run defaults seeded (onboarding, theme)"
+}
+
+# Pre-trust the forge project folder (2026-08-31, minted-session blocker #2:
+# after the theme picker was seeded away, claude's workspace-trust dialog —
+# "Yes, I trust this folder / Enter to confirm" — blocked the prompt next).
+# Inside a forge the folder is a fresh clone from OUR OWN mirror into an
+# isolated container; the trust question is answered by the architecture,
+# not by a human at a dialog. Call AFTER find_project_dir with $PROJECT_DIR.
+seed_claude_project_trust() {
+    local project_dir="$1"
+    local user_cfg="${CLAUDE_CONFIG_FILE:-$HOME/.claude.json}"
+    local tmp
+    [ -n "$project_dir" ] || return 0
+    [ -s "$user_cfg" ] || printf '{}
+' >"$user_cfg"
+    tmp="$(mktemp "${user_cfg}.tmp.XXXXXX")" || return 1
+    jq --arg dir "$project_dir"         '.projects = ((.projects // {}) | .[$dir] = ((.[$dir] // {}) + {hasTrustDialogAccepted: (.[$dir].hasTrustDialogAccepted // true)}))'         "$user_cfg" >"$tmp" || { rm -f "$tmp"; return 1; }
+    chmod 600 "$tmp"
+    mv -f "$tmp" "$user_cfg"
+    trace_lifecycle "config" "claude project trust seeded for $project_dir"
 }
 
 # ── Hot-path population ─────────────────────────────────────
@@ -4058,7 +4342,7 @@ inject_startup_context() {
   - Machine-readable (branch on this, do not parse the prose): \`inference_state=${_inference_state} inference_models=${_inference_count} inference_warm=${_inference_warm} inference_reason=${_inference_reason}\`
   - \`inference_state\` is \`ready\` only when the endpoint answers AND at least one model is cached. Otherwise \`not-ready\` with a named \`inference_reason\`: \`no-models\` (endpoint up, nothing cached), \`endpoint-unreachable\`, \`endpoint-timeout\`, \`endpoint-http-error\`, \`probe-tool-missing\`, \`probe-helper-missing\`, or \`probe-error-<n>\`. There is no indeterminate "starting up" state.
   - Local inference is OPTIONAL: a \`not-ready\` endpoint never blocks this session. Use cloud models, or pull one yourself (\`curl http://inference:11434/api/pull -d '{"name":"qwen2.5:0.5b"}'\`).
-- **Experts** — \`experts: ${_experts_status}\`. An expert is a CITED RETRIEVAL SURFACE behind an MCP tool, not a model; the plan expert runs NO inference. Query it through the \`forge-plan\` MCP server (\`plan_check\`, \`plan_status\`, \`plan_ready\`, \`plan_blocked_by\`, \`plan_closure\`, \`plan_burndown\`) instead of grepping \`plan/index.yaml\`.
+- **Experts** — \`experts: ${_experts_status}\`. An expert is a CITED RETRIEVAL SURFACE behind an MCP tool, not a model; the plan expert runs NO inference. Query it through the \`forge-plan\` MCP server (\`plan_answer\`, \`plan_next\`, \`methodology_ask\`, \`spec_answer\`, \`plan_check\`, \`plan_status\`, \`plan_ready\`, \`plan_blocked_by\`, \`plan_closure\`, \`plan_burndown\`; \`expert_capability\` when any answer is \`unsupported\`) instead of grepping \`plan/index.yaml\`.
   - Machine-readable (branch on this, do not parse the prose): \`experts_state=${_experts_state} experts_reason=${_experts_reason} experts_elapsed=${_experts_elapsed}\`
   - Machine-readable CAPABILITY SKEW (order 569 — branch on this, do not parse the prose): \`${_cap_line}\`
   - \`experts_state=ready\` only means THE BUILD FINISHED. It has never meant the binary can answer — a forge seeded from a base without the expert sources builds a pre-expert binary and reports \`ready\` truthfully while every \`plan_answer\` returns \`confidence=unsupported\` (order 531). The line above is the honest one. Read it as three answers: \`now=\` is what you can use in THIS session; \`after_relaunch=\` is what the MOUNTED CHECKOUT would give you on the next forge run (so it already includes your uncommitted edits to the expert crate); \`blocked_capabilities=\` is the direct answer to "is my current work blocked pending a relaunch".
@@ -4079,9 +4363,12 @@ You never need to configure git remotes, tokens, SSH keys, proxy settings, or CA
 
 ## Plan entry points
 
-- **Active work queue**: \`plan/index.yaml\`
-- **Full plan index**: \`plan/index.yaml\`
-- **Loop status**: \`plan/loop_status.md\`
+Ask, don't grep — answers come back cited, the files are thousands of lines:
+
+- **Current Direction**: \`plan_answer "what is the current Direction?"\` (forge-plan MCP)
+- **What's next**: \`plan_next\` (forge-plan MCP)
+- **Conversational status**: Local Experts mode (the \`local-experts\` agent → grounded \`expert-serve\`) — citations or a typed \`unsupported:\` refusal, never raw-model prose.
+- Fallback when experts are degraded/unsupported (see \`experts_state\` above): read \`plan/index.yaml\` / \`plan/loop_status.md\` directly and RECORD the outage (\`mcp_first_read_path\`).
 
 Pick up work using the \`/meta-orchestration\` skill or \`/advance-work-from-plan\`.
 
@@ -4260,6 +4547,26 @@ CONTEXT_EOF
 
     export FORGE_STARTUP_CONTEXT_FILE="$ctx_file"
     trace_lifecycle "startup-context" "written to $ctx_file (branch=${branch}, version=${version})"
+
+    local observed_tokens=""
+    for t in GH_TOKEN GITHUB_TOKEN HOMEBREW_GITHUB_API_TOKEN; do
+        if env | grep -q "^${t}="; then
+            if [[ -z "$observed_tokens" ]]; then
+                observed_tokens="$t"
+            else
+                observed_tokens="${observed_tokens},${t}"
+            fi
+        fi
+    done
+    [[ -z "$observed_tokens" ]] && observed_tokens="none"
+
+    local observed_accel="unknown"
+    if [[ -n "${TILLANDSIAS_ACCEL_ENVELOPE:-}" ]]; then
+        observed_accel=$(echo "$TILLANDSIAS_ACCEL_ENVELOPE" | sed -n 's/.*accel_class=\([^ ]*\).*/\1/p')
+        [[ -z "$observed_accel" ]] && observed_accel="unknown"
+    fi
+
+    echo "lane-observed: agent=${agent_name:-unknown} accel_class=${observed_accel} tokens=${observed_tokens}" >> /tmp/forge-lifecycle.log 2>/dev/null || true
 }
 
 # ── Banner ──────────────────────────────────────────────────

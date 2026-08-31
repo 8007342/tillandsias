@@ -140,6 +140,24 @@ integration_version="$(git show origin/linux-next:VERSION 2>/dev/null || git sho
 if [[ -n "$integration_version" && "$current_version" == "$integration_version" ]]; then
     version_sync_forward=true
 fi
+#   4. RELEASE-TAG CATCH-UP (2026-08-31, daily-channel day one). A daily/
+#      prerelease release is cut from a release/version-bump-* branch, so the
+#      TAG carries the new VERSION while main does not — and preflight's
+#      monotonicity then REQUIRES the integration branch to catch up to the
+#      tag it carries, while exceptions 1-3 only recognize catch-ups to main
+#      or linux-next. The two guards deadlocked every host that fetched the
+#      daily tag (lenovinha, then macuahuitl, within the hour). Equality with
+#      the version of a PUBLISHED tag reachable from HEAD is a catch-up for
+#      exactly the reason equality with main is: the value was decided by the
+#      release that published the tag, not proposed by this push. A VERSION
+#      ahead of every tag the branch carries stays refused.
+release_tag_version=""
+latest_reachable_tag="$(git tag -l 'v*' --merged HEAD --sort=-version:refname 2>/dev/null | head -1)" || latest_reachable_tag=""
+[[ -n "$latest_reachable_tag" ]] && release_tag_version="${latest_reachable_tag#v}"
+if [[ -n "$release_tag_version" && "$current_version" == "$release_tag_version" ]]; then
+    version_sync_forward=true
+fi
+
 version_bump_branch=false
 case "$branch" in
     release/version-bump-*) version_bump_branch=true ;;

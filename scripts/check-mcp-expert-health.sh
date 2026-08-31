@@ -1,6 +1,29 @@
 #!/bin/bash
 # freshness: updated 2026-08-16 windows-yolanda (tool-call depth + launcher fidelity, order 770-f6u4)
 set -uo pipefail
+
+# ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has it.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+# Resolve the lib by WALKING UP, not by a fixed depth (order 914-ahsy). The
+# fixed form `dirname "${BASH_SOURCE[0]}"/lib/...` is correct only for a caller
+# sitting directly in scripts/. From scripts/refusal-calibration/ it points at a
+# lib that does not exist, the `|| true` swallows the miss, and the tool variable
+# silently falls back to the bare name — a conversion that passes review, passes
+# the suite, and changes nothing.
+_td_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_td_dir" ] && [ "$_td_dir" != "/" ] && [ ! -f "$_td_dir/lib/tool-dispatch.sh" ]; do
+    _td_dir="$(dirname "$_td_dir")"
+done
+if [ -f "$_td_dir/lib/tool-dispatch.sh" ]; then
+    . "$_td_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+fi
+if command -v resolve_tool >/dev/null 2>&1; then
+    JQ="$(resolve_tool jq || printf 'jq')"
+else
+    JQ="jq"   # lib unavailable: preserve the previous behaviour exactly
+fi
+
 # @trace order:737-zcj5, order:741-t66e, order:741-2izr, order:741-na2c, order:770-f6u4
 # @trace invariant:plan_is_queried_via_mcp_server_avoiding_heuristic_parsing
 #
@@ -116,6 +139,21 @@ set -uo pipefail
 # else — no outage line from cycle-metrics.sh, no ledger artifact. A signal that
 # fires every cycle is one nobody reads.
 #
+# ── WHAT THIS PROBE STILL CANNOT SEE (order 823-u3k9) ───────────────────────
+#
+# It launches its OWN instance from the registration, so the process it measures
+# always reflects the CURRENT file. The long-lived process the agent's tool calls
+# actually reach is never contacted, and a server running pre-fix code therefore
+# reads `ok:experts-healthy` here BY CONSTRUCTION — measured on macuahuitl
+# 2026-08-18, where 799-j4xd's fix was in the file and not in the process.
+#
+# That is not a gap to harden: hardening this probe measures the fresh instance
+# harder. It is closed next door, by the same MEASURED/ATTESTED split 801-m9tk
+# used for the tool surface — see scripts/check-mcp-live-build.sh. Read all
+# three verdicts together; they answer three orthogonal questions (does the
+# registered command serve MCP / did this session get the tools / is the server
+# it reaches running current code).
+#
 # VERDICT GRAMMAR (pinned by litmus:mcp-expert-health-probe-shape):
 #   ^(ok:experts-healthy|down:[a-z0-9-]+(,[a-z0-9-]+)*|absent:not-registered|skip:[a-z0-9-]+)$
 #
@@ -140,7 +178,12 @@ set -uo pipefail
 
 EXPECTED_DEFAULT="forge-plan,project-info"
 EXPECTED="${TILLANDSIAS_MCP_EXPECTED:-$EXPECTED_DEFAULT}"
-HEALTH_LOG="${TILLANDSIAS_EXPERT_HEALTH_LOG:-/tmp/forge-expert-health.jsonl}"
+# 890-t9pu: the writer and the reader of this log must agree on its path, and
+# /tmp is not one place across the WSL boundary. Shared rule, best-effort source.
+# shellcheck source=scripts/metrics-log-path.sh
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/metrics-log-path.sh" 2>/dev/null || true
+command -v metrics_default_log >/dev/null 2>&1 || { metrics_default_log() { printf '/tmp/%s' "$1"; }; }
+HEALTH_LOG="${TILLANDSIAS_EXPERT_HEALTH_LOG:-$(metrics_default_log forge-expert-health.jsonl)}"
 PROBE_TIMEOUT="${TILLANDSIAS_MCP_PROBE_TIMEOUT:-10}"
 PROBE_MAXLINES="${TILLANDSIAS_MCP_PROBE_MAXLINES:-500}"
 PROBE_ID=1
@@ -197,7 +240,7 @@ registration_file() {
 # two makes a broken registration look like a host that was never meant to have
 # experts, which is the one reading that suppresses the alarm.
 server_is_registered() {
-    jq -e --arg s "$2" --arg p "$PWD" '
+    "$JQ" -e --arg s "$2" --arg p "$PWD" '
         ((.projects[$p]?.mcpServers[$s]?) // (.mcpServers[$s]?)) != null
     ' "$1" >/dev/null 2>&1
 }
@@ -215,7 +258,7 @@ server_is_registered() {
 # $3 (optional) replaces argv[0] — the launcher-fidelity rewrite. It is applied
 # inside jq so the substitution inherits the same quoting as every other word.
 server_command() {
-    jq -r --arg s "$2" --arg p "$PWD" --arg o "${3:-}" '
+    "$JQ" -r --arg s "$2" --arg p "$PWD" --arg o "${3:-}" '
         ((.projects[$p]?.mcpServers[$s]?) // (.mcpServers[$s]?) // empty)
         | select(type == "object" and (.command | type == "string"))
         | select((.args // []) | type == "array")
@@ -227,7 +270,7 @@ server_command() {
 # The registered command word alone, un-rewritten — the launcher-fidelity test
 # keys on it and the JSONL `launcher` field defaults to it.
 server_argv0() {
-    jq -r --arg s "$2" --arg p "$PWD" '
+    "$JQ" -r --arg s "$2" --arg p "$PWD" '
         ((.projects[$p]?.mcpServers[$s]?) // (.mcpServers[$s]?) // empty)
         | select(type == "object")
         | (.command // empty)
@@ -238,7 +281,7 @@ server_argv0() {
 # A registration may carry `env`. Dropping it reported healthy experts as down
 # (741-2izr) because a server that needs its environment cannot start without it.
 server_env() {
-    jq -r --arg s "$2" --arg p "$PWD" '
+    "$JQ" -r --arg s "$2" --arg p "$PWD" '
         ((.projects[$p]?.mcpServers[$s]?) // (.mcpServers[$s]?) // empty)
         | (.env // {})
         | to_entries | map("\(.key)=\(.value|tostring)") | @sh
@@ -270,13 +313,13 @@ harness_bash_launcher() {
 probe_tool_frame() {
     case "$1" in
         forge-plan)
-            jq -cn '{jsonrpc:"2.0",id:2,method:"tools/call",params:{name:"expert_capability",arguments:{}}}'
+            "$JQ" -cn '{jsonrpc:"2.0",id:2,method:"tools/call",params:{name:"expert_capability",arguments:{}}}'
             ;;
         project-info)
-            jq -cn '{jsonrpc:"2.0",id:2,method:"tools/call",params:{name:"project_type",arguments:{}}}'
+            "$JQ" -cn '{jsonrpc:"2.0",id:2,method:"tools/call",params:{name:"project_type",arguments:{}}}'
             ;;
         *)
-            jq -cn '{jsonrpc:"2.0",id:2,method:"tools/list",params:{}}'
+            "$JQ" -cn '{jsonrpc:"2.0",id:2,method:"tools/list",params:{}}'
             ;;
     esac
 }
@@ -313,7 +356,7 @@ probe_tool_text_ok() {
 # banner line and blew the litmus step budget on windows, where spawns are
 # ~100x dearer than on linux.
 probe_scan_init() {
-    printf '%s\n' "$1" | jq -Rr --argjson id "$PROBE_ID" '
+    printf '%s\n' "$1" | "$JQ" -Rr --argjson id "$PROBE_ID" '
         fromjson? | select(
             (.jsonrpc == "2.0")
             and (.error == null)
@@ -332,7 +375,7 @@ probe_scan_tool() {
     _pt_name="$1"; _pt_out="$2"
     case "$_pt_name" in
         forge-plan | project-info)
-            _pt_text="$(printf '%s\n' "$_pt_out" | jq -Rr --argjson id "$TOOL_ID" '
+            _pt_text="$(printf '%s\n' "$_pt_out" | "$JQ" -Rr --argjson id "$TOOL_ID" '
                 fromjson? | select(
                     (.jsonrpc == "2.0")
                     and (.error == null)
@@ -347,7 +390,7 @@ probe_scan_tool() {
             probe_tool_text_ok "$_pt_name" "$_pt_text"
             ;;
         *)
-            printf '%s\n' "$_pt_out" | jq -Rr --argjson id "$TOOL_ID" '
+            printf '%s\n' "$_pt_out" | "$JQ" -Rr --argjson id "$TOOL_ID" '
                 fromjson? | select(
                     (.jsonrpc == "2.0")
                     and (.error == null)
@@ -564,11 +607,11 @@ fixture() {
     _hserr_srv="$(_mk_srv sh "$_fx_dir/hserr.sh")"
     _hsmute_srv="$(_mk_srv sh "$_fx_dir/hsmute.sh")"
     _binerr_srv="$(_mk_srv sh "$_fx_dir/binerr.sh")"
-    _env_srv="$(jq -cn --arg a "$_fx_dir/envsrv.sh" '{command:"sh",args:[$a],env:{FIXTURE_TOKEN:"ok"}}')"
-    _err_srv="$(jq -cn --arg f '{"jsonrpc":"2.0","id":1,"error":{"code":-32603,"message":"init failed","data":"no \"result\" available"}}' '{command:"echo",args:[$f]}')"
-    _null_srv="$(jq -cn --arg f '{"jsonrpc":"2.0","id":1,"result":null}' '{command:"echo",args:[$f]}')"
-    _empty_srv="$(jq -cn --arg f '{"jsonrpc":"2.0","id":1,"result":{}}' '{command:"echo",args:[$f]}')"
-    _log_srv="$(jq -cn --arg f 'INFO starting up, no "result" yet' '{command:"echo",args:[$f]}')"
+    _env_srv="$("$JQ" -cn --arg a "$_fx_dir/envsrv.sh" '{command:"sh",args:[$a],env:{FIXTURE_TOKEN:"ok"}}')"
+    _err_srv="$("$JQ" -cn --arg f '{"jsonrpc":"2.0","id":1,"error":{"code":-32603,"message":"init failed","data":"no \"result\" available"}}' '{command:"echo",args:[$f]}')"
+    _null_srv="$("$JQ" -cn --arg f '{"jsonrpc":"2.0","id":1,"result":null}' '{command:"echo",args:[$f]}')"
+    _empty_srv="$("$JQ" -cn --arg f '{"jsonrpc":"2.0","id":1,"result":{}}' '{command:"echo",args:[$f]}')"
+    _log_srv="$("$JQ" -cn --arg f 'INFO starting up, no "result" yet' '{command:"echo",args:[$f]}')"
     _bad_srv='{"command":"false"}'
 
     _fx_run "healthy-both-answer (also pins args are honoured)" \
@@ -650,7 +693,7 @@ fixture() {
         printf '%s\n' "exec sh '$_fx_dir/ok.sh'"
     } >"$_fx_dir/fakebash.sh"
     chmod +x "$_fx_dir/fakebash.sh" 2>/dev/null || true
-    _bash_srv="$(jq -cn --arg a "$_fx_dir/ok.sh" '{command:"bash",args:[$a]}')"
+    _bash_srv="$("$JQ" -cn --arg a "$_fx_dir/ok.sh" '{command:"bash",args:[$a]}')"
     : >"$_fx_dir/health.jsonl"
     _mk_reg "$_bash_srv" "$_bash_srv" >"$_fx_dir/reg.json"
     _got_v="$(TILLANDSIAS_MCP_REGISTRATION="$_fx_dir/reg.json" \

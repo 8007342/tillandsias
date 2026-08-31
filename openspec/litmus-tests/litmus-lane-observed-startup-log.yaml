@@ -1,0 +1,31 @@
+name: litmus:lane-observed-startup-log
+spec: forge-environment-discoverability
+phase: pre-build
+description: "Executes the lane observability emitting code path against a fixture env to pin the line grammar and the never-fails property (emission failure must not block lane startup)."
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains images/default/lib-common.sh
+  - shell utilities (grep, bash, printenv) are available in PATH
+
+critical_path:
+  - step: "Execute emitting code path with envelope and tokens present"
+    command: "export TILLANDSIAS_ACCEL_ENVELOPE='accel_class=workstation-gpu accel_gpu=present' && export GH_TOKEN='fake_token' && export HOMEBREW_GITHUB_API_TOKEN='another_token' && unset GITHUB_TOKEN && export TILLANDSIAS_AGENT_NAME='test-agent' && rm -f /tmp/forge-lifecycle.log && sed '/^init_runtime_ca_trust$/d' images/default/lib-common.sh > /tmp/lib-common-test.sh && bash -c 'source /tmp/lib-common-test.sh >/dev/null 2>&1; inject_startup_context /tmp' || true && grep -q '^lane-observed: agent=test-agent accel_class=workstation-gpu tokens=GH_TOKEN,HOMEBREW_GITHUB_API_TOKEN$' /tmp/forge-lifecycle.log && echo 'ok: parses envelope and tokens'"
+    timeout_ms: 3000
+    expected_behavior: "ok: parses envelope and tokens"
+
+  - step: "Execute emitting code path with NO envelope and NO tokens"
+    command: "unset TILLANDSIAS_ACCEL_ENVELOPE GH_TOKEN GITHUB_TOKEN HOMEBREW_GITHUB_API_TOKEN && export TILLANDSIAS_AGENT_NAME='test-agent-2' && rm -f /tmp/forge-lifecycle.log && sed '/^init_runtime_ca_trust$/d' images/default/lib-common.sh > /tmp/lib-common-test.sh && bash -c 'source /tmp/lib-common-test.sh >/dev/null 2>&1; inject_startup_context /tmp' || true && grep -q '^lane-observed: agent=test-agent-2 accel_class=unknown tokens=none$' /tmp/forge-lifecycle.log && echo 'ok: absent envelope and tokens degrade properly'"
+    timeout_ms: 3000
+    expected_behavior: "ok: absent envelope and tokens degrade properly"
+
+  - step: "Emission failure does not block lane startup (never-fails property)"
+    command: "export TILLANDSIAS_ACCEL_ENVELOPE='accel_class=workstation-gpu' && touch /tmp/forge-lifecycle.log && chmod 000 /tmp/forge-lifecycle.log && sed '/^init_runtime_ca_trust$/d' images/default/lib-common.sh > /tmp/lib-common-test.sh && bash -c 'set -e; source /tmp/lib-common-test.sh >/dev/null 2>&1; inject_startup_context /tmp' ; rc=$? ; chmod 644 /tmp/forge-lifecycle.log && rm -f /tmp/forge-lifecycle.log && [ $rc -eq 0 ] && echo 'ok: never-fails property holds'"
+    timeout_ms: 3000
+    expected_behavior: "ok: never-fails property holds"
+
+failure_modes:
+  - "The emitting code fails under set -e when the log is unwritable, breaking lane startup."
+  - "The token check prints token values into the log instead of names."
+  - "Missing envelope or tokens result in empty fields instead of the defined 'unknown' or 'none' values."

@@ -60,6 +60,8 @@ windows = { version = "0.58", features = [
     "Win32_Graphics_Gdi",
     "Win32_UI_HiDpi",
     "Win32_Networking_WinSock",
+    # 663-64xi: NotifyIconSettings reconciliation at tray startup.
+    "Win32_System_Registry",
 ] }
 uuid = { workspace = true }
 # File-based tracing: a GUI-subsystem tray has no console, so logs must go to a
@@ -72,6 +74,14 @@ uuid = { workspace = true }
 
 [build-dependencies]
 embed-resource = { workspace = true }
+# ORDER 776-g6r3 — MSIX logo rendering. Same pure-Rust pipeline
+# tillandsias-core/build.rs already uses for the tray icons, deliberately: the
+# alternative is an ImageMagick dependency on every machine that packages a
+# release, and a release step that needs a system tool nobody installed is a
+# release step that runs on one laptop. BUILD-dependency only, so it adds
+# nothing to the shipped binary.
+resvg = "0.45"
+tiny-skia = "0.11"
 
 [dev-dependencies]
 tempfile = { workspace = true }

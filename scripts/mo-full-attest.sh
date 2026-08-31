@@ -211,8 +211,8 @@ check_log() {
             return 1
             ;;
     esac
-    if ! printf '%s' "$local_sha" | grep -qE "$SHA_RE" \
-        || ! printf '%s' "$remote_sha" | grep -qE "$SHA_RE"; then
+    if ! grep -qE "$SHA_RE" <<<"$local_sha" \
+        || ! grep -qE "$SHA_RE" <<<"$remote_sha"; then
         echo "MO-FULL: FAIL malformed sha in: $marker"
         return 1
     fi
@@ -271,7 +271,7 @@ self_attest() {
     fi
 
     local_sha="$(git rev-parse HEAD 2>/dev/null || true)"
-    if ! printf '%s' "$local_sha" | grep -qE "$SHA_RE"; then
+    if ! grep -qE "$SHA_RE" <<<"$local_sha"; then
         echo "MO-FULL: FAIL cannot read a valid local HEAD sha (not a git repo, or an unborn branch)"
         return 1
     fi
@@ -363,6 +363,26 @@ record_attest() {
             "# Gate: scripts/check-mo-full-attestations.sh (./build.sh --check)." >>"$ledger"
     fi
     printf '\n## %s %s\n%s\n' "$ts" "$host" "$marker" >>"$ledger"
+
+    # The cycle is now attested; tell the checkout lock so the host's NEXT fire
+    # is not refused by this cycle's own leftover lock (order 899-q9di).
+    #
+    # This is here, and not left to the agent, because Finalization step 9 says
+    # the marker is the FINAL OUTPUT LINE and step 9b asks for a release after
+    # it — two rules that cannot both be obeyed, so the release must not depend
+    # on which one the agent believed. `record` is the right hook precisely
+    # because it runs ONCE per cycle; `self` may be called repeatedly mid-cycle.
+    #
+    # Best-effort in every direction: stdout stays the marker alone (callers
+    # emit it verbatim), and a failure here never changes the exit code — an
+    # unmarked lock just falls back to the pre-existing stale bound, which is
+    # the behaviour that existed before this line.
+    local _lockjs
+    _lockjs="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/cycle-checkout-lock.sh"
+    if [ -x "$_lockjs" ]; then
+        "$_lockjs" mark-attested >/dev/null 2>&1 || true
+    fi
+
     printf '%s\n' "$marker"
     return 0
 }

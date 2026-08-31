@@ -87,7 +87,7 @@ for model in $MODELS; do
     payload="$(mk_payload "$model")"
 
     # Warm-up: load weights, compile kernels, prime caches. Discarded.
-    if ! printf '%s' "$payload" | curl -fsS -m 600 "$EP/api/generate" -d @- >/dev/null 2>&1; then
+    if ! printf '%s' "$payload" | curl -fsS -m 600 "$EP/api/generate" -d @- >/dev/null 2>&1; then # sigpipe-ok: consumer does not exit early
         echo "semantic: model=$model verdict=ERROR reason=unavailable"
         continue
     fi

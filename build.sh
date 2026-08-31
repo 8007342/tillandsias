@@ -25,6 +25,18 @@
 set -euo pipefail
 export TILLANDSIAS_NO_SINGLETON=1
 
+# ORDER 936-kdev. A SIGTERM used to kill this script SILENTLY: two ci-full
+# runs died rc=143 with every check green, and even naming the phase that was
+# live took forensic log reading — the sender is still unidentified. This
+# trap converts the event into one loud line (phase, pid, UTC), then
+# re-raises with default disposition so rc stays 143 and process-group
+# semantics are untouched. It is attribution, not protection.
+trap '{
+    echo "[build] SIGTERM received (pid $$) during phase: ${_PHASE_NAME:-<pre-phase>} at $(date -u +%Y-%m-%dT%H:%M:%SZ) — exiting 143 (936-kdev)" >&2
+    trap - TERM
+    kill -TERM $$
+}' TERM
+
 # On Fedora Silverblue (immutable), transparently re-exec inside the
 # tillandsias-builder toolbox where Rust/gcc/ruby/etc are available.
 # Non-Silverblue hosts skip with zero overhead.
@@ -37,6 +49,17 @@ source "$_BUILDER_DIR/scripts/with-tillandsias-builder.sh"
 # overhead. PLEASE REVIEW: linux — shared-scope hook added from the
 # windows lane.
 source "$_BUILDER_DIR/scripts/with-wsl2-builder.sh"
+
+# When TILLANDSIAS_BUILD_LANE=container is set, route nix invocations through
+# the tillandsias-builder container (images/builder/Containerfile — the one
+# lineage; distro nix): /nix on a named volume so a relaunch lands warm, the
+# per-host cache chroot store mounted at /host-store, and a post-build
+# populate + pin (openspec/changes/nix-cache-build-lane/design.md, 790-6n2k).
+# The wrapper injects per-host substituter flags when nix-cache-service.sh
+# answers; a cache that is down degrades to cold, never to failure. When
+# unset, byte-identical current behaviour (873-b1nx exit criterion 3).
+source "$_BUILDER_DIR/scripts/with-nix-builder.sh"
+
 unset _BUILDER_DIR
 
 # @trace spec:linux-native-portable-executable, spec:dev-build, spec:build-script-architecture, spec:windows-cross-build
@@ -687,7 +710,23 @@ fi
 # time. That is exactly how `./build.sh --observatorium` used to die
 # (_require_host_build_tools was defined ~45 lines below its only caller).
 
+# spec:dev-build "Build churn directories opt out of copy-on-write on btrfs".
+# Idempotent and best-effort: `chattr +C` affects only files created after it
+# is set, so this is safe on a live tree and needs no wipe; on non-btrfs the
+# chattr simply fails and we stay silent. The churn these trees hold is
+# rebuildable, and CoW+zstd+checksum amplification on it is what saturated
+# macuahuitl's NVMe during parallel builds (2026-08-30, io full 21.6% PSI).
+_ensure_nodatacow_churn_dirs() {
+    local d
+    for d in "$SCRIPT_DIR/target" "$HOME/.local/share/containers/storage/overlay"; do
+        [[ -d "$d" ]] || continue
+        [[ "$(lsattr -d "$d" 2>/dev/null | awk '{print $1}')" == *C* ]] && continue
+        chattr +C "$d" 2>/dev/null || true
+    done
+}
+
 _require_host_build_tools() {
+    _ensure_nodatacow_churn_dirs
     local missing=()
     local tool
     for tool in cargo rustc rustfmt clippy-driver gcc pkg-config; do
@@ -718,7 +757,11 @@ _require_host_build_tools() {
             _error "Install rustup, initialize it, then add x86_64-unknown-linux-musl."
             exit 1
         fi
-        if ! rustup target list --installed | grep -qx 'x86_64-unknown-linux-musl'; then
+        # PIPESTATUS[1] (grep's verdict), not the pipeline's: with pipefail, a
+        # SIGPIPE'd rustup would red this guard even when grep matched (795-imz3).
+        _musl_target_rc=0
+        rustup target list --installed | grep -qx 'x86_64-unknown-linux-musl' || _musl_target_rc="${PIPESTATUS[1]}"
+        if [[ "$_musl_target_rc" -ne 0 ]]; then
             _error "Missing Rust target: x86_64-unknown-linux-musl"
             _error "Run: rustup target add x86_64-unknown-linux-musl"
             exit 1
@@ -1030,7 +1073,7 @@ _run_litmus_phase() {
     shift 3
     local -a phase_args=()
     local arg
-    for arg in "${CI_ARG_LIST[@]}"; do
+    for arg in ${CI_ARG_LIST[@]+"${CI_ARG_LIST[@]}"}; do
         # run-litmus-test runs the full selected phase by default; strict-all is
         # a local-ci frontier-expansion flag and is not part of its CLI.
         [[ "$arg" == "--strict-all" ]] || phase_args+=("$arg")
@@ -1123,11 +1166,41 @@ _write_gate_stamp() {
         _stamp_dispatch="ci"
     fi
 
+    # ORDER 940-f77j — issue the PASS TOKEN that authorises the stamp.
+    #
+    # This function is reached only after every check passed, so reaching it IS
+    # the gate's verdict. Until now that invariant lived only in this control
+    # flow, while `gate-stamp.sh write` stayed callable by anyone — so a caller
+    # could assert a pass the gate never granted, and on 2026-08-29 one did
+    # (`./build.sh --check; scripts/gate-stamp.sh write; git push`, semicolons
+    # rather than `&&`: red gate, stamped anyway, pushed).
+    #
+    # Emitting the token here moves the invariant out of build.sh's shell and
+    # into an artifact only a green run produces. The token names the TREE it
+    # covers, so it cannot vouch for a tree edited after the gate ran, and
+    # gate-stamp.sh consumes it, so it cannot vouch twice.
+    local _pass_token _token_digest
+    _pass_token="$(git rev-parse --absolute-git-dir 2>/dev/null)/tillandsias-gate-pass-token"
+    if _token_digest="$(bash "$SCRIPT_DIR/scripts/gate-stamp.sh" compute 2>/dev/null)" \
+       && [[ -n "$_token_digest" ]]; then
+        {
+            printf 'version 1\n'
+            printf 'digest %s\n' "$_token_digest"
+            printf 'dispatch %s\n' "$_stamp_dispatch"
+            printf 'issued %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        } > "$_pass_token" 2>/dev/null || true
+    fi
+
     _step "Writing the gate stamp..."
     if bash "$SCRIPT_DIR/scripts/gate-stamp.sh" write --scope full --dispatch "$_stamp_dispatch" >/dev/null 2>&1; then
         _info "Gate stamp recorded (pre-push will accept this tree)"
     else
         _warn "Could not record gate stamp — pre-push may ask you to re-run the gate"
+        # Never leave a live token behind: an unconsumed token is a standing
+        # authorisation to stamp this tree later, which is the thing 940-f77j
+        # removes. If the stamp could not be written, the remedy is to re-run
+        # the gate, not to hold a credit note for it.
+        rm -f "$_pass_token" 2>/dev/null || true
     fi
     return 0
 }
@@ -1237,6 +1310,15 @@ fi
 # ---------------------------------------------------------------------------
 
 if [[ "$FLAG_INSTALL" == true ]]; then
+    # 765-evbt: a staged artifact must never carry false provenance. Refuse
+    # loudly if a non-artifact lane's fingerprint overrides leaked into the
+    # environment.
+    if [[ -n "${TILLANDSIAS_GIT_SHA_OVERRIDE:-}" ]] || [[ -n "${BUILD_COMMIT_SHA_OVERRIDE:-}" ]]; then
+        _error "Fingerprint overrides must not be set during --install (TILLANDSIAS_GIT_SHA_OVERRIDE=${TILLANDSIAS_GIT_SHA_OVERRIDE:-}, BUILD_COMMIT_SHA_OVERRIDE=${BUILD_COMMIT_SHA_OVERRIDE:-})"
+        _error "A staged artifact must carry real provenance. Unset the overrides and retry."
+        exit 1
+    fi
+
     _step "Building portable launcher (musl-static) with tray support for install..."
     _bump_build_version
     _check_trace_coverage
@@ -1485,6 +1567,14 @@ if [[ "$FLAG_CHECK" == true ]]; then
         esac
     fi
 
+    # 765-evbt: export tray-crate build fingerprint overrides for non-artifact
+    # lanes. These stabilize the build fingerprint across git activity during
+    # --check, preventing unnecessary recompilations of downstream crates.
+    # NEVER export in --install or --release — a staged artifact must carry
+    # real provenance (guarded below).
+    export TILLANDSIAS_GIT_SHA_OVERRIDE="non-artifact"
+    export BUILD_COMMIT_SHA_OVERRIDE="non-artifact"
+
     _step "Checking Rust formatting..."
     if ! _run cargo fmt --check --all --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1; then
         _error "Rust code not formatted: run 'cargo fmt --all'"
@@ -1583,6 +1673,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Fragment-integrity fixture passed"
+    _step "Checking the sanctioned YAML reader is present here (746-htj9)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-yaml-reader-availability.sh" 2>&1; then
+        _error "no sanctioned YAML reader in this environment, or the load-failure verdict collapsed into the divergence verdict (720-24u6)"
+        exit 1
+    fi
+    _info "YAML reader available and its verdicts stay distinct"
+
 
     _step "Checking set-field emits valid YAML for every value shape..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-set-field-yaml-shapes.sh" 2>&1; then
@@ -1657,6 +1754,71 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "pre-push empty-ref-list fixture passed"
+
+    # A cycle that attests must not refuse the checkout to its own successor
+    # (899-q9di). Wired here rather than left standing because an uninvoked
+    # guard is the shape audit-guard-activation exists to catch — and because
+    # the defect it pins was MEASURED on this host: the hourly fire was refused
+    # by pid 2393229, its own $PPID, a live harness that had already emitted a
+    # valid MO-FULL. The fixture's negative controls (cases 2 and 4) are the
+    # load-bearing half: they fail if the fix ever widens into "reclaim a lock",
+    # which would retire 873-zcim while every positive case stayed green.
+    # append-event must not write into the ARCHIVE (896-f8ti). Arms 3 and 4 are
+    # the load-bearing pair: the naive fix ("refuse anything not in the base")
+    # passes the refusal arms and breaks 699-usxc, the case that lets a packet
+    # filed THIS cycle receive events. Falsified against the pre-fix binary —
+    # arm 1 catches the acceptance, arm 3 catches the fragment it wrote.
+    _step "Checking the append-event archived-refusal fixture (896-f8ti)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-append-event-archived-refusal.sh" 2>&1; then
+        _error "append-event's archive guard regressed — either events are landing on completed work again, or legitimate writes to fragment-only packets are being refused"
+        exit 1
+    fi
+    _info "append-event archived-refusal fixture passed"
+
+    _step "Checking the checkout-lock attested-release fixture (899-q9di)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-cycle-lock-attested-release.sh" 2>&1; then
+        _error "the checkout-lock attested-release fixture regressed — either a finished cycle strands its lock again, or the lock stopped refusing concurrent agents"
+        exit 1
+    fi
+    _info "checkout-lock attested-release fixture passed"
+
+    # The release runbook must not prescribe pushing the tag before the
+    # back-merge (898-zhf3). That order is UNEXECUTABLE with the pre-push hook
+    # installed — creating the tag locally is enough for the monotonicity guard
+    # to resolve it as "latest release" and refuse the branch's pre-release
+    # VERSION, and the back-merge that fixes it was prescribed afterwards.
+    # Measured during the v0.4.260826.1 cut. The pressure at that point is
+    # toward --no-verify, on the one ref where bypassing the gate ships.
+    # Evidence capture must not be truncated by its own display (899-6pwv).
+    # Arms 1 and 2 reproduce the two original incidents with the original
+    # idioms, so if `tee|head` ever stops truncating — or the pipe-status rule
+    # changes — this fails and tells us the helper's premise moved.
+    _step "Checking the evidence capture helper (899-6pwv)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-capture-helper.sh" 2>&1; then
+        _error "capture.sh regressed — evidence files can be silently truncated by the excerpt that displays them"
+        exit 1
+    fi
+    _info "capture helper fixture passed"
+
+    # `expire-claims --list-live` must NAME every in_progress packet it counts
+    # (905-wjfj). The count and the rows had different sources: the summary
+    # counted all in_progress, the rows came from a claim-event filter, and a
+    # packet that was fresh but unclaimed fell through every bucket — observed
+    # on two hosts an hour apart as `in_progress=1` with zero rows. The arm that
+    # matters is the fresh-unclaimed one; it fails against the pre-fix binary.
+    _step "Checking expire-claims --list-live names what it counts (905-wjfj)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-expire-claims-list-live-rows.sh" 2>&1; then
+        _error "--list-live is counting in_progress packets it will not name — the sibling-overlap step built on it is blind again"
+        exit 1
+    fi
+    _info "expire-claims --list-live rows fixture passed"
+
+    _step "Checking the release runbook's tag/back-merge order (898-zhf3)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-release-runbook-tag-order.sh" 2>&1; then
+        _error "the release runbook prescribes an order the pre-push hook refuses — the next cut deadlocks at the tag push"
+        exit 1
+    fi
+    _info "release runbook tag-order fixture passed"
 
     _step "Checking the promote-stable evidence gate and dry-run..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-promote-stable-evidence-gate.sh" 2>&1; then
@@ -1733,6 +1895,100 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Capability-row host-resolution fixture passed"
+
+    # Order 889-ewvt. The guard above proves the host can NAME itself. This one
+    # proves the row it publishes is still TRUE: check-capability-row.sh printed
+    # `ok:capability-row-reported:yoga` all night over a row advertising an
+    # ollama engine the host did not have, and that false row routed the
+    # authoritative release gate to a host that could not run it. A missing row
+    # routes nothing; a false row routes confidently and wrongly.
+    _step "Checking capability-row truth dimension (889-ewvt)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-capability-row.sh" fixture 2>&1; then
+        _error "the capability-row truth fixture broke — a stale row can be consumed as a current fact again"
+        exit 1
+    fi
+    _info "Capability-row truth fixture passed"
+
+    # Order 823-u3k9. check-mcp-expert-health.sh launches its OWN server from
+    # the registration, so it validates the FILE and reads green by construction
+    # over a long-lived process running pre-fix code — measured on macuahuitl
+    # 2026-08-18, where 799-j4xd's fix was in the file and not in the server the
+    # session actually reached. This fixture pins the join that can see it.
+    _step "Checking the live MCP server build join (823-u3k9)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-mcp-live-build.sh" fixture 2>&1; then
+        _error "the live-build join broke — a stale MCP server can read healthy again"
+        exit 1
+    fi
+    _info "Live MCP server build fixture passed"
+
+    # Order 748-tkjx. ./build.sh --check runs NO litmus (deliberate — the suite
+    # is minutes and a gate that slow gets bypassed with --no-verify), so a
+    # green gate plus the spec you happened to run can both pass over another
+    # spec's broken pin. Measured twice: an edit to images/default/lib-common.sh
+    # left litmus:startup-context-addendum-shape red through both on 2026-08-15,
+    # and 921-vtf4 found three tests red back to af745f3fd on 2026-08-28. This
+    # fixture pins the reverse map that lets an editor ask what to re-run.
+    _step "Checking the file -> covering-litmus-specs query (748-tkjx)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/litmus-covering-specs.sh" fixture 2>&1; then
+        _error "the litmus coverage query broke — an editor of a shared file cannot learn which specs cover it"
+        exit 1
+    fi
+    _info "Litmus coverage query fixture passed"
+
+    # Order 925-erjs. A litmus step that asserts through `grep -A<N>` measures
+    # FORMATTING: a comment inserted above the anchor reddens correct code, and
+    # a window too narrow to reach the real arm greens a broken one. 25 such
+    # windows across 15 tests were converted to structural ranges; the seven
+    # that remain are argued in
+    # openspec/litmus-tests/LINE-WINDOW-DISPOSITIONS.txt. ADVISORY, per
+    # 634-39ik's recorded scope — enforcement never halts the line — but the
+    # count must not silently grow back: it went from 21 to 23 in the one day
+    # between filing the packet and starting it.
+    _step "Reporting litmus line-window pins (925-erjs, advisory)..."
+    _run bash "$SCRIPT_DIR/scripts/check-litmus-line-windows.sh" 2>&1 || true
+    _info "Litmus line-window report emitted"
+
+    # Order 928-qm8k. A groundtruth case that asserts on ANSWER PROSE has a
+    # verdict that belongs to the HOST, not to the answer: measured on yoga, the
+    # same query yields a synthesised sentence with inference up and the raw
+    # pasted section with it down. `answer_contains: "## Direction"` therefore
+    # passed on retrieval-only hosts and failed on synthesising ones — three
+    # hosts, three rounds, 24 hours. This grades the whole corpus under both
+    # regimes and names any case whose verdict moves. ~4s; the deterministic
+    # engines never touch the network.
+    _step "Checking groundtruth cases grade the same with inference up or down (928-qm8k)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-groundtruth-regime-invariance.sh" --strict 2>&1; then
+        _error "a groundtruth case grades differently by inference regime — its verdict is a property of the host (928-qm8k)"
+        exit 1
+    fi
+    _info "Groundtruth regime-invariance check passed"
+
+    # Order 923-rmtw. containers.conf's [engine] env proxy block was written by
+    # an init that could only CREATE it (its guard was a presence test), so
+    # every host provisioned before 801-kqme kept a no_proxy list without
+    # nix-cache — four days of phantom 883-ncrs "cache RSTs" and a broken e2e,
+    # repaired BY HAND on two hosts. This fixture pins the converger that
+    # removes the block and the check that would have caught the drift.
+    _step "Checking the containers.conf proxy-env converger (923-rmtw)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-containers-conf-proxy-env.sh" fixture 2>&1; then
+        _error "the containers.conf proxy-env check broke — a stale enclave proxy can strand fleet hosts again"
+        exit 1
+    fi
+    _info "containers.conf proxy-env fixture passed"
+
+    # Order 923-rmtw, shell half. A pasted copy of a Rust constant stops
+    # tracking its source: run-forge-project.sh and orchestrate-enclave.sh each
+    # carried their own no_proxy list, both frozen at pre-801-kqme values for
+    # eleven days — naming git-service after the constant dropped it, missing
+    # nix-cache after it gained it. One definition now, and this gate parses
+    # main.rs rather than restating the value, so the next change to
+    # ENCLAVE_NO_PROXY_BASE breaks the build instead of stranding the fleet.
+    _step "Checking the enclave proxy list has one definition (923-rmtw)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-enclave-proxy-lib.sh" 2>&1; then
+        _error "the shell enclave proxy list drifted from ENCLAVE_NO_PROXY_BASE, or a script re-pasted it"
+        exit 1
+    fi
+    _info "Enclave proxy list single-source check passed"
 
     # Order 858-ihcb. A benchmark that measures a warm prompt cache reports a
     # number that is wrong by 10x and looks plausible. This fixture inspects
@@ -1857,6 +2113,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Base-ledger status-loss advisory reported"
 
+    # Order 941-trcf. The fragment-overlay cost is linear in the index.d
+    # backlog (~40ms of gate time per fragment per gate run, measured), so the
+    # gate NAMES the backlog before it regrows to the 338 that doubled it.
+    # ADVISORY on the 751-i9mb terms: a grown backlog is news for the next
+    # coordination cycle, never a build break.
+    _step "Checking the plan fragment backlog against the compaction cadence (941-trcf, advisory)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-backlog.sh" 2>&1; then
+        _error "the fragment-backlog advisory could not run — that is a broken checkout, not a clean backlog"
+        exit 1
+    fi
+    _info "Fragment-backlog advisory reported"
+
     # Order 810-k8jy. Which file classes under a corpus root the RAG indexer
     # indexes, declines, or has never been told about. ADVISORY like the
     # carry-forward line above, and for the same reason: a new file class in the
@@ -1923,9 +2191,20 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # to a caller. 2.0s. Gating a tool nobody invokes yet is deliberate: the
     # sweep gets its call site under R3, and the gate must predate the sweep
     # rather than be added after the first bad run.
+    # ORDER 923-ws3r. The two outcomes are now separate exit codes, because the
+    # merged message ("would change the ready set, OR its check could not run")
+    # named both and pointed at neither — and the check spent days red on clean
+    # checkouts for the second reason while its wording invited the first
+    # reading. A violation means STOP. A could-not-run means the INSTRUMENT is
+    # broken and this step has learned nothing about the ledger.
     _step "Checking the plan archiver preserves the ready set (831-ezea)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/archive-plan-packets.sh" --check 2>&1; then
-        _error "the plan archiver would change the ready set, or its check could not run"
+    _archiver_rc=0
+    _run bash "$SCRIPT_DIR/scripts/archive-plan-packets.sh" --check 2>&1 || _archiver_rc=$?
+    if [ "$_archiver_rc" -eq 3 ]; then
+        _error "the plan archiver's check COULD NOT RUN (exit 3) — this says nothing about the ready set; the instrument is what needs repair (923-ws3r)"
+        exit 1
+    elif [ "$_archiver_rc" -ne 0 ]; then
+        _error "the plan archiver would CHANGE THE READY SET, orphan events, or leave archived rows unanswerable — do not sweep"
         exit 1
     fi
     _info "Plan archiver check passed"
@@ -2045,6 +2324,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "MO-FULL attestation ledger check passed"
 
+    # Order 795-imz3. `if ! <pipeline>` verdicts invert under pipefail when the
+    # consumer exits early (grep -q SIGPIPEs its producer), so the gate refuses
+    # the shape outright across scripts/ and build.sh. The gate shipped in
+    # 3b71b105a but was invoked by nothing here; wiring it activates it as a
+    # real --check gate (same activation shape as 599-4wzr below).
+    _step "Checking for if-not pipeline verdict guards (795-imz3)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-no-spawn-in-if-not.sh" 2>&1; then
+        _error "a script uses 'if ! <pipeline>' as a verdict — pipefail + SIGPIPE can invert the guard; capture the exit into a variable first or mark '# sigpipe-ok: <reason>' (795-imz3)"
+        exit 1
+    fi
+    _info "If-not pipeline guard check passed"
+
     # Order 680-zphp. Fail loud if an expert-groundtruth case pins `status:` on a
     # packet whose LIVE status is non-terminal — such a pin reds the 4-verifier
     # ratification harness on the next legitimate ledger update (it fired 3x:
@@ -2087,6 +2378,79 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Bash dialect gate passed"
+
+    _step "Checking the litmus step model (901-jtvi)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-step-model.sh" 2>&1; then
+        _error "the litmus step model regressed — a producer's failure or its stderr can go missing again (901-jtvi)"
+        exit 1
+    fi
+    _info "Litmus step-model fixture passed"
+
+    _step "Checking every litmus definition parses (933-4gm8)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-yaml-parses.sh" 2>&1; then
+        _error "a litmus YAML does not load — the runner's fallbacks would silently re-bucket it (933-4gm8; the named file is above)"
+        exit 1
+    fi
+    _info "Litmus YAML parse gate passed"
+
+    _step "Checking the nix-capability probe's evidence survives a noisy shell (917-zkge)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-probe-nix-capability-evidence.sh" 2>&1; then
+        _error "a capable row can carry shell noise as its proof that nix answered (917-zkge)"
+        exit 1
+    fi
+    _info "Probe evidence-capture guard passed"
+
+    _step "Checking a gate stamp cannot be written unearned (940-f77j)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-gate-stamp-must-be-earned.sh" 2>&1; then
+        _error "a caller can stamp a tree the gate never passed — the stamp stops meaning 'this tree is green' (940-f77j)"
+        exit 1
+    fi
+    _info "Gate-stamp earned-only guard passed"
+
+    _step "Checking the hardware fingerprint refuses an untrue twin claim (805-r98w)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-hardware-fingerprint.sh" 2>&1; then
+        _error "the hardware fingerprint would bless two different machines as a control — every tier number keyed on it inherits the difference (805-r98w)"
+        exit 1
+    fi
+    _info "Hardware-fingerprint gate passed"
+
+    _step "Checking uninstall sweeps BOTH macOS app dirs..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-uninstall-sweeps-both-app-dirs.sh" 2>&1; then
+        _error "uninstall would leave the app in the DEFAULT install dir while removing the LaunchAgent beside it — the app stays, nothing launches it, and the uninstaller reports success"
+        exit 1
+    fi
+    _info "Uninstall app-dir sweep gate passed"
+
+    _step "Checking image rebuild keeps the installed binary's launch tag (747-knbp)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-build-image-installed-version-alias.sh" 2>&1; then
+        _error "an image rebuild can orphan the tag the installed binary launches by — every forge launch would be dead on arrival (747-knbp)"
+        exit 1
+    fi
+    _info "Image-rebuild launch-tag gate passed"
+
+    _step "Checking end-user UX strings against recorded operator approval (626-w3fn)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-approved-ux-strings.sh" 2>&1; then
+        # The script names the file, the string and the ledger it failed to
+        # match, and states the two remedies. spec:tray-ux makes this a
+        # governance gate rather than a style one: an unapproved user-facing
+        # string must not ship, and the in-file unit test cannot catch a
+        # reword because a single find-and-replace edits the assertion too.
+        _error "an end-user UX string is not the one the operator approved in the ledger (626-w3fn, spec:tray-ux)"
+        exit 1
+    fi
+    _info "Approved-UX-string gate passed"
+
+    _step "Checking user-visible terminology against the dictionary (629-t6bx)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-terminology.sh" 2>&1; then
+        # The script names the file, the variant and the offending string, and
+        # says the two remedies (fix the string, or add the variant to the
+        # dictionary if it is correct). Do not restate a cause here — its
+        # verdict distinguishes a violation from a blocked/unreadable
+        # dictionary, and a wrapper that collapses those sends the reader to
+        # the wrong fix.
+        exit 1
+    fi
+    _info "Terminology gate passed"
 
     _step "Checking plan/schema status-vocab divergence (440)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-plan-schema-divergence.sh" 2>&1; then
@@ -2221,6 +2585,55 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Long-running view agreement check passed"
 
+    _step "Checking the reclaim-stranded-claims fixture (943-unii)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-reclaim-stranded-claims.sh" 2>&1; then
+        _error "the stranded-claim reaper regressed (943-unii) — see the failing case above"
+        exit 1
+    fi
+    _info "Reclaim-stranded-claims fixture passed"
+
+    _step "Checking the stranded-sweep predicate fixture (946-pdpi)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-check-stranded-in-progress.sh" 2>&1; then
+        _error "the stranded sweep's age predicate regressed (946-pdpi) — see the failing case above"
+        exit 1
+    fi
+    _info "Stranded-sweep predicate fixture passed"
+
+    _step "Checking the opencode rollback failure is loud and accurate (797-t9m7)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-opencode-rollback-is-loud.sh" 2>&1; then
+        _error "opencode_validate_or_rollback stopped distinguishing its three outcomes (797-t9m7) — see the failing case above"
+        exit 1
+    fi
+    _info "Opencode rollback loudness fixture passed"
+
+    _step "Checking plan fragments use keys the fold reads (944-vim8)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-keys-are-read.sh" 2>&1; then
+        _error "a plan/index.d/ fragment uses a top-level key the fold discards (944-vim8) — see the verdict line above"
+        exit 1
+    fi
+    _info "Fragment key check passed"
+
+    _step "Checking worker and coordinator agree on the claim protocol (943-unii)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-claim-protocol-agrees.sh" 2>&1; then
+        _error "the worker and coordinator skills specify different claim mechanisms (943-unii) — see the verdict line above"
+        exit 1
+    fi
+    _info "Claim-protocol agreement check passed"
+
+    _step "Checking the enclave membership list matches the code (245 P8)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-enclave-membership-documented.sh" 2>&1; then
+        _error "an enclave attach site is undocumented, or the spec names one that is gone (245 P8) — see the verdict line above"
+        exit 1
+    fi
+    _info "Enclave membership documentation check passed"
+
+    _step "Checking the proxy's permissive port agrees with its consumers (245 P6)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-proxy-permissive-port-routing.sh" 2>&1; then
+        _error "squid.conf and the code disagree about whether :3129 is routed (245 P6) — see the verdict line above"
+        exit 1
+    fi
+    _info "Proxy permissive-port routing check passed"
+
     _step "Checking litmus pin claims resolve and execute (721-77yu)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-pin-claims.sh" 2>&1; then
         _error "a script claims a litmus pin that cannot execute (721-77yu) — see the verdict line above"
@@ -2305,6 +2718,35 @@ if [[ "$FLAG_CHECK" == true ]]; then
             ;;
     esac
 
+    # ORDER 739-6r6n. The macOS twin, reported in the SAME breath as the windows
+    # one — the asymmetry this closes was not a missing script, it was that one
+    # platform had a loud warning and the other had SILENCE, and the silent one
+    # read as healthy. Same gate, same vocabulary, same attestation format; only
+    # the scope differs.
+    _step "Reporting macOS-only source verification state (739-6r6n)..."
+    _macos_only_verdict="$(bash "$SCRIPT_DIR/scripts/check-macos-only-sources-verified.sh" 2>/dev/null || echo "stale:sources-check-failed:macos-only")"
+    case "$_macos_only_verdict" in
+        ok:* | skip:*)
+            _info "macOS-only sources: $_macos_only_verdict"
+            ;;
+        missing:*)
+            # Same distinction the windows arm draws, and for the same reason:
+            # this says the REPOSITORY holds no attestation, never that the
+            # sources are unverified.
+            _warn "macOS-only sources: $_macos_only_verdict"
+            _warn "  No host has committed an attestation for these yet — this is a fact about"
+            _warn "  the repository, NOT a claim that the sources are broken or unverified."
+            _warn "  On a macOS host: cargo test -p tillandsias-macos-tray --bins | \\"
+            _warn "    scripts/check-macos-only-sources-verified.sh attest --from -"
+            ;;
+        *)
+            _warn "macOS-only sources: $_macos_only_verdict"
+            _warn "  A Linux or Windows build compiles stubs for these — this gate did NOT read them."
+            _warn "  Verify natively (cargo test -p tillandsias-macos-tray --bins), then:"
+            _warn "    scripts/check-macos-only-sources-verified.sh attest --from <transcript>"
+            ;;
+    esac
+
     # Record that the gate passed against THIS exact tree. The pre-push hook
     # verifies this stamp instead of re-running the whole gate: a multi-minute
     # hook gets --no-verify'd on its second use and then enforces nothing, while
@@ -2329,6 +2771,13 @@ fi
 
 # Release build
 if [[ "$FLAG_RELEASE" == true ]]; then
+    # 765-evbt: a release artifact must never carry false provenance.
+    if [[ -n "${TILLANDSIAS_GIT_SHA_OVERRIDE:-}" ]] || [[ -n "${BUILD_COMMIT_SHA_OVERRIDE:-}" ]]; then
+        _error "Fingerprint overrides must not be set during --release (TILLANDSIAS_GIT_SHA_OVERRIDE=${TILLANDSIAS_GIT_SHA_OVERRIDE:-}, BUILD_COMMIT_SHA_OVERRIDE=${BUILD_COMMIT_SHA_OVERRIDE:-})"
+        _error "A release artifact must carry real provenance. Unset the overrides and retry."
+        exit 1
+    fi
+
     _bump_build_version
     _check_trace_coverage
     if ! _run_local_ci_gate --fast "${CI_ARG_LIST[@]}"; then

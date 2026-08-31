@@ -115,7 +115,50 @@ PIN_SUBDIR="nix/var/nix/gcroots/tillandsias"
 # (Same reasoning as scripts/nix-toolbox.sh.)
 _podman() { env http_proxy= https_proxy= HTTP_PROXY= HTTPS_PROXY= podman "$@"; }
 
-have_nix() { command -v nix >/dev/null 2>&1; }
+# CAPABILITY, NOT `command -v nix` on the HOST — third instance of the
+# 799-tb7q second-criterion defect in this lane (after check-nix-deps-stability.sh
+# and select-work-batch.sh, and alongside check-nix-builder-e2e.sh fixed in the
+# same pass). Judging by the host binary made the whole nix cache lane excuse
+# itself with `skip:nix-cache:no-nix` on a host where nix is reachable through
+# the tillandsias-nix toolbox — and where 790-6n2k specifically wanted coverage.
+#
+# NIX_RUNG is resolved ONCE here and consumed by _cache_nix below, because the
+# rung is a property of the host and re-asking per call would pay a container
+# round trip for an answer that cannot change mid-run.
+# Resolved here rather than assumed: this script has no SCRIPT_DIR of its own,
+# and a sibling-path guess would be the fixed-depth mistake 914-ahsy hazard 4
+# is about.
+_NCS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+NIX_RUNG=""
+have_nix() {
+    [ -n "$NIX_RUNG" ] && return 0
+    NIX_RUNG="$(bash "$_NCS_DIR/nix-toolbox.sh" capability 2>/dev/null)" || return 1
+    NIX_RUNG="${NIX_RUNG#ok:nix-capability:}"
+    return 0
+}
+
+# Run nix on whichever rung this host actually has. On daemon/chroot the host
+# binary is the one to call; on the toolbox rung there is no host nix at all, so
+# the call goes through nix-toolbox.sh run. The --store flag stays with the
+# caller in both cases: $CHROOT_STORE is under $HOME, which toolbox shares with
+# the host, so it addresses the same store from either side.
+_cache_nix() {
+    # RESOLVE IF UNSET, because NIX_RUNG cannot be relied on to have survived.
+    # do_ensure calls do_prepare in a COMMAND SUBSTITUTION, so the rung that
+    # have_nix resolved there was set in a subshell and is gone by the time
+    # do_ensure re-derives the entrypoint. That produced an empty harmonia path,
+    # an entrypoint of `/bin/harmonia-cache`, and `blocked:nix-cache:start-failed`
+    # — a verdict three layers away from its cause. Defect introduced by the
+    # lazy caching in this same pass and caught by running it; a subshell
+    # boundary is invisible in review.
+    [ -n "$NIX_RUNG" ] || have_nix || return 1
+    if [ "$NIX_RUNG" = "toolbox" ]; then
+        bash "$_NCS_DIR/nix-toolbox.sh" run -- nix "$@"
+    else
+        nix "$@"
+    fi
+}
 store_present() { [ -d "$CHROOT_STORE/nix/store" ]; }
 
 # nix reports LOGICAL /nix/store paths even for a chroot store. A GC root that
@@ -132,7 +175,7 @@ _logical() {
 
 # Resolve harmonia in the persistent store, building it there if absent.
 resolve_harmonia() {
-    nix "${NIX_FEATURES[@]}" build --store "$CHROOT_STORE" --no-link \
+    _cache_nix "${NIX_FEATURES[@]}" build --store "$CHROOT_STORE" --no-link \
         --print-out-paths nixpkgs#harmonia 2>/dev/null | head -1
 }
 
@@ -156,7 +199,23 @@ ensure_keypair() {
         return 0
     fi
     rm -f "$SECRET_KEY" "$PUBLIC_KEY"
-    nix-store --generate-binary-cache-key "$KEY_NAME" "$SECRET_KEY" "$PUBLIC_KEY" >/dev/null 2>&1 || return 1
+    # nix-store, not nix, and it is a SECOND binary this lane assumes the host
+    # carries. Routed through the rung like every other nix call here: on a
+    # toolbox-rung host there is no host nix-store at all, and the bare call
+    # returned 1 — surfacing as `blocked:nix-cache:no-ca`, which named the wrong
+    # thing entirely. The CA files were present and healthy; the KEYPAIR could
+    # not be minted. Worth fixing the message too, but that is the caller's.
+    if [ "$NIX_RUNG" = "toolbox" ]; then
+        # --store is required on this rung: nix-store initialises the store
+        # before doing anything, and the container's default /nix is root-owned,
+        # so the keygen died with the single-user-installation error even though
+        # it only needed to write two key files.
+        bash "$_NCS_DIR/nix-toolbox.sh" run -- \
+            nix-store --store "$CHROOT_STORE" \
+            --generate-binary-cache-key "$KEY_NAME" "$SECRET_KEY" "$PUBLIC_KEY" >/dev/null 2>&1 || return 1
+    else
+        nix-store --generate-binary-cache-key "$KEY_NAME" "$SECRET_KEY" "$PUBLIC_KEY" >/dev/null 2>&1 || return 1
+    fi
     chmod 600 "$SECRET_KEY" 2>/dev/null
     return 0
 }
@@ -394,9 +453,18 @@ case "$cmd" in
         # retries it on every path. Silence here means "build as you did before".
         [ -s "$PUBLIC_KEY" ] || exit 0
         probe_ready || exit 0
+        # ORDER 917-zkge (pirria's A/B, 2026-08-30): these MUST be the
+        # --extra-* forms. The bare --substituters/--trusted-public-keys
+        # REPLACE nix's configured values, so an answering-but-cold cache
+        # became the ONLY substituter -- cutting cache.nixos.org and turning
+        # 389 fetchable paths into 3145 from-source derivations (6.4x) on
+        # the host least able to build them. images/builder/nix.conf states
+        # the invariant verbatim: "Upstream stays available so a cold cache
+        # degrades to slow, never to broken." The extra- forms APPEND, which
+        # is what every prior reading of this flag list assumed it did.
         printf '%s\n' \
-            --substituters "$(endpoint_host)" \
-            --trusted-public-keys "$(cat "$PUBLIC_KEY")" \
+            --extra-substituters "$(endpoint_host)" \
+            --extra-trusted-public-keys "$(cat "$PUBLIC_KEY")" \
             --ssl-cert-file "$CA_BUNDLE"
         ;;
     *)

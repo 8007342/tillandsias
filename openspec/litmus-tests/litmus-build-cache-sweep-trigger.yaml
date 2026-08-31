@@ -67,6 +67,75 @@ critical_path:
     expected_behavior: "ok: corrupt marker is due and named"
     timeout_ms: 30000
 
+  - step: "NO MARKER under the threshold INITIALISES and is NOT due (906-qi89)"
+    # A bookkeeping absence is not evidence of bloat. `no-marker` used to
+    # prescribe `cargo clean` — measured on tlatoanis-macbook-air across three
+    # cycles at 18 GiB against a 40 GiB trigger, a full rebuild for a marker
+    # that had never been written. Initialising also closes a real gap: a
+    # never-stamped marker has no age, so the 14-day trigger could never fire
+    # for a host sitting just under the size threshold.
+    command: "d=$(mktemp -d); mkdir -p \"$d/t\" \"$d/c\"; head -c 1000 /dev/zero > \"$d/t/x\"; out=$(TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/m\" scripts/check-build-cache-sweep.sh); rc=$?; wrote=no; [ -f \"$d/c/m\" ] && wrote=yes; body=$(cat \"$d/c/m\" 2>/dev/null); rm -rf \"$d\"; [ \"$rc\" -eq 0 ] && [ \"$wrote\" = yes ] && printf '%s' \"$out\" | grep -q ':reason=no-marker-initialised-under-threshold$' && printf '%s' \"$body\" | grep -q 'NO-SWEEP-PERFORMED' && echo 'ok: initialised, not swept, and the marker says so'"
+    expected_behavior: "ok: initialised, not swept, and the marker says so"
+    timeout_ms: 30000
+
+  - step: "NEGATIVE CONTROL: no marker OVER the threshold is still due, and is NOT initialised"
+    # Without this leg, "initialise on no-marker" could be implemented as
+    # "always initialise", which would disable the size trigger and silently
+    # start the staleness clock on a genuinely bloated host.
+    command: "d=$(mktemp -d); mkdir -p \"$d/t\" \"$d/c\"; head -c 1000 /dev/zero > \"$d/t/x\"; out=$(TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/m\" TILLANDSIAS_BUILD_CACHE_MAX_GIB=0 scripts/check-build-cache-sweep.sh); rc=$?; wrote=no; [ -f \"$d/c/m\" ] && wrote=yes; rm -rf \"$d\"; [ \"$rc\" -ne 0 ] && [ \"$wrote\" = no ] && printf '%s' \"$out\" | grep -q ':reason=over-size$' && echo 'ok: bloat still fires and no clock was started'"
+    expected_behavior: "ok: bloat still fires and no clock was started"
+    timeout_ms: 30000
+
+  - step: "THE STAMPED DATE IS UTC, and agrees with the marker's own utc= field (905-97xh)"
+    # One line of one file used to name two different days: `date=` came from
+    # local `date` and `utc=` from `date -u`. Measured on tlatoanis-macbook-air
+    # at 2026-08-26T06:09:41Z (23:09 PDT on the 25th): date=2026-08-25
+    # utc=2026-08-26T06:09:41Z. Asserted through TZ so this fails on a host
+    # whose local date differs from UTC, rather than passing vacuously wherever
+    # the two happen to agree.
+    # THE STRAY FIRST INVOCATION HERE WROTE THE REAL PRODUCTION MARKER.
+    # It ran `stamp` with NO TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER override, so
+    # every litmus run stamped ~/.cache/tillandsias/.last-build-cache-sweep with
+    # `host=t action=cargo-clean:done` — a sweep that never happened — resetting
+    # the 14-day staleness trigger to 0. Measured on macuahuitl hours after it
+    # landed: marker `host=t`, target/ at 37 GiB against a 40 GiB size trigger,
+    # verdict `ok:...not-due:...reason=under-threshold-0d`. The sweep could not
+    # fire by age, and the host reported green while carrying ~106 GB.
+    # Removed; every invocation below is hermetic.
+    command: "d=$(mktemp -d); TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/m\" TZ=Pacific/Kiritimati scripts/check-build-cache-sweep.sh stamp --host t --action 'cargo-clean:done' >/dev/null; md=$(sed -n 's/^date=\\([0-9-]*\\) .*/\\1/p' \"$d/m\"); mu=$(sed -n 's/.* utc=\\([0-9-]*\\)T.*/\\1/p' \"$d/m\"); rm -rf \"$d\"; [ -n \"$md\" ] && [ \"$md\" = \"$mu\" ] && [ \"$md\" = \"$(date -u +%Y-%m-%d)\" ] && echo 'ok: date= is UTC and matches utc='"
+    expected_behavior: "ok: date= is UTC and matches utc="
+    timeout_ms: 30000
+
+  - step: "A LEGACY local-stamped marker one day ahead in UTC is fresh, not corrupt (905-97xh migration)"
+    # The edge the UTC switch creates. A marker written by the OLD local-time
+    # stamp on a UTC+14 host carries tomorrow's UTC date; naive subtraction
+    # gives age=-1, which this script reports as unreadable-marker — a good
+    # marker called corrupt and a full sweep prescribed for it.
+    command: "d=$(mktemp -d); mkdir -p \"$d/t\" \"$d/c\"; head -c 1000 /dev/zero > \"$d/t/x\"; ahead=$(date -u -v+1d +%Y-%m-%d 2>/dev/null || date -u -d '1 day' +%Y-%m-%d); printf 'date=%s utc=x host=legacy action=cargo-clean:done\\n' \"$ahead\" > \"$d/c/m\"; out=$(TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/m\" scripts/check-build-cache-sweep.sh); rc=$?; rm -rf \"$d\"; [ \"$rc\" -eq 0 ] && printf '%s' \"$out\" | grep -q '^ok:build-cache-sweep-not-due:' && echo 'ok: legacy one-day-ahead marker is fresh'"
+    expected_behavior: "ok: legacy one-day-ahead marker is fresh"
+    timeout_ms: 30000
+
+  - step: "NEGATIVE CONTROL: a marker far in the future is still refused"
+    # The clamp above must cover exactly the one-day timezone case and no more.
+    # Accepting an arbitrary future date would disable the staleness trigger
+    # for any host with a badly wrong clock.
+    command: "d=$(mktemp -d); mkdir -p \"$d/t\" \"$d/c\"; head -c 1000 /dev/zero > \"$d/t/x\"; far=$(date -u -v+10d +%Y-%m-%d 2>/dev/null || date -u -d '10 days' +%Y-%m-%d); printf 'date=%s utc=x host=bad action=cargo-clean:done\\n' \"$far\" > \"$d/c/m\"; out=$(TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/m\" scripts/check-build-cache-sweep.sh); rc=$?; rm -rf \"$d\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -q ':reason=unreadable-marker$' && echo 'ok: a far-future marker is still refused'"
+    expected_behavior: "ok: a far-future marker is still refused"
+    timeout_ms: 30000
+
+  - step: "NEGATIVE CONTROL: this suite does not touch the REAL sweep marker"
+    # The arm that would have caught the defect above, and the reason it is
+    # worth its own step rather than a review habit: a fixture writing
+    # production state fails SILENTLY and in the safe-looking direction — the
+    # gate it disables goes green. Nothing in the suite's own results could
+    # reveal it; it took an infrastructure audit reading the live marker.
+    #
+    # Snapshots the real marker (or its absence), runs every stamping scenario
+    # in this file, and asserts the marker is byte-identical afterwards.
+    command: "M=\"${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/.last-build-cache-sweep\"; before=$(cat \"$M\" 2>/dev/null || echo ABSENT); d=$(mktemp -d); mkdir -p \"$d/t\" \"$d/c\"; head -c 1000 /dev/zero > \"$d/t/x\"; TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/m\" scripts/check-build-cache-sweep.sh stamp --host t --action 'cargo-clean:done' >/dev/null 2>&1; TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/absent\" scripts/check-build-cache-sweep.sh >/dev/null 2>&1; after=$(cat \"$M\" 2>/dev/null || echo ABSENT); rm -rf \"$d\"; [ \"$before\" = \"$after\" ] && echo 'ok: real marker untouched' || echo \"FAIL: the suite mutated the production marker: [$before] -> [$after]\""
+    expected_behavior: "ok: real marker untouched"
+    timeout_ms: 30000
+
   - step: "An EPHEMERAL FORGE never sweeps — its target/ dies with the container"
     command: "out=$(TILLANDSIAS_HOST_KIND=forge scripts/check-build-cache-sweep.sh); rc=$?; [ \"$rc\" -eq 0 ] && [ \"$out\" = 'skip:forge-exempt' ] && echo 'ok: forge exempt'"
     expected_behavior: "ok: forge exempt"

@@ -66,7 +66,12 @@ param(
     [switch]$DebugBuild,
     [switch]$Release,
     [string]$Version,
-    [switch]$Sign
+    [switch]$Sign,
+    # Order 776-g6r3. Emit the MSIX with Revision=0. The Store may reserve the
+    # fourth version field; this host cannot reach Partner Center validation to
+    # settle it, so the constraint is a FLAG rather than a guess in either
+    # direction. See the version block in the MSIX section for what it costs.
+    [switch]$MsixStoreRevisionZero
 )
 
 $ErrorActionPreference = 'Stop'
@@ -271,6 +276,256 @@ if ($Sign) {
     Write-Host "  NOTE: UNSIGNED build (pass -Sign to Authenticode-sign; requires az login or CI federated credentials)" -ForegroundColor Yellow
 }
 
+# -- MSIX (order 776-g6r3) ---------------------------------------------------
+# POSITION IS LOAD-BEARING, for the same reason the zip's is: this packages the
+# STAGED exe, so it must run AFTER the -Sign block above. Signing mutates the
+# file; packaging first would seal an unsigned binary inside a package whose
+# checksum we then publish (722-qvqb).
+#
+# It must also run BEFORE the Remove-Item of $stage further down. The MSIX and
+# the zip are two packagings of one staged payload, not two builds.
+#
+# The MSIX supersedes install-windows.ps1's job rather than shipping it: the
+# startupTask replaces the Startup-folder shortcut, the package root replaces
+# %LOCALAPPDATA%\Programs, and Store uninstall replaces the HKCU uninstall key.
+# So the MSIX payload is the exe and its assets only -- the bundled operator
+# scripts stay in the zip, which is the channel that still needs them.
+$msix = Join-Path $artifactsDir "$base.msix"
+$msixTemplate = Join-Path $RepoRoot 'packaging\msix\AppxManifest.xml.template'
+if (Test-Path -LiteralPath $msixTemplate) {
+    Write-Host "Packaging MSIX ..." -ForegroundColor Cyan
+
+    # -- resolve makeappx ----------------------------------------------------
+    # Same glob + env-override shape as sign-windows-artifact.ps1's signtool
+    # resolution, deliberately: two tools from the same SDK discovered two
+    # different ways is how one of them silently stops being found.
+    $makeappx = $env:TILLANDSIAS_MAKEAPPX
+    if (-not $makeappx) {
+        $candidates = @(
+            "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\makeappx.exe",
+            "${env:ProgramFiles}\Windows Kits\10\bin\*\x64\makeappx.exe"
+        ) | ForEach-Object { Get-ChildItem -Path $_ -ErrorAction SilentlyContinue } |
+            Sort-Object { try { [version]$_.VersionInfo.ProductVersion } catch { [version]'0.0' } } -Descending
+        if ($candidates) { $makeappx = $candidates[0].FullName }
+    }
+    if (-not $makeappx -or -not (Test-Path -LiteralPath $makeappx)) {
+        throw "makeappx-absent (need the Windows SDK; set TILLANDSIAS_MAKEAPPX to override)"
+    }
+
+    # -- version: ONE encoding, two consumers --------------------------------
+    # Reuses crates/tillandsias-windows-tray/build.rs's u16 re-encoding rather
+    # than inventing a second one. 0.4.260826.1 -> 0.4.2608.2601: YYMMDD does
+    # not fit a u16 field, so it splits as YYMM and DD*100+N, monotonic within
+    # each field.
+    #
+    # OPEN CONSTRAINT, deliberately not guessed: Store submissions may require
+    # Revision=0 (Microsoft reserves the fourth field). This host cannot reach
+    # Partner Center validation to settle it, so the default keeps the full
+    # encoding and -MsixStoreRevisionZero produces the Store variant. If the
+    # Store does require it, same-day builds collide at 0.4.2608.0 and the N
+    # component needs somewhere else to live -- that is a decision for the
+    # submission slice, not a default to assume here.
+    # VERSION IS NOW STORE-LEGAL AT THE SOURCE, so this is near-passthrough.
+    #
+    # It used to be an encoder. Under the old 0.4.YYMMDD.N shape the workspace
+    # major was 0 -- which the Store forbids ("the first section cannot be 0")
+    # -- and YYMMDD (260830) blew past the 65535 per-field cap, so EVERY MSIX
+    # this repo could build was rejected before certification looked at it. The
+    # epoch-concat encoder existed to translate around that.
+    #
+    # The v2 scheme (2026-08-31) fixed the shape at the source instead:
+    #
+    #     <years_since_epoch>.<month>.<day>.<daily_build>     56.8.31.1
+    #
+    # Field one is years since 1970, so it is non-zero until 1970 and cannot
+    # overflow 65535 until the year 67505. Month and day are trivially in range.
+    # The translation layer is therefore gone, and with it the 2036 wall the
+    # previous encoding carried and the minor!=0 hazard that would have bitten
+    # on a 1.0 release. Fixing the shape beat translating it, permanently.
+    #
+    # WHAT STILL HAS TO HAPPEN HERE: field four. The Store reserves it and
+    # requires 0, so the daily build number is DROPPED for the MSIX. That is the
+    # operator's own semantic -- Windows ships the durable .0 build while other
+    # hosts carry dailies -- and it means two Store submissions on the SAME DAY
+    # would collapse to the same version, which the Store refuses as a duplicate.
+    # One Windows release per day is the design, not an accident of this code,
+    # but it is a real constraint and it is written down rather than discovered.
+    $vParts = $Version.Split('.')
+    if ($vParts.Count -ne 4) {
+        throw "msix-version-unmappable: expected <years>.<month>.<day>.<build>, got '$Version'"
+    }
+    foreach ($p in $vParts) {
+        if ($p -notmatch '^\d+$') {
+            throw "msix-version-unmappable: non-numeric field in '$Version'"
+        }
+    }
+    $years = [int]$vParts[0]
+    # YEARS-FIELD SANITY, replacing the old minor!=0 assert. Field one being 0
+    # is the single rule that invalidated every package this repo used to build,
+    # so it stays asserted even though the v2 scheme cannot produce it -- an
+    # assert is cheap and the failure it catches costs a certification round
+    # trip. The upper bound is the Store's per-field cap, reached in 67505.
+    if ($years -lt 1) {
+        throw "msix-version-first-field-zero: field one is '$years'. The Store forbids a leading 0; a package built this way is rejected before certification."
+    }
+    foreach ($i in 0..2) {
+        if ([int]$vParts[$i] -gt 65535) {
+            throw "msix-version-field-overflow: field $($i+1) is $($vParts[$i]) and the Store caps fields at 65535"
+        }
+    }
+    $msixVersion = "{0}.{1}.{2}.0" -f $years, [int]$vParts[1], [int]$vParts[2]
+
+    # -- stage the package layout -------------------------------------------
+    $msixStage = Join-Path $artifactsDir "$base-msix"
+    if (Test-Path $msixStage) { Remove-Item -Recurse -Force $msixStage }
+    New-Item -ItemType Directory -Force $msixStage | Out-Null
+    New-Item -ItemType Directory -Force (Join-Path $msixStage 'Assets') | Out-Null
+    Copy-Item $stagedExe (Join-Path $msixStage 'tillandsias-tray.exe')
+
+    # Logos are RENDERED by the windows-tray build script from the bloom SVG
+    # (no ImageMagick). Absence is fatal HERE and best-effort there, on purpose:
+    # a Linux host cross-checking the crate must not need the art, but a release
+    # package without its Store logos is not a release package.
+    $logoSrc = Join-Path $RepoRoot 'target\msix-logos'
+    $logos = @('Square44x44Logo.png', 'Square150x150Logo.png', 'StoreLogo.png')
+    foreach ($logo in $logos) {
+        $src = Join-Path $logoSrc $logo
+        if (-not (Test-Path -LiteralPath $src)) {
+            throw "msix-logo-missing: $src (build crates/tillandsias-windows-tray once to render it)"
+        }
+        Copy-Item $src (Join-Path $msixStage "Assets\$logo")
+    }
+
+    # -- manifest ------------------------------------------------------------
+    # Placeholders, not defaults with real-looking values: a publisher CN that
+    # LOOKS plausible is one somebody ships under by accident. These are
+    # overridable per-invocation and the Store values come from Partner Center.
+    # IDENTITY RESOLUTION: env var, then an UNTRACKED user-space file, then the
+    # placeholder. The middle rung exists because the operator declines to
+    # commit the Partner Center Publisher CN to a public repo (2026-08-31), and
+    # retyping an env var every session is how a value ends up wrong once and
+    # silently thereafter.
+    #
+    # The file is KEY=VALUE, one per line, read as UTF-8 EXPLICITLY. That is
+    # load-bearing rather than tidy: PublisherDisplayName must match Partner
+    # Center byte-for-byte and this operator's is "Tlatoa" + U+0304 + "ni". Read
+    # with the ANSI default it becomes mojibake, the manifest is written
+    # correctly from a wrong string, and certification fails for a reason that
+    # looks nothing like encoding. Get-Content without -Encoding is exactly that
+    # bug, which is why this uses ReadAllText with an explicit UTF8Encoding.
+    #
+    # This function contains no non-ASCII literals: 722-qvqb pins this script to
+    # ASCII for the 5.1 parser, so the macron only ever travels as DATA.
+    $identityFile = Join-Path $HOME '.config/tillandsias/msix-identity.env'
+    $identityFromFile = @{}
+    if (Test-Path -LiteralPath $identityFile) {
+        $lines = [System.IO.File]::ReadAllText(
+            $identityFile, (New-Object System.Text.UTF8Encoding($false))) -split "`r?`n"
+        foreach ($line in $lines) {
+            if ($line -match '^\s*#') { continue }
+            if ($line -match '^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$') {
+                $identityFromFile[$Matches[1]] = $Matches[2]
+            }
+        }
+    }
+    function Resolve-MsixIdentityValue([string]$Key, [string]$Fallback) {
+        $fromEnv = [Environment]::GetEnvironmentVariable($Key)
+        if ($fromEnv) { return $fromEnv }
+        if ($identityFromFile.ContainsKey($Key) -and $identityFromFile[$Key]) {
+            return $identityFromFile[$Key]
+        }
+        return $Fallback
+    }
+
+    $identityName = Resolve-MsixIdentityValue 'TILLANDSIAS_MSIX_IDENTITY_NAME' 'Tlatoani.Tillandsias'
+    # The default publisher sits in Microsoft's UNSIGNED NAMESPACE -- the
+    # OID.2.25.3117... suffix. Two reasons, and the second is the important one:
+    #   1. It makes `Add-AppxPackage -AllowUnsigned` work, so the acceptance test
+    #      for this packaging needs no certificate and no change to the machine's
+    #      trust store. Sideload-testing a package should not require installing
+    #      a root you then have to remember to remove.
+    #   2. It CANNOT be shipped by accident. A package in the unsigned namespace
+    #      is refused by the Store and by any normal install path, so a build
+    #      that forgot to set TILLANDSIAS_MSIX_PUBLISHER fails loudly at the
+    #      point of distribution rather than quietly publishing under a
+    #      plausible-looking fake identity.
+    $placeholderPublisher = 'CN=TillandsiasTestPublisher, OID.2.25.311729368913984317654407730594956997722=1'
+    $publisher = Resolve-MsixIdentityValue 'TILLANDSIAS_MSIX_PUBLISHER' $placeholderPublisher
+    $publisherDisplay = Resolve-MsixIdentityValue 'TILLANDSIAS_MSIX_PUBLISHER_DISPLAY' 'Tlatoani'
+    $displayName = Resolve-MsixIdentityValue 'TILLANDSIAS_MSIX_DISPLAY_NAME' 'Tillandsias'
+
+    # STORE-BOUND BUILDS REFUSE THE PLACEHOLDER. -MsixStoreRevisionZero is only
+    # ever passed when the package is meant for Partner Center, and a Store
+    # submission carrying the unsigned-namespace CN is rejected after upload,
+    # certification queue and wait -- feedback measured in hours for a fault
+    # knowable in milliseconds. Worse, the package LOOKS submittable: it builds,
+    # it sideloads, its manifest reads plausibly.
+    #
+    # This refuses instead, and never prints the resolved CN. The operator
+    # treats it as sensitive; a build log is the last place it should surface,
+    # and "did the build see it" is answerable without echoing it.
+    if ($MsixStoreRevisionZero -and $publisher -eq $placeholderPublisher) {
+        throw @"
+msix-store-identity-missing: refusing to build a Store-bound package under the
+placeholder publisher.
+
+  -MsixStoreRevisionZero says this package is for Partner Center, but
+  TILLANDSIAS_MSIX_PUBLISHER resolved to the unsigned-namespace placeholder, so
+  the Store would reject it after upload and certification.
+
+  Set it in the environment, or in an untracked file:
+    $identityFile
+  as KEY=VALUE lines (UTF-8), using the values from Partner Center ->
+  Product management -> View app identity details:
+    TILLANDSIAS_MSIX_IDENTITY_NAME=<Package/Identity/Name, verbatim>
+    TILLANDSIAS_MSIX_PUBLISHER=<Package/Identity/Publisher, the CN=... string>
+    TILLANDSIAS_MSIX_PUBLISHER_DISPLAY=<Package/Identity/PublisherDisplayName>
+
+  Omit -MsixStoreRevisionZero to build a sideload package instead.
+"@
+    }
+
+    $manifestText = Get-Content -LiteralPath $msixTemplate -Raw
+    $manifestText = $manifestText.Replace('@MSIX_IDENTITY_NAME@', $identityName)
+    $manifestText = $manifestText.Replace('@MSIX_PUBLISHER@', $publisher)
+    $manifestText = $manifestText.Replace('@MSIX_PUBLISHER_DISPLAY_NAME@', $publisherDisplay)
+    $manifestText = $manifestText.Replace('@MSIX_DISPLAY_NAME@', $displayName)
+    $manifestText = $manifestText.Replace('@MSIX_VERSION@', $msixVersion)
+    if ($manifestText -match '@MSIX_[A-Z_]+@') {
+        # A leftover placeholder produces a manifest makeappx may still accept,
+        # yielding a package identified as literally "@MSIX_PUBLISHER@". Fail
+        # here, where the cause is one line away.
+        throw "msix-manifest-unsubstituted: $($Matches[0]) still present"
+    }
+    # UTF-8 without BOM: makeappx rejects a BOM'd manifest.
+    [System.IO.File]::WriteAllText(
+        (Join-Path $msixStage 'AppxManifest.xml'),
+        $manifestText,
+        (New-Object System.Text.UTF8Encoding($false)))
+
+    if (Test-Path $msix) { Remove-Item -Force $msix }
+    & $makeappx pack /d $msixStage /p $msix /o
+    if ($LASTEXITCODE -ne 0) {
+        throw "makeappx-failed (exit $LASTEXITCODE); refusing to publish a package that did not build"
+    }
+    Remove-Item -Recurse -Force $msixStage
+
+    if ($Sign) {
+        # An MSIX carries its own signature; signing the payload exe does not
+        # sign the package. Skipped for Store submission (Microsoft re-signs),
+        # required for sideloading.
+        Write-Host "Signing $msix ..." -ForegroundColor Cyan
+        & (Join-Path $PSScriptRoot 'sign-windows-artifact.ps1') -Path $msix
+        if ($LASTEXITCODE -ne 0) {
+            throw "signing refused for the MSIX; refusing to publish an unsigned package"
+        }
+    }
+    Write-Host "Packaged: $msix (version $msixVersion)" -ForegroundColor Green
+} else {
+    Write-Host "  WARN: $msixTemplate not found; skipping MSIX" -ForegroundColor Yellow
+    $msix = $null
+}
+
 $zip = Join-Path $artifactsDir "$base.zip"
 if (Test-Path $zip) { Remove-Item -Force $zip }
 Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force
@@ -280,7 +535,24 @@ Remove-Item -Recurse -Force $stage
 # the shared release. sha256sum format: "<hash>  <filename>".
 $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
 $sums = Join-Path $artifactsDir 'SHA256SUMS-windows'
-"$hash  $(Split-Path $zip -Leaf)" | Out-File -Encoding ascii -NoNewline $sums
+# One sums file covering every Windows artifact. The MSIX gets its own line
+# rather than its own file: a verifier that has to know which sums file to fetch
+# for which artifact is a verifier people skip. Order matters only for humans;
+# sha256sum -c does not care.
+#
+# The PUBLISHED file carries two separator conventions and that is expected,
+# not a defect. These lines use sha256sum TEXT mode ("<hash>  <name>"); the
+# release workflow later appends the alias, exe and installer lines with
+# coreutils sha256sum, which writes BINARY mode ("<hash> *<name>"). Both parse,
+# and release.yml runs `sha256sum -c` on the merged file right after appending.
+# Do not "normalize" one producer without the other -- a uniform-looking file
+# produced by changing only this end would still be produced by two writers.
+$sumLines = @("$hash  $(Split-Path $zip -Leaf)")
+if ($msix -and (Test-Path -LiteralPath $msix)) {
+    $msixHash = (Get-FileHash $msix -Algorithm SHA256).Hash.ToLower()
+    $sumLines += "$msixHash  $(Split-Path $msix -Leaf)"
+}
+($sumLines -join "`n") | Out-File -Encoding ascii -NoNewline $sums
 
 Write-Host "Packaged: $zip" -ForegroundColor Green
 Write-Host "Checksums: $sums" -ForegroundColor Green

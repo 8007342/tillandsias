@@ -1,0 +1,98 @@
+# @trace spec:expert-serve-grounded-pipeline
+# @trace order:920-pxg6 (exit criterion 3 — citations survive only if used)
+#
+# THE GAP THIS CLOSES. The 687eb6d57 facade stamped citations:[] onto every
+# response, and its OpenCode agent fabricated citations freely — decoration
+# in both directions. The grounded pipeline builds every envelope through the
+# spec::build_envelope family, whose contract is: a retrieved chunk's
+# citation survives ONLY when the synthesized prose actually contains its
+# key. Retrieval width is k=6, so most answers retrieve MORE than they use —
+# without this filter every answer would ship plausible-looking spans the
+# prose never leaned on, and verify-answer would certify decoration.
+#
+# WHAT IS EXECUTED. The real release binary's `pipeline` arm against a
+# two-chunk fixture entry where BOTH chunks retrieve at cosine 1 (the stub
+# embeds every query identically), and a scripted synthesis stub whose prose
+# names exactly ONE of the two keys. The envelope must carry exactly that
+# one citation, stamped with the ENTRY's commit frame. The negative control
+# rewrites the stub's script to prose that names NO key: the prose must be
+# DISCARDED (never shipped uncited) and the cited retrieval-only digest —
+# which names both keys by construction — must serve instead.
+name: litmus:expert-serve-citations-only-if-used
+spec: expert-serve-grounded-pipeline
+phase: pre-build
+description: >
+  Pin 920-pxg6 exit criterion 3: subset-usage synthesis keeps ONLY the used
+  citation (retrieved-but-unused chunks are stripped), the surviving
+  citation carries the index entry's commit frame, and the envelope
+  verifies. Negative control: synthesis that uses NO retrieved key is
+  discarded in favor of the cited retrieval-only digest carrying every
+  retrieved citation — model prose never ships uncited.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-plan (the engine and the openai-stub example)
+  - jq is available in PATH
+  - target/release/tillandsias-plan built with the expert-serve capability, or cargo available to build it
+
+critical_path:
+  - step: "FIXTURE: stage the two-chunk entry, the fixture root, the scripted OpenAI stub on 21438, and the release binary"
+    # Same fixture shape as litmus:expert-serve-refusal-not-fallback (the
+    # entry's chunks cite real spans in the fixture root so Rust validation
+    # passes); the stub's --content file is re-read per request, which is
+    # what lets the negative control re-script the synthesis without a
+    # second stub.
+    command: "rm -rf /tmp/.litmus-920c; pkill -f 'openai-stu[b] --port 21438' 2>/dev/null; mkdir -p /tmp/.litmus-920c/fixroot/plan /tmp/.litmus-920c/fixroot/crates/tillandsias-plan /tmp/.litmus-920c/entry /tmp/.litmus-920c/bin && cp -r crates/tillandsias-plan/lua /tmp/.litmus-920c/fixroot/crates/tillandsias-plan/ && printf 'k: v\\n' > /tmp/.litmus-920c/fixroot/plan/index.yaml && printf 'fixture-key-a\\nbody a\\nfixture-key-b\\nbody b\\n' > /tmp/.litmus-920c/fixroot/notes.md && printf '%s\\n%s\\n' '{\"id\":0,\"path\":\"notes.md\",\"line_start\":1,\"line_end\":2,\"kind\":\"spec\",\"key\":\"fixture-key-a\",\"content_hash\":\"0\",\"text\":\"fixture-key-a body a\"}' '{\"id\":1,\"path\":\"notes.md\",\"line_start\":3,\"line_end\":4,\"kind\":\"spec\",\"key\":\"fixture-key-b\",\"content_hash\":\"0\",\"text\":\"fixture-key-b body b\"}' > /tmp/.litmus-920c/entry/chunks.jsonl && printf '[1.0,0.0]\\n[1.0,0.0]\\n' > /tmp/.litmus-920c/entry/vectors.jsonl && printf 'abcdef1234567890abcdef1234567890abcdef12\\n' > /tmp/.litmus-920c/entry/.commit && printf 'stub-embed\\n' > /tmp/.litmus-920c/entry/.model && printf 'Grounded: fixture-key-a is the mechanism. Sources: fixture-key-a\\n' > /tmp/.litmus-920c/synth.txt && B=${CARGO_TARGET_DIR:-target}/release/tillandsias-plan; { test -x \"$B\" && \"$B\" capabilities 2>/dev/null | grep -qx expert-serve; } || cargo build -q -p tillandsias-plan --release; cp \"$B\" /tmp/.litmus-920c/bin/plan && S=${CARGO_TARGET_DIR:-target}/release/examples/openai-stub; test -x \"$S\" || cargo build -q -p tillandsias-plan --release --example openai-stub; nohup \"$S\" --port 21438 --log /tmp/.litmus-920c/stub.log --content /tmp/.litmus-920c/synth.txt > /tmp/.litmus-920c/stub.out 2>&1 & echo $! > /tmp/.litmus-920c/stub.pid; for i in $(seq 1 50); do if (exec 3<>/dev/tcp/127.0.0.1/21438) 2>/dev/null; then break; fi; sleep 0.1; done; (exec 3<>/dev/tcp/127.0.0.1/21438) 2>/dev/null && echo 'ok: fixture-ready'"
+    timeout_ms: 300000
+    expected_behavior: "ok: fixture-ready"
+
+  - step: "BEHAVIOURAL: subset-usage synthesis — both chunks retrieved, prose names only fixture-key-a, so EXACTLY that citation survives, framed at the entry commit"
+    command: "env TILLANDSIAS_SPEC_INDEX_NO_PODMAN=1 TILLANDSIAS_SPEC_INDEX_DIR=/tmp/.litmus-920c/entry TILLANDSIAS_EMBED_ENDPOINT=http://127.0.0.1:21438/v1 TILLANDSIAS_SPEC_EXPERT_ENDPOINT=http://127.0.0.1:21438/v1 /tmp/.litmus-920c/bin/plan --index /tmp/.litmus-920c/fixroot/plan/index.yaml pipeline --domain spec 'what is key a' > /tmp/.litmus-920c/subset.json 2>/dev/null && jq -e '.confidence == \"retrieved\" and (.citations | length == 1) and (.citations[0].authority.key == \"fixture-key-a\") and (.citations[0].commit == \"abcdef1234567890abcdef1234567890abcdef12\")' /tmp/.litmus-920c/subset.json >/dev/null && C=$(jq -r '.citations[].authority.key' /tmp/.litmus-920c/subset.json | grep -c 'fixture-key-b'); test \"${C:-0}\" = 0 && echo 'ok: only-used-citation-survives'"
+    timeout_ms: 60000
+    expected_behavior: "ok: only-used-citation-survives"
+
+  - step: "BEHAVIOURAL: the subset envelope verifies against the fixture root"
+    command: "/tmp/.litmus-920c/bin/plan verify-answer --root /tmp/.litmus-920c/fixroot < /tmp/.litmus-920c/subset.json | grep -q '^ok: envelope verified' && echo 'ok: subset-envelope-verifies'"
+    timeout_ms: 30000
+    expected_behavior: "ok: subset-envelope-verifies"
+
+  - step: "NEGATIVE CONTROL: synthesis that names NO retrieved key is DISCARDED — the cited retrieval-only digest (both keys, by construction) serves instead of uncited prose"
+    # The stub re-reads --content per request, so re-scripting is one printf.
+    # The digest's pinned first line and the citation count are both asserted:
+    # two citations proves the fallback (only-if-used over the digest keeps
+    # every retrieved chunk), and the pinned line proves the model's keyless
+    # prose was not shipped.
+    command: "printf 'The model paraphrased away every section name entirely.\\n' > /tmp/.litmus-920c/synth.txt && env TILLANDSIAS_SPEC_INDEX_NO_PODMAN=1 TILLANDSIAS_SPEC_INDEX_DIR=/tmp/.litmus-920c/entry TILLANDSIAS_EMBED_ENDPOINT=http://127.0.0.1:21438/v1 TILLANDSIAS_SPEC_EXPERT_ENDPOINT=http://127.0.0.1:21438/v1 /tmp/.litmus-920c/bin/plan --index /tmp/.litmus-920c/fixroot/plan/index.yaml pipeline --domain spec 'what is key a' > /tmp/.litmus-920c/zerokey.json 2>/dev/null && jq -e '.confidence == \"retrieved\" and (.citations | length == 2)' /tmp/.litmus-920c/zerokey.json >/dev/null && jq -r '.answer' /tmp/.litmus-920c/zerokey.json | head -1 | grep -q '^Relevant spec sections (retrieval-only' && C=$(jq -r '.answer' /tmp/.litmus-920c/zerokey.json | grep -c 'paraphrased away'); test \"${C:-0}\" = 0 && /tmp/.litmus-920c/bin/plan verify-answer --root /tmp/.litmus-920c/fixroot < /tmp/.litmus-920c/zerokey.json | grep -q '^ok: envelope verified' && echo 'ok: keyless-prose-discarded-cited-digest-serves'"
+    timeout_ms: 60000
+    expected_behavior: "ok: keyless-prose-discarded-cited-digest-serves"
+
+  - step: "TEARDOWN: stop the stub"
+    command: "kill $(cat /tmp/.litmus-920c/stub.pid) 2>/dev/null; echo 'ok: teardown'"
+    timeout_ms: 15000
+    expected_behavior: "ok: teardown"
+
+observability:
+  traces:
+    - "@trace spec:expert-serve-grounded-pipeline"
+    - "@trace order:920-pxg6"
+  expected_log: "subset-usage synthesis keeps exactly the used citation with the entry's commit frame; keyless synthesis is discarded for the cited retrieval-only digest — citations are never decoration and prose never ships uncited"
+  log_fields:
+    spec: "expert-serve-grounded-pipeline"
+    test: "expert-serve-citations-only-if-used"
+    engine: "tillandsias-plan pipeline (run_grounded via spec::build_envelope_scored_with_freshness)"
+    stub: "crates/tillandsias-plan/examples/openai-stub.rs"
+    verifier: "tillandsias-plan verify-answer"
+
+rollback:
+  on_failure: >
+    The only-if-used citation filter regressed. If the subset step failed
+    with two citations, retrieved-but-unused chunks are being shipped as
+    decoration; if it failed with zero, the filter is matching keys too
+    strictly (or synthesis output stopped reaching build_envelope). If the
+    commit assertion failed, the entry frame is no longer stamped before the
+    emit path's HEAD default (D2/801-g9nn). If the NEGATIVE CONTROL failed
+    with the model's prose in .answer, uncited prose is shipping — the exact
+    raw-model laundering 920-pxg6 exists to kill; if it failed with a
+    refusal, the cited retrieval-only fallback was dropped.
+  command: "jq -c '{confidence, citations: [.citations[].authority.key]}' /tmp/.litmus-920c/subset.json 2>/dev/null; jq -r '.answer' /tmp/.litmus-920c/zerokey.json 2>/dev/null | head -3; cat /tmp/.litmus-920c/stub.log 2>/dev/null"

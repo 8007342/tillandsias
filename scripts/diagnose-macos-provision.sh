@@ -13,7 +13,9 @@
 # Exit codes:
 #   0 — provisioning smoke passed
 #   2 — degraded (provision failed, image missing, or SHA mismatch)
-#   1 — hard failure (tray binary not found, manifest unavailable, jq absent)
+#   1 — hard failure (tray binary not found, manifest unavailable)
+#   3 — no JSON processor available; a TOOLING gap on this machine, not a
+#       provisioning fault. Distinct from 1 on purpose (order 799-tb7q).
 #
 # @trace plan/issues/osx-next-work-queue-2026-05-25.md (m12)
 
@@ -78,9 +80,37 @@ write_check() {
 
 trap 'printf "\n${RED}ABORTED${RESET} — smoke test interrupted\n"' INT TERM
 
-if ! command -v jq >/dev/null 2>&1; then
-    echo "error: jq required for JSON parsing — \`brew install jq\`" >&2
-    exit 1
+# ORDER 799-tb7q — same rule as tray-diagnose.sh: a shipped diagnostic must not
+# tell an end user to install a developer tool, and must not report a missing
+# PARSER as a failure of the thing under diagnosis. Dispatch is host jq ->
+# toolbox jq -> degrade with the reason named.
+#
+# WHY THIS DISPATCH IS INLINE AND NOT scripts/lib/tool-dispatch.sh — A DECISION,
+# NOT AN OVERSIGHT (order 799-tb7q). That lib exists and 46 dev-host callers use
+# it; these two diagnostics deliberately do not.
+#
+# THIS SCRIPT SHIPS. It runs on an end-user machine, and its whole job is to work
+# where nothing else does. Sourcing a sibling file would give it a dependency
+# that may be absent exactly there — and a diagnostic that fails to source its
+# helper fails at the moment its output is needed, with a failure that LOOKS LIKE
+# the thing it was sent to investigate. That is strictly worse than no
+# diagnostic.
+#
+# So: two justified copies beat one fragile abstraction. If you are sweeping
+# callers onto the lib, SKIP THIS FILE. scripts/test-shipped-diagnostic-tool-dispatch.sh
+# and scripts/test-tool-dispatch-lib.sh both FAIL if this file starts sourcing it.
+TILLANDSIAS_JQ=""
+if command -v jq >/dev/null 2>&1; then
+    TILLANDSIAS_JQ="jq"
+elif command -v toolbox >/dev/null 2>&1 \
+     && toolbox run --container tillandsias-builder jq --version >/dev/null 2>&1; then
+    TILLANDSIAS_JQ="toolbox run --container tillandsias-builder jq"
+else
+    echo "note: no JSON processor available (no host \`jq\`, no tillandsias-builder" >&2
+    echo "      toolbox). This script needs one to read the manifest; that is a" >&2
+    echo "      TOOLING gap on this machine, not a provisioning fault (799-tb7q)." >&2
+    echo "      Install jq to run this diagnostic." >&2
+    exit 3
 fi
 
 if [[ ! -f "$MANIFEST_FILE" ]]; then

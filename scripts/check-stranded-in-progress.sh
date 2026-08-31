@@ -5,10 +5,17 @@
 #
 # Order 642-*.
 #
-# THE LEAK. A packet in `in_progress` is invisible in BOTH directions: `ready`
-# queries skip it so nobody claims it, and burndown does not count it so nobody
-# notices it is unfinished. It is neither work nor done. 23 packets were in that
-# state when this was written (16 linux, 6 windows), the oldest at order 153.
+# THE LEAK. A packet in `in_progress` is skipped by `ready` queries, so nobody
+# claims it.
+#
+# CORRECTED 2026-08-31 (946-pdpi, measured): this said "invisible in BOTH
+# directions ... burndown does not count it". The burndown half is false —
+# `tillandsias-plan burndown <milestone>` lists in_progress children WITH their
+# status. Only the ready/selector pool hides a claim, which is precisely why
+# this sweep is the sole observer and why its predicate had to be right.
+#
+# Such a packet is neither work nor done. 23 were in that state when this was
+# written (16 linux, 6 windows), the oldest at order 153.
 #
 # This is a DIFFERENT leak from 635-i6vm, and the guard written for that one
 # cannot see it:
@@ -25,9 +32,15 @@
 # automated closer that guesses would silently mark unfinished work done — the
 # most expensive possible version of this bug. It reports; owners close.
 #
-# GRAMMAR — one line per stranded packet, then one summary line:
-#   ^stranded\t<order>\t<role>\t<packet_id>$
+# GRAMMAR — one line per flagged packet, then one summary line:
+#   ^stranded\t<order>\t<role>\t<packet_id>\tidle=<n>h$
+#   ^unknown-age\t<order>\t<role>\t<packet_id>$
 #   ^summary: (population=<n> in_progress=<n> stranded=<n> threshold_events=<n>|unavailable:<reason>)$
+#
+# `stranded` means IDLE PAST THE THRESHOLD (946-pdpi), not "has never had a
+# progress event". `idle=<n>h` is on the row so the reader can judge without
+# re-deriving it. `unknown-age` is its own class rather than a silent pass or a
+# guessed flag — an unreadable age is not an absent one.
 #
 # POPULATION (order 831-ezea). Every check verdict names the size of the set it
 # examined, so that a green cannot be misread as health over nothing. Here
@@ -51,6 +64,29 @@
 # failing a build on it would block work for a state that is often correct.
 
 set -uo pipefail
+
+
+# ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has it.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+# Resolve the lib by WALKING UP, not by a fixed depth (order 914-ahsy). The
+# fixed form `dirname "${BASH_SOURCE[0]}"/lib/...` is correct only for a caller
+# sitting directly in scripts/. From scripts/refusal-calibration/ it points at a
+# lib that does not exist, the `|| true` swallows the miss, and the tool variable
+# silently falls back to the bare name — a conversion that passes review, passes
+# the suite, and changes nothing.
+_td_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_td_dir" ] && [ "$_td_dir" != "/" ] && [ ! -f "$_td_dir/lib/tool-dispatch.sh" ]; do
+    _td_dir="$(dirname "$_td_dir")"
+done
+if [ -f "$_td_dir/lib/tool-dispatch.sh" ]; then
+    . "$_td_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+fi
+if command -v resolve_tool >/dev/null 2>&1; then
+    JQ="$(resolve_tool jq || printf 'jq')"
+else
+    JQ="jq"   # lib unavailable: preserve the previous behaviour exactly
+fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 2
@@ -91,7 +127,7 @@ if ! raw="$("$PLAN" query --status in_progress --limit 200 --json 2>/dev/null)";
     exit 0
 fi
 if ! rows="$(printf '%s' "$raw" \
-    | jq -r '.[] | [(.order|tostring), (.pickup_role // "unassigned"), .packet_id] | @tsv' 2>/dev/null)"; then
+    | "$JQ" -r '.[] | [(.order|tostring), (.pickup_role // "unassigned"), .packet_id] | @tsv' 2>/dev/null)"; then
     echo "summary: unavailable:plan-query-unparseable"
     exit 0
 fi
@@ -128,24 +164,106 @@ total=0
 # just the instance). When the binary is unavailable the loop DECLINES to
 # classify rather than guessing from half the ledger — an unreadable history is
 # not an absent one.
+# ORDER 946-pdpi. AGE THE CLAIM, DO NOT COUNT ITS EVENTS.
+#
+# THIS LOOP USED TO ASK THE WRONG QUESTION, and its comment and its code did not
+# even agree on which question. The comment said "no progress event SINCE the
+# claim"; the code counted `progress|completed|blocked` over the packet's ENTIRE
+# history and flagged zero. It read no timestamp, never looked at the claim, and
+# never compared the two. "Since" existed only in the prose.
+#
+# MEASURED on the live ledger 2026-08-31T04:55Z, both error directions in ONE
+# run:
+#
+#   packet     qualifying events   age at claim   old verdict
+#   335              5               1 minute     NOT stranded
+#   944-jaef         0              35 minutes    STRANDED
+#   759-vceg         0               3.2 hours    STRANDED
+#
+# The FALSE NEGATIVE is the structural one. 335 carries progress events from
+# earlier cycles, so it was PERMANENTLY IMMUNE: claimed one minute before the
+# run and absent from the report, and it would still be absent if the claiming
+# host had died holding it for a week. Every packet that has ever been worked —
+# precisely the multi_cycle and repeatedly-claimed set most likely to be claimed
+# again — was invisible to this sweep by construction. A sweep structurally
+# blind to ever-worked packets is blind to exactly the set most likely to be
+# claimed and abandoned, while crying wolf on fresh cycles; both errors came
+# from one missing timestamp read.
+#
+# The FALSE POSITIVE is the noisy one: a cycle that has not yet written a
+# progress event is the normal state of its first hour. `expire-claims` agreed
+# nothing was past TTL in that same run (expired=0) while this sweep reported
+# stranded=4 of population=5 — an 80% rate that measured how many in_progress
+# packets had never had a progress event, which correlates with being NEW.
+#
+# NOT A RE-REPORT OF 882-vqe4, which fixed a different defect in this same loop
+# (counting the fragment overlay instead of the folded history). That fix was
+# correct and the fold is fine. The predicate on top of it was not.
+#
+# WHERE THE AGE COMES FROM. `expire-claims --list-live` already derives, per
+# in_progress packet, the claim timestamp from the status LWW channel and the
+# most recent activity timestamp. Re-deriving either here would be the same
+# defect one storage location later (704-zcgi: the copy has to go, not just the
+# instance), so this consumes those rows instead of parsing fragments again.
+# `--dry-run` is passed with `--list-live` to make the read-only intent explicit
+# in the command rather than resting on an observation that it happens not to
+# write today.
+#
+# THRESHOLD, and why it is not the reaper's. The 24h TTL is when a claim becomes
+# RECLAIMABLE. This sweep is advisory and exists to warn a human EARLIER, so it
+# defaults to 8h and is overridable. Setting it equal to the TTL would make this
+# report a duplicate of `threshold_events` below and delete the early warning
+# that is the sweep's only reason to exist.
+STRANDED_HOURS="${TILLANDSIAS_STRANDED_HOURS:-8}"
+case "$STRANDED_HOURS" in
+    ''|*[!0-9]*) echo "summary: unavailable:bad-stranded-hours:$STRANDED_HOURS"; exit 2 ;;
+esac
+[ "$STRANDED_HOURS" -gt 0 ] || { echo "summary: unavailable:bad-stranded-hours:$STRANDED_HOURS"; exit 2 ; }
 stranded=0
 out=""
 if [ -n "$rows" ]; then
+    # LET THE BINARY DO THE AGE ARITHMETIC. `expire-claims --ttl-hours N`
+    # already answers "which in_progress claims have been idle longer than N
+    # hours", against the same status/event history every other reader folds.
+    # Two reasons this is not a shortcut:
+    #   * 704-zcgi — a second implementation of an existing derivation is the
+    #     same defect one storage location later. This sweep asks the question;
+    #     it does not get to invent its own arithmetic for it.
+    #   * 761-g36m — the shell version of this needed `date -u -d <iso>`, which
+    #     is GNU-only, and BSD `date` SUCCEEDS with garbage output, so an
+    #     exit-code guard cannot catch it. The gate refused it, correctly. A
+    #     portable ISO-to-epoch in POSIX shell is not worth writing when the
+    #     binary already has one.
+    # `--dry-run` makes the read-only intent explicit rather than resting on
+    # an observation that --list-live happens not to write today.
+    ec_args="expire-claims --ttl-hours $STRANDED_HOURS --dry-run"
+    [ -n "${TILLANDSIAS_STRANDED_NOW_EPOCH:-}" ] \
+        && ec_args="$ec_args --now-epoch $TILLANDSIAS_STRANDED_NOW_EPOCH"
+    # shellcheck disable=SC2086
+    if ! aged="$("$PLAN" $ec_args 2>/dev/null)"; then
+        # An unreadable claim table is an UNKNOWN, not a quiet all-clear
+        # (702-68zj) — the whole point of the third verdict existing.
+        echo "summary: unavailable:expire-claims-failed"
+        exit 2
+    fi
     while IFS=$'\t' read -r order role pid; do
         [ -n "$pid" ] || continue
-        if [ -z "$PLAN" ]; then
-            # No folder available: report the population and refuse the verdict.
-            echo "summary: unavailable:no-runnable-plan-binary"
-            exit 2
-        fi
-        # `filed` and `claim` do not count as activity; `progress`, `completed`
-        # and `blocked` do. plan-events exits 1 only for an unresolvable id.
-        events=$("$PLAN" plan-events "$pid" 2>/dev/null \
-            | grep -cE '^(progress|completed|blocked)	' || true)
-        if [ "${events:-0}" -eq 0 ]; then
-            out="${out}stranded	${order}	${role}	${pid}"$'\n'
-            stranded=$((stranded + 1))
-        fi
+        # An `expire-candidate` row means "idle past the threshold we asked
+        # about". Report the row's own timestamp rather than a computed age:
+        # it is the evidence, it needs no arithmetic, and it does not drift
+        # between the run and the reading.
+        since="$(printf '%s\n' "$aged" \
+            | awk -F'\t' -v p="$pid" '
+                $1 == "expire-candidate" && $3 == p {
+                    for (i = 4; i <= NF; i++)
+                        if ($i ~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z$/) {
+                            print $i; exit
+                        }
+                    print "unknown"; exit
+                }')"
+        [ -n "$since" ] || continue
+        out="${out}stranded	${order}	${role}	${pid}	idle-since=${since}"$'\n'
+        stranded=$((stranded + 1))
     done <<< "$rows"
 fi
 

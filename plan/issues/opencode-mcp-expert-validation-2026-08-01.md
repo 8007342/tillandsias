@@ -84,3 +84,18 @@ this report.
 - This dated report: `plan/issues/opencode-mcp-expert-validation-2026-08-01.md`
 - Raw transcripts: envelope JSON captured from `tools/call` responses
   (see section 2 for the three envelopes; full JSON in the MCP tool-call output).
+
+## 7. Correction (2026-08-28): the `host-browser` row misdiagnosed the socket error
+
+Section 1 above recorded `host-browser` as "host-side server, not applicable
+inside the forge container" on the strength of its
+`TILLANDSIAS_CONTROL_SOCKET not set` error. That reading was wrong. The
+control socket IS meant to be lane-mounted into the forge (order 505); the
+error is a wiring gap — the OpenCode launcher never bind-mounts the lane's
+`mcp.sock` into the container nor exports `TILLANDSIAS_CONTROL_SOCKET`.
+Re-observed 2026-08-28 in sibling lane `forge-tillandsias-org`
+(SiblingContainerDiagnosis.md: no control-socket mount anywhere in
+`/proc/1/mountinfo`), where the missing wiring blocks the sibling-container
+publish path outright. Filed as packet
+`opencode-forge-lane-missing-order-505-control-socket`. The historical text in
+section 1 is left as written; this section supersedes its diagnosis.

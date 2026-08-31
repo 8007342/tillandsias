@@ -80,7 +80,14 @@ run_sut() { #  run_sut <env assignments...>  -> prints "<verdict>|<exit>"
     # simulated locus; inherited forge/workstation markers would otherwise
     # divert the ordinary-host cases into the forge refusal branch before the
     # identity fallback under test is reached.
+    # Order 889-ewvt added a TRUTH dimension (does the committed row still
+    # agree with a live probe). This file is about IDENTITY RESOLUTION, and its
+    # plan binary is a stub that serves a canned matrix — there is no live fold
+    # to be had here, so the truth half is switched off explicitly rather than
+    # left to run a real hardware probe against a fake ledger. Its own
+    # behaviour is covered by `check-capability-row.sh fixture`.
     out="$(env -u TILLANDSIAS_HOST_KIND -u TILLANDSIAS_WORKSTATION "$@" \
+        TILLANDSIAS_CAPABILITY_LIVE_UNRUNNABLE=1 \
         PATH="$TMPD/bin:$PATH" \
         TILLANDSIAS_PLAN_BIN="$TMPD/bin/stub-plan" \
         TILLANDSIAS_FORGE_CONTEXT="$TMPD/no-forge-context" \

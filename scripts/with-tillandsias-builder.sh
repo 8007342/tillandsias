@@ -98,20 +98,122 @@ if [[ ! -f /etc/os-release ]]; then
     return 0 2>/dev/null || exit 0
 fi
 
+# ── Gate on CAPABILITY, not on OS IDENTITY (operator direction 2026-08-26) ──
+#
+# This used to read: `VARIANT_ID != silverblue && ! command -v rpm-ostree` ->
+# skip. That is an IDENTITY test, and it excluded the one host in the fleet that
+# most needed the toolbox — macuahuitl, mutable Fedora 44, which has `toolbox`
+# installed and rootless podman working but is not Silverblue and has no
+# rpm-ostree. So the coordinator built bare on the host while every immutable
+# sibling built inside a container.
+#
+# MEASURED CONSEQUENCE, 2026-08-26: that host accumulated 12 GB of a dead agent
+# session in tmpfs and 60 GB across 13 abandoned worktrees, wedged its own
+# tooling against a tmpfs quota, and needed an operator with a terminal to
+# recover. Silverblue siblings reported no comparable accumulation. That is a
+# correlation with a mechanism behind it, not proof — see the caveat below.
+#
+# WHAT CHANGES: a host that CAN run a toolbox now does, regardless of what
+# /etc/os-release calls it.
+#
+# WHAT DELIBERATELY DOES NOT CHANGE, because widening a gate is where this kind
+# of edit goes wrong:
+#   - A host with NO toolbox still passes straight through, exactly as before.
+#     It must, or every plain container and CI runner that reached this line
+#     harmlessly would start failing.
+#   - On an ostree host a missing toolbox is still a hard ERROR, because there
+#     it means a broken install rather than a different kind of machine.
+#   - Every earlier skip-guard is untouched: already-inside-toolbox,
+#     container=oci/podman, and TILLANDSIAS_SKIP_TOOLBOX=1 all still win. The
+#     last of those is the escape hatch if this misbehaves on a host mid-cycle.
+#
+# THE CAVEAT WORTH KEEPING: .claude/worktrees is created by the Claude Code
+# harness, not by this build system, so the 60 GB half of that accumulation may
+# follow the WORKLOAD rather than the host variant. This change addresses the
+# build-state half, which is the half it can actually reach.
 VARIANT_ID="$(grep -oP '^VARIANT_ID=\K.*' /etc/os-release 2>/dev/null || true)"
-if [[ "$VARIANT_ID" != "silverblue" ]] && ! command -v rpm-ostree &>/dev/null; then
+_TB_OSTREE=0
+if [[ "$VARIANT_ID" == "silverblue" ]] || command -v rpm-ostree &>/dev/null; then
+    _TB_OSTREE=1
+fi
+
+# ── NO SILENT FALLBACK TO A HOST-NATIVE BUILD (operator ruling 2026-08-26) ──
+#
+# The operator owns every development host and guarantees the invariant: EVERY
+# Linux builder has podman and toolbox. Given that, a fallback to building on
+# the host is not resilience — it is the failure mode this milestone exists to
+# kill. A host-native build that "worked" is indistinguishable from a
+# containerised one until something diverges, and then the divergence is
+# attributed to the code rather than to the environment it was never built in.
+#
+# THE RULE: entering the toolbox ALWAYS succeeds, or this FAILS HARD AND
+# IMMEDIATELY. On a healthy Silverblue fleet the failure branch never runs; if
+# it does, something is wrong that a silent fallback would hide.
+#
+# THIS REPLACES a pass-through I wrote an hour earlier, on the reasoning that
+# "a host that cannot containerise should still be able to compile". That is
+# exactly backwards under an owned fleet: the machine that cannot containerise
+# is the one whose build you should trust least, and letting it proceed
+# converts an environment fault into a silent behavioural difference.
+#
+# macOS and Windows are the sanctioned exceptions. macOS is handled ABOVE by the
+# /etc/os-release guard — it has its own build path (build-macos-tray.sh).
+#
+# ORDER 922-curm — WINDOWS WAS NOT, AND THIS COMMENT USED TO CLAIM IT WAS.
+# The claim was "macOS and Windows ... are handled ABOVE by the /etc/os-release
+# guard". Half true: that guard fires where the file is ABSENT, which on Windows
+# is only the Git Bash side. `./build.sh --check` there does not stop at Git
+# Bash — it re-execs into the tillandsias-build WSL2 distro, and INSIDE that
+# distro /etc/os-release exists (Fedora 44 Container Image), so the guard the
+# comment pointed at never runs. Measured on yolanda 2026-08-28 while closing
+# 889-8tcb: /etc/os-release present, `container` unset, /run/.containerenv
+# absent, toolbox absent — the distro is indistinguishable from a bare Fedora
+# builder to every guard this script had, and the FATAL below killed EVERY
+# Windows gate before a single check ran.
+#
+# So detect WSL natively instead of asserting an exception that was not there.
+# /proc/version carries the marker on every WSL2 kernel (measured in this
+# distro: "6.18.33.2-microsoft-standard-WSL2"), it is a property of the KERNEL
+# rather than of the asker — the distinction 889-8tcb paid for when a
+# capability probe answered differently on each side of the same boundary — and
+# it needs no cooperation from the distro's userland, which is a container
+# image that ships neither `hostname` (890-t9pu) nor systemd-detect-virt.
+#
+# THIS DELIBERATELY DOES NOT WIDEN THE RULING. The refusal below is what an
+# owned Linux fleet gets, and a bare-metal Linux builder without toolbox still
+# fails exactly as hard — pinned by the negative control in
+# scripts/test-toolbox-refusal-wsl-exception.sh, not by review. What changes is
+# only that a WSL2 distro stops being mistaken for one: it is not a host
+# escaping its container, it is the container the Windows lane sanctions, and
+# scripts/with-wsl2-builder.sh is the thing that put us inside it.
+if grep -qi microsoft /proc/version 2>/dev/null; then
     [[ "$_TB_DIRECT" == 1 && $# -gt 0 ]] && exec "$@"
     ! declare -F _tb_restore_caller_opts >/dev/null || _tb_restore_caller_opts
     return 0 2>/dev/null || exit 0
 fi
 
-# ── Guard: toolbox binary must be installed ──────────────────────────────
+# Reaching here means Linux, not under WSL.
 if ! command -v toolbox &>/dev/null; then
-    echo "[tillandsias-builder] ERROR: 'toolbox' not found on Silverblue." >&2
+    echo "[tillandsias-builder] FATAL: 'toolbox' is not installed on this Linux host." >&2
+    echo "[tillandsias-builder] Every Linux builder in this fleet is required to have it;" >&2
+    echo "[tillandsias-builder] there is deliberately NO host-native fallback, because a" >&2
+    echo "[tillandsias-builder] build that silently escapes its container is worse than no" >&2
+    echo "[tillandsias-builder] build at all." >&2
     echo "[tillandsias-builder] Install it:" >&2
-    echo "    rpm-ostree install toolbox" >&2
-    echo "    (or: sudo dnf install --skip-broken toolbox)" >&2
-    echo "[tillandsias-builder] Then reboot and retry." >&2
+    echo "    rpm-ostree install toolbox      # immutable hosts" >&2
+    echo "    sudo dnf install toolbox        # mutable hosts" >&2
+    echo "[tillandsias-builder] To override for a one-off, set TILLANDSIAS_SKIP_TOOLBOX=1" >&2
+    echo "[tillandsias-builder] — deliberately explicit, never automatic." >&2
+    exit 1
+fi
+
+# toolbox(1) is a thin wrapper over podman. Without podman it cannot create or
+# enter anything, so this is the same fault one layer down and gets the same
+# treatment: fail, do not degrade.
+if ! command -v podman &>/dev/null; then
+    echo "[tillandsias-builder] FATAL: 'toolbox' is present but podman is not." >&2
+    echo "[tillandsias-builder] toolbox is a wrapper over podman and cannot work without it." >&2
+    echo "[tillandsias-builder] No host-native fallback by design (see above)." >&2
     exit 1
 fi
 
@@ -142,8 +244,51 @@ _toolbox_exists() {
 # init so `./build.sh --check` does not fail with "Missing host build tools".
 _toolbox_initialized() {
     toolbox run --container "$TOOLBOX_NAME" \
-        bash -c 'command -v gcc && command -v musl-gcc && command -v pkg-config && command -v ruby && command -v rustup && command -v jq && command -v yq && command -v rg && command -v openssl && command -v x86_64-w64-mingw32-gcc && rustup target list --installed 2>/dev/null | grep -qxF x86_64-unknown-linux-musl && rustup target list --installed 2>/dev/null | grep -qxF x86_64-pc-windows-gnu' \
+        bash -c 'command -v gcc && command -v musl-gcc && command -v pkg-config && command -v ruby && command -v rustup && command -v jq && command -v yq && command -v rg && command -v openssl && command -v x86_64-w64-mingw32-gcc && command -v podman && command -v nix && command -v node && command -v systemd-run && rustup target list --installed 2>/dev/null | grep -qxF x86_64-unknown-linux-musl && rustup target list --installed 2>/dev/null | grep -qxF x86_64-pc-windows-gnu' \
         &>/dev/null 2>&1
+}
+
+# ── Helper: host-escape shims for tools the toolbox cannot carry (934-7jd4) ─
+# podman and nix are HOST facilities: rootless podman needs the host's user
+# namespace and storage, and nix serves the host-shared chroot store in $HOME.
+# Neither exists inside the toolbox image, and their absence was silent — the
+# ci-full lane on this host lost its litmus phase (require_podman red) and its
+# nix guest-binary lane (blocked:nix-toolbox:image-pull-failed) for three days
+# after the capability-gate change routed builds through the toolbox, while
+# every interactive probe on the host answered fine (the 2/2-inside vs
+# 0/4-outside matrix on packet 934-7jd4).
+#
+# flatpak-spawn --host is the escape: it forwards stdio, the cwd and the exit
+# code EXACTLY (verified on macuahuitl 2026-08-29: `bash -c "exit 7"` -> 7;
+# pwd inside == pwd outside; $HOME is the same mount). What it does NOT
+# forward is the environment, so the shim re-exports the project's control
+# namespaces explicitly — the same boundary lesson the re-exec below already
+# records for toolbox run.
+_install_host_escape_shims() {
+    local shim_src="$HOME/.cache/tillandsias/host-escape-shim.sh"
+    mkdir -p "$(dirname "$shim_src")"
+    cat > "$shim_src" <<'SHIM'
+#!/usr/bin/env bash
+# Host-escape shim (934-7jd4): TOOL_NAME does not exist in this toolbox; run
+# the HOST's binary via flatpak-spawn, which forwards stdio/cwd/exit code
+# exactly. Env does not cross by default — forward the control namespaces.
+_fs_args=()
+for _v in $(compgen -e); do
+    case "$_v" in
+        TILLANDSIAS_*|LITMUS_*|FORGE_*|NIX_*|CONTAINER_HOST|DOCKER_HOST)
+            _fs_args+=("--env=$_v=${!_v}") ;;
+    esac
+done
+exec flatpak-spawn --host "${_fs_args[@]}" TOOL_NAME "$@"
+SHIM
+    local tool
+    for tool in podman nix; do
+        sed "s/TOOL_NAME/$tool/g" "$shim_src" > "$shim_src.$tool"
+        toolbox run --container "$TOOLBOX_NAME" \
+            sudo install -m 0755 "$shim_src.$tool" "/usr/local/bin/$tool"
+        rm -f "$shim_src.$tool"
+    done
+    rm -f "$shim_src"
 }
 
 # ── Ensure toolbox exists and is initialized ──────────────────────────────
@@ -193,6 +338,7 @@ if ! _toolbox_initialized; then
             ruby perl-FindBin \
             procps-ng findutils diffutils \
             jq yq ripgrep openssl \
+            nodejs systemd \
             mingw64-gcc \
         2>&1 | while IFS= read -r line; do printf '  [dnf] %s\n' "$line"; done
 
@@ -210,6 +356,8 @@ if ! _toolbox_initialized; then
     toolbox run --container "$TOOLBOX_NAME" \
         bash -l -c "rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl x86_64-pc-windows-gnu" \
         2>&1 | while IFS= read -r line; do printf '  [rustup] %s\n' "$line"; done
+
+    _install_host_escape_shims
 
     toolbox run --container "$TOOLBOX_NAME" \
         bash -c "mkdir -p '$(dirname "$MARKER_FILE")' && touch '$MARKER_FILE'"

@@ -71,11 +71,14 @@ const DISPATCH_ARMS: &[&str] = &[
     "carry-forward-check",
     "check",
     "closure-evidence-check",
+    "collect",
     "compact",
     "corpus-coverage",
     "declared-closures",
     "declared-closures-check",
     "dependencies-of",
+    "decompose",
+    "expert-serve",
     "expire-claims",
     "plan-events",
     "fragment-event-packets",
@@ -94,14 +97,22 @@ const DISPATCH_ARMS: &[&str] = &[
     "next",
     "next-order",
     "parked-blocks",
+    "pipeline",
     "query",
     "ready",
     "select-rows",
+    "split-parents",
+    "experts-probe",
     "spec-envelope",
+    "spec-floor",
     "spec-index",
     "spec-retrieve",
     "status",
+    "validate-yaml",
     "verify-answer",
+    "yaml-get",
+    "yaml-json",
+    "yaml-type",
 ];
 
 /// ORDER 583-dv9n. The dispatch arms an arbitrary declared set omits. Split out
@@ -139,6 +150,16 @@ const USAGE: &str = concat!(
     "                                     schedulable (device_class, lane, engine) triples, and its\n",
     "                                     present-but-unusable devices. Distinct from `capabilities`\n",
     "                                     above, which reports THIS BINARY's subcommands.\n",
+    "           experts-probe             ORDER 718-ja7g. Which expert TIER is live on this host, as\n",
+    "                                     ONE line: l0 (file-backed, always ready) / l1 (retrieval —\n",
+    "                                     needs BOTH an embeddings endpoint and a built index) / l2\n",
+    "                                     (synthesis). Closed vocabulary per tier: ready | unset |\n",
+    "                                     unreachable | no-index | scheme-unsupported | malformed.\n",
+    "                                     `advice=` names ONE next action. Exit 0 when every\n",
+    "                                     configured tier answers, 1 otherwise — ADVISORY, not a\n",
+    "                                     gate: a dev host with no endpoint is a supported state and\n",
+    "                                     L0 still answers with citations. Both MCP servers consume\n",
+    "                                     this instead of each re-deriving reachability.\n",
     "           corpus-coverage           Which repository file types the spec/answer corpus indexes,\n",
     "                                     which it DECLINES and why. Read-only. The declined list is\n",
     "                                     explicit so an answer's absence can be attributed to a\n",
@@ -247,6 +268,21 @@ const USAGE: &str = concat!(
     "           parked-blocks [id|order]  dependents invisibly blocked behind a PARKED\n",
     "                                     packet (implemented/needs_clarification/blocked/\n",
     "                                     failed); no arg = whole ledger (order 686-7qcm)\n",
+    "           split-parents             ORDER 750-zrt4. Packets SPLIT INTO children that\n",
+    "                                     are still `ready`, so the selector keeps offering\n",
+    "                                     them: 722-ecne was ranked urgent= on four\n",
+    "                                     consecutive cycles and claimed by nobody, and\n",
+    "                                     606-bvnp ranked #1 claimable with all four slices\n",
+    "                                     already spoken for. One TSV row per parent, NAMING\n",
+    "                                     the children and their statuses so a host reading\n",
+    "                                     the exclusion knows where the work went. A parent\n",
+    "                                     that legitimately keeps direct work of its own\n",
+    "                                     declares `retains_direct_work: true` and is never\n",
+    "                                     reported; an unresolvable child is skipped, so a\n",
+    "                                     typo cannot make a parent unclaimable. REPORTS\n",
+    "                                     ONLY (exit 0) — auto-obsoleting a split parent\n",
+    "                                     would satisfy its dependents and turn a selection\n",
+    "                                     nuisance into a false green.\n",
     "           ready [role]              ready packets (optionally for a pickup role)\n",
     "           next [role] [--release V] [--limit N]\n",
     "                                     ORDER 606-xu52. The cold-start selector: at most FIVE\n",
@@ -286,6 +322,47 @@ const USAGE: &str = concat!(
     "                                     emits the plan_query projection array.\n",
     "           burndown <milestone>      release-target children with statuses\n",
     "           answer <question...>      the CITED answer envelope as JSON (order 394b)\n",
+    "           decompose <query...>      adversarial query decomposition via LLM\n",
+    "                                     (order 920-pxg6). Returns a JSON array of\n",
+    "                                     {prompt, kind} variants for concurrent dispatch.\n",
+    "           pipeline <query...> [--domain D]\n",
+    "                                     ORDER 920-pxg6. THE grounded pipeline, CLI front-end:\n",
+    "                                     tier -> decompose -> per-variant domain-filtered\n",
+    "                                     retrieval from the published spec index -> synthesis\n",
+    "                                     over retrieved context -> only-if-used citations ->\n",
+    "                                     Rust validation -> collect merge. Emits the ratified\n",
+    "                                     answer envelope: cited, or the typed unsupported:\n",
+    "                                     refusal — never raw model prose. Same function as\n",
+    "                                     expert-serve (one pipeline, two front-ends).\n",
+    "           expert-serve [--port N] [--root D]\n",
+    "                                     ORDER 920-pxg6. OpenAI-compatible loopback front-end\n",
+    "                                     over the SAME grounded pipeline: 127.0.0.1:11436 by\n",
+    "                                     default, POST /v1/chat/completions (non-stream and\n",
+    "                                     stream:true SSE ending 'data: [DONE]'; the model id\n",
+    "                                     IS the domain: all|spec|code|methodology|cheatsheet),\n",
+    "                                     GET /v1/models, 404 JSON otherwise. Refusals are\n",
+    "                                     rendered VERBATIM as completion content (HTTP 200,\n",
+    "                                     finish_reason stop). Serves until stdin EOF —\n",
+    "                                     </dev/null exits immediately. One pinned stderr line\n",
+    "                                     on start; nothing on stdout.\n",
+    "           collect                   first-wins dedup of responses via Lua runtime\n",
+    "                                     (order 920-pxg6). Reads JSON array from stdin,\n",
+    "                                     returns collected envelope on stdout.\n",
+    "           validate-yaml <file>...   ORDER 746-htj9. Load each file with serde_yaml and\n",
+    "                                     report ok:yaml-loads / blocked:yaml-load-failed /\n",
+    "                                     blocked:yaml-unreadable. THE sanctioned YAML reader:\n",
+    "                                     no interpreter (yq, ruby) exists in all three\n",
+    "                                     environments the gates run in; this binary does.\n",
+    "           yaml-get <file> <path>    ORDER 746-htj9. Read a dotted path and print the\n",
+    "                                     sequence space-joined. Missing key is EMPTY, not an\n",
+    "                                     error; unparseable stays its own verdict (720-24u6).\n",
+    "           yaml-json <file>          ORDER 746-htj9. Emit the document as JSON on stdout,\n",
+    "                                     so rich queries compose with jq — the one query tool\n",
+    "                                     present in ALL THREE environments: yaml-json f | jq '…'.\n",
+    "                                     The yq filters this retires are already jq syntax.\n",
+    "           yaml-type <file>          ORDER 746-htj9. Top-level node kind in yq spelling\n",
+    "                                     (!!map, !!seq, !!str, …), so pre-push can assert\n",
+    "                                     fragment shape without yq.\n",
     "           verify-answer [--root D]  read an envelope on stdin; exit 1 if any citation\n",
     "                                     does not resolve or its span does not contain the claim.\n",
     "                                     ORDER 801-g9nn: also derives caller-relation\n",
@@ -305,7 +382,13 @@ const USAGE: &str = concat!(
     "           append-event <id|order> <type> <summary> --ts <ISO> [--agent A] [--host H]\n",
     "                                     append an event, VALIDATED before flush (refuses a broken ledger).\n",
     "                                     --agent defaults from TILLANDSIAS_AGENT_ID and REFUSES when both\n",
-    "                                     are absent; --host defaults to the compiled platform (772-4se9)\n",
+    "                                     are absent; --host defaults to the compiled platform (772-4se9).\n",
+    "                                     WRITE TARGET differs from set-field's, invisibly at the call\n",
+    "                                     site: a NEW plan/index.d/ fragment when the packet was DECLARED\n",
+    "                                     in one, the folded plan/index.yaml otherwise — both print ok:.\n",
+    "                                     Stage plan/ wholesale (git add plan/) BEFORE the gate, or the\n",
+    "                                     event stays local while the ok: line reads as landed (746-htj9;\n",
+    "                                     measured twice on 2026-08-29, on two hosts).\n",
     "           grade [--root D] [--case ID] [--envelope F|-] [--list-engines] [SET.yaml ...]\n",
     "                                     ORDER 394d. Grade the experts against the COMMITTED ground\n",
     "                                     truth. Defaults to openspec/litmus-tests/groundtruth/\n",
@@ -318,6 +401,12 @@ const USAGE: &str = concat!(
     "                                     ORDER 547. Chunk the whole-spec corpus into <dir>/chunks.jsonl\n",
     "           spec-retrieve --index-dir <dir> --query-vec <f> [--k N]\n",
     "                                     network-free cosine top-k over caller-supplied embeddings\n",
+    "           spec-floor --chunks-json <f>\n",
+    "                                     ORDER 821-73es. Apply the grounded pipeline's retrieval\n",
+    "                                     floors (TILLANDSIAS_RETRIEVE_REFUSAL_FLOOR on the best\n",
+    "                                     score, TILLANDSIAS_RETRIEVE_MIN_SCORE per chunk) to a\n",
+    "                                     spec-retrieve result: the kept array, or a typed\n",
+    "                                     out-of-coverage refusal object with the reason ready\n",
     "           spec-envelope --chunks-json <f> [--answer-file F] [--root D]\n",
     "                         [--corpus-commit SHA]\n",
     "                                     build a VERIFIED envelope keeping only the citations the\n",
@@ -1912,6 +2001,24 @@ fn read_chunks_array(path: &Path) -> Vec<spec::Chunk> {
     })
 }
 
+/// ORDER 821-73es. `spec-floor` consumes what `spec-retrieve` emits: scored
+/// chunks. A bare-chunk array (no `score` key) is refused loudly here rather
+/// than defaulting scores to anything — a floor applied to invented numbers
+/// would be a confident lie about coverage.
+fn read_scored_chunks_array(path: &Path) -> Vec<spec::ScoredChunk> {
+    let text = std::fs::read_to_string(path).unwrap_or_else(|e| {
+        eprintln!("error: read {}: {e}", path.display());
+        std::process::exit(1);
+    });
+    serde_json::from_str::<Vec<spec::ScoredChunk>>(&text).unwrap_or_else(|e| {
+        eprintln!(
+            "error: {} is not a JSON array of scored chunks (spec-retrieve output): {e}",
+            path.display()
+        );
+        std::process::exit(1);
+    })
+}
+
 fn read_vectors(path: &Path) -> Vec<Vec<f32>> {
     let text = std::fs::read_to_string(path).unwrap_or_else(|e| {
         eprintln!("error: read {}: {e}", path.display());
@@ -2223,8 +2330,282 @@ fn carry_forward_gaps(doc: &serde_yaml::Value) -> Vec<String> {
     gaps
 }
 
+/// ORDER 746-htj9 (dispatch position). The four YAML-reader subcommands are
+/// file-local: they read the file named in their argv and NOTHING else — no
+/// ledger, no schema, no fragments. Called from the ledger-free fast path in
+/// `dispatch_fragment_only`, because the `Ledger::load_with_fragments` below
+/// main's big match costs ~220ms of a 227ms invocation, and the litmus
+/// runner calls these in a per-file loop where that overhead multiplies into
+/// minutes. Measured 2026-08-29 on macuahuitl: yaml-type on a 40-line file,
+/// 227ms behind the ledger load; the parse itself is under 5ms.
+fn yaml_read_dispatch(subcommand: &str, args: &[String]) {
+    match subcommand {
+        // ORDER 746-htj9. The read half of the everywhere-reader.
+        //
+        // `validate-yaml` proves a file loads; the gates that caused the
+        // 2026-08-15 outage needed to READ something out of it — which is why
+        // they reached for yq and ruby in the first place. Shipping only the
+        // validator would have left every one of them on its interpreter
+        // chain, so this is the subcommand that actually retires them.
+        //
+        // Deliberately NOT a query language. The production call sites want a
+        // dotted path to a sequence of scalars, space-joined — that is the
+        // whole shape yq's `.a.b // [] | join(" ")` and the ruby `dig` exprs
+        // were computing. A general engine here would be a second yq with our
+        // name on it, and the packet asks for one read PATH, not one more tool.
+        //
+        // A missing key is EMPTY, not an error, matching the `// []` in the yq
+        // exprs it replaces: the schema gate distinguishes "loads, vocabulary
+        // is empty" from "will not load", and collapsing those two was the
+        // 720-24u6 defect.
+        "yaml-get" => {
+            if args.len() < 3 {
+                eprintln!("usage: tillandsias-plan yaml-get <file> <dotted.path>");
+                std::process::exit(2);
+            }
+            let (file, path) = (&args[1], &args[2]);
+            let text = match std::fs::read_to_string(file) {
+                Ok(t) => t,
+                Err(err) => {
+                    println!("blocked:yaml-unreadable:{file}: {err}");
+                    std::process::exit(1);
+                }
+            };
+            let doc: serde_yaml::Value = match serde_yaml::from_str(&text) {
+                Ok(v) => v,
+                Err(err) => {
+                    println!("blocked:yaml-load-failed:{file}: {err}");
+                    std::process::exit(1);
+                }
+            };
+            let mut cur = &doc;
+            let mut missing = false;
+            // A NUMERIC segment indexes a sequence. Real callers need this:
+            // the set-field shapes test reads `status.0.value`, which under the
+            // ruby it replaces was `((d["status"] || [])[0] || {})["value"]`.
+            // Keys win over indices — a mapping whose key is literally "0" is
+            // still reachable — so this only ever ADDS reach.
+            for key in path.split('.').filter(|s| !s.is_empty()) {
+                let next = cur.get(key).or_else(|| {
+                    key.parse::<usize>()
+                        .ok()
+                        .and_then(|i| cur.as_sequence().and_then(|s| s.get(i)))
+                });
+                match next {
+                    Some(v) => cur = v,
+                    None => {
+                        missing = true;
+                        break;
+                    }
+                }
+            }
+            if missing || cur.is_null() {
+                println!();
+                return;
+            }
+            match cur {
+                serde_yaml::Value::Sequence(items) => {
+                    let parts: Vec<String> = items.iter().map(scalar_to_string).collect();
+                    println!("{}", parts.join(" "));
+                }
+                other => println!("{}", scalar_to_string(other)),
+            }
+        }
+        // ORDER 746-htj9. The last thing the trunk's own gate needed yq for.
+        //
+        // scripts/hooks/pre-push-local-gate.sh validated each pushed fragment
+        // with `yq eval '.'` AND `yq eval 'type' == '!!map'`. It had a fallback
+        // for hosts without yq — but the fallback could not express the second
+        // check, so the map-shape assertion silently existed on some hosts and
+        // not others. A gate whose strictness depends on which tools happen to
+        // be installed is the same defect this packet is about, one level up.
+        //
+        // Names are yq's, deliberately: this replaces yq at call sites that
+        // already compare against `!!map`, and inventing a new vocabulary would
+        // mean editing every comparison for no gain.
+        "yaml-type" => {
+            if args.len() < 2 {
+                eprintln!("usage: tillandsias-plan yaml-type <file>");
+                std::process::exit(2);
+            }
+            let file = &args[1];
+            let text = match std::fs::read_to_string(file) {
+                Ok(t) => t,
+                Err(err) => {
+                    println!("blocked:yaml-unreadable:{file}: {err}");
+                    std::process::exit(1);
+                }
+            };
+            let doc: serde_yaml::Value = match serde_yaml::from_str(&text) {
+                Ok(v) => v,
+                Err(err) => {
+                    println!("blocked:yaml-load-failed:{file}: {err}");
+                    std::process::exit(1);
+                }
+            };
+            let kind = match doc {
+                serde_yaml::Value::Mapping(_) => "!!map",
+                serde_yaml::Value::Sequence(_) => "!!seq",
+                serde_yaml::Value::String(_) => "!!str",
+                serde_yaml::Value::Bool(_) => "!!bool",
+                serde_yaml::Value::Number(_) => "!!float",
+                serde_yaml::Value::Null => "!!null",
+                _ => "!!unknown",
+            };
+            println!("{kind}");
+        }
+        // ORDER 746-htj9. The bridge for the queries yaml-get refuses to grow
+        // into.
+        //
+        // yaml-get deliberately stopped short of a query language, and the
+        // call sites that remained after the first two tranches are exactly
+        // the ones that need one: run-litmus-test.sh and local-ci.sh filter
+        // litmus-bindings.yaml with `select()` expressions. Growing yaml-get
+        // toward them would end at a second yq with our name on it.
+        //
+        // The availability table above has one more row worth reading: `jq`
+        // IS present in all three environments — its only defect is that it
+        // cannot read YAML. So the sanctioned rich-read path is composition,
+        // not a new engine:
+        //
+        //     tillandsias-plan yaml-json <file> | jq '<filter>'
+        //
+        // and the yq filters this retires run under jq VERBATIM, because
+        // `yq eval` deliberately mimics jq's language:
+        //     .specs[] | select(.status=="active") | .spec_id
+        //
+        // A document that loads but cannot be represented as JSON (non-string
+        // mapping keys are the realistic case) is its own loud verdict, kept
+        // distinct from load failure per the 720-24u6 rule.
+        "yaml-json" => {
+            if args.len() < 2 {
+                eprintln!("usage: tillandsias-plan yaml-json <file>");
+                std::process::exit(2);
+            }
+            let file = &args[1];
+            let text = match std::fs::read_to_string(file) {
+                Ok(t) => t,
+                Err(err) => {
+                    println!("blocked:yaml-unreadable:{file}: {err}");
+                    std::process::exit(1);
+                }
+            };
+            let doc: serde_yaml::Value = match serde_yaml::from_str(&text) {
+                Ok(v) => v,
+                Err(err) => {
+                    println!("blocked:yaml-load-failed:{file}: {err}");
+                    std::process::exit(1);
+                }
+            };
+            match serde_json::to_string(&doc) {
+                Ok(json) => println!("{json}"),
+                Err(err) => {
+                    println!("blocked:yaml-json-unrepresentable:{file}: {err}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        // ORDER 746-htj9. THE YAML READ PATH THAT EXISTS EVERYWHERE.
+        //
+        // On 2026-08-15 two locally-correct fixes caused two outages in one
+        // day, because no YAML interpreter is present in all three
+        // environments this repo's gates run in:
+        //
+        //                     yq        ruby      jq        python3
+        //   forge             present   ABSENT    present   FORBIDDEN
+        //   host (Silverblue) ABSENT    ABSENT    present   FORBIDDEN
+        //   builder toolbox   ABSENT    present   present   FORBIDDEN
+        //
+        // `jq` is the only tool present everywhere and cannot read YAML. A
+        // fallback chain (`try yq, then ruby`) does not fix this: it still
+        // leaves an environment with no reader, and every future YAML-reading
+        // script has to remember to rewrite the same chain.
+        //
+        // WHY THIS LIVES ON `tillandsias-plan` AND NOT ON `tillandsias-policy`,
+        // which already has an identical `validate-yaml`: availability is the
+        // whole point, and only this binary HAS it. `scripts/cycle-preflight.sh`
+        // rebuilds `tillandsias-plan` at the top of every cycle, so a pre-push
+        // gate can rely on it being current. `tillandsias-policy` is not built
+        // by default, and its facade falls through to `cargo run`, which is a
+        // multi-minute build in a fresh forge and needs a network the enclave
+        // may not give it. A reader that might not be there is the defect, not
+        // the fix.
+        //
+        // serde_yaml also settles order 720-24u6 by construction: the folded
+        // ledger carries 231 bare ISO-8601 timestamps, which Ruby's safe_load
+        // rejects unless the caller remembers `permitted_classes: [Time, Date]`.
+        // Forgetting it made the schema gate report a vocabulary divergence
+        // that did not exist. serde_yaml reads them as scalars with nothing to
+        // remember.
+        //
+        // The verdict grammar keeps LOAD FAILURE distinct from every other
+        // verdict, which is the 720-24u6 negative control: a file that will not
+        // parse must never be reported as anything but unparseable.
+        "validate-yaml" => {
+            let files = if args.len() > 1 {
+                &args[1..]
+            } else {
+                &args[0..0]
+            };
+            if files.is_empty() {
+                eprintln!("usage: tillandsias-plan validate-yaml <file>...");
+                std::process::exit(2);
+            }
+            let mut failed = false;
+            for file in files {
+                match std::fs::read_to_string(file) {
+                    Ok(text) => match serde_yaml::from_str::<serde_yaml::Value>(&text) {
+                        Ok(_) => println!("ok:yaml-loads:{file}"),
+                        Err(err) => {
+                            println!("blocked:yaml-load-failed:{file}: {err}");
+                            failed = true;
+                        }
+                    },
+                    Err(err) => {
+                        println!("blocked:yaml-unreadable:{file}: {err}");
+                        failed = true;
+                    }
+                }
+            }
+            if failed {
+                std::process::exit(1);
+            }
+        }
+        other => unreachable!("yaml_read_dispatch called with {other}"),
+    }
+}
+
 fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
     match subcommand {
+        "experts-probe" => {
+            // ORDER 718-ja7g. Which expert TIER is actually live on this host,
+            // as one typed line. Replaces both MCP servers each re-deriving
+            // reachability from the same three env vars in their own idiom —
+            // three derivations that could and did disagree.
+            //
+            // EXIT CODE IS ADVISORY, NOT A GATE: 0 when every configured tier
+            // answers, 1 otherwise. A dev host with no endpoint is a normal,
+            // supported state (L0 still answers), so a caller that treats
+            // non-zero as "broken" is reading it wrong — the LINE is the
+            // answer, the code is a convenience for `if` in shell.
+            let timeout = std::time::Duration::from_millis(
+                std::env::var("TILLANDSIAS_EXPERTS_PROBE_TIMEOUT_MS")
+                    .ok()
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(3000),
+            );
+            let (line, all_ready) = tillandsias_plan::experts_probe::run(timeout);
+            println!("{line}");
+            if !all_ready {
+                std::process::exit(1);
+            }
+            // This dispatcher's arms return whether they handled the
+            // subcommand. experts-probe belongs on this LEDGER-FREE fast path:
+            // it reads env and one socket, never folds the plan, and a
+            // diagnostic that paid the ledger load to answer "is the endpoint
+            // up" would be the slowest tool in the box.
+            true
+        }
         "corpus-coverage" => {
             // ORDER 810-k8jy. Every file class under a corpus root, and how the
             // indexer treats it. The packet's complaint was not that HCL and
@@ -2661,6 +3042,14 @@ fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
             }
             true
         }
+        // ORDER 746-htj9 (perf). The YAML readers are file-local and belong on
+        // this ledger-free path: the litmus runner calls them per test file,
+        // and the ledger load below main's dispatch costs ~220ms per call that
+        // these subcommands never use.
+        "yaml-get" | "yaml-type" | "yaml-json" | "validate-yaml" => {
+            yaml_read_dispatch(subcommand, args);
+            true
+        }
         _ => false,
     }
 }
@@ -2804,6 +3193,51 @@ fn main() {
     // corpus must still run in a checkout whose plan ledger is broken.
     if args[0] == "grade" {
         std::process::exit(run_grade(&args[1..], &index));
+    }
+
+    // ORDER 920-pxg6. `expert-serve` runs BEFORE the ledger load for the same
+    // reason `verify-answer` does: it serves the SPEC-INDEX corpus, not the
+    // plan ledger, and a long-lived endpoint must come up in a checkout whose
+    // plan/index.yaml is broken or absent.
+    if args[0] == "expert-serve" {
+        let mut port: u16 = tillandsias_plan::expert_serve::DEFAULT_PORT;
+        let mut root = root_for(&index);
+        let mut i = 1;
+        while i < args.len() {
+            match args[i].as_str() {
+                "--port" => {
+                    i += 1;
+                    let raw = args.get(i).cloned().unwrap_or_default();
+                    match raw.parse::<u16>() {
+                        Ok(p) => port = p,
+                        Err(_) => {
+                            eprintln!("error: --port must be a u16 (got {raw:?})");
+                            std::process::exit(2);
+                        }
+                    }
+                }
+                "--root" => {
+                    i += 1;
+                    if let Some(r) = args.get(i) {
+                        root = PathBuf::from(r);
+                    }
+                }
+                other => {
+                    eprintln!(
+                        "error: unknown option {other:?} for `expert-serve` (known: --port <n>, --root <dir>)"
+                    );
+                    std::process::exit(2);
+                }
+            }
+            i += 1;
+        }
+        let cfg = tillandsias_plan::expert_serve::ServeConfig {
+            port,
+            root: root.clone(),
+            grounded: tillandsias_plan::pipeline::GroundedConfig::from_env(root),
+            index_dir: None,
+        };
+        std::process::exit(tillandsias_plan::expert_serve::run_blocking(cfg));
     }
 
     // ORDER 394c. The methodology corpus is a DIFFERENT corpus from the plan
@@ -3023,6 +3457,44 @@ fn main() {
                     Err(e) => {
                         eprintln!("error: serialize retrieval result: {e}");
                         std::process::exit(1);
+                    }
+                }
+                return;
+            }
+            "spec-floor" => {
+                // ORDER 821-73es. The coverage decision for the shell
+                // spec_answer path: apply the grounded pipeline's dual
+                // retrieval floors (spec::apply_retrieval_floors — ONE
+                // implementation, no drift) to a spec-retrieve result.
+                // Covered: the kept chunks, the same array shape
+                // spec-retrieve emits. Out of coverage: a typed refusal
+                // OBJECT carrying the best score and the ready-made reason,
+                // so the caller refuses instead of dressing k
+                // real-but-irrelevant citations as a confident answer.
+                let Some(cj) = chunks_json else {
+                    eprintln!("error: spec-floor requires --chunks-json <file>");
+                    std::process::exit(2);
+                };
+                let scored = read_scored_chunks_array(&cj);
+                let min_score = spec::retrieve_min_score();
+                let refusal = spec::refusal_floor();
+                match spec::apply_retrieval_floors(scored, min_score, refusal) {
+                    spec::FloorDecision::Keep(kept) => match serde_json::to_string_pretty(&kept) {
+                        Ok(s) => println!("{s}"),
+                        Err(e) => {
+                            eprintln!("error: serialize floor result: {e}");
+                            std::process::exit(1);
+                        }
+                    },
+                    spec::FloorDecision::OutOfCoverage { best } => {
+                        let refused = serde_json::json!({
+                            "refused": "out-of-coverage",
+                            "best": best,
+                            "refusal_floor": refusal,
+                            "min_score": min_score,
+                            "reason": spec::out_of_coverage_reason("full", best, refusal),
+                        });
+                        println!("{refused}");
                     }
                 }
                 return;
@@ -4144,6 +4616,21 @@ fn main() {
                 ));
             }
         }
+        "split-parents" => {
+            // 750-zrt4. A packet whose residual work lives entirely in children
+            // should stop competing with its own children for a cycle, without
+            // an agent having to notice a four-cycle stall. One TSV row per
+            // parent: parent<TAB>status<TAB>child:status,child:status.
+            for sp in &ledger.split_parents() {
+                let kids = sp
+                    .children
+                    .iter()
+                    .map(|(id, st)| format!("{id}:{st}"))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                emit(&format!("{}\t{}\t{}", sp.parent, sp.status, kids));
+            }
+        }
         "closure-evidence-check" => {
             // 686-7qcm criterion 3. A single-FILE gate: a fragment that sets a
             // closure-ladder terminal (completed/verified/done) — via the
@@ -4906,6 +5393,127 @@ fn main() {
             // confidence=exact with a citation `verify-answer` refused.
             emit_verified_envelope(envelope, &root, ledger.skipped_fragments());
         }
+        "decompose" => {
+            // ORDER 920-pxg6. LLM-based adversarial query decomposition.
+            // The model generates the adversarial variants — no regex.
+            // --domain <name> sets the RAG domain context.
+            let mut domain: Option<String> = None;
+            let mut query_parts = Vec::new();
+            let mut i = 1;
+            while i < args.len() {
+                if args[i] == "--domain" && i + 1 < args.len() {
+                    domain = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    query_parts.push(args[i].clone());
+                    i += 1;
+                }
+            }
+            let query = query_parts.join(" ");
+            if query.trim().is_empty() {
+                usage();
+            }
+            let config = tillandsias_plan::pipeline::InferenceConfig {
+                domain,
+                ..Default::default()
+            };
+            let prompts = tillandsias_plan::pipeline::decompose_with_llm(&config, &query);
+            let json = serde_json::to_string(&prompts)
+                .unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"));
+            println!("{json}");
+        }
+        "collect" => {
+            // ORDER 920-pxg6. First-wins dedup of adversarial responses
+            // (real validated-filtering arrives with 920-pxg6). Reads a JSON
+            // array from stdin, returns the collected envelope on stdout.
+            let mut raw = String::new();
+            if let Err(e) = std::io::Read::read_to_string(&mut std::io::stdin(), &mut raw) {
+                eprintln!("error: read stdin: {e}");
+                std::process::exit(1);
+            }
+            let root = root_for(&index);
+            let lua_dir = root.join("crates").join("tillandsias-plan").join("lua");
+            let rt = match tillandsias_plan::lua_runtime::LuaRuntime::new(&lua_dir, &root) {
+                Ok(rt) => rt,
+                Err(e) => {
+                    eprintln!("error: lua runtime init failed: {e}");
+                    std::process::exit(1);
+                }
+            };
+            match rt.call_collect("collect", &raw) {
+                Ok(responses) => {
+                    let json = serde_json::to_string(&responses)
+                        .unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"));
+                    println!("{json}");
+                }
+                Err(e) => {
+                    eprintln!("error: collect failed: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        "pipeline" => {
+            // ORDER 920-pxg6. The grounded pipeline's CLI front-end — the
+            // SAME `run_grounded` expert-serve calls (one pipeline, two
+            // front-ends). Emits the ratified envelope: cited, or the typed
+            // refusal. The pre-920-pxg6 skeleton — no retrieval, hardcoded
+            // validated:true/confidence:0.5/citations:[], and a
+            // Freshness::for_corpus stamp that presented this process's HEAD
+            // as the frame of an index it never read — is deleted; freshness
+            // now comes from the resolved index entry itself (801-g9nn).
+            // --domain <name> filters retrieval to one corpus domain.
+            let mut domain: Option<String> = None;
+            let mut query_parts = Vec::new();
+            let mut i = 1;
+            while i < args.len() {
+                if args[i] == "--domain" && i + 1 < args.len() {
+                    domain = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    query_parts.push(args[i].clone());
+                    i += 1;
+                }
+            }
+            let query = query_parts.join(" ");
+            if query.trim().is_empty() {
+                usage();
+            }
+            let root = root_for(&index);
+            // EXIT 0 EVEN WHEN UNSUPPORTED, like `answer`: the MCP wrapper
+            // runs under `set -e` and the envelope IS the signal. Only the
+            // runtime substrate failing to come up is a hard error.
+            let unknown_freshness = || {
+                tillandsias_plan::answer::Freshness::new(
+                    "unknown".to_string(),
+                    "unknown".to_string(),
+                )
+            };
+            let envelope = match tillandsias_plan::spec_index::SpecIndexEntry::load() {
+                Err(e) => tillandsias_plan::answer::Envelope::unsupported(e, unknown_freshness()),
+                Ok(entry) => match tillandsias_plan::lua_runtime::create_shared_runtime(&root) {
+                    Err(e) => tillandsias_plan::answer::Envelope::unsupported(
+                        format!("the Lua tier/trim/collect scripts failed to load: {e}"),
+                        unknown_freshness(),
+                    ),
+                    Ok(shared_rt) => {
+                        let rt_handle = tokio::runtime::Runtime::new().unwrap_or_else(|e| {
+                            eprintln!("error: tokio runtime init failed: {e}");
+                            std::process::exit(1);
+                        });
+                        let mut cfg =
+                            tillandsias_plan::pipeline::GroundedConfig::from_env(root.clone());
+                        cfg.inference.domain = domain;
+                        rt_handle.block_on(tillandsias_plan::pipeline::run_grounded(
+                            &shared_rt, &entry, &cfg, &query,
+                        ))
+                    }
+                },
+            };
+            // Envelope-level frame stamps (default citation commit = the
+            // entry frame) were already applied inside run_grounded, BEFORE
+            // this emit path's HEAD default — spec-envelope's 801-g9nn rule.
+            emit_verified_envelope(envelope, &root, &[]);
+        }
         "next" => {
             // ORDER 606-xu52. The cold-start selector: at most five cited,
             // release-aware, role-compatible, dependency-clear, unleased
@@ -5044,6 +5652,42 @@ fn main() {
                 eprintln!("error: {}", unresolved_reason(&ledger, reference));
                 std::process::exit(1);
             };
+            // 896-f8ti. `resolve()` falls through to the ARCHIVE as its last
+            // lookup (lib.rs:763). That ordering is CORRECT and deliberate for
+            // reads — its own comment defends it — and wrong for a WRITE.
+            //
+            // The same comment names the fix it did not apply: "Callers that
+            // must distinguish the two ask [`Self::is_archived`]; `status`, the
+            // answer rows and the citation path all do." Three read paths ask.
+            // This, the one write path, did not.
+            //
+            // MEASURED 2026-08-26: `append-event 624-q4jj` on macOS resolved to
+            // the real, archived, COMPLETED packet
+            // `macos-unstable-channel-installer-validation`
+            // (plan/archive/packets-2026-08.yaml:6033), wrote an event for it,
+            // and — since an archived packet has no block in the live base —
+            // the 699-usxc arm filed a NEW FRAGMENT no live reader ever folds.
+            // Every step behaved as designed; the composite blocked a release
+            // preflight an hour later on a different host.
+            //
+            // The refusal is SEPARATE from the not-found refusal above, because
+            // the two need different remedies and reporting this one as "check
+            // your ref" sends the author hunting a typo that does not exist.
+            // The ref was right; the target is finished.
+            //
+            // NOTE this predicate deliberately does NOT test "present in the
+            // base": a packet declared only in an uncompacted fragment is LIVE,
+            // and 699-usxc exists to let it receive events. `is_archived` is
+            // true only for genuinely archived work, so that path is untouched.
+            if ledger.is_archived(&target) {
+                eprintln!(
+                    "error: {reference} resolves to {target}, which is ARCHIVED (completed work). \
+                     Events belong on live packets; an event appended here lands in a fragment no \
+                     reader folds. Your reference is not a typo — the target is finished. If this \
+                     work is genuinely continuing, file a new packet citing {target}, or reopen it."
+                );
+                std::process::exit(1);
+            }
             // 772-4se9: identity resolves AFTER the ref so an unresolvable
             // reference still reports as such (pinned by
             // litmus:append-event-rejects-unknown-flags-shape), but BEFORE
@@ -5577,9 +6221,119 @@ fn main() {
             // resumable-claim-dirt detector. Read-only regardless of
             // --dry-run — listing must never write.
             if list_live {
-                for (order, pid, claim_host, claim_ts, last) in &live_claims(&ledger, &cutoff) {
+                let live = live_claims(&ledger, &cutoff);
+                for (order, pid, claim_host, claim_ts, last) in &live {
                     emit(&format!(
                         "live-claim\t{order}\t{pid}\t{claim_host}\t{claim_ts}\t{last}"
+                    ));
+                }
+                // ORDER 905-wjfj — THE COUNT AND THE ROWS HAD DIFFERENT SOURCES.
+                //
+                // `summary: in_progress=N` counts every in_progress packet.
+                // The rows above come from `live_claims`, which yields a row
+                // only for a packet carrying a `claimed for cycle` event. The
+                // two never had to agree, and on 2026-08-26 they did not:
+                // `in_progress=1` with zero rows, on yoga and on macuahuitl an
+                // hour apart, against the same ledger.
+                //
+                // The missing row was not an edge case. `expire_claim_candidates`
+                // ends in `match last_ts { ... Some(_) => {} ... }` — a packet
+                // whose newest activity is INSIDE the TTL is not expired, not
+                // unknown-age and not held, so it emits nothing; and if it also
+                // carries no claim event it gets no live-claim row either. Fresh
+                // and unclaimed is a silent fifth bucket, and 831-ezea has been
+                // sitting in it with a gate step wired into ./build.sh --check.
+                //
+                // FAIL-CLOSED IS RIGHT FOR 833-fpe7 AND INVERTED HERE. live_claims
+                // refuses to name an owner it cannot attribute, which is correct
+                // for the resumable-dirt detector: do not resume work whose owner
+                // is unknown. For sibling overlap the same silence is dangerous —
+                // an in_progress packet with NO claimant is the one you cannot
+                // send a heads-up to, so dropping it hides exactly the case that
+                // needs a human. Hence a distinct row rather than a widened
+                // live_claims: the two callers want opposite defaults, and the
+                // row type says which situation the reader is in.
+                let mut reported: std::collections::HashSet<&str> =
+                    std::collections::HashSet::new();
+                for (_, pid, _) in &expired {
+                    reported.insert(pid);
+                }
+                for (_, pid) in &unknown {
+                    reported.insert(pid);
+                }
+                for (_, pid, _) in &held {
+                    reported.insert(pid);
+                }
+                for (_, pid, _, _, _) in &live {
+                    reported.insert(pid);
+                }
+                let in_progress = query_packets(
+                    &ledger,
+                    Some("in_progress"),
+                    None,
+                    None,
+                    None,
+                    &[],
+                    usize::MAX,
+                );
+                let mut unclaimed = 0usize;
+                for p in &in_progress {
+                    let Some(pid) = str_field(p, "packet_id") else {
+                        continue;
+                    };
+                    if reported.contains(pid) {
+                        continue;
+                    }
+                    let order = p
+                        .get("order")
+                        .map(|v| match v {
+                            serde_yaml::Value::Number(n) => n.to_string(),
+                            serde_yaml::Value::String(s) => s.clone(),
+                            _ => "?".into(),
+                        })
+                        .unwrap_or_else(|| "?".into());
+                    let mut last = String::from("-");
+                    if let Some(seq) = p.get("events").and_then(serde_yaml::Value::as_sequence) {
+                        for ev in seq {
+                            let Some(ts) = ev.get("ts").and_then(serde_yaml::Value::as_str) else {
+                                continue;
+                            };
+                            if ts.len() < 4 || !ts.as_bytes()[..4].iter().all(u8::is_ascii_digit) {
+                                continue;
+                            }
+                            if last == "-" || ts > last.as_str() {
+                                last = ts.to_string();
+                            }
+                        }
+                    }
+                    // Field positions match `live-claim` so one parser reads
+                    // both; `-` where a claim would name a host and a time,
+                    // because there is no host to warn and no lease to reason
+                    // about. That absence is the actionable part of the row.
+                    emit(&format!(
+                        "unclaimed-in-progress\t{order}\t{pid}\t-\t-\t{last}"
+                    ));
+                    unclaimed += 1;
+                }
+                // THE PARTITION, STATED SO IT CAN BE FALSIFIED. Every in_progress
+                // packet lands in exactly one bucket, and this line lets a reader
+                // — or a fixture — check that against the summary's count instead
+                // of trusting it. `mismatch` is the loud form: a bucket added
+                // later without a row type would otherwise re-open the same hole
+                // silently, which is the whole defect repeating.
+                let rows = expired.len() + unknown.len() + held.len() + live.len() + unclaimed;
+                emit(&format!(
+                    "rows: live={} unclaimed={} expired={} held={} unknown_age={} total={rows}",
+                    live.len(),
+                    unclaimed,
+                    expired.len(),
+                    held.len(),
+                    unknown.len()
+                ));
+                if rows != in_progress.len() {
+                    emit(&format!(
+                        "attention:list-live-partition-mismatch: rows={rows} in_progress={} — an in_progress packet is in no bucket or in two; --list-live is under-reporting and the sibling-overlap step built on it is blind (905-wjfj)",
+                        in_progress.len()
                     ));
                 }
             }
@@ -5923,6 +6677,21 @@ fn expire_claim_candidates<'a>(
         }
     }
     (expired, unknown, held)
+}
+
+/// ORDER 746-htj9. Render a YAML scalar the way the shell callers expect.
+/// Strings pass through unquoted; everything else takes its YAML spelling.
+fn scalar_to_string(v: &serde_yaml::Value) -> String {
+    match v {
+        serde_yaml::Value::String(s) => s.clone(),
+        serde_yaml::Value::Bool(b) => b.to_string(),
+        serde_yaml::Value::Number(n) => n.to_string(),
+        serde_yaml::Value::Null => String::new(),
+        other => serde_yaml::to_string(other)
+            .unwrap_or_default()
+            .trim()
+            .to_string(),
+    }
 }
 
 #[cfg(test)]

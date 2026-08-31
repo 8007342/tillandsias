@@ -1,0 +1,57 @@
+events:
+  - packet_id: twin-tier-7b-experts-behind-an-openai-endpoint
+    event:
+      type: evidence
+      ts: "2026-08-31T07:58:57Z"
+      agent_id: "windows-yolanda-claude-20260830t162208z"
+      host: windows
+      summary: |
+        ROOT CAUSE, and it CORRECTS my own diagnosis in the previous event. I called
+        the token soup a "lossy config migration". That described the mechanism and
+        got the cause wrong. The cause is a MISSING RUNTIME plus a fallback that
+        degrades instead of refusing.
+
+        THE EXPERIMENT I NAMED AS UNTRIED, now run and REFUTED. I predicted that
+        hand-merging custom_ops_library and custom_allocator back into the MIGRATED
+        config would restore correct generation. It does not: the model then fails to
+        load, exactly as the unmigrated original does. So those keys were not dropped
+        by oversight — the installed runtime rejects them.
+
+        WHY, established by enumeration rather than inference:
+
+          /c/Users/bullo/.cache/lemonade/bin/ryzenai-server/npu/     EXISTS
+          /c/Users/bullo/.cache/lemonade/bin/flm/npu/                EXISTS
+          any directory matching *hybrid* under lemonade/bin         ZERO
+
+        There is no hybrid runtime on this machine. onnx_custom_ops.dll is present,
+        but only inside the NPU runtime's directory. So Lemonade is serving a HYBRID
+        checkpoint on the NPU runtime, and the config rewrite is it stripping session
+        options that runtime cannot honour until the graph consents to load.
+
+        THIS EXPLAINS EVERY OBSERVATION AT ONCE, which the previous account did not:
+          * DeepSeek-R1-Distill-1.5B-NPU is coherent   -> its runtime IS installed
+          * Qwen2.5-0.5B-Instruct-Hybrid emits soup    -> served by the wrong runtime
+          * the original config will not load          -> NPU runtime rejects hybrid options
+          * the hand-merge will not load either        -> same rejection, same reason
+          * the download is intact                     -> was never the issue
+
+        THE ACTUAL DEFECT, stated as an operator would need it: Lemonade ADVERTISES
+        Qwen2.5-0.5B-Instruct-Hybrid in /api/v1/models on a host with no hybrid
+        runtime, and when asked for it, silently serves it on the wrong runtime rather
+        than refusing. "I cannot run this checkpoint, the hybrid runtime is not
+        installed" is a sentence it could have said at any point. Instead the failure
+        surfaces as fluent-looking output four layers away, where it cost this fleet a
+        retracted benchmark and a device-handoff hypothesis invented to explain a
+        latency gap that was never real.
+
+        THE FIX IS NOT OURS but it is now precisely stated: install the hybrid runtime
+        (or have Lemonade refuse checkpoints whose runtime is absent). Deleting or
+        refetching the model remains pointless.
+
+        WHAT I GOT WRONG AND HOW IT WAS CAUGHT: my "lossy migration" account was
+        consistent with everything I had measured and still wrong, because I stopped
+        at the first mechanism that explained the symptom. It was caught only because
+        I had NAMED the hand-merge as untried rather than implying the case was
+        closed — the refutation arrived within the hour precisely because the
+        prediction was on the record. An untested hypothesis recorded as untested is
+        recoverable; the same hypothesis recorded as a conclusion is not.

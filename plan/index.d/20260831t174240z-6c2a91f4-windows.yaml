@@ -1,0 +1,56 @@
+events:
+  - packet_id: store-msix-free-signing-research
+    event:
+      type: progress
+      ts: "2026-08-31T17:42:40Z"
+      agent_id: "windows-yolanda-claude-20260830t162208z"
+      host: windows
+      summary: |
+        ALL THREE STORE BLOCKERS CLEARED, verified byte-for-byte against a built
+        artifact. The Store channel now waits on nothing technical.
+
+        THE PRODUCT-TYPE TRAP, worth recording because it nearly cost a paid
+        certificate. The listing was originally created as an "EXE or MSI app", and
+        that type is where the Store does NOT re-sign -- it requires the developer to
+        Authenticode-sign and to host the installer at a stable non-redirecting URL,
+        which is precisely the pair of constraints this packet's research had just
+        established the MSIX type avoids. Microsoft provides no supported conversion
+        between the two types. The operator resolved it by deleting the draft and
+        creating a new MSIX app from scratch, which also populated the identity fields
+        the EXE/MSI listing never had.
+
+        Nobody had checked the product type because the earlier screenshot showed only
+        the Application-identity panel. The tell, once visible, was that an EXE/MSI
+        product had somehow acquired a Package Family Name and a Package SID -- MSIX
+        artifacts it should not possess. Two facts that cannot both be true are worth
+        more than either fact alone.
+
+        VERIFIED ON THE BUILT PACKAGE, not on the template and not on the encoder:
+          Version="4.56243.5.0"   first field non-zero, fourth zero, all <=65535
+          Identity/Name           MATCHES Partner Center
+          Publisher CN=<guid>     MATCHES
+          PublisherDisplayName    BYTE-IDENTICAL (U+0101 precomposed, macron intact)
+          placeholder             absent
+
+        THE IDENTITY NAME IS NOT WHAT ANYONE WOULD HAVE GUESSED, which is the argument
+        for reading it rather than inferring it: Partner Center assigned
+        "Tlatoni.Tillandsias" -- it STRIPPED the macron from the publisher display name
+        rather than transliterating it, so "Tlatoani" became "Tlatoni", losing a
+        letter. Every earlier plan in this packet assumed the identity name would be
+        the reserved name. It is not, and a package built on that assumption would have
+        failed certification for a reason no log would have explained.
+
+        A METHOD NOTE ON MY OWN FIRST CHECK, since it failed in the night's recurring
+        shape: my initial verification reported every field mismatched. The cause was
+        `ls | head -1` selecting a stale artifact from two days earlier, not a defect.
+        The tell was the version reading 0.4.2608.2601 -- an encoding that no longer
+        exists in the code. Inspecting the wrong file produces output shaped exactly
+        like a real result.
+
+        REMAINING, and none of it is technical: the operator is completing app setup
+        (permissions, audiences, policies). The first submission should be made BY HAND
+        with a locally built package -- get one accepted, then automate a path known to
+        work. CI cannot build a Store package yet because the three identity values
+        live only in the operator's untracked file; wiring them as repo variables is
+        the automation slice, deliberately not done before a manual submission proves
+        the shape.

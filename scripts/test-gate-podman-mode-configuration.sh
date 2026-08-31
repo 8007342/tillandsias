@@ -45,6 +45,8 @@ mkdir -p "$SANDBOX/scripts" "$SANDBOX/run/podman"
 cp "$ROOT/build.sh" "$SANDBOX/build.sh"
 : > "$SANDBOX/scripts/with-tillandsias-builder.sh"
 : > "$SANDBOX/scripts/with-wsl2-builder.sh"
+# 3d56d69b6 added a third sourced wrapper to build.sh; stub it like its siblings.
+: > "$SANDBOX/scripts/with-nix-builder.sh"
 cat > "$SANDBOX/scripts/common.sh" <<'STUB'
 echo "handed-remote-url=[${TILLANDSIAS_PODMAN_REMOTE_URL:-<unset>}]"
 echo "handed-container-host=[${CONTAINER_HOST:-<unset>}]"

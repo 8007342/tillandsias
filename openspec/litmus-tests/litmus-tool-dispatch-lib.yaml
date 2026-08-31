@@ -1,0 +1,78 @@
+# @trace spec:ci-release
+# @trace order:799-tb7q
+#
+# Pins the shared host-preferred / toolbox-fallback dispatch and the ONE
+# deliberate exception to it.
+#
+# methodology's tool_dispatch_pattern is only valid for tools the toolbox HAS,
+# which is why this packet had to grow the init set before any sweep. Measured
+# 2026-08-26: 61 scripts under scripts/ call jq, 15 guard or dispatch, 46 do
+# not. Copy-pasting the six-line block 46 more times would make 48 copies of one
+# rule, and a second copy can DRIFT — after which a caller handles a missing
+# tool according to a definition the project no longer uses.
+#
+# The exception is guarded because it looks like an oversight: the two SHIPPED
+# diagnostics keep inline copies on purpose, since they run where a sibling lib
+# may not exist and a shipped diagnostic that fails to source a helper is worse
+# than one that duplicates six lines.
+name: litmus:tool-dispatch-lib
+spec: ci-release
+phase: pre-build
+description: >
+  Pin scripts/lib/tool-dispatch.sh: a present host tool resolves to its bare
+  name with no container round trip; an absent one resolves to the documented
+  toolbox invocation; a tool that exists nowhere returns non-zero and names BOTH
+  places checked as a tooling gap; the converted callers carry no bare jq and
+  degrade to literal jq if the lib cannot be sourced; and the shipped
+  diagnostics keep self-contained inline dispatch.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/lib/tool-dispatch.sh
+  - workspace contains scripts/test-tool-dispatch-lib.sh
+  - bash and coreutils are available in PATH
+
+critical_path:
+  - step: "lib and fixture parse, and the fixture is executable"
+    command: "bash -n scripts/lib/tool-dispatch.sh && bash -n scripts/test-tool-dispatch-lib.sh && test -x scripts/test-tool-dispatch-lib.sh && echo 'ok: parses'"
+    timeout_ms: 5000
+    expected_behavior: "ok: parses"
+
+  - step: "all dispatch arms pass (host arm, toolbox fallback with asserted precondition, both-places diagnosis, converted callers, shipped-diagnostic exception, lib-missing degradation)"
+    command: "bash scripts/test-tool-dispatch-lib.sh 2>&1 | tail -1"
+    timeout_ms: 120000
+    expected_behavior: "ok:tool-dispatch-lib:all"
+
+  - step: "the shipped diagnostics have not been 'tidied' into the shared lib"
+    # ORDER 925-erjs / 921-vtf4. Was `grep -l 'lib/tool-dispatch.sh' <files>` —
+    # a filename SUBSTRING, not a source statement. It went red at f58079555
+    # (2026-08-26, "docs(799-tb7q): the non-conversion's reason lives at the
+    # call site now"), green at its parent e75a9ff59: that commit added the
+    # comment "WHY THIS DISPATCH IS INLINE AND NOT scripts/lib/tool-dispatch.sh"
+    # to both diagnostics, and the pin matched the comment.
+    #
+    # So the commit that DOCUMENTED the exception broke the test that GUARDS the
+    # exception, and it stayed red for three days while the behaviour it pins was
+    # never once violated — neither script sources anything at all. Same shape as
+    # the 925-erjs sweep: an assertion anchored on prose rather than on code,
+    # failing on correct and better-documented work.
+    #
+    # Now: a SOURCE STATEMENT for that lib (`.` or `source`, at the start of a
+    # line, before any comment). NEGATIVE CONTROL, verified 2026-08-29 on a
+    # mutated copy: inserting `. "$(dirname "$0")/lib/tool-dispatch.sh"` into
+    # tray-diagnose.sh is detected; the explanatory comments are not.
+    command: "if grep -lE '^[[:space:]]*(\\.|source)[[:space:]]+[^#]*lib/tool-dispatch\\.sh' scripts/tray-diagnose.sh scripts/diagnose-macos-provision.sh 2>/dev/null | grep -q .; then echo 'FAIL: a shipped diagnostic now sources a sibling lib'; else echo 'ok: shipped diagnostics self-contained'; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok: shipped diagnostics self-contained"
+
+evidence:
+  artifact: "scripts/lib/tool-dispatch.sh + scripts/test-tool-dispatch-lib.sh"
+  measured_on: >
+    lenovinha (Fedora Silverblue) 2026-08-26 — all arms green. Fallback verified
+    by masking jq with a curated mirror of /usr/bin; two earlier attempts failed
+    for harness reasons rather than code reasons (env -i strips what podman
+    needs; dropping /usr/bin removes every other utility), so the fixture now
+    ASSERTS the mask before relying on it. Dispatch cost measured: a single
+    `toolbox run ... jq` is ~264 ms against ~1 ms for host jq, so a caller with
+    jq inside a LOOP must not be converted without re-measuring.

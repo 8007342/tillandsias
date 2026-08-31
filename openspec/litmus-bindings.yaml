@@ -145,6 +145,8 @@ specs:
 - spec_id: ci-release
   status: active
   litmus_tests:
+  - litmus:tool-materialization
+  - litmus:if-not-pipeline-guard-shape
   - litmus:ci-release-musl-binary-policy
   - litmus:github-actions-budget
   - litmus:ci-release-toolchain-shape
@@ -167,6 +169,10 @@ specs:
   - litmus:fold-incompleteness-typed-shape
   - litmus:release-runbook-external-preconditions-shape
   - litmus:script-exec-bit-shape
+  - litmus:scratchpad-headroom
+  - litmus:tool-dispatch-lib
+  - litmus:shipped-diagnostic-tool-dispatch
+  - litmus:daily-maintenance-day-boundary
   - litmus:mode-only-regression-gate
   - litmus:post-merge-litmus-pass-shape
   - litmus:sidecar-is-a-build-graph-input
@@ -249,6 +255,7 @@ specs:
   - litmus:build-ci-dispatch-shape
   - litmus:wsl2-builder-wrapper-shape
   - litmus:wsl2-builder-shell-options-shape
+  - litmus:nix-container-lane-shape
   - litmus:cross-target-cfg-gate-check
   - litmus:no-tracked-binaries-shape
   - litmus:ensure-toolbox-include-shape
@@ -277,6 +284,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:enclave-isolation
+  - litmus:enclave-membership-documented
   - litmus:binary-e2e-smoke
   - litmus:enclave-network-source-shape
   - litmus:tray-network-bootstrap
@@ -359,6 +367,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:forge-environment-discoverability-shape
+  - litmus:lane-observed-startup-log
   - litmus:onboarding-cold-start-discovery
   - litmus:forge-environment-discoverability-install-shape
   - litmus:mcp-discoverability-shape
@@ -621,6 +630,7 @@ specs:
 - spec_id: methodology-accountability
   status: active
   litmus_tests:
+  - litmus:fragment-keys-are-read
   - litmus:methodology-accountability-shape
   - litmus:base-ledger-status-loss-shape
   - litmus:agent-identity-canonical-source-shape
@@ -711,8 +721,9 @@ specs:
   litmus_tests:
   - litmus:nix-builder-shape
   - litmus:nix-cache-size-signal
+  - litmus:nix-capability-probe
   coverage_ratio: 100
-  last_verified: '2026-06-23'
+  last_verified: '2026-08-28'
 - spec_id: no-terminal-flicker
   status: active
   litmus_tests:
@@ -815,6 +826,7 @@ specs:
   - litmus:brew-attestation-egress
   - litmus:proxy-container-shape
   - litmus:agent-egress-allowlist-shape
+  - litmus:proxy-permissive-port-not-silently-unrouted
   - litmus:podman-egress-control-shape
   - litmus:proxy-crash-supervision-shape
   coverage_ratio: 75
@@ -899,6 +911,7 @@ specs:
   - litmus:freshness-inventory-shape
   - litmus:hook-install-portability-shape
   - litmus:declared-closure-resolves
+  - litmus:lww-channel-fields-alias
   coverage_ratio: 83
   last_verified: '2026-07-17'
 - spec_id: subdomain-naming-flip
@@ -1184,3 +1197,11 @@ specs:
   - litmus:one-length-delimited-framing-impl
   coverage_ratio: 100
   last_verified: '2026-07-14'
+- spec_id: expert-serve-grounded-pipeline
+  status: active
+  litmus_tests:
+  - litmus:expert-serve-refusal-not-fallback
+  - litmus:expert-serve-citations-only-if-used
+  - litmus:expert-serve-endpoint-shape
+  coverage_ratio: 100
+  last_verified: '2026-08-28'

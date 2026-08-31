@@ -1,0 +1,8 @@
+# Tests allowed to be red when stamping macOS-only sources (order 739-6r6n).
+# Each entry needs a filed issue; an unexplained name here is how a stamp stops
+# meaning anything.
+#
+# EMPTY ON PURPOSE, and the file exists rather than being absent so that
+# "no macOS test is excused" is a recorded decision a reader can see, not an
+# inference from a missing path. `cargo test -p tillandsias-macos-tray --bins`
+# was 107 passed / 0 failed / 1 ignored when this was written.

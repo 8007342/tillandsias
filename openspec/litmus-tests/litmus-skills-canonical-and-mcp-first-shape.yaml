@@ -18,7 +18,7 @@ preconditions:
 
 critical_path:
   - step: "every non-generated skill is a symlink into canonical skills/"
-    command: "scripts/check-skill-canonicalization.sh | grep -qE '^ok:skills-canonical:[0-9]+ entries checked across [0-9]+ harnesses$' && echo 'ok: canonical'"
+    command: "mf_stage prod 0 OUT -- scripts/check-skill-canonicalization.sh && mf_holds_ere OUT '^ok:skills-canonical:[0-9]+ entries checked across [0-9]+ harnesses$' && echo 'ok: canonical'"
     timeout_ms: 10000
     expected_behavior: "ok: canonical"
 

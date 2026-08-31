@@ -175,3 +175,167 @@ mf_plan_binary() {
   . "$probe" || return 1
   resolve_plan_binary
 }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ORDER 901-jtvi — THE STEP MODEL: per-stage exit codes, no SIGPIPE.
+#
+# THE DEFECT, measured on lenovinha 2026-08-29 over the litmus corpus:
+#
+#   piped `command:` lines                                        1290
+#   of those, piping into an EARLY-EXIT consumer                   698  (54%)
+#     …into head                                                   235
+#     …into tail                                                    93
+#     …into `grep -q`                                              418   <- the largest class
+#
+# `grep -q` IS A TRUNCATING CONSUMER, and that is the part everyone (including
+# this packet's own filing, and my own first count) misses. It exits the instant
+# it decides, closes the pipe, and SIGPIPEs its producer — exactly like `head`.
+# Measured, on a real step from litmus:forge-plan-expert-build-shape:
+#
+#   sed -n '/^ensure_forge_experts() {/,/^}/p' … | grep -q 'cargo build' && echo ok
+#     without pipefail : "ok: no-python-cargo-only", rc=0
+#     with    pipefail : no output,                  rc=141   (128+13 = SIGPIPE)
+#
+# So the exposed population is not the 273 head/tail sites the head-count
+# suggests. It is 698, and the biggest slice is the idiom authors reach for
+# precisely BECAUSE it looks safe.
+#
+# WHY `set -o pipefail` IS NOT THE FIX, and this is the load-bearing result of
+# the 901-jtvi measurement. Enabling it in the step shell and re-running the
+# pre-build/instant suite moved 4 tests from PASS to FAIL — and ALL FOUR ARE
+# FALSE POSITIVES. Classified individually:
+#
+#   forge-plan-expert-build-shape   `| grep -q` SIGPIPEd a healthy `sed`
+#   inference-container-…-shape     `| head -1` SIGPIPEd a healthy `grep`
+#   nix-capability-probe            producer exits 2 BY DESIGN (a usage probe)
+#   installer-wsl-preflight-shape   `grep -q` non-match used as a boolean
+#
+# ZERO masked producer failures were found in 249 executed tests. That is a real
+# and reportable outcome about how much this cluster actually cost HERE, and it
+# is the opposite of what a reader would assume from five field incidents: the
+# incidents were real, and this suite is not where they live. Turning on
+# pipefail would have bought four red tests and no additional truth.
+#
+# THE ACTUAL FIX, which is the operator's shape: the consumer must read a
+# COMPLETE stream, never truncate a live one. Truncation becomes a property of
+# the consumer's input, not a signal delivered to the producer's throat. Then
+# the producer's status is its own, observable, and separate.
+#
+# BASH 3.2 CLEAN. No PIPESTATUS — it is bash-only and empty under zsh 5.9,
+# macOS's default shell, which is defect (3) in this packet's own list.
+
+# mf_run VAR -- CMD [ARGS...]
+#   Run CMD to COMPLETION, capturing stdout+stderr into $VAR and its exit code
+#   into ${VAR}_rc. Never truncates, so the producer can never be SIGPIPEd by
+#   its consumer. Returns the command's own status.
+#
+#   Both streams are captured together on purpose: a discarded stderr is the
+#   fourth defect in this packet's list (`2>/dev/null` on a probe hid
+#   `ps: unknown option`, and a broken primitive returned a confident wrong
+#   verdict). A step that genuinely wants stderr dropped must say so explicitly
+#   rather than get it by default.
+mf_run() {
+  _mfr_var="$1"; shift
+  [ "${1:-}" = "--" ] && shift
+  _mfr_out="$("$@" 2>&1)"; _mfr_rc=$?
+  eval "$_mfr_var=\$_mfr_out"
+  eval "${_mfr_var}_rc=\$_mfr_rc"
+  return "$_mfr_rc"
+}
+
+# mf_stage NAME EXPECTED_RC VAR -- CMD [ARGS...]
+#   mf_run with an ASSERTED exit code, and a diagnosis naming the stage when it
+#   disagrees. EXPECTED_RC of `any` accepts anything — for the usage-probe case
+#   (`script --bogus` exits 2 by design) that pipefail cannot distinguish from a
+#   real failure. THE POINT IS THAT THE STEP SAYS WHICH IT MEANT.
+mf_stage() {
+  _mfs_name="$1"; _mfs_want="$2"; _mfs_var="$3"; shift 3
+  [ "${1:-}" = "--" ] && shift
+  mf_run "$_mfs_var" -- "$@"
+  eval "_mfs_rc=\$${_mfs_var}_rc"
+  if [ "$_mfs_want" = "any" ] || [ "$_mfs_rc" = "$_mfs_want" ]; then
+    return 0
+  fi
+  echo "FAIL: stage '${_mfs_name}' exited ${_mfs_rc}, expected ${_mfs_want}" >&2
+  eval "printf '%s\\n' \"\$${_mfs_var}\"" | sed -n '1,20p' >&2
+  return 1
+}
+
+# mf_stage_sh NAME EXPECTED_RC VAR -- SHELL_STRING
+#   mf_stage for a producer that is a COMPOUND command — `a && b`, `x; y`, one
+#   using `$(…)`, or one with its own redirection. `mf_stage` runs `"$@"`
+#   directly, which cannot express those, and MEASURED over the corpus that is
+#   not an edge case: 22 of the single-pipe `grep -q` sites have a compound
+#   producer, and many of the multi-pipe chains reduce to one.
+#
+#   THIS IS NOT A RETREAT TO THE SHELL STRING THIS PACKET IS ABOUT. The defect
+#   was never that a shell string exists; it is that a PIPELINE yields one exit
+#   code for several stages and lets a consumer SIGPIPE its producer. Here the
+#   whole compound producer is ONE stage with ONE asserted status, and the
+#   consumer reads a finished buffer afterwards. Per-stage status is preserved
+#   because the stages are the producer and the consumer, which is the split
+#   that was being lost.
+mf_stage_sh() {
+  _mfx_name="$1"; _mfx_want="$2"; _mfx_var="$3"; shift 3
+  [ "${1:-}" = "--" ] && shift
+  mf_stage "$_mfx_name" "$_mfx_want" "$_mfx_var" -- sh -c "$*"
+}
+
+# mf_holds VAR PATTERN        — BRE, mirroring plain `grep -q`
+# mf_holds_ere VAR PATTERN    — ERE, mirroring `grep -qE`
+# mf_holds_literal VAR STRING — fixed string, mirroring `grep -qF`
+# mf_holds_line VAR STRING    — whole line, mirroring `grep -qx`
+# mf_lacks* VAR …             — the negation of each
+#
+#   Consumers over an ALREADY-COMPLETE buffer. This is the `| grep -q` family's
+#   replacement: same question, no live pipe, so nothing upstream can be killed
+#   and the producer's status was already checked by its stage.
+#
+# ONE VARIANT PER GREP FLAG, AND `mf_holds` IS **BRE** — which it was not in the
+# first cut of this model, and the correction is the difference between a
+# faithful migration and 418 silently altered assertions.
+#
+# MEASURED over the litmus corpus 2026-08-29, the `grep -q*` flag distribution:
+#     grep -q   321      grep -qE   85      grep -qF   46
+#     grep -qx   18      grep -qiE  10      grep -qv/-qvE/-qi  7
+# The MAJORITY is plain `grep -q`, which is BASIC regex. `mf_holds` shipped
+# using `grep -qE`, so the obvious mechanical rewrite
+#     `producer | grep -q 'X'`  ->  `mf_stage p 0 V -- producer && mf_holds V 'X'`
+# would have quietly reinterpreted every one of them as EXTENDED regex.
+#
+# THAT IS NOT A PEDANTIC DIFFERENCE. BRE and ERE give OPPOSITE answers on the
+# same pattern — verified:
+#     pattern 'a+b'   on "a+b" :  BRE MATCH,     ERE no match
+#     pattern 'a+b'   on "aab" :  BRE no match,  ERE MATCH
+# and 74 plain-`grep -q` patterns in this corpus carry ERE-significant
+# metachars. One of them, from the enclave-service-dead test (named WITHOUT its
+# `litmus:` prefix on purpose — that token is a VERIFICATION CLAIM, and the
+# 721-77yu pin gate correctly refused this file when the example wore one),
+#     fail:enclave-service-dead:service={name}:state={state}:rc={exit_code}…
+# does not merely mismatch under ERE — it ERRORS ("invalid repeat"), because
+# `{name}` is an interval expression there and a literal brace in BRE.
+#
+# So the flag is part of the assertion, and a conversion that drops it is a
+# conversion bug. Each variant below exists so the rewrite can be FAITHFUL:
+# whatever flag the original carried, there is a consumer with exactly those
+# semantics and no thinking required at the call site.
+mf_holds()         { eval "printf '%s\\n' \"\$$1\"" | grep -q  -- "$2"; }
+mf_holds_ere()     { eval "printf '%s\\n' \"\$$1\"" | grep -qE -- "$2"; }
+mf_holds_literal() { eval "printf '%s\\n' \"\$$1\"" | grep -qF -- "$2"; }
+mf_holds_line()    { eval "printf '%s\\n' \"\$$1\"" | grep -qx -- "$2"; }
+# -qi and -qiE. Added because the corpus has them (6 sites) and APPROXIMATING a
+# case-insensitive match with a case-sensitive consumer would be exactly the
+# flag-dropping this file exists to prevent.
+mf_holds_i()       { eval "printf '%s\\n' \"\$$1\"" | grep -qi  -- "$2"; }
+mf_holds_i_ere()   { eval "printf '%s\\n' \"\$$1\"" | grep -qiE -- "$2"; }
+mf_lacks()         { ! mf_holds "$1" "$2"; }
+mf_lacks_ere()     { ! mf_holds_ere "$1" "$2"; }
+mf_lacks_literal() { ! mf_holds_literal "$1" "$2"; }
+mf_lacks_line()    { ! mf_holds_line "$1" "$2"; }
+mf_lacks_i()       { ! mf_holds_i "$1" "$2"; }
+mf_lacks_i_ere()   { ! mf_holds_i_ere "$1" "$2"; }
+
+# mf_first VAR N — the first N lines of a captured stream.
+#   The `| head -N` replacement. Truncation is a property of the CONSUMER
+#   reading a finished buffer, which is the whole design in one function.
+mf_first() { eval "printf '%s\\n' \"\$$1\"" | sed -n "1,${2}p"; }

@@ -26,6 +26,29 @@
 
 set -uo pipefail
 
+
+# ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has it.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+# Resolve the lib by WALKING UP, not by a fixed depth (order 914-ahsy). The
+# fixed form `dirname "${BASH_SOURCE[0]}"/lib/...` is correct only for a caller
+# sitting directly in scripts/. From scripts/refusal-calibration/ it points at a
+# lib that does not exist, the `|| true` swallows the miss, and the tool variable
+# silently falls back to the bare name — a conversion that passes review, passes
+# the suite, and changes nothing.
+_td_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_td_dir" ] && [ "$_td_dir" != "/" ] && [ ! -f "$_td_dir/lib/tool-dispatch.sh" ]; do
+    _td_dir="$(dirname "$_td_dir")"
+done
+if [ -f "$_td_dir/lib/tool-dispatch.sh" ]; then
+    . "$_td_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+fi
+if command -v resolve_tool >/dev/null 2>&1; then
+    JQ="$(resolve_tool jq || printf 'jq')"
+else
+    JQ="jq"   # lib unavailable: preserve the previous behaviour exactly
+fi
+
 # On Fedora Silverblue (immutable), transparently re-exec inside the
 # tillandsias-builder toolbox where Rust/gcc/ruby/etc are available.
 # Non-Silverblue hosts skip with zero overhead. Sourced first so the
@@ -193,7 +216,20 @@ spec_in_list() {
 }
 
 get_all_active_specs() {
-    if command -v yq &>/dev/null; then
+    # ORDER 746-htj9: the compiled reader + jq first — both exist in every
+    # environment the gates run in; yq and the awk parser stay as fallbacks
+    # for a fresh clone that has never built the binary.
+    local _bin=""
+    if [[ -f "$REPO_ROOT/scripts/plan-binary-probe.sh" ]]; then
+        # shellcheck source=scripts/plan-binary-probe.sh
+        . "$REPO_ROOT/scripts/plan-binary-probe.sh" 2>/dev/null || true
+        command -v resolve_plan_binary &>/dev/null && _bin="$(resolve_plan_binary 2>/dev/null)" || _bin=""
+    fi
+    local v
+    if [[ -n "$_bin" ]] && command -v jq &>/dev/null \
+        && v="$("$_bin" yaml-json "$REPO_ROOT/openspec/litmus-bindings.yaml" 2>/dev/null | jq -r '.specs[] | select(.status=="active") | .spec_id' 2>/dev/null)"; then
+        [[ -n "$v" ]] && printf '%s\n' "$v"
+    elif command -v yq &>/dev/null; then
         yq eval '.specs[] | select(.status=="active") | .spec_id' "$REPO_ROOT/openspec/litmus-bindings.yaml" 2>/dev/null || true
     else
         awk '
@@ -487,7 +523,7 @@ write_convergence_artifacts() {
             residual_cc=$((residual_cc + weight))
             failed_specs+=("$(check_spec_ref "$check_id")")
             failed_weights+=("$weight")
-            jq -nc \
+            "$JQ" -nc \
                 --arg reason "$(failed_reason_for_check "$check_id")" \
                 --arg spec "$(check_spec_ref "$check_id")" \
                 --argjson cc "$weight" \
@@ -500,7 +536,7 @@ write_convergence_artifacts() {
 
     local failed_reasons_json
     if [[ -s "$failed_reasons_file" ]]; then
-        failed_reasons_json="$(jq -sc '.' "$failed_reasons_file")"
+        failed_reasons_json="$("$JQ" -sc '.' "$failed_reasons_file")"
     else
         failed_reasons_json='[]'
     fi
@@ -554,7 +590,7 @@ write_convergence_artifacts() {
 
     local signature_tmp
     signature_tmp="$(mktemp)"
-    jq -nc \
+    "$JQ" -nc \
         --arg timestamp "$CI_TIMESTAMP" \
         --arg version "$VERSION_VALUE" \
         --arg source_commit "$SOURCE_COMMIT" \
@@ -626,10 +662,10 @@ write_convergence_artifacts() {
     signature_history_file="$(mktemp)"
     signature_latest_file="$(mktemp)"
     trap 'rm -f "$failed_reasons_file" "$failed_checks_file" "$failed_reasons_list_file" "$signature_history_file" "$signature_latest_file"' RETURN
-    jq -s '.' "$SIGNATURE_JSONL" >"$signature_history_file"
-    jq '.[-1]' "$signature_history_file" >"$signature_latest_file"
+    "$JQ" -s '.' "$SIGNATURE_JSONL" >"$signature_history_file"
+    "$JQ" '.[-1]' "$signature_history_file" >"$signature_latest_file"
 
-    jq -nc \
+    "$JQ" -nc \
         --arg generated_at "$CI_TIMESTAMP" \
         --arg source_file "target/convergence/centicolon-signature.jsonl" \
         --argjson record_count "$(wc -l < "$SIGNATURE_JSONL")" \
@@ -651,7 +687,7 @@ write_convergence_artifacts() {
         delta_hash="$(shasum -a 256 "$DELTA_JSON" | awk '{print $1}')"
     fi
 
-    jq -nc \
+    "$JQ" -nc \
         --arg timestamp "$CI_TIMESTAMP" \
         --arg version "$VERSION_VALUE" \
         --arg source_commit "$SOURCE_COMMIT" \
@@ -809,7 +845,7 @@ archive_check_log() {
     fi
     _CHECK_ANCHOR_MS="$_acl_now"
 
-    jq -nc \
+    "$JQ" -nc \
         --arg ci_run_id "$CI_RUN_ID" \
         --arg ci_phase "$CI_PHASE" \
         --arg check_id "$check_id" \
@@ -971,7 +1007,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         coverage_output=$(bash scripts/validate-traces.sh --coverage-threshold 2>&1 | tee /tmp/trace-coverage.log)
         if [[ $? -eq 0 ]]; then
             # Extract coverage percentage from JSON output
-            coverage_pct=$(echo "$coverage_output" | jq -r '.coverage_percentage // 0' 2>/dev/null || echo "unknown")
+            coverage_pct=$(echo "$coverage_output" | "$JQ" -r '.coverage_percentage // 0' 2>/dev/null || echo "unknown")
             log_pass "Spec trace coverage: $coverage_pct% (≥ 90%)"
             archive_check_log "spec-trace-coverage" "pass" /tmp/trace-coverage.log
         else
@@ -1284,6 +1320,29 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         archive_check_log "spec-index-resolution-agreement" "skipped"
     fi
 
+    # Order 931-p26p. The guard above proves the three carriers AGREE; it cannot
+    # prove they agree on the RIGHT thing. Rung 4 (repo-relative) was added so
+    # two userlands on one Windows host stop resolving two roots from one $HOME
+    # rule — and the risk it carries is the mirror image of the bug: capturing
+    # resolution on Linux and macOS hosts whose podman-volume rung is correct
+    # today, silently relocating a working index fleet-wide. Three of this
+    # fixture's arms are negative controls asserting an earlier rung still wins,
+    # and one is a control proving the divergence it fixes was real. Wired here
+    # rather than trusted to review, because "no host moved" is a claim about
+    # every host, made from one.
+    if [[ -f "scripts/test-spec-index-repo-relative-rung.sh" ]]; then
+        if bash scripts/test-spec-index-repo-relative-rung.sh 2>&1 | tee /tmp/spec-index-repo-relative-rung.log; then
+            log_pass "Spec-index repo-relative rung fixes Windows without moving other hosts"
+            archive_check_log "spec-index-repo-relative-rung" "pass" /tmp/spec-index-repo-relative-rung.log
+        else
+            log_fail_tracked "spec-index-repo-relative-rung" "Spec-index repo-relative rung regression (see /tmp/spec-index-repo-relative-rung.log)"
+            archive_check_log "spec-index-repo-relative-rung" "fail" /tmp/spec-index-repo-relative-rung.log
+        fi
+    else
+        log_fail_missing_guard "spec-index-repo-relative-rung" "scripts/test-spec-index-repo-relative-rung.sh"
+        archive_check_log "spec-index-repo-relative-rung" "skipped"
+    fi
+
     # Order 765-mza8. Wired here, literally, for the same reason as the two
     # above. A dead `inputs:` glob is silent by construction: it cannot make a
     # test run, only skip, so nothing else in this suite would ever go red for
@@ -1336,13 +1395,14 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         # guard-activation audit directly above. PIPESTATUS[0] is read only to
         # NAME the exit code in the failure message; do not read `$?` there,
         # it is tee's.
-        if bash scripts/check-markdown-distillation.sh 2>&1 | tee /tmp/markdown-distillation.log; then
+        bash scripts/check-markdown-distillation.sh 2>&1 | tee /tmp/markdown-distillation.log
+        _rc="${PIPESTATUS[0]}"
+        if [ "$_rc" -eq 0 ]; then
             log_pass "Markdown distillation policy checked"
             archive_check_log "markdown-distillation" "pass" /tmp/markdown-distillation.log
         else
-            rc=${PIPESTATUS[0]}
             log_fail_tracked "markdown-distillation" \
-                "Markdown distillation policy FAILED (exit ${rc}) — noncanonical markdown outside the inventory; see /tmp/markdown-distillation.log"
+                "Markdown distillation policy FAILED (exit ${_rc}) — noncanonical markdown outside the inventory; see /tmp/markdown-distillation.log"
             archive_check_log "markdown-distillation" "fail" /tmp/markdown-distillation.log
         fi
     else

@@ -30,7 +30,7 @@ preconditions:
 
 critical_path:
   - step: "Req: the view agrees with the ledger on this tree, in the pinned grammar"
-    command: "scripts/check-long-running-view.sh | grep -qE '^ok:long-running-view:[0-9]+ live packets listed$' && echo 'ok: view agrees'"
+    command: "mf_stage prod 0 OUT -- scripts/check-long-running-view.sh && mf_holds_ere OUT '^ok:long-running-view:[0-9]+ live packets listed$' && echo 'ok: view agrees'"
     expected_behavior: "ok: view agrees"
     timeout_ms: 30000
 
@@ -59,4 +59,31 @@ critical_path:
     # demanded every ready packet would be unsatisfiable and get disabled.
     command: "d=$(mktemp -d); printf 'plan_index:\\n  packets:\\n    - packet_id: alpha\\n      order: 900\\n      status: ready\\n      multi_cycle: true\\n    - packet_id: plain\\n      order: 903\\n      status: ready\\n' > \"$d/idx.yaml\"; printf '| Order | Packet |\\n|---:|---|\\n| 900 | `alpha` |\\n' > \"$d/view.md\"; out=$(TILLANDSIAS_LONG_RUNNING_INDEX=\"$d/idx.yaml\" TILLANDSIAS_LONG_RUNNING_VIEW=\"$d/view.md\" scripts/check-long-running-view.sh 2>/dev/null); rc=$?; rm -rf \"$d\"; [ \"$rc\" -eq 0 ] && echo 'ok: single-cycle packets are out of scope'"
     expected_behavior: "ok: single-cycle packets are out of scope"
+    timeout_ms: 30000
+
+  - step: "ORDER 943-26rx: a packet closed by set-field (which writes a FRAGMENT) must read TERMINAL here, even while the folded base still says ready"
+    # THE BLIND SPOT THIS ARM EXISTS FOR. The arms above all supply a fixture
+    # INDEX, so none of them ever exercised the fragment overlay — and the gate
+    # read only the folded base. `tillandsias-plan set-field <id> status done`
+    # is the closure method the worker protocol MANDATES, and it writes to
+    # plan/index.d/, so the base keeps the old status until the next fold.
+    # Measured 2026-08-30: 321 unfolded fragments over four days, 144 carrying
+    # a status entry, and order 831-ezea `completed` per the folding reader
+    # while the base called it live — so the gate DEMANDED a closed packet stay
+    # in the active view and refused the push of anyone removing it.
+    #
+    # 831-ezea is used as the fixture subject because terminal is terminal: a
+    # completed packet does not become live again. If this arm ever fails
+    # because that order was resurrected, replace the subject rather than the
+    # assertion.
+    command: "d=$(mktemp -d); printf 'plan_index:\\n  packets:\\n    - packet_id: subject\\n      order: 831-ezea\\n      status: ready\\n      multi_cycle: true\\n' > \"$d/idx.yaml\"; printf '| Order | Packet |\\n|---:|---|\\n| 831-ezea | `subject` |\\n' > \"$d/view.md\"; out=$(TILLANDSIAS_LONG_RUNNING_INDEX=\"$d/idx.yaml\" TILLANDSIAS_LONG_RUNNING_VIEW=\"$d/view.md\" scripts/check-long-running-view.sh 2>/dev/null); rc=$?; rm -rf \"$d\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -q '^violation:long-running-view:missing=0:stale=1$' && echo 'ok: fragment-closed packet read as terminal' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    expected_behavior: "ok: fragment-closed packet read as terminal"
+    timeout_ms: 30000
+
+  - step: "ORDER 943-26rx POSITIVE CONTROL: the overlay must only REFINE — a genuinely live packet still reads live, so it cannot pass the arm above by calling everything terminal"
+    # Without this, the overlay could satisfy the negative by resolving every
+    # order to terminal — which would empty the view's obligations entirely and
+    # be far worse than the blind spot it replaced.
+    command: "d=$(mktemp -d); printf 'plan_index:\\n  packets:\\n    - packet_id: subject\\n      order: 245\\n      status: ready\\n      multi_cycle: true\\n' > \"$d/idx.yaml\"; printf '| Order | Packet |\\n|---:|---|\\n| 245 | `subject` |\\n' > \"$d/view.md\"; out=$(TILLANDSIAS_LONG_RUNNING_INDEX=\"$d/idx.yaml\" TILLANDSIAS_LONG_RUNNING_VIEW=\"$d/view.md\" scripts/check-long-running-view.sh 2>/dev/null); rc=$?; rm -rf \"$d\"; [ \"$rc\" -eq 0 ] && printf '%s' \"$out\" | grep -q '^ok:long-running-view:1 live packets listed$' && echo 'ok: overlay refines, never widens' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    expected_behavior: "ok: overlay refines, never widens"
     timeout_ms: 30000

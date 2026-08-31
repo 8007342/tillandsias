@@ -40,7 +40,7 @@ run() {
     out="$(cd "$repo" && "$GUARD" "$@" 2>&1)" || rc=$?
     if [ "$rc" -ne "$want_rc" ]; then
         failures+=("$name: exit=$rc expected=$want_rc (out: $out)")
-    elif ! printf '%s' "$out" | grep -Fq "$want"; then
+    elif ! grep -Fq "$want" <<<"$out"; then
         failures+=("$name: expected '$want', got: $out")
     fi
 }

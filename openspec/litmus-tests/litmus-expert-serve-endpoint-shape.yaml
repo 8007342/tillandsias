@@ -1,0 +1,113 @@
+# @trace spec:expert-serve-grounded-pipeline
+# @trace order:920-pxg6 (exit criterion 5 — one pipeline, two front-ends; R6 endpoint shape)
+#
+# THE SURFACE THIS PINS. `tillandsias-plan expert-serve` is the OpenAI-
+# compatible front-end the local-experts OpenCode agent consumes: the wire
+# shape is the contract, and OpenCode parses it with a stock
+# @ai-sdk/openai-compatible provider that this project does not control.
+# What must hold: the completion envelope shape (object/choices/message/
+# finish_reason), refusals rendered VERBATIM as 200 completions (a refusal
+# that surfaces as an HTTP error would make OpenCode retry or blame the
+# transport), SSE streams terminated by the pinned `data: [DONE]`, the
+# static five-domain model listing, 404 JSON for unknown routes, the
+# stdin-EOF lifetime (`</dev/null` exits immediately — what keeps
+# litmus:expert-capability-skew-honesty's invoke-every-token sweep fast),
+# and — 801-g9nn — `rag_source_commit` equal to the SERVED ENTRY's own
+# .commit marker, never this checkout's HEAD.
+#
+# Everything is EXECUTED: the real release binary serving a real fixture
+# entry over real HTTP (curl), with a dead embedding endpoint so every
+# completion is the typed refusal — which is exactly the hardest case for
+# the shape contract, and needs no model anywhere.
+name: litmus:expert-serve-endpoint-shape
+spec: expert-serve-grounded-pipeline
+phase: pre-build
+description: >
+  Pin 920-pxg6 R6: the expert-serve OpenAI surface — chat.completion
+  envelope shape with refusals verbatim in content at HTTP 200 /
+  finish_reason stop, rag_source_commit equal to the served entry's .commit
+  (not HEAD), the ratified envelope riding along and verify-answer clean,
+  SSE chunks ending 'data: [DONE]', GET /v1/models listing exactly the five
+  domain ids, 404 JSON otherwise, and immediate exit on stdin EOF.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-plan
+  - jq and curl are available in PATH
+  - target/release/tillandsias-plan built with the expert-serve capability, or cargo available to build it
+
+critical_path:
+  - step: "FIXTURE: stage the entry (with a .commit frame distinct from HEAD), the fixture root, and start expert-serve on 21436 with stdin held open"
+    # The server's lifetime is stdin EOF, so the fixture holds its stdin
+    # open with a silent bounded pipe (`sleep 600 |` — if teardown ever
+    # misses, the holder exits on its own and the server follows at EOF);
+    # the embedding endpoint is a dead port on purpose (refusals exercise
+    # the shape without any model). The wait loop polls the port; the
+    # pinned stderr line is asserted afterwards.
+    command: "rm -rf /tmp/.litmus-920e; pkill -f 'expert-serv[e] --port 21436' 2>/dev/null; mkdir -p /tmp/.litmus-920e/fixroot/plan /tmp/.litmus-920e/fixroot/crates/tillandsias-plan /tmp/.litmus-920e/entry /tmp/.litmus-920e/bin && cp -r crates/tillandsias-plan/lua /tmp/.litmus-920e/fixroot/crates/tillandsias-plan/ && printf 'k: v\\n' > /tmp/.litmus-920e/fixroot/plan/index.yaml && printf 'fixture-key-a\\nbody a\\n' > /tmp/.litmus-920e/fixroot/notes.md && printf '%s\\n' '{\"id\":0,\"path\":\"notes.md\",\"line_start\":1,\"line_end\":2,\"kind\":\"spec\",\"key\":\"fixture-key-a\",\"content_hash\":\"0\",\"text\":\"fixture-key-a body a\"}' > /tmp/.litmus-920e/entry/chunks.jsonl && printf '[1.0,0.0]\\n' > /tmp/.litmus-920e/entry/vectors.jsonl && printf '1234567890abcdef1234567890abcdef12345678\\n' > /tmp/.litmus-920e/entry/.commit && printf 'stub-embed\\n' > /tmp/.litmus-920e/entry/.model && B=${CARGO_TARGET_DIR:-target}/release/tillandsias-plan; { test -x \"$B\" && \"$B\" capabilities 2>/dev/null | grep -qx expert-serve; } || cargo build -q -p tillandsias-plan --release; cp \"$B\" /tmp/.litmus-920e/bin/plan && ES=expert-serve; nohup bash -c \"sleep 600 | env TILLANDSIAS_SPEC_INDEX_NO_PODMAN=1 TILLANDSIAS_SPEC_INDEX_DIR=/tmp/.litmus-920e/entry TILLANDSIAS_EMBED_ENDPOINT=http://127.0.0.1:9/v1 /tmp/.litmus-920e/bin/plan $ES --port 21436 --root /tmp/.litmus-920e/fixroot\" > /tmp/.litmus-920e/serve.log 2>&1 & echo $! > /tmp/.litmus-920e/serve.pid; for i in $(seq 1 100); do if (exec 3<>/dev/tcp/127.0.0.1/21436) 2>/dev/null; then break; fi; sleep 0.1; done; grep -q 'expert-serve: listening on http://127.0.0.1:21436' /tmp/.litmus-920e/serve.log && echo 'ok: server-ready'"
+    timeout_ms: 300000
+    expected_behavior: "ok: server-ready"
+
+  - step: "BEHAVIOURAL: GET /v1/models lists exactly the five domain ids"
+    command: "curl -s http://127.0.0.1:21436/v1/models > /tmp/.litmus-920e/models.json && test \"$(jq -r '.data[].id' /tmp/.litmus-920e/models.json | paste -sd ,)\" = 'all,spec,code,methodology,cheatsheet' && jq -e '.object == \"list\"' /tmp/.litmus-920e/models.json >/dev/null && echo 'ok: five-domain-models'"
+    timeout_ms: 30000
+    expected_behavior: "ok: five-domain-models"
+
+  - step: "BEHAVIOURAL: a completion is OpenAI-shaped, the refusal rides VERBATIM in content at HTTP 200 with finish_reason stop, and rag_source_commit is the ENTRY's .commit — not this checkout's HEAD"
+    command: "H=$(curl -s -o /tmp/.litmus-920e/resp.json -w '%{http_code}' http://127.0.0.1:21436/v1/chat/completions -H 'Content-Type: application/json' -d '{\"model\":\"spec\",\"messages\":[{\"role\":\"user\",\"content\":\"what governs the forge?\"}]}'); test \"$H\" = 200 && jq -e '.object == \"chat.completion\" and .choices[0].message.role == \"assistant\" and .choices[0].finish_reason == \"stop\" and (.choices[0].message.content | startswith(\"unsupported: \")) and .rag_source_commit == \"1234567890abcdef1234567890abcdef12345678\"' /tmp/.litmus-920e/resp.json >/dev/null && test \"$(jq -r '.rag_source_commit' /tmp/.litmus-920e/resp.json)\" != \"$(git rev-parse HEAD)\" && echo 'ok: completion-shape-and-entry-frame'"
+    timeout_ms: 60000
+    expected_behavior: "ok: completion-shape-and-entry-frame"
+
+  - step: "BEHAVIOURAL: the ratified envelope rides along and verify-answer accepts it"
+    command: "jq '.tillandsias_envelope' /tmp/.litmus-920e/resp.json | /tmp/.litmus-920e/bin/plan verify-answer --root /tmp/.litmus-920e/fixroot | grep -q '^ok: envelope verified' && echo 'ok: envelope-rides-along'"
+    timeout_ms: 30000
+    expected_behavior: "ok: envelope-rides-along"
+
+  - step: "BEHAVIOURAL: stream:true answers text/event-stream chat.completion.chunk frames terminated by the pinned data: [DONE]"
+    command: "curl -si http://127.0.0.1:21436/v1/chat/completions -H 'Content-Type: application/json' -d '{\"model\":\"all\",\"stream\":true,\"messages\":[{\"role\":\"user\",\"content\":\"anything\"}]}' > /tmp/.litmus-920e/sse.txt && grep -qi 'content-type: text/event-stream' /tmp/.litmus-920e/sse.txt && grep -q 'chat.completion.chunk' /tmp/.litmus-920e/sse.txt && T=$(tail -c 32 /tmp/.litmus-920e/sse.txt | grep -Fc 'data: [DONE]'); test \"${T:-0}\" = 1 && echo 'ok: sse-done-terminated'"
+    timeout_ms: 60000
+    expected_behavior: "ok: sse-done-terminated"
+
+  - step: "BEHAVIOURAL: an unknown route answers 404 with a JSON error body"
+    command: "H=$(curl -s -o /tmp/.litmus-920e/missing.json -w '%{http_code}' http://127.0.0.1:21436/nope); test \"$H\" = 404 && jq -e '.error.message' /tmp/.litmus-920e/missing.json >/dev/null && echo 'ok: 404-json'"
+    timeout_ms: 30000
+    expected_behavior: "ok: 404-json"
+
+  - step: "BEHAVIOURAL: stdin EOF exits immediately — the capability-sweep contract"
+    # A second instance on its own port, stdin from /dev/null: the process
+    # must exit 0 well inside the 10s cap (the sweep invokes every declared
+    # token this way and cannot afford a hanging server).
+    command: "timeout 10 env TILLANDSIAS_SPEC_INDEX_NO_PODMAN=1 /tmp/.litmus-920e/bin/plan expert-serve --port 21440 --root /tmp/.litmus-920e/fixroot </dev/null >/dev/null 2>&1 && echo 'ok: stdin-eof-fast-exit'"
+    timeout_ms: 30000
+    expected_behavior: "ok: stdin-eof-fast-exit"
+
+  - step: "TEARDOWN: stop the server"
+    command: "kill $(cat /tmp/.litmus-920e/serve.pid) 2>/dev/null; pkill -f 'expert-serv[e] --port 21436' 2>/dev/null; echo 'ok: teardown'"
+    timeout_ms: 15000
+    expected_behavior: "ok: teardown"
+
+observability:
+  traces:
+    - "@trace spec:expert-serve-grounded-pipeline"
+    - "@trace order:920-pxg6"
+  expected_log: "OpenAI completion + SSE shapes pinned against the real server; refusals verbatim at HTTP 200; rag_source_commit is the served entry's frame, not HEAD; five-domain model listing; 404 JSON; stdin-EOF immediate exit"
+  log_fields:
+    spec: "expert-serve-grounded-pipeline"
+    test: "expert-serve-endpoint-shape"
+    engine: "tillandsias-plan expert-serve"
+    verifier: "tillandsias-plan verify-answer"
+
+rollback:
+  on_failure: >
+    The wire contract with OpenCode regressed. A failed completion-shape step
+    means the stock @ai-sdk/openai-compatible provider can no longer parse
+    the endpoint (or a refusal became an HTTP error, which OpenCode reads as
+    a transport fault and retries). A failed rag_source_commit assertion
+    means the server is stamping its own checkout's frame onto spans it
+    never read there — the 801-g9nn lie D2 exists to prevent; check
+    SpecIndexEntry::freshness and the with_default_citation_commit ordering.
+    A failed SSE step strands streaming clients waiting for [DONE]. A failed
+    stdin-EOF step makes every capability sweep hang for its full timeout on
+    this token.
+  command: "cat /tmp/.litmus-920e/serve.log 2>/dev/null; head -c 600 /tmp/.litmus-920e/resp.json 2>/dev/null; tail -5 /tmp/.litmus-920e/sse.txt 2>/dev/null"

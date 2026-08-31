@@ -1,0 +1,116 @@
+# @trace spec:expert-serve-grounded-pipeline
+# @trace order:920-pxg6 (exit criterion 2 — refusal, not fallback)
+#
+# THE GAP THIS CLOSES. Commit 687eb6d57's Local Experts facade dispatched
+# every query straight to the raw model with no retrieval and stamped the
+# result validated:true / confidence:0.5 / citations:[] — fluent uncited
+# prose presented as a grounded answer. The 920-pxg6 pipeline's contract is
+# the opposite dichotomy: an answer either carries citations that verifiably
+# support it, or it is the pinned typed refusal (`unsupported: <reason>`,
+# confidence=unsupported, citations=[]). There is NO third state and NO
+# raw-model fallback.
+#
+# WHAT IS EXECUTED. The real release binary's `pipeline` arm (the CLI
+# front-end of the ONE grounded function expert-serve also serves), against
+# a real published-entry fixture and a real listening OpenAI stub
+# (crates/tillandsias-plan/examples/openai-stub) that LOGS every request it
+# receives. The proof of "never falls back to the raw model" is that log:
+# after the refusal it holds ZERO requests (the refusal fired before any
+# dispatch — the pinned `[grounded] refuse-before-dispatch:` stderr line
+# names the same fact), and even the answering NEGATIVE CONTROL (dead
+# synthesis endpoint) contains zero /chat/completions requests, because the
+# fail-soft floor is the CITED retrieval-only digest, never model prose.
+name: litmus:expert-serve-refusal-not-fallback
+spec: expert-serve-grounded-pipeline
+phase: pre-build
+description: >
+  Pin 920-pxg6 exit criterion 2: when retrieval cannot ground an answer
+  (here: the served entry holds no chunks in the requested domain), the
+  grounded pipeline returns the typed unsupported: refusal — pinned prefix,
+  confidence=unsupported, citations=[], verify-answer clean — and provably
+  makes ZERO model requests (the logging stub endpoint records none).
+  Negative control: a covered query under the SAME fixture still answers
+  cited, and with a dead synthesis endpoint it answers from the cited
+  retrieval-only floor — still zero raw-model requests.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-plan (the engine and the openai-stub example)
+  - jq is available in PATH
+  - target/release/tillandsias-plan built with the expert-serve capability, or cargo available to build it
+
+critical_path:
+  - step: "FIXTURE: stage the published-entry fixture, the fixture checkout root, the logging OpenAI stub on 21437, and the release binary"
+    # The entry is a real content-addressed index entry shape (chunks.jsonl +
+    # vectors.jsonl + .commit/.model markers). Its two chunks are SPEC-domain
+    # and cite real spans in the fixture root, so Rust validation passes for
+    # the negative control; the refusal step asks the CODE domain, which the
+    # entry does not hold. Vectors are [1.0,0.0] and the stub embeds every
+    # query to [1.0,0.0], so retrieval is deterministic at cosine 1. The
+    # fixture root carries the crate's lua/ scripts because the pipeline's
+    # tier/trim/collect load from <root>/crates/tillandsias-plan/lua.
+    command: "rm -rf /tmp/.litmus-920r; pkill -f 'openai-stu[b] --port 21437' 2>/dev/null; mkdir -p /tmp/.litmus-920r/fixroot/plan /tmp/.litmus-920r/fixroot/crates/tillandsias-plan /tmp/.litmus-920r/entry /tmp/.litmus-920r/bin && cp -r crates/tillandsias-plan/lua /tmp/.litmus-920r/fixroot/crates/tillandsias-plan/ && printf 'k: v\\n' > /tmp/.litmus-920r/fixroot/plan/index.yaml && printf 'fixture-key-a\\nbody a\\nfixture-key-b\\nbody b\\n' > /tmp/.litmus-920r/fixroot/notes.md && printf '%s\\n%s\\n' '{\"id\":0,\"path\":\"notes.md\",\"line_start\":1,\"line_end\":2,\"kind\":\"spec\",\"key\":\"fixture-key-a\",\"content_hash\":\"0\",\"text\":\"fixture-key-a body a\"}' '{\"id\":1,\"path\":\"notes.md\",\"line_start\":3,\"line_end\":4,\"kind\":\"spec\",\"key\":\"fixture-key-b\",\"content_hash\":\"0\",\"text\":\"fixture-key-b body b\"}' > /tmp/.litmus-920r/entry/chunks.jsonl && printf '[1.0,0.0]\\n[1.0,0.0]\\n' > /tmp/.litmus-920r/entry/vectors.jsonl && printf '1234567890abcdef1234567890abcdef12345678\\n' > /tmp/.litmus-920r/entry/.commit && printf 'stub-embed\\n' > /tmp/.litmus-920r/entry/.model && printf 'Grounded: fixture-key-a is the mechanism. Sources: fixture-key-a\\n' > /tmp/.litmus-920r/synth.txt && B=${CARGO_TARGET_DIR:-target}/release/tillandsias-plan; { test -x \"$B\" && \"$B\" capabilities 2>/dev/null | grep -qx expert-serve; } || cargo build -q -p tillandsias-plan --release; cp \"$B\" /tmp/.litmus-920r/bin/plan && S=${CARGO_TARGET_DIR:-target}/release/examples/openai-stub; test -x \"$S\" || cargo build -q -p tillandsias-plan --release --example openai-stub; nohup \"$S\" --port 21437 --log /tmp/.litmus-920r/stub.log --content /tmp/.litmus-920r/synth.txt > /tmp/.litmus-920r/stub.out 2>&1 & echo $! > /tmp/.litmus-920r/stub.pid; for i in $(seq 1 50); do if (exec 3<>/dev/tcp/127.0.0.1/21437) 2>/dev/null; then break; fi; sleep 0.1; done; (exec 3<>/dev/tcp/127.0.0.1/21437) 2>/dev/null && echo 'ok: fixture-ready'"
+    timeout_ms: 300000
+    expected_behavior: "ok: fixture-ready"
+
+  - step: "BEHAVIOURAL: an empty-domain miss returns the pinned typed refusal — unsupported: prefix, confidence=unsupported, citations=[]"
+    # Both endpoint envs point at the LIVE logging stub, so any fallback
+    # attempt would be recorded. The entry holds only spec chunks; the query
+    # asks the code domain.
+    command: "env TILLANDSIAS_SPEC_INDEX_NO_PODMAN=1 TILLANDSIAS_SPEC_INDEX_DIR=/tmp/.litmus-920r/entry TILLANDSIAS_EMBED_ENDPOINT=http://127.0.0.1:21437/v1 TILLANDSIAS_SPEC_EXPERT_ENDPOINT=http://127.0.0.1:21437/v1 /tmp/.litmus-920r/bin/plan --index /tmp/.litmus-920r/fixroot/plan/index.yaml pipeline --domain code 'what is key a' > /tmp/.litmus-920r/refusal.json 2> /tmp/.litmus-920r/refusal.err && jq -r '.answer' /tmp/.litmus-920r/refusal.json | grep -q '^unsupported: ' && jq -e '.confidence == \"unsupported\" and (.citations | length == 0)' /tmp/.litmus-920r/refusal.json >/dev/null && echo 'ok: refusal-typed'"
+    timeout_ms: 60000
+    expected_behavior: "ok: refusal-typed"
+
+  - step: "PROOF: the refusal made ZERO model requests — the stub's request log is empty and the refuse-before-dispatch line fired"
+    # This is the raw-model-fallback kill shot: a pipeline that consulted
+    # any endpoint before refusing would have left a request line behind.
+    command: "test ! -s /tmp/.litmus-920r/stub.log && grep -q 'refuse-before-dispatch' /tmp/.litmus-920r/refusal.err && echo 'ok: zero-model-requests'"
+    timeout_ms: 15000
+    expected_behavior: "ok: zero-model-requests"
+
+  - step: "BEHAVIOURAL: the refusal is the RATIFIED envelope — verify-answer accepts it"
+    command: "/tmp/.litmus-920r/bin/plan verify-answer --root /tmp/.litmus-920r/fixroot < /tmp/.litmus-920r/refusal.json | grep -q '^ok: envelope verified' && echo 'ok: verifier-accepts-refusal'"
+    timeout_ms: 30000
+    expected_behavior: "ok: verifier-accepts-refusal"
+
+  - step: "NEGATIVE CONTROL: a covered query under the SAME fixture answers CITED — dead synthesis endpoint, so the cited retrieval-only floor serves, and still zero raw-model requests"
+    # A refusal gate that refuses everything would pass every step above and
+    # kill the working lane. Embedding goes through the live stub; synthesis
+    # points at a dead port — the answer must be confidence=retrieved with
+    # citations, verify clean, and the stub log must show embeddings traffic
+    # but not one /chat/completions request.
+    command: "env TILLANDSIAS_SPEC_INDEX_NO_PODMAN=1 TILLANDSIAS_SPEC_INDEX_DIR=/tmp/.litmus-920r/entry TILLANDSIAS_EMBED_ENDPOINT=http://127.0.0.1:21437/v1 TILLANDSIAS_SPEC_EXPERT_ENDPOINT=http://127.0.0.1:9/v1 /tmp/.litmus-920r/bin/plan --index /tmp/.litmus-920r/fixroot/plan/index.yaml pipeline --domain spec 'what is key a' > /tmp/.litmus-920r/negctl.json 2>/dev/null && jq -e '.confidence == \"retrieved\" and (.citations | length >= 1)' /tmp/.litmus-920r/negctl.json >/dev/null && /tmp/.litmus-920r/bin/plan verify-answer --root /tmp/.litmus-920r/fixroot < /tmp/.litmus-920r/negctl.json | grep -q '^ok: envelope verified' && grep -q 'embeddings' /tmp/.litmus-920r/stub.log && C=$(grep -c 'chat/completions' /tmp/.litmus-920r/stub.log 2>/dev/null); test \"${C:-0}\" = 0 && echo 'ok: covered-query-answers-cited'"
+    timeout_ms: 60000
+    expected_behavior: "ok: covered-query-answers-cited"
+
+  - step: "TEARDOWN: stop the stub"
+    command: "kill $(cat /tmp/.litmus-920r/stub.pid) 2>/dev/null; echo 'ok: teardown'"
+    timeout_ms: 15000
+    expected_behavior: "ok: teardown"
+
+observability:
+  traces:
+    - "@trace spec:expert-serve-grounded-pipeline"
+    - "@trace order:920-pxg6"
+  expected_log: "typed refusal on empty-domain retrieval with a provably untouched model endpoint; covered query answers cited from the retrieval-only floor under a dead synthesis endpoint — no raw-model fallback in either direction"
+  log_fields:
+    spec: "expert-serve-grounded-pipeline"
+    test: "expert-serve-refusal-not-fallback"
+    engine: "tillandsias-plan pipeline (run_grounded)"
+    stub: "crates/tillandsias-plan/examples/openai-stub.rs"
+    verifier: "tillandsias-plan verify-answer"
+
+rollback:
+  on_failure: >
+    The answer-or-typed-refusal dichotomy regressed. If the refusal step
+    failed, an ungroundable query is being answered — check whether a
+    fallback to raw model prose crept back into run_grounded. If the PROOF
+    step failed, the pipeline is contacting model endpoints before (or
+    instead of) refusing: the preflight refusals in run_grounded must fire
+    before any dispatch. If the verifier step failed, refusals are no longer
+    the ratified envelope. If the NEGATIVE CONTROL failed, the refusal gate
+    is intercepting the working lane — either covered queries refuse, or the
+    cited retrieval-only floor on synthesis failure was replaced by a refusal
+    (or worse, by uncited prose: check the stub log for /chat/completions).
+  command: "cat /tmp/.litmus-920r/refusal.json 2>/dev/null; cat /tmp/.litmus-920r/refusal.err 2>/dev/null; cat /tmp/.litmus-920r/stub.log 2>/dev/null; jq -r '.answer' /tmp/.litmus-920r/negctl.json 2>/dev/null"

@@ -96,9 +96,15 @@ critical_path:
     # (see tests::inference_run_args_place_every_flag_before_the_image in
     # crates/tillandsias-headless/src/main.rs), which is the only observable form
     # of this boundary. Filed as order 528.
-    command: "grep -A 200 'fn build_inference_run_args' crates/tillandsias-headless/src/main.rs | grep -F '/home/ollama/.ollama/models:rw' && grep -A 200 'fn build_inference_run_args' crates/tillandsias-headless/src/main.rs | grep -F '/etc/tillandsias/ca.crt' | head -1"
+    # ORDER 925-erjs. Was `grep -A 200 'fn build_inference_run_args' … ` twice.
+    # A 200-line window is plainly reaching for "the whole function", so say
+    # that: the awk range is bounded by the function's own closing brace and
+    # cannot spill into whatever follows it as the file grows.
+    # NEGATIVE CONTROL (verified 2026-08-29 on a mutated copy): changing the
+    # mount to `models:ro` fails the step.
+    command: "blk=$(awk '/^fn build_inference_run_args\\(/,/^}/' crates/tillandsias-headless/src/main.rs); printf '%s' \"$blk\" | grep -qF '/home/ollama/.ollama/models:rw' && printf '%s' \"$blk\" | grep -qF '/etc/tillandsias/ca.crt' && echo 'ok: models-rw and ca-crt mounted'"
     timeout_ms: 3000
-    expected_behavior: "/etc/tillandsias/ca.crt"
+    expected_behavior: "ok: models-rw and ca-crt mounted"
 
   - step: "Req 5 tier classification log: entrypoint emits single `tier=` line at boot"
     # Spec § Req 5 mandates one `tier=` line summarizing the

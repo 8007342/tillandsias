@@ -32,7 +32,7 @@ critical_path:
     expected_behavior: "ok: lateral terminal admitted without evidence"
 
   - step: "the diff-scoped wrapper reports its grammar over the branch"
-    command: "scripts/check-fragment-closure-evidence-added.sh | grep -qE '^(ok:closure-evidence:[0-9]+ checked|violation:closure-without-evidence:[0-9]+|skip:stale-plan-binary)$' && echo 'ok: wrapper grammar holds'"
+    command: "mf_stage prod 0 OUT -- scripts/check-fragment-closure-evidence-added.sh && mf_holds_ere OUT '^(ok:closure-evidence:[0-9]+ checked|violation:closure-without-evidence:[0-9]+|skip:stale-plan-binary)$' && echo 'ok: wrapper grammar holds'"
     timeout_ms: 30000
     expected_behavior: "ok: wrapper grammar holds"
 

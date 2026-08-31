@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: sni-windowid-type-wedges-shell
+    event:
+      type: note
+      ts: "2026-08-31T05:03:42Z"
+      agent_id: linux-macuahuitl-fable5-20260831t050342z
+      host: macuahuitl
+      summary: >
+        ZERO-TOUCH ACCEPTANCE, round 4, the honest one: minted agent reached its prompt with NO human interaction — its own report: 'Dialogs encountered: NONE' — after three seeded blockers (theme/onboarding, workspace trust, bypass-permissions consent), each found by a live round and invisible to the round before it. The agent self-reported over RC and self-exited per its prompt. The coordinator can now mint, direct, and dismiss sibling forge workers with zero operator touches, in visible ptyxis windows per the operator's standing preference. The premature round-3 acceptance and its correction remain on the record above as the method lesson: the operator's dinner was the control that exposed manual-approval contamination.

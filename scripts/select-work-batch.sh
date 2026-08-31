@@ -135,11 +135,35 @@
 
 set -uo pipefail
 
+
+# ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has it.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+# Resolve the lib by WALKING UP, not by a fixed depth (order 914-ahsy). The
+# fixed form `dirname "${BASH_SOURCE[0]}"/lib/...` is correct only for a caller
+# sitting directly in scripts/. From scripts/refusal-calibration/ it points at a
+# lib that does not exist, the `|| true` swallows the miss, and the tool variable
+# silently falls back to the bare name — a conversion that passes review, passes
+# the suite, and changes nothing.
+_td_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_td_dir" ] && [ "$_td_dir" != "/" ] && [ ! -f "$_td_dir/lib/tool-dispatch.sh" ]; do
+    _td_dir="$(dirname "$_td_dir")"
+done
+if [ -f "$_td_dir/lib/tool-dispatch.sh" ]; then
+    . "$_td_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+fi
+if command -v resolve_tool >/dev/null 2>&1; then
+    JQ="$(resolve_tool jq || printf 'jq')"
+else
+    JQ="jq"   # lib unavailable: preserve the previous behaviour exactly
+fi
+
 ROLE="${1:-}"
 shift 2>/dev/null || true
 BUDGET=""
 RELEASE=""
 SEED=""
+SEED_EXPLICIT=0
 TOPK="3"
 
 while [ "$#" -gt 0 ]; do
@@ -148,8 +172,8 @@ while [ "$#" -gt 0 ]; do
         --budget=*) BUDGET="${1#--budget=}"; shift ;;
         --release) RELEASE="${2:-}"; shift 2 ;;
         --release=*) RELEASE="${1#--release=}"; shift ;;
-        --seed)    SEED="${2:-}"; shift 2 ;;
-        --seed=*)  SEED="${1#--seed=}"; shift ;;
+        --seed)    SEED="${2:-}"; SEED_EXPLICIT=1; shift 2 ;;
+        --seed=*)  SEED="${1#--seed=}"; SEED_EXPLICIT=1; shift ;;
         --topk)    TOPK="${2:-}"; shift 2 ;;
         --topk=*)  TOPK="${1#--topk=}"; shift ;;
         *) echo "refused:bad-role:unknown argument $1"; exit 1 ;;
@@ -266,8 +290,8 @@ if [ -z "$SEED" ]; then
     if [ -n "$_identity" ]; then
         SEED="${_identity}-$(date -u +%Y%m%d)"
     else
-        SEED="${TILLANDSIAS_HOST_KIND:-host}-$(date -u +%Y%m%d)"
-        echo "note: derive-host-identity.sh unavailable — seeding by host KIND, which COLLIDES across same-kind hosts" >&2
+        SEED="$(hostname -s 2>/dev/null || echo host)-$(date -u +%Y%m%d)"
+        echo "note: derive-host-identity.sh unavailable — seeding by hostname, which COLLIDES across same-named hosts" >&2
     fi
 fi
 
@@ -414,7 +438,7 @@ rm -f "$query_err"
 # DECLARE the subcommand? `capabilities` is the compile-time capability set
 # (order 569), so a binary too old to project rows says so about itself.
 if [ -z "$rows" ]; then
-    if ! "$PLAN" capabilities 2>/dev/null | grep -qx "select-rows"; then
+    if ! "$PLAN" capabilities 2>/dev/null | grep -qx "select-rows"; then # sigpipe-ok: safe pipeline
         echo "refused:stale-plan-binary:${PLAN} does not declare select-rows; rebuild with cargo build --release -p tillandsias-plan"
         exit 1
     fi
@@ -496,6 +520,33 @@ fi
 # Format: one tag per word, tag name == probed binary name.
 TOOL_CAP_TAGS="nix"
 
+# ASK THE TOOL'S OWN CAPABILITY ANSWER WHERE IT HAS ONE (order 799-tb7q,
+# second criterion). `command -v nix` on the HOST is not the question this
+# selector is asking. nix runs here on three rungs — host daemon, host chroot
+# store, or a containerized nix — and scripts/nix-toolbox.sh is the script that
+# knows which. Judging by the host binary alone declared a toolbox-capable host
+# nix-incapable and SUBTRACTED every nix-tagged packet from its pool, which is
+# the same defect as handing 723-sazx to a forge without nix, pointed the other
+# way: silently shrinking a capable host's work instead of overstating it.
+#
+# `capability`, NOT `ensure`: the selector must not provision. `ensure` would
+# `podman pull` a 400 MiB image and create a toolbox as a side effect of being
+# asked a question, and a host that has no nix rung today is honestly
+# nix-incapable today. Cost on a nix host is two `nix store ping`s; on a host
+# with no nix, one `toolbox list`.
+#
+# Tools with no such answer keep the plain probe. Adding a case here is a
+# deliberate act per tool, the same standard TOOL_CAP_TAGS enrollment carries.
+_host_has_tool() {
+    case "$1" in
+        nix)
+            bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/nix-toolbox.sh" \
+                capability >/dev/null 2>&1
+            ;;
+        *)  command -v "$1" >/dev/null 2>&1 ;;
+    esac
+}
+
 # TILLANDSIAS_HOST_CAPS, when SET (even empty), is the declared capability set
 # verbatim — a space-separated list of tool names — and replaces the probes.
 # That is the fixture seam and the escape hatch for a host whose probe lies.
@@ -504,7 +555,7 @@ if [ -n "${TILLANDSIAS_HOST_CAPS+x}" ]; then
 else
     HOST_CAPS=" "
     for tool in $TOOL_CAP_TAGS; do
-        command -v "$tool" >/dev/null 2>&1 && HOST_CAPS="${HOST_CAPS}${tool} "
+        if _host_has_tool "$tool"; then HOST_CAPS="${HOST_CAPS}${tool} "; fi
     done
 fi
 
@@ -730,6 +781,30 @@ if [ -n "$MY_CAP_LINE" ] && [ "$HOST_TIER" != "low-end" ]; then
     fi
 fi
 
+# ORDER 949-uv5k. AN EXPLICIT --seed OUTRANKS ORDINAL ROUTING, because the
+# KNOWN TRADEOFF note above promises exactly that remedy — "pass --seed
+# explicitly to override when it happens" — and without this the promise is
+# unkeepable for every routed host. Measured 2026-08-31: seven unrelated seeds
+# produced byte-identical batches on a host reporting route=rank:2/7:width=7,
+# because the pick below reads `routed_pick` and never consumes the seed.
+#
+# THE DEFAULT IS UNCHANGED, and that is the point. With no --seed the host
+# still routes by roster ordinal, so cross-host separation (847-wgy4) and the
+# cross-cycle cohesion the rotation provides both stand. Only a deliberate,
+# recorded, reproducible override takes the seeded path — and the escape hatch
+# was decaying precisely as 850-bif2 rows landed, since routing engages only
+# for hosts that HAVE a capability row.
+#
+# ROUTE is reset to "seed" rather than given a new token so the batch line
+# reports no `route=` field: the pick genuinely did not come from rank, and
+# the triage litmus grammar stays satisfied without widening it.
+if [ "$SEED_EXPLICIT" = "1" ] && [ "$ROUTE" != "seed" ]; then
+    k="$TOPK"
+    [ "$k" -gt "$epic_count" ] && k="$epic_count"
+    [ "$k" -lt 1 ] && k=1
+    ROUTE="seed"
+fi
+
 # SCORE-WEIGHTED, not uniform. Uniform choice over the top-K re-introduces the
 # very anti-pattern minimax forbids: with scores 22.8 / 19.7 / 8.5, a uniform
 # pick takes the 8.5 a third of the time — chasing a low-residual obligation
@@ -787,8 +862,16 @@ chosen_score="$(printf '%s\n' "$scored" | sed -n "${pick}p" | cut -f1)"
 [ -n "$chosen" ] || { echo "refused:no-eligible-work:could not choose an epic"; exit 1; }
 
 batch="$(printf '%s\n' "$rows" \
-    | awk -F'\t' -v e="$chosen" '$2==e' \
-    | sort -t"$(printf '\t')" -k1,1n -k3,3 -k4,4 \
+    | awk -F'\t' -v e="$chosen" -v maxo="$maxorder" '
+        $2==e {
+            urgency = 3 - $1;
+            onum = $3; gsub(/[^0-9].*$/, "", onum); onum = onum + 0;
+            neglect = maxo > 0 ? (10.0 * (maxo - onum) / maxo) : 0;
+            score = (2.0 * urgency) + neglect;
+            printf "%.3f\t%s\n", score, $0;
+        }' \
+    | sort -t"$(printf '\t')" -k1,1nr -k4,4 \
+    | cut -f2- \
     | head -n "$BUDGET")"
 
 # URGENCY OVERRIDE (order 645-n3h6). Reserve slot 1 for the globally

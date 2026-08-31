@@ -7,3 +7,13 @@ path "secret/data/claude/oauth" {
 path "secret/metadata/claude/oauth" {
   capabilities = ["read"]
 }
+
+# Operator's one-time interactive approvals (trust/bypass/onboarding) — the
+# same restore/harvest rail as the OAuth document (2026-08-31 directive:
+# approve once on first launch, vault carries it thereafter).
+path "secret/data/claude/approvals" {
+  capabilities = ["create", "update", "read"]
+}
+path "secret/metadata/claude/approvals" {
+  capabilities = ["read"]
+}

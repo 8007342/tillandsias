@@ -88,6 +88,55 @@ tillandsias_dev_env_hook() {
         export TILLANDSIAS_EMBED_MODEL="nomic-embed-text"
     fi
 
+    # ── PER-HOST MODEL TIER TABLE (order 902-5bf9) ──────────────────────────
+    #
+    # Selects the inference model based on available hardware:
+    #   GPU (CUDA/ROCm)  → 14b with ≥16GB VRAM, else 7b (measured, not assumed)
+    #   NPU              → 0.5b model (fast, low quality)
+    #   CPU only         → 0.5b model (fallback, minimal quality)
+    #
+    # TILLANDSIAS_INFERENCE_MODEL always wins (CLI override).
+    # TILLANDSIAS_MODEL_TIER forces a specific tier: "gpu", "npu", "cpu".
+    if [ -z "${TILLANDSIAS_INFERENCE_MODEL:-}" ]; then
+        _deh_tier="${TILLANDSIAS_MODEL_TIER:-}"
+        if [ -z "$_deh_tier" ]; then
+            # Auto-detect hardware
+            if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then
+                _deh_tier="gpu"
+            elif [ -d /dev/accel ] || [ -d /dev/npu ] || ls /dev/accel_* >/dev/null 2>&1; then
+                _deh_tier="npu"
+            else
+                _deh_tier="cpu"
+            fi
+        fi
+        case "$_deh_tier" in
+            gpu)
+                # 14b needs ≥16GB VRAM for quantized models, and low-end GPU
+                # hosts are fleet targets — measure before selecting, and fall
+                # back to 7b when the card (or the measurement) comes up short.
+                _deh_vram="$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -d '[:space:]')"
+                case "$_deh_vram" in
+                    '' | *[!0-9]*) _deh_vram=0 ;;
+                esac
+                if [ "$_deh_vram" -ge 16000 ]; then
+                    export TILLANDSIAS_INFERENCE_MODEL="qwen2.5:14b"
+                else
+                    export TILLANDSIAS_INFERENCE_MODEL="qwen2.5:7b"
+                fi
+                ;;
+            npu)
+                # 0.5b on NPU — fast, fits in NPU memory (the qwen2.5 family
+                # has no 0.6b tag; the earlier 0.6b pin could never pull)
+                export TILLANDSIAS_INFERENCE_MODEL="qwen2.5:0.5b"
+                ;;
+            cpu|*)
+                # 0.5b CPU fallback — always available
+                export TILLANDSIAS_INFERENCE_MODEL="qwen2.5:0.5b"
+                ;;
+        esac
+        printf '[lib-dev-env] model tier: %s -> %s\n' "$_deh_tier" "$TILLANDSIAS_INFERENCE_MODEL" >&2
+    fi
+
     # Operator kill switch (620-ca7g): honored here too, loudly.
     _deh_state_dir="${XDG_RUNTIME_DIR:-/tmp}"
     _deh_verdict="$_deh_state_dir/tillandsias-dev-inference.verdict"

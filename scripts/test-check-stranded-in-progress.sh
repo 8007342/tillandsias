@@ -1,153 +1,167 @@
 #!/usr/bin/env bash
-# @trace order:882-vqe4, order:641-e2qa
+# @trace spec:methodology-accountability
+# @trace order:946-pdpi, order:641-e2qa
 #
-# test-check-stranded-in-progress.sh — pin that a packet's stranded verdict does
-# not depend on WHERE its history is stored.
+# Fixture for check-stranded-in-progress.sh's stranding predicate.
 #
-# THE DEFECT THIS EXISTS TO PREVENT. The detector counted activity with a grep
-# over plan/index.d/*.yaml only. Compaction folds fragments into plan/index.yaml
-# as routine garbage collection, so after a fold that grep returned zero for a
-# packet whose history was fully intact. Measured on the live ledger
-# 2026-08-25: 865-n8vq carried 35 events in the base, the detector saw 0, and
-# reported a p0 the coordinator had touched 106 minutes earlier as STRANDED.
-# 641-e2qa built this check to make neglected work visible; pointing it at the
-# best-tended packet in the ledger inverts it.
+# THE AUTHORITATIVE PAIR (946-pdpi, exit criterion 2 as restated by the
+# coordinator; the ORIGINAL wording was vacuous and is deliberately not used).
+# The original asked only that "a long-worked, compacted packet is NOT flagged"
+# — which the UNFIXED code guaranteed unconditionally, so that arm passed
+# against the bug and had no teeth. The pair below is what discriminates:
 #
-# Arm 3 is the one that keeps the fix honest: a claim with no events ANYWHERE
-# must still report stranded. A check that stopped reporting anything would
-# "fix" the false positive by deleting the feature.
+#   (a) a long-worked packet whose claim is RECENT        -> NOT flagged
+#   (b) a long-worked packet whose claim is STALE         -> flagged
 #
-# Hermetic: a scratch tree with its own plan/index.yaml and plan/index.d/,
-# the real script and the real folder binary. No network, no repo ledger.
+# and the mutation control is that the OLD predicate — count
+# progress|completed|blocked over all history, flag zero — fails (b), because
+# both fixture packets carry progress events and were therefore permanently
+# immune.
+#
+# Verdict grammar:
+#   ok:stranded-fixture:<n> passed        exit 0
+#   violation:stranded-fixture:<case>     exit 1
+#   blocked:<reason>                      exit 2
 set -uo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-fail=0; pass=0
-ok()  { echo "ok: $1"; pass=$((pass+1)); }
-bad() { echo "FAIL: $1" >&2; fail=$((fail+1)); }
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO_ROOT" || exit 2
 
-# shellcheck source=scripts/plan-binary-probe.sh
-. "$ROOT/scripts/plan-binary-probe.sh"
-PLAN="$(resolve_plan_binary)" || { echo "SKIP: no runnable plan binary"; exit 0; }
-case "$PLAN" in /*) ;; *) PLAN="$ROOT/${PLAN#./}" ;; esac
+# Resolve through the shared probe, never a hardcoded target/ path (721-nyev):
+# an executable bit is a claim, running the binary is evidence.
+. "$(dirname "${BASH_SOURCE[0]}")/plan-binary-probe.sh"
+PLAN_BIN="$(resolve_plan_binary)" || { echo "blocked:no-plan-binary"; exit 2; }
+[ -n "$PLAN_BIN" ] || { echo "blocked:no-plan-binary"; exit 2; }
+command -v jq >/dev/null 2>&1 || { echo "blocked:no-jq"; exit 2; }
 
-W="$(mktemp -d "${TMPDIR:-/tmp}/stranded-test.XXXXXX")"
-trap 'rm -rf "$W"' EXIT INT TERM
-mkdir -p "$W/scripts" "$W/plan/index.d" "$W/target/release"
-for s in check-stranded-in-progress.sh plan-binary-probe.sh agent-identity.sh; do
-    [ -f "$ROOT/scripts/$s" ] && cp "$ROOT/scripts/$s" "$W/scripts/"
-done
-cp "$PLAN" "$W/target/release/tillandsias-plan"
+D="$(mktemp -d)"
+trap 'rm -rf "$D"' EXIT
 
-# BASE: three in_progress packets.
-#   base-evented   — its only events are in the BASE (the folded case)
-#   frag-evented   — its only events arrive in a FRAGMENT (the overlay case)
-#   never-touched  — claimed, no events anywhere (the TRUE POSITIVE)
-cat > "$W/plan/index.yaml" <<'YAML'
+# FIXED instants plus a pinned NOW, so the fixture does not depend on the wall
+# clock and needs no date arithmetic at all. `date -u -d <iso>` is GNU-only and
+# BSD date SUCCEEDS with garbage, which no exit-code guard can catch (761-g36m);
+# a fixture that silently computed different instants on macOS would be worse
+# than one that failed there.
+#   NOW    = 2026-08-31T12:00:00Z  (epoch 1788177600)
+NOW_EPOCH=1788177600
+RECENT="2026-08-31T11:40:00Z"   # 20 minutes before NOW  -> inside an 8h window
+STALE="2026-08-28T12:00:00Z"    # 3 days before NOW      -> outside it
+OLD="2026-08-01T12:00:00Z"      # 30 days before NOW     -> long-worked history
+
+# Both packets are LONG-WORKED: each carries progress events, so the old
+# predicate counted a non-zero number for both and flagged neither. They differ
+# only in WHEN the most recent activity happened, which is the whole point.
+cat > "$D/ledger.yaml" <<LEDGEREOF
+plan_index:
+  default_status_values: [ready, in_progress, completed]
 packets:
-    - order: 900-aaaa
-      packet_id: base-evented
-      status: in_progress
-      kind: defect
-      pickup_role: any
-      priority: p2
-      events:
-        - type: claim
-          ts: "2026-08-25T01:00:00Z"
-        - type: progress
-          ts: "2026-08-25T11:00:00Z"
-    - order: 900-bbbb
-      packet_id: frag-evented
-      status: in_progress
-      kind: defect
-      pickup_role: any
-      priority: p2
-      events:
-        - type: claim
-          ts: "2026-08-25T01:00:00Z"
-    - order: 900-cccc
-      packet_id: never-touched
-      status: in_progress
-      kind: defect
-      pickup_role: any
-      priority: p2
-      events:
-        - type: claim
-          ts: "2026-08-25T01:00:00Z"
-YAML
+  - packet_id: long-worked-recent-claim
+    order: 990-aaaa
+    status: in_progress
+    desired_release: v0.5
+    pickup_role: linux
+    priority: p2
+    events:
+      - type: progress
+        ts: "${OLD}"
+        host: fixture
+        summary: worked a long time ago
+      - type: progress
+        ts: "${RECENT}"
+        host: fixture
+        summary: worked just now
+  - packet_id: long-worked-stale-claim
+    order: 990-bbbb
+    status: in_progress
+    desired_release: v0.5
+    pickup_role: linux
+    priority: p2
+    events:
+      - type: progress
+        ts: "${OLD}"
+        host: fixture
+        summary: worked a long time ago
+      - type: progress
+        ts: "${STALE}"
+        host: fixture
+        summary: last touched three days ago, then abandoned
+LEDGEREOF
 
-cat > "$W/plan/index.d/20260825t120000z-fixture-test.yaml" <<'YAML'
-events:
-  - packet_id: frag-evented
-    event:
-      type: progress
-      ts: "2026-08-25T12:00:00Z"
-      host: fixture
-      summary: overlay activity
-YAML
-
-run() { ( cd "$W" && bash "$W/scripts/check-stranded-in-progress.sh" 2>/dev/null ); }
-verdicts() { run | sed -n 's/^stranded\t[^\t]*\t[^\t]*\t//p' | sort; }
-
-before="$(verdicts)"
-sum="$(run | sed -n 's/^summary: //p')"
-
-# ── 1. Events in the BASE count. This is the measured regression. ──────────
-printf '%s\n' "$before" | grep -qx base-evented \
-    && bad "REGRESSION: a packet whose events are in the compacted base reports stranded" \
-    || ok "events in the compacted base count as activity"
-
-# ── 2. Events in the FRAGMENT overlay still count (no regression the other way).
-printf '%s\n' "$before" | grep -qx frag-evented \
-    && bad "a packet with fragment-overlay events reports stranded" \
-    || ok "events in the fragment overlay still count as activity"
-
-# ── 3. TRUE POSITIVE. A claim with no events anywhere MUST report stranded. ─
-printf '%s\n' "$before" | grep -qx never-touched \
-    && ok "a claim with no events anywhere is still reported stranded" \
-    || bad "the true positive was lost — the check now reports nothing"
-
-# ── 4. The summary counts the population it examined, not just the hits. ───
-case "$sum" in
-    *population=3*in_progress=3*stranded=1*) ok "summary reports population=3 stranded=1" ;;
-    *) bad "summary line unexpected: $sum" ;;
+# The probe may return a relative path; make it absolute before baking it into
+# a wrapper that runs from a temp directory.
+case "$PLAN_BIN" in
+    /*) PLAN_ABS="$PLAN_BIN" ;;
+    *)  PLAN_ABS="$PWD/${PLAN_BIN#./}" ;;
 esac
+printf '#!/usr/bin/env bash\nexec "%s" --index "%s/ledger.yaml" "$@"\n' \
+    "$PLAN_ABS" "$D" > "$D/plan"
+chmod +x "$D/plan"
 
-# ── 5. COMPACTION INVARIANCE — the property that was violated. Folding the
-#      fragment into the base must not change any verdict.
-{ head -n -0 "$W/plan/index.yaml"; } > "$W/plan/index.yaml.bak"
-awk '
-/^      packet_id: frag-evented$/ { print; infrag=1; next }
-infrag && /^        - type: claim$/ {
-    print; getline; print
-    print "        - type: progress"
-    print "          ts: \"2026-08-25T12:00:00Z\""
-    infrag=0; next
+run_sweep() {
+    TILLANDSIAS_PLAN_BIN="$D/plan" TILLANDSIAS_STRANDED_HOURS=8 \
+        TILLANDSIAS_STRANDED_NOW_EPOCH="$NOW_EPOCH" \
+        scripts/check-stranded-in-progress.sh 2>/dev/null
 }
-{ print }
-' "$W/plan/index.yaml.bak" > "$W/plan/index.yaml"
-rm -f "$W/plan/index.d/20260825t120000z-fixture-test.yaml"
-after="$(verdicts)"
-[ "$before" = "$after" ] \
-    && ok "verdicts are invariant under compaction (before == after)" \
-    || bad "compaction changed the verdict set: before=[$before] after=[$after]"
 
-# ── 6. MUTATION CONTROL: the pre-fix fragment-only grep must fail arm 1. ───
-cp "$W/plan/index.yaml.bak" "$W/plan/index.yaml"
-cat > "$W/plan/index.d/20260825t120000z-fixture-test.yaml" <<'YAML'
-events:
-  - packet_id: frag-evented
-    event:
-      type: progress
-      ts: "2026-08-25T12:00:00Z"
-      host: fixture
-      summary: overlay activity
-YAML
-legacy=$( cd "$W" && grep -rh -A3 "packet_id: base-evented\$" plan/index.d/*.yaml 2>/dev/null \
-    | grep -cE 'event: (progress|completed|blocked)|type: (progress|completed|blocked)' || true )
-[ "${legacy:-0}" -eq 0 ] \
-    && ok "MUTATION: the pre-fix fragment-only grep sees 0 events for base-evented — arm 1 has teeth" \
-    || bad "mutation control did not reproduce the pre-fix blindness (saw $legacy)"
+pass=0
+fail=""
 
-echo "test-check-stranded-in-progress: $pass passed, $fail failed"
-[ "$fail" = 0 ] || exit 1
+out="$(run_sweep)"
+
+# (a) recent claim on a long-worked packet must NOT be flagged.
+if printf '%s\n' "$out" | grep -q '^stranded.*long-worked-recent-claim'; then
+    fail="${fail}recent-claim-wrongly-flagged "
+else
+    pass=$((pass + 1))
+fi
+
+# (b) stale claim on a long-worked packet MUST be flagged. This is the arm the
+#     old predicate could not satisfy at all.
+if printf '%s\n' "$out" | grep -q '^stranded.*long-worked-stale-claim'; then
+    pass=$((pass + 1))
+else
+    fail="${fail}stale-claim-not-flagged "
+fi
+
+# The row carries its age, so a reader does not re-derive it.
+if printf '%s\n' "$out" | grep -q '^stranded.*long-worked-stale-claim.*idle-since=[0-9-]*T'; then
+    pass=$((pass + 1))
+else
+    fail="${fail}stale-row-missing-idle-since "
+fi
+
+# POPULATION is confessed, so a green cannot be misread as health over nothing.
+if printf '%s\n' "$out" | grep -qE '^summary: population=2 in_progress=2 stranded=1 threshold_events=[0-9]+$'; then
+    pass=$((pass + 1))
+else
+    fail="${fail}summary-shape:$(printf '%s\n' "$out" | grep '^summary:') "
+fi
+
+# THRESHOLD IS HONOURED, not hard-coded: at a 96h threshold the 3-day-stale
+# claim is inside the window and must fall out of the report. Without this,
+# a predicate that flagged on something other than age could still pass above.
+out_wide="$(TILLANDSIAS_PLAN_BIN="$D/plan" TILLANDSIAS_STRANDED_HOURS=96 \
+    TILLANDSIAS_STRANDED_NOW_EPOCH="$NOW_EPOCH" \
+    scripts/check-stranded-in-progress.sh 2>/dev/null)"
+if printf '%s\n' "$out_wide" | grep -qE '^summary: population=2 in_progress=2 stranded=0 '; then
+    pass=$((pass + 1))
+else
+    fail="${fail}threshold-not-honoured "
+fi
+
+# A non-numeric threshold REFUSES rather than silently defaulting — a typo must
+# not be able to choose a different window (the 943-unii lesson).
+bad="$(TILLANDSIAS_PLAN_BIN="$D/plan" TILLANDSIAS_STRANDED_HOURS=abc \
+    scripts/check-stranded-in-progress.sh 2>/dev/null)"
+if printf '%s\n' "$bad" | grep -q '^summary: unavailable:bad-stranded-hours:abc$'; then
+    pass=$((pass + 1))
+else
+    fail="${fail}bad-threshold-not-refused "
+fi
+
+if [ -n "$fail" ]; then
+    echo "violation:stranded-fixture:${fail% }"
+    printf '%s\n' "$out" | sed 's/^/  /'
+    exit 1
+fi
+echo "ok:stranded-fixture:${pass} passed"

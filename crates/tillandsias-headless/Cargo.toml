@@ -1,6 +1,6 @@
 [package]
 name = "tillandsias-headless"
-version = "0.4.260819"
+version = "56.8.31"
 edition = "2024"
 license = "GPL-3.0-or-later"
 authors = ["Tlatoani"]
@@ -23,6 +23,9 @@ tillandsias-logging = { path = "../tillandsias-logging" }
 tillandsias-metrics = { path = "../tillandsias-metrics" }
 tillandsias-otp = { path = "../tillandsias-otp" }
 tillandsias-podman = { path = "../tillandsias-podman" }
+# Order 628-p5tj: the shared portable menu builder lives in host-shell.
+# Linux's tray reuses it instead of maintaining an independent implementation.
+tillandsias-host-shell = { path = "../tillandsias-host-shell" }
 tokio = { workspace = true }
 bytes = { workspace = true }
 # Order 795-5itp: `Framed` for the control wire, built from the ONE shared

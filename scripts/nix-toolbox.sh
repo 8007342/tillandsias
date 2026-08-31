@@ -56,6 +56,8 @@
 # GRAMMAR (exactly one line on stdout)
 #   ok:nix-toolbox:<daemon|chroot|toolbox>
 #   blocked:nix-toolbox:<no-nix-and-no-toolbox|image-pull-failed|create-failed>
+#   ok:nix-capability:<daemon|chroot|toolbox>
+#   none:nix-capability:<no-nix-and-no-toolbox>
 #   ok:nix-store:<absent|empty|populated>:paths=<n>:size=<n>G:pinned=<n>
 #   ok:nix-store:<cold|warm>:deps=<present>/<resolved>:paths=<n>:size=<n>G:pinned=<n>
 #   ok:nix-store-pin:<pinned>/<resolved> of <total>
@@ -72,6 +74,7 @@
 #   scripts/nix-toolbox.sh ensure            # print the verdict, prepare the rung
 #   scripts/nix-toolbox.sh run -- <cmd...>   # run <cmd> with a working nix
 #   scripts/nix-toolbox.sh nix-args          # print the flags for the chosen rung
+#   scripts/nix-toolbox.sh capability        # is this host nix-capable? NEVER creates
 #   scripts/nix-toolbox.sh store-path        # print the persistent store root
 #   scripts/nix-toolbox.sh store-status      # cheap facts; --deps adds cold/warm
 #   scripts/nix-toolbox.sh pin               # root the CURRENT deps closures
@@ -80,6 +83,29 @@
 # Exit 0 on ok/skip, 1 on blocked.
 
 set -uo pipefail
+
+
+# ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has it.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+# Resolve the lib by WALKING UP, not by a fixed depth (order 914-ahsy). The
+# fixed form `dirname "${BASH_SOURCE[0]}"/lib/...` is correct only for a caller
+# sitting directly in scripts/. From scripts/refusal-calibration/ it points at a
+# lib that does not exist, the `|| true` swallows the miss, and the tool variable
+# silently falls back to the bare name — a conversion that passes review, passes
+# the suite, and changes nothing.
+_td_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_td_dir" ] && [ "$_td_dir" != "/" ] && [ ! -f "$_td_dir/lib/tool-dispatch.sh" ]; do
+    _td_dir="$(dirname "$_td_dir")"
+done
+if [ -f "$_td_dir/lib/tool-dispatch.sh" ]; then
+    . "$_td_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+fi
+if command -v resolve_tool >/dev/null 2>&1; then
+    JQ="$(resolve_tool jq || printf 'jq')"
+else
+    JQ="jq"   # lib unavailable: preserve the previous behaviour exactly
+fi
 
 TOOLBOX_NAME="${TILLANDSIAS_NIX_TOOLBOX:-tillandsias-nix}"
 TOOLBOX_IMAGE="${TILLANDSIAS_NIX_TOOLBOX_IMAGE:-registry.fedoraproject.org/fedora-toolbox:44}"
@@ -124,10 +150,54 @@ daemon_live() {
     nix "${NIX_FEATURES[@]}" store ping >/dev/null 2>&1
 }
 
+# ORDER 934-7jd4: the probes CAPTURE why they failed instead of discarding it.
+# The blocked:* verdict grammar is pinned (test-nix-toolbox.sh) and unchanged;
+# the cause travels as a `detail:` line on STDERR beside it. Diagnosing a
+# swallowed cause cost an evening on 2026-08-29: the real reason was
+# "nix: command not found" inside the builder toolbox, and every verdict said
+# only which rung refused.
+NIX_TB_CHROOT_ERR=""
+NIX_TB_PULL_ERR=""
+
 chroot_works() {
-    command -v nix >/dev/null 2>&1 || return 1
-    mkdir -p "$CHROOT_STORE" 2>/dev/null || return 1
-    nix "${NIX_FEATURES[@]}" --store "$CHROOT_STORE" store ping >/dev/null 2>&1
+    if ! command -v nix >/dev/null 2>&1; then
+        NIX_TB_CHROOT_ERR="nix: command not found on PATH"
+        return 1
+    fi
+    if ! mkdir -p "$CHROOT_STORE" 2>/dev/null; then
+        NIX_TB_CHROOT_ERR="mkdir failed: $CHROOT_STORE"
+        return 1
+    fi
+    local _cw_err
+    if ! _cw_err="$(nix "${NIX_FEATURES[@]}" --store "$CHROOT_STORE" store ping 2>&1 >/dev/null)"; then
+        NIX_TB_CHROOT_ERR="${_cw_err##*$'\n'}"
+        return 1
+    fi
+}
+
+# EXERCISE THE STORE, not merely `command -v nix` (order 914-ahsy follow-on).
+#
+# The header above already states this rule for the daemon rung — `nix eval` is
+# pure and answers with the daemon dead, so the probe must touch the store. The
+# toolbox arm did NOT follow its own rule: it asked whether the binary was in
+# the container and stopped there.
+#
+# MEASURED on lenovinha 2026-08-28, and it is a live false green rather than a
+# theoretical one. After `dnf install nix` in the tillandsias-nix toolbox,
+# `command -v nix` succeeds, so the rung reported `toolbox` — but the container
+# runs as the user and /nix/store is root:nixbld, so the very next store
+# operation fails with `creating directory "/nix/store/.links": Permission
+# denied`. The rung was reported usable and could not build.
+#
+# THE STORE THAT WORKS IS THE ONE THE SCRIPT ALREADY HAS. $CHROOT_STORE lives
+# under $HOME, and toolbox shares $HOME with the host, so the same store is
+# visible on both sides — the container needs no privileges to write it and the
+# host keeps the cache when the toolbox is thrown away. Verified end to end: a
+# real `nix build nixpkgs#hello` inside the toolbox against that store
+# completes and prints its out-path.
+toolbox_nix_works() {
+    _toolbox run -c "$TOOLBOX_NAME" \
+        nix "${NIX_FEATURES[@]}" --store "$CHROOT_STORE" store info >/dev/null 2>&1
 }
 
 toolbox_exists() {
@@ -143,10 +213,38 @@ ensure_toolbox() {
     # Pull explicitly so a proxy failure is reported as itself rather than as a
     # create failure.
     if ! _podman image exists "$TOOLBOX_IMAGE" 2>/dev/null; then
-        _podman pull "$TOOLBOX_IMAGE" >/dev/null 2>&1 || return 2
+        local _et_err
+        if ! _et_err="$(_podman pull "$TOOLBOX_IMAGE" 2>&1 >/dev/null)"; then
+            NIX_TB_PULL_ERR="${_et_err##*$'\n'}"
+            return 2
+        fi
     fi
     _toolbox create -y "$TOOLBOX_NAME" >/dev/null 2>&1 || return 3
     return 0
+}
+
+# ORDER 917-zkge follow-on — INSTALL THE THING THE TOOLBOX EXISTS FOR.
+#
+# `ensure_toolbox` above creates the container and stops there, so a host could
+# hold a running tillandsias-nix toolbox with no nix in it and this script would
+# report `no-nix-and-no-toolbox` — a verdict naming an absent toolbox that is
+# present. That is what yoga reported on 2026-08-30 while sitting one `dnf
+# install nix` from capable, and 917-zkge's premise ("five hosts each
+# independently confirmed no nix at all") rests partly on readings of that kind.
+#
+# The install step was already documented — in a COMMENT above
+# `toolbox_nix_works`, describing a past manual run. A step that only a reader
+# performs is not part of `ensure`.
+#
+# Kept deliberately narrow: only when the toolbox exists and its nix does not
+# answer, only dnf, and a failure is reported rather than retried. This is a
+# convenience over a step an operator would otherwise type, not a package
+# manager.
+ensure_toolbox_nix() {
+    toolbox_exists || return 1
+    toolbox_nix_works && return 0
+    _toolbox run -c "$TOOLBOX_NAME" sudo dnf install -y nix >/dev/null 2>&1 || return 1
+    toolbox_nix_works
 }
 
 resolve_rung() {
@@ -160,13 +258,60 @@ resolve_rung() {
     fi
     ensure_toolbox
     case "$?" in
-        0) if _toolbox run -c "$TOOLBOX_NAME" command -v nix >/dev/null 2>&1; then
+        0) if toolbox_nix_works; then
                printf 'toolbox\n'; return 0
            fi
+           # The toolbox is there and its nix is not. Install it rather than
+           # reporting the host incapable (917-zkge follow-on).
+           if ensure_toolbox_nix; then
+               printf 'toolbox\n'; return 0
+           fi
+           [ -n "$NIX_TB_CHROOT_ERR" ] && printf 'detail:nix-toolbox:chroot:%s\n' "$NIX_TB_CHROOT_ERR" >&2
            printf 'blocked:no-nix-and-no-toolbox\n'; return 1 ;;
-        2) printf 'blocked:image-pull-failed\n'; return 1 ;;
-        *) printf 'blocked:create-failed\n'; return 1 ;;
+        2) [ -n "$NIX_TB_CHROOT_ERR" ] && printf 'detail:nix-toolbox:chroot:%s\n' "$NIX_TB_CHROOT_ERR" >&2
+           [ -n "$NIX_TB_PULL_ERR" ] && printf 'detail:nix-toolbox:pull:%s\n' "$NIX_TB_PULL_ERR" >&2
+           printf 'blocked:image-pull-failed\n'; return 1 ;;
+        *) [ -n "$NIX_TB_CHROOT_ERR" ] && printf 'detail:nix-toolbox:chroot:%s\n' "$NIX_TB_CHROOT_ERR" >&2
+           printf 'blocked:create-failed\n'; return 1 ;;
     esac
+}
+
+# CAPABILITY, WITHOUT BUILDING THE THING THAT WOULD MAKE IT TRUE (order
+# 799-tb7q, second criterion).
+#
+# `resolve_rung` is an ENSURE: its toolbox arm may `podman pull` a 400 MiB
+# fedora-toolbox image and `toolbox create`. That is correct for `ensure` and
+# `run`, and wrong for the two callers this exists for — a pre-push gate
+# (check-nix-deps-stability.sh) and the work selector
+# (select-work-batch.sh) — which merely ASK whether nix work is runnable here.
+# A question that answers itself by provisioning infrastructure changes the
+# gate's cost, which is why 777-amku left both callers on host `command -v nix`
+# rather than routing them through this script.
+#
+# So this is a strict READ of the same preference order: daemon, chroot, then
+# an ALREADY-EXISTING nix toolbox. It never pulls and never creates. The cost
+# is bounded by two `nix store ping`s and, only on a host with no nix at all,
+# one `toolbox list` plus one `toolbox run command -v nix`.
+#
+# CONSEQUENCE, and it is the defect being fixed: a toolbox-capable host whose
+# nix lives only in the toolbox used to report "no nix" and had every
+# nix-tagged packet subtracted from its work pool. It now reports `toolbox`.
+# A host that COULD have a nix toolbox but does not yet still reports none —
+# deliberately: capability is what is true now, not what an ensure could make
+# true, and answering otherwise would hand a selector work whose first action
+# is a 400 MiB pull.
+capability_rung() {
+    if daemon_live; then printf 'daemon\n'; return 0; fi
+    if chroot_works; then printf 'chroot\n'; return 0; fi
+    # toolbox_nix_works, NOT `command -v nix` inside the container — the same
+    # store-not-binary rule the daemon rung has always followed. Keeping the
+    # binary check here while resolve_rung exercised the store would make
+    # `capability` and `ensure` disagree about the same host, which is worse
+    # than either answer alone.
+    if toolbox_exists && toolbox_nix_works; then
+        printf 'toolbox\n'; return 0
+    fi
+    return 1
 }
 
 # ---------------------------------------------------------------------------
@@ -221,14 +366,14 @@ deps_out_path() { # <flake-output>
     local out="$1" json depsdrv djson outpath
     json="$(cd "$REPO_ROOT" && _store_nix derivation show ".#${out}" 2>/dev/null)" || return 1
     [ -n "$json" ] || return 1
-    depsdrv="$(printf '%s' "$json" | jq -r '
+    depsdrv="$(printf '%s' "$json" | "$JQ" -r '
         (if has("derivations") then .derivations else . end)
         | to_entries[0].value
         | ((.inputs.drvs // {}) + (.inputDrvs // {}))
         | keys[] | select(test("-deps-"))' 2>/dev/null | head -n 1)"
     [ -n "$depsdrv" ] || return 1
     djson="$(cd "$REPO_ROOT" && _store_nix derivation show "$(_logical "$depsdrv")" 2>/dev/null)" || return 1
-    outpath="$(printf '%s' "$djson" | jq -r '
+    outpath="$(printf '%s' "$djson" | "$JQ" -r '
         (if has("derivations") then .derivations else . end)
         | to_entries[0].value | .outputs.out.path' 2>/dev/null)"
     [ -n "$outpath" ] && [ "$outpath" != "null" ] || return 1
@@ -315,11 +460,26 @@ case "$cmd" in
             *) echo "ok:nix-toolbox:$rung"; exit 0 ;;
         esac
         ;;
+    capability)
+        if rung="$(capability_rung)"; then
+            echo "ok:nix-capability:$rung"
+            exit 0
+        fi
+        echo "none:nix-capability:no-nix-and-no-toolbox"
+        exit 1
+        ;;
     nix-args)
         rung="$(resolve_rung)"
         case "$rung" in
             daemon)  printf '%s\n' "${NIX_FEATURES[@]}" ;;
             chroot)  printf '%s\n' "${NIX_FEATURES[@]}" --store "$CHROOT_STORE" ;;
+            # Same flags as chroot: $CHROOT_STORE is under $HOME, which toolbox
+            # shares with the host, so the rung addresses the identical store
+            # from inside the container. Before this the toolbox rung REFUSED
+            # to emit args, so a caller that asked for args and then went
+            # through `run` invoked nix against the container's root-owned
+            # /nix and failed at the first store write (914-ahsy follow-on).
+            toolbox) printf '%s\n' "${NIX_FEATURES[@]}" --store "$CHROOT_STORE" ;;
             *)       echo "blocked:nix-toolbox:${rung#blocked:}" >&2; exit 1 ;;
         esac
         ;;
@@ -329,7 +489,16 @@ case "$cmd" in
         rung="$(resolve_rung)"
         case "$rung" in
             daemon|chroot) exec "$@" ;;
-            toolbox)       exec _toolbox run -c "$TOOLBOX_NAME" "$@" ;;
+            # NOT `exec _toolbox …`: _toolbox is a shell FUNCTION and exec can
+            # only exec a BINARY, so that form died with
+            # `exec: _toolbox: not found` and the toolbox rung of `run` had
+            # never worked. Found 2026-08-28 the only way it could be — by
+            # running it on the one host that reaches this arm. The function's
+            # job (neutralising the enclave proxy env, which otherwise breaks
+            # registry traffic whenever the enclave is down) is inlined here so
+            # the behaviour is preserved rather than dropped.
+            toolbox)       exec env http_proxy= https_proxy= HTTP_PROXY= HTTPS_PROXY= \
+                                toolbox run -c "$TOOLBOX_NAME" "$@" ;;
             *)             echo "blocked:nix-toolbox:${rung#blocked:}" >&2; exit 1 ;;
         esac
         ;;
@@ -375,8 +544,17 @@ case "$cmd" in
         store_gc "${1:-}"
         exit $?
         ;;
+    substituter-args)
+        # Delegate to nix-cache-service.sh — emits nix flags only when the
+        # cache is actually answering (same semantics as nix-cache-service.sh
+        # substituter-args: empty output means "no cache, build as before").
+        _nix_cache_script="${TILLANDSIAS_NIX_CACHE_SCRIPT:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/nix-cache-service.sh}"
+        if [[ -x "$_nix_cache_script" ]]; then
+            "$_nix_cache_script" substituter-args 2>/dev/null || true
+        fi
+        ;;
     *)
-        echo "usage: $0 [ensure|nix-args|run -- <command...>|store-path|store-status [--deps]|pin|gc [--dry-run]]" >&2
+        echo "usage: $0 [ensure|capability|nix-args|run -- <command...>|store-path|store-status [--deps]|pin|gc [--dry-run]|substituter-args]" >&2
         exit 2
         ;;
 esac

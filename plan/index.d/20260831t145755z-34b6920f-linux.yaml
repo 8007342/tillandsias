@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: network-architecture-audit
+    field: next_action
+    value: 'Thirteen slices. SECTION 2 IS CLOSED for a Linux host as of L6 2026-08-31: symbol-anchored (L5) AND every operation-table claim re-verified against the arrays (L6, six of six TRUE, no finding). P4 was already done before that (platform transport matrix normative in openspec/specs/vsock-transport/spec.md). THE ACTIONABLE-FOR-LINUX SET IS NOW EMPTY, and that is the honest state rather than a gap: (1) COMPLETION GATE — opencode-bigpickle, antigravity-gemini and codex-gpt55-highthink owe verified-by events; five of six criteria now have artifacts that did not exist at the 2026-07-14 verification; no worker may flip this packet closed. (2) SIBLING LANES — the two SOURCE-READ rows in the vsock platform matrix need Windows (derived GUID against a live WSL utility VM) and macOS (Virtualization.framework as the only host-side path); named as unverified in the spec, not assertable from Linux. (3) OPERATOR — P1 blocked on the git-mirror-egress verdict (plan/issues/git-mirror-egress-spec-divergence-audit-2026-08-10.md), P6 on the :3129 wire-or-delete call. (4) LOW VALUE — 39 line citations survive outside sections 2/4/7; L1/L2/L3/L5 are the worked pattern, but those sections'' content is already promoted into specs, so this is the least valuable remaining work in the packet. A LINUX CYCLE THAT ROUTES HERE SHOULD EXPECT TO FIND NOTHING TO DO and should say so rather than manufacturing a slice — that emptiness is a datapoint for 950-icqy (routing weighs epic residual, not per-host actionability). TWO STANDING WARNINGS. This document accumulates corrections in the section where they were FOUND and nothing cross-links them: grep the whole file for terms you are about to assert. And citation rot here is a NAVIGATION failure, not a correctness signal — three sections running have had totally rotted citations over claims that were entirely TRUE, so never infer a claim''s staleness from its pointer''s state.'
+    ts: "2026-08-31T14:57:55Z"
+    host: linux
+
+events:
+  - packet_id: network-architecture-audit
+    event:
+      type: note
+      ts: "2026-08-31T14:57:55Z"
+      host: linux
+      summary: >
+        L6 closes section 2 for Linux; recording that the actionable-for-this-host set is now empty

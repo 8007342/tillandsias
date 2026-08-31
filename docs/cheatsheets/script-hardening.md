@@ -67,6 +67,35 @@ if ! some_command; then
 fi
 ```
 
+### The `if ! <pipeline>` Inversion Risk (SIGPIPE)
+
+Under `set -o pipefail`, an `if !` guard wrapped around a pipeline whose consumer exits early (e.g. `grep -q`) can silently **invert** the verdict.
+
+```bash
+# DANGEROUS: If grep -q matches, it exits 0 immediately and closes the pipe.
+# The producer takes SIGPIPE and exits 141. Pipefail promotes 141 to the pipeline status.
+# The `!` inverts it to 0. The guard PASSES, even though grep MATCHED.
+if ! cat bigfile | grep -q "forbidden_pattern"; then
+    echo "Found forbidden pattern!"
+    exit 1
+fi
+```
+
+**Safe Rewrites:**
+* If the producer output is small, use a here-string:
+  ```bash
+  out="$(cmd)"
+  if ! grep -q "pattern" <<<"$out"; then ...
+  ```
+* Use the bash `case` idiom for lists or variables:
+  ```bash
+  case $'\n'"$list"$'\n' in
+      *$'\n'"$item"$'\n'*) echo "Found" ;;
+      *) echo "Not found" ;;
+  esac
+  ```
+* If a pipeline is genuinely safe (producer never takes SIGPIPE, consumer never exits early), append `# sigpipe-ok: <reason>`.
+
 Source: `build.sh`, `lib-common.sh` (both use `set -euo pipefail`)
 
 ## Quoting All Variable Expansions

@@ -24,11 +24,25 @@
 //!        plan/issues/optimization-macos-vz-idiomatic-exec-layer-2026-06-21.md
 
 use tillandsias_control_wire::{
-    CAP_PTY_HEARTBEAT_V1, CAP_PTY_HEARTBEAT_V2, ControlEnvelope, ControlMessage, MAX_MESSAGE_BYTES,
-    MAX_PTY_FRAME_BYTES, PtyDirection, PtyExit, PtyInputState, VmPhase, WIRE_VERSION, decode,
-    encode,
+    CAP_PTY_DATA_SESSION, CAP_PTY_HEARTBEAT_V1, CAP_PTY_HEARTBEAT_V2, CAP_PTY_STDIN_EOF,
+    ControlEnvelope, ControlMessage, MAX_MESSAGE_BYTES, MAX_PTY_FRAME_BYTES, PtyDirection, PtyExit,
+    PtyInputState, VmPhase, WIRE_VERSION, decode, encode, transport::control_frame_codec,
 };
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
+
+/// The control-wire session stream, framed once per session.
+///
+/// ORDER 795-5itp. One `LengthDelimitedCodec` — `control_frame_codec()`, which
+/// pins `MAX_MESSAGE_BYTES` on both encode and decode — instead of this file's
+/// own copy of the `u32-BE` prefix arithmetic.
+type ExecFramed<S> = tokio_util::codec::Framed<S, tokio_util::codec::LengthDelimitedCodec>;
+
+/// Wrap a connected control-wire stream in the shared codec. Call this ONCE
+/// per session; see the note on [`read_envelope`] for why per-call framing
+/// loses pipelined bytes.
+fn frame_stream<S: AsyncRead + AsyncWrite + Unpin>(stream: S) -> ExecFramed<S> {
+    tokio_util::codec::Framed::new(stream, control_frame_codec())
+}
 
 const IDLE_TIMEOUT_SECS: u64 = 300;
 const MIN_EXEC_IDLE_TIMEOUT_SECS: u64 = 60;
@@ -278,8 +292,8 @@ pub struct ExecOutput {
 }
 
 /// Write one length-prefixed `ControlEnvelope` frame.
-async fn write_envelope<W: AsyncWrite + Unpin>(
-    w: &mut W,
+async fn write_envelope<S: AsyncRead + AsyncWrite + Unpin>(
+    w: &mut ExecFramed<S>,
     env: &ControlEnvelope,
 ) -> Result<(), String> {
     let bytes = encode(env).map_err(|e| format!("vsock_exec: encode: {e}"))?;
@@ -302,15 +316,26 @@ async fn write_envelope<W: AsyncWrite + Unpin>(
     // make progress for as long as a read may go silent is stuck by the same
     // standard, and one env var is easier to reason about than two.
     let deadline = exec_idle_timeout()?;
+    // ORDER 795-5itp: write through the UNDERLYING stream, not the codec Sink.
+    //
+    // The staged bounds above are load-bearing (690-eug2): `SinkExt::send`
+    // encodes and writes in one call, so a stall inside it can only be
+    // reported as "the write blocked", losing the length-vs-body distinction
+    // that `a_peer_that_stops_draining_does_not_park_the_writer` asserts.
+    // Reaching past the codec is sound here precisely BECAUSE the Sink half
+    // is never used: its write buffer is always empty, so nothing can
+    // interleave with these bytes. The READ half still goes through the
+    // codec, which is where the raw frame-length decode actually was.
+    let raw = w.get_mut();
     write_all_bounded(
-        w,
+        raw,
         &(bytes.len() as u32).to_be_bytes(),
         deadline,
         "the frame length",
     )
     .await?;
-    write_all_bounded(w, &bytes, deadline, "the frame body").await?;
-    match tokio::time::timeout(deadline, w.flush()).await {
+    write_all_bounded(raw, &bytes, deadline, "the frame body").await?;
+    match tokio::time::timeout(deadline, raw.flush()).await {
         Ok(r) => r.map_err(|e| format!("vsock_exec: flush: {e}"))?,
         Err(_) => {
             return Err(format!(
@@ -345,23 +370,41 @@ async fn write_all_bounded<W: AsyncWrite + Unpin>(
     }
 }
 
-/// Read one length-prefixed `ControlEnvelope` frame.
-async fn read_envelope<R: AsyncRead + Unpin>(r: &mut R) -> Result<ControlEnvelope, String> {
-    let mut len_buf = [0u8; 4];
-    r.read_exact(&mut len_buf)
-        .await
-        .map_err(|e| format!("vsock_exec: read len: {e}"))?;
-    let n = u32::from_be_bytes(len_buf) as usize;
-    if n > MAX_MESSAGE_BYTES {
-        return Err(format!(
-            "vsock_exec: inbound frame too large ({n} > {MAX_MESSAGE_BYTES})"
-        ));
-    }
-    let mut buf = vec![0u8; n];
-    r.read_exact(&mut buf)
-        .await
-        .map_err(|e| format!("vsock_exec: read body: {e}"))?;
-    decode(&buf).map_err(|e| format!("vsock_exec: decode: {e}"))
+/// Read one length-prefixed `ControlEnvelope` frame off the session codec.
+///
+/// ORDER 795-5itp slice 6, the last Linux production raw frame-length decode.
+/// The `u32::from_be_bytes` + bounds-check + `read_exact(body)` that used to
+/// live here is now `control_frame_codec()`, so the maximum frame length is
+/// the shared `MAX_MESSAGE_BYTES` by construction instead of by a copy of the
+/// comparison.
+///
+/// WHY THE CODEC IS SESSION-SCOPED AND NOT PER CALL. A `Framed` reads into its
+/// OWN buffer and routinely reads past the frame it returns. Constructing one
+/// per call and dropping it would discard whatever of the next frame came in
+/// the same TCP/vsock segment — on this seam that is a lost `PtyData` or a
+/// lost `PtyClose`, i.e. a hang, not an error. So every entry point wraps its
+/// stream ONCE (`frame_stream`) and threads `&mut ExecFramed` through the
+/// whole session, which is why this takes the framed stream rather than a
+/// reader.
+async fn read_envelope<S: AsyncRead + AsyncWrite + Unpin>(
+    r: &mut ExecFramed<S>,
+) -> Result<ControlEnvelope, String> {
+    let frame = match futures_util::StreamExt::next(r).await {
+        Some(Ok(bytes)) => bytes,
+        Some(Err(e)) if e.kind() == std::io::ErrorKind::InvalidData => {
+            // The codec refuses an oversize length prefix before allocating.
+            // Keep the wording the hand-rolled bound used: this is the same
+            // refusal, and callers/logs should not have to learn a new one.
+            return Err(format!(
+                "vsock_exec: inbound frame too large (> {MAX_MESSAGE_BYTES}): {e}"
+            ));
+        }
+        Some(Err(e)) => return Err(format!("vsock_exec: read frame: {e}")),
+        None => {
+            return Err("vsock_exec: read frame: peer closed the connection".to_string());
+        }
+    };
+    decode(&frame).map_err(|e| format!("vsock_exec: decode: {e}"))
 }
 
 /// Read a SETUP-stage envelope under the same deadline the data path uses, and
@@ -377,8 +420,8 @@ async fn read_envelope<R: AsyncRead + Unpin>(r: &mut R) -> Result<ControlEnvelop
 /// different moments here and useless in all of them; "guest never answered
 /// Hello" and "guest never replied to PtyOpen" are different faults with
 /// different causes.
-async fn read_setup_envelope<R: AsyncRead + Unpin>(
-    r: &mut R,
+async fn read_setup_envelope<S: AsyncRead + AsyncWrite + Unpin>(
+    r: &mut ExecFramed<S>,
     timeout: std::time::Duration,
     stage: &str,
 ) -> Result<ControlEnvelope, String> {
@@ -393,8 +436,8 @@ async fn read_setup_envelope<R: AsyncRead + Unpin>(
     }
 }
 
-async fn read_exec_envelope<R: AsyncRead + Unpin>(
-    r: &mut R,
+async fn read_exec_envelope<S: AsyncRead + AsyncWrite + Unpin>(
+    r: &mut ExecFramed<S>,
     idle_timeout: std::time::Duration,
 ) -> Result<ControlEnvelope, String> {
     match tokio::time::timeout(idle_timeout, read_envelope(r)).await {
@@ -422,6 +465,68 @@ where
     exec_over_stream_with_input(stream, argv, &[]).await
 }
 
+/// Choose the open frame for an EXEC session (order 926-bin4).
+///
+/// A data session puts the child's fd 0 on a pipe, so binary stdin survives:
+/// the line discipline never sees it. When the peer cannot do that we fall back
+/// to `PtyOpen` and SAY SO if the payload is at risk, because the alternative is
+/// the silent truncation this packet was filed for — measured as 0x15 discarding
+/// everything buffered before it while the caller was told rc=0.
+///
+/// The warning is conditioned on the payload, not on the capability alone: a
+/// text-only stdin is unaffected by the line discipline and warning about it
+/// every time would train readers to ignore the message that matters.
+fn exec_open_frame(
+    peer_supports_data_session: bool,
+    input: &[u8],
+    session_id: u32,
+    argv: Vec<String>,
+    env: Vec<(String, String)>,
+    cwd: Option<String>,
+) -> ControlMessage {
+    // Both exec entry points opened 24x80; it is a nominal size for a session
+    // whose output is piped, not rendered, so it lives here rather than being
+    // threaded through as two arguments that never vary.
+    const EXEC_ROWS: u16 = 24;
+    const EXEC_COLS: u16 = 80;
+    let (rows, cols) = (EXEC_ROWS, EXEC_COLS);
+    if peer_supports_data_session {
+        return ControlMessage::PtyOpenData {
+            session_id,
+            rows,
+            cols,
+            argv,
+            env,
+            cwd,
+        };
+    }
+    if input.iter().any(|b| LINE_DISCIPLINE_SPECIALS.contains(b)) {
+        eprintln!(
+            "[vsock_exec] WARNING: this guest does not advertise {CAP_PTY_DATA_SESSION}, so stdin \
+             crosses a terminal line discipline that INTERPRETS control bytes. This payload \
+             contains at least one of them, so it will be altered in transit: 0x04/0x11 lose a \
+             byte, 0x15/0x1a discard everything buffered before them, 0x7f deletes the preceding \
+             byte, 0x03 kills the child, and 0x13 wedges the session. Measured, order 926-bin4. \
+             Update the staged guest binary."
+        );
+    }
+    ControlMessage::PtyOpen {
+        session_id,
+        rows,
+        cols,
+        argv,
+        env,
+        cwd,
+    }
+}
+
+/// The bytes a canonical-mode line discipline does NOT deliver verbatim, as
+/// MEASURED on a live guest (926-bin4) rather than taken from a header. 0x08 is
+/// deliberately absent: it arrived intact, because VERASE is DEL here, and
+/// warning about bytes that are fine would dull the warning about bytes that
+/// are not.
+const LINE_DISCIPLINE_SPECIALS: &[u8] = &[0x03, 0x04, 0x11, 0x13, 0x15, 0x1a, 0x7f];
+
 /// Like [`exec_over_stream`] but first delivers `input` to the guest child's
 /// PTY (its stdin **and** `/dev/tty`) before draining output.
 ///
@@ -438,7 +543,7 @@ where
 /// Generic over the stream so it is unit-testable with an in-memory
 /// `tokio::io::duplex` peer (no real VM).
 pub async fn exec_over_stream_with_input<S>(
-    mut stream: S,
+    stream: S,
     argv: &[&str],
     input: &[u8],
 ) -> Result<ExecOutput, String>
@@ -448,6 +553,9 @@ where
     if argv.is_empty() {
         return Err("vsock_exec: empty argv".to_string());
     }
+    // ORDER 795-5itp: frame the session ONCE. See read_envelope for why a
+    // per-call Framed would drop pipelined bytes on this control path.
+    let mut stream = frame_stream(stream);
     let session_id: u32 = 1;
     let mut seq: u64 = 1;
 
@@ -470,13 +578,26 @@ where
     )
     .await?;
     let ack = read_setup_envelope(&mut stream, exec_idle_timeout()?, "the Hello handshake").await?;
-    match ack.body {
-        ControlMessage::HelloAck { wire_version, .. } => {
+    // Order 925-eofi: read the EOF capability off the ack. Feature-detect on
+    // the advertised token, NEVER on the wire version — a fleet routinely runs
+    // a host newer than the guest staged beside it, and a version comparison
+    // would send a frame an older guest cannot decode (which kills the session
+    // rather than degrading).
+    let (peer_supports_stdin_eof, peer_supports_data_session) = match ack.body {
+        ControlMessage::HelloAck {
+            wire_version,
+            ref server_caps,
+            ..
+        } => {
             if wire_version != WIRE_VERSION {
                 return Err(format!(
                     "vsock_exec: wire_version mismatch (peer {wire_version}, self {WIRE_VERSION})"
                 ));
             }
+            (
+                server_caps.iter().any(|c| c == CAP_PTY_STDIN_EOF),
+                server_caps.iter().any(|c| c == CAP_PTY_DATA_SESSION),
+            )
         }
         other => {
             return Err(format!(
@@ -484,7 +605,7 @@ where
                 other.kind()
             ));
         }
-    }
+    };
 
     // 2) PtyOpen (seq 2). env REPLACES the guest environment; a login shell or
     // absolute argv[0] is the caller's responsibility (the guest pty handler
@@ -496,14 +617,14 @@ where
         &ControlEnvelope {
             wire_version: WIRE_VERSION,
             seq,
-            body: ControlMessage::PtyOpen {
+            body: exec_open_frame(
+                peer_supports_data_session,
+                input,
                 session_id,
-                rows: 24,
-                cols: 80,
-                argv: argv_owned,
-                env: vec![("TERM".to_string(), "dumb".to_string())],
-                cwd: None,
-            },
+                argv_owned,
+                vec![("TERM".to_string(), "dumb".to_string())],
+                None,
+            ),
         },
     )
     .await?;
@@ -525,6 +646,38 @@ where
             },
         )
         .await?;
+    }
+
+    // 3b) Tell the guest the input is finished — but ONLY if it said it can be
+    // told (order 925-eofi). The guest turns this into whatever its terminal
+    // state actually requires; the host deliberately does not send the byte
+    // itself, for the reasons measured in 924-eof7.
+    //
+    // WHEN THE PEER CANNOT BE TOLD, SAY SO. Silence here is the whole defect:
+    // a child that reads to EOF would block forever on a PTY whose master
+    // never closes, and the caller would see a hang with no explanation. A
+    // named warning is the minimum; callers whose command genuinely needs EOF
+    // should treat this as a refusal rather than proceed hopefully.
+    if !input.is_empty() {
+        if peer_supports_stdin_eof {
+            seq += 1;
+            write_envelope(
+                &mut stream,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq,
+                    body: ControlMessage::PtyStdinEof { session_id },
+                },
+            )
+            .await?;
+        } else {
+            eprintln!(
+                "[vsock_exec] WARNING: this guest does not advertise {CAP_PTY_STDIN_EOF}, so it \
+                 cannot be told that stdin is finished. Commands that read to EOF (a bare `cat`, \
+                 `gh auth login --with-token`) will HANG here rather than return; byte-exact \
+                 readers (`head -c N`) are unaffected. Update the staged guest binary to fix it."
+            );
+        }
     }
 
     // 4) Drain until PtyClose for our session. Empty ToHost frames are guest
@@ -646,7 +799,7 @@ pub fn missing_cap_message(required_cap: &str, server_caps: &[String]) -> String
 }
 
 async fn exec_over_stream_with_input_streaming_timeout<S, F>(
-    mut stream: S,
+    stream: S,
     argv: &[&str],
     input: &[u8],
     required_cap: Option<&str>,
@@ -660,6 +813,9 @@ where
     if argv.is_empty() {
         return Err("vsock_exec: empty argv".to_string());
     }
+    // ORDER 795-5itp: frame the session ONCE. See read_envelope for why a
+    // per-call Framed would drop pipelined bytes on this control path.
+    let mut stream = frame_stream(stream);
     let session_id: u32 = 1;
     let mut seq: u64 = 1;
 
@@ -681,7 +837,10 @@ where
     )
     .await?;
     let ack = read_setup_envelope(&mut stream, exec_idle_timeout()?, "the Hello handshake").await?;
-    match ack.body {
+    // Order 925-eofi / 926-bin4: same feature-detect as the non-streaming entry
+    // point. Both capabilities are read in the SAME window, because both must be
+    // known before the open frame is chosen.
+    let (peer_supports_stdin_eof, peer_supports_data_session) = match ack.body {
         // `server_caps` is READ here, not destructured away (795-zshi): the
         // capability check has to happen between the ack and the PtyOpen, which
         // is the only window in which the host still knows what the guest can do
@@ -699,6 +858,10 @@ where
             if let Some(cap) = required_cap.filter(|c| !server_caps.iter().any(|s| s == c)) {
                 return Err(missing_cap_message(cap, &server_caps));
             }
+            (
+                server_caps.iter().any(|c| c == CAP_PTY_STDIN_EOF),
+                server_caps.iter().any(|c| c == CAP_PTY_DATA_SESSION),
+            )
         }
         other => {
             return Err(format!(
@@ -706,7 +869,7 @@ where
                 other.kind()
             ));
         }
-    }
+    };
 
     seq += 1;
     let argv_owned: Vec<String> = argv.iter().map(|s| s.to_string()).collect();
@@ -715,14 +878,14 @@ where
         &ControlEnvelope {
             wire_version: WIRE_VERSION,
             seq,
-            body: ControlMessage::PtyOpen {
+            body: exec_open_frame(
+                peer_supports_data_session,
+                input,
                 session_id,
-                rows: 24,
-                cols: 80,
-                argv: argv_owned,
-                env: vec![("TERM".to_string(), "dumb".to_string())],
-                cwd: None,
-            },
+                argv_owned,
+                vec![("TERM".to_string(), "dumb".to_string())],
+                None,
+            ),
         },
     )
     .await?;
@@ -742,6 +905,35 @@ where
             },
         )
         .await?;
+    }
+
+    // Order 925-eofi. THIS ENTRY POINT NEEDS IT TOO — and that is the whole
+    // lesson of the first attempt: the EOF was added only to
+    // `exec_over_stream_with_input`, its unit tests scanned that function and
+    // passed the gate, and the live run STILL HUNG, because `--exec-guest`
+    // comes through HERE. Two entry points, one of them fixed, green tests.
+    // `every_input_entry_point_sends_stdin_eof` now enumerates them instead of
+    // trusting anyone to remember, and fails on the day a third is added.
+    if !input.is_empty() {
+        if peer_supports_stdin_eof {
+            seq += 1;
+            write_envelope(
+                &mut stream,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq,
+                    body: ControlMessage::PtyStdinEof { session_id },
+                },
+            )
+            .await?;
+        } else {
+            eprintln!(
+                "[vsock_exec] WARNING: this guest does not advertise {CAP_PTY_STDIN_EOF}, so it \
+                 cannot be told that stdin is finished. Commands that read to EOF (a bare `cat`, \
+                 `gh auth login --with-token`) will HANG here rather than return; byte-exact \
+                 readers (`head -c N`) are unaffected. Update the staged guest binary to fix it."
+            );
+        }
     }
 
     // 772-qn6j observability: TILLANDSIAS_VSOCK_EXEC_TRACE=1 prints one
@@ -811,10 +1003,12 @@ pub struct DynamicExpect {
 /// per probe. Used by `VzRuntime::wait_phase_ready` to poll until Ready.
 ///
 /// @trace plan/issues/osx-next-work-queue-2026-05-25.md#macos-tray/wait-ready-phase-signal
-pub async fn probe_vm_phase<S>(mut stream: S) -> Result<VmPhase, String>
+pub async fn probe_vm_phase<S>(stream: S) -> Result<VmPhase, String>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
+    // ORDER 795-5itp: frame the session ONCE (see read_envelope).
+    let mut stream = frame_stream(stream);
     // Hello / HelloAck (seq 1).
     write_envelope(
         &mut stream,
@@ -889,11 +1083,13 @@ pub const CAP_METRICS_SNAPSHOT: &str = "MetricsSnapshotRequest";
 ///
 /// @trace spec:observability-metrics, spec:vsock-transport
 pub async fn fetch_metrics_snapshot<S>(
-    mut stream: S,
+    stream: S,
 ) -> Result<Option<tillandsias_control_wire::MetricsSnapshotWire>, String>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
+    // ORDER 795-5itp: frame the session ONCE (see read_envelope).
+    let mut stream = frame_stream(stream);
     write_envelope(
         &mut stream,
         &ControlEnvelope {
@@ -1013,7 +1209,7 @@ where
 /// Like [`exec_over_stream_expect`], but each response is produced lazily after
 /// its prompt is observed.
 pub async fn exec_over_stream_expect_dynamic<S>(
-    mut stream: S,
+    stream: S,
     argv: &[&str],
     expects: Vec<DynamicExpect>,
     mut on_event: impl FnMut(&str),
@@ -1024,6 +1220,9 @@ where
     if argv.is_empty() {
         return Err("vsock_exec: empty argv".to_string());
     }
+    // ORDER 795-5itp: frame the session ONCE. See read_envelope for why a
+    // per-call Framed would drop pipelined bytes on this control path.
+    let mut stream = frame_stream(stream);
     let session_id: u32 = 1;
     let mut seq: u64 = 1;
 
@@ -1342,6 +1541,167 @@ where
 
 #[cfg(test)]
 mod tests {
+
+    /// ORDER 926-bin4 — the same ENUMERATION discipline 925-eofi's failure
+    /// taught, applied to the open frame. Every exec entry point must choose
+    /// its open frame through `exec_open_frame`, never construct `PtyOpen`
+    /// inline: an entry point that hardcodes the terminal frame silently keeps
+    /// the line-discipline corruption while its neighbours are fixed, and a
+    /// per-function assertion would not see it.
+    #[test]
+    fn every_exec_entry_point_chooses_its_open_frame() {
+        let source = include_str!("vsock_exec.rs");
+        let code = source.split("#[cfg(test)]").next().expect("code region");
+        let mut checked = 0;
+        for chunk in code.split("async fn ").skip(1) {
+            let name = chunk
+                .split('<')
+                .next()
+                .unwrap_or("")
+                .split('(')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            // Only the entry points that deliver an `input` payload.
+            if !chunk.contains("for chunk in input.chunks(") {
+                continue;
+            }
+            checked += 1;
+            assert!(
+                chunk.contains("exec_open_frame("),
+                "{name} opens its session without exec_open_frame, so it cannot \
+                 use a data session and its stdin still crosses the line \
+                 discipline (order 926-bin4)"
+            );
+        }
+        assert!(
+            checked >= 2,
+            "expected at least two input-delivering entry points, found {checked}"
+        );
+    }
+
+    /// The warning must fire on a payload that WILL be altered and stay quiet on
+    /// one that will not — a warning that cries wolf on every text payload
+    /// trains readers to ignore the case that matters.
+    #[test]
+    fn the_specials_list_is_what_was_measured_not_the_whole_control_range() {
+        // Measured corrupting/killing/wedging on a live guest.
+        for b in [0x03u8, 0x04, 0x11, 0x13, 0x15, 0x1a, 0x7f] {
+            assert!(
+                LINE_DISCIPLINE_SPECIALS.contains(&b),
+                "0x{b:02x} was measured as altered and must be listed"
+            );
+        }
+        // Measured arriving INTACT: VERASE is DEL here, so 0x08 is ordinary
+        // data. Listing it would warn about a payload that is actually fine.
+        assert!(
+            !LINE_DISCIPLINE_SPECIALS.contains(&0x08),
+            "0x08 arrived intact in the 926-bin4 sweep; listing it would warn \
+             about bytes that are not broken"
+        );
+        assert!(
+            !LINE_DISCIPLINE_SPECIALS.contains(&0x41),
+            "0x41 is the sweep's negative control"
+        );
+    }
+
+    /// ORDER 925-eofi — THE TEST THAT WOULD HAVE CAUGHT THE FIRST ATTEMPT.
+    ///
+    /// The EOF was originally added to `exec_over_stream_with_input` only. Its
+    /// tests scanned that function, passed, and the live run still hung —
+    /// because `--exec-guest` goes through the STREAMING entry point, which is
+    /// a separate function with its own handshake and its own input loop. A
+    /// per-function assertion cannot see a sibling that forgot.
+    ///
+    /// So this enumerates every function that writes `PtyData{ToGuest}` from
+    /// an `input` argument and requires each to also send `PtyStdinEof`. A
+    /// third input-sending path will fail here on the day it is written.
+    #[test]
+    fn every_input_entry_point_sends_stdin_eof() {
+        let source = include_str!("vsock_exec.rs");
+        // Function bodies, split on the `async fn` boundary; the test module is
+        // excluded so its own quoted needles do not count as senders.
+        let code = source.split("#[cfg(test)]").next().expect("code region");
+        let mut checked = 0;
+        for chunk in code.split("async fn ").skip(1) {
+            let name = chunk.split('<').next().unwrap_or("");
+            let name = name.split('(').next().unwrap_or("").trim();
+            // Only functions that actually chunk an `input` onto the wire.
+            if !chunk.contains("for chunk in input.chunks(") {
+                continue;
+            }
+            checked += 1;
+            assert!(
+                chunk.contains("ControlMessage::PtyStdinEof"),
+                "{name} sends stdin but never tells the guest it ended — a child \
+                 reading to EOF will hang here. Every input-sending entry point \
+                 must send PtyStdinEof (order 925-eofi)."
+            );
+            assert!(
+                chunk.contains("peer_supports_stdin_eof"),
+                "{name} must gate the EOF on the advertised capability"
+            );
+        }
+        assert!(
+            checked >= 2,
+            "expected at least two input-sending entry points; found {checked} — \
+             if the shape changed, repoint this scan rather than deleting it"
+        );
+    }
+
+    /// ORDER 925-eofi — the refusal must be reachable and NAMED. A peer that
+    /// cannot be told stdin is finished must not be sent the frame (it would
+    /// fail the decode and kill the session), and the caller must not be left
+    /// to infer a hang from silence.
+    #[test]
+    fn stdin_eof_is_gated_on_the_advertised_capability_not_the_wire_version() {
+        let source = include_str!("vsock_exec.rs");
+        let window = source
+            .split("pub async fn exec_over_stream_with_input<S>")
+            .nth(1)
+            .and_then(|t| t.split("pub async fn ").next())
+            .expect("the with_input entry point moved — repoint this scan");
+        assert!(
+            window.contains("server_caps.iter().any(|c| c == CAP_PTY_STDIN_EOF)"),
+            "the EOF frame must be gated on the advertised capability"
+        );
+        assert!(
+            !window.contains("wire_version >= ") && !window.contains("wire_version > "),
+            "feature detection must never be a wire-version comparison: a fleet \
+             runs hosts newer than the guest staged beside them"
+        );
+        assert!(
+            window.contains("if peer_supports_stdin_eof"),
+            "the send must be conditional"
+        );
+        let else_arm = window
+            .split("if peer_supports_stdin_eof")
+            .nth(1)
+            .expect("gated send");
+        assert!(
+            else_arm.contains("WARNING") && else_arm.contains("HANG"),
+            "an un-negotiated peer must produce a NAMED warning naming the \
+             consequence — silence here is the defect this packet exists to remove"
+        );
+    }
+
+    /// The EOF must only be sent when there was input to terminate; an empty
+    /// stdin needs no end marker and sending one would be a frame for nothing.
+    #[test]
+    fn stdin_eof_is_only_sent_when_input_was_actually_delivered() {
+        let source = include_str!("vsock_exec.rs");
+        let window = source
+            .split("3b) Tell the guest the input is finished")
+            .nth(1)
+            .expect("the 3b block moved — repoint this scan");
+        let guard = window.split("if peer_supports_stdin_eof").next().unwrap();
+        assert!(
+            guard.contains("if !input.is_empty()"),
+            "the EOF path must be inside an input-non-empty guard"
+        );
+    }
+
     use super::*;
 
     #[test]
@@ -1378,7 +1738,8 @@ mod tests {
     /// reported; it deliberately asserts nothing about timing.
     #[tokio::test]
     async fn heartbeats_report_what_the_host_is_waiting_for() {
-        let (client, mut guest) = tokio::io::duplex(8192);
+        let (client, guest) = tokio::io::duplex(8192);
+        let mut guest = frame_stream(guest);
 
         tokio::spawn(async move {
             let _ = read_envelope(&mut guest).await.unwrap();
@@ -1504,7 +1865,8 @@ mod tests {
     async fn try_run_with_heartbeats(
         frames: Vec<ControlMessage>,
     ) -> (Result<ExecOutput, String>, Vec<String>) {
-        let (client, mut guest) = tokio::io::duplex(8192);
+        let (client, guest) = tokio::io::duplex(8192);
+        let mut guest = frame_stream(guest);
         tokio::spawn(async move {
             let _ = read_envelope(&mut guest).await.unwrap();
             write_envelope(
@@ -1863,6 +2225,115 @@ mod tests {
     /// exercises the driver with trimming compiled in at the real cap. Buying
     /// one more assertion at the cost of a test that only passes when it runs
     /// alone is a bad trade.
+    /// ORDER 795-5itp, NEGATIVE CONTROL for exit criterion 3: an over-long
+    /// inbound frame is still refused, and the refusal still SAYS so.
+    ///
+    /// The hand-rolled reader compared the decoded `u32` against
+    /// `MAX_MESSAGE_BYTES` itself. That comparison is gone; the bound now comes
+    /// from `control_frame_codec()`. Without this test the migration could have
+    /// silently widened the ceiling to `u32::MAX` — the codec's default is
+    /// 8 MiB, not "whatever the old constant was", so an unbuilt or
+    /// default-built codec would accept frames the old reader rejected and this
+    /// file's other tests, which only ever send legal frames, would not notice.
+    #[tokio::test]
+    async fn an_oversize_inbound_frame_is_refused_by_the_codec_bound() {
+        let (client, mut guest) = tokio::io::duplex(8192);
+        let mut client = frame_stream(client);
+
+        // A length prefix one byte past the shared ceiling. The body is never
+        // sent: the codec must refuse on the PREFIX, before allocating for it.
+        tokio::spawn(async move {
+            let too_big = (MAX_MESSAGE_BYTES + 1) as u32;
+            let _ = guest.write_all(&too_big.to_be_bytes()).await;
+            let _ = guest.flush().await;
+            // Hold the connection open so this cannot pass as an EOF test.
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        });
+
+        let err = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            read_envelope(&mut client),
+        )
+        .await
+        .expect("the bound must fire without waiting for a body that never comes")
+        .expect_err("a frame longer than MAX_MESSAGE_BYTES must be refused");
+
+        assert!(
+            err.contains("too large"),
+            "the refusal must name the size bound, not surface as a generic \
+             decode or IO failure: {err}"
+        );
+        assert!(
+            err.contains(&MAX_MESSAGE_BYTES.to_string()),
+            "it must name the ceiling that was exceeded, so an operator can tell \
+             a policy refusal from a corrupt stream: {err}"
+        );
+    }
+
+    /// ORDER 795-5itp, THE HAZARD THE SESSION-SCOPED CODEC EXISTS TO AVOID.
+    ///
+    /// A `Framed` reads into its own buffer and routinely reads PAST the frame
+    /// it returns. The obvious migration — construct a `Framed` inside
+    /// `read_envelope`, use it, drop it — passes every test in this file,
+    /// because they all write one frame and wait. It then loses data in
+    /// production the first time a guest emits two frames into one segment:
+    /// the second is sitting in the dropped codec's buffer, not on the socket.
+    ///
+    /// So this test writes two envelopes in a SINGLE `write_all` and requires
+    /// both back. It fails loudly if anyone re-scopes the codec per call.
+    #[tokio::test]
+    async fn two_frames_in_one_write_are_both_read_back() {
+        let (client, mut guest) = tokio::io::duplex(8192);
+        let mut client = frame_stream(client);
+
+        let env = |seq: u64| ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq,
+            body: ControlMessage::PtyData {
+                session_id: 1,
+                direction: PtyDirection::ToHost,
+                bytes: vec![b'a' + seq as u8; 16],
+            },
+        };
+
+        // One syscall, two frames — exactly what a chatty guest produces.
+        let mut wire = Vec::new();
+        for seq in [1u64, 2] {
+            let body = encode(&env(seq)).unwrap();
+            wire.extend_from_slice(&(body.len() as u32).to_be_bytes());
+            wire.extend_from_slice(&body);
+        }
+        tokio::spawn(async move {
+            let _ = guest.write_all(&wire).await;
+            let _ = guest.flush().await;
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        });
+
+        let first = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            read_envelope(&mut client),
+        )
+        .await
+        .expect("first frame")
+        .expect("first frame decodes");
+        assert_eq!(first.seq, 1);
+
+        let second = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            read_envelope(&mut client),
+        )
+        .await
+        .expect(
+            "the SECOND frame must still be reachable — if this times out the codec is \
+             being constructed per call and the pipelined bytes were dropped with it",
+        )
+        .expect("second frame decodes");
+        assert_eq!(
+            second.seq, 2,
+            "both frames of a single write must survive the framing layer"
+        );
+    }
+
     /// ORDER 690-eug2. A peer that stops DRAINING must not park the writer.
     ///
     /// This is the failure no read-side deadline can observe: the host is not
@@ -1952,7 +2423,8 @@ mod tests {
             })
             .collect();
 
-        let (client, mut guest) = tokio::io::duplex(8192);
+        let (client, guest) = tokio::io::duplex(8192);
+        let mut guest = frame_stream(guest);
         tokio::spawn(async move {
             let _ = read_envelope(&mut guest).await.unwrap();
             write_envelope(
@@ -2041,7 +2513,8 @@ mod tests {
         // threads of ONE process, so a global env mutation is visible to every
         // other test that reads it. A test that can only pass when it runs
         // alone is not a test of this code.
-        let (mut client, guest) = tokio::io::duplex(8192);
+        let (client, guest) = tokio::io::duplex(8192);
+        let mut client = frame_stream(client);
         // Hold the guest end open and never write. Dropping it would make this
         // an EOF test — a DIFFERENT failure that already worked. The wedge
         // being pinned is a peer that stays CONNECTED and silent.
@@ -2065,7 +2538,8 @@ mod tests {
 
         // The other setup stage produces its own name, so the two faults are
         // distinguishable in an operator's log.
-        let (mut client, guest) = tokio::io::duplex(8192);
+        let (client, guest) = tokio::io::duplex(8192);
+        let mut client = frame_stream(client);
         let err = read_setup_envelope(
             &mut client,
             std::time::Duration::from_millis(50),
@@ -2225,7 +2699,8 @@ mod tests {
     /// "this exchange is stuck".
     #[tokio::test]
     async fn a_talking_guest_produces_no_waiting_reports() {
-        let (client, mut guest) = tokio::io::duplex(8192);
+        let (client, guest) = tokio::io::duplex(8192);
+        let mut guest = frame_stream(guest);
 
         tokio::spawn(async move {
             let _ = read_envelope(&mut guest).await.unwrap();
@@ -2320,7 +2795,7 @@ mod tests {
     /// live shape: every Error emission site in the guest today fires BEFORE a
     /// PTY session exists, i.e. on early rejection such as an exec-allowlist
     /// refusal.
-    async fn reject_after_open<S>(guest: &mut S)
+    async fn reject_after_open<S>(guest: &mut ExecFramed<S>)
     where
         S: AsyncRead + AsyncWrite + Unpin,
     {
@@ -2373,7 +2848,8 @@ mod tests {
     #[tokio::test]
     async fn every_driver_surfaces_a_guest_error_envelope() {
         // Driver 1: the buffered one, which has had the arm since 2026-07-14.
-        let (client, mut guest) = tokio::io::duplex(8192);
+        let (client, guest) = tokio::io::duplex(8192);
+        let mut guest = frame_stream(guest);
         let guest_task = tokio::spawn(async move { reject_after_open(&mut guest).await });
         let err = tokio::time::timeout(
             std::time::Duration::from_secs(5),
@@ -2386,7 +2862,8 @@ mod tests {
         guest_task.await.unwrap();
 
         // Driver 2: the streaming one, which always had the arm.
-        let (client, mut guest) = tokio::io::duplex(8192);
+        let (client, guest) = tokio::io::duplex(8192);
+        let mut guest = frame_stream(guest);
         let guest_task = tokio::spawn(async move { reject_after_open(&mut guest).await });
         let err = tokio::time::timeout(
             std::time::Duration::from_secs(5),
@@ -2406,7 +2883,8 @@ mod tests {
         guest_task.await.unwrap();
 
         // Driver 3: the expect driver — the one that was silently dropping it.
-        let (client, mut guest) = tokio::io::duplex(8192);
+        let (client, guest) = tokio::io::duplex(8192);
+        let mut guest = frame_stream(guest);
         let guest_task = tokio::spawn(async move { reject_after_open(&mut guest).await });
         let err = tokio::time::timeout(
             std::time::Duration::from_secs(5),
@@ -2440,7 +2918,8 @@ mod tests {
     /// pass by failing every exec.
     #[tokio::test]
     async fn expect_driver_normal_close_is_unaffected_by_the_error_arm() {
-        let (client, mut guest) = tokio::io::duplex(8192);
+        let (client, guest) = tokio::io::duplex(8192);
+        let mut guest = frame_stream(guest);
         let guest_task = tokio::spawn(async move {
             let hello = read_envelope(&mut guest).await.unwrap();
             assert!(matches!(hello.body, ControlMessage::Hello { .. }));
@@ -2515,7 +2994,8 @@ mod tests {
 
     #[tokio::test]
     async fn exec_with_input_surfaces_guest_error_instead_of_hanging() {
-        let (client, mut guest) = tokio::io::duplex(8192);
+        let (client, guest) = tokio::io::duplex(8192);
+        let mut guest = frame_stream(guest);
 
         let guest_task = tokio::spawn(async move {
             let hello = read_envelope(&mut guest).await.unwrap();
@@ -2572,7 +3052,8 @@ mod tests {
     /// non-interactive exec protocol end to end without a real VM.
     #[tokio::test]
     async fn exec_over_stream_collects_output_and_exit() {
-        let (client, mut guest) = tokio::io::duplex(8192);
+        let (client, guest) = tokio::io::duplex(8192);
+        let mut guest = frame_stream(guest);
 
         let guest_task = tokio::spawn(async move {
             // Expect Hello, reply HelloAck.
@@ -2751,7 +3232,8 @@ mod tests {
 
     #[tokio::test]
     async fn streaming_exec_heartbeats_survive_total_silence_beyond_idle_deadline() {
-        let (client, mut guest) = tokio::io::duplex(8192);
+        let (client, guest) = tokio::io::duplex(8192);
+        let mut guest = frame_stream(guest);
         let guest_task = tokio::spawn(async move {
             let _ = read_envelope(&mut guest).await.unwrap();
             write_envelope(
@@ -2840,7 +3322,8 @@ mod tests {
 
     #[tokio::test]
     async fn streaming_exec_times_out_when_slow_guest_sends_no_frames() {
-        let (client, mut guest) = tokio::io::duplex(8192);
+        let (client, guest) = tokio::io::duplex(8192);
+        let mut guest = frame_stream(guest);
         let guest_task = tokio::spawn(async move {
             let _ = read_envelope(&mut guest).await.unwrap();
             write_envelope(
@@ -2881,7 +3364,8 @@ mod tests {
     /// `read X; echo "GOT:$X"` round-trip.
     #[tokio::test]
     async fn exec_over_stream_with_input_delivers_stdin() {
-        let (client, mut guest) = tokio::io::duplex(8192);
+        let (client, guest) = tokio::io::duplex(8192);
+        let mut guest = frame_stream(guest);
         let guest_task = tokio::spawn(async move {
             // Hello -> HelloAck.
             let _ = read_envelope(&mut guest).await.unwrap();
@@ -2963,7 +3447,8 @@ mod tests {
     /// A non-zero guest exit is propagated faithfully.
     #[tokio::test]
     async fn exec_over_stream_propagates_nonzero_exit() {
-        let (client, mut guest) = tokio::io::duplex(8192);
+        let (client, guest) = tokio::io::duplex(8192);
+        let mut guest = frame_stream(guest);
         let guest_task = tokio::spawn(async move {
             let _ = read_envelope(&mut guest).await.unwrap();
             write_envelope(
@@ -3018,7 +3503,8 @@ mod tests {
     /// must receive the three scripted responses, token last.
     #[tokio::test]
     async fn exec_over_stream_expect_drives_sequential_prompts() {
-        let (client, mut guest) = tokio::io::duplex(8192);
+        let (client, guest) = tokio::io::duplex(8192);
+        let mut guest = frame_stream(guest);
         let guest_task = tokio::spawn(async move {
             let _ = read_envelope(&mut guest).await.unwrap(); // Hello
             write_envelope(
@@ -3039,7 +3525,7 @@ mod tests {
 
             // Helper: emit a ToHost prompt, then expect the next ToGuest response.
             async fn step(
-                guest: &mut tokio::io::DuplexStream,
+                guest: &mut ExecFramed<tokio::io::DuplexStream>,
                 seq: u64,
                 prompt: &[u8],
                 expected_response: &[u8],
@@ -3132,7 +3618,8 @@ mod tests {
     /// preflight.
     #[tokio::test]
     async fn exec_over_stream_expect_dynamic_defers_response_until_prompt() {
-        let (client, mut guest) = tokio::io::duplex(8192);
+        let (client, guest) = tokio::io::duplex(8192);
+        let mut guest = frame_stream(guest);
         let callback_called = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let guest_observer = callback_called.clone();
 
@@ -3242,7 +3729,8 @@ mod tests {
     /// merely returns an error AFTER sending the request has not gated
     /// anything — the guest already saw a shape it cannot serve.
     async fn gated_exec_against_caps(caps: Vec<String>) -> (Result<ExecOutput, String>, bool) {
-        let (client, mut guest) = tokio::io::duplex(8192);
+        let (client, guest) = tokio::io::duplex(8192);
+        let mut guest = frame_stream(guest);
         let saw_pty_open = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let flag = saw_pty_open.clone();
         let guest_task = tokio::spawn(async move {

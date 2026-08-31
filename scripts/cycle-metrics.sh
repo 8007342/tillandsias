@@ -103,12 +103,68 @@
 
 set -uo pipefail
 
+
+# ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has it.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+# Resolve the lib by WALKING UP, not by a fixed depth (order 914-ahsy). The
+# fixed form `dirname "${BASH_SOURCE[0]}"/lib/...` is correct only for a caller
+# sitting directly in scripts/. From scripts/refusal-calibration/ it points at a
+# lib that does not exist, the `|| true` swallows the miss, and the tool variable
+# silently falls back to the bare name — a conversion that passes review, passes
+# the suite, and changes nothing.
+_td_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_td_dir" ] && [ "$_td_dir" != "/" ] && [ ! -f "$_td_dir/lib/tool-dispatch.sh" ]; do
+    _td_dir="$(dirname "$_td_dir")"
+done
+if [ -f "$_td_dir/lib/tool-dispatch.sh" ]; then
+    . "$_td_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+fi
+if command -v resolve_tool >/dev/null 2>&1; then
+    JQ="$(resolve_tool jq || printf 'jq')"
+else
+    JQ="jq"   # lib unavailable: preserve the previous behaviour exactly
+fi
+
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 
-USAGE_LOG="${TILLANDSIAS_EXPERT_USAGE_LOG:-/tmp/forge-expert-usage.jsonl}"
-FLOW_LOG="${TILLANDSIAS_CYCLE_FLOW_LOG:-/tmp/tillandsias-cycle-flow.jsonl}"
-TIMING_LOG="${TILLANDSIAS_TIMING_LOG:-/tmp/tillandsias-timing.jsonl}"
+# Where a metrics log lives when the caller has not named one (order 890-t9pu).
+#
+# `/tmp` WAS the default, and `/tmp` IS NOT ONE PLACE. On a Windows host
+# `./build.sh` re-execs into WSL2 and writes there, while `cycle-metrics.sh`
+# runs in Git Bash and reads a different filesystem entirely. MEASURED on
+# yolanda 2026-08-25: 322 `build-check` records on the WSL side, 0 on the Git
+# Bash side, so `timing:` reported `build_check_ms_avg=-` while 322
+# measurements sat in a log the reader could not open, and named a `slowest`
+# step from a two-day-old file. Every timing metric that host ever published
+# was stale or absent — including, until it was found, the measurement of the
+# boundary itself.
+#
+# The checkout is the one thing both userlands agree on, so the default moves
+# under `target/` (gitignored, already the home for build artifacts). Callers
+# that name a log explicitly are untouched, which keeps every fixture working.
+#
+# ONE-TIME COST, stated rather than hidden: a host with history in `/tmp` starts
+# a fresh series here. The rolling views degrade gracefully — they report
+# `source=absent` until the first append — so this costs recent averages, not
+# correctness. That is the price of the numbers being attributable at all.
+#
+# Falls back to `/tmp` when there is no writable checkout to write into, so a
+# forge or a bare invocation outside a repo keeps working exactly as before.
+# The rule itself lives in one file so a writer and a reader cannot drift apart
+# — which is the defect this fixes. Sourced best-effort: if it is unavailable
+# the old /tmp behaviour is preserved rather than the script failing.
+# shellcheck source=scripts/metrics-log-path.sh
+. "$SCRIPT_DIR/metrics-log-path.sh" 2>/dev/null || true
+command -v metrics_default_log >/dev/null 2>&1 || {
+    metrics_default_log() { printf '/tmp/%s' "$1"; }
+}
+_metrics_default_log() { metrics_default_log "$1" "$REPO_ROOT"; }
+
+USAGE_LOG="${TILLANDSIAS_EXPERT_USAGE_LOG:-$(_metrics_default_log forge-expert-usage.jsonl)}"
+FLOW_LOG="${TILLANDSIAS_CYCLE_FLOW_LOG:-$(_metrics_default_log tillandsias-cycle-flow.jsonl)}"
+TIMING_LOG="${TILLANDSIAS_TIMING_LOG:-$(_metrics_default_log tillandsias-timing.jsonl)}"
 
 # ── --emit-timing: append one build/test/litmus DURATION record (packet 682-emvg)
 # Best-effort by construction, mirroring --emit-flow above and mcp-usage-log.sh:
@@ -311,7 +367,7 @@ if [ -r "$USAGE_LOG" ]; then
     errors=$(printf '%s\n' "$PLAN_STREAM" | grep -c '"outcome":"error"' 2>/dev/null) || errors=0
     # `jq -r` renders a missing key as the literal string "null", which would be
     # reported as a tool name. Drop those rather than print a word no tool has.
-    t=$(printf '%s\n' "$PLAN_STREAM" | jq -r '.tool // empty' 2>/dev/null | sort -u | paste -sd, - 2>/dev/null || true)
+    t=$(printf '%s\n' "$PLAN_STREAM" | "$JQ" -r '.tool // empty' 2>/dev/null | sort -u | paste -sd, - 2>/dev/null || true)
     [ -n "$t" ] && tools="$t"
 fi
 
@@ -368,7 +424,7 @@ printf 'experts_substitution: unknown (needs the agent harness tool log; not der
 # is retro-labelled by a fact nobody recorded. An `ok-unexposed` cycle also
 # fires the mcp_outage: line, because a read path that silently degraded for a
 # whole cycle IS the outage 737-zcj5 was built to stop losing.
-HEALTH_LOG="${TILLANDSIAS_EXPERT_HEALTH_LOG:-/tmp/forge-expert-health.jsonl}"
+HEALTH_LOG="${TILLANDSIAS_EXPERT_HEALTH_LOG:-$(_metrics_default_log forge-expert-health.jsonl)}"
 mcp_health="unprobed"
 mcp_outages=0
 if [ -s "$HEALTH_LOG" ]; then
@@ -550,7 +606,7 @@ flow_avg_completed="-"; flow_avg_commits="-"; flow_overhead="-"
 flow_source="absent"
 if [ -r "$FLOW_LOG" ]; then
     flow_source="$FLOW_LOG"
-    flow_stats="$(jq -R 'fromjson?' "$FLOW_LOG" 2>/dev/null | jq -s -r '
+    flow_stats="$("$JQ" -R 'fromjson?' "$FLOW_LOG" 2>/dev/null | "$JQ" -s -r '
         map(select(type=="object")) as $r
         | ($r | length) as $n
         | if $n == 0 then "0 - - -"
@@ -599,7 +655,7 @@ timing_build_check_avg="-"; timing_litmus_avg="-"; timing_slowest="-:-"
 timing_source="absent"
 if [ -r "$TIMING_LOG" ]; then
     timing_source="$TIMING_LOG"
-    timing_stats="$(jq -R 'fromjson?' "$TIMING_LOG" 2>/dev/null | jq -s -r '
+    timing_stats="$("$JQ" -R 'fromjson?' "$TIMING_LOG" 2>/dev/null | "$JQ" -s -r '
         # 693-tf79: reject implausible durations (negative, or >= 24h in ms).
         # A record whose duration_ms is really an absolute epoch (~1.78e12,
         # from a zero start time) must never enter the averages or the slowest
@@ -715,8 +771,27 @@ elif [ "$traces" = "stale" ]; then
     verdict="attention:trace-indexes-stale"
 elif [ "$degraded" -gt 0 ]; then
     verdict="attention:experts-degraded-${degraded}-calls-could-not-run"
-elif [ "$graded" -gt 0 ] && [ "$answered" -eq 0 ]; then
+elif [ "$calls" -gt 0 ] && [ "$graded" -gt 0 ] && [ "$answered" -eq 0 ]; then
     # The order-531 signature: the expert ran every time and answered nothing.
+    #
+    # ORDER 902-j49y — `calls > 0` IS LOAD-BEARING AND WAS MISSING. `graded`
+    # comes from the groundtruth harness; `answered` comes from the usage log.
+    # Two independent sources, and the guard for a claim about one was read
+    # from the other. With an empty usage log — a fresh host, a rotated log —
+    # `answered` is 0 while `graded` is whatever the harness scored, so this
+    # arm fired and reported the order-531 signature ("the ARTIFACT is wrong,
+    # check the base branch") about an expert that was demonstrably fine.
+    #
+    # MEASURED on yolanda 2026-08-26, immediately after 890-t9pu rotated the
+    # usage log to a path both userlands can read: `expert_accuracy: pass=28
+    # graded=28 rate=100%` on the same line as
+    # `verdict: attention:expert-answered-nothing-check-base-branch`. A 100%
+    # accuracy score and "answered nothing" cannot both be true.
+    #
+    # "the expert ran every time and answered nothing" is FALSE when it never
+    # ran. That state has its own arm directly below — which was unreachable
+    # whenever the harness had graded anything, i.e. exactly when the report
+    # was most likely to be read.
     verdict="attention:expert-answered-nothing-check-base-branch"
 elif [ "$calls" -eq 0 ]; then
     verdict="attention:experts-never-called"

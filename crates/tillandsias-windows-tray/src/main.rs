@@ -32,6 +32,12 @@ mod notify_icon;
 #[cfg(target_os = "windows")]
 mod wsl_lifecycle;
 mod wsl_probe_policy;
+// Pure NotifyIconSettings reconciliation policy (order 663-64xi). Deliberately
+// NOT cfg-gated and deliberately free of Win32: the decision is what needs
+// pinning, and keeping it platform-independent means its three exit criteria —
+// including the negative control that a live portable build survives — are
+// exercised on every host rather than only where a registry exists.
+mod tray_registry;
 
 // Linux stub modules so unit tests + portable code paths compile cleanly.
 #[cfg(not(target_os = "windows"))]
@@ -64,10 +70,20 @@ const KNOWN_FLAGS: &[&str] = &[
     "--status-once",
     "--diagnose",
     "--logs",
+    "--forge",
     // mode modifiers
     "--json",
     "--tail",
     "--bak",
+    // 945-vpg3: forge-launch intent selectors. They modify `--forge` rather
+    // than being modes of their own, and they are listed here for the same
+    // reason every other flag is: `unknown_flag` refuses anything absent from
+    // this list, and a mode reachable in `main` but missing here becomes an
+    // immediate hard error.
+    "--shell",
+    "--claude",
+    "--codex",
+    "--opencode",
     // the one option that modifies GUI mode and must reach `notify_icon::run`
     "--no-provision",
 ];
@@ -135,6 +151,19 @@ fn main() {
     // only cost.
     if std::env::args().any(|a| a == "--reset-guest") {
         std::process::exit(notify_icon::reset_guest_once());
+    }
+    // 945-vpg3: headless forge launch. Until this existed, the ONLY way to
+    // open a forge was a tray menu click, so an automated release blessing
+    // could smoke every other leg and had to stop here — v0.4.260830.5 did.
+    //
+    // This calls `notify_icon::launch_pty`, the SAME function the menu arm
+    // calls, which is the whole point: a headless path that rebuilt the argv
+    // itself could pass while the menu did something else, and the smoke would
+    // be testing the tester. Flag names mirror the Linux CLI lanes
+    // (--claude / --codex / --opencode <project>) so one contract spans both
+    // platforms.
+    if std::env::args().any(|a| a == "--forge") {
+        std::process::exit(forge_launch_once());
     }
     if std::env::args().any(|a| a == "--status-once") {
         let format = if std::env::args().any(|a| a == "--json") {
@@ -613,5 +642,72 @@ mod tests {
                 && src.contains("github_login_state_from_reply(logged_in, handle)"),
             "the confirm path must map replies over the transitional state"
         );
+    }
+}
+
+#[cfg(target_os = "windows")]
+/// `--forge <project> [--shell|--claude|--codex|--opencode]` — open a forge
+/// PTY without a tray click. 945-vpg3.
+///
+/// Exit codes are the contract a smoke harness consumes:
+///   0  the PTY was spawned
+///   2  usage error (no project, or two agent flags)
+///   1  the launch itself was refused or failed
+///
+/// The agent flag is OPTIONAL and defaults to `--shell`, the maintenance
+/// intent, because that launch needs no agent installed in the guest and is
+/// therefore the one a blessing round can always run.
+///
+/// REFUSES rather than guesses on two inputs. A missing project name is a
+/// usage error, not "attach to something reasonable": the tray's own refusal
+/// comment says a silently rewritten name launches a DIFFERENT project than
+/// the one asked for, and inventing one headlessly is the same defect with
+/// nobody watching. Two agent flags is refused rather than last-one-wins,
+/// because a harness passing both has a bug and should be told, not served.
+fn forge_launch_once() -> i32 {
+    use tillandsias_host_shell::menu_state::SelectedAgent;
+    use tillandsias_host_shell::pty::PtyIntent;
+
+    let args: Vec<String> = std::env::args().collect();
+    let project = match args.iter().position(|a| a == "--forge") {
+        Some(i) => match args.get(i + 1) {
+            Some(p) if !p.starts_with("--") && !p.is_empty() => p.clone(),
+            _ => {
+                eprintln!("refused: --forge needs a project name, e.g. --forge myproject");
+                return 2;
+            }
+        },
+        None => return 2,
+    };
+
+    let mut intent: Option<PtyIntent> = None;
+    for (flag, agent) in [
+        ("--claude", Some(SelectedAgent::Claude)),
+        ("--codex", Some(SelectedAgent::Codex)),
+        ("--opencode", Some(SelectedAgent::OpenCode)),
+        ("--shell", None),
+    ] {
+        if args.iter().any(|a| a == flag) {
+            if intent.is_some() {
+                eprintln!("refused: pass at most one of --shell/--claude/--codex/--opencode");
+                return 2;
+            }
+            intent = Some(match agent {
+                Some(a) => PtyIntent::Agent(a),
+                None => PtyIntent::Shell,
+            });
+        }
+    }
+    let intent = intent.unwrap_or(PtyIntent::Shell);
+
+    match notify_icon::launch_pty(&intent, Some(project.as_str())) {
+        Ok(()) => {
+            println!("ok:forge-launch:{project}");
+            0
+        }
+        Err(err) => {
+            eprintln!("failed:forge-launch:{project}: {err}");
+            1
+        }
     }
 }

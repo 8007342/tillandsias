@@ -677,12 +677,59 @@ _pa_probe_inference() {
 #   missing_capability=synthesis-tier   the endpoint IS ready but no synthesis
 #                                       tier is wired into this surface yet
 #                                       (the 397+ family owns the tiers)
+# _pa_experts_tier — ORDER 718-ja7g. The EXPERT TIER verdict, which is a
+# different question from _pa_probe_inference's and must not be conflated with
+# it. That probe curls TILLANDSIAS_INFERENCE_ENDPOINT/api/tags — Ollama's NATIVE
+# api at the ROOT — and answers "is there an Ollama with models". This one asks
+# the binary that implements the expert path whether the OpenAI-shape /v1 bases
+# it actually dispatches to are live.
+#
+# THEY DISAGREE, and the disagreement is the reason this exists. Measured on
+# lenovinha 2026-08-29 with a real Ollama serving two models and
+# TILLANDSIAS_INFERENCE_ENDPOINT=http://127.0.0.1:11434 (a root url):
+#   _pa_probe_inference : READY (models=2)
+#   experts-probe       : l1=unset l2=ready
+# Retrieval was dead and the probe an operator reads said READY in capitals,
+# because TILLANDSIAS_INFERENCE_ENDPOINT feeds synth_base only — embed_base has
+# no fallback in the precedence chain. Reporting both keeps each honest.
+_pa_experts_tier() {
+    TILLANDSIAS_EXPERTS_L1="unknown"
+    TILLANDSIAS_EXPERTS_L2="unknown"
+    TILLANDSIAS_EXPERTS_ADVICE="-"
+    for _pae_lib in \
+        "${TILLANDSIAS_EXPERTS_PROBE_LIB:-}" \
+        "${BASH_SOURCE[0]%/*}/../../lib-experts-probe.sh" \
+        "/usr/local/lib/tillandsias/lib-experts-probe.sh"; do
+        if [ -n "$_pae_lib" ] && [ -r "$_pae_lib" ]; then
+            # shellcheck source=/dev/null
+            . "$_pae_lib"
+            tillandsias_experts_probe "${PLAN_BIN:-}" || true
+            return 0
+        fi
+    done
+    TILLANDSIAS_EXPERTS_ADVICE="probe-helper-missing: lib-experts-probe.sh not found — tier liveness UNKNOWN, not absent"
+    return 0
+}
+
+# THE EXPERTS FIELDS ARE APPENDED, NEVER INSERTED, and I learned that the
+# expensive way: 718-ja7g first put them mid-sentence, right before the `;`,
+# which broke litmus:project-answer-synthesis-refusal-typed — its assertion
+# anchors on `…inference_reason=endpoint-unreachable; `. ./build.sh --check
+# passed because it does not run the full pre-build litmus suite, so the
+# regression shipped and was found two packets later while measuring 901-jtvi.
+#
+# lib-expert-capability.sh already states the rule for its own line ("APPENDED,
+# never inserted: the existing fields are matched by substring … so growing the
+# line at the end is additive for every current reader"). It applies here for
+# the same reason and I did not look for it. Growing this sentence at the END is
+# additive for every current reader; growing it in the middle is a grammar change.
 _pa_synthesis_refusal() {
     _pa_probe_inference
+    _pa_experts_tier
     if [ "${TILLANDSIAS_INFERENCE_STATE:-unknown}" = "ready" ]; then
-        _pa_refusal "synthesis question — missing_capability=synthesis-tier inference_state=ready inference_reason=-; the deterministic layer holds no citable answer for it, and no synthesis tier is wired into project_answer yet (inference adds recall, never authority — citations stay deterministic-layer products). Deterministic questions (type, status, commands, layout, actions) still answer."
+        _pa_refusal "synthesis question — missing_capability=synthesis-tier inference_state=ready inference_reason=-; the deterministic layer holds no citable answer for it, and no synthesis tier is wired into project_answer yet (inference adds recall, never authority — citations stay deterministic-layer products). Deterministic questions (type, status, commands, layout, actions) still answer. experts_l1=${TILLANDSIAS_EXPERTS_L1:-unknown} experts_l2=${TILLANDSIAS_EXPERTS_L2:-unknown}"
     else
-        _pa_refusal "synthesis question — missing_capability=local-inference inference_state=${TILLANDSIAS_INFERENCE_STATE:-unknown} inference_reason=${TILLANDSIAS_INFERENCE_REASON:--}; the deterministic layer holds no citable answer for it and no local inference endpoint is available to add recall. Deterministic questions (type, status, commands, layout, actions) still answer from the index alone."
+        _pa_refusal "synthesis question — missing_capability=local-inference inference_state=${TILLANDSIAS_INFERENCE_STATE:-unknown} inference_reason=${TILLANDSIAS_INFERENCE_REASON:--}; the deterministic layer holds no citable answer for it and no local inference endpoint is available to add recall. Deterministic questions (type, status, commands, layout, actions) still answer from the index alone. experts_l1=${TILLANDSIAS_EXPERTS_L1:-unknown} experts_l2=${TILLANDSIAS_EXPERTS_L2:-unknown}"
     fi
 }
 

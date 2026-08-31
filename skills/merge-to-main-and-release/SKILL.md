@@ -50,7 +50,14 @@ builds. The ALL-platform completeness requirement from
 all-green on `required` rows before that release") lives HERE instead:
 
 ```bash
-ruby -ryaml -e 'data = YAML.load_file(%q(openspec/tray-parity-matrix.yaml)); gaps = 0; data[%q(features)].each { |f| next unless f[%q(parity)] == %q(required); [%q(linux), %q(macos), %q(windows)].each { |p| (puts p + %q(: ) + f[%q(capability)].to_s + %q( status=) + f[p].to_s; gaps += 1) if f[p] != %q(done) } }; puts %q(parity gaps: ) + gaps.to_s; exit 1 if gaps > 0'
+# 746-htj9: the sanctioned YAML path — ruby is NOT present in every
+# environment this runbook runs in (it broke the forge once already).
+. scripts/plan-binary-probe.sh
+PLAN="$(resolve_plan_binary)" || { echo 'blocked: no runnable tillandsias-plan (run scripts/cycle-preflight.sh)'; exit 1; }
+gaps="$("$PLAN" yaml-json openspec/tray-parity-matrix.yaml | jq -r '.features[] | select(.parity=="required") | . as $f | ("linux","macos","windows") | select($f[.] != "done") | "\(.): \($f.capability) status=\($f[.])"')"
+printf '%s\n' "$gaps" | grep -v '^$' || true
+echo "parity gaps: $(printf '%s' "$gaps" | grep -c . || true)"
+test -z "$gaps"
 ```
 
 If this exits non-zero, the parity matrix has unverified/incomplete `required`
@@ -273,7 +280,31 @@ still conflicting after 3 attempts, write an `ESCALATION:` line in
 
 ---
 
-## 5 — Tag + push + MANDATORY back-merge
+## 5 — Tag, THEN back-merge, THEN push both (order 898-zhf3)
+
+> **THIS STEP USED TO SAY "push the tag, then back-merge, never before". THAT
+> ORDER IS UNEXECUTABLE and it had almost certainly never been run on a host
+> with the pre-push hook installed.** Measured on macuahuitl 2026-08-26 while
+> cutting v0.4.260826.1: `git push origin "${new_tag}"` was REFUSED —
+>
+> ```
+> ✗ pre-push refused: release preflight says blocked:version-not-monotonic
+>   ERROR: Version 0.4.260817.1 is LESS than latest release v0.4.260826.1
+>   REMEDY: git fetch origin && git merge origin/main
+> ```
+>
+> **The guard is correct.** The moment `git tag` creates the tag LOCALLY,
+> `verify-version-monotonic.sh` resolves it as "latest release" and compares it
+> against the branch's VERSION — which is still the pre-release value, because
+> the back-merge is the very thing the old text deferred until after this push.
+> So: tag push requires the back-merge; the back-merge was prescribed after the
+> tag push. Circular, on every host that has run `scripts/install-hooks.sh`.
+>
+> The pressure at that moment is toward `git push --no-verify`, which is the one
+> exit the hook's own text warns against — and it would push the release tag
+> past the only remaining gate.
+
+**Create the tag. Do NOT push it yet.**
 
 ```bash
 git tag -a "${new_tag}" -m "Release ${new_version}
@@ -281,29 +312,52 @@ git tag -a "${new_tag}" -m "Release ${new_version}
 Daily linux-next → main promotion via the merge-to-main-and-release
 skill. See PR #${existing_pr} for the merged work range.
 "
-git push origin "${new_tag}"
 ```
 
 The annotated tag carries the PR reference so the GitHub Release page links back to the merged work.
 
+**WHY DEFERRING THE PUSH IS SAFE, which is the concern the old ordering was
+protecting and which survives intact.** The old text's stated reason was "the
+tag must keep pointing at main's bump-merge commit". It does: the tag is created
+against main's bump-merge SHA and a back-merge into `linux-next` cannot move a
+tag that points at a commit on `main`. **Verified, not assumed** — during the
+v0.4.260826.1 cut `git rev-list -n1 v0.4.260826.1` returned `341ab0010` both
+before and after the back-merge.
+
 ### The back-merge is part of the cut, not a tidy-up (order 800-vk2p)
 
 ```bash
-# The moment ${new_tag} is pushed, release-preflight gate 1 refuses
-# blocked:version-not-monotonic on EVERY branch still carrying the pre-release
-# VERSION. At v0.4.260817.1 that was all three platform branches, fleet-wide,
-# within seconds — including this release's OWN ledger records, so step 8
-# cannot push until this lands. Precedents: f6424070d, 97cd7068b.
+# The moment ${new_tag} EXISTS — locally is enough — release-preflight gate 1
+# refuses blocked:version-not-monotonic on every branch still carrying the
+# pre-release VERSION. At v0.4.260817.1 that was all three platform branches,
+# fleet-wide, within seconds — including this release's OWN ledger records, so
+# step 8 cannot push until this lands. Precedents: f6424070d, 97cd7068b.
+#
+# It also refuses THIS host's tag push, which is why the back-merge comes first
+# (898-zhf3). "Locally is enough" is the correction: the old text said "is
+# pushed", and the guard resolves the tag from the local ref.
 test "$(git symbolic-ref --short HEAD)" = "${release_source_branch:-linux-next}"
 git fetch origin
 git merge origin/main          # back-merge the VERSION bump; merge, never rebase
-./build.sh --check             # the merge changed VERSION, so the gate stamp is
-                               # stale and the push below would be refused
+TILLANDSIAS_SKIP_VERSION_BUMP=1 ./build.sh --check
+                               # the merge changed VERSION, so the gate stamp is
+                               # stale and the pushes below would be refused
+
+# NOW both pushes succeed. Order between them does not matter; both are gated
+# on the back-merge above, not on each other.
+git push origin "${new_tag}"
 git push origin "${release_source_branch:-linux-next}"
 ```
 
-Run this **after** the tag push, never before: the tag must keep pointing at
-main's bump-merge commit.
+**VERIFY THE TAG DID NOT MOVE, rather than assuming it.** The whole reason the
+old ordering existed was to keep the tag on main's bump-merge commit:
+
+```bash
+git rev-list -n1 "${new_tag}"   # MUST equal main's bump-merge SHA
+```
+
+A back-merge into the source branch cannot move a tag pointing at a commit on
+`main` — but check it, because this is the property the reordering trades on.
 
 `windows-next` and `osx-next` then self-heal on their next mandated
 `git merge origin/linux-next` (methodology `pull_merge_cadence.pre_push_gate`),
@@ -402,9 +456,14 @@ branch is not ahead of upstream.
   deletions rejected server-side).
 - **NEVER skip the workflow_dispatch step**: the release workflow is manual-only by design. If the user wants automatic-on-tag, they edit release.yml first.
 - **NEVER bump VERSION on linux-next**; only on main as part of the release commit. Sibling hosts (osx-next / windows-next) consume VERSION from their respective merge points; bumping it on linux-next desyncs them.
-- The release ships three platform artifacts to ONE GitHub release with matching versions:
-  Linux musl (`release` job), macOS arm64 thin tray (`macos-release`), Windows x64 thin tray
-  (`windows-release`). The macOS/Windows jobs `needs: release` and upload via `--clobber`.
+- The release ships three platform artifact SETS to ONE GitHub release with matching versions:
+  Linux musl (`release` job), macOS arm64 thin tray + DMG (`macos-release`), Windows x64 thin
+  tray zip + **MSIX package** (`windows-release`). The macOS/Windows jobs `needs: release` and
+  upload via `--clobber`. The MSIX (`tillandsias-tray-<ver>-windows-x64.msix`) is the
+  Microsoft Store's release artifact (operator directive 2026-08-29, order 776-g6r3): the
+  Store re-signs submitted MSIX itself, so its presence is NOT gated on the Authenticode
+  identity — a release whose windows job produced a zip but no MSIX is incomplete once
+  776-g6r3's packaging slice lands, and step 7's asset check should name it missing.
 - **NEVER cancel an in-flight release** — let it complete or fail, then handle in the next cycle.
 - **NEVER end a cut without the step-5 back-merge pushed to the source branch.**
   Until it lands, every sibling push is refused `blocked:version-not-monotonic`

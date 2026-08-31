@@ -52,22 +52,22 @@ preconditions:
 
 critical_path:
   - step: "the CRDT property suite passes (commutative, idempotent, LWW-deterministic, GC-safe)"
-    command: "cargo test --quiet --release -p tillandsias-plan fragments::tests 2>&1 | grep -q 'test result: ok' && echo 'ok: crdt properties hold'"
+    command: "mf_stage cargo 0 T -- cargo test --quiet --release -p tillandsias-plan fragments::tests && mf_holds T 'test result: ok' && echo 'ok: crdt properties hold'"
     timeout_ms: 300000
     expected_behavior: "ok: crdt properties hold"
 
   - step: "commutativity specifically — the defining property, named so a failure is legible"
-    command: "cargo test --quiet --release -p tillandsias-plan the_fold_is_commutative 2>&1 | grep -q 'test result: ok' && echo 'ok: fold commutes'"
+    command: "mf_stage cargo 0 T -- cargo test --quiet --release -p tillandsias-plan the_fold_is_commutative && mf_holds T 'test result: ok' && echo 'ok: fold commutes'"
     timeout_ms: 300000
     expected_behavior: "ok: fold commutes"
 
   - step: "idempotence — a compaction that dies halfway must be safe to re-run"
-    command: "cargo test --quiet --release -p tillandsias-plan the_fold_is_idempotent 2>&1 | grep -q 'test result: ok' && echo 'ok: fold is idempotent'"
+    command: "mf_stage cargo 0 T -- cargo test --quiet --release -p tillandsias-plan the_fold_is_idempotent && mf_holds T 'test result: ok' && echo 'ok: fold is idempotent'"
     timeout_ms: 300000
     expected_behavior: "ok: fold is idempotent"
 
   - step: "events are a G-SET: two hosts commenting on one packet keep BOTH comments"
-    command: "cargo test --quiet --release -p tillandsias-plan events_from_two_hosts_on_one_packet 2>&1 | grep -q 'test result: ok' && echo 'ok: events are a set'"
+    command: "mf_stage cargo 0 T -- cargo test --quiet --release -p tillandsias-plan events_from_two_hosts_on_one_packet && mf_holds T 'test result: ok' && echo 'ok: events are a set'"
     timeout_ms: 300000
     expected_behavior: "ok: events are a set"
 
@@ -77,7 +77,7 @@ critical_path:
     expected_behavior: "ok: concurrent filing merges clean"
 
   - step: "reads are TRANSPARENT: a fragment-only packet resolves through the CLI"
-    command: "cargo run --quiet --release -p tillandsias-plan -- status format-preserving-ledger-compaction 2>/dev/null | grep -q 'format-preserving-ledger-compaction' && echo 'ok: fragment-only packet is queryable'"
+    command: "mf_stage cargo 0 T -- cargo run --quiet --release -p tillandsias-plan -- status format-preserving-ledger-compaction && mf_holds T 'format-preserving-ledger-compaction' && echo 'ok: fragment-only packet is queryable'"
     timeout_ms: 300000
     expected_behavior: "ok: fragment-only packet is queryable"
 
@@ -87,7 +87,7 @@ critical_path:
     expected_behavior: "ok: compaction is format-preserving"
 
   - step: "the REAL ledger compacts with every comment, item order, and fold state preserved"
-    command: "cargo test --quiet --release -p tillandsias-plan compaction_on_the_real_ledger 2>&1 | grep -q 'test result: ok' && echo 'ok: real-ledger compaction preserves format'"
+    command: "mf_stage cargo 0 T -- cargo test --quiet --release -p tillandsias-plan compaction_on_the_real_ledger && mf_holds T 'test result: ok' && echo 'ok: real-ledger compaction preserves format'"
     timeout_ms: 300000
     expected_behavior: "ok: real-ledger compaction preserves format"
 
@@ -97,7 +97,7 @@ critical_path:
     expected_behavior: "ok: no glob deletion"
 
   - step: "a malformed fragment is skipped but REPORTED, never silently dropped"
-    command: "cargo test --quiet --release -p tillandsias-plan a_malformed_fragment_is_skipped 2>&1 | grep -q 'test result: ok' && echo 'ok: malformed fragments are visible'"
+    command: "mf_stage cargo 0 T -- cargo test --quiet --release -p tillandsias-plan a_malformed_fragment_is_skipped && mf_holds T 'test result: ok' && echo 'ok: malformed fragments are visible'"
     timeout_ms: 300000
     expected_behavior: "ok: malformed fragments are visible"
 

@@ -31,6 +31,7 @@ issues.
 | `README-ABOUT.md` | `README.md`, OpenSpec specs, cheatsheets |
 | `RELEASE-HANDOFF.md` | release plan steps, `docs/VERIFICATION.md`, `docs/UPDATING.md` |
 | `RELEASE-NOTES.md` | release workflow output or governed changelog; not an untracked planning surface |
+| `../tillandsias.org/SiblingContainerDiagnosis.md` (sibling repo `tillandsias.org`, 2026-08-28) | plan packets `opencode-forge-lane-missing-order-505-control-socket`, `populate-hot-paths-fails-silent-and-traces-success`, `lane-listeners-and-publish-local-hardcode-home-src`; note event on order 353; `cheatsheets/runtime/networking.md` + `cheatsheets/runtime/enclave-proxy-patterns.md` (proxy TCP_RESET allowlist-denial signature) |
 
 ## Current Audit Result
 

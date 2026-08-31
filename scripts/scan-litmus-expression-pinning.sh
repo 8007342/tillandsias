@@ -91,7 +91,7 @@ for f in "$LITMUS_DIR"/*.yaml; do
                 fi
 
                 # no-exec: the command never invokes anything from the project.
-                if ! printf '%s' "$cmd" | grep -qE '(scripts/[a-z0-9-]+\.sh|\./build\.sh|target/release/|cargo |tillandsias-[a-z]+ |bash -c)'; then
+                if ! grep -qE '(scripts/[a-z0-9-]+\.sh|\./build\.sh|target/release/|cargo |tillandsias-[a-z]+ |bash -c)' <<<"$cmd"; then # sigpipe-ok: safe pipeline
                     score=$((score + 1)); signals="${signals},no-exec"
                 fi
 

@@ -71,6 +71,7 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
     | a methodology rule | `methodology_ask "<question>"` / `methodology_path` |
     | a spec's content | `spec_answer` |
     | repo/code navigation | `project-info`: `search_code`, `grep_code`, `find_files`, `file_summary`, `read_file` |
+    | conversational/synthesis status question | Local Experts mode (`expert-serve`) — same citations-or-typed-refusal contract as `spec_answer` |
 
     Every answer is CITED. Keep the citations — §5 and §7 need them.
 
@@ -177,26 +178,119 @@ automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triag
 
 ## 3 — Claim the Lease
 
-1.  **Mint Lease ID**: Mint a content-stable lease ID.
-2.  **Emit Claim Event**: Append a `claim` event as a fragment in `plan/index.d/` using `tillandsias-plan append-event <packet-id> claim "<summary>" --ts "<ISO-8601-UTC>" --agent "$agent_id" --host "<host>"` or by creating an append-only fragment in `plan/index.d/<utc>-<suffix>-<host>.yaml`. `$agent_id` is the §1.4 helper output (`scripts/agent-identity.sh id <backend>`) — if the helper refused, there is no identity to claim with, and no event may be appended.
+1.  **Claim by flipping status, and push it BEFORE the work.**
+
+    ```bash
+    tillandsias-plan set-field <packet-id> status in_progress \
+        --host "$(hostname -s)" --reason "claimed for cycle <UTC ts> by $agent_id"
+    git add plan/index.d/
+    git commit -m "claim(<packet-id>): <host>"
+    git push origin <active-branch>
+    ```
+
+    `$agent_id` is the §1.4 helper output (`scripts/agent-identity.sh id
+    <backend>`) — if the helper refused, there is no identity to claim with, and
+    nothing may be appended or pushed.
+
+    **This is the whole separation mechanism, and it is the ONLY one.**
+    `plan_next` / `plan_ready` / `select-work-batch.sh` filter to `unleased`,
+    and *leased* means exactly `status: in_progress`. Nothing else — not a
+    `claim` event, not a lease ID, not a work-queue line — hides a packet from
+    another host.
+
+    **Push it BEFORE the work, not with it. An unpushed claim separates
+    nobody**, and neither does one that lands after you have already spent the
+    cycle implementing.
+
+    CORRECTED 2026-08-31 (order 943-unii). This step used to say *"Emit Claim
+    Event: append a `claim` event … using `tillandsias-plan append-event
+    <packet-id> claim …`"*, committed and pushed WITH the cycle's work. That
+    recipe changes no status, so a packet claimed that way stays `ready` and
+    stays offered to every other host. It is an AUDIT RECORD, not a claim.
+
+    Measured on the live ledger: packet 245 carried **43** claim events and was
+    still returned by `ready linux`. `expire-claims` reported `in_progress=0`
+    fleet-wide on 2026-08-19 — nothing had ever been claimed at all. On
+    2026-08-18 two hosts implemented 798-tk7b six minutes apart, ~4h duplicated
+    (order 814-iyu7); that is the failure this recipe left open, and one worker
+    host followed it for nineteen consecutive cycles without claiming anything.
+
+    Verified again when this correction was written, on this repository:
+    `set-field … in_progress` moved the selector's `eligible` count 174 → 173
+    and dropped the packet out of both `ready linux` and the printed batch, in
+    the same command. That is the positive control — the mechanism was never
+    broken, it was simply not being invoked.
+
+    `methodology/distributed-work.yaml` (*"a `claim` event changes status from
+    ready to in_progress"*) and `skills/meta-orchestration/SKILL.md` (*"Cycle
+    batch triage"*) both already specified the recipe above. This section was
+    the outlier, and it was the one every worker host runs every cycle.
+
+2.  **Optionally add a narrative `claim` event too** — useful, never sufficient:
+
+    ```bash
+    tillandsias-plan append-event <packet-id> claim "<what this cycle intends>" \
+        --ts "<ISO-8601-UTC>" --agent "$agent_id" --host "<host>"
+    ```
 
     If `append-event` refuses with `packet_id not found`, the packet lives only
     in a fragment and that command cannot see it (600-c266) — write the event
-    block by hand in your own fragment. **A `status` change is different: never
-    hand-author it, use `tillandsias-plan set-field`** (see §7.2).
+    block by hand in your own fragment, keyed under `events:`. **A `status`
+    change is different: never hand-author it, always use `tillandsias-plan
+    set-field`** (see §7.2), because a hand-written fragment that re-declares
+    the packet under `packets:` with a new status is a G-Set no-op — it parses,
+    validates, passes `tillandsias-plan check`, reads correctly in review, and
+    the fold discards it (635-i6vm).
 
-    A claim that produces no event by cycle end is reclaimed after 4h by
-    `scripts/reclaim-stranded-claims.sh` — 8 claims abandoned for 17–26 days
-    were found that way. Ending a cycle with an event is what keeps your claim.
-3.  **Commit & Push**: Commit ONLY the plan fragment edits, and push them to your active platform branch:
+3.  **Collisions are arbitrated by TIMESTAMP, not by push rejection.**
+
+    The ledger is a CRDT, so two hosts can both claim in the same window and
+    both pushes can succeed. On your next fetch, if another host's claim for
+    that order carries an EARLIER timestamp (ties broken by lexicographically
+    smaller hostname), **you lost**: release yours back to `ready` and take the
+    next batch item.
+
+    Losing the race is normal and cheap. Both hosts writing is fine; both hosts
+    *continuing* is the defect, and is precisely 814-iyu7. A rejected push is a
+    weaker and later signal than the timestamp — a push can succeed and still
+    have lost — so do not wait for one.
+
+4.  **Release on exit, unconditionally.**
+
+    Completed work moves to its terminal status (§7.2). Work you did NOT finish
+    goes back to `ready` **in the same cycle you abandon it**:
+
     ```bash
-    git add plan/index.d/
-    git commit -m "chore(plan): claim lease for <task-id>"
-    git push origin <active-branch>
+    tillandsias-plan set-field <packet-id> status ready \
+        --reason "released unclaimed at cycle end: <what remains>"
     ```
-4.  **Collision Recovery**: If the push is rejected because another agent claimed the lease concurrently, fetch, pull, yield your claim, and select a different packet.
 
----
+    Leaving it `in_progress` hides it from `ready` AND from burndown until the
+    24h reaper — 21 packets were stranded that way on 2026-08-09 (641-e2qa).
+    **Claiming is only safe because releasing is unconditional.** A cycle that
+    claims and then exits without either completing or releasing has taken work
+    away from the fleet and given nothing back.
+
+5.  **The reaper is a backstop for a dead host, not your return path.**
+
+    A claim with no event by cycle end is *reclaimable* after **24h** by
+    `scripts/reclaim-stranded-claims.sh` — read the verb: reclaim**able**, not
+    reclaimed. The TTL is 24h (`TTL_HOURS=24`, "the fleet claim TTL";
+    `expire-claims` reports `ttl_hours=24`). **No automation runs either tool:**
+    the reaper has no caller outside its own source and fixture, and `build.sh`
+    only shape-checks `expire-claims --list-live`.
+
+    THAT IS DELIBERATE, NOT A GAP. `skills/meta-orchestration/SKILL.md` gives
+    the coordinator a per-cycle stranded sweep that REPORTS and does not reap,
+    and says why: *"Advisory, never a gate… Do not bulk-close what it reports.
+    Closing a packet requires checking its exit criteria against the tree;
+    guessing marks unfinished work done, which is strictly worse than leaving it
+    stranded."* A packet legitimately in flight is indistinguishable from one
+    abandoned an hour ago, so the discrimination is human judgement by design.
+
+    Which is exactly why step 4 is yours. If hosts released on exit, the reaper
+    would have nothing to find; the 3-of-5 stranded rate measured on 2026-08-30
+    is a symptom of hosts not releasing, not of a reaper that fails to run.
 
 ## 4 — Host Write Scope & Unblock-with-NOOP
 

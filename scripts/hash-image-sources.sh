@@ -40,6 +40,7 @@ case "$image_name" in
 esac
 
 file_list=()
+indexed_entries=()
 untracked_rel=()
 if git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     # NUL-delimited reads remain compatible with stock macOS Bash 3.2.
@@ -61,9 +62,33 @@ if git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
             exit 1
         fi
     fi
-    while IFS= read -r -d '' rel; do
-        [[ -n "$rel" ]] && file_list+=("$root/$rel")
-    done < <(git -C "$root" ls-files -z -- "${source_rels[@]}" 2>/dev/null || true)
+    # ORDER 776-cm74 — TRACKED ENTRIES HASH GIT-NORMALIZED CONTENT, NOT
+    # WORKING-TREE BYTES. Operator decision, 2026-08-16, attended on the
+    # Windows host.
+    #
+    # `git ls-files -s` yields `<mode> <object> <stage>\t<path>`, where the
+    # object id is the blob AFTER clean filters and autocrlf normalization, and
+    # the mode is git's own `100644`/`100755`/`120000`. Both are properties of
+    # the COMMIT rather than of this checkout, which is the whole point:
+    #
+    #   * `core.autocrlf=true` gives a CRLF working tree, so hashing bytes made
+    #     two clones of the SAME commit disagree — Windows against Linux, and
+    #     Windows against Windows with different settings. The fixture's
+    #     cross-location comparison could not be truthful there.
+    #   * `stat` mode is meaningless where `core.fileMode=false`, which is the
+    #     default on both Windows lanes.
+    #
+    # So the cache key stops depending on where the checkout lives or how git
+    # was configured to materialise it. Untracked directories keep the
+    # find/stat path below — they have no index entry to read.
+    while IFS= read -r line; do
+        [[ -n "$line" ]] || continue
+        # `<mode> <object> <stage>\t<path>`
+        local_meta="${line%%$'\t'*}"
+        rel="${line#*$'\t'}"
+        set -- $local_meta
+        indexed_entries+=("$1:$2:$rel")
+    done < <(git -C "$root" ls-files -s -- "${source_rels[@]}" 2>/dev/null || true)
 else
     for source_dir in "${source_dirs[@]}"; do
         [[ -d "$source_dir" ]] || continue
@@ -73,7 +98,7 @@ else
     done
 fi
 
-if [[ ${#file_list[@]} -eq 0 ]]; then
+if [[ ${#file_list[@]} -eq 0 && ${#indexed_entries[@]} -eq 0 ]]; then
     echo "no-sources"
     exit 0
 fi
@@ -82,7 +107,25 @@ fi
 # tracked context files. Changing the final image layer policy therefore
 # invalidates unsquashed canonical tags exactly once.
 manifest=("layer-policy:squash-new")
-for file in "${file_list[@]}"; do
+
+# Tracked entries: mode and content id come straight from the index, so the
+# manifest line is already normalized and no file is read from disk.
+for entry in ${indexed_entries[@]+"${indexed_entries[@]}"}; do
+    gmode="${entry%%:*}"
+    rest="${entry#*:}"
+    oid="${rest%%:*}"
+    rel="${rest#*:}"
+    path_hash="$(printf '%s' "$rel" | "${PORTABLE_SHA256[@]}" | cut -d' ' -f1)"
+    case "$gmode" in
+        120000) type=symlink ;;
+        100755) type=file ;;
+        100644) type=file ;;
+        *)      echo "error: unsupported tracked image source mode $gmode for $rel" >&2; exit 1 ;;
+    esac
+    manifest+=("${path_hash}:${type}:${gmode}:${oid}")
+done
+
+for file in ${file_list[@]+"${file_list[@]}"}; do
     rel="${file#"$root"/}"
     path_hash="$(printf '%s' "$rel" | "${PORTABLE_SHA256[@]}" | cut -d' ' -f1)"
     if mode="$(stat -c '%a' "$file" 2>/dev/null)"; then

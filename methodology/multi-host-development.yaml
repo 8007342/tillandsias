@@ -235,13 +235,31 @@ multi_host_development:
         that nothing will ever reap. "Push freely" is a licence about
         FREQUENCY and CONFIDENCE, not about namespace.
     ledger_rule: >
-      Lane branches are code-only for shared ledger state: plan/index.yaml,
-      plan.yaml, plan/loop_status.md, and methodology/** ride integration
-      branches directly (claims land on the base ref mid-cycle, recording
-      lane name + tip SHA). Lanes MAY add new append-only files under
-      plan/issues/. Mechanical enforcement is rung 4; until then this is
-      binding convention. Rationale: every recorded order-number collision
-      came from delayed ledger landing (462/464, 477/479, 478-479/486-487).
+      Lane branches are code-only for shared ledger state: the COMPACTED BASE
+      plan/index.yaml, plus plan.yaml, plan/loop_status.md, and methodology/**
+      ride integration branches directly (claims land on the base ref
+      mid-cycle, recording lane name + tip SHA). Lanes MAY add new append-only
+      files under plan/issues/, and MAY carry append-only fragments under
+      plan/index.d/ and plan/loop_status.d/ (order 863-iicc criterion 2,
+      ratified 2026-08-26). Those fragments are host+timestamp-named and
+      cannot textually conflict; the concern that motivates this rule is an
+      ORDER-TOKEN collision, and a stale base shifts only the token PREFIX,
+      never the token. A shared prefix is normal and permanent by design.
+      Mechanical enforcement is rung 4; until then this is binding convention.
+      Rationale, and its LIMIT: every order-number collision this rule cites
+      (462/464, 477/479, 478-479/486-487, and the 2026-07-31 pair at 560-562
+      and 568-570) is a BARE numeric token. Bare `order: N` tokens run to a
+      maximum of 578 in the committed ledger; suffixed `order: N-xxxx` tokens
+      begin at 583. All of them therefore predate the suffix entirely — they
+      were real collisions of a token format that no longer exists. Measured
+      on two hosts, ten mints, two ledger states: calmecacpilli 907 at HEAD
+      versus 903 from a hidden-fragment base, macuahuitl 908 versus 903, and
+      ZERO suffix collisions including the four drawn from identical stale
+      input. The prefix window is real and its width varies with base drift;
+      the token is suffix-disambiguated and packet_id remains the identity.
+      This admits fragments ONLY, for the suffixed-token era, and says nothing
+      about whether lanes are sanctioned (criterion 1), the missing reaper
+      (criterion 5), or the green-exit command.
     pre_push_gate_amendment: >
       pull_merge_cadence.pre_push_gate.applies_to EXCLUDES agent/* and
       salvage/* refs (mid-cycle lane checkpoints need no trunk merge). The
@@ -820,10 +838,18 @@ multi_host_development:
       agent MAY (and SHOULD) run `sudo dnf install` — and `dnf copr enable`,
       etc. — for ANY package it needs inside ANY toolbox (`tools`,
       `tillandsias-builder`, or a fresh `toolbox create`) WITHOUT asking the
-      operator. The sanctioned validators and build deps (ruby for the
-      `ruby -ryaml` YAML fallback, shellcheck, gcc/cmake/make, cross
-      toolchains, …) are all one toolbox `dnf install` away. Net effect: an
-      immutable Linux host is effectively MORE flexible than a mutable one —
+      operator. Build deps (shellcheck, gcc/cmake/make, cross toolchains, …)
+      are all one toolbox `dnf install` away. NOTE the YAML validator is NOT
+      among them any more: ORDER 746-htj9 retired the per-environment reader,
+      because no interpreter is present in all three environments the gates
+      run in, and two locally-correct fixes caused two outages in one day
+      picking different ones. The sanctioned path is `tillandsias-plan
+      validate-yaml` / `yaml-get`, built from this repo and rebuilt by
+      scripts/cycle-preflight.sh, so availability is a property we own rather
+      than one the environment has to provide. Prove it with
+      scripts/check-yaml-reader-availability.sh, do not assert it.
+      Net effect: an immutable Linux host is effectively MORE flexible than a
+      mutable one —
       it gets a clean, disposable, per-need build/validate sandbox without
       ever mutating /usr. Do not surface "tool X absent on the bare host" as a
       gap; install it in a toolbox and proceed.
@@ -876,7 +902,7 @@ multi_host_development:
       - "the canonical gate itself: ./build.sh --check before EVERY push (now mandatory-cheap on Windows; a cargo-only substitute already let one broken merge through, 2026-07-15)"
       - "linux-universe compile/clippy/test verification of any crate (targeted `with-wsl2-builder.sh cargo test -p <crate>`)"
       - "shell/git-shaped scripts and fixture tests (scripts/test-*.sh, litmus command steps, hook/relay fixtures)"
-      - "ruby YAML validation + shellcheck (the sanctioned validators, absent from stock Windows)"
+      - "YAML validation via `tillandsias-plan validate-yaml`/`yaml-get`, rich queries via `tillandsias-plan yaml-json <file> | jq '<filter>'` (order 746-htj9; the ONE sanctioned read path — the binary exists wherever this repo is built and jq is the one query tool present in every gate environment; never name yq or ruby in committed automation) + shellcheck (absent from stock Windows)"
       - "unblock-with-NOOP class repairs in sibling scope (cfg gates, dead-code allows) — verify with the wrapped gate, mark PLEASE REVIEW: <sibling>"
       - "research packets whose probes are plain git/bash mechanics (order 238 precedent)"
     file_a_linux_packet_instead:
@@ -894,3 +920,36 @@ multi_host_development:
       wrapped gate locally (35s) AND leave the packet's live criteria to the
       owning host — partial local evidence plus an honest residual note
       beats both silence and false completion.
+
+# ── OPERATOR DIRECTIVE 2026-08-31: loop cadence and stagger ────────────────────
+loop_cadence:
+  directive: >
+    Hourly loops on every host trampled each other: concurrent pushes forced
+    pull/re-gate/retry cycles on most landings (the 2026-08-31 blessing round
+    re-gated the coordinator five times just to land records). Operator ruling:
+    fleet loops run EVERY 2 HOURS, staggered, and we compare convergence
+    velocity after a day — the hypothesis is same velocity, fewer tokens
+    spent merging.
+  cadence_hours: 2
+  stagger_slots:
+    # Minutes are offsets inside the repeating 2-hour window anchored on EVEN
+    # local hours. No two slots within 15 minutes. A host arms its OWN slot —
+    # relayed cadence is coordination config, but each session's operator or
+    # loop harness does the arming (rate-change doctrine unchanged).
+    macos: "08 even hours (0-22/2) — reserved; currently loops on request"
+    macuahuitl: "23 even hours (0-22/2) — coordinator; armed 2026-08-31"
+    yolanda: "53 even hours (0-22/2)"
+    pirria: "08 odd hours (1-23/2) — reserved; currently one-off per operator"
+    lenovinha: "23 odd hours (1-23/2)"
+    yoga: "53 odd hours (1-23/2)"
+  coordinator_note: >
+    The coordinator's slot at even:23 lands 30 minutes after yolanda's
+    previous-window push and 30 before her next, and sweeps sibling landings
+    from the odd-hour slots — each loop generally finds at most one fresh
+    sibling landing to merge instead of racing three.
+  velocity_review: >
+    After ~24h on this schedule, compare plan-event throughput and the count
+    of pull/re-gate/retry cycles per landing against the hourly era
+    (loop_status entries 2026-08-30 are the baseline). If velocity drops
+    materially, the operator decides between returning to hourly-staggered
+    or keeping 2h.

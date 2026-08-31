@@ -43,7 +43,7 @@ critical_path:
   - step: "DIFF-SCOPED: full git-mode run over this branch reports ok (added steps are compliant, corpus untouched)"
     # Proves the enforcer cannot red the existing 643-step corpus — it examines
     # only steps added vs the base ref and passes when those are compliant.
-    command: "scripts/check-litmus-expression-pinning-added.sh | grep -q '^ok:' && echo 'ok: diff-scoped run clean'"
+    command: "mf_stage prod 0 OUT -- scripts/check-litmus-expression-pinning-added.sh && mf_holds OUT '^ok:' && echo 'ok: diff-scoped run clean'"
     timeout_ms: 30000
     expected_behavior: "ok: diff-scoped run clean"
 

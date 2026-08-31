@@ -140,7 +140,7 @@ while IFS= read -r var; do
     printf '%s\n' "$assigns" | grep -qxF "$var" && continue
     unassigned=$((unassigned + 1))
     printf '%s\n' "$docs" | grep -qxF "$var" && continue
-    if ! printf '%s\n' "$gating" | grep -qxF "$var"; then
+    if ! grep -qxF "$var" <<<"$gating"; then
         tunable=$((tunable + 1))     # every read carries a nonempty default
         continue
     fi

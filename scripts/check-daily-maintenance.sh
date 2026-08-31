@@ -69,7 +69,36 @@ set -uo pipefail
 
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias"
 MARKER="${TILLANDSIAS_DAILY_MAINTENANCE_MARKER:-$CACHE_DIR/.last-daily-maintenance}"
-TODAY="${TILLANDSIAS_DAILY_MAINTENANCE_TODAY:-$(date +%Y-%m-%d 2>/dev/null || echo unknown)}"
+# ORDER 895-j8ag — THE DAY BOUNDARY IS UTC, AND IT IS STATED HERE.
+#
+# This read `date +%Y-%m-%d` — the LOCAL date — while the marker it compares
+# against also records `utc=`. On a host at a non-zero UTC offset the two
+# disagree for part of every day, and the verdict followed the local half.
+#
+# MEASURED, three hosts, all UTC-7, all reading `ok:...-current` while the UTC
+# day had already rolled:
+#   pirria     2026-08-26 01:43:44Z / 18:43:44 PDT — marker utc=2026-08-25T07:44:07Z (18h old)
+#   macuahuitl same shape, different host, so not host-specific
+#   lenovinha  2026-08-26 03:48:12Z / 20:48:12 PDT — marker utc=2026-08-25T20:14:30Z
+#
+# On a UTC-NEGATIVE host the last hours of local day report a stale gate as
+# current, and the whole new UTC day can pass without the body running. A
+# UTC-POSITIVE host has the mirror problem: its local date rolls BEFORE UTC, so
+# it can demand a second run inside one UTC day.
+#
+# UTC IS CHOSEN, for one reason that is not aesthetic: every other timestamp
+# this fleet coordinates on is UTC — ledger event `ts`, `loop-status-append
+# --ts` (which is validated against the UTC clock), the mo-full attestations,
+# the marker's own `utc=` field. A LOCAL boundary means hosts in different zones
+# roll over at different instants, so "did today's maintenance run" has no
+# fleet-wide answer at all. A local boundary is defensible for a single operator
+# on one machine; it is not defensible for a fleet, and this is a fleet.
+#
+# The marker keeps recording BOTH `date=` and `utc=` (below). That pair is what
+# made this defect findable — without `utc=` it reads as a perfectly healthy
+# gate — and it lets a host reading an OLD marker tell which boundary produced
+# it, which matters exactly once: across this change.
+TODAY="${TILLANDSIAS_DAILY_MAINTENANCE_TODAY:-$(date -u +%Y-%m-%d 2>/dev/null || echo unknown)}"
 
 # Ephemeral forges discard their substrate on teardown, so they have nothing to
 # garbage-collect and must not be nagged. Exit 0: nothing is due.

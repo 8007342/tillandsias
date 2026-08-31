@@ -35,6 +35,7 @@ use tillandsias_control_wire::{
 };
 use tillandsias_core::config::{self, SelectedAgent};
 use tillandsias_core::genus::TrayIconState;
+use tillandsias_host_shell::menu_state as shared_menu;
 use tillandsias_podman::{
     ContainerSpec, MountMode, container_exists_sync, image_exists_sync, podman_available_sync,
     stop_container_sync,
@@ -1379,13 +1380,21 @@ fn handle_control_connection(
                     //
                     // @trace spec:host-shell-architecture
                     // @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q4)
-                    let projects = crate::cloud_projects::fetch_cloud_projects(None);
+                    // 731-eupn: PROPAGATE the outcome, never re-flatten it here.
+                    // `fetch_cloud_projects` returns (projects, outcome) precisely
+                    // so an empty list from a FAILED fetch stays distinguishable
+                    // from a confirmed-empty account. Substituting
+                    // `CloudRefreshOutcome::Unknown` at this seam would restore
+                    // the four-outcomes-one-representation bug on the Linux lane
+                    // while the macOS lane reported it correctly.
+                    let (projects, outcome) = crate::cloud_projects::fetch_cloud_projects(None);
                     let reply = ControlEnvelope {
                         wire_version: WIRE_VERSION,
                         seq: first.seq,
                         body: ControlMessage::CloudRefreshReply {
                             seq_in_reply_to: seq,
                             projects,
+                            outcome,
                         },
                     };
                     let _ = write_control_envelope(&mut stream, &reply);
@@ -1622,7 +1631,27 @@ struct TrayService {
     /// backlink a Quit click would set `TrayService.shutdown` but never
     /// break the main wait loop.
     signal_shutdown: OnceLock<Arc<AtomicBool>>,
+    /// ORDER 944-jaef, the operator's rate-limiter directive after the sixth
+    /// freeze: every state change used to emit NewIcon+NewStatus+NewToolTip+
+    /// LayoutUpdated unconditionally (16 call sites), and during a forge
+    /// build's status ticks with the menu OPEN each LayoutUpdated makes
+    /// gnome-shell refetch the FULL layout + every property + run its
+    /// unguarded GC walk — enough ticks and the session drowns for a minute
+    /// at a time. Emissions are now coalesced: at most one signal group per
+    /// EMIT_COOLDOWN, with a suppressed burst flagged in `emit_pending` and
+    /// flushed by the 250 ms main wait loop so the FINAL state of a burst
+    /// always reaches the shell.
+    last_emit: std::sync::Mutex<std::time::Instant>,
+    emit_pending: AtomicBool,
 }
+
+/// Minimum spacing between tray signal-emission groups (944-jaef).
+/// Operator-directed: "orders of magnitude larger than the collisions,
+/// probably rate limited in the order of seconds." The trailing flush in
+/// the main wait loop guarantees the final state of a burst still lands,
+/// so the only cost of a wide window is status-line staleness, bounded by
+/// this constant.
+const EMIT_COOLDOWN: std::time::Duration = std::time::Duration::from_secs(2);
 
 #[derive(Clone)]
 struct StatusNotifierItemIface(Arc<TrayService>);
@@ -1736,6 +1765,10 @@ impl TrayService {
             task_executor,
             shutdown: AtomicBool::new(false),
             signal_shutdown: OnceLock::new(),
+            last_emit: std::sync::Mutex::new(
+                std::time::Instant::now() - EMIT_COOLDOWN - EMIT_COOLDOWN,
+            ),
+            emit_pending: AtomicBool::new(false),
         }
     }
 
@@ -1798,7 +1831,38 @@ impl TrayService {
         self.snapshot()
     }
 
+    /// True when an emission is allowed NOW (and stamps the cooldown);
+    /// false marks the burst pending for the main loop's trailing flush.
+    fn emission_due(&self) -> bool {
+        let mut last = self.last_emit.lock().expect("emit stamp lock");
+        if last.elapsed() >= EMIT_COOLDOWN {
+            *last = std::time::Instant::now();
+            true
+        } else {
+            self.emit_pending
+                .store(true, std::sync::atomic::Ordering::SeqCst);
+            false
+        }
+    }
+
+    /// Trailing-edge flush: called from the 250 ms main wait loop so the
+    /// last state of a coalesced burst always reaches the shell.
+    async fn flush_pending_emit(&self) {
+        if self.emit_pending.load(std::sync::atomic::Ordering::SeqCst) && self.emission_due() {
+            self.emit_pending
+                .store(false, std::sync::atomic::Ordering::SeqCst);
+            let _ = self.emit_refresh_now(true).await;
+        }
+    }
+
     async fn emit_refresh(&self, include_menu: bool) -> zbus::Result<()> {
+        if !self.emission_due() {
+            return Ok(());
+        }
+        self.emit_refresh_now(include_menu).await
+    }
+
+    async fn emit_refresh_now(&self, include_menu: bool) -> zbus::Result<()> {
         let item_ctxt = SignalContext::new(self.connection(), self.item_path.as_str())?;
         StatusNotifierItemIface::new_icon(&item_ctxt).await?;
         StatusNotifierItemIface::new_status(&item_ctxt).await?;
@@ -2046,7 +2110,7 @@ fn icon_pixmaps(state: TrayIconState) -> Vec<IconPixmap> {
     let (width, height) = image.dimensions();
     let rgba = image.into_rgba8();
     let mut argb = Vec::with_capacity(rgba.len());
-    for pixel in rgba.as_raw().chunks_exact(4) {
+    for pixel in rgba.as_raw().as_chunks::<4>().0 {
         argb.extend_from_slice(&[pixel[3], pixel[0], pixel[1], pixel[2]]);
     }
     vec![(width as i32, height as i32, argb)]
@@ -2944,6 +3008,7 @@ fn handle_stop_project(service: Arc<TrayService>, project: String) {
 }
 
 // @trace spec:tray-minimal-ux
+#[allow(dead_code)]
 fn build_separator_item(id: i32) -> MenuNode {
     node(
         id,
@@ -3092,6 +3157,25 @@ pub(super) fn resolved_max_cloud_projects_in_menu() -> usize {
         .unwrap_or(MAX_CLOUD_PROJECTS_IN_MENU)
 }
 
+/// A UNIQUE, NEVER-ZERO id for a shared-menu id string this mapper has no
+/// arm for (944-jaef, the fifth desktop freeze). The old fallback was `0` —
+/// the ROOT's dbusmenu id — so the first item the shared builder grew that
+/// this match didn't know shipped a layout in which the root was its own
+/// child. gnome-shell's appindicator extension walks the item graph with an
+/// unguarded `toTraverse.shift()` loop (dbusMenu.js `_gcItems`): a root
+/// cycle makes that queue grow forever, and one tray click wedged the whole
+/// Wayland session. An unknown item as a DEAD, uniquely-numbered leaf is
+/// harmless (its click dispatches nowhere); an unknown item as id 0 is a
+/// session killer. Range 0x0800_0000..0x1000_0000 sits below LOCAL_BASE_LO
+/// and above every fixed top-level id, so it collides with nothing.
+fn fallback_menu_id(id_str: &str) -> i32 {
+    use std::hash::Hash;
+    use std::hash::Hasher;
+    let mut hash = std::collections::hash_map::DefaultHasher::new();
+    id_str.hash(&mut hash);
+    0x0800_0000 + (hash.finish() as u32 % 0x0800_0000u32) as i32
+}
+
 fn project_base(name: &str, scope: ProjectScope) -> i32 {
     use std::hash::Hash;
     use std::hash::Hasher;
@@ -3158,6 +3242,10 @@ fn project_action_from_id(
 /// The submenu node's id is `base + PROJECT_SUBMENU_OFFSET`; each leaf is
 /// `base + LeafAction::offset()`. All leaves are emitted with `enabled=true`
 /// **unless** podman is unavailable, in which case every leaf is disabled.
+///
+/// @trace dead_code — retired by order 628-p5tj convergence; kept for
+/// `project_action_from_id` which shares the `project_base` scheme.
+#[allow(dead_code)]
 fn build_project_submenu(
     state: &TrayUiState,
     project: &ProjectEntry,
@@ -3209,6 +3297,9 @@ fn build_project_submenu(
 /// When the project list is empty (still loading, or genuinely empty
 /// `~/src`), a single disabled `(loading…)` child is emitted so the
 /// submenu chevron doesn't dead-end.
+///
+/// @trace dead_code — retired by order 628-p5tj convergence.
+#[allow(dead_code)]
 fn build_local_projects_submenu(state: &TrayUiState) -> MenuNode {
     let mut children: Vec<OwnedValue> = state
         .projects
@@ -3265,6 +3356,7 @@ fn build_local_projects_submenu(state: &TrayUiState) -> MenuNode {
 /// children are serialized `OwnedValue`s, so a test that walked the finished
 /// menu would be asserting against a DBus encoding rather than against the
 /// decision. The decision is what the packet is about.
+#[allow(dead_code)]
 fn cloud_overflow_row(total: usize, visible_count: usize) -> (String, bool) {
     let hidden = total.saturating_sub(visible_count);
     // Carries BOTH counts. The pre-existing test pinned the total, because
@@ -3279,6 +3371,8 @@ fn cloud_overflow_row(total: usize, visible_count: usize) -> (String, bool) {
     (label, false)
 }
 
+/// @trace dead_code — retired by order 628-p5tj convergence.
+#[allow(dead_code)]
 fn build_cloud_projects_submenu(state: &TrayUiState) -> MenuNode {
     let total = state.cloud_projects.len();
     let cap = resolved_max_cloud_projects_in_menu();
@@ -3543,6 +3637,273 @@ fn stable_project_item_id(project: &str, suffix: &str) -> i32 {
     if value == 0 { 1 } else { value }
 }
 
+/// Map the Linux `TrayUiState` onto the shared portable `MenuState` so the
+/// shared `build()` function can compute the menu structure.
+///
+/// The Linux tray's `is_authenticated` / `login_in_progress` /
+/// `login_observed` triple maps onto the shared `GithubLoginState` four-state
+/// enum. The cloud loading state maps `last_fetched: Option<Instant>` onto
+/// `cloud_projects_loaded: bool`.
+fn tray_ui_state_to_menu_state(state: &TrayUiState) -> shared_menu::MenuState {
+    let login = if state.is_authenticated {
+        shared_menu::GithubLoginState::LoggedIn {
+            handle: String::new(),
+        }
+    } else if state.login_in_progress {
+        shared_menu::GithubLoginState::LoggingIn
+    } else if state.login_observed {
+        shared_menu::GithubLoginState::LoggedOut
+    } else {
+        shared_menu::GithubLoginState::Unknown
+    };
+
+    let local_projects = state
+        .projects
+        .iter()
+        .map(|p| shared_menu::ProjectEntry {
+            name: p.name.clone(),
+            path: p.path.to_string_lossy().into_owned(),
+            ready: false,
+            full_name: None,
+        })
+        .collect();
+
+    let cloud_projects = state
+        .cloud_projects
+        .iter()
+        .map(|p| shared_menu::ProjectEntry {
+            name: p.name.clone(),
+            path: p.path.to_string_lossy().into_owned(),
+            ready: false,
+            full_name: p.full_name.clone(),
+        })
+        .collect();
+
+    shared_menu::MenuState {
+        guest_version: None,
+        status_text: state.status_text.clone(),
+        version: state.version.clone(),
+        login,
+        local_projects,
+        cloud_projects,
+        cloud_projects_loaded: state.last_fetched.is_some(),
+        selected_agent: shared_menu::SelectedAgent::Claude,
+        gui_passthrough_available: false,
+        podman_ready: state.podman_available,
+        login_runtime_ready: state.login_observed || state.is_authenticated,
+        target: shared_menu::TargetSurface::LinuxTray,
+        provisioning_failure: None,
+    }
+}
+
+/// Fixed integer IDs for top-level menu items in the DBus protocol.
+/// These must stay stable: the `event()` handler dispatches on them.
+const MENU_ID_STATUS: i32 = 10;
+const MENU_ID_LOGIN: i32 = 20;
+const MENU_ID_LOCAL_PROJECTS: i32 = 21;
+const MENU_ID_CLOUD_PROJECTS: i32 = 22;
+const MENU_ID_SEPARATOR: i32 = 29;
+const MENU_ID_VERSION: i32 = 30;
+const MENU_ID_QUIT: i32 = 31;
+
+/// Map a shared `MenuItem` to a DBus integer ID.
+///
+/// Top-level items get fixed IDs that match the `event()` handler.
+/// Per-project submenu leaves use the same hash-based scheme the
+/// `project_action_from_id` resolver expects.
+fn shared_id_to_int(id: &str) -> i32 {
+    match id {
+        shared_menu::ids::STATUS => MENU_ID_STATUS,
+        shared_menu::ids::GITHUB_LOGIN => MENU_ID_LOGIN,
+        shared_menu::ids::LOCAL_PROJECTS => MENU_ID_LOCAL_PROJECTS,
+        shared_menu::ids::CLOUD_PROJECTS => MENU_ID_CLOUD_PROJECTS,
+        shared_menu::ids::SEPARATOR => MENU_ID_SEPARATOR,
+        shared_menu::ids::VERSION => MENU_ID_VERSION,
+        shared_menu::ids::QUIT => MENU_ID_QUIT,
+        other => {
+            // Per-project items: "project.local.<name>.<verb>" or
+            // "project.cloud.<name>.<verb>" — hash the project name to
+            // recover the integer base, then add the verb offset.
+            if let Some(rest) = other.strip_prefix("project.") {
+                let (scope_str, remainder) = rest.split_once('.').unwrap_or((rest, ""));
+                let (name, verb) = remainder.rsplit_once('.').unwrap_or((remainder, ""));
+                let scope = match scope_str {
+                    "local" => ProjectScope::Local,
+                    "cloud" => ProjectScope::Cloud,
+                    _ => return fallback_menu_id(other),
+                };
+                let base = project_base(name, scope);
+                let offset = match verb {
+                    "claude" => 0,
+                    "codex" => 1,
+                    "opencode" => 2,
+                    "antigravity" => 3,
+                    "opencode-web" => 4,
+                    "observatorium" => 5,
+                    "maintenance" => 6,
+                    "" => PROJECT_SUBMENU_OFFSET,
+                    _ => return fallback_menu_id(other),
+                };
+                base + offset
+            } else if other == shared_menu::ids::LOCAL_PROJECTS_EMPTY {
+                LOADING_LOCAL_ID
+            } else if other == shared_menu::ids::CLOUD_PROJECTS_EMPTY
+                || other == shared_menu::ids::CLOUD_PROJECTS_LOADING
+            {
+                LOADING_CLOUD_ID
+            } else if other == shared_menu::ids::CLOUD_PROJECTS_OVERFLOW {
+                CLOUD_OVERFLOW_ID
+            } else {
+                fallback_menu_id(other)
+            }
+        }
+    }
+}
+
+/// Convert a shared `MenuItem` tree into a DBus `MenuNode` tuple. This is
+/// the only place the `MenuItem` → `(i32, props, children)` translation
+/// happens; the shared builder's string IDs are mapped to integer IDs via
+/// [`shared_id_to_int`]. Includes children only to
+/// `depth` more levels (`-1` = unlimited, `0` = none — dbusmenu's
+/// GetLayout `recursionDepth` semantics). A depth-pruned submenu KEEPS its
+/// `children-display=submenu` property: that property is how the client
+/// knows an arrow belongs there and that a deeper GetLayout will yield the
+/// children — pruning it would render submenus as dead leaves.
+fn shared_menu_item_to_node_depth(item: &shared_menu::MenuItem, depth: i32) -> MenuNode {
+    let id = shared_id_to_int(&item.id);
+
+    let mut p = vec![
+        ("label".to_string(), ov_str(&item.label)),
+        ("enabled".to_string(), ov(Value::from(item.enabled))),
+        ("visible".to_string(), ov(Value::from(true))),
+    ];
+    if let Some(ref reason) = item.disabled_reason {
+        p.push(("tooltip".to_string(), ov_str(reason)));
+    }
+    if !item.children.is_empty() {
+        p.push(("children-display".to_string(), ov_str("submenu")));
+    }
+
+    let children: Vec<OwnedValue> = if depth == 0 {
+        Vec::new()
+    } else {
+        let next = if depth < 0 { -1 } else { depth - 1 };
+        item.children
+            .iter()
+            .map(|c| child(shared_menu_item_to_node_depth(c, next)))
+            .collect()
+    };
+
+    node(id, props(p), children)
+}
+
+/// The shared builder's item list with the Linux-specific podman-unavailable
+/// status override applied — the single source both the full-menu path and
+/// the per-subtree GetLayout path convert from.
+fn shared_menu_items(state: &TrayUiState) -> Vec<shared_menu::MenuItem> {
+    let mut ui_state = tray_ui_state_to_menu_state(state);
+    if !state.podman_available {
+        ui_state.status_text = status_label(&TrayStatusStage::PodmanMissing);
+    }
+    match shared_menu::build(&ui_state) {
+        shared_menu::MenuStructure::Provisioning { items }
+        | shared_menu::MenuStructure::Ready { items }
+        | shared_menu::MenuStructure::Failed { items } => items,
+    }
+}
+
+/// WIRE-BOUNDARY INVARIANT (944-jaef): no item may map to id 0 (the root's
+/// id — a root cycle livelocks gnome-shell's unguarded graph walk) and no
+/// two items may share an id (the client's flat item map would cross-link
+/// two subtrees). Violating items are DROPPED here, loudly — a missing menu
+/// leaf is an inconvenience; an emitted cycle is a dead Wayland session,
+/// five times over. This runs on every layout build so a future mapper gap
+/// or hash collision degrades instead of freezing.
+fn enforce_unique_nonroot_ids(items: &mut Vec<shared_menu::MenuItem>) {
+    fn walk(items: &mut Vec<shared_menu::MenuItem>, seen: &mut std::collections::HashSet<i32>) {
+        items.retain(|item| {
+            let id = shared_id_to_int(&item.id);
+            if id == 0 {
+                eprintln!(
+                    "[tray] DROPPING menu item '{}': it mapped to dbusmenu id 0 (the root) — \
+                     emitting it would hand the shell a cyclic layout (944-jaef)",
+                    item.id
+                );
+                return false;
+            }
+            if !seen.insert(id) {
+                eprintln!(
+                    "[tray] DROPPING menu item '{}': duplicate dbusmenu id {id} — \
+                     emitting it would cross-link two subtrees in the shell's item map (944-jaef)",
+                    item.id
+                );
+                return false;
+            }
+            true
+        });
+        for item in items.iter_mut() {
+            walk(&mut item.children, seen);
+        }
+    }
+    // Root id 0 is pre-seeded: any ITEM mapping to 0 is a violation.
+    let mut seen = std::collections::HashSet::new();
+    seen.insert(0);
+    walk(items, &mut seen);
+}
+
+/// Depth-first search for the shared item whose dbusmenu id is `id`.
+fn find_shared_item(items: &[shared_menu::MenuItem], id: i32) -> Option<&shared_menu::MenuItem> {
+    for item in items {
+        if shared_id_to_int(&item.id) == id {
+            return Some(item);
+        }
+        if let Some(found) = find_shared_item(&item.children, id) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+/// The layout GetLayout must return: the subtree rooted at `parent_id`,
+/// with children included to `recursion_depth` levels (`-1` = unlimited).
+/// `None` when no node carries `parent_id` — the caller turns that into a
+/// DBus error rather than guessing (944-jaef: guessing was returning the
+/// root tree for EVERY id, and gnome-shell's client livelocked re-queueing
+/// a reply whose root never matched what it asked for).
+fn build_menu_layout(
+    state: &TrayUiState,
+    parent_id: i32,
+    recursion_depth: i32,
+) -> Option<MenuNode> {
+    let mut items = shared_menu_items(state);
+    enforce_unique_nonroot_ids(&mut items);
+    if parent_id == 0 {
+        let children: Vec<OwnedValue> = if recursion_depth == 0 {
+            Vec::new()
+        } else {
+            let next = if recursion_depth < 0 {
+                -1
+            } else {
+                recursion_depth - 1
+            };
+            items
+                .iter()
+                .map(|item| child(shared_menu_item_to_node_depth(item, next)))
+                .collect()
+        };
+        return Some(node(
+            0,
+            props(vec![
+                ("label".to_string(), ov_str("Tillandsias")),
+                ("visible".to_string(), ov(Value::from(true))),
+            ]),
+            children,
+        ));
+    }
+    find_shared_item(&items, parent_id)
+        .map(|item| shared_menu_item_to_node_depth(item, recursion_depth))
+}
+
 // @trace spec:tray-minimal-ux, spec:tray-ux, spec:tray-progress-and-icon-states
 /// Build the minimal tray menu.
 ///
@@ -3571,123 +3932,31 @@ fn stable_project_item_id(project: &str, suffix: &str) -> i32 {
 /// | No             | 5: status + login + separator + version + quit |
 /// | Yes            | 6: status + ~/src + Cloud + separator + version + quit |
 ///
+/// ## Convergence with the shared builder (order 628-p5tj)
+///
+/// This function delegates to the shared portable menu builder in
+/// `tillandsias-host-shell::menu_state` and converts the result to the
+/// DBus `MenuNode` format. The business logic — what items appear, their
+/// labels, enabled states, and the auth-gated structure — lives in ONE
+/// place: the shared `build()` function. This function handles only the
+/// DBus-specific translation (string IDs → integer IDs, `MenuItem` → tuple).
+///
 /// ## Podman-unavailable degradation
 ///
 /// When `state.podman_available == false`, *every* per-project leaf is
 /// emitted with `enabled=false` and the status line is replaced with
 /// `❌ Podman not available`. The top-level shape is unchanged so the menu
-/// remains stable across the failure boundary.
+/// remains stable across the failure boundary. This status-text override is
+/// the one Linux-specific deviation from the shared builder's output.
+//
+// RELOCATED 2026-08-26 (899-q9di cycle). This block had drifted ~200 lines
+// above the function it documents, stranded when three helpers were inserted
+// between them, and clippy's `empty_line_after_doc_comments` was pointing at
+// real misattribution rather than style: rustdoc would have published a
+// menu-shape contract as the documentation for `tray_ui_state_to_menu_state`.
+// The shorter duplicate that had grown here in the meantime is folded in.
 fn build_menu(state: &TrayUiState) -> MenuNode {
-    let mut children = Vec::new();
-
-    // (1) Status element — always visible, always disabled.
-    let status_text = if state.podman_available {
-        state.status_text.clone()
-    } else {
-        status_label(&TrayStatusStage::PodmanMissing)
-    };
-    children.push(child(node(
-        1,
-        props(vec![
-            ("label".to_string(), ov_str(status_text)),
-            ("enabled".to_string(), ov(Value::from(false))),
-            ("visible".to_string(), ov(Value::from(true))),
-        ]),
-        Vec::new(),
-    )));
-
-    // (2) Auth-gated row. Exactly one of {GitHubLogin} OR {~/src, Cloud}
-    //     is emitted, never both. windows-260719-2: the login row is a
-    //     THREE-state machine — while a login flow is in flight the row
-    //     renders as a disabled "Logging in…" (flipped locally on the
-    //     click, before any wire round-trip; the confirming probe either
-    //     expands the menu or falls back to the actionable login row).
-    if state.is_authenticated {
-        children.push(child(build_local_projects_submenu(state)));
-        children.push(child(build_cloud_projects_submenu(state)));
-    } else if state.login_in_progress {
-        children.push(child(node(
-            20,
-            props(vec![
-                ("label".to_string(), ov_str("\u{1F504} Logging in\u{2026}")),
-                ("enabled".to_string(), ov(Value::from(false))),
-                ("visible".to_string(), ov(Value::from(true))),
-            ]),
-            Vec::new(),
-        )));
-    } else if !state.login_observed {
-        // Order 627-m3vp: the probe has not reported yet, so we do NOT know the
-        // user is signed out — only that we have not asked. Disabled is the
-        // load-bearing part: a sign-in we have not ruled out must never be
-        // offered as an action. Operator-approved copy 2026-08-09T08:33Z, the
-        // same string the Windows and macOS trays render for this state.
-        children.push(child(node(
-            20,
-            props(vec![
-                (
-                    "label".to_string(),
-                    ov_str("\u{1F504} Checking your account\u{2026}"),
-                ),
-                ("enabled".to_string(), ov(Value::from(false))),
-                ("visible".to_string(), ov(Value::from(true))),
-            ]),
-            Vec::new(),
-        )));
-    } else {
-        // Confirmed signed out — the ONLY state that earns an actionable row.
-        // Operator ruling 2026-08-09T09:04Z: "GitHub" is the canonical
-        // spelling; this label was "GitHubLogin" (no space) and diverged from
-        // the other two trays and from locales/en.toml's `sign_in_github`.
-        children.push(child(node(
-            20,
-            props(vec![
-                ("label".to_string(), ov_str("\u{1F511} GitHub Login")),
-                ("enabled".to_string(), ov(Value::from(true))),
-                ("visible".to_string(), ov(Value::from(true))),
-            ]),
-            Vec::new(),
-        )));
-    }
-
-    // (3) Separator.
-    children.push(child(build_separator_item(29)));
-
-    // (4) Version + attribution. Always disabled.
-    children.push(child(node(
-        30,
-        props(vec![
-            (
-                "label".to_string(),
-                ov_str(format!("v{} \u{2014} By Tlatoa\u{0304}ni", state.version)),
-            ),
-            ("enabled".to_string(), ov(Value::from(false))),
-            ("visible".to_string(), ov(Value::from(true))),
-        ]),
-        Vec::new(),
-    )));
-
-    // (5) Quit. NOTE: the `Reset Guest…` leaf (id=32) that briefly sat here
-    //     was an UNAPPROVED UX surface, removed by operator order 2026-07-22
-    //     (tray-ux "UX curation governance"); a wedged guest is recovered
-    //     via the `--reset-guest` CLI verb.
-    children.push(child(node(
-        31,
-        props(vec![
-            ("label".to_string(), ov_str("\u{274C} Quit Tillandsias")),
-            ("enabled".to_string(), ov(Value::from(true))),
-            ("visible".to_string(), ov(Value::from(true))),
-        ]),
-        Vec::new(),
-    )));
-
-    node(
-        0,
-        props(vec![
-            ("label".to_string(), ov_str("Tillandsias")),
-            ("visible".to_string(), ov(Value::from(true))),
-        ]),
-        children,
-    )
+    build_menu_layout(state, 0, -1).expect("root layout always exists")
 }
 
 #[interface(name = "org.kde.StatusNotifierItem")]
@@ -3712,8 +3981,15 @@ impl StatusNotifierItemIface {
         tray_icon_status(self.0.snapshot().tray_icon_state).to_string()
     }
 
+    // SNI spec: WindowId is INT32 ('i'). Exporting u32 made gnome-shell log
+    // "Received property WindowId with type u does not match expected type i"
+    // and busy-loop at ~100% CPU from the moment the item registered —
+    // the 2026-08-30 desktop freeze, live on this host, shell CPU dropping
+    // 99.5% -> 2.3% the instant the tray unit stopped. Same defect class as
+    // the dbusmenu Event/EventGroup signatures (938-9yh4): a wire type the
+    // watcher tolerates until it doesn't.
     #[zbus(property)]
-    fn window_id(&self) -> u32 {
+    fn window_id(&self) -> i32 {
         0
     }
 
@@ -3853,14 +4129,27 @@ impl DbusMenuIface {
         "normal".to_string()
     }
 
+    // BOTH PARAMETERS ARE LOAD-BEARING (944-jaef, the fourth desktop
+    // freeze): this handler ignored parent_id and recursion_depth and
+    // returned the full root tree for every request. gnome-shell's dbusmenu
+    // client asks for ONE submenu at depth 1 while opening it; a reply
+    // rooted at 0 never matches, the client re-queues the whole tree and
+    // asks again — an unbounded Array.shift livelock that wedged the
+    // Wayland session on a single tray click. Content conformance is as
+    // load-bearing as wire types.
     async fn get_layout(
         &self,
-        _parent_id: i32,
-        _recursion_depth: i32,
+        parent_id: i32,
+        recursion_depth: i32,
         _property_names: Vec<String>,
     ) -> fdo::Result<(u32, MenuNode)> {
         let state = self.0.snapshot();
-        Ok((state.revision, build_menu(&state)))
+        match build_menu_layout(&state, parent_id, recursion_depth) {
+            Some(layout) => Ok((state.revision, layout)),
+            None => Err(fdo::Error::InvalidArgs(format!(
+                "no menu node with id {parent_id}"
+            ))),
+        }
     }
 
     async fn get_group_properties(
@@ -3922,7 +4211,14 @@ impl DbusMenuIface {
         }
     }
 
-    async fn about_to_show(&self, id: i32) -> fdo::Result<(bool, bool)> {
+    // REPLY TYPE IS LOAD-BEARING, third instance of the class (944-jaef,
+    // 2026-08-30): com.canonical.dbusmenu declares AboutToShow as returning a
+    // SINGLE bool — "b" (needUpdate). This returned (bool, bool) — wire
+    // "(bb)" — and expanding a project submenu froze the Wayland session
+    // mid-grab exactly like the Event "(ib)" incident documented below.
+    // AboutToShowGroup is the variant with two return values; AboutToShow is
+    // not it.
+    async fn about_to_show(&self, id: i32) -> fdo::Result<bool> {
         // The ☁️ Cloud submenu (id=22) opens — refresh if our TTL expired.
         // The root menu (id=0) opens — refresh too, since many trays call
         // AboutToShow on the root rather than per-submenu. Both paths are
@@ -3954,18 +4250,26 @@ impl DbusMenuIface {
         // The refresh above is asynchronous. Returning "needs update" here
         // asks the shell to re-read the submenu while it is opening, which
         // causes visible flicker when the cache is already fresh.
-        Ok((false, false))
+        Ok(false)
     }
 
+    // REPLY TYPE IS LOAD-BEARING (2026-08-29 incident): com.canonical.dbusmenu
+    // declares Event as returning NOTHING — `()`. This method returned
+    // `(i32, bool)` (wire type "(ib)"), and gnome-shell REJECTS a reply whose
+    // signature disagrees with the spec: the operator clicked the tray icon,
+    // the shell logged `Method "com.canonical.dbusmenu.Event" returned type
+    // "(ib)", but expected "()"` mid menu-grab, and the Wayland session froze
+    // hard enough to need a session restart. The handler's work is its side
+    // effects; the reply carries no information and must carry none.
     async fn event(
         &self,
         id: i32,
         event_id: &str,
         _data: OwnedValue,
         _timestamp: u32,
-    ) -> fdo::Result<(i32, bool)> {
+    ) -> fdo::Result<()> {
         if event_id != "clicked" && event_id != "opened" && event_id != "activate" {
-            return Ok((0, false));
+            return Ok(());
         }
 
         // Static-id dispatch covers the minimal-UX skeleton. Per-project
@@ -4015,7 +4319,7 @@ impl DbusMenuIface {
                     in_flight
                 };
                 if already_in_flight {
-                    return Ok((0, true));
+                    return Ok(());
                 }
                 let _ = self.0.rebuild_after_state_change().await;
                 // GitHubLogin click: launch the gh login flow AND refresh
@@ -4140,24 +4444,23 @@ impl DbusMenuIface {
             }
         }
 
-        Ok((0, true))
+        Ok(())
     }
 
     async fn event_group(
         &self,
-        ids: Vec<i32>,
-        event_id: &str,
-        _data: OwnedValue,
-        timestamp: u32,
-    ) -> fdo::Result<Vec<(i32, i32, bool)>> {
-        let mut out = Vec::new();
-        for id in ids {
-            let (result, handled) = self
-                .event(id, event_id, ov(Value::from(0u32)), timestamp)
-                .await?;
-            out.push((id, result, handled));
+        events: Vec<(i32, String, OwnedValue, u32)>,
+    ) -> fdo::Result<Vec<i32>> {
+        // Spec: EventGroup(events: a(isvu)) -> idErrors: ai. Both halves were
+        // wrong here (same 2026-08-29 incident class as `event` above): the
+        // input was flattened parallel args (wire "aisvu") and the reply was
+        // a(iib). Every event dispatches through the same handler as Event
+        // (unknown ids are a handled no-op there), so the error list is
+        // always empty.
+        for (id, event_id, data, timestamp) in events {
+            self.event(id, &event_id, data, timestamp).await?;
         }
-        Ok(out)
+        Ok(Vec::new())
     }
 
     #[zbus(signal)]
@@ -4446,6 +4749,8 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
         use std::sync::atomic::Ordering;
         while !shutdown.load(Ordering::SeqCst) {
             tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+            // 944-jaef: trailing flush of a coalesced signal burst.
+            service.flush_pending_emit().await;
         }
         info!(
             spec = "signal-handling",
@@ -4709,8 +5014,17 @@ mod tests {
         }
 
         // Give the reaping threads time to wait() the exited children.
-        std::thread::sleep(std::time::Duration::from_millis(500));
-        let zombies_after = count_zombie_children();
+        // BOUNDED POLL, not a fixed sleep: under the full parallel suite
+        // (584 tests) 500ms was not reliably enough and the count is
+        // process-wide, so a slow reap read as a zombie leak (flaked in
+        // ci-full run 9, 2026-08-30; passes in isolation in 0.5s). Poll to
+        // quiescence with a hard ceiling so a REAL leak still fails.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let mut zombies_after = count_zombie_children();
+        while zombies_after > zombies_before && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            zombies_after = count_zombie_children();
+        }
         assert!(
             zombies_after <= zombies_before,
             "fast-exiting children must be reaped, not left as zombies \
@@ -6074,9 +6388,16 @@ mod tests {
     /// This test fails if anyone defaults `login_observed` to true in the live
     /// constructor or makes the unobserved row clickable.
     ///
+    /// Order 628-p5tj: with the shared builder, the unobserved state renders
+    /// "Setting up…" when the runtime is not yet ready (enclave still
+    /// verifying), or "Checking your account…" when the runtime is ready but
+    /// the sign-in answer is outstanding. Both are disabled.
+    ///
     /// @trace spec:tray-ux, spec:tray-minimal-ux
     #[test]
     fn unobserved_login_renders_disabled_checking_row() {
+        // When the enclave is still verifying, login_runtime_ready is false,
+        // so the shared builder shows "Setting up…" (workspace still coming up).
         let state = TrayStateBuilder::new()
             .forge_available(false)
             .enclave_status(EnclaveStatus::Verifying)
@@ -6086,10 +6407,8 @@ mod tests {
         let menu = build_menu(&state);
         let label_list = labels(&menu);
         assert!(
-            label_list
-                .iter()
-                .any(|l| l.contains("Checking your account")),
-            "unobserved sign-in must render the Checking-your-account row. labels={label_list:?}"
+            label_list.iter().any(|l| l.contains("Setting up")),
+            "unobserved sign-in with verifying enclave must show Setting-up row. labels={label_list:?}"
         );
         assert!(
             !label_list.iter().any(|l| l.contains("GitHub Login")),
@@ -6369,6 +6688,155 @@ mod tests {
         );
     }
 
+    // 944-jaef, sixth freeze — emission coalescing. A burst of state
+    // changes must collapse to one signal group per cooldown window, with
+    // the suppressed tail flagged for the main loop's trailing flush.
+    #[test]
+    fn signal_emissions_coalesce_within_cooldown() {
+        let state = TrayStateBuilder::new().build();
+        let service = TrayService::new(state);
+        assert!(service.emission_due(), "first emission passes");
+        assert!(
+            !service.emission_due(),
+            "second emission within the cooldown is suppressed"
+        );
+        assert!(
+            service
+                .emit_pending
+                .load(std::sync::atomic::Ordering::SeqCst),
+            "suppressed burst is flagged for the trailing flush"
+        );
+    }
+
+    // 944-jaef FIXTURE, fifth freeze — the id-0 cycle. An unknown shared-menu
+    // id string used to map to dbusmenu id 0 (the root), which handed
+    // gnome-shell a cyclic layout and livelocked its unguarded graph walk.
+    #[test]
+    fn no_layout_ever_carries_id_zero_or_duplicates() {
+        // Unknown strings map to a unique nonzero fallback, never 0.
+        assert_ne!(
+            shared_id_to_int("agents"),
+            0,
+            "AGENTS must never map to root"
+        );
+        assert_ne!(
+            shared_id_to_int("reset-guest"),
+            0,
+            "RESET_GUEST must never map to root"
+        );
+        assert_ne!(
+            shared_id_to_int("agents"),
+            shared_id_to_int("reset-guest"),
+            "distinct unknown strings get distinct fallback ids"
+        );
+        assert_ne!(
+            shared_id_to_int("project.bogus-scope.x.claude"),
+            0,
+            "unknown project scope must never map to root"
+        );
+
+        // The full authenticated layout (local + cloud projects, the shape
+        // the operator's freezing click opened) contains no id 0 and no
+        // duplicate ids anywhere.
+        let state = TrayStateBuilder::new()
+            .forge_available(true)
+            .enclave_status(EnclaveStatus::AllHealthy)
+            .authenticated(true)
+            .projects(vec![ProjectEntry {
+                name: "tillandsias".to_string(),
+                path: PathBuf::from("/home/x/src/tillandsias"),
+                full_name: None,
+            }])
+            .cloud_projects(vec![ProjectEntry {
+                name: "tillandsias".to_string(),
+                path: PathBuf::new(),
+                full_name: Some("owner/tillandsias".to_string()),
+            }])
+            .last_fetched(Some(Instant::now()))
+            .build();
+        let menu = build_menu(&state);
+        let mut flat = Vec::new();
+        flatten_layout(&menu, &mut flat);
+        assert!(flat.len() > 5, "authenticated layout is non-trivial");
+        let mut seen = std::collections::HashSet::new();
+        for (id, _) in &flat {
+            if *id == 0 {
+                // Exactly one id 0 is legal: the root itself, first in the walk.
+                assert!(
+                    seen.is_empty(),
+                    "id 0 appeared as a NON-ROOT item — the cycle that froze five sessions"
+                );
+            }
+            assert!(seen.insert(*id), "duplicate dbusmenu id {id} in one layout");
+        }
+    }
+
+    // 944-jaef FIXTURE — the contract whose absence cost four desktop
+    // sessions: GetLayout returns the subtree rooted at the REQUESTED id,
+    // pruned to the REQUESTED depth. The old handler returned the id-0 full
+    // tree for every request and gnome-shell's client livelocked.
+    #[test]
+    fn get_layout_honors_parent_id_and_recursion_depth() {
+        let state = TrayStateBuilder::new()
+            .forge_available(true)
+            .enclave_status(EnclaveStatus::AllHealthy)
+            .authenticated(true)
+            .projects(vec![ProjectEntry {
+                name: "tillandsias".to_string(),
+                path: PathBuf::from("/home/x/src/tillandsias"),
+                full_name: None,
+            }])
+            .build();
+        let service = Arc::new(TrayService::new(state));
+        let iface = DbusMenuIface(service.clone());
+
+        // Root at unlimited depth: id 0, non-empty children.
+        let (_, root) =
+            futures::executor::block_on(iface.get_layout(0, -1, Vec::new())).expect("root");
+        assert_eq!(root.0, 0, "root request must root at 0");
+        assert!(!root.2.is_empty(), "root must carry the top-level items");
+
+        // Root at depth 0: children pruned entirely.
+        let (_, shallow) =
+            futures::executor::block_on(iface.get_layout(0, 0, Vec::new())).expect("depth-0 root");
+        assert!(shallow.2.is_empty(), "depth 0 must prune all children");
+
+        // Submenu request roots at the REQUESTED id — the whole 944-jaef
+        // defect in one assertion.
+        let local = MENU_ID_LOCAL_PROJECTS;
+        let (_, sub) = futures::executor::block_on(iface.get_layout(local, 1, Vec::new()))
+            .expect("submenu layout");
+        assert_eq!(sub.0, local, "reply must be rooted at the requested id");
+        assert!(!sub.2.is_empty(), "~/src submenu has the project child");
+        // Depth 1 means the project child appears but ITS children (the
+        // per-agent leaves) are pruned — while children-display survives so
+        // the shell still draws the arrow and asks deeper.
+        for c in &sub.2 {
+            let st = c
+                .downcast_ref::<zbus::zvariant::Structure>()
+                .expect("child is a structure");
+            let fields = st.fields();
+            let grandchildren = fields[2]
+                .downcast_ref::<zbus::zvariant::Array>()
+                .expect("children field is an array");
+            assert_eq!(
+                grandchildren.len(),
+                0,
+                "depth 1 prunes grandchildren under {:?}",
+                fields[0]
+            );
+            let prop_str = format!("{:?}", fields[1]);
+            assert!(
+                prop_str.contains("children-display"),
+                "pruned submenu child keeps children-display so the arrow survives"
+            );
+        }
+
+        // Unknown id is an ERROR, never a guessed tree.
+        let unknown = futures::executor::block_on(iface.get_layout(9999, -1, Vec::new()));
+        assert!(unknown.is_err(), "unknown parent_id must error, not guess");
+    }
+
     #[test]
     fn cloud_about_to_show_with_fresh_cache_does_not_request_immediate_relayout() {
         let state = TrayStateBuilder::new()
@@ -6388,9 +6856,8 @@ mod tests {
         let result = futures::executor::block_on(iface.about_to_show(22))
             .expect("AboutToShow should succeed");
 
-        assert_eq!(
-            result,
-            (false, false),
+        assert!(
+            !result,
             "fresh Cloud cache must not ask the shell to re-read the submenu while it opens"
         );
     }
@@ -7250,6 +7717,89 @@ mod tests {
         assert!(
             after.revision > rev_before,
             "refresh must bump the menu revision so the submenu re-renders"
+        );
+    }
+
+    /// Order 628-p5tj: verify that the shared builder's string IDs map to
+    /// the exact integer IDs the `event()` handler dispatches on. This is
+    /// the cross-platform contract — a regression here means the tray
+    /// dispatches clicks to the wrong handler on Linux.
+    // `base + 0` is deliberate and must stay. These assertions are a TABLE of
+    // agent slot offsets — `+ 0`, `+ 1`, `+ 2` read down the page as the slot
+    // numbers they encode. Collapsing the first to a bare `base_local` would
+    // satisfy identity_op and hide the one fact the table exists to state:
+    // that `claude` is slot ZERO. The lint is right in general and wrong here.
+    #[allow(clippy::identity_op)]
+    #[test]
+    fn shared_id_to_int_matches_event_dispatch_contract() {
+        use tillandsias_host_shell::menu_state::ids;
+
+        assert_eq!(shared_id_to_int(ids::STATUS), 10);
+        assert_eq!(shared_id_to_int(ids::GITHUB_LOGIN), 20);
+        assert_eq!(shared_id_to_int(ids::LOCAL_PROJECTS), 21);
+        assert_eq!(shared_id_to_int(ids::CLOUD_PROJECTS), 22);
+        assert_eq!(shared_id_to_int(ids::SEPARATOR), 29);
+        assert_eq!(shared_id_to_int(ids::VERSION), 30);
+        assert_eq!(shared_id_to_int(ids::QUIT), 31);
+
+        // Per-project items: project.local.<name>.<verb> → base + offset
+        let base_local = local_project_base("my-project");
+        assert_eq!(
+            shared_id_to_int("project.local.my-project."),
+            base_local + PROJECT_SUBMENU_OFFSET
+        );
+        assert_eq!(
+            shared_id_to_int("project.local.my-project.claude"),
+            base_local + 0
+        );
+        assert_eq!(
+            shared_id_to_int("project.local.my-project.codex"),
+            base_local + 1
+        );
+        assert_eq!(
+            shared_id_to_int("project.local.my-project.opencode"),
+            base_local + 2
+        );
+        assert_eq!(
+            shared_id_to_int("project.local.my-project.antigravity"),
+            base_local + 3
+        );
+        assert_eq!(
+            shared_id_to_int("project.local.my-project.opencode-web"),
+            base_local + 4
+        );
+        assert_eq!(
+            shared_id_to_int("project.local.my-project.observatorium"),
+            base_local + 5
+        );
+        assert_eq!(
+            shared_id_to_int("project.local.my-project.maintenance"),
+            base_local + 6
+        );
+
+        // Cloud projects use cloud_project_base
+        let base_cloud = cloud_project_base("my-project");
+        assert_eq!(
+            shared_id_to_int("project.cloud.my-project.claude"),
+            base_cloud + 0
+        );
+
+        // Placeholder and overflow IDs
+        assert_eq!(
+            shared_id_to_int(ids::LOCAL_PROJECTS_EMPTY),
+            LOADING_LOCAL_ID
+        );
+        assert_eq!(
+            shared_id_to_int(ids::CLOUD_PROJECTS_EMPTY),
+            LOADING_CLOUD_ID
+        );
+        assert_eq!(
+            shared_id_to_int(ids::CLOUD_PROJECTS_LOADING),
+            LOADING_CLOUD_ID
+        );
+        assert_eq!(
+            shared_id_to_int(ids::CLOUD_PROJECTS_OVERFLOW),
+            CLOUD_OVERFLOW_ID
         );
     }
 }

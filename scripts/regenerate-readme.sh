@@ -61,7 +61,15 @@ fi
 
 # Build FOR HUMANS section
 TIMESTAMP=$(date -u -Iminutes)
-PROJECT_NAME=$(basename "$PROJECT_ROOT" | sed 's/-/ /g' | sed 's/\b\(.\)/\u\1/g')
+# Title-case via awk, not `sed 's/\b\(.\)/\u\1/g'`. BOTH `\b` and `\u` are
+# GNU-sed extensions and BSD sed implements neither — and does not error, so on
+# macOS this silently produced `tillandsias` where Linux produced
+# `Tillandsias`, i.e. the regenerated README differed by the platform that
+# regenerated it. Measured on Darwin 2026-08-26; found by the GNU-sed rule
+# added to check-bash-dialect.sh the same day, which was looking for something
+# else. awk's toupper/substr is identical under gawk, mawk and one-true-awk.
+PROJECT_NAME=$(basename "$PROJECT_ROOT" | sed 's/-/ /g' \
+    | awk '{for (i = 1; i <= NF; i++) $i = toupper(substr($i, 1, 1)) substr($i, 2)}1')
 
 FOR_HUMANS=$(cat <<'HUMANS_END'
 # FOR HUMANS

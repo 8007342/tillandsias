@@ -121,13 +121,26 @@ fi
 
 ROOT="${WINDOWS_ONLY_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 GIT_DIR="$(git -C "$ROOT" rev-parse --absolute-git-dir 2>/dev/null || echo "$ROOT/.git")"
-STAMP_FILE="${WINDOWS_ONLY_STAMP:-$GIT_DIR/tillandsias-windows-only-verified}"
-TRAY_SRC="$ROOT/crates/tillandsias-windows-tray/src"
+# ORDER 739-6r6n. The macOS twin is THIS script with four values swapped, not a
+# second copy. The file already said scope was "a FIELD in one shared grammar,
+# so a macOS writer reuses this vocabulary" — a forked implementation would have
+# honoured the vocabulary while abandoning the reason for it, and two 450-line
+# gates drift the moment one is fixed. `scripts/check-macos-only-sources-verified.sh`
+# is a wrapper that sets these and execs here.
+#
+# Defaults keep the windows behaviour byte-identical for every existing caller,
+# which was verified by comparing this script's verdict before and after the
+# parameterisation (`stale:sources-drifted:windows-only:1:...notify_icon.rs`,
+# unchanged).
+ONLY_PLATFORM="${ONLY_PLATFORM:-windows}"
+ONLY_CRATE="${ONLY_CRATE:-tillandsias-windows-tray}"
+STAMP_FILE="${WINDOWS_ONLY_STAMP:-$GIT_DIR/tillandsias-$ONLY_PLATFORM-only-verified}"
+TRAY_SRC="$ROOT/crates/$ONLY_CRATE/src"
 MAIN_RS="$TRAY_SRC/main.rs"
 
 # ORDER 738-3pft. Scope is a FIELD in one shared grammar, so a macOS writer
 # reuses this vocabulary rather than minting `macos-sources-*` tokens.
-SCOPE="windows-only"
+SCOPE="$ONLY_PLATFORM-only"
 ATTEST_DIR="${WINDOWS_ONLY_ATTEST_DIR:-$ROOT/plan/attestations}"
 
 # One file per scope+host, so two hosts never write the same path and git has
@@ -174,7 +187,14 @@ read_transcript() {
 windows_only_sources() {
     [ -f "$MAIN_RS" ] || return 0
     # `grep -A 1` over the cfg attribute, keep the `mod X;` line, strip to X.
-    grep -A 1 -F '#[cfg(target_os = "windows")]' "$MAIN_RS" 2>/dev/null |
+    #
+    # The MODULE DECLARATION is the right unit, not "every .rs in the crate"
+    # (order 739-6r6n): a crate also holds files that BOTH platforms compile,
+    # and attesting those would claim verification of sources the reader's own
+    # build already parses — a report that overstates its own coverage. Measured
+    # on the macOS crate: 10 .rs files, but only 7 are cfg-gated; menu_disabled_v2,
+    # terminal_attach and main.rs itself compile everywhere.
+    grep -A 1 -F "#[cfg(target_os = \"$ONLY_PLATFORM\")]" "$MAIN_RS" 2>/dev/null |
         grep -oE '^mod [a-z_]+;' |
         cut -d' ' -f2 |
         tr -d ';' |
@@ -182,6 +202,16 @@ windows_only_sources() {
         while IFS= read -r m; do
             [ -n "$m" ] && [ -f "$TRAY_SRC/$m.rs" ] && echo "$TRAY_SRC/$m.rs"
         done
+}
+
+# Minimal JSON string escaper (order 739-6r6n). The attestation is emitted with
+# printf, so any value containing a double quote or backslash produced INVALID
+# JSON — measured the moment a known-red file carried ordinary prose with a
+# quoted phrase in it. The failure was at least loud (a parser refuses the
+# file), but a writer that can be broken by its own input data is not one the
+# fleet should depend on: every host READS these.
+json_escape() {
+    printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
 }
 
 digest_of() {
@@ -234,7 +264,7 @@ parse_from_arg() {
 require_evidence() {
     _subcmd="$1"
     if [ -z "$TRANSCRIPT_FROM" ]; then
-        echo "refused:stamp-needs-evidence:usage: check-windows-only-sources-verified.sh $_subcmd --from <cargo-test-output>; a stamp with no transcript is an assertion, not a verification"
+        echo "refused:stamp-needs-evidence:usage: $(basename "$0") $_subcmd --from <cargo-test-output>; a stamp with no transcript is an assertion, not a verification"
         exit 1
     fi
     TRANSCRIPT="$(read_transcript "$TRANSCRIPT_FROM")"
@@ -243,11 +273,14 @@ require_evidence() {
     # writing producer, which `set -uo pipefail` then promotes to the pipeline's
     # status even on a MATCH. A false "no tests ran" here would record a
     # verification that never happened.
-    if ! grep -qE '^test .* \.\.\. (ok|FAILED|ignored)' <<<"$TRANSCRIPT"; then
+    if ! grep -qE '^test .* \.\.\. (ok|FAILED|ignored)' <<<"$TRANSCRIPT"; then # sigpipe-ok: safe pipeline
         echo "refused:stamp-needs-evidence:the transcript contains no test results"
         exit 1
     fi
-    known_red="$ROOT/scripts/windows-only-known-red.txt"
+    # Per-platform: a windows known-red entry excuses a windows test, and
+    # carrying it into a macOS attestation would silently pre-authorise a
+    # failure that has nothing to do with this platform (order 739-6r6n).
+    known_red="$ROOT/scripts/$ONLY_PLATFORM-only-known-red.txt"
     undeclared=""
     failures="$(grep -E '^test .* \.\.\. FAILED' <<<"$TRANSCRIPT" | awk '{print $2}' | sed 's/.*:://')"
     for name in $failures; do
@@ -305,7 +338,7 @@ case "${1:-check}" in
         # which is the failure this whole check exists to prevent.
         rm -rf "$STAMP_FILE.d"
         mkdir -p "$STAMP_FILE.d"
-        for f in "${SOURCES[@]}"; do
+        for f in ${SOURCES[@]+"${SOURCES[@]}"}; do
             rel="${f#"$ROOT"/}"
             printf '%s\n' "$f" | digest_of \
                 > "$STAMP_FILE.d/$(printf '%s' "$rel" | tr '/' '_')"
@@ -330,16 +363,24 @@ case "${1:-check}" in
         # a writer that dies there could not be proven to work at all.
         _commit="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null)" || _commit=""
         [ -n "$_commit" ] || _commit="unknown"
+        # SAME per-platform file as the verification check above — read twice,
+        # so it had to be fixed twice (order 739-6r6n). The first macOS
+        # attestation embedded the WINDOWS known-red list, i.e. it recorded that
+        # a windows-only test was excused on a macOS stamp: a pre-authorised
+        # failure for a platform that never runs it. Caught by reading the
+        # written JSON, not by the "wrote ..." line, which was happy both times.
+        _known_red_file="$ROOT/scripts/$ONLY_PLATFORM-only-known-red.txt"
         _known_red_list=""
-        if [ -f "$ROOT/scripts/windows-only-known-red.txt" ]; then
+        if [ -f "$_known_red_file" ]; then
             while IFS= read -r _kr; do
                 [ -n "$_kr" ] || continue
+                _kr_esc="$(json_escape "$_kr")"
                 if [ -n "$_known_red_list" ]; then
-                    _known_red_list="$_known_red_list, \"$_kr\""
+                    _known_red_list="$_known_red_list, \"$_kr_esc\""
                 else
-                    _known_red_list="\"$_kr\""
+                    _known_red_list="\"$_kr_esc\""
                 fi
-            done < "$ROOT/scripts/windows-only-known-red.txt"
+            done < "$_known_red_file"
         fi
         mkdir -p "$ATTEST_DIR"
         _out="$ATTEST_DIR/$SCOPE-sources.$_host_label.json"
@@ -349,11 +390,18 @@ case "${1:-check}" in
             printf '  "host": "%s",\n' "$_host_label"
             printf '  "attested_at": "%s",\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             printf '  "commit": "%s",\n' "$_commit"
-            printf '  "command": "%s",\n' "${WINDOWS_ONLY_ATTEST_COMMAND:-cargo test -p tillandsias-windows-tray --bins}"
-            printf '  "result": "%s",\n' "$RESULT_LINE"
+            # The command is PROVENANCE — it tells a reader what to re-run to
+            # reproduce this claim. Hardcoding the windows crate here made the
+            # first macOS attestation record a command that verifies nothing
+            # about macOS (order 739-6r6n, caught by reading the written file
+            # rather than trusting the "wrote ..." line).
+            printf '  "command": "%s",\n' "${WINDOWS_ONLY_ATTEST_COMMAND:-cargo test -p $ONLY_CRATE --bins}"
+            # Escaped for the same reason as known_red: RESULT_LINE is arbitrary
+            # test output and a quoted test name in it would break every reader.
+            printf '  "result": "%s",\n' "$(json_escape "$RESULT_LINE")"
             printf '  "sources": {\n'
             _n=0
-            for f in "${SOURCES[@]}"; do
+            for f in ${SOURCES[@]+"${SOURCES[@]}"}; do
                 rel="${f#"$ROOT"/}"
                 _n=$((_n + 1))
                 if [ "$_n" -lt "${#SOURCES[@]}" ]; then
@@ -388,7 +436,7 @@ case "${1:-check}" in
             # bytes it has.
             _drifted=0
             _first=""
-            for f in "${SOURCES[@]}"; do
+            for f in ${SOURCES[@]+"${SOURCES[@]}"}; do
                 rel="${f#"$ROOT"/}"
                 _have="$(blob_hash_of "$f")"
                 # Line-oriented read of the one field that matters; no YAML/JSON
@@ -427,7 +475,7 @@ case "${1:-check}" in
         # and a rumour.
         changed=0
         first=""
-        for f in "${SOURCES[@]}"; do
+        for f in ${SOURCES[@]+"${SOURCES[@]}"}; do
             rel="${f#"$ROOT"/}"
             per_file="$(printf '%s\n' "$f" | digest_of)"
             prev_file="$STAMP_FILE.d/$(printf '%s' "$rel" | tr '/' '_')"
@@ -446,7 +494,7 @@ case "${1:-check}" in
         echo "stale:sources-drifted:$SCOPE:$changed:$first"
         ;;
     *)
-        echo "usage: check-windows-only-sources-verified.sh [check|stamp|attest]" >&2
+        echo "usage: $(basename "$0") [check|stamp|attest]" >&2
         exit 2
         ;;
 esac

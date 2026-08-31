@@ -103,3 +103,134 @@ in_forge_delegation:
       thresholds are defined under 689-zwzm; until they are met and the
       operator approves, the stage does not change no matter how smooth the
       night felt. CRDT telemetry is paramount here by design.
+
+  stage_lift_gates:
+    # ORDER 689-zwzm criterion 2. `lift_rule` above promises these are
+    # "defined under 689-zwzm"; until this block existed that was a forward
+    # reference to nothing, so "the 682 telemetry set showing stability" had
+    # no operational meaning and any lift would have been the vibe the rule
+    # exists to forbid.
+    #
+    # THE RULE THAT MAKES THIS BLOCK HONEST, and it is the whole design:
+    # AN UNFED METRIC IS A RED GATE, NEVER A PASS. Every gate below names the
+    # exact command that produces its number and a `fed:` verdict measured at
+    # HEAD. A gate whose producer emits nothing is FAILING, not "clean" —
+    # absent data reading as green is how a concurrency ramp lifts itself on
+    # silence. Re-measure `fed:` before every lift; do not trust these
+    # verdicts as durable facts, they are dated observations.
+    #
+    # Measured 2026-08-30 on lenovinha. THREE of five gates are fed and can
+    # gate a lift today; TWO are unfed and BLOCK every lift until wired.
+
+    evaluation_window: >
+      Six consecutive cycles on the lifting host, of which at least four ran
+      a delegate. Six because the flow log's own rolling view is per-cycle and
+      a single night is one or two data points; four-with-a-delegate because a
+      gate that a quiet cycle can satisfy is measuring the host, not the ramp.
+
+    gates:
+      - id: G1-overhead-ratio
+        metric: "flow: overhead_ratio (total commits per completed packet)"
+        source: "scripts/cycle-metrics.sh  → flow: line"
+        threshold: >
+          Must be COMPUTABLE (not `-`) and must not rise by more than 25%
+          against the median of the six cycles preceding the current stage's
+          start. Rising overhead per completed packet is precisely the
+          "concurrency costs more than it produces" failure a ramp must catch.
+        fed: >
+          NO — BLOCKING. Measured 2026-08-30: the flow log holds SEVEN rows,
+          all from 2026-08-26 (05:53Z–17:47Z), and `completed` is 0 in every
+          one, so overhead_ratio has never once been computable. It has been
+          silent for four days across every host. Cause: `cycle-metrics.sh
+          --emit-flow` has NO caller anywhere in the loop — the worker skill
+          tells agents to RUN cycle-metrics.sh and report it, never to emit.
+          The only invocations in the tree are its own fixture
+          (scripts/test-cycle-flow-emit-idempotency.sh) and its own litmus,
+          which is why litmus:cycle-flow-telemetry-shape is green while the
+          log is dead: it tests the EMITTER, not the WIRING.
+          Filed as order 943-7dn5.
+
+      - id: G2-expert-accuracy
+        metric: "expert_accuracy: rate"
+        source: "scripts/cycle-metrics.sh → expert_accuracy: line (groundtruth corpus)"
+        threshold: >
+          rate must be 100% with graded == pass, and `graded` must not FALL
+          between measurements. Both halves are required: a rate computed over
+          a shrinking denominator is how an accuracy gate goes green by
+          grading less.
+        fed: >
+          YES. Measured 2026-08-30: pass=28 graded=28 total=33 rate=100%
+          source=groundtruth-all-sets. Computed from the corpus on demand
+          rather than from an append log, so it cannot go stale the way G1
+          did. Note skipped=5 (spec.answer NOT-EXERCISED-ON-THIS-HOST) — a
+          lifting host must state whether its own skipped set grew.
+
+      - id: G3-stranded-claims
+        metric: "expired / held claim counts"
+        source: "tillandsias-plan expire-claims  (read the summary: line)"
+        threshold: >
+          expired == 0 and held == 0 across the whole window. NOT
+          in_progress == 0: an in-flight claim is the mechanism working. A
+          claim that OUTLIVES its ttl is the ramp's characteristic failure —
+          a delegate died holding work — and is the reason this gate exists.
+        fed: >
+          YES. Measured 2026-08-30: in_progress=4 expired=1 held=0
+          ttl_hours=24. NOTE THIS GATE IS CURRENTLY FAILING (expired=1,
+          920-pxg6 stale since 2026-08-29T05:13:52Z) — recorded as a live
+          demonstration that the gate discriminates, rather than quietly
+          reset before writing it down.
+
+      - id: G4-delegate-deaths
+        metric: "delegate sessions ending without recorded evidence"
+        source: "scripts/delegate-outcome.sh sweep  (per cycle-end, per cycle_protocol above)"
+        threshold: >
+          ZERO `died-without-outcome` dispositions in the window. This is the
+          one gate with no tolerance: a silent mid-task delegate death is the
+          recorded failure mode that `prompt_rules` and the whole disposition
+          channel were built around, and one instance means the stage is not
+          stable at its CURRENT width, let alone a wider one.
+        fed: >
+          MECHANISM LIVE AS OF 2026-08-30, NO DATA YET. CORRECTED same day: the
+          first version of this verdict said "mechanism live" after testing
+          only with an explicit --alive-cmd. Exercising the DEFAULT probe
+          showed it matched the shell that ran it and reported still-running
+          for every id, so died-without-outcome could never fire and this gate
+          could never have failed. Fixed as 943-3xyf and pinned by two new
+          litmus arms. Measured after the fix, 2026-08-30:
+          `delegate-outcome.sh sweep` → `sweep:no-registered-runs`, printing
+          and exiting 0 as litmus:delegate-outcome-disposition-not-silent-shape
+          requires. The channel works; nothing has been registered through it
+          on this host. An empty registry is NOT a passing G4 — it is an
+          unrun stage, and stage 0 must actually run (criterion 1) before this
+          gate can read anything.
+
+      - id: G5-fold-conflicts-and-mcp-usage
+        metric: "ledger fold integrity + per-server MCP usage"
+        source: "tillandsias-plan check; scripts/cycle-metrics.sh → mcp: line"
+        threshold: >
+          `check` clean across the window, and the mcp: line must report
+          servers > 0 with a real source. Concurrent flows write the ledger
+          concurrently; a fold conflict under two flows predicts worse under
+          four.
+        fed: >
+          HALF. `tillandsias-plan check` is live and runs in ./build.sh
+          --check every cycle. The mcp: half is NOT: measured 2026-08-30 it
+          reports `servers=0 plan-expert-calls=0
+          other-servers=uninstrumented-see-682-m8ek health=ok source=absent`
+          — pointing at 682-m8ek, which is COMPLETED and ARCHIVED. Either the
+          instrumentation regressed or the reporter's pointer is stale;
+          either way a gate cannot be built on `source=absent`. Investigate
+          before the first lift. BLOCKING for the mcp half only.
+
+    blocking_summary: >
+      NO STAGE LIFT IS POSSIBLE TODAY, and the reason is measurement rather
+      than behaviour. G1 has never produced a number (order 943-7dn5 wires
+      it), G5's mcp half reads `source=absent`, and G4 has no data because
+      stage 0 has not been run through the disposition channel on this host
+      (criterion 1). G3 is currently failing on a real expired claim. Only G2
+      is green.
+
+      This is the intended posture, not an obstacle: `lift_rule` says
+      telemetry first, approval second, lift third, and the honest state of
+      the telemetry is that most of it is not yet reaching the reporter. A
+      ramp that lifted on this evidence would be lifting on silence.

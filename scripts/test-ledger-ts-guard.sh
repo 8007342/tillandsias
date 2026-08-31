@@ -123,7 +123,7 @@ ls_out="$(printf '## Cycle drift test\n\n- body\n' |
     "$PLAN" --index "$index" loop-status-append --host fixture --ts "$(iso_offset 31000)" 2>&1)" || ls_rc=$?
 if [ "$ls_rc" -ne 2 ]; then
     failures+=("loop-status-drift-refused: exit=$ls_rc expected=2 (out: $ls_out)")
-elif ! printf '%s' "$ls_out" | grep -Fq "disagrees with this host's clock"; then
+elif ! grep -Fq "disagrees with this host's clock" <<<"$ls_out"; then
     failures+=("loop-status-drift-refused: expected clock-disagreement verdict, got: $ls_out")
 fi
 

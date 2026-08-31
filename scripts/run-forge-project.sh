@@ -2,6 +2,37 @@
 # @trace spec:browser-isolation-tray-integration, spec:transparent-https-caching
 set -euo pipefail
 
+
+# ORDER 799-tb7q — resolve `openssl` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has the CLI.
+#
+# UNLIKE jq, OPENSSL WRITES FILES. The conversion is only safe because the
+# toolbox shares /tmp with the host bidirectionally — VERIFIED on lenovinha
+# 2026-08-26: a file the host wrote to /tmp is readable inside the container and
+# vice versa, and every CERTS_DIR here is under /tmp (mktemp -d, or
+# /tmp/tillandsias-ca). A caller whose write path is NOT shared would have the
+# cert land where the caller cannot find it — a silent break, not an error.
+# Re-check the path before converting any further openssl site.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+# Resolve the lib by WALKING UP, not by a fixed depth (order 914-ahsy). The
+# fixed form `dirname "${BASH_SOURCE[0]}"/lib/...` is correct only for a caller
+# sitting directly in scripts/. From scripts/refusal-calibration/ it points at a
+# lib that does not exist, the `|| true` swallows the miss, and the tool variable
+# silently falls back to the bare name — a conversion that passes review, passes
+# the suite, and changes nothing.
+_td_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_td_dir" ] && [ "$_td_dir" != "/" ] && [ ! -f "$_td_dir/lib/tool-dispatch.sh" ]; do
+    _td_dir="$(dirname "$_td_dir")"
+done
+if [ -f "$_td_dir/lib/tool-dispatch.sh" ]; then
+    . "$_td_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+fi
+if command -v resolve_tool >/dev/null 2>&1; then
+    OPENSSL="$(resolve_tool openssl || printf 'openssl')"
+else
+    OPENSSL="openssl"
+fi
+
 # Ambient enclave-proxy env would poison this script's own podman pulls and
 # any container NOT on the enclave network (order 653-zzkb). The explicit
 # --env proxy flags below are unaffected — the forge container deliberately
@@ -39,6 +70,14 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
+# ORDER 923-rmtw. The proxy env comes from ONE definition, never a pasted copy.
+# This script carried its own list for long enough to go stale: it still named
+# `git-service` (dropped from the Rust constant) and never gained `nix-cache`
+# (added by 801-kqme on 2026-08-17), so every forge container it launched sent
+# https://nix-cache:5000 through squid. Kept in step with ENCLAVE_NO_PROXY_BASE
+# by scripts/test-enclave-proxy-lib.sh.
+# shellcheck source=scripts/lib/enclave-proxy.sh
+source "$SCRIPT_DIR/lib/enclave-proxy.sh"
 require_podman
 PODMAN_CTL="$SCRIPT_DIR/tillandsias-podman"
 
@@ -48,7 +87,11 @@ PROJECT_ABS="$(cd "$PROJECT_PATH" && pwd)"
 PROJECT_NAME="$(basename "$PROJECT_ABS")"
 IMAGE="${FORGE_IMAGE:-tillandsias-forge:v${VERSION}}"
 CONTAINER_NAME="${FORGE_REPRO_CONTAINER_NAME:-tillandsias-repro-${PROJECT_NAME}-${KIND}}"
-ENTRYPOINT="/usr/local/bin/entrypoint-forge-${KIND}.sh"
+if [[ "$KIND" == "terminal" ]]; then
+    ENTRYPOINT="/usr/local/bin/entrypoint-terminal.sh"
+else
+    ENTRYPOINT="/usr/local/bin/entrypoint-forge-${KIND}.sh"
+fi
 CERTS_DIR="${FORGE_REPRO_CERTS_DIR:-/tmp/tillandsias-ca}"
 CA_CERT="${CERTS_DIR}/intermediate.crt"
 ENCLAVE_NET="${FORGE_REPRO_NETWORK:-tillandsias-enclave}"
@@ -75,7 +118,7 @@ fi
 mkdir -p "$CERTS_DIR"
 if [[ ! -f "$CA_CERT" ]]; then
     echo "[run-forge-project] Generating ephemeral CA: $CA_CERT"
-    openssl req -x509 -newkey rsa:2048 -keyout "${CERTS_DIR}/intermediate.key" \
+    "$OPENSSL" req -x509 -newkey rsa:2048 -keyout "${CERTS_DIR}/intermediate.key" \
         -out "$CA_CERT" -days 30 -nodes \
         -subj "/C=US/ST=Privacy/L=Local/O=Tillandsias/CN=Tillandsias CA" >/dev/null 2>&1
     chmod 644 "$CA_CERT" 2>/dev/null || true
@@ -107,12 +150,7 @@ else
         --env PROJECT="$PROJECT_NAME" \
         --env TILLANDSIAS_PROJECT="$PROJECT_NAME" \
         --env TILLANDSIAS_GIT_MIRROR_PATH="$MIRROR_DIR" \
-        --env http_proxy=http://proxy:3128 \
-        --env https_proxy=http://proxy:3128 \
-        --env HTTP_PROXY=http://proxy:3128 \
-        --env HTTPS_PROXY=http://proxy:3128 \
-        --env no_proxy=localhost,127.0.0.1,proxy,git-service,inference \
-        --env NO_PROXY=localhost,127.0.0.1,proxy,git-service,inference \
+        "${ENCLAVE_PROXY_ENV_ARGS[@]}" \
         --env PATH=/usr/local/bin:/usr/bin:/usr/sbin:/bin:/sbin \
         --volume "${CA_CERT}:/etc/tillandsias/ca.crt:ro" \
         --entrypoint "$ENTRYPOINT" \
@@ -121,7 +159,7 @@ else
     fi
 fi
 
-if ! "$PODMAN_CTL" container inspect "$CONTAINER_NAME" 2>/dev/null | grep -q '"state":"running"'; then
+if ! "$PODMAN_CTL" container inspect "$CONTAINER_NAME" 2>/dev/null | grep -q '"state":"running"'; then # sigpipe-ok: safe pipeline
     echo "[run-forge-project] Starting container: $CONTAINER_NAME"
     "$PODMAN_CTL" container start "$CONTAINER_NAME" >/dev/null
 fi

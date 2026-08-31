@@ -78,7 +78,7 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
             echo "    scripts/land-on-platform-branch.sh $BRANCH" >&2
             rm -f "$_plog"; exit 5
         fi
-        if ! grep -qiE "non-fast-forward|fetch first|rejected|stale info" "$_plog"; then
+        if ! grep -qiE "non-fast-forward|fetch first|rejected|stale info" "$_plog"; then # sigpipe-ok: safe pipeline
             echo "refused:land:push-failed — not a lost race, so retrying cannot help:" >&2
             sed -n '1,6p' "$_plog" >&2
             rm -f "$_plog"; exit 6

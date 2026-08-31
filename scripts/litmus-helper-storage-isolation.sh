@@ -36,15 +36,38 @@ case "$MODE" in
     echo "CONTAINER_B=$CONTAINER_B" && test -n "$CONTAINER_B" && echo PROJECT_B_LAUNCHED
     ;;
   verify-src-readonly)
+    # THIS ARM COULD NOT FAIL, AND IT IS A severity:critical SECURITY CHECK.
+    #
+    # `echo SRC_READONLY_VERIFIED` used to sit AFTER the if/else, so a
+    # read-WRITE /src produced:
+    #     WARNING: Expected EROFS but got:
+    #     SRC_READONLY_VERIFIED
+    # and exit 0. run-litmus-test.sh matches expected_behavior as a
+    # case-insensitive SUBSTRING, so the success token was found and the step
+    # PASSED. A read-write /src mount would have passed the test whose entire
+    # purpose is to forbid it — measured by calmecacpilli's audit with a fake
+    # podman whose `exec` returns 0.
+    #
+    # The warning branch was doing the work of a failure without any of its
+    # effect. A diagnostic that reports a violation and then emits the
+    # all-clear is worse than silence: it puts the evidence in the log and the
+    # verdict in the other direction.
+    #
+    # Now: the token is emitted ONLY on the verified path, and both failure
+    # modes exit non-zero.
     CONTAINER_A=$(podman ps -q -f "label=tillandsias-litmus-storage-test=project-a" 2>/dev/null | head -1)
-    if [ -n "$CONTAINER_A" ]; then
-      OUTPUT=$(podman exec "$CONTAINER_A" bash -c 'touch /src/test.txt 2>&1' || true)
-      if echo "$OUTPUT" | grep -q "Read-only file system\|Permission denied\|cannot touch"; then
-        echo "Read-only mount verified for /src in project-a"
-      else
-        echo "WARNING: Expected EROFS but got: $OUTPUT"
-      fi
+    if [ -z "$CONTAINER_A" ]; then
+      echo "FAIL: project-a container is not running; /src read-only was NOT verified" >&2
+      exit 1
+    fi
+    OUTPUT=$(podman exec "$CONTAINER_A" bash -c 'touch /src/test.txt 2>&1' || true)
+    if echo "$OUTPUT" | grep -q "Read-only file system\|Permission denied\|cannot touch"; then
+      echo "Read-only mount verified for /src in project-a"
       echo SRC_READONLY_VERIFIED
+    else
+      echo "FAIL: /src ACCEPTED A WRITE — the :ro mount is not in effect." >&2
+      echo "      touch reported: ${OUTPUT:-<no output, i.e. the write SUCCEEDED>}" >&2
+      exit 1
     fi
     ;;
   verify-workspace-rw)

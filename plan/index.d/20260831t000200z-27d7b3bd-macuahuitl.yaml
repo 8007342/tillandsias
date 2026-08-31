@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: sni-windowid-type-wedges-shell
+    event:
+      type: note
+      ts: "2026-08-31T00:02:00Z"
+      agent_id: linux-macuahuitl-fable5-20260831t000200z
+      host: macuahuitl
+      summary: >
+        FIFTH FREEZE ROOT CAUSE — THE ID-0 CYCLE, found via upstream source + refuted alternates. gdb JS-dump segfaulted the wedged shell (bonus: full core dump preserved, coredumpctl 3587). The SNI handler is the system-wide appindicator extension; its dbusMenu.js _gcItems walks the item graph with an UNGUARDED toTraverse.shift() loop, and its comment admits it always requests FULL layouts (so the GetLayout parent_id fix, while spec-correct, was not this trigger). OUR POISON: shared_id_to_int had THREE fallback arms returning 0 — the ROOT's dbusmenu id — for any shared-menu id string without a match arm (AGENTS and RESET_GUEST have no arms; the operator froze clicking toward 'launch an agent'). An item with id 0 makes root its own child; the extension's walk grows the queue forever = ArrayShiftMoveElements, five wedged sessions. FIXES: (1) fallback_menu_id() — unique nonzero derived ids in a reserved range, all three arms; (2) enforce_unique_nonroot_ids() at the wire boundary drops any id-0/duplicate item LOUDLY on every layout build — future mapper gaps degrade instead of freezing; (3) fixture no_layout_ever_carries_id_zero_or_duplicates covers the authenticated local+cloud shape — and CAUGHT THE THIRD ZERO-ARM (unknown scope) live before shipping, its own mutation control. Signal-storm hypothesis refuted by measurement (0 SNI signals in 6s idle). Tray relaunched v0.4.260830.5; live layout dup-check clean; tray module 78/78. Also worth an upstream courtesy report: dbusMenu.js _gcItems has no visited-set and no cycle guard — a hostile or buggy SNI app can wedge any GNOME session; filing that is a fleet-queue candidate.

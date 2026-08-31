@@ -49,7 +49,7 @@ Do not invent a scheme. Pick the right primitive per field.
 |---|---|---|
 | A new work packet | **G-Set** (grow-only set), keyed by `packet_id` | Union is commutative, associative, idempotent. Two hosts adding different packets → both present. Adding the same packet twice → present once. |
 | An event on an existing packet | **G-Set of events**, keyed by `(packet_id, event identity)` | Same. Events are immutable facts; you never edit one, you add another. |
-| A status / progress field | **LWW-Register** (last-writer-wins) | Only one value can survive, so pick deterministically: highest `(timestamp, host)` wins. |
+| ANY packet field (status, pickup_role, priority, depends_on, title) | **LWW-Register** (last-writer-wins) | Only one value can survive, so pick deterministically: highest `(timestamp, host)` wins. The register is keyed on `(packet_id, field)`, so it was never status-specific — the channel was merely NAMED `status:` until 642-fedr renamed it `fields:` and kept `status:` as an alias. |
 
 Deletion is the trap. A grow-only set has no remove, and "just delete it" breaks
 convergence — a host that never saw the delete will re-add the element on its next
@@ -122,6 +122,36 @@ rules are not:
   silently discards the loser's entries. Lists want G-Sets.
 - **Editing a fragment** breaks immutability and therefore convergence, usually
   long after the edit, in a way that is very hard to trace.
+
+## Testing ledger behaviour: `--index` against a copy, never `mv` the live one
+
+To exercise fold, mint or collision behaviour, point the tool at a COPY:
+
+```bash
+cp -r plan /tmp/ledger-probe/
+tillandsias-plan --index /tmp/ledger-probe/plan/index.yaml <subcommand>
+```
+
+**Never move `plan/index.d/` aside on a live checkout to isolate a test.**
+
+The recipe that motivated this was *"`mv plan/index.d/*.yaml` aside, mint twice,
+move them back"*, and its author retracted it themselves after running it
+(calmecacpilli, 2026-08-26, relayed by the coordinator):
+
+> Mine displaces the fleet's shared append-only overlay to prove a point about
+> it — and if the mint had crashed, or the session had died between the `mv` and
+> the `mv` back, another host folding in that window would have silently read a
+> truncated ledger. I ran exactly that on this host an hour ago and got away
+> with it.
+
+Two properties make it worse than it looks. It is **a live-instrument mutation
+dressed up as a read** — nothing about "mint twice and compare" suggests the
+shared ledger moves. And the failure lands on the **reader**, not the mutator: a
+sibling folding mid-window sees a smaller ledger and *no error*, because a
+missing fragment is indistinguishable from a fragment never written. The host
+that took the risk is the one host guaranteed not to observe the damage.
+
+`--index` costs a `cp` and removes the window entirely.
 
 ## Prose: the same overlay on `plan/loop_status.md`
 

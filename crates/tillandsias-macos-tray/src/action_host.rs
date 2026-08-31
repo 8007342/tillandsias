@@ -600,6 +600,7 @@ fn local_entry_to_menu(
         name: entry.label.clone(),
         path: entry.guest_path.clone(),
         ready: false,
+        full_name: None,
     }
 }
 
@@ -680,6 +681,7 @@ fn cloud_entry_to_menu(
         name: entry.label.clone(),
         path: format!("{}/{}", entry.owner, entry.repo),
         ready: false,
+        full_name: None,
     }
 }
 
@@ -705,7 +707,7 @@ fn cloud_entry_to_menu(
 ///        plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 8a)
 async fn poll_cloud_projects_once(
     vz: &VzRuntime,
-) -> Result<Vec<tillandsias_host_shell::menu_state::ProjectEntry>, String> {
+) -> Result<(Vec<tillandsias_host_shell::menu_state::ProjectEntry>, bool), String> {
     use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
     use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
     use tillandsias_host_shell::vsock_client::Client;
@@ -743,9 +745,16 @@ async fn poll_cloud_projects_once(
         .map_err(|e| format!("CloudRefreshRequest: {e}"))?;
 
     match reply.body {
-        ControlMessage::CloudRefreshReply { projects, .. } => {
-            Ok(projects.iter().map(cloud_entry_to_menu).collect())
-        }
+        // 731-eupn: the bool is whether this list is an ANSWER. Returning it
+        // beside the list rather than folding it in keeps the caller unable to
+        // forget it — an `Ok(list)` that silently meant "or maybe the fetch
+        // died" is what this packet is about.
+        ControlMessage::CloudRefreshReply {
+            projects, outcome, ..
+        } => Ok((
+            projects.iter().map(cloud_entry_to_menu).collect(),
+            outcome.is_confirmed(),
+        )),
         // See poll_vm_status_once for context on the dispatcher Error
         // frame (Linux convergence-packet items 2 + 3, commits
         // aeb5499a / 4eb0baff). Surface code + message via the shared
@@ -2332,9 +2341,26 @@ fn apply_login_state(
 /// on repeat.
 fn apply_cloud_projects(
     projects: Vec<tillandsias_host_shell::menu_state::ProjectEntry>,
+    confirmed: bool,
     menu_state: &Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>,
 ) -> bool {
     let new_count = projects.len();
+    // 731-eupn: AN UNCONFIRMED REPLY IS NOT AN ANSWER. This function used to
+    // latch `cloud_projects_loaded = true` for every reply that arrived,
+    // because the wire could not say otherwise — so a failed fetch published
+    // an empty list and the submenu rendered "(no repos)" with the tooltip
+    // "no GitHub repos visible to the in-VM gh client", a confirmation nobody
+    // made. Now the reply carries a discriminator and a failure is DISCARDED:
+    // keep whatever was there and leave the flag alone, which is the
+    // defensive position Linux already took by stamping last_fetched only on
+    // success. Doing nothing is the truthful response to being told nothing.
+    if !confirmed {
+        eprintln!(
+            "[tillandsias-tray] cloud-projects: fetch unconfirmed; keeping previous list \
+             (not rendering '(no repos)')"
+        );
+        return false;
+    }
     let mut guard = menu_state.lock().unwrap();
     // A confirmed answer (even an empty one) flips the cloud submenu from
     // "(loading repos…)" to real entries / "(no repos)" — mirrors the Windows
@@ -2833,10 +2859,26 @@ async fn run_push_listener(
                             }
                         }
                     }
-                    ControlMessage::CloudProjectsPush { projects, .. }
-                    | ControlMessage::CloudRefreshReply { projects, .. } => {
+                    // Split from CloudRefreshReply (731-eupn): a PUSH is only
+                    // emitted from guest state that a confirmed fetch already
+                    // wrote, so it is confirmed by construction. A REPLY
+                    // carries its own discriminator and may not be.
+                    ControlMessage::CloudProjectsPush { projects, .. } => {
                         let mapped = projects.iter().map(cloud_entry_to_menu).collect();
-                        if apply_cloud_projects(mapped, &menu_state) {
+                        if apply_cloud_projects(mapped, true, &menu_state) {
+                            dispatch_rebuild(
+                                &menu_state,
+                                &status_item,
+                                &status_menu_item,
+                                &self_handle,
+                            );
+                        }
+                    }
+                    ControlMessage::CloudRefreshReply {
+                        projects, outcome, ..
+                    } => {
+                        let mapped = projects.iter().map(cloud_entry_to_menu).collect();
+                        if apply_cloud_projects(mapped, outcome.is_confirmed(), &menu_state) {
                             dispatch_rebuild(
                                 &menu_state,
                                 &status_item,
@@ -2960,8 +3002,8 @@ fn spawn_vm_status_poller(
                         }
                     }
                     match poll_cloud_projects_once(&vz).await {
-                        Ok(projects) => {
-                            if apply_cloud_projects(projects, &menu_state) {
+                        Ok((projects, confirmed)) => {
+                            if apply_cloud_projects(projects, confirmed, &menu_state) {
                                 rebuild_needed = true;
                             }
                         }
@@ -3265,6 +3307,7 @@ mod tests {
                 name: "tillandsias".into(),
                 path: "/home/forge/src/tillandsias".into(),
                 ready: false,
+                full_name: None,
             }]
         };
         assert!(
@@ -3281,6 +3324,72 @@ mod tests {
         );
     }
 
+    /// 731-eupn, THE EXIT CRITERION: confirmed-empty renders `(no repos)`;
+    /// failed-fetch does NOT. Both arms in one test because the pair IS the
+    /// property — either alone passes for a implementation that ignores the
+    /// discriminator entirely, in one direction or the other.
+    #[test]
+    fn failed_fetch_does_not_render_no_repos_but_confirmed_empty_does() {
+        let menu_state = Arc::new(Mutex::new(
+            tillandsias_host_shell::menu_state::MenuState::initial(),
+        ));
+
+        // A FAILED fetch: no rebuild, and the loaded flag stays FALSE so the
+        // submenu keeps saying "(loading repos…)" rather than asserting a
+        // zero nobody confirmed.
+        assert!(
+            !apply_cloud_projects(Vec::new(), false, &menu_state),
+            "an unconfirmed empty reply must NOT request a rebuild"
+        );
+        assert!(
+            !menu_state.lock().unwrap().cloud_projects_loaded,
+            "an unconfirmed reply must NOT latch cloud_projects_loaded — that latch \
+             is what rendered a confident '(no repos)' for a broken gh"
+        );
+
+        // A CONFIRMED empty answer: rebuild, and the flag latches. Same input
+        // list, opposite outcome, opposite behaviour — which is the whole
+        // point of the discriminator.
+        assert!(
+            apply_cloud_projects(Vec::new(), true, &menu_state),
+            "a confirmed empty answer must request a rebuild (loading → no repos)"
+        );
+        assert!(
+            menu_state.lock().unwrap().cloud_projects_loaded,
+            "a confirmed empty answer must latch cloud_projects_loaded"
+        );
+    }
+
+    /// A failed fetch must not DESTROY a good list either — the Linux
+    /// position ("keep the previous list on failure so the menu doesn't
+    /// flicker into (no repos)"), now enforced on macOS.
+    #[test]
+    fn failed_fetch_preserves_a_previously_confirmed_list() {
+        let menu_state = Arc::new(Mutex::new(
+            tillandsias_host_shell::menu_state::MenuState::initial(),
+        ));
+        let projects = vec![tillandsias_host_shell::menu_state::ProjectEntry {
+            name: "tillandsias".to_string(),
+            path: "octocat/tillandsias".to_string(),
+            ready: false,
+            full_name: Some("octocat/tillandsias".to_string()),
+        }];
+        assert!(apply_cloud_projects(projects.clone(), true, &menu_state));
+        assert_eq!(menu_state.lock().unwrap().cloud_projects.len(), 1);
+
+        // Now the fetch breaks mid-session — the operator-reported symptom.
+        assert!(!apply_cloud_projects(Vec::new(), false, &menu_state));
+        assert_eq!(
+            menu_state.lock().unwrap().cloud_projects.len(),
+            1,
+            "a failed fetch must not replace a good list with an empty one"
+        );
+        assert!(
+            menu_state.lock().unwrap().cloud_projects_loaded,
+            "and must not un-latch a flag a real answer had earned"
+        );
+    }
+
     /// M5 pin (598-kibt): a confirmed cloud reply — even an EMPTY one — must
     /// mark `cloud_projects_loaded` so the submenu renders "(no repos)"
     /// instead of "(loading repos…)" forever, and a fresh logout must reset
@@ -3293,7 +3402,7 @@ mod tests {
             tillandsias_host_shell::menu_state::MenuState::initial(),
         ));
         assert!(
-            apply_cloud_projects(Vec::new(), &menu_state),
+            apply_cloud_projects(Vec::new(), true, &menu_state),
             "first empty cloud reply must request a rebuild (loading → no repos)"
         );
         assert!(
@@ -3301,7 +3410,7 @@ mod tests {
             "a confirmed empty answer must mark cloud_projects_loaded"
         );
         assert!(
-            !apply_cloud_projects(Vec::new(), &menu_state),
+            !apply_cloud_projects(Vec::new(), true, &menu_state),
             "identical empty reply must not re-request a rebuild"
         );
         // Log in, then out: the logout must clear the loaded flag and list.
@@ -3406,7 +3515,7 @@ mod tests {
         // THE M5 EVENT: a confirmed reply that happens to be empty — what a
         // zero-repo account produces.
         assert!(
-            apply_cloud_projects(Vec::new(), &menu_state),
+            apply_cloud_projects(Vec::new(), true, &menu_state),
             "the first confirmed reply must request a rebuild even when empty"
         );
         assert_eq!(
@@ -3476,7 +3585,7 @@ mod tests {
         // Nothing on the wire distinguishes those two, which is exactly why
         // this reply must not be treated as a confirmed answer for the session
         // that has not started yet.
-        apply_cloud_projects(Vec::new(), &menu_state);
+        apply_cloud_projects(Vec::new(), true, &menu_state);
 
         // Step 3: the user signs in. The submenu becomes visible for the first
         // time and MUST show the loading row, because the post-login fetch has
@@ -3573,18 +3682,19 @@ mod tests {
             tillandsias_host_shell::menu_state::MenuState::initial(),
         ));
         // First confirmed reply: the loaded flip is itself a change.
-        assert!(apply_cloud_projects(Vec::new(), &menu_state));
+        assert!(apply_cloud_projects(Vec::new(), true, &menu_state));
         // Identical empty repeat: loaded already set, list unchanged.
-        assert!(!apply_cloud_projects(Vec::new(), &menu_state));
+        assert!(!apply_cloud_projects(Vec::new(), true, &menu_state));
         let projects = vec![ProjectEntry {
             name: "tillandsias".into(),
             path: "8007342/tillandsias".into(),
             ready: false,
+            full_name: None,
         }];
-        assert!(apply_cloud_projects(projects.clone(), &menu_state));
+        assert!(apply_cloud_projects(projects.clone(), true, &menu_state));
         assert_eq!(menu_state.lock().unwrap().cloud_projects, projects);
-        assert!(!apply_cloud_projects(projects, &menu_state));
-        assert!(apply_cloud_projects(Vec::new(), &menu_state));
+        assert!(!apply_cloud_projects(projects, true, &menu_state));
+        assert!(apply_cloud_projects(Vec::new(), true, &menu_state));
     }
 
     /// `apply_vm_status` flips MenuState gating + reports a rebuild

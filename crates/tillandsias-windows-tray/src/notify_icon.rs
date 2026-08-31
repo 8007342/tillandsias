@@ -257,6 +257,176 @@ fn update_status_text(text: &str, hwnd: HWND) {
     }
 }
 
+/// Apply [`crate::tray_registry::classify_entry`] across
+/// `HKCU\Control Panel\NotifyIconSettings` at startup (order 663-64xi).
+///
+/// Windows keys this hive by executable path, so the tray accumulates one
+/// permanent entry per location it has ever run from, and the installer's prune
+/// only runs at install — never in the portable flow. The surviving entry's
+/// `InitialTooltip` was also written once and never refreshed, so the one entry
+/// guaranteed to survive was the one guaranteed to go stale (measured on
+/// yolanda: `Tillandsias 0.4.260728.1` against an `0.4.260826.1` binary).
+///
+/// BEST-EFFORT AND SILENT ON FAILURE, deliberately. This tidies a cosmetic
+/// Settings list; a permissions problem or a hive that does not exist must not
+/// stop a tray from starting. Every outcome is logged so the reconciliation is
+/// observable in `tray.log` without being load-bearing.
+///
+/// @trace order:663-64xi
+fn reconcile_notify_icon_settings() {
+    use crate::tray_registry::{EntryAction, classify_entry, settings_tooltip};
+    use windows::Win32::System::Registry::{
+        HKEY, HKEY_CURRENT_USER, KEY_ALL_ACCESS, REG_SZ, RegCloseKey, RegDeleteTreeW,
+        RegEnumKeyExW, RegOpenKeyExW, RegSetValueExW,
+    };
+    use windows::core::PCWSTR;
+
+    let current_exe = match std::env::current_exe() {
+        Ok(p) => p.to_string_lossy().to_string(),
+        Err(err) => {
+            tracing::debug!(%err, "notify-icon reconcile: current_exe unavailable; skipping");
+            return;
+        }
+    };
+    let tooltip = settings_tooltip(env!("WORKSPACE_VERSION"));
+
+    let root_w = to_utf16(r"Control Panel\NotifyIconSettings");
+    let mut root: HKEY = HKEY::default();
+    let opened = unsafe {
+        RegOpenKeyExW(
+            HKEY_CURRENT_USER,
+            PCWSTR(root_w.as_ptr()),
+            0,
+            KEY_ALL_ACCESS,
+            &mut root,
+        )
+    };
+    if opened.is_err() {
+        tracing::debug!("notify-icon reconcile: hive absent or unreadable; skipping");
+        return;
+    }
+
+    // Collect subkey names first: deleting while enumerating renumbers the
+    // indices underneath the walk and silently skips entries.
+    let mut names: Vec<String> = Vec::new();
+    let mut idx: u32 = 0;
+    loop {
+        let mut buf = [0u16; 256];
+        let mut len = buf.len() as u32;
+        let rc = unsafe {
+            RegEnumKeyExW(
+                root,
+                idx,
+                windows::core::PWSTR(buf.as_mut_ptr()),
+                &mut len,
+                None,
+                windows::core::PWSTR::null(),
+                None,
+                None,
+            )
+        };
+        if rc.is_err() {
+            break;
+        }
+        names.push(String::from_utf16_lossy(&buf[..len as usize]));
+        idx += 1;
+    }
+
+    let (mut refreshed, mut pruned, mut left) = (0u32, 0u32, 0u32);
+    for name in &names {
+        let sub_w = to_utf16(name);
+        let mut sub: HKEY = HKEY::default();
+        if unsafe { RegOpenKeyExW(root, PCWSTR(sub_w.as_ptr()), 0, KEY_ALL_ACCESS, &mut sub) }
+            .is_err()
+        {
+            continue;
+        }
+        let entry_path = read_reg_string(sub, "ExecutablePath").unwrap_or_default();
+        let target_exists = !entry_path.is_empty() && std::path::Path::new(&entry_path).exists();
+
+        match classify_entry(&entry_path, &current_exe, target_exists) {
+            EntryAction::RefreshTooltip => {
+                let tip_w = to_utf16(&tooltip);
+                let bytes = unsafe {
+                    std::slice::from_raw_parts(
+                        tip_w.as_ptr() as *const u8,
+                        tip_w.len() * std::mem::size_of::<u16>(),
+                    )
+                };
+                let name_w = to_utf16("InitialTooltip");
+                let _ =
+                    unsafe { RegSetValueExW(sub, PCWSTR(name_w.as_ptr()), 0, REG_SZ, Some(bytes)) };
+                refreshed += 1;
+            }
+            EntryAction::Prune => {
+                let _ = unsafe { RegCloseKey(sub) };
+                let name_w = to_utf16(name);
+                let _ = unsafe { RegDeleteTreeW(root, PCWSTR(name_w.as_ptr())) };
+                tracing::info!(path = %entry_path, "notify-icon reconcile: pruned dead entry");
+                pruned += 1;
+                continue;
+            }
+            EntryAction::Leave => left += 1,
+        }
+        let _ = unsafe { RegCloseKey(sub) };
+    }
+    let _ = unsafe { RegCloseKey(root) };
+    tracing::info!(
+        refreshed,
+        pruned,
+        left,
+        scanned = names.len(),
+        tooltip = %tooltip,
+        "notify-icon reconcile complete"
+    );
+}
+
+/// Read a `REG_SZ` value as a Rust string. Returns `None` for any other type,
+/// an absent value, or an unreadable key — every caller treats absence as
+/// "not ours", which is the safe direction.
+#[cfg(target_os = "windows")]
+fn read_reg_string(key: windows::Win32::System::Registry::HKEY, value: &str) -> Option<String> {
+    use windows::Win32::System::Registry::{REG_SZ, RegQueryValueExW};
+    use windows::core::PCWSTR;
+
+    let name_w = to_utf16(value);
+    let mut kind = windows::Win32::System::Registry::REG_VALUE_TYPE::default();
+    let mut size: u32 = 0;
+    let rc = unsafe {
+        RegQueryValueExW(
+            key,
+            PCWSTR(name_w.as_ptr()),
+            None,
+            Some(&mut kind),
+            None,
+            Some(&mut size),
+        )
+    };
+    if rc.is_err() || kind != REG_SZ || size == 0 {
+        return None;
+    }
+    let mut buf = vec![0u8; size as usize];
+    let rc = unsafe {
+        RegQueryValueExW(
+            key,
+            PCWSTR(name_w.as_ptr()),
+            None,
+            None,
+            Some(buf.as_mut_ptr()),
+            Some(&mut size),
+        )
+    };
+    if rc.is_err() {
+        return None;
+    }
+    let wide: Vec<u16> = buf
+        .chunks_exact(2)
+        .map(|c| u16::from_le_bytes([c[0], c[1]]))
+        .take_while(|&c| c != 0)
+        .collect();
+    Some(String::from_utf16_lossy(&wide))
+}
+
 /// Severity of a tray balloon notification — maps to the Win11 toast icon.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum BalloonSeverity {
@@ -367,6 +537,16 @@ pub fn run() -> ! {
     // Route tracing to a file before anything logs — a GUI tray has no console.
     init_tracing();
     tracing::info!(log = %log_file_path().display(), "tillandsias tray starting");
+
+    // 663-64xi: reconcile this build's NotifyIconSettings entry BEFORE the icon
+    // is registered, so the Settings list reflects the running version rather
+    // than the first build ever to register from this path — and so entries
+    // whose executable is gone stop accumulating in the portable flow, which
+    // never runs the installer's prune.
+    //
+    // Best-effort by construction: a tray that cannot tidy a cosmetic registry
+    // hive must still start. Every failure is logged and swallowed.
+    reconcile_notify_icon_settings();
 
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -788,6 +968,10 @@ pub fn help_text() -> String {
             deleting the VHDX + in-VM vault) and reprovision from scratch.\n                            \
             Destructive by design; you'll re-authenticate once. Exit: 0 = Ready,\n                            \
             1 = failed.\n    \
+            --forge <project>       Open a forge PTY for <project> without a tray click.\n                            \
+            Add --shell (default), --claude, --codex or --opencode to pick\n                            \
+            the intent. Runs the SAME launch path as the tray menu item.\n                            \
+            Exit: 0 = spawned, 2 = usage, 1 = refused or failed.\n    \
             --status-once [--json]  Connect to the live control wire, print VmStatus.\n                            \
             Exit: 0 = Ready, 2 = reachable-not-Ready, 1 = unreachable.\n    \
             --diagnose [--json]     Bundled health report (10+ keys). Exit: 0 healthy,\n                            \
@@ -812,11 +996,17 @@ pub fn help_text() -> String {
             (CI / reproducible-source scenarios). Bakes at compile time, not runtime.\n\
          \n\
          OUTPUT NOTE:\n    \
-            The tray is a GUI-subsystem binary; PowerShell pipe capture of stdout\n    \
-            is unreliable (Rust treats a detached stdout as BrokenPipe and discards).\n    \
-            Support scripts MUST redirect to a file: `tillandsias-tray.exe \\\n        \
-                --diagnose --json > out.json 2>nul`\n    \
-            and branch on the exit code rather than the captured output.\n\
+            The tray is a GUI-subsystem binary, so PowerShell does NOT wait for it.\n    \
+            A bare redirect returns before the child writes anything and records no\n    \
+            exit status at all: `$exe --diagnose --json > out.json` yields an EMPTY\n    \
+            $LASTEXITCODE and a 0-byte file. That reads as success-in-zero-seconds.\n    \
+            Support scripts MUST force a wait, either way works:\n    \
+              cmd.exe /c \"tillandsias-tray.exe --diagnose --json > out.json 2>nul\"\n    \
+              Start-Process tillandsias-tray.exe -ArgumentList '--diagnose','--json' \\\n        \
+                -Wait -PassThru -RedirectStandardOutput out.json\n    \
+            A pipeline (`| Out-String`) also works, because PowerShell reads to EOF\n    \
+            and that incidentally waits. Branch on the exit code only after one of\n    \
+            these — an exit code you did not wait for is not an exit code.\n\
          \n\
          See cheatsheets/runtime/windows-tray-diagnostics.md for the full\n\
          diagnose JSON schema + the canonical PowerShell consumer pattern.\n",
@@ -1700,7 +1890,34 @@ fn login_state_label(state: &GithubLoginState) -> &'static str {
 /// was the FIRST confirmed answer (the moment the submenu stops showing
 /// "(loading repos…)"). Factored out of the global `MENU_STATE` so the
 /// latch it sets can be exercised alongside [`apply_login_state`].
-fn apply_cloud_projects_state(menu: &mut MenuState, mapped: Vec<ProjectEntry>) -> bool {
+fn apply_cloud_projects_state(
+    menu: &mut MenuState,
+    mapped: Vec<ProjectEntry>,
+    confirmed: bool,
+) -> bool {
+    // 731-eupn: AN UNCONFIRMED REPLY IS NOT AN ANSWER, and until this change
+    // the Windows lane had no way to know the difference.
+    //
+    // The wire grew a discriminator, the guest sets it, and the macOS and Linux
+    // handlers were updated — but this function kept latching
+    // `cloud_projects_loaded = true` for every reply that arrived, because its
+    // caller destructured `CloudRefreshReply { projects, .. }` and threw the
+    // outcome away. A user whose gh/vault/proxy path broke mid-session got a
+    // confident "(no repos)" on Windows: a confirmation nobody made, which is
+    // the precise defect this packet exists to end.
+    //
+    // WORTH RECORDING because it is how the gap survived review: the macOS
+    // applier's comment says it "mirrors the Windows wiring in
+    // notify_icon::apply_cloud_projects" — asserting a parity with a lane that
+    // did not have it. A comment claiming symmetry is not symmetry.
+    //
+    // A failure is DISCARDED: keep whatever was there and leave the flag alone.
+    // Doing nothing is the truthful response to being told nothing, and it is
+    // the defensive position Linux already took by stamping last_fetched only
+    // on success.
+    if !confirmed {
+        return false;
+    }
     // Before this observation the submenu was still showing
     // "(loading repos…)"; this is the moment the list becomes real.
     let first_answer = !menu.cloud_projects_loaded;
@@ -1748,13 +1965,24 @@ fn apply_login_state(menu: &mut MenuState, state: GithubLoginState) {
 /// or an unrequested `CloudProjectsPush` frame (order 154 slice 2; full
 /// replacement list per the wire doc) — to the shared
 /// `MenuState.cloud_projects`. Returns the entry count for logging.
-fn apply_cloud_projects(projects: &[tillandsias_control_wire::CloudProjectEntry]) -> usize {
+fn apply_cloud_projects(
+    projects: &[tillandsias_control_wire::CloudProjectEntry],
+    confirmed: bool,
+) -> usize {
     let mapped: Vec<ProjectEntry> = projects.iter().map(cloud_entry_to_menu).collect();
     let n = mapped.len();
     let mut first_answer = false;
+    if !confirmed {
+        // Named, not silent. The whole packet is about a state the user was
+        // never told; a lane that discards a failed fetch without saying so in
+        // the log reproduces that on the operator's side of the glass.
+        tracing::warn!(
+            "cloud-projects: fetch unconfirmed; keeping previous list (not rendering '(no repos)')"
+        );
+    }
     if let Ok(mut guard) = MENU_STATE.lock() {
         let state = guard.get_or_insert_with(MenuState::initial);
-        first_answer = apply_cloud_projects_state(state, mapped);
+        first_answer = apply_cloud_projects_state(state, mapped, confirmed);
     }
     // Companion to the sign-in transition above: the pair of INFO lines is
     // what lets a field log time the startup handoff end to end. First
@@ -1922,8 +2150,12 @@ async fn run_vm_status_push_listener(hwnd: HwndHandle) {
                         apply_github_login(logged_in, handle);
                         tracing::debug!(logged_in, "github login state pushed");
                     }
+                    // Split from CloudRefreshReply (731-eupn), same reasoning as
+                    // the macOS lane: a PUSH is only emitted from guest state a
+                    // confirmed fetch already wrote, so it is confirmed BY
+                    // CONSTRUCTION. A REPLY is not.
                     ControlMessage::CloudProjectsPush { projects, .. } => {
-                        let n = apply_cloud_projects(&projects);
+                        let n = apply_cloud_projects(&projects, true);
                         tracing::debug!(count = n, "cloud projects pushed");
                     }
                     ControlMessage::LocalProjectsPush { entries, .. } => {
@@ -1995,6 +2227,7 @@ fn local_entry_to_menu(entry: &tillandsias_control_wire::LocalProjectEntry) -> P
         name: entry.label.clone(),
         path: entry.guest_path.clone(),
         ready: false,
+        full_name: None,
     }
 }
 
@@ -2114,6 +2347,7 @@ fn cloud_entry_to_menu(entry: &tillandsias_control_wire::CloudProjectEntry) -> P
         name: entry.label.clone(),
         path: format!("{}/{}", entry.owner, entry.repo),
         ready: false,
+        full_name: None,
     }
 }
 
@@ -2136,8 +2370,12 @@ async fn refresh_cloud_projects(hwnd: HwndHandle) {
         None => return,
     };
     match reply.body {
-        ControlMessage::CloudRefreshReply { projects, .. } => {
-            let n = apply_cloud_projects(&projects);
+        ControlMessage::CloudRefreshReply {
+            projects, outcome, ..
+        } => {
+            // 731-eupn: the REPLY carries its own discriminator and may not be
+            // confirmed. `outcome` was previously swallowed by `..`.
+            let n = apply_cloud_projects(&projects, outcome.is_confirmed());
             tracing::debug!(count = n, "cloud projects refreshed");
         }
         // Convergence packet (5c67ddb9): dispatcher returns Error{Unsupported}
@@ -3652,6 +3890,7 @@ fn apply_project_event_to(state: &mut MenuState, ev: &ProjectEvent) {
                 name: name.to_string(),
                 path: path.to_string_lossy().into_owned(),
                 ready: false,
+                full_name: None,
             });
             state.local_projects.sort_by(|a, b| a.name.cmp(&b.name));
         }
@@ -3803,18 +4042,43 @@ fn launch_open_shell_terminal(action: &MenuAction) {
     // HWND in scope for a balloon, and ERROR relays to tray.log AND the Windows
     // Event Log (source "Tillandsias"), which is the surface a GUI-only user is
     // pointed at by `--logs` and `--diagnose`.
-    let spec = match launch_spec(&intent, project.as_deref(), 24, 80) {
-        Ok(s) => s,
-        Err(refused) => {
-            tracing::error!(
-                refused = %refused,
-                ?intent,
-                project = ?project,
-                "refusing to open a PTY: unsafe project name"
-            );
-            return;
-        }
-    };
+    match launch_pty(&intent, project.as_deref()) {
+        Ok(()) => tracing::info!(?intent, project = ?project,
+            "opened in-VM PTY in a native terminal (wsl.exe)"),
+        Err(err) => tracing::error!(%err, ?intent, project = ?project,
+            "failed to open terminal for in-VM PTY"),
+    }
+}
+
+/// Open an in-VM PTY for `intent` — the launch path with NO GUI in it.
+///
+/// 945-vpg3. This body used to live inline in `launch_open_shell_terminal`,
+/// which meant the ONLY way to launch a forge was to click a tray menu item.
+/// A release blessing could therefore smoke every other leg headlessly and had
+/// to stop at the forge launch, and the v0.4.260830.5 round did exactly that.
+///
+/// The split is deliberately placed so that the menu arm and any headless
+/// caller run THE SAME CODE from here down. Everything above this line in
+/// `launch_open_shell_terminal` is genuinely GUI-only — the double-click
+/// debounce and `intent_for_action`, which maps a `MenuAction`. Everything
+/// from `launch_spec` onward is host-agnostic and lives here.
+///
+/// That placement is the point rather than an implementation detail: a
+/// headless path that reimplemented argv construction would let a smoke pass
+/// while the menu did something else, which is a test of the tester rather
+/// than of the client. Errors are RETURNED instead of logged so a caller that
+/// is not a tray can set an exit code; the menu arm logs them exactly as
+/// before.
+pub(crate) fn launch_pty(intent: &PtyIntent, project: Option<&str>) -> Result<(), String> {
+    // Hostile project names are REFUSED here (E3, 2026-08-17). launch_spec
+    // now emits the project as ONE verbatim argv element (823-u5zf), so the
+    // old single-quoted `--cloud '<p>'` breakout is structurally gone; the
+    // refusal stays because names come verbatim off disk and it is what keeps
+    // every token wt-safe (belt and braces). It deliberately does not
+    // sanitize, because a silently rewritten name launches a DIFFERENT
+    // project than the one clicked.
+    let spec = launch_spec(intent, project, 24, 80)
+        .map_err(|refused| format!("refusing to open a PTY: unsafe project name: {refused}"))?;
     // GitHub Login runs the INJECTED wrapper (bare path, zero shell
     // metacharacters): the inline `bash -lc '<script>'` argv had to survive
     // both std::process MSVC quoting AND wt.exe's own re-parse, and arrived
@@ -3828,7 +4092,7 @@ fn launch_open_shell_terminal(action: &MenuAction) {
         spec.argv.clone()
     };
     let distro = crate::wsl_lifecycle::DISTRO_NAME;
-    let title = terminal_title(&intent, project.as_deref());
+    let title = terminal_title(intent, project);
     // The credential-critical login lane bypasses wt.exe ENTIRELY: two field
     // crashes (Esmeralda, 2026-08-09) reached bash with an unbalanced quote
     // through the wt re-parse chain, and wt offers no verbatim-args contract.
@@ -3845,12 +4109,7 @@ fn launch_open_shell_terminal(action: &MenuAction) {
     } else {
         spawn_wsl_terminal(distro, &title, &argv)
     };
-    match spawn_result {
-        Ok(()) => tracing::info!(?intent, project = ?project, argv = ?argv,
-            "opened in-VM PTY in a native terminal (wsl.exe)"),
-        Err(err) => tracing::warn!(%err, ?intent, project = ?project,
-            "failed to open terminal for in-VM PTY"),
-    }
+    spawn_result.map_err(|err| format!("failed to spawn terminal for in-VM PTY: {err}"))
 }
 
 /// Plain-console spawn: `wsl.exe` in its own fresh conhost window, argv passed
@@ -3969,6 +4228,60 @@ fn apply_menu_action_state(state: &mut MenuState, action: &MenuAction) -> bool {
 mod tests {
     use super::*;
 
+    /// ORDER 731-eupn, exit criterion 4: "confirmed-empty renders (no repos);
+    /// failed-fetch does NOT."
+    ///
+    /// THESE TWO WERE INDISTINGUISHABLE ON THIS LANE. The wire grew an outcome
+    /// discriminator and the macOS and Linux handlers honoured it, but this
+    /// crate destructured `CloudRefreshReply { projects, .. }` and threw it
+    /// away — so a failed fetch published an empty list and the submenu latched
+    /// "(no repos)", a confirmation nobody made.
+    #[test]
+    fn a_confirmed_empty_answer_latches_loaded() {
+        let mut menu = MenuState::initial();
+        assert!(!menu.cloud_projects_loaded);
+        assert!(apply_cloud_projects_state(&mut menu, Vec::new(), true));
+        assert!(
+            menu.cloud_projects_loaded,
+            "a CONFIRMED empty answer is an answer — the submenu may say (no repos)"
+        );
+        assert!(menu.cloud_projects.is_empty());
+    }
+
+    #[test]
+    fn an_unconfirmed_empty_reply_does_not_latch_loaded() {
+        let mut menu = MenuState::initial();
+        assert!(!apply_cloud_projects_state(&mut menu, Vec::new(), false));
+        assert!(
+            !menu.cloud_projects_loaded,
+            "a FAILED fetch must not flip the submenu to (no repos) — it was never told zero"
+        );
+    }
+
+    /// And a failure must not DESTROY what the user could already see: wiping
+    /// the list to empty would render "(no repos)" by another route.
+    #[test]
+    fn an_unconfirmed_reply_retains_the_previous_list() {
+        let mut menu = MenuState::initial();
+        let prior = vec![ProjectEntry {
+            name: "hello-world".into(),
+            path: "octocat/hello-world".into(),
+            ready: false,
+            full_name: None,
+        }];
+        assert!(apply_cloud_projects_state(&mut menu, prior, true));
+        assert_eq!(menu.cloud_projects.len(), 1);
+
+        // The fetch breaks mid-session: gh, vault or the proxy path fails.
+        assert!(!apply_cloud_projects_state(&mut menu, Vec::new(), false));
+        assert_eq!(
+            menu.cloud_projects.len(),
+            1,
+            "the previous list must survive an unconfirmed fetch"
+        );
+        assert!(menu.cloud_projects_loaded, "and the flag must be untouched");
+    }
+
     /// 731-qth3, the windows half of the macOS 731-m58f defect. This is the
     /// PRODUCTION ordering — LoggedOut, then an empty cloud reply, then
     /// sign-in — not the returning-user ordering that starts from LoggedIn,
@@ -3991,7 +4304,7 @@ mod tests {
 
         // 2. The push listener's unconditional CloudRefreshRequest answers
         //    while there is no token: an empty list, which latches the flag.
-        assert!(apply_cloud_projects_state(&mut menu, Vec::new()));
+        assert!(apply_cloud_projects_state(&mut menu, Vec::new(), true));
         assert!(
             menu.cloud_projects_loaded,
             "an empty answer is still a confirmed answer while logged out"
@@ -4030,7 +4343,9 @@ mod tests {
                 name: "hello-world".into(),
                 path: "octocat/hello-world".into(),
                 ready: false,
+                full_name: None,
             }],
+            true,
         );
 
         apply_login_state(&mut menu, signed_in);
@@ -4929,6 +5244,39 @@ mod tests {
                 "help text missing section header {section}"
             );
         }
+        // 802-fbkg: the OUTPUT NOTE must be CORRECT, not merely PRESENT.
+        //
+        // The header check above passed for a year while the note prescribed the
+        // one capture pattern that silently fails. A pinned-but-wrong note is
+        // indistinguishable from a pinned-and-right one — the order-531 shape in
+        // documentation form — so presence was never the property worth asserting.
+        //
+        // Measured on the shipped v0.4.260830.5 binary, four probes, one host:
+        //   A  $exe --diagnose --json > out.json    -> $LASTEXITCODE EMPTY, 0 bytes
+        //   B  $exe --diagnose --json | Out-String  -> exit 2, 2910 chars
+        //   C  Start-Process -Wait -PassThru -Redirect -> exit 2, 2854 bytes
+        //   D  cmd.exe /c "$exe ... > out.json 2>nul"  -> exit 2, 2854 bytes
+        // A was what the note told support scripts they MUST use. The binary is
+        // GUI-subsystem, so PowerShell does not wait on it; a bare redirect
+        // returns before the child writes and records no status. B works only
+        // because reading a pipeline to EOF incidentally waits.
+        //
+        // So the note must name a WAITING construct. This asserts that at least
+        // one wrapper token survives, which is the property that was violated.
+        assert!(
+            text.contains("cmd.exe /c") || text.contains("Start-Process"),
+            "the OUTPUT NOTE must name a construct that WAITS for the \
+             GUI-subsystem child (cmd.exe /c or Start-Process -Wait). Without \
+             one, the prescribed pattern yields an empty exit code and a 0-byte \
+             file, which reads as success (802-fbkg)."
+        );
+        // And it must not quietly return to prescribing the bare redirect as the
+        // required pattern: the failure mode is the word MUST attached to it.
+        assert!(
+            !text.contains("MUST redirect to a file"),
+            "the OUTPUT NOTE prescribes a bare file redirect again — that is the \
+             802-fbkg defect returning; a bare redirect does not wait."
+        );
         // Exit-code contract is part of the CLI promise — pin it.
         for exit_code_marker in [
             "Exit: 0",

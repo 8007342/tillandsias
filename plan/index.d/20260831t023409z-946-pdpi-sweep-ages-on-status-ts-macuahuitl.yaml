@@ -1,0 +1,31 @@
+packets:
+  - packet_id: stranded-sweep-ages-on-status-ts
+    order: 946-pdpi
+    status: ready
+    kind: defect
+    pickup_role: linux
+    priority: p2
+    desired_release: v0.5
+    title: |
+      Stranded sweep should age claims on the status LWW ts, not event presence — compaction erodes the current signal
+    context: |
+      Cites archived stranded-in-progress-packets-are-invisible-both-ways
+      (641-e2qa). Now that claims actually claim (943-unii), the sweep is
+      the sole observer of stranding, and its current definition — "no
+      progress event since the claim" — decays under compaction: the longer
+      a packet is legitimately worked, the more likely its evidence folded
+      and the more confidently the sweep mislabels attended work as
+      stranded (the check's own comments ~125-145 admit this). Lenovinha's
+      design, adopted 2026-08-31: age against the status LWW record
+      (set-field already writes value/ts/host per claim; compaction-stable
+      by construction; answers "how long claimed" directly). Drop any
+      expected-completion field — self-reported estimates are the least
+      trustworthy input. DEFERRED past the 2h-cadence 24h review on
+      lenovinha's own caution: do not change the instrument mid-measurement.
+      Also recorded here: set-field --reason lands as a type:note event,
+      NOT type:claim — any future consumer grepping claim-typed events
+      finds nothing from the new protocol.
+    exit_criteria:
+      - check-stranded-in-progress.sh ages on the status channel's ts for in_progress packets, with the event-presence heuristic retired or demoted to corroboration
+      - a fixture proves a long-worked, compacted packet is NOT flagged while a claim with no status progress past the threshold IS
+      - the --reason/type:note asymmetry is either documented where claim events are defined or normalized

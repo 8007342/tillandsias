@@ -16,6 +16,27 @@
   and a long addendum is one nobody finishes.
 -->
 
+## Project status: ask, don't grep
+
+Primary path: the forge-plan MCP tools (`plan_answer "what is the current
+Direction?"`, `plan_next`, `plan_status`, `methodology_ask`, `spec_answer`) and
+the Local Experts mode (`local-experts` agent → grounded `expert-serve`). Both
+answer with verifiable citations or a typed `unsupported: <reason>` refusal
+that names its own remedy — never raw-model prose. Available while the startup
+context above shows `experts_state=ready` (and, for `spec_answer` /
+expert-serve, the index + `inference_state` are up); the `expert_capability`
+tool and `scripts/check-mcp-expert-health.sh` say which answers this session
+can give. On a typed refusal or a degraded `experts_state`, fall back to
+`plan/index.yaml` / `plan/loop_status.md` and SAY SO in your output
+(`mcp_first_read_path`: unavailable / verification / not exposed).
+
+On a COLD host the spec index builds in the background at launch (919-vvyv:
+~2min GPU, ~60min CPU; instant when already published) — `spec_index=absent`
+on the capability line plus a typed `spec_answer` refusal means it is not
+ready YET, not broken. `/tmp/forge-lifecycle.log` (`[spec-index]` lines)
+carries the verdict; use `plan_answer`/`methodology_ask` (no index needed)
+meanwhile.
+
 ## Before you exit: a finding you did not PUSH is a finding you destroyed
 
 This workspace is a `git clone` into the container. When the forge tears down it

@@ -644,6 +644,33 @@ jobs:
           } else {
             Write-Host "::warning::TILLANDSIAS_SIGNING_ACCOUNT is unset — publishing UNSIGNED Windows artifacts (plan packet 722-w7a2)"
             scripts/build-windows-tray.ps1 -Release -Version "${{ steps.version.outputs.version }}"
+            # 2026-08-31 (yolanda's stable-blessing red, 722-w7a2 re-rated):
+            # an unsigned EXE degrades — SmartScreen warns, the user can click
+            # through. An unsigned MSIX is INERT — Add-AppxPackage hard-refuses
+            # with 0x800B0100, no click-through exists, and the asset only
+            # pretends to be an installer. An absent asset is honest; an
+            # uninstallable one is not. So without signing the MSIX is
+            # withheld from the release rather than shipped decorative.
+            $sums = 'release-artifacts/SHA256SUMS-windows'
+            Get-ChildItem release-artifacts -Filter *.msix | ForEach-Object {
+              Write-Host "::warning::withholding unsigned MSIX from release assets: $($_.Name) (uninstallable without a signature; set TILLANDSIAS_SIGNING_ACCOUNT to publish it)"
+              $name = $_.Name
+              Remove-Item $_.FullName
+              # The sums file was written by the build script with the MSIX
+              # included; a checksum for an absent asset fails every verifier,
+              # so drop its line in the same breath as the file.
+              # LINE ENDINGS (v56.8.31.1 post-mortem): Set-Content rewrote the
+              # whole file CRLF, and sha256sum -c hunted for "...zip\r" — the
+              # release shipped ZERO Windows assets. Write LF explicitly, UTF8
+              # no-BOM, single trailing newline; the consuming job asserts
+              # CR-free before verifying. (Fix authored by yolanda, f77897371,
+              # carried here so one commit owns the file.)
+              if (Test-Path $sums) {
+                $kept = (Get-Content $sums) | Where-Object { $_ -notmatch [regex]::Escape($name) }
+                $text = ($kept -join "`n") + "`n"
+                [System.IO.File]::WriteAllText((Resolve-Path $sums), $text, (New-Object System.Text.UTF8Encoding($false)))
+              }
+            }
           }
           Get-ChildItem release-artifacts
 
@@ -686,6 +713,20 @@ jobs:
           # (order 756-rfdr, measured on the published v0.4.260815.1).
           cp ../scripts/install-windows.ps1 install-windows.ps1
           sha256sum tillandsias-windows-x64.zip tillandsias-tray.exe install-windows.ps1 >> SHA256SUMS-windows
+          # LINE-ENDING INVARIANT, asserted in the job rather than commented at
+          # a writer (v56.8.31.1 post-mortem): this file has had THREE writers
+          # across two files and two languages — the packaging script (LF), this
+          # step's coreutils append (LF), and the unsigned-MSIX withhold guard,
+          # whose PowerShell Set-Content rewrote every line CRLF and made
+          # `sha256sum -c` hunt for "…zip\r". The documented seam warning did
+          # not protect the file because the third writer lived in a different
+          # file, days later, by a different host — an invariant must live where
+          # the file is CONSUMED, failing the job that created the byte, not the
+          # next release.
+          if grep -q $'\r' SHA256SUMS-windows; then
+            echo "::error::SHA256SUMS-windows contains CR bytes — some writer emitted CRLF; sha256sum -c would hunt for filenames ending in \\r (v56.8.31.1 shipped zero Windows assets this way)"
+            exit 1
+          fi
           # Fail the job rather than publish a checksum file that cannot verify.
           sha256sum -c SHA256SUMS-windows
           echo "Staged version-stable aliases:"

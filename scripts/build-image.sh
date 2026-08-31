@@ -25,6 +25,29 @@
 
 set -euo pipefail
 
+
+# ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has it.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+# Resolve the lib by WALKING UP, not by a fixed depth (order 914-ahsy). The
+# fixed form `dirname "${BASH_SOURCE[0]}"/lib/...` is correct only for a caller
+# sitting directly in scripts/. From scripts/refusal-calibration/ it points at a
+# lib that does not exist, the `|| true` swallows the miss, and the tool variable
+# silently falls back to the bare name — a conversion that passes review, passes
+# the suite, and changes nothing.
+_td_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_td_dir" ] && [ "$_td_dir" != "/" ] && [ ! -f "$_td_dir/lib/tool-dispatch.sh" ]; do
+    _td_dir="$(dirname "$_td_dir")"
+done
+if [ -f "$_td_dir/lib/tool-dispatch.sh" ]; then
+    . "$_td_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+fi
+if command -v resolve_tool >/dev/null 2>&1; then
+    JQ="$(resolve_tool jq || printf 'jq')"
+else
+    JQ="jq"   # lib unavailable: preserve the previous behaviour exactly
+fi
+
 # @trace spec:default-image, spec:dev-build, spec:podman-orchestration, spec:nix-builder
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -136,6 +159,40 @@ fi
 IMAGE_LABEL_PREFIX="tillandsias-${IMAGE_NAME}"
 IMAGE_VERSION_TAG="${IMAGE_LABEL_PREFIX}:v${IMAGE_VERSION}"
 IMAGE_LATEST_TAG="${IMAGE_LABEL_PREFIX}:latest"
+
+# ORDER 747-knbp — the launcher resolves images by the INSTALLED BINARY's
+# version (`versioned_image_tag` -> localhost/tillandsias-<img>:v<version>),
+# while this script tags from the checkout's VERSION file. On any host whose
+# installed tray predates the checkout — which is precisely what "rebuild the
+# image so my fix is live" means — the rebuild moved the human aliases onto the
+# new version and `_remove_stale_image_tags` then DELETED the tag the installed
+# binary launches by, leaving every forge launch dead on arrival.
+#
+# So the installed binary's version is a KEPT alias too, whenever it differs
+# from VERSION. When the two agree (the common case) nothing extra is tagged and
+# nothing is printed: the negative control stays silent.
+_installed_binary_version() {
+    local bin ver
+    bin=""
+    for candidate in "${TILLANDSIAS_INSTALLED_BIN:-}" "$HOME/.local/bin/tillandsias" "$(command -v tillandsias 2>/dev/null || true)"; do
+        if [[ -n "$candidate" && -x "$candidate" ]]; then
+            bin="$candidate"
+            break
+        fi
+    done
+    [[ -n "$bin" ]] || return 1
+    # `tillandsias --version` prints e.g. "Tillandsias v0.4.260826.1".
+    ver="$("$bin" --version 2>/dev/null | head -1 | grep -oE 'v?[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1 || true)"
+    ver="${ver#v}"
+    [[ -n "$ver" ]] || return 1
+    printf '%s' "$ver"
+}
+
+INSTALLED_VERSION="$(_installed_binary_version || true)"
+IMAGE_INSTALLED_TAG=""
+if [[ -n "$INSTALLED_VERSION" && "$INSTALLED_VERSION" != "$IMAGE_VERSION" ]]; then
+    IMAGE_INSTALLED_TAG="${IMAGE_LABEL_PREFIX}:v${INSTALLED_VERSION}"
+fi
 USE_HUMAN_ALIASES=true
 if [[ -n "$FLAG_TAG" ]]; then
     IMAGE_CANONICAL_TAG="$FLAG_TAG"
@@ -212,6 +269,10 @@ _is_kept_image_tag() {
                 return 0
                 ;;
         esac
+        # ORDER 747-knbp: never reap the tag the installed binary launches by.
+        if [[ -n "$IMAGE_INSTALLED_TAG" && "$candidate" == "$IMAGE_INSTALLED_TAG" ]]; then
+            return 0
+        fi
     else
         case "$candidate" in
             "$IMAGE_TAG")
@@ -282,6 +343,15 @@ _apply_alias_tags() {
         fi
         _verbose_info "Tagging ${source_tag} -> ${IMAGE_LATEST_TAG}"
         "$PODMAN" tag "$source_tag" "$IMAGE_LATEST_TAG" >/dev/null 2>&1 || true
+    fi
+    # ORDER 747-knbp — version skew: also point the INSTALLED binary's tag at
+    # this image, loudly, so the rebuild cannot orphan the launch path.
+    if [[ -n "$IMAGE_INSTALLED_TAG" && "$source_tag" != "$IMAGE_INSTALLED_TAG" ]]; then
+        if "$PODMAN" image exists "$IMAGE_INSTALLED_TAG" 2>/dev/null; then
+            "$PODMAN" rmi "$IMAGE_INSTALLED_TAG" >/dev/null 2>&1 || true
+        fi
+        _info "Version skew: installed binary is v${INSTALLED_VERSION}, checkout VERSION is v${IMAGE_VERSION}; also aliasing ${IMAGE_INSTALLED_TAG} so the installed tray can still launch this image"
+        "$PODMAN" tag "$source_tag" "$IMAGE_INSTALLED_TAG" >/dev/null 2>&1 || true
     fi
 }
 
@@ -453,9 +523,24 @@ fi
 # Log preservation: the build output is kept in $ROOT/build-*.log for agent iteration
 
 BUILD_TIMEOUT_SECS="${TILLANDSIAS_BUILD_TIMEOUT_SECS:-1800}"
+# macOS ships no GNU timeout; coreutils installs it as gtimeout. With neither,
+# the build runs untimed rather than not at all — the timeout is a guard
+# against a hung network fetch, not a correctness requirement.
+_resolve_timeout_bin() {
+    if command -v timeout >/dev/null 2>&1; then
+        printf 'timeout'
+    elif command -v gtimeout >/dev/null 2>&1; then
+        printf 'gtimeout'
+    fi
+}
+TIMEOUT_BIN="$(_resolve_timeout_bin)"
 _timeout_podman_build() {
     local rc=0
-    timeout --signal=TERM --kill-after=10 "$BUILD_TIMEOUT_SECS" "$PODMAN" build "$@" || rc=$?
+    if [[ -n "$TIMEOUT_BIN" ]]; then
+        "$TIMEOUT_BIN" --signal=TERM --kill-after=10 "$BUILD_TIMEOUT_SECS" "$PODMAN" build "$@" || rc=$?
+    else
+        "$PODMAN" build "$@" || rc=$?
+    fi
     if [[ "$rc" -eq 124 ]]; then
         _error "podman build timed out after ${BUILD_TIMEOUT_SECS}s (TILLANDSIAS_BUILD_TIMEOUT_SECS to adjust)."
         _error "A package-manager layer needing a genuine network fetch can hang"
@@ -602,7 +687,11 @@ echo ""
 _info "----------------------------------------------"
 _info "Image:    ${BOLD}${IMAGE_TAG}${NC}"
 if [[ "$USE_HUMAN_ALIASES" == true ]]; then
-    _info "Aliases:  ${IMAGE_VERSION_TAG}, ${IMAGE_LATEST_TAG}"
+    if [[ -n "$IMAGE_INSTALLED_TAG" ]]; then
+        _info "Aliases:  ${IMAGE_VERSION_TAG}, ${IMAGE_LATEST_TAG}, ${IMAGE_INSTALLED_TAG} (installed binary)"
+    else
+        _info "Aliases:  ${IMAGE_VERSION_TAG}, ${IMAGE_LATEST_TAG}"
+    fi
 fi
 _info "Size:     ${SIZE_DISPLAY}"
 _info "Time:     ${BUILD_DURATION}s"
@@ -616,7 +705,7 @@ _extract_build_telemetry() {
     [[ -s "$progress_log" ]] || { echo "0|0|0"; return 0; }
     command -v jq &>/dev/null || { echo "0|0|0"; return 0; }
 
-    parsed="$(jq -r '
+    parsed="$("$JQ" -r '
         if .progressDetail and .progressDetail.total and .id then
             "BYTES\t\(.id)\t\(.progressDetail.total)"
         elif .stream then

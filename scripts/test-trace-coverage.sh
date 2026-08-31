@@ -6,6 +6,29 @@
 
 set -euo pipefail
 
+
+# ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has it.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+# Resolve the lib by WALKING UP, not by a fixed depth (order 914-ahsy). The
+# fixed form `dirname "${BASH_SOURCE[0]}"/lib/...` is correct only for a caller
+# sitting directly in scripts/. From scripts/refusal-calibration/ it points at a
+# lib that does not exist, the `|| true` swallows the miss, and the tool variable
+# silently falls back to the bare name — a conversion that passes review, passes
+# the suite, and changes nothing.
+_td_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_td_dir" ] && [ "$_td_dir" != "/" ] && [ ! -f "$_td_dir/lib/tool-dispatch.sh" ]; do
+    _td_dir="$(dirname "$_td_dir")"
+done
+if [ -f "$_td_dir/lib/tool-dispatch.sh" ]; then
+    . "$_td_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+fi
+if command -v resolve_tool >/dev/null 2>&1; then
+    JQ="$(resolve_tool jq || printf 'jq')"
+else
+    JQ="jq"   # lib unavailable: preserve the previous behaviour exactly
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
@@ -53,7 +76,7 @@ fi
 # Test 5: JSON output format
 echo "Test 5: JSON output format"
 output=$(bash "$SCRIPT_DIR/validate-traces.sh" --coverage-threshold 80 2>/dev/null)
-if echo "$output" | jq -e '.coverage_percentage' >/dev/null 2>&1; then
+if echo "$output" | "$JQ" -e '.coverage_percentage' >/dev/null 2>&1; then
     _pass "JSON contains all required fields"
 else
     _fail "JSON missing required fields"
@@ -61,7 +84,7 @@ fi
 
 # Test 6: Status PASS when threshold met
 echo "Test 6: Status PASS when coverage meets threshold"
-status=$(echo "$output" | jq -r '.status')
+status=$(echo "$output" | "$JQ" -r '.status')
 if [[ "$status" == "PASS" ]]; then
     _pass "Correctly reports PASS status"
 else
@@ -71,7 +94,7 @@ fi
 # Test 7: Default threshold 90
 echo "Test 7: Default threshold is 90"
 output=$(bash "$SCRIPT_DIR/validate-traces.sh" --coverage-threshold 2>/dev/null)
-threshold=$(echo "$output" | jq -r '.threshold')
+threshold=$(echo "$output" | "$JQ" -r '.threshold')
 if [[ "$threshold" == "90" ]]; then
     _pass "Default threshold is 90"
 else

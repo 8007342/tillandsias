@@ -1,0 +1,59 @@
+# @trace spec:ci-release
+# @trace order:895-j8ag
+#
+# Pins that the daily-maintenance gate's day boundary is UTC, and that it is the
+# SAME boundary the marker stamps with.
+#
+# The gate compared the LOCAL date against a marker recording both `date=` and
+# `utc=`. On a host at a non-zero UTC offset those disagree for part of every
+# day and the verdict followed the local half. MEASURED on three hosts, all
+# UTC-7, all reading `ok:...-current` while the UTC day had already rolled.
+#
+# THE FAILURE IS DIRECTIONAL, which is the whole reason this pin tests both
+# signs: a UTC-negative host reports a stale gate as current for the last hours
+# of its local day; a UTC-positive host rolls its local date BEFORE UTC and can
+# demand a second run inside one UTC day. Every observed reproduction was
+# UTC-negative, so a one-sign fixture would pass on half the fleet.
+name: litmus:daily-maintenance-day-boundary
+spec: ci-release
+phase: pre-build
+description: >
+  Pin scripts/check-daily-maintenance.sh to a UTC day boundary: the verdict
+  flips exactly once across a day window, TZ does not move it at either sign of
+  offset, the verdict grammar is unchanged, the marker still records both date=
+  and utc= and they agree, and a mutation control proves the pre-fix local-date
+  guard disagrees across zones on the same input.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/check-daily-maintenance.sh
+  - workspace contains scripts/test-daily-maintenance-day-boundary.sh
+  - bash, date and sed are available in PATH
+
+critical_path:
+  - step: "guard and fixture parse, and the fixture is executable"
+    command: "bash -n scripts/check-daily-maintenance.sh && bash -n scripts/test-daily-maintenance-day-boundary.sh && test -x scripts/test-daily-maintenance-day-boundary.sh && echo 'ok: parses'"
+    timeout_ms: 5000
+    expected_behavior: "ok: parses"
+
+  - step: "all boundary arms pass (flip-once, both offset signs, grammar, marker fields, mutation control)"
+    command: "bash scripts/test-daily-maintenance-day-boundary.sh 2>&1 | tail -1"
+    timeout_ms: 60000
+    expected_behavior: "ok:daily-maintenance-day-boundary:all"
+
+  - step: "the boundary is UTC in the source, not local — the one line the whole packet turns on"
+    command: "if grep -qE '^TODAY=\"\\$\\{TILLANDSIAS_DAILY_MAINTENANCE_TODAY:-\\$\\(date -u \\+%Y-%m-%d' scripts/check-daily-maintenance.sh; then echo 'ok: utc-boundary'; else echo 'FAIL: TODAY no longer derives from date -u'; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok: utc-boundary"
+
+evidence:
+  artifact: "scripts/check-daily-maintenance.sh + scripts/test-daily-maintenance-day-boundary.sh"
+  measured_on: >
+    lenovinha (Fedora Silverblue, UTC-7) 2026-08-26 — live before/after on the
+    same host at the same instant: with the local boundary the gate read
+    ok:daily-maintenance-current:2026-08-25 while UTC was already 2026-08-26 and
+    the marker's utc= was 2026-08-25T20:14:30Z; with the UTC boundary the same
+    host read due:stale:2026-08-25. Fixture green, including the mutation
+    control showing the pre-fix guard returns current at UTC-7 and stale at
+    UTC+9 on one identical input.

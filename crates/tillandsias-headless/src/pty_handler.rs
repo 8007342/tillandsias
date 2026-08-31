@@ -87,7 +87,15 @@ const PTY_WRITE_ENQUEUE_DEADLINE: Duration = Duration::from_millis(250);
 /// would reorder).
 enum PtyWriteCommand {
     Write(Vec<u8>),
-    Resize { rows: u16, cols: u16 },
+    Resize {
+        rows: u16,
+        cols: u16,
+    },
+    /// Host says its stdin for this child is finished (order 925-eofi).
+    /// Routed through this SAME queue as the input bytes, for the ordering
+    /// reason `Resize` documents: an EOF that overtook the bytes it follows
+    /// would truncate them.
+    StdinEof,
 }
 
 /// One active PTY session for a single connection.
@@ -181,6 +189,34 @@ impl PtySessionStore {
         env: Vec<(String, String)>,
         cwd: Option<String>,
     ) -> Result<(), PtyOpenError> {
+        self.open_with_stdin_kind(session_id, rows, cols, argv, env, cwd, false)
+            .await
+    }
+
+    /// [`Self::open`] with the DATA-session choice made explicit (926-bin4).
+    ///
+    /// `data_session = true` puts the child's fd 0 on a PIPE and leaves fd 1/2
+    /// on the PTY slave. That is the entire fix for the control-byte
+    /// corruption: stdin crosses no line discipline, so 0x03/0x04/0x11/0x13/
+    /// 0x15/0x1a/0x7f are delivered rather than interpreted, and end-of-input
+    /// becomes a real close instead of a VEOF injection that only works in
+    /// canonical mode.
+    ///
+    /// Output is deliberately UNCHANGED: fd 1 and 2 still point at the slave,
+    /// so streaming, combined stdout/stderr ordering and `isatty(1)` behave
+    /// exactly as before, and an interactive attach (which must keep its Ctrl-C)
+    /// never takes this path.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn open_with_stdin_kind(
+        &mut self,
+        session_id: u32,
+        rows: u16,
+        cols: u16,
+        argv: Vec<String>,
+        env: Vec<(String, String)>,
+        cwd: Option<String>,
+        data_session: bool,
+    ) -> Result<(), PtyOpenError> {
         if self.sessions.contains_key(&session_id) {
             return Err(PtyOpenError::DuplicateSession(session_id));
         }
@@ -247,6 +283,40 @@ impl PtySessionStore {
         if let Some(dir) = cwd {
             cmd.current_dir(dir);
         }
+        // 2b) DATA SESSION: fd 0 comes from a PIPE, not the slave (926-bin4).
+        // Created BEFORE the fork so both ends exist for pre_exec to dup2 from;
+        // the parent keeps the write end and the child keeps the read end.
+        let stdin_pipe = if data_session {
+            // O_CLOEXEC ON BOTH ENDS IS LOAD-BEARING, not hygiene. A plain
+            // pipe() leaves both ends inheritable, so the forked child would
+            // keep a copy of the WRITE end open across exec — and a pipe
+            // reports EOF only when the LAST writer closes. The child would
+            // then hold open the very thing whose closure is supposed to tell
+            // it that input ended, and every reader would block forever.
+            // MEASURED before this flag existed: `cat` hung at the 120s bound
+            // instead of returning, on a byte (0x03) that the pipe had already
+            // stopped interpreting — delivery working, EOF silently impossible.
+            //
+            // dup2 clears CLOEXEC on the NEW descriptor, so the read end still
+            // reaches the child as fd 0; only the inherited duplicates vanish.
+            // pipe() + explicit FD_CLOEXEC rather than pipe2(O_CLOEXEC): nix
+            // gates pipe2 away on macOS (Darwin has no pipe2(2)), and this file
+            // compiles on the macOS dev host for its unit tests even though the
+            // guest it runs in is Linux. fcntl(F_SETFD) is portable to both.
+            let (read_fd, write_fd) = nix::unistd::pipe().map_err(PtyOpenError::Openpty)?;
+            for end in [read_fd.as_raw_fd(), write_fd.as_raw_fd()] {
+                nix::fcntl::fcntl(
+                    end,
+                    nix::fcntl::FcntlArg::F_SETFD(nix::fcntl::FdFlag::FD_CLOEXEC),
+                )
+                .map_err(PtyOpenError::Openpty)?;
+            }
+            Some((read_fd, write_fd))
+        } else {
+            None
+        };
+        let stdin_read_raw = stdin_pipe.as_ref().map(|(r, _)| r.as_raw_fd());
+
         // SAFETY: pre_exec runs in the child after fork; the closure
         // must only call async-signal-safe functions. setsid + dup2 +
         // ioctl(TIOCSCTTY) are all on the safe list.
@@ -256,10 +326,17 @@ impl PtySessionStore {
                 if libc::setsid() < 0 {
                     return Err(std::io::Error::last_os_error());
                 }
-                for target_fd in 0..=2 {
+                // fd 1 and 2 ALWAYS come from the slave: output streaming,
+                // combined ordering and isatty(1) must not change (926-bin4).
+                for target_fd in 1..=2 {
                     if libc::dup2(slave_raw, target_fd) < 0 {
                         return Err(std::io::Error::last_os_error());
                     }
+                }
+                // fd 0 is the pipe on a data session, the slave otherwise.
+                let stdin_src = stdin_read_raw.unwrap_or(slave_raw);
+                if libc::dup2(stdin_src, 0) < 0 {
+                    return Err(std::io::Error::last_os_error());
                 }
                 // `ioctl`'s request arg is `c_ulong` on BSD/macOS but the
                 // `TIOCSCTTY` constant is `c_int`/`u32` there; cast so the
@@ -319,7 +396,25 @@ impl PtySessionStore {
         //    reading its slave wedges only this task — never the loop.
         let (writer_tx, writer_rx) = mpsc::channel::<PtyWriteCommand>(PTY_WRITE_QUEUE_CAPACITY);
         let (writer_cancel_tx, writer_cancel_rx) = tokio::sync::oneshot::channel::<()>();
-        let writer = spawn_writer_task(session_id, master_arc.clone(), writer_rx, writer_cancel_rx);
+        // The child now owns the pipe's READ end via dup2; the parent drops it
+        // so the child sees EOF when we close the WRITE end and not before —
+        // a lingering read end in this process would make that close silent.
+        let stdin_sink = match stdin_pipe {
+            Some((read_fd, write_fd)) => {
+                drop(read_fd);
+                StdinSink::Pipe(Some(
+                    AsyncFd::new(write_fd).map_err(PtyOpenError::StdinPipe)?,
+                ))
+            }
+            None => StdinSink::Pty(master_arc.clone()),
+        };
+        let writer = spawn_writer_task(
+            session_id,
+            master_arc.clone(),
+            stdin_sink,
+            writer_rx,
+            writer_cancel_rx,
+        );
 
         self.sessions.insert(
             session_id,
@@ -356,6 +451,14 @@ impl PtySessionStore {
             .await;
     }
 
+    /// Handle a `PtyStdinEof`: the host has no more input for this child
+    /// (order 925-eofi). Enqueued on the same bounded queue as the bytes it
+    /// follows so it cannot overtake them.
+    pub async fn stdin_eof(&mut self, session_id: u32) {
+        self.enqueue_write_command(session_id, PtyWriteCommand::StdinEof)
+            .await;
+    }
+
     /// Handle a `PtyResize`: routed through the SAME per-session queue as
     /// `PtyData{ToGuest}` so `TIOCSWINSZ` is applied at its host-arrival
     /// position relative to input bytes (audit D6 ordering note).
@@ -386,6 +489,7 @@ impl PtySessionStore {
         let kind = match &cmd {
             PtyWriteCommand::Write(_) => "PtyData{ToGuest}",
             PtyWriteCommand::Resize { .. } => "PtyResize",
+            PtyWriteCommand::StdinEof => "PtyStdinEof",
         };
         let writer_tx = session.writer_tx.clone();
         match tokio::time::timeout(PTY_WRITE_ENQUEUE_DEADLINE, writer_tx.send(cmd)).await {
@@ -470,6 +574,10 @@ pub enum PtyOpenError {
     EmptyArgv,
     Openpty(nix::Error),
     Spawn(std::io::Error),
+    /// The data session's stdin pipe could not be made non-blocking/async
+    /// (order 926-bin4). Distinct from `Openpty` so the failure names the pipe
+    /// rather than blaming the PTY that opened fine.
+    StdinPipe(std::io::Error),
 }
 
 impl std::fmt::Display for PtyOpenError {
@@ -479,6 +587,9 @@ impl std::fmt::Display for PtyOpenError {
             PtyOpenError::EmptyArgv => write!(f, "PtyOpen.argv must not be empty"),
             PtyOpenError::Openpty(err) => write!(f, "openpty failed: {err}"),
             PtyOpenError::Spawn(err) => write!(f, "fork+exec failed: {err}"),
+            PtyOpenError::StdinPipe(err) => {
+                write!(f, "data-session stdin pipe unusable: {err}")
+            }
         }
     }
 }
@@ -589,6 +700,28 @@ fn set_slave_iutf8(slave: &OwnedFd) -> nix::Result<()> {
     tcsetattr(slave, SetArg::TCSANOW, &t)
 }
 
+/// The canonical-mode end-of-input byte (^D). Not a constant anyone should
+/// reach for casually: it only MEANS end-of-input when the line discipline is
+/// interpreting it (order 924-eof7).
+const VEOF_BYTE: u8 = 0x04;
+
+/// Is this PTY currently in canonical (line) mode?
+///
+/// The whole EOF design turns on this answer: with `ICANON` set, VEOF ends the
+/// reader's current read; with it clear, the same byte is ordinary data. Asked
+/// at the moment of use rather than remembered, because an interactive child
+/// can flip the terminal into raw mode at any point in the session.
+fn termios_is_canonical(fd: std::os::fd::RawFd) -> nix::Result<bool> {
+    use std::os::fd::BorrowedFd;
+    // SAFETY: `fd` is the live PTY master owned by this session's Arc<AsyncFd>,
+    // borrowed only for the duration of this call.
+    let borrowed = unsafe { BorrowedFd::borrow_raw(fd) };
+    let attrs = nix::sys::termios::tcgetattr(borrowed)?;
+    Ok(attrs
+        .local_flags
+        .contains(nix::sys::termios::LocalFlags::ICANON))
+}
+
 fn set_winsize(fd: std::os::fd::RawFd, rows: u16, cols: u16) -> nix::Result<()> {
     use nix::libc;
     let winsize = libc::winsize {
@@ -665,9 +798,100 @@ fn pty_heartbeat_envelope(session_id: u32) -> ControlEnvelope {
 /// mid-write), when the store drops the sender (session removed), or
 /// when a master write fails (child side gone; the pump emits the
 /// terminal `PtyClose` through its own path).
+/// Write every byte to an arbitrary owned fd (a data session's stdin pipe),
+/// mirroring `write_all_to_master`'s cancellation and partial-write handling.
+///
+/// Separate from that function rather than generic over the fd because the two
+/// differ in what a short write MEANS: on the master a wedged child stops
+/// draining its slave and the session is killed; on a pipe a full buffer is
+/// ordinary back-pressure from a child that simply has not read yet.
+async fn write_all_to_fd(
+    session_id: u32,
+    fd: &AsyncFd<OwnedFd>,
+    bytes: &[u8],
+    cancel_rx: &mut tokio::sync::oneshot::Receiver<()>,
+) -> bool {
+    let mut written = 0usize;
+    while written < bytes.len() {
+        let mut guard = tokio::select! {
+            _ = &mut *cancel_rx => {
+                debug!(
+                    spec = "vsock-transport",
+                    session_id,
+                    remaining = bytes.len() - written,
+                    "PTY writer: cancel signalled mid-write to the stdin pipe"
+                );
+                return false;
+            }
+            writable = fd.writable() => match writable {
+                Ok(g) => g,
+                Err(err) => {
+                    warn!(
+                        spec = "vsock-transport",
+                        session_id, error = %err,
+                        "stdin pipe: writable() guard failed"
+                    );
+                    return false;
+                }
+            }
+        };
+        let raw = guard.get_inner().as_raw_fd();
+        let result = guard.try_io(|_| {
+            // SAFETY: `raw` is the live pipe write end owned by this task.
+            let n = unsafe {
+                nix::libc::write(
+                    raw,
+                    bytes[written..].as_ptr() as *const _,
+                    bytes.len() - written,
+                )
+            };
+            if n < 0 {
+                Err(io::Error::last_os_error())
+            } else {
+                Ok(n as usize)
+            }
+        });
+        match result {
+            Ok(Ok(n)) => written += n,
+            Ok(Err(err)) => {
+                warn!(
+                    spec = "vsock-transport",
+                    session_id, error = %err,
+                    "stdin pipe: write failed"
+                );
+                return false;
+            }
+            Err(_would_block) => continue,
+        }
+    }
+    true
+}
+
+/// Where a session's host→guest bytes actually land (order 926-bin4).
+///
+/// A TERMINAL session writes to the PTY master, so the line discipline
+/// interprets what arrives — which is correct there: Ctrl-C must raise SIGINT.
+/// A DATA session writes to a pipe on the child's fd 0, so nothing is
+/// interpreted and every byte is delivered as sent.
+///
+/// The distinction also decides what END OF INPUT means, which is why it is
+/// modelled here rather than as a bool beside the fd: on the PTY there is no
+/// stdin to close (the master serves output too), so EOF is a VEOF injection
+/// that only works in canonical mode; on the pipe it is a real close. Holding
+/// the pipe write end by VALUE is what makes that close expressible — dropping
+/// it is the EOF.
+enum StdinSink {
+    /// Shares the master with the pump task, which is reading output from it.
+    Pty(Arc<AsyncFd<OwnedFd>>),
+    /// Owned exclusively by the writer task. `None` once EOF has been sent;
+    /// further writes are refused rather than silently discarded.
+    Pipe(Option<AsyncFd<OwnedFd>>),
+}
+
 fn spawn_writer_task(
     session_id: u32,
     master: Arc<AsyncFd<OwnedFd>>,
+    mut stdin_sink: StdinSink,
     mut queue: mpsc::Receiver<PtyWriteCommand>,
     mut cancel_rx: tokio::sync::oneshot::Receiver<()>,
 ) -> tokio::task::JoinHandle<()> {
@@ -691,7 +915,36 @@ fn spawn_writer_task(
             };
             match cmd {
                 PtyWriteCommand::Write(bytes) => {
-                    if !write_all_to_master(session_id, &master, &bytes, &mut cancel_rx).await {
+                    // A DATA session's bytes go to the pipe, where nothing is
+                    // interpreted; a terminal session's go to the master, where
+                    // the line discipline is doing its job (926-bin4).
+                    let target = match &stdin_sink {
+                        StdinSink::Pty(m) => m.clone(),
+                        StdinSink::Pipe(Some(_)) => {
+                            // handled below without cloning an Arc
+                            master.clone()
+                        }
+                        StdinSink::Pipe(None) => {
+                            warn!(
+                                spec = "vsock-transport",
+                                session_id,
+                                bytes = bytes.len(),
+                                "PtyData{{ToGuest}} arrived AFTER stdin EOF on a \
+                                 data session — refusing to write. The host \
+                                 declared input finished and then sent more; \
+                                 delivering it would contradict the EOF the child \
+                                 has already seen."
+                            );
+                            continue;
+                        }
+                    };
+                    let ok = match &stdin_sink {
+                        StdinSink::Pipe(Some(pipe)) => {
+                            write_all_to_fd(session_id, pipe, &bytes, &mut cancel_rx).await
+                        }
+                        _ => write_all_to_master(session_id, &target, &bytes, &mut cancel_rx).await,
+                    };
+                    if !ok {
                         // Loud, never silent: any commands still queued die
                         // with the session. Teardown (SIGTERM/SIGKILL +
                         // terminal PtyClose) is driven by the store and the
@@ -707,6 +960,75 @@ fn spawn_writer_task(
                             );
                         }
                         return;
+                    }
+                }
+                PtyWriteCommand::StdinEof => {
+                    // A DATA session has a real stdin to close, so EOF is a
+                    // close — no termios question, no VEOF, no canonical-mode
+                    // dependency, and no byte injected into the stream. This is
+                    // the whole reason 926-bin4 chose a pipe: it collapses the
+                    // machinery below into a drop.
+                    if let StdinSink::Pipe(pipe) = &mut stdin_sink {
+                        if pipe.take().is_some() {
+                            debug!(
+                                spec = "vsock-transport",
+                                session_id,
+                                "PtyStdinEof: closed the data session's stdin pipe \
+                                 (real EOF; no VEOF injection needed)"
+                            );
+                        }
+                        continue;
+                    }
+                    let fd = master.get_ref().as_raw_fd();
+                    // WHY TWO, ALWAYS. In canonical mode VEOF ends the CURRENT
+                    // read: on an empty buffer that is end-of-input, but after
+                    // unterminated bytes the first 0x04 only FLUSHES them and a
+                    // second is needed to signal EOF. Rather than track whether
+                    // the last write ended in a newline, send two — MEASURED
+                    // correct in all three buffer states (terminated,
+                    // unterminated, empty: child exits, every byte delivered,
+                    // nothing corrupted). A redundant EOF on an already-empty
+                    // buffer simply reports end-of-input again.
+                    //
+                    // WHY NOT IN RAW MODE. With ICANON off there is no line
+                    // discipline to interpret 0x04 — it is ordinary data, would
+                    // be INJECTED into the child's stdin, and would signal
+                    // nothing. That is the silent no-op 924-eof7 measured and
+                    // rejected, so this refuses loudly instead of writing a
+                    // byte that corrupts the stream while pretending to work.
+                    match termios_is_canonical(fd) {
+                        Ok(true) => {
+                            if !write_all_to_master(
+                                session_id,
+                                &master,
+                                &[VEOF_BYTE, VEOF_BYTE],
+                                &mut cancel_rx,
+                            )
+                            .await
+                            {
+                                return;
+                            }
+                        }
+                        Ok(false) => {
+                            warn!(
+                                spec = "vsock-transport",
+                                session_id,
+                                "PtyStdinEof: session is in RAW mode (ICANON \
+                                 clear), where 0x04 is data rather than \
+                                 end-of-input — refusing to write it. The \
+                                 child will not see EOF; a reader waiting for \
+                                 one will not return."
+                            );
+                        }
+                        Err(err) => {
+                            warn!(
+                                spec = "vsock-transport",
+                                session_id, error = ?err,
+                                "PtyStdinEof: tcgetattr failed; cannot tell \
+                                 whether VEOF would be interpreted, so writing \
+                                 nothing rather than guessing"
+                            );
+                        }
                     }
                 }
                 PtyWriteCommand::Resize { rows, cols } => {
@@ -948,6 +1270,66 @@ async fn reap_child(pid: Pid) -> PtyExit {
 
 #[cfg(test)]
 mod tests {
+
+    /// ORDER 925-eofi — the guest must refuse to write VEOF in raw mode rather
+    /// than injecting a byte that corrupts the stream while signalling nothing.
+    /// That silent no-op is exactly what 924-eof7 measured and rejected.
+    #[test]
+    fn stdin_eof_refuses_in_raw_mode_and_says_why() {
+        let source = include_str!("pty_handler.rs");
+        let arm = source
+            .split("PtyWriteCommand::StdinEof => {")
+            .nth(1)
+            .and_then(|t| t.split("PtyWriteCommand::Resize").next())
+            .expect("the StdinEof arm moved — repoint this scan");
+        assert!(
+            arm.contains("termios_is_canonical"),
+            "the arm must ASK whether the line discipline would interpret VEOF"
+        );
+        assert!(
+            arm.contains("Ok(false)") && arm.contains("RAW mode"),
+            "the raw-mode branch must exist and name itself"
+        );
+        let raw_branch = arm.split("Ok(false)").nth(1).expect("raw branch");
+        assert!(
+            !raw_branch.contains("write_all_to_master"),
+            "raw mode must write NOTHING: 0x04 there is data, not end-of-input"
+        );
+    }
+
+    /// Two VEOF bytes, always — measured correct for an empty, a terminated and
+    /// an unterminated input buffer. One is not enough after unterminated
+    /// input, and tracking the newline state would be a second source of truth.
+    #[test]
+    fn stdin_eof_writes_two_veof_bytes() {
+        let source = include_str!("pty_handler.rs");
+        let arm = source
+            .split("PtyWriteCommand::StdinEof => {")
+            .nth(1)
+            .and_then(|t| t.split("PtyWriteCommand::Resize").next())
+            .expect("the StdinEof arm moved — repoint this scan");
+        assert!(
+            arm.contains("&[VEOF_BYTE, VEOF_BYTE]"),
+            "must send TWO VEOF bytes; one only flushes an unterminated line"
+        );
+    }
+
+    /// The EOF rides the same bounded queue as the bytes it terminates. A
+    /// separate path could overtake them and truncate the input.
+    #[test]
+    fn stdin_eof_is_ordered_with_the_input_it_terminates() {
+        let source = include_str!("pty_handler.rs");
+        let f = source
+            .split("pub async fn stdin_eof(")
+            .nth(1)
+            .expect("stdin_eof entry point moved — repoint this scan");
+        let body = f.split("}").next().unwrap();
+        assert!(
+            body.contains("enqueue_write_command"),
+            "stdin_eof must go through the same per-session queue as writes"
+        );
+    }
+
     use super::*;
 
     fn store() -> (PtySessionStore, mpsc::Receiver<ControlEnvelope>) {
@@ -996,7 +1378,16 @@ mod tests {
         let (master, slave) = raw_pty_pair();
         let (tx, rx) = mpsc::channel(PTY_WRITE_QUEUE_CAPACITY);
         let (_cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
-        let _writer = spawn_writer_task(11, master, rx, cancel_rx);
+        let _writer = spawn_writer_task(
+            11,
+            master.clone(),
+            // These pre-926-bin4 tests exercise the TERMINAL sink, which is
+            // still the default for an interactive attach — the data-session
+            // pipe is opt-in per session and does not change this path.
+            StdinSink::Pty(master),
+            rx,
+            cancel_rx,
+        );
 
         let mut expected = Vec::new();
         for i in 0..8u8 {
@@ -1032,7 +1423,16 @@ mod tests {
         let (master, slave) = raw_pty_pair();
         let (tx, rx) = mpsc::channel(PTY_WRITE_QUEUE_CAPACITY);
         let (_cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
-        let _writer = spawn_writer_task(12, master, rx, cancel_rx);
+        let _writer = spawn_writer_task(
+            12,
+            master.clone(),
+            // These pre-926-bin4 tests exercise the TERMINAL sink, which is
+            // still the default for an interactive attach — the data-session
+            // pipe is opt-in per session and does not change this path.
+            StdinSink::Pty(master),
+            rx,
+            cancel_rx,
+        );
 
         // First write far exceeds kernel PTY buffering (~64 KiB ceiling),
         // so with nobody reading the slave the writer is still mid-write

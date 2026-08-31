@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # @trace order:744-agyy (order 440, order 720-24u6)
 # Plan/schema status vocabulary divergence check (order 440, 744-agyy).
 # Exits 0 if plan/index.yaml default_status_values and plan/schema.yaml statuses
@@ -24,8 +24,8 @@
 #
 # ORDER 744-agyy (2026-08-15):
 # ----------------------------
-# Rewritten from ruby to yq (the forge container has no ruby, but documents yq
-# present; python3 is forbidden under tlatoani_hard_no_python).
+# Rewritten from ruby to yq — and then off BOTH; see ORDER 746-htj9 below.
+# (python3 is forbidden under tlatoani_hard_no_python.)
 #
 # ORDER 746-* (2026-08-15, same day): THAT REWRITE MOVED THE BREAKAGE, IT DID
 # NOT REMOVE IT. Measured across the three environments this gate actually runs
@@ -42,73 +42,83 @@
 # green tree could not be pushed at all. Neither interpreter is universal, and
 # picking one and hoping is what produced two outages in one day.
 #
-# So: TRY EACH IN TURN, and fail with a verdict that names what is missing
-# instead of a parser error that reads like a corrupt ledger. jq is the only
-# tool present everywhere but cannot read YAML, so it is not a candidate here —
-# a universal reader is the real fix and is filed separately.
+# So: the real fix landed. This gate now reads YAML through ONE path that
+# exists in all three environments — `tillandsias-plan yaml-get`, built from
+# this repo and rebuilt by cycle-preflight. The try-each-in-turn chain that
+# stood here is gone; see the read_seq comment below. jq is the only external
+# tool present everywhere and cannot read YAML, so it was never a candidate.
+
 set -eu
 
 INDEX="${1:-plan/index.yaml}"
 SCHEMA="${2:-plan/schema.yaml}"
+# ORDER 746-htj9 + 721-nyev. Resolve through the ONE sanctioned probe rather
+# than a hardcoded ./target path. This is not ceremony: every forge exports
+# CARGO_TARGET_DIR (images/default/lib-common.sh points it at the cache
+# volume), so ./target does not exist in the mounted checkout at all — a
+# hardcoded path would be absent in precisely the environment this packet is
+# about. Shebang is bash because the probe uses `local`.
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -r "$ROOT/scripts/plan-binary-probe.sh" ]; then
+  . "$ROOT/scripts/plan-binary-probe.sh"
+else
+  # Never a raw source-failure. The whole point of this packet is that a
+  # missing reader must announce itself, not surface as file-not-found.
+  resolve_plan_binary() { return 1; }
+fi
+READER="$(resolve_plan_binary 2>/dev/null || true)"
 
 if [ ! -f "$INDEX" ] || [ ! -f "$SCHEMA" ]; then
   echo "blocked:status-vocab-diverges: could not read $INDEX or $SCHEMA"
   exit 1
 fi
 
-# read_seq <file> <yq-path> <ruby-expr> -> space-joined sequence on stdout.
-# Returns non-zero and leaves the reader's message on stdout when the file will
-# not load, so the caller can report it verbatim.
+# ORDER 746-htj9. ONE READER, NAMED WHEN ABSENT.
+#
+# What stood here was a four-tier interpreter chain: yq, then host ruby, then
+# ruby inside the builder toolbox, then a refusal. Each tier was added by a
+# correct fix for a real outage, and the chain is the SHAPE of the defect, not
+# a solution to it — there is no interpreter present in all three environments
+# this repo's gates run in, so every tier is somebody's missing tool:
+#
+#                     yq        ruby      jq        python3
+#   forge             present   ABSENT    present   FORBIDDEN
+#   host (Silverblue) ABSENT    ABSENT    present   FORBIDDEN
+#   builder toolbox   ABSENT    present   present   FORBIDDEN
+#
+# `tillandsias-plan yaml-get` is present in all three because it is BUILT from
+# this repo and scripts/cycle-preflight.sh rebuilds it at the top of every
+# cycle — availability is a property we own rather than one we hope the
+# environment provides. It also settles 762-8yna and 720-24u6 by construction:
+# no psych version to placate, no `permitted_classes: [Time, Date]` to
+# remember, so the ledger's bare ISO-8601 timestamps just load.
+#
+# read_seq <file> <dotted.path> -> space-joined sequence on stdout.
+# Non-zero with the reader's verdict on stdout when the file will not load, so
+# the caller reports it verbatim and index-load-failed stays distinct from
+# status-vocab-diverges (the 720-24u6 negative control).
 read_seq() {
-  _rs_file="$1"; _rs_yq="$2"; _rs_rb="$3"
-  if command -v yq >/dev/null 2>&1; then
-    yq eval "$_rs_yq" "$_rs_file" 2>&1
-    return $?
+  _rs_file="$1"; _rs_path="$2"
+  if [ -z "$READER" ] || [ ! -x "$READER" ]; then
+    # A NAMED refusal, never a raw command-not-found. The 2026-08-15 breakage
+    # surfaced as `yq: commande introuvable` inside an index-load-failed line,
+    # which reads like a corrupt ledger and sent the first responder to the
+    # wrong place entirely.
+    echo "no sanctioned YAML reader built (resolve_plan_binary found none; run scripts/cycle-preflight.sh)"
+    return 2
   fi
-  if command -v ruby >/dev/null 2>&1; then
-    # -rdate: the exprs name Date in permitted_classes. Rubies >= 3.x reach it
-    # because psych itself requires date; macOS system ruby (2.6) does not, so
-    # without the explicit require the constant is uninitialized and this
-    # reader reports index-load-failed on a perfectly loadable index
-    # (762-8yna, found blocking the macOS local gate 2026-08-16).
-    ruby -ryaml -rdate -e "$_rs_rb" "$_rs_file" 2>&1
-    return $?
-  fi
-  # TOOLBOX TIER (methodology multi_host_development.toolbox_first_scripts,
-  # order 777-amku): host tool preferred, toolbox as the fallback. `ruby` is in
-  # the tillandsias-builder init set, so a Silverblue host with no host ruby
-  # can still read the ledger instead of refusing. This is STRICTLY ADDITIVE —
-  # it is reached only where the two tiers above already gave up and the next
-  # line was a hard refusal. No `ensure_toolbox.sh` include here on purpose:
-  # this script is #!/bin/sh (no BASH_SOURCE), and a check has no business
-  # CREATING a toolbox — it uses one that already exists, or it refuses.
-  if command -v toolbox >/dev/null 2>&1 &&
-     toolbox run --container "${TILLANDSIAS_BUILDER_TOOLBOX:-tillandsias-builder}" \
-        true >/dev/null 2>&1; then
-    toolbox run --container "${TILLANDSIAS_BUILDER_TOOLBOX:-tillandsias-builder}" \
-        ruby -ryaml -rdate -e "$_rs_rb" "$_rs_file" 2>&1
-    return $?
-  fi
-  echo "no YAML reader on PATH (tried yq, ruby, toolbox ruby)"
-  return 2
+  "$READER" yaml-get "$_rs_file" "$_rs_path" 2>&1
 }
 
-# safe_load(File.read(...)) rather than safe_load_file: the latter is psych 4
-# (ruby >= 3.1) only, while this form parses identically on every psych >= 3.1
-# — macOS system ruby 2.6 included (762-8yna, same gate-blocking incident as
-# the -rdate require above).
-RB_INDEX='d=YAML.safe_load(File.read(ARGV[0]), permitted_classes: [Time, Date]); puts((d.dig("plan_index","default_status_values") || []).join(" "))'
-RB_SCHEMA='d=YAML.safe_load(File.read(ARGV[0]), permitted_classes: [Time, Date]); puts((d["statuses"] || []).join(" "))'
-
 # Load index
-if ! idx_raw=$(read_seq "$INDEX" '.plan_index.default_status_values // [] | join(" ")' "$RB_INDEX"); then
+if ! idx_raw=$(read_seq "$INDEX" plan_index.default_status_values); then
   first_err=$(printf '%s\n' "$idx_raw" | head -n 1)
   echo "blocked:index-load-failed: $INDEX: $first_err"
   exit 1
 fi
 
 # Load schema
-if ! sch_raw=$(read_seq "$SCHEMA" '.statuses // [] | join(" ")' "$RB_SCHEMA"); then
+if ! sch_raw=$(read_seq "$SCHEMA" statuses); then
   first_err=$(printf '%s\n' "$sch_raw" | head -n 1)
   echo "blocked:index-load-failed: $SCHEMA: $first_err"
   exit 1

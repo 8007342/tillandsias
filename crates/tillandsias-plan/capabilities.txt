@@ -28,11 +28,15 @@ carry-forward-check
 check
 # close: order 531 ran a forge whose checkout was a pre-expert `main` snapshot,
 closure-evidence-check
+collect
 compact
 corpus-coverage
 declared-closures
 declared-closures-check
+decompose
 dependencies-of
+expert-serve
+experts-probe
 expire-claims
 # does not remove the capability — it makes the expert UNDER-report itself, and
 # file are checked against each other BEHAVIOURALLY by
@@ -57,6 +61,7 @@ next-order
 # One filename, two readers, so the "available now" and "available after a
 # ONE token per line: the subcommands this expert can answer. Sorted, unique,
 parked-blocks
+pipeline
 plan-events
 query
 # reader.
@@ -66,13 +71,19 @@ ready
 select-rows
 set-field
 spec-envelope
+spec-floor
 spec-index
 spec-retrieve
+split-parents
 status
 # the litmus asserts the manifest covers the documented command surface too.
 # tillandsias-plan CAPABILITY MANIFEST — order 569
 # Two DIFFERENT readers need the same list, and they cannot both run Rust:
+validate-yaml
 verify-answer
+yaml-get
+yaml-json
+yaml-type
 # WHY THIS IS A DATA FILE AND NOT A RUST ARRAY
 #      with no build and no cargo.
 #      wrapper and lib-common.sh read THIS FILE from the checkout directly,

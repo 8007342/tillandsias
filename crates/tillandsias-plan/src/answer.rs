@@ -343,6 +343,52 @@ impl Freshness {
     pub fn indexed_at(&self) -> &str {
         &self.indexed_at
     }
+
+    /// RAG freshness timestamp in local time: `"RAG(hh:mm:ss)"`.
+    /// Returns `"RAG(unknown)"` when `indexed_at` is unparseable.
+    pub fn rag_timestamp(&self) -> String {
+        if self.indexed_at == "unknown" {
+            return "RAG(unknown)".to_string();
+        }
+        // Parse ISO 8601 and convert to local time
+        match chrono::DateTime::parse_from_rfc3339(&self.indexed_at) {
+            Ok(dt) => {
+                let local: chrono::DateTime<chrono::Local> = dt.with_timezone(&chrono::Local);
+                format!("RAG({})", local.format("%H:%M:%S"))
+            }
+            Err(_) => "RAG(unknown)".to_string(),
+        }
+    }
+
+    /// Staleness indicator: returns `true` if the corpus is older than the
+    /// given threshold (in seconds). Default threshold: 3600 (1 hour).
+    pub fn is_stale(&self, threshold_secs: i64) -> bool {
+        if self.indexed_at == "unknown" {
+            return true;
+        }
+        match chrono::DateTime::parse_from_rfc3339(&self.indexed_at) {
+            Ok(dt) => {
+                let now = chrono::Utc::now();
+                let age = now.signed_duration_since(dt);
+                age.num_seconds() > threshold_secs
+            }
+            Err(_) => true,
+        }
+    }
+
+    /// RAG freshness with staleness: `"RAG(hh:mm:ss)"` or `"RAG(hh:mm:ss stale)"`.
+    pub fn rag_timestamp_with_staleness(&self, threshold_secs: i64) -> String {
+        let ts = self.rag_timestamp();
+        if ts == "RAG(unknown)" {
+            return ts;
+        }
+        if self.is_stale(threshold_secs) {
+            // Replace closing paren with " stale)"
+            format!("{} stale)", ts.trim_end_matches(')'))
+        } else {
+            ts
+        }
+    }
 }
 
 /// ORDER 801-g9nn — where the READER stands relative to the frame this answer

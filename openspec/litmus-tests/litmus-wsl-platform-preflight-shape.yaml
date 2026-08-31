@@ -47,7 +47,7 @@ critical_path:
     expected_behavior: "ok: locale-stable-marker"
 
   - step: "start() consults the preflight BEFORE the poke loop (fail fast, no retry storm)"
-    command: "awk '/async fn start\\(&self\\)/,/WSL start poke: attempt/' crates/tillandsias-vm-layer/src/wsl.rs | grep -q 'wsl_platform_preflight' && echo 'ok: fail-fast-wired'"
+    command: "mf_stage prod 0 OUT -- awk '/async fn start\\(&self\\)/,/WSL start poke: attempt/' crates/tillandsias-vm-layer/src/wsl.rs && mf_holds OUT 'wsl_platform_preflight' && echo 'ok: fail-fast-wired'"
     timeout_ms: 3000
     expected_behavior: "ok: fail-fast-wired"
 

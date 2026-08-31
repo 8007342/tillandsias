@@ -27,9 +27,9 @@ use tillandsias_control_wire::transport::{
 };
 use tillandsias_control_wire::{
     CAP_PTY_ATTACH_V1, CAP_PTY_HEARTBEAT_V1, CAP_PTY_HEARTBEAT_V2, CloudProjectEntry,
-    ContainerMetricWire, ControlEnvelope, ControlMessage, ErrorCode, LocalProjectEntry,
-    MAX_MESSAGE_BYTES, MetricsSnapshotWire, MountIoMetricWire, VmPhase, WIRE_VERSION, decode,
-    encode,
+    CloudRefreshOutcome, ContainerMetricWire, ControlEnvelope, ControlMessage, ErrorCode,
+    LocalProjectEntry, MAX_MESSAGE_BYTES, MetricsSnapshotWire, MountIoMetricWire, VmPhase,
+    WIRE_VERSION, decode, encode,
 };
 use tillandsias_secure_channel::{HopId, channel_psk, server_handshake_or_reclaim};
 #[cfg(test)]
@@ -413,12 +413,27 @@ impl VmStateHandle {
     /// contract is unit-testable without podman.
     pub async fn apply_login_transition<F>(&self, logged_in: bool, handle: Option<String>, fetch: F)
     where
-        F: FnOnce() -> Vec<CloudProjectEntry> + Send + 'static,
+        F: FnOnce() -> (Vec<CloudProjectEntry>, CloudRefreshOutcome) + Send + 'static,
     {
         let flipped_in = self.set_login_state(logged_in, handle);
         if flipped_in {
-            let projects = tokio::task::spawn_blocking(fetch).await.unwrap_or_default();
-            self.set_cloud_projects(projects);
+            let (projects, outcome) = tokio::task::spawn_blocking(fetch).await.unwrap_or_default();
+            // 731-eupn: a login transition must not publish an UNCONFIRMED
+            // list. This is the post-login fetch, and it is exactly the moment
+            // the tray first renders the cloud submenu — so pushing an empty
+            // list here because `gh` was not ready yet is what produced
+            // "(no repos)" for accounts with hundreds of them. On a failed
+            // fetch, leave the previous list alone; the periodic refresh will
+            // publish once it has something to say.
+            if outcome.is_confirmed() {
+                self.set_cloud_projects(projects);
+            } else {
+                debug!(
+                    spec = "host-shell-architecture",
+                    ?outcome,
+                    "login transition: cloud fetch unconfirmed; keeping previous list"
+                );
+            }
         }
     }
 
@@ -972,6 +987,17 @@ async fn serve_ready_stream(
                 // they shipped in different commits, so the argv cap does not
                 // imply the heal. See CAP_PROXY_CA_KEY_HEAL's doc comment.
                 tillandsias_control_wire::CAP_PROXY_CA_KEY_HEAL.into(),
+                // Order 925-eofi: advertise that this guest understands an
+                // explicit end-of-stdin frame. A host MUST feature-detect on
+                // this before sending PtyStdinEof — a guest predating it
+                // rejects the unknown variant and the SESSION dies, which is
+                // strictly worse than the hang the frame exists to fix
+                // (924-eof7).
+                tillandsias_control_wire::CAP_PTY_STDIN_EOF.into(),
+                // Order 926-bin4: advertise that this guest can open a DATA
+                // session (child fd 0 on a pipe), so a host can send binary
+                // stdin without the line discipline eating control bytes.
+                tillandsias_control_wire::CAP_PTY_DATA_SESSION.into(),
                 CAP_PTY_ATTACH_V1.into(),
                 CAP_PTY_HEARTBEAT_V1.into(),
             ],
@@ -1342,7 +1368,12 @@ async fn serve_ready_stream(
                 //
                 // @trace spec:host-shell-architecture, spec:tillandsias-vault,
                 //        plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q4)
-                let projects = tokio::task::spawn_blocking(fetch_cloud_projects)
+                // A panicked/cancelled blocking task defaults to
+                // (empty, Unknown) — NOT (empty, Ok). The tuple's Default
+                // derives from CloudRefreshOutcome's, which is Unknown by
+                // design (731-eupn), so a join failure also fails closed
+                // rather than announcing a confirmed-empty account.
+                let (projects, outcome) = tokio::task::spawn_blocking(fetch_cloud_projects)
                     .await
                     .unwrap_or_default();
                 // Order 231: an explicit refresh is also a push source — fan
@@ -1357,6 +1388,7 @@ async fn serve_ready_stream(
                     body: ControlMessage::CloudRefreshReply {
                         seq_in_reply_to: seq,
                         projects,
+                        outcome,
                     },
                 };
                 if write_envelope_with_shutdown(&mut write_half, &reply, &mut shutdown).await.is_err() {
@@ -1499,6 +1531,47 @@ async fn serve_ready_stream(
                 // control-plane fairness deadline — a wedged session is
                 // killed by the store instead (kill-not-drop).
                 pty_store.write_to_guest(session_id, bytes).await;
+            }
+            #[cfg(unix)]
+            ControlMessage::PtyOpenData {
+                session_id,
+                rows,
+                cols,
+                argv,
+                env: pty_env,
+                cwd,
+            } => {
+                // Order 926-bin4: identical to PtyOpen except the child's fd 0
+                // is a pipe, so stdin crosses no line discipline. Shares the
+                // same failure reporting; only the stdin wiring differs.
+                if let Err(err) = pty_store
+                    .open_with_stdin_kind(session_id, rows, cols, argv, pty_env, cwd, true)
+                    .await
+                {
+                    let err_env = ControlEnvelope {
+                        wire_version: WIRE_VERSION,
+                        seq: env.seq,
+                        body: ControlMessage::Error {
+                            seq_in_reply_to: Some(env.seq),
+                            code: ErrorCode::Internal,
+                            message: format!("PtyOpenData failed: {err}"),
+                        },
+                    };
+                    if write_envelope_with_shutdown(&mut write_half, &err_env, &mut shutdown)
+                        .await
+                        .is_err()
+                    {
+                        break 'connection;
+                    }
+                }
+            }
+            #[cfg(unix)]
+            ControlMessage::PtyStdinEof { session_id } => {
+                // Order 925-eofi. Same bounded queue as the input bytes, so an
+                // EOF cannot overtake the data it terminates. What actually
+                // reaches the child is decided in the writer task, which can
+                // see the termios state — see PtyWriteCommand::StdinEof.
+                pty_store.stdin_eof(session_id).await;
             }
             #[cfg(unix)]
             ControlMessage::PtyData {
@@ -1847,24 +1920,41 @@ pub(crate) fn login_transition_sentinel_path() -> std::path::PathBuf {
     std::env::temp_dir().join("tillandsias-login-transition")
 }
 
-pub(crate) fn fetch_cloud_projects() -> Vec<CloudProjectEntry> {
+/// 731-eupn: returns the list AND whether it is an ANSWER.
+///
+/// This is the wrapper the vsock server actually calls in the VM, and the
+/// `Err` arm below already had the discriminator — it was being thrown away
+/// one line before the host needed it. `Err` became `Vec::new()`, identical on
+/// the wire to an account with no repos, and the tray rendered a confident
+/// `(no repos)` for a containerized `gh` that had failed outright.
+pub(crate) fn fetch_cloud_projects() -> (Vec<CloudProjectEntry>, CloudRefreshOutcome) {
     match crate::remote_projects::discover_github_projects_result_with_debug(false) {
-        Ok(projects) => projects
-            .into_iter()
-            .map(|p| CloudProjectEntry {
-                label: format!("{}/{}", p.owner, p.name),
-                owner: p.owner,
-                repo: p.name,
-                default_branch: String::new(),
-            })
-            .collect(),
+        Ok(projects) => (
+            projects
+                .into_iter()
+                .map(|p| CloudProjectEntry {
+                    label: format!("{}/{}", p.owner, p.name),
+                    owner: p.owner,
+                    repo: p.name,
+                    default_branch: String::new(),
+                })
+                .collect(),
+            // An Ok with zero entries IS an answer: the account has no visible
+            // repos. That is the one case where an empty list means something.
+            CloudRefreshOutcome::Ok,
+        ),
         Err(e) => {
             debug!(
                 spec = "host-shell-architecture",
                 error = %e,
-                "CloudRefreshRequest (in-VM): containerized gh fetch failed; returning empty cloud list"
+                "CloudRefreshRequest (in-VM): containerized gh fetch failed; reporting FAILED, not empty"
             );
-            Vec::new()
+            (
+                Vec::new(),
+                CloudRefreshOutcome::Failed {
+                    reason: format!("in-VM gh fetch failed: {e}"),
+                },
+            )
         }
     }
 }
@@ -2665,12 +2755,15 @@ mod tests {
 
         state
             .apply_login_transition(true, Some("octocat".to_string()), || {
-                vec![CloudProjectEntry {
-                    label: "octocat/tillandsias".to_string(),
-                    owner: "octocat".to_string(),
-                    repo: "tillandsias".to_string(),
-                    default_branch: "main".to_string(),
-                }]
+                (
+                    vec![CloudProjectEntry {
+                        label: "octocat/tillandsias".to_string(),
+                        owner: "octocat".to_string(),
+                        repo: "tillandsias".to_string(),
+                        default_branch: "main".to_string(),
+                    }],
+                    CloudRefreshOutcome::Ok,
+                )
             })
             .await;
 

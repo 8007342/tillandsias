@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: claim-events-change-no-status-so-claiming-separates-nobody
+    field: status
+    value: in_progress
+    ts: "2026-08-31T02:17:29Z"
+    host: lenovinha
+
+events:
+  - packet_id: claim-events-change-no-status-so-claiming-separates-nobody
+    event:
+      type: note
+      ts: "2026-08-31T02:17:29Z"
+      host: lenovinha
+      summary: >
+        claimed for cycle 20260831t021652z by linux-lenovinha-claude-20260831t021652z

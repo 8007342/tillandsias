@@ -54,6 +54,29 @@
 
 set -uo pipefail
 
+
+# ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has it.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+# Resolve the lib by WALKING UP, not by a fixed depth (order 914-ahsy). The
+# fixed form `dirname "${BASH_SOURCE[0]}"/lib/...` is correct only for a caller
+# sitting directly in scripts/. From scripts/refusal-calibration/ it points at a
+# lib that does not exist, the `|| true` swallows the miss, and the tool variable
+# silently falls back to the bare name — a conversion that passes review, passes
+# the suite, and changes nothing.
+_td_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_td_dir" ] && [ "$_td_dir" != "/" ] && [ ! -f "$_td_dir/lib/tool-dispatch.sh" ]; do
+    _td_dir="$(dirname "$_td_dir")"
+done
+if [ -f "$_td_dir/lib/tool-dispatch.sh" ]; then
+    . "$_td_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+fi
+if command -v resolve_tool >/dev/null 2>&1; then
+    JQ="$(resolve_tool jq || printf 'jq')"
+else
+    JQ="jq"   # lib unavailable: preserve the previous behaviour exactly
+fi
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 2
 
@@ -74,16 +97,37 @@ case "${1:-}" in
     *) echo "usage: $(basename "$0") [--all]" >&2; exit 2 ;;
 esac
 
-command -v nix >/dev/null 2>&1 || { echo "skip:nix-deps-stability:no-nix"; exit 0; }
+# CAPABILITY, NOT `command -v nix` (order 799-tb7q, second criterion). Asking
+# the HOST for the binary declared a toolbox-capable host nix-incapable and
+# skipped this gate on it entirely — a green skip, which is the worst kind.
+# scripts/nix-toolbox.sh answers the question properly across all three rungs.
+#
+# `capability`, NOT `ensure`: this runs inside ./build.sh --check, and `ensure`
+# may `podman pull` a 400 MiB image and create a toolbox. A pre-push gate reads
+# its environment; it does not provision one. So a host that has no nix on any
+# rung TODAY still skips, exactly as before — the change is that a host whose
+# nix lives in an existing toolbox no longer does.
+NIX_RUNG="$(bash "$ROOT/scripts/nix-toolbox.sh" capability 2>/dev/null)" \
+    || { echo "skip:nix-deps-stability:no-nix"; exit 0; }
+NIX_RUNG="${NIX_RUNG#ok:nix-capability:}"
 
 NIX_ARGS=()
 while IFS= read -r line; do
     [ -n "$line" ] && NIX_ARGS+=("$line")
 done < <(bash "$ROOT/scripts/nix-toolbox.sh" nix-args 2>/dev/null)
 
+# On daemon/chroot the host binary is the one to call and NIX_ARGS carries the
+# rung's flags. On the toolbox rung there is no host `nix` at all, so every
+# invocation goes through the script's `run` — which is also why `nix-args`
+# legitimately printed nothing above (it refuses that rung by design).
 _nix() {
-    nix --extra-experimental-features "nix-command flakes" \
-        ${NIX_ARGS[0]+"${NIX_ARGS[@]}"} "$@"
+    if [ "$NIX_RUNG" = "toolbox" ]; then
+        bash "$ROOT/scripts/nix-toolbox.sh" run -- \
+            nix --extra-experimental-features "nix-command flakes" "$@"
+    else
+        nix --extra-experimental-features "nix-command flakes" \
+            ${NIX_ARGS[0]+"${NIX_ARGS[@]}"} "$@"
+    fi
 }
 
 _nix store ping >/dev/null 2>&1 || { echo "skip:nix-deps-stability:nix-unusable"; exit 0; }
@@ -94,9 +138,9 @@ _nix store ping >/dev/null 2>&1 || { echo "skip:nix-deps-stability:nix-unusable"
 probe() { # <output> -> "<top>\t<deps>"
     local out="$1" json top deps
     json="$(_nix derivation show ".#${out}" 2>/dev/null)" || return 1
-    top="$(printf '%s' "$json" | jq -r '
+    top="$(printf '%s' "$json" | "$JQ" -r '
         (if has("derivations") then .derivations else . end) | keys[0]' 2>/dev/null)"
-    deps="$(printf '%s' "$json" | jq -r '
+    deps="$(printf '%s' "$json" | "$JQ" -r '
         (if has("derivations") then .derivations else . end)
         | to_entries[0].value
         | ((.inputs.drvs // {}) + (.inputDrvs // {}))

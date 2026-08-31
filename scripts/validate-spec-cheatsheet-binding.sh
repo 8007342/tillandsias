@@ -113,7 +113,7 @@ EOF
 if [[ ${#EMPTY_SOURCES[@]} -gt 0 ]]; then
     {
         echo "Specs with empty \"## Sources of Truth\" (${#EMPTY_SOURCES[@]}):"
-        for spec in "${EMPTY_SOURCES[@]}"; do
+        for spec in ${EMPTY_SOURCES[@]+"${EMPTY_SOURCES[@]}"}; do
             echo "  - $spec"
         done
         echo ""
@@ -123,7 +123,7 @@ fi
 if [[ ${#INVALID_ONLY[@]} -gt 0 ]]; then
     {
         echo "Specs with only invalid refs (${#INVALID_ONLY[@]}):"
-        for spec in "${INVALID_ONLY[@]}"; do
+        for spec in ${INVALID_ONLY[@]+"${INVALID_ONLY[@]}"}; do
             echo "  - $spec"
         done
         echo ""

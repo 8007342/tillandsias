@@ -65,6 +65,29 @@
 
 set -uo pipefail
 
+
+# ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has it.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+# Resolve the lib by WALKING UP, not by a fixed depth (order 914-ahsy). The
+# fixed form `dirname "${BASH_SOURCE[0]}"/lib/...` is correct only for a caller
+# sitting directly in scripts/. From scripts/refusal-calibration/ it points at a
+# lib that does not exist, the `|| true` swallows the miss, and the tool variable
+# silently falls back to the bare name — a conversion that passes review, passes
+# the suite, and changes nothing.
+_td_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_td_dir" ] && [ "$_td_dir" != "/" ] && [ ! -f "$_td_dir/lib/tool-dispatch.sh" ]; do
+    _td_dir="$(dirname "$_td_dir")"
+done
+if [ -f "$_td_dir/lib/tool-dispatch.sh" ]; then
+    . "$_td_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+fi
+if command -v resolve_tool >/dev/null 2>&1; then
+    JQ="$(resolve_tool jq || printf 'jq')"
+else
+    JQ="jq"   # lib unavailable: preserve the previous behaviour exactly
+fi
+
 ENDPOINT_HOST="127.0.0.1"
 ENDPOINT_PORT="${TILLANDSIAS_DEV_INFERENCE_PORT:-11434}"
 ENDPOINT="http://${ENDPOINT_HOST}:${ENDPOINT_PORT}"
@@ -101,7 +124,7 @@ api_up() { curl -fsS --max-time 2 "$ENDPOINT/api/version" >/dev/null 2>&1; }
 
 have_model() { # <model>
     curl -fsS --max-time 5 "$ENDPOINT/api/tags" 2>/dev/null \
-        | jq -e --arg m "$1" '.models[]?.name | select(. == $m or startswith($m + ":"))' \
+        | "$JQ" -e --arg m "$1" '.models[]?.name | select(. == $m or startswith($m + ":"))' \
             >/dev/null 2>&1
 }
 
@@ -113,7 +136,7 @@ pull_model() { # <model> — native binary when present, else the serve API.
         "$BIN" pull "$1" >>"$LOG" 2>&1
     else
         curl -fsS --max-time 1800 -X POST "$ENDPOINT/api/pull" \
-            -d "$(jq -cn --arg m "$1" '{name: $m}')" >>"$LOG" 2>&1
+            -d "$("$JQ" -cn --arg m "$1" '{name: $m}')" >>"$LOG" 2>&1
     fi
 }
 
@@ -166,7 +189,80 @@ ensure_container() {
     _ec_accel=""
     if [ "$_ec_tier" = "gpu-cuda" ]; then
         _ec_accel="--device=nvidia.com/gpu=all"
+    elif [ "$_ec_tier" = "gpu-rocm" ]; then
+        # ORDER 937-68n4 / the gpu-rocm half of the very bug the comment above
+        # describes. That fix was written for CUDA and never extended, so the
+        # fleet's gpu-rocm host spent three orders running CPU-only while this
+        # script passed TILLANDSIAS_INFERENCE_TIER=gpu-rocm INTO the container.
+        # The label announced an accelerator the container was never given —
+        # and the label is why nobody noticed, because a tier that names the
+        # wiring reads as evidence that the wiring happened.
+        #
+        # ROCm has no CDI spec to name, so the devices are passed directly:
+        # /dev/kfd is the compute interface and /dev/dri carries the render
+        # node. Both are needed; /dev/kfd alone enumerates no agent.
+        _ec_accel="--device=/dev/kfd --device=/dev/dri"
     fi
+
+    # ORDER 917-zkge — A WORKING LANE REFUSED BY POLICY.
+    #
+    # ollama ENUMERATES an integrated GPU and then discards it by default:
+    #   "dropping integrated GPU; to enable, set OLLAMA_IGPU_ENABLE=1"
+    #   id=0 library=Vulkan name=Vulkan0 description="AMD Radeon 840M Graphics"
+    # That line is DEBUG level, so on a host whose ONLY GPU is integrated the
+    # observable result is a silent fall back to CPU while every other signal
+    # says the lane is configured: devices passed, ICD present, backend
+    # installed, manifest recording core+vulkan.
+    #
+    # Reasonable default for a machine with a discrete card beside the iGPU;
+    # wrong for this whole hardware class, where integrated IS the GPU. Set for
+    # the AMD lanes only, so a discrete-GPU host keeps ollama's own preference.
+    #
+    # MEASURED on yoga (gfx1152 / RADV KRACKAN1), all fully placed, CPU baselines
+    # taken on the same host with size_vram=0 verified as the control:
+    #
+    #   model         GPU decode      CPU decode      ratio
+    #   qwen2.5:0.5b  86.4 tok/s      115.6 tok/s     0.75x  <- GPU is SLOWER
+    #   llama3.2:3b   32.6 tok/s       25.2 tok/s     1.30x
+    #   qwen2.5:7b    12.9 tok/s       12.2 tok/s     1.06x
+    #
+    # NOT a monotonic win — an inverted U with the benefit peaking mid-size:
+    #   * 0.5b LOSES on the GPU. The model is small enough that dispatch and
+    #     synchronisation overhead exceeds what the iGPU's parallelism buys, and
+    #     12 CPU threads on a model this size are simply faster.
+    #   * 3b is the sweet spot: big enough to amortise dispatch, small enough that
+    #     compute still dominates.
+    #   * 7b is bandwidth-bound. An iGPU shares the system memory bus, so the
+    #     constraint that binds is identical on both lanes and the GPU cannot fix
+    #     it (prefill DOES improve, 93 vs 52 tok/s — that part is compute-bound).
+    #
+    # TTFT (yoga, 0.5b, warm, wall clock to the first STREAMED token, 3 reps):
+    #   GPU 33-34 ms   CPU 26-27 ms   -> 1.26x WORSE on the accelerated lane.
+    # Direction agrees with yolanda's Windows pair (0.562s vs 0.108s), the
+    # MAGNITUDE does not: 1.26x here against 5.2x there. Kept as two separate
+    # numbers rather than averaged — an average of 1.26x and 5.2x would describe
+    # no machine that exists and would read as more authoritative than either
+    # measurement.
+    #
+    # AND THEY ARE NOT TWO POINTS ON ONE AXIS. This 1.26x is GPU-vs-CPU. Theirs is
+    # HYBRID(NPU+iGPU)-vs-CPU, which varies the device count AND their kinds AND
+    # the dispatch path at once. So the 5.2x is a HYBRID-DISPATCH cost measured on
+    # one stack, not a property of accelerated lanes: a reader on a discrete-GPU
+    # host should expect something nearer 1.26x. yolanda tried to isolate the
+    # handoff cost with a GPU-only path and reported it untestable there — the
+    # ryzenai-llm recipe ships CPU/NPU/Hybrid checkpoints and no GPU-only variant,
+    # so the device count can vary 1->2 but not WHICH single device.
+    #
+    # CONSEQUENCE FOR THE DEFAULT MODEL, which is the operator-facing part: the
+    # fleet default is qwen2.5:0.5b, and on this hardware class that model is
+    # FASTER on the CPU. Enabling this lane is a regression for the default and a
+    # win only from roughly 3b up. The flag is still set because the lane must
+    # exist and be measurable, but a tier that routes 0.5b to the GPU here is
+    # choosing the slower path.
+    _ec_igpu=""
+    case "$_ec_tier" in
+        gpu-rocm|gpu-vulkan) _ec_igpu="--env=OLLAMA_IGPU_ENABLE=1" ;;
+    esac
 
     # shellcheck disable=SC2086 # _ec_accel is one optional flag or empty
     podman run --detach --name "$DEV_CONTAINER" \
@@ -175,6 +271,7 @@ ensure_container() {
         --userns=keep-id --pids-limit=128 \
         $_ec_accel \
         --env OLLAMA_DEBUG=1 \
+        $_ec_igpu \
         --env TILLANDSIAS_INFERENCE_TIER="$_ec_tier" \
         --env OLLAMA_KEEP_ALIVE="${TILLANDSIAS_DEV_INFERENCE_KEEP_ALIVE:-30m}" \
         -v "$_ec_cache:/home/ollama/.ollama/models:rw" \

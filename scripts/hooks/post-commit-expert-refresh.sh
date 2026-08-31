@@ -99,6 +99,8 @@ if [ -x "$REPO_ROOT/scripts/spec-index-ensure.sh" ]; then
     disown -a 2>/dev/null || true
 fi
 
+# L1b domain fan-out removed: spec-index-ensure.sh parses no --domain flag, so each per-domain fork was a FULL-corpus ensure (12m19s CPU cold), 2-5 concurrent per commit — the single ensure above already covers everything.
+
 # ── Crate changes → async binary rebuild ────────────────────────────
 # The tillandsias-plan binary changes when its crate sources change.
 # Trigger a background, bounded rebuild so the next answer uses the
@@ -141,6 +143,35 @@ if echo "$CHANGED" | grep -qE '^crates/tillandsias-plan/'; then
             fi
         else
             echo "[$HOOK_NAME] $(date -u +%Y-%m-%dT%H:%M:%SZ) SKIP: cargo not available — binary rebuild deferred" >> "$HOOK_LOG"
+        fi
+    ) &
+    disown -a 2>/dev/null || true
+fi
+
+# ── SENTINEL ADVERSARIAL QUERY (order 902-5bf9) ─────────────────────
+#
+# After commits that touch the expert system pipeline (Lua scripts,
+# pipeline.rs, semantic_expert.rs), run a lightweight sentinel query
+# through the adversarial decomposition pipeline. This verifies:
+#   1. The Lua runtime loads all scripts without errors
+#   2. The tier classifier produces a valid tier
+#   3. The decompose function produces variants
+#   4. The collect function processes responses
+#
+# Runs in the background, never blocks the commit.
+# IMMEDIATE tier: short query, fast timeout, no inference required.
+if echo "$CHANGED" | grep -qE '^crates/tillandsias-plan/(lua/|src/pipeline\.rs|src/lua_runtime\.rs|src/semantic_expert\.rs)'; then
+    (
+        _sentinel_bin="${FORGE_EXPERTS_BIN_DIR:-$HOME/.local/bin}/tillandsias-plan"
+        if [ -x "$_sentinel_bin" ]; then
+            # Decompose only — no inference needed, just verifies Lua loads
+            _sentinel_out="$("$_sentinel_bin" --index "$REPO_ROOT/plan/index.yaml" decompose "what is the current direction" 2>/dev/null || true)"
+            if printf '%s' "$_sentinel_out" | jq -e 'type == "array" and length > 0' >/dev/null 2>&1; then
+                _count=$(printf '%s' "$_sentinel_out" | jq 'length')
+                echo "[$HOOK_NAME] $(date -u +%Y-%m-%dT%H:%M:%SZ) sentinel: ok:decompose:$_count-variants" >> "$HOOK_LOG"
+            else
+                echo "[$HOOK_NAME] $(date -u +%Y-%m-%dT%H:%M:%SZ) sentinel: FAIL:decompose: $_sentinel_out" >> "$HOOK_LOG"
+            fi
         fi
     ) &
     disown -a 2>/dev/null || true

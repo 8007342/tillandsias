@@ -399,7 +399,8 @@ distributed_work:
         is consumed by the dependency resolver, burndown, guards, and
         selectors; no reader defines its own.
     rules:
-      - "A `claim` event changes status from ready to in_progress (mint lease_id; heartbeat per lease rules)."
+      - "A `claim` event changes status from ready to in_progress (mint lease_id; heartbeat per lease rules). IN PRACTICE the status change is what `tillandsias-plan set-field <id> status in_progress` writes, and that is the ONLY thing selectors read as a lease (943-unii)."
+      - "The `--reason` text passed to `set-field` is recorded as a `type: note` event, NOT `type: claim` (946-pdpi). A consumer that greps for claim-typed events therefore finds NOTHING from the current claim protocol; read the status LWW channel, which carries the value, the timestamp and the host. The stranded sweep ages on that channel for exactly this reason."
       - "A `blocked` event must name the blocker, owner host if known, and the next ping time."
       - "A checkpoint that lands the artifact with field verification still outstanding sets status `implemented` and MUST name the outstanding verification in next_action."
       - "A `completed` event REQUIRES evidence_refs and sets status to `completed` — or directly to `verified`/`done` when the evidence already meets that bar. Writers without as-wired check evidence write `completed`, never `verified`; writers without validation/acceptance evidence write `verified`, never `done`."
@@ -1987,3 +1988,240 @@ distributed_work:
     consumers:
       - "skills/advance-work-from-plan/SKILL.md §1.4 (Create Agent ID) and §3 (claim events)"
       - "scripts/mo-full-attest.sh (shares tillandsias_node_name for its ledger host label)"
+
+  sibling_heads_up_protocol:
+    rationale: >
+      Hosts can message each other directly (ListAgents / SendMessage over
+      Remote Control). The capability is NEW and agents do not discover it on
+      their own — the coordinator stumbled onto it on 2026-08-25 after months
+      of the fleet coordinating exclusively through the ledger and the trunk.
+      A ledger is an excellent record and a terrible way to say "I am about to
+      change a thing you depend on", because it is read AFTER work, not before.
+    the_defect_this_prevents: >
+      THE STRUCTURAL ARGUMENT, which holds regardless of anyone's diligence:
+      THE UNION IS A STATE NO SINGLE BRANCH'S GATE OBSERVES. Every branch can be
+      green alone and the merge still broken, because no branch's `--check` ever
+      compiles the other's configuration. Care does not close that gap; only a
+      second lane looking does.
+    worked_example: >
+      MEASURED 2026-08-26. macbook landed 731-eupn on osx-next: CloudRefreshReply
+      gained an `outcome` discriminator so an empty project list from a FAILED
+      fetch stops being indistinguishable from a confirmed-empty account. Good
+      fix. They updated vsock_server.rs:1365 and missed tray/mod.rs:1383. Each
+      branch was green alone; the union was E0063 + E0308, costing a red gate
+      and ~30 minutes of coordinator cycle.
+
+      THE CAPTION MATTERS AND THE FIRST VERSION OF IT HERE WAS FALSE. This
+      section originally said the author "could not see" the Linux site because
+      that lane does not compile on macOS. macbook checked and refuted both
+      halves: `cargo check -p tillandsias-headless --features tray --all-targets`
+      finishes in 6.80s on their Mac (the `tray` feature's deps — image, zbus,
+      zvariant — are cross-platform and nothing target-gates the file), and the
+      missed call site was THE TENTH LINE of their own
+      `grep -rn CloudRefreshReply ... | head -10`. They had it on screen and let
+      a `head` boundary decide where the survey ended.
+
+      So the accurate caption, in their words: the author had every call site in
+      his own grep output and compiled only the configurations his host reaches
+      by default; a heads-up would have caused the LINUX LANE to check its own
+      configuration, which no amount of care on the macOS side substitutes for.
+
+      Kept in this form deliberately. An exculpatory example teaches a reader
+      that the defect was unavoidable, which is both false and demotivating; the
+      protocol does not need it, because the structural argument above is enough.
+    the_gated_module_rule: >
+      WHEN A MODULE IS GATED OUT OF YOUR HOST'S DEFAULT BUILD, A GREEN BUILD IS
+      NOT A CHECK OF IT — `-p <crate>` selects a PACKAGE, not a configuration.
+      Two measured instances of one class in three days: macbook's FEATURE gate
+      (the `tray` feature never compiled — the worked example above) and
+      lenovinha's TARGET gate (2026-08-29, fixing this same 731-eupn defect on
+      the Windows lane: `cargo check -p tillandsias-windows-tray --all-targets`
+      was green on Linux while compiling the cfg-gated STUB
+      src/stubs/notify_icon.rs; the tell was two stale call sites of a changed
+      signature still building clean). The check that counts compiles the gated
+      configuration itself (`--features tray`, `--target
+      x86_64-pc-windows-gnu`), and the verifier must be mutation-tested before
+      it is trusted: append a deliberate type error to the REAL module and
+      confirm the cross-configuration build goes red, silent when reverted. A
+      signature change whose stale callers build green is a build that did not
+      look.
+
+      THE INVERSE INSTANCE, and the structural fact behind it (2026-08-29,
+      the same 793-zumy fn): a helper added on the Windows lane compiled
+      only in its target_os="linux" configuration there (the Windows gate
+      builds inside WSL2), was dead code off-Linux, and left trunk
+      UNBUILDABLE on darwin under -D dead-code until the fleet's one Apple
+      host happened to compile. The author's own gates could not catch it:
+      the Windows lane never compiles the non-Linux arm of files it edits,
+      check-cross-target-build.sh is single-target, and no Apple target is
+      reachable from a non-Apple host. STATE THE STRUCTURAL FACT PLAINLY:
+      for some platforms, ONE host is the sole detector of the entire
+      compile surface. The cheap mitigation is a review-time convention,
+      not a gate: in a file whose helpers carry cfg attributes, a NEW
+      helper inherits its neighbours' attribute unless there is a stated
+      reason not to — the convention was on the line directly above the
+      insertion point, which is exactly where the next author will not
+      look unless told to.
+
+    the_gated_module_rule_inverse: >
+      THE MECHANISM OF THE INVERSE INSTANCE ABOVE, from the host that found it
+      (macbook, 935-6fzk). `wsl2_paravirtual_gpu_reason` had exactly ONE
+      production caller, `enumerate_gpus`, which is
+      `#[cfg(target_os = "linux")]`. On Linux the function is live. On macOS
+      that caller vanishes, the only remaining reference is `#[cfg(test)]`, and
+      the NON-TEST build therefore sees dead code — which `-D warnings` turns
+      from a lint into a HARD BUILD FAILURE. The trigger is not the cfg alone;
+      it is a cfg-gated sole caller plus a test-only survivor plus deny-warnings,
+      and each is individually reasonable.
+
+      WHAT MAKES IT INVISIBLE TO THE AUTHOR: nothing in their configuration is
+      wrong, nothing they can run goes red, and the defect is not in the code
+      they wrote but in the code that is MISSING on the other side of the cfg.
+      No amount of care at the keyboard surfaces it; only compiling the other
+      configuration does.
+
+      THE FIX SHAPE, when a helper exists for a platform-gated caller: gate it
+      the same way, plus `test` so the assertion it exists for still runs
+      everywhere — `#[cfg(any(target_os = "linux", test))]`. Gating on the
+      platform alone breaks the test on every other host, which is the same
+      defect wearing the opposite sign.
+
+    the_sole_detector_surface_is_wider_than_cfg_code: >
+      THE GENERALISATION, proven three ways in one night on macbook
+      (2026-08-30). The rule above reads as if this were a Rust `cfg` problem.
+      It is not. The invariant is: SOME SURFACES HAVE EXACTLY ONE HOST THAT
+      CAN SEE THEM, and a change that is green on every other lane can be
+      trunk-broken there with nobody learning until that host tries to push.
+      Three distinct surfaces, same night, same shape:
+
+      (1) CFG-COMPILED CODE — the instance above.
+
+      (2) SHELL DIALECT. Apple ships bash 3.2 and nothing newer.
+      `"${arr[@]}"` on an EMPTY array is an unbound-variable death under
+      `set -u` there, and expands to nothing on bash 4.4+. 776-cm74 added a
+      branch to hash-image-sources.sh that left one of two arrays empty
+      whichever way it went; linux and windows could not see it, and it broke
+      747-knbp, which BLOCKED EVERY PUSH FROM THE MAC.
+
+      (3) SEALED-PATH ENVIRONMENTS — the subtlest, because the obvious
+      diagnosis is wrong. The 747-knbp fixture runs build-image.sh under
+      `env -i` with `PATH="$WORK/bin:/usr/bin:/bin"` so its podman stubs are
+      the only ones reachable. On linux that PATH still carries
+      /usr/bin/timeout because coreutils is base; on macOS nothing there
+      provides it. The host was NOT missing the tool — /opt/homebrew/bin/timeout
+      exists. It is a sealed PATH that only linux survives. Read as a missing
+      host tool, the "fix" is to install coreutils on every mac forever; read
+      correctly, it is to stop requiring a non-POSIX tool inside a hermetic
+      fixture. A hermetic PATH is a PORTABILITY CLAIM, and the claim is only
+      ever tested on the hosts that run it.
+
+      THE MITIGATION IS TWO-PART, and the second half is the point. Review-time
+      convention alone does not survive contact: a reviewer on linux cannot see
+      any of these three. So whenever a sole-detector surface is found, ask
+      whether one slice of it can be made MECHANICAL, and give that slice to
+      the gate that already owns the class. Case (2) became a rule in the
+      bash-dialect gate — the gate had PASSED the broken file, being the very
+      gate that exists for the linux/darwin split. Case (3) has no gate yet and
+      remains review-time.
+
+      COROLLARY, and the reason this is filed rather than left to convention:
+      A DIALECT GATE MUST BE ABLE TO GROW RULES FROM THE HOST THAT DETECTS THE
+      DIALECT. Requiring the sole detector to get permission from hosts that
+      cannot reproduce the finding is the sole-detector problem eating its own
+      solution.
+
+      PROTOCOL: adding a helper whose only non-test caller is cfg-gated is a
+      SHARED-SURFACE change under `why_a_message_and_not_more_care` — the
+      sibling lane is the only party that can check it. Say so, or gate it at
+      the moment you write it.
+    why_a_message_and_not_more_care: >
+      A HEADS-UP IS A FALSIFIABLE ACT AND CARE IS NOT (yoga, 2026-08-26).
+      "I considered the siblings" cannot be checked by anyone, including its
+      author an hour later. "I sent a message naming the surface, and lenovinha
+      ACKed" exists in two transcripts and a ledger. Same reason
+      `cross_host_relay_provenance` works: it replaced a disposition with an
+      artifact.
+
+      Evidence that care is the wrong lever, self-audited: within an hour of
+      this section landing, yoga reviewed their own night and found FOUR
+      shared-surface changes shipped with zero heads-ups — including wiring a
+      NEW GATE into `build.sh --check` (build.sh:2016), which every host then
+      runs on every gate. Had it been wrong, the whole fleet goes red at once
+      and the author is the only one who cannot see it. None of the four broke a
+      sibling, and yoga's own summary of that is the point: "the union was green
+      because the changes happened to be self-contained, not because I
+      established that before landing them — that is luck presented as
+      diligence."
+    when_to_send:
+      - >
+        BEFORE changing a SHARED SURFACE: a wire type or shared struct, a
+        script another lane executes, a litmus/YAML schema, a methodology rule,
+        or any guard wired into `./build.sh --check`. These are the changes
+        whose blast radius leaves your lane.
+      - >
+        BEFORE taking a packet whose live claim overlaps a sibling's. Run
+        `tillandsias-plan query --status in_progress` — AFTER the branch merge,
+        never before it — and if a live claim touches the surface your batch
+        touches, message that host BEFORE implementing.
+    the_ordering_is_the_step: >
+      MEASURED 2026-08-26, one cycle after this section landed, by its own
+      author running it. The check first shipped as meta-orchestration step 2a,
+      placed before the branch update, and it MISSED the very claim it existed
+      to find:
+
+        before the merge:  831-ezea only          (yoga's claim invisible)
+        after the merge:   642-fedr + 831-ezea    (yoga, on fragments.rs)
+
+      `git fetch` updates remote-tracking refs; it does NOT update the worktree
+      ledger `tillandsias-plan` reads. A check placed before the merge sees
+      claims as of your LAST merge — and a stale ledger always shows FEWER
+      claims, never more, so it FAILS SILENTLY TOWARD "no overlap", which is
+      the answer that looks safe. Moved to step 5a, after the merge.
+
+      `expire-claims --list-live` is the tool again as of 905-wjfj: it prints
+      one row per in_progress packet plus a `rows:` line whose total must equal
+      the summary's `in_progress=N`. Before that fix it printed the count and no
+      rows — two hosts hit it on the same day, one while performing this exact
+      step — and `query --status in_progress` was the workaround. That still
+      works as a cross-check.
+
+      READ THE ROW TYPE; the two carry opposite instructions.
+      `live-claim` names a host to message. `unclaimed-in-progress` carries
+      dashes where the host and claim time would be, and those dashes ARE the
+      finding: the packet is in_progress, recent enough that no reaper will
+      surface it, and there is nobody to send a heads-up to. Silence on that row
+      is not evidence the surface is free — it means the protocol has no
+      addressee and you inspect the diff yourself. MEASURED: 831-ezea sat there
+      for over a day with a gate step wired into `./build.sh --check`.
+      `attention:list-live-partition-mismatch` means the enumeration is
+      under-reporting; a "no overlap" verdict derived from it is not evidence.
+      - >
+        WHEN YOU LAND something a sibling is waiting on — "pull when you are
+        done" — so a blocked host stops guessing whether it is blocked.
+    when_NOT_to_send:
+      - >
+        Routine drain confined to your own lane. Most work is this. A channel
+        that carries everything is one nobody reads, and interrupting a working
+        agent has a real cost — it is mid-cycle, holding a checkout lock, and
+        its context is expensive.
+      - >
+        Anything already unambiguous in the ledger. The heads-up is for what the
+        ledger CANNOT carry in time: intent, before the fact.
+    shape: >
+      Low ceremony, deliberately. HEADS UP: the surface you are touching, the
+      shape of the change, any sibling call sites you already know of, and the
+      ask. The recipient replies ACK plus comments — either "no sites on this
+      lane" or "site at <path>; I will take it" / "you take it". Two messages,
+      under a minute each. This is not a design review and must not become one.
+    the_honest_caveat: >
+      A prose rule that depends on an attentive agent is a suggestion, not a
+      constraint — this file says so elsewhere and the fleet proved it twice in
+      one night (a documented `tee | head` trap walked into hours after being
+      read; a documented skip-flag missed by the release runbook). So the
+      forcing function is the Start Of Cycle live-claim check above, which is
+      mechanical, and the honest expectation is that THIS SECTION ALONE WILL BE
+      HONOURED INCONSISTENTLY until a check surfaces the overlap without being
+      asked. That check is worth filing rather than assuming.
+    consumers:
+      - "skills/meta-orchestration/SKILL.md (Start Of Cycle 5a — AFTER the merge; note .claude/skills is a SYMLINK to this path, cite the real one)"
+      - "skills/coordinate-multihost-work/SKILL.md"

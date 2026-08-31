@@ -59,7 +59,14 @@ critical_path:
     # Extraction is now keyed on the comparison itself, so it survives the arm
     # being a case, an awk expression, or a list — per 634-39ik a step should
     # assert the property, not how the source happens to be written today.
-    command: "guard=$(grep -oE 'want == \"[a-z-]+\"' scripts/check-fragment-status-loss.sh | grep -oE '\"[a-z-]+\"' | tr -d '\"' | sort -u | tr '\\n' ' '); code=$(grep -A3 'pub fn is_terminal_status' crates/tillandsias-plan/src/lib.rs | grep -oE '\"[a-z-]+\"' | tr -d '\"' | sort -u | tr '\\n' ' '); if [ -z \"$guard\" ] || [ -z \"$code\" ]; then echo 'FAIL: cannot locate guard or code vocabulary'; exit 1; fi; if [ \"$guard\" != \"$code\" ]; then echo \"FAIL: guard=[$guard] != code=[$code]\"; exit 1; fi; echo 'ok: guard set equals resolver set'"
+    # ORDER 925-erjs. The code half was `grep -A3 'pub fn is_terminal_status'`.
+    # This step COMPARES two vocabularies, so a truncated read does not fail —
+    # it reports a mismatch that is not there. MEASURED 2026-08-29 on a copy:
+    # reflowing the `matches!` across five lines (ordinary rustfmt output) makes
+    # the window see ONE status where the function has four, and the step then
+    # accuses the guard script of drift on correct code. The awk range is
+    # bounded by the function, so a reformat cannot shrink the vocabulary.
+    command: "guard=$(grep -oE 'want == \"[a-z-]+\"' scripts/check-fragment-status-loss.sh | grep -oE '\"[a-z-]+\"' | tr -d '\"' | sort -u | tr '\\n' ' '); code=$(awk '/pub fn is_terminal_status/,/^}/' crates/tillandsias-plan/src/lib.rs | grep -oE '\"[a-z-]+\"' | tr -d '\"' | sort -u | tr '\\n' ' '); if [ -z \"$guard\" ] || [ -z \"$code\" ]; then echo 'FAIL: cannot locate guard or code vocabulary'; exit 1; fi; if [ \"$guard\" != \"$code\" ]; then echo \"FAIL: guard=[$guard] != code=[$code]\"; exit 1; fi; echo 'ok: guard set equals resolver set'"
     timeout_ms: 10000
     expected_behavior: "ok: guard set equals resolver set"
 

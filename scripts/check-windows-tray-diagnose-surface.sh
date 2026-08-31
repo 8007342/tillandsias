@@ -117,7 +117,7 @@ if grep -qF "Application Control policy has blocked" <<<"$output"; then
     echo "skip:diagnose-surface-unverifiable:windows-toolchain-blocked"
     exit 0
 fi
-if ! grep -qE "^test .* \.\.\. (ok|FAILED|ignored)" <<<"$output"; then
+if ! grep -qE "^test .* \.\.\. (ok|FAILED|ignored)" <<<"$output"; then # sigpipe-ok: safe pipeline
     echo "skip:diagnose-surface-unverifiable:no-test-run"
     exit 0
 fi

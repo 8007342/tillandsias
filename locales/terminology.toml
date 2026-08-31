@@ -1,0 +1,87 @@
+# Tillandsias — controlled vocabulary (order 629-t6bx)
+#
+# TIER 1 ONLY: this governs USER-VISIBLE TEXT — the values in locales/*.toml.
+# It deliberately does NOT govern code identifiers; that is tier 2 and is an
+# operator decision the packet surfaces with its rename cost, not something a
+# dictionary should decide by existing.
+#
+# WHY A DICTIONARY RATHER THAN A SPELLING RULE. Two platforms can agree
+# byte-for-byte and still both be wrong, so a per-platform diff cannot detect
+# a wrong-but-consistent term. 628-h4nx compares platforms; this names what is
+# correct. One vocabulary, two consumers.
+#
+# ADDING A TERM IS A ONE-FILE CHANGE: append a [[term]] block here. Nothing
+# else needs editing — scripts/check-terminology.sh reads this file.
+#
+# FORMAT, one block per term:
+#   canonical  the product/proper-noun spelling that user-visible text must use
+#   wrong      variants that are always incorrect in user-visible text
+#   lower_ok   OPTIONAL. true when the all-lowercase form is a legitimate
+#              COMMAND name as well as a product name — see the Podman note.
+#
+# THE `lower_ok` DISTINCTION IS LOAD-BEARING AND WAS MEASURED, NOT ASSUMED.
+# en.toml contains, in a single string:
+#     podman_note = "(Podman image storage is managed by podman — see 'podman system df')"
+# The capital is the product, the lowercase is the executable. Both are correct
+# in that sentence. A dictionary asserting "Podman is canonical, podman is
+# wrong" would flag 128 legitimate uses across the corpus and be switched off
+# within a day. So the check exempts the lowercase form when it reads as a
+# command: inside a URL, inside single quotes or backticks, or immediately
+# followed by a subcommand-looking word.
+#
+# @trace order:629-t6bx, spec:tray-ui-integration
+
+[[term]]
+canonical = "GitHub"
+wrong = ["Github", "GITHUB", "Git Hub", "GitHUB"]
+lower_ok = true   # github.com appears in real URLs in the corpus
+
+[[term]]
+canonical = "Podman"
+wrong = ["PodMan", "podMan", "PODMAN"]
+lower_ok = true   # `podman` is the executable; see the note above
+
+[[term]]
+canonical = "OpenCode"
+wrong = ["Opencode", "openCode", "OPENCODE", "Open Code"]
+lower_ok = true   # `opencode` is the in-guest command
+
+[[term]]
+canonical = "WSL"
+wrong = ["Wsl", "wsl2", "WSL2 "]   # WSL2 is fine; "wsl2" lowercase is not
+lower_ok = true   # `wsl --terminate` is the command
+
+[[term]]
+canonical = "Fedora"
+wrong = ["fedora Linux", "FEDORA"]
+lower_ok = true   # image tags such as fedora-44 are identifiers, not prose
+
+[[term]]
+canonical = "Vault"
+wrong = ["vault Server", "VAULT"]
+lower_ok = true   # `vault-cli`, `vault` the binary
+
+[[term]]
+canonical = "Tillandsias"
+wrong = ["tillandsias Tray", "TILLANDSIAS"]
+lower_ok = true   # `tillandsias` is the command name
+
+[[term]]
+canonical = "Claude"
+wrong = ["claude Code", "CLAUDE"]
+lower_ok = true
+
+[[term]]
+canonical = "Codex"
+wrong = ["codex CLI", "CODEX"]
+lower_ok = true
+
+[[term]]
+canonical = "Antigravity"
+wrong = ["AntiGravity", "antigravity Agent", "ANTIGRAVITY"]
+lower_ok = true
+
+[[term]]
+canonical = "Observatorium"
+wrong = ["observatorium Dashboard", "OBSERVATORIUM"]
+lower_ok = true

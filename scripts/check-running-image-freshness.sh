@@ -117,7 +117,7 @@ CHECKED=0
 SKIPPED=0
 INDETERMINATE=0
 
-for IMAGE in "${IMAGES[@]}"; do
+for IMAGE in ${IMAGES[@]+"${IMAGES[@]}"}; do
     IMAGE_DIR="$ROOT/images/$IMAGE"
     if [ ! -d "$IMAGE_DIR" ]; then
         echo "check-running-image-freshness: no such image dir: images/$IMAGE" >&2
@@ -152,7 +152,7 @@ for IMAGE in "${IMAGES[@]}"; do
         continue
     fi
 
-    for C in "${CONTAINERS[@]}"; do
+    for C in ${CONTAINERS[@]+"${CONTAINERS[@]}"}; do
         CHECKED=$((CHECKED + 1))
         IMAGE_ID="$(podman inspect -f '{{.Image}}' "$C" 2>/dev/null || true)"
         if [ -z "$IMAGE_ID" ]; then

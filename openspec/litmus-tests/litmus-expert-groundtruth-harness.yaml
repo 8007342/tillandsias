@@ -62,7 +62,12 @@ preconditions:
   # HOST artifact, not a repo one, so it is OPTIONAL by design: a host without
   # one skips those cases loudly rather than failing. Stated here so an unmet
   # environment is legible before a step runs, not inferred from a red.
-  - OPTIONAL (spec.answer cases only): a built spec index — TILLANDSIAS_SPEC_INDEX_DIR,
+  # A plain scalar cannot carry this item: the `:` after "OPTIONAL (…)" makes
+  # it a mapping key and the continuation lines then scan as keyless keys —
+  # this file DID NOT PARSE from 888-miiy until 2026-08-29 (933-*), and the
+  # runner's metadata fallbacks silently mis-bucketed it instead of saying so.
+  - >-
+    OPTIONAL (spec.answer cases only): a built spec index — TILLANDSIAS_SPEC_INDEX_DIR,
     FORGE_SPEC_INDEX_DIR, FORGE_SPEC_INDEX_ROOT, the tillandsias-spec-index-tillandsias
     podman volume, or the XDG cache — containing vectors.jsonl. Build one with
     scripts/spec-index-ensure.sh. WITHOUT IT the spec.answer cases are SKIPPED and
@@ -356,7 +361,7 @@ critical_path:
     # STRUCTURALLY — the grader spawns no process at all — because a word-grep
     # would fire on the query set's own honest text (one of its cases is
     # literally "is Python allowed in a committed script?").
-    command: "test ! -d crates/tillandsias-groundtruth || { echo 'FAIL: a new crate appeared'; exit 1; }; test \"$(grep -c 'workspace = true' crates/tillandsias-plan/Cargo.toml)\" = '3' || { echo 'FAIL: the dependency set changed'; exit 1; }; test \"$(grep -c 'std::process::Command' crates/tillandsias-plan/src/groundtruth.rs)\" = '0' || { echo 'FAIL: the grader spawns a subprocess'; exit 1; }; Q=openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml; grep -qE '^\\s*(command|script|shell|exec):' \"$Q\" && { echo 'FAIL: the query set carries executable keys — ground truth is DATA'; exit 1; }; echo 'ok: no-new-dependency-data-only-query-set'"
+    command: "test ! -d crates/tillandsias-groundtruth || { echo 'FAIL: a new crate appeared'; exit 1; }; test \"$(grep -oE '^[a-z0-9_-]+ = \\{ workspace = true' crates/tillandsias-plan/Cargo.toml | cut -d' ' -f1 | sort | tr '\\n' ' ')\" = 'chrono serde serde_json serde_yaml tokio ' || { echo \"FAIL: the dependency set changed: $(grep -oE '^[a-z0-9_-]+ = \\{ workspace = true' crates/tillandsias-plan/Cargo.toml | cut -d' ' -f1 | sort | tr '\\n' ' ')\"; exit 1; }; test \"$(grep -c 'std::process::Command' crates/tillandsias-plan/src/groundtruth.rs)\" = '0' || { echo 'FAIL: the grader spawns a subprocess'; exit 1; }; Q=openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml; grep -qE '^\\s*(command|script|shell|exec):' \"$Q\" && { echo 'FAIL: the query set carries executable keys — ground truth is DATA'; exit 1; }; echo 'ok: no-new-dependency-data-only-query-set'"
     timeout_ms: 15000
     expected_behavior: "ok: no-new-dependency-data-only-query-set"
 

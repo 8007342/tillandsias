@@ -42,7 +42,12 @@ critical_path:
     expected_behavior: "ok: secret-only key path"
 
   - step: "Req: ensure_ca_bundle clamps DOWN to 0600 — the old 0644 modes are gone from the key path"
-    command: "grep -q 'fn enforce_ca_key_mode' crates/tillandsias-headless/src/main.rs && grep -A3 'fn enforce_ca_key_mode' crates/tillandsias-headless/src/main.rs | grep -q 'from_mode(0o600)' && echo 'ok: 0600 clamp present'"
+    # ORDER 925-erjs. Was `grep -A3 … | grep -q 'from_mode(0o600)'` — three
+    # lines, on a security clamp. One inserted comment above the call and this
+    # would have gone red on correct code; one inserted line below and it would
+    # have gone GREEN on a weakened mode.
+    # NEGATIVE CONTROL (verified 2026-08-29): 0o644 fails the step.
+    command: "grep -q 'fn enforce_ca_key_mode' crates/tillandsias-headless/src/main.rs && awk '/^fn enforce_ca_key_mode/,/^}/' crates/tillandsias-headless/src/main.rs | grep -qF 'from_mode(0o600)' && echo 'ok: 0600 clamp present'"
     timeout_ms: 10000
     expected_behavior: "ok: 0600 clamp present"
 

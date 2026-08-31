@@ -78,6 +78,34 @@ The `--clean` flag SHALL remove all build artifacts before building.
 - **WHEN** `./build.sh --clean --release` is run
 - **THEN** `cargo clean` SHALL run first, then a release build SHALL proceed
 
+### Requirement: Build churn directories opt out of copy-on-write on btrfs
+On a btrfs host, the build artifact directory (`target/`) and the rootless
+container layer store (`~/.local/share/containers/storage/overlay`) SHALL
+carry the `nodatacow` attribute (`chattr +C`). These trees are rebuildable
+churn, not history: every cargo artifact and container layer write otherwise
+pays copy-on-write + compression + checksum amplification before reaching the
+device, which is what saturated a DRAM-less NVMe on macuahuitl during
+parallel builds (2026-08-30, `io full avg300=21.6%` in PSI while CPU pressure
+read 0.00 — the whole desktop stuttered on a "fast" drive at 78% capacity).
+The attribute costs nothing to hold and disables nothing these trees need:
+compression saves little on binaries, and checksums protect data that a
+rebuild regenerates anyway.
+
+`chattr +C` applies only to files created AFTER it is set. Setting it on a
+live directory is therefore safe and immediately effective for the churn
+(new artifacts, new layers) while pre-existing files keep CoW until their
+next full recreation — a `--clean` or a store reset completes the migration
+naturally. Do not wipe either tree just to migrate it.
+
+#### Scenario: Provisioning a Linux build host on btrfs
+- **WHEN** a build substrate is provisioned (or first checked) on a btrfs filesystem
+- **THEN** `target/` and the rootless overlay store SHALL have the `C` attribute (`lsattr -d` shows it)
+- **AND** setting it SHALL NOT require wiping existing contents
+
+#### Scenario: Non-btrfs host
+- **WHEN** the filesystem is not btrfs (ext4, xfs, WSL2 ext4)
+- **THEN** the attribute is not applicable and the check SHALL pass as a named skip, not a failure
+
 ### Requirement: Install to local path
 The `--install` flag SHALL build a release binary and copy it to `~/.local/bin/` with only non-executable supporting files.
 

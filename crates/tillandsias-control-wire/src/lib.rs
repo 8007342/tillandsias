@@ -141,6 +141,123 @@ pub const CAP_EXEC_ARGV_VECTOR: &str = "ExecArgvVector";
 /// @trace spec:vsock-exec-authz
 pub const CAP_PROXY_CA_KEY_HEAL: &str = "ProxyCaKeyHeal";
 
+/// Capability a peer advertises when it understands an explicit end-of-stdin
+/// signal on the exec wire (order 924-eof7). RESERVED BY A DESIGN SLICE — the
+/// frame itself is deliberately NOT added yet; this constant and its reasoning
+/// are the decision record the implementer inherits.
+///
+/// THE DEFECT. Host->guest stdin is `PtyData { direction: ToGuest }` and
+/// nothing else; there is no variant meaning "input is finished".
+/// `exec_over_stream_with_input*` writes its chunks and goes straight to
+/// draining ToHost, sending no terminator. The child sits on a PTY whose
+/// master stays open for the session, so a reader that waits for EOF waits
+/// forever: piped `cat > file` hangs while byte-exact `head -c N` succeeds.
+/// The symptom PAIR is the discriminator — either alone admits other causes.
+///
+/// WHY NOT THE CHEAPER OPTION. The obvious alternative is to send VEOF (0x04)
+/// as a final ToGuest frame: no wire change, works today. It was rejected on
+/// MEASUREMENT, not taste — three trials on a real PTY, macOS 2026-08-29:
+///
+///   1. BINARY STDIN IS DESTROYED. A 64-byte payload legitimately containing
+///      0x04 (at offsets 4, 12, 20, ...) delivered ZERO bytes to the child,
+///      which exited at the first embedded 0x04. Any stdin that is not text is
+///      silently truncated at its first 0x04 byte.
+///   2. IT DOES NOTHING IN RAW MODE. The same payload in raw mode left the
+///      child running — 0x04 is just a byte there, so the "EOF" is a no-op and
+///      the hang this is meant to fix persists, silently.
+///   3. ONE 0x04 IS NOT ENOUGH, AND THE COUNT DEPENDS ON THE PAYLOAD. After
+///      unterminated input, the first 0x04 only FLUSHES the pending line; the
+///      child exited only on a second. So a correct in-band implementation must
+///      know whether its own payload ended in a newline to know whether to send
+///      one 0x04 or two — a caller obligation that will be got wrong.
+///
+/// Hazards 1 and 2 were recorded in the packet as reasoning; hazard 3 was found
+/// by running it and is the one that makes the option untenable rather than
+/// merely awkward.
+///
+/// WHY THIS SHAPE, AND THE RULE IT MUST FOLLOW. `ControlMessage` is
+/// `#[non_exhaustive]`, which buys forward compatibility for MATCH ARMS and
+/// nothing at all on the wire: postcard encodes a variant as a varint INDEX,
+/// and a decoder built before the variant exists returns an ERROR rather than
+/// skipping the frame — pinned by
+/// `unknown_future_variant_is_a_decode_error_not_a_silent_skip`. So an ungated
+/// new frame sent to an older guest does not degrade to today's hang; it fails
+/// the decode and takes the SESSION down, which is strictly worse than the bug
+/// being fixed. The frame must therefore be gated on this capability read from
+/// `HelloAck.server_caps`, exactly as `CAP_EXEC_ARGV_VECTOR` requires, and
+/// never on a wire-version comparison.
+///
+/// It is also a capability of its OWN, not a rider on a neighbouring one, per
+/// the rule `CAP_PROXY_CA_KEY_HEAL` states: a capability must name the
+/// behaviour a caller depends on, because reusing a nearby token as a proxy for
+/// "built after roughly then" is version comparison wearing a capability's
+/// clothes.
+///
+/// WHAT THE FALLBACK MUST DO, and this is the half most likely to be skipped:
+/// when the peer does NOT advertise this, the caller must not quietly send the
+/// input and hope. Today's silence is precisely the failure this milestone
+/// exists to remove, so the un-negotiated path should REFUSE a request whose
+/// semantics need EOF, and say that the guest is too old to be told when stdin
+/// ends — a loud, named refusal instead of a wait that never returns.
+///
+/// @trace spec:vsock-transport, spec:vsock-exec-authz
+pub const CAP_PTY_STDIN_EOF: &str = "pty.stdin.eof@v1";
+
+/// Capability a peer advertises when it can open a DATA session — one whose
+/// stdin is a PIPE rather than the PTY slave (order 926-bin4). RESERVED BY A
+/// DESIGN SLICE: the frame is deliberately not added yet, and this constant
+/// carries the decision the implementer inherits.
+///
+/// THE DEFECT. Exec stdin travels as `PtyData{ToGuest}` and is written to a PTY
+/// master whose line discipline INTERPRETS it. Measured on a live guest,
+/// `AB<byte>CD` per byte with md5 compared end to end: 0x13 WEDGES the session
+/// (unrecoverable, one data byte); 0x03 KILLS the child (rc 130); 0x04 and 0x11
+/// silently eat a byte; 0x15 and 0x1a silently discard EVERYTHING buffered
+/// before them; 0x7f additionally destroys the preceding byte. Six of nine
+/// bytes, five of them at rc=0 with the caller told it succeeded. 0x08 and a
+/// plain 0x41 arrive intact — the latter is the negative control that makes the
+/// rest of the table trustworthy.
+///
+/// WHY NOT JUST USE RAW MODE. Because canonical mode is simultaneously the
+/// corruption mechanism AND the only stdin-EOF mechanism a PTY has: a reader
+/// sees EOF when the master closes (which ends the session) or when the
+/// discipline interprets VEOF, which requires ICANON (924-eof7, 925-eofi).
+/// Switching the exec PTY to raw fixes all six bytes and reinstates the hang
+/// 925-eofi fixed. The two packets are two horns of one structural choice.
+///
+/// WHY NOT TOGGLE RAW AROUND WRITES. It is correct for data and silently wrong
+/// for terminals: on an interactive attach, 0x03 MUST raise SIGINT, because it
+/// is a user pressing Ctrl-C rather than a byte to preserve. Both kinds share
+/// the same guest path today.
+///
+/// THE SHAPE: A PIPE FOR STDIN ONLY. Wire the child's fd 0 to a pipe and leave
+/// fd 1/2 on the PTY slave. A pipe has no line discipline, so all six bytes
+/// arrive by construction; closing the write end is a REAL end-of-input, which
+/// makes `PtyStdinEof` on this path a pipe close rather than a VEOF injection
+/// and drops the canonical-mode dependency entirely. Output streaming, combined
+/// stdout/stderr ordering and `isatty(1)` are unchanged because fd 1/2 still
+/// point at the slave, and the interactive attach path is untouched.
+///
+/// WHY A NEW VARIANT AND NOT A FIELD ON `PtyOpen` — the part that is easy to
+/// get backwards, so it is measured
+/// (`postcard_field_skew_is_asymmetric_and_the_old_reader_fails_silently`).
+/// postcard field skew is ASYMMETRIC: an OLD decoder handed a frame with an
+/// extra trailing field DECODES IT FINE and ignores the surplus, while a NEW
+/// decoder handed an old frame errors on the missing field. So widening
+/// `PtyOpen` would not break an older guest loudly — it would make that guest
+/// silently ignore the session kind and treat a data session as a terminal one,
+/// which is exactly this packet's corruption, arriving with no error anywhere.
+/// A new variant is rejected by NAME instead
+/// (`unknown_future_variant_is_a_decode_error_not_a_silent_skip`), which is why
+/// the additive move here must be a variant gated on this capability.
+///
+/// FALLBACK, and it must stay loud: a peer without this capability keeps
+/// today's PTY-stdin behaviour, so a caller sending non-text stdin to it should
+/// be told the payload may be altered rather than discovering it downstream.
+///
+/// @trace spec:vsock-transport, spec:vsock-exec-authz
+pub const CAP_PTY_DATA_SESSION: &str = "pty.data-session@v1";
+
 /// Order 779-dqsv: this number OUTLIVED the transport it was written for.
 /// It was the per-variant cap on `McpFrame`, which order 505 retired (that
 /// path is now refused; see `host-browser-mcp` spec). The live MCP transport
@@ -266,6 +383,14 @@ pub enum ControlMessage {
     CloudRefreshReply {
         seq_in_reply_to: u64,
         projects: Vec<CloudProjectEntry>,
+        /// 731-eupn: whether `projects` is an ANSWER or the residue of a
+        /// failed fetch. `#[serde(default)]` yields
+        /// [`CloudRefreshOutcome::Unknown`] for a guest that predates this
+        /// field, so an old guest's empty list is never mistaken for a
+        /// confirmed zero. See [`CloudRefreshOutcome`] for why the default
+        /// fails closed.
+        #[serde(default)]
+        outcome: CloudRefreshOutcome,
     },
     /// Host → guest: start a PTY-attached subprocess inside the VM.
     /// `session_id` is allocated by the host from a per-connection monotonic
@@ -434,6 +559,54 @@ pub enum ControlMessage {
         seq_in_reply_to: u64,
         snapshot: MetricsSnapshotWire,
     },
+    /// Host → guest: the host has no more stdin for this session's child
+    /// (order 925-eofi, implementing the 924-eof7 decision).
+    ///
+    /// IT CARRIES INTENT, NOT A BYTE, AND THAT IS THE WHOLE POINT. The child
+    /// runs on a PTY with the slave as its controlling tty and the master open
+    /// for the session, so there is no stdin handle to close — "EOF" on a PTY
+    /// means the line discipline seeing VEOF. 924-eof7 measured why the HOST
+    /// must not send that byte itself: in raw mode 0x04 is ordinary data and
+    /// the signal silently does nothing, and after unterminated input a single
+    /// 0x04 only FLUSHES (a second is needed). Both facts depend on termios
+    /// state and on what was last written — which the GUEST knows and the host
+    /// does not. So the host declares that input is finished and the guest,
+    /// which can be correct about it, decides what to write.
+    ///
+    /// New trailing variant: additive per the `WIRE_VERSION` doc. A guest
+    /// predating it rejects the frame with `Error::UnknownVariant`, which on
+    /// this wire ENDS THE SESSION — so a host MUST NOT send this without
+    /// having seen `CAP_PTY_STDIN_EOF` in `HelloAck.server_caps`. See that
+    /// constant for the full reasoning and the mandatory fallback.
+    ///
+    /// @trace spec:vsock-transport
+    PtyStdinEof { session_id: u32 },
+    /// Host → guest: open a DATA session (order 926-bin4). Same shape as
+    /// [`ControlMessage::PtyOpen`], and deliberately a SEPARATE VARIANT rather
+    /// than a flag on it — see `CAP_PTY_DATA_SESSION` for the measurement that
+    /// forced that choice (an older peer silently ignores a widened variant's
+    /// extra field and would treat a data session as a terminal one, which is
+    /// the corruption this exists to prevent, arriving with no error).
+    ///
+    /// The guest wires the child's fd 0 to a PIPE instead of the PTY slave,
+    /// leaving fd 1/2 on the slave. Stdin therefore crosses NO line discipline:
+    /// the six control bytes measured corrupting, killing or wedging an exec
+    /// session (0x03, 0x04, 0x11, 0x13, 0x15, 0x1a, 0x7f) arrive as data. End
+    /// of input is a real pipe close rather than a VEOF injection.
+    ///
+    /// Use it for stdin that is DATA. A terminal session must keep using
+    /// `PtyOpen`, because there 0x03 SHOULD raise SIGINT — it is a user
+    /// pressing Ctrl-C, not a byte to preserve.
+    ///
+    /// @trace spec:vsock-transport
+    PtyOpenData {
+        session_id: u32,
+        rows: u16,
+        cols: u16,
+        argv: Vec<String>,
+        env: Vec<(String, String)>,
+        cwd: Option<String>,
+    },
 }
 
 /// What the guest established about a PTY session's foreground process.
@@ -512,6 +685,52 @@ pub struct LocalProjectEntry {
     pub label: String,
     pub guest_path: String,
     pub last_seen_unix: u64,
+}
+
+/// Whether a `CloudRefreshReply`'s project list is an ANSWER or an ARTIFACT
+/// of a failed fetch (731-eupn).
+///
+/// Before this existed, `cloud_projects.rs` returned an empty `Vec` for a
+/// non-zero `gh` exit, a missing `gh` binary, missing auth, AND for an account
+/// that genuinely has no repos — four outcomes, one representation. The tray
+/// then latched "confirmed empty" and rendered `(no repos)` with the tooltip
+/// "no GitHub repos visible to the in-VM gh client": a confirmation nobody
+/// made, from a message that only ever meant "here is a list".
+///
+/// `Unknown` IS THE DEFAULT ON PURPOSE, and it is the mixed-version half of
+/// this fix. A guest predating this field serializes no `outcome`, so serde
+/// fills `Unknown` and the host treats the list as unconfirmed rather than
+/// authoritative. Defaulting to `Ok` would make an old guest's every reply —
+/// including its failures — read as a confirmed answer, which is the exact bug
+/// this type exists to end. Fail closed: an absent discriminator is not a
+/// success discriminator.
+///
+/// @trace spec:host-shell-architecture, order:731-eupn
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum CloudRefreshOutcome {
+    /// The guest ran the query and this list is what it found. An empty list
+    /// under `Ok` means the account genuinely has no visible repos.
+    Ok,
+    /// The guest could not complete the query. `projects` carries no
+    /// information — it is empty because there is nothing to say, not because
+    /// the answer is zero. `reason` is a short operator-facing phrase.
+    Failed { reason: String },
+    /// No discriminator was carried: a guest older than 731-eupn. Treat
+    /// exactly as `Failed` for display purposes — the list is not an answer —
+    /// but distinguishable in logs so a version skew is not misread as a
+    /// broken `gh`.
+    #[default]
+    Unknown,
+}
+
+impl CloudRefreshOutcome {
+    /// True only when the list may be presented as an authoritative answer.
+    /// The one predicate every consumer should branch on, so `Unknown` cannot
+    /// be forgotten at a call site the way a bare `matches!(.., Failed { .. })`
+    /// invites.
+    pub fn is_confirmed(&self) -> bool {
+        matches!(self, CloudRefreshOutcome::Ok)
+    }
 }
 
 /// A single cloud-side project entry returned by `CloudRefreshReply`.
@@ -649,6 +868,8 @@ impl ControlMessage {
             ControlMessage::LocalProjectsPush { .. } => "LocalProjectsPush",
             ControlMessage::MetricsSnapshotRequest { .. } => "MetricsSnapshotRequest",
             ControlMessage::MetricsSnapshotReply { .. } => "MetricsSnapshotReply",
+            ControlMessage::PtyStdinEof { .. } => "PtyStdinEof",
+            ControlMessage::PtyOpenData { .. } => "PtyOpenData",
         }
     }
 }
@@ -1664,6 +1885,96 @@ pub mod crashloop {
 
 #[cfg(test)]
 mod tests {
+
+    /// ORDER 926-bin4 — HOW POSTCARD ACTUALLY BEHAVES UNDER FIELD SKEW, in
+    /// both directions, measured rather than assumed. I expected widening a
+    /// variant to break older decoders and wrote this to confirm it. It does
+    /// NOT, and the real behaviour is ASYMMETRIC, which is what the session-kind
+    /// design has to be built on:
+    ///
+    ///   OLD reader / NEW frame (extra trailing field) -> DECODES FINE. The
+    ///     surplus bytes are simply not consumed. An older guest would silently
+    ///     ignore a session kind it does not understand — and silently treat a
+    ///     data session as a terminal one, which is the corruption this packet
+    ///     is about, arriving without a single error.
+    ///   NEW reader / OLD frame (missing field) -> DECODE ERROR. It runs out of
+    ///     input for a field it requires.
+    ///
+    /// So widening `PtyOpen` is not a compile-time break but something worse: a
+    /// SILENT MISINTERPRETATION on exactly the peers a mixed-version fleet
+    /// produces. A new VARIANT is the safe additive move, because an older peer
+    /// rejects an unknown variant index by NAME (see
+    /// `unknown_future_variant_is_a_decode_error_not_a_silent_skip`) instead of
+    /// quietly mis-reading a frame it thinks it understands.
+    #[test]
+    fn postcard_field_skew_is_asymmetric_and_the_old_reader_fails_silently() {
+        let env = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 7,
+            body: ControlMessage::PtyResize {
+                session_id: 1,
+                rows: 24,
+                cols: 80,
+            },
+        };
+        let encoded = encode(&env).expect("encode");
+
+        // OLD reader, NEW frame: one extra trailing field.
+        let mut widened = encoded.clone();
+        widened.push(0x01);
+        let old_reads_new = decode(&widened);
+        assert!(
+            old_reads_new.is_ok(),
+            "expected postcard to ignore surplus trailing bytes; if this now \
+             ERRORS, widening a variant became a loud break and 926-bin4's \
+             new-variant argument can be revisited"
+        );
+        assert_eq!(
+            old_reads_new.unwrap(),
+            env,
+            "the surplus byte must not disturb the fields that WERE understood \
+             — this is precisely why the misinterpretation is silent"
+        );
+
+        // NEW reader, OLD frame: truncate a field's worth of input.
+        let mut narrowed = encoded.clone();
+        narrowed.pop();
+        assert!(
+            decode(&narrowed).is_err(),
+            "a decoder expecting more fields than the frame carries must fail, \
+             not invent a default"
+        );
+    }
+
+    /// ORDER 924-eof7 — the skew fact the EOF design turns on, pinned by
+    /// experiment rather than by reading postcard's docs.
+    ///
+    /// postcard encodes an enum variant as a varint INDEX. A decoder built
+    /// before a variant existed has no case for that index, so it returns an
+    /// error — it does NOT skip the frame and carry on. `#[non_exhaustive]`
+    /// buys source-level forward compatibility for MATCH ARMS; it buys nothing
+    /// on the wire. That is why any new ControlMessage variant must be gated on
+    /// a capability the peer advertised, and never merely on "we are newer".
+    #[test]
+    fn unknown_future_variant_is_a_decode_error_not_a_silent_skip() {
+        // Hand-roll an envelope whose body names a variant index far beyond
+        // anything this build knows: wire_version(varint) seq(varint)
+        // variant_index(varint).
+        let bytes: Vec<u8> = vec![
+            1,   // wire_version = 1
+            0,   // seq = 0
+            200, // variant index, low 7 bits + continuation
+            1,   // ... second varint byte: comfortably past the real count
+        ];
+        let err = decode(&bytes);
+        assert!(
+            err.is_err(),
+            "an unknown variant index must FAIL to decode; if this ever starts \
+             succeeding, the EOF capability gate in 924-eof7 rests on a false \
+             premise and must be revisited"
+        );
+    }
+
     use super::*;
 
     fn roundtrip(envelope: &ControlEnvelope) {
@@ -2045,6 +2356,7 @@ mod tests {
                 ControlMessage::CloudRefreshReply {
                     seq_in_reply_to: 1,
                     projects: vec![],
+                    outcome: CloudRefreshOutcome::Ok,
                 },
                 "CloudRefreshReply",
             ),

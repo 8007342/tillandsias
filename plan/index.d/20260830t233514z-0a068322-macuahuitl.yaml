@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: sni-windowid-type-wedges-shell
+    event:
+      type: note
+      ts: "2026-08-30T23:35:14Z"
+      agent_id: linux-macuahuitl-fable5-20260830t233514z
+      host: macuahuitl
+      summary: >
+        GETLAYOUT FIX LANDED AND WIRE-VERIFIED WITHOUT A DESKTOP IN THE LOOP: get_layout now honors parent_id (subtree rooted at the requested id via the typed shared-menu tree; unknown id -> InvalidArgs, never a guessed tree) and recursion_depth (-1 unlimited / 0 none / n levels; pruned submenus KEEP children-display so the arrow survives). Fixture get_layout_honors_parent_id_and_recursion_depth pins all four properties incl. the root-at-requested-id assertion that IS the defect; tray module 77/77. PROACTIVE VERIFICATION REGIME CHANGED per the whack-a-mole lesson: the full client call-sequence (GetLayout root/depth-0/submenu-21-depth-1/project-subtree/unknown-id, AboutToShow, Event opened) was driven over busctl against the LIVE relaunched tray BEFORE any human click — every reply read back conforming, shell at 2.9% CPU. The desktop is no longer the test harness. Binary v0.4.260830.5 installed, tray running. Still open: emission rate limiter.

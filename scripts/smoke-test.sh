@@ -50,7 +50,7 @@ echo ""
 phase "Clean Build & Install (./build.sh --ci-full --install)"
 cd "$PROJECT_ROOT"
 
-if ! ./build.sh --ci-full --install 2>&1 | tee "$EVIDENCE_DIR/01-build-full.log"; then
+if ! ./build.sh --ci-full --install 2>&1 | tee "$EVIDENCE_DIR/01-build-full.log"; then # sigpipe-ok: consumer does not exit early
     error "Build failed. See $EVIDENCE_DIR/01-build-full.log"
 fi
 success "Build passed (500+ tests)"
@@ -72,7 +72,7 @@ mkdir -p "$TEST_PROJECT"
 cd "$TEST_PROJECT"
 git init
 
-if ! tillandsias --init --debug 2>&1 | tee "$EVIDENCE_DIR/02-init.log"; then
+if ! tillandsias --init --debug 2>&1 | tee "$EVIDENCE_DIR/02-init.log"; then # sigpipe-ok: consumer does not exit early
     error "Init failed. See $EVIDENCE_DIR/02-init.log"
 fi
 success "Project initialized, all images built"

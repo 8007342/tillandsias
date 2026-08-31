@@ -1,6 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+
+# ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
+# toolbox-fallback dispatch instead of assuming the host has it.
+# shellcheck source=scripts/lib/tool-dispatch.sh
+# Resolve the lib by WALKING UP, not by a fixed depth (order 914-ahsy). The
+# fixed form `dirname "${BASH_SOURCE[0]}"/lib/...` is correct only for a caller
+# sitting directly in scripts/. From scripts/refusal-calibration/ it points at a
+# lib that does not exist, the `|| true` swallows the miss, and the tool variable
+# silently falls back to the bare name — a conversion that passes review, passes
+# the suite, and changes nothing.
+_td_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_td_dir" ] && [ "$_td_dir" != "/" ] && [ ! -f "$_td_dir/lib/tool-dispatch.sh" ]; do
+    _td_dir="$(dirname "$_td_dir")"
+done
+if [ -f "$_td_dir/lib/tool-dispatch.sh" ]; then
+    . "$_td_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+fi
+if command -v resolve_tool >/dev/null 2>&1; then
+    JQ="$(resolve_tool jq || printf 'jq')"
+else
+    JQ="jq"   # lib unavailable: preserve the previous behaviour exactly
+fi
+
 # Portable SHA-256 (851-28b5): coreutils sha256sum on Linux/forge/WSL; stock
 # macOS before 13 ships only `shasum`. Identical "<hex>  <name>" output.
 if command -v sha256sum >/dev/null 2>&1; then
@@ -115,7 +138,7 @@ SOURCE=/dev/null \
     bash "$DASHBOARD_SCRIPT" >/dev/null
 
 test -s "$fixture_dir/centicolon-dashboard.md"
-jq -e . "$fixture_dir/centicolon-dashboard.json" >/dev/null
+"$JQ" -e . "$fixture_dir/centicolon-dashboard.json" >/dev/null
 test "$("${PORTABLE_SHA256[@]}" "$tracked_md")" = "$tracked_md_before"
 test "$("${PORTABLE_SHA256[@]}" "$tracked_json")" = "$tracked_json_before"
 

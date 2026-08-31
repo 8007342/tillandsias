@@ -349,8 +349,41 @@ On a durable bare-metal DEVELOPMENT host (not an ephemeral forge):
    the same ephemeral RAG experts + commit-hook RAG retraining the forge runs),
    and confirm this host is visible in the capability matrix (order 850-bif2):
    ```bash
-   scripts/check-capability-row.sh   # ok:capability-row-reported:<host> | due:no-capability-row:<host>
+   scripts/check-capability-row.sh   # ok:capability-row-current:<host> | due:no-capability-row:<host>
+                                     # | stale:capability-row-drifted:<host>:row-only=…,probe-only=…
+                                     # | stale:capability-row-expired:<host>:age=<n>s
    ```
+   On Linux, confirm this host is not carrying the orphaned enclave proxy
+   block (order 923-rmtw):
+   ```bash
+   scripts/check-containers-conf-proxy-env.sh   # ok:… | drift:… | unavailable:…
+   ```
+   `[engine] env` in containers.conf is injected into EVERY container on every
+   network, and `proxy` resolves only inside the enclave. Init used to write
+   that block and could never converge it, so hosts provisioned before
+   801-kqme kept a no_proxy list without `nix-cache` — that was four days of
+   phantom 883-ncrs "cache RSTs" and one broken nix e2e, hand-repaired on
+   macuahuitl and lenovinha. On `drift:containers-conf-proxy-env-present`, run
+   `tillandsias --init`: it now REMOVES the block, and containers get proxy env
+   per-container. A commented-out block still counts as drift — that is how
+   yoga ended up with no proxy env at all while init reported success.
+
+   Report scratchpad headroom in the same breath (order 915-wkm2) — one line,
+   ADVISORY, exits 0 on every path:
+   ```bash
+   scripts/check-scratchpad-headroom.sh   # ok:/warn:scratchpad-headroom-low:/skip:
+   ```
+   The agent scratchpad is tmpfs; systemd sizes /tmp at 50% of RAM but a
+   usrquota can sit far below that, so `df` reports gigabytes free while every
+   write returns EDQUOT — the host stays healthy and only the agent's tooling
+   dies. That wedged macuahuitl for several cycles: it presents as "my shell is
+   broken", not "I filled a disk". On `warn:` do NOT build in the scratchpad;
+   build in the checkout. The threshold is absolute (one cold Rust `target/`,
+   2.6-4.4 GB) rather than a percentage, because the fleet's quotas span 4.6x —
+   lenovinha warns at 29% used while macuahuitl is fine at 62%, so any
+   "warn above N%" rule passes the host that will wedge and warns the one that
+   will not.
+
    On `due:`, publish the row THIS cycle — the matrix was silent for 5 of 7
    hosts because nothing ever asked, and capability routing (847-wgy4) cannot
    route to hardware it cannot see:
@@ -519,10 +552,14 @@ outage, per `mcp_first_read_path`. And like every joining host, pass your
 hostname as `--seed` to `select-work-batch.sh`.
 
 **Publish your capability row before you drain anything** (order 850-bif2).
-`scripts/check-capability-row.sh` answers whether the matrix can see you; on
-`due:` generate and commit a row with
+`scripts/check-capability-row.sh` answers whether the matrix can see you AND
+whether what it sees is still true (order 889-ewvt); on `due:`, `stale:…drifted`
+or `stale:…expired` generate and commit a row with
 `scripts/host-capability-probe.sh --fragment` (Linux/macOS/forge loci; the
-windows-host locus keeps its own generator). A joining host that drains work
+windows-host locus keeps its own generator). `drifted` is the urgent one: the
+committed row disagrees with a live probe, and routing that consumes it will
+send work to hardware this host does not have — that is how the release gate
+was routed to yoga for a `gpu/container/ollama` engine yoga never had. A joining host that drains work
 while publishing nothing is how the matrix went silent for 5 of 7 hosts —
 and capability-aware routing (847-wgy4) cannot route to hardware the matrix
 cannot see.
@@ -702,6 +739,98 @@ filing — not the prompt.
    `litmus:resumable-claim-dirt-shape`.
 5. Update the active local branch from remote with fast-forward or an explicit
    merge from `origin/linux-next` into the platform branch when appropriate.
+
+5a. **NOW check for sibling overlap** (methodology `sibling_heads_up_protocol`).
+   Hosts can message each other directly — `ListAgents` to see who is live,
+   `SendMessage` to reach them. **The capability is new and you will not
+   discover it on your own**; the fleet coordinated exclusively through the
+   ledger and the trunk for months before anyone noticed it existed.
+
+   ```bash
+   tillandsias-plan query --status in_progress   # who is holding what, right now
+   ```
+
+   **AFTER THE MERGE, NOT BEFORE, AND THIS ORDERING IS THE WHOLE STEP.** This
+   check first shipped as step 2a — before the branch update — and was MEASURED
+   BROKEN on the next cycle by its own author:
+
+   ```
+   before the merge:  831-ezea only            <- the other host's claim INVISIBLE
+   after the merge:   642-fedr + 831-ezea      <- yoga's fragments.rs claim
+   ```
+
+   `git fetch` at step 2 updates remote-tracking refs; it does NOT update the
+   worktree ledger that `tillandsias-plan` reads. So a check placed before the
+   merge answers about the claims as of your LAST merge, not as of now.
+
+   **THE STALENESS IS NOT ONE-DIRECTIONAL, and the earlier wording here said it
+   was.** This passage used to end "a stale ledger always shows FEWER claims,
+   never more." Measured on yoga 2026-08-26T07:26Z, one cycle after that
+   sentence landed, running the same query either side of the merge:
+
+   ```
+   before the merge:  799-tb7q + 831-ezea    <- 799-tb7q was a PHANTOM
+   after  the merge:  831-ezea only          <- another host had released it
+   ```
+
+   `799-tb7q` was `in_progress` in the stale ledger and `ready` at the new head:
+   a sibling finished a slice and released it in commits this host had fetched
+   but not merged. So a pre-merge check can show a claim that no longer exists
+   as easily as it can hide one that does — **fewer claims when siblings have
+   been claiming, more when they have been releasing.**
+
+   Both directions are harmful and they fail differently. Missing a live claim
+   fails toward "no overlap", which is the safe-LOOKING answer and the one that
+   costs a union. Seeing a released claim fails toward a needless heads-up, or
+   toward skipping a packet that is free — cheaper, but it teaches the reader
+   that the step produces noise, which is how a step stops being run.
+
+   `expire-claims --list-live` is the tool again as of 905-wjfj: it now prints
+   one row per in_progress packet and a `rows:` accounting line whose total must
+   equal the summary's `in_progress=N`. Before that fix it printed the count and
+   no rows — two hosts hit it on the same day — and the workaround here was
+   `query --status in_progress`, which still works and is a fine cross-check.
+
+   **READ THE ROW TYPE, because the two mean opposite things.**
+
+   - `live-claim <order> <pid> <host> <claimed-at> <last>` — a sibling holds
+     this. If it touches your surface, message that host.
+   - `unclaimed-in-progress <order> <pid> - - <last>` — in_progress, recent
+     enough that no reaper will touch it, and **nobody to send a heads-up to**.
+     The dashes are the actionable part. This row is not the quiet case; it is
+     the one where the protocol has no addressee, so if it touches your surface
+     you inspect the diff yourself rather than assuming silence means free.
+   - `attention:list-live-partition-mismatch` — a packet is in no bucket or in
+     two. The enumeration is under-reporting; do not trust a `no overlap`
+     verdict derived from it.
+
+   MEASURED 2026-08-26: `831-ezea` sat in the unclaimed row for at least a day —
+   in_progress, with a gate step wired into `./build.sh --check`, last activity
+   18h old and therefore inside the 24h TTL, so neither the reaper nor the
+   live-claim list would ever surface it. Exactly the row an overlap check
+   exists to show you, and the only one it could not.
+
+   If a live claim touches the SAME SURFACE your batch touches — a wire type, a
+   shared struct, a script another lane runs, a schema, a guard wired into
+   `--check` — send one HEADS UP before implementing: what you are touching, the
+   shape of the change, any sibling call sites you know of, and the ask. They
+   reply ACK plus comments. Two short messages.
+
+   **WHY, structurally: THE UNION IS A STATE NO SINGLE BRANCH'S GATE OBSERVES.**
+   Every branch can be green alone and the merge still broken, because no
+   branch's `--check` compiles the other's configuration. Care cannot close
+   that; only a second lane looking can. MEASURED 2026-08-26: macbook's
+   731-eupn was green on both branches and `E0063 + E0308` in the union — a red
+   gate and ~30 minutes of coordinator cycle.
+
+   **Prefer the message to the resolve-to-be-careful: a heads-up is a
+   falsifiable act, care is not.** "I considered the siblings" cannot be checked
+   by anyone, including you an hour later.
+
+   DO NOT broadcast routine drain. Most work touches only your own lane, and a
+   channel that carries everything is one nobody reads — the recipient is
+   mid-cycle, holding a checkout lock, with expensive context. The heads-up is
+   for what the ledger cannot carry in time: **intent, before the fact.**
 
 ## Credential Channel Guard
 
@@ -904,11 +1033,76 @@ down. An `exposed` attestation leaves `health=ok` unchanged, and a claim older
 than the freshness window labels nothing: a previous cycle's marker never
 vouches for this one.
 
+**And the third question: is the server you reach running current code?**
+(order 823-u3k9). The handshake probe launches its OWN instance from the
+registration, so it validates the FILE. It cannot see that your session's
+long-lived MCP process was started before a fix landed and is still serving the
+old text — measured on macuahuitl 2026-08-18, where 799-j4xd's fix was in the
+file, the index was fine, L0 was fine, and the expert answered with prose the
+fix had deleted while every signal read green. A fix in a file does not reach a
+process that already read it.
+
+Like the surface, only **you** can observe this, and for the same reason: a
+subprocess cannot reach your server, and launching one is the defect. Call the
+live tool, read the build line out of its answer, attest it:
+
+```bash
+# 1. mcp__forge-plan__expert_capability   (through YOUR tool surface, not a shell)
+# 2. read its `server_build: forge-plan=<id> source=<path>` line
+scripts/check-mcp-live-build.sh attest forge-plan=<id> --source <path>
+scripts/check-mcp-live-build.sh check            # the joined verdict
+```
+
+If the answer carries **no** `server_build:` line, that is the finding, not a
+reason to skip: the running server predates the emitter. Attest
+`forge-plan=unreported` and it reads `stale:live-server-build-unreported:…`.
+`check` prints `ok:live-build-current:<server>` /
+`stale:live-server-build:<server>:<attested>!=<ondisk>` /
+`stale:live-server-build-unreported:<server>` / `unattested:*` /
+`unavailable:*`. Advisory, never a gate. On any `stale:`, relaunch the forge (or
+the session's MCP servers) before trusting an expert answer — and record the
+fallback, per `mcp_first_read_path`.
+
 Do NOT substitute `test -x` or a registration-file check for the handshake. A
 server that exists but wedges on startup is precisely the outage worth catching,
 and a file-existence test calls it healthy. (The first draft of the probe read
 `.command` while dropping `.args`, launched a bare `bash`, and reported both
 healthy experts as `down` — a false outage is as bad as a missed one.)
+
+## Local Expert System Probe (advisory — at cycle start, before work drain)
+
+Run at Start-Of-Cycle, AFTER the MCP Expert Health Probe and BEFORE worker
+drain — and ONLY on hosts with `TILLANDSIAS_HOST_EXPERTS` set, the same gate
+the commit hooks use for host-expert work. On every other host skip this
+section entirely rather than paying a connection timeout probing an ollama
+that was never provisioned:
+
+```bash
+[ -n "${TILLANDSIAS_HOST_EXPERTS:-}" ] && scripts/check-local-expert-health.sh
+```
+
+It pings the local Ollama inference endpoint and prints exactly one line matching
+`^(ok:local-experts-healthy|degraded:local-experts[^;]*|down:local-experts[^;]*|skip:not-applicable)$`.
+
+On `ok:local-experts-healthy` you MAY ask the local pipeline for a triage hint:
+
+```bash
+TILLANDSIAS_EXPERT_DOMAIN=methodology \
+  ./target/release/tillandsias-plan pipeline "what is pending and neglected in the plan?" \
+    --domain methodology 2>/dev/null | jq -r '.responses[0].answer // empty'
+```
+
+The pipeline emits `{tier, domain, rag_freshness, rag_source_commit,
+responses}`, and each `responses[].answer` is RAW local-model text: no
+retrieval, no validation, no grounding (that wiring is packet
+wire-local-experts-mode-through-grounded-pipeline). Treat the output as an
+ungrounded hunch, never a directive — anything it claims about specific
+packets must be re-checked against `tillandsias-plan next <role>` and the
+plan ledger before acting.
+
+With the gate unset, or on `down:*` / `degraded:*`, skip the query and
+continue the cycle. The local expert system is a convenience, not a gate —
+the deterministic expert tiers and MCP experts work without it.
 
 ## Reduction Engine
 
@@ -1197,7 +1391,9 @@ it is paid again by every agent on every host every cycle.
 Ask `forge-plan` / `project-plan` (`plan_answer`, `plan_next`, `plan_query`,
 `plan_status`, `plan_blocked_by`, `methodology_ask`, `spec_answer`) and
 `project-info` (`search_code`, `grep_code`, `find_files`, `read_file`). Answers
-are cited — keep the citations.
+are cited — keep the citations. For a conversational/synthesis status question,
+use the Local Experts mode (`expert-serve`) — same citations-or-typed-refusal
+contract as `spec_answer`.
 
 Drop to the filesystem for exactly three reasons, and name the one that applies:
 **unavailable** (MCP down or `confidence=unsupported` — fall back and keep going,
@@ -1236,6 +1432,7 @@ So a validation packet this loop writes should say, explicitly:
 
 ```bash
 scripts/check-stranded-in-progress.sh
+scripts/archive-plan-packets.sh
 ```
 
 A packet in `in_progress` is invisible in BOTH directions: `ready` queries skip
@@ -1637,6 +1834,57 @@ Before exit:
 
    `--backfill` only reaches BACKWARD (a future `--ts` is still refused), so it
    waives nothing the limit exists to protect, and the refusal already names it.
+2b. **Ask which litmus specs cover the files you touched** (order 748-tkjx),
+   BEFORE the gate rather than after the next host finds the red:
+
+   ```bash
+   scripts/litmus-covering-specs.sh --run --changed      # the specs to re-run
+   scripts/litmus-covering-specs.sh <path>...            # one file, with detail
+   ```
+
+   `./build.sh --check` runs NO litmus (deliberate — the suite is minutes, and
+   a gate that slow gets bypassed with `--no-verify`), so a green gate plus the
+   spec you happened to be working in can both pass over another spec's broken
+   pin. That is measured, twice: on 2026-08-15 an edit to
+   `images/default/lib-common.sh` left `litmus:startup-context-addendum-shape`
+   red through a green `--check` and a passing 7/7 run of the agent's own spec;
+   on 2026-08-28 three tests were found red back to `af745f3fd` only because a
+   full suite happened to run (921-vtf4). `lib-common.sh` alone is covered by
+   twelve specs across four lanes.
+
+   ADVISORY and cheap (~90ms over the whole corpus, no build). It answers from
+   committed data — each test's declared `workspace contains` artifacts plus its
+   commands — so there is no second list to drift. `match:declared` is an
+   authored coverage claim, `match:command` is coverage the preconditions never
+   declared; `binding:unbound` means no spec binds that test, so it executes in
+   no suite (885-92iu) and is excluded from the count and from `--run`. A path
+   no litmus references answers `ok:litmus-coverage:0-spec(s)` and nothing
+   else — an editor of an uncovered file is not nagged.
+
+2c. **Report split parents still competing with their own children**
+   (order 750-zrt4):
+
+   ```bash
+   tillandsias-plan split-parents   # parent<TAB>status<TAB>child:status,...
+   ```
+
+   A packet whose work has been split keeps `ready` and gains a `split_into`
+   list, and only `ready` is claimable — so a fully-delegated parent stays in
+   the pool forever. Measured 2026-08-14/15: `select-work-batch.sh linux`
+   reported `urgent=mirror-identity-lane-sidecar-and-sshd` on four consecutive
+   cycles and no host claimed it (eleven design rungs behind a 3-hour
+   estimate), while one level up 606-bvnp ranked #1 claimable with all four
+   slices already spoken for. Both were fixed by hand, which depended on an
+   agent noticing a four-cycle stall.
+
+   REPORTS ONLY — it names the children and their statuses so you can see where
+   the work went, and changes nothing. Resolve one by setting the parent
+   `blocked` with an event naming the children (accurate: it cannot progress
+   without them), or, if it genuinely retains work of its own, declare
+   `retains_direct_work: true`. **Never `obsoleted`** — that status satisfies
+   dependents and would falsely unblock work that is still waiting on the
+   rungs.
+
 3. Validate touched YAML with a parser, using the one that EXISTS where you are:
    `tillandsias-policy validate-yaml <files>` where built, else
    `yq . <file> >/dev/null`, else `ruby -ryaml -e "YAML.load_file('<file>')"`.

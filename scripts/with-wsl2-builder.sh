@@ -228,7 +228,39 @@ for arg in "$@"; do
     ARGS_QUOTED="$ARGS_QUOTED$(printf '%q ' "$arg")"
 done
 
-_ENV_PREFIX="export TILLANDSIAS_SKIP_WSL2=1; . /root/.cargo/env 2>/dev/null || true;"
+# ORDER 889-8tcb — `wsl.exe` does NOT forward the caller's environment, so
+# every TILLANDSIAS_* control flag died silently at this boundary. The one
+# that mattered: TILLANDSIAS_FORCE_CHECK=1, the documented escape hatch for a
+# stale gate memo, was inert on Windows — measured on yolanda while the
+# exec-bit deadlock made it the only lever left. Setting WSLENV by hand did
+# work, which is the proof the value simply never crossed.
+#
+# This is the same fix scripts/with-tillandsias-builder.sh:299 already carries
+# for the toolbox boundary, with the same precedent in its comment. The Windows
+# dispatch was the outlier, and a control flag that works on one platform's
+# dispatch and not the other's is worse than one that works on neither, because
+# only one of those gets noticed.
+#
+# TILLANDSIAS_SKIP_WSL2 is exported AFTER this string, so the recursion guard
+# always wins over anything forwarded here.
+_ENV_FORWARD=""
+while IFS= read -r _w2_var; do
+    _ENV_FORWARD="${_ENV_FORWARD}export $(printf '%q' "$_w2_var")=$(printf '%q' "${!_w2_var}"); "
+done < <(compgen -v | grep '^TILLANDSIAS_' || true)
+
+# ORDER 922-curm — the TILLANDSIAS_SKIP_TOOLBOX=1 that stood here is GONE, and
+# its removal is the point rather than a tidy-up. 889-8tcb set it at this
+# boundary as a same-hour mitigation for a total Windows blocker: the toolbox
+# script's FATAL fired inside the distro because its "Windows is handled by the
+# /etc/os-release guard" claim was false. 922-curm fixed that at the source —
+# with-tillandsias-builder.sh now detects WSL from /proc/version — so keeping
+# the flag here would leave TWO mechanisms for one fact, and the second would
+# be unexercised on every host that could notice it breaking. That is the
+# objection lenovinha raised against a core.fileMode conditional on 889-8tcb,
+# and it applies to my own mitigation. Verified live before removal: with the
+# flag cleared, with-tillandsias-builder.sh passes straight through inside the
+# tillandsias-build distro.
+_ENV_PREFIX="${_ENV_FORWARD}export TILLANDSIAS_SKIP_WSL2=1; . /root/.cargo/env 2>/dev/null || true;"
 if [[ "${TILLANDSIAS_WSL2_TARGET_IN_TREE:-}" != "1" ]]; then
     _ENV_PREFIX="$_ENV_PREFIX export CARGO_TARGET_DIR=\"/root/.cache/tillandsias-wsl2-target/$REPO_BASENAME\";"
 fi

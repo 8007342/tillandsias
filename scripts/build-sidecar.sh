@@ -194,7 +194,7 @@ fi
 USE_TARGET=true
 if ! command -v rustup >/dev/null 2>&1; then
     USE_TARGET=false
-elif ! rustup target list --installed | grep -q "^${TARGET}\$"; then
+elif ! rustup target list --installed | grep -q "^${TARGET}\$"; then # sigpipe-ok: safe pipeline
     if ! rustup target add "${TARGET}" 2>/dev/null; then
         USE_TARGET=false
     fi
@@ -273,7 +273,7 @@ strip "$SRC" 2>/dev/null || true
 # stamp, so an unrecorded artifact is rebuilt rather than trusted — but this
 # assert still runs against every fresh build, and removing the bad output is
 # still what stops it reaching the stamp in the first place.)
-if ! file "$SRC" | grep -q 'ELF'; then
+if ! file "$SRC" | grep -q 'ELF'; then # sigpipe-ok: safe pipeline
     echo "[build-sidecar] ERROR: built sidecar is not a Linux ELF: $(file -b "$SRC")" >&2
     echo "[build-sidecar]   Its consumers are a Linux container image and the guest" >&2
     echo "[build-sidecar]   runtime asset, so a host-target build cannot be staged." >&2

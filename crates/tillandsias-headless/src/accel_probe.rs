@@ -323,8 +323,18 @@ pub fn record_measurement(m: MeasurementRecord) -> Result<(), String> {
 }
 
 // @trace spec:accel-capability-probe
+/// `effective_tier` NO LONGER REACHES DEVICE ENUMERATION (order 935-jhh5). It
+/// used to be threaded down to `enumerate_gpus` and decide `cdi_ok`, which made
+/// the GPU record's container lane a restatement of the tier — itself derived
+/// from the same `nvidia-smi` that record already runs.
+///
+/// It is still read HERE, for `legacy_tier`, and that is the right place for it:
+/// the document then carries the CLAIMED tier beside INDEPENDENTLY MEASURED
+/// devices, so the two can be compared instead of one being manufactured from
+/// the other. Enumeration measures the machine; this field records what the
+/// tier probe asserted. Do not re-thread it downward.
 pub fn run_probe(effective_tier: &str) -> CapabilityDocument {
-    let devices = enumerate_devices(effective_tier);
+    let devices = enumerate_devices();
     let engines = enumerate_engines();
     let measurements = Vec::new(); // Microbenchmarks run on demand / bounded
     let host = enumerate_host();
@@ -358,14 +368,14 @@ pub fn probe_identity() -> String {
 }
 
 // @trace spec:accel-capability-probe
-fn enumerate_devices(effective_tier: &str) -> Vec<DeviceRecord> {
+fn enumerate_devices() -> Vec<DeviceRecord> {
     let mut devices = Vec::new();
 
     // 1. CPU Device
     devices.push(enumerate_cpu());
 
     // 2. GPUs
-    devices.extend(enumerate_gpus(effective_tier));
+    devices.extend(enumerate_gpus());
 
     // 3. NPUs
     devices.extend(enumerate_npus());
@@ -506,6 +516,26 @@ fn wsl2_paravirtual_gpu(dxg_present: bool, dri_present: bool, already_found: boo
     dxg_present && !dri_present && !already_found
 }
 
+/// Why a WSL2 paravirtual GPU is unusable — as a value, so a test can pin it.
+///
+/// ORDER 793-zumy, AND THE REASON THIS IS A FUNCTION AT ALL. The literal used
+/// to sit inline in `enumerate_gpus`, which reads real `/dev` paths and cannot
+/// run in a unit test. The existing envelope test looked like it covered this
+/// and did not: it builds its own `DeviceRecord` fixture, so it renders whatever
+/// reason the TEST supplies and passes identically against a wrong production
+/// value — verified by reverting the literal and watching it stay green. A pure
+/// function is the smallest thing that makes the production value assertable.
+/// Gated to match its production caller, `enumerate_gpus`, which is
+/// `#[cfg(target_os = "linux")]` — plus `test` so the assertion 793-zumy added
+/// this function to make possible still runs on every host. Without the `test`
+/// arm the macOS gate fails on dead code; without the `linux` arm the Linux
+/// build loses the production value. Order 935-6fzk found this from macOS,
+/// where the Linux-only caller vanishes and nothing else references it.
+#[cfg(any(target_os = "linux", test))]
+fn wsl2_paravirtual_gpu_reason() -> &'static str {
+    "engine-missing:no-vulkan-icd"
+}
+
 /// Order 850-bif2, the pure decision half of the AMD arm (unit-tested):
 /// given what the walker observed for an amdgpu card, decide usability,
 /// lanes, and the reason for any refusal.
@@ -538,10 +568,32 @@ fn amd_gpu_disposition(
     if !render_node {
         return (false, vec![], Some("render-node-missing".to_string()));
     }
+    // ORDER 793-zumy: THE CONTAINER LANE IS NOT CLAIMED HERE, and its absence is
+    // the fix rather than an omission.
+    //
+    // Every input above — rocm_gfx, kfd, render_node — is read from the HOST.
+    // MEASURED on yoga 2026-08-30: all three were true, this function therefore
+    // advertised `container`, and inside the container /dev/kfd and /dev/dri
+    // were absent, size_vram was 0.00GB for every model, and the runtime
+    // reported library=cpu. After their passthrough fix put the device nodes
+    // IN the container, size_vram was STILL 0.00GB — the image ships no
+    // ROCm/HIP backend. The envelope did not move a single character across
+    // that entire real change.
+    //
+    // So host-vantage evidence cannot support a container-lane claim, twice
+    // over: it does not know what `--device` flags a launcher will pass, and
+    // even when they are passed it does not know whether a runtime inside can
+    // drive them. Those are `Proof::Reachable` and `Proof::Placed`
+    // respectively, and a sysfs read reaches neither.
+    //
+    // Unlike NVIDIA there is no CDI spec to read — AMD passthrough is explicit
+    // `--device` at launch — so there is nothing host-side to inspect. The
+    // honest report is the lane we CAN prove, plus a reason naming what is
+    // unverified rather than silently dropping it.
     (
         true,
-        vec!["container".to_string(), "host-native".to_string()],
-        None,
+        vec!["host-native".to_string()],
+        Some("container-lane-unverified".to_string()),
     )
 }
 
@@ -705,13 +757,345 @@ fn intel_compute_runtime_present() -> bool {
         .unwrap_or(false)
 }
 
-fn enumerate_gpus(effective_tier: &str) -> Vec<DeviceRecord> {
+/// ORDER 793-zumy — REAL GPU ENUMERATION, replacing file-existence detection.
+///
+/// THE CLASS THIS EXISTS TO END, in yoga's words: A LABEL THAT SUBSTITUTES FOR
+/// THE WIRING IT NAMES. Four measured instances, one shape:
+///
+///   * accel_probe.rs computed `cdi_ok = effective_tier == "gpu-cuda"` — a label
+///     derived from the same `nvidia-smi` the surrounding code had already run.
+///     The container lane was advertised on a host where
+///     `podman run --device nvidia.com/gpu=all` returned rc=126 (935-jhh5).
+///   * WSL2 detection is `dxg_present && !dri_present` — file existence. Nothing
+///     enumerates, so the software-rasterizer rejection this packet requires is
+///     not merely untested there, it is UNIMPLEMENTABLE (yolanda, 793-zumy).
+///   * The inference container announced `TILLANDSIAS_INFERENCE_TIER=gpu-rocm`
+///     with `HostConfig.Devices == []` and `size_vram=0` on every model (yoga).
+///   * dev-inference-ensure.sh wires `--device` for gpu-cuda only; gpu-rocm falls
+///     through empty while the tier label is still passed in (yoga).
+///
+/// A label that stands in for wiring READS AS EVIDENCE to every later reader,
+/// which is why the gap survived three orders unnoticed.
+///
+/// THE RULE: a lane is proven by what can be STATTED OR PLACED — a device node
+/// visible in-container, a nonzero size_vram, a real enumeration — never by a
+/// label, an env var, or the presence of a file. The precedent is already
+/// in-tree and is a shell script: images/inference/entrypoint.sh refuses a cuda
+/// tier when `[ -e /dev/nvidia0 ]` fails INSIDE the container.
+///
+/// WHY DRM RENDER NODES ARE THE RIGHT PRIMITIVE HERE, measured on lenovinha
+/// 2026-08-30 — the fleet's only dual-vendor host:
+///
+///   renderD128  vendor=0x1002 device=0x1638 driver=amdgpu   (AMD Cezanne iGPU)
+///   renderD129  vendor=0x10de device=0x24dd driver=nvidia    (RTX 3070 dGPU)
+///
+///   1. IT REPRESENTS TWO GPUs. `/dev/dri exists` is one bit and cannot; this is
+///      the enumeration gap 793-zumy was filed against, and this host is the
+///      fixture that shows it.
+///   2. IT CARRIES REAL IDENTITY — PCI vendor/device and the BOUND KERNEL
+///      DRIVER, not a guess from a filename.
+///   3. IT REJECTS SOFTWARE RASTERIZERS STRUCTURALLY. lavapipe/llvmpipe are
+///      USERSPACE-ONLY ICDs: they create no DRM render node, so an enumeration
+///      of render nodes cannot see them AT ALL. Criterion 3 is satisfied by
+///      construction rather than by a blocklist of driver names — and a
+///      blocklist is exactly the shape that rots when a new rasterizer appears.
+///
+/// WHAT THIS DELIBERATELY DOES NOT COVER, stated so nobody reads it as total:
+/// WSL2. /dev/dxg is not a DRM device and creates no render node, so a
+/// paravirtualised GPU is invisible here and its arm must keep its own proof.
+/// Yolanda's `engine-missing:no-vulkan-icd` reason already carries that case
+/// honestly. Enumerating nothing on WSL2 is CORRECT for this primitive; it is
+/// the WSL2 arm's job to say what it can prove, not this one's job to guess.
+/// WHERE a piece of evidence was gathered. Yoga's tightening of the rule, and it
+/// is the dimension whose absence produced their finding: not "proven by what
+/// can be statted or placed" but PROVEN BY WHAT CAN BE STATTED FROM WHERE THE
+/// WORK HAPPENS.
+///
+/// Measured on yoga 2026-08-30, one machine, two true statements:
+///   host envelope : accel_gpu=usable, /dev/kfd 235,0 and /dev/dri/renderD128 present
+///   in-container  : /dev/kfd absent, /dev/dri absent, size_vram=0 for every model
+/// "usable" was true of the MACHINE and false of every lane any workload runs
+/// in, and nothing in the envelope distinguished those. The node existed the
+/// entire time it was missing where it mattered.
+///
+/// So a record carries its vantage. An enumeration performed on the host is
+/// evidence ABOUT THE HOST and must never be read as a container-lane claim —
+/// which is exactly the substitution this packet exists to end, one level up
+/// from the label.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Vantage {
+    /// Observed from the host's own filesystem.
+    Host,
+    /// Observed from inside a container — the only vantage that can speak for
+    /// the container lane. `images/inference/entrypoint.sh` is the in-tree
+    /// precedent: it refuses a cuda tier when `[ -e /dev/nvidia0 ]` fails THERE.
+    Container,
+}
+
+impl Vantage {
+    pub fn token(&self) -> &'static str {
+        match self {
+            Vantage::Host => "host",
+            Vantage::Container => "container",
+        }
+    }
+}
+
+/// HOW FAR THE EVIDENCE ACTUALLY GOES. Yoga's second refinement, measured on
+/// their host 2026-08-30, and it is a rung this model did not have.
+///
+/// My rule after their first message was "statted from where the work happens".
+/// They then supplied the case that breaks it, and it is the case a
+/// label-based probe gets wrong most confidently:
+///
+///     hardware present                              yes  (real AMD, real PCI ids)
+///     device nodes stat-able INSIDE the container   yes  (/dev/kfd, /dev/dri/renderD128)
+///     a runtime that can drive them                 NO   (no ROCm/HIP backend in the image)
+///     -> size_vram = 0.00GB, decode 12.18 -> 12.22 tok/s, unchanged
+///
+/// EVERY SIGNAL SHORT OF PLACEMENT SAID YES. The vantage rule was satisfied and
+/// the lane still could not run. So: A STAT PROVES THE DEVICE IS REACHABLE FROM
+/// WHERE THE WORK HAPPENS; IT DOES NOT PROVE A LANE. ONLY PLACEMENT PROVES A
+/// LANE. Two rungs, not one — and the three requirements (hardware, device
+/// nodes, a runtime) are INDEPENDENT. The tier label asserted all three.
+///
+/// THE IN-TREE PROOF THAT THIS DISTINCTION IS ALREADY UNDERSTOOD, and the
+/// sharpest thing in yoga's report: on that same envelope the NPU line reads
+/// `engine-missing` while the GPU line reads `usable` — the two devices are in
+/// the IDENTICAL state. The GPU's verdict came from a label; the NPU's came
+/// from something closer to a check.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Proof {
+    /// The hardware exists and identifies itself. Says nothing about any lane.
+    Enumerated,
+    /// Its device nodes are stat-able from the vantage the work runs in.
+    /// Necessary, and NOT sufficient — this is exactly where yoga's host sat
+    /// with size_vram still 0.
+    Reachable,
+    /// Work was actually placed on it: a runtime reported non-zero residency.
+    /// The only rung that proves a lane EXISTS.
+    ///
+    /// AND IT IS NOT A CLAIM ABOUT CAPACITY — yoga's caveat, recorded here so
+    /// this rung does not inherit the problem it fixes. Non-zero residency
+    /// proves a runtime placed weights on a device. It does NOT prove the
+    /// device is doing the compute (a PARTIAL OFFLOAD reports non-zero VRAM
+    /// while most layers run on CPU), and it does not prove the lane works at
+    /// the size that matters (a lane that places 200 MB may still fail at
+    /// 5 GB).
+    ///
+    /// PLACED ANSWERS "DID ANY WORK LAND HERE", NOT "WILL THE WORK LAND HERE".
+    /// A scheduler reading it as capacity is making the same substitution one
+    /// rung up, which is exactly how this family reproduces.
+    Placed,
+}
+
+impl Proof {
+    pub fn token(&self) -> &'static str {
+        match self {
+            Proof::Enumerated => "enumerated",
+            Proof::Reachable => "reachable",
+            Proof::Placed => "placed",
+        }
+    }
+    /// A lane may be ADVERTISED only at the top rung. Deliberately not `>=
+    /// Reachable`: that is the mistake this whole packet family is about, and
+    /// it is one keystroke away, so it is stated as a method rather than left
+    /// to each caller's comparison.
+    pub fn proves_a_lane(&self) -> bool {
+        matches!(self, Proof::Placed)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DrmRenderNode {
+    /// e.g. "renderD128"
+    pub node: String,
+    /// PCI vendor id, e.g. 0x10de
+    pub vendor_id: u16,
+    /// PCI device id.
+    ///
+    /// USE THIS WITH `vendor_id`, NEVER ALONE.
+    ///
+    /// CORRECTED 2026-08-30. This comment previously argued the point with a
+    /// FABRICATED counterexample — "0x1638 is BOTH yoga's Krackan Radeon
+    /// 840M/860M AND lenovinha's Cezanne". That is false. Measured from each
+    /// host's own `lspci -nn`:
+    ///
+    ///   yoga       04:00.0 Krackan Radeon 840M/860M   [1002:1114]
+    ///   lenovinha  05:00.0 Cezanne  Radeon Vega       [1002:1638]
+    ///
+    /// device_id DISCRIMINATES those two parts; it does not collide. I took the
+    /// collision from a peer message rather than from an artifact, and wrote it
+    /// into a doc comment that outlives the message — the assertion-not-artifact
+    /// error, committed on the very field built to resist it.
+    ///
+    /// THE CONCLUSION SURVIVES, on a measured argument instead of an invented
+    /// one: VENDOR alone collides — yoga's 1002:1114 and lenovinha's 1002:1638
+    /// share 0x1002, so vendor identifies a manufacturer, not a part. And on
+    /// lenovinha the two render nodes are different vendors AND different
+    /// devices (0x1002:0x1638 amdgpu, 0x10de:0x24dd nvidia), so the node index
+    /// carries no identity of its own. The PAIR, keyed to the node, is what
+    /// names a GPU. Neither half alone is sufficient, and only one half was ever
+    /// shown to collide.
+    pub device_id: u16,
+    /// bound kernel driver, e.g. "amdgpu" / "nvidia" / "i915"
+    pub driver: String,
+    /// WHERE this was observed. Set by the enumerator, never by a caller: a
+    /// record that could be relabelled is a label again.
+    pub vantage: Vantage,
+    /// HOW FAR the evidence goes. An enumeration can only ever establish
+    /// `Enumerated`; reaching `Reachable` needs a stat from the work's vantage
+    /// and `Placed` needs a runtime's residency report, neither of which a
+    /// sysfs walk can do. Hardcoded here so no caller can inflate it.
+    pub proof: Proof,
+}
+
+impl DrmRenderNode {
+    /// Vendor name from the PCI id. Unknown ids are named as themselves rather
+    /// than guessed — an honest "0x1234" beats a wrong "intel".
+    pub fn vendor(&self) -> String {
+        match self.vendor_id {
+            0x10de => "nvidia".to_string(),
+            0x1002 => "amd".to_string(),
+            0x8086 => "intel".to_string(),
+            other => format!("0x{other:04x}"),
+        }
+    }
+}
+
+/// Parse one hex sysfs id file body ("0x10de\n") into a u16.
+///
+/// Split out because it is the only fiddly part and the whole enumeration is
+/// worthless if it silently yields 0 for a value it could not read.
+pub fn parse_pci_id(body: &str) -> Option<u16> {
+    let t = body.trim();
+    let hex = t.strip_prefix("0x").unwrap_or(t);
+    u16::from_str_radix(hex, 16).ok()
+}
+
+/// Enumerate DRM render nodes under a sysfs root. `root` is a parameter ONLY so
+/// tests can point it at a fixture tree — production always passes
+/// "/sys/class/drm". A test that read the real /sys would assert whatever this
+/// machine happens to be, which is the vacuous-green shape yolanda caught on
+/// this very packet: a test that built its own fixture, never touched
+/// production, and stayed GREEN when production was reverted to a wrong value.
+pub fn enumerate_render_nodes_at(root: &std::path::Path, vantage: Vantage) -> Vec<DrmRenderNode> {
+    let mut out = Vec::new();
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return out;
+    };
+    let mut names: Vec<String> = entries
+        .flatten()
+        .filter_map(|e| e.file_name().into_string().ok())
+        .filter(|n| n.starts_with("renderD"))
+        .collect();
+    names.sort();
+    for name in names {
+        let dev = root.join(&name).join("device");
+        let vendor_id = std::fs::read_to_string(dev.join("vendor"))
+            .ok()
+            .as_deref()
+            .and_then(parse_pci_id);
+        let device_id = std::fs::read_to_string(dev.join("device"))
+            .ok()
+            .as_deref()
+            .and_then(parse_pci_id);
+        // A node whose identity cannot be read is SKIPPED, not defaulted to
+        // zero: a record claiming vendor 0x0000 is still a claim, and this
+        // packet is about not making claims the evidence does not support.
+        let (Some(vendor_id), Some(device_id)) = (vendor_id, device_id) else {
+            continue;
+        };
+        let driver = std::fs::read_link(dev.join("driver"))
+            .ok()
+            .and_then(|p| p.file_name().and_then(|f| f.to_str()).map(str::to_string))
+            .unwrap_or_else(|| "unknown".to_string());
+        out.push(DrmRenderNode {
+            node: name,
+            vendor_id,
+            device_id,
+            driver,
+            // This function reads a filesystem. Whose filesystem is the
+            // caller's business; what it can honestly say is "I saw this from
+            // where I ran". Production passes /sys/class/drm on the host.
+            vantage,
+            // A sysfs walk sees hardware. It cannot see a container's device
+            // list and it cannot see size_vram, so this is the ONLY rung it is
+            // entitled to claim.
+            proof: Proof::Enumerated,
+        });
+    }
+    out
+}
+
+/// Does ONE spec body name the NVIDIA kind AND a usable device node?
+///
+/// Split out so it is testable without the filesystem: a spec that names the
+/// kind but no `/dev/nvidiaN` node cannot deliver a GPU, and neither can one
+/// whose node sits under a self-referential `/run/host` prefix — that lands at
+/// the wrong in-container path, which is exactly the spec a bad `--dev-root`
+/// produced on this host.
+#[cfg(target_os = "linux")]
+fn spec_body_delivers_nvidia(body: &str) -> bool {
+    body.contains("nvidia.com/gpu") && body.contains("/dev/nvidia") && !body.contains("/run/host")
+}
+
+#[cfg(target_os = "linux")]
+fn spec_file_delivers_nvidia(path: &std::path::Path) -> bool {
+    std::fs::read_to_string(path)
+        .map(|b| spec_body_delivers_nvidia(&b))
+        .unwrap_or(false)
+}
+
+#[cfg(target_os = "linux")]
+fn nvidia_cdi_deliverable() -> bool {
+    // podman's own default search path, plus the user dir a rootless immutable
+    // host must use (podman does not search it unless containers.conf declares
+    // it — the correction recorded on 665-zddn).
+    let mut dirs: Vec<std::path::PathBuf> = vec![
+        std::path::PathBuf::from("/etc/cdi"),
+        std::path::PathBuf::from("/var/run/cdi"),
+    ];
+    if let Ok(home) = std::env::var("HOME") {
+        dirs.push(std::path::Path::new(&home).join(".config/cdi"));
+    }
+
+    for dir in dirs {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("yaml") {
+                continue;
+            }
+            if spec_file_delivers_nvidia(&path) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// ORDER 935-jhh5: `effective_tier` USED TO BE A PARAMETER HERE and is gone on
+/// purpose. Its only consumer was `cdi_ok = effective_tier == "gpu-cuda"`, and
+/// that tier is itself derived from the same `nvidia-smi` this function already
+/// runs — so the parameter was the circularity, carried in by signature. The
+/// compiler flagging it unused the moment the real check landed is the proof
+/// that the dependency is severed rather than merely rerouted.
+fn enumerate_gpus() -> Vec<DeviceRecord> {
     let mut gpus = Vec::new();
 
-    // Only the Linux arm consults the tier (CDI container-deliverability);
-    // the macOS arm is host-native only by spec (PROBE-7).
-    #[cfg(not(target_os = "linux"))]
-    let _ = effective_tier;
+    // The tier no longer reaches this function at all (order 935-jhh5). It used
+    // to be a parameter whose ONLY consumer was the Linux arm's
+    // `cdi_ok = effective_tier == "gpu-cuda"` — a check derived from the same
+    // `nvidia-smi` that arm already runs. With that circularity removed the
+    // parameter went too, and this `let _ = effective_tier;` — the
+    // non-Linux fallback that existed purely to silence the resulting
+    // unused-parameter warning — went with it. The cross-target gate (656-spux)
+    // caught it: it compiles on the host either way, and only the Windows
+    // target proved the line was now referencing something that no longer
+    // exists. The macOS arm is host-native only by spec (PROBE-7).
 
     #[cfg(target_os = "macos")]
     {
@@ -745,7 +1129,7 @@ fn enumerate_gpus(effective_tier: &str) -> Vec<DeviceRecord> {
             .filter(|s| !s.is_empty());
 
         if let Some(nvidia_output) = nvidia_present {
-            let cdi_ok = effective_tier == "gpu-cuda";
+            let cdi_ok = nvidia_cdi_deliverable();
             let lanes = if cdi_ok {
                 vec!["container".to_string(), "host-native".to_string()]
             } else {
@@ -883,9 +1267,36 @@ fn enumerate_gpus(effective_tier: &str) -> Vec<DeviceRecord> {
                 fw_version: None,
                 driver: None,
                 usable: false,
-                unusable_reason: Some("wsl2-no-dri-render-node".to_string()),
+                // ORDER 793-zumy. This said `wsl2-no-dri-render-node`, and that
+                // reason was a red herring dressed as a diagnosis. WSL2 delivers
+                // the GPU through /dev/dxg and is NOT EXPECTED to create a DRI
+                // render node at all, so naming the render node's absence as the
+                // obstruction describes normal WSL2 rather than anything wrong —
+                // while reading, to a scheduler, as a hardware verdict. Measured
+                // on yolanda 2026-08-29: /dev/dxg present, /dev/dri absent,
+                // /usr/lib/wsl/lib carrying libd3d12/libd3d12core/libdxcore, and
+                // NO Vulkan loader — vulkaninfo off PATH, /usr/share/vulkan/icd.d
+                // absent entirely. The device is delivered; the translation layer
+                // is not installed. That is the real obstruction and it is a
+                // PROVISIONING fact, three packages away (793-a8e7), not a
+                // statement about the silicon. The same host has already driven
+                // this GPU at 2.04x CPU prefill once a loader was present.
+                //
+                // `engine-missing` is the grammar's existing word for exactly
+                // this — hardware present, no runtime to reach it — and is what
+                // the packet's criterion 2 requires verbatim. The suffix keeps
+                // WHICH engine and therefore what would fix it, matching the
+                // sibling `rocm-runtime-missing` / `intel-compute-runtime-missing`
+                // shape: a provisioning statement should name its own remedy.
+                //
+                // THE VERDICT IS DELIBERATELY UNCHANGED. usable stays false and
+                // the class stays cpu-only: nothing here makes the GPU reachable
+                // today, and inflating the class would place GPU work on a host
+                // that cannot run it — the opposite failure, and the worse one.
+                unusable_reason: Some(wsl2_paravirtual_gpu_reason().to_string()),
                 // No lane: unreachable from the container AND from host-native
-                // code in the guest, because there is no render node to open.
+                // code in the guest, because no Vulkan ICD is installed to
+                // translate onto the dxg path.
                 lanes: vec![],
                 memory_bandwidth_gbps: None,
                 memory_bandwidth_source: "unknown".to_string(),
@@ -1358,6 +1769,261 @@ fn slug(raw: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    /// YOGA'S SECOND REFINEMENT, pinned as a rule rather than a comment: a stat
+    /// proves the DEVICE is reachable; only PLACEMENT proves a lane.
+    ///
+    /// Their measured case is the reason this rung exists — real AMD hardware,
+    /// real render node, correct PCI ids, /dev/kfd and /dev/dri/renderD128
+    /// stat-able INSIDE the container, and size_vram still 0.00GB with decode
+    /// unchanged at 12.2 tok/s. Every signal short of placement said yes.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn only_placement_proves_a_lane_reachable_is_not_enough() {
+        assert!(!super::Proof::Enumerated.proves_a_lane());
+        assert!(
+            !super::Proof::Reachable.proves_a_lane(),
+            "REACHABLE MUST NOT PROVE A LANE — yoga's host had device nodes in \
+             the container and size_vram=0; this is the exact assertion that \
+             stops the next reader treating a successful stat as a working lane"
+        );
+        assert!(super::Proof::Placed.proves_a_lane());
+        // The rungs are ordered, so a future caller can ask "at least
+        // Reachable" for diagnosis without that ordering implying a lane.
+        assert!(super::Proof::Enumerated < super::Proof::Reachable);
+        assert!(super::Proof::Reachable < super::Proof::Placed);
+    }
+
+    /// A sysfs walk may claim ONLY the bottom rung. It cannot see a container's
+    /// device list and cannot see size_vram, so any higher claim would be the
+    /// substitution this packet exists to end.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_sysfs_enumeration_claims_only_the_enumerated_rung() {
+        let root = drm_fixture(&[("renderD128", "0x1002\n", "0x1638\n", "amdgpu")]);
+        let nodes = super::enumerate_render_nodes_at(&root, super::Vantage::Host);
+        assert_eq!(nodes[0].proof, super::Proof::Enumerated);
+        assert!(
+            !nodes[0].proof.proves_a_lane(),
+            "an enumeration must never advertise a lane"
+        );
+        // Even asked from the container's vantage, a sysfs walk is still only
+        // an enumeration — the vantage improves WHERE, not HOW FAR.
+        let inside = super::enumerate_render_nodes_at(&root, super::Vantage::Container);
+        assert_eq!(inside[0].vantage.token(), "container");
+        assert_eq!(
+            inside[0].proof,
+            super::Proof::Enumerated,
+            "vantage and proof are independent axes; a better vantage is not a higher rung"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// ORDER 793-zumy. Fixture trees, never the real /sys — a test that read
+    /// this machine would assert whatever it happens to be, which is the
+    /// vacuous-green shape yolanda caught on this very packet: a test that
+    /// built its own fixture, never touched production, and stayed GREEN when
+    /// production was reverted to a wrong value.
+    #[cfg(target_os = "linux")]
+    fn drm_fixture(spec: &[(&str, &str, &str, &str)]) -> std::path::PathBuf {
+        let root =
+            std::env::temp_dir().join(format!("drm-fixture-{}-{}", std::process::id(), spec.len()));
+        let _ = std::fs::remove_dir_all(&root);
+        for (node, vendor, device, driver) in spec {
+            let dev = root.join(node).join("device");
+            std::fs::create_dir_all(&dev).unwrap();
+            std::fs::write(dev.join("vendor"), vendor).unwrap();
+            std::fs::write(dev.join("device"), device).unwrap();
+            if !driver.is_empty() {
+                let drv = root.join("drivers").join(driver);
+                std::fs::create_dir_all(&drv).unwrap();
+                let _ = std::os::unix::fs::symlink(&drv, dev.join("driver"));
+            }
+        }
+        root
+    }
+
+    /// THE ENUMERATION GAP 793-zumy WAS FILED AGAINST. `/dev/dri exists` is one
+    /// bit and cannot represent two GPUs. This is lenovinha's real hardware,
+    /// measured 2026-08-30 — the fleet's only dual-vendor fixture.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn enumeration_represents_two_gpus_where_file_existence_cannot() {
+        let root = drm_fixture(&[
+            ("renderD128", "0x1002\n", "0x1638\n", "amdgpu"),
+            ("renderD129", "0x10de\n", "0x24dd\n", "nvidia"),
+        ]);
+        let nodes = super::enumerate_render_nodes_at(&root, super::Vantage::Host);
+        assert_eq!(nodes.len(), 2, "two render nodes must yield two records");
+        assert_eq!(nodes[0].vendor(), "amd");
+        assert_eq!(nodes[0].driver, "amdgpu");
+        assert_eq!(nodes[1].vendor(), "nvidia");
+        assert_eq!(nodes[1].driver, "nvidia");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// EXIT CRITERION 3, SATISFIED STRUCTURALLY RATHER THAN BY A BLOCKLIST.
+    /// lavapipe/llvmpipe are USERSPACE-ONLY Vulkan ICDs: they create no DRM
+    /// render node, so an enumeration of render nodes cannot see them at all.
+    /// A host with Mesa's full ICD set installed and no GPU enumerates ZERO —
+    /// which is why no driver-name blocklist is needed, and why this cannot rot
+    /// when a new software rasterizer appears.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_software_rasterizer_cannot_satisfy_the_gpu_check() {
+        let root = drm_fixture(&[]);
+        std::fs::create_dir_all(&root).unwrap();
+        let nodes = super::enumerate_render_nodes_at(&root, super::Vantage::Host);
+        assert!(
+            nodes.is_empty(),
+            "a tree with no render node must enumerate nothing — llvmpipe has no node to find"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// A NODE WHOSE IDENTITY CANNOT BE READ IS SKIPPED, NOT DEFAULTED. A record
+    /// claiming vendor 0x0000 is still a claim, and the whole packet is about
+    /// not making claims the evidence does not support.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn an_unreadable_node_is_skipped_rather_than_reported_as_vendor_zero() {
+        let root = std::env::temp_dir().join(format!("drm-partial-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("renderD128").join("device")).unwrap();
+        // vendor present, device absent
+        std::fs::write(root.join("renderD128/device/vendor"), "0x10de\n").unwrap();
+        let nodes = super::enumerate_render_nodes_at(&root, super::Vantage::Host);
+        assert!(
+            nodes.is_empty(),
+            "a half-readable node must not become a record"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// YOGA'S TIGHTENING, pinned: a record carries WHERE it was observed, and a
+    /// host enumeration must never read as a container-lane claim. Their
+    /// machine reported accel_gpu=usable from the host while the container had
+    /// no /dev/kfd, no /dev/dri and size_vram=0 on every model — both true, and
+    /// nothing distinguished them.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_record_carries_the_vantage_it_was_observed_from() {
+        let root = drm_fixture(&[("renderD128", "0x1002\n", "0x1638\n", "amdgpu")]);
+        let host = super::enumerate_render_nodes_at(&root, super::Vantage::Host);
+        assert_eq!(host[0].vantage.token(), "host");
+        let inside = super::enumerate_render_nodes_at(&root, super::Vantage::Container);
+        assert_eq!(inside[0].vantage.token(), "container");
+        assert_ne!(
+            super::Vantage::Host,
+            super::Vantage::Container,
+            "the two vantages must not be interchangeable"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// LIVE, on whatever this host is. Deliberately NOT an assertion about
+    /// lenovinha's hardware — it asserts an INVARIANT that must hold on every
+    /// host: whatever enumerates, its identity is readable and its vantage is
+    /// host. On a machine with no GPU it passes vacuously, which is correct.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn live_enumeration_is_self_consistent_on_whatever_host_this_is() {
+        let nodes = super::enumerate_render_nodes_at(
+            std::path::Path::new("/sys/class/drm"),
+            super::Vantage::Host,
+        );
+        for n in &nodes {
+            assert_ne!(n.vendor_id, 0, "a reported node must have a real vendor id");
+            assert!(!n.node.is_empty());
+            assert_eq!(n.vantage.token(), "host");
+        }
+        eprintln!(
+            "[793-zumy] live enumeration on this host: {} node(s)",
+            nodes.len()
+        );
+        for n in &nodes {
+            eprintln!(
+                "  {} vendor={} (0x{:04x}) device=0x{:04x} driver={} vantage={}",
+                n.node,
+                n.vendor(),
+                n.vendor_id,
+                n.device_id,
+                n.driver,
+                n.vantage.token()
+            );
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn pci_ids_parse_with_and_without_the_prefix_and_reject_garbage() {
+        assert_eq!(super::parse_pci_id("0x10de\n"), Some(0x10de));
+        assert_eq!(super::parse_pci_id("1002"), Some(0x1002));
+        assert_eq!(super::parse_pci_id(""), None);
+        assert_eq!(super::parse_pci_id("not-a-number"), None);
+    }
+
+    /// ORDER 935-jhh5. The old `cdi_ok = effective_tier == "gpu-cuda"` was
+    /// CIRCULAR — the tier derives from the same `nvidia-smi` the caller already
+    /// ran — so it could never report a missing spec on a host with a working
+    /// driver. These pin the replacement against real spec SHAPES, using a
+    /// temp dir rather than this machine's state, because on a host where CDI
+    /// already works BOTH the broken and the fixed check answer true and a test
+    /// that read the live filesystem would pass either way.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn cdi_deliverable_requires_a_device_node_not_merely_the_kind() {
+        use std::io::Write;
+        let dir = std::env::temp_dir().join(format!("cdi-probe-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let write = |name: &str, body: &str| {
+            let p = dir.join(name);
+            let mut f = std::fs::File::create(&p).unwrap();
+            f.write_all(body.as_bytes()).unwrap();
+            p
+        };
+
+        // Names the kind but declares no node: cannot deliver a GPU.
+        let bare = write(
+            "bare.yaml",
+            "kind: nvidia.com/gpu\ndevices:\n  - name: all\n",
+        );
+        assert!(
+            !super::spec_file_delivers_nvidia(&bare),
+            "a spec with no /dev/nvidiaN node must not count as deliverable"
+        );
+
+        // The shape a bad --dev-root produced here: the node exists but under a
+        // self-referential prefix, so it lands at the wrong in-container path
+        // and the inference entrypoint's `[ -e /dev/nvidia0 ]` finds nothing.
+        let prefixed = write(
+            "prefixed.yaml",
+            "kind: nvidia.com/gpu\ndevices:\n  - name: all\n    deviceNodes:\n      - path: /run/host/dev/nvidia0\n",
+        );
+        assert!(
+            !super::spec_file_delivers_nvidia(&prefixed),
+            "a /run/host-prefixed node lands at the wrong container path — not deliverable"
+        );
+
+        // The good shape.
+        let good = write(
+            "good.yaml",
+            "kind: nvidia.com/gpu\ndevices:\n  - name: all\n    deviceNodes:\n      - path: /dev/nvidia0\n",
+        );
+        assert!(
+            super::spec_file_delivers_nvidia(&good),
+            "a spec naming the kind and a real /dev/nvidia0 IS deliverable"
+        );
+
+        // A spec for someone else's device must not answer for NVIDIA.
+        let other = write(
+            "other.yaml",
+            "kind: amd.com/gpu\ndevices:\n  - name: all\n    deviceNodes:\n      - path: /dev/dri/card0\n",
+        );
+        assert!(!super::spec_file_delivers_nvidia(&other));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
     use super::*;
 
     /// ORDER 880-tdwn: pin the podman seam to /bin/false for a test's
@@ -1620,8 +2286,46 @@ mod tests {
         );
     }
 
-    #[test]
     // @trace spec:accel-capability-probe
+    /// ORDER 793-zumy criterion 2, pinned against the PRODUCTION value.
+    ///
+    /// Measured on yolanda 2026-08-29: /dev/dxg present, /dev/dri absent, and no
+    /// Vulkan loader at all — vulkaninfo off PATH, /usr/share/vulkan/icd.d
+    /// absent. The old reason, `wsl2-no-dri-render-node`, named a render node
+    /// WSL2 is never expected to create, so it described normal WSL2 while
+    /// reading to a scheduler as a hardware verdict. The real obstruction is a
+    /// missing translation layer, which is provisioning, not silicon.
+    ///
+    /// Read the sibling test below before trusting either: it renders a
+    /// TEST-SUPPLIED reason and therefore cannot pin production at all. This one
+    /// asserts the shipped value, and was confirmed to go red against the old
+    /// literal before it went green.
+    #[test]
+    fn the_wsl2_unusable_reason_names_the_missing_engine_not_the_missing_render_node() {
+        let reason = wsl2_paravirtual_gpu_reason();
+
+        // Criterion 2 requires this word verbatim.
+        assert!(
+            reason.starts_with("engine-missing"),
+            "criterion 2 requires the verbatim word `engine-missing`; got {reason}"
+        );
+        // The red herring must not come back.
+        assert!(
+            !reason.contains("dri-render-node"),
+            "the reason blames a render node WSL2 never creates: {reason}"
+        );
+        // A provisioning statement should name its own remedy, like the sibling
+        // rocm-runtime-missing / intel-compute-runtime-missing values do.
+        assert!(
+            reason.contains("vulkan"),
+            "the reason should name WHICH engine is missing: {reason}"
+        );
+    }
+
+    /// NOTE: this test cannot pin the production reason — it supplies its own.
+    /// Kept for what it does cover (present-unusable never collapsing to none,
+    /// and the class staying cpu-only). See the test above for the reason pin.
+    #[test]
     fn a_wsl2_paravirtual_gpu_renders_as_present_unusable_never_as_none() {
         // The point of 806-2r4s: this host has a healthy AMD Radeon 860M that
         // WSL2 exposes only as /dev/dxg. Before the probe emitted this record
@@ -1632,7 +2336,7 @@ mod tests {
             "gpu",
             "WSL2 paravirtual GPU (/dev/dxg)",
             &[],
-            Some("wsl2-no-dri-render-node"),
+            Some("engine-missing:no-vulkan-icd"),
         );
         gpu.usable = false;
 
@@ -1643,7 +2347,7 @@ mod tests {
 
         assert!(env.contains("accel_gpu=present-unusable"), "{env}");
         assert!(!env.contains("accel_gpu=none"), "{env}");
-        assert!(env.contains("wsl2-no-dri-render-node"), "{env}");
+        assert!(env.contains("engine-missing"), "{env}");
         // Capacity is still cpu-only — an unreachable GPU must not inflate the
         // class, or a scheduler would place GPU work on a host that cannot run it.
         assert!(env.contains("accel_class=cpu-only"), "{env}");
@@ -2059,10 +2763,34 @@ mod tests {
         assert!(lanes.is_empty(), "no render node = no lane to reach it on");
         assert_eq!(reason.as_deref(), Some("render-node-missing"));
 
+        // ORDER 793-zumy: THIS ASSERTION CHANGED, AND IT WAS PINNING THE DEFECT.
+        //
+        // It previously required lanes == ["container", "host-native"] and
+        // reason == None for a host with rocm + kfd + a render node. All three
+        // of those inputs are read FROM THE HOST, and yoga measured 2026-08-30
+        // that a host satisfying all three had, inside the container that
+        // actually runs inference: no /dev/kfd, no /dev/dri, size_vram=0.00GB
+        // for every model, and a runtime reporting library=cpu. After the
+        // device nodes WERE passed in, size_vram was still 0.00GB because the
+        // image ships no ROCm backend.
+        //
+        // So the old expectation encoded exactly the substitution this packet
+        // exists to end — host evidence standing in for a container-lane claim
+        // — and a test asserting it made the defect look verified. Updating it
+        // is the point, not collateral: the probe now reports the lane it can
+        // prove and NAMES the one it cannot.
         let (usable, lanes, reason) = amd_gpu_disposition(true, true, true);
-        assert!(usable);
-        assert_eq!(lanes, vec!["container", "host-native"]);
-        assert_eq!(reason, None);
+        assert!(usable, "the DEVICE is usable — that part was never wrong");
+        assert_eq!(
+            lanes,
+            vec!["host-native"],
+            "a host-vantage probe cannot claim the container lane"
+        );
+        assert_eq!(
+            reason.as_deref(),
+            Some("container-lane-unverified"),
+            "and it must SAY the lane is unverified rather than silently omit it"
+        );
     }
 
     #[test]

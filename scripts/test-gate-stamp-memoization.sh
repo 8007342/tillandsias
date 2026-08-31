@@ -53,6 +53,21 @@ setup_repo() {
     git -C "$TDIR/repo" commit -qm fixture
 }
 
+# ORDER 940-f77j — `write` now requires the one-shot pass token a GREEN gate
+# issues. This fixture stands in for the gate (its subject is the memo
+# DECISION, not stamp earning), so it issues the token the way build.sh does
+# before each write it expects to succeed.
+issue_pass_token() {
+    local _d
+    _d="$(cd "$TDIR/repo" && bash scripts/gate-stamp.sh compute)" || return 1
+    {
+        echo 'version 1'
+        echo "digest $_d"
+        echo 'dispatch check'
+        echo 'issued now'
+    } > "$(git -C "$TDIR/repo" rev-parse --absolute-git-dir)/tillandsias-gate-pass-token"
+}
+
 # Prints the verdict and RETURNS the exit code, so callers can use
 # `v="$(memo check)"; rc=$?` — a command substitution runs in a subshell, so a
 # global assigned inside would never reach the caller (it did not, first try).
@@ -62,6 +77,7 @@ memo() { # <dispatch>
 
 # 1. Unchanged tree after a green stamp -> memo hit carrying the timestamp.
 setup_repo
+issue_pass_token
 (cd "$TDIR/repo" && bash scripts/gate-stamp.sh write --scope full --dispatch check >/dev/null)
 v="$(memo check)"; rc=$?
 if [ "$rc" -eq 0 ] && [ "${v#ok:gate-fresh }" != "$v" ]; then
@@ -82,6 +98,7 @@ fi
 # 3. A changed UNTRACKED byte invalidates it too — the stamp covers untracked
 #    files, and a memo that ignored them would bless an unvalidated tree.
 setup_repo
+issue_pass_token
 (cd "$TDIR/repo" && bash scripts/gate-stamp.sh write --scope full --dispatch check >/dev/null)
 printf 'new\n' > "$TDIR/repo/untracked.txt"
 v="$(memo check)"; rc=$?
@@ -94,6 +111,7 @@ fi
 # 4. Toolchain change with byte-identical tree -> refuse. Faked by rewriting
 #    the recorded digest, which is what a rustc/clippy bump does to it.
 setup_repo
+issue_pass_token
 (cd "$TDIR/repo" && bash scripts/gate-stamp.sh write --scope full --dispatch check >/dev/null)
 stampfile="$TDIR/repo/.git/tillandsias-gate-stamp"
 sed -i 's/^toolchain .*/toolchain 0000000000000000000000000000000000000000000000000000000000000000/' "$stampfile"
@@ -107,6 +125,7 @@ fi
 # 5. A stamp predating 765-tkq2 (no toolchain field) is stale, not "assume
 #    unchanged" — the fail-closed migration path.
 setup_repo
+issue_pass_token
 (cd "$TDIR/repo" && bash scripts/gate-stamp.sh write --scope full --dispatch check >/dev/null)
 grep -v '^toolchain ' "$stampfile" > "$stampfile.tmp"
 mv "$stampfile.tmp" "$stampfile"
@@ -139,6 +158,7 @@ fi
 
 # 8. A SCOPED stamp may not memoize the whole gate.
 setup_repo
+issue_pass_token
 (cd "$TDIR/repo" && bash scripts/gate-stamp.sh write --scope plan-ledger --dispatch check >/dev/null)
 v="$(memo check)"; rc=$?
 if [ "$rc" -ne 0 ] && [ "$v" = "stale:scoped-stamp-cannot-memoize-full-gate" ]; then
@@ -149,6 +169,7 @@ fi
 
 # 9. Dispatch equality: a ci-full stamp does not memoize a --check run.
 setup_repo
+issue_pass_token
 (cd "$TDIR/repo" && bash scripts/gate-stamp.sh write --scope full --dispatch ci-full >/dev/null)
 v="$(memo check)"; rc=$?
 if [ "$rc" -ne 0 ] && [ "$v" = "stale:dispatch-mismatch:ci-full" ]; then
@@ -161,6 +182,7 @@ fi
 #     freshly stamped tree still passes. Without this, "refuse everything"
 #     would satisfy cases 2-9.
 setup_repo
+issue_pass_token
 (cd "$TDIR/repo" && bash scripts/gate-stamp.sh write --scope full --dispatch check >/dev/null)
 v="$(memo check)"; rc=$?
 if [ "$rc" -eq 0 ]; then
@@ -175,9 +197,24 @@ fi
 started_real_work() { grep -q 'Checking Rust formatting' "$1"; }
 took_memo()         { grep -q 'ok:gate-fresh (stamped' "$1"; }
 
+# 940-f77j applies to the real checkout's writes too: without a token the
+# setup writes below silently refuse, no stamp lands, and case 11 falls
+# through to a FULL real gate instead of the memo branch it exists to test.
+issue_root_pass_token() {
+    local _d
+    _d="$(cd "$ROOT" && bash scripts/gate-stamp.sh compute)" || return 1
+    {
+        echo 'version 1'
+        echo "digest $_d"
+        echo 'dispatch check'
+        echo 'issued now'
+    } > "$(git -C "$ROOT" rev-parse --absolute-git-dir)/tillandsias-gate-pass-token"
+}
+
 # 11. The gate consults the memo and says so, out loud, with the override.
+issue_root_pass_token
 bash "$ROOT/scripts/gate-stamp.sh" write --scope full --dispatch check >/dev/null 2>&1
-"$ROOT/build.sh" --check > "$TDIR/hit.log" 2>&1
+TILLANDSIAS_SKIP_VERSION_BUMP=1 "$ROOT/build.sh" --check > "$TDIR/hit.log" 2>&1
 hit_rc=$?
 if [ "$hit_rc" -eq 0 ] && took_memo "$TDIR/hit.log" && ! started_real_work "$TDIR/hit.log" &&
     grep -q 'TILLANDSIAS_FORCE_CHECK=1 to re-run' "$TDIR/hit.log"; then
@@ -187,9 +224,14 @@ else
     tail -3 "$TDIR/hit.log" >&2
 fi
 
-# 12. The override bypasses it.
-TILLANDSIAS_FORCE_CHECK=1 timeout 90 "$ROOT/build.sh" --check > "$TDIR/force.log" 2>&1
-if ! took_memo "$TDIR/force.log" && started_real_work "$TDIR/force.log"; then
+# 12. The override bypasses it. Bounded like case 13: under the litmus
+#     runner's PATH the forced run re-execs into the tillandsias-builder
+#     toolbox, and that entry alone can eat the whole bound before the
+#     formatting check ever prints — so a timeout kill (124) while the memo
+#     was NOT taken counts as real work, and only an instant memo exit fails.
+TILLANDSIAS_SKIP_VERSION_BUMP=1 TILLANDSIAS_FORCE_CHECK=1 timeout 90 "$ROOT/build.sh" --check > "$TDIR/force.log" 2>&1
+force_rc=$?
+if ! took_memo "$TDIR/force.log" && { started_real_work "$TDIR/force.log" || [ "$force_rc" -eq 124 ]; }; then
     ok "TILLANDSIAS_FORCE_CHECK=1 bypasses the memo and runs the gate"
 else
     bad "force override did not bypass the memo"
@@ -205,7 +247,7 @@ fi
 #     first time). What must be true is that the memo was not taken and the
 #     process was doing real work when the bound hit — an instant exit 0 is
 #     the failure being excluded.
-timeout 40 "$ROOT/build.sh" --check --install > "$TDIR/combined.log" 2>&1
+TILLANDSIAS_SKIP_VERSION_BUMP=1 timeout 40 "$ROOT/build.sh" --check --install > "$TDIR/combined.log" 2>&1
 combined_rc=$?
 if ! took_memo "$TDIR/combined.log" && [ "$combined_rc" -eq 124 ]; then
     ok "a combined dispatch (--check --install) never memoizes and does real work"
@@ -224,10 +266,11 @@ fi
 #     see proves nothing. Appending to an already-compiled file is seen.
 STAMP_PATH="$(git -C "$ROOT" rev-parse --absolute-git-dir)/tillandsias-gate-stamp"
 VICTIM="crates/tillandsias-vault-client/src/error.rs"
+issue_root_pass_token
 bash "$ROOT/scripts/gate-stamp.sh" write --scope full --dispatch check >/dev/null 2>&1
 before="$("${PORTABLE_SHA256[@]}" "$STAMP_PATH" | cut -d' ' -f1)"
 printf 'pub fn   memo_fixture_badfmt( )->u8{1}\n' >> "$ROOT/$VICTIM"
-TILLANDSIAS_FORCE_CHECK=1 timeout 300 "$ROOT/build.sh" --check > "$TDIR/red.log" 2>&1
+TILLANDSIAS_SKIP_VERSION_BUMP=1 TILLANDSIAS_FORCE_CHECK=1 timeout 300 "$ROOT/build.sh" --check > "$TDIR/red.log" 2>&1
 red_rc=$?
 git -C "$ROOT" checkout -- "$VICTIM"
 after="$("${PORTABLE_SHA256[@]}" "$STAMP_PATH" | cut -d' ' -f1)"
@@ -239,6 +282,7 @@ else
 fi
 
 # Leave the checkout's stamp matching reality: the tree changed during case 14.
+issue_root_pass_token
 bash "$ROOT/scripts/gate-stamp.sh" write --scope full --dispatch check >/dev/null 2>&1
 
 if [ "$fail" -eq 0 ]; then

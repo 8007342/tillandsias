@@ -135,7 +135,7 @@ ensure_query_binary() {
         cargo_flags="--quiet"
     fi
 
-    if ! "$CARGO_BIN" build --release -p tillandsias-logging $cargo_flags 2>&1 | grep -v "^warning" || true; then
+    if ! "$CARGO_BIN" build --release -p tillandsias-logging $cargo_flags 2>&1 | grep -v "^warning" || true; then # sigpipe-ok: consumer does not exit early
         die "Failed to build query engine"
     fi
 
