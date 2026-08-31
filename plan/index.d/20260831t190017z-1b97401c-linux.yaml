@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: fat-spec-expert-cannot-refuse-an-out-of-corpus-question
+    field: next_action
+    value: 'READ THIS BEFORE IMPLEMENTING — the prior next_action was stale twice over. Tier A deterministic citation verification is NOT open work: the 2026-08-29 event reports spec-envelope already runs emit_verified_envelope -> answer::verify on that path, and spec-floor is live in the binary''s capability set (verified 2026-08-31). The declined-alternatives corpus content is now LANDED as methodology/declined-alternatives.yaml and methodology/not-enough-information.yaml (2026-08-31), with one source record CORRECTED: it claimed systemd unit files are not used, and packaging/systemd/user/tillandsias.service exists and is titled ''Tillandsias Headless Orchestrator''. REMAINING: (1) RE-MEASURE the conversion against the landed files — the 2-of-5 near-miss conversion with zero in-corpus regression was measured on the JSONL, by another host, BEFORE the systemd correction; rebuild the index and re-run scripts/refusal-calibration/ to confirm the corrected text still converts, and record the number as your own rather than inheriting it. (2) The near-miss band remains unrefused BY DESIGN and that is the fleet decision, not a gap: no cosine floor separates near from in (n=579, overlap 0.17-0.28 in every corpus, top1-vs-top2 margin worse at 0.1306), so near-miss refusal is routed to 853-6gz3''s expert validation layer, which decides by WHICH CHUNK WON and whether its citation verifies. Do NOT implement a threshold; that approach is measured-dead and re-deriving it is the folklore 802-2536 exists to stop. (3) Criteria 1 and 3 are met (score reaches the envelope since 2026-08-18; spec-rung1.yaml carries an unsupported case since 2026-08-24); criterion 2 is met for the FAR band only, and closure over the near band belongs to 853-6gz3. A STANDING CAUTION EARNED HERE: the refusal-calibration harness measures whether a corpus record CONVERTS a question, never whether the record is TRUE. Verify any new declined-alternatives entry against the tree before landing it — one of the three original records was false and would have entered the corpus as authority.'
+    ts: "2026-08-31T19:00:17Z"
+    host: linux
+
+events:
+  - packet_id: fat-spec-expert-cannot-refuse-an-out-of-corpus-question
+    event:
+      type: note
+      ts: "2026-08-31T19:00:17Z"
+      host: linux
+      summary: >
+        recording that Tier A was already done and the corpus content is landed with a corrected record; naming re-measurement as the real next step
