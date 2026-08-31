@@ -68,10 +68,12 @@ done
 # inside the copy, and a 9P/DrvFs mount charges per file operation, so the one
 # check that must copy everything is the one that pays most.
 #
-# Pointing $WORK at a native filesystem takes it to 34s warm as this default
-# actually ships — 2.4x, 48s saved, rc=0 and 273/273 in both arms. A hand-run
-# with the env override measured 29s; 34s is quoted because it is the figure
-# produced BY THE CODE BELOW rather than by a manual invocation of it.
+# Pointing $WORK at a native filesystem takes it to 31-34s warm as this default
+# actually ships (three runs: 34s, 31s, and 29s from a hand-run with the env
+# override) — call it ~2.5x and ~50s saved, rc=0 and 273/273 in every arm. The
+# RANGE is quoted rather than the best single run: three measurements that
+# disagree by 5s are honestly reported as a range, and picking 29s because it
+# flatters the change is how a real win becomes an unreproducible claim.
 #
 # Both quoted numbers are warm. The first native run was 57s cold, and 57s
 # against a warm 82s would have reported 1.4x — understating a real win by
@@ -92,7 +94,23 @@ if [ -z "${TILLANDSIAS_ARCHIVE_CHECK_WORK:-}" ] \
     # Only when the checkout is demonstrably on 9P AND a native root is
     # writable. Probed, never assumed: a wrong guess here would silently move
     # the work root on a host this reasoning does not apply to.
-    WORK="/root/.cache/tillandsias-archive-answerability"
+    #
+    # KEYED BY CHECKOUT, deliberately. The obvious spelling of this is one
+    # fixed native path, and that would WIDEN the fixed-path race filed as
+    # `archiver/concurrent-check-fixed-path-race` (plan/issues/
+    # concurrent-gate-archiver-check-race-2026-08-31.md): the old default lived
+    # under $REPO_ROOT/target, so two checkouts on one host could not collide,
+    # while a single native path would let them. The digest keeps this default
+    # no more collision-prone than the one it replaces.
+    #
+    # It stays STABLE per checkout rather than per run, because $WORK/target is
+    # a compiler cache whose whole value is surviving between runs (see the
+    # comment on the stable work root above). Per-RUN isolation is that
+    # packet's business and belongs in the same place as the plan_tmp fix, not
+    # bolted on here where it would silently cost a full rebuild every run.
+    _ck="$(printf '%s' "$REPO_ROOT" | cksum | cut -d' ' -f1)"
+    WORK="/root/.cache/tillandsias-archive-answerability-${_ck}"
+    unset _ck
 else
     WORK="${TILLANDSIAS_ARCHIVE_CHECK_WORK:-$REPO_ROOT/target/archive-answerability}"
 fi
