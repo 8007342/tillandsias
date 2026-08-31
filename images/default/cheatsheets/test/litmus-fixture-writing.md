@@ -704,3 +704,14 @@ having READ a source's output is not having VERIFIED its scope, its
 schema, or its portability. Before building on a view, ask what it
 excludes, whether its shape is uniform, and whether its tools fail loud —
 the fixture's first run is the cheapest place to learn all three.
+
+And the author's own correction of the flattering summary, kept because
+it is the argument for this whole file: only one of the catching checks
+was theirs. The dialect guard (761-g36m) and the plan-binary probe
+(721-nyev) were left behind by earlier cycles — by people who hit those
+failures first and built the guard instead of only fixing their instance.
+"Checks left behind by earlier cycles caught three defects their authors
+will never know about." That sentence is the return-on-investment case to
+cite when deciding whether a guard is worth the extra hour: the payoff
+lands on a stranger, later, silently — which is exactly why it happens at
+all.
