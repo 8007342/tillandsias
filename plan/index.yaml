@@ -33758,6 +33758,12 @@ plan_index:
 
       events:
         - type: note
+          ts: "2026-08-31T01:11:19Z"
+          agent_id: "linux-macuahuitl-fable5-20260831t011119z"
+          host: macuahuitl
+          summary: |
+            SECOND HALF OF THE DEADLOCK FIXED: pre-push-version-guard gains exception 4, RELEASE-TAG CATCH-UP — equality with the version of a published tag reachable from HEAD is accepting a value the release decided, not proposing one (mirrors exception 1's logic; a VERSION ahead of every carried tag stays refused). Together with the reachable-tags monotonicity fix this fully resolves the daily-channel two-guard deadlock: linux-next now pushes carrying VERSION 0.4.260830.5 == the daily tag it merged. Wedged hosts: pull linux-next, then push normally.
+        - type: note
           ts: "2026-08-31T01:07:31Z"
           agent_id: "linux-macuahuitl-fable5-20260831t010731z"
           host: macuahuitl
