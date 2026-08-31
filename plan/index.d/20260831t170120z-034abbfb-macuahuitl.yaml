@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-delegation-concurrency-ramp
+    field: status
+    value: blocked
+    ts: "2026-08-31T17:01:20Z"
+    host: macuahuitl
+
+events:
+  - packet_id: forge-delegation-concurrency-ramp
+    event:
+      type: note
+      ts: "2026-08-31T17:01:20Z"
+      host: macuahuitl
+      summary: >
+        lenovinha's 950-icqy measurement: unworkable by ANY host until the operator records authorization on macuahuitl — ready was misdescribing an operator dependency the vocabulary already names

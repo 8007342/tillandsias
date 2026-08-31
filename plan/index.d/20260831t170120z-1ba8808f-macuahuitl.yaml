@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: router-weighs-actionability-not-just-residual
+    field: status
+    value: obsoleted
+    ts: "2026-08-31T17:01:20Z"
+    host: macuahuitl
+
+events:
+  - packet_id: router-weighs-actionability-not-just-residual
+    event:
+      type: completed
+      ts: "2026-08-31T17:01:20Z"
+      host: macuahuitl
+      summary: >
+        status 'obsoleted' with evidence_refs: lenovinha's blocked-after-measuring analysis (ce5d6dba4): of the design's three signals, pickup-role-vs-capability is already applied pre-scoring, operator-authorization flags do not exist in the ledger (grep: 0 such markers), multi_cycle phase alone rarely fires — the fixture could only pass by constructing input production never derives. Superseded by data hygiene executed this cycle (689-zwzm -> blocked; 795-5itp role -> osx,windows) which removes most of the motivating harm with zero new mechanism
+  - packet_id: router-weighs-actionability-not-just-residual
+    event:
+      type: note
+      ts: "2026-08-31T17:01:20Z"
+      host: macuahuitl
+      summary: >
+        retired per measured refutation; successor = status-hygiene check packet
