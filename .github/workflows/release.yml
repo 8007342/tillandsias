@@ -659,28 +659,16 @@ jobs:
               # The sums file was written by the build script with the MSIX
               # included; a checksum for an absent asset fails every verifier,
               # so drop its line in the same breath as the file.
+              # LINE ENDINGS (v56.8.31.1 post-mortem): Set-Content rewrote the
+              # whole file CRLF, and sha256sum -c hunted for "...zip\r" — the
+              # release shipped ZERO Windows assets. Write LF explicitly, UTF8
+              # no-BOM, single trailing newline; the consuming job asserts
+              # CR-free before verifying. (Fix authored by yolanda, f77897371,
+              # carried here so one commit owns the file.)
               if (Test-Path $sums) {
-                # LF, EXPLICITLY. `Set-Content` here shipped v56.8.31.1 with ZERO
-                # Windows assets: it rewrites the whole file CRLF, so every line
-                # the build script had written with LF gained a trailing CR, and
-                # the `sha256sum -c` two steps below then looked for a file named
-                # "...windows-x64.zip\r" and refused the job. The three lines
-                # appended AFTER this by coreutils kept LF and verified fine,
-                # which is exactly the 3-pass/1-fail split in that run's log.
-                #
-                # This file already had two writers with different conventions
-                # (build-windows-tray.ps1 writes text mode, release.yml appends
-                # binary mode via coreutils) and that was harmless because both
-                # used LF. Set-Content made a THIRD writer that changed the FIRST
-                # writer's bytes, which is the failure the seam comment in
-                # build-windows-tray.ps1 warns about in as many words: do not
-                # rewrite one producer's output with a tool that disagrees with
-                # it about line endings.
-                $kept = @(Get-Content $sums | Where-Object { $_ -notmatch [regex]::Escape($name) })
-                [System.IO.File]::WriteAllText(
-                  $sums,
-                  (($kept -join "`n") + "`n"),
-                  (New-Object System.Text.UTF8Encoding($false)))
+                $kept = (Get-Content $sums) | Where-Object { $_ -notmatch [regex]::Escape($name) }
+                $text = ($kept -join "`n") + "`n"
+                [System.IO.File]::WriteAllText((Resolve-Path $sums), $text, (New-Object System.Text.UTF8Encoding($false)))
               }
             }
           }
