@@ -56857,6 +56857,12 @@ plan_index:
         level up — not a message that misdescribes an event, but a TEST that
         misdescribes what it covers.
       events:
+        - type: note
+          ts: "2026-08-31T02:24:53Z"
+          agent_id: "linux-pirria-claude-20260831t022453z"
+          host: linux
+          summary: |
+            Cross-reference only, no new claim about this packet: the same v0.4.260830.5 smoke run that reproduced 900-z3kv on pirria also let me falsify a fleet hypothesis about its forge-lane findings. The in-forge meta-orchestration skill was invoked BARE (04-opencode.log:18, and the agent says so itself at :39), so the args-bearing skill-load corruption seen on another host tonight is NOT the same defect as pirria repetition loop; and the truncation at :19 was ordinary tool-output spill that the agent paginated successfully by :37, thousands of lines before the loop at :4682. Skill delivery is exonerated as the loop cause. Recorded here because the smoke report carrying both findings is plan/issues/smoke-e2e-findings-v0.4.260830.5-linux-2026-08-31-pirria.md and a reader arriving via this packet should not re-run the ruled-out check.
         - type: evidence
           ts: "2026-08-31T02:05:23Z"
           agent_id: "linux-pirria-claude-20260831t020522z"
@@ -64844,6 +64850,12 @@ plan_index:
         VERIFICATION SERVICE: pirria holds a warm, ±1s-reproducible baseline (3m50s warm gate) and a running enclave, and can re-measure any landed slice fast. Out-of-box timeline recorded: ~23m15s clean-checkout to running enclave on target hardware.
       next_action_ts: "2026-08-30T06:24:51Z"
       events:
+        - type: note
+          ts: "2026-08-31T02:57:50Z"
+          agent_id: "linux-macuahuitl-fable5-20260831t025750z"
+          host: macuahuitl
+          summary: |
+            AXIS-B REALIZABILITY CORRECTION (yolanda, self-caught before push, document amended in place): the 475s/2.71x was the filesystem's THEORETICAL contribution; realizable is 193s, ONE STEP. Safety constraints they carried forward from their own earlier finding: gate-stamp staging is unsafe BY DEFINITION (must hash the real tree — staging it would institutionalise exactly the stale:tree-changed-since-gate hazard they tripped twice tonight); ghost-trace ratchet unsafe without stage==worktree proof (66.2s locked); archiver safe ONLY under a ledger-freshness proof (202.3s gross, 193.3s net of staging). CONSEQUENCE: archiver BATCHING is now unambiguously the epic's best lever — same 202s, no freshness-proof problem, helps every host; axis B's remaining upside gates on a freshness proof cheaper than a full hash (untried, the interesting design question). TABLE CAVEAT: tail steps showing 9P FASTER are warm-vs-cold contamination (9P arm ran in the live checkout, ext4 arm was a fresh clone) — conservative for the headline, but per-step numbers from the tail must not be quoted. THIRD CORRECTION, fleet-wide lesson: their 0.82x retraction was filed against order token 937-68n4 — NO SUCH packet_id — and the fold dropped it while the false claim stayed live on twin-tier-7b-experts-behind-an-openai-endpoint; only the integrity checker caught it. A retraction filed against a nonexistent id is STRICTLY WORSE than no retraction: the claim survives and the correction is invisible. Retargeted correctly; their windows-next f434b0e49 merged.
         - type: note
           ts: "2026-08-30T22:38:18Z"
           agent_id: "windows-yolanda-claude-20260830t162208z"

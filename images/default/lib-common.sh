@@ -3337,6 +3337,52 @@ apply_claude_config_overlay() {
     trace_lifecycle "config" "claude MCP overlay applied"
 }
 
+# Seed first-run state so a FRESH forge's claude never blocks on an
+# interactive dialog (2026-08-31, coordinator-minted sessions — THREE
+# blockers found across the live rounds, each invisible until the one
+# before it was seeded): the theme/onboarding picker, the workspace-trust
+# dialog (seeded per-project separately), and the
+# --dangerously-skip-permissions consent dialog, which held round 3 until
+# the operator came home from dinner and pressed allow. Idempotent and
+# additive:
+# only absent keys are seeded, so a config restored from the provider
+# vault document keeps whatever the operator chose there.
+seed_claude_first_run_defaults() {
+    local user_cfg="${CLAUDE_CONFIG_FILE:-$HOME/.claude.json}"
+    local tmp
+    mkdir -p "$(dirname "$user_cfg")"
+    tmp="$(mktemp "${user_cfg}.tmp.XXXXXX")" || return 1
+    if [ -s "$user_cfg" ] && jq -e 'type == "object"' "$user_cfg" >/dev/null 2>&1; then
+        jq '. + {hasCompletedOnboarding: (.hasCompletedOnboarding // true), theme: (.theme // "dark"), bypassPermissionsModeAccepted: (.bypassPermissionsModeAccepted // true)}'             "$user_cfg" >"$tmp" || { rm -f "$tmp"; return 1; }
+    else
+        printf '{"hasCompletedOnboarding": true, "theme": "dark", "bypassPermissionsModeAccepted": true}
+' >"$tmp"
+    fi
+    chmod 600 "$tmp"
+    mv -f "$tmp" "$user_cfg"
+    trace_lifecycle "config" "claude first-run defaults seeded (onboarding, theme)"
+}
+
+# Pre-trust the forge project folder (2026-08-31, minted-session blocker #2:
+# after the theme picker was seeded away, claude's workspace-trust dialog —
+# "Yes, I trust this folder / Enter to confirm" — blocked the prompt next).
+# Inside a forge the folder is a fresh clone from OUR OWN mirror into an
+# isolated container; the trust question is answered by the architecture,
+# not by a human at a dialog. Call AFTER find_project_dir with $PROJECT_DIR.
+seed_claude_project_trust() {
+    local project_dir="$1"
+    local user_cfg="${CLAUDE_CONFIG_FILE:-$HOME/.claude.json}"
+    local tmp
+    [ -n "$project_dir" ] || return 0
+    [ -s "$user_cfg" ] || printf '{}
+' >"$user_cfg"
+    tmp="$(mktemp "${user_cfg}.tmp.XXXXXX")" || return 1
+    jq --arg dir "$project_dir"         '.projects = ((.projects // {}) | .[$dir] = ((.[$dir] // {}) + {hasTrustDialogAccepted: (.[$dir].hasTrustDialogAccepted // true)}))'         "$user_cfg" >"$tmp" || { rm -f "$tmp"; return 1; }
+    chmod 600 "$tmp"
+    mv -f "$tmp" "$user_cfg"
+    trace_lifecycle "config" "claude project trust seeded for $project_dir"
+}
+
 # ── Hot-path population ─────────────────────────────────────
 # @trace spec:forge-hot-cold-split, spec:agent-cheatsheets, spec:cheatsheets-license-tiered
 # @cheatsheet runtime/cheatsheet-crdt-overrides.md

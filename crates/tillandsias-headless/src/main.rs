@@ -1364,7 +1364,9 @@ fn print_usage(version: &str) {
     println!(
         "  --port PORT     Use PORT when 80 and 8080 are unavailable for the router or observatorium"
     );
-    println!("  --prompt TEXT  Send prompt to LLM inference (requires --opencode)");
+    println!(
+        "  --prompt TEXT  Initial prompt for the agent lane (--opencode/--codex: non-interactive; --claude: interactive session opens with it submitted)"
+    );
     println!("  --init         Pre-build container images");
     println!("  --force        Rebuild all images even if cached (use with --init)");
     println!(
@@ -13418,7 +13420,9 @@ fn build_forge_agent_run_args_with_vault(
     // like the OpenCode CLI prompt path, it must NOT claim a TTY, or podman
     // refuses with "input device is not a TTY" / the child stops (T-state)
     // when the parent is a background/e2e harness rather than a live terminal.
-    let non_interactive_prompt = prompt.is_some();
+    // A prompt-driven CLAUDE run is the opposite: the prompt is the initial
+    // message of an INTERACTIVE session, so it keeps its TTY.
+    let non_interactive_prompt = prompt.is_some() && matches!(mode, ForgeAgentMode::Codex);
     let mut spec = ContainerSpec::new(image)
         .name(forge_container_name_for_mode(project_name, mode))
         .hostname(forge_hostname(project_name))
@@ -13557,6 +13561,15 @@ fn build_forge_agent_run_args_with_vault(
         if delegated_json_requested(Some(prompt)) {
             spec = spec.env("TILLANDSIAS_AGENT_RESULT_FORMAT", "json");
         }
+    }
+    // Interactive initial prompt for the Claude lane (2026-08-31): the
+    // entrypoint appends this as claude's positional argument, which starts
+    // the interactive session with the message already submitted — the
+    // coordinator's "report for directions" hook.
+    if let Some(prompt) = prompt
+        && matches!(mode, ForgeAgentMode::Claude)
+    {
+        spec = spec.env("TILLANDSIAS_CLAUDE_PROMPT", prompt);
     }
 
     for (name, value) in git_identity_env_pairs(&read_git_identity_defaults()) {
@@ -13858,14 +13871,19 @@ fn run_forge_agent_cli_mode(
     prompt: Option<&str>,
     debug: bool,
 ) -> Result<(), String> {
-    // A non-interactive prompt is only honored by the Codex lane today
-    // (`codex exec "<prompt>"`); other agent CLIs ignore it. Fail loud
-    // rather than silently drop it so an operator/e2e harness learns the
-    // lane it targeted does not yet support headless prompting.
-    if prompt.is_some() && !matches!(mode, ForgeAgentMode::Codex) {
+    // Prompt support is per-lane and the SEMANTICS differ (operator
+    // directive 2026-08-31, the coordinator-mints-its-own-workers wiring):
+    //   Codex  — non-interactive `codex exec "<prompt>"`, no TTY.
+    //   Claude — INTERACTIVE session with the prompt submitted as the
+    //            initial message; the session stays attached (the tray/
+    //            ptyxis-window pattern) and reachable over remote control,
+    //            so a coordinator can launch a sibling forge agent and
+    //            direct it afterward.
+    // Other lanes ignore a prompt; fail loud rather than silently drop it.
+    if prompt.is_some() && !matches!(mode, ForgeAgentMode::Codex | ForgeAgentMode::Claude) {
         return Err(format!(
-            "{flag} does not support --prompt (non-interactive prompting is Codex-only today); \
-             use --codex --prompt or --opencode --prompt"
+            "{flag} does not support --prompt; \
+             use --claude --prompt, --codex --prompt, or --opencode --prompt"
         ));
     }
     let delegated = delegated_run_config(prompt)?;

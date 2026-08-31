@@ -87,6 +87,7 @@ fi
 # Run after OAuth restore because Claude keeps credentials and MCP registration
 # in the same document. The overlay merge preserves every non-MCP field.
 apply_claude_config_overlay
+seed_claude_first_run_defaults
 
 # ── SSH key auto-discovery ──────────────────────────────────
 # @trace gap:ON-007
@@ -97,6 +98,7 @@ export_ssh_env || true
 # ── Find project directory ──────────────────────────────────
 find_project_dir
 [ -n "$PROJECT_DIR" ] && cd "$PROJECT_DIR"
+seed_claude_project_trust "$PROJECT_DIR"
 configure_git_identity
 trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 
@@ -140,5 +142,13 @@ export TILLANDSIAS_CODEX_VAULT_HELPER=/usr/local/bin/provider-oauth-vault
 claude_forge_args=()
 if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]; then
     claude_forge_args+=(--dangerously-skip-permissions)
+fi
+# Coordinator-minted sessions (2026-08-31): an initial prompt threaded from
+# `tillandsias <project> --claude --prompt "<text>"` opens the INTERACTIVE
+# session with the message already submitted — typically "report to the
+# coordinator for directions" — so a fleet coordinator can launch sibling
+# forge agents and direct them over the remote-control channel.
+if [ -n "${TILLANDSIAS_CLAUDE_PROMPT:-}" ]; then
+    claude_forge_args+=("$TILLANDSIAS_CLAUDE_PROMPT")
 fi
 exec /usr/local/bin/codex-oauth-session -- "$CC_BIN" "${claude_forge_args[@]}" "$@"
