@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+
+events:
+  - packet_id: epoch-version-encoding-fleet-adoption
+    event:
+      type: note
+      ts: "2026-08-31T22:20:00Z"
+      host: macuahuitl
+      summary: >
+        STABLE PROMOTED: v56.8.31.3 is the stable channel (prerelease flag
+        flipped; /releases/latest resolves to it) and main is at ad4a84773
+        (PR #102) carrying VERSION 56.8.31.3 == the tag — the Store's
+        stable files are in main, per the operator's pre-authorization.
+        Promotion path was promote-the-blessed-artifacts: NO re-cut, so
+        stable serves the exact assets yolanda's blessing round verified
+        (first fully-unattended round, forge leg included). The promotion's
+        ci-full gate went red twice with REAL findings before green:
+        (1) litmus-versioning-shape still pinned the retired
+        Major.Minor.YYMMDD.Build docblock — the drift-protection had
+        drifted — and PRIVACY.md needed allowlisting as a location-pinned
+        Store surface; (2) clippy --all-features caught a duplicated
+        #[test] whose pair was a tray fixture with NO #[test] at all
+        (cloud_about_to_show_with_fresh_cache_does_not_request_immediate_
+        relayout had NEVER executed; restored, first run passes, tray suite
+        a true 79/79), a caller-less wrapper from the GetLayout rework, and
+        the pty-attach litmus pinning a call shape the single-launch-path
+        refactor legitimately changed (re-pinned to both hops). VERSION
+        bump on main was SKIPPED by design: the merged main's VERSION
+        already equals the promoted tag; no new tag was cut. Runbook debt
+        filed as 952-mrsl. Remaining on the epoch-adoption packet: retire
+        it once the fleet's platform branches all carry the cutover
+        (drift is zero today) and 952-mrsl lands.
