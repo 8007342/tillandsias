@@ -632,3 +632,59 @@ creation (an explicit table of names the app's own builders mint —
 time. Before writing any destructive sweep, ask where the ownership fact
 is RECORDED; if the answer is "in the name", the sweep will eventually
 destroy something that merely resembles yours.
+
+## Some assertions must not be executable, and a banner-located block must fail loud
+
+Two design choices from the macOS uninstaller drain (945-qs3n, 2026-08-31),
+recorded because each is the correct resolution of a trap this file already
+documents, applied under pressure.
+
+First: the fixture asserts the uninstaller's tray-stop TEXTUALLY, not by
+running it — an executable assertion would `pkill` the developer's real
+tray on every machine that runs the gate. The self-matching-process-query
+trap taught "match the object, not the process table"; this is its sibling:
+when the behaviour under test is inherently destructive to the host running
+the test, pin the CODE that performs it and verify the behaviour in a live
+pass on the owning platform, not in the gate.
+
+Second: the fixture locates the block under test by its banner comment and
+FAILS LOUD with an explanatory message when the banner is missing — never
+silently finds nothing and passes. A scan that can come back empty must
+distinguish "checked and clean" from "found nothing to check" (the
+dialect-gate scan-empty lesson, applied at authoring time instead of after
+an incident).
+
+And the drain itself re-proved the standing rule: the live pass found what
+no fixture could — a tray running from a deleted bundle, still owning the
+VM, on a machine the user believes clean. Fixtures pin what you know;
+running the real thing on real hardware finds what you don't.
+
+## The text you executed is not necessarily the text that is committed
+
+Lenovinha's retraction of the vacuous-awk finding (2026-08-31), kept
+because the error survived their otherwise-rigorous falsification. They
+tested the check's BEHAVIOUR properly — even "proved" it unconditional
+against a tag known to have a row — but never diffed the runbook text they
+RECEIVED against the file on disk. The text had been corrupted upstream of
+them (a harness bug substituted a bare $0 in the skill body with the first
+word of the invocation args), so a sound experiment ran on a corrupted
+premise and produced a confident false finding about the committed code.
+
+Before filing "this committed check is broken": run the COMMITTED text —
+`git show <ref>:<path>`, copy the block from the file, not from what your
+tooling rendered — and only then attribute the failure to the repository.
+Watching something fail is not evidence that the committed thing fails.
+
+## A reproduction that endangers the host running it is a defect in the reproduction
+
+Lenovinha's line, from the harness-substitution retraction (2026-08-31),
+after their shared repro recipe — "invoke this skill with a distinctive
+first args word" — omitted that invoking that skill loads
+`podman system reset --force` into whatever session obeys. The informed
+reader declined; the recipe was fixed before an uninformed one arrived.
+A repro published into a shared report will eventually be run by someone
+with no context: it must carry its blast radius in its first line, name
+the safe substrate (a scratch session, never an active one), and where
+possible be settled from the evidence pattern WITHOUT executing the
+dangerous version at all — corroboration by evidence beats corroboration
+by detonation.

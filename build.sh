@@ -2414,6 +2414,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Hardware-fingerprint gate passed"
 
+    _step "Checking uninstall sweeps BOTH macOS app dirs..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-uninstall-sweeps-both-app-dirs.sh" 2>&1; then
+        _error "uninstall would leave the app in the DEFAULT install dir while removing the LaunchAgent beside it — the app stays, nothing launches it, and the uninstaller reports success"
+        exit 1
+    fi
+    _info "Uninstall app-dir sweep gate passed"
+
     _step "Checking image rebuild keeps the installed binary's launch tag (747-knbp)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-build-image-installed-version-alias.sh" 2>&1; then
         _error "an image rebuild can orphan the tag the installed binary launches by — every forge launch would be dead on arrival (747-knbp)"
@@ -2591,6 +2598,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Fragment key check passed"
+
+    _step "Checking worker and coordinator agree on the claim protocol (943-unii)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-claim-protocol-agrees.sh" 2>&1; then
+        _error "the worker and coordinator skills specify different claim mechanisms (943-unii) — see the verdict line above"
+        exit 1
+    fi
+    _info "Claim-protocol agreement check passed"
 
     _step "Checking the enclave membership list matches the code (245 P8)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-enclave-membership-documented.sh" 2>&1; then

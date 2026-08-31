@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: sni-windowid-type-wedges-shell
+    event:
+      type: note
+      ts: "2026-08-31T02:34:33Z"
+      agent_id: linux-macuahuitl-fable5-20260831t023433z
+      host: macuahuitl
+      summary: >
+        YOLANDA RUNTIME: GREEN on every drivable leg with the RELEASE binary — --reset-guest full wipe+reprovision 'VM Ready, control wire up' (113 pkgs, vsock_loopback loaded, zero failures); --provision-once idempotency DEMONSTRATED (14s vs minutes on Ready substrate); enclave healthy from scratch (vault+proxy Up healthy, both networks, systemd running, --failed empty); guest images tagged v0.4.260830.5 — the parity-lane guest binaries provisioned and went healthy from scratch, exercised not inferred. FORGE LAUNCH honestly NOT-DONE: on Windows it exists only as a tray GUI menu arm; hand-rolling podman run would test their argv not the client's — the substitution that makes a smoke worthless. They file 'no headless forge-launch entry point' as a packet; NOTE CONVERGENCE: the operator directed the same capability on Linux tonight (CLI forge launch with --prompt + remote-control reporting, in progress on macuahuitl) — one epic, two platform legs. VERDICT UNCHANGED: not-green solely on the unsigned MSIX; no second blocker found. Also landed on their side awaiting push: 2d203efba axis-B document (75 steps, both arms) + dc831ece6 0.82x retraction with TILLANDSIAS_TIER_ASSERT guard.

@@ -20689,6 +20689,12 @@ plan_index:
         - The recurring cost and its renewal owner are written down — an expired signing identity fails a release, loudly and at the worst moment.
       events:
         - type: note
+          ts: "2026-08-31T01:33:19Z"
+          agent_id: "linux-macuahuitl-fable5-20260831t013319z"
+          host: macuahuitl
+          summary: |
+            SEVERITY RE-RATED on yolanda's stable-blessing RED (v0.4.260830.5): the unsigned-artifacts gap stopped being benign the moment an MSIX shipped. Asymmetry is the finding: unsigned EXE degrades (SmartScreen click-through works); unsigned MSIX is INERT (Add-AppxPackage 0x800B0100 'No signature was present', no click-through, no user-side workaround — the asset is decorative). Reproduced twice on the end-user path; package contains no AppxSignature.p7x; cause pinned to release.yml:642 taking the else branch because repo var TILLANDSIAS_SIGNING_ACCOUNT is unset — CI even warned, naming this packet. What is NOT broken, per yolanda's forensics: sigstore/cosign provenance sound (Fulcio cert bound to the release-branch workflow, run 33337888277); SHA256SUMS verify; binary reports the exact tag commit; MSIX internals correct (identity, runFullTrust, startupTask, xerographica logos) — only the signature is missing. WORKFLOW GUARD LANDED: without signing, the MSIX is now WITHHELD from release assets (and its line dropped from SHA256SUMS-windows) rather than shipped uninstallable — absent is honest, decorative is not. PATH TO GREEN, operator decision pending: set TILLANDSIAS_SIGNING_ACCOUNT and re-cut (yolanda re-smokes within the cycle), or re-cut with MSIX omitted under the new guard.
+        - type: note
           ts: "2026-08-13T22:24:16Z"
           agent_id: unknown
           host: windows
@@ -56851,6 +56857,12 @@ plan_index:
         level up — not a message that misdescribes an event, but a TEST that
         misdescribes what it covers.
       events:
+        - type: evidence
+          ts: "2026-08-31T02:05:23Z"
+          agent_id: "linux-pirria-claude-20260831t020522z"
+          host: linux
+          summary: |
+            Reproduced on a THIRD host during the v0.4.260830.5 curl-install smoke (pirria, Intel N150 4c/4t, 15 GiB, NVMe, Fedora Silverblue). Step 2 of /smoke-curl-install-and-test-e2e asserted a genuinely empty store — `podman system reset --force` exit 0, then 0 containers, 0 volumes, 0 images, all three asserted not merely observed — and step 3's pristine `tillandsias --debug --init` nonetheless logged `recovered Shamir unseal share from host keychain or fallback (v1, base64)` followed by `preserving existing data volume (Shamir share present in keychain)`, alongside a fresh `creating podman secret tillandsias-vault-unseal (32 bytes from HKDF)`. Vault came up healthy (initialized=true sealed=false v=1.18.5, 12 policies) but by RECOVERY, not by initialization, so the vault re-init path SKILL.md:52-53 claims this smoke exercises was again not exercised. This is a third independent host on top of the two of differing share ages recorded in the v0.4.260826.1 stable row, which further supports the platform-property reading over any single host's state, and confirms Linux still has no equivalent of Windows' 804-ckst credential clearing. NOT re-filed as a new packet per the smoke skill's de-duplication rule; recorded here as an additional data point. Evidence: target/smoke-e2e/02-empty-store.txt (all three sections empty), target/smoke-e2e/03-init.log (the two recovery lines). Full run report: plan/issues/smoke-e2e-findings-v0.4.260830.5-linux-2026-08-31-pirria.md.
         - type: filed
           ts: "2026-08-26T03:55:00Z"
           agent_id: linux-macuahuitl-claude-20260826t034017z
@@ -64284,6 +64296,12 @@ plan_index:
         - one instrumented run either completes exit 0 solo or names the sender
       events:
         - type: note
+          ts: "2026-08-31T02:22:54Z"
+          agent_id: "linux-macuahuitl-fable5-20260831t022254z"
+          host: macuahuitl
+          summary: |
+            RECURRENCE NOTE, distinct from the closed mechanism: tillandsias-builder exited 137 correlated with a tray graceful shutdown at 2026-08-31T02:20Z, ON a binary verified to carry is_stack_managed_name (strings marker present). Either a second stop path exists that the fix does not cover, or the correlation is coincidental (a concurrent podman stop from another actor — pirria's fixed-path archiver race shows concurrent-gate actors exist). NOT reopening on one instance; if a second correlated kill lands on the fixed binary, reopen with the tray journal + podman events joined on timestamps.
+        - type: note
           ts: "2026-08-31T00:31:25Z"
           agent_id: "linux-macuahuitl-fable5-20260831t003125z"
           host: macuahuitl
@@ -64890,6 +64908,17 @@ plan_index:
             A CAVEAT I AM STATING RATHER THAN BURYING: these are STANDALONE invocations, and their 9P absolutes do not match the in-gate profile for the same steps (ghost-trace 36.8s standalone vs 134s in-gate; terminology 40.9s vs 80s). The gate runs them under different conditions — warm/cold caches, concurrent work, possibly wider scope. The RATIOS are same-host same-command and are the trustworthy part; the projected 122s should be treated as an order-of-magnitude estimate, not a promise, and re-measured in-gate before anyone commits to it.
 
             NOT MEASURED: whether a staged tree can actually serve these steps in a real gate run. Every number above comes from invoking the step directly against a staged copy; wiring the gate to use a stage introduces refresh, staleness and correctness questions (the stamp must describe the REAL tree, not the copy) that this measurement does not address and that are the harder half of axis B.
+          ts: "2026-08-31T02:19:35Z"
+          agent_id: "linux-macuahuitl-fable5-20260831t021935z"
+          host: macuahuitl
+          summary: |
+            AXIS B SETTLED (yolanda, forced+profiled, both arms, 81 phases): 9P 767s vs native ext4 283s — NET 475s per forced gate for 9s staging (git clone --no-hardlinks beats cp -a: 9s/245M). THE MULTIPLIER IS NOT A CONSTANT: per-step 1.01x-78x, tracking FILE-OP COUNT, not bytes or CPU. Extremes prove the mechanism: SIGPIPE scan 78x and ghost-trace ratchet 48.29x (walk many small files, compute nothing) vs terminology dictionary 1.01x (reads once, spends 42s parsing — axis B CANNOT touch it on any host; if it needs speed, that is parser work). Archiver 5.37x/202s saved — confirmed as predicted (46.3s ext4 vs 25-50s call; 22x vs macuahuitl's 11.2s = parse-dominated here, op-dominated there). The do-not-extrapolate instruction was load-bearing: uniform 2.96x would have booked 28s of nonexistent dictionary savings while under-predicting the ratchet 16x. UNATTRIBUTED GROWTH DISSOLVED: story-tracked steps IMPROVED 45.6s; the 206s 'rise' was against the rolling-average non-baseline — no regression exists, none will be manufactured. EPIC CONSEQUENCES: (1) axis B ships on 9P hosts, 2.71x for 9s; (2) archiver file-op BATCHING is now the best-supported item — 202s on 9P AND helps every host; (3) the dictionary is the standing counterexample against uniform-multiplier reasoning. Joined 81-row table to be committed into the packet by yolanda as the axis-B document.
+        - type: note
+          ts: "2026-08-31T02:16:09Z"
+          agent_id: "linux-macuahuitl-fable5-20260831t021609z"
+          host: macuahuitl
+          summary: |
+            THIRD-REGIME MEASUREMENT resolves yolanda's 767s alarm into two clean facts. (1) BASELINE PROVENANCE ANSWERED from the recorded caveat on their own 561s report: that figure was 'aggregate spans the most recent runs rather than isolating one... build-check is the wrapper total' — a rolling average, NOT a single forced run. '767s forced vs 561s aggregate' is not a valid delta; no regression is established by it. (2) ARCHIVER NOT INTRINSICALLY HEAVIER: standalone on macuahuitl post-compaction = 11.2s real (was 22.4s pre-compaction — it HALVED like the other ledger steps; output 'ok:archive-answerability:273/273 after archiving 871 packets, ready set unchanged at 394'). Their 131.6->248.6s doubling is therefore host-side: 248.6/11.2 = 22x vs their measured 2.96x ext4 factor, and the archiver's --check simulates archiving 871 packets = hundreds of small file operations, the 9P worst case — per-file-op latency dominates there while parse cost dominates here, so compaction helped this host and could not help that step on 9P. PREDICTION FOR THEIR IN-FLIGHT AXIS-B PER-STEP RUN: archiver on their native-ext4 clone lands ~25-50s (silicon ~2x over 11.2s), confirming the step as the single strongest axis-B beneficiary. Their methodological note stands and is adopted for the Lua planner scope: no check-collapse touches a single 248s step — on 9P hosts, axis B (or making the archiver batch its file ops) IS the win, not dedupe.
         - type: note
           ts: "2026-08-30T21:34:42Z"
           agent_id: "linux-macuahuitl-fable5-20260830t213442z"
