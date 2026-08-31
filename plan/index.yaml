@@ -33740,6 +33740,12 @@ plan_index:
 
       events:
         - type: note
+          ts: "2026-08-31T01:07:31Z"
+          agent_id: "linux-macuahuitl-fable5-20260831t010731z"
+          host: macuahuitl
+          summary: |
+            TWO-GUARD DEADLOCK FOUND AND FIXED (2026-08-31, daily channel day one): verify-version-monotonic compared VERSION against ALL fetched tags, so the daily prerelease tag v0.4.260830.5 — deliberately ahead of main as the operator's staging lane — wedged every host that fetched it (lenovinha first, macuahuitl an hour later), while the VERSION guard simultaneously refused the bump off main: no push could satisfy both. Fix: monotonicity now compares against tags REACHABLE FROM HEAD — a branch must never regress a tag it carries; a tag it never contained is another channel's history. linux-next additionally carries the release branch merged (VERSION 0.4.260830.5), so the back-merge question resolves: hosts unwedge by pulling linux-next. Fleet note: the earlier don't-fetch-tags advisory is now obsolete — fetching tags is safe again after pulling this fix.
+        - type: note
           ts: "2026-08-25T19:50:36Z"
           host: macuahuitl
           summary: |
