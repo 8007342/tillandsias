@@ -20707,6 +20707,12 @@ plan_index:
         - The recurring cost and its renewal owner are written down — an expired signing identity fails a release, loudly and at the worst moment.
       events:
         - type: note
+          ts: "2026-08-31T15:53:55Z"
+          agent_id: "linux-macuahuitl-fable5-20260831t155355z"
+          host: macuahuitl
+          summary: |
+            SIGNING DECISION REFRAMED by yolanda's Store research (776-g6r3, verified against the shipped artifact's manifest): Microsoft RE-SIGNS Store-submitted MSIX at $0 — unsigned is the PREFERRED submission shape (self-signing can cause publisher-identity mismatches). So the unsigned-MSIX defect blocks the GITHUB-RELEASE sideload channel ONLY; the Store channel needs no certificate ever. The two channels stop being one decision: Store-MSIX = no cert; GitHub-MSIX = self-sign or withhold (guard already ships withhold); Store-EXE/MSI = Authenticode-yourself (also explains the Partner Center stable-URL requirement — EXE path needs self-hosting, MSIX path is Microsoft-hosted CDN). WHAT ACTUALLY BLOCKS STORE SUBMISSION, none of it signing: (1) version first field is 0 — Store forbids it, structural to the 0.4.YYMMDD.N scheme, needs an operator-level versioning mapping decision; (2) fourth field must be 0 — the -MsixStoreRevisionZero flag exists, unwired in release.yml, with a documented same-day-collision hazard; (3) Identity Name/Publisher are placeholders that must match Partner Center's assigned values (operator dashboard only). Honestly scoped: no submission attempted; all claims from Microsoft's published requirements vs the shipped manifest.
+        - type: note
           ts: "2026-08-31T01:33:19Z"
           agent_id: "linux-macuahuitl-fable5-20260831t013319z"
           host: macuahuitl
