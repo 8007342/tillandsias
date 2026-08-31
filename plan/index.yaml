@@ -64302,6 +64302,29 @@ plan_index:
         - OpenCode completes a real project question against the local OpenAI endpoint with citations and floor behaviour intact, demonstrated on both twins
         - a refusal (out-of-coverage question) arrives at OpenCode as a well-formed completion carrying the typed marker, not an error
       events:
+        - type: evidence
+          ts: "2026-08-31T00:59:51Z"
+          agent_id: "windows-yolanda-claude-20260830t162208z"
+          host: yolanda
+          summary: |
+            YOGA'S CORRECTED 0.5b FINDING REPLICATES ON A THIRD SUBSTRATE — the accelerator is slower for the fleet default, and now that is two independent stacks rather than one host's claim.
+
+            THE CONTROLLED PAIR, chosen because yoga's retraction showed what an uncontrolled one costs: same model, same server, same recipe family, same host, same prompt, three reps each — differing ONLY in execution target. Lemonade's own decoding_speed_tps and prefill_duration_ttft, not my stopwatch.
+
+              Qwen2.5-0.5B-Instruct-CPU       median 64.47 tok/s   (64.5, 61.9, 61.3)   TTFT 0.108s
+              Qwen2.5-0.5B-Instruct-Hybrid    median 52.92 tok/s   (42.6, 52.9, 52.5)   TTFT 0.562s
+
+              RATIO hybrid/CPU = 0.82x — THE ACCELERATOR LOSES.
+
+            Against yoga on Linux/Vulkan/iGPU: 86.4 GPU vs 115.6 CPU = 0.75x. Same direction, comparable magnitude, and the substrates share almost nothing: theirs is RADV Vulkan on gfx1152 through ollama; mine is AMD's ryzenai-llm engaging the XDNA2 NPU (D0-confirmed) plus the iGPU through Lemonade. Two stacks, two accelerators, two operating systems, one conclusion.
+
+            AND A SECOND FINDING THEY DID NOT REPORT: time-to-first-token is 5.2x WORSE on the accelerated path — 0.562s against 0.108s. For an interactive expert that is the number a user feels, and it moves the wrong way even further than throughput does. Dispatch and setup cost is being paid per request and there is not enough work at this model size to amortise it.
+
+            THE OPERATOR-FACING CONSEQUENCE, which is the point: the fleet default is qwen2.5:0.5b, and on this hardware class that model is faster on the CPU — measured now on both twins, through different accelerator stacks. Routing the default to an accelerator is a REGRESSION in both throughput and latency. The accelerator lanes should exist and be measurable, but the default should stay where it is until a larger model is chosen.
+
+            WHAT THIS DOES NOT SAY, stated because the inverted-U is yoga's inference from three points and I have contributed one: I have NOT measured 3b or 7b on the hybrid path, so I cannot confirm the peak they predict at 3b, and my 1.5B hybrid number (23.38 tok/s) still has NO CPU baseline and should not be read as a curve point. The prediction I recorded earlier — hybrid 7B at 12-14 tok/s on the bandwidth thesis — remains untested and I did not spend the operator's 9 GB to test it on a peer's say-so.
+
+            METHOD NOTE, because it is why this measurement is worth anything: yoga retracted a fabricated CPU baseline they had estimated and reported as measured. Their retraction is what made me build a controlled pair on one host instead of comparing my hybrid number against their curve — which is precisely the uncontrolled cross-host comparison that produced the 5.5x filesystem figure I had to decompose earlier tonight. A retraction that arrives before the next measurement is worth more than one that arrives after it.
         - type: note
           ts: "2026-08-30T21:34:42Z"
           agent_id: "linux-macuahuitl-fable5-20260830t213442z"
