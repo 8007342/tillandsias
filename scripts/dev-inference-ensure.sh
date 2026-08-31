@@ -236,6 +236,14 @@ ensure_container() {
     #     constraint that binds is identical on both lanes and the GPU cannot fix
     #     it (prefill DOES improve, 93 vs 52 tok/s — that part is compute-bound).
     #
+    # TTFT (yoga, 0.5b, warm, wall clock to the first STREAMED token, 3 reps):
+    #   GPU 33-34 ms   CPU 26-27 ms   -> 1.26x WORSE on the accelerated lane.
+    # Direction agrees with yolanda's Windows hybrid pair (0.562s vs 0.108s), the
+    # MAGNITUDE does not: 1.26x here against 5.2x there. Kept as two separate
+    # numbers rather than averaged — theirs is an NPU+iGPU hybrid through
+    # Lemonade, mine is Vulkan through ollama, and collapsing them would invent a
+    # cross-substrate figure neither host measured.
+    #
     # CONSEQUENCE FOR THE DEFAULT MODEL, which is the operator-facing part: the
     # fleet default is qwen2.5:0.5b, and on this hardware class that model is
     # FASTER on the CPU. Enabling this lane is a regression for the default and a
