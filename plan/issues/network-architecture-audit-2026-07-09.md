@@ -186,36 +186,46 @@ Six canonical scenarios; every operation must name one per container it runs.
   inference — and, since commit 0a972411 (2026-08-10, orders
   606-9wqd/654-7ur4), the git mirror, the remote-projects gh helper, and the
   GitHub clone helper, all now enclave-only with proxy env at squid :3128
-  after their egress legs were removed (`main.rs:3031-3037,3049`;
-  `remote_projects.rs:316-328,655-657,679-693`). All egress through squid
+  after their egress legs were removed (`remote_projects.rs` `run_git_image_shell` and
+  `clone_project_from_github_with_debug`, each setting `http_proxy=http://proxy:3128`). All egress through squid
   :3128 allowlist.
 - **S3 dual-homed** — enclave + egress legs: proxy (the ONLY spec-sanctioned
-  taker, `main.rs:2556`) + github-login helper (`main.rs:7589,7625`) — and the
+  taker, `main.rs` `build_proxy_run_args`) + github-login helper (`main.rs` `run_provider_login`) — and the
   helper's dual-home was itself ruled an unsanctioned spec violation pending a
   verdict ("One sanctioned dual-homing, five unsanctioned runtime sites",
   `plan/issues/git-mirror-egress-spec-divergence-audit-2026-08-10.md`).
   git-service left this set on 2026-08-10 (commit 0a972411 dropped the
   mirror's egress leg). The original rationale — "credentials must not transit
   the bump CA" — is obsolete: squid now splices everything except GitHub
-  release assets (`squid.conf:77-79`), so credentials do not transit the bump
+  release assets (`squid.conf` `acl github_release_assets`), so credentials do not transit the bump
   CA even when proxied, and the runtime reproduction showed the egress leg
   grants unscoped internet access.
 - **S4 host-network** — RETIRED, used by NOTHING: commit 63784ddb (2026-08-08,
   order 615-x3b8) moved the chromium browser off host network onto podman's
-  default rootless netns, and the policy layer now denylists `--network=host`
-  as a disallowed passthrough option
-  (`crates/tillandsias-podman/src/policy.rs:271,280`).
+  default rootless netns, and the policy layer ALLOWLISTS only `--device=`
+  passthrough options, so `--network=host` is refused by not being on that
+  allowlist (`crates/tillandsias-podman/src/policy.rs`
+  `is_allowlisted_passthrough_option` / `disallowed_passthrough_options`).
+  CORRECTED 2026-08-31 (L5): this bullet said the layer "denylists
+  `--network=host`", which the section's own superseding note above had already
+  ruled wrong — an allowlist of one flag is strictly stronger than a denylist
+  of another, and the difference is the whole point. The old citation
+  `policy.rs:271,280` still RESOLVED, which is why it survived a reading: both <!-- cite-ok: the drifted citation IS the evidence — this sentence records that it still resolves, into a test -->
+  lines contain the literal `--network=host`, but they are fixture rows inside
+  `fn passthrough_allowlist_keeps_only_gpu_device_flags`, a test. A citation
+  that lands in a test asserting the opposite structure is worse than a rotted
+  one, because it reads as confirmation.
 - **S5 build-default** — podman build netns, `--dns 8.8.8.8`: every
   `ensure_image_exists` call.
 
 | Operation | Containers touched | Scenarios |
 |---|---|---|
-| `--init` | builds 10 images INCLUDING vault (proxy git **vault** inference router chromium-core chromium-framework forge-base forge web — `run_init`, `main.rs:5847`, array + order-253 rationale comment at `main.rs:5879-5895`, commit 8b6c7031); does NOT create the enclave/egress networks — no ensure_enclave_network/ensure_egress_network call in the run_init body; networks are created by the launch/status/login lanes (`main.rs:6948,8882,9405,10531`) and the container_deps satisfier (`container_deps.rs:303-304`) | S5 |
-| `--github-login` / provider login (now `run_provider_login`, generalized to multiple providers, `main.rs:7468`) | vault (S1, normally PRE-BUILT by `--init` per order 253; `build_vault_image` survives only as fail-soft fallback, `vault_bootstrap.rs:598,1397`), proxy (S3), login helper (S3 — dual-home flagged unsanctioned, see S3); bring-up routes through `container_deps::ensure_git_login` — topological Vault+Proxy ensure replacing the ad-hoc chain (`main.rs:7515-7522`, order 227); token entry is a cooked-mode shell read piped to `gh auth login --with-token` (`main.rs:7201-7214`) | S1+S3 |
-| forge launch (tray or CLI) | SIX managed containers — vault, proxy, router, git, inference, forge; image ensure of 4 = `["router","git","inference","forge"]` (`main.rs:11081`; proxy's image is verified inside the dependency-model satisfier instead) via `ensure_enclave_for_project` (`main.rs:11028`), routing through `container_deps::ensure_forge_launch` (`main.rs:11067`); Vault is a structural ForgeLaunch prerequisite (`container_deps.rs:84-98`, windows-260716-2) and router is brought up before the per-project stack so squid's `cache_peer` resolves (`main.rs:11110-11128`) | S1+S2+S3+S5 |
-| cloud project list | vault lease (S1), proxy self-heal (S3), containerized gh helper — no longer dual-homed: enclave-only + explicit proxy:3128 env since 0a972411, S2 posture (`remote_projects.rs:295-306,316-328,400-401,436-437`) | S1+S2+S3 |
-| status check / diagnostics | ensures EIGHT images — proxy git inference chromium-core chromium-framework forge router web (`run_status_check`, `main.rs:6934`, array at `main.rs:6950-6961`; router+web added 2026-07-16 for the version-handover phantom-pull gap) — and launches status-proxy, a throwaway per-project git mirror with vault identity provisioning + credential mint, status-inference, and a one-shot status forge (`main.rs:6985-7075`); heavyweight for a read path, and heavier than at draft time | S5 (should be S0/read-only) |
-| opencode / web | CLI opencode: proxy router git inference forge — 5-image ensure (`main.rs:9403-9413`); router is no longer web-mode-only (preflighted in the CLI lane since the 2026-07-15 macOS cold-forge fix). Web mode (`run_opencode_web_mode`, `main.rs:10490`): 7-image ensure WITHOUT `web` (`main.rs:10533-10541`) + chromium browser on the default rootless netns; the `web` image belongs to `run_observatorium_mode` (`main.rs:8884`) and `publish_local_service` (`main.rs:13379-13424`) | S2+S3+S5 (no S4 — the browser runs on a default-netns posture the catalog has no name for) |
+| `--init` | builds 10 images INCLUDING vault (proxy git **vault** inference router chromium-core chromium-framework forge-base forge web — `main.rs` `run_init`, whose image array carries the order-253 rationale comment, commit 8b6c7031); does NOT create the enclave/egress networks — no ensure_enclave_network/ensure_egress_network call in the run_init body; networks are created by the launch/status/login lanes and the `container_deps.rs` satisfier (`main.rs` `ensure_enclave_network`, which also ensures the egress network — pinned by the test `ensure_enclave_network_also_ensures_egress_network`) | S5 |
+| `--github-login` / provider login (now `run_provider_login`, generalized to multiple providers, `main.rs` `run_provider_login`) | vault (S1, normally PRE-BUILT by `--init` per order 253; `vault_bootstrap.rs` `build_vault_image` survives only as fail-soft fallback), proxy (S3), login helper (S3 — dual-home flagged unsanctioned, see S3); bring-up routes through `container_deps::ensure_git_login` — topological Vault+Proxy ensure replacing the ad-hoc chain (`container_deps.rs` `ensure_git_login`, order 227); token entry is a cooked-mode shell read piped to `gh auth login --with-token` (inside `main.rs` `run_provider_login`) | S1+S3 |
+| forge launch (tray or CLI) | SIX managed containers — vault, proxy, router, git, inference, forge; image ensure of 4 = `["router","git","inference","forge"]` (proxy's image is verified inside the dependency-model satisfier instead) via `main.rs` `ensure_enclave_for_project`, routing through `container_deps.rs` `ensure_forge_launch`; Vault is a structural ForgeLaunch prerequisite (`container_deps.rs` `Service::ForgeLaunch`, windows-260716-2) and router is brought up before the per-project stack so squid's `cache_peer` resolves (inside `main.rs` `ensure_enclave_for_project`) | S1+S2+S3+S5 |
+| cloud project list | vault lease (S1), proxy self-heal (S3), containerized gh helper — no longer dual-homed: enclave-only + explicit proxy:3128 env since 0a972411, S2 posture (`remote_projects.rs` `run_git_image_shell`, `is_github_logged_in`, `fetch_github_projects`) | S1+S2+S3 |
+| status check / diagnostics | ensures EIGHT images — proxy git inference chromium-core chromium-framework forge router web (`main.rs` `run_status_check`; router+web added 2026-07-16 for the version-handover phantom-pull gap) — and launches status-proxy, a throwaway per-project git mirror with vault identity provisioning + credential mint, status-inference, and a one-shot status forge (all inside `main.rs` `run_status_check`); heavyweight for a read path, and heavier than at draft time | S5 (should be S0/read-only) |
+| opencode / web | CLI opencode: proxy router git inference forge — 5-image ensure (`main.rs` `run_opencode_mode`); router is no longer web-mode-only (preflighted in the CLI lane since the 2026-07-15 macOS cold-forge fix). Web mode (`main.rs` `run_opencode_web_mode`): 7-image ensure WITHOUT `web` + chromium browser on the default rootless netns; the `web` image belongs to `main.rs` `run_observatorium_mode` and `publish_local_service` | S2+S3+S5 (no S4 — the browser runs on a default-netns posture the catalog has no name for) |
 
 ## 3. Dependency Graph Awareness (NA-03)
 
@@ -864,3 +874,89 @@ references". This slice replaced its remaining line citations with symbols
 while auditing it — meaning the criterion, read literally, asks the next author
 to undo that. It should say `file:symbol`. Changing an exit criterion remains
 the packet owner's call.
+
+## L5. NA-02 re-verified and re-anchored — 2026-08-31, lenovinha (linux slice)
+
+Fourth section through the 881-29me treatment, after §1/§1.1 (L1, yoga) and
+§3/§6 (L2/L3). §2 held 28 of the document's 67 remaining line citations — the
+largest single concentration left.
+
+### The drift is total again, and the pattern is now three-for-three
+
+Every `main.rs` line citation in §2 pointed at unrelated code. Spot-read before
+re-anchoring:
+
+| cited | what is actually there now |
+|---|---|
+| `main.rs:2556` (proxy dual-home) | `.output_bounded(OperationKind::Inspect...)` | <!-- cite-ok: the drifted number IS the evidence — this row records where it now lands -->
+| `main.rs:5847` (`run_init`) | a doc comment about read-only input races | <!-- cite-ok: the drifted number IS the evidence — this row records where it now lands -->
+| `main.rs:5879-5895` (image array) | `format!("/home/forge/.codex-{worker}")` | <!-- cite-ok: the drifted number IS the evidence — this row records where it now lands -->
+| `main.rs:6934` (`run_status_check`) | a cache-checksum `warn!` | <!-- cite-ok: the drifted number IS the evidence — this row records where it now lands -->
+| `main.rs:10531` (network creation) | `} else if ch == '-' {` | <!-- cite-ok: the drifted number IS the evidence — this row records where it now lands -->
+| `main.rs:11081` (4-image ensure) | `Ok(Ok(output)) => {` | <!-- cite-ok: the drifted number IS the evidence — this row records where it now lands -->
+
+`run_init` is at 7326, `run_status_check` at 8453, `run_provider_login` at 8988,
+`ensure_enclave_for_project` at 12874, `run_opencode_web_mode` at 12333. The
+cited numbers are not offsets from these; they are unrelated. Same shape as L1
+and L2: `main.rs` has passed 22,000 lines and every number in the document
+predates several thousand of them.
+
+### The finding: a citation that still RESOLVES, into a test, defending a claim its own section had already retracted
+
+S4 said the policy layer "now denylists `--network=host` as a disallowed
+passthrough option", citing `crates/tillandsias-podman/src/policy.rs:271,280`. <!-- cite-ok: quoting the citation whose survival is the finding -->
+
+Both lines still contain the literal `--network=host`. The citation looks live.
+
+They are fixture rows inside `fn passthrough_allowlist_keeps_only_gpu_device_flags`
+— a test. The mechanism is `fn is_allowlisted_passthrough_option`, which
+allowlists `--device=` and nothing else; `--network=host` is refused by failing
+to be on that allowlist, never by being named on a denylist.
+
+Two things make this worse than ordinary rot:
+
+- **The section had already corrected itself and the body did not follow.** The
+  superseding note at the head of §2, added 2026-08-30 under P5, states plainly
+  that "the policy layer does not denylist `--network=host`, it ALLOWLISTS only
+  `--device=` flags, which is strictly stronger and was mis-described here."
+  The S4 bullet twelve lines below kept the retracted claim for a day. A
+  correction at the top of a section does not propagate to its body on its own.
+- **A resolving citation reads as confirmation.** L1 and L2 documented citations
+  that landed in plausible neighbouring code. This one lands on the exact string
+  the claim is about, in a test asserting the opposite structure. Following it
+  would have *confirmed* the wrong mechanism to a careful reader. A citation
+  that survives a spot-check while supporting a retracted claim is the most
+  expensive kind, and no line-range checker could catch it — the file is long
+  enough that the numbers are in range, and the string match is real.
+
+### What changed
+
+- All 28 line citations in §2 replaced with symbol anchors, verified against the
+  tree: `run_init`, `run_status_check`, `run_provider_login`,
+  `ensure_enclave_for_project`, `run_opencode_mode`, `run_opencode_web_mode`,
+  `run_observatorium_mode`, `publish_local_service`, `build_proxy_run_args`,
+  `ensure_enclave_network`; `container_deps.rs` `ensure_git_login`,
+  `ensure_forge_launch`, `Service::ForgeLaunch`; `remote_projects.rs`
+  `run_git_image_shell`, `clone_project_from_github_with_debug`,
+  `is_github_logged_in`, `fetch_github_projects`; `vault_bootstrap.rs`
+  `build_vault_image`; `policy.rs` `is_allowlisted_passthrough_option` /
+  `disallowed_passthrough_options`; `squid.conf` `acl github_release_assets`.
+- S4's mechanism corrected to the allowlist, with the retraction recorded in
+  place rather than only at the section head.
+- One `<!-- cite-ok: -->` retained, on the sentence that quotes
+  `policy.rs:271,280` as evidence — the escape hatch used for its stated <!-- cite-ok: naming the citation retained under the escape hatch -->
+  purpose.
+- `squid.conf:77-79`, cited for "splices everything except GitHub release <!-- cite-ok: recording where the drifted squid.conf citation pointed -->
+  assets", pointed at `tls_outgoing_options`. The real anchor is the
+  `github_release_assets` ACL.
+
+### Not done here
+
+- **§2's operation table was re-anchored, not re-verified.** The symbols exist
+  and contain the cited behaviour; whether the *claims* about image counts
+  ("10 images", "EIGHT images", "5-image ensure") still hold was not re-checked
+  against the arrays. Re-anchoring makes that check possible for the next
+  reader, which is the point, but it is not the same as having done it.
+- §5's P1/P6 items remain open on their own terms (git-mirror-egress verdict;
+  the `:3129` decision) — both operator calls, unchanged by this slice.
+- 39 line citations remain in the document, all outside §2/§4/§7.

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: network-architecture-audit
+    field: next_action
+    value: 'Twelve slices. P4 IS DONE — the platform transport matrix is normative in openspec/specs/vsock-transport/spec.md (added 2026-08-30 from 245 §5 P4); this field wrongly named it the one open item for a day, so verify before implementing. Sections 1, 2, 3, 5, 6, 7 and Observation are re-verified; §2 symbol-anchored by L5 2026-08-31 (§4 and §7 held one citation each, §7''s already under cite-ok). REMAINING: (1) THE COMPLETION GATE — opencode-bigpickle, antigravity-gemini and codex-gpt55-highthink still owe verified-by events, and five of six criteria now have artifacts that did not exist at the 2026-07-14 verification; (2) sibling-lane confirmation of the two SOURCE-READ rows in vsock-transport''s platform matrix (Windows derived-GUID against a live WSL utility VM; macOS Virtualization.framework as the only host-side path) — named as unverified in the spec, not assertable from Linux; (3) 39 line citations survive OUTSIDE §2/§4/§7 — same 881-29me treatment, L1/L2/L3/L5 are the worked pattern, and this is the LEAST valuable remaining work since the affected sections'' content is already promoted into specs; (4) §2''s operation table was RE-ANCHORED BUT NOT RE-VERIFIED — the image-count claims (10 for --init, EIGHT for status check, 5-image opencode ensure) were never checked against the arrays, now cheap because the symbols resolve; (5) P6''s :3129 wire-or-delete decision and (6) P1 blocked on the git-mirror-egress verdict (plan/issues/git-mirror-egress-spec-divergence-audit-2026-08-10.md) — both OPERATOR calls, not worker items; (7) §7''s proposed RuntimeContext enum in container_deps was NEVER FILED as a packet — order 252 closed with launch-target guards, not context modeling; if someone wants it, mint an order and read the revised §3 first (the graph gained Service::NixCache via order 801-vm4p since the draft). THE WARNING STANDS AND WAS PROVED AGAIN THIS CYCLE: this document accumulates corrections in the section where they were FOUND and nothing cross-links them. Grep the whole file for the terms you are about to assert BEFORE editing a section. L5''s finding is the same defect one level in — §2''s own superseding note carried the allowlist correction while the S4 bullet twelve lines below kept the retracted denylist claim for a day. A correction at the head of a section does not propagate to its body. CLOSURE: multi_cycle with verification_required, phase review — no worker may flip this to completed.'
+    ts: "2026-08-31T08:57:05Z"
+    host: linux
+
+events:
+  - packet_id: network-architecture-audit
+    event:
+      type: note
+      ts: "2026-08-31T08:57:05Z"
+      host: linux
+      summary: >
+        restoring items I truncated in the previous set-field this cycle: completion gate, sibling-lane matrix confirmation, the unfiled RuntimeContext follow-up, and the cross-link warning
