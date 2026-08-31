@@ -996,11 +996,17 @@ pub fn help_text() -> String {
             (CI / reproducible-source scenarios). Bakes at compile time, not runtime.\n\
          \n\
          OUTPUT NOTE:\n    \
-            The tray is a GUI-subsystem binary; PowerShell pipe capture of stdout\n    \
-            is unreliable (Rust treats a detached stdout as BrokenPipe and discards).\n    \
-            Support scripts MUST redirect to a file: `tillandsias-tray.exe \\\n        \
-                --diagnose --json > out.json 2>nul`\n    \
-            and branch on the exit code rather than the captured output.\n\
+            The tray is a GUI-subsystem binary, so PowerShell does NOT wait for it.\n    \
+            A bare redirect returns before the child writes anything and records no\n    \
+            exit status at all: `$exe --diagnose --json > out.json` yields an EMPTY\n    \
+            $LASTEXITCODE and a 0-byte file. That reads as success-in-zero-seconds.\n    \
+            Support scripts MUST force a wait, either way works:\n    \
+              cmd.exe /c \"tillandsias-tray.exe --diagnose --json > out.json 2>nul\"\n    \
+              Start-Process tillandsias-tray.exe -ArgumentList '--diagnose','--json' \\\n        \
+                -Wait -PassThru -RedirectStandardOutput out.json\n    \
+            A pipeline (`| Out-String`) also works, because PowerShell reads to EOF\n    \
+            and that incidentally waits. Branch on the exit code only after one of\n    \
+            these — an exit code you did not wait for is not an exit code.\n\
          \n\
          See cheatsheets/runtime/windows-tray-diagnostics.md for the full\n\
          diagnose JSON schema + the canonical PowerShell consumer pattern.\n",
@@ -5238,6 +5244,39 @@ mod tests {
                 "help text missing section header {section}"
             );
         }
+        // 802-fbkg: the OUTPUT NOTE must be CORRECT, not merely PRESENT.
+        //
+        // The header check above passed for a year while the note prescribed the
+        // one capture pattern that silently fails. A pinned-but-wrong note is
+        // indistinguishable from a pinned-and-right one — the order-531 shape in
+        // documentation form — so presence was never the property worth asserting.
+        //
+        // Measured on the shipped v0.4.260830.5 binary, four probes, one host:
+        //   A  $exe --diagnose --json > out.json    -> $LASTEXITCODE EMPTY, 0 bytes
+        //   B  $exe --diagnose --json | Out-String  -> exit 2, 2910 chars
+        //   C  Start-Process -Wait -PassThru -Redirect -> exit 2, 2854 bytes
+        //   D  cmd.exe /c "$exe ... > out.json 2>nul"  -> exit 2, 2854 bytes
+        // A was what the note told support scripts they MUST use. The binary is
+        // GUI-subsystem, so PowerShell does not wait on it; a bare redirect
+        // returns before the child writes and records no status. B works only
+        // because reading a pipeline to EOF incidentally waits.
+        //
+        // So the note must name a WAITING construct. This asserts that at least
+        // one wrapper token survives, which is the property that was violated.
+        assert!(
+            text.contains("cmd.exe /c") || text.contains("Start-Process"),
+            "the OUTPUT NOTE must name a construct that WAITS for the \
+             GUI-subsystem child (cmd.exe /c or Start-Process -Wait). Without \
+             one, the prescribed pattern yields an empty exit code and a 0-byte \
+             file, which reads as success (802-fbkg)."
+        );
+        // And it must not quietly return to prescribing the bare redirect as the
+        // required pattern: the failure mode is the word MUST attached to it.
+        assert!(
+            !text.contains("MUST redirect to a file"),
+            "the OUTPUT NOTE prescribes a bare file redirect again — that is the \
+             802-fbkg defect returning; a bare redirect does not wait."
+        );
         // Exit-code contract is part of the CLI promise — pin it.
         for exit_code_marker in [
             "Exit: 0",

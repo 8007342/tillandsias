@@ -325,14 +325,66 @@ if (Test-Path -LiteralPath $msixTemplate) {
     # Store does require it, same-day builds collide at 0.4.2608.0 and the N
     # component needs somewhere else to live -- that is a decision for the
     # submission slice, not a default to assume here.
+    # SUPERSEDED 2026-08-31 by the epoch-anchored encoding below. The old
+    # YYMM/DD*100+N split kept the workspace major in field one, and the
+    # workspace major is 0 -- which the Store forbids outright ("the first
+    # section cannot be 0"). Every MSIX this repo produced was rejected before
+    # certification ever looked at it, and -MsixStoreRevisionZero alone did not
+    # help: it fixed field four while field one stayed 0.
+    #
+    # OPERATOR-DIRECTED ENCODING, 2026-08-31:
+    #
+    #     <minor> . <years_since_epoch><day_of_year:3> . <daily_N> . 0
+    #     0.4.260831.5  ->  4.56243.5.0
+    #
+    # Field 1 is the workspace MINOR, promoted so field one is non-zero.
+    # Field 2 concatenates years since the Unix epoch with the zero-padded day
+    # of year. Field 3 is the daily build number. Field 4 is 0, which the Store
+    # reserves.
+    #
+    # THE ZERO-PADDING IS LOAD-BEARING, not cosmetic. Unpadded, 2026 day 366
+    # encodes as 56366 and 2027 day 001 as 571 -- the version would go BACKWARDS
+    # at the year boundary, and the Store permanently refuses a version lower
+    # than one already shipped. Padded, 56366 -> 57001 and it climbs.
+    #
+    # TWO KNOWN LIMITS, recorded rather than discovered later:
+    #   * FIELD 2 OVERFLOWS IN 2036. Store fields cap at 65535; year 65 (2035)
+    #     yields at most 65366 and fits, year 66 (2036) yields 66001 and does
+    #     not. That is ~9 years of runway and a hard wall, not a degradation.
+    #   * MINOR MUST NEVER BE 0. Field one is the minor, so a future 1.0 release
+    #     would put 0 back in field one and the package would be rejected again
+    #     for the exact reason this encoding exists to fix.
+    # Both are asserted below rather than trusted.
     $vParts = $Version.Split('.')
-    if ($vParts.Count -eq 4) {
-        $yymmdd = [int]$vParts[2]
-        $rev = if ($MsixStoreRevisionZero) { 0 } else { ($yymmdd % 100) * 100 + [int]$vParts[3] }
-        $msixVersion = "{0}.{1}.{2}.{3}" -f $vParts[0], $vParts[1], [int]($yymmdd / 100), $rev
-    } else {
+    if ($vParts.Count -ne 4) {
         throw "msix-version-unmappable: expected major.minor.YYMMDD.N, got '$Version'"
     }
+    $minor = [int]$vParts[1]
+    if ($minor -lt 1) {
+        throw "msix-version-first-field-zero: the MSIX first field is the workspace MINOR and it is '$minor'. The Store forbids a leading 0, so this package would be rejected. Pick a non-zero minor or re-map the encoding."
+    }
+    # Day-of-year from the workspace version's own YYMMDD, NOT from the wall
+    # clock: rebuilding an old tag must reproduce its version, and `date` would
+    # silently stamp today onto a rebuild of last week's release.
+    $yymmdd = $vParts[2]
+    if ($yymmdd -notmatch '^\d{6}$') {
+        throw "msix-version-unmappable: expected a 6-digit YYMMDD in field 3, got '$yymmdd'"
+    }
+    $stampYear  = 2000 + [int]$yymmdd.Substring(0, 2)
+    $stampMonth = [int]$yymmdd.Substring(2, 2)
+    $stampDay   = [int]$yymmdd.Substring(4, 2)
+    $stamp = Get-Date -Year $stampYear -Month $stampMonth -Day $stampDay -Hour 0 -Minute 0 -Second 0
+    $yearsSinceEpoch = $stampYear - 1970
+    $dayOfYear = $stamp.DayOfYear
+    $fineGrained = [int]("{0}{1:D3}" -f $yearsSinceEpoch, $dayOfYear)
+    if ($fineGrained -gt 65535) {
+        throw "msix-version-field-overflow: fine-grained field is $fineGrained and the Store caps fields at 65535. This encoding runs out in 2036; it is now that year or later, so the scheme needs re-mapping (see the comment above)."
+    }
+    $daily = [int]$vParts[3]
+    if ($daily -gt 65535) {
+        throw "msix-version-field-overflow: daily build number $daily exceeds 65535"
+    }
+    $msixVersion = "{0}.{1}.{2}.0" -f $minor, $fineGrained, $daily
 
     # -- stage the package layout -------------------------------------------
     $msixStage = Join-Path $artifactsDir "$base-msix"
@@ -359,7 +411,44 @@ if (Test-Path -LiteralPath $msixTemplate) {
     # Placeholders, not defaults with real-looking values: a publisher CN that
     # LOOKS plausible is one somebody ships under by accident. These are
     # overridable per-invocation and the Store values come from Partner Center.
-    $identityName = if ($env:TILLANDSIAS_MSIX_IDENTITY_NAME) { $env:TILLANDSIAS_MSIX_IDENTITY_NAME } else { 'Tlatoani.Tillandsias' }
+    # IDENTITY RESOLUTION: env var, then an UNTRACKED user-space file, then the
+    # placeholder. The middle rung exists because the operator declines to
+    # commit the Partner Center Publisher CN to a public repo (2026-08-31), and
+    # retyping an env var every session is how a value ends up wrong once and
+    # silently thereafter.
+    #
+    # The file is KEY=VALUE, one per line, read as UTF-8 EXPLICITLY. That is
+    # load-bearing rather than tidy: PublisherDisplayName must match Partner
+    # Center byte-for-byte and this operator's is "Tlatoa" + U+0304 + "ni". Read
+    # with the ANSI default it becomes mojibake, the manifest is written
+    # correctly from a wrong string, and certification fails for a reason that
+    # looks nothing like encoding. Get-Content without -Encoding is exactly that
+    # bug, which is why this uses ReadAllText with an explicit UTF8Encoding.
+    #
+    # This function contains no non-ASCII literals: 722-qvqb pins this script to
+    # ASCII for the 5.1 parser, so the macron only ever travels as DATA.
+    $identityFile = Join-Path $HOME '.config/tillandsias/msix-identity.env'
+    $identityFromFile = @{}
+    if (Test-Path -LiteralPath $identityFile) {
+        $lines = [System.IO.File]::ReadAllText(
+            $identityFile, (New-Object System.Text.UTF8Encoding($false))) -split "`r?`n"
+        foreach ($line in $lines) {
+            if ($line -match '^\s*#') { continue }
+            if ($line -match '^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$') {
+                $identityFromFile[$Matches[1]] = $Matches[2]
+            }
+        }
+    }
+    function Resolve-MsixIdentityValue([string]$Key, [string]$Fallback) {
+        $fromEnv = [Environment]::GetEnvironmentVariable($Key)
+        if ($fromEnv) { return $fromEnv }
+        if ($identityFromFile.ContainsKey($Key) -and $identityFromFile[$Key]) {
+            return $identityFromFile[$Key]
+        }
+        return $Fallback
+    }
+
+    $identityName = Resolve-MsixIdentityValue 'TILLANDSIAS_MSIX_IDENTITY_NAME' 'Tlatoani.Tillandsias'
     # The default publisher sits in Microsoft's UNSIGNED NAMESPACE -- the
     # OID.2.25.3117... suffix. Two reasons, and the second is the important one:
     #   1. It makes `Add-AppxPackage -AllowUnsigned` work, so the acceptance test
@@ -371,9 +460,41 @@ if (Test-Path -LiteralPath $msixTemplate) {
     #      that forgot to set TILLANDSIAS_MSIX_PUBLISHER fails loudly at the
     #      point of distribution rather than quietly publishing under a
     #      plausible-looking fake identity.
-    $publisher = if ($env:TILLANDSIAS_MSIX_PUBLISHER) { $env:TILLANDSIAS_MSIX_PUBLISHER } else { 'CN=TillandsiasTestPublisher, OID.2.25.311729368913984317654407730594956997722=1' }
-    $publisherDisplay = if ($env:TILLANDSIAS_MSIX_PUBLISHER_DISPLAY) { $env:TILLANDSIAS_MSIX_PUBLISHER_DISPLAY } else { 'Tlatoani' }
-    $displayName = if ($env:TILLANDSIAS_MSIX_DISPLAY_NAME) { $env:TILLANDSIAS_MSIX_DISPLAY_NAME } else { 'Tillandsias' }
+    $placeholderPublisher = 'CN=TillandsiasTestPublisher, OID.2.25.311729368913984317654407730594956997722=1'
+    $publisher = Resolve-MsixIdentityValue 'TILLANDSIAS_MSIX_PUBLISHER' $placeholderPublisher
+    $publisherDisplay = Resolve-MsixIdentityValue 'TILLANDSIAS_MSIX_PUBLISHER_DISPLAY' 'Tlatoani'
+    $displayName = Resolve-MsixIdentityValue 'TILLANDSIAS_MSIX_DISPLAY_NAME' 'Tillandsias'
+
+    # STORE-BOUND BUILDS REFUSE THE PLACEHOLDER. -MsixStoreRevisionZero is only
+    # ever passed when the package is meant for Partner Center, and a Store
+    # submission carrying the unsigned-namespace CN is rejected after upload,
+    # certification queue and wait -- feedback measured in hours for a fault
+    # knowable in milliseconds. Worse, the package LOOKS submittable: it builds,
+    # it sideloads, its manifest reads plausibly.
+    #
+    # This refuses instead, and never prints the resolved CN. The operator
+    # treats it as sensitive; a build log is the last place it should surface,
+    # and "did the build see it" is answerable without echoing it.
+    if ($MsixStoreRevisionZero -and $publisher -eq $placeholderPublisher) {
+        throw @"
+msix-store-identity-missing: refusing to build a Store-bound package under the
+placeholder publisher.
+
+  -MsixStoreRevisionZero says this package is for Partner Center, but
+  TILLANDSIAS_MSIX_PUBLISHER resolved to the unsigned-namespace placeholder, so
+  the Store would reject it after upload and certification.
+
+  Set it in the environment, or in an untracked file:
+    $identityFile
+  as KEY=VALUE lines (UTF-8), using the values from Partner Center ->
+  Product management -> View app identity details:
+    TILLANDSIAS_MSIX_IDENTITY_NAME=<Package/Identity/Name, verbatim>
+    TILLANDSIAS_MSIX_PUBLISHER=<Package/Identity/Publisher, the CN=... string>
+    TILLANDSIAS_MSIX_PUBLISHER_DISPLAY=<Package/Identity/PublisherDisplayName>
+
+  Omit -MsixStoreRevisionZero to build a sideload package instead.
+"@
+    }
 
     $manifestText = Get-Content -LiteralPath $msixTemplate -Raw
     $manifestText = $manifestText.Replace('@MSIX_IDENTITY_NAME@', $identityName)
