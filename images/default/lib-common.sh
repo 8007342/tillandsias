@@ -3360,6 +3360,26 @@ seed_claude_first_run_defaults() {
     trace_lifecycle "config" "claude first-run defaults seeded (onboarding, theme)"
 }
 
+# Pre-trust the forge project folder (2026-08-31, minted-session blocker #2:
+# after the theme picker was seeded away, claude's workspace-trust dialog —
+# "Yes, I trust this folder / Enter to confirm" — blocked the prompt next).
+# Inside a forge the folder is a fresh clone from OUR OWN mirror into an
+# isolated container; the trust question is answered by the architecture,
+# not by a human at a dialog. Call AFTER find_project_dir with $PROJECT_DIR.
+seed_claude_project_trust() {
+    local project_dir="$1"
+    local user_cfg="${CLAUDE_CONFIG_FILE:-$HOME/.claude.json}"
+    local tmp
+    [ -n "$project_dir" ] || return 0
+    [ -s "$user_cfg" ] || printf '{}
+' >"$user_cfg"
+    tmp="$(mktemp "${user_cfg}.tmp.XXXXXX")" || return 1
+    jq --arg dir "$project_dir"         '.projects = ((.projects // {}) | .[$dir] = ((.[$dir] // {}) + {hasTrustDialogAccepted: (.[$dir].hasTrustDialogAccepted // true)}))'         "$user_cfg" >"$tmp" || { rm -f "$tmp"; return 1; }
+    chmod 600 "$tmp"
+    mv -f "$tmp" "$user_cfg"
+    trace_lifecycle "config" "claude project trust seeded for $project_dir"
+}
+
 # ── Hot-path population ─────────────────────────────────────
 # @trace spec:forge-hot-cold-split, spec:agent-cheatsheets, spec:cheatsheets-license-tiered
 # @cheatsheet runtime/cheatsheet-crdt-overrides.md

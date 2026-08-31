@@ -98,6 +98,7 @@ export_ssh_env || true
 # ── Find project directory ──────────────────────────────────
 find_project_dir
 [ -n "$PROJECT_DIR" ] && cd "$PROJECT_DIR"
+seed_claude_project_trust "$PROJECT_DIR"
 configure_git_identity
 trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 
