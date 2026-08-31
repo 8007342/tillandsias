@@ -64,6 +64,7 @@ COPY codex-oauth-session.sh /usr/local/bin/codex-oauth-session
 COPY config-overlay/codex/register-experts.sh /usr/local/bin/register-codex-experts
 COPY provider-device-auth.sh /usr/local/bin/provider-device-auth
 COPY provider-oauth-vault.sh /usr/local/bin/provider-oauth-vault
+COPY claude-approvals-vault.sh /usr/local/bin/claude-approvals-vault
 # @trace spec:error-message-localization
 COPY lib-localized-errors.sh /usr/local/lib/tillandsias/lib-localized-errors.sh
 # @trace spec:inference-container — order 392a inference model-warm state.
@@ -109,6 +110,7 @@ RUN chmod +x /usr/local/bin/tillandsias-entrypoint.sh \
              /usr/local/bin/register-codex-experts \
              /usr/local/bin/provider-device-auth \
              /usr/local/bin/provider-oauth-vault \
+             /usr/local/bin/claude-approvals-vault \
              /usr/local/bin/sse-keepalive-proxy.js
 
 # ── Locale ──────────────────────────────────────────────────────

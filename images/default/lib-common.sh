@@ -3353,9 +3353,9 @@ seed_claude_first_run_defaults() {
     mkdir -p "$(dirname "$user_cfg")"
     tmp="$(mktemp "${user_cfg}.tmp.XXXXXX")" || return 1
     if [ -s "$user_cfg" ] && jq -e 'type == "object"' "$user_cfg" >/dev/null 2>&1; then
-        jq '. + {hasCompletedOnboarding: (.hasCompletedOnboarding // true), theme: (.theme // "dark"), bypassPermissionsModeAccepted: (.bypassPermissionsModeAccepted // true)}'             "$user_cfg" >"$tmp" || { rm -f "$tmp"; return 1; }
+        jq '. + {hasCompletedOnboarding: (.hasCompletedOnboarding // true), theme: (.theme // "dark")}'             "$user_cfg" >"$tmp" || { rm -f "$tmp"; return 1; }
     else
-        printf '{"hasCompletedOnboarding": true, "theme": "dark", "bypassPermissionsModeAccepted": true}
+        printf '{"hasCompletedOnboarding": true, "theme": "dark"}
 ' >"$tmp"
     fi
     chmod 600 "$tmp"

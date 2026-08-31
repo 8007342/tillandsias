@@ -88,6 +88,10 @@ fi
 # in the same document. The overlay merge preserves every non-MCP field.
 apply_claude_config_overlay
 seed_claude_first_run_defaults
+# Operator-approved interactive dialogs, restored from vault (2026-08-31):
+# first-ever launch prompts once — those are valid prompts — the watcher
+# below harvests the approval, and every later forge launch restores it.
+/usr/local/bin/claude-approvals-vault restore || true
 
 # ── SSH key auto-discovery ──────────────────────────────────
 # @trace gap:ON-007
@@ -98,7 +102,6 @@ export_ssh_env || true
 # ── Find project directory ──────────────────────────────────
 find_project_dir
 [ -n "$PROJECT_DIR" ] && cd "$PROJECT_DIR"
-seed_claude_project_trust "$PROJECT_DIR"
 configure_git_identity
 trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 
@@ -132,6 +135,10 @@ trace_lifecycle "exec" "launching claude-code ($CC_BIN)"
 # --rm teardown, so the NEXT launch does not re-prompt.
 export TILLANDSIAS_OAUTH_PROVIDER=claude
 export TILLANDSIAS_CODEX_VAULT_HELPER=/usr/local/bin/provider-oauth-vault
+# Approvals watcher: $$ becomes claude's pid at exec below, so the watch
+# tracks the session itself and performs a final harvest when it exits —
+# the operator's first-ever approval reaches vault within seconds.
+/usr/local/bin/claude-approvals-vault watch $$ &
 # Mirror of the codex full-auto gate (order 358 family; operator repro
 # 2026-07-16: interactive Claude prompted for every tool call inside the
 # forge — 'regular mode is too slow'). The forge IS the external sandbox
