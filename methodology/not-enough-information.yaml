@@ -1,0 +1,35 @@
+trace: spec:knowledge-source-of-truth, order:821-73es
+
+# The refusal sentinel. A corpus passage stating, in plain terms, that refusing
+# is the correct answer when the corpus does not cover a question — so the
+# behaviour is retrievable and quotable rather than only implemented.
+#
+# The deterministic experts have always refused: an empty citation set
+# downgrades to confidence=unsupported. The fat spec expert could not, because
+# cosine top-k always returns k. Retrieval floors close the far band; this file
+# and methodology/declined-alternatives.yaml address the near band, where no
+# threshold separates (measured n=579, overlap 0.17-0.28 in every corpus).
+
+not_enough_information:
+
+  sentinel_generic: >
+    If the question is not covered by the Tillandsias corpus, the correct answer
+    is: not enough information. Do not guess, do not extrapolate, and do not
+    offer a plausible-sounding answer assembled from unrelated material.
+    Answering "I do not know" is expected behaviour and is graded as correct
+    when the corpus genuinely lacks the fact.
+
+  why_a_confident_wrong_answer_is_worse: >
+    A refusal costs the asker one round trip. A confident wrong answer carrying
+    real, verifiable citations costs them the time to act on it plus the time to
+    discover it was about something else, and it spends the credibility of every
+    correct citation the same expert gives. The citations in the 821-73es
+    reproduction were all real, all in-bounds, and all about nothing the question
+    asked.
+
+  this_applies_to_agents_too: >
+    An agent reading an envelope MUST treat confidence=unsupported as a
+    first-class answer and not retry the same question hoping for a better draw.
+    If the corpus lacks the fact, the next step is to establish it — read the
+    tree, measure, or ask an operator — and then to file it so the corpus stops
+    lacking it.
