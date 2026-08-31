@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+
+events:
+  - packet_id: sni-windowid-type-wedges-shell
+    event:
+      type: note
+      ts: "2026-08-31T20:03:00Z"
+      host: macuahuitl
+      summary: >
+        Truth sync at the 8h claim-expiry warning: all five freeze fixes
+        (Event/EventGroup/AboutToShow/WindowId wire types, GetLayout
+        parent_id+recursion_depth, id-0 cycle, emission coalescing 2s) are
+        landed on trunk AND shipped in v56.8.31.2's Linux assets; the tray
+        module fixture suite is 79/79. The 10:15Z unattributed in_progress
+        claim reflects work already done — remaining verification is the
+        OPERATOR's live tray smoke on a desktop session, which no fleet host
+        can perform. Leaving the claim to the 24h reaper rather than
+        re-claiming; closure evidence wanted: one operator session of tray
+        clicks (menu open, submenu expand, forge launch) with no freeze and
+        podman-log witness. Do-not-relaunch warning from the 260830.5 row is
+        LIFTED as of v56.8.31.2 — the GetLayout fix that warning waited on is
+        aboard.
