@@ -1,0 +1,30 @@
+packets:
+  - packet_id: plan-only-lane-survives-plan-only-merges
+    order: 947-w9kx
+    status: ready
+    kind: defect
+    pickup_role: linux
+    priority: p2
+    desired_release: v0.5
+    title: |
+      A merge that only touches plan/ evicts the push from the plan-only lane — slow hosts pay full gates to land fragments
+    context: |
+      Measured by pirria (N150, 2026-08-31): SIX gate runs (~16 min at 162s
+      each) to land TWO plan-only commits, because trunk moved during every
+      gate and each integration merge pulled the outgoing diff out of the
+      plan-only lane (modified plan/index.yaml from other hosts' folds does
+      not qualify as "new fragment files only"). On fast hardware the gate
+      window closes before trunk moves; on the fleet's slowest host it
+      never does — the lane exists precisely for these hosts and excludes
+      them under contention. Design constraint: the strictness is load-
+      bearing (fragments immutable; own edits to shared plan files must
+      gate). Candidate rule that preserves it: the lane accepts outgoing
+      NON-new-fragment plan changes IFF they are already reachable from
+      origin/linux-next (inherited via merge, gated by their authors) while
+      the pusher's OWN new content remains new-fragments-only. Cadence
+      experiment (2h stagger) reduces the trigger frequency but does not
+      remove the class.
+    exit_criteria:
+      - a plan-only commit plus a merge of already-published plan-only trunk commits pushes through the plan lane without a build stamp
+      - a push whose OWN changes modify existing plan files is still refused to the full gate (negative control)
+      - pirria re-lands a two-commit plan-only batch under contention in one lane push (the measuring host verifies)
