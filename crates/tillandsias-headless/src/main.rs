@@ -8949,6 +8949,98 @@ fn select_github_login_input_mode(
     )
 }
 
+/// ORDER 759-vceg. Derive `owner/repo` from a git origin URL, for the
+/// push-AUTHORIZATION probe.
+///
+/// Accepts the two shapes an operator's origin actually takes — `https://` and
+/// `git@host:` — and refuses anything that is not a GitHub repository path,
+/// because a probe against the wrong repo answers a question nobody asked.
+fn github_owner_repo_from_origin(origin: &str) -> Option<String> {
+    let trimmed = origin.trim();
+    // The prefixes an operator's origin actually takes. Anything else is not a
+    // GitHub repository path and must yield None, so the caller says "could not
+    // verify" rather than probing some other host.
+    let rest = [
+        "https://github.com/",
+        "http://github.com/",
+        "git@github.com:",
+        "ssh://git@github.com/",
+    ]
+    .iter()
+    .find_map(|prefix| trimmed.strip_prefix(prefix))?;
+    let rest = rest.strip_suffix(".git").unwrap_or(rest);
+    let rest = rest.trim_end_matches('/');
+    let mut parts = rest.split('/');
+    let owner = parts.next()?;
+    let repo = parts.next()?;
+    if owner.is_empty() || repo.is_empty() || parts.next().is_some() {
+        return None;
+    }
+    Some(format!("{owner}/{repo}"))
+}
+
+/// ORDER 759-vceg. The in-container push-authorization probe.
+///
+/// Runs INSIDE the ephemeral login container, exactly where `gh auth status`
+/// already runs, so the token never reaches host disk, argv, or env — the
+/// property the whole login lane is built around. `.permissions.push` is
+/// reported for BOTH classic and fine-grained tokens, which is why it is the
+/// chosen signal.
+fn github_push_authorization_probe_args(container: &str, owner_repo: &str) -> Vec<String> {
+    vec![
+        "exec".to_string(),
+        container.to_string(),
+        "gh".to_string(),
+        "api".to_string(),
+        format!("repos/{owner_repo}"),
+        "--jq".to_string(),
+        ".permissions.push".to_string(),
+    ]
+}
+
+/// ORDER 759-vceg. Classify the probe's output into seed-or-refuse.
+///
+/// THE DEFECT THIS EXISTS FOR. The login flow checked non-emptiness, `gh auth
+/// status`, and a Vault round-trip — every one of which is AUTHENTICATION. None
+/// asked whether the token may PUSH. A fine-grained PAT missing Contents:write
+/// authenticates perfectly as its owner and is denied at push time, which is
+/// how "Permission to 8007342/tillandsias.git denied to 8007342" surfaced hours
+/// into a work cycle on 2026-08-15, long after the credential was seeded.
+///
+/// An UNPARSEABLE answer is refused, not waved through. "I could not tell"
+/// resolving to "seed it anyway" is how the original defect reads to an
+/// operator: a credential accepted with no evidence it works.
+fn github_push_authorization_verdict(owner_repo: &str, probe_stdout: &str) -> Result<(), String> {
+    match probe_stdout.trim() {
+        "true" => Ok(()),
+        "false" => Err(format!(
+            "the pasted token authenticates, but it CANNOT PUSH to {owner_repo}.\n\
+             \n\
+             Missing permission: Contents - Read and write.\n\
+             \n\
+             Nothing was written to Vault; the previous credential (if any) is untouched.\n\
+             \n\
+             Fix the token at https://github.com/settings/personal-access-tokens :\n\
+               - Repository access must INCLUDE {owner_repo}\n\
+               - Contents  - Read and write  (clone, fetch, push)\n\
+               - Metadata  - Read-only       (required by GitHub)\n\
+             \n\
+             Then run the login again. Seeding a token that cannot push moves this\n\
+             failure hours downstream, into the middle of a work cycle (order 759-vceg)."
+        )),
+        other => Err(format!(
+            "could not determine push permission on {owner_repo}: the probe answered {other:?} \
+             rather than true/false.\n\
+             \n\
+             Nothing was written to Vault. This is refused rather than assumed, because a \
+             credential seeded on an unreadable answer is exactly the state order 759-vceg \
+             exists to prevent — it looks seeded and fails at push time.\n\
+             \n\
+             Check that the token can read the repository at all (repository access must \
+             include {owner_repo}, Metadata read-only), then run the login again."
+        )),
+    }
+}
 fn provider_login_exec_args(
     container: &str,
     token_script: &str,
@@ -9201,6 +9293,58 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
                 "containerized {provider_name} authentication verification failed after login: {e}"
             )
         })?;
+    }
+
+    // ORDER 759-vceg. AUTHENTICATION IS NOT AUTHORIZATION, and until here
+    // only authentication had been checked. `gh auth status` above proves
+    // the token is a valid identity; it says nothing about whether that
+    // identity may PUSH to the repository this installation exists to push
+    // to. A fine-grained PAT missing Contents:write passes everything above
+    // and is denied at push time — the 2026-08-15 incident, surfacing hours
+    // after the credential was seeded.
+    //
+    // The probe runs in the SAME ephemeral container as the login itself,
+    // so the token still never reaches host disk, argv, or env.
+    //
+    // WHEN THERE IS NO UPSTREAM TO CHECK AGAINST, say so out loud rather
+    // than skipping quietly. A silent skip is indistinguishable from a
+    // passed check by anyone reading the output, which is the same
+    // ambiguity this packet exists to remove.
+    match read_host_project_origin_url(Path::new("."))
+        .as_deref()
+        .and_then(github_owner_repo_from_origin)
+    {
+        Some(owner_repo) => {
+            let mut probe = podman_command();
+            probe.args(github_push_authorization_probe_args(
+                &container,
+                &owner_repo,
+            ));
+            let probe_out = podman_command_output(probe, debug).map_err(|e| {
+                format!(
+                    "could not check push permission on {owner_repo}: {e}\n\n\
+                         Nothing was written to Vault. The token may be unable to READ the \
+                         repository at all — repository access must include {owner_repo} with \
+                         Metadata read-only (order 759-vceg)."
+                )
+            })?;
+            github_push_authorization_verdict(&owner_repo, &probe_out)?;
+            info!(
+                accountability = true,
+                category = "secrets",
+                spec = "secret-rotation",
+                operation = "github_push_authorization_verified",
+                "token has push permission on {owner_repo}; proceeding to Vault write"
+            );
+        }
+        None => {
+            eprintln!(
+                "NOTE: no GitHub upstream is configured for this checkout, so push \
+                     permission could NOT be verified against a repository. The token is \
+                     being seeded on authentication alone — if it lacks Contents:write, the \
+                     failure will appear at the first push, not here (order 759-vceg)."
+            );
+        }
     }
 
     info!(
@@ -22111,6 +22255,118 @@ esac
                 "{mode:?} claims a TTY but sets no COLORTERM (702-6jza D3)"
             );
         }
+    }
+
+    /// ORDER 759-vceg. The incident shape: a fine-grained PAT that
+    /// AUTHENTICATES as the repo owner and cannot push. Every check the login
+    /// flow had — non-emptiness, `gh auth status`, a Vault round-trip — passes
+    /// for this token. Only `.permissions.push` distinguishes it.
+    #[test]
+    fn a_token_without_push_permission_is_refused_with_the_missing_permission_named() {
+        let err = github_push_authorization_verdict("8007342/tillandsias", "false\n")
+            .expect_err("push=false must refuse");
+        assert!(
+            err.contains("CANNOT PUSH"),
+            "refusal must say what is wrong, got: {err}"
+        );
+        assert!(
+            err.contains("Contents - Read and write"),
+            "refusal must NAME the missing permission, not just fail: {err}"
+        );
+        assert!(
+            err.contains("Nothing was written to Vault"),
+            "refusal must state that no credential was persisted: {err}"
+        );
+        assert!(
+            err.contains("8007342/tillandsias"),
+            "refusal must name the repo it checked: {err}"
+        );
+    }
+
+    /// POSITIVE CONTROL. Without it, every arm above is satisfied by a verdict
+    /// function that refuses unconditionally — which would break every login.
+    #[test]
+    fn a_push_capable_token_seeds_exactly_as_before() {
+        assert!(
+            github_push_authorization_verdict("8007342/tillandsias", "true\n").is_ok(),
+            "push=true must seed"
+        );
+        assert!(
+            github_push_authorization_verdict("o/r", "true").is_ok(),
+            "a probe answer without a trailing newline must still seed"
+        );
+    }
+
+    /// AN UNREADABLE ANSWER IS REFUSED, NOT WAVED THROUGH. "I could not tell"
+    /// resolving to "seed it anyway" reproduces the original defect exactly: a
+    /// credential accepted with no evidence it works.
+    #[test]
+    fn an_unparseable_probe_answer_refuses_rather_than_assuming_permission() {
+        for answer in ["", "null", "gh: Not Found (HTTP 404)", "TRUE", "1"] {
+            let err = github_push_authorization_verdict("o/r", answer)
+                .expect_err("an unreadable answer must be refused, never treated as permission");
+            assert!(
+                err.contains("Nothing was written to Vault"),
+                "{answer:?} refusal must state no credential was persisted: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn owner_repo_is_derived_from_every_origin_shape_an_operator_actually_has() {
+        for origin in [
+            "https://github.com/8007342/tillandsias.git",
+            "https://github.com/8007342/tillandsias",
+            "git@github.com:8007342/tillandsias.git",
+            "ssh://git@github.com/8007342/tillandsias.git",
+            "  https://github.com/8007342/tillandsias.git  ",
+        ] {
+            assert_eq!(
+                github_owner_repo_from_origin(origin).as_deref(),
+                Some("8007342/tillandsias"),
+                "failed to derive owner/repo from {origin}"
+            );
+        }
+    }
+
+    /// NEGATIVE CONTROL for the parser. A non-GitHub or malformed origin must
+    /// yield None so the caller takes the "cannot verify, say so" branch —
+    /// probing the WRONG repo would answer a question nobody asked and could
+    /// pass a token that cannot push where it matters.
+    #[test]
+    fn a_non_github_or_malformed_origin_yields_no_repo_to_probe() {
+        for origin in [
+            "https://gitlab.com/8007342/tillandsias.git",
+            "https://github.com/8007342",
+            "https://github.com/",
+            "https://github.com/a/b/c",
+            "",
+            "not a url",
+        ] {
+            assert!(
+                github_owner_repo_from_origin(origin).is_none(),
+                "{origin} must not produce a repo to probe"
+            );
+        }
+    }
+
+    /// The probe must run in the SAME container as the login, and ask for the
+    /// permission field that covers BOTH classic and fine-grained tokens.
+    #[test]
+    fn the_probe_runs_in_container_and_asks_for_the_push_permission() {
+        let args = github_push_authorization_probe_args("tillandsias-git-login", "o/r");
+        assert_eq!(args.first().map(String::as_str), Some("exec"));
+        assert!(
+            args.iter().any(|a| a == "tillandsias-git-login"),
+            "probe must run inside the ephemeral login container so the token never \
+             reaches host disk: {args:?}"
+        );
+        assert!(args.iter().any(|a| a == "repos/o/r"), "{args:?}");
+        assert!(
+            args.iter().any(|a| a == ".permissions.push"),
+            "must ask for .permissions.push — the field reported for classic AND \
+             fine-grained tokens: {args:?}"
+        );
     }
 
     /// The NEGATIVE CONTROL for the test above, and the reason it cannot simply

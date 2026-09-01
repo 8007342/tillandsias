@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-warm-path-evidence-is-debug-gated-in-the-lifecycle-log
+    field: status
+    value: in_progress
+    ts: "2026-09-01T04:52:09Z"
+    host: forge
+
+events:
+  - packet_id: forge-warm-path-evidence-is-debug-gated-in-the-lifecycle-log
+    event:
+      type: note
+      ts: "2026-09-01T04:52:09Z"
+      host: forge
+      summary: >
+        claimed for cycle 20260901T0450Z by forge-forge-tillandsias-opencode-20260901t045023z — fix trace_lifecycle file sink gating

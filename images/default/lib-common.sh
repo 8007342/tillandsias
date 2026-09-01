@@ -194,14 +194,14 @@ export TILLANDSIAS_EXTERNAL_LOGS="/var/log/tillandsias/external"
 # can surface lifecycle events back to the calling terminal.
 # @trace spec:cross-platform, spec:windows-wsl-runtime, spec:runtime-diagnostics-stream
 trace_lifecycle() {
-    # Only emit lifecycle traces when TILLANDSIAS_DEBUG is set.
-    # In production, these clutter the terminal (stderr shares the display).
-    [ -n "${TILLANDSIAS_DEBUG:-}" ] || return 0
+    # Write to the file log unconditionally so agents can always observe
+    # expert build state (order 797-thbw). Gate stderr only — in production,
+    # these clutter the terminal (stderr shares the display).
     local phase="$1"
     shift
     local line="[lifecycle] $phase | $*"
-    echo "$line" >&2
     echo "$line" >> /tmp/forge-lifecycle.log 2>/dev/null || true
+    [ -n "${TILLANDSIAS_DEBUG:-}" ] && echo "$line" >&2
 }
 
 export_pull_cache_path() {

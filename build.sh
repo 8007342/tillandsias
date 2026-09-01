@@ -2613,6 +2613,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Backgrounded-job stderr check passed"
 
+    _step "Checking bound litmus files are RUNNABLE, not merely parseable (958-b36m)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-bound-litmus-is-runnable.sh" 2>&1; then
+        _error "the bound-but-unrunnable check regressed (958-b36m) — see the failing case above"
+        exit 1
+    fi
+    _info "Bound-litmus-runnable fixture passed"
+
     _step "Checking plan fragments use keys the fold reads (944-vim8)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-keys-are-read.sh" 2>&1; then
         _error "a plan/index.d/ fragment uses a top-level key the fold discards (944-vim8) — see the verdict line above"

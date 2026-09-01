@@ -260,6 +260,18 @@ export LITMUS_PODMAN_CALLS_FILE="${LITMUS_PODMAN_CALLS_FILE:-$PROJECT_ROOT/targe
 TIMEOUT_SECONDS=600
 VERBOSE=0
 LIST_ONLY=0
+
+# ORDER 958-b36m. Parse a named litmus file with the RUNNER'S OWN parser and
+# report whether its steps are extractable, WITHOUT executing any of them.
+#
+# The binding gate needs to ask "can the runner run this file?" and there was
+# no way to ask. Reimplementing the parse in the gate would assert the GATE's
+# idea of the format and could go green while this runner refuses the file —
+# strictly worse than no gate, and this corpus has two instances THIS WEEK of a
+# rule copied to one lane and left on others (702-6jza D3, D4). So the answer
+# is a mode on the authority itself.
+PARSE_ONLY=0
+PARSE_ONLY_FILES=()
 FILTER_SPEC=""
 # 764-8m5j was REVERTED here on 2026-08-17 and the packet reopened. It made a
 # test-name filter RUN that single test, which is genuinely useful — but
@@ -1245,6 +1257,16 @@ run_litmus_test_file() {
         return 1
     fi
 
+    # ORDER 958-b36m. PARSE-ONLY returns HERE — after the same parse the real
+    # run does, and before a single step is executed. Both refusals above
+    # (PARSE FAIL for an unextractable named step, PARSE ERROR for a file with
+    # no steps at all) have already fired if they apply, so this mode's verdict
+    # is the runner's verdict by construction rather than by imitation.
+    if [[ $PARSE_ONLY -eq 1 ]]; then
+        printf 'ok:litmus-parseable:%s:%d step(s)\n' "$test_file" "${#step_commands[@]}"
+        return 0
+    fi
+
     local combined_output=""
     local step_index=0
 
@@ -1780,6 +1802,14 @@ parse_args() {
                 LIST_ONLY=1
                 shift
                 ;;
+            --parse-only)
+                PARSE_ONLY=1
+                shift
+                while [[ $# -gt 0 && "${1:0:1}" != "-" ]]; do
+                    PARSE_ONLY_FILES+=("$1")
+                    shift
+                done
+                ;;
             --timeout)
                 TIMEOUT_SECONDS="${2}"
                 shift 2
@@ -1938,6 +1968,32 @@ validate_environment() {
 
 main() {
     parse_args "$@"
+    # ORDER 958-b36m. `--parse-only <file>...` asks THIS runner whether it can
+    # extract the named files' steps, and answers without executing any of
+    # them. Short-circuits before selection and before the reporting banner:
+    # the caller is a gate wanting one verdict line per file, not a test run.
+    #
+    # Selection is deliberately bypassed. A gate checking a NEWLY BOUND file
+    # must be able to reach it whatever its phase, size or spec — the whole
+    # failure being closed is a file that no selection path reaches.
+    if [[ $PARSE_ONLY -eq 1 ]]; then
+        local parse_rc=0
+        local parse_target
+        if [[ ${#PARSE_ONLY_FILES[@]} -eq 0 ]]; then
+            printf 'blocked:parse-only:no files named\n' >&2
+            exit 2
+        fi
+        for parse_target in ${PARSE_ONLY_FILES[@]+"${PARSE_ONLY_FILES[@]}"}; do
+            if [[ ! -f "$parse_target" ]]; then
+                printf 'blocked:parse-only:missing:%s\n' "$parse_target" >&2
+                parse_rc=1
+                continue
+            fi
+            run_litmus_test_file "$parse_target" "parse-only" || parse_rc=1
+        done
+        exit "$parse_rc"
+    fi
+
 
     if [[ -n "$SPEC_SHORTHAND" ]]; then
         if [[ -z "$FILTER_SPEC" ]]; then
