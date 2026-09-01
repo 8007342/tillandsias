@@ -1,0 +1,71 @@
+events:
+  - packet_id: accel-probe-blind-to-wsl2-paravirtualised-gpu
+    event:
+      type: evidence
+      ts: "2026-09-01T06:03:22Z"
+      agent_id: "windows-yolanda-claude-20260830t162208z"
+      host: windows
+      summary: |
+        WINDOWS-HOST EVIDENCE FOR THE PLACED RUNG, gathered incidentally on this host
+        2026-08-30/31 while chasing an unrelated inference defect. It is the strongest
+        confirmation this packet's central rule has yet had, and it arrived by
+        violating that rule first.
+
+        THE RULE: "only placement proves a lane." I broke it and got caught. Serving a
+        checkpoint named -NPU, on a runtime named ryzenai-server, from a vendor whose
+        own capability flag said amd_npu.available=true, I concluded the work ran on
+        the GPU because three indirect signals agreed: the vendor's NPU utilisation
+        counter read 0.0 through every sample, exactly one video controller enumerated,
+        and the serving process pinned a GPU compute engine at 95%. Three agreeing
+        proxies, one wrong conclusion.
+
+        WHAT ACTUALLY PROVED PLACEMENT was a D-state read from the OS's own PnP layer
+        (DEVPKEY_Device_PowerData, PD_MostRecentPowerState at byte offset 4 -- NOT
+        offset 8, which returns the capabilities word and decodes as nonsense):
+
+          idle before        D3-off
+          DURING generation  D0-active
+          idle +60s          D3-off
+          idle +120s         D3-off
+
+        The NPU powers up for exactly the span of the work and releases. That is the
+        OS acting on the device, not a runtime describing itself.
+
+        THE TRANSFERABLE FINDING FOR THIS PACKET'S RUNGS:
+          * A VENDOR UTILISATION COUNTER IS NOT A PLACED PROOF. Lemonade's
+            amd_npu.utilization read 0.0 through generations in which Windows showed
+            the device in D0 doing work. A lane gated on that field would be declared
+            dead while running. This is a fifth instance of the packet's own class --
+            a label substituting for the wiring it names -- and the first from a
+            vendor runtime rather than our code.
+          * THE OS POWER-MANAGEMENT LAYER IS A CREDIBLE PLACED SOURCE, and credible
+            for a structural reason worth writing down: runtime power state is
+            maintained by the kernel's PCI power management for its own purposes, so
+            it would be wrong in a way that broke suspend/resume rather than merely
+            mis-reporting. A device the OS believes is powered down cannot be
+            executing. Linux equivalent: /sys/class/accel/accelN/device/power/runtime_status.
+          * size_vram REMAINS THE RIGHT PLACED SOURCE FOR OLLAMA, unchanged; the above
+            is an additional source for devices ollama does not model.
+
+        AND A REACHABLE-RUNG CAUTION FROM THE SAME NIGHT: a stat from inside the
+        container proves reach, and this host demonstrated why it cannot prove a lane.
+        Lemonade advertised Qwen2.5-0.5B-Instruct-Hybrid in /api/v1/models on a machine
+        with NO hybrid runtime installed (bin/ryzenai-server/npu and bin/flm/npu exist;
+        zero *hybrid* directories), served it on the NPU runtime, and migrated its
+        config until the graph loaded. It returned finish_reason "stop", exact
+        completion_tokens, and token soup. Reachable was satisfied; the lane did not
+        work. That is the packet's "a stat proves the device is reachable; a lane needs
+        a runtime that can drive it" measured end to end.
+
+        SCOPE NOTE, so this is not mistaken for the remaining work: REMAINING 2 (wiring
+        producers for Reachable and Placed) is NOT done. This event supplies evidence
+        about what a valid Placed source looks like and one measured counter-example of
+        a proxy that must not be used; the rungs stay inert until something produces
+        them.
+
+        REMAINING 1 IS OPERATOR-GATED AND I AM NOT TAKING IT. It needs a Vulkan ICD
+        installed on this machine. The packet already records a prior decline on the
+        grounds that provisioning the operator's machine to make a criterion pass is not
+        evidence, and that reasoning still holds. Installing it should be a deliberate
+        recorded act with the operator's consent, not a step a worker takes because a
+        criterion is otherwise unreachable.
