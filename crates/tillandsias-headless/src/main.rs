@@ -13788,6 +13788,25 @@ fn build_forge_agent_run_args_with_vault(
     let raw_instance = std::env::var("TILLANDSIAS_FORGE_INSTANCE").ok();
     let mcp_dir = mcp_socket_host_dir(project_name, raw_instance.as_deref());
     if std::fs::create_dir_all(&mcp_dir).is_ok() {
+        // START THE LANE LISTENER TOO — not just the mount. The legacy tray
+        // path does this (tray/mod.rs build_launch_spec) and this live path
+        // did not, so a project launched AFTER tray startup got a mounted,
+        // env-var'd, EMPTY socket dir: the in-forge host-browser bridge died
+        // with CONNECTION_CLOSED on connect. Found live 2026-09-02 when the
+        // first tillandsias.org forge could not reach publish_local; the
+        // same dual-source-of-truth shape as the pids-limit partial fix
+        // (959-fpc5) — a capability added to one launcher and not the other.
+        // The tray-boot enumeration only covers projects that existed then.
+        // (cfg-gated with the module: the listener implementation lives in
+        // tray/mod.rs, so a no-tray build still cannot bind one — that
+        // pre-existing limitation is unchanged by this fix.)
+        #[cfg(feature = "tray")]
+        {
+            let _ = tray::start_mcp_socket_server_for_lane(
+                project_name,
+                raw_instance.as_deref().unwrap_or("default"),
+            );
+        }
         spec = spec
             .bind_mount(
                 mcp_dir.display().to_string(),
