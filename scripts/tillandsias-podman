@@ -1,16 +1,32 @@
 #!/usr/bin/env bash
 # Thin compatibility facade; orchestration belongs to the Rust CLI.
+#
+# Two low-end lessons baked in (esmeraldinha, N100 forge guest, 2026-09-01):
+#   * If podman is absent from PATH, no invocation of the CLI can succeed —
+#     answer the guaranteed negative immediately instead of building a wrapper
+#     to discover it. Measured: the old fall-through cost 105s of cargo/rustc
+#     ONCE PER FRESH VOLUME (then 18ms) to learn "No such file or directory".
+#   * Probe release/ as well as debug/: the forge builds its artifacts
+#     --release, so a guest with a warm release cache was still paying the
+#     debug compile because only debug/ was ever consulted.
 set -euo pipefail
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PODMAN_CLI_BIN="$ROOT/target/debug/tillandsias-podman-cli"
-if [[ -n "${CARGO_TARGET_DIR:-}" ]]; then
-    if [[ "$CARGO_TARGET_DIR" = /* ]]; then
-        [[ -x "$CARGO_TARGET_DIR/debug/tillandsias-podman-cli" ]] && PODMAN_CLI_BIN="$CARGO_TARGET_DIR/debug/tillandsias-podman-cli"
-    else
-        [[ -x "$ROOT/$CARGO_TARGET_DIR/debug/tillandsias-podman-cli" ]] && PODMAN_CLI_BIN="$ROOT/$CARGO_TARGET_DIR/debug/tillandsias-podman-cli"
-    fi
+if ! command -v podman >/dev/null 2>&1; then
+    echo "tillandsias-podman: podman is not on PATH — the volume/container query cannot succeed on this host" >&2
+    exit 1
 fi
-if [[ -x "$PODMAN_CLI_BIN" ]]; then
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PODMAN_CLI_BIN=""
+for profile in release debug; do
+    for base in "${CARGO_TARGET_DIR:+$CARGO_TARGET_DIR}" "${CARGO_TARGET_DIR:+$ROOT/$CARGO_TARGET_DIR}" "$ROOT/target"; do
+        [[ -n "$base" ]] || continue
+        [[ "$base" = /* ]] || continue
+        if [[ -x "$base/$profile/tillandsias-podman-cli" ]]; then
+            PODMAN_CLI_BIN="$base/$profile/tillandsias-podman-cli"
+            break 2
+        fi
+    done
+done
+if [[ -n "$PODMAN_CLI_BIN" ]]; then
     exec "$PODMAN_CLI_BIN" "$@"
 fi
 exec cargo run --quiet -p tillandsias-podman-cli -- "$@"
