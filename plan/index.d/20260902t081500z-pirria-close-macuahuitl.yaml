@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+
+events:
+  - packet_id: litmus-low-end-instrument
+    event:
+      type: note
+      ts: "2026-09-02T08:15:00Z"
+      host: macuahuitl
+      summary: >
+        PIRRIA ASSIGNMENT COMPLETE (gate/litmus/local-ci done, build
+        check held per ruling; zero repo writes all evening; mutations
+        confined to gitignored target/ 561M->5.4G and the global hooks
+        2->4 with hashes matching esmeraldinha exactly). Step (c):
+        local-ci runtime 21s, sole failure podman-path-availability, red
+        exactly as corrected — and a nuance FOR the product: require_
+        podman correctly diagnoses ABSENT (793-a62g honored) where the
+        litmus shim made the same missing runtime look like a HANG
+        (LITMUS_PODMAN_MODE=real wrapping nothing, 5s stall to 124).
+        Same dependency, two diagnoses, the correct one from the path
+        DESIGNED for the distinction — strengthens the runner-seam
+        filing and vindicates 793-a62g. VARIANCE RULING adopted from
+        pirria's own warning: intra-host session variance (N100 litmus
+        740s prior -> 917s current, +24%) EXCEEDS the inter-host
+        difference (~20%), so the WSL2-vs-native comparison files
+        DIRECTION ONLY — native+N150 faster, consistent across four
+        independent measurements (731 vs 917 litmus, 21 vs 33 local-ci,
+        three per-test pairs at ~30-33%) — and NO percentage; n=1 per
+        host under 24% observed variance cannot support a point
+        estimate. STANDING CALIBRATION INSTRUMENT approved for whoever
+        takes the comparison further: 3x local-ci runtime runs per host
+        (40x cheaper than litmus, identical cross-host failure
+        membership). Advisories quoted for the burndown lanes:
+        dead-env-branches 451/184/24 (829-dkuc), 38 freshness-stale
+        litmus files (2026-07-25 vintage). The 16 content candidates
+        (14 after the record answered two) go to a FRESH session with
+        the packets in hand — deliberate fixture-reading, not
+        end-of-evening name-guessing, per the scout's own request.

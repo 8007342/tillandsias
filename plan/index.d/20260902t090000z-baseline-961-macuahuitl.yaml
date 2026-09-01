@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+
+packets:
+  - packet_id: forge-image-fast-linker-and-sccache
+    order: 961-flnk
+    status: ready
+    kind: fix
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    depends_on: []
+    capability_tags: [forge, images, performance]
+    title: >
+      The forge image ships no fast linker and no compilation cache —
+      plain GNU ld serializes every link tail on the hardware class that
+      feels it most; adding lld (or mold) + sccache is the cheapest
+      floor-hardware win on the board.
+    context: |
+      From the N150 baseline (plan/issues/pirria-n150-floor-baseline-
+      2026-09-02.md): lld, ld.lld, mold, ld.gold and sccache are ALL
+      absent from the guest; RUSTC_WRAPPER unset. On 4-core hosts the
+      serial link tail dominates small-graph builds (cargo -j4 achieves
+      only 1.86x on a 12-crate graph), and every litmus cargo step, the
+      expert bootstrap, and the per-commit plan-crate rebuild all pay
+      it. Image-level: install lld + sccache, set RUSTFLAGS
+      link-arg=-fuse-ld=lld and RUSTC_WRAPPER=sccache with the cache on
+      the persistent tool-cache volume (960-tpop's boundary — an
+      sccache on the overlay would be another rented payload).
+    verifiable_closure: |
+      A fresh floor guest: cargo build -p tillandsias-plan cold shows
+      sccache MISS then a recycle shows HIT with measurably reduced
+      wall (bracket both), and readelf on the produced binary confirms
+      lld linked it. No regression in the x86_64 musl release lane.
+
+events:
+  - packet_id: litmus-low-end-instrument
+    event:
+      type: note
+      ts: "2026-09-02T09:00:00Z"
+      host: macuahuitl
+      summary: >
+        Pirria's 63-measurement floor baseline filed as
+        plan/issues/pirria-n150-floor-baseline-2026-09-02.md (caveat
+        carried: tokei-bootstrap window overlap, single-run). Scheduling
+        canon for the class: fan-out 3.0 not 4 (DRAM bandwidth ceiling,
+        2.2x scaling), nameplate clocks 19% optimistic, zram converts
+        memory pressure to CPU loss at ~7.6 core-s/GiB, external
+        commands 120x builtins, python3 14.1ms/invocation. Missing-tool
+        hazard census included (no openssl/zstd/fio/bc in guests; the
+        runner's awk-not-bc workaround noted as prior art). Independent
+        support for 959's conclusion: cargo achieves 1.86x on small
+        graphs — builds never could have reached 512. New packet
+        961-flnk (fast linker + sccache on the persistent volume) is
+        the baseline's cheapest actionable yield. Candidate triage
+        remains assigned to a FRESH session, declined twice now for the
+        right reason.

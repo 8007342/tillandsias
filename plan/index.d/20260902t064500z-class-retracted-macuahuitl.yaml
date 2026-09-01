@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+
+events:
+  - packet_id: litmus-low-end-instrument
+    event:
+      type: note
+      ts: "2026-09-02T06:45:00Z"
+      host: macuahuitl
+      summary: >
+        FAST-HARDWARE-BUDGET CLASS RETRACTED (pirria, direct isolated
+        timings on a quiet box with PSI total= deltas): all four of
+        their timed-out steps run 25x-214x UNDER budget in isolation
+        (cheatsheet-source 0.12-0.20s vs 5s; external-logs 0.20s vs 30s;
+        uninstall-preserves-vm 0.14s vs 30s; cycle-metrics 2.77s vs
+        10s), all exit 0, essentially zero stall. The class is REFILED
+        WITH ZERO CONFIRMED MEMBERS. The true mechanism is SUITE
+        CONTEXT: CARGO_TARGET_DIR grew 561M -> 5.4G DURING the
+        'instant' suite — the 27 cargo-invoking steps pay full compile
+        cost on a COLD guest against budgets sized on a warm tree. The
+        fix is cache pre-warming/staging (960-tpop's placement question
+        — target lives on the persistent mount but a NEW guest starts
+        cold), not re-budgeting. GENERAL INSTRUMENT WARNING, applies
+        retroactively: the runner's slowest-tests table reports KILL
+        TIMES for timeouts — every TIMEOUT entry is a lower bound equal
+        to its budget, censored data. CASUALTY THE RETRACTION IMPLIES
+        BUT DID NOT STATE, coordinator-derived: esmeraldinha's
+        'within-1%-of-budget' centerpiece (120.2s/+0.17% etc., filed
+        05:15Z) is the SAME censored data — a kill time sits at
+        budget+epsilon BY CONSTRUCTION, so those margins measure the
+        runner's kill latency, not step cost; the table is withdrawn as
+        headroom evidence. The uninstall-preserves-vm ANOMALY DISSOLVES
+        the same way (30.1s was a kill time; true cost 0.14s; no
+        mystery variable — a puzzle built from a censored measurement).
+        ADJUDICATOR FILING CORRECTED at its author's insistence: the
+        SATURATED stamps were likely SUBSTANTIVELY RIGHT on 3 of
+        pirria's 4 (steps fast alone + slow in-suite = starvation by
+        suite contention is the parsimonious read; the PSI avg300
+        refutation was under-powered exactly as its declared caveat
+        warned — the caveat came due). The three DEFECTS stand
+        unchanged: wrong scope, wrong proposition, wrong window, and a
+        verdict inverting on 0.10 of a trailing unit — a broken
+        instrument landing on a defensible answer is still broken, but
+        the record must not claim the stamps were wrong about
+        starvation. 'Runner scored 1 of 4' is corrected to 'closer to 3
+        of 4 on substance, by an indefensible method'. SURVIVORS,
+        unchanged: the pids chain and zero-denial compiles (both
+        hosts), the hook 2->4 diff now HASH-PROVEN on the second host
+        (f7494c13/9801449d, exactly the mtime-forensics prediction),
+        and the WSL2+chip bracket: ~30-33% faster on N150/native across
+        three independently PASSING tests (118.3->80.3, 44.8->31.2,
+        36.6->24.7), cache-state caveat attached.

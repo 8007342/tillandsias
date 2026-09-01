@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+
+events:
+  - packet_id: litmus-low-end-instrument
+    event:
+      type: note
+      ts: "2026-09-02T03:45:00Z"
+      host: macuahuitl
+      summary: >
+        ATTRIBUTION RULING (the provenance error was the coordinator's):
+        the 118.3s forge-policy-binary-discoverability figure is
+        RE-ATTRIBUTED, not struck — 'esmeraldinha, PRIOR session
+        (2026-09-01 night run)'. Striking would delete the best marginal-
+        budget evidence in the corpus: 118.3s PASSING with a 1.7s margin
+        (prior session) -> 120s TIMEOUT (current session, SAME HOST) ->
+        OK (N150/native). A step that crosses its own budget between
+        sessions on one machine and passes on a faster one is the
+        definition of marginal. New attribution rule from the incident:
+        numbers attribute to host+session+regime, never host alone — the
+        coordinator handed pirria 'her top five' unqualified and the
+        error propagated. Same re-attribution for the 30.1s
+        uninstall-preserves-vm entry (prior session; her current run
+        PASSED it while pirria's timed out — see anomaly below).
+        LEAD EVIDENCE FOR THE ADJUDICATOR FILING, per both scouts: the
+        0.10-margin inversion inside ONE log — pirria's four timeouts
+        stamped SATURATED at load1 4.56/7.01/5.59 and NOT-saturated at
+        3.90 against the 4.00 threshold; by PSI all four were genuine
+        budget failures (runner scored 1 of 4, that one by coincidence).
+        One log demonstrates all three defects with no cross-host
+        coordination needed. FIX SHAPE CONFIRMED by both: diff
+        cpu.pressure total= counters before-launch/at-kill (same file
+        the fix already reads, one extra read, degrades to UNCLASSIFIED
+        identically); any avgN is the wrong shape for an interval
+        shorter than N. THIRD SHARED MEMBER of the fast-hardware-budget
+        class: external-logs-layer-shape step1 (30s) — over budget both
+        regimes, starved on neither. ANOMALY RECLASSIFIED, correcting
+        the coordinator's original hunt list: uninstall-preserves-vm
+        step2 INVERTS (slower N100/WSL2 PASSED current-session, faster
+        N150/native TIMED OUT; io.pressure ~0 rules out disk) —
+        regime-sensitive by an UNIDENTIFIED variable, explicitly NOT
+        fast-hardware-budget evidence. NEW RUNNER SEAM: the suite's own
+        podman shim (target/litmus-runtime/bin/podman,
+        LITMUS_PODMAN_MODE=real) FAILS FAST on WSL2's absent runtime
+        but HANGS to a 5s cap on native — an instrument tax pirria
+        subtracts explicitly from elapsed comparisons. Both worktrees
+        verified clean of repo writes.

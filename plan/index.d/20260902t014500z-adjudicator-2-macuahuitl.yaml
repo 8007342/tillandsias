@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+
+events:
+  - packet_id: litmus-low-end-instrument
+    event:
+      type: note
+      ts: "2026-09-02T01:45:00Z"
+      host: macuahuitl
+      summary: >
+        SECOND INDEPENDENT ADJUDICATOR DEFECT (esmeraldinha), which a
+        namespacing fix alone would NOT cure: the comparison load1>ncpus
+        is a UTILIZATION test read as a STARVATION test — load average
+        counts runnable plus uninterruptible tasks, so a healthy cargo
+        -j4 on 4 cores yields load1~=4 BY CONSTRUCTION. The adjudicator
+        is structurally guaranteed to stamp SATURATED on the
+        compile-heavy steps the suite actually runs, and its advice
+        ('re-run before treating as regression') is ANTI-CORRELATED with
+        truth: it fires hardest exactly where the budget failure is most
+        real. Her confirmation of defect 1 is also conclusive by
+        asymmetry: her WSL2 loadavg covers only her VM — the FAVORABLE
+        case — and produced three false stamps anyway (PSI full
+        avg300=1.74%, io/mem ~0). COORDINATOR RETRACTION, formal: the
+        'runner adjudicates at kill time; trust its stamps' instruction
+        is WITHDRAWN for forge guests. Interim pair rule: every timeout
+        classifies by cgroup PSI; stamps are void; UNCLASSIFIED beats a
+        confident wrong verdict. The claimed runner fix now covers BOTH
+        faults: prefer cpu.pressure full avg10 with a stall-fraction
+        threshold (not load-vs-ncpus), fall back to the existing
+        UNCLASSIFIED branch when PSI is absent. PSI-sampling caveats
+        declared by both scouts (point-load1 vs windowed PSI) ride with
+        the evidence. Two-host reclassified budget failures stand:
+        cheatsheet-source-layer-validation 5s and uninstall-preserves-vm
+        30s — budgets sized on fast hardware, the class the paired run
+        exists to find.

@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+
+events:
+  - packet_id: litmus-low-end-instrument
+    event:
+      type: note
+      ts: "2026-09-02T09:45:00Z"
+      host: macuahuitl
+      summary: >
+        Esmeraldinha's independent retraction of her within-1% table
+        arrived after the coordinator's pre-filing (91006178f) and ADDS
+        three things now filed. (1) The censoring SIGNATURE, her
+        articulation kept verbatim: three different budgets each
+        exceeded by ~0.2-0.4s is not three marginal steps — it is one
+        harness's kill overhead measured three times; the cluster
+        tightness she presented as the finding's strength was the
+        artifact's fingerprint. Her isolated cross-host table confirms
+        18x-150x under budget on the shared tests. Her 118.3->120.2
+        MARGINAL-STEP INTERPRETATION is also withdrawn (the step is
+        cargo-adjacent; cross-session delta is cache state) — the
+        re-attribution stands, the interpretation dies. (2) CORRECTION
+        TO THE 3-OF-4 CORRECTION: for cargo-invoking steps the
+        SATURATED stamps are still substantively WRONG — a step
+        spending 30s compiling is not starved, it is WORKING; starvation
+        is runnable-and-denied. The substance question is per-step
+        (starved vs hidden-work) and the adjudicator can distinguish
+        NEITHER — which is the defect stated one level deeper. (3)
+        LEAKED-PROCESS HYPOTHESIS, unestablished, potentially the most
+        serious runner finding yet: cheatsheet-source (NO cargo, 0.2s
+        isolated) times out at 5s in-suite immediately after the
+        panicking compile step in BOTH hosts' logs; hypothesis — the
+        runner's timeout kills the direct child but rustc children
+        SURVIVE, leaking compilation into subsequent steps' windows;
+        contrary datum declared (4 busy-loops did not reproduce). If
+        confirmed it corrupts FOLLOWING steps rather than mislabeling
+        one. The pair's decisive test (back-to-back isolation, sample
+        for surviving rustc between) is AUTHORIZED — cheap,
+        non-destructive, non-compiling beyond the fixture's own step.
+        STEP 2 CLOSED CLEAN on her host (31.70s, sole red = the shared
+        absent-podman root, zero content failures). Project-health
+        numbers banked from both hosts' advisories: FRESHNESS coverage
+        4.4% (69/1578 components stamped); dead-env-branches
+        451/184/24. Her assignment is complete except the authorized
+        leak test; zero repo writes across both steps.
