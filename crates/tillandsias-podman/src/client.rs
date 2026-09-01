@@ -2185,6 +2185,34 @@ fn summary_line(value: &str) -> &str {
     value.lines().next().unwrap_or(value)
 }
 
+/// ORDER 665-zddn. Pull the driver version the STALE CDI spec still believes
+/// out of the OCI runtime's refusal.
+///
+/// The message names the first absent file, e.g.
+/// ``cannot stat `/usr/lib64/libEGL_nvidia.so.610.43.03` ``. The trailing
+/// dotted number is the driver release the spec was generated against, and
+/// printing it beside what `nvidia-smi` reports is what turns "some file is
+/// missing" into "your spec is one driver update behind".
+///
+/// Returns `None` rather than guessing when no `.so.<version>` suffix is
+/// present: an unlabelled remedy is better than a confidently wrong version.
+fn stale_driver_version_from_error(stderr: &str) -> Option<String> {
+    // Take the token after the LAST `.so.` — a path can contain other dots,
+    // and the version is always that suffix.
+    let (_, tail) = stderr.rsplit_once(".so.")?;
+    let version: String = tail
+        .chars()
+        .take_while(|c| c.is_ascii_digit() || *c == '.')
+        .collect();
+    // A bare `.so.` with nothing dotted after it is not a version, and neither
+    // is a lone separator.
+    let trimmed = version.trim_end_matches('.');
+    if trimmed.is_empty() || !trimmed.contains('.') {
+        return None;
+    }
+    Some(trimmed.to_string())
+}
+
 /// Step 15 slice 4: collapse the exit-125 cascade into a single actionable
 /// typed error line.
 ///
@@ -2203,7 +2231,31 @@ fn summary_line(value: &str) -> &str {
 pub(crate) fn classify_typed_launch_failure(
     failure: &crate::backend::CommandFailure,
 ) -> Option<String> {
-    if failure.output.status != Some(125) {
+    // ORDER 665-zddn. This gate used to read `!= Some(125) { return None }`,
+    // and left alone it would have made every CDI arm below DEAD ON ARRIVAL —
+    // a classifier arm that cannot be reached is indistinguishable from one
+    // that does not exist.
+    //
+    // MEASURED on lenovinha 2026-09-01 by replaying this packet's own failure
+    // with a CDI spec naming an absent hostPath:
+    //
+    //   $ podman run --replace --device <kind>=all …
+    //   Error: crun: cannot stat `/usr/lib64/libEGL_nvidia.so.610.43.03`:
+    //          No such file or directory: OCI runtime attempted to invoke a
+    //          command that was not found
+    //   exit status = 127        <-- NOT 125
+    //
+    // 125 is "podman itself refused"; a container-setup failure raised by the
+    // OCI RUNTIME surfaces as 126/127. So the single loudest and least
+    // self-explanatory class of launch failure — the one this packet was filed
+    // for — was categorically unclassifiable, and no amount of pattern-adding
+    // below would have changed that.
+    //
+    // Widening is safe for the three pre-existing arms: each keys on stderr
+    // text specific enough (network-not-found, address-in-use, no-such-image)
+    // that matching it under 126/127 is a better answer than `None`, not a
+    // wrong one.
+    if !matches!(failure.output.status, Some(125) | Some(126) | Some(127)) {
         return None;
     }
     let stderr_lc = failure.output.stderr.to_ascii_lowercase();
@@ -2246,6 +2298,62 @@ pub(crate) fn classify_typed_launch_failure(
             "typed-error: container image is not present locally — run the materializer \
              (`cargo run -p tillandsias-vm-layer --features materialize --bin materialize-cli`) \
              or `podman pull` the missing tag before this spawn"
+                .to_string(),
+        );
+    }
+
+    // ORDER 665-zddn, arm 1: a STALE CDI spec after a host driver update.
+    //
+    // The spec pins driver-versioned library paths. When the host driver
+    // updates underneath it, every one of those paths stops existing, and crun
+    // refuses the container naming the FIRST absent file. Reproduced 2026-08-10
+    // on macuahuitl (610.43.03 -> 610.57.04): the forge launcher died here
+    // AFTER router and git-mirror were already up, leaving a half-provisioned
+    // enclave and an error recoverable only from `podman inspect .State.Error`.
+    //
+    // The stale version is parsed out of the message rather than probed,
+    // because it is the one number that makes the mismatch legible: it is what
+    // the SPEC still believes, and `nvidia-smi` reports what the host actually
+    // has. A classifier that probed the host would also stop being a pure
+    // function of its input, which is what makes it unit-testable at all.
+    if stderr_lc.contains("cannot stat") && stderr_lc.contains("nvidia") {
+        let stale = stale_driver_version_from_error(&failure.output.stderr);
+        let stale_clause = match stale.as_deref() {
+            Some(v) => format!(
+                " The CDI spec still describes driver {v}; compare with the host's \
+                 `nvidia-smi --query-gpu=driver_version --format=csv,noheader`."
+            ),
+            None => String::new(),
+        };
+        return Some(format!(
+            "typed-error: the NVIDIA CDI spec is STALE — it names a driver library that no \
+             longer exists on this host, so the OCI runtime refused the container.{stale_clause} \
+             Remedy: re-run `scripts/ensure-nvidia-cdi.sh`, which regenerates the spec against \
+             the current driver, prunes absent paths, and removes duplicate specs for the same \
+             device kind (order 935-jhh5). The container is recreated on every launch, so no \
+             `podman rm` is needed."
+        ));
+    }
+
+    // ORDER 665-zddn, arm 2: the spec does not RESOLVE at all.
+    //
+    // Two different causes produce a byte-identical message, and both were paid
+    // for in lost time on lenovinha 2026-08-29, so both are named here:
+    //   (a) the spec is somewhere podman does not search. Podman's defaults are
+    //       [/etc/cdi, /var/run/cdi]; ~/.config/cdi is NOT searched unless
+    //       `cdi_spec_dirs` names it — and on an immutable host it is the only
+    //       user-writable persistent option.
+    //   (b) TWO spec files both declare the same device kind, which podman
+    //       reports as unresolvable rather than as a conflict.
+    if stderr_lc.contains("unresolvable cdi devices") || stderr_lc.contains("unresolvable cdi") {
+        return Some(
+            "typed-error: podman could not resolve the requested CDI device. Two different \
+             causes print this identical message: (1) the spec is in a directory podman does \
+             not search — its defaults are [/etc/cdi, /var/run/cdi], and ~/.config/cdi counts \
+             only once `cdi_spec_dirs` in ~/.config/containers/containers.conf names it; \
+             (2) TWO spec files declare the same device kind, which reads as unresolvable \
+             rather than as a conflict. Remedy for both: `scripts/ensure-nvidia-cdi.sh` \
+             (order 935-jhh5). Verify with `podman --help | grep cdi-spec-dir`."
                 .to_string(),
         );
     }
@@ -2776,10 +2884,10 @@ mod tests {
         );
     }
 
-    /// Non-125 exit codes are not classified — we don't want false
+    /// Statuses outside {125, 126, 127} are not classified — we do not want false
     /// positives swallowing legitimate runtime errors.
     #[test]
-    fn classify_typed_only_fires_on_125() {
+    fn classify_typed_fires_only_on_podman_and_oci_runtime_statuses() {
         let f = fake_failure(Some(1), "Error: network not found");
         assert!(classify_typed_launch_failure(&f).is_none());
         let f = fake_failure(None, "Error: network not found");
@@ -2791,6 +2899,104 @@ mod tests {
     #[test]
     fn classify_typed_unknown_125_falls_through() {
         let f = fake_failure(Some(125), "Error: some unrecognized failure");
+        assert!(classify_typed_launch_failure(&f).is_none());
+    }
+
+    /// ORDER 665-zddn. The exact stderr podman produced on this host when a CDI
+    /// spec named an absent driver library. Captured from a live replay
+    /// (2026-09-01), not composed by hand — a classifier tested against an
+    /// invented string proves only that it matches the string you invented.
+    const STALE_CDI_STDERR: &str = "Error: crun: cannot stat \
+         `/usr/lib64/libEGL_nvidia.so.610.43.03`: No such file or directory: \
+         OCI runtime attempted to invoke a command that was not found";
+
+    /// ORDER 665-zddn, and the reason the status gate had to move.
+    ///
+    /// MEASURED: this failure exits **127**, not 125. Under the old
+    /// `!= Some(125) -> None` gate every arm below was unreachable, so this
+    /// test is the one that would have caught a classifier that looked
+    /// complete and could never fire.
+    #[test]
+    fn a_stale_nvidia_cdi_spec_is_classified_at_the_oci_runtime_exit_status() {
+        let f = fake_failure(Some(127), STALE_CDI_STDERR);
+        let typed = classify_typed_launch_failure(&f)
+            .expect("exit 127 is the measured status for this failure; it must classify");
+        assert!(
+            typed.starts_with("typed-error: the NVIDIA CDI spec is STALE"),
+            "got: {typed}"
+        );
+        assert!(
+            typed.contains("610.43.03"),
+            "the stale driver version makes the mismatch legible; got: {typed}"
+        );
+        assert!(
+            typed.contains("ensure-nvidia-cdi.sh"),
+            "the operator needs the exact remediation, not a description of it; got: {typed}"
+        );
+        assert!(
+            typed.contains("nvidia-smi"),
+            "naming the stale version without the command for the current one \
+             leaves the comparison unmakeable; got: {typed}"
+        );
+    }
+
+    /// ORDER 665-zddn. Same class, raised by podman rather than crun.
+    #[test]
+    fn an_unresolvable_cdi_device_names_both_causes_of_the_identical_message() {
+        let f = fake_failure(
+            Some(125),
+            "Error: setting up CDI devices: unresolvable CDI devices nvidia.com/gpu=all",
+        );
+        let typed = classify_typed_launch_failure(&f).expect("should classify");
+        assert!(
+            typed.starts_with("typed-error: podman could not resolve the requested CDI device"),
+            "got: {typed}"
+        );
+        // Both causes print this byte-identical message; naming only one sends
+        // the operator down a blind alley, which is what cost time on
+        // lenovinha 2026-08-29.
+        assert!(typed.contains("cdi_spec_dirs"), "got: {typed}");
+        assert!(
+            typed.contains("same device kind"),
+            "the duplicate-spec cause must be named too; got: {typed}"
+        );
+    }
+
+    /// ORDER 665-zddn, PARSER unit + its refusal case.
+    #[test]
+    fn the_stale_driver_version_parser_refuses_rather_than_guesses() {
+        assert_eq!(
+            stale_driver_version_from_error(STALE_CDI_STDERR).as_deref(),
+            Some("610.43.03")
+        );
+        // Trailing punctuation after the version must not be absorbed.
+        assert_eq!(
+            stale_driver_version_from_error("cannot stat `/lib/libfoo.so.570.1`: nope").as_deref(),
+            Some("570.1")
+        );
+        // No version suffix at all: an unlabelled remedy beats a confident
+        // wrong number.
+        assert_eq!(
+            stale_driver_version_from_error("cannot stat `/lib/libfoo.so`").as_deref(),
+            None
+        );
+        assert_eq!(
+            stale_driver_version_from_error("no library mentioned here").as_deref(),
+            None
+        );
+        // A single undotted number is not a driver version.
+        assert_eq!(
+            stale_driver_version_from_error("cannot stat `/lib/libfoo.so.6`").as_deref(),
+            None
+        );
+    }
+
+    /// ORDER 665-zddn SCOPE CONTROL. Widening the gate to the OCI-runtime
+    /// statuses must not turn the classifier into a catch-all: an
+    /// unrecognized 127 still falls through to the stage-keyed hint.
+    #[test]
+    fn an_unrecognized_oci_runtime_failure_still_falls_through() {
+        let f = fake_failure(Some(127), "Error: something else entirely went wrong");
         assert!(classify_typed_launch_failure(&f).is_none());
     }
 

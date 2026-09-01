@@ -17105,6 +17105,26 @@ plan_index:
             A launch failure after partial enclave provisioning leaves a durable one-line breadcrumb on the host (not only in a vanishing terminal window) naming the failed service and the inspect command.
 
       events:
+        - type: progress
+          ts: "2026-09-01T19:05:00Z"
+          agent_id: "linux-lenovinha-claude-20260901t185307z"
+          host: lenovinha
+          summary: |
+            Error classification shipped (EC1, EC3). TWO OF THIS PACKET'S RECORDED PREMISES ARE WRONG, both measured on lenovinha 2026-09-01 by replaying the failure with a CDI spec naming an absent hostPath.
+
+            CORRECTION 1 — "the stale Created container is reused, not recreated" IS NOT TRUE, and EC2's recreate strand was already satisfied before this packet was filed. build_inference_run_args has emitted --replace since 2026-07-12 (d128d4651, extended 89c97fc3e 2026-07-17), i.e. four weeks BEFORE the 2026-08-10 report, and the ensure guard falls through to run_container_observed for anything not Running. Measured directly: two consecutive failing launches produced container ids 40dd62fb18a2 then 3904cc2474a8 — a NEW container each time. What the operator saw was a Created husk after every attempt and read it as one husk persisting. So `podman rm tillandsias-inference` was never the load-bearing half of the recorded remediation; regenerating the CDI spec was. The classifier now says so explicitly, so the next operator does not repeat the unnecessary rm.
+
+            CORRECTION 2 — and this one would have made the obvious fix INERT. The failure exits 127, NOT 125. classify_typed_launch_failure early-returned on `status != Some(125)`, so every CDI arm added to it would have been unreachable: a classifier that reads complete and can never fire. 125 is "podman itself refused"; a container-setup failure raised by the OCI RUNTIME surfaces as 126/127. The gate now admits {125,126,127}, which is safe for the three pre-existing arms because each keys on stderr text specific enough that matching it under 126/127 is a better answer than None.
+
+            SHIPPED: two arms in crates/tillandsias-podman/src/client.rs classify_typed_launch_failure — (a) stale spec after a driver update, naming the stale version parsed out of the message plus the nvidia-smi command for the current one and scripts/ensure-nvidia-cdi.sh; (b) unresolvable-CDI, which names BOTH causes of the byte-identical message (spec outside podman's searched dirs; two specs declaring one device kind). Plus stale_driver_version_from_error, which refuses rather than guessing when no .so.<version> suffix is present.
+
+            FIVE MUTATIONS, each asserted to LAND (occurrence count checked) before its verdict was trusted: reverting the gate to 125-only, disabling each arm, disabling the parser's refusal, and renaming a test out from under the litmus filter. All five bite.
+
+            LITMUS (EC3): litmus-tray-network-bootstrap.yaml step 7/7, behavioural rather than a source grep (634-39ik). It asserts the arms PASS and that exactly 4 RAN — `cargo test -- <filter>` exits 0 when the filter matches nothing, so a renamed test would otherwise leave the step green over an empty selection. Verified: renaming one test makes the step fail with "3 ran".
+
+            EC1 deviation, stated rather than hidden: the message names the STALE driver version (parsed from the error) and the exact command for the current one, instead of probing nvidia-smi inline. Probing would make the classifier stop being a pure function of its input, which is what makes it unit-testable at all. If the coordinator wants the live version inlined, that is a signature change and a separate decision.
+
+            NOT DONE: EC4, the durable host breadcrumb. It is greenfield on Linux — the only existing launch-failure breadcrumb is Windows-side (windows-tray/src/notify_icon.rs writes launch-failure-diagnostics.json); the Linux launcher only returns a String and writes stderr. The natural anchor is tillandsias_core::config::state_dir(). Left unclaimed rather than half-built.
         - type: note
           ts: "2026-08-29T23:27:23Z"
           agent_id: "linux-lenovinha-claude-20260828t223829z"

@@ -46,6 +46,11 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok: classify_typed_launch_failure threaded into format_observed_launch_failure"
 
+  - step: "the CDI launch-failure classification arms pass against the measured OCI-runtime stderr (665-zddn)"
+    command: "scripts/litmus-helper-tray-network-bootstrap.sh check-cdi-classification-arms"
+    timeout_ms: 180000
+    expected_behavior: "ok: cdi-classification-arms:4 passed"
+
 observability:
   traces:
     - "@trace spec:enclave-network"
