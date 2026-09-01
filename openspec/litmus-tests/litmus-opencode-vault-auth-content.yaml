@@ -20,10 +20,13 @@ preconditions:
   - cargo, bash, and jq are available in PATH
 
 critical_path:
-  - step: "exercise free, Vault-derived, installed-binary, no-file, and rollback paths"
+  - step: "exercise free, Vault-derived, installed-binary, and no-file paths"
+    # The last-good rollback arm retired with the opencode curl lane
+    # (operator ruling 2026-08-31) — the npm on-demand channel carries its
+    # own last-good record, pinned by litmus:harness-rollback-shape.
     command: "scripts/test-opencode-vault-auth-content.sh"
     timeout_ms: 120000
-    success_pattern: "PASS: OpenCode Vault auth content, no-file assertion, and last-good rollback"
+    success_pattern: "PASS: OpenCode Vault auth content and no-file assertion"
     failure_pattern: "FAIL:"
 
   - step: "prove the OpenCode Vault policy has exactly one read-only data path"
