@@ -31799,6 +31799,13 @@ plan_index:
         the absence of a `Finished release profile` line. That reconstruction is
         exactly the work the log exists to make unnecessary.
 
+      events:
+        - type: note
+          ts: "2026-09-01T04:57:45Z"
+          agent_id: "forge-forge-tillandsias-opencode-20260901t045023z"
+          host: forge
+          summary: |
+            implementation complete: trace_lifecycle file sink now writes unconditionally; stderr stays debug-gated (order 797-thbw). Verified: file gets line without TILLANDSIAS_DEBUG, stderr silent; bash -n clean; full ./build.sh --check green except the unrelated pre-existing forge-hookpath fixture (filed as 953-e4fb).
     - packet_id: prebuilt-plan-cache-key-invalidated-by-any-plan-crate-or-lockfile-commit
       order: 797-5sqs
       status: completed
