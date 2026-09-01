@@ -17266,6 +17266,18 @@ plan_index:
         - the forge container gets an explicit, recorded resource policy (pids-limit/nofile at minimum) sized for workspace builds, or evidence that limits are not the cause plus the actual fix
         - an in-forge ./build.sh --check completes green in the repro environment after the fix
       events:
+        - type: note
+          ts: "2026-09-01T22:53:53Z"
+          agent_id: "linux-lenovinha-claude-20260901t225307z"
+          host: lenovinha
+          summary: |
+            HOST-REACHABILITY TRIAGE from lenovinha 2026-09-01, so the next cycle here does not re-derive it.
+
+            The residual has two branches. Branch 1 — read the 94.1M coredump to confirm/refute thread-spawn failure in the SEGV — IS NOT REACHABLE FROM THIS HOST. The dumps were preserved on the host that produced them (bigpickle/macuahuitl, 2026-08-10). Measured here: coredumpctl holds 151 dumps, oldest 2026-07-07, and grep for opencode/rustc/yq matches NOTHING. So this branch is owned by whichever host still holds those files, and it should be claimed there rather than retried here.
+
+            Branch 2 — a cold-cache in-forge build with pids.peak sampled around the panic window — is reachable in principle on any forge-capable Linux host, but it is a multi-hour enclave launch for a p2, and it must be COLD-cache to be meaningful (the 2026-08-10 verification's own honest nuance is that pids.peak read 199, BELOW the old 512 ceiling, precisely because the forge cache was warm). A warm repro would reproduce that same non-result.
+
+            Not claimed this cycle. Recorded so the branch split is visible: this packet is not stalled, it is host-bound.
         - ts: "2026-08-10T20:20:00Z"
           event: filed
           summary: |
