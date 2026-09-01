@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tray-help-prescribes-the-one-capture-pattern-that-silently-fails
+    field: status
+    value: completed
+    ts: "2026-09-01T04:03:05Z"
+    host: windows
+
+events:
+  - packet_id: tray-help-prescribes-the-one-capture-pattern-that-silently-fails
+    event:
+      type: completed
+      ts: "2026-09-01T04:03:05Z"
+      host: windows
+      summary: >
+        status 'completed' with evidence_refs: 0c914c15a; cargo test -p tillandsias-windows-tray help_text_documents_all_cli_modes = ok (1 passed), and the mutation control FAILED with the new assert's own diagnostic when the wrapper tokens were removed
+  - packet_id: tray-help-prescribes-the-one-capture-pattern-that-silently-fails
+    event:
+      type: note
+      ts: "2026-09-01T04:03:05Z"
+      host: windows
+      summary: >
+        help text now names cmd.exe /c and Start-Process -Wait; two asserts pin that the OUTPUT NOTE names a WAITING construct and never returns to prescribing a bare redirect. Re-measured on the shipped binary first: A (prescribed) empty exit + 0 bytes, B/C/D exit 2 with output
