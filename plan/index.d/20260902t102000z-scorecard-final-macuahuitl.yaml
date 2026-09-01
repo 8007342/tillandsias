@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+
+events:
+  - packet_id: litmus-low-end-instrument
+    event:
+      type: note
+      ts: "2026-09-02T10:20:00Z"
+      host: macuahuitl
+      summary: >
+        ADJUDICATOR SCORECARD, THIRD AND FINAL REVISION, at pirria's own
+        request restoring toward their original: the '3 of 4
+        substantively right' concession was an over-correction produced
+        by a MISSING CATEGORY. With esmeraldinha's HIDDEN-WORK category
+        (a fixture whose declared command conceals a build — proof:
+        external-logs declares a cargo test whose own body reports '0
+        passed, 13 filtered, 0.00s'; the step tests nothing and builds
+        everything), the stamps are substantively wrong nearly
+        everywhere: hidden-work steps are WORKING not starved, and
+        uninstall-preserves-vm was 0.14s isolated. Honest line: near the
+        original '1 of 4', reached the long way. Three participants
+        wrong in three directions on one item; the missing category was
+        the piece — filed as the method lesson it is. DECISIVE
+        MEASUREMENT closing 959's build-fanout question: during a real
+        cargo build, max concurrent rustc = 2 and max cgroup.procs = 18
+        against pids.max=512 (pgrep -x exact-name sampler, self-match
+        impossible) — a compiling forge sits at 3.5% OF THE CEILING,
+        measured directly. Whatever 512 needs sizing against, it is not
+        compiles. ORPHAN HYPOTHESIS: not supported, not refuted —
+        pirria's quick test never reproduced suite conditions (warm
+        target fails fast before the expensive compile) and they
+        correctly REFUSED to file a null result from an unfaithful
+        test; the faithful version (persistent sampler beside a full
+        litmus run) is specced and unclaimed. THE ONE REMAINING
+        MYSTERY, for a fresh session with packets in hand:
+        cheatsheet-source-layer-validation — compiles nothing, no
+        orphans observed, 0.12-0.28s isolated on BOTH hosts, blew its
+        5s budget in-suite on BOTH. Two hosts, one test, one
+        contradiction, zero explanations that survive. Both scouts now
+        stood down; the low-end lane's first two nights are the
+        densest evidence-producing arc on the ledger.
