@@ -2741,19 +2741,52 @@ opencode_restore_curl_last_good() {
     harness_probe opencode "$target"
 }
 
+# ORDER 797-t9m7. TWO DIFFERENT FAILURES USED TO PRINT THE SAME LINE, and the
+# more serious one printed a sentence that was not true.
+#
+# This function announced "rolling back to last-good" BEFORE checking whether a
+# last-good existed. On a cold cache nothing had ever been recorded, so the
+# harness reported a rollback to a binary that was never there — measured on
+# yoga across three cold launches (2026-08-17), where
+# $HARNESS_CURL_ROOT/opencode/bin stayed empty every time.
+#
+# It was also emitted at trace_lifecycle level, which returns early unless
+# TILLANDSIAS_DEBUG is set. So in normal operation the curl provisioning path
+# failed completely silently, on every launch, while the lane kept working
+# because opencode resolves from the NPM harness path instead
+# (NPM_CONFIG_PREFIX/bin is earlier on PATH). A failure invisible in normal
+# operation and mis-described in debug output is the fail-loud defect this
+# packet is filed under.
+#
+# WHAT THIS DOES NOT CHANGE, deliberately. Which binary the forge executes is
+# untouched: opencode still comes from npm, exactly as before. Retiring the
+# curl path or making it succeed both alter fleet provisioning and were left to
+# the per-host-kind treatment 793-rb9u is getting — yoga's 2026-08-17 judgement,
+# and it still holds. This slice only makes the existing outcome legible.
 opencode_validate_or_rollback() {
-    local bin="$1"
+    local bin="$1" last_good
     OPENCODE_ROLLBACK_USED=0
     if [ -x "$bin" ] && harness_probe opencode "$bin"; then
         opencode_record_curl_last_good "$bin" >/dev/null 2>&1 || true
         return 0
     fi
-    trace_lifecycle "harness" "opencode refresh FAILED auth contract — rolling back to last-good"
-    if opencode_restore_curl_last_good "$bin"; then
-        OPENCODE_ROLLBACK_USED=1
-        trace_lifecycle "harness" "opencode rollback to last-good OK"
-        return 0
+    last_good="$(opencode_curl_last_good_path)"
+    if [ -x "$last_good" ]; then
+        trace_lifecycle "harness" "opencode refresh FAILED auth contract — rolling back to last-good"
+        if opencode_restore_curl_last_good "$bin"; then
+            OPENCODE_ROLLBACK_USED=1
+            trace_lifecycle "harness" "opencode rollback to last-good OK"
+            return 0
+        fi
+        # A recorded last-good that will not restore is worse than none: the
+        # snapshot exists and is not usable, so say so rather than folding it
+        # into the empty-cache case below.
+        echo "[harness] WARNING: opencode rollback FAILED — a curl-side last-good exists at $last_good but could not be restored or did not pass the auth contract (order 797-t9m7)." >&2
+        return 1
     fi
+    # THE EMPTY-CACHE CASE, which is the one that was lying. There is no
+    # last-good because the curl path has never once succeeded here.
+    echo "[harness] WARNING: opencode curl-install produced no usable binary and there is NO last-good to roll back to ($last_good does not exist). The curl provisioning path is not populating ${HARNESS_CURL_ROOT}/opencode/bin. This is not fatal: opencode runs from the npm harness path, which carries its own last-good and auth/render contracts. It means the SECOND provisioning path is inert — see order 797-t9m7 for the retire-or-repair decision." >&2
     return 1
 }
 

@@ -3760,16 +3760,10 @@ fn shared_id_to_int(id: &str) -> i32 {
     }
 }
 
-/// Convert a shared `MenuItem` tree into a DBus `MenuNode` tuple.
-///
-/// This is the only place the `MenuItem` → `(i32, props, children)`
-/// translation happens. The shared builder's string IDs are mapped to
-/// integer IDs via [`shared_id_to_int`].
-fn shared_menu_item_to_node(item: &shared_menu::MenuItem) -> MenuNode {
-    shared_menu_item_to_node_depth(item, -1)
-}
-
-/// Convert a shared item to a dbusmenu node, including children only to
+/// Convert a shared `MenuItem` tree into a DBus `MenuNode` tuple. This is
+/// the only place the `MenuItem` → `(i32, props, children)` translation
+/// happens; the shared builder's string IDs are mapped to integer IDs via
+/// [`shared_id_to_int`]. Includes children only to
 /// `depth` more levels (`-1` = unlimited, `0` = none — dbusmenu's
 /// GetLayout `recursionDepth` semantics). A depth-pruned submenu KEEPS its
 /// `children-display=submenu` property: that property is how the client
@@ -3857,11 +3851,8 @@ fn enforce_unique_nonroot_ids(items: &mut Vec<shared_menu::MenuItem>) {
     walk(items, &mut seen);
 }
 
-/// Depth-first search for the shared item whose dbusmenu id is `id`./// Depth-first search for the shared item whose dbusmenu id is `id`.
-fn find_shared_item<'a>(
-    items: &'a [shared_menu::MenuItem],
-    id: i32,
-) -> Option<&'a shared_menu::MenuItem> {
+/// Depth-first search for the shared item whose dbusmenu id is `id`.
+fn find_shared_item(items: &[shared_menu::MenuItem], id: i32) -> Option<&shared_menu::MenuItem> {
     for item in items {
         if shared_id_to_int(&item.id) == id {
             return Some(item);
@@ -6697,7 +6688,6 @@ mod tests {
         );
     }
 
-    #[test]
     // 944-jaef, sixth freeze — emission coalescing. A burst of state
     // changes must collapse to one signal group per cooldown window, with
     // the suppressed tail flagged for the main loop's trailing flush.
@@ -6847,6 +6837,7 @@ mod tests {
         assert!(unknown.is_err(), "unknown parent_id must error, not guess");
     }
 
+    #[test]
     fn cloud_about_to_show_with_fresh_cache_does_not_request_immediate_relayout() {
         let state = TrayStateBuilder::new()
             .forge_available(true)

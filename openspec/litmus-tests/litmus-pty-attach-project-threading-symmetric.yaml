@@ -48,11 +48,16 @@ critical_path:
     expected_behavior: "launch_spec"
     timeout_ms: 3000
 
-  - step: "windows-tray calls launch_spec with project.as_deref()"
-    # Pinning the exact 4-arg call shape catches a regression to None on
-    # the second positional argument (slice-4c.2 macOS shape pre-m10).
-    command: "grep -F 'launch_spec(&intent, project.as_deref(), 24, 80)' crates/tillandsias-windows-tray/src/notify_icon.rs"
-    expected_behavior: "launch_spec(&intent, project.as_deref(), 24, 80)"
+  - step: "windows-tray threads project through launch_pty into launch_spec"
+    # Pinning the call shape catches a regression to None on the project
+    # argument (slice-4c.2 macOS shape pre-m10). Since the single-launch-path
+    # refactor (945-vpg3 forge lane, 2026-08-31) windows-tray no longer calls
+    # launch_spec directly at each site: every arm goes through launch_pty,
+    # which passes the project on to launch_spec with the default geometry.
+    # The invariant is unchanged — project.as_deref() must survive the hop —
+    # so pin BOTH halves of the two-hop path.
+    command: "grep -F 'launch_pty(&intent, project.as_deref())' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'launch_spec(intent, project, 24, 80)' crates/tillandsias-windows-tray/src/notify_icon.rs"
+    expected_behavior: "launch_spec(intent, project, 24, 80)"
     timeout_ms: 3000
 
   # macOS threads a live seed size since 3d1cba4c/terminal-attach@v2 (the
