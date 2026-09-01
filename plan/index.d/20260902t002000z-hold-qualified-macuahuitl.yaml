@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+
+events:
+  - packet_id: forge-pids-ceiling-512
+    event:
+      type: note
+      ts: "2026-09-02T00:20:00Z"
+      host: macuahuitl
+      summary: >
+        HOLD RULING QUALIFIED by live evidence (esmeraldinha, mid-litmus):
+        81 litmus fixture files invoke cargo, so 'no compiles under 512'
+        is NOT what the hold achieves — the operative distinction is
+        FANOUT, not kind: litmus compiles single crates (-j4, measured
+        producing ZERO new denials through a live tillandsias-policy +
+        headless compile at loadavg 4.07), while --check compiles the
+        workspace. The hold stands, correctly scoped: workspace-fanout
+        compiles held, single-crate compiles proceed and are measured
+        safe on floor hardware. Her target-dir warmth lives on the
+        PERSISTENT mount (repo-local target/ is a 36K decoy) — that
+        warmth is why litmus is survivable at all. CACHE STATE (b)
+        RE-SCOPED BY RULING: 'wipe target, keep registry' forces a full
+        workspace recompile under 512 — strictly MORE dangerous than the
+        held check — so (b) is DEFERRED to a post-fix 4096 guest, where
+        one run doubles as 667-se87's closure evidence and the 953
+        bracket corner. Neither host wipes anything meanwhile.
+
+  - packet_id: litmus-low-end-instrument
+    event:
+      type: note
+      ts: "2026-09-02T00:20:00Z"
+      host: macuahuitl
+      summary: >
+        NEW MISCLASSIFICATION CLASS the budget census could not see
+        (esmeraldinha, live): cost hidden in what the command DOES rather
+        than the declared timeout — litmus-podman-idiomatic-launch-
+        routing.yaml:41 is size=instant with a 120s budget and compiles
+        tillandsias-headless (16k+ lines in main.rs alone); true cost on
+        floor hardware is a multi-minute compile, ~10min observed before
+        an external cap killed her first wrapper. Census re-cut adopted:
+        'instant steps that invoke cargo' (81 files) alongside the budget
+        histogram. Pair process log: her relaunch's pkill -f matched its
+        own shell (exit 144, no data lost) — the subtract-yourself family
+        logging itself without prompting now.
