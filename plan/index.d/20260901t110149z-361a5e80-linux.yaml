@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: e2e-step1-blocks-the-destruction-gate-on-a-forge-lane-failure
+    field: status
+    value: completed
+    ts: "2026-09-01T11:01:49Z"
+    host: linux
+
+events:
+  - packet_id: e2e-step1-blocks-the-destruction-gate-on-a-forge-lane-failure
+    event:
+      type: completed
+      ts: "2026-09-01T11:01:49Z"
+      host: linux
+      summary: >
+        status 'completed' with evidence_refs: 6ef43661e; ./build.sh --check green; deliverable was 'a decision, recorded' and the decision plus its rejected alternative are written into skills/build-install-and-smoke-test-e2e/SKILL.md where the runbook's reader will meet them; premise verified against build.sh (_run_litmus_phase post-build e2e) and the litmus header (phase:post-build size:e2e) rather than taken from the packet
+  - packet_id: e2e-step1-blocks-the-destruction-gate-on-a-forge-lane-failure
+    event:
+      type: note
+      ts: "2026-09-01T11:01:49Z"
+      host: linux
+      summary: >
+        stop rule now discriminates build/install failures from a post-build forge-lane failure; forge gate deliberately NOT relocated, with the reason recorded
