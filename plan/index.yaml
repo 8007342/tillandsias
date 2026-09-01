@@ -42200,6 +42200,23 @@ plan_index:
         chosen, the invariant worth stating is that no lock covering ALL
         subscribers may be held across an unbounded wait on ONE of them.
 
+      events:
+        - type: progress
+          ts: "2026-09-01T17:22:00Z"
+          agent_id: "linux-lenovinha-claude-20260901t165545z"
+          host: lenovinha
+          summary: |
+            Write deadline landed. broadcast_control_envelope no longer waits unbounded on any one subscriber.
+
+            WHAT SHIPPED: CONTROL_SUBSCRIBER_WRITE_TIMEOUT (5s, SO_SNDTIMEO) applied in a new register_control_subscriber(), which is the only door into the broadcast set. A stream whose deadline cannot be set is REFUSED rather than registered undeadlined: dropping one subscriber costs that peer its broadcasts, while one undeadlined subscriber costs every peer every future broadcast. Eviction in the retain is now logged with error_kind, because retain dropped failed subscribers silently and an operator cannot otherwise distinguish an evicted tray from one that never subscribed.
+
+            SCOPE: SO_SNDTIMEO bounds writes only, so the connection thread's blocking read_control_envelope on the same stream is unaffected. This is why the deadline can be applied at registration without turning idle subscribers into read timeouts.
+
+            MUTATION-TESTED, both arms, with the mutation asserted to land first (occurrence count 1 -> 0 before trusting any verdict). Replacing the deadline with None fails both tests.
+
+            TEST SHAPE IS DELIBERATE: the regression's signature is a HANG, not a red assertion, because write_all blocks inside the broadcast and an in-loop wall-clock assert can never be reached to fire. A first version of the arm asserted in-loop; under mutation it hung past 300s, which stalls the gate rather than reddening it. The broadcast now runs on a worker thread watched by recv_timeout, so the same mutation fails in 60s. The stalled peer's far end is held alive on purpose: dropping it would close the socket and evict via EPIPE, a different path that would pass even with the wedge present.
+
+            The 828-r2ek frame bound does not fix this and is not read as fixing it.
     - packet_id: older-app-silently-downgrades-a-newer-enclave
       order: 834-r6vn
       status: ready
