@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+
+status:
+  - packet_id: merge-to-main-runbook-speaks-legacy-versions
+    field: status
+    value: completed
+    ts: "2026-09-01T12:05:00Z"
+    host: macuahuitl
+
+events:
+  - packet_id: merge-to-main-runbook-speaks-legacy-versions
+    event:
+      type: completed
+      ts: "2026-09-01T12:05:00Z"
+      host: macuahuitl
+      summary: >
+        status 'completed' with evidence_refs: the SKILL.md rewrite in this
+        commit; hermetic dry-run demonstrated live (scratch bump of VERSION
+        56.8.31.3 on 2026-09-01 derives 56.9.1.1 — the closure's exact
+        expected new-day derivation — with the real VERSION untouched, after
+        catching that bump-version.sh anchors VERSION to its own script path
+        so a naive scratch would have bumped the real file). Step 1 now
+        DECIDES THE PROMOTION PATH first (promote-existing flips the blessed
+        release's prerelease flag and skips cut steps — the v56.8.31.3
+        stable path, so blessed artifacts are never discarded for a fresh
+        cut) and delegates all version derivation to bump-version.sh with
+        the malformed-hybrid hazard named. Step 4 carries the 702-eusw
+        bump-alone rule with the live incident. The MSIX guardrail now
+        expects the honest withhold on unsigned builds instead of naming the
+        MSIX missing. Symlinked runtimes inherit automatically.
