@@ -785,3 +785,25 @@ removals. Assert on BEHAVIOR (run the diagnostic without jq and inspect the
 output), or at minimum `grep -v '^\s*#'` before matching. Same disease as
 grep-greens-on-comments, opposite direction; file findings against either
 shape on sight.
+
+## Bound and still unrunnable — content verification is not delivery verification (2026-09-01)
+
+litmus:codex-e2e-launch-parity shipped with a top-level `steps:` key where
+the runner reads `critical_path:` — zero steps parsed, the whole file
+failed, fleet-wide, on every full run. The author had verified ALL NINE
+step commands by executing them in a shell (every one passed, reported as
+evidence), the YAML validated, and the 660-ryhn binding gate confirmed the
+file was bound. Two green checks standing over a file no runner could
+execute: 660-ryhn catches "nothing will ever run this"; nothing caught "the
+runner cannot parse this once it tries". And this is 944-vim8 EXACTLY, one
+file format over — same author, same key name even (`steps:` unread by a
+reader that wants another block) — the guard's own author reproduced the
+class the guard exists for, in a corpus the guard does not cover. The
+rules: (1) verifying a fixture means running it THROUGH ITS RUNNER at least
+once, not executing its commands by hand — the delivery mechanism is part
+of the thing under test; (2) when a reader consumes only named keys, every
+NEW file for that reader gets one parse-probe at bind time (the 660-ryhn
+extension), because the unread-key class recurs across file formats and
+survives every check that doesn't enter the reader's own code path. The
+runner's loud refusal is what surfaced this in hours instead of weeks —
+loud-on-unparseable is load-bearing; never soften it.
