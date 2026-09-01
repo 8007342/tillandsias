@@ -1028,6 +1028,52 @@ pub fn enumerate_render_nodes_at(root: &std::path::Path, vantage: Vantage) -> Ve
     out
 }
 
+/// Upgrade a node to [`Proof::Placed`] from a runtime's reported residency.
+///
+/// 793-zumy REMAINING 2, second half. Takes the residency as a VALUE rather than
+/// fetching it, which keeps the only rung that proves a lane decidable without a
+/// network round trip and testable without a live runtime. The caller supplies
+/// `resident_bytes` — in practice the sum of `size_vram` across
+/// `ollama /api/ps` — and the IO stays at the caller's layer where it can be
+/// mocked, timed, and refused independently.
+///
+/// EXACTLY-ONE-CANDIDATE OR NOTHING, and this is the load-bearing rule.
+/// `/api/ps` reports residency per MODEL, never per DEVICE. On a host with one
+/// candidate node the attribution is unambiguous; with two it is a guess, and a
+/// guess recorded as `Placed` is precisely this packet's failure class — a label
+/// standing in for the wiring it names, one rung higher and therefore worse.
+/// With zero or several candidates this returns `None` and upgrades nothing.
+///
+/// CANDIDATES ARE `Reachable` NODES, not merely enumerated ones: a runtime
+/// cannot have placed weights on a device the work's vantage cannot even stat.
+/// That ordering is why the rungs are ordered.
+///
+/// NOT A CAPACITY CLAIM, restating the enum's own caveat because this is the
+/// function that could quietly become one: non-zero residency proves weights
+/// landed, not that the device does the compute (a partial offload reports
+/// non-zero VRAM with most layers on CPU) and not that a larger model would fit.
+///
+/// Returns the node index upgraded, or `None` when nothing could be attributed.
+pub fn upgrade_placed(nodes: &mut [DrmRenderNode], resident_bytes: u64) -> Option<usize> {
+    if resident_bytes == 0 {
+        return None;
+    }
+    let mut candidates = nodes
+        .iter()
+        .enumerate()
+        .filter(|(_, n)| n.proof >= Proof::Reachable);
+    let (idx, _) = candidates.next()?;
+    if candidates.next().is_some() {
+        // Two or more reachable nodes and a per-model residency figure: the
+        // honest answer is that we cannot say WHICH one, so we say nothing.
+        return None;
+    }
+    if nodes[idx].proof < Proof::Placed {
+        nodes[idx].proof = Proof::Placed;
+    }
+    Some(idx)
+}
+
 /// Upgrade `Enumerated` nodes to [`Proof::Reachable`] by STATTING them from the
 /// vantage the work runs in.
 ///
@@ -1889,6 +1935,58 @@ mod tests {
         assert_eq!(d[0].proof, Proof::Placed);
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 793-zumy REMAINING 2, second half. Five arms, four negative, because the
+    /// rung that proves a lane is the one where a wrong upgrade costs most.
+    #[test]
+    fn placed_upgrades_only_on_unambiguous_attribution() {
+        use super::{DrmRenderNode, Proof, Vantage};
+        let mk = |node: &str, proof| DrmRenderNode {
+            node: node.to_string(),
+            vendor_id: 0x1002,
+            device_id: 0x1114,
+            driver: "amdgpu".to_string(),
+            vantage: Vantage::Container,
+            proof,
+        };
+
+        // ARM 1 — one reachable node, non-zero residency: UPGRADES.
+        let mut a = vec![mk("renderD128", Proof::Reachable)];
+        assert_eq!(super::upgrade_placed(&mut a, 572_228_893), Some(0));
+        assert_eq!(a[0].proof, Proof::Placed);
+
+        // ARM 2 — residency ZERO: nothing. This is exactly where yoga's host sat
+        // with the device statted and size_vram still 0.
+        let mut b = vec![mk("renderD128", Proof::Reachable)];
+        assert_eq!(super::upgrade_placed(&mut b, 0), None);
+        assert_eq!(b[0].proof, Proof::Reachable);
+
+        // ARM 3 — TWO reachable nodes: refuses. /api/ps reports per MODEL, not
+        // per DEVICE, so attributing to one of two would be a guess wearing the
+        // only rung that proves a lane.
+        let mut c = vec![
+            mk("renderD128", Proof::Reachable),
+            mk("renderD129", Proof::Reachable),
+        ];
+        assert_eq!(super::upgrade_placed(&mut c, 572_228_893), None);
+        assert!(c.iter().all(|n| n.proof == Proof::Reachable));
+
+        // ARM 4 — only ENUMERATED nodes: refuses. A runtime cannot have placed
+        // weights on a device the work's vantage cannot stat.
+        let mut d2 = vec![mk("renderD128", Proof::Enumerated)];
+        assert_eq!(super::upgrade_placed(&mut d2, 572_228_893), None);
+        assert_eq!(d2[0].proof, Proof::Enumerated);
+
+        // ARM 5 — one reachable among unreachable siblings: the enumerated ones
+        // are not candidates, so attribution stays unambiguous and it upgrades.
+        let mut e = vec![
+            mk("renderD128", Proof::Enumerated),
+            mk("renderD129", Proof::Reachable),
+        ];
+        assert_eq!(super::upgrade_placed(&mut e, 1), Some(1));
+        assert_eq!(e[1].proof, Proof::Placed);
+        assert_eq!(e[0].proof, Proof::Enumerated);
     }
 
     /// A sysfs walk may claim ONLY the bottom rung. It cannot see a container's
