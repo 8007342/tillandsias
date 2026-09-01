@@ -22,7 +22,7 @@ inputs:
 # stub `tillandsias` early on PATH and pointing the limiter at a temp dir, so
 # the real control flow — mode decision, budget record, verdict gate — executes
 # without launching a forge.
-steps:
+critical_path:
   - step: "both launchers exist and are executable"
     command: "test -x scripts/litmus-codex-e2e-launch.sh && test -x scripts/litmus-opencode-e2e-launch.sh && echo 'ok: executable'"
     timeout_ms: 5000

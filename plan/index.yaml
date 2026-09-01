@@ -7286,6 +7286,12 @@ plan_index:
         - "a shape litmus pins the codex launch path + verdict-grammar parity"
       events:
         - type: progress
+          ts: "2026-09-01T06:39:37Z"
+          agent_id: "linux-lenovinha-claude-20260901t045319z"
+          host: lenovinha
+          summary: |
+            REGRESSION I INTRODUCED, FIXED: litmus:codex-e2e-launch-parity used a top-level 'steps:' key; the runner reads 'critical_path:'. It therefore parsed ZERO steps and failed the whole file with 'no parseable critical_path steps', reddening every full pre-build litmus run fleet-wide — caught and reported by macuahuitl, proven on clean trunk via a worktree control. Renamed the key; the runner now parses and executes all nine steps, verified by running the real sweep rather than the steps by hand: STEP 1..9 all OK inside 'Executing litmus:codex-e2e-launch-parity', 60.3s. THE MISTAKE IS EXACTLY 944-vim8, WHICH I BUILT THE GUARD FOR, IN A DIFFERENT FILE FORMAT. That packet was four plan fragments keyed 'steps:' when the fold reads 'packets:' — content that parses, validates, reads correctly to a human, and is silently discarded because the READER never enters the block. I wrote the fragment-key guard, then made the same error one format over. HOW I MISSED IT, and this is the reusable part: I verified the nine arms by executing their commands MYSELF in a shell, and every one passed. What I never verified was that the RUNNER could reach them. build.sh --check validated the YAML and the binding registry confirmed the file was bound — two green checks over a file no runner could execute. Behavioural verification of the CONTENT is not verification of the DELIVERY MECHANISM, and I had proof of the former standing in for the latter. The 660-ryhn binding gate caught 'nothing will ever run this'; nothing caught 'the runner cannot parse this once it tries'. A file can be bound and still unrunnable. NOT FILED AS A NEW PACKET: whether the corpus should carry a parse-shape check for litmus files (the runner already fails loud, which is correct 944-vim8-class behaviour) is a judgement for the coordinator, not a unilateral third guard from me.
+        - type: progress
           ts: "2026-09-01T03:09:58Z"
           agent_id: "linux-lenovinha-claude-20260901t025318z"
           host: lenovinha
