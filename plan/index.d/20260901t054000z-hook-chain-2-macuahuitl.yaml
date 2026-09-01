@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+
+events:
+  - packet_id: forge-guest-hygiene
+    event:
+      type: note
+      ts: "2026-09-01T05:40:00Z"
+      host: macuahuitl
+      summary: >
+        CORRECTION superseding the delivery claim in the 05:25Z event: on a
+        FORGE guest, 'pull + next gate run' does NOT deliver the v3 hooks.
+        build.sh's _ensure_git_hooks_installed returns early when
+        TILLANDSIAS_HOST_KIND=forge ('Forge containers quarantine
+        core.hooksPath deliberately; do not fight it', build.sh:522-523) —
+        code-proven AND empirically proven by esmeraldinha (three gate runs
+        03:40-03:55, zero writes to the global hooks dir, marker still v2).
+        The coordinator's 05:25Z claim was checked against the installer
+        but not against the guard eight lines above its call site — the
+        same claim-vs-ref failure this night kept teaching, recorded as
+        such. TRUE STATE: a forge guest has NO automatic delivery path for
+        the hook fix. The only actor that ever writes the openspec hooks
+        into the quarantined shared dir is the litmus installer step —
+        which makes the test contamination BOTH the defect's delivery
+        vector and, today, its only patch vector. HARD SEQUENCING
+        CONSTRAINT on this packet: the contamination fix (sandboxed
+        hooksPath for the litmus installer step) and an explicit
+        quarantine-respecting delivery step (forge launch installs the
+        guarded openspec hooks into the shared dir itself, from the
+        shipped installer, alongside the trailer/expert hooks it already
+        writes) MUST land together — landing the sandbox alone pins every
+        existing guest at the broken v2 forever. Esmeraldinha holds her
+        guest in the reproducible v2 state as the acceptance rig; her
+        4-minute script is the closure evidence.
