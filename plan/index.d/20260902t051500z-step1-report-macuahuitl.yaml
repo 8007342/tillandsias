@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+
+events:
+  - packet_id: forge-guest-hygiene
+    event:
+      type: note
+      ts: "2026-09-02T05:15:00Z"
+      host: macuahuitl
+      summary: >
+        INSTRUCTION CONFLICT, coordinator-owned: the authorized litmus run
+        installed the v2 hooks (2 files -> 4, pre-commit f7494c13 +
+        pre-push 9801449d at 20:51:52, marker openspec-pre-commit-hook-v2)
+        on esmeraldinha's guest — directly doing what her preservation
+        instruction forbade. She followed both instructions; they
+        conflicted structurally, and pirria's earlier warning that litmus
+        mutates hook state was not connected to the preservation order by
+        the coordinator. Consequences filed: (1) the acceptance path is
+        EASIER than recorded — the standard instant/pre-build suite
+        recreates the defect state automatically, no deliberate step;
+        (2) the contamination arm's evidence sharpens: pre-litmus hook
+        baselines must expect 2->4, and matched pre-run checksums are
+        only comparable pre-run; (3) her guest's foreign-repo commits are
+        broken again (v2 live) — expected, harmless to her remaining
+        steps, and the fixer's reproduction is now one litmus run away
+        on any guest.
+
+  - packet_id: litmus-low-end-instrument
+    event:
+      type: note
+      ts: "2026-09-02T05:15:00Z"
+      host: macuahuitl
+      summary: >
+        ESMERALDINHA STEP-1 COMPLETE (917.22s wall, 289 executed, 88%,
+        DENIAL_DELTA=0 — with pirria's identical zero, the folklore
+        inversion is final: compiles do not reach 512, installers do).
+        THE REAL BUDGET FINDING: all three of her marginal failures sit
+        WITHIN 1% of budget — forge-policy-binary-discoverability 120.2s
+        vs 120s (+0.17%), external-logs-layer 30.1s vs 30s (+0.33%),
+        resumable-claim-dirt 60.4s vs 60s (+0.67%). Not slow steps:
+        budgets with NO headroom — a 0.17% margin is a coin flip, which
+        is exactly the 118.3->120.2 cross-session crossing. Both scouts
+        now agree on re-attribution over strike. DEDUPLICATED
+        ATTRIBUTION (33 fails != 33 defects): 10 collapse to FOUR
+        environmental roots (absent podman x5, uncommitted router-sidecar
+        artifact x3, host-browser x1, absent plan binary x1 — rc=127
+        correctly not misread as brew); 1 self-inflicted
+        (brew-ondemand-tools-shape reds UNDER AUTOINSTALL=0 by design,
+        proven by A/B); 6 genuine budget by PSI; 1 test defect —
+        shipped-diagnostic-tool-dispatch independently REDISCOVERED
+        (matches the born-red filing: grep hits the removal comment at
+        tray-diagnose.sh:101); ~15 content candidates pending individual
+        adjudication. Quoting '33 failures on floor hardware' would
+        overstate independent defects by a third. Shared
+        fast-hardware-budget class holds at cheatsheet-source-layer (5s)
+        + external-logs-layer (30s); the uninstall anomaly stays OUT as
+        regime-sensitive-unidentified. Cellar unchanged; zero repo
+        writes; step 2 authorized.
