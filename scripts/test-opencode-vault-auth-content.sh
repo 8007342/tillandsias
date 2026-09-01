@@ -2,8 +2,9 @@
 # @trace spec:default-image, spec:tillandsias-vault, spec:podman-secrets-integration
 #
 # Order 431: prove OpenCode consumes a Vault-derived OPENCODE_AUTH_CONTENT
-# document while auth.json stays absent, and prove an upstream contract break
-# takes the persistent curl cache's last-good rollback.
+# document while auth.json stays absent. (The curl-cache last-good rollback
+# arm retired with the opencode curl lane, 2026-08-31 — the npm on-demand
+# channel is the only delivery path and carries its own last-good record.)
 
 set -euo pipefail
 
@@ -46,7 +47,7 @@ trace_lifecycle() {
 
 [ -r "$LIB" ] || fail "cannot read $LIB"
 
-# Source only the credential/probe/rollback functions. Sourcing all of
+# Source only the credential/probe functions. Sourcing all of
 # lib-common would run forge-container setup on the build host.
 eval "$(
     sed -n \
@@ -59,12 +60,8 @@ eval "$(
          /^harness_contract_flags()/,/^}/p
          /^harness_contract_ok()/,/^}/p
          /^harness_probe()/,/^}/p
-         /^opencode_curl_last_good_path()/,/^}/p
-         /^opencode_record_curl_last_good()/,/^}/p
-         /^opencode_restore_curl_last_good()/,/^}/p
          /^opencode_render_contract_ok()/,/^}/p
-         /^opencode_render_contract_cached()/,/^}/p
-         /^opencode_validate_or_rollback()/,/^}/p' \
+         /^opencode_render_contract_cached()/,/^}/p' \
         "$LIB"
 )"
 # The two render-contract functions are extracted because harness_probe()
@@ -80,8 +77,7 @@ eval "$(
 for function_name in \
     prepare_opencode_vault_auth \
     opencode_auth_contract_ok \
-    opencode_actual_auth_ok \
-    opencode_validate_or_rollback; do
+    opencode_actual_auth_ok; do
     declare -F "$function_name" >/dev/null \
         || fail "could not load $function_name from lib-common.sh"
 done
@@ -157,53 +153,6 @@ else
 fi
 
 # Rollback regression. Both harnesses are generated in isolated test state.
-# The broken candidate is live but reports zero env credentials; the last-good
-# candidate parses provider/count without printing the runtime key.
-mkdir -p "$WORK/curl/opencode/bin" "$WORK/curl/opencode/last-good"
-cat >"$WORK/good-opencode" <<'GOOD'
-#!/usr/bin/env bash
-case "$*" in
-    # harness_probe -> opencode_render_contract_cached -> ..._ok runs the
-    # binary with --pure and requires real terminal output (alt-screen or
-    # truecolor) as proof the TUI renders. A "good" stub that cannot render
-    # is not good by the CURRENT contract, so last-good restore correctly
-    # refused it and the rollback assertion failed with no hint as to why.
-    *--pure*) printf '\033[?1049h'; exit 0 ;;
-    *--version*) echo good; exit 0 ;;
-    "run --help") echo "--auto --format"; exit 0 ;;
-    "auth list")
-        provider="$(printf '%s' "${OPENCODE_AUTH_CONTENT:-{}}" | jq -r 'keys[0] // empty')"
-        count="$(printf '%s' "${OPENCODE_AUTH_CONTENT:-{}}" | jq -r 'length')"
-        [ "$provider" != "google" ] || provider="Google"
-        printf '%s api\n%s credentials\n' "$provider" "$count"
-        exit 0
-        ;;
-esac
-exit 1
-GOOD
-cat >"$WORK/broken-opencode" <<'BROKEN'
-#!/usr/bin/env bash
-case "$*" in
-    *--version*) echo broken; exit 0 ;;
-    "run --help") echo "--auto --format"; exit 0 ;;
-    "auth list") echo "0 credentials"; exit 0 ;;
-esac
-exit 1
-BROKEN
-chmod +x "$WORK/good-opencode" "$WORK/broken-opencode"
-install -m 0755 "$WORK/good-opencode" "$WORK/curl/opencode/last-good/opencode"
-install -m 0755 "$WORK/broken-opencode" "$WORK/curl/opencode/bin/opencode"
-HARNESS_CURL_ROOT="$WORK/curl"
-export HARNESS_CURL_ROOT
-TRACE_LOG=""
-opencode_validate_or_rollback "$WORK/curl/opencode/bin/opencode" \
-    || fail "broken candidate did not restore last-good"
-[ "${OPENCODE_ROLLBACK_USED:-0}" = "1" ] \
-    || fail "rollback helper did not report last-good use"
-[ "$("$WORK/curl/opencode/bin/opencode" --version)" = "good" ] \
-    || fail "last-good binary was not restored"
-printf '%s' "$TRACE_LOG" | grep -q "rolling back to last-good" \
-    || fail "contract failure did not produce a loud rollback trace"
 
 unset OPENCODE_AUTH_CONTENT TEST_GEMINI_KEY
-echo "PASS: OpenCode Vault auth content, no-file assertion, and last-good rollback"
+echo "PASS: OpenCode Vault auth content and no-file assertion"

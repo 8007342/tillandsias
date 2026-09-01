@@ -65,7 +65,7 @@ Terminal entrypoint is simpler: source common → find project → show welcome 
 ## Agent Cache Locations
 
 - Claude Code: `$CACHE/claude/` — installed via `npm install -g --prefix`; binary at `$CACHE/claude/bin/claude`
-- OpenCode: `$CACHE/opencode/` — installed via official installer (`OPENCODE_INSTALL_DIR=$CACHE/opencode curl -fsSL https://opencode.ai/install | bash`)
+- OpenCode: npm on-demand via `_require_harness` into the persistent npm prefix (`$NPM_CONFIG_PREFIX/bin/opencode`) — the official curl installer was retired 2026-08-31 (it can never populate a custom dir while a PATH-visible opencode exists)
 - OpenSpec: `$CACHE/openspec/` — installed via `npm install -g --prefix`; binary at `$CACHE/openspec/bin/openspec`
 - Stamp files: `$CACHE/<agent>/.last-update-check` — epoch timestamp for daily throttle
 

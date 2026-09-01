@@ -2599,13 +2599,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Stranded-sweep predicate fixture passed"
 
-    _step "Checking the opencode rollback failure is loud and accurate (797-t9m7)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-opencode-rollback-is-loud.sh" 2>&1; then
-        _error "opencode_validate_or_rollback stopped distinguishing its three outcomes (797-t9m7) — see the failing case above"
-        exit 1
-    fi
-    _info "Opencode rollback loudness fixture passed"
-
     _step "Checking the inference pull-failure classifier (525)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-inference-pull-failure-classification.sh" 2>&1; then
         _error "a TLS-trust pull failure stopped being distinguishable from an empty cache (525) — see the failing case above"
