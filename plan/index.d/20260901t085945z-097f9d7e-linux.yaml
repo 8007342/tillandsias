@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: github-login-validates-push-authorization
+    field: next_action
+    value: 'EC1 and EC2 MET (2026-09-01). EC3 IS NOT MET and was deliberately not claimed. The gate refuses a token without .permissions.push before anything is written to Vault, inside the ephemeral login container, on both paste and stdin modes; six unit tests plus an ORDERING test on run_provider_login''s body (verdict is reached before the vault write, with a scope control on the source window), all mutation-tested. EC3 AS WRITTEN NEEDS A VAULT-FAKING HARNESS, measured this cycle rather than estimated: TILLANDSIAS_PODMAN_BIN is a real stub seam, but driving the login with a stubbed podman never reaches the probe — it dies at "auth preflight failed: tillandsias-vault is not running" after 20+ podman calls (image ensure, network ensure, secret create, vault run, wait --condition=healthy). Reaching the gate hermetically means faking a healthy Vault with TLS on 127.0.0.1:8201, which is reimplementing the enclave, not mocking gh. COORDINATOR DECISION NEEDED, two ways: (1) restate EC3 to what is cheap — decision by unit tests, wiring by the ordering test, container boundary by the LIVE login that 759-vsaj''s fleet propagation already runs on three platforms; or (2) keep EC3 and file the Vault-faking harness as its own packet with its own justification. I did not restate it myself: rewriting my own contract to match what I delivered is the move I refused on 950-icqy. DO NOT re-derive the spans; find run_provider_login, github_push_authorization_verdict and the GH_LOGIN token-script constants by symbol. Still unverified anywhere: no live GitHub call has been made from any host, so the probe''s real stdout has never been compared against the shapes the verdict expects.'
+    ts: "2026-09-01T08:59:45Z"
+    host: linux
+
+events:
+  - packet_id: github-login-validates-push-authorization
+    event:
+      type: note
+      ts: "2026-09-01T08:59:45Z"
+      host: linux
+      summary: >
+        EC3 measured as needing a Vault-faking harness; decision handed up rather than restating my own criterion

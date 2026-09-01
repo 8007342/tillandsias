@@ -22369,6 +22369,72 @@ esac
         );
     }
 
+    /// ORDER 759-vceg. THE GATE MUST SIT BETWEEN AUTHENTICATION AND
+    /// PERSISTENCE, and that is an ORDERING property no unit test on the pure
+    /// verdict can see.
+    ///
+    /// The decision functions are covered and mutation-tested elsewhere in this
+    /// file. What they cannot show is that `run_provider_login` actually calls
+    /// them, and calls them BEFORE writing the token to Vault. Move the vault
+    /// write above the probe and every one of those tests still passes while
+    /// the defect returns in full: a token that cannot push, seeded anyway.
+    ///
+    /// Asserted on the function's own body, the same way
+    /// `idiomatic_podman_launch_paths_do_not_bypass_shared_layer` asserts its
+    /// architectural invariant. This is weaker than executing the path and is
+    /// not pretending otherwise — see the packet's event for why executing it
+    /// hermetically is not cheap: the gate sits downstream of vault bootstrap
+    /// and a full container preflight, so a stubbed podman dies at vault
+    /// preflight long before reaching it.
+    #[test]
+    fn the_push_authorization_gate_runs_before_the_vault_write() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let body = source_window(source, "fn run_provider_login(config: &ProviderLoginConfig");
+
+        let verdict_at = body.find("github_push_authorization_verdict").expect(
+            "run_provider_login must CALL the push-authorization verdict — \
+                     a decision function nothing invokes is the 759-vceg defect itself",
+        );
+        let probe_at = body
+            .find("github_push_authorization_probe_args")
+            .expect("run_provider_login must build the in-container probe");
+        let vault_write_at = body
+            .find("vault-cli.sh write-stdin")
+            .expect("run_provider_login must still contain the vault write");
+
+        assert!(
+            probe_at < verdict_at,
+            "the probe must run before its verdict is judged"
+        );
+        assert!(
+            verdict_at < vault_write_at,
+            "the push-authorization verdict must be reached BEFORE the token is \
+             written to Vault. Persisting first and checking after re-creates the \
+             exact defect: a token that authenticates, cannot push, and is seeded \
+             anyway — surfacing hours later at the first push (759-vceg)."
+        );
+    }
+
+    /// NEGATIVE CONTROL for the ordering test above: the window it inspects must
+    /// actually be `run_provider_login`'s body and not the whole file, or the
+    /// assertion would hold no matter where those calls lived.
+    #[test]
+    fn the_login_source_window_is_scoped_to_one_function() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let body = source_window(source, "fn run_provider_login(config: &ProviderLoginConfig");
+        assert!(
+            body.len() < source.len() / 4,
+            "the window is not scoped to a function: {} of {} bytes",
+            body.len(),
+            source.len()
+        );
+        assert!(
+            !body.contains("fn github_push_authorization_verdict"),
+            "the window has swallowed the helper DEFINITIONS, so finding their \
+             names inside it would prove nothing about the call site"
+        );
+    }
+
     /// The NEGATIVE CONTROL for the test above, and the reason it cannot simply
     /// assert "always set TERM": a prompt-driven Codex run deliberately does NOT
     /// claim a TTY, because podman refuses with "input device is not a TTY" when
