@@ -201,7 +201,15 @@ trace_lifecycle() {
     shift
     local line="[lifecycle] $phase | $*"
     echo "$line" >> /tmp/forge-lifecycle.log 2>/dev/null || true
-    [ -n "${TILLANDSIAS_DEBUG:-}" ] && echo "$line" >&2
+    # if-form, NOT `[ ... ] && echo`: as the function's LAST statement the
+    # &&-chain returns 1 whenever DEBUG is unset, and under this file's own
+    # `set -e` that killed EVERY sourcing shell at the first source-time
+    # trace call (export_pull_cache_path) — silently, before any function
+    # was defined past line ~240. Broke litmus:lane-observed-startup-log
+    # fleet-wide within the hour it landed.
+    if [ -n "${TILLANDSIAS_DEBUG:-}" ]; then
+        echo "$line" >&2
+    fi
 }
 
 export_pull_cache_path() {
