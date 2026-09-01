@@ -10,11 +10,14 @@ status:
 events:
   - packet_id: opencode-curl-install-never-populates-its-cache
     event:
-      type: note
+      type: completed
       ts: "2026-09-01T04:45:00Z"
       host: macuahuitl
       summary: >
-        COMPLETED at 0d05d4d8d: curl lane, four exclusive last-good helpers,
+        status 'completed' with evidence_refs: 0d05d4d8d (the retirement
+        commit, gate green), 4ca96e414 (wrapper re-pin), adversarial verify
+        workflow wf_663b0f49-2c1 (runtime CLEAN), default-image litmus 13/13
+        instant + full-gate pass at 8ecb5f606-era tree. Detail: curl lane, four exclusive last-good helpers,
         vendor-scratch sweep, harness_update_lock quartet, and
         require_opencode's lock dance all removed; npm on-demand via
         _require_harness is the only channel. Two fixtures retired with

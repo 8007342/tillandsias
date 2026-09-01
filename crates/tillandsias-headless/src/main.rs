@@ -13430,6 +13430,23 @@ fn build_forge_agent_run_args_with_vault(
         .pids_limit(512);
     if !non_interactive_prompt {
         spec = spec.interactive().tty();
+        // D3 of order 702-6jza. With --tty, podman injects its DEFAULT
+        // TERM=xterm unless one is set explicitly (container_spec.rs emits
+        // --interactive/--tty and no TERM), so the pinned xterm-256color the
+        // attach wire carries was being dropped at the container boundary for
+        // the Claude, Codex, Antigravity and Maintenance lanes — a downgraded
+        // palette on a live TUI.
+        //
+        // The 2026-07-27 fix for this exact anomaly was applied ONLY to the
+        // OpenCode lane (see the --env TERM push beside its --interactive/--tty
+        // block). This is the same fix, on the lanes it was never carried to:
+        // forward the SESSION's real terminal identity, since this process runs
+        // on the terminal the container renders into. Fallbacks keep a bare env
+        // sane rather than propagating an empty TERM.
+        // @trace plan/issues/bigpickle-macos-terminal-cooperative-debug-2026-07-27.md
+        spec = spec
+            .env("TERM", env_or("TERM", "xterm-256color"))
+            .env("COLORTERM", env_or("COLORTERM", "truecolor"));
     }
     // Order 437: clone-only by default. The host-checkout bind mount at
     // /home/forge/src/<project> is the OPT-IN legacy shared-mount path; without
@@ -22050,6 +22067,81 @@ esac
         assert!(has_arg(&args, "TILLANDSIAS_DEBUG=1"));
     }
 
+    /// D3 of order 702-6jza. With `--tty`, podman injects its DEFAULT
+    /// `TERM=xterm` unless one is set explicitly, so the pinned
+    /// `xterm-256color` the attach wire carries was dropped at the container
+    /// boundary and a live TUI rendered on a downgraded palette.
+    ///
+    /// The 2026-07-27 fix was applied ONLY to the OpenCode lane. Every OTHER
+    /// interactive lane — Claude, Antigravity, Maintenance, and Codex without a
+    /// prompt — had the identical defect for a month, which is why this asserts
+    /// the whole set rather than the one lane that prompted the report: a fix
+    /// carried to one caller of a shared builder is the shape that produced the
+    /// regression in the first place.
+    #[test]
+    fn every_interactive_agent_lane_pins_term_across_the_container_boundary() {
+        let _pseam = podman_false_seam();
+        for mode in [
+            ForgeAgentMode::Claude,
+            ForgeAgentMode::Codex,
+            ForgeAgentMode::OpenCode,
+            ForgeAgentMode::Antigravity,
+            ForgeAgentMode::Maintenance,
+        ] {
+            let args = build_forge_agent_run_args(
+                &PathBuf::from("/tmp/project"),
+                "alpha",
+                None,
+                &PathBuf::from("/tmp/ca"),
+                "1.2.3",
+                mode,
+                false,
+            );
+            assert!(
+                has_arg(&args, "--tty"),
+                "{mode:?} is an interactive lane and must claim a TTY"
+            );
+            assert!(
+                args.iter().any(|a| a.starts_with("TERM=")),
+                "{mode:?} claims a TTY but sets no TERM — podman will inject its \
+                 default xterm and downgrade the palette (702-6jza D3)"
+            );
+            assert!(
+                args.iter().any(|a| a.starts_with("COLORTERM=")),
+                "{mode:?} claims a TTY but sets no COLORTERM (702-6jza D3)"
+            );
+        }
+    }
+
+    /// The NEGATIVE CONTROL for the test above, and the reason it cannot simply
+    /// assert "always set TERM": a prompt-driven Codex run deliberately does NOT
+    /// claim a TTY, because podman refuses with "input device is not a TTY" when
+    /// the parent is a background or e2e harness. A lane with no TTY has no
+    /// terminal identity to pin, and setting one there would assert a terminal
+    /// that does not exist.
+    #[test]
+    fn a_non_interactive_prompt_lane_claims_no_tty_and_pins_no_term() {
+        let _pseam = podman_false_seam();
+        let args = build_forge_agent_run_args_with_vault(
+            &PathBuf::from("/tmp/project"),
+            "alpha",
+            None,
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeAgentMode::Codex,
+            false,
+            None,                 // vault_secret
+            Some("do the thing"), // prompt — this is the arg that matters
+        );
+        assert!(
+            !has_arg(&args, "--tty"),
+            "a prompt-driven Codex run must not claim a TTY"
+        );
+        assert!(
+            !args.iter().any(|a| a.starts_with("TERM=")),
+            "a lane with no TTY must not pin a terminal identity it does not have"
+        );
+    }
     /// Order 425: a repo with NO origin and a repo whose origin cannot be
     /// RESOLVED must not look alike. They used to both yield `None`, and a
     /// generated config with no `[url]` block was ambiguous between "healthy
