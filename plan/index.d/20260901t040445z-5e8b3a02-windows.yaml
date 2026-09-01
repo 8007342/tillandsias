@@ -1,0 +1,42 @@
+events:
+  - packet_id: project-lanes-always-fall-back-to-legacy-conhost-losing-paste-and-clickable-links
+    event:
+      type: evidence
+      ts: "2026-09-01T04:04:45Z"
+      agent_id: "windows-yolanda-claude-20260830t162208z"
+      host: windows
+      summary: |
+        THIS PACKET'S PREMISE NO LONGER HOLDS — project lanes get Windows Terminal,
+        not conhost. Recording rather than closing, because the packet may carry
+        criteria beyond the one I can observe.
+
+        THE PREMISE WAS: "every project lane opens in a legacy conhost window
+        because its inline `bash -lc` argv can never pass argv_survives_wt_reparse".
+        That guard NO LONGER EXISTS. It was deleted under 795-zshi once 823-u5zf
+        made every non-login lane emit verbatim argv vectors whose tokens are safe
+        for wt.exe re-parsing; the guard always returned true for the shapes
+        launch_spec actually emits, so it was dead code. Verified today: zero
+        definitions of argv_survives_wt_reparse repo-wide.
+
+        THE BRANCH AS IT STANDS, in launch_pty:
+          GithubLogin  -> spawn_wsl_console  (conhost, DELIBERATE)
+          everything else -> spawn_wsl_terminal (wt.exe)
+        The login lane's conhost route is not this defect: it is the fix for two
+        field crashes where an unbalanced quote reached bash through wt's re-parse
+        chain, and wt offers no verbatim-args contract. That one should stay.
+
+        OBSERVED, not inferred, during the v56.8.31.3 blessing round on this host:
+        `tillandsias-tray.exe --forge tillandsias --shell` from the DOWNLOADED
+        release binary returned exit 0 with ok:forge-launch:tillandsias, and the
+        host process list then showed WindowsTerminal x1 with 6 wsl children. A
+        project lane opened Windows Terminal. Paste and clickable links follow from
+        that, though I did not test them individually.
+
+        WHAT I DID NOT VERIFY, so nobody reads this as a full closure:
+          * spawn_wsl_terminal retains a fallback arm to conhost for hosts with no
+            wt.exe. That fallback is legitimate and is NOT the reported defect, but
+            I have not confirmed which arm ran — only that Windows Terminal was the
+            process that appeared, which is strong but indirect.
+          * paste and clickable-link behaviour were not exercised as such.
+        A host without Windows Terminal installed would still land in conhost by
+        design, and if the packet means to cover that case it is not resolved.
