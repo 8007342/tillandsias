@@ -1028,6 +1028,50 @@ pub fn enumerate_render_nodes_at(root: &std::path::Path, vantage: Vantage) -> Ve
     out
 }
 
+/// Upgrade `Enumerated` nodes to [`Proof::Reachable`] by STATTING them from the
+/// vantage the work runs in.
+///
+/// 793-zumy REMAINING 2, first half. The rungs were modelled but inert: nothing
+/// produced anything above `Enumerated`, and an honest model that does no work
+/// is only half the fix.
+///
+/// THE IN-TREE PRECEDENT IS `images/inference/entrypoint.sh`, which refuses a
+/// cuda tier when `[ -e /dev/nvidia0 ]` fails INSIDE the container. This is that
+/// check, lifted into the probe and given a rung.
+///
+/// CONTAINER VANTAGE ONLY, and this is the whole point rather than a
+/// restriction. [`Vantage::Container`] is documented as the only vantage that
+/// can speak for the container lane, so a HOST stat is not weaker evidence for
+/// that lane — it is evidence about a different question. A node enumerated on
+/// the host and statted on the host stays `Enumerated`; claiming otherwise
+/// would be this packet's own failure class, a label standing in for the wiring
+/// it names.
+///
+/// STILL NOT A LANE. Reachable is necessary and NOT sufficient: yoga's host sat
+/// exactly here with the device statted and `size_vram` still 0. Only
+/// [`Proof::Placed`] proves a lane, and nothing here produces it.
+///
+/// Never downgrades: a node already at a higher rung is left alone.
+pub fn upgrade_reachable_at(nodes: &mut [DrmRenderNode], dev_dri_root: &std::path::Path) -> usize {
+    let mut upgraded = 0;
+    for n in nodes.iter_mut() {
+        if n.vantage != Vantage::Container {
+            continue;
+        }
+        if n.proof >= Proof::Reachable {
+            continue;
+        }
+        // `exists()` follows symlinks, which is what we want: /dev/dri entries
+        // are commonly symlinked and the question is whether opening the path
+        // would find a device, not whether the entry is itself a node.
+        if dev_dri_root.join(&n.node).exists() {
+            n.proof = Proof::Reachable;
+            upgraded += 1;
+        }
+    }
+    upgraded
+}
+
 /// Does ONE spec body name the NVIDIA kind AND a usable device node?
 ///
 /// Split out so it is testable without the filesystem: a spec that names the
@@ -1792,6 +1836,59 @@ mod tests {
         // Reachable" for diagnosis without that ordering implying a lane.
         assert!(super::Proof::Enumerated < super::Proof::Reachable);
         assert!(super::Proof::Reachable < super::Proof::Placed);
+    }
+
+    /// 793-zumy REMAINING 2, first half: the Reachable rung now has a producer,
+    /// and the rule that makes it mean anything is the vantage restriction.
+    ///
+    /// Four arms, three of them negative, because a producer that only ever
+    /// upgrades is indistinguishable from one that ignores its inputs.
+    #[test]
+    fn reachable_upgrades_only_from_container_vantage_and_only_when_the_node_exists() {
+        use super::{DrmRenderNode, Proof, Vantage};
+        let dir = std::env::temp_dir().join(format!("tz-reach-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        std::fs::write(dir.join("renderD128"), b"").expect("node");
+
+        let mk = |node: &str, vantage| DrmRenderNode {
+            node: node.to_string(),
+            vendor_id: 0x1002,
+            device_id: 0x1114,
+            driver: "amdgpu".to_string(),
+            vantage,
+            proof: Proof::Enumerated,
+        };
+
+        // ARM 1 — container vantage, node present: UPGRADES.
+        let mut a = vec![mk("renderD128", Vantage::Container)];
+        assert_eq!(super::upgrade_reachable_at(&mut a, &dir), 1);
+        assert_eq!(a[0].proof, Proof::Reachable);
+
+        // ARM 2 — HOST vantage, same node present: STAYS Enumerated. A host stat
+        // is not weak evidence for the container lane, it is evidence about a
+        // different question.
+        let mut b = vec![mk("renderD128", Vantage::Host)];
+        assert_eq!(super::upgrade_reachable_at(&mut b, &dir), 0);
+        assert_eq!(
+            b[0].proof,
+            Proof::Enumerated,
+            "a host-vantage stat must never claim the container lane's rung"
+        );
+
+        // ARM 3 — container vantage, node ABSENT: stays Enumerated.
+        let mut c = vec![mk("renderD129", Vantage::Container)];
+        assert_eq!(super::upgrade_reachable_at(&mut c, &dir), 0);
+        assert_eq!(c[0].proof, Proof::Enumerated);
+
+        // ARM 4 — never downgrades: a node already Placed stays Placed even
+        // though this function only ever knows how to reach Reachable.
+        let mut d = vec![mk("renderD128", Vantage::Container)];
+        d[0].proof = Proof::Placed;
+        assert_eq!(super::upgrade_reachable_at(&mut d, &dir), 0);
+        assert_eq!(d[0].proof, Proof::Placed);
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// A sysfs walk may claim ONLY the bottom rung. It cannot see a container's
