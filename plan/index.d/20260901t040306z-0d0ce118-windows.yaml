@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: guest-exec-allowlist-forces-argv-flattening
+    field: status
+    value: completed
+    ts: "2026-09-01T04:03:06Z"
+    host: windows
+
+events:
+  - packet_id: guest-exec-allowlist-forces-argv-flattening
+    event:
+      type: completed
+      ts: "2026-09-01T04:03:06Z"
+      host: windows
+      summary: >
+        status 'completed' with evidence_refs: da38da956; cargo check -p tillandsias-vm-layer clean and cargo test -p tillandsias-vm-layer = ok (97 passed); live-distro measurement probe=hello -> value=[] via '--' vs value=[hello] via '--exec', control /bin/sh = value=[hello]
+  - packet_id: guest-exec-allowlist-forces-argv-flattening
+    event:
+      type: note
+      ts: "2026-09-01T04:03:06Z"
+      host: windows
+      summary: >
+        item 1 closed by verification (argv_survives_wt_reparse function gone repo-wide, pinning test passes, remaining sites are rationale not dead code); item 2 fixed with --exec in wsl_root_sh, repairing all ten call sites at once because the hazard is centralised in that function
