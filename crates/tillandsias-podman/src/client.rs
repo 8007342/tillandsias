@@ -1299,6 +1299,21 @@ impl PodmanClient {
                 redact_argv(&full_args).join(" ")
             ),
         ]);
+        // ORDER 665-zddn EC4. Record the failure on the HOST before returning
+        // the message. The caller's string goes to stderr, and on a forge
+        // launch that stderr dies with the terminal window — which is how the
+        // 2026-08-10 failure became recoverable only from `podman inspect`.
+        //
+        // The typed verdict is passed through so the breadcrumb carries the
+        // ACTIONABLE line, not just "something failed": for the stale-CDI case
+        // that is the difference between a file naming the remedy and a file
+        // naming a container.
+        let typed_verdict = match err {
+            PodmanError::CommandFailure(failure) => classify_typed_launch_failure(failure),
+            _ => None,
+        };
+        write_launch_breadcrumb(stage, container_name, typed_verdict.as_deref());
+
         let rendered = diagnostics.render_human();
         if !rendered.trim().is_empty() {
             parts.push(rendered);
@@ -2185,6 +2200,98 @@ fn summary_line(value: &str) -> &str {
     value.lines().next().unwrap_or(value)
 }
 
+/// ORDER 665-zddn EC4. The file every launch failure leaves behind on the host.
+///
+/// WHY A FILE AT ALL. Reproduced 2026-08-10: the forge launcher died starting
+/// inference AFTER router and git-mirror were already up, and the terminal
+/// window carrying the error closed with it. The failure was recoverable only
+/// from `podman inspect .State.Error` — which you can only think to run if you
+/// already know which service failed. Everything the launcher knew went to
+/// stderr and vanished. Windows has had a bundle for this since order 420
+/// (windows-tray notify_icon.rs `write_failure_diagnostics_bundle`); Linux had
+/// nothing.
+pub(crate) fn launch_breadcrumb_path() -> std::path::PathBuf {
+    // The override exists so unit tests never write to the real host state
+    // directory. A test that pollutes ~/.local/state is a test that changes
+    // its own machine.
+    if let Ok(dir) = std::env::var("TILLANDSIAS_LAUNCH_BREADCRUMB_DIR") {
+        return std::path::PathBuf::from(dir).join("launch-failures.log");
+    }
+    tillandsias_core::config::state_dir().join("launch-failures.log")
+}
+
+/// How many breadcrumb lines to keep. BOUNDED APPEND, not latest-wins.
+///
+/// Windows keeps exactly one bundle ("latest failure wins, no unbounded
+/// growth"), which is right for a multi-hundred-KB JSON bundle. These are one
+/// line each, and the case that motivated this packet — a driver update that
+/// breaks every launch until someone regenerates the CDI spec — is a REPEATING
+/// failure whose history is the evidence that it is not a one-off. Keeping a
+/// short window costs a few hundred bytes and answers "has this been happening
+/// all week?", which latest-wins cannot.
+const LAUNCH_BREADCRUMB_KEEP_LINES: usize = 50;
+
+/// Append one line naming the failed service and how to get the full error.
+///
+/// DELIBERATELY NARROW CONTENT: timestamp, stage, container, the typed verdict
+/// (our own text, from `classify_typed_launch_failure`), and the inspect
+/// command. NO podman stderr and NO argv — this file is durable and
+/// operator-shareable, and raw stderr/argv is where credentials would leak.
+/// The inspect command retrieves the full error on demand, which is the point
+/// of naming it.
+///
+/// Best-effort by construction: a launch failure must never be masked by a
+/// failure to write about the launch failure, so every error here is dropped
+/// after one warning.
+pub(crate) fn write_launch_breadcrumb(stage: &str, container_name: &str, verdict: Option<&str>) {
+    write_launch_breadcrumb_at(&launch_breadcrumb_path(), stage, container_name, verdict);
+}
+
+/// The breadcrumb core, taking its path explicitly.
+///
+/// SPLIT FROM THE WRAPPER SO THE TESTS NEED NO ENV VAR. `set_var` is
+/// process-global and these tests run in parallel, so an env-driven test would
+/// race its siblings and fail intermittently — the kind of flake that gets a
+/// test deleted rather than fixed.
+pub(crate) fn write_launch_breadcrumb_at(
+    path: &std::path::Path,
+    stage: &str,
+    container_name: &str,
+    verdict: Option<&str>,
+) {
+    if let Some(parent) = path.parent()
+        && let Err(err) = std::fs::create_dir_all(parent)
+    {
+        warn!(path = %parent.display(), error = %err, "could not create the launch-breadcrumb directory");
+        return;
+    }
+
+    let line = format!(
+        "{ts} stage={stage} service={container_name} verdict={verdict} inspect=\"podman inspect {container_name} --format '{{{{.State.Error}}}}'\"",
+        ts = iso8601_millis(chrono::Utc::now()),
+        verdict = verdict.unwrap_or("unclassified"),
+    );
+
+    let existing = std::fs::read_to_string(path).unwrap_or_default();
+    let body = bounded_breadcrumb_body(&existing, &line);
+
+    if let Err(err) = std::fs::write(path, body) {
+        warn!(path = %path.display(), error = %err, "could not write the launch breadcrumb");
+        return;
+    }
+    warn!(breadcrumb = %path.display(), stage, container = container_name, "launch failure recorded on the host");
+}
+
+/// Append `line` to `existing`, keeping only the newest
+/// [`LAUNCH_BREADCRUMB_KEEP_LINES`]. Pure, so the bound is testable without
+/// touching a filesystem.
+fn bounded_breadcrumb_body(existing: &str, line: &str) -> String {
+    let mut kept: Vec<&str> = existing.lines().filter(|l| !l.is_empty()).collect();
+    kept.push(line);
+    let start = kept.len().saturating_sub(LAUNCH_BREADCRUMB_KEEP_LINES);
+    kept[start..].join("\n") + "\n"
+}
+
 /// ORDER 665-zddn. Pull the driver version the STALE CDI spec still believes
 /// out of the OCI runtime's refusal.
 ///
@@ -2998,6 +3105,119 @@ mod tests {
     fn an_unrecognized_oci_runtime_failure_still_falls_through() {
         let f = fake_failure(Some(127), "Error: something else entirely went wrong");
         assert!(classify_typed_launch_failure(&f).is_none());
+    }
+
+    /// ORDER 665-zddn EC4. A unique scratch path per test, so nothing races and
+    /// nothing touches the real host state directory.
+    fn scratch_breadcrumb(tag: &str) -> std::path::PathBuf {
+        let unique = format!(
+            "tillandsias-bc-{tag}-{}-{:?}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        );
+        std::env::temp_dir()
+            .join(unique)
+            .join("launch-failures.log")
+    }
+
+    /// ORDER 665-zddn EC4. The breadcrumb must name the failed SERVICE and the
+    /// command that retrieves the full error — those two facts are what the
+    /// vanishing terminal window took with it on 2026-08-10.
+    #[test]
+    fn the_launch_breadcrumb_names_the_failed_service_and_how_to_read_the_error() {
+        let path = scratch_breadcrumb("names");
+        write_launch_breadcrumb_at(
+            &path,
+            "forge-launch-inference",
+            "tillandsias-inference",
+            Some("typed-error: the NVIDIA CDI spec is STALE — remedy: ensure-nvidia-cdi.sh"),
+        );
+
+        let body = std::fs::read_to_string(&path).expect("the breadcrumb must exist on disk");
+        assert!(
+            body.contains("service=tillandsias-inference"),
+            "got: {body}"
+        );
+        assert!(body.contains("stage=forge-launch-inference"), "got: {body}");
+        assert!(
+            body.contains("podman inspect tillandsias-inference --format '{{.State.Error}}'"),
+            "the inspect command must be literally runnable, braces and all; got: {body}"
+        );
+        // The typed verdict is the actionable half. A breadcrumb naming only a
+        // container tells the operator where to look, not what to do.
+        assert!(body.contains("ensure-nvidia-cdi.sh"), "got: {body}");
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    /// ORDER 665-zddn EC4. An unclassified failure still leaves a breadcrumb —
+    /// the file exists for the failures we could NOT explain just as much as
+    /// for the ones we could.
+    #[test]
+    fn an_unclassified_launch_failure_still_leaves_a_breadcrumb() {
+        let path = scratch_breadcrumb("unclassified");
+        write_launch_breadcrumb_at(&path, "forge-launch-router", "tillandsias-router", None);
+        let body = std::fs::read_to_string(&path).expect("must exist");
+        assert!(body.contains("verdict=unclassified"), "got: {body}");
+        assert!(body.contains("service=tillandsias-router"), "got: {body}");
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    /// ORDER 665-zddn EC4. Repeated failures accumulate — the driver-update
+    /// case that motivated this packet breaks EVERY launch until someone
+    /// regenerates the spec, and the history is the evidence that it is not a
+    /// one-off. But the window is BOUNDED, so a host failing in a loop cannot
+    /// grow this file without limit.
+    #[test]
+    fn breadcrumbs_accumulate_but_the_window_is_bounded() {
+        let mut body = String::new();
+        for i in 0..(LAUNCH_BREADCRUMB_KEEP_LINES * 2) {
+            body = bounded_breadcrumb_body(&body, &format!("line-{i}"));
+        }
+        let lines: Vec<&str> = body.lines().collect();
+        assert_eq!(
+            lines.len(),
+            LAUNCH_BREADCRUMB_KEEP_LINES,
+            "the window must stay bounded on a host failing in a loop"
+        );
+        // NEWEST kept, oldest dropped — a window that discarded the most recent
+        // failure would be worse than no file.
+        assert_eq!(*lines.last().unwrap(), "line-99");
+        assert!(!body.contains("line-0\n"), "the oldest line must age out");
+        // Two failures in a row must BOTH be visible; latest-wins would fail here.
+        let two = bounded_breadcrumb_body("first-failure", "second-failure");
+        assert!(two.contains("first-failure") && two.contains("second-failure"));
+    }
+
+    /// ORDER 665-zddn EC4, SCOPE CONTROL. The breadcrumb is durable and
+    /// operator-shareable, so it must carry NEITHER podman stderr NOR argv —
+    /// that is where a credential would leak. It names the inspect command
+    /// instead, which fetches the full error on demand.
+    #[test]
+    fn the_breadcrumb_carries_no_stderr_and_no_argv() {
+        let path = scratch_breadcrumb("noleak");
+        write_launch_breadcrumb_at(
+            &path,
+            "forge-launch-git",
+            "tillandsias-git",
+            Some("typed-error: something"),
+        );
+        let body = std::fs::read_to_string(&path).expect("must exist");
+        for forbidden in [
+            "--env",
+            "GITHUB_TOKEN",
+            "ghp_",
+            "redacted argv",
+            "podman run",
+        ] {
+            assert!(
+                !body.contains(forbidden),
+                "breadcrumb must not carry {forbidden}; got: {body}"
+            );
+        }
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 
     /// Pins the idiomatic-layer container-launch diagnostics wire shape that

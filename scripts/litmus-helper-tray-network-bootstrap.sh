@@ -41,8 +41,15 @@ case "$MODE" in
     [ "$ran" -eq 4 ] || { echo "FAIL: expected 4 CDI classification arms, $ran ran (renamed or deleted?)"; exit 1; }
     echo "ok: cdi-classification-arms:4 passed"
     ;;
+  check-launch-breadcrumb-wired)
+    # ORDER 665-zddn EC4. The breadcrumb helper is only worth anything if the
+    # failure path CALLS it. A helper with no caller is the exact defect this
+    # packet's own EC1 arm nearly shipped: code that reads complete and never
+    # runs. The unit tests cover the helper's behaviour; this covers the wire.
+    awk '/async fn format_observed_launch_failure/{in_fn=1} in_fn&&/write_launch_breadcrumb\(/{found=1; exit} /^    }$/&&in_fn{exit} END{if(found)print "ok: write_launch_breadcrumb called from format_observed_launch_failure"; else{print "FAIL: the launch breadcrumb has no caller in format_observed_launch_failure"; exit 1}}' crates/tillandsias-podman/src/client.rs
+    ;;
   help|*)
-    echo "Usage: $0 {check-run_opencode_mode-ordering|check-run_observatorium_mode-ordering|check-ensure_enclave_for_project-ordering|check-ensure_enclave_network-present|check-format_observed_launch_failure-classifier|check-cdi-classification-arms}"
+    echo "Usage: $0 {check-run_opencode_mode-ordering|check-run_observatorium_mode-ordering|check-ensure_enclave_for_project-ordering|check-ensure_enclave_network-present|check-format_observed_launch_failure-classifier|check-cdi-classification-arms|check-launch-breadcrumb-wired}"
     exit 2
     ;;
 esac

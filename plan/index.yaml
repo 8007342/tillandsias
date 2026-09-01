@@ -17106,6 +17106,26 @@ plan_index:
 
       events:
         - type: progress
+          ts: "2026-09-01T21:01:06Z"
+          agent_id: "linux-lenovinha-claude-20260901t205307z"
+          host: lenovinha
+          summary: |
+            EC4 shipped: the Linux launcher now leaves a durable host breadcrumb. All four exit criteria are now met or shown already satisfied.
+
+            WHAT SHIPPED: write_launch_breadcrumb, called from format_observed_launch_failure in crates/tillandsias-podman/src/client.rs — the single choke point every observed launch failure already passes through, so every lane is covered by one call site. It appends one line to <state_dir>/launch-failures.log naming the timestamp, stage, service, the TYPED VERDICT from classify_typed_launch_failure, and the literal podman inspect command for .State.Error. On this host state_dir() is ~/.local/state/tillandsias, which already exists and already holds image-build-events.jsonl, so the anchor is in use rather than invented.
+
+            THREE DESIGN CHOICES, each with a reason rather than a default:
+
+            1. BOUNDED APPEND (50 lines), not Windows' latest-wins. Windows keeps exactly one bundle because a bundle is hundreds of KB; these are one line. The failure that motivated this packet — a driver update breaking every launch until someone regenerates the spec — is a REPEATING failure whose history is the evidence that it is not a one-off, and latest-wins cannot answer "has this been happening all week?".
+
+            2. NO STDERR AND NO ARGV IN THE FILE. It is durable and operator-shareable, which is exactly where a credential leaks. It names the inspect command instead, which fetches the full error on demand. A scope-control test asserts the forbidden substrings stay absent.
+
+            3. THE CORE TAKES ITS PATH EXPLICITLY (write_launch_breadcrumb_at), with the env-var override confined to the thin wrapper. set_var is process-global and these tests run in parallel, so an env-driven test would race its siblings — the kind of flake that gets a test deleted rather than fixed.
+
+            VERIFICATION. Four unit tests (names the service and the runnable inspect command; unclassified failures still leave a breadcrumb; the window accumulates but stays bounded and keeps the NEWEST; the no-stderr/no-argv scope control). Three further mutations, each asserted to LAND before its verdict was trusted: unwiring the call, removing the bound, and dropping the verdict. All three bite. Litmus step 8/8 in litmus-tray-network-bootstrap.yaml asserts the helper HAS A CALLER on the failure path — a helper with no caller is precisely the defect EC1 nearly shipped this morning, and unwiring it makes that step fail.
+
+            HONEST LIMIT, stated rather than implied: I have NOT observed a real launch failure writing this file. The helper is covered by unit tests and the wiring by the litmus, but the end-to-end path (a genuine podman failure through run_container_observed producing the file on disk) is unexercised here — it needs a launch that fails for real. The cheapest confirmation for whoever next reproduces a launch failure on any Linux host: cat ~/.local/state/tillandsias/launch-failures.log.
+        - type: progress
           ts: "2026-09-01T19:05:00Z"
           agent_id: "linux-lenovinha-claude-20260901t185307z"
           host: lenovinha
