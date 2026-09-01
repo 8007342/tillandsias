@@ -2231,7 +2231,11 @@ fn build_launch_spec(project: &ProjectEntry, kind: LaunchKind, image: &str) -> C
         ))
         .hostname(super::sanitize_hostname(&format!("forge-{project_name}")))
         .network("tillandsias-enclave")
-        .pids_limit(512)
+        // 4096, not 512 — same 667-se87/959-fpc5 rationale as the live
+        // launcher (main.rs build_forge_agent_run_args_with_vault): 512 is
+        // reachable by one tool-install fork storm on floor hardware. This
+        // legacy path stays value-aligned with the live one.
+        .pids_limit(4096)
         .volume(
             project_path.display().to_string(),
             format!("/home/forge/src/{project_name}"),

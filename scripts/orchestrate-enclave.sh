@@ -302,6 +302,10 @@ log_step "Starting inference container (non-blocking)..."
 
 # ===========================================================================
 # Step 5: Forge Container
+# (pids-limit 4096, not 512 — 667-se87/959-fpc5: one installer fork storm
+# pinned pids.peak at exactly 512 on two floor hosts; builds measured
+# 3.5-6.6% of the ceiling. Value-aligned with the Rust launchers; the
+# rationale travels with every site so no copy looks intentionally lower.)
 # ===========================================================================
 log_step "Starting forge container..."
 
@@ -319,7 +323,7 @@ podman rm -f "$FORGE_CONTAINER" 2>/dev/null || true
             --security-opt=no-new-privileges \
             --security-opt=label=disable \
             --userns=keep-id \
-            --pids-limit=512 \
+            --pids-limit=4096 \
             --entrypoint /bin/bash \
             --env "http_proxy=http://proxy:3128" \
             --env "https_proxy=http://proxy:3128" \
@@ -401,7 +405,7 @@ podman rm -f "$FORGE_CONTAINER" 2>/dev/null || true
         --security-opt=no-new-privileges \
         --security-opt=label=disable \
         --userns=keep-id \
-        --pids-limit=512 \
+        --pids-limit=4096 \
         --env "http_proxy=http://proxy:3128" \
         --env "https_proxy=http://proxy:3128" \
         --env "HTTP_PROXY=http://proxy:3128" \
