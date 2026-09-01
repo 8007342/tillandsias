@@ -1,0 +1,228 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+
+status:
+  - packet_id: opencode-curl-install-never-populates-its-cache
+    field: status
+    value: completed
+    ts: "2026-09-01T04:45:00Z"
+    host: macuahuitl
+
+events:
+  - packet_id: opencode-curl-install-never-populates-its-cache
+    event:
+      type: note
+      ts: "2026-09-01T04:45:00Z"
+      host: macuahuitl
+      summary: >
+        COMPLETED at 0d05d4d8d: curl lane, four exclusive last-good helpers,
+        vendor-scratch sweep, harness_update_lock quartet, and
+        require_opencode's lock dance all removed; npm on-demand via
+        _require_harness is the only channel. Two fixtures retired with
+        their subject (rollback-is-loud — lenovinha's loud clause did its
+        job by forcing the decision — and harness-lock); vault-auth kept
+        its auth arms; three litmus files re-pinned including a
+        single-writer pin replacing the two-taker pin, plus the vault-auth
+        wrapper's success_pattern (caught only by the FULL gate — the
+        instant-size filter excluded it from every scoped verify, a shared
+        blind spot recorded in 4ca96e414). Adversarial verify workflow ran
+        pre-commit; its one DEFECT finding (stale rollback guidance
+        instructing readers to resurrect the retired lock) was fixed before
+        landing. The cold-forge warning cost clock is stopped.
+
+  - packet_id: epoch-version-encoding-fleet-adoption
+    event:
+      type: note
+      ts: "2026-09-01T04:45:00Z"
+      host: macuahuitl
+      summary: >
+        Coordinator host is fully cut over: v56.9.1.10 installed (first
+        real new-day rollover 56.8.31.x -> 56.9.1.x executed unattended and
+        correctly), all images at matching version, tray relaunched and
+        protocol-verified (GetLayout parent_id/depth honored, AboutToShow
+        single-bool, unknown id errors — the three freeze surfaces), full
+        stack healthy, live agent witnessed working in a forge container.
+        The install took TEN rebuild attempts across ~5h: four real gate
+        catches (vault-auth wrapper pin, drm_fixture (pid,len) temp-dir
+        collision made deterministic by an unrelated +1 test, rustfmt, my
+        own forensic podman shim breaking the podman probe inside the
+        toolbox) and a still-unattributed serial killer of the builder
+        container (six podman kills: 22:05Z 23:58Z 01:52Z 03:39Z 04:14Z
+        04:17Z, fresh podman CLI, at least three at exact :00 seconds,
+        only during builder-resident full builds ~15min in; no cron, no
+        timer, no healthcheck, no local session, no repo script matches;
+        --check gates in the same container never hit). Worked around via
+        TILLANDSIAS_SKIP_TOOLBOX=1 host-native build. Evidence packet
+        filed as builder-container-serial-killer. Root cause of the
+        OPERATOR'S original lane failures confirmed en route: the old
+        installed v0.4.260830.5 binary's pre-936-kdev prefix sweep killed
+        the enclave stack (vault/proxy/inference Exited 137 at 22:05Z) on
+        every lane launch — the launch killed the stack it needed. The
+        fixed binary ends the class.
+
+  - packet_id: sni-windowid-type-wedges-shell
+    event:
+      type: note
+      ts: "2026-09-01T04:45:00Z"
+      host: macuahuitl
+      summary: >
+        Tray relaunched at v56.9.1.10 (all five freeze fixes + scoped
+        shutdown sweep). Wire verified by busctl protocol drive, not by
+        desktop clicking: GetLayout honors parent_id/recursion_depth with
+        correct u(ia{sv}av) shape, AboutToShow answers 'b false', unknown
+        id 9999 returns a proper error never a guessed tree. Remaining for
+        closure: the operator's live click-through session (menu open,
+        submenu expand, forge launch, no freeze).
+
+packets:
+  - packet_id: forge-first-launch-tax
+    order: 953-fflt
+    status: ready
+    kind: fix
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    depends_on: []
+    capability_tags: [forge, images, performance]
+    title: >
+      The forge schedules its heaviest job concurrently with its own entire
+      startup, and the warm path structurally never covers a user's first
+      launch — prebake tillandsias-plan at image build and serialize the
+      expert bootstrap.
+    context: |
+      Full evidence and the three-point bracket (cold+idle 233s vs
+      stale+contended 516s — a 2.2x inversion; self-contention, not cache
+      state, is the risk; timeout bump RETIRED at 61% idle headroom) in
+      plan/issues/esmeraldinha-n100-forge-audit-2026-09-01.md. Measured by
+      esmeraldinha on the N100 lower-bound host. 781-6gys's copy-out design
+      HELD under hostile test and stays. The shim first-launch tax
+      (105s-once) is already fixed on trunk; this packet is the bootstrap
+      half: prebake (the publish logic exists, runs one stage too late) +
+      do-not-build-during-startup.
+    verifiable_closure: |
+      A fresh forge guest at a new release reaches forge-plan MCP ready
+      without any cargo build (podman logs show the prebake restore path),
+      and startup load1 on a 4-core guest stays under 4 through expert
+      readiness.
+
+  - packet_id: forge-stable-identity
+    order: 954-fsid
+    status: ready
+    kind: fix
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    depends_on: []
+    capability_tags: [forge, telemetry, orchestration]
+    title: >
+      A forge guest has no stable fleet identity: build.sh --check is
+      refused by the capability-row gate and timing telemetry writes
+      host=unknown in 96% of records — one missing fact, two starving
+      consumers; export TILLANDSIAS_WORKSTATION at launch.
+    context: |
+      Evidence in plan/issues/esmeraldinha-n100-forge-audit-2026-09-01.md
+      (322/337 unattributed timing records; 889-ewvt refusal text — which
+      is also the fleet's positive exemplar of a diagnostic that names its
+      condition, sources, reasoning and remedy). The launcher knows the
+      host's fleet name; pass it into the guest env at forge launch.
+    verifiable_closure: |
+      In a fresh guest: build.sh --check passes the capability-row gate,
+      and new tillandsias-timing.jsonl records carry the host's fleet name.
+
+  - packet_id: forge-guest-hygiene
+    order: 955-fgh7
+    status: ready
+    kind: fix
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    depends_on: []
+    capability_tags: [forge, images]
+    title: >
+      Forge guest hygiene bundle: root-owned gh config dir (gh dies before
+      argv), launch-time opsx re-materialization dirties every checkout
+      with semantic drift, gitconfig latches a pre-clone transient as a
+      permanent origin FAULT, and litmus writes into the live global hooks
+      dir.
+    context: |
+      Four separately-verified defects, one image/launch surface — details
+      and exact modes/mtimes in
+      plan/issues/esmeraldinha-n100-forge-audit-2026-09-01.md. The global
+      hooksPath foreign-repo blocking itself is already FIXED on trunk
+      (install-hooks.sh guard, esmeraldinha-verified 6/5 -> 11/0);
+      follow-up consideration there: includeIf gitdir: scoping instead of
+      global hooksPath, which would also resolve the litmus contamination
+      arm structurally.
+    verifiable_closure: |
+      Fresh guest: gh --version runs as uid 1000; git status clean at
+      first prompt; gitconfig carries a mirror redirect or a TRUE fault;
+      a litmus full run leaves the global hooks dir mtimes untouched.
+
+  - packet_id: litmus-low-end-instrument
+    order: 956-llei
+    status: ready
+    kind: fix
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    depends_on: []
+    capability_tags: [litmus, test, performance]
+    title: >
+      Litmus on the low-end lane: close precondition-gating holes, adopt
+      the starvation verdict vocabulary, re-budget or lane-gate the top
+      wasteful steps (33% of wall in 5 tests, one PASSING at 118.3s), fix
+      the guard that greps its own removal comment, and make multi-arm
+      failures name their arm.
+    context: |
+      plan/issues/esmeraldinha-n100-forge-audit-2026-09-01.md carries the
+      full adjudication: 2.05x contention multiplier with the runner's
+      kill-time adjudication correct on every stamp; instant-tier not
+      instant on N100; two of three over-budget steps are macOS-floor
+      checks running on Linux guests; shipped-diagnostic-tool-dispatch
+      step 3 greps 'brew install jq' and hits the comment documenting the
+      799-tb7q removal (assert BEHAVIOR or exclude comments; likely born
+      red at a0ea1f169 — confirm on a free host);
+      daily-maintenance-day-boundary emits a bare fail with no arm named.
+    verifiable_closure: |
+      host-browser-lane skips (not fails) where its socket is absent; the
+      diagnostic guard passes on the current tree and fails on a tree with
+      a live brew-install instruction (mutation pair); every multi-arm
+      fixture failure names its arm; the top-five timing table shrinks or
+      each survivor's budget carries a low-end rationale.
+
+  - packet_id: builder-container-serial-killer
+    order: 957-bcsk
+    status: ready
+    kind: investigation
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    depends_on: []
+    capability_tags: [podman, build, forensics]
+    title: >
+      Something killed the tillandsias-builder toolbox six times in one
+      night — fresh podman CLI, exact :00 seconds at least three times,
+      only during builder-resident full builds — and every attribution
+      lane came up empty.
+    context: |
+      Kill timestamps 2026-08-31/09-01: 22:05:23Z, 23:58:54Z, 01:52:31Z,
+      03:39:14Z, 04:14:00Z, 04:17:00Z (last three during rebuilds seven
+      and nine; the on-the-minute pair suggests minute-granularity
+      scheduling). Ruled out with evidence: user+system systemd timers,
+      crontab, harness crons (only the :23 coordinate slot), podman
+      healthchecks (builder has none, none armed), other local Claude
+      sessions (none), repo scripts (no podman-kill call site matches),
+      OOM (journal clean), operator activity (asleep for the later kills).
+      A PATH-shim forensic wrapper caught nothing because the kill window
+      did not recur while armed — and broke the toolbox-internal podman
+      probe (the shim itself is a lesson: /usr/bin/podman is not the entry
+      point inside a toolbox). --check gates (~90s in the same container)
+      were never hit; the kill window is ~15min into a run. WORKAROUND
+      PROVEN: TILLANDSIAS_SKIP_TOOLBOX=1 host-native ci-full+install
+      completed where five builder-resident attempts died. Next
+      instrumentation: podman events --stream with process accounting
+      (forkstat/execsnoop) armed BEFORE a deliberate builder-resident
+      build, on a host that can spare the hour.
+    verifiable_closure: |
+      The killing process is named with its full ancestry, or 72h of
+      armed instrumentation across builder-resident builds records zero
+      kills and the packet closes as ceased-with-instrumentation.

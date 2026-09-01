@@ -751,3 +751,37 @@ a failing measurement names the tool and invocation that produced it, and
 a surprising one is confirmed by a second, differently-shaped instrument
 before it is filed — the third measurement artifact of that night was
 caught only by asking a second tool.
+
+## Subtract yourself before attributing a signal to the environment (2026-09-01, two hosts)
+
+Five instances in one night, independently on a fat coordinator and an N100
+forge guest: a pgrep -f gate that matched its own sibling watchers' argv
+(twice, once per host); an idle-gate that deadlocked on it for 17 minutes; a
+"periodic" ~113-minute container killer whose periodicity was the observer's
+own retry cadence reflected back; a zsh harness word-splitting a bash-ism so
+a sampler reported 0MB peaks; and a forensic PATH shim whose first catch was
+its own installation command's argv. The rule: your watchers, your wrappers,
+your retry cadence, and your shell's semantics are all part of the observed
+system — gate on task lifecycle or an exec-path match, never on a pattern
+you also typed into a sibling command, and prefer `ps -eo args | grep -c
+"[b]racketed"` over pgrep -f inside any agent harness.
+
+The pair rule, from the same night's four self-caught corrections (the
+zero-SKIP claim, the /dev/null-disables-the-spy confound, the shim-cost
+magnitude, the truncated denominator): **confirmation is when the instrument
+gets the least scrutiny and needs the most** — when a result agrees with
+what you expected, read the instrument once more before reporting it. Three
+of the four corrections came from exactly that habit.
+
+## grep-REDS-on-comments (2026-09-01) — the mirror of grep-greens-on-comments
+
+litmus-shipped-diagnostic-tool-dispatch step 3 greps two shipped scripts for
+'brew install jq' and FAILS on the comment documenting the 799-tb7q removal
+of that very instruction — the fix quoted what it removed, and the guard
+added to protect the fix cannot tell code from the prose describing its own
+victory. Likely born red in the same commit that added it (a0ea1f169). A
+guard that punishes explaining a removal teaches people not to explain
+removals. Assert on BEHAVIOR (run the diagnostic without jq and inspect the
+output), or at minimum `grep -v '^\s*#'` before matching. Same disease as
+grep-greens-on-comments, opposite direction; file findings against either
+shape on sight.
