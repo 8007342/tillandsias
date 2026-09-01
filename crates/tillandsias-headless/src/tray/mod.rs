@@ -639,13 +639,91 @@ fn write_control_envelope(
     stream.flush()
 }
 
+/// Order 832-me6z. The write deadline every broadcast subscriber carries.
+///
+/// THE INVARIANT THIS EXISTS FOR: no lock covering ALL subscribers may be
+/// held across an unbounded wait on ONE of them.
+/// `broadcast_control_envelope` holds the subscriber-LIST lock while doing a
+/// blocking `write_all` to each subscriber in turn, so a single peer that
+/// stops draining fills its socket buffer and wedges every future broadcast
+/// to every OTHER subscriber, forever.
+///
+/// THE 828-r2ek FRAME BOUND DOES NOT FIX THIS and must not be read as fixing
+/// it. Capping frames at `MAX_MESSAGE_BYTES` makes the oversize path
+/// unreachable, but a subscriber that merely stops reading — a wedged tray, a
+/// SIGSTOPped process, a slow peer — still fills its buffer at NORMAL frame
+/// sizes and produces the identical wedge. The bound removed one trigger, not
+/// the mechanism.
+///
+/// This is `SO_SNDTIMEO`, so it bounds WRITES ONLY: the connection thread's
+/// blocking `read_control_envelope` on the same stream is unaffected, which is
+/// why the deadline can be applied at registration without turning idle
+/// subscribers into read timeouts.
+///
+/// The value is a deadline, not a latency budget. A healthy local subscriber
+/// on a unix socket completes a <=64 KiB write in microseconds; five seconds
+/// is chosen to be far outside any legitimate scheduling delay so an expiry
+/// means the peer is genuinely not draining, while still bounding the wedge to
+/// something an operator experiences as a hiccup rather than a hang.
+const CONTROL_SUBSCRIBER_WRITE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Register `stream` for broadcasts, applying the write deadline FIRST.
+///
+/// Registration is the only place a stream enters the broadcast path, so it is
+/// the one place the deadline has to be applied — a subscriber that reaches
+/// `subscribers` without one reintroduces the wedge.
+///
+/// A stream whose deadline could not be set is REFUSED rather than registered
+/// undeadlined. Dropping one subscriber costs that peer its broadcasts; a
+/// single undeadlined subscriber costs EVERY peer every future broadcast, so
+/// the asymmetry decides it. Returns whether the stream was registered.
+fn register_control_subscriber(stream: UnixStream, subscribers: &ControlSubscribers) -> bool {
+    if let Err(err) = stream.set_write_timeout(Some(CONTROL_SUBSCRIBER_WRITE_TIMEOUT)) {
+        warn!(
+            spec = "tray-host-control-socket",
+            error = %err,
+            timeout_secs = CONTROL_SUBSCRIBER_WRITE_TIMEOUT.as_secs(),
+            "refusing to register a control subscriber whose write deadline could \
+             not be set; an undeadlined subscriber can wedge every future broadcast"
+        );
+        return false;
+    }
+    subscribers
+        .lock()
+        .expect("control subscribers lock")
+        .push(Arc::new(Mutex::new(stream)));
+    true
+}
+
 fn broadcast_control_envelope(subscribers: &ControlSubscribers, envelope: &ControlEnvelope) {
     let mut subscribers = subscribers.lock().expect("control subscribers lock");
     subscribers.retain(|subscriber| {
         let Ok(mut stream) = subscriber.lock() else {
             return false;
         };
-        write_control_envelope(&mut stream, envelope).is_ok()
+        match write_control_envelope(&mut stream, envelope) {
+            Ok(()) => true,
+            Err(err) => {
+                // Order 832-me6z. `retain` already dropped a failed subscriber
+                // SILENTLY. With a write deadline in place the commonest
+                // failure is now a peer that stopped draining, and an operator
+                // whose tray quietly stops receiving broadcasts has no way to
+                // tell that from a tray that was never subscribed. WouldBlock /
+                // TimedOut is the deadline expiring; anything else is the peer
+                // going away.
+                warn!(
+                    spec = "tray-host-control-socket",
+                    kind = envelope.body.kind(),
+                    error = %err,
+                    error_kind = ?err.kind(),
+                    timeout_secs = CONTROL_SUBSCRIBER_WRITE_TIMEOUT.as_secs(),
+                    "evicting a control subscriber: its broadcast write failed. \
+                     A TimedOut/WouldBlock kind means the peer stopped draining \
+                     and hit the write deadline."
+                );
+                false
+            }
+        }
     });
 }
 
@@ -1311,10 +1389,9 @@ fn handle_control_connection(
                     if write_control_envelope(&mut stream, &ack).is_err() {
                         return;
                     }
-                    subscribers
-                        .lock()
-                        .expect("control subscribers lock")
-                        .push(Arc::new(Mutex::new(stream)));
+                    // Order 832-me6z: the deadline is applied HERE, at the only
+                    // door into the broadcast path. See register_control_subscriber.
+                    register_control_subscriber(stream, &subscribers);
                 }
                 ControlMessage::IssueWebSession { .. } | ControlMessage::EvictProject { .. } => {
                     // Broadcast to every registered subscriber first. This is a
@@ -4861,6 +4938,140 @@ mod tests {
             delivered > 0,
             "the small envelope must have reached the peer; only the oversize one is refused"
         );
+    }
+
+    /// Order 832-me6z, big envelope helper: a frame large enough that a
+    /// handful of them fill a default unix-socket send buffer. Keeping it
+    /// under MAX_MESSAGE_BYTES matters — an oversize frame is refused by the
+    /// 828-r2ek writer bound and would never reach `write_all`, so a test
+    /// built on one would prove nothing about the wedge.
+    fn fat_broadcast_envelope() -> ControlEnvelope {
+        let label = "x".repeat(MAX_MESSAGE_BYTES / 2);
+        ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 1,
+            body: ControlMessage::IssueWebSession {
+                project_label: label,
+                cookie_value: [0u8; 32],
+            },
+        }
+    }
+
+    /// Order 832-me6z, POSITIVE CONTROL for the mechanism.
+    ///
+    /// Registration is the only door into the broadcast path, so this pins
+    /// that the deadline is applied there rather than left to the caller.
+    #[test]
+    fn a_registered_control_subscriber_carries_a_write_deadline() {
+        let (server_side, _peer) = UnixStream::pair().expect("UnixStream::pair");
+        let subscribers: ControlSubscribers = Arc::new(Mutex::new(Vec::new()));
+
+        assert!(
+            register_control_subscriber(server_side, &subscribers),
+            "a healthy stream must register"
+        );
+
+        let registered = subscribers.lock().expect("subscribers lock");
+        assert_eq!(
+            registered.len(),
+            1,
+            "the stream must be in the broadcast set"
+        );
+        let deadline = registered[0]
+            .lock()
+            .expect("subscriber lock")
+            .write_timeout()
+            .expect("querying the write timeout must succeed");
+        assert_eq!(
+            deadline,
+            Some(CONTROL_SUBSCRIBER_WRITE_TIMEOUT),
+            "a registered subscriber with no write deadline can wedge every \
+             future broadcast to every other subscriber (832-me6z)"
+        );
+    }
+
+    /// Order 832-me6z, THE ARM. This is the test the packet exists for.
+    ///
+    /// A subscriber that stops draining fills its socket buffer at NORMAL
+    /// frame sizes. Before the deadline, `broadcast_control_envelope` blocked
+    /// in `write_all` while holding the subscriber-LIST lock, so this loop did
+    /// not fail — it HUNG, which is exactly how 832-me6z was found (the runner
+    /// reported "has been running for over 60 seconds"). With the deadline the
+    /// stalled peer is evicted and the broadcast path stays open.
+    ///
+    /// FALSIFICATION NOTE, and why this test is shaped the way it is.
+    ///
+    /// The regression's signature is a HANG, not a red assertion:
+    /// `write_all` blocks inside the broadcast, so an in-loop wall-clock
+    /// assert can never be reached to fire. A hanging arm STALLS the gate
+    /// instead of reddening it, which is barely better than no arm at all.
+    /// So the broadcast runs on a WORKER thread and the test thread watches it
+    /// with `recv_timeout`: the wedge becomes a clean, fast failure.
+    /// Verified by mutation — replacing the deadline with `None` fails this
+    /// test in ~15s where the same mutation hung a same-thread version past
+    /// 300s.
+    #[test]
+    fn a_subscriber_that_stops_draining_is_evicted_instead_of_wedging_the_broadcast() {
+        let subscribers: ControlSubscribers = Arc::new(Mutex::new(Vec::new()));
+
+        // The stalled peer: registered, and its far end NEVER read from. The
+        // peer end is held alive deliberately — dropping it would close the
+        // socket and produce EPIPE, which is a different eviction path and
+        // would pass even with the wedge present.
+        let (stalled, _stalled_peer_never_reads) = UnixStream::pair().expect("pair");
+        assert!(register_control_subscriber(stalled, &subscribers));
+
+        // A HEALTHY peer alongside it, and the reason the packet is about more
+        // than one dead subscriber: the wedge's real cost is that every OTHER
+        // subscriber's broadcasts queue behind the stalled one forever.
+        let (healthy, healthy_peer) = UnixStream::pair().expect("pair");
+        assert!(register_control_subscriber(healthy, &subscribers));
+        let drainer = std::thread::spawn(move || {
+            let mut peer = healthy_peer;
+            let mut sink = [0u8; 8192];
+            while let Ok(n) = peer.read(&mut sink) {
+                if n == 0 {
+                    break;
+                }
+            }
+        });
+
+        // Broadcast on a worker; the test thread only watches the clock.
+        let (done_tx, done_rx) = mpsc::channel::<usize>();
+        let broadcaster = {
+            let subscribers = subscribers.clone();
+            std::thread::spawn(move || {
+                let envelope = fat_broadcast_envelope();
+                let mut broadcasts = 0;
+                // Enough iterations to overrun any plausible default send
+                // buffer with MAX_MESSAGE_BYTES/2 frames.
+                while subscribers.lock().expect("lock").len() > 1 && broadcasts < 64 {
+                    broadcast_control_envelope(&subscribers, &envelope);
+                    broadcasts += 1;
+                }
+                let _ = done_tx.send(broadcasts);
+            })
+        };
+
+        // One deadline expiry (5s) plus scheduling slack. A wedge blows this;
+        // a healthy run returns in about one expiry.
+        let broadcasts = done_rx
+            .recv_timeout(std::time::Duration::from_secs(60))
+            .expect(
+                "the broadcast loop did not finish: a stalled subscriber is \
+                 wedging the broadcast path for every other subscriber (832-me6z)",
+            );
+
+        let remaining = subscribers.lock().expect("lock").len();
+        assert_eq!(
+            remaining, 1,
+            "the stalled subscriber must be evicted, and the draining one must \
+             survive; got {remaining} subscriber(s) after {broadcasts} broadcast(s)"
+        );
+
+        let _ = broadcaster.join();
+        subscribers.lock().expect("lock").clear();
+        let _ = drainer.join();
     }
 
     /// ORDER 591-33s6. The cloud overflow row must not be a clickable control

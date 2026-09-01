@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+
+status:
+  - packet_id: claim-events-change-no-status-so-claiming-separates-nobody
+    field: status
+    value: ready
+    ts: "2026-09-01T18:00:00Z"
+    host: macuahuitl
+
+events:
+  - packet_id: claim-events-change-no-status-so-claiming-separates-nobody
+    event:
+      type: note
+      ts: "2026-09-01T18:00:00Z"
+      host: macuahuitl
+      summary: >
+        UNBLOCKED by the coordinator: the 2026-08-30 two-guard deadlock this
+        packet blocked on is structurally resolved — both halves of the
+        worker's proposed resolution landed 2026-08-31:
+        verify-version-monotonic.sh is scoped to tags REACHABLE from the
+        pushed branch (--merged HEAD, exactly the worker's second option),
+        and the version guard gained the release-tag catch-up equality
+        exception. Verified live today: git merge-base --is-ancestor
+        v56.8.31.3 origin/main returns 0 (the root condition — a release
+        tag on no branch — is gone; the whole v56.* train landed through
+        release branches with main promoted). The worker's stranded local
+        work also reached trunk: scripts/test-check-stranded-in-progress.sh
+        runs in every build.sh --check and passes 6/6 here now. Status back
+        to ready; the next owner should verify the packet's ORIGINAL scope
+        (claim events changing no status) against the current fold rather
+        than resuming from the deadlock narrative — the 636-9m79 set-field
+        LWW channel landed since and may have absorbed part of the scope.

@@ -38293,6 +38293,12 @@ plan_index:
         probably the better manners.
 
       events:
+        - type: progress
+          ts: "2026-09-01T14:57:53Z"
+          agent_id: "linux-lenovinha-claude-20260901t145326z"
+          host: lenovinha
+          summary: |
+            STOP BEFORE DELETING THE TRAPS — the packet's premise is wrong in a way that would have caused a regression, and I verified it rather than acting on it. THE CLAIM: 'all five in-container exit_pause traps written to prevent exactly this are destroyed by their own exec', 'six divergent duplicates compensating for an unset default, NONE OF WHICH CAN FIRE', and the deliverable ends 'the five inert exit_pause copies are then deleted'. MEASURED ACROSS ALL SIX. The trap is armed before the exec in every file, so on the SUCCESS path exec replaces the process image and the trap is indeed destroyed. That half is right. But exit_pause was never written for the success path — its own comment, three lines above it, says so: 'a successful exec <agent> replaces the shell, so the trap never fires on the happy path'. It exists for FAILURE exits, and there it works. entrypoint-forge-antigravity.sh has a live one: require_antigravity failing after three install attempts prints a diagnostic block naming the proxy allowlist entry to add, then exit 1 at line 104 — after the trap is armed, with no exec between. The trap fires, prints 'Press any key to exit...', and holds the window open so the operator can READ the allowlist hostname. That is the single path where holding the window matters most, and deleting the trap as inert would take it away. Counted after the trap arms: antigravity has 1 bare exit, the other five have 0, and none of the six sets -e, so a failing command does not abort them into an early exit. So the accurate statement is FIVE INERT, ONE LIVE — not six inert. The packet is also internally inconsistent on this: the title says five, the context says six copies. PROVEN, NOT REASONED: a scratch script with set -euo pipefail, an EXIT trap, and a failure before its exec printed TRAP FIRED and exited 1. The mechanism is real; only its reachability per file needed counting. CONSEQUENCE FOR THE SEQUENCING. 'The six become deletable once the wrapper lands' holds ONLY IF the wrapper holds the window on FAILURE exits too. If it holds only on clean exit — which is the bug the packet is about — deleting the traps silently removes failure-path hold, and the regression appears exactly when an operator is trying to read an error. Whoever implements the wrapper must state which exits it holds, and the deletion must be justified against that, per trap, rather than by the blanket 'they cannot fire'. NOT DONE THIS CYCLE, and why: the wrapper's own acceptance test is 'run a lane, let it exit cleanly, confirm the window survives with the scrollback readable, close it, confirm no residue' — that needs a host that can OBSERVE A WINDOW. This session cannot. Implementing an unobservable GUI change and calling it done would be the same move as claiming a criterion I did not meet.
         - type: note
           ts: "2026-08-19T02:15:00Z"
           agent_id: linux-macuahuitl-opus5-20260819T021500Z
@@ -42194,6 +42200,23 @@ plan_index:
         chosen, the invariant worth stating is that no lock covering ALL
         subscribers may be held across an unbounded wait on ONE of them.
 
+      events:
+        - type: progress
+          ts: "2026-09-01T17:22:00Z"
+          agent_id: "linux-lenovinha-claude-20260901t165545z"
+          host: lenovinha
+          summary: |
+            Write deadline landed. broadcast_control_envelope no longer waits unbounded on any one subscriber.
+
+            WHAT SHIPPED: CONTROL_SUBSCRIBER_WRITE_TIMEOUT (5s, SO_SNDTIMEO) applied in a new register_control_subscriber(), which is the only door into the broadcast set. A stream whose deadline cannot be set is REFUSED rather than registered undeadlined: dropping one subscriber costs that peer its broadcasts, while one undeadlined subscriber costs every peer every future broadcast. Eviction in the retain is now logged with error_kind, because retain dropped failed subscribers silently and an operator cannot otherwise distinguish an evicted tray from one that never subscribed.
+
+            SCOPE: SO_SNDTIMEO bounds writes only, so the connection thread's blocking read_control_envelope on the same stream is unaffected. This is why the deadline can be applied at registration without turning idle subscribers into read timeouts.
+
+            MUTATION-TESTED, both arms, with the mutation asserted to land first (occurrence count 1 -> 0 before trusting any verdict). Replacing the deadline with None fails both tests.
+
+            TEST SHAPE IS DELIBERATE: the regression's signature is a HANG, not a red assertion, because write_all blocks inside the broadcast and an in-loop wall-clock assert can never be reached to fire. A first version of the arm asserted in-loop; under mutation it hung past 300s, which stalls the gate rather than reddening it. The broadcast now runs on a worker thread watched by recv_timeout, so the same mutation fails in 60s. The stalled peer's far end is held alive on purpose: dropping it would close the socket and evict via EPIPE, a different path that would pass even with the wedge present.
+
+            The 828-r2ek frame bound does not fix this and is not read as fixing it.
     - packet_id: older-app-silently-downgrades-a-newer-enclave
       order: 834-r6vn
       status: ready
