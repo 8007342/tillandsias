@@ -70,45 +70,51 @@ verification debt; make the debt loud, not invisible).
 
 ---
 
-## 1 — Compute the new version
+## 1 — Decide the promotion path, THEN (maybe) compute a version
 
-The canonical format is `MAJOR.MINOR.YYMMDD.N` where:
+**Two paths exist, and choosing wrong discards evidence (952-mrsl, learned
+during the v56.8.31.3 stable promotion):**
 
-- `MAJOR.MINOR` is the **current series, read from the `VERSION` file** — never hardcoded.
-  As of the 2026-06 CalVer transition the series is `0.3`. Deriving it from VERSION
-  means a future series bump (the operator edits VERSION's first two components) flows
-  through automatically instead of desyncing main vs linux-next (the 2026-06-04 incident).
-- `YYMMDD` is today's UTC date (e.g. `260605` for 2026-06-05).
-- `N` is the daily sequence (1 for the first release of the day, 2 for the second, etc.).
+- **PROMOTE-EXISTING** (the default when a blessed release already exists):
+  a daily release was already cut, its assets were verified by a blessing
+  round, and the ask is "make it stable". Do NOT cut a new version — a fresh
+  cut discards the exact artifacts the blessing verified. Skip this step's
+  computation entirely: merge linux-next → main (steps 2-3), SKIP the
+  VERSION bump (step 4) when main's merged VERSION already equals the
+  existing tag, skip tag/dispatch/watch (steps 5-7), and instead flip the
+  existing release: `gh release edit vX.Y.Z.N --prerelease=false --latest`.
+  Verify `/releases/latest` resolves to it. Stable then serves byte-for-byte
+  what was blessed.
+- **CUT-NEW** (no existing blessed release, or the tree moved past it):
+  compute the next version and run every step below.
+
+**The version scheme is epoch-anchored CalVer** (operator ruling 2026-08-31):
+`<years_since_epoch>.<month>.<day>.<build>` — e.g. `56.8.31.3` for the third
+build of 2026-08-31. `scripts/bump-version.sh` is the scheme's executable
+definition (`openspec/specs/versioning/spec.md` is the spec); NEVER re-derive
+the format here. This section previously computed `MAJOR.MINOR.YYMMDD.N` by
+hand — under the epoch scheme that hand-derivation produces the malformed
+hybrid `v56.8.260901.1`, whose six-digit third field is the exact Store-cap
+violation the cutover retired. Delegate:
 
 ```bash
-series="$(cut -d. -f1-2 VERSION | tr -d '[:space:]')"   # e.g. "0.3"
-today=$(date -u +%y%m%d)
-prev_tag=$(git tag --list "v${series}.${today}.*" | sort -V | tail -1)
-if [[ -z "$prev_tag" ]]; then
-    seq=1
-else
-    seq=$(( $(echo "$prev_tag" | sed -E "s/v${series//./\\.}\.${today}\.([0-9]+)/\1/") + 1 ))
-fi
-new_version_computed="${series}.${today}.${seq}"
-
-# Check if current VERSION is already ahead of the computed sequence
-current_version=$(cat VERSION | tr -d '[:space:]')
-if [[ "$current_version" =~ ^${series//./\\.}.${today}\.[0-9]+$ ]]; then
-    if [[ "$(printf '%s\n%s' "$current_version" "$new_version_computed" | sort -V | tail -1)" == "$current_version" ]]; then
-        new_version="$current_version"
-    else
-        new_version="$new_version_computed"
-    fi
-else
-    new_version="$new_version_computed"
-fi
-
+# CUT-NEW path only. Same UTC day → build+1; new UTC day → <y>.<m>.<d>.1.
+# The bump lands via a release/version-bump-* branch (step 4), never here.
+# NOTE the layout-preserving scratch: bump-version.sh anchors VERSION to its
+# OWN script path (SCRIPT_DIR/..), not to $PWD — copying VERSION alone into a
+# scratch dir and cd-ing there would bump the REAL checkout's file.
+new_version="$(
+  tmp=$(mktemp -d) && mkdir -p "$tmp/scripts" \
+  && cp VERSION "$tmp/VERSION" && cp scripts/bump-version.sh "$tmp/scripts/" \
+  && bash "$tmp/scripts/bump-version.sh" --bump-build >/dev/null \
+  && tr -d '[:space:]' < "$tmp/VERSION" && rm -rf "$tmp"
+)"
 new_tag="v${new_version}"
-echo "Computed: $new_tag (series ${series} from VERSION, current ${current_version})"
+echo "Computed: $new_tag (dry-run bump in a scratch layout; the real bump lands in step 4)"
 ```
 
-This produces e.g. `v0.3.260605.1` for the first release of 2026-06-05, `v0.3.260605.2` for the second.
+Sanity: the third field is a day-of-month (1-31), never six digits; the first
+field is ≥56 and ≤65535.
 
 ---
 
@@ -217,7 +223,13 @@ git pull --ff-only origin main
 bump_branch="release/version-bump-${new_version}"
 git checkout -b "${bump_branch}"
 echo "${new_version}" > VERSION
-git add VERSION
+# THE BUMP COMMIT CARRIES VERSION + CARGO FILES ONLY (702-eusw, hit live
+# 2026-08-31): the pre-push guard refuses any commit that sweeps a VERSION
+# bump in with unrelated files. Run scripts/bump-version.sh to sync the
+# Cargo.toml semver, then add ONLY those files — never `git add -A` here
+# (a stray loop-status fragment once rode along and the push was refused).
+scripts/bump-version.sh >/dev/null
+git add VERSION Cargo.lock crates/*/Cargo.toml 2>/dev/null || git add VERSION
 git commit -m "release: bump VERSION to ${new_version}
 
 The merge-to-main-and-release skill bumped VERSION as part of the
@@ -458,12 +470,16 @@ branch is not ahead of upstream.
 - **NEVER bump VERSION on linux-next**; only on main as part of the release commit. Sibling hosts (osx-next / windows-next) consume VERSION from their respective merge points; bumping it on linux-next desyncs them.
 - The release ships three platform artifact SETS to ONE GitHub release with matching versions:
   Linux musl (`release` job), macOS arm64 thin tray + DMG (`macos-release`), Windows x64 thin
-  tray zip + **MSIX package** (`windows-release`). The macOS/Windows jobs `needs: release` and
-  upload via `--clobber`. The MSIX (`tillandsias-tray-<ver>-windows-x64.msix`) is the
-  Microsoft Store's release artifact (operator directive 2026-08-29, order 776-g6r3): the
-  Store re-signs submitted MSIX itself, so its presence is NOT gated on the Authenticode
-  identity — a release whose windows job produced a zip but no MSIX is incomplete once
-  776-g6r3's packaging slice lands, and step 7's asset check should name it missing.
+  tray zip (`windows-release`). The macOS/Windows jobs `needs: release` and
+  upload via `--clobber`. The MSIX is built but **an UNSIGNED MSIX is
+  deliberately WITHHELD from release assets** with its checksum line dropped
+  (2026-08-31: unsigned MSIX is inert for sideload — Add-AppxPackage
+  0x800B0100 — so shipping it only produces uninstallable downloads; the
+  withhold guard runs whenever the signing account is absent). Step 7's asset
+  check should therefore expect the HONEST WITHHOLD on unsigned builds, not
+  flag the MSIX missing. The Store channel is unaffected: Microsoft re-signs
+  submitted MSIX at $0 (776-g6r3), and Store submission uses a locally built
+  manifest-legal package, not the release asset.
 - **NEVER cancel an in-flight release** — let it complete or fail, then handle in the next cycle.
 - **NEVER end a cut without the step-5 back-merge pushed to the source branch.**
   Until it lands, every sibling push is refused `blocked:version-not-monotonic`
