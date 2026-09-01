@@ -1826,8 +1826,19 @@ mod tests {
     /// production was reverted to a wrong value.
     #[cfg(target_os = "linux")]
     fn drm_fixture(spec: &[(&str, &str, &str, &str)]) -> std::path::PathBuf {
-        let root =
-            std::env::temp_dir().join(format!("drm-fixture-{}-{}", std::process::id(), spec.len()));
+        // Key the root on a per-call sequence, NOT on spec.len(): every test
+        // in this binary shares one process, so (pid, len) collides for any
+        // two tests with same-sized specs — the first line below then deletes
+        // the sibling's live fixture, and which victim loses depends on
+        // thread interleaving. Latent until 2026-09-01, when an unrelated
+        // +1 test shifted the schedule and made the collision deterministic.
+        static FIXTURE_SEQ: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let seq = FIXTURE_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let root = std::env::temp_dir().join(format!(
+            "drm-fixture-{}-{}",
+            std::process::id(),
+            seq
+        ));
         let _ = std::fs::remove_dir_all(&root);
         for (node, vendor, device, driver) in spec {
             let dev = root.join(node).join("device");
