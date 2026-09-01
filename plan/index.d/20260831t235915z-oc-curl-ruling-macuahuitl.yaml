@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+
+status:
+  - packet_id: opencode-curl-install-never-populates-its-cache
+    field: status
+    value: in_progress
+    ts: "2026-08-31T23:59:15Z"
+    host: macuahuitl
+
+events:
+  - packet_id: opencode-curl-install-never-populates-its-cache
+    event:
+      type: note
+      ts: "2026-08-31T23:59:15Z"
+      host: macuahuitl
+      summary: >
+        OPERATOR RULING (2026-08-31, direct): "Update the opencode install
+        as per your findings" — the deferred decision is made, and it is
+        RETIRE curl_install_opencode. Basis unchanged from yoga+lenovinha's
+        evidence: the upstream installer's check_version() exits 0 on any
+        PATH-visible opencode without consulting OPENCODE_INSTALL_DIR, so
+        the curl channel can structurally never populate its cache while
+        npm provides the binary; retirement loses no capability
+        (harness_probe defaults to the npm binary, harness_record_last_good
+        keeps last-good in the npm prefix, auth/render contracts and
+        rollback apply to the binary that actually runs). Coordinator
+        (macuahuitl) claims the retirement: lib-common.sh lane removal,
+        litmus-harness-curl-install-shape re-pin (claude's curl channel
+        stays), test-opencode-rollback-is-loud third-state wording, and the
+        cold-forge warning retires with the lane — that cost clock was the
+        argument for deciding, and it stops today. Landing ahead of this
+        host's full rebuild so the fresh forge images bake it in.

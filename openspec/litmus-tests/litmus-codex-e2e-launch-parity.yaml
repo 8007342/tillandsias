@@ -1,0 +1,82 @@
+# @trace spec:meta-orchestration
+name: litmus:codex-e2e-launch-parity
+spec: ci-release
+phase: pre-build
+description: The codex e2e smoke lane is scored exactly like the opencode one — same limiter class, same verdict grammar, same de-escalation rule
+severity: high
+size: instant
+inputs:
+  - scripts/litmus-codex-e2e-launch.sh
+  - scripts/litmus-opencode-e2e-launch.sh
+  - scripts/lib-e2e-mode.sh
+
+# ORDER 404 exit criterion 4. The packet asks for a codex lane scored EXACTLY
+# like the opencode one. "Both are green" is not parity — parity is that the two
+# lanes resolve mode by the same rule against the SAME budget and reject the
+# same shapes of non-answer.
+#
+# EVERY step here RUNS a launcher. The first draft grepped source literals and
+# the 634-39ik gate refused it, correctly: a step that pins how a line is
+# currently written passes a rewrite that breaks the behaviour and fails a
+# harmless reword. The launchers are made runnable in a fixture by putting a
+# stub `tillandsias` early on PATH and pointing the limiter at a temp dir, so
+# the real control flow — mode decision, budget record, verdict gate — executes
+# without launching a forge.
+steps:
+  - step: "both launchers exist and are executable"
+    command: "test -x scripts/litmus-codex-e2e-launch.sh && test -x scripts/litmus-opencode-e2e-launch.sh && echo 'ok: executable'"
+    timeout_ms: 5000
+    expected_behavior: "ok: executable"
+
+  - step: "PARITY: both lanes resolve the SAME mode from the same limiter state"
+    command: "export TILLANDSIAS_E2E_RATE_DIR=$(mktemp -d); c=$(scripts/litmus-codex-e2e-launch.sh --print-mode | tail -1); o=$(scripts/litmus-opencode-e2e-launch.sh --print-mode | tail -1); rm -rf \"$TILLANDSIAS_E2E_RATE_DIR\"; [ \"$c\" = \"$o\" ] && echo \"ok: parity ($c)\" || { echo \"FAIL: codex=$c opencode=$o\"; exit 1; }"
+    timeout_ms: 30000
+    expected_behavior: "ok: parity"
+
+  - step: "SHARED BUDGET, NOT DOUBLED: a codex full run spends the allowance the opencode lane would have used"
+    # The wrong implementation — a private limiter class for codex — passes a
+    # source grep for `record` and still doubles the 4h token budget the
+    # 2026-07-11 directive exists to cap. So this RUNS a codex full cycle
+    # against a stub binary and then asks the OPENCODE lane what mode it can
+    # get. If codex spent its own private class, opencode still resolves full
+    # and the budget has silently doubled.
+    command: "d=$(mktemp -d); export TILLANDSIAS_E2E_RATE_DIR=$(mktemp -d); printf '#!/bin/sh\\necho \"MO-SMOKE: PASS\"\\n' > \"$d/tillandsias\"; chmod +x \"$d/tillandsias\"; PATH=\"$d:$PATH\" scripts/litmus-codex-e2e-launch.sh >/dev/null 2>&1; after=$(scripts/litmus-opencode-e2e-launch.sh --print-mode | tail -1); rm -rf \"$d\" \"$TILLANDSIAS_E2E_RATE_DIR\"; [ \"$after\" = mode=smoke ] && echo 'ok: shared budget — codex full consumed the common allowance' || { echo \"FAIL: opencode still resolves $after after a codex full run — the budget is doubled\"; exit 1; }"
+    timeout_ms: 60000
+    expected_behavior: "ok: shared budget"
+
+  - step: "--print-mode consumes NO budget on either lane"
+    command: "export TILLANDSIAS_E2E_RATE_DIR=$(mktemp -d); scripts/litmus-codex-e2e-launch.sh --print-mode >/dev/null; scripts/litmus-opencode-e2e-launch.sh --print-mode >/dev/null; after=$(scripts/forge-e2e-rate-limit.sh check full-meta); rm -rf \"$TILLANDSIAS_E2E_RATE_DIR\"; [ \"$after\" = allow:full-meta ] && echo 'ok: probe is free' || { echo \"FAIL: after=$after\"; exit 1; }"
+    timeout_ms: 30000
+    expected_behavior: "ok: probe is free"
+
+  - step: "VERDICT GATE: a smoke run that exits 0 WITHOUT the verdict is refused with FORGE_EXIT=126"
+    # The case this exists for: a provider returns cleanly between tool calls
+    # having done nothing. Exit zero is not a pass.
+    command: "d=$(mktemp -d); export TILLANDSIAS_E2E_RATE_DIR=$(mktemp -d); printf '#!/bin/sh\\necho \"did nothing at all\"\\n' > \"$d/tillandsias\"; chmod +x \"$d/tillandsias\"; out=$(TILLANDSIAS_E2E_FORCE_MODE=smoke PATH=\"$d:$PATH\" scripts/litmus-codex-e2e-launch.sh 2>&1); rc=$?; rm -rf \"$d\" \"$TILLANDSIAS_E2E_RATE_DIR\"; printf '%s' \"$out\" | grep -q 'FORGE_EXIT=126' && [ \"$rc\" -ne 0 ] && echo 'ok: silent success refused' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 60000
+    expected_behavior: "ok: silent success refused"
+
+  - step: "POSITIVE CONTROL: the same run PASSES when the verdict is present"
+    # Without this the arm above is satisfied by a lane that refuses everything.
+    command: "d=$(mktemp -d); export TILLANDSIAS_E2E_RATE_DIR=$(mktemp -d); printf '#!/bin/sh\\necho \"MO-SMOKE: PASS\"\\n' > \"$d/tillandsias\"; chmod +x \"$d/tillandsias\"; out=$(TILLANDSIAS_E2E_FORCE_MODE=smoke PATH=\"$d:$PATH\" scripts/litmus-codex-e2e-launch.sh 2>&1); rc=$?; rm -rf \"$d\" \"$TILLANDSIAS_E2E_RATE_DIR\"; [ \"$rc\" -eq 0 ] && printf '%s' \"$out\" | grep -q 'FORGE_EXIT=0' && echo 'ok: verdict accepted' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 60000
+    expected_behavior: "ok: verdict accepted"
+
+  - step: "GRAMMAR PARITY: both lanes refuse a verdict-less smoke run the SAME way"
+    # Comparable scoring is the packet's actual ask. Two lanes that both fail
+    # but report differently cannot be compared.
+    command: "d=$(mktemp -d); printf '#!/bin/sh\\necho nothing\\n' > \"$d/tillandsias\"; chmod +x \"$d/tillandsias\"; export TILLANDSIAS_E2E_RATE_DIR=$(mktemp -d); c=$(TILLANDSIAS_E2E_FORCE_MODE=smoke PATH=\"$d:$PATH\" scripts/litmus-codex-e2e-launch.sh 2>&1 | grep -o 'FORGE_EXIT=[0-9]*' | tail -1); rm -rf \"$TILLANDSIAS_E2E_RATE_DIR\"; export TILLANDSIAS_E2E_RATE_DIR=$(mktemp -d); o=$(TILLANDSIAS_E2E_FORCE_MODE=smoke PATH=\"$d:$PATH\" scripts/litmus-opencode-e2e-launch.sh 2>&1 | grep -o 'FORGE_EXIT=[0-9]*' | tail -1); rm -rf \"$d\" \"$TILLANDSIAS_E2E_RATE_DIR\"; [ \"$c\" = \"$o\" ] && [ -n \"$c\" ] && echo \"ok: identical refusal ($c)\" || { echo \"FAIL: codex=$c opencode=$o\"; exit 1; }"
+    timeout_ms: 60000
+    expected_behavior: "ok: identical refusal"
+
+  - step: "DE-ESCALATION ONLY on the codex lane too: smoke accepted, anything else refused with exit 2"
+    command: "export TILLANDSIAS_E2E_RATE_DIR=$(mktemp -d); TILLANDSIAS_E2E_FORCE_MODE=full scripts/litmus-codex-e2e-launch.sh --print-mode >/dev/null 2>&1; a=$?; TILLANDSIAS_E2E_FORCE_MODE=bogus scripts/litmus-codex-e2e-launch.sh --print-mode >/dev/null 2>&1; b=$?; s=$(TILLANDSIAS_E2E_FORCE_MODE=smoke scripts/litmus-codex-e2e-launch.sh --print-mode | tail -1); rm -rf \"$TILLANDSIAS_E2E_RATE_DIR\"; [ \"$a\" = 2 ] && [ \"$b\" = 2 ] && [ \"$s\" = mode=smoke ] && echo 'ok: de-escalation only' || { echo \"FAIL: full_rc=$a bogus_rc=$b smoke=$s\"; exit 1; }"
+    timeout_ms: 30000
+    expected_behavior: "ok: de-escalation only"
+
+  - step: "each lane writes its OWN evidence, so one run cannot overwrite the other's"
+    command: "d=$(mktemp -d); export TILLANDSIAS_E2E_RATE_DIR=$(mktemp -d); printf '#!/bin/sh\\necho \"MO-SMOKE: PASS\"\\n' > \"$d/tillandsias\"; chmod +x \"$d/tillandsias\"; rm -f /tmp/codex-e2e-forge.log; TILLANDSIAS_E2E_FORCE_MODE=smoke PATH=\"$d:$PATH\" scripts/litmus-codex-e2e-launch.sh >/dev/null 2>&1; rm -rf \"$d\" \"$TILLANDSIAS_E2E_RATE_DIR\"; test -f /tmp/codex-e2e-forge.log && test \"$(cat /tmp/codex-e2e-mode)\" = smoke && echo 'ok: codex evidence is its own' || { echo 'FAIL: codex run did not write its own evidence'; exit 1; }"
+    timeout_ms: 60000
+    expected_behavior: "ok: codex evidence is its own"
+
+expected_log: "Codex e2e lane resolves mode, budget and verdict identically to the opencode lane"

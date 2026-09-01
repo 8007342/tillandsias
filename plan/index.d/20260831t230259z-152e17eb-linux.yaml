@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: inference-enclave-ca-not-trusted-by-engine
+    field: status
+    value: completed
+    ts: "2026-08-31T23:02:59Z"
+    host: linux
+
+events:
+  - packet_id: inference-enclave-ca-not-trusted-by-engine
+    event:
+      type: completed
+      ts: "2026-08-31T23:02:59Z"
+      host: linux
+      summary: >
+        status 'completed' with evidence_refs: 67d87a917; ./build.sh --check green with scripts/test-inference-pull-failure-classification.sh wired (ok:pull-failure-classification:12 passed); mutation-tested both directions — folding TLS into the generic bucket reddens 5 arms, always-answering-tls reddens the negative control; EC1/EC2 verified empirically in the real image as uid 1000 on 2026-07-29 (rc=1 confirmed, WARN emitted once, SSL_CERT_FILE exported). NOT live-enclave verified: classifier pinned against recorded x509/ollama output shapes, not a pull that failed through squid's bump on this host (experts-probe l1=unreachable here)
+  - packet_id: inference-enclave-ca-not-trusted-by-engine
+    event:
+      type: note
+      ts: "2026-08-31T23:02:59Z"
+      host: linux
+      summary: >
+        all three exit criteria met; EC3 closed by engine-side classification rather than a probe-side vocabulary token that would have had no producer

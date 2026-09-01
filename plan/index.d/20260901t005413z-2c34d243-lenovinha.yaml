@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-terminal-attach-renders-corrupt-from-launch
+    field: status
+    value: in_progress
+    ts: "2026-09-01T00:54:13Z"
+    host: lenovinha
+
+events:
+  - packet_id: macos-terminal-attach-renders-corrupt-from-launch
+    event:
+      type: note
+      ts: "2026-09-01T00:54:13Z"
+      host: lenovinha
+      summary: >
+        claimed for cycle 20260901t005316z by linux-lenovinha-claude-20260901t005316z — D3 (TERM at container boundary) + D4 (stderr bleed), both linux-verifiable; D1/D2 need macOS
