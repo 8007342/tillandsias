@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: nvidia-driver-update-strands-inference-container
+    field: status
+    value: completed
+    ts: "2026-09-01T21:01:37Z"
+    host: linux
+
+events:
+  - packet_id: nvidia-driver-update-strands-inference-container
+    event:
+      type: completed
+      ts: "2026-09-01T21:01:37Z"
+      host: linux
+      summary: >
+        status 'completed' with evidence_refs: commits 7a939989e (EC1/EC3 classification) + 3577aa430 (EC4 breadcrumb); cargo test -p tillandsias-podman --lib -- cdi driver oci_runtime breadcrumb = 9 passed; litmus:tray-network-bootstrap 8/8 PASS via scripts/run-litmus-test.sh enclave-network --phase pre-build --size instant; ./build.sh --check green
+  - packet_id: nvidia-driver-update-strands-inference-container
+    event:
+      type: note
+      ts: "2026-09-01T21:01:37Z"
+      host: linux
+      summary: >
+        EC1 classification (after correcting the 125-only gate that would have made it unreachable), EC2 shown already satisfied by --replace since 2026-07-12 plus the exact remediation named in the message, EC3 behavioural litmus asserting 4 arms RAN, EC4 durable host breadcrumb with a caller-assertion. Limit recorded in the 2026-09-01 progress event: the breadcrumb is not yet observed on a real launch failure.
