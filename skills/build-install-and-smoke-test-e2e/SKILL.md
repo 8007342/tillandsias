@@ -375,6 +375,42 @@ test "$FORGE_RC" -eq 0
 Allow the in-forge agent to complete its skill, including filing and pushing
 its plan work packets. Do not terminate it merely because it runs long.
 
+
+### 4·Linux — choosing the harness (order 404)
+
+Two harnesses can run this lane non-interactively, and they are scored
+IDENTICALLY on purpose: same rate-limit class, same `MO-SMOKE: PASS|FAIL`
+verdict grammar, same de-escalation rule.
+
+| harness | launcher | full-mode attestation |
+|---|---|---|
+| OpenCode | `scripts/litmus-opencode-e2e-launch.sh` | asserts the `MO-FULL` terminal marker (order 614-2gqx) |
+| Codex | `scripts/litmus-codex-e2e-launch.sh` | NOT asserted — that surface is order 614-2gqx's scope for this lane |
+
+**They share one budget, not two.** Both resolve full-vs-smoke through
+`scripts/lib-e2e-mode.sh` against the same `full-meta` limiter class, so a Codex
+full run consumes the same 4h allowance an OpenCode one would. Running both
+back to back does not buy two full cycles; the second will resolve to smoke.
+That is deliberate — the 2026-07-11 directive caps provider spend per host, not
+per harness.
+
+**How the two are compared.** Because the verdict grammar is identical, a Codex
+smoke run and an OpenCode smoke run are directly comparable: both exit 0 only
+with `MO-SMOKE: PASS` in their log, and both report `FORGE_EXIT=126` when a run
+exits 0 WITHOUT the verdict — the case where a provider returns cleanly between
+tool calls having done nothing. Divergence between the two harnesses on the same
+prompt is therefore a finding about the harness, not about the scoring, and
+belongs in `codex-opencode-smoke-divergence-comparison`.
+
+Each lane writes its own evidence (`/tmp/codex-e2e-*` vs `/tmp/opencode-e2e-*`)
+so one run never overwrites the other's log or mode file.
+
+Parity is pinned by `litmus:codex-e2e-launch-parity`, which fails if the lanes
+drift apart — including if the shared decision is ever copied instead of
+sourced.
+
+Prefer OpenCode when the run needs full-mode attestation. Either is valid for a
+smoke run; record which one you used in the findings.
 ---
 
 ## Findings and report
