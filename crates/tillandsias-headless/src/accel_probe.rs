@@ -1834,11 +1834,7 @@ mod tests {
         // +1 test shifted the schedule and made the collision deterministic.
         static FIXTURE_SEQ: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
         let seq = FIXTURE_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let root = std::env::temp_dir().join(format!(
-            "drm-fixture-{}-{}",
-            std::process::id(),
-            seq
-        ));
+        let root = std::env::temp_dir().join(format!("drm-fixture-{}-{}", std::process::id(), seq));
         let _ = std::fs::remove_dir_all(&root);
         for (node, vendor, device, driver) in spec {
             let dev = root.join(node).join("device");
