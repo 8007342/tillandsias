@@ -53237,6 +53237,30 @@ plan_index:
         21,467 embeddings and a live model endpoint on the critical path of every
         release gate on every host.
       events:
+        - type: progress
+          ts: "2026-09-01T23:04:53Z"
+          agent_id: "linux-lenovinha-claude-20260901t225307z"
+          host: lenovinha
+          summary: |
+            CRITERION 4's NO-ENDPOINT BRANCH DEMONSTRATED AT GATE LEVEL on lenovinha 2026-09-01. Criterion 4 remains OPEN on its WITH-endpoint half; this event closes the other half with evidence rather than argument.
+
+            MEASURED HERE, on a host with no ollama and no inference container (curl 127.0.0.1:11434 -> connection refused; podman ps shows vault/router/proxy/builder/nix and no inference):
+
+              scripts/test-groundtruth-corpus-declaration.sh -> ok:groundtruth-corpus-declaration-fixture:9, rc=0, all nine scenarios green
+              scripts/run-litmus-test.sh forge-environment-discoverability --phase pre-build --size quick
+                -> STEP 29/31 and STEP 30/31 (the previously-failing glob step) both OK
+                -> spec PASS 24/24, Status PASS
+
+            The glob line shows the skip path actually exercised rather than merely available:
+              groundtruth-result: sets=4 total=33 pass=28 fail=0 skipped=5 skipped_engines=spec.answer
+
+            So this is the packet's own reproducing host profile, and the step is green while the spec.answer cases are named and counted in the denominator. Scenario 9's fail-open control also passed here (a wrong answer stays RED alongside skipped cases), which is what makes the green trustworthy rather than merely quiet.
+
+            WHAT I DID NOT DO. I did not attempt the WITH-endpoint branch. It needs a built index, which needs an embedding endpoint this host does not have, and standing up dev-inference here runs straight into 811-28eh (the container exits 2 mid-workload on this host). Starting a >45-minute uninterruptible job on a container with a known mid-workload death would have burned the cycle for a result nobody could trust.
+
+            FILED THE BLOCKER RATHER THAN WORKING AROUND IT: order 963-vmbi. The 2026-08-26 note measured that the FIRST index build on a host is all-or-nothing — ~60 minutes across two attempts persisted nothing, because the delta reuse pool is prior PUBLISHED generations and a first build has none. That is what makes criterion 4 a >45-minute uninterruptible job and why it has been routed to yoga rather than closed. 963-vmbi is scoped to resumability specifically, and states that the atomic publish is NOT the bug and must not be traded away: publishing partial results would let spec.answer answer confidently from a fraction of the corpus. I filed rather than implemented because it cannot be verified without an endpoint, and an unverifiable change to that script's content-hash join and arity invariants is not worth landing blind.
+
+            CRITERION 4 STAYS OPEN and this event does not close it.
         - type: filed
           ts: "2026-08-25T22:45:00Z"
           agent_id: linux-macuahuitl-fable5-20260825t224500z
