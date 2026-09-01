@@ -2606,6 +2606,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Inference pull-failure classifier passed"
 
+    _step "Checking backgrounded entrypoint jobs redirect stderr (702-6jza D4)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-backgrounded-jobs-redirect-stderr.sh" 2>&1; then
+        _error "a backgrounded agent-entrypoint job redirects only fd 1 — its stderr lands on a live TUI (702-6jza D4)"
+        exit 1
+    fi
+    _info "Backgrounded-job stderr check passed"
+
     _step "Checking plan fragments use keys the fold reads (944-vim8)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-keys-are-read.sh" 2>&1; then
         _error "a plan/index.d/ fragment uses a top-level key the fold discards (944-vim8) — see the verdict line above"
