@@ -1,0 +1,50 @@
+events:
+  - packet_id: store-msix-free-signing-research
+    event:
+      type: decision
+      ts: "2026-09-02T00:03:06Z"
+      agent_id: "windows-yolanda-claude-20260830t162208z"
+      host: windows
+      summary: |
+        OPERATOR DECISION, EXIT CRITERION 3: the Store channel IS ADOPTED, and the
+        GitHub-release channel STAYS UNSIGNED. Recorded from the operator's actions
+        and their own words on 2026-08-31, not inferred from enthusiasm.
+
+        THE STORE CHANNEL IS ADOPTED. The operator deleted the draft EXE/MSI listing
+        and created a NEW MSIX-type listing from scratch — "I have deleted the old
+        app, created a new one as MSIX, which then provided the values you needed,
+        and is now the only active app" — then supplied the Partner Center identity
+        values and asked for a submission package. Those are adoption in the only
+        form that matters: the listing exists, is the right product type, and its
+        identity is wired into the build.
+
+        THE GITHUB-RELEASE CHANNEL STAYS UNSIGNED, and this half is the one a future
+        reader is likeliest to misread as an oversight. Asked to set up Azure Trusted
+        Signing, the operator answered "None of those paid services will happen."
+        That is a deliberate cost decision, not a gap. Its consequences are known and
+        accepted: SmartScreen warns on the published .exe, and the sideload .msix is
+        WITHHELD by the release workflow rather than shipped uninstallable (722-w7a2's
+        guard). Self-signing was considered and rejected on the merits — it buys no
+        trust, and Microsoft's own guidance is that a self-signed MSIX can FAIL Store
+        validation on publisher mismatch.
+
+        SO THE TWO CHANNELS DIVERGE BY DESIGN: Store distribution is signed, free, by
+        Microsoft; GitHub distribution is unsigned and stays that way until someone
+        pays for a certificate. Anyone re-opening the signing question should start
+        from that decision rather than from the 0x800B0100 symptom.
+
+        EXIT CRITERION 1 IS MET (working MSIX demonstrated end to end; the package
+        built from the stable tag v56.8.31.3 carries Version 56.8.31.0 with identity
+        matching Partner Center byte-for-byte, macron intact).
+
+        EXIT CRITERION 2 IS ONLY PARTLY MET AND I AM NOT CLAIMING OTHERWISE. It asks
+        for the Store submission API path mapped END TO END — auth, artifact upload,
+        submission, publish — with costs and lead time. What exists is the
+        REQUIREMENTS half: no certificate needed, the version rules, the identity
+        rules, the product-type trap, and the three blockers now cleared. The API
+        path itself is NOT mapped: no Azure AD app registration, no upload call, no
+        submission call, no measured lead time. I deliberately recommended a MANUAL
+        first submission — get one package accepted, then automate a path known to
+        work — so the API mapping is correctly still open, not skipped.
+
+        This packet therefore stays OPEN on criterion 2.
