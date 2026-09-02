@@ -2,8 +2,9 @@
 # @trace order:944-vim8, order:635-i6vm
 #
 # ORDER 944-vim8. Four packets were filed across four cycles in fragments keyed
-# `steps:` — the key the BASE ledger uses. The fold reads only `packets:`,
-# `events:`, `fields:` and `status:`. Those fragments parsed, passed
+# `steps:` — the key the BASE ledger uses. The fold reads `packets:`, `events:`,
+# `fields:`, `status:` and `capabilities:` and nothing else. Those fragments
+# parsed, passed
 # validate-yaml, passed `tillandsias-plan check` (same packet count before and
 # after: 696, then 700 once re-filed correctly), read correctly in review, and
 # were silently discarded by the next compaction.
@@ -43,8 +44,8 @@ critical_path:
     timeout_ms: 20000
     expected_behavior: "ok: steps-keyed fragment refused"
 
-  - step: "POSITIVE CONTROL — all four real channels are accepted, so the guard cannot pass the negative by refusing everything"
-    command: "T=$(mktemp -d); printf 'packets: []\\nevents: []\\nfields: []\\nstatus: []\\n' > \"$T/a.yaml\"; out=$(TILLANDSIAS_FRAGMENT_DIR=\"$T\" scripts/check-fragment-keys-are-read.sh 2>/dev/null); rc=$?; rm -rf \"$T\"; [ \"$rc\" -eq 0 ] && echo 'ok: every read channel accepted' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+  - step: "POSITIVE CONTROL — all five real channels are accepted, so the guard cannot pass the negative by refusing everything"
+    command: "T=$(mktemp -d); printf 'packets: []\\nevents: []\\nfields: []\\nstatus: []\\ncapabilities: []\\n' > \"$T/a.yaml\"; out=$(TILLANDSIAS_FRAGMENT_DIR=\"$T\" scripts/check-fragment-keys-are-read.sh 2>/dev/null); rc=$?; rm -rf \"$T\"; [ \"$rc\" -eq 0 ] && echo 'ok: every read channel accepted' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
     timeout_ms: 20000
     expected_behavior: "ok: every read channel accepted"
 
@@ -54,7 +55,7 @@ critical_path:
     expected_behavior: "ok: comments and nested keys ignored"
 
   - step: "THE GUARD'S KEY LIST MATCHES fragments.rs — a hard-coded allowlist that drifts from the fold becomes its own stale premise"
-    command: "for k in packets events fields status; do grep -q \"\\\"$k\\\"\" crates/tillandsias-plan/src/fragments.rs || { echo \"FAIL: fragments.rs does not name channel $k\"; exit 1; }; grep -q \" $k \" scripts/check-fragment-keys-are-read.sh || { echo \"FAIL: the guard's READ_KEYS omits $k\"; exit 1; }; done; echo 'ok: guard key list agrees with the fold'"
+    command: "for k in packets events fields status capabilities; do grep -q \"\\\"$k\\\"\" crates/tillandsias-plan/src/fragments.rs || { echo \"FAIL: fragments.rs does not name channel $k\"; exit 1; }; grep -q \" $k \" scripts/check-fragment-keys-are-read.sh || { echo \"FAIL: the guard's READ_KEYS omits $k\"; exit 1; }; done; echo 'ok: guard key list agrees with the fold'"
     timeout_ms: 10000
     expected_behavior: "ok: guard key list agrees with the fold"
 
@@ -76,9 +77,9 @@ observability:
 rollback:
   on_failure: >
     A fragment declares content under a top-level key the fold discards. Move it
-    to `packets:` (definitions), `events:` (event records) or `status:`/`fields:`
-    (LWW field writes). Do NOT resolve this by widening the guard's key list
-    unless the fold learned a new channel in the same commit — the list exists
+    to `packets:` (definitions), `events:` (event records), `status:`/`fields:`
+    (LWW field writes) or `capabilities:` (host capability rows, LWW by ts+host).
+    Do NOT resolve this by widening the guard's key list unless the fold learned a new channel in the same commit — the list exists
     to be narrower than YAML, and the four packets lost to `steps:` were lost
     precisely because every other check was wider.
   command: "scripts/check-fragment-keys-are-read.sh; grep -n 'for channel in' crates/tillandsias-plan/src/fragments.rs"
