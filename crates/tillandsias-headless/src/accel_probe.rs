@@ -1102,10 +1102,10 @@ pub fn hardware_fingerprint(doc: &CapabilityDocument) -> String {
             )),
             _ => {}
         }
+        // First device carrying a RAM figure wins; `map` keeps this flat, which
+        // clippy's collapsible_if requires under the gate's -D warnings.
         if ram.is_none() {
-            if let Some(gb) = d.system_ram_gb {
-                ram = Some(ram_class(gb));
-            }
+            ram = d.system_ram_gb.map(ram_class);
         }
     }
     parts.sort();
