@@ -8555,6 +8555,26 @@ plan_index:
         codex-device-auth.sh:24-40, token to secret/claude/oauth-token,
         injected + refreshed transparently. Promoted to the index 2026-07-24.
       events:
+        - type: note
+          ts: "2026-09-02T03:00:14Z"
+          agent_id: "linux-lenovinha-claude-20260902t025309z"
+          host: lenovinha
+          summary: |
+            NOT CLAIMED — this packet is gated on an OPERATOR SIGN-OFF that has been open since 2026-07-28, and it is now blocking active-release batch work.
+
+            Recorded from lenovinha 2026-09-02 because the whole of this cycle's batch (epic harness-mcp-expert-validation) was unworkable from this host, and this is the only item whose blocker is a DECISION rather than a capability:
+
+              702-6jza  D1 verification needs a macOS window; D2's code is macOS-owned.
+              317       needs the macOS local-build e2e on a pristine aarch64 guest.
+              405       needs a LIVE paired forge run (codex + opencode on one prompt),
+                        i.e. a full enclave launch plus real provider budget.
+              468       THIS ONE: "OPERATOR SIGN-OFF REQUIRED before implementation".
+
+            The sign-off request has been open ~5 weeks. The packet's own slip record says it is "entirely unimplemented feature gated on Tlatoani sign-off" and that the defect it closes (the interactive Claude login TUI smearing the auth URL on a Vault credential miss) is a usability fallback rather than a crashloop/work-loss item — which is why v0.4 declined it. It now carries desired_release v0.5 and release_target harness-mcp-expert-validation, so under the active release it is in scope on merit and blocked only on the decision.
+
+            I did not implement it, and deliberately did not implement "just the harmless part": the packet's header makes sign-off a precondition for implementation, not for merge, and salami-slicing a gated feature past its gate would defeat the gate. Surfaced to the operator this cycle instead.
+
+            WHAT THE DECISION NEEDS TO BE, so it can be made cheaply: approve or decline transparent Claude OAuth capture -> Vault -> inject -> refresh, mirroring the Codex/GitHub path already in run_provider_login. If approved, it is ~5h of work with no cross-host dependency (pickup_role any). If declined, say so and the packet can be retired rather than re-offered every cycle to hosts that then cannot take it.
         - type: slipped
           ts: "2026-07-28T00:20:00Z"
           agent_id: "linux-mutable-metaorch-20260727"
