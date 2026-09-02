@@ -1,0 +1,56 @@
+events:
+  - packet_id: accel-probe-blind-to-wsl2-paravirtualised-gpu
+    event:
+      type: progress
+      ts: "2026-09-01T22:02:29Z"
+      agent_id: "windows-yolanda-claude-20260830t162208z"
+      host: windows
+      summary: |
+        REMAINING 2 IS DONE — both Proof rungs now have producers, and the model
+        that was "honest but inert" does work. REMAINING 1 is untouched and
+        operator-gated; this packet is NOT closed.
+
+        upgrade_reachable_at() lifts Enumerated -> Reachable by STATTING the node
+        from the vantage the work runs in. That is images/inference/entrypoint.sh's
+        `[ -e /dev/nvidia0 ]` check — the in-tree precedent this packet names —
+        given a rung. CONTAINER VANTAGE ONLY: Vantage::Container is documented as
+        the only vantage that can speak for the container lane, so a host stat is
+        not weaker evidence for that lane, it answers a different question.
+
+        upgrade_placed() lifts Reachable -> Placed from a runtime's reported
+        residency, taken as a VALUE rather than fetched. EXACTLY-ONE-CANDIDATE OR
+        NOTHING: ollama /api/ps reports residency per MODEL, never per DEVICE, so
+        with one candidate the attribution is unambiguous and with two it is a
+        guess — and a guess recorded as Placed is this packet's own failure class
+        wearing the highest rung. Candidates must be REACHABLE, not merely
+        enumerated: a runtime cannot have placed weights on a device the vantage
+        cannot stat. That ordering is why the rungs are ordered.
+
+        NINE ARMS ACROSS THE TWO, SEVEN NEGATIVE, both mutation-controlled:
+        deleting the vantage restriction fails the host arm; deleting the
+        two-candidate refusal fails the ambiguity arm. Each guard IS the claim, so
+        a test passing without it would have been decoration.
+
+        A CORRECTION TO MY OWN DEFERRAL, recorded because the reasoning error is
+        this packet's subject. I deferred the Placed half one cycle claiming "this
+        probe does ZERO network today", evidenced by a grep of accel_probe.rs
+        returning 0 for reqwest/hyper/ureq/TcpStream. That grep was accurate about
+        the FILE and I used it for an ARCHITECTURAL claim about the CRATE:
+        tillandsias-headless already depends on hyper AND reqwest, and main.rs
+        already uses one. A file-level measurement wearing a crate-level
+        conclusion — the same substitution, in my reasoning about my own scope
+        decision.
+
+        THE CORRECTION IMPROVED THE DESIGN rather than merely unblocking it. Having
+        to justify the dependency made the value-taking signature obvious:
+        upgrade_placed() receives resident_bytes and leaves the fetch to the
+        caller, so the only rung that proves a lane is decidable without a network
+        round trip and testable without a live runtime. The version I would have
+        written under the false premise — fetching inside the probe — would have
+        been worse.
+
+        STILL OPEN: REMAINING 1 (Vulkan ICD + WSL2 enumeration) needs software
+        installed on the operator's machine. A prior instance declined on the
+        grounds that provisioning the operator's machine to make a criterion pass
+        is not evidence; that reasoning holds and I did not take it either. It
+        wants a deliberate, recorded operator decision.
