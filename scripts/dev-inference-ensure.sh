@@ -100,6 +100,19 @@ BIN="$STATE_DIR/bin/ollama"
 LOG="$STATE_DIR/serve.log"
 READY_BUDGET_SECS="${TILLANDSIAS_DEV_INFERENCE_READY_SECS:-90}"
 DEV_CONTAINER="tillandsias-dev-inference"
+# ORDER 967-6ax6. The lane that CREATES the container names it, so the accel
+# proof rungs (793-zumy) stop guessing. `probe_container_render_nodes()` used
+# to hardcode `tillandsias-inference` — the PRODUCT runtime's name — and a dev
+# host running only this lane therefore reported `accel_proof=-` while its
+# devices were passed and its endpoint answered from inside the container.
+# MEASURED on yoga 2026-09-02: /dev/kfd and /dev/dri present inside
+# tillandsias-dev-inference, /api/ps answering, rung stuck at `-`.
+#
+# Exported rather than kept as a second name on the Rust side, because a list
+# the binary keeps in sync with this script IS the drift. The consumer honours
+# an explicit name on existence alone, the same rule plan-binary-probe.sh
+# applies to TILLANDSIAS_PLAN_BIN.
+export TILLANDSIAS_INFERENCE_CONTAINER="${TILLANDSIAS_INFERENCE_CONTAINER:-$DEV_CONTAINER}"
 
 # Operator kill switch (620-ca7g): any value except "0" disables local
 # inference, loudly, on every lane.

@@ -69,8 +69,24 @@ EOF
 
 # Runner output, both streams; the probe is SUPPOSED to fail, so the runner's
 # exit code is not the fixture's verdict.
+# Name the reader explicitly. The runner reads its OWN metadata (bindings, probe
+# yaml) through the compiled tillandsias-plan when one resolves, and falls back
+# to yq/grep otherwise (746-htj9). PROJECT_ROOT here is the TEMP root, whose
+# target/ is empty, so the resolve finds nothing and the fallback needs yq on
+# PATH — which no macOS host has. Without the override every arm failed as
+# `No litmus tests bound to spec`, for a reason that has nothing to do with the
+# adjudicator under test.
+. "$ROOT/scripts/plan-binary-probe.sh"
+# The probe prints a path relative to the checkout; run_probe cds into the temp
+# root, so absolutize it here or the override names nothing.
+PLAN_BIN="$(cd "$ROOT" && resolve_plan_binary)" || {
+    echo "SKIP: no runnable tillandsias-plan to read the fixture's own metadata (956-llei)"
+    exit 0
+}
+case "$PLAN_BIN" in /*) ;; *) PLAN_BIN="$ROOT/${PLAN_BIN#./}" ;; esac
+
 run_probe() {
-    (cd "$tmp" && bash "$tmp/scripts/run-litmus-test.sh" kill-adjudicator-probe --phase pre-build --timeout 2 2>&1) || true
+    (cd "$tmp" && TILLANDSIAS_PLAN_BIN="$PLAN_BIN" bash "$tmp/scripts/run-litmus-test.sh" kill-adjudicator-probe --phase pre-build --timeout 2 2>&1) || true
 }
 
 pass=0; fail=0

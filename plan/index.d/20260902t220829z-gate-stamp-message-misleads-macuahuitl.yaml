@@ -1,0 +1,49 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: gate-stamp-refusal-names-mtime-while-deciding-on-content
+    order: 970-7fqk
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    release_target: convergence-velocity-milestone
+    capability_tags:
+      - build-gate
+      - fail-loud
+      - diagnosability
+    estimated_hours: 2
+    title: |
+      The stale-stamp refusal lists paths by MTIME while the staleness decision is made on CONTENT — so it names files that are not the cause and can omit the one that is.
+    context: |
+      MEASURED TWICE on 2026-09-02, on two hosts, each losing a full gate cycle
+      to it. The stamp (scripts/gate-stamp.sh compute) hashes path + kind +
+      st_mode + CONTENT of every tracked and untracked file, and DELIBERATELY
+      ignores HEAD and the index — a correct design, documented at length,
+      because an earlier HEAD-based version went stale the moment you
+      committed. The pre-push refusal, however, builds its "CHANGED SINCE THE
+      GATE RAN" list with `[ "{}" -nt "$_gs" ]` — pure mtime
+      (pre-push-local-gate.sh, the 864-q7dm block). The two answer different
+      questions.
+      CONSEQUENCE, both directions, both observed: a merge or a regeneration
+      that rewrites bytes IDENTICALLY appears in the list without being the
+      cause (macuahuitl, twelve .claude/commands/opsx/*.md paths listed while
+      check-opsx-generated-dirt.sh answered ok:clean-tree); and a genuine
+      digest-mover can be absent from it. yolanda spent about 25 minutes and
+      three extra full gates on this and concluded the check itself was
+      mtime-based, which it is not — the MESSAGE taught them a false mechanism,
+      and they then designed around the wrong model. That is worse than an
+      unhelpful message.
+      WHY THE MTIME LIST EXISTS, and it should not simply be deleted: 864-q7dm
+      added it to point at a LIVE WRITER — a background job appending inside
+      the checkout — where "re-run the gate" is actively wrong advice because
+      the tree changes again before the push lands. That use case is real and
+      the mtime signal is the right instrument for it. The fix is to stop
+      conflating the two: name the paths whose CONTENT differs from the stamped
+      digest as the cause, and keep the mtime list clearly labelled as the
+      live-writer hint it was built to be.
+    exit_criteria:
+      - the refusal names paths whose content differs from the stamped tree, computed the same way gate-stamp.sh compute computes the digest
+      - the mtime list survives, explicitly labelled as a live-writer hint rather than as the cause
+      - a fixture plants both shapes separately — a content change with an old mtime, and an identical rewrite with a new mtime — and asserts each is reported in the right section
+      - the refusal text names stale:tree-changed-since-gate as the authority, since two agents reached for the message instead

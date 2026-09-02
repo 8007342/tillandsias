@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: accel-proof-probes-a-container-name-dev-hosts-do-not-run
+    field: next_action
+    value: 'Both halves are landing on windows-next (owner: yolanda). YOGA''S REMAINING STEP: after the merge, rebuild tillandsias-headless and re-run --capabilities here; expect accel_proof=reachable with a renderD128 row at vantage=container (1002:1114, amdgpu), or ''unknown'' if tillandsias-dev-inference is down. Reproduce the original miss with: podman exec tillandsias-inference true (no such container) while podman exec tillandsias-dev-inference ls /dev/dri succeeds.'
+    ts: "2026-09-02T21:55:54Z"
+    host: yoga
+
+events:
+  - packet_id: accel-proof-probes-a-container-name-dev-hosts-do-not-run
+    event:
+      type: progress
+      ts: "2026-09-02T21:55:54Z"
+      host: yoga
+      summary: >
+        status 'Both halves are landing on windows-next (owner: yolanda). YOGA'S REMAINING STEP: after the merge, rebuild tillandsias-headless and re-run --capabilities here; expect accel_proof=reachable with a renderD128 row at vantage=container (1002:1114, amdgpu), or 'unknown' if tillandsias-dev-inference is down. Reproduce the original miss with: podman exec tillandsias-inference true (no such container) while podman exec tillandsias-dev-inference ls /dev/dri succeeds.' (not terminal) with evidence_refs: scripts/dev-inference-ensure.sh exports TILLANDSIAS_INFERENCE_CONTAINER

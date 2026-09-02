@@ -98,8 +98,17 @@ raw="$("$PROBE" --capabilities --fresh 2>/dev/null)" || { echo "error: $PROBE --
 # kept: --fresh and the BSD-safe sed address DIFFERENT faults and arrived from
 # different hosts in the same merge (concurrent_correct_fixes).
 doc="$(printf '%s\n' "$raw" | sed '1{/^accel_class=/d;}')"
-printf '%s' "$doc" | "$JQ" -e '.schema_version == 2 and (.host.host_id | length > 0)' >/dev/null \
-    || { echo "error: probe document is not a valid schema-2 capability document with a host_id" >&2; exit 1; }
+# A FLOOR, NOT AN EQUALITY (order 793-qr4t). This read `== 2`, and the schema
+# bump to 3 turned every host's publisher into a hard refusal — the row could
+# not be republished by the very change that made the row worth republishing.
+# An equality test says "I understand exactly this version", which is the
+# opposite of what a consumer that only reads `.host.host_id` needs; the two
+# fields checked here have existed since 2 and the document is additive by
+# construction (every field added since is `Option` + `serde(default)`). A
+# floor refuses a document too OLD to describe itself, which is the fault this
+# check was written for, and stops refusing documents that are merely newer.
+printf '%s' "$doc" | "$JQ" -e '.schema_version >= 2 and (.host.host_id | length > 0)' >/dev/null \
+    || { echo "error: probe document is not a schema-2-or-later capability document with a host_id" >&2; exit 1; }
 
 if [ "$MODE" = "document" ]; then
     printf '%s\n' "$doc"

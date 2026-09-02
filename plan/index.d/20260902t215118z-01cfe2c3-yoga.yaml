@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: spec-expert-refusal-threshold-fleet-decision
+    field: next_action
+    value: 'Two slices, in order. (1) Run the 7b-vs-14b cited-synthesis comparison through the FULL run_grounded pipeline on a host that can hold a 14b resident. On yoga this is RAM-bound (15 GB total, CPU decode lane), so a ''14b will not load here'' result would make the model floor a hardware property and turn this packet into a tier ladder rather than a number. (2) Criterion 1''s remaining gap is still the low-end tier''s own bands. Note they are a property of (embedder, corpus, prefix) and NOT of host silicon: reproduced 2026-09-02 across an NVIDIA regime and a CPU-only regime to within 0.1pp in-corpus cost and to the unit on far-refusal count, so that report is cheap and needs no hardware claim, just measure-bands.sh against that host''s live index.'
+    ts: "2026-09-02T21:51:18Z"
+    host: yoga
+
+events:
+  - packet_id: spec-expert-refusal-threshold-fleet-decision
+    event:
+      type: progress
+      ts: "2026-09-02T21:51:18Z"
+      host: yoga
+      summary: >
+        status 'Two slices, in order. (1) Run the 7b-vs-14b cited-synthesis comparison through the FULL run_grounded pipeline on a host that can hold a 14b resident. On yoga this is RAM-bound (15 GB total, CPU decode lane), so a '14b will not load here' result would make the model floor a hardware property and turn this packet into a tier ladder rather than a number. (2) Criterion 1's remaining gap is still the low-end tier's own bands. Note they are a property of (embedder, corpus, prefix) and NOT of host silicon: reproduced 2026-09-02 across an NVIDIA regime and a CPU-only regime to within 0.1pp in-corpus cost and to the unit on far-refusal count, so that report is cheap and needs no hardware claim, just measure-bands.sh against that host's live index.' (not terminal) with evidence_refs: scripts/refusal-calibration/results-wide-579-nomic-20260902-yoga.tsv

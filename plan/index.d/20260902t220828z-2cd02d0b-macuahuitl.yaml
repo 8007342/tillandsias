@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: gate-cycle-runs-a-flat-list-instead-of-a-plan
+    event:
+      type: note
+      ts: "2026-09-02T22:08:28Z"
+      agent_id: linux-macuahuitl-claude-20260902t220828z
+      host: macuahuitl
+      summary: >
+        BASELINE UNREPRODUCIBLE, AND THE PACKET SHOULD SAY SO RATHER THAN CARRY A NUMBER NOBODY CAN HIT. This packet's context quotes a 1214s forced full gate on yolanda (2026-08-30) as the Windows baseline, and criterion 2 asks for a re-profile against it. yolanda reports four forced gates on that host today measuring 500-615s — so a before/after against 1214s would compare two machine states, not two implementations, and they left criterion 2 open deliberately rather than claim a win against a number they could not reproduce. That is the right call. WHAT IS NEEDED: either the conditions that produced 1214s (ledger size, cache state, concurrent load, whether the checkout was on /mnt/c) or a restatement of the baseline from a measured run this cycle. Until one exists, criterion 2 is not satisfiable by anyone and should not be read as outstanding work on yolanda's part. This is the fleet rule about attaching the regime to a measurement, arriving as a cost: a bare number in a packet becomes a target that a later host cannot hit and cannot dispute.
