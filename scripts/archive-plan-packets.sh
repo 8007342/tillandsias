@@ -15,7 +15,16 @@ REPO_ROOT="$(dirname "$DIR")"
 # no yq fallback (it runs .rb programs, not just YAML parsing). Ensure the
 # toolbox, then prefer host ruby and fall back to the toolbox's — zero
 # behavior change on hosts that carry ruby natively.
-source "$DIR/ensure_toolbox.sh"
+# ORDER 965-sxec: a failed ensure is a DEGRADED lane, not the verdict.
+# `set -e` plus a sourced script that `return 1`s killed this one with rc=1
+# before the ruby probe below could run — so a host with a broken toolbox got
+# the same uninterpretable exit as a real ledger violation, one layer above the
+# 127 this order is about. ensure_toolbox is an ACCELERATOR (it makes the
+# toolbox lane available); whether ruby is USABLE is decided by _ruby_usable(),
+# by execution, and that is the question the caller actually needs answered.
+# Keep the ensure's stderr — it is the diagnosis when the toolbox lane is why
+# ruby is unreachable.
+source "$DIR/ensure_toolbox.sh" || true
 # 704-zcgi. The .rb now asks the FOLD which packets are terminal instead of
 # grepping the base index, so this script has a hard tillandsias-plan
 # dependency too — resolved by execution, through the one shared probe.
@@ -32,7 +41,15 @@ _ruby() {
     # ledger's first em-dash kills String#match? with "invalid byte sequence
     # in US-ASCII". The ledger is UTF-8 by construction; zero behavior change
     # where the locale already says so.
-    if command -v ruby >/dev/null 2>&1; then
+    # ORDER 965-sxec. Gate on USABILITY, and dispatch on the lane the probe
+    # actually confirmed — not on `command -v`, which a brew shim satisfies
+    # without providing a ruby. Testing PATH here and the toolbox there could
+    # disagree: a forge with a shim named `ruby` and no working toolbox would
+    # take the native branch and exit 127, which is the defect. Placing the
+    # gate INSIDE _ruby means no call site can forget it (three call sites
+    # today), and the probe is memoised so the cost is paid once.
+    _require_ruby
+    if [ "$_RUBY_LANE" = "native" ]; then
         ruby -E UTF-8:UTF-8 "$@"
     else
         # ORDER 923-ws3r — FORWARD THE NAMESPACE ACROSS THIS BOUNDARY.
@@ -73,6 +90,76 @@ _ruby() {
     fi
 }
 
+
+# ── ORDER 965-sxec: RUBY MUST BE USABLE, NOT MERELY ON PATH ──────────────────
+#
+# `command -v ruby` is not a usability test inside a forge. The image ships NO
+# ruby and puts an on-demand brew SHIM on PATH under that name, so `command -v`
+# succeeds, the shim attempts a userspace install, the install fails by design
+# (attestation verification is REQUIRED and no GitHub credential may exist in a
+# forge), and the shim exits 127.
+#
+# 127 is the defect. build.sh already draws the right distinction — it maps
+# rc==3 to "the archiver's check COULD NOT RUN ... the instrument is what needs
+# repair (923-ws3r)" — but 127 misses that branch and falls through to the
+# `-ne 0` arm, which prints:
+#
+#     the plan archiver would CHANGE THE READY SET, orphan events, or leave
+#     archived rows unanswerable — do not sweep
+#
+# That is a substantive claim about the LEDGER, asserted on the strength of a
+# command that never executed. An agent reading it goes hunting for ledger
+# damage that does not exist. MEASURED on lenovinha-tillandsias-forge
+# 2026-09-02: `scripts/archive-plan-packets.sh --check` -> rc=127, and the gate
+# reported ledger corruption.
+#
+# So probe by EXECUTION, exactly as 704-zcgi/721-nyev require for the plan
+# binary two blocks below, and for the same reason: an executable bit — or a
+# name on PATH — is not the property being asked about. The probe is a trivial
+# program, bounded, with output discarded; a real ruby answers in milliseconds
+# and a shim fails immediately now that the 966-rq7f re-entrancy guard stops it
+# recursing.
+#
+# MEMOISED for the process lifetime. Before 966-rq7f each shim hit forked a
+# fresh `brew install ruby`, and a single `--check` reached 3663 processes and
+# 89.4% of the pid ceiling on pirria — the container then failed to fork at all
+# and the symptom surfaced as `git: unable to create threaded lstat`, nowhere
+# near its cause. The guard fixed the recursion; this memo makes sure a caller
+# that probes repeatedly still pays exactly one acquisition attempt.
+_RUBY_LANE=""
+_ruby_usable() {
+    if [ -n "$_RUBY_LANE" ]; then
+        [ "$_RUBY_LANE" != "none" ]
+        return
+    fi
+    _RUBY_LANE="none"
+    if command -v ruby >/dev/null 2>&1 \
+        && TILLANDSIAS_BREW_AUTOINSTALL=0 timeout 30 ruby -e 'exit 0' >/dev/null 2>&1; then
+        _RUBY_LANE="native"
+    elif command -v toolbox >/dev/null 2>&1 \
+        && timeout 60 toolbox run --container tillandsias-builder \
+            ruby -e 'exit 0' >/dev/null 2>&1; then
+        # The toolbox lane _ruby() falls back to. A host with no native ruby but
+        # a working builder toolbox is fully supported and must not be refused.
+        _RUBY_LANE="toolbox"
+    fi
+    [ "$_RUBY_LANE" != "none" ]
+}
+
+# Refuse into the could-not-run channel rather than letting a 127 masquerade as
+# a ledger verdict. Callers that only need the archiver's OTHER halves never
+# reach this; it guards the ruby-dependent paths.
+_require_ruby() {
+    _ruby_usable && return 0
+    echo "Check FAILED: no usable ruby in this locus, so the archiver's ready-set" >&2
+    echo "  and orphan-event invariants CANNOT BE EVALUATED. This says NOTHING" >&2
+    echo "  about the ledger — the instrument is missing, not the data (923-ws3r)." >&2
+    echo "  Inside a forge this is expected: the image ships no ruby and the brew" >&2
+    echo "  shim cannot install one without a GitHub credential (965-sxec)." >&2
+    echo "  Remedy: run this check on a host with ruby or a tillandsias-builder" >&2
+    echo "  toolbox, or rebuild the forge image with ruby present." >&2
+    exit 3
+}
 cd "$REPO_ROOT"
 
 # CLEAN UP ON EVERY EXIT, INCLUDING THE ONES NOBODY ANTICIPATED.

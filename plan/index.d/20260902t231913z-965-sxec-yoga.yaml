@@ -1,0 +1,81 @@
+events:
+  - packet_id: build-check-unrunnable-in-forge-ruby-absent
+    event:
+      type: completed
+      ts: "2026-09-02T23:19:13Z"
+      agent_id: linux-yoga-claude-20260902t230905z
+      host: yoga
+      summary: |
+        FIXED, AND THE FALSE VERDICT IS THE HALF THAT MATTERED. All three exit
+        criteria met; verified hermetically and wired into the gate.
+
+        WHAT WAS WRONG, in two layers rather than one.
+
+        (1) `command -v ruby` IS NOT A USABILITY TEST inside a forge. The image
+        ships no ruby and puts an on-demand brew SHIM on PATH under that name, so
+        the probe succeeded, the shim's install failed by design (attestation is
+        REQUIRED and no GitHub credential may exist in a forge), and it exited
+        127. build.sh maps rc==3 to could-not-run (923-ws3r) but 127 misses that
+        branch and falls to the `-ne 0` arm, which prints "the plan archiver
+        would CHANGE THE READY SET, orphan events, or leave archived rows
+        unanswerable — do not sweep". That is a substantive claim about the
+        LEDGER asserted from a command that never executed, and it sends an agent
+        hunting for damage that does not exist.
+
+        (2) A LAYER ABOVE IT, found while testing and not in the original report:
+        `source "$DIR/ensure_toolbox.sh"` under `set -e` killed the script with
+        rc=1 before any ruby probe could run, so a host with a BROKEN toolbox got
+        a different uninterpretable exit for the same underlying condition. The
+        ensure is an ACCELERATOR (it makes the toolbox lane available); whether
+        ruby is usable is a separate question and is now the one that decides.
+        It is sourced with `|| true` and its stderr is kept as the diagnosis.
+
+        THE FIX. _ruby_usable() probes BY EXECUTION — `ruby -e 'exit 0'` with
+        TILLANDSIAS_BREW_AUTOINSTALL=0 and a bound, then the toolbox lane — and
+        records WHICH lane answered, memoised for the process lifetime. _ruby()
+        gates on _require_ruby() and dispatches on the recorded lane rather than
+        re-testing PATH. That last detail is load-bearing: testing PATH at the
+        call site and the toolbox in the probe can DISAGREE, and a forge with a
+        shim named `ruby` plus a dead toolbox would have taken the native branch
+        and exited 127 again. The gate lives INSIDE _ruby so none of the three
+        call sites can forget it. Same discipline 704-zcgi/721-nyev require for
+        the plan binary two blocks below: resolve by execution, never by a name
+        or an executable bit.
+
+        MEMOISATION IS NOT AN OPTIMISATION HERE. Before 966-rq7f's re-entrancy
+        guard each shim hit forked a fresh `brew install ruby`; one `--check`
+        reached 3663 processes and 89.4% of the pid ceiling on pirria, the
+        container could no longer fork, and the symptom surfaced as
+        `git: unable to create threaded lstat` — nowhere near its cause. That
+        guard fixed the recursion; the memo makes a repeatedly-probing caller pay
+        exactly one acquisition attempt.
+
+        A MISTAKE CAUGHT BY THE TEST, recorded rather than quietly fixed: the
+        refusal first printed to STDOUT, and the ruby-dependent call site
+        redirects stdout to /dev/null — so the diagnosis was invisible while the
+        exit code was already correct. A correct code with a swallowed
+        explanation is the same defect this order is about, one layer smaller.
+        It is on stderr now, and arm 3 asserts it arrives.
+
+        VERIFIED — scripts/test-archiver-ruby-could-not-run.sh, 5/5, hermetic
+        (stub `ruby` and stub `toolbox`, no container, no network), wired into
+        ./build.sh --check because the defect is invisible on any host that HAS
+        ruby, which is every host that runs the gate:
+          1. exit 3, not 127 and not 1
+          2. the output contains NO ready-set claim
+          3. the refusal names the instrument AND a remedy, on stderr
+          4. POSITIVE CONTROL — a host with a working lane still passes, so a
+             refuse-everything guard cannot satisfy arms 1-3
+          5. the refusal path leaves no scratch state in the worktree (the
+             2026-08-23 leak that starts every boundary-guarded cycle dirty)
+        Live on this host: the real `--check` passes rc=0 through the toolbox
+        lane; with the stubs it returns rc=3 with the named verdict.
+
+        SCOPE NOT CLAIMED: I did not put ruby into the forge image, and I did not
+        verify inside a real forge — this host has no native ruby but does have a
+        working builder toolbox, so the forge condition is reproduced by stubs
+        rather than observed. The criterion "./build.sh --check reaches a real
+        verdict inside a forge" is met in the sense that the archiver step now
+        yields could-not-run instead of a false failure; whether the REST of the
+        gate passes in a forge is 965-sxec's sibling territory and untested by me.
+        A forge host should confirm.

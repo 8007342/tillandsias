@@ -2646,6 +2646,20 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Archiver-check memo check passed"
 
+    # 965-sxec: a missing or unusable ruby must read as COULD-NOT-RUN (exit 3),
+    # never as a claim about the ready set. Inside a forge `command -v ruby`
+    # finds a brew shim that cannot install one, exits 127, and the caller's
+    # `-ne 0` arm then asserted "the plan archiver would CHANGE THE READY SET" —
+    # a substantive ledger claim from a command that never executed. Wired here
+    # because the defect is invisible on any host that HAS ruby, which is every
+    # host that runs this gate; only the stub-PATH arms exercise it.
+    _step "Checking a missing ruby reads as could-not-run, not as a ledger verdict (965-sxec)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-archiver-ruby-could-not-run.sh" 2>&1; then
+        _error "an absent ruby does not route to the could-not-run channel (965-sxec) — see the verdict line above"
+        exit 1
+    fi
+    _info "Archiver could-not-run channel check passed"
+
     # Order 881-29me. A `plan/issues/` audit cites its evidence and nothing
     # checked those citations still resolved. Measured in one document: every
     # factual claim re-verified TRUE while every `file:line` citation
