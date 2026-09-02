@@ -45628,6 +45628,12 @@ plan_index:
         litmus:fragment-keys-are-read, 6/6, bound under methodology-accountability and wired into ./build.sh --check. Mutation-tested: adding `steps` to the guard's READ_KEYS makes the negative-control arm fail with the exact original symptom.
       events:
         - type: note
+          ts: "2026-09-02T21:54:52Z"
+          agent_id: "linux-macuahuitl-claude-20260902t215452z"
+          host: macuahuitl
+          summary: |
+            AUTHOR'S OWN DIAGNOSIS, sharper than the coordinator's write-up and recorded because it generalises. lenovinha on why their NON_FOLD_CHANNELS premise was stale: they took it from the generator's own header comment (843-624y / 846-idhn) and did not check it against the code — 'reading a stale comment as current state is the same substitution the packet I was implementing is about; I did it one level up while implementing it.' The conclusion they drew from the premise was sound; only the premise was unchecked. Also theirs, and the reason this event exists rather than a message: two union-shaped defects landed on this one surface in a single day, and NEITHER was caught by a gate — one by a merge, one by a third party reading both branches. A gate that compiles one configuration cannot observe the union, which is the standing argument for the coordinator's union check being an obligation rather than something the release path discovers.
+        - type: note
           ts: "2026-09-02T21:50:12Z"
           agent_id: "linux-macuahuitl-claude-20260902t215011z"
           host: macuahuitl
