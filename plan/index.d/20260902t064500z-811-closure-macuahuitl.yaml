@@ -1,0 +1,64 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+
+events:
+  - packet_id: dev-inference-container-exits-2-mid-workload-with-no-error
+    event:
+      type: completed
+      ts: "2026-09-02T06:45:00Z"
+      host: macuahuitl
+      summary: >
+        DONE — cause identified AND fixed (the packet's first deliverable
+        branch; the second, a typed death verdict, landed earlier in
+        3807164f4). CAUSE: the dev-inference container ran under
+        --pids-limit=128 and the pids cgroup counts THREADS; ollama serve (29)
+        plus one llama-server runner per resident model (31-67 each) crosses
+        128 with two runners. At the ceiling a runner's std::thread creation
+        gets EAGAIN and it aborts ("what(): Resource temporarily unavailable"),
+        the daemon relays the dead runner as HTTP 400 (tokenize/detokenize
+        connection reset — the packet's symptom), and a daemon that cannot
+        spawn a thread exits 2 through Go's runtime fatal — the packet's
+        silent exit(2), stated as the consistent mechanism (the runners
+        absorbed every hit in this run, so the daemon's own death was not
+        directly observed). FALSIFICATION RESULT (prediction filed at 06:05Z
+        before the reading): 40-minute two-client rig in the indexer's own
+        shape, 10,471 requests — 11 HTTP 400 in the 387 before the live
+        raise, ZERO in the 10,080 after it; container running throughout,
+        exit 0, restarts 0; cgroup pids.events stayed at "max 41" (no hit
+        after the raise); unconstrained pids.peak 142 with two runners; GPU
+        peak 3.5 GiB / 69%; latency p50 424ms p95 444ms. FIXES: live —
+        `podman update --pids-limit 4096` (persists in the container config
+        across restarts until recreation); durable — 21322c507, all five
+        128 sites to 1024 (~7x the measured peak, headroom for five resident
+        runners, still a fork-bomb guard), role test and inference-shape
+        litmus follow the value with the measurement attached. REGIME: Fedora
+        44 / kernel 7.1.12 / cgroup2 / RTX A5000 / ollama container
+        v0.4.260818.1 / nomic-embed-text, batch 64 real chunks (~29 KB);
+        the number is for THIS tree shape — a host with more resident models
+        reads pids.peak before trusting it. RE-INTERPRETED: the 2026-08-23
+        "batch 32 works, 64 fails" bisect recorded in spec-index-ensure.sh is
+        the same ceiling (a bigger batch spawns more runner threads), not a
+        payload rule — the 4b model's runner is simply bigger. evidence_refs:
+        commits 0842e0e66 (root-cause event), 21322c507 (fix); cgroup
+        counters quoted above read from
+        /sys/fs/cgroup/.../libpod-<id>.scope/pids.{current,max,peak,events};
+        scripts/test-litmus-... not applicable — the verification is the
+        falsification run itself, summarized here (session-local logs
+        811-hammer.log / 811-inference.log / 811-sampler.log). Open
+        question, NOT a change: git (64) and proxy (32) ceilings were set by
+        the same reasoning; nobody has read their pids.peak under load.
+  - packet_id: forge-pids-ceiling-512
+    event:
+      type: note
+      ts: "2026-09-02T06:45:00Z"
+      host: macuahuitl
+      summary: >
+        THIRD CONTAINER, SAME MECHANISM: 811-28eh closed today on the
+        dev-inference container's 128 ceiling (thread-counting cgroup vs a
+        131-142-thread ollama tree), proven by pids.events "max 41" and a
+        10,080-request zero-failure run after the raise. The fleet rule this
+        packet and 667-se87 arrived at holds beyond forges: a pids ceiling
+        must be set from a measured pids.peak of the tree it bounds, and any
+        "silent death / connection reset / fork: retry" symptom is read
+        against that cgroup's pids.events before anything else. Closure
+        evidence for THIS packet (a fresh 4096 forge guest sample) is still
+        pending the tray relaunch.
