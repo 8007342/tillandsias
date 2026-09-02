@@ -1,0 +1,88 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# macuahuitl coordinator, coordination pass 21:41Z: the expert regression this pass caught, and the pattern it belongs to.
+
+packets:
+  - packet_id: host-lane-spec-index-never-refreshes
+    order: 967-xq5e
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    release_target: forge-local-experts-milestone
+    capability_tags:
+      - experts
+      - rag
+      - fail-loud
+      - host-lane
+      - soundness
+    estimated_hours: 3
+    title: |
+      The spec index never refreshes on a bare-metal host — the post-commit hook silently skips on no-embed-endpoint while a working inference endpoint sits on localhost, so expert citations drift into fabrication as code moves.
+    context: |
+      CAUGHT BY THE COORDINATION PASS 2026-09-02T21:41Z on macuahuitl, as an
+      expert_accuracy drop from 33/33 to 31/33 in the cycle metrics. The two
+      failures are not near-misses; the harness classes both as FABRICATED:
+        spec-forge-isolation-and-egress: cited
+          crates/tillandsias-headless/src/main.rs:5785-5796 for
+          `fn forge_uses_host_mount`, which now begins at 5840.
+        spec-inference-tier-mechanism-is-in-code: cited 4208-4242 and
+          4243-4254 for `fn detect_inference_tier` and
+          `fn effective_inference_tier`, which now begin at 4263 and 4298.
+      A CONSISTENT ~55-LINE OFFSET, which is the signature of code movement
+      rather than of a model inventing spans. main.rs last changed at 21:14
+      today (d4b764392, the forge's own 965-rb3v fix), which added lines above
+      all three functions. The citations were true when the index was built
+      and rotted underneath it.
+      WHY NOTHING REBUILT IT. scripts/hooks/post-commit-expert-refresh.sh does
+      call spec-index-ensure.sh on every commit — the Direction's "refreshed on
+      commit" is wired. But spec-index-ensure.sh:286 reads
+      TILLANDSIAS_EMBED_ENDPOINT and :296 exits 0 with
+      `skip:spec-index:no-embed-endpoint` when it is unset. On this host it IS
+      unset (so are OLLAMA_HOST and TILLANDSIAS_INFERENCE_ENDPOINT), while
+      tillandsias-dev-inference is up and serving qwen2.5:14b on
+      localhost:11434. So the refresh has been skipping silently, on the
+      coordinator, with a working endpoint one variable away.
+      AND THIS IS THE SAME DEFECT lenovinha's forge FIXED TODAY, IN THE OTHER
+      COPY. 919-vvyv landed the derivation in images/default/lib-common.sh —
+      the FORGE image's lib, which probes and wires the endpoint for a
+      container. Nothing does it for the host lane: scripts/lib-dev-env.sh
+      carries no EMBED_ENDPOINT derivation, and neither the hook nor
+      spec-index-ensure.sh sources anything that would.
+      THE PATTERN, named by yolanda the same hour and now at five instances in
+      one cycle (plan-binary probe, hardware fingerprint, the accel probe's two
+      transports, the Windows purge credential clear, and this): ONE COPY
+      FIXED, ONE COPY MISSED. Their remedy is the one to apply — a guard that
+      makes the second copy impossible to add silently, not more care on the
+      second copy.
+      WHY p1: the fat expert is the Direction. An expert that cites a span not
+      containing what it claims is worse than one that refuses — 821-73es's
+      whole argument — and this failure mode is invisible except as a metric
+      line nobody gates on.
+    exit_criteria:
+      - on a host with a reachable inference endpoint, a commit that moves code causes the spec index to refresh, proven by the two groundtruth cases passing after a code-moving commit
+      - spec-index-ensure.sh's no-embed-endpoint skip is distinguishable in the hook log from a successful refresh, so a silently-skipping host is visible without grading
+      - the host-lane and forge-lane endpoint derivations resolve from one shared place, or a guard names the second copy when they diverge
+      - a stale index is reported by the expert rather than answered from — a citation whose span no longer contains its anchor must degrade the envelope's confidence, not pass as retrieved
+
+events:
+  - packet_id: fat-spec-expert-cannot-refuse-an-out-of-corpus-question
+    event:
+      type: note
+      ts: "2026-09-02T21:46:18Z"
+      host: macuahuitl
+      summary: >
+        A SECOND FAILURE MODE FOR THE SAME ENVELOPE, found while grading during
+        the 21:41Z coordination pass and filed as 967-xq5e. This packet's case is
+        a question the corpus does not cover being answered with confident
+        citations. The case measured today is a question the corpus DOES cover,
+        answered with citations whose spans no longer contain what they claim —
+        two groundtruth cases, a consistent ~55-line offset, caused by code
+        moving under a spec index that never rebuilt because the host lane's
+        embed endpoint is unset. Both render as `confidence: retrieved`, and an
+        agent cannot tell either from a good answer. Worth knowing while you
+        implement the relevance signal: a threshold on cosine score would not
+        catch the second one at all — those citations are topically perfect and
+        merely point at the wrong lines — so whatever reaches the envelope
+        should also let a consumer see that a cited span was verified against
+        the tree it names.
