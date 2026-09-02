@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-check-unrunnable-in-forge-ruby-absent
+    event:
+      type: note
+      ts: "2026-09-02T23:43:59Z"
+      agent_id: linux-macuahuitl-claude-20260902t234359z
+      host: macuahuitl
+      summary: >
+        TWO HOSTS IMPLEMENTED THIS PACKET INDEPENDENTLY AND THE UNION WAS BROKEN — caught by the gate during the coordinator's merge, not by either branch. yoga (a3a846cba, linux-next) placed the usability gate INSIDE _ruby via _require_ruby, which EXITS 3 on an unusable lane, dispatching on a recorded lane so the probe and the call site cannot disagree. yolanda (582c3b835, windows-next) added _ruby_runnable plus a TOKENISED early exit ('could-not-run:no-usable-ruby'), because build.sh must distinguish THIS exit 3 from a stale plan binary or an unreadable fragment, which are repairable where they happen and must never be waved through. BOTH ARE RIGHT AND COMPOSED THEY FAILED: yolanda's probe worked by calling _ruby, and yoga's _ruby now exits the script from inside it — so the probe could never return false and the tokenised message was unreachable. The observable was 'exit 3 happened, but with no token', which means the forge skip (criterion 3) would never key and build.sh could not tell this cause from the others. Each branch was honestly green: yoga's arms pass, yolanda's 4-arm test passes, and only the merged tree fails. RESOLUTION: one probe. _ruby_runnable now delegates to _ruby_usable, the lane-recording probe that _ruby itself dispatches on, so asking it cannot disagree with what _ruby will do — yoga's intent — while yolanda's tokenised early exit stays reachable — theirs. yolanda's test now reads 4/4 including the token arm. ALSO MERGED as a union at the two call sites: yolanda's could-not-run guards and the 964-js34 _ap_phase timers, which touched adjacent lines. THIS IS THE THIRD DUPLICATE-IMPLEMENTATION COLLISION TODAY (944-vim8 READ_KEYS, the core.hooksPath fixture fix, and now this), all three invisible to their authors and all three found by a third party or a merge. The claiming protocol did not prevent it: 965-sxec was claimed twice, by eb6a9b5c0 and 3c4c88a86, and neither host saw the other's claim because they were on different branches and each claim was pushed to its own.

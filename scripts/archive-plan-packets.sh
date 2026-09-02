@@ -206,8 +206,22 @@ _archiver_cleanup() {
 # that found this the binary IS on PATH and is a shim that cannot execute. An
 # executable bit is a claim; running it is evidence — the same rule
 # plan-binary-probe.sh states for tillandsias-plan, three files away.
+# TWO HOSTS IMPLEMENTED 965-sxec INDEPENDENTLY AND THE UNION BROKE (coordinator,
+# 2026-09-02). yoga (a3a846cba) put the usability gate INSIDE _ruby via
+# _require_ruby, which EXITS 3 on an unusable lane. yolanda (582c3b835) added
+# this probe plus the tokenised early exit below, and probed by calling _ruby.
+# Composed, this probe can never return false: _ruby exits the script from
+# inside it, before the token is ever printed. The gate caught it as
+# "no could-not-run:no-usable-ruby token" — exit 3 happened, but via yoga's
+# stderr path with no token, so build.sh cannot tell this exit 3 from the
+# others and the forge skip (965-sxec criterion 3) never keys.
+#
+# Resolution: ONE probe. _ruby_usable is the lane-recording one and is what
+# _ruby itself dispatches on, so asking it here cannot disagree with what
+# _ruby will do — which was the whole point of yoga's change. yolanda's
+# tokenised early exit stays reachable, which was the whole point of theirs.
 _ruby_runnable() {
-    _ruby -e 'exit 0' >/dev/null 2>&1
+    _ruby_usable
 }
 
 if [ "$1" == "--check" ]; then
@@ -236,17 +250,21 @@ if [ "$1" == "--check" ]; then
     _ap_phase start
     echo "Running in check mode..."
     if ! _ruby_runnable; then
-        # A STABLE TOKEN, so a caller can tell THIS could-not-run from the others
-        # without parsing prose. Only this cause is skip-eligible: a stale plan
-        # binary or an unreadable fragment also exit 3 and must never be waved
-        # through, because those are repairable where they happen.
+        # A STABLE TOKEN ON STDOUT, so a caller can tell THIS could-not-run from
+        # the others without parsing prose. Only this cause is skip-eligible: a
+        # stale plan binary or an unreadable fragment also exit 3 and must never
+        # be waved through, because those are repairable where they happen.
         echo "could-not-run:no-usable-ruby (965-sxec)"
-        echo "Check COULD NOT RUN: no usable ruby (965-sxec). This script's worker is"
-        echo "  archive-plan-packets.rb and neither a host ruby nor the toolbox's is"
-        echo "  runnable here — inside a forge that is expected, the image ships none."
-        echo "  This says NOTHING about the ready set: the check did not execute."
-        echo "  Remedy: run the gate outside the forge, or add ruby to the image."
-        exit 3
+        # ...then the CANONICAL refusal, on stderr, from the single place that
+        # owns that text. This block used to carry its own copy of the prose,
+        # which is how the merged tree ended up with two refusals that named the
+        # instrument differently and satisfied different tests (coordinator,
+        # 2026-09-02: yoga's arm wants "no usable ruby in this locus" and a
+        # Remedy on STDERR, because a refusal printed on stdout is invisible to
+        # a caller reading a log; yolanda's arm wants the token). _require_ruby
+        # re-checks the memoised lane, prints that text to stderr, and exits 3 —
+        # so both hold with ONE copy of the words.
+        _require_ruby
     fi
     # ORDER 964-9yyp. On a fast worktree this is "$REPO_ROOT" and every path
     # below is byte-for-byte what it was — a host that was correct before this
