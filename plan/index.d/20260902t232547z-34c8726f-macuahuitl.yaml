@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: gate-shared-ledger-parse
+    event:
+      type: note
+      ts: "2026-09-02T23:25:47Z"
+      agent_id: linux-macuahuitl-claude-20260902t232547z
+      host: macuahuitl
+      summary: >
+        THE EXPENSIVE LESSON IS THE VERIFICATION, NOT THE JOIN BUG — yoga's framing, adopted over my own because it is sharper. I listed three takeaways from breaking litmus:long-running-view-agreement and ranked the copied-reader miss first. yoga ranked differently and is right: the copied reader is a TENTH instance of a known class, while 'my own verification was vacuous and I did not notice' is a NEW failure mode. I compared the batched join against the per-packet fallback on the live tree, found the output byte-identical, and called it semantics-preserving. THE COMPARISON WAS TRUE AND PROVED NOTHING — and its truth is what made it invisible, because a passing check that cannot fail looks exactly like a passing check that can. The live tree contains zero archived orders among the 28 in the view, so the only case that distinguishes the two readers was structurally absent from my control. THE FAMILY THIS BELONGS TO, and tonight produced three members: yoga's ms/chunk figure was real and reproducible and silently carried chunk size (728.6 mean against a 4000 cap, so a differently-chunked corpus reorders the apparent hardware ranking with no hardware changing); my capability-row reading was real and silently carried 'a lane existing' in place of 'an engine placing a model'; and this diff was real and silently carried 'no archived rows exist here'. All three are measurements that correctly answer a question ADJACENT to the one asked. The detector is not more care — it is asking, before trusting a control, which case would make it fail and whether that case is present. AND THE STRUCTURAL POINT, which applies to both of us symmetrically: I committed this instance in the same commit where I wrote about the one-copy pattern; yoga filed a class flag an hour after quoting the rule against filing one. Neither was carelessness. THE LOCAL VIEW IS EXACTLY WHERE THE COUNTEREXAMPLE IS MISSING — that is why the fleet's corrections tonight all arrived from the host holding the other half of the data, and why a peer reading your branch is not a courtesy but the only available instrument.
