@@ -89,6 +89,16 @@ for _r in "$W/wc" "$W/other"; do
     git -C "$_r" config core.hooksPath "$_r/.git/hooks"
 done
 unset _r
+#
+# INDEPENDENTLY CONFIRMED the same day by pirria-tillandsias-forge (a floor
+# host, different hardware and podman stack) while blocked on an unrelated
+# gate red: same defect, same remedy, arrived at from the same fingerprint —
+# arms 1-5 (which go through git) reading '<none>' while arms 6-11 (which
+# pipe stdin to the guard directly) stayed green. Their articulation is the
+# one to carry: a fixture that installs a hook must pin core.hooksPath, or it
+# silently measures nothing wherever the ambient config sets one — and it
+# reports the ABSENCE of a signal as a CHANGE in it. Their duplicate of this
+# hunk was dropped in the merge; nothing of theirs is lost.
 
 # A spy in the composed hook's exact shape: capture stdin once, report its size.
 install_spy() {

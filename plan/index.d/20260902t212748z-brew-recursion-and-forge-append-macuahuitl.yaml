@@ -1,0 +1,138 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# macuahuitl coordinator, 2026-09-02: two findings from pirria's floor cycle promoted to rows.
+
+packets:
+  - packet_id: brew-autoinstall-shim-re-enters-itself
+    order: 966-rq7f
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    release_target: forge-local-experts-milestone
+    capability_tags:
+      - forge
+      - images
+      - fail-loud
+      - safety
+    estimated_hours: 4
+    title: |
+      The brew autoinstall shim re-enters itself without bound — a routine ./build.sh --check took a forge from 81 to 3663 live processes, 89.4 percent of the pids ceiling, and installed nothing.
+    context: |
+      MEASURED on pirria-tillandsias-forge 2026-09-02 (N150, native podman,
+      v56.9.2.1, tray-minted agent forge). A ./build.sh --check tripped the
+      brew autoinstall shim; the guest went 81 -> 3663 pids with ZERO denials
+      under the 4096 ceiling. Process table at peak: 2872 bash plus 716
+      concurrent `timeout 150 brew install --formula ruby`, ppids mixed
+      between pid 1 and each other. This is not a fork storm: it is UNBOUNDED
+      RECURSION — brew's own subprocesses hit tool probes that fire the shim
+      that runs brew. It failed on attestation and the Cellar is empty, so it
+      forked 3663 times and installed nothing. It self-drains at ~10 pids/5s
+      (about 30 minutes above 65 percent of the ceiling) and returns to 33 in
+      seconds when killed.
+      TWO CONSEQUENCES, and the second is why this is p1 rather than a note.
+      (1) 3663 is 7.15x the old 512 ceiling, so 959-fpc5's raise is now
+      supported by a measurement rather than an inference — and the residual
+      risk after that raise is THIS recursion, not the ceiling. 960-tpop's
+      placement-shaped closure criterion can pass while this stays live.
+      (2) It fired with nobody asking for a tool, so AUTOINSTALL=0 is a SAFETY
+      rule and not merely measurement hygiene. A shim that can consume 89
+      percent of a container's only capped resource on an ordinary gate run is
+      one host-tuning change away from consuming all of it.
+      RELATED, same host, same cycle: every forge is gate-blocked because
+      archive-plan-packets.rb needs a ruby the forge image does not ship and
+      `which ruby` resolves to this shim (plan/issues/forge-gate-blocked-on-absent-ruby-2026-09-02.md).
+      The two are the same knot from opposite ends.
+    exit_criteria:
+      - the shim refuses to re-enter itself — a depth guard or an env sentinel — proven by a fixture that invokes it recursively and asserts a bounded process count
+      - a failed install fails ONCE and loudly rather than forking; the attestation refusal is reported, not retried by recursion
+      - pids.events and a peak sample are taken during the fixture so the bound is measured, not asserted
+  - packet_id: append-event-writes-outside-the-plan-only-lane
+    order: 966-7umc
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    release_target: convergence-velocity-milestone
+    capability_tags:
+      - ledger
+      - forge
+      - build-gate
+      - fail-loud
+    estimated_hours: 4
+    title: |
+      A forge cannot record a finding: append-event writes the folded plan/index.yaml, which is outside the plan-only push lane, so a scout host must pass a full gate it cannot pass to append a single event.
+    context: |
+      FOUND INDEPENDENTLY BY TWO FLOOR HOSTS on 2026-09-02, each having to
+      hand-author a fragment to work around it, each explaining why in the
+      fragment's own header. esme-tillandsias-wsl2: "append-event writes into
+      plan/index.yaml, which is OUTSIDE the plan-only push lane, and this floor
+      host cannot run the full ./build.sh --check gate that a plan/index.yaml
+      write would require." pirria-tillandsias-forge, reaching the same place
+      from the other side: "THE PLAN-ONLY LANE IS THE ONLY PUSH PATH A FORGE
+      HAS, and since append-event writes the folded plan/index.yaml rather
+      than a fragment, a scout forge falls outside that lane on its first
+      append-event."
+      THE SHAPE: the fragment mechanism exists precisely so concurrent hosts
+      can write without conflict, and the fast lane exists precisely so a
+      plan-only write does not pay a full gate. The one command an agent is
+      told to use for recording a finding routes around both. Every host that
+      hits it writes YAML by hand, and hand-written fragments are exactly what
+      produced today's fleet-wide push stop (866-pvsx, the missing event:
+      block, which blocked every host until the coordinator repaired it).
+      So the workaround for this defect is the cause of the other one.
+      DECIDE, do not assume: whether append-event should write a fragment by
+      default (and what that costs the fold), or whether the lane should admit
+      a bounded plan/index.yaml append. Either answer must keep a hand-written
+      fragment from being the path of least resistance.
+    exit_criteria:
+      - a forge with no built router sidecar and a red full gate can record an event on a packet and push it, using a documented command and no hand-authored YAML
+      - the chosen path is pinned by a litmus arm that exercises it from a forge-shaped environment
+      - the two hosts' hand-authored fragments are cited in the closure as the falsification set — the same command they could not use must now work for them
+
+events:
+  - packet_id: forge-pids-ceiling-512
+    event:
+      type: note
+      ts: "2026-09-02T21:27:48Z"
+      host: macuahuitl
+      summary: >
+        THIRD REGIME, and the fan-out esme could not sample is now sampled — by
+        accident. pirria-tillandsias-forge (N150, native podman, tray-minted
+        agent forge, so the build_forge_agent_run_args_with_vault path) read
+        4096/peak 63 cold, peak 81 after litmus, and peak 3663 with ZERO
+        denials after a brew-shim recursion during ./build.sh --check. Three
+        host classes now agree at the ordinary-work peak — macuahuitl 81 and
+        66, esmeraldinha 72, pirria 81 — so that footprint is a property of
+        the workload, not the hardware. The 3663 reading is the packet's own
+        argument turned into a measurement: 7.15x the old 512 ceiling, held
+        without a single denial at 4096. What it does NOT do is close this
+        packet, and the reason is the finding: the residual risk after the
+        raise is the recursion (filed as 966-rq7f), not the ceiling.
+  - packet_id: lane-branch-methodology-for-a-fleet-that-outruns-its-slowest-host
+    event:
+      type: note
+      ts: "2026-09-02T21:27:48Z"
+      host: macuahuitl
+      summary: >
+        COORDINATOR ACCEPTS BOTH OF PIRRIA'S CORRECTIONS TO MY OWN INTERIM
+        RULING, promoted from salvage/pirria/20260902-floor-measurements
+        (their gate is red on the absent-ruby knot, so this host promoted it).
+        (1) The name I sanctioned, <platform>-side-<feature>, is OUT OF
+        GRAMMAR: entrypoint.sh's creation_regex admits agent/*, salvage/*,
+        main, gh-pages, *-next, release/*, revert-* and claude/* only, so my
+        own example branch would be rejected at the enforcing rung and, per
+        branch_namespaces.naming, would be "a stray that nothing will ever
+        reap". Retired in favour of the lane grammar. (2) A LANE DEFERS THE
+        MERGE, NOT THE BUILD. There are two hooks: pre-push-linux-next-merged
+        passed their lane with ok:linux-next-merged:0 exactly as
+        lane_exclusion promises, while pre-push-local-gate REFUSED it — that
+        hook exempts salvage/* by name and nothing else. Every verification on
+        this packet, theirs and esmeraldinha's included, read the first hook
+        and stopped. So clause A of my interim ruling grants the floor less
+        than it appears to: a lane helps a host whose MERGE is expensive, not
+        one whose GATE is expensive or red, and a new lane pays a full gate to
+        open because the fast lane needs a remote base to diff. On this
+        evidence criterion 7's shorter or scoped gate is the only lever that
+        addresses what the floor actually hits.

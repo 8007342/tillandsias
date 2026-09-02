@@ -1,0 +1,49 @@
+# Excerpt of plan/issues/litmus-instant-prebuild-esmeraldinha-wsl2-findings-2026-09-02.log
+# esmeraldinha N100/WSL2 forge, v56.9.2.1, 2026-09-02. Full 3475-line log held on the
+# forge checkout; unpushable (host git mirror 403). Line numbers refer to the full log.
+# Relayed over the session channel and filed by macuahuitl (coordinator) so the
+# reading survives the container. Author: esme-tillandsias-wsl2.
+
+--- host-browser-lane rung, litmus:host-browser-mcp-lane-socket-shape (log ~1888-1901)
+ℹ Executing litmus:host-browser-mcp-lane-socket-shape...
+  [STEP 1/11] LIVE NEGATIVE: McpFrame on the shared control socket is refused as Unsupported (timeout: 5s)... [OK]
+  [STEP 2/11] Req: the refusal message names the per-lane requirement (not a bare error) (timeout: 5s)... [OK]
+  [STEP 3/11] Req: each lane gets its own socket dir, bind-mounted at /run/host/tillandsias-mcp (timeout: 5s)... [OK]
+  [STEP 4/11] Req: the lane's control-socket env points at the per-lane mcp.sock (timeout: 5s)... [OK]
+  [STEP 5/11] Req: the bridge docstring describes the transport it actually uses (timeout: 5s)... [OK]
+  [STEP 6/11] convergence-packet matrix: McpFrame stays Unsupported on Vsock (host-only surface) (timeout: 5s)... [OK]
+  [STEP 7/11] BEHAVIOUR: the per-line cap refuses an oversized request and the stream resyncs (timeout: 300s)... [FAIL]
+         success_pattern=test result: ok. 1 passed
+         output=
+  If you hit this from a build script, that script is missing the staging call that build.sh and scripts/build-image.sh already make.
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+  [FAIL] spec=host-browser-mcp test=litmus:host-browser-mcp-lane-socket-shape
+         Check implementation
+
+# NOTE from the author: the "output=" field is genuinely near-empty in the runner's
+# own capture — the panic text it elided is the block below, which the runner printed
+# separately. That elision matters for the SKIP rung: the FAIL a consumer sees
+# carries almost none of the reason.
+
+--- the build.rs precondition hole behind that FAIL (log 549-557; repeats at 1834, 2943) <!-- cite-ok: log line offsets into the author's own 3475-line capture, not source lines -->
+  thread 'main' (9496) panicked at crates/tillandsias-headless/build.rs:139:17: <!-- cite-ok: verbatim runner output; the line number is the evidence, not a citation the coordinator chose. The marker is the only text added to this quoted block. -->
+  required runtime asset missing: /home/forge/src/tillandsias/images/router/tillandsias-router-sidecar
+
+  This is a BUILD ARTIFACT, not a tracked file — it is built from crates/tillandsias-router-sidecar, never committed (order 710-w9kc). A fresh clone will not have it.
+
+  Produce it, then rebuild:
+      bash scripts/build-sidecar.sh
+
+  If you hit this from a build script, that script is missing the staging call that build.sh and scripts/build-image.sh already make.
+
+--- 956-llei kill-time adjudicator, censored rows (slowest-tests table)
+    120.2s  litmus:forge-policy-binary-discoverability  (killed at budget — censored; the true time is longer)
+     30.1s  litmus:litmus-bindings-reconciliation-shape  (killed at budget — censored; the true time is longer)
+
+--- sweep totals
+  PASS:  263
+  FAIL:  27
+  SKIP:  183 (excluded from coverage)
+  Total: 473 (executed: 290, skipped: 183)
+Coverage: 100% [100/100 specs]
+Pass Rate: 90% (263/290 executed)

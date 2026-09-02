@@ -412,8 +412,35 @@ multi_host_development:
       matches only osx-next and windows-next, so every non-integration name is
       ungated equally), it is already excluded from the pre_push_gate by
       lane_exclusion, it becomes grammar-legal instead of grammar-warning, and
-      it becomes VISIBLE to the sweep that is supposed to reap it. One name,
-      four properties, none of them lost.
+      it becomes VISIBLE to the sweep that is supposed to reap it.
+
+      CORRECTION, MEASURED THE SAME DAY THIS CLAUSE WAS WRITTEN, BY TRYING IT:
+      "ungated" above is TRUE OF THE TRUNK-MERGE HOOK AND FALSE OF THE BUILD
+      STAMP, and the difference decides whether a lane is a durability escape
+      hatch. A push of agent/pirria/linux-next/20260902-floor-measurements from
+      a forge with a red gate printed `ok:linux-next-merged:0` — the merge hook
+      passed, exactly as lane_exclusion promises — and was then REFUSED by
+      scripts/hooks/pre-push-local-gate.sh with "./build.sh --check has never
+      run in this checkout". That hook exempts ONLY salvage refs, by name and
+      by design (order 872-c9nd), with the comment that a dirty-tree copy is
+      not expected to build. agent/* gets no such exemption.
+
+      SO A LANE IS NOT A PLACE WORK CAN GO WHEN THE GATE IS RED. Its purpose is
+      to defer the TRUNK MERGE, not the gate — a host on a lane still gates
+      every push. Read lane_exclusion narrowly: it is about the merge, and the
+      words "durability beats integration freshness" that accompany it explain
+      why the MERGE is deferred; they are not a licence to skip the build.
+
+      WHEN THE GATE ITSELF CANNOT PASS — infrastructure absent, or a fixture
+      red for reasons the cycle did not cause — the sanctioned namespace is
+      salvage/<host>/<yyyymmdd>-<slug>, which IS gate-exempt, and the
+      coordinator triages it. A host that reaches for a lane in that situation
+      meets the same refusal it was trying to escape, and if it then reaches
+      for --no-verify it has overridden the trunk's only gate on its own
+      judgement. Reach for salvage instead. This is 872-c9nd's rule — SALVAGE
+      BEFORE YOU REFUSE — arriving from the opposite direction: that rule was
+      written for a dirty tree, and it applies just as exactly to a CLEAN tree
+      whose commits cannot pass a gate they did not break.
 
       THE REAPER IS THEREFORE sweep_role's, UNCHANGED AND WITHOUT A NEW
       MECHANISM: merged -> delete; idle >24h -> salvage packet; >72h ->
